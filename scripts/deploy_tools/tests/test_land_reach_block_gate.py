@@ -132,8 +132,6 @@ _PR_2071_SETUP_PATHS = [
     "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_main_branches.py",
     "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_not_the_deployer.py",
     "ansible/roles/setup/gitops_deploy/tests/test_gitops_markers.py",
-    "ansible/roles/setup/renovate_agent/files/renovate_agent.py",
-    "ansible/roles/setup/renovate_agent/tasks/main.yml",
 ]
 
 

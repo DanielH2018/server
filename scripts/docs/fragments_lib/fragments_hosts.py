@@ -26,7 +26,7 @@ from lib.repo_paths import ALL_VARS, K8S_ROLES, REPO, ROLES
 PI_TUNING = REPO / "hosts" / "components" / "pi-tuning"
 VALHEIM_ROLE = K8S_ROLES / "valheim"
 JELLYFIN_ROLE = K8S_ROLES / "jellyfin"
-RENOVATE_AGENT_ROLE = ROLES / "setup" / "renovate_agent"
+RENOVATE_AGENT_ROLE = REPO / "hosts" / "components" / "renovate-agent"
 AUDIT_TASKS = ROLES / "setup" / "initial_setup" / "tasks" / "audit-and-kernel.yml"
 
 

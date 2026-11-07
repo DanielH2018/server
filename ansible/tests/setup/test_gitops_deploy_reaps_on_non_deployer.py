@@ -91,16 +91,17 @@ def _check_timer_imports(tasks_file, state: str) -> dict[str, str]:
     return found
 
 
+GITHUB_CHECK_TIMERS = {
+    "github-ruleset-drift": "github-ruleset-drift",
+    "github-interaction-limit": "github-interaction-limit",
+}
+
+
 def test_the_teardown_reaps_both_timers_and_their_legacy_crons():
-    # The GitHub checks are kuma-check timers. The install imports them
-    # present; the teardown imports the same names absent, and the shared task file's absent
-    # arm removes the units AND the cron each replaced, by the same cron_file.
-    installed = _check_timer_imports("github_checks.yml", "present")
-    assert installed == {
-        "github-ruleset-drift": "github-ruleset-drift",
-        "github-interaction-limit": "github-interaction-limit",
-    }
-    assert _check_timer_imports("teardown.yml", "absent") == installed
+    # daniel-box's package ships the GitHub checks. The teardown imports the Ansible-era timers
+    # absent, and the shared task file's absent arm removes the units AND the cron each replaced,
+    # by the same cron_file.
+    assert _check_timer_imports("teardown.yml", "absent") == GITHUB_CHECK_TIMERS
 
 
 def test_the_teardown_removes_every_textfile_and_stamp_install_leaves():
@@ -108,17 +109,11 @@ def test_the_teardown_removes_every_textfile_and_stamp_install_leaves():
     render = task_named(
         load_tasks(ROLE / "service.yml"), "Stamp the rendered gitops-deploy units"
     )
-    checks_render = task_named(
-        load_tasks(ROLE / "github_checks.yml"), "Stamp the rendered GitHub checks"
-    )
     deployed = next(
         t
         for t in load_tasks(ROLE / "code.yml")
         if "stamp_deployed_name" in (t.get("vars") or {})
     )
-    timers = _check_timer_imports("github_checks.yml", "present")
-    assert timers, "the GitHub check census found nothing"
-
     removal = task_named(
         load_tasks(ROLE / "teardown.yml"),
         "Remove the deployer's textfiles and stamp fragments",
@@ -126,9 +121,12 @@ def test_the_teardown_removes_every_textfile_and_stamp_install_leaves():
     assert removal["ansible.builtin.file"]["state"] == "absent"
     assert {
         "/var/lib/node-exporter-textfile/gitops_tick.prom",
-        *(f"/var/lib/node-exporter-textfile/{name}.prom" for name in timers),
+        *(
+            f"/var/lib/node-exporter-textfile/{name}.prom"
+            for name in GITHUB_CHECK_TIMERS
+        ),
         f"/var/lib/homelab/setup-render-manifest.d/{render['vars']['stamp_render_name']}",
-        f"/var/lib/homelab/setup-render-manifest.d/{checks_render['vars']['stamp_render_name']}",
+        "/var/lib/homelab/setup-render-manifest.d/gitops-deploy-github-checks",
         f"/var/lib/homelab/setup-deployed-manifest.d/{deployed['vars']['stamp_deployed_name']}",
     } <= set(removal["loop"])
 

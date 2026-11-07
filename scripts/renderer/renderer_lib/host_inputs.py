@@ -26,6 +26,9 @@ HOST_INPUTS = (
     "ansible/vars/hosts/",
     # `host_sources.SHARED_FILES`, which M6 B5 copies into the Pi's package.
     "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
+    "ansible/roles/setup/gitops_deploy/files/gitops_markers.py",
+    "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py",
+    "ansible/roles/setup/gitops_deploy/files/gitops_hold.py",
     # What a component's `role:` renders (`host_sources.ROLE_SOURCES`): the role's defaults and
     # the two templates daniel-server's package renders in place (H4.3a, H4.3c).
     "ansible/roles/setup/nut_host/defaults/main.yml",

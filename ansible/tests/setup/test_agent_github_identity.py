@@ -100,7 +100,9 @@ def enter_worktree_branch(name: str) -> str:
 def fence_lets_push(branch: str) -> bool:
     """Whether a branch falls in one of the agent branch fence's exclusions."""
     defaults = yaml_fast.safe_load(
-        (ANSIBLE / "roles/setup/gitops_deploy/defaults/main.yml").read_text()
+        (
+            ANSIBLE.parent / "hosts/components/github-checks/defaults/main.yml"
+        ).read_text()
     )
     globs = defaults["gitops_deploy_fence_ruleset_exclude"]
     assert globs, "the fence declares no exclusions"

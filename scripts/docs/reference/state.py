@@ -149,8 +149,8 @@ def gitops_deploy_run(state_dir: Path = Path(STATE_DIR)) -> LoopRun:
 def renovate_agent_run(state_dir: Path = Path("/var/lib/renovate-agent")) -> LoopRun:
     """The daily Renovate PR triage session.
 
-    Cadence: renovate_agent.timer's OnCalendar, from renovate_agent_oncalendar
-    (roles/setup/renovate_agent/defaults/main.yml:47 = daily 15:00).
+    Cadence: homelab-renovate-agent.timer's OnCalendar, from renovate_agent_oncalendar
+    (hosts/components/renovate-agent/defaults/main.yml).
     """
     return _epoch_marker(state_dir, "last_run", "session completed")
 
@@ -158,8 +158,8 @@ def renovate_agent_run(state_dir: Path = Path("/var/lib/renovate-agent")) -> Loo
 def renovate_notify_run(state_dir: Path = Path("/var/lib/renovate-notify")) -> LoopRun:
     """The daily Renovate dashboard digest.
 
-    Cadence: renovate-notify.timer's OnCalendar is fixed at daily 13:00
-    (roles/setup/renovate_notify/templates/renovate-notify.timer.j2).
+    Cadence: homelab-renovate-notify.timer's OnCalendar is fixed at daily 13:00
+    (hosts/components/renovate-notify/units/homelab-renovate-notify.timer).
     """
     base = _epoch_marker(state_dir, "last_run", "checked, nothing new to notify")
     if base.last_run is None:

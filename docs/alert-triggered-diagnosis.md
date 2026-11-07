@@ -20,8 +20,8 @@ proposal was an "outer loop"
 agent (12-factor-agents, factor 11): an alert starts a bounded, read-only session, which posts
 a first diagnosis to Discord before the operator opens a session.
 
-The parts exist. `ansible/roles/setup/renovate_agent/` runs a bounded headless `claude -p`
-from a systemd unit, under an Autonomous-role contract. `ansible/roles/setup/common/tasks/agent_user.yml`
+The parts exist. `hosts/components/renovate-agent/` runs a bounded headless `claude -p`
+from a systemd unit, under an Autonomous-role contract. `hosts/components/renovate-agent/templates/renovate-agent-setup.sh.j2`
 builds an agent identity. `scripts/diagnostics/probe.py` is an allow-listed read-only
 toolkit, and the `homelab-network-diagnostician` agent is a read-only diagnostic brief.
 
@@ -157,8 +157,7 @@ day.
 - The incident has lasted at least two cycles, which removes the 560 one-cycle episodes.
 - The host has been up past monitor-bridge's startup grace, which removes the recovery burst.
 
-**Read-only by construction, not by prompt.** A new profile in
-`ansible/roles/setup/common/tasks/agent_user.yml`, with:
+**Read-only by construction, not by prompt.** A new agent profile, with:
 
 - no GitHub token at all, so the session cannot comment, push or file;
 - a kubeconfig for the `homelab-readonly` ServiceAccount only, which holds `get list watch`

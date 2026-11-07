@@ -129,3 +129,7 @@ flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
   sonarr-air-date-guard:
     kind: mutation
     rerun_safe: ansible/roles/k8s/sonarr/tests/test_sonarr_air_date_guard.py::test_a_second_run_removes_nothing
+
+# The Service's pinned address (templates/service.yaml.j2). daniel-box's fake-remux config names
+# it, so a change here changes hosts/components/fake-remux/defaults/main.yml too.
+sonarr_k8s_cluster_ip: 10.43.114.186

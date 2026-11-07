@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# fake-remux heartbeats, shipped by the fake-remux component.
+#
+# Usage: fake-remux-health [-h|--help]
+# Takes no arguments. homelab-fake-remux-health.timer runs it as the deploy user every
+# fake_remux_health_cron_minute minutes. Run it by hand the same way.
+# It reads the three state files in fake_remux_state_dir and writes one verdict per state file to
+# $TEXTFILE_DIR/<fake-remux-scan|fake-remux-replace|mkv-attachment-repair>.prom for
+# node_exporter's textfile collector, which the FakeRemux* and MkvAttachmentRepair* rules in
+# other-setup-checks.yaml read (M6 batch B4). It logs to syslog under the tag fake-remux-health.
+# Exit 1 means /usr/lib/homelab/homelab-check-lib.sh is missing. B4's Cutover-2 removed its three
+# Kuma pushes.
+#
+# Thin on purpose — the verdict logic is in state_push.py, a plain file with unit tests and a 3.12
+# floor check. Same shape as longhorn-backup-health.sh.
+#
+# This file carries NO secret.
+set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
+
+# shellcheck source=/dev/null
+source /usr/lib/homelab/homelab-check-lib.sh || {
+  logger -t fake-remux-health "homelab-check-lib.sh missing — the check-lib component ships it"
+  exit 1
+}
+
+# The longest legitimate gap between two textfile writes: two cron periods plus 300s, the rule
+# M3 fixed (docs/target-architecture/monitoring/m3-textfile-timer.md, "The deadline for
+# disk-health"). It renders from fake_remux_health_cron_minute, which must be `*/N`, and
+# ansible/tests/setup/test_b4_rule_literals.py pins the rules' literals to this value.
+{% set _every_n = fake_remux_health_cron_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
+{% if _every_n.isdigit() and '*/' ~ _every_n == fake_remux_health_cron_minute | string %}
+DEADLINE_S={{ 2 * 60 * (_every_n | int) + 300 }}
+{% else %}
+{{ fake_remux_health_cron_minute_not_every_n | mandatory('fake_remux_health_cron_minute must be */N for fake-remux-health.sh to derive DEADLINE_S, got ' ~ fake_remux_health_cron_minute) }}
+{% endif %}
+TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
+
+# Order is load-bearing: state_push.py prints one line per triple, in argument order, and the
+# LABELS and CHECKS below are consumed in that same order.
+mapfile -t LINES < <(/usr/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ fake_remux_opt_dir }}/state_push.py \
+  "fake-remux scan" "{{ fake_remux_state_dir }}/state.json" "{{ fake_remux_scan_max_age_hours }}" \
+  "fake-remux replace" "{{ fake_remux_state_dir }}/replace_state.json" "{{ fake_remux_replace_max_age_hours }}" \
+  "mkv attachment repair" "{{ fake_remux_state_dir }}/mkv_attachment_state.json" "{{ fake_remux_mkv_attachment_max_age_hours }}")
+
+LABELS=("fake-remux scan" "fake-remux replace" "mkv attachment repair")
+# One textfile per state file, named for what it checks. The syslog tag is shared, so it cannot
+# name them (M3 names a check file after its producer's tag, which assumes one verdict per tag).
+CHECKS=(fake-remux-scan fake-remux-replace mkv-attachment-repair)
+
+# Indexed off LABELS rather than a literal `0 1`, which is what this loop said while it served two
+# state files. A third triple added above a literal index list renders a state_push line nobody
+# reads and writes nothing — the verdict then goes stale with no explanation, which is the
+# failure this whole script exists to report.
+for i in "${!LABELS[@]}"; do
+  LINE="${LINES[$i]:-}"
+  if [[ -z "$LINE" ]]; then
+    # A missing line means the reader itself broke. Report that rather than writing nothing,
+    # which would leave the verdict to go stale with no explanation.
+    STATUS=down
+    MSG="${LABELS[$i]} reader produced no output"
+  else
+    STATUS="${LINE%%$'\t'*}"
+    MSG="${LINE#*$'\t'}"
+  fi
+  # The status line is the durable record of the message: the local record of the verdict, readable in Loki with `probe.py loki-query`.
+  logger -t fake-remux-health "status=${STATUS} ${LABELS[$i]}: ${MSG}"
+  # The textfile carries the verdict. A failed write logs and the loop goes on.
+  SUCCESS=0
+  [[ "$STATUS" == "up" ]] && SUCCESS=1
+  write_check_textfile "${CHECKS[$i]}" "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
+    || logger -t fake-remux-health "textfile write to ${TEXTFILE_DIR} failed (${CHECKS[$i]} status=${STATUS})"
+done

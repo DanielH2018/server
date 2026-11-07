@@ -1,0 +1,78 @@
+---
+# The fake-remux pair — detector + reconciler — runs on the media stack's host. daniel-box
+# runs no Docker, so the scripts use their Docker-free mode (SONARR_URL, host ffprobe +
+# HOST_DATA_ROOT), which this role configures.
+#
+# The two crons move TOGETHER and cannot be split: they share one ledger
+# (replacements.json), the scan seeding entries the reconciler acts on. The role's own docs warned
+# about repointing one half without the other.
+#
+# Scripts and the config template live in THIS role's files/templates: one copy, no drift.
+# fake_remux_host lives in group_vars/all.yml — initial_setup.yml's role `when:` needs it before
+# this file is in scope.
+
+# Where the media PV is mounted on the node. Sonarr reports its own `/data` view; both /data/media
+# and /data/torrents live under this root, so one value covers the library and the download dir.
+# Verified on daniel-box: /srv/media/media and /srv/media/torrents both exist.
+fake_remux_host_data_root: /srv/media
+
+# Empty selects host-ffprobe mode in fake_remux_scan.py. It is not an omission — there is no
+# container on this node to exec into, and none is needed: the library is a local directory here.
+fake_remux_jellyfin_container: ""
+
+# The *arr is not reachable by name from the host (no cluster DNS), and a package cannot read the
+# cluster when it renders, so this is the Service's pinned ClusterIP.
+# roles/k8s/sonarr/defaults/main.yml:sonarr_k8s_cluster_ip is the other copy, and
+# hosts/lib/tests/test_h737_box_components.py holds the two equal.
+fake_remux_sonarr_cluster_ip: 10.43.114.186
+fake_remux_sonarr_port: 8989
+
+# Unchanged from the autofix-bridge role: daily detect, 20-minute reconcile.
+fake_remux_scan_cron_hour: "4"
+fake_remux_scan_cron_minute: "45"
+fake_remux_replace_cron_minute: "*/20"
+
+# Health verdicts. monitor-bridge read these two state files over a `:ro` bind mount on
+# daniel-server; that stopped working when the cron changed host, so a cron here reads them and
+# writes one textfile verdict each. Max-ages match the ones check.py applied (26h / 1.2h).
+fake_remux_scan_max_age_hours: 26
+fake_remux_replace_max_age_hours: 1.2
+fake_remux_health_cron_minute: "*/10"
+
+# mkv attachment-name repair. Every 15 minutes, which is what bounds how long a newly imported
+# file can sit unplayable with burned-in subtitles: the repair is only reachable by a sweep, so
+# the sweep interval IS the exposure window. The cost of a 15-minute cadence is nil — the sweep reads mkv headers and never the streams, and took 5s over 61 files
+# measured on daniel-box. It shares fake_remux_lock with the daily scan and the */20 reconcile;
+# flock waits rather than skipping, so the extra contention costs a wait, not a missed run.
+#
+# The max-age is derived from the schedule rather than picked: 26h against a 15-minute gap would leave the monitor green through 103 consecutive missed runs.
+# 1.2h is the reconciler's value, against the same */20-ish cadence — a grace shorter than the
+# gap flaps, one much longer clears the DOWN it exists to make sticky.
+fake_remux_mkv_attachment_cron_minute: "*/15"
+fake_remux_mkv_attachment_max_age_hours: 1.2
+
+# The config and state paths the autofix-bridge role used on daniel-server, and that is load-bearing
+# rather than tidy: both scripts fall back to /etc/autofix-fake-remux/config.env when their
+# FAKE_REMUX_CONFIG / FAKE_REMUX_REPLACE_CONFIG env vars are unset, so keeping the paths means the
+# cron lines need no override at all.
+#
+# A first attempt renamed two of the three. The scan then read a config that did not exist and
+# reported `disabled (no Sonarr API key)` — exit 0, monitor green, scanning nothing. Worth the
+# comment: the failure mode of a wrong path here is silence, not an error.
+fake_remux_opt_dir: /usr/lib/homelab/fake-remux
+fake_remux_config_dir: /etc/autofix-fake-remux
+fake_remux_state_dir: /var/lib/autofix-fake-remux
+
+# ONE lock shared by both crons, carried over from daniel-server. Not decoration: they share
+# replacements.json — the scan seeds entries the reconciler acts on — and the daily 04:45 scan
+# lands inside the */20 reconcile's schedule, so without it they race on the ledger a few times
+# a week. -w 600 waits rather than skipping, because a skipped reconcile tick is invisible.
+fake_remux_lock: /var/lock/autofix-fake-remux.lock
+
+# What the config template reads, under the names the autofix-bridge role gave them.
+autofix_fake_remux_host_data_root: "{{ fake_remux_host_data_root }}"
+autofix_fake_remux_jellyfin_container: "{{ fake_remux_jellyfin_container }}"
+autofix_fake_remux_sonarr_url: "http://{{ fake_remux_sonarr_cluster_ip }}:{{ fake_remux_sonarr_port }}"
+# host_vars/daniel-box.yml declares the reconciler's selection policy; empty keeps a render
+# with no host context working.
+autofix_fake_remux_policy: {}

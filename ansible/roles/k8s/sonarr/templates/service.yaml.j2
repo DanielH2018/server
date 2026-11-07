@@ -1,0 +1,26 @@
+---
+# The role's own Service, because the shared default cannot pin a clusterIP.
+apiVersion: v1
+kind: Service
+metadata:
+  name: sonarr
+  namespace: {{ k8s_namespace }}
+spec:
+  # DECIDED: the ClusterIP is pinned, because daniel-box's host package renders it literally into
+  # the fake-remux config (H7.37). An auto-assigned address would change on a Service recreate and
+  # strand the reconciler on a value nothing re-resolves. The pin equals the address the Service
+  # already held, so applying it changes nothing live. The package's copy is
+  # `fake_remux_sonarr_cluster_ip` in hosts/components/fake-remux/defaults/main.yml, and
+  # hosts/lib/tests/test_h737_box_components.py pins the two together.
+  clusterIP: {{ sonarr_k8s_cluster_ip }}
+  selector:
+    app: sonarr
+  ports:
+    - name: http
+      port: {{ container_item.port }}
+      targetPort: {{ container_item.port }}
+{% for extra in container_item.service_extra_ports %}
+    - name: {{ extra.name }}
+      port: {{ extra.port }}
+      targetPort: {{ extra.port }}
+{% endfor %}

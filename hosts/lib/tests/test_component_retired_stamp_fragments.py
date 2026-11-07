@@ -32,6 +32,14 @@ KINDS = {
 RECORDED = {
     # 94d0fb13a^:ansible/roles/setup/homelab_builder/tasks/builder.yml
     "builder": {("deployed", "homelab-builder"), ("render", "homelab-builder")},
+    # 3b3e4abb1:ansible/roles/setup/renovate_notify/tasks/{service,code}.yml
+    "renovate-notify": {("render", "renovate-notify"), ("deployed", "renovate-notify")},
+    # 3b3e4abb1:ansible/roles/setup/renovate_agent/tasks/{service,code}.yml
+    "renovate-agent": {("render", "renovate-agent"), ("deployed", "renovate-agent")},
+    # 3b3e4abb1:ansible/roles/setup/fake_remux/tasks/main.yml
+    "fake-remux": {("render", "fake-remux"), ("deployed", "fake-remux")},
+    # 3b3e4abb1:ansible/roles/setup/gitops_deploy/tasks/github_checks.yml
+    "github-checks": {("render", "gitops-deploy-github-checks")},
     # cb61ae0d94:ansible/roles/setup/initial_setup/tasks/crons.yml
     "worktree-holders": {("deployed", "worktree-holders")},
     # cb61ae0d9:ansible/roles/setup/initial_setup/tasks/crons.yml

@@ -177,7 +177,7 @@ and the other modules move into a `<prefix>_lib/` namespace package beside it. A
 listing the directory then sees one program rather than several. The operator ruled on
 2026-10-10 that this navigation gain is reason enough on its own. References:
 `scripts/deploy_tools/land.py` with `land_lib/`, `scripts/diagnostics/probe.py` with
-`probe_lib/`, and `ansible/roles/setup/fake_remux/files/fake_remux.py` with
+`probe_lib/`, and `hosts/components/fake-remux/files/fake_remux.py` with
 `fake_remux_lib/`. A forwarding shim at an old path does not count. A shim holds only
 imports and a `__main__` guard whose one statement calls the entrypoint of its own family. Shipped code
 or an older checkout still runs such a path, so the consolidation leaves a shim there

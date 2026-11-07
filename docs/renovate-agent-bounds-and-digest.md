@@ -1,6 +1,6 @@
 # `renovate_agent` — what bounds a run, and what its digest measures
 
-Working-out moved off `ansible/roles/setup/renovate_agent/CLAUDE.md` (#2995), which a session
+Working-out moved off `hosts/components/renovate-agent/CLAUDE.md` (#2995), which a session
 reads on every touch of the unattended agent. The role doc keeps the arming procedure and the
 autonomous-role contract; this page keeps the modules `files/` ships, the lander, the session's
 own identity and the arming checklist, the four bounds and why each is the var it is, the
@@ -17,11 +17,10 @@ worktree rules, what the Discord digest measures, and the exit codes behind the 
 - `land_renovate_pr.py` — the lander, run by `renovate-agent-land@<n>.service` rather than by
   the session. *The lander* below says why it is separate.
 
-The role names each module twice — once in the "Install agent Python files" copy loop, once in
-`stamp_deployed_pairs` for setup-drift-check.sh's deployed-code arm. Neither list is derived
-from the directory, so a module in `files/` and in neither list is one the host never receives.
+`component.yml` names each module in `files:`. The list is not derived from the directory, so a
+module in `files/` and not on the list is one the host never receives.
 ENFORCED:
-`ansible/tests/setup/test_renovate_agent_modules_are_shipped.py::test_every_shipped_module_is_installed_and_stamped`.
+`ansible/tests/setup/test_renovate_agent_modules_are_shipped.py::test_every_shipped_module_is_installed`.
 
 ## The lander
 
@@ -37,7 +36,7 @@ check in its module docstring passes. The denied roles come from
 `RENOVATE_AGENT_REPO_DIR`, the checkout from which it runs `land.sh`, so `renovate.json`'s rule
 and the lander read one derivation. A non-zero exit, a timeout or output holding no list refuses
 the landing. It never reads the PR title, because the session can edit a title. ENFORCED:
-`ansible/roles/setup/renovate_agent/tests/test_land_renovate_pr.py`, which also holds the polkit
+`hosts/components/renovate-agent/tests/test_land_renovate_pr.py`, which also holds the polkit
 rule's unit-name pattern to the PR numbers the script accepts.
 
 The session starts the lander with a plain `systemctl start`, which blocks until the landing
@@ -59,7 +58,7 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
   record, the session's `~/.claude` and its own clone at `renovate_agent_clone_dir`. The
   directory carries the set-group-ID bit and group `sys_user`, so the docs cron still reads the run record.
 - **Toolchain.** The agent runs its own uv rather than `/usr/bin/uv`, the host's
-  package wrapper. The role copies the operator's uv into the agent's `~/.local/bin` and runs
+  package wrapper. `renovate-agent-setup` copies the operator's uv into the agent's `~/.local/bin` and runs
   `uv python install` as the agent. Every project hook runs through `uv run`, and in an
   unattended session a hook that cannot start makes each Bash call an `ask`, which is a denial.
 - **Project hooks.** `.claude/hooks/run-hook.sh` defaults to the operator's checkout and uv. The
@@ -68,7 +67,7 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
   that cannot import its dependencies raises, and the dispatcher drops its verdict without a
   word. `block-footguns` also needs the `claude_guard` package, which the dotfiles repo deploys
   only under the operator's home; without it the guard asks on every command naming `gh`. The
-  role copies the operator's package into the agent's `~/.local/share/claude-guard` on each
+  `renovate-agent-setup` copies the operator's package into the agent's `~/.local/share/claude-guard` on each
   apply.
 - **GitHub token.** `renovate_agent_gh_token` is a fine-grained token for this repo alone:
   pull requests and actions read-write, contents, checks and metadata read. With no contents
@@ -98,13 +97,14 @@ ENFORCED: `ansible/tests/setup/test_renovate_agent_identity.py`, which also runs
 
 ## Arming it
 
-The role refuses to arm without both credentials. To arm the agent:
+`host_secrets.py check` fails a host file that lacks either credential. To arm the agent:
 
 1. Create a fine-grained token for the repo with exactly the permissions above.
 2. Run `claude setup-token`.
 3. Add both as `renovate_agent_gh_token` and `renovate_agent_claude_oauth_token` with the
    `add-secret` skill, then run `secret_rotation.py sync`.
-4. Set `renovate_agent_enabled: true` in `inventory/host_vars/daniel-box.yml` and apply the role.
+4. Set `renovate_agent_enabled: true` in `inventory/host_vars/daniel-box.yml`, and let the next
+   package version arm the timer.
 5. Start one run by hand and watch it. Auto mode's classifier decides whether the session may
    run `systemctl start` on a system unit, and nothing short of a real run tests that.
 
@@ -118,12 +118,12 @@ the `gh` census and the return path:
 ```bash
 RENOVATE_AGENT_CONFIG=/tmp/agent-test.env \
   PYTHONPATH=hosts/lib:ansible/roles/setup/gitops_deploy/files \
-  uv run python ansible/roles/setup/renovate_agent/files/renovate_agent.py
+  uv run python hosts/components/renovate-agent/files/renovate_agent.py
 ```
 
-The `PYTHONPATH` stands in for the deploy-time copy. The role's `tasks/code.yml` installs
+The `PYTHONPATH` stands in for the package's copies. `component.yml` installs
 `host_lib.py` from `hosts/lib/` and the `gitops_*` modules from `gitops_deploy/files/` beside
-the script in `/opt/renovate-agent/`, so a run from the repo cannot import them without it.
+the script in `/usr/lib/homelab/renovate-agent/`, so a run from the repo cannot import them without it.
 
 The override exists for exactly this. Without it the first armed tick would be the first time this
 code ever ran.
@@ -297,7 +297,7 @@ that hid a one-line `prepare_worktree` failure, a directory at the run worktree'
 and posts the exception text to Discord. The deadman stays as the backstop for a host that is
 genuinely off. The report is best effort and never re-raises, so a failed report cannot replace the
 traceback that says what broke. ENFORCED:
-`ansible/roles/setup/renovate_agent/tests/test_crash_report.py::test_a_crash_posts_the_exception_text_to_discord_and_the_runs_file`.
+`hosts/components/renovate-agent/tests/test_crash_report.py::test_a_crash_posts_the_exception_text_to_discord_and_the_runs_file`.
 
 **The unit and `config.env` carry no Kuma push.** ENFORCED:
 `ansible/tests/setup/test_renovate_agent_unit.py::test_the_unit_and_its_config_make_no_kuma_push`.

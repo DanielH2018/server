@@ -47,8 +47,6 @@ TASKS = COMMON / "tasks" / "check_timer.yml"
 KNOWN_CHECKS = frozenset(
     {
         "setup-drift",
-        "github-ruleset-drift",
-        "github-interaction-limit",
     }
 )
 
@@ -324,6 +322,14 @@ COMPONENT_CHECKS = {
         "loki-route-witness",
         "loki-read-route-health.sh.j2",
     ),
+    "homelab-github-ruleset-drift": (
+        "github-checks",
+        "github-ruleset-drift.sh.j2",
+    ),
+    "homelab-github-interaction-limit": (
+        "github-checks",
+        "github-interaction-limit.sh.j2",
+    ),
 }
 
 
@@ -355,8 +361,9 @@ def test_every_wired_shell_producer_exits_nonzero_after_a_down_push() -> None:
     # Lower it only for a deliberate retirement. H7.36 moved the secret-rotation audit to a
     # component (COMPONENT_CHECKS), which took the floor from 6 to 5. D6.17 disarmed
     # manifest-prune-check, which took it to 4. H7.59 moved daniel-server's Loki witness, the last
-    # wired copy, to a component, which took it to 3.
-    assert checked >= 3, (
+    # wired copy, to a component, which took it to 3. H7.37 moved the two GitHub checks to a
+    # component, which took it to 1.
+    assert checked >= 1, (
         f"only {checked} shell producers checked; the census has shrunk"
     )
 
@@ -398,6 +405,9 @@ def test_a_packaged_check_script_never_exits_zero_after_a_down_push(unit):
     if template.startswith("secret-rotation-audit"):
         assert not re.search(r"^\s*exit 0\b", text, re.M)
         assert "audit --verdict" in text
+    elif template.startswith("github-"):
+        # Each exits per branch, and its test module drives `rc == 1` on a down verdict.
+        assert "exit 1" in text
     else:
         assert text.rstrip().endswith(EXIT_CONTRACT)
 

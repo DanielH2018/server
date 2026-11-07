@@ -2679,6 +2679,13 @@ the `manual_plane` clearing, and *Rollback*'s
       onto C2's `DEPLOY_HOLD`. That one is packaged here, and H7.19b deletes its remaining
       deployer reads in `deploy_ui.py`, `deploy_ui_reads.py` and `deploy_ui_writes.py`.
       The deployer-import census covers it in both cases.
+    - **What H7.37 did (#7504).** D6.15's review recorded no move onto `DEPLOY_HOLD`, so
+      deploy_ui took the first branch and has no line in the package. #7419 holds the rest.
+      The three roles are emptied, as *Roles are emptied before H7.20a, never deleted*
+      requires, and four components hold their content: `renovate-notify`,
+      `renovate-agent`, `fake-remux` and `github-checks`. A package cannot resolve a
+      ClusterIP, so the Sonarr Service gains a pin at its live address, as H7.8 did for
+      `nut`. `renovate-agent-setup` is the agent's tooling unit H7.12b describes.
 12. **H7.12 Claude Code.**
     - **H7.12a** The paired PR in `DanielH2018/dotfiles` adds the per-user tooling: uv, the
       pinned Python, Claude Code, `claude_guard`, `claude_worktree`, prek, `github_cli` and

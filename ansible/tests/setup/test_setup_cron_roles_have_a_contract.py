@@ -26,10 +26,6 @@ CONTRACT_HEADING = "## Autonomous-role contract"
 # Roles whose cron/timer changes no state: it reads, then pushes a heartbeat or a notification.
 # Each reason is the thing to re-check before keeping the role here.
 EXEMPT: dict[str, str] = {
-    "renovate_notify": (
-        "reads the open Renovate PRs from GitHub and posts to Discord; it merges, closes and "
-        "edits nothing — `renovate_agent` is the role that acts, and it carries the contract"
-    ),
     "common": (
         "`templates/check-timer.timer.j2` is the shared unit pair `tasks/check_timer.yml` "
         "renders for an importing role; it has no schedule or check of its own, and the role "
@@ -100,7 +96,7 @@ def test_census_finds_the_roles_known_to_install_crons():
         for d in role_dirs(SETUP_ROLES, skip_dotted=True)
         if _installs_a_cron_or_timer(d)
     }
-    expected = {"gitops_deploy", "renovate_agent", "k3s", "fake_remux"}
+    expected = {"gitops_deploy", "k3s"}
     assert expected <= found, f"missing from the cron/timer census: {expected - found}"
 
 
