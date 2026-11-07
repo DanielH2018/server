@@ -7,7 +7,7 @@ journal, or /var/lock. The only live reads are the wrapper's own `/var/lib/gitop
 markers, which it prints and never grades.
 
 The lines the wrapper prints for a landing to book -- `gitops_tick.sh: joined ...` -- are
-asserted together with the parser that reads them (`land_lib/tools.py:in_flock_wait`), so a
+asserted together with the parser that reads them (`in_flock_wait`, below, which land_lib no longer carries), so a
 wording change on either side that the other does not follow is caught here.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_gitops_tick_wrapper.py
@@ -20,9 +20,20 @@ from pathlib import Path
 from _deploy_sh_fakes import stub_bin
 from _deploy_sh_fakes import stub_path as _stub_path
 from lib import exit_codes as ec
-from deploy_tools.land_lib import tools
 
 from lib.repo_paths import REPO as _REPO
+
+_JOINED = re.compile(
+    r"gitops_tick\.sh: joined a tick already [^;]*in flight; waited (\d+)s for it\s*$"
+)
+
+
+def in_flock_wait(line: str) -> int | None:
+    """The seconds waited on a joined tick, or None for any other line."""
+    if m := _JOINED.search(line):
+        return int(m[1])
+    return None
+
 
 _TICK_SH = _REPO / "scripts" / "deploy_tools" / "gitops_tick.sh"
 
@@ -126,7 +137,7 @@ def test_joining_a_tick_in_flight_reports_how_long_it_ran_and_how_long_we_waited
     # `!= 0` is the load-bearing part -- 0 is what the `${seconds:-0}` fallback produces, and a
     # test that accepted it would pass while checking none of the conversion.
     assert in_flight and int(in_flight[1]) == _IN_FLIGHT_S, line
-    booked = tools.in_flock_wait(line)
+    booked = in_flock_wait(line)
     assert booked is not None, (
         f"land.py no longer parses gitops_tick.sh's line: {line!r}"
     )
@@ -238,7 +249,7 @@ def test_a_joined_run_that_ends_cleanly_is_followed_by_a_fresh_run(tmp_path):
     assert "started and graded instead" in proc.stdout
     stderr = proc.stderr.splitlines()
     joined = next((x for x in stderr if "gitops_tick.sh: joined a tick" in x), "")
-    assert tools.in_flock_wait(joined) is not None, (
+    assert in_flock_wait(joined) is not None, (
         "the joined line the landing books must survive"
     )
     assert any("started a fresh run" in x for x in stderr), stderr

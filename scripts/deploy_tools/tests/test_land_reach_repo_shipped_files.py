@@ -19,13 +19,8 @@ import pytest
 
 from deployer_lib import deploy_cross_role
 from deploy_tools.land_lib import land_reach
-from deploy_tools.land_lib import land_tags
-from _land_fakes import MERGE_SHA
-from deploy_tools.land_lib import deploy
-from deploy_tools.land_lib.outcome import Outcome
 
 from lib.repo_paths import REPO as REPO_ROOT
-from deploy_tools.land_lib.landing import Classification
 from deploy_tools.setup_lib.setup_role_chains import task_gates_shipping_repo_path
 
 _ROLE = "gitops_deploy"
@@ -117,30 +112,6 @@ def test_the_ticks_own_host_is_owed_when_the_role_entered_by_the_file_alone(
         "`uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy`"
         in note
     ), note
-
-
-def test_a_repo_file_only_pr_ends_needs_manual_apply(landing, table_without_the_row):
-    """The verify-by: the LANDING names it.
-
-    `no_tag_outcome` read `self_applied` and ended at `nothing-to-deploy` with
-    `ln.classification.remaining_setup` populated and never printed.
-    """
-    ln, _ = landing(None)
-    ln.merge_sha = MERGE_SHA
-    ln.classification = Classification(
-        plane=land_tags.plane_note([_SHIPPED]),
-        self_applied=land_tags.self_applied([_SHIPPED]),
-        self_applied_command=land_tags.self_applied_command([_SHIPPED]),
-        remaining_setup=land_reach.remaining_setup_hosts_note(
-            [_SHIPPED], "daniel-server"
-        ),
-    )
-    assert (ln.plane, ln.classification.self_applied) == ("", False), (
-        "the premise of #2798 moved"
-    )
-    with pytest.raises(Outcome) as exc:
-        deploy.no_tag_outcome(ln)
-    assert (exc.value.verdict, exc.value.rc) == ("needs-manual-apply", 1)
 
 
 # --- A task NAME that mentions a repo path ships nothing (#6538) -------------

@@ -30,7 +30,7 @@ from _shell_render import rendered_shell_function, rendered_shell_text
 from lib.proc_testing import run
 
 KEEP_SET = "\n".join(
-    rendered_shell_function("setup", "k8s_host_files", "registry-gc.sh.j2", name)
+    rendered_shell_function("components", "registry-gc", "registry-gc.sh.j2", name)
     for name in ("ghcr_refs", "write_mirror_keep_set")
 )
 LIVE = "sha256:" + "a" * 64
@@ -152,31 +152,31 @@ def test_a_cluster_with_no_digest_writes_no_keep_set(tmp_path):
 
 
 RESTORE = rendered_shell_function(
-    "setup", "k8s_host_files", "registry-gc.sh.j2", "restore_mirror_store"
+    "components", "registry-gc", "registry-gc.sh.j2", "restore_mirror_store"
 )
 START = rendered_shell_function(
-    "setup", "k8s_host_files", "registry-gc.sh.j2", "start_deploy"
+    "components", "registry-gc", "registry-gc.sh.j2", "start_deploy"
 )
 STOP = rendered_shell_function(
-    "setup", "k8s_host_files", "registry-gc.sh.j2", "stop_deploy"
+    "components", "registry-gc", "registry-gc.sh.j2", "stop_deploy"
 )
 JOURNAL = rendered_shell_function(
-    "setup", "k8s_host_files", "registry-gc.sh.j2", "journal_mirror_prune"
+    "components", "registry-gc", "registry-gc.sh.j2", "journal_mirror_prune"
 )
 REPORT = rendered_shell_function(
-    "setup", "k8s_host_files", "registry-gc.sh.j2", "report_mirror_job"
+    "components", "registry-gc", "registry-gc.sh.j2", "report_mirror_job"
 )
 COLLECT_MIRROR = rendered_shell_function(
-    "setup", "k8s_host_files", "registry-gc.sh.j2", "collect_mirror_store"
+    "components", "registry-gc", "registry-gc.sh.j2", "collect_mirror_store"
 )
 TAKE_LOCK = rendered_shell_function(
-    "setup", "k8s_host_files", "registry-gc.sh.j2", "take_lock"
+    "components", "registry-gc", "registry-gc.sh.j2", "take_lock"
 )
 # The script's top-level sequence, everything after take_lock's definition, as cron runs it.
-_SCRIPT = rendered_shell_text("setup", "k8s_host_files", "registry-gc.sh.j2")
+_SCRIPT = rendered_shell_text("components", "registry-gc", "registry-gc.sh.j2")
 MAIN = _SCRIPT[_SCRIPT.index("\n}\n", _SCRIPT.index("take_lock() {")) + 3 :]
 STRANDED = "\n".join(
-    rendered_shell_function("setup", "k8s_host_files", "registry-gc.sh.j2", name)
+    rendered_shell_function("components", "registry-gc", "registry-gc.sh.j2", name)
     for name in (
         "restore_stranded_mirror",
         "run_mirror_phase",
@@ -411,7 +411,7 @@ def test_a_skipped_prune_reports_the_run_down(tmp_path):
 
 
 WARM = "\n".join(
-    rendered_shell_function("setup", "k8s_host_files", "registry-gc.sh.j2", name)
+    rendered_shell_function("components", "registry-gc", "registry-gc.sh.j2", name)
     for name in ("mirror_manifest", "mirror_blob_digests", "warm_mirror")
 )
 CHILD, ARM, CONFIG, SHARED, OWN = ("sha256:" + c * 64 for c in "cdefg")

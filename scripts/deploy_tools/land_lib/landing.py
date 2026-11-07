@@ -12,9 +12,7 @@ other.
 """
 
 import subprocess
-from collections.abc import Callable
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Any, NoReturn
 
 import sys as _sys
@@ -23,38 +21,13 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.ledger import Ledger
 from deploy_tools.land_lib.options import Options
-from deploy_tools.land_lib.outcome import (
-    ABANDONED_WATCH_NOTE,
-    Outcome,
-    hold_clear_hint,
-    say,
-    unrecorded_apply_note,
-)
+from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.pr_json import PrView, parse_view
-from deploy_tools.land_lib import gh_read, land_tags
+from deploy_tools.land_lib import gh_read
 from deploy_tools.land_lib.tools import Classifier, Tools
 from lib.json_types import as_object
-from lib.repo_paths import GITOPS_DEPLOY_FILES
-
-_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from gitops_ledger import Receipt, parse_receipts
-from gitops_markers import MARKERS
 
 BRANCH = "master"
-
-
-class TickState(StrEnum):
-    """What the deployer did with this landing, read from its own marker files.
-
-    `UNKNOWN` is not a deployer state: it is this landing failing to READ one. It exists so
-    an unreadable state directory cannot be reported as `CONVERGED`, which is the answer
-    that says the tick applied the change.
-    """
-
-    HELD = "held"
-    BEHIND = "behind"
-    CONVERGED = "converged"
-    UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True)
@@ -73,9 +46,6 @@ class Classification:
             every reader then falls back to its own tree.
         plane: what a hand must apply, as step 1 renders it with whole-role tags; "" for
             nothing. `Landing.plane` is the note to print.
-        self_applied: whether the tick applies part of this PR itself.
-        self_applied_command: what applies that half by hand if the tick did not.
-        remaining_setup: the hosts a self-applied setup role reaches beyond the tick's own.
     """
 
     pr_paths: tuple[str, ...] = ()
@@ -83,9 +53,6 @@ class Classification:
     quiet: frozenset[str] = frozenset()
     declared: frozenset[str] | None = None
     plane: str = ""
-    self_applied: bool = False
-    self_applied_command: str = ""
-    remaining_setup: str = ""
 
     def declared_set(self) -> set[str] | None:
         """`declared` as the mutable set the classifiers take, or None when the read failed."""
@@ -114,17 +81,11 @@ class Landing:
         self.host_targets: list[Any] = []  # HostTargets; host_wait imports us
         self.flux_tags: list[
             str
-        ] = []  # the k8s tags a promotion applies and step 7 gates
+        ] = []  # the k8s tags a promotion applies and step 6 gates
         self.suspended_tags: list[str] = []  # suspended at M; the gate skips them
-        # The merge commit, when step 5 did not await a tick and the primary checkout may not
-        # carry it yet. Empty means the awaited tick fast-forwarded the primary. The health
-        # verdict reads it to gate from a tree holding this PR.
+        # The merge commit, set once step 4 starts: the primary checkout may not carry it
+        # yet. The health verdict reads it to gate from a tree holding this PR.
         self.deployed_at = ""
-        # True once a tick attempt returned TICK_STILL_RUNNING: this landing stopped WATCHING
-        # a tick that was still applying. Every later read of the deployer's markers is then
-        # racing that apply, so `behind_since` set with `hold_sha` empty is the state of a run
-        # in flight rather than a settled deferral.
-        self.tick_watch_abandoned = False
         # Set by `merge.arm_merge` to the squash subject. `merge.await_merge` then merges the
         # PR directly once CI is green, at the head CI checked. Empty means something else
         # does the merge, such as an auto-merge a session armed, and this landing only polls.
@@ -148,32 +109,6 @@ class Landing:
     def tags_csv(self) -> str:
         """`resolved_tags` as the comma string an argv, a label or a message needs."""
         return ",".join(self.resolved_tags)
-
-    @property
-    def tick_is_the_apply(self) -> bool:
-        """Does the TICK apply part of this PR, so that its state decides this landing?
-
-        Exactly the two classifications `health_verdict.health` grades against the deployer's
-        own markers: `self_applied` (a deploy-plane change, or a setup role
-        `initial_setup.yml` includes) gates the `tick_state` / `tick_applied` reads,
-        and `remaining_setup` gates the branch that asserts the tick applied on this host.
-
-        NOT `plane`, which is by construction what the tick does not apply: awaiting a tick
-        cannot change that verdict, so a tags-plus-plane PR keeps the fast path.
-
-        `remaining_setup` is near-implied by `self_applied` and is UNTESTED on its own:
-        `remaining_setup_hosts_note` resolves its hosts through `initial_setup.yml`, and a
-        setup role that playbook includes is what makes `self_applied` True. It is named here
-        because the branch that reads it asserts the tick applied on the local host, so a
-        landing reaching it must have awaited the tick whatever `self_applied` said.
-
-        One property rather than the same `or` at two call sites, because `pipeline._step_tick`
-        and `deploy.deploy_phase` have to answer it identically -- one awaiting the tick while
-        the other kicks it is the mixed state neither path is written for.
-        """
-        return self.classification.self_applied or bool(
-            self.classification.remaining_setup
-        )
 
     # -- ending the landing -------------------------------------------------------------
 
@@ -233,279 +168,6 @@ class Landing:
         if self.git("fetch", "-q", "origin", BRANCH).returncode != 0:
             self.die(f"could not fetch origin/{BRANCH}", 1)
 
-    def note_lock_contention(self, seconds: int, holder: str = "") -> None:
-        """Book one attempt that lost the tree lock; name the holder on the first.
-
-        `holder` is the sample the caller took BEFORE the losing attempt. By the time the
-        attempt returns, the holder has usually released and a fresh read is empty, so the
-        given one wins whenever it is non-empty.
-        """
-        self.ledger.lock_waited += seconds
-        if self.ledger.lock_holder:
-            return
-        self.ledger.lock_holder = holder or self.tools.lock_holder()
-        if self.ledger.lock_holder:
-            say(f"lock held by {self.ledger.lock_holder}")
-
-    def note_in_flock_wait(self, seconds: int) -> None:
-        """Book a wait a wrapper rode out INSIDE its own flock.
-
-        Separate from `note_lock_contention` because the attempt succeeded: there is no
-        backoff to add, and the wrapper's line names no holder.
-        """
-        self.ledger.lock_waited += seconds
-
     def state(self, name: str) -> str | None:
         """The deployer's `<name>` marker; "" when absent, None when it could not be read."""
         return self.tools.read_state(self.opts.deployer_state, name)
-
-    def tick_state(self) -> TickState:
-        """What the deployer did with this landing, from its own markers.
-
-        `hold_sha` non-empty: an apply failed and the tick is holding. `behind_since`
-        non-empty: the tick did not cross origin (a newer merge whose CI is still running,
-        most often). Both are written by the deployer after main() returns.
-
-        A marker that could not be READ is `UNKNOWN`, never `CONVERGED`: reporting the
-        deployer as converged on the strength of a read that failed is the one wrong answer
-        that ends a landing with `settled`. `hold_sha` is read first and decides on its
-        own: a readable hold is `HELD` whatever `behind_since` does, so an unreadable
-        second marker cannot downgrade a real hold to `UNKNOWN`.
-
-        **`behind_since` alone is not enough to answer BEHIND.** The tick fast-forwards
-        to the newest GREEN ancestor of the master tip rather than gating the whole range on
-        it, so a tick that applied this very PR still ends behind the tip and still writes the
-        marker — that is what keeps the 6h watchdog armed for a tail that never goes green.
-        Reading the marker alone would therefore report `deferred` (exit 75) for work already
-        live. `merge_applied` settles it: a tick that
-        crossed this PR's merge commit is not deferring it, whatever the tip is doing.
-        """
-        hold = self.state("hold_sha")
-        if hold:
-            return TickState.HELD
-        behind = self.state("behind_since")
-        if hold is None or behind is None:
-            return TickState.UNKNOWN
-        if behind and not self.merge_applied():
-            return TickState.BEHIND
-        return TickState.CONVERGED
-
-    def merge_applied(self) -> bool:
-        """Does the primary checkout already contain this PR's merge commit?
-
-        False when there is no merge SHA to look for and when the query itself fails — an
-        unresolvable SHA is not evidence the tick applied it, and the conservative answer
-        keeps the landing on the resume path rather than reporting work as done. Same stance
-        as `tick_applied`, for the same reason.
-        """
-        if not self.merge_sha:
-            return False
-        return (
-            self.git("merge-base", "--is-ancestor", self.merge_sha, "HEAD").returncode
-            == 0
-        )
-
-    def tick_applied(self, sha: str) -> bool:
-        """Did the tick that crossed `sha` RECORD applying a broad plane?
-
-        CONVERGED is not that answer. It says local == origin, which any session's `git merge
-        --ff-only` also produces — and once it holds, `next_action()` returns `noop` for every
-        later tick, so a setup plane the tick never applied is stranded permanently while this
-        landing reports `settled`.
-
-        The answer is the `applied` half of the receipt covering `sha` (`receipt_for`).
-        `deploy_handlers.handle_broad` writes it only after `deploy_io.deploy_broad` returned,
-        so it means "applied", never "attempted". It is not a check that the apply named this
-        PR's own roles: `handle_broad` scopes `--tags` to the range it crossed, which carries
-        this PR's paths. A receipt holding only `manual` roles is a range the tick left to a
-        hand, and reads False.
-
-        Before #3391 this read the `broad_applied` marker, the LAST plane applied, and passed
-        whenever that apply ran at a commit containing `sha`. A range crossed by another
-        session's ff-merge then read as applied once any later broad tick ran. The receipt is
-        scoped to the one range containing `sha`, so that landing now reads as unapplied.
-
-        False for an absent marker, an unreadable state directory, and a receipt this checkout
-        cannot resolve. Reporting work as unfinished when it was done costs one hand check;
-        the other direction is the bug.
-        """
-        receipt = self.receipt_for(sha)
-        if not (receipt and receipt.applied):
-            return False
-        # Every plane this PR's broad half needs, not just any plane (#4333). An unread answer
-        # is the conservative False the docstring gives.
-        missing = self.planes_unapplied(receipt)
-        return missing is not None and not missing
-
-    def planes_unapplied(self, receipt: Receipt | None) -> set[str] | None:
-        """The playbooks this PR's broad half needs that `receipt` did not apply; None unread."""
-        try:
-            needed = land_tags.self_applied_playbooks(
-                list(self.classification.pr_paths), self.classification.quiet
-            )
-        except Exception:
-            return None
-        return set(needed) - set(receipt.applied if receipt else ())
-
-    def receipt_for(self, sha: str) -> Receipt | None:
-        """The deployer's receipt for the tick that crossed `sha`, or None when there is none.
-
-        The tick writes one receipt per origin SHA it crossed with a broad change (#3391). The
-        one for this landing is the receipt whose range `base..origin` contains `sha`: its
-        origin descends from `sha` and its base does not. Both halves are checked, because
-        the crossing tick may have written no receipt at all — another session's `git merge
-        --ff-only` crossed it, the tick ran a deployer without the writer, or the receipt was
-        pruned — and a LATER range's receipt also has an origin containing `sha`. Quoting that
-        one would print another range's tags and a clear that drops this PR's work unapplied.
-
-        None for an absent or unreadable marker, a receipt this checkout cannot resolve, and
-        no covering receipt, so the caller keeps the whole-role tag — the answer that is blunt
-        but never wrong.
-        """
-        # The basename, not the `MARKERS` key: `state` reads `<deployer_state>/<name>` as
-        # given, and the key read a file named `receipts` that the tick never writes.
-        for receipt in parse_receipts(self.state(MARKERS["receipts"])):
-            if self.git("merge-base", "--is-ancestor", sha, receipt.origin).returncode:
-                continue
-            if (
-                receipt.base
-                and self.git(
-                    "merge-base", "--is-ancestor", sha, receipt.base
-                ).returncode
-                == 0
-            ):
-                continue
-            return receipt
-        return None
-
-    def tick_half_unrecorded(self) -> bool:
-        """Is this PR's self-applied half converged-but-unapplied?
-
-        True only for that one state: the PR carries something the TICK applies, the tick
-        answers CONVERGED, and it recorded no broad apply covering the merge commit. HELD,
-        BEHIND and UNKNOWN are false here — each has a verdict of its own at the foot of
-        `health_verdict.health` and `deploy.no_tag_outcome`, and `tick_half_open_lines` is
-        what reports them at an arm that ends above those verdicts.
-        """
-        return (
-            bool(self.classification.self_applied)
-            and self.tick_state() == TickState.CONVERGED
-            and not self.tick_applied(self.merge_sha)
-        )
-
-    def tick_half_remediation(self) -> list[str]:
-        """What to do about a tick's own half that recorded no apply of this PR.
-
-        The abandoned watch first: the markers were read mid-apply, so the apply command
-        would send an operator after work that may be running. Otherwise the note and, where
-        the classifier derived one, the command itself. One builder, called from all four
-        sites that reach this state, so the plane arms and the verdict arms cannot drift.
-        """
-        if self.tick_watch_abandoned:
-            return [ABANDONED_WATCH_NOTE]
-        lines = [unrecorded_apply_note(self.state("behind_since"))]
-        if self.classification.self_applied_command:
-            lines.append(f"  Apply it: {self.classification.self_applied_command}")
-        return lines
-
-    def tick_half_open_lines(self) -> list[str]:
-        """What the deployer's own state still owes this landing, as printable lines.
-
-        Empty when the PR carries no self-applied half, and when the tick's half is settled.
-        Otherwise one report per `tick_state()`: the hold, the deferral, the unreadable state
-        directory, or the converged-but-unapplied shape and its remediation.
-
-        DECIDED: this REPORTS the tick's state, it does not re-verdict the landing. The arms
-        that call it end at `needs-manual-apply` for a plane only a hand can apply, and every
-        tick-state verdict is weaker than that: `deferred` (exit 75) is a resume point, and
-        re-running a landing never applies a bring-up playbook. Letting BEHIND win would
-        downgrade "a human must apply this" to "wait and retry", so the plane verdict stands
-        and the tick's half is printed beside it. Extends #2579's stance from CONVERGED to
-        all four states (#2601). For the same reason nothing here sets `ledger.cause`, which
-        `outcome.Cause` scopes to a `deploy-failed` verdict.
-        """
-        if not self.classification.self_applied:
-            return []
-        state = self.tick_state()
-        if state == TickState.UNKNOWN:
-            return [
-                f"  The deployer's state directory ({self.opts.deployer_state}) could not "
-                "be read, so whether the tick applied its own half is unknown"
-            ]
-        if state == TickState.HELD:
-            hold = self.state("hold_sha")
-            return [
-                f"  The deployer is also holding {hold}: its own apply "
-                "failed — see the held planes in owed.jsonl and the gitops-deploy journal. A hold blocks every "
-                "session's deploy until it is cleared, so this PR's half stays unapplied.",
-                f"  {hold_clear_hint(hold)}",
-            ]
-        if state == TickState.BEHIND:
-            lines = [
-                "  The tick has also not fast-forwarded to origin (parked since: "
-                f"{self.state('behind_since')}), so its own half of this PR is not applied "
-                "yet. Usually a newer merge whose CI is still running; the next tick crosses "
-                "it, and the plane above still needs a hand either way."
-            ]
-            if self.tick_watch_abandoned:
-                lines.append(ABANDONED_WATCH_NOTE)
-            return lines
-        if not self.tick_half_unrecorded():
-            return []
-        return [
-            "  The tick also converged without recording an apply of this PR "
-            f"({self.receipt_summary(self.merge_sha)})",
-            *self.tick_half_remediation(),
-        ]
-
-    def receipt_summary(self, sha: str) -> str:
-        """What the receipt covering `sha` says the tick applied, for a printed line.
-
-        The receipt is JSON, so a line quoting it raw would be unreadable; this names its
-        origin and each plane with its tags.
-        """
-        receipt = self.receipt_for(sha)
-        if receipt is None:
-            return "receipt: none covers this commit"
-        planes = "; ".join(
-            f"{playbook} {','.join(tags) or '(whole play)'}"
-            for playbook, tags in sorted(receipt.applied.items())
-        )
-        return f"receipt {receipt.origin[:8]}: {planes or 'no plane applied'}"
-
-
-def retry_while_locked(
-    ln: Landing, busy_rc: int, attempt: Callable[[], int], note: Callable[[int], str]
-) -> int:
-    """Run `attempt` until it stops returning `busy_rc`; the last return code.
-
-    Bounded by `opts.lock_retries`, with `opts.lock_backoff` between attempts.
-
-    The holder is sampled BEFORE each attempt on purpose: read afterwards, it has usually
-    released and the landing books an empty one.
-
-    Args:
-      ln: the landing, for its budgets and its lock accounting.
-      busy_rc: the return code that means "the lock was held; try again".
-      attempt: what to run, returning a process exit code.
-      note: the progress line for attempt N, given N.
-    """
-    o, t = ln.opts, ln.tools
-    rc = 0
-    for n in range(1, o.lock_retries + 1):
-        # DECIDED: this samples on every attempt, including an uncontended first one, where
-        # bash's `note_lock_contention` only ran fuser+ps after an attempt had already lost
-        # the lock. That is a real parity delta (#1085 item 4) and it stays: reverting to
-        # bash's post-failure sample reintroduces the #1031 race this pre-sample exists to
-        # close, and `test_the_lock_holder_is_sampled_before_the_attempt`
-        # (tests/test_land_tick.py) plus its deploy.py sibling would go red on the revert.
-        # The cost is two short-lived processes per attempt against a 10-15 minute landing.
-        holder = t.lock_holder()
-        started = t.clock()
-        rc = attempt()
-        if rc != busy_rc:
-            break
-        ln.note_lock_contention(int(t.clock() - started) + o.lock_backoff, holder)
-        say(note(n))
-        t.sleep(o.lock_backoff)
-    return rc

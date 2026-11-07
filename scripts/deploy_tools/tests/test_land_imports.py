@@ -20,7 +20,6 @@ MODULES = frozenset(
         "classify",
         "closing_refs",
         "ci",
-        "tick",
         "deploy",
         "promotion",
         "health_verdict",
@@ -97,18 +96,14 @@ ALLOWED = {
     "classify": {"landing", "outcome", "land_tags", "promotion"},
     "closing_refs": {"gh_read", "landing", "outcome"},
     "ci": {"landing", "outcome"},
-    "tick": {"landing", "outcome"},
     "deploy": {
         "landing",
         "outcome",
-        "tick",
         "promotion",
     },
     # The split of a landing's tags and the wait on promotion, step 5's work (D2.3).
     "promotion": {"landing", "outcome"},
-    # `tick.rearm_tick`: the second kick request, after the gate, for a first one that joined
-    # a run in flight. The kick's states live in tick.py, in one place.
-    "health_verdict": {"landing", "outcome", "tick", "promotion"},
+    "health_verdict": {"landing", "outcome", "promotion"},
     # The fork, the logfile and the verdict wait. It imports no phase: `land.py` hands it a
     # callable and it never knows what a landing is.
     "detach": set(),
@@ -149,7 +144,6 @@ ALLOWED = {
         "classify",
         "closing_refs",
         "ci",
-        "tick",
         "deploy",
         "health_verdict",
         "host_wait",

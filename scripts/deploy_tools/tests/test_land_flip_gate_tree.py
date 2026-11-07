@@ -23,7 +23,6 @@ from _land_fakes import (
     Fakes,
     build_classifier,
     build_tools,
-    receipt,
 )
 from deploy_tools.deploy_lib import detach_notify
 from deploy_tools.deploy_lib.detach_notify import NotifyTools
@@ -128,9 +127,7 @@ def _flip(**kwargs: object) -> Fakes:
             }
         },
         derived=(["traefik", "traefik-crds", "artifacts"], "pr"),
-        self_applied=True,
         owners={MERGE_SHA: dict.fromkeys(FLIPPED, "flux")},
-        state=receipt({"ansible/deploy.yml": ["narrowed-to-nothing"]}),
         land_wait=[WaitResult("settled", detail="2 applied", tags=FLIPPED)],
     )
     return replace(fakes, **kwargs)

@@ -17,6 +17,7 @@ from _host_write_rows import _flippable_task_files, _host_write_tasks
 from _row_table import Census, Subject, tracked
 
 _HOST_FILES_ROLE = "ansible/roles/setup/k8s_host_files/"
+_REGISTRY_GC_SCRIPT = "hosts/components/registry-gc/templates/registry-gc.sh.j2"
 
 # ── No host script writes a cluster object ────────────────────────────────────────────
 
@@ -190,6 +191,7 @@ def _host_scripts() -> list[str]:
     return sorted(
         {rel for rel in installed if (REPO / rel).is_file()}
         | set(tracked(_HOST_FILES_ROLE + "templates/*", _HOST_FILES_ROLE + "files/*"))
+        | {_REGISTRY_GC_SCRIPT}
     )
 
 
@@ -243,9 +245,9 @@ HOST_SCRIPT_WRITES = Census(
     # move most of them to setup roles, so the floor and the member are the one only D5 moves.
     # pi-peer-backup's forced-command wrapper, the other, moved to `k8s_host_files` at its flip.
     min_matches=1,
-    must_find=frozenset({_HOST_FILES_ROLE + "templates/registry-gc.sh.j2"}),
+    must_find=frozenset({_REGISTRY_GC_SCRIPT}),
     allow={
-        _HOST_FILES_ROLE + "templates/registry-gc.sh.j2": (
+        _REGISTRY_GC_SCRIPT: (
             "The script scales only deploy/ghcr-mirror and deploy/dockerhub-mirror, since D5 "
             "retired the push store's GC phase. Neither mirror template renders `replicas:`, "
             "so Flux's server-side apply does not own `spec.replicas`, the one field the "

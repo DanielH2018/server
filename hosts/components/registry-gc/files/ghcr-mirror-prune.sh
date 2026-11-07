@@ -1,5 +1,5 @@
 #!/bin/sh
-# Prune the ghcr-mirror store offline — managed by Ansible (k8s/registry role); edits overwritten.
+# Prune the ghcr-mirror store offline — shipped by the registry-gc component; edits overwritten.
 #
 # The ghcr-mirror container is a pull-through cache with REGISTRY_PROXY_TTL=0s, so nothing
 # expires what it cached, and a registry in proxy mode refuses manifest DELETE (#5541). The

@@ -26,9 +26,11 @@ import re
 from pathlib import Path
 
 import pytest
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, REPO
 from _shell_render import rendered_shell_text
 from lib.repo_paths import ROLES
+
+_COMPONENTS = REPO / "hosts" / "components"
 
 
 PING_HOST = "hc-ping.com"
@@ -99,7 +101,7 @@ def _ping_files() -> list[Path]:
     """
     found = [
         path
-        for path in sorted(ANSIBLE.rglob("*"))
+        for path in sorted([*ANSIBLE.rglob("*"), *_COMPONENTS.rglob("*")])
         if path.is_file()
         and path.suffix in SOURCE_SUFFIXES
         and "collections" not in path.parts

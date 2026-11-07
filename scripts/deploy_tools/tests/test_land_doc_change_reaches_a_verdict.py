@@ -7,7 +7,7 @@ TWO PLACES A `.md` COULD REACH A VERDICT, and both are covered here. `role_for` 
 matches by path and only `quiet_paths` can drop.
 
 THE VERDICT IS ASSERTED for the doc-only half, not just `plane_note`. A `tasks/` change deploys the role's callers -- one of them when the change to `manifests` moves no rendered bytes, narrowed to a single smoke caller -- so its half asserts that tag instead. `plane_note` returning "" is not the outcome --
-`no_tag_outcome` reads it together with `self_applied`, and only their combination decides between `nothing-to-deploy` (exit 0) and `needs-manual-apply` (exit 1).
+`no_tag_outcome` reads it, and only its answer decides between `nothing-to-deploy` (exit 0) and `needs-manual-apply` (exit 1).
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_doc_change_reaches_a_verdict.py
 """
@@ -73,9 +73,6 @@ def _verdict(landing, files: list[str]) -> Outcome:
     quiet = land_tags.quiet_paths(files, "")
     ln.classification = Classification(
         plane=land_tags.plane_note(files, quiet=quiet),
-        self_applied=land_tags.self_applied(files, quiet=quiet),
-        self_applied_command=land_tags.self_applied_command(files, quiet=quiet),
-        remaining_setup="",
     )
     with pytest.raises(Outcome) as exc:
         deploy.no_tag_outcome(ln)
