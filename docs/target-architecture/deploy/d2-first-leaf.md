@@ -467,7 +467,7 @@ applies nothing and says so. No site ever hands an empty `--tags` value on.
 | `deploy.sh --list-services` | Marks T with its owner. |
 | GitOps deployer | Routes T's paths to a new `cs.flux` set: fast-forwarded, logged, never deferred, never alerted, never owed. `_deploy_plane` drops T before its `if not tags` check, so a list left empty is `NARROWED_TO_NOTHING`. Ownership is read at the commit being applied. |
 | `land.sh` | Splits the PR's tags. T waits on promotion (below). Before it merges, it refuses a PR that makes T Ansible-owned while T's Kustomization exists (*Rollback*). |
-| `secret_rotation.py --deploy` | `cmd_rotate` drops T before it calls `rotation_tools.run_deploy`, which runs `ansible-playbook ansible/deploy.yml` without `deploy.sh`. It runs no playbook when nothing remains. D3 gives a rotated cluster secret its path. |
+| `secret_rotation.py --deploy` | `cmd_rotate` drops T and runs no deploy, because Flux applies T once the commit lands. It exits 1 on a consumer that is not flux-owned, which has no path since R4.7. D3 gives a rotated cluster secret its path. |
 | `probe.py health T` | Reads T's Kustomization, not a release record, for its reference time when the tree marks T flux-owned (`tag_owners`). |
 | `gen_role_glance.py`, `service_catalog.py` | For `owner: flux`, print that Flux applies the role through `promote` and that `deploy.sh` refuses it with exit 5, in place of the deploy tag and the auto-deploy stance. |
 

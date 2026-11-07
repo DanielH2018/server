@@ -294,9 +294,9 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     Dry-run by default; `--commit` writes new values via `sops set`. Due-ness is judged from
     the registry dates advanced to git's (skipped with `--no-derive`). Exits 64 when
     `args.name` names a non-auto-tier secret, 3 when a `sops set` fails or times out partway
-    through the batch or the cluster files fail to follow it (`sync_cluster_files`), 1 when `--deploy` is given and the redeploy fails (the new tokens are written but
-    their consumers are not), 0 otherwise. A consumer whose entry carries `owner` is left out of
-    the redeploy and named, and no deploy runs when none is left.
+    through the batch or the cluster files fail to follow it (`sync_cluster_files`), 1 when `--deploy` is given and a consumer carries no `owner: flux` (the
+    new tokens are written, and no path would apply them), 0 otherwise. Flux applies an `owner: flux`
+    consumer once the commit lands, so this runs no deploy of its own and names each one.
     """
     reg = tools.load_registry()
     now = tools.today()
@@ -404,37 +404,29 @@ def cmd_rotate(args, tools: RotationTools) -> int:
             % (", ".join(written), " ".join(REVERT_PATHS + CLUSTER_PATHS))
         )
         return 3
-    # Before both the redeploy and the Next: line, so neither names a tag `deploy.sh` refuses.
     owners = tools.owners()
     left_out = tags & owners.keys()
     for tag in sorted(left_out):
         print(left_out_line(tag))
-    tags -= left_out
-    if args.deploy and tags:
-        if tools.deploy(sorted(tags)) != 0:
-            error(
-                "DEPLOY FAILED for tags %s — new tokens written to secrets.yml but consumers "
-                "NOT updated. Revert the working tree (`git checkout -- "
-                "ansible/vars/secrets.yml ansible/secret_rotation.yml`) or finish by hand."
-                % ",".join(sorted(tags))
-            )
-            return 1
-    elif args.deploy:
-        if left_out:
-            print("  deployed nothing: no consumer is left for Ansible to deploy")
-    else:
-        # deploy.sh deploys HEAD, not the working tree, so no consumer sees a rotated value
-        # until it is committed. A Flux consumer needs the commit too, so that half stays.
-        redeploy = (
-            ", then redeploy the consumer(s): `./scripts/deploy.sh --tags %s`"
-            % ",".join(sorted(tags))
-            if tags
-            else ""
+    unapplied = sorted(tags - left_out)
+    if args.deploy and unapplied:
+        error(
+            "NO DEPLOY PATH for tags %s — Flux applies only a consumer carrying owner: flux, "
+            "and no playbook applies any other. New tokens are written to secrets.yml but "
+            "these consumers are NOT updated. Revert the working tree (`git checkout -- "
+            "ansible/vars/secrets.yml ansible/secret_rotation.yml`) or finish by hand."
+            % ",".join(unapplied)
         )
+        return 1
+    if not args.deploy:
         # Once `write` rewrote them, CI's `cluster_vars.py check` fails a commit without them.
         files = ["secrets.yml", "secret_rotation.yml"] + (synced and CLUSTER_PATHS)
         files = ", ".join(files[:-1]) + " and " + files[-1]
-        print("\nNext: commit " + files + redeploy)
+        print(
+            "\nNext: commit "
+            + files
+            + ", then land the commit: `promote` and Flux apply it"
+        )
     return 0
 
 
@@ -529,7 +521,9 @@ def main(argv=None) -> int:
     pr.add_argument("--all", action="store_true", help="all auto secrets, not only due")
     pr.add_argument("--name", help="rotate one named auto secret")
     pr.add_argument(
-        "--deploy", action="store_true", help="redeploy consumers after rotating"
+        "--deploy",
+        action="store_true",
+        help="exit 1 when a consumer carries no owner: flux; Flux applies the rest once the commit lands",
     )
     pr.add_argument(
         "--no-derive",

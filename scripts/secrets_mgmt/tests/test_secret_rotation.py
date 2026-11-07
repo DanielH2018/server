@@ -254,8 +254,8 @@ def test_rotate_reports_the_names_already_written_when_a_sops_set_hangs(capsys):
 
 
 # ── what `cmd_rotate` tells the operator to do next ─────────────────────────
-def test_rotate_without_deploy_says_commit_then_deploy_sh(capsys):
-    """deploy.sh deploys HEAD, so the Next: line must say to commit before it deploys."""
+def test_rotate_without_deploy_says_commit_then_land(capsys):
+    """Flux reaches a rotated value only through a landed commit, so the Next: line says so."""
     name = "monitor_bridge_test_token"
     tools, _ = build_tools(Fakes(registry=_reg((name, "auto", "2026-01-01"))))
     args = SimpleNamespace(
@@ -263,25 +263,26 @@ def test_rotate_without_deploy_says_commit_then_deploy_sh(capsys):
     )
     assert sr.cmd_rotate(args, tools) == 0
     out = capsys.readouterr().out
-    assert "Next: commit " in out and "./scripts/deploy.sh --tags " in out, out
-    assert "ansible-playbook" not in out, out
+    assert "Next: commit " in out and "then land the commit" in out, out
+    assert "deploy.sh" not in out, out
 
 
-def test_rotate_deploy_failure_names_the_revert_command_and_tags(capsys):
+def test_rotate_deploy_refuses_a_consumer_flux_does_not_apply(capsys):
+    """No playbook applies a role, so a tag Flux does not own must not read as deployed."""
     name = "monitor_bridge_test_token"
-    tools, _ = build_tools(Fakes(registry=_reg((name, "auto", "2026-01-01")), run_rc=1))
-    # `run_rc` would also fail the `sops set`, which passes `check=True`; only the deploy
-    # should fail here.
-    tools = replace(tools, sops_set=lambda _name, _value: None)
+    tools, calls = build_tools(
+        Fakes(registry=_reg((name, "auto", "2026-01-01")), owners={})
+    )
     args = SimpleNamespace(
         name=name, all=False, commit=True, deploy=True, no_derive=False
     )
     assert sr.cmd_rotate(args, tools) == 1
     err = capsys.readouterr().err
-    assert "DEPLOY FAILED for tags " in err, err
+    assert "NO DEPLOY PATH for tags monitor-bridge" in err, err
     assert (
         "git checkout -- ansible/vars/secrets.yml ansible/secret_rotation.yml" in err
     ), err
+    assert not [c for c, _ in process_calls(calls) if "ansible-playbook" in c]
 
 
 # ── `source: record` keys ─────────────────────────────────────

@@ -95,8 +95,10 @@ does for homepage and peanut. Every step that handles the value is **operator-on
    `needs-manual-apply` naming the Ansible half.
 5. Run the `deploy.sh` line from step 3.
 
-The weekly cron needs no `write` step: `rotate --commit` runs it before it deploys. For an
-`owner: flux` consumer, `rotate` prints that Flux applies the value once the commit lands.
+The weekly cron needs no `write` step: `rotate --commit` runs it in process. `rotate` prints
+that Flux applies each `owner: flux` consumer's value once the commit lands. With `--deploy`, it
+runs no deploy and exits 1 on a consumer that carries no `owner: flux`, because no other path
+applies a k8s consumer since `ansible/deploy.yml` lost its roles.
 
 ### Rotating the cluster key
 

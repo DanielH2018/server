@@ -5,7 +5,6 @@ test drives each stderr path and checks every line it wrote.
 """
 
 import datetime as dt
-from dataclasses import replace
 from types import SimpleNamespace
 
 
@@ -33,14 +32,14 @@ def test_every_stderr_line_carries_the_scripts_error_prefix(monkeypatch, capsys)
     record_key, _ = build_tools(Fakes(registry=_reg("tok", source="record")))
     pinned, _ = build_tools(Fakes(registry=_reg("tok", tier="pinned")))
     write_fails, _ = build_tools(Fakes(registry=_reg(token), run_rc=1))
-    deploy_fails = replace(write_fails, sops_set=lambda _name, _value: None)
+    no_path, _ = build_tools(Fakes(registry=_reg(token), owners={}))
     future = (TODAY + dt.timedelta(days=1)).isoformat()
 
     codes = [
         sr.cmd_rotate(_rotate("tok"), record_key),
         sr.cmd_rotate(_rotate("tok"), pinned),
         sr.cmd_rotate(_rotate(token), write_fails),
-        sr.cmd_rotate(_rotate(token), deploy_fails),
+        sr.cmd_rotate(_rotate(token), no_path),
         sr.cmd_record(_record("absent", "2026-01-01"), pinned),
         sr.cmd_record(_record("tok", future), pinned),
     ]
@@ -53,20 +52,13 @@ def test_every_stderr_line_carries_the_scripts_error_prefix(monkeypatch, capsys)
         assert line.startswith("secret_rotation.py: error: "), line
 
 
-# A token whose consumer Flux applies (D2.4b): the redeploy leaves that tag out, and runs no
-# deploy at all when no consumer is left. `monitor-bridge` is the test token's one consumer.
+# A token whose consumer Flux applies (D2.4b): `rotate` runs no deploy and names the tag.
+# `monitor-bridge` is the test token's one consumer.
 _TOKEN = "monitor_bridge_test_token"
 
 
 def _deploys(calls) -> list[list[str]]:
     return [argv for argv, _ in process_calls(calls) if "ansible-playbook" in argv]
-
-
-def test_rotate_deploy_of_an_ansible_owned_consumer_is_clean(capsys):
-    tools, calls = build_tools(Fakes(registry=_reg(_TOKEN)))
-    assert sr.cmd_rotate(_rotate(_TOKEN), tools) == 0
-    assert [argv[-1] for argv in _deploys(calls)] == ["monitor-bridge"]
-    assert "not redeployed" not in capsys.readouterr().out
 
 
 def test_rotate_deploy_of_a_flux_owned_consumer_is_flagged(capsys):
@@ -79,7 +71,6 @@ def test_rotate_deploy_of_a_flux_owned_consumer_is_flagged(capsys):
     assert "not redeployed: monitor-bridge carries owner: flux" in out, out
     # The Flux path, not the refusal: `write` already ran in process (D3.4).
     assert "Flux applies it once the commit carrying the cluster files lands" in out
-    assert "deployed nothing" in out, out
 
 
 def test_rotate_next_line_leaves_out_a_flux_owned_consumer(capsys):
