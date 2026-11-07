@@ -26,9 +26,8 @@ steps, and this page describes each piece once its PR has merged.
 - `scripts/renderer/renderer_lib/derived.py:content_tag` computes each built image's tag
   (*Derived values*), and `scripts/renderer/renderer_lib/targets.py:render_targets` lists the
   tags a host renders.
-- `scripts/renderer/shadow_diff.py compare`, `stubcheck` and `digest` compare two trees and
-  hash a render (*Compare two render trees*). `scripts/renderer/renderer_lib/shadow.py`
-  holds their library.
+- `scripts/renderer/shadow_diff.py digest` hashes a render (*Hash a render tree*).
+  `scripts/renderer/renderer_lib/shadow.py` holds its library.
 - Four determinism modules in `scripts/renderer/tests/` render every tag twice under an audit
   hook (*The render is deterministic and reads only the repo*).
 - `scripts/renderer/renderer_lib/placeholders.py` holds placeholder mode: the mode call, the
@@ -727,45 +726,10 @@ key before the load, so neither assert fires.
   before a secret was added fails here and names the new key. To fix it, write a fresh stub
   file from the same tree.
 
-## Compare two render trees
+## Hash a render tree
 
-`shadow_diff.py compare` reads two render trees and reports how they differ. Either side is a
-per-service tree, with one directory per service, or a C1 tree, with `cluster/` at the top as
-`homelab_render.py cluster` writes it. It keys both by the C1 path. A per-service tree's
-deferred subdirectory, such as `pihole/pihole-instance-2/`, maps to `cluster/pihole-deferred/`.
-`kustomization.yaml` is ignored.
-
-- **The expected tags.** When either side is a per-service tree, the set is the render targets
-  of daniel-box less the entries that carry `owner: flux` (C4 in
-  [the contracts](target-architecture/contracts.md)). A C1 side's flux-owned directories are
-  ignored, and a per-service directory for a tag outside the set is reported as extra. Two C1
-  trees compare over every render target.
-- **The verdict.** It exits 0 and prints `<t> tags, <n> files, 0 differences` only when the
-  trees match. `<t>` is the expected tag count and `<n>` the number of files compared. It
-  exits 1 on any missing, extra or differing file, and on an expected tag that neither side
-  rendered.
-- **The refusals.** It exits 2 when the expected set is empty, when neither tree holds a file
-  for an expected tag, or when either side lacks one of three named members:
-  `traefik/deployment.yaml`, pihole's deferred directory `pihole-instance-2`, and a
-  `claim-*.yaml` file. A named member whose tag is flux-owned is dropped from that check, and
-  `compare` prints which. A file where neither layout puts one is refused as well.
-- **The report.** It groups the differences by class: present on one side only, an expected
-  tag on neither side, trailing newlines only, whitespace only, content, and a file lacking a
-  stub token. The report is meant for posting, so it prints no stub or secret value. A file
-  that fails `stubcheck`'s rule is named and its content withheld. A file holding a `kind:
-  Secret` document is named without a hunk, because its `data` is base64 that redaction
-  cannot read. A file that differs on a line where the C1 render holds a stub token is named
-  without a hunk too, because the other side's line sits at a stub site. Every other hunk
-  carries each stub token as `<stub>`.
-
-`shadow_diff.py stubcheck ANSIBLE C1` checks a per-service tree's stub values against the C1
-render. For each file both trees hold, every stub token in the C1 file must appear in the
-per-service file at least as often, with the `data` of each Secret decoded on both sides. The
-count matters: a file that keeps a token at one site and holds another value at a second
-site fails. A stub token is `stub-` followed by lower-case letters, digits and hyphens, and
-tokens compare whole. It
-names each failing file with the tokens it lacks, never the file's content, and exits 1. A
-file only one side holds, or one whose C1 render holds no token, passes unchecked.
+The render-diff job's `compare` holds two complete C1 trees to each other (*The render-diff
+gate*), so nothing compares a render with a per-service tree.
 
 `shadow_diff.py digest DIR` prints one line per directory under `DIR/cluster/`, as
 `<directory> sha256:<hex>`, then a `total` line over every file under `DIR`. Each hash covers
@@ -774,8 +738,8 @@ no line depends on the absolute directory or the locale. A render of some tags g
 lines for those tags as a render of all of them. `digest_line` and `directory_digests` in
 `scripts/renderer/renderer_lib/shadow.py` build the same lines for R1's determinism tests.
 
-All three exit 64 on a usage error. `scripts/lib/exit_codes.py` holds the codes as its
-`SHADOW_*` family.
+It exits 64 on a usage error. `scripts/lib/exit_codes.py` holds the codes as its `SHADOW_*`
+family.
 
 ## The render is deterministic and reads only the repo
 
