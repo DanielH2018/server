@@ -49,7 +49,7 @@ here must satisfy this summary.
 - **Mode (per actuator, explicit + reversible):** sidecar `DRY_RUN` (live) and fake-remux
   `FAKE_REMUX_REPLACE_MODE` (off/shadow/live, run `live` by host_vars). Returning either
   plane to report-only is one env flip, merged (the sidecar's reaches the pod through
-  `promote`) or deployed (fake-remux's through its setup role) — preserve that.
+  `promote`) or deployed (fake-remux's through daniel-box's package) — preserve that.
 - **Authoritative sources:** the *arr `/api/v3/queue` and ffprobe truth, never a cached
   guess.
 - **Abort valves:** `GRACE_CYCLES`, plus `MAX_ACTIONS_PER_CYCLE` / `MAX_PER_SCAN` — a mass
@@ -67,7 +67,7 @@ here must satisfy this summary.
    `CLIENT_ERROR_PATTERNS`, was retired 2026-09-18 (#1951) as inert at the pinned *arr
    versions, and **an *arr bump re-opens that**: re-run #1951's verify-by first.
 2. **Host plane** — the two fake-remux crons, doing work the locked-down container cannot
-   (host ffprobe on the media files), each writing a state file `fake-remux-health.sh` reads into
+   (host ffprobe on the media files), each writing a state file `fake-remux-health` reads into
    a textfile for the `other-setup-checks` rules. Both run as `sys_user`, never root.
    - **The scan never deletes or re-searches**: it flags a file whose quality claims a Remux
      but whose video stream is a re-encode, and seeds the ledger. It ffprobes the file on the
@@ -114,7 +114,7 @@ here must satisfy this summary.
   `templates/env-secret.yaml.j2`, which carries only the credentials, and
   `templates/script-configmap.yaml.j2`. A setting never goes in the Secret: Flux's typed patch
   reads a Secret's quoted `"300"` back as a number and refuses it (#5574).
-- The two fake-remux crons live in `ansible/roles/setup/fake_remux/files/`;
+- The two fake-remux crons live in `hosts/components/fake-remux/files/`;
   `docs/autofix-bridge-actuators.md` carries the command that runs either by hand safely.
 - Tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` and `uv run pytest
-  ansible/roles/setup/fake_remux/tests`.
+  hosts/components/fake-remux/tests`.

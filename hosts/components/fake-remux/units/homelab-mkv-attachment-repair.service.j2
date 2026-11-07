@@ -1,0 +1,17 @@
+# Shipped by the fake-remux component. Started by homelab-mkv-attachment-repair.timer.
+[Unit]
+Description=Rename mkv font attachments that jellyfin-ffmpeg refuses
+After=network-online.target homelab-secrets.service
+Wants=network-online.target homelab-secrets.service
+
+[Service]
+SyslogLevel=notice
+Type=oneshot
+User={{ sys_user }}
+SyslogIdentifier=mkv-attachment-repair
+# DECIDED: takes fake_remux_lock, though it shares no ledger with the other two. The reconciler
+# deletes and swaps the same mkv files this rewrites the header of, and mkvpropedit rewriting a
+# header mid-swap corrupts the file it was called to fix. The lock costs a wait.
+ExecStart=/usr/bin/flock -w 600 {{ fake_remux_lock }} \
+  /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
+  {{ fake_remux_opt_dir }}/mkv_attachment_repair.py

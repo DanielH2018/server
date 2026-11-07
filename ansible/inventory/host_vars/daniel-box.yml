@@ -1240,7 +1240,7 @@ render_gid: 993
 # is what re-checks it afterwards, every 10 minutes via ups-secondary-health.sh.
 nut_host_secondary_armed: true
 
-# The unattended Renovate agent (roles/setup/renovate_agent). The timer fires at 06:00
+# The unattended Renovate agent (hosts/components/renovate-agent). The timer fires at 06:00
 # America/Chicago daily and spends one headless session over the open Renovate PRs, landing up
 # to renovate_agent_max_prs of them through the renovate-agent-land@ lander. Setting this back
 # to false stops and disables the timer; that is the rollback.

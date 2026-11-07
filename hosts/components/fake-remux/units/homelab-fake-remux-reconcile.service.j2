@@ -1,0 +1,14 @@
+# Shipped by the fake-remux component. Started by homelab-fake-remux-reconcile.timer.
+[Unit]
+Description=Replace the fake remuxes the ledger lists through Sonarr
+After=network-online.target homelab-secrets.service
+Wants=network-online.target homelab-secrets.service
+
+[Service]
+SyslogLevel=notice
+Type=oneshot
+User={{ sys_user }}
+SyslogIdentifier=fake-remux-reconcile
+ExecStart=/usr/bin/flock -w 600 {{ fake_remux_lock }} \
+  /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
+  {{ fake_remux_opt_dir }}/fake_remux.py replace

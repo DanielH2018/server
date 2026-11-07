@@ -25,6 +25,11 @@
 # coredns-host metrics allows to `setup/k3s` (H7.35 declares the join rules `keep`), and the
 # deploy-ui allows to `setup/deploy_ui`. None carries a `homelab:` label, so the arm leaves them.
 #
+# Since H7.37 it ships the Renovate pair, fake_remux and the two GitHub checks (their components).
+# They read four more keys: renovate_agent_gh_token, renovate_agent_claude_oauth_token,
+# sonarr_api_key and arr_discord_webhook_url (`host_secrets.py sync daniel-box`, operator-only).
+# deploy_ui is not packaged: H7.11 keeps it with the deployer, and #7419 holds that question.
+#
 # The builder and the repository moved in H7.41b (hosts/components/builder). Other timers stay with
 # Ansible until H7. H6.4a adds the k3s-server component, whose first k3s.service drop-in lets the
 # package mark k3s.service `windowed` (the renderer refuses a unit policy that no package installs
@@ -70,6 +75,10 @@ components:
   - k3s-server
   - claude-code
   - sops
+  - renovate-notify
+  - renovate-agent
+  - fake-remux
+  - github-checks
 units:
   k3s.service: {policy: windowed}
 credentials:

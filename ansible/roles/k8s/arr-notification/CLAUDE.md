@@ -29,7 +29,7 @@ Both apps already carried a Discord notification named `Discord (health)`, creat
 | radarr | 1 | `Discord (health)` | Discord | `onHealthIssue`, `onHealthRestored` |
 
 Both point at the same webhook, and that webhook is byte-for-byte the SOPS
-`arr_discord_webhook_url` that `autofix-bridge` and `fake_remux` already read. So this role
+`arr_discord_webhook_url` that `autofix-bridge` and the `fake-remux` component already read. So this role
 adopts two rows and mints nothing: the first deploy reports **no change**.
 
 sonarr also carries an `Episode Trimmer` CustomScript notification (id 2, `onDownload` +

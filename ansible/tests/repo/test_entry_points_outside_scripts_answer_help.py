@@ -183,7 +183,7 @@ EXIT_64_ON_A_BAD_FLAG = (
     "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py",
     "ansible/roles/setup/initial_setup/files/loki_route_health.py",
     "ansible/roles/setup/initial_setup/files/worktree_holders.py",
-    "ansible/roles/setup/renovate_agent/files/land_renovate_pr.py",
+    "hosts/components/renovate-agent/files/land_renovate_pr.py",
     "scripts/deploy_tools/prune_releases.py",
 )
 

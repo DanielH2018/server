@@ -19,9 +19,9 @@ from _helpers import ANSIBLE, load_defaults
 from _ruleset_drift import textfile_series
 from _shell_render import render_shell_script
 
-ROLE = ANSIBLE / "roles" / "setup" / "gitops_deploy"
-TEMPLATE = ("setup", "gitops_deploy", "github-interaction-limit.sh.j2")
-CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
+ROLE = ANSIBLE.parent / "hosts" / "components" / "github-checks"
+TEMPLATE = ("components", "github-checks", "github-interaction-limit.sh.j2")
+CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 # The role's copy of the check library, so a runner that never ran initial_setup still sources it
 # and the textfile the script writes lands in TEXTFILE_DIR under tmp_path, never on the host.
 REAL_CHECK_LIB = REPO / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
@@ -218,9 +218,7 @@ def test_the_declared_values_are_ones_the_api_accepts(key):
     """The defaults are what the cron sends daily; a typo there is a daily 422 and a red tile."""
     from lib import yaml_fast
 
-    defaults = yaml_fast.safe_load(
-        (ANSIBLE / "roles/setup/gitops_deploy/defaults/main.yml").read_text()
-    )
+    defaults = yaml_fast.safe_load((ROLE / "defaults/main.yml").read_text())
     accepted = {
         "gitops_deploy_interaction_limit": {
             "none",

@@ -267,25 +267,22 @@ def test_the_narrowing_loop_stops_asking_once_its_budget_is_spent():
 def test_a_shipped_file_applies_and_holds_every_role_that_ships_it(
     gitops_deploy, tick, state
 ):
-    """deploy_ui and renovate_agent install the deployer's markers by path (#3306).
+    """deploy_ui installs the deployer's markers by path (#3306).
 
-    A range touching only that file applies all three roles' blocks, and a failed apply holds
+    A range touching only that file applies both roles' blocks, and a failed apply holds
     each block under its own role, so no apply of the owner alone can clear the hold.
     """
     tick.paths = ["ansible/roles/setup/gitops_deploy/files/gitops_markers.py"]
     tick.narrow_setup = {
         "gitops_deploy": (0, "gitops-deploy-code"),
         "deploy_ui": (0, "deploy-ui-code"),
-        "renovate_agent": (0, "renovate-agent-code"),
     }
     tick.playbook_outcomes = [RuntimeError("boom")]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert _playbook_argv(tick)[-1] == (
-        "deploy-ui-code,gitops-deploy-code,renovate-agent-code"
-    )
+    assert _playbook_argv(tick)[-1] == "deploy-ui-code,gitops-deploy-code"
     assert state.hold_plane == (
         "ansible/initial_setup.yml deploy_ui:deploy-ui-code,"
-        "gitops_deploy:gitops-deploy-code,renovate_agent:renovate-agent-code"
+        "gitops_deploy:gitops-deploy-code"
     )
     assert state.manual_plane_pending() == []
 
@@ -314,13 +311,13 @@ def test_exit_three_without_the_nothing_line_applies_the_whole_role_tag(
     gitops_deploy, tick, state
 ):
     """The rejecting half: the exit code alone is not the answer, so it stays doubt."""
-    tick.paths = [INITIAL_SETUP_DEFAULTS]
+    tick.paths = ["ansible/roles/setup/gitops_deploy/files/gitops_markers.py"]
     tick.narrow_setup = {
-        "renovate_agent": (deploy_narrow.NARROW_SETUP_NOTHING_EXIT, ""),
-        "initial_setup": (0, "prune"),
+        "deploy_ui": (deploy_narrow.NARROW_SETUP_NOTHING_EXIT, ""),
+        "gitops_deploy": (0, "prune"),
     }
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert _playbook_argv(tick)[-1] == "prune,renovate_agent"
+    assert _playbook_argv(tick)[-1] == "deploy_ui,prune"
 
 
 def test_a_range_no_setup_role_needs_a_tag_for_runs_no_playbook(

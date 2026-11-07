@@ -1,0 +1,79 @@
+---
+# What github-ruleset-drift and github-interaction-limit compare the repo with.
+gitops_deploy_github_repo: DanielH2018/server
+
+# --- The MERGE gate, which is a different thing from gitops_deploy_ci_contexts above ---
+#
+# The list above is what this DEPLOYER waits for. The list here is what GitHub's ruleset requires
+# before a PR can merge at all, and it is a superset: `renovate config validator` gates merges
+# while deliberately not gating deploys (see the reasoning above), and `pull + boot changed
+# images` is required for merges but has no `push:` trigger, so it never produces a check run on
+# master and could never be waited on by a tick. `flux-deletion-drill` is the same shape: it runs
+# on `pull_request` only, skips itself when no deletion path changed, and always reports (#6042).
+# `render-diff` also runs on `pull_request` only, and R4's last PR removes it.
+#
+# Declared here so github-ruleset-drift.sh can compare it against the live ruleset daily. That
+# comparison is the whole point: this list is a hand-copy of remote state that can silently go
+# stale. Reconcile this list when the drift
+# monitor fires — do not edit the ruleset to match the list.
+gitops_deploy_ruleset_id: 20912512
+gitops_deploy_expected_ruleset_contexts:
+  - prek (lint + validate + tests + secrets)
+  - pull + boot changed images
+  - renovate config validator
+  - flux-deletion-drill
+  - render-diff
+# Nobody merges past the CI gate. A bypass actor added here could merge an un-CI'd PR, through
+# land.sh's REST merge or any other merge call it makes. Each entry is
+# `<actor_type>:<actor_id>:<bypass_mode>`, as the rulesets API names them.
+gitops_deploy_ruleset_bypass_actors: []
+# The CI gate's pull_request rule: every change to master arrives as a PR, and none needs an
+# approving review. GitHub's auto-merge never applies a bypass, so a non-zero count leaves every
+# auto-merged PR BLOCKED. The operator chose on 2026-10-11 that PRs from the operator's account
+# and the agent's account both auto-merge once CI is green.
+gitops_deploy_ruleset_required_approvals: 0
+
+# The branch-protection ruleset ("Default": `deletion` + `non_fast_forward` on every ref, admin
+# bypass only) must exclude Renovate's branches, or GitHub refuses the app's post-merge delete
+# and its rebase force-push. A merged branch then survives at its green SHA and the next
+# version's PR automerges empty off that stale verdict. The drift
+# check alerts when the exclusion is missing; it never writes the ruleset.
+gitops_deploy_branch_ruleset_id: 17358590
+gitops_deploy_branch_ruleset_renovate_exclude: refs/heads/renovate/**
+
+# The fence ruleset ("agent branch fence", created 2026-10-05): creating, updating and deleting
+# a branch is restricted everywhere except the exclusions below. The agent's GitHub account is
+# not a bypass actor, so it cannot push onto a branch an operator session or Renovate opened,
+# where the next landing of that branch would carry its commit to master. An exclusion added to
+# the live ruleset is a branch the agent can push to, so the drift check compares the list
+# exactly. Master is excluded so that the agent's account can merge a PR, by auto-merge or
+# otherwise. The CI gate's pull_request rule still stops it pushing to master without a PR.
+gitops_deploy_fence_ruleset_id: 24517167
+gitops_deploy_fence_ruleset_exclude:
+  # Master is open to the agent only through a merged PR: see gitops_deploy_ruleset_required_approvals.
+  - refs/heads/master
+  # EnterWorktree names a `claude/<slug>` worktree's branch `worktree-claude+<slug>`: it
+  # replaces `/` with `+` (observed 2026-10-05). `worktree-claude-*` would also match operator
+  # branches such as worktree-claude-agent-github-identity.
+  - refs/heads/worktree-claude+**
+gitops_deploy_fence_ruleset_bypass_actors:
+  # `always`, because the operator's sessions and Renovate push branches, not only merge PRs.
+  - RepositoryRole:5:always
+  - Integration:2740:always
+
+# Daily, offset from the other daniel-box health crons. Rulesets change on a human cadence, and
+# the endpoint is rate-limited per source IP (60/hr unauthenticated, shared with renovate_notify),
+# so this is a safety net rather than a control loop.
+gitops_deploy_ruleset_drift_cron_hour: "6"
+gitops_deploy_ruleset_drift_cron_minute: "40"
+
+# The repo's GitHub interaction limit: who may comment, react, open issues and open PRs on a
+# repo that stays public. `collaborators_only` closes every one of those to anyone not listed
+# as a collaborator; `none` clears the limit. GitHub caps the setting at six months and lets it
+# lapse silently, so github-interaction-limit.sh re-applies it daily — a PUT with the same body
+# resets the expiry. Change the declaration here, never in the GitHub UI: the cron applies
+# whatever this says on its next run. Ten minutes after the ruleset check, same token budget.
+gitops_deploy_interaction_limit: collaborators_only
+gitops_deploy_interaction_limit_expiry: six_months
+gitops_deploy_interaction_limit_cron_hour: "6"
+gitops_deploy_interaction_limit_cron_minute: "50"

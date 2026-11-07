@@ -154,8 +154,8 @@ A setup role the deployer cannot apply is a fourth case. `k3s` lives in `k3s-bri
 fast-forwards and records the role instead of parking; see *A role only a hand can apply is
 recorded, not parked* below.
 
-A setup role can ship another setup role's file by path. The `deploy_ui` and `renovate_agent`
-roles install the deployer's `files/gitops_markers.py` and `files/gitops_ledger.py` that way.
+A setup role can ship another setup role's file by path. The `deploy_ui`
+role installs the deployer's `files/gitops_markers.py` and `files/gitops_ledger.py` that way.
 `deploy_changes.setup_roles_for` maps a change to such a file to its owner AND every role listed
 for it in `SETUP_FILES_SHIPPED_BY_OTHER_ROLES`. `ChangeSet.setup_roles` and `setup_tags_for` both
 read the table, so the `manual_plane` ledger class, the narrowed apply, the `hold_plane` coverage
@@ -914,14 +914,14 @@ the tick applies it on daniel-box, and daniel-server and daniel-pi need
 `uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy` (with `-e
 target=daniel-pi` for the Pi) run by an operator.
 
-**The two GitHub crons** are daily kuma-check timers on the deploy host (`check_timer.yml`
-in the `common` role). Each writes its verdict through `write_check_textfile`, which the rules
+**The two GitHub checks** are daily timers of the `github-checks` component on the deploy host, which keep the contract of
+`check_timer.yml` in the `common` role. Each writes its verdict through `write_check_textfile`, which the rules
 in `gitops-checks.yaml` read, and pushes to nothing. Each exits 1 on a down verdict, and
 `Restart=on-failure` reruns it every 30 minutes until it exits 0. Both
 authenticate with the deploy user's `gh auth token`, and without it both are red, because GitHub
 shows a ruleset's bypass list only to an admin. The timers are `Persistent=true`, so a slot missed
-inside an outage runs at boot. `teardown.yml` imports the same names absent, which reaps the
-units on a non-deployer host. One alerts and the other reconciles:
+inside an outage runs at boot. `teardown.yml` imports their Ansible-era names absent, which reaps
+the old units on a non-deployer host. One alerts and the other reconciles:
 
 - **`github-ruleset-drift.sh`** reads four ruleset definitions from GitHub and alerts on drift in
   any of them. It never writes: a ruleset changes because a human changed it, and reconciling

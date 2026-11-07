@@ -29,18 +29,6 @@ CHECK_TIMER = "check_timer.yml"
 _INSTALL_MODULES = ("ansible.builtin.copy", "ansible.builtin.template")
 
 EXEMPT: dict[str, str] = {
-    "fake_remux: cron `fake-remux scan`": (
-        "fake-remux-health.sh reads this cron's state file and writes its verdict as the "
-        "fake-remux-scan textfile"
-    ),
-    "fake_remux: cron `fake-remux reconcile`": (
-        "fake-remux-health.sh reads this cron's state file and writes its verdict as the "
-        "fake-remux-replace textfile"
-    ),
-    "fake_remux: cron `mkv attachment repair`": (
-        "fake-remux-health.sh reads this cron's state file and writes its verdict as the "
-        "mkv-attachment-repair textfile"
-    ),
     "gitops_deploy: timer `gitops-deploy`": (
         "writes /var/lib/gitops-deploy/last_run every tick, which monitor-bridge's GitOps-Alive "
         "check reads, and gitops_tick_metrics.py counts each tick by outcome"
@@ -192,8 +180,6 @@ def test_census_resolves_each_route_a_writer_takes():
     found = census()
     writers = {
         "k3s: cron `Longhorn backup health`",
-        "fake_remux: cron `fake-remux health`",
-        "renovate_agent: timer `renovate-agent`",
     }
     assert {key for key in writers if found.get(key)} == writers
     assert found.get("initial_setup: timer `kuma-check-setup-drift`") is True

@@ -26,8 +26,8 @@
 ansible/roles/k8s/artifacts/tests/test_artifact_server.py 1
 ansible/roles/k8s/autofix-bridge/tests/test_autofix.py 12
 ansible/roles/setup/deploy_ui/tests/test_deploy_ui_app.py 6
-ansible/roles/setup/fake_remux/tests/test_fake_remux_replace_logic.py 2
-ansible/roles/setup/renovate_notify/tests/test_pending_soak_wiring.py 6
+hosts/components/fake-remux/tests/test_fake_remux_replace_logic.py 2
+hosts/components/renovate-notify/tests/test_pending_soak_wiring.py 6
 scripts/backup/tests/test_longhorn_reap_delete_transport.py 5
 scripts/deploy_tools/tests/conftest.py 1
 scripts/deploy_tools/tests/test_await_ci.py 4

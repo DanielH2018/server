@@ -1,0 +1,10 @@
+# Shipped by the fake-remux component. Started by homelab-fake-remux-health.timer.
+[Unit]
+Description=Write the fake-remux and mkv repair verdicts to the textfile directory
+
+[Service]
+SyslogLevel=notice
+Type=oneshot
+User={{ sys_user }}
+SyslogIdentifier=fake-remux-health
+ExecStart=/usr/lib/homelab/fake-remux-health

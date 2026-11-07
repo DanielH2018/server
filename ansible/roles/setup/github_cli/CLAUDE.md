@@ -22,7 +22,7 @@ the GitHub API authenticated. Applied by `initial_setup.yml` (`--tags github_cli
   renders it.
 - **The credential helper is per-user git config**, so it lives with the connecting user and
   the deploy user reads the same token through `gh auth token` — the one identity behind the
-  deployer's CI gate, the two GitHub crons in `gitops_deploy`, and `renovate_agent`'s session.
+  deployer's CI gate and the two GitHub timers of the `github-checks` component.
 - **The apt source and the keyring belong to the host packages, not this role.**
   `hosts/components/apt-github-cli/` ships `github-cli.sources` and the keyring under
   `/etc/apt/keyrings`, and the packages of daniel-box and daniel-server list it. dpkg creates the file at mode

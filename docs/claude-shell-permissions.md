@@ -98,8 +98,7 @@ cluster.**
 holds. Remote Control sessions and new interactive sessions run as the `claude` user, which holds
 neither the age key that decrypts the become password nor the repo owner's `gh` token
 (`docs/claude-agent-user.md`, *What the `claude` user cannot do*). A session that still runs as
-`sys_user` holds both, and the header of `ansible/roles/setup/common/tasks/agent_user.yml` lists
-the rest of what that user can read. With the age key, such a session can run `deploy.sh` and
+`sys_user` holds both, and that user can read everything under its home. With the age key, such a session can run `deploy.sh` and
 `initial_setup.yml` as root on every host. With the token, it can merge its own PR through the
 REST endpoint, which is how `land.sh` merges every landing, or arm GitHub's auto-merge on it.
 The master CI gate's `pull_request` rule refuses a direct push to master from any token, so
@@ -107,7 +106,7 @@ every change reaches master as a PR. The GitOps deployer then applies master wit
 for a `sys_user` session the boundary is the permission layer this page describes, plus the PR
 every change leaves. The unattended
 Renovate session runs as its own user, on a token that can neither push nor merge
-(`ansible/roles/setup/renovate_agent/CLAUDE.md`).
+(`hosts/components/renovate-agent/CLAUDE.md`).
 
 **A `Bash()` rule matches on `kubectl <verb>` and nothing finer — flags and sub-subcommands in the
 rule are decorative.** The OTEL `tool_decision` stream shows:

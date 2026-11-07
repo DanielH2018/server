@@ -16,7 +16,7 @@ The rest is ordinary: triage by class, finish what needs finishing, then land ea
 `land-after-merge`.
 
 A daily timer runs this same skill unattended where it is armed —
-`ansible/roles/setup/renovate_agent/CLAUDE.md`.
+`hosts/components/renovate-agent/CLAUDE.md`.
 
 ## 0. An update with no PR is still an update
 

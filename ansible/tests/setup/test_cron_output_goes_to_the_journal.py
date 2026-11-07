@@ -35,16 +35,12 @@ from _role_census import task_files
 # A rename fails `test_every_named_cron_still_exists` below rather than going quiet.
 JOURNAL_ROUTED = {
     # The verdict crons: silent when healthy, but their failure stderr is the evidence.
-    "fake-remux health": "fake-remux-health",
     "Longhorn backup health": "longhorn-backup-health",
     "daniel-box disk health": "disk-health",
     "etcd token drift": "etcd-snapshot-offbox",
     "Registry garbage collection": "registry-gc",
     # The fake-remux workers discarded both streams to /dev/null until #6162, which the
     # every-cron judge below accepts, so naming them here is what holds them to the journal.
-    "fake-remux scan": "fake-remux-scan",
-    "fake-remux reconcile": "fake-remux-reconcile",
-    "mkv attachment repair": "mkv-attachment-repair",
 }
 
 
@@ -94,7 +90,6 @@ def test_a_stdout_only_redirect_does_not_satisfy_the_check():
 # rather than passing over an empty census.
 KNOWN_CRONS = frozenset(
     {
-        "fake-remux scan",  # setup/fake_remux/tasks/main.yml
         "Longhorn backup health",  # setup/k3s/tasks/health-crons.yml
         "etcd token drift",  # setup/k3s/tasks/health-crons.yml
     }
@@ -103,7 +98,7 @@ KNOWN_CRONS = frozenset(
 # ran were deleted, 20 after H2.2c moved the Longhorn
 # trim to a RecurringJob, 21 after H7.40 moved the artifacts node's two crons into package
 # timers, 23 before that, and 29 before H7.36).
-_CENSUS_FLOOR = 12
+_CENSUS_FLOOR = 8
 
 _JINJA = re.compile(r"\{\{.*?\}\}")
 
