@@ -340,7 +340,7 @@ def test_the_real_tree_has_no_kubeconfig_violation():
 
 UV_PINNED = (
     "#!/bin/bash\n"
-    "OUT=$(/usr/bin/uv run --no-project --no-python-downloads --python 3.14.6 /opt/x/x.py)\n"
+    "OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python 3.14.6 /opt/x/x.py)\n"
 )
 UV_EXPORT = 'export UV_PYTHON_INSTALL_DIR="/home/ubuntu/.local/share/uv/python"\n'
 

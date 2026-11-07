@@ -103,7 +103,7 @@ Scan, live but report-only:
 ```bash
 SONARR_API_KEY=… ARR_DISCORD_WEBHOOK_URL= STATE_FILE=/tmp/x.json \
   PYTHONPATH=hosts/lib \
-  /usr/bin/uv run --no-project --python 3.15.2 files/fake_remux.py scan
+  /usr/local/bin/uv run --no-project --python 3.15.2 files/fake_remux.py scan
 ```
 
 Reconcile, in shadow so it has no side effects:
@@ -112,7 +112,7 @@ Reconcile, in shadow so it has no side effects:
 FAKE_REMUX_REPLACE_MODE=shadow SONARR_API_KEY=… LEDGER_FILE=/tmp/l.json \
   REPLACE_STATE_FILE=/tmp/rs.json OUTCOMES_FILE=/tmp/o.jsonl \
   PYTHONPATH=hosts/lib \
-  /usr/bin/uv run --no-project --python 3.15.2 files/fake_remux.py replace
+  /usr/local/bin/uv run --no-project --python 3.15.2 files/fake_remux.py replace
 ```
 
 Unit tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` for the sidecar, and `uv run

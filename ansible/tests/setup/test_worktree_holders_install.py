@@ -31,6 +31,7 @@ from lib.worktrees import WORKTREE_HOLDER_ROOTS, WORKTREE_HOLDERS_SOCKET
 from renderer.renderer_lib import host as host_mode
 
 CRONS = SETUP_ROLES / "initial_setup" / "tasks" / "crons.yml"
+COMPONENT = REPO / "hosts" / "components" / "worktree-holders" / "component.yml"
 UNITS = "/usr/lib/systemd/system"
 PACKAGED_HELPER = "/usr/lib/homelab/worktree-holders"
 # What the role wrote on the host, each of which reconcile must retire.
@@ -317,6 +318,10 @@ def test_reconcile_retires_what_the_role_installed_and_only_daniel_server_lists_
     assert RETIRED_PATHS <= {e.get("path") for e in manifest["legacy"]}
     assert "worktree-holders.socket" in manifest["enable_links"]
     assert "netcat-openbsd" in server_package.depends
+    # The way out: every installed path follows the flag the role's teardown read.
+    spec = yaml_fast.safe_load(COMPONENT.read_text())
+    assert {f.get("when") for f in spec["files"]} == {"has_claude_code"}
+    assert spec["enable"]["worktree-holders.socket"]["when"] == "has_claude_code"
     # Canary order: daniel-box keeps the role's copy until H7.62.
     box = host_mode.render_host("daniel-box")
     assert WORKTREE_HOLDER_ROOTS not in box.files

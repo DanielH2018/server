@@ -31,7 +31,7 @@ Environment=PYTHONDONTWRITEBYTECODE=1
 # NB the interpreter itself lives under $HOME (~/.local/share/uv/python) and is only *read*,
 # which ProtectHome=read-only permits.
 Environment=UV_CACHE_DIR=/tmp/uv-cache
-ExecStart=/usr/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/renovate-notify/renovate_notify.py
+ExecStart=/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/renovate-notify/renovate_notify.py
 # The same run's verdict for node_exporter's textfile collector (M6 batch B4). It runs only when
 # ExecStart succeeded. A crash writes nothing, which is the rule's own reading: the missing file
 # is the signal, and the rules in other-setup-checks.yaml carry only a NotReporting arm for it.

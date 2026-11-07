@@ -13,6 +13,9 @@
 # the repo, and a root unit naming a file there is root for whoever edits it. fanout_lib.clean
 # connects with `nc -U` from a shell chain, so netcat-openbsd is a Depends.
 #
+# Each file and the enable link carry `has_claude_code`, so a host that stops running Claude
+# sessions loses the root service with its next package version, as the role's teardown did.
+#
 # The units keep their Ansible-era names, so reconcile's shadow handoff removes the /etc copies,
 # reloads once and restarts the socket. /run/worktree-holders.sock does not change.
 role: initial_setup
@@ -27,12 +30,12 @@ defaults:
     daniel-server:
       - {name: claude, clone_dir: /var/lib/claude/server}
 files:
-  - {src: "role-file:worktree_holders.py", dst: /usr/lib/homelab/worktree-holders, mode: "0700"}
-  - {src: templates/worktree-holders.json.j2, dst: /etc/worktree-holders.json}
-  - {src: units/worktree-holders.socket.j2, dst: /usr/lib/systemd/system/worktree-holders.socket}
-  - {src: units/worktree-holders@.service, dst: /usr/lib/systemd/system/worktree-holders@.service}
+  - {src: "role-file:worktree_holders.py", dst: /usr/lib/homelab/worktree-holders, mode: "0700", when: has_claude_code}
+  - {src: templates/worktree-holders.json.j2, dst: /etc/worktree-holders.json, when: has_claude_code}
+  - {src: units/worktree-holders.socket.j2, dst: /usr/lib/systemd/system/worktree-holders.socket, when: has_claude_code}
+  - {src: units/worktree-holders@.service, dst: /usr/lib/systemd/system/worktree-holders@.service, when: has_claude_code}
 enable:
-  worktree-holders.socket: sockets.target
+  worktree-holders.socket: {target: sockets.target, when: has_claude_code}
 # What initial_setup installed. The role's old sudoers rule stays its own task until the absent
 # arms of tasks/crons.yml move (H7.58 to H7.60).
 legacy:

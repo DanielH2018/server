@@ -98,14 +98,14 @@ _REACHING = ("User", "WorkingDirectory", "Environment", "EnvironmentFile", "Exec
 def operator_reach(unit_text: str, operator: str) -> list[str]:
     """Every directive value naming the operator's user or home. Empty means none does.
 
-    `/usr/bin/uv` counts: it is the host's shared uv, not the agent's. The agent runs its own copy
-    and Python under its own home.
+    `/usr/local/bin/uv` counts: it is the operator's uv install, which `initial_setup` copies
+    out of their home. The agent runs its own copy and Python under its own home.
     """
     return [
         f"{key}={value}"
         for key in _REACHING
         for value in directive(unit_text, key)
-        if value == operator or "/home/" in value or "/usr/bin/uv" in value
+        if value == operator or "/home/" in value or "/usr/local/bin/uv" in value
     ]
 
 
@@ -114,13 +114,11 @@ def test_the_session_unit_reaches_nothing_of_the_operators() -> None:
 
 
 def test_a_unit_running_from_the_operators_home_is_flagged() -> None:
-    unit = (
-        "User=op\nEnvironment=PATH=/home/op/.local/bin\nExecStart=/usr/bin/uv run x\n"
-    )
+    unit = "User=op\nEnvironment=PATH=/home/op/.local/bin\nExecStart=/usr/local/bin/uv run x\n"
     assert operator_reach(unit, "op") == [
         "User=op",
         "Environment=PATH=/home/op/.local/bin",
-        "ExecStart=/usr/bin/uv run x",
+        "ExecStart=/usr/local/bin/uv run x",
     ]
 
 

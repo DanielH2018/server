@@ -4,10 +4,14 @@
 # of that path, as the sops component does. A Renovate bump of the homelab-tools pin therefore
 # reaches every caller.
 #
-# Every reader names /usr/bin/uv, and some of them render on both cluster hosts, so both packages
-# list this component. /usr/local/bin precedes /usr/bin on PATH, so a host package that stops
-# writing /usr/local/bin/uv lists it as a legacy entry beside this component. The per-user uv under
-# ~/.local/bin is the dotfiles repo's.
+# Both cluster hosts list this component, because the packaged readers, such as the claude-code
+# component's units, name /usr/bin/uv on both. /usr/local/bin precedes /usr/bin on PATH, so a host
+# package that stops writing /usr/local/bin/uv lists it as a legacy entry beside this component. The
+# per-user uv under ~/.local/bin is the dotfiles repo's.
+#
+# DECIDED: the setup roles that only daniel-box applies keep naming /usr/local/bin/uv until H7.62.
+# The GitOps tick re-renders them within ten minutes of a merge, while daniel-box's package waits on
+# the rollout gate, so a repoint there would run a path that does not exist yet.
 depends:
   - homelab-tools
 files:

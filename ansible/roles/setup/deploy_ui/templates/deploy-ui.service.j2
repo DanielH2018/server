@@ -19,7 +19,7 @@ Environment=DEPLOY_UI_LOGS=/home/{{ sys_user }}/.local/state/deploy-ui
 # enforcement rather than a request: gitops-deploy is the ONLY unit exempt from it, because
 # only there does a hard failure remove the ability to ship the correction.
 # ENFORCED: ansible/tests/setup/test_host_python_invocations.py.
-ExecStart=/usr/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ deploy_ui_dir }}/deploy_ui.py
+ExecStart=/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ deploy_ui_dir }}/deploy_ui.py
 Restart=on-failure
 RestartSec=5
 SyslogLevel=notice

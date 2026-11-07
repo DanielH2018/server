@@ -258,7 +258,7 @@ if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
   GATE_CMD=("$REPO_ROOT/.venv/bin/python" "$GATE_SCRIPT" etcd-restore --gate 3)
 else
   GATE_CMD=(
-    /usr/bin/uv run --no-project --no-python-downloads
+    /usr/local/bin/uv run --no-project --no-python-downloads
     --python "$(cat "$REPO_ROOT/.python-version" 2>/dev/null || echo 3.14)"
     "$GATE_SCRIPT" etcd-restore --gate 3
   )

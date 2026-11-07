@@ -169,7 +169,7 @@ def _run_rendered_shim(
     script = script.replace("/usr/local/lib/homelab-check-lib.sh", str(check_lib))
     script = script.replace("/etc/healthchecks/ping.env", str(hc_ping_env))
     reader_invocation = re.search(
-        r"/usr/bin/uv run --no-project --no-python-downloads --python \S+ "
+        r"/usr/local/bin/uv run --no-project --no-python-downloads --python \S+ "
         r"/opt/longhorn-backup-health/longhorn_backup_health\.py",
         script,
     )
