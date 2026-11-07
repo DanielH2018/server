@@ -173,7 +173,7 @@ that a host file carries is also skipped by the unattended `rotate --commit`, wh
 --8<-- "assets/generated/fragments/secret-tiers.md"
 
 - `auto` — locally generated push tokens with no external coupling. `rotate --commit`, then
-  redeploy the consumer.
+  land the commit.
 - `assisted` — app passwords, API keys and OIDC secrets. An app-side step, below.
 - `external` — provider-managed (Cloudflare, Discord, Mullvad, SMTP, LLM). Mint in the
   provider console.
@@ -204,8 +204,8 @@ The `rotate --commit` weekly cron is autonomous and state-changing — its autho
 - **Scope / exclusions:** only `auto`-tier, locally generated push tokens with **no external
   coupling**, and only those **coming due** within `ROTATE_LEAD_DAYS` (8). `assisted` / `external` /
   `pinned` are **never** touched by the cron — a `pinned` swap loses data (see below).
-- **Mode:** change-producing — writes via `sops set`, commits the registry, and the operator
-  redeploys the consumer. Not report-only; there is no dry-run cron (the bare `rotate` is the dry run,
+- **Mode:** change-producing — writes via `sops set` and commits the registry, and Flux applies
+  the value once the commit lands. Not report-only; there is no dry-run cron (the bare `rotate` is the dry run,
   run by hand).
 - **Required evidence:** the daily audit's verdict (`SecretRotationAuditFailed`) must stay quiet
   after a rotation.
