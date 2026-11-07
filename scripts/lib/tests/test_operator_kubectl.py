@@ -53,14 +53,14 @@ def test_a_call_names_its_kubeconfig_and_passes_stdin():
 )
 def test_a_failed_call_raises_with_its_cause(run, message):
     with pytest.raises(KubectlFailed, match=message):
-        runner("/etc/k3s.yaml", run=run)("get", "pods")
+        runner("/etc/k3s.yaml", "/bin/kubectl", run=run)("get", "pods")
 
 
 def _for_mode(apply: bool, run: Run, readable: bool = True):
     return for_mode(
         apply,
         "scripts/x.py --apply",
-        tool=lambda _: "/bin/kubectl",
+        tool=lambda: "/bin/kubectl",
         kubeconfig=lambda: Path("/home/u/config"),
         readable=lambda _: readable,
         run=run,
@@ -109,7 +109,7 @@ def test_a_new_cluster_can_skip_the_check():
         True,
         "scripts/x.py",
         cluster=None,
-        tool=lambda _: "/bin/kubectl",
+        tool=lambda: "/bin/kubectl",
         readable=lambda _: True,
         run=run,
     )

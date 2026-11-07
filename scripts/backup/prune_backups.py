@@ -37,7 +37,7 @@ sys.path.insert(
 from diagnostics.probe_lib import core
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import B2_DRAIN_ERRORED, B2_DRAIN_OK, B2_DRAIN_REFUSED
-from lib.kubectl import MissingKubectl
+from lib.kubectl import K3S_KUBECONFIG, MissingKubectl, kubectl_argv
 from lib.operator_kubectl import Kubectl, KubectlFailed, for_mode
 from longhorn_lib.longhorn_backups import B2_TARGET
 
@@ -85,10 +85,7 @@ def drain_argv(args: argparse.Namespace, live_file: str) -> list[str]:
 def sync_argv(now: datetime) -> list[str]:
     """The sudo command asking Longhorn to re-read the B2 target."""
     stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    return [
-        "sudo",
-        "k3s",
-        "kubectl",
+    return kubectl_argv(
         "-n",
         LONGHORN_NAMESPACE,
         "patch",
@@ -98,7 +95,9 @@ def sync_argv(now: datetime) -> list[str]:
         "merge",
         "-p",
         '{"spec":{"syncRequestedAt":"%s"}}' % stamp,
-    ]
+        kubeconfig=K3S_KUBECONFIG,
+        privileged=True,
+    )
 
 
 def main(

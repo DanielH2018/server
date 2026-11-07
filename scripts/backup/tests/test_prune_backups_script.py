@@ -67,10 +67,11 @@ def test_an_apply_syncs_the_b2_target():
     runs = Runs()
     assert run(runs, "--volumes", "pvc-a", "--apply") == B2_DRAIN_OK
     assert "--apply" in runs.drain
-    assert runs.sync[:8] == [
+    assert runs.sync[:9] == [
         "sudo",
-        "k3s",
         "kubectl",
+        "--kubeconfig",
+        "/etc/rancher/k3s/k3s.yaml",
         "-n",
         "longhorn-system",
         "patch",
@@ -95,7 +96,7 @@ def test_a_failed_drain_stops_before_the_sync():
 def test_a_failed_sync_is_an_error_that_prints_the_retry(capsys):
     runs = Runs(sync_code=1)
     assert run(runs, "--volumes", "pvc-a", "--apply") == B2_DRAIN_ERRORED
-    assert "sudo k3s kubectl" in capsys.readouterr().err
+    assert "sudo kubectl" in capsys.readouterr().err
 
 
 def test_an_empty_live_list_refuses_before_the_drain_and_the_secrets(capsys):

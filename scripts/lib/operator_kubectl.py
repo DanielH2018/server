@@ -35,7 +35,8 @@ from lib.kubectl import (
     cluster_of,
     cluster_refusal,
     find_kubeconfig,
-    find_tool,
+    find_kubectl,
+    kubectl_argv,
     node_names,
 )
 
@@ -54,7 +55,7 @@ class Kubectl(Protocol):
 
 def runner(
     kubeconfig: str | Path,
-    binary: str = "kubectl",
+    binary: str,
     run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     timeout: float = DEFAULT_TIMEOUT_S,
 ) -> Kubectl:
@@ -68,7 +69,7 @@ def runner(
     """
 
     def kubectl(*args: str, stdin: str | None = None) -> str:
-        argv = [binary, "--kubeconfig", str(kubeconfig), *args]
+        argv = kubectl_argv(*args, binary=binary, kubeconfig=kubeconfig)
         try:
             proc = run(
                 argv,
@@ -103,7 +104,7 @@ def for_mode(
     apply: bool,
     apply_command: str,
     cluster: str | None = DEFAULT_CLUSTER,
-    tool: Callable[[str], str | None] = find_tool,
+    tool: Callable[[], str | None] = find_kubectl,
     kubeconfig: Callable[[], Path | None] = find_kubeconfig,
     readable: Callable[[Path], bool] = lambda path: os.access(path, os.R_OK),
     run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
@@ -131,7 +132,7 @@ def for_mode(
             f"This write needs the root-only kubeconfig at {K3S_KUBECONFIG}. Re-run from the "
             f"repo root as: sudo {sys.executable} -B {apply_command}"
         )
-    binary = tool("kubectl")
+    binary = tool()
     if binary is None:
         raise MissingKubectl("kubectl not found on this host")
     chosen = K3S_KUBECONFIG if apply else kubeconfig()
