@@ -290,10 +290,10 @@ def test_the_real_tree_agrees_that_a_scaffolded_role_takes_the_default(args, tmp
 
 
 @pytest.mark.parametrize("route, printed", [([], True), (["--no-route"], False)])
-def test_a_routed_service_is_told_to_deploy_observability_before_the_gate(
+def test_a_routed_service_is_told_to_wait_for_observability_before_the_gate(
     route, printed
 ):
-    """observability is denylisted, so only this step loads the route's probe (#5346)."""
+    """The route's probe loads only when Flux applies observability (#5346)."""
     args = scaffold.parse_args(["widget", "--image", "img:1", "--port", "1", *route])
     text = scaffold.next_steps(args, scaffold.K8S_ROLES / args.name)
-    assert ("--tags observability" in text) is printed
+    assert ("applied `observability`" in text) is printed

@@ -103,7 +103,9 @@ def _run(monkeypatch, capsys, command):
 def test_main_denies_with_the_fix(monkeypatch, capsys):
     decision = _run(monkeypatch, capsys, "kubectl rollout restart deploy/x")
     assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "deploy.sh" in decision["hookSpecificOutput"]["permissionDecisionReason"]
+    assert (
+        "checksum/restart" in decision["hookSpecificOutput"]["permissionDecisionReason"]
+    )
 
 
 def test_main_is_silent_on_an_ordinary_command(monkeypatch, capsys):

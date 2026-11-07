@@ -13,8 +13,11 @@ package. This page says which path applies a change, and what the wrapper still 
   `gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>`.
 - **A setup role:** the GitOps deployer applies it on the tick after the merge. A role the tick
   cannot apply becomes a `manual_plane` line in `owed.jsonl`, and
-  `uv run python scripts/deploy_tools/owed_run.py <role>` clears it. By hand, the command is
-  `uv run ansible-playbook ansible/initial_setup.yml --tags <role>`.
+  `uv run python scripts/deploy_tools/owed_run.py <role>` clears it. By hand, run the playbook
+  and tag that the `Applied by:` line of the role's `CLAUDE.md` names. Neither follows from the
+  role's name: `chezmoi_setup` takes the tag `chezmoi`, and `k3s` applies through
+  `k3s-bringup.yml`, where the same page names narrower tags than the maximal `k3s`. Ansible
+  exits 0 on a tag that matches nothing.
 - **A bring-up playbook:** the deployer never applies these, so run the playbook by hand.
 - **A Pi Compose service or anything under `hosts/`:** the builder publishes the package and the
   host's updater installs it ([Host packages](host-packages.md)).

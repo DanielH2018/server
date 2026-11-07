@@ -32,7 +32,7 @@ reaches production.
 |---|---|---|
 | `prek run --all-files` | nothing (renders locally, then parses and schema-checks) | Jinja indent bugs, invalid YAML, duplicate keys, **undefined fields and wrong types** — everything but CRDs, which have no upstream schema |
 | `uv run python scripts/renderer/homelab_render.py cluster --out <dir> --role <tag>` | nothing — it reads the git tree alone | what Flux would receive for the tag, the secret rules and the renderer's refusals; read the files under `<dir>/cluster/<tag>/` |
-| `uv run python scripts/validate/render_diff_gates.py --base origin/master`, which CI's `pr_gates` job runs, and CI's flux round trip job | nothing | a removed object with no `Removes-Object:` line, and a render `flux build` cannot build |
+| `uv run python scripts/validate/render_diff_gates.py --base origin/master`, which CI's `pr_gates` job runs, and CI's flux round trip job | nothing — the gates compare commits, so **commit first**: an uncommitted edit is invisible to them | a removed object with no `Removes-Object:` line, and a render `flux build` cannot build |
 | `takeover-check` on daniel-box (operator's account) | the **live API server**, through a server-side dry run | CRD schemas, admission rejections and field conflicts, for the tags it names |
 
 `deploy.sh --check` and `--dry-run` are not on this list. Neither runs a role, so neither shows a
@@ -44,7 +44,7 @@ Flux applies the tag.
 ## Applying a k3s workload
 
 1. Confirm the service name matches a role and a `containers_list` entry.
-2. Run the checks above, then commit and open the PR.
+2. Run `prek` and the renderer, commit, run the render-diff gates, then open the PR.
 3. Land it with the `land-after-merge` skill: `land.sh` merges, waits for master CI, waits on the
    `promote` run that applies the merge commit, and gates the health.
 4. **Verify it actually came up healthy.** Flux reporting `Ready` only means the apply finished,
@@ -92,12 +92,18 @@ A playbook goes through `uv run`, because bare `ansible-playbook` (the uv-tool s
 module deps and fails. A setup play aimed at the Pi takes `-e target=daniel-pi`, because the
 playbooks default `hosts:` to the local hostname and `--limit` alone matches nothing.
 
+To apply one setup role by hand, read the playbook and tag from the `Applied by:` line of the
+role's `CLAUDE.md`. Neither follows from the role's name: `chezmoi_setup` takes the tag `chezmoi`,
+and `k3s` applies through `k3s-bringup.yml`, where the same page names narrower tags than the
+maximal `k3s`. Ansible exits 0 on a tag that matches nothing, so a wrong guess reads as a green
+recap.
+
 ```bash
 # Clear the owed line your own merged PR created
 uv run python scripts/deploy_tools/owed_run.py <role>
 
-# Apply one setup role by hand
-uv run ansible-playbook ansible/initial_setup.yml --tags <role>
+# Apply one setup role by hand, with the playbook and tag its Applied by: line names
+uv run ansible-playbook ansible/<playbook> --tags <tag>
 
 # Trigger a GitOps tick now instead of waiting for the 10-min timer (daniel-box only).
 # Runs the identical code path the timer runs — there is no dry-run mode.

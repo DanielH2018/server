@@ -164,8 +164,8 @@ The tiers below describe the **Manual-mode fallback**, not what happens in a nor
   filesystem in a privileged pod), `attach`, `run`, and `edit` (interactive — it just hangs for an
   agent).
 
-Ansible is the only write path to the cluster. Deploy through `./scripts/deploy.sh --tags <svc>`
-rather than reaching for a write verb.
+`promote` and Flux apply every k8s change. Merge the change through `land.sh` rather than reaching
+for a write verb.
 
 ## `git diff` on a SOPS path — why a pipe is denied and a flag is not
 
