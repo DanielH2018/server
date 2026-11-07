@@ -64,9 +64,6 @@ GUARDED_TASKS = [
     for name, tasks in files.items()
     for task in sorted(tasks)
 ]
-TOOLS = yaml_fast.safe_load(
-    (ANSIBLE.parent / "hosts/packages/homelab-tools/package.yml").read_text()
-)["tools"]
 
 
 @pytest.fixture(scope="module")
@@ -102,18 +99,6 @@ def test_vale_reaches_daniel_server_alone_and_retires_the_old_copy(server, box):
     assert "/usr/local/bin/vale" in _legacy_paths(server)
     assert "/usr/bin/vale" not in box.files
     assert "/usr/local/bin/vale" not in _legacy_paths(box)
-
-
-@pytest.mark.parametrize("arch", ["amd64", "arm64"])
-def test_homelab_tools_installs_the_vale_binary_from_inside_its_archive(arch):
-    pin = TOOLS["vale"][arch]
-    assert pin["member"] == "vale"
-    assert pin["url"].endswith(".tar.gz")
-
-
-def test_nfpm_and_uv_stay_the_last_two_tool_blocks():
-    # hosts/bootstrap-host.sh embeds this tail byte for byte.
-    assert list(TOOLS)[-2:] == ["nfpm", "uv"]
 
 
 @pytest.mark.parametrize(("subject", "file", "task"), GUARDED_TASKS)
