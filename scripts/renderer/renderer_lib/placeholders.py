@@ -53,7 +53,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
-from lib.repo_paths import K8S_ROLES
+from lib.repo_paths import JOB_FILES, K8S_ROLES
 from renderer.renderer_lib.cluster import (
     KUSTOMIZATION,
     RenderedTag,
@@ -75,9 +75,8 @@ SENTINEL_SUFFIX = "__END"
 SOPS_MANIFESTS_VAR = "render_sops_manifests"
 
 # The guard's committed map: each deploy tag to the keys standing alone in its render, every
-# one of them. `scripts/renderer/standalone_map.py` writes it, and the shared `k8s/manifests`
-# role reads it before every render.
-GUARD_MAP = K8S_ROLES / "manifests" / "files" / "standalone_secret_keys.json"
+# one of them. `scripts/renderer/standalone_map.py` writes it.
+GUARD_MAP = JOB_FILES / "standalone_secret_keys.json"
 
 
 def read_guard_map(path: Path = GUARD_MAP) -> dict[str, list[str]]:

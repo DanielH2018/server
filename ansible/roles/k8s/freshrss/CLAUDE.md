@@ -3,7 +3,7 @@
 FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=freshrss` with exit 5
 - **Images:** `lscr.io/linuxserver/freshrss` (`freshrss_k8s_image`), `nginx`
@@ -18,7 +18,7 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
   applies it.
 - **Port:** 80
 - **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. Both dependencies,
   authelia and traefik, stay
@@ -33,8 +33,7 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
   reverts the claim on its own: the operator follows the revert runbook in
   `docs/volume-snapshot-drills.md`. `k8s_autodeploy: true` still lets Renovate automerge the
   digest bump.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays until R4 deletes it. Its pre-apply snapshot through
+- **Where the task went.** Its pre-apply snapshot through
   `k8s/volume-snapshot` became the `freshrss-snapshot` Job, and the Kustomization's `wait`
   replaces the rollout wait. The `freshrss-feed-cache` entry in `manifests_extra_rollouts`
   rolled nginx after a cache-config edit, because nginx rereads `conf.d` only on start. The

@@ -62,7 +62,6 @@ GUARDS = {
     "scripts/renderer/tests/test_renderer_task_inputs.py": "2026-11-06",
     "ansible/tests/setup/test_setup_crons_write_a_textfile.py": "2026-11-06",
     "scripts/deploy_tools/tests/test_land_imports.py": "2026-11-06",
-    "scripts/renderer/tests/test_renderer_r4_precondition.py": "2026-11-06",
     "scripts/deploy_tools/tests/test_land_deploy_arm_retired.py": "2026-11-06",
 }
 

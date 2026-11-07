@@ -146,34 +146,6 @@ def test_every_built_image_pin_names_the_content_tag():
     )
 
 
-def test_every_builder_include_precedes_the_manifests_include():
-    """The pin resolves when the manifests render, so the fact has to exist by then.
-
-    `k8s_built_image_tags` is a play fact, and a role that includes k8s/manifests first renders
-    its Deployment before k8s/image-builder has published — the play dies on an undefined
-    variable, or renders `:latest` if something else defined it.
-    """
-    checked, late = [], []
-    for role in sorted(KNOWN_BUILT_IMAGES):
-        tasks = ANSIBLE / "roles" / "k8s" / role / "tasks" / "main.yml"
-        if not tasks.is_file():
-            continue
-        body = tasks.read_text()
-        if "name: k8s/image-builder" not in body:
-            continue
-        checked.append(role)
-        if builder_include_is_too_late(body):
-            late.append(role)
-    assert len(checked) >= 6, (
-        f"only {checked} include k8s/image-builder directly — the guard stopped seeing the "
-        "roles it covers"
-    )
-    assert not late, (
-        "these roles include k8s/manifests before k8s/image-builder, so their image pin reads "
-        f"k8s_built_image_tags before it is published: {late}"
-    )
-
-
 def test_a_role_including_the_builder_after_its_manifests_is_flagged():
     assert builder_include_is_too_late(
         "- include_role:\n    name: k8s/manifests\n- include_role:\n    name: k8s/image-builder\n"

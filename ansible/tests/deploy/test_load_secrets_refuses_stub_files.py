@@ -248,8 +248,7 @@ def test_only_deploy_yml_allows_a_stub_file() -> None:
     assert setters == [], (
         f"only deploy.yml may set load_secrets_stubs_allowed: {setters}"
     )
-    docker_play, k8s_play = _deploy_allowed_expressions()
-    assert k8s_play is True
+    [docker_play] = _deploy_allowed_expressions()
     assert (
         isinstance(docker_play, str) and "filter_by_platform('docker')" in docker_play
     )

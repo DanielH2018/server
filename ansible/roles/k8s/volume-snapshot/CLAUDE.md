@@ -1,28 +1,25 @@
 # k8s/volume-snapshot — a pre-apply Longhorn snapshot for a `Recreate` + RWO role
 
-This role deploys nothing. `roles/k8s/manifests` includes it immediately **before** the apply, and
-it takes a Longhorn snapshot of each of the caller's RWO volumes, waits until the snapshot is
-usable, then prunes that service's older snapshots of the same volume. It gives you a recovery
-point; `k8s/volume-revert`, included between it and the apply, consumes one.
+This role deploys nothing. Its defaults feed the `<tag>-snapshot` Job that the renderer emits
+for each opted-in caller. The Job takes a Longhorn snapshot of each of the caller's RWO volumes,
+waits until the snapshot is usable, then prunes that service's older snapshots of the same
+volume. It gives you a recovery point; `k8s/volume-revert` consumes one.
 
 **Why a `Recreate` + RWO role needs it:** such a role attaches its volume to a freshly-created pod
 on an image bump, and the application may migrate its on-disk format before anything observes a
 fault, after which redeploying the previous image is not a rollback. Neither `rollout status` nor
 the stabilisation soak sees that, because a migration looks exactly like a healthy start.
 
-**This file carries the rules; `docs/volume-snapshot-drills.md` carries the measurements** — the
-drill records, the traps the `kubectl` calls are written around, the variable-precedence
-measurement and the 13 over-long CRs Longhorn refused. Read it before editing `tasks/claim.yml`.
+**This file carries the rules; `docs/volume-snapshot-drills.md` carries the measurements.** Read
+it before editing the snapshot Job, `scripts/renderer/job_files/flux_snapshot.py`.
 
-**No standalone deploy tag.** No `containers_list` entry names it, so `--tags volume-snapshot`
-selects nothing of its own. The include fires only for an opted-in caller (#2704).
+**No standalone deploy tag.** `--tags volume-snapshot` selects nothing: the Job renders for each
+opted-in role under that role's `<tag>-snapshot` Kustomization.
 
 ## How a role opts in
 
-A `Recreate` + RWO role does **not** include this role. It declares
-`k8s_autodeploy_snapshot_pvcs` in its own `defaults/main.yml`, and the shared include in
-`roles/k8s/manifests/tasks/main.yml` picks it up, because role defaults are in scope for an
-included role:
+A `Recreate` + RWO role declares `k8s_autodeploy_snapshot_pvcs` in its own `defaults/main.yml`,
+and the renderer reads that list to emit the `<tag>-snapshot` Job:
 
 ```yaml
 # roles/k8s/widget/defaults/main.yml
@@ -30,84 +27,49 @@ k8s_autodeploy_snapshot_pvcs:
   - widget-config   # PVC name(s) in k8s_namespace
 ```
 
-A role that declares nothing gets `length == 0` and the include never runs. Fourteen roles are
-opted in, of the 31 carrying this shape.
+A role that declares nothing gets no Job.
 
-- **A caller cannot change `volume_snapshot_retain` or `volume_snapshot_timeout` from its own
-  `defaults/main.yml`** — this role's own default wins that collision, measured. `group_vars`,
-  `host_vars` and `-e` do override them; a caller needing another value adds it to the `vars:` of
-  the `Snapshot the stateful volumes` task.
-- **`volume_snapshot_retain` is clamped to a floor of 2**, whatever is passed. Two, not one,
-  because a rollback redeploy takes its own snapshot and prunes BEFORE `k8s/volume-revert` reads
-  the chain, so both must survive one run's own prune.
+- **`volume_snapshot_retain` is clamped to a floor of 2**, whatever is passed
+  (`scripts/renderer/job_files/flux_snapshot.py:RETAIN_FLOOR`).
 
 ## The snapshot name is deterministic, and the revert depends on that
 
 ```
-autodeploy-<service>-<sha8>-<claim>-<token>
+autodeploy-<tag>-<digest8>-<claim>-<token>
 ```
 
-`<sha8>` is `git rev-parse --short=8 HEAD`'s output **used verbatim** — `--short=8` is a minimum
-width, not a fixed one, and truncating a longer abbreviation back to 8 would build a prefix that no
-longer matches. `<token>` is a UTC timestamp. Both are resolved once in `tasks/main.yml` before the
-per-claim loop, so every claim in one run shares them and the wait
-polls for the name the apply just created. `autodeploy-<service>-<sha8>-<claim>` survives as a **prefix**,
-which `k8s/volume-revert` reconstructs and matches on.
+`<digest8>` is the role's spec digest. `<token>` is the UTC time the Job's pod starts, so every
+claim in one run shares it. `autodeploy-<tag>-<digest8>-<claim>` survives as a **prefix**, which
+`k8s/volume-revert` reconstructs and matches on.
 
-- **The token keeps a rollback deploy from being refused by its own protection step**, and makes
-  the prefix a non-unique lookup — so the revert picks the NEWEST match. Two runs in one second
-  are the case it does not separate.
+- **The token makes the prefix a non-unique lookup**, so the revert picks the NEWEST match.
 - **Renaming a service strands its old snapshots permanently**: the prune selects on
-  `autodeploy-<service>-`, and the cluster-wide reaper skips a snapshot with no `RecurringJob`
-  label — which no `autodeploy-*` snapshot carries.
+  `autodeploy-<tag>-`, and the cluster-wide reaper skips a snapshot with no `RecurringJob`
+  label, which no `autodeploy-*` snapshot carries.
 - **A name must stay under 63 bytes.** Past that, Longhorn's webhook denies every DELETE through
-  every route and nothing removes the CR; `claim.yml`'s length assert is what keeps a new snapshot
-  deletable. Thirteen needed a webhook bypass by hand (#2734).
+  every route and nothing removes the CR. Thirteen needed a webhook bypass by hand (#2734).
 
 ## Pruning is asynchronous, and a lingering CR is normal
 
 A Snapshot CR carries a `longhorn.io` finalizer, so a delete sets `markRemoved: true` and waits for
-the volume to coalesce. Hence: the delete always passes `--wait=false` (it once hung a drill for
-twelve minutes); the CR persists afterwards and the name stays taken, so "the CR is gone" is never
-the success condition; and `markRemoved` snapshots are dropped from the retention window rather
-than counted in it, because counting dead CRs as the retained three deletes live snapshots to make
-room. **The window holds the 3 most recent deploy RUNS, not commits** — the accepted cost of the
-per-run token.
+the volume to coalesce. The CR persists afterwards and the name stays taken, so "the CR is gone" is
+never the success condition. `markRemoved` snapshots are dropped from the retention window rather
+than counted in it, because counting dead CRs as retained deletes live snapshots to make room.
 
-## What fails the deploy, and what does not
+## What fails the Job
 
-The whole role runs **before** the apply, so every failure below stops the deploy without having
-changed the workload: a claim missing or still `Pending`, an empty `git rev-parse`, a snapshot that
-never reports `readyToUse`, a listing that does not contain this run's own snapshot, or a non-zero
-delete in the prune. The last is deliberate — swallowing it means unbounded snapshot growth, and a
-retained snapshot pins every block beneath it against `filesystem trim`.
+The Job runs **before** `<tag>` applies, because `<tag>` depends on `<tag>-snapshot`, so a failure
+stops the revision without having changed the workload. Every claim is resolved, named and checked
+against its snapshot-space cap before any snapshot is created. A claim whose PVC is absent live
+and absent from `<tag>`'s inventory is new in this revision, and the Job skips it. A PVC the
+inventory lists and the cluster lacks fails the Job, naming it.
 
-**`git rev-parse` runs without `become`**, because git refuses a checkout read as root as "dubious
-ownership", so a hand-run deploy from someone else's checkout fails every opted-in role there.
-**This role also runs on a no-op deploy**, creating a real CR and a real prune.
-
-## A detached volume is snapshotted on the ordinary path
-
-Longhorn v1.12.1 snapshots a detached volume with healthy replicas, so `claim.yml` treats a
-detached claim as any other: apply, one readiness wait, prune (#2740 retired the maintenance-mode
-attach two drills made dead code). **A detached claim that cannot be snapshotted fails the
-deploy**, and `claim.yml` names the volume's `status.state` in that failure — which is what
-distinguishes Longhorn refusing a detached snapshot from a wedged engine.
-
-## The guard is `k8s_no_mutate`, and neither `--check` nor `--dry-run` exercises this role
-
-Every mutating task carries `when: not (k8s_no_mutate | bool)` —
-`ansible_check_mode or (k8s_dry_run | bool)`, one fact rather than two, because a role guarding
-either alone is guarded against neither. **The call site skips the whole role, not just its
-mutations**, so **a wrong claim name surfaces only on a real deploy**, as the "PVC has no
-spec.volumeName" assert failing before the apply.
+Longhorn v1.12.1 snapshots a detached volume with healthy replicas, so a detached claim takes the
+ordinary path (#2740).
 
 ## Reverting through k8s/volume-revert
 
-**No automated rollback runs.** `roles/k8s/manifests` still includes `k8s/volume-revert` between
-this role's snapshot and the apply, gated on `k8s_restore_snapshot_sha`. D6.12 deleted the
-tick's rollback redeploy, the one caller that set that variable, so the include does not fire on
-any path this repo runs.
+**No automated rollback runs.** `k8s/volume-revert` runs only from the operator's runbook.
 
 **The revert is an operator-only runbook.** The `<tag>-snapshot` Job takes
 the snapshot in this role's name shape, with the role's `digest8` in place of `<sha8>`. `promote`

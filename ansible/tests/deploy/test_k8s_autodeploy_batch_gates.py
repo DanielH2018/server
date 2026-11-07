@@ -15,7 +15,6 @@ tree-wide assertions; what counts as a completion gate and a failure escalation 
 import pytest
 
 from _autodeploy import (
-    _GATING_SHARED_ROLES,
     _K8S_ROLES,
     _auto_deployable,
     _batch_templates,
@@ -23,8 +22,6 @@ from _autodeploy import (
 )
 from _autodeploy_batch import (
     _batch_gated_names,
-    _has_completion_gate,
-    _has_failure_escalation,
     flux_gated_names,
 )
 
@@ -374,49 +371,6 @@ def test_auto_deployable_roles_gate_every_batch_workload_they_render() -> None:
         "k8s_autodeploy: false with a k8s_autodeploy_reason:\n  "
         + "\n  ".join(offenders)
     )
-
-
-def test_gating_shared_roles_actually_wait() -> None:
-    """Every role `_GATING_SHARED_ROLES` names must hold a real, live completion gate.
-
-    Necessary, not sufficient. A completion gate proves the play blocks until the Job
-    finishes; it does not by itself prove a failed Job fails the deploy. image-builder's own
-    wait is `... || wait --for=condition=failed` with no `failed_when` on that task, so it
-    exits 0 on a failed build by design — what actually fails the play is a separate
-    `ansible.builtin.fail` task a few steps later. So this checks for a gate AND an
-    `ansible.builtin.fail` somewhere in the role's tasks, not that the two are wired together
-    end to end.
-
-    `failed_when` is deliberately NOT accepted as the second half: `failed_when: false` and
-    `failed_when: rc != 0` are opposite meanings sharing a prefix, and a substring test
-    cannot tell them apart — accepting either would let a failure *suppressor* satisfy a
-    check written to prove failure escalates. image-builder in fact carries
-    `failed_when: false` on the very task that observes the outcome, so accepting it would
-    have made this half of the check pass on its own inverse.
-
-    BOTH halves walk the role's tasks through `_live_tasks` rather than searching its text. A
-    substring check reads a comment explaining why a role deliberately does NOT use
-    `kubectl wait --for=condition=complete` as the gate it argues against; the same
-    trailing-comment and prose-in-a-`debug` shapes satisfy the `ansible.builtin.fail` half, as
-    does a real `fail` under `when: false` or `tags: [never]`. `_has_completion_gate` and
-    `_has_failure_escalation` carry the module and liveness discipline, so a comment, a `debug`,
-    and a dead task all fail to credit.
-    """
-    for shared in sorted(_GATING_SHARED_ROLES):
-        role = _K8S_ROLES / shared
-        assert (role / "tasks/main.yml").is_file(), (
-            f"{shared}: trusted as a gating shared role but has no tasks"
-        )
-        assert _has_completion_gate(role), (
-            f"{shared}: trusted as a gating shared role but holds no completion gate — "
-            "neither a `wait --for=condition=complete` nor an `until:` poll naming both "
-            "the Complete and Failed conditions, on a command/shell task that a normal "
-            "deploy actually runs"
-        )
-        assert _has_failure_escalation(role), (
-            f"{shared}: waits for completion but runs no ansible.builtin.fail to actually "
-            "fail the deploy on a bad image"
-        )
 
 
 _GATED_CRONJOB_DEFAULTS = "flux_cronjob_gates:\n  widget-sync: {kind: verify}\n"

@@ -8,7 +8,7 @@ five installed plugins is, what blocks the Jellyfin 12 image line, the census of
 the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=jellyfin` with exit 5
 - **Images:** `lscr.io/linuxserver/jellyfin` (`jellyfin_k8s_image`), `python`
@@ -40,7 +40,7 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
   auto-assigned address with the pod still healthy. observability's
   `JellyfinLanAddressNotPinned` rule watches the same address from kube-state-metrics, at
   `warning` with `verify="true"`, so the soak checks it on every revision. It replaces the
-  two `tasks/main.yml` tasks the flip deleted. Its address is a
+  two Ansible tasks the flip deleted. Its address is a
   literal, so moving the VIP is an edit to that rule too.
 
 ## Notable
@@ -80,7 +80,7 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
 - **`templates/verify/` holds jellyfin's two Jobs**, which the renderer emits into
   `jellyfin-verify`.
   - `job.yaml.j2` runs `files/jellyfin_verify.py`, which replaced two of the retired
-    `tasks/verify.yml`'s exec checks: the render node opens, and the library sits at the depth
+    Ansible exec checks: the render node opens, and the library sits at the depth
     Jellyfin's database expects, with a real file readable. Its pod is built like jellyfin's, with
     the same device request, render group, PUID and both read-only `media-data` mounts, so it
     checks that wiring and not the live pod. It dials no Service and no API, so it needs no fence

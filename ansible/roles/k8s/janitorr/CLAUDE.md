@@ -4,7 +4,7 @@ Deletes watched/old media and cleans up Sonarr/Radarr based on disk-usage rules.
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=janitorr` with exit 5
 - **Images:** `ghcr.io/schaka/janitorr` (`janitorr_k8s_image`), `python`
@@ -96,7 +96,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## The Flux verify Job
 
-`templates/verify/` holds `janitorr-verify`, which replaced `tasks/verify.yml` at janitorr's
+`templates/verify/` holds `janitorr-verify`, which replaced the retired verify tasks at janitorr's
 flip with no `pods/exec` grant. `files/verify_janitorr.py` reads the mounted `application.yml`,
 dials sonarr, radarr and jellyfin over HTTP, and writes, reads and removes the leaving-soon
 probe link through jellyfin's mount layout; its docstring maps each proof. Its pod is
@@ -104,7 +104,7 @@ probe link through jellyfin's mount layout; its docstring maps each proof. Its p
 `tests/test_verify_janitorr.py` renders the Job through the Job census, checks that both
 fences admit the Job's pod, and holds the Job's mounts to janitorr's and jellyfin's.
 
-`tasks/main.yml` holds the `k8s/manifests` include, which no Flux path runs.
+Flux applies the role's manifests.
 `templates/config/application.yml.j2` and `templates/verify/job.yaml.j2` both read
 `janitorr_k8s_dry_run` from `defaults/main.yml`.
 

@@ -39,8 +39,9 @@ of the Pi package Depends on the pinned version (#6590; `validate_lib/engine_cas
 Another installs the three apt-source components over seeded copies of the files the roles
 wrote, with no conffile prompt (H7.24a; `validate_lib/repos_case.py`). The last cases run
 `hosts/bootstrap-host.sh --local-build` on a container named after each host, then the offline
-branch with a break-glass kit, the kit's two red fixtures and a local build whose Depends only
-the homelab repository satisfies (H7.15a; `validate_lib/bootstrap_case.py`). The last runs the
+branch with a break-glass kit, the kit's two red fixtures, a local build whose Depends only
+the homelab repository satisfies (H7.15a; `validate_lib/bootstrap_case.py`) and a host made from
+the *Adding a host* walkthrough (H7.15d; `validate_lib/fixture_host_case.py`). The last runs the
 script without `--local-build` on daniel-pi, against the test repository with a rewritten copy of
 the script that pins its throwaway key (#6245; `validate_lib/bootstrap_repo_case.py`). A last
 case runs step 3 with real apt on an image holding no age (`validate_lib/bootstrap_age_case.py`).

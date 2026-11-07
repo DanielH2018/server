@@ -456,9 +456,8 @@ jobs:
       # The render-diff gates (D4.4, renamed from the cross-plane gate in D6.12, which deleted
       # its plane-order arm). It refuses an edge added beside a change to its dependent.
       # docs/landing.md says how to split a refused PR, and there is no bypass. Its removal arms (D5.1f) refuse an object a flux-owned tag drops without a
-      # `Removes-Object:` line in the PR's commits, and a flux-owned name added to
-      # k8s_retired_services (docs/flux-deploy-plane.md). It runs on a pull request only,
-      # because a push or a dispatch has no diff to judge and no PR commits to read. The
+      # `Removes-Object:` line in the PR's commits (docs/flux-deploy-plane.md). It runs on a
+      # pull request only, because a push or a dispatch has no diff to judge and no PR commits to read. The
       # checkout is the merge commit, so its first parent is the base it merges onto, and each
       # side renders with its own tree's renderer, about 15s each.
       - name: Render-diff gates
@@ -879,7 +878,7 @@ jobs:
         run: |
           set -euo pipefail
           jq 'map_values(map(select(. != "email")))' \
-            ansible/roles/k8s/manifests/files/standalone_secret_keys.json \
+            scripts/renderer/job_files/standalone_secret_keys.json \
             > "$RUNNER_TEMP/guard-map-without-email.json"
           rc=0
           uv run python scripts/renderer/shadow_diff.py roundtrip --out "$RUNNER_TEMP/rt-map" \
@@ -1184,6 +1183,9 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}  # via env, never interpolated into the shell
           CASE_INPUTS: |
+            ansible/inventory/host_vars/_example.yml
+            ansible/inventory/hosts.ini
+            docs/host-packages.md
             hosts/bootstrap-host.sh
             hosts/lib/tests/container/
             scripts/validate/host_package_cases.py
@@ -1194,9 +1196,11 @@ jobs:
             scripts/validate/validate_lib/bootstrap_repo_case.py
             scripts/validate/validate_lib/conffile_case.py
             scripts/validate/validate_lib/engine_case.py
+            scripts/validate/validate_lib/fixture_host_case.py
             scripts/validate/validate_lib/host_fixtures.py
             scripts/validate/validate_lib/package_roots.py
             scripts/validate/validate_lib/repos_case.py
+            scripts/validate/validate_lib/scratch_clones.py
             scripts/validate/validate_lib/secrets_case.py
             scripts/validate/validate_lib/shadow_case.py
             scripts/validate/validate_lib/pi_host_seed.py

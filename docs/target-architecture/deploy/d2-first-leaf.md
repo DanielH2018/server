@@ -462,7 +462,6 @@ applies nothing and says so. No site ever hands an empty `--tags` value on.
 
 | Entry point | Behaviour for a tag T that is not Ansible-owned |
 |---|---|
-| `deploy.yml` k8s play | The batch loop runs over `containers_list \| ansible_owned`. The `containers_list` fact keeps every entry, because templates read it. |
 | `deploy.sh --tags T` | Exits `DEPLOY_FLUX_OWNED` (5) before any lock and prints that T lands through `promote`. |
 | `deploy.sh --changed` | Drops T before `derive_changed_tags`'s empty check, so a derivation left empty ends as `Refused(0)`, with a note naming T. |
 | `deploy.sh --list-services` | Marks T with its owner. |

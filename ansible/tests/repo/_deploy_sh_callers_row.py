@@ -32,8 +32,8 @@ TABLE_HEADING = "### What each entry point does with a tag that is not Ansible-o
 
 DEPLOY_SH_EXEMPT = {
     "ansible/bring-up.sh": (
-        "runs a full deploy with no --tags, so no tag reaches the refusal; the play's "
-        "`ansible_owned` batch loop skips the entry instead"
+        "runs a full deploy with no --tags, so no tag reaches the refusal, and `deploy.yml` "
+        "applies no k8s role"
     ),
 }
 

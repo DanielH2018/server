@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 from lib import yaml_fast
-from lib.k8s_roles import SHARED_ROLES, is_leftover_dir, k8s_autodeploy_denylist
+from lib.k8s_roles import is_leftover_dir, k8s_autodeploy_denylist
 from lib.repo_paths import ANSIBLE as _ANSIBLE
 
 
@@ -29,14 +29,7 @@ _OK = 'k8s_autodeploy: false\nk8s_autodeploy_reason: "because"\n'
 _OK_TRUE = 'k8s_autodeploy: true\nk8s_autodeploy_reason: "stateless, gated, probed"\n'
 
 
-def _seed_shared_roles(tmp_path: Path) -> None:
-    """Create every SHARED_ROLES member as a bare dir, satisfying the invariant check."""
-    for name in SHARED_ROLES:
-        _role(tmp_path, name, None)
-
-
 def test_returns_only_the_roles_declaring_false(tmp_path: Path) -> None:
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied-one", _OK)
     _role(tmp_path, "denied-two", _OK)
     _role(tmp_path, "allowed", _OK_TRUE)
@@ -44,14 +37,12 @@ def test_returns_only_the_roles_declaring_false(tmp_path: Path) -> None:
 
 
 def test_result_is_sorted(tmp_path: Path) -> None:
-    _seed_shared_roles(tmp_path)
     for name in ("zulu", "alpha", "mike"):
         _role(tmp_path, name, _OK)
     assert k8s_autodeploy_denylist(str(tmp_path)) == ["alpha", "mike", "zulu"]
 
 
 def test_shared_roles_are_skipped_without_declaring(tmp_path: Path) -> None:
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     assert k8s_autodeploy_denylist(str(tmp_path)) == ["denied"]
 
@@ -63,7 +54,6 @@ def test_a_directory_holding_only_pycache_is_not_a_role(tmp_path: Path) -> None:
     a pytest run in the primary checkout keeps the directory itself alive. Reading that shell
     as a role would raise, which refuses every Renovate landing.
     """
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     ghost = _role(tmp_path, "retired", None)
     pycache = ghost / "files" / "__pycache__"
@@ -78,7 +68,6 @@ def test_a_directory_holding_a_real_file_is_still_a_role(tmp_path: Path) -> None
     A role that carries any tracked file still has to declare a stance, so the skip above
     cannot widen what may land unattended.
     """
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     undeclared = _role(tmp_path, "half-retired", None)
     pycache = undeclared / "files" / "__pycache__"
@@ -90,7 +79,6 @@ def test_a_directory_holding_a_real_file_is_still_a_role(tmp_path: Path) -> None
 
 
 def test_a_role_with_no_defaults_file_raises(tmp_path: Path) -> None:
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     _role(tmp_path, "undeclared", None)
     with pytest.raises(ValueError, match=r"undeclared.*has no defaults/main\.yml"):
@@ -98,7 +86,6 @@ def test_a_role_with_no_defaults_file_raises(tmp_path: Path) -> None:
 
 
 def test_a_role_not_declaring_the_key_raises(tmp_path: Path) -> None:
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     _role(tmp_path, "silent", "some_other_var: 1\n")
     with pytest.raises(ValueError, match=r"silent.*does not set"):
@@ -107,7 +94,6 @@ def test_a_role_not_declaring_the_key_raises(tmp_path: Path) -> None:
 
 def test_a_non_dict_yaml_raises(tmp_path: Path) -> None:
     """A bare top-level list has no `k8s_autodeploy` key to find — same failure as no key."""
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     _role(tmp_path, "listy", "- one\n- two\n")
     with pytest.raises(ValueError, match=r"listy.*does not set"):
@@ -115,7 +101,6 @@ def test_a_non_dict_yaml_raises(tmp_path: Path) -> None:
 
 
 def test_a_non_boolean_declaration_raises(tmp_path: Path) -> None:
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     _role(tmp_path, "stringly", 'k8s_autodeploy: "false"\nk8s_autodeploy_reason: "x"\n')
     with pytest.raises(ValueError, match=r"stringly.*not a boolean"):
@@ -123,7 +108,6 @@ def test_a_non_boolean_declaration_raises(tmp_path: Path) -> None:
 
 
 def test_a_declaration_without_a_reason_raises(tmp_path: Path) -> None:
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     _role(tmp_path, "unreasoned", "k8s_autodeploy: false\n")
     with pytest.raises(ValueError, match=r"unreasoned.*but no"):
@@ -131,7 +115,6 @@ def test_a_declaration_without_a_reason_raises(tmp_path: Path) -> None:
 
 
 def test_a_whitespace_only_reason_raises(tmp_path: Path) -> None:
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     _role(
         tmp_path, "blankreason", 'k8s_autodeploy: false\nk8s_autodeploy_reason: "   "\n'
@@ -141,7 +124,6 @@ def test_a_whitespace_only_reason_raises(tmp_path: Path) -> None:
 
 
 def test_unparseable_yaml_raises(tmp_path: Path) -> None:
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     _role(tmp_path, "broken", "k8s_autodeploy: false\n  bad: [indent\n")
     with pytest.raises(ValueError, match=r"cannot read.*broken"):
@@ -149,7 +131,6 @@ def test_unparseable_yaml_raises(tmp_path: Path) -> None:
 
 
 def test_non_utf8_bytes_raise(tmp_path: Path) -> None:
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     role = _role(tmp_path, "badbytes", _OK)
     (role / "defaults" / "main.yml").write_bytes(b"k8s_autodeploy: false\n\xff\xfe\n")
@@ -159,7 +140,6 @@ def test_non_utf8_bytes_raise(tmp_path: Path) -> None:
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root can read a mode-000 file")
 def test_permission_denied_raises(tmp_path: Path) -> None:
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     role = _role(tmp_path, "locked", _OK)
     defaults_file = role / "defaults" / "main.yml"
@@ -172,7 +152,6 @@ def test_permission_denied_raises(tmp_path: Path) -> None:
 
 
 def test_a_dangling_symlink_raises(tmp_path: Path) -> None:
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     roles_dir = tmp_path / "roles" / "k8s"
     (roles_dir / "ghost").symlink_to(roles_dir / "nonexistent-target")
@@ -182,7 +161,6 @@ def test_a_dangling_symlink_raises(tmp_path: Path) -> None:
 
 def test_a_non_directory_dotfile_is_skipped(tmp_path: Path) -> None:
     """Editor/VCS cruft (a stray .gitkeep etc.) is not a role and must not raise."""
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     (tmp_path / "roles" / "k8s" / ".gitkeep").write_text("")
     assert k8s_autodeploy_denylist(str(tmp_path)) == ["denied"]
@@ -190,14 +168,12 @@ def test_a_non_directory_dotfile_is_skipped(tmp_path: Path) -> None:
 
 def test_a_stray_pycache_directory_is_skipped(tmp_path: Path) -> None:
     """A stray __pycache__ (or dotdir) under roles/k8s/ is not a role and must not raise."""
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     (tmp_path / "roles" / "k8s" / "__pycache__").mkdir()
     assert k8s_autodeploy_denylist(str(tmp_path)) == ["denied"]
 
 
 def test_an_empty_result_raises(tmp_path: Path) -> None:
-    _seed_shared_roles(tmp_path)
     _role(tmp_path, "allowed", _OK_TRUE)
     with pytest.raises(ValueError, match="derived an EMPTY denylist"):
         k8s_autodeploy_denylist(str(tmp_path))
@@ -205,26 +181,6 @@ def test_an_empty_result_raises(tmp_path: Path) -> None:
 
 def test_a_missing_roles_directory_raises(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="no such directory"):
-        k8s_autodeploy_denylist(str(tmp_path))
-
-
-def test_a_shared_role_that_does_not_exist_raises(tmp_path: Path) -> None:
-    """Seed no SHARED_ROLES member — the missing one must raise, not silently exclude
-    nothing."""
-    (tmp_path / "roles" / "k8s").mkdir(parents=True)
-    _role(tmp_path, "denied", _OK)
-    with pytest.raises(ValueError, match=r"SHARED_ROLES member.*is not a directory"):
-        k8s_autodeploy_denylist(str(tmp_path))
-
-
-def test_a_shared_role_pinning_an_image_key_raises(tmp_path: Path) -> None:
-    _role(tmp_path, "denied", _OK)
-    for name in SHARED_ROLES:
-        body = (
-            "widget_image: alpine:3.24\n" if name == next(iter(SHARED_ROLES)) else None
-        )
-        _role(tmp_path, name, body)
-    with pytest.raises(ValueError, match=r"SHARED_ROLES member.*pins"):
         k8s_autodeploy_denylist(str(tmp_path))
 
 
@@ -300,7 +256,6 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
         and not role_dir.name.startswith(".")
         and role_dir.name != "__pycache__"
         and not is_leftover_dir(str(role_dir))
-        and role_dir.name not in SHARED_ROLES
         and (role_dir / "defaults" / "main.yml").is_file()
         and (
             yaml_fast.safe_load((role_dir / "defaults" / "main.yml").read_text()) or {}

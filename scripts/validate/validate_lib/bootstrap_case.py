@@ -20,6 +20,14 @@ systemd loads that unit:
     carries. The offline build on daniel-box must then reach step 5's install, and apt's
     simulation must refuse it. Without it the green cases prove only that today's Depends
     resolve, never that the simulation can fail.
+  * The fixture host (H7.15d): a third scratch clone takes a new host by the file list of
+    `docs/host-packages.md`, *Adding a host* (`fixture_host_case.py`). The offline build then
+    renders, builds and simulates the install of that host's package on a container of its name.
+
+The cases read `systemctl show` after the run: the installer leaves the node's k3s unit disabled
+and stopped, because the operator starts it by hand (`docs/host-packages.md`). The install is a
+simulation, so a package's enable link never lands here. `hosts/lib/tests/test_bootstrap_host_k3s.py`
+reads the rendered links instead.
 
 The script runs unmodified, with three stand-ins around it:
 
@@ -53,20 +61,19 @@ import time
 from pathlib import Path
 from typing import NamedTuple
 
-from lib.git import git, git_process
 from lib.repo_paths import REPO
 from validate.host_packages import fetch_tools, tool_fetch_module
+from validate.validate_lib.fixture_host_case import FIXTURE_HOST
 from validate.validate_lib.host_container import CaseFailed, Container, expect
+from validate.validate_lib.scratch_clones import (
+    ANCHOR_ACCEPTS,
+    HOMELAB_ONLY,
+    fixture_clone,
+    red_clone,
+    scratch_clone,
+)
 
 SCRIPT = REPO / "hosts" / "bootstrap-host.sh"
-ANCHOR = "hosts/lib/bootstrap_anchor.py"
-ANCHOR_ACCEPTS = "bootstrap-host: the case's stub anchor accepts"
-ANCHOR_STUB = f'''"""bootstrap_case.py's stand-in for bootstrap_anchor.py in the case's scratch clone."""
-
-import sys
-
-print(f"{ANCHOR_ACCEPTS} {{sys.argv[2][:12]}}")
-'''
 UNCHECKED = "is unchecked; the operator who chose it is its trust root"
 APT_CALLS = "/var/log/bootstrap-case-apt.calls"
 APT_SHIM = f"""#!/bin/sh
@@ -85,9 +92,6 @@ TOOLS_SEED = "/srv/tools-seed"
 # A join address and token for the agent, which the installer writes and nothing contacts.
 AGENT_ENV = "K3S_URL=https://192.0.2.10:6443 K3S_TOKEN=bootstrap-case-token"
 UNITS = {"daniel-box": "k3s.service", "daniel-server": "k3s-agent.service"}
-# A package only the homelab repository carries, so no local build or Ubuntu archive provides it.
-HOMELAB_ONLY = "homelab-daniel-server"
-BOX_SPEC = "hosts/daniel-box/package.yml"
 INSTALL_REFUSED = "apt-get install of the local build failed"
 
 
@@ -206,58 +210,6 @@ def _download(
     except tool_fetch.Failure as exc:
         raise CaseFailed(str(exc)) from exc
     shutil.copyfile(path, dest)
-
-
-def _git(*argv: str, cwd: Path) -> None:
-    identity = [
-        "-c",
-        "user.name=bootstrap-case",
-        "-c",
-        "user.email=case@example.invalid",
-    ]
-    git(*identity, "-c", "commit.gpgsign=false", *argv, cwd=cwd)
-
-
-def scratch_clone(out: Path) -> Path:
-    """A one-commit git repository holding the checkout's HEAD tree and ANCHOR_STUB."""
-    shutil.rmtree(out, ignore_errors=True)
-    out.mkdir(parents=True)
-    archive = git_process("archive", "HEAD", cwd=REPO)
-    assert archive.stdin and archive.stdout
-    archive.stdin.close()
-    subprocess.run(["tar", "-x", "-C", str(out)], stdin=archive.stdout, check=True)
-    archive.stdout.close()
-    expect(archive.wait() == 0, f"git archive of {REPO} exited {archive.returncode}")
-    (out / ANCHOR).write_text(ANCHOR_STUB)
-    _git("init", "-q", cwd=out)
-    _git("add", "-A", "-f", cwd=out)
-    _git("commit", "-q", "-m", "bootstrap case: stub the anchor check", cwd=out)
-    return out
-
-
-def add_depends(spec: str, package: str) -> str:
-    """A host package spec with `package` appended to its `depends:` list.
-
-    Raises:
-        CaseFailed: The spec holds no `depends:` list of block entries, or more than one.
-    """
-    changed, count = re.subn(
-        r"^(depends:\n(?:  - .*\n)+)", rf"\1  - {package}\n", spec, flags=re.MULTILINE
-    )
-    expect(count == 1, f"the spec holds {count} depends: lists, not one")
-    return changed
-
-
-def red_clone(clone: Path, out: Path) -> Path:
-    """`clone` with one more commit, which gives homelab-daniel-box a Depends on HOMELAB_ONLY."""
-    shutil.rmtree(out, ignore_errors=True)
-    _git("clone", "-q", str(clone), str(out), cwd=clone.parent)
-    spec = out / BOX_SPEC
-    spec.write_text(add_depends(spec.read_text(), HOMELAB_ONLY))
-    _git(
-        "commit", "-q", "-a", "-m", f"bootstrap case: depend on {HOMELAB_ONLY}", cwd=out
-    )
-    return out
 
 
 def install_apt_shim(c: Container) -> None:
@@ -400,7 +352,11 @@ class Bootstrap:
         return c.sh(f"{env} sh {COPY}/bootstrap-host.sh {self.host} {flags}", 1800)
 
     def unit_problems(self) -> list[str]:
-        """What is wrong with the k3s units the installer left, as systemd loads them."""
+        """What is wrong with the k3s units the installer left, as systemd loads them.
+
+        The node's own unit must also be disabled and inactive, because k3s's first start belongs
+        to the operator, after the restores.
+        """
         c = self.container
         c.ok("systemctl daemon-reload")
         problems = []
@@ -409,6 +365,14 @@ class Bootstrap:
             want = "loaded" if host == self.host else "not-found"
             if state != want:
                 problems.append(f"{unit} is {state}, not {want}")
+            if host == self.host:
+                for prop, stopped in (
+                    ("UnitFileState", "disabled"),
+                    ("ActiveState", "inactive"),
+                ):
+                    value = c.ok(f"systemctl show -P {prop} {unit}").strip()
+                    if value != stopped:
+                        problems.append(f"{unit}'s {prop} is {value}, not {stopped}")
         return problems
 
     def baseline_problems(self) -> list[str]:
@@ -522,7 +486,8 @@ class Planned(NamedTuple):
         kit: The offline kit, or None for an online run.
         marker: A line a green run must print; None for a red one.
         refusal: The refusal a red run must print; None for a green one.
-        clone: Which scratch clone the run builds: "green", or "red-depends" for `red_clone`'s.
+        clone: Which scratch clone the run builds: "green", "red-depends" for `red_clone`'s, or
+            "fixture-host" for `fixture_clone`'s.
         apt_says: What apt must print when a red run's refusal is apt's; None when the
             refusal comes before any install.
         seed: The directory `--tools-seed` reads, or None for an offline run, which has the kit.
@@ -598,6 +563,18 @@ def plan(work: Path, green: Path) -> list[Planned]:
             f"Depends: {HOMELAB_ONLY}",
         )
     )
+    # Offline, like the other cases that differ from the green build in their clone alone.
+    cases.append(
+        Planned(
+            f"bootstrap {FIXTURE_HOST}, made from the Adding a host walkthrough",
+            "fixture-host",
+            FIXTURE_HOST,
+            green,
+            UNCHECKED,
+            None,
+            "fixture-host",
+        )
+    )
     return cases
 
 
@@ -617,6 +594,9 @@ def run(cases) -> None:
         clones = {
             "green": clone,
             "red-depends": red_clone(clone, cases.work / "bootstrap-clone-red-depends"),
+            "fixture-host": fixture_clone(
+                clone, cases.work / "bootstrap-clone-fixture"
+            ),
         }
         stock_kit(cases, clone, green)
         planned = plan(cases.work, green)

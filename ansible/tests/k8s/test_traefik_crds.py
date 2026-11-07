@@ -3,12 +3,11 @@
 D5 step 26's traefik bullet: no render may fetch a URL, so `traefik-crds` keeps upstream's
 CRD file under `files/upstream/`, and the renderer attaches it to that tag's bundle verbatim
 (#5666). `scripts/dev/vendor_manifest.py --check` holds the file to its sha256 pin
-(`ansible/tests/k8s/test_vendored_manifests_match_their_pins.py`). Three more things keep
+(`ansible/tests/k8s/test_vendored_manifests_match_their_pins.py`). Two more things keep
 the copy honest:
 
 - `traefik_crds_k8s_version` has traefik's image minor, so a minor image bump fails until
   someone refreshes the copy (a patch bump does not, as upstream changes no CRD in a patch);
-- no task in either role names a URL, so the fetch the copy replaced cannot come back;
 - the copy declares every kind traefik's own render instantiates, so a refresh that dropped
   one fails here rather than as a Kustomization that cannot apply.
 
@@ -20,7 +19,6 @@ from pathlib import Path
 
 from _helpers import ROLES, image_tag, load_defaults
 from _k8s_render import rendered_docs
-from _role_census import role_task_files
 from lib import yaml_fast
 
 TRAEFIK = ROLES / "k8s" / "traefik"
@@ -64,10 +62,6 @@ def crd_pin_problems(
         problems.append(
             f"traefik_k8s_image is {image} but the CRD copy is {crd}; refresh the copy"
         )
-    for role in (crds, traefik):
-        for path in role_task_files(role):
-            if "://" in path.read_text():
-                problems.append(f"{role.name}/{path.relative_to(role)} names a URL")
     missing = (used_crds() if used is None else used) - declared_crds(crds)
     if missing:
         problems.append(f"traefik renders kinds the copy lacks: {sorted(missing)}")
@@ -76,10 +70,9 @@ def crd_pin_problems(
 
 def _fixture(tmp_path: Path) -> tuple[Path, Path]:
     crds, traefik = tmp_path / "traefik-crds", tmp_path / "traefik"
-    for sub in ("defaults", "tasks", "files/upstream"):
+    for sub in ("defaults", "files/upstream"):
         shutil.copytree(TRAEFIK_CRDS / sub, crds / sub)
-    for sub in ("defaults", "tasks"):
-        shutil.copytree(TRAEFIK / sub, traefik / sub)
+    shutil.copytree(TRAEFIK / "defaults", traefik / "defaults")
     return crds, traefik
 
 
@@ -117,20 +110,6 @@ def test_a_patch_image_bump_is_clean(tmp_path):
         defaults.read_text().replace(f"traefik:{tag}", "traefik:v3.7.99", 1)
     )
     assert crd_pin_problems(crds, traefik) == []
-
-
-def test_a_task_that_fetches_a_url_is_flagged(tmp_path):
-    crds, traefik = _fixture(tmp_path)
-    tasks = crds / "tasks" / "main.yml"
-    tasks.write_text(
-        tasks.read_text().replace(
-            "name: k8s/manifests",
-            "name: k8s/manifests\n    src: https://raw.githubusercontent.com/traefik/x.yml",
-        )
-    )
-    assert crd_pin_problems(crds, traefik) == [
-        "traefik-crds/tasks/main.yml names a URL"
-    ]
 
 
 def test_a_kind_the_copy_lacks_is_flagged(tmp_path):

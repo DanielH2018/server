@@ -4,68 +4,31 @@ Generic, callers set `image_builder_name`/`_dockerfile`/`_context`/`_tag` rather
 service carrying its own build block — that would copy the securityContext reasoning into
 every caller, where it would drift. See repo-root `CLAUDE.md` for shared conventions.
 
-**No standalone deploy tag.** Callers reach it via `include_role: name: k8s/image-builder`,
-not `--tags image-builder` — it is not a `containers_list` entry either, so a promoted bump
-to `image_builder_k8s_image` (the BuildKit tool itself) would match no play and deploy nothing
-while reporting success.
+**No standalone deploy tag.** `--tags image-builder` selects nothing: it is not a
+`containers_list` entry, and no render applies its Job.
 
 ## At a glance
 - **Builder image:** `moby/buildkit` (`image_builder_k8s_image`) — rootless
   BuildKit, not kaniko (archived upstream) or the daemonful BuildKit variant (wants a
   privileged pod). Runs as uid 1000 with no added capabilities.
 - **Callers:** `ical-proxy`, `terraria`, `pi-peer-backup`, `n8n`, `code-server`,
-  `nut`, `homelab-mcp`, `valheim`, `karakeep` — each `include_role`s this and lists its builds'
+  `nut`, `homelab-mcp`, `valheim`, `karakeep` — each lists its builds'
   `image_builder_*` vars in its own `image_builder_builds` default.
 - **Renovate does not automerge its bumps** (`k8s_autodeploy: false`). It renders a Job and a
   ConfigMap, no Deployment, and it builds the images every other role above consumes, so a bad
   build here is upstream of all of them.
 
 ## Notable
-- **Every build pushes TWO names for one manifest**, from one `--output`: the mutable
-  `image_builder_tag` (`latest`) and an immutable `image_builder_content_tag`
-  (`sha-<12 hex>`) derived from the build inputs. Both resolve to the same digest, so every
-  digest comparison here reads one object either way. The content tag is what makes "is the
-  running pod the image this commit describes" a comparison of NAMES rather than a registry
-  digest read (`post_tasks/k8s_image_drift_gate.yml`).
-  - The hash is taken over `context-configmap.yaml.j2`'s own render, `data` only — that
-    mapping IS every byte the build reads, so no second list of inputs can fall out of step
-    with it, and a comment edit in that template does not rebuild all nine images.
-  - Computed on the CONTROLLER and before the render, so `--check` and a `--skip-tags deploy`
-    run compute the same name a deploy does.
-  - Published as the play-scoped `k8s_built_image_tags` (name → tag), for the roles that
-    DEPLOY these images. A consumer reads `k8s_built_image_tags.get('<name>', 'latest')`, so
-    a deploy that skips the building role falls back to the mutable alias instead of naming a
-    tag nothing pushed. **All nine `*_k8s_image` pins read it**
+- **Every build has TWO names for one manifest:** the mutable `image_builder_tag` (`latest`) and
+  an immutable `image_builder_content_tag` (`sha-<12 hex>`) derived from the build inputs.
+  - The hash is taken over `context-configmap.yaml.j2`'s own render, `data` only. That mapping
+    is every byte the build reads, so no second list of inputs can fall out of step with it,
+    and a comment edit in that template does not rebuild the images.
+  - The renderer computes `k8s_built_image_tags` (name → tag) for the roles that deploy these
+    images. **All nine `*_k8s_image` pins read it**
     (`ansible/tests/k8s/test_built_images_name_the_content_tag.py` requires it).
-    - Every consumer includes this role itself, ahead of `k8s/manifests`, so the fact is
-      published before its manifests render. n8n was the exception until #2813 folded its
-      separate `n8n-images` builder role into it.
-    - A render outside a play has no fact at all. `scripts/lib/render_guard.py:BUILT_IMAGE_TAG_STUBS`
-      seeds one for every rendered-manifest guard, which would otherwise check `:latest` while
-      production renders the hash.
-  - Nothing prunes superseded content tags from the push store. registry's GC of that store
-    was retired once no caller of this role was Ansible-owned (D5, Wave D's registry bullet),
-    so no build reaches it. The registry verify Job's seed still writes there (#5752).
-- Skips the actual build when the rendered context is byte-identical to the last run's and
-  the registry already serves BOTH tags — saved ~106s across the seven original callers.
-  `image_builder_force=true` overrides it, for a base-image CVE bump nothing here can see.
-  The content-tag clause is what keeps the tag from being decorative: `:latest` being served
-  says nothing about whether the `sha-…` name exists, and an unchanged context with `:latest`
-  present is exactly the state the first deploy after this landed was in.
-- **A failed build forces the next one.** The gate otherwise reads every input as unchanged
-  after a failure — the rendered context is still on disk and the registry still serves the
-  previous tag — so the next deploy skipped the rebuild and the workload kept the old image
-  behind a `failed=0` recap (#1534). The extra clause reads the previous Job's
-  `.status.succeeded`. An ABSENT Job does not force a build: `ttlSecondsAfterFinished: 86400`
-  collects a completed one after a day.
-- **The build wait polls both terminal conditions.** `kubectl wait` takes one condition and a
-  failed Job never gets `condition=complete`, so the earlier `||` fallback blocked the deploy
-  for the whole `image_builder_timeout` after a build had already failed — ~30 minutes for
-  code-server (#1535). `ansible/tests/deploy/test_image_builder_wait_returns_promptly.py` runs the
-  wait against a stubbed `k3s` and times it.
-- Reads the registry's pre- and post-build digest around every build, even a skipped one, so
-  a stale pod in front of an unchanged tag still surfaces to the post-deploy drift gate
-  (`ansible/tests/deploy/test_built_image_drift_gate.py`).
+  - `scripts/lib/render_guard.py:BUILT_IMAGE_TAG_STUBS` seeds one for every rendered-manifest
+    guard, which would otherwise check `:latest` while production renders the hash.
 
 ## Flux-owned roles (target slice D5.4)
 - **The renderer writes every context this role builds.** `homelab-render cluster` writes
@@ -81,15 +44,14 @@ while reporting success.
   under `DIR/images/<name>/`, refuses one that differs from `tags.json`, and pushes
   `ghcr.io/danielh2018/<name>:<content tag>` only when GHCR does not serve that tag
   (`scripts/deploy_tools/ci_images.py`). A served tag is never rebuilt, so the tag stays
-  immutable. Since D5.4b, every flux-owned consumer pulls its image from GHCR, and only an
-  Ansible-owned consumer builds here.
+  immutable. Every consumer pulls its image from GHCR.
 - **`image_builder_force` has no Flux-era use.** The plan's rule for a package refresh that
   no pin moves is a hand PR that bumps a `rebuild_stamp` data key in the context, which moves
   the content tag. No context carries that key yet.
   The plan is `docs/target-architecture/deploy/d5-bulk-move.md`, *Images built by CI (D5.4)*.
 
 ## Editing
-- Task logic: `tasks/main.yml` · Job/ConfigMap shape: `templates/build-job.yaml.j2`,
-  `templates/context-configmap.yaml.j2`.
+- Job shape: `templates/build-job.yaml.j2`. The renderer reads
+  `templates/context-configmap.yaml.j2` for each content tag.
 - Not deployed standalone, and no caller reaches it: every caller is `owner: flux`. promote's
   `images` job builds their images, and `deploy.sh` refuses their tags with exit 5.
