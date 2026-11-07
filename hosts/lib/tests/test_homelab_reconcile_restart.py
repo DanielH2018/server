@@ -420,6 +420,7 @@ def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_credentials(
         "ssh.service",
         "systemd-journald.service",
         "auditd.service",
+        "systemd-modules-load.service",
         "fail2ban.service",
         "postfix.service",
         "sysstat.service",
