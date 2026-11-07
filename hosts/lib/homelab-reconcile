@@ -781,14 +781,11 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
             units_state[unit] = new
 
     # Step 4: retire the legacy entries not yet retired. A package that ships `secrets-unit`
-    # retires none until every credential and output exists and homelab-secrets is active. An
-    # entry stays while a unit of its spec failed to start, unless it shadows a packaged unit:
-    # that copy may be why the unit failed, so the hand-off below does not wait for the start.
-    kept_for = replacement_failed(manifest["handoffs"], start_failed | failed)
+    # retires none until every credential and output exists and homelab-secrets is active.
     prev_retired = set(prev.get("retired") or [])
     retired = []
     waiting = None
-    removed, handed = False, set()
+    removed, handed, plain = False, set(), []
     for entry in manifest["legacy"]:
         key = legacy_key(entry)
         if key not in prev_retired and digest and waiting is None:
@@ -796,8 +793,8 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         shadow = shadow_path(entry, units)
         # An Ansible-era copy under /etc shadows the packaged unit of the same name, or that
         # unit's packaged drop-in: remove it (one daemon-reload and the restarts follow the
-        # loop). With no packaged unit of that name, the file is the only copy, so it stays
-        # and counts as drift.
+        # loop), whatever the unit's start did, because the copy may be why it failed. With no
+        # packaged unit of that name, the file is the only copy, so it stays and counts as drift.
         if shadow and key not in prev_retired and not waiting:
             unit = shadowed(shadow)[0]
             if unit not in units:
@@ -810,7 +807,26 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
                 removed |= result[0]
                 if result[1]:
                     handed.add(unit)
-            continue
+        else:
+            plain.append(entry)
+
+    # Step 4b: one daemon-reload after every removal under /etc/systemd/system, then each
+    # packaged unit whose fragment changed, in the order step 3 uses.
+    if removed and systemctl("daemon-reload").returncode != 0:
+        log("daemon-reload failed after removing a file under /etc/systemd/system", ERR)
+        ok = False
+    for unit in sorted(handed):
+        if not left_alone(unit, units, links, manual) and not bring_up(
+            unit, "restart", outputs, queued, started
+        ):
+            start_failed.add(unit)
+            ok = False
+
+    # Step 4c: the other entries. One stays while a unit of its spec failed to start in this run.
+    kept_for = replacement_failed(manifest["handoffs"], start_failed | failed)
+    removed = False
+    for entry in plain:
+        key = legacy_key(entry)
         # A running service is never stopped to retire it: the entry stays and counts as drift.
         if key not in prev_retired and not waiting and running_service(entry):
             drift["legacy"] += 1
@@ -831,14 +847,9 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
             else:
                 ok = False
 
-    # Step 4b: one daemon-reload after every removal under /etc/systemd/system, then each
-    # packaged unit whose fragment changed, in the order step 3 uses.
     if removed and systemctl("daemon-reload").returncode != 0:
         log("daemon-reload failed after removing a file under /etc/systemd/system", ERR)
         ok = False
-    for unit in sorted(handed):
-        if not left_alone(unit, units, links, manual):
-            ok = bring_up(unit, "restart", outputs, queued, started) and ok
 
     # Step 5: the per-kind reconcilers. The manifest's other kinds are ones this version lacks.
     for name in manifest["reconcilers"]:

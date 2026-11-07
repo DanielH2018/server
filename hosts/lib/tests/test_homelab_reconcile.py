@@ -252,6 +252,25 @@ def test_a_failed_unit_does_not_keep_the_copy_that_shadows_it(node):
     assert not copy.exists()
 
 
+def test_a_failed_restart_on_the_packaged_file_keeps_the_legacy_entry(node):
+    cron = replaced_cron(node)
+    node.manifest["legacy"].clear()
+    settled(node)
+    node.manifest["legacy"].append(CRON_ENTRY)
+    copy = node.root / "etc/systemd/system" / TIMER
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    copy.write_text("[Unit]\nDescription=stale\n")
+    shadow = {"path": f"/etc/systemd/system/{TIMER}"}
+    node.manifest["legacy"].append(shadow)
+    node.manifest["handoffs"][0]["legacy"].append(shadow)
+    node.state["fail"].append(f"restart {TIMER}")
+
+    assert node.run().returncode == 1
+    assert not copy.exists()
+    assert cron.exists()
+    assert node.actions() == [["restart", TIMER]]
+
+
 def test_a_legacy_cron_line_is_removed_and_the_rest_of_the_crontab_kept(node):
     node.state["crontabs"]["ubuntu"] = (
         "#Ansible: pi-sd-health\n*/5 * * * * /usr/local/bin/pi-sd-health.sh\n"

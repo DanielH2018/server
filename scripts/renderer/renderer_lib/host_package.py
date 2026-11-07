@@ -124,8 +124,11 @@ class Package:
         )
 
     def spec_units(self) -> set[str]:
-        """Every unit the package ships a file, a drop-in or an enable link for so far."""
-        return {*self.units(), *self.dropin_targets(), *self.enable_links()}
+        """Every unit the package ships a file or a drop-in for so far.
+
+        A bare enable link does not count: `homelab-updater.timer`'s arms another package's unit.
+        """
+        return {*self.units(), *self.dropin_targets()}
 
     def add_handoff(self, units_before: set[str], legacy_before: int) -> None:
         """Pair what one spec added to the package: its legacy entries and its units.

@@ -251,8 +251,17 @@ def test_each_handoff_holds_only_its_own_specs_units_and_entries(hosts):
             "legacy": [{"cron_file": "two"}],
         },
         "files-only": {"legacy": [{"path": "/usr/local/bin/stale"}]},
+        "link-only": {
+            "enable": {"homelab-updater.timer": "timers.target"},
+            "legacy": [{"path": "/usr/local/bin/other"}],
+        },
     }
     root = hosts({"components": list(components)}, components, {"u": ""})
+    updater = hosts(
+        {"files": [{"src": "u", "dst": f"{UNITS}/homelab-updater.timer"}]},
+        where="packages/homelab-updater",
+    )
+    (updater / "packages" / "homelab-updater" / "u").write_text("")
 
     assert host_mode.render_host("daniel-pi", root).handoffs == [
         {"units": ["homelab-one.timer"], "legacy": [{"cron_file": "one"}]},
