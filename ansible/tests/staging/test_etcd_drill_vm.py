@@ -324,3 +324,25 @@ def test_the_fence_verdict_has_a_check_of_its_own():
     assert 'write_verdict "$CHECK_FENCE"' in body
     for leftover in ("kuma-push-lib", "kuma_push", "/api/push/", "PUSH_TOKEN"):
         assert leftover not in body, f"the orchestrator still names {leftover}"
+
+
+def test_every_path_the_scripts_read_is_a_path_the_package_installs():
+    """The `dst:` values are literals, so a drift would first fail the drill on the 1st."""
+    package = host_mode.render_host("daniel-server")
+    v = _vars()
+    env = make_ansible_env(undefined_cls=Undefined)
+    share = v["hypervisor_etcd_drill_share_dir"]
+    wanted = {
+        env.from_string(v[key]).render(**v)
+        for key in (
+            "hypervisor_etcd_drill_runner_path",
+            "hypervisor_etcd_drill_prepare_path",
+            "hypervisor_etcd_drill_script_path",
+            "hypervisor_etcd_drill_guest_script_path",
+            "hypervisor_etcd_drill_vm_xml",
+            "hypervisor_suc_rehearsal_helper_path",
+            "hypervisor_suc_rehearsal_guest_script_path",
+        )
+    } | {f"{share}/user-data.in", f"{share}/meta-data"}
+    assert wanted <= set(package.files), wanted - set(package.files)
+    assert v["hypervisor_etcd_drill_s3_env"] in package.links

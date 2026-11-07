@@ -28,6 +28,11 @@
 # Both netplan files carry `manual:systemd-networkd.service`: `netplan apply` reconfigures the
 # link an SSH session rides on, so a change goes live at the next boot.
 #
+# FORWARD-ONLY for the address pin. Reverting the PR that added it deletes the file, and an agent
+# that boots while the gateway's DHCP is down cannot bind server_ip (#3882). A revert therefore owes
+# `k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address` on daniel-server before
+# the next reboot (operator-only); the revert restores that play's tasks.
+#
 # ENFORCED: ansible/tests/setup/test_k3s_agent_component.py.
 role: k3s
 depends:
