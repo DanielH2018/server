@@ -24,6 +24,7 @@ COMMANDS = (
     "sysctl",
     "sshd",
     "fail2ban-client",
+    "rsyslogd",
     "ufw",
     "iptables",
     "getent",

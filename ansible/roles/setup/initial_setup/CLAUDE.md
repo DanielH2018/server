@@ -1,25 +1,24 @@
 # initial_setup — host baseline + security hardening
 
 The host-bring-up role: base packages, per-user Python tooling, the sudo credential cache,
-auditd and kernel-module hardening, and the two host checks. The host packages own the rest of
+auditd and kernel-module hardening, and the setup-drift check. The host packages own the rest of
 the baseline (sshd, fail2ban, unattended upgrades, sysctls, the journald cap, the maintenance
 jobs, the integrity scans and the firewall), and this role keeps no task for them. On daniel-pi
 the `host-hardening` component and step 4 of `hosts/bootstrap-host.sh` also own the base packages,
 the sudo cache, auditd and the kernel modules, so
 `ansible/roles/setup/initial_setup/defaults/main.yml:initial_setup_packaged_hosts` skips those
-tasks there, and no setup apply upgrades the Pi's packages. daniel-server's package also owns the
-dev tooling, Vale and the worktree holder scan, so the same map skips those three subjects there,
-and the role still writes them on daniel-box.
+tasks there, and no setup apply upgrades the Pi's packages. daniel-server's package owns the same
+subjects, the rsyslog info filter, the dev tooling, Vale and the worktree holder scan, so the same
+map skips them there, and the role still writes them on daniel-box.
 **Not a container role** — a host-setup role under `ansible/roles/setup/`, run by
 `initial_setup.yml`, not `deploy.yml`. It is a large setup role, so **`--check` first** and scope
 with `--tags` when iterating. `docs/host-baseline-record.md` carries the per-block traps, the two
-host checks in full, and the journald-cap forensics.
+host checks' reasoning, and the journald-cap forensics.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "initial_setup"`
-- **Timers (2):** `kuma-check-setup-drift.timer` (`OnCalendar=*-*-* 08:20:00`),
-  `kuma-check-loki-read-route.timer` (`OnCalendar=*-*-* *:23:00`)
+- **Timer:** `kuma-check-setup-drift.timer` (`OnCalendar=*-*-* 08:20:00`)
 - **Packaged timers:** `homelab-aide-check.timer` (`OnCalendar=Mon *-*-* 03:00:00`) on
   daniel-box, daniel-pi, daniel-server; `homelab-apt-autoremove.timer` (`OnCalendar=Sun *-*-*
   02:00:00`) on daniel-box, daniel-pi, daniel-server; `homelab-docker-prune.timer`
@@ -45,8 +44,8 @@ those two files only, and an unknown name there leaves the role unplaced.
 `scripts/deploy_tools/setup_lib/setup_gates.py:_eval_when` also reads the role's defaults, but
 only when its caller passes them.
 
-Two gates keep a host literal behind a `DECIDED:` comment, because they read HOST HISTORY
-that no capability names, and they delete themselves once the host converges. ENFORCED:
+A new gate that reads HOST HISTORY keeps a host literal behind a `DECIDED:` comment, because no
+capability names it, and it deletes itself once the host converges. ENFORCED:
 `ansible/tests/setup/test_initial_setup_host_gates.py::test_a_surviving_host_literal_is_one_of_the_recorded_deliberate_ones`
 refuses a new bare literal.
 
@@ -71,8 +70,9 @@ runs. These two bite from outside the file you are editing; the rest, with every
 are in the record page.
 
 - **The journal cap and the rsyslog info filter are one change.** The cap ships in
-  `hosts/components/host-tuning/templates/50-homelab-journald.conf`; the filter is this role's,
-  gated `when: has_rsyslog` (false on the Pi). ENFORCED:
+  `hosts/components/host-tuning/templates/50-homelab-journald.conf`. The filter is the
+  `rsyslog-filter` component's on daniel-server, and this role's on daniel-box. Both follow
+  `has_rsyslog`, which is false on the Pi. ENFORCED:
   `ansible/tests/setup/test_journald_syslog_forwarding.py::test_raising_the_forwarding_level_requires_the_syslog_filter`.
 - **Handlers live in `handlers/main.yml`**, and a `notify:` from any role in the play can reach
   them. Each handler needs a notifier. ENFORCED:
@@ -88,14 +88,13 @@ timers into components under `hosts/components/`. Each component's `component.ym
 own contract, and renders this role's templates and files in place. The fail2ban, sshd, sysctl,
 unattended-upgrades and ufw tasks were deleted with the last host's move, so a template here
 that no task names may still be a component's input: grep `hosts/` before you delete one.
-This role keeps the Loki read-route witness for daniel-server
-(`initial_setup_packaged_hosts` in `defaults/main.yml` excludes daniel-box) and the setup-drift
-check, both read-only. Before you add a state-changing cron, put it in a component.
+This role keeps the setup-drift check, which is read-only. The `loki-route-witness` component is
+the Loki read-route witness on both cluster nodes. Before you add a state-changing cron, put it
+in a component.
 
 ## Notable
-**Two host checks live here rather than in monitor-bridge**, both `kuma-check-*` timers that
-rerun on failure: the setup-plane drift reader (`setup_drift`) and the Loki read-route witness
-(`loki_route_witness`).
+**The setup-plane drift reader (`setup_drift`) lives here rather than in monitor-bridge**, a
+`kuma-check-*` timer that reruns on failure.
 The reader runs on each host in `setup_drift_check_hosts`, and only daniel-server's verdict pages.
 A change to that list routes to no setup role, so it takes a hand `--tags setup_drift` apply on
 the host it adds or drops. That apply removes a dropped host's timer, units, script, `.prom` file
@@ -115,4 +114,4 @@ dpkg purge and firmware update jobs run through `files/host-maintenance.sh`, whi
 each job's exit code as a textfile verdict, and the `host-checks` group reads it with a
 `Failed` and a `NotReporting` rule per host that runs the job (#6179). ENFORCED:
 `ansible/tests/setup/test_host_maintenance.py`. The witness gets its
-textfile directory from a task tagged `loki_route_witness`, which gives the deploy user write access on daniel-server.
+textfile directory from a tmpfiles.d line of its component, which gives the deploy user write access.

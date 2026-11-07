@@ -8,7 +8,7 @@
 # Since H7.28 it ships the first three subjects of initial_setup, the same components as daniel-pi:
 # apt's unattended upgrades, the sshd drop-ins and the kernel, journald, limits and login hardening.
 # initial_setup skips each on this host through `initial_setup_packaged_hosts`. No file needs a
-# credential. The rsyslog info filter stays an Ansible task gated on has_rsyslog.
+# credential.
 #
 # #6413 adds `k3s-gates` alone: the k3s-agent Plan's `prepare` runs /usr/lib/homelab/k3s_gates.py
 # from the host's root (H6.3d). The windowed restart, `k3s-restart`, stays off this package until
@@ -42,6 +42,14 @@
 # initial_setup skips each subject on this host through `initial_setup_packaged_hosts`. The dotfiles
 # repo owns the per-user uv, prek and Python, and the cluster-node procedure runs `prek install`.
 #
+# H7.59 adds the host baseline and the Loki witness: `host-hardening` ships the sudo cache,
+# auditd's rules, the module blacklist, the core-dump drop-in, the login banner, the i915 option
+# and the base packages; `rsyslog-filter` ships the info filter; `loki-route-witness` replaces the
+# Ansible-era timer. initial_setup skips each on this host through
+# `initial_setup_packaged_hosts`, which ends the role's dist-upgrade here. No file needs a
+# credential. The `unattended-upgrades` component above applies the regular updates pocket, this
+# host has no Docker to hold, and no homelab origin is allowed.
+#
 # The package declares no ufw rule of its own. The k3s agent's join rules stay `setup/k3s`
 # rules until H7.34 declares them `keep`; they carry no `homelab:` label, so the arm leaves them.
 description: daniel-server's homelab host package
@@ -51,7 +59,7 @@ component: claude-code
 users:
   # uid 995 is the live uid (`getent passwd claude` on daniel-server, 2026-10-29).
   - {name: claude, uid: 995, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
-components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, uv, vale, worktree-holders]
+components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, uv, vale, worktree-holders, host-hardening, rsyslog-filter, loki-route-witness]
 units:
   k3s-agent.service: {policy: windowed}
 credentials:
@@ -74,10 +82,10 @@ legacy:
   - {path: /etc/apt/sources.list.d/github-cli.list}
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
-  # H7.61: the copy initial_setup installed, which sits ahead of /usr/bin/vale on PATH.
-  # /usr/local/bin/uv is not listed yet: this host's Ansible-era Loki witness still runs it, and no
-  # tick re-renders that script here. H7.59 lists it when it moves the witness.
+  # H7.61 and H7.59: the copies initial_setup installed, which sit ahead of /usr/bin/vale and
+  # /usr/bin/uv on PATH. The Ansible-era Loki witness was the last reader of the uv copy here.
   - {path: /usr/local/bin/vale}
+  - {path: /usr/local/bin/uv}
   # #6716: the Compose-era CrowdSec hub update the retired traefik role installed in root's crontab
   # (`docker exec crowdsec cscli hub update && … upgrade`, 07:15 daily). This host has had no
   # Docker since 2026-08-14, so it fails every day, and no other tree path retires it.
@@ -85,3 +93,8 @@ legacy:
   # #6735: not Ansible-era. A 2026-10-25 test run leaked this textfile; the eval sweep runs on
   # daniel-box alone, so nothing here overwrites it and HostCheckOverdue holds on it.
   - {path: /var/lib/node-exporter-textfile/eval-run.prom}
+  # H7.59: the absent arms of initial_setup's crons.yml that reached this host.
+  - {path: /etc/sudoers.d/20-worktree-holders}
+  - {path: /usr/local/bin/secret-rotation-audit.sh}
+  - {path: /usr/local/bin/secret-rotate.sh}
+  - {path: /etc/homelab/cert-expiry-webhook.env}
