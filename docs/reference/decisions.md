@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-07 02:18 UTC
-generated_sha: 30af9b2f2b
+generated_at: 2026-11-07 03:21 UTC
+generated_sha: 494e8b7c29
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 30af9b2f2b
 
 # Decisions
 
-873 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+867 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -20,13 +20,13 @@ generated_sha: 30af9b2f2b
     * `.claude/agents/homelab-cicd-reviewer.md:47` and `.claude/hooks/tests/test_hook_shim_fail_open.py:14`
     * `.claude/agents/homelab-cicd-reviewer.md:47` and `ansible/roles/setup/gitops_deploy/CLAUDE.md:95`
     * `.claude/agents/homelab-cicd-reviewer.md:47` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
-    * `.claude/agents/homelab-cicd-reviewer.md:47` and `docs/gitops-pipeline.md:622`
+    * `.claude/agents/homelab-cicd-reviewer.md:47` and `docs/gitops-pipeline.md:617`
     * `.claude/hooks/_claude_guard.py:19` and `scripts/lib/_claude_worktree.py:11`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `ansible/roles/setup/gitops_deploy/CLAUDE.md:95`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/post-merge-automation.md:268`
-    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:622`
-    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:1149`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:617`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:1139`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/monitor-bridge-checks.md:480`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/tests/test_probe_health.py:348`
@@ -133,7 +133,7 @@ generated_sha: 30af9b2f2b
     * `ansible/roles/setup/config_files/tasks/main.yml:7` and `ansible/roles/setup/optimize_pi/tasks/main.yml:8`
     * `ansible/roles/setup/config_files/tasks/main.yml:7` and `ansible/roles/setup/sops_setup/tasks/main.yml:7`
     * `ansible/roles/setup/gitops_deploy/CLAUDE.md:95` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
-    * `ansible/roles/setup/gitops_deploy/CLAUDE.md:95` and `docs/gitops-pipeline.md:622`
+    * `ansible/roles/setup/gitops_deploy/CLAUDE.md:95` and `docs/gitops-pipeline.md:617`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:25`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:15`
@@ -171,39 +171,39 @@ generated_sha: 30af9b2f2b
     * `ansible/tests/repo/test_adr_links.py:12` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
     * `ansible/tests/repo/test_adr_links.py:12` and `scripts/lib/b2.py:21`
     * `ansible/tests/repo/test_adr_links.py:34` and `ansible/tests/repo/test_census_rows_roles.py:258`
-    * `ansible/tests/setup/test_aide_check.py:13` and `docs/gitops-pipeline.md:711`
+    * `ansible/tests/setup/test_aide_check.py:13` and `docs/gitops-pipeline.md:706`
     * `docs/adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md:135` and `docs/adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md:121`
     * `docs/adr/index.md:9` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:100`
     * `docs/adr/template.md:51` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:372`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:162` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:344`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/archive/docs-ui-and-adrs/design.md:7`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/archive/docs-ui-and-adrs/design.md:137`
-    * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:622`
+    * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:617`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/docs-ui-and-adrs/design.md:137`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/post-merge-automation.md:268`
-    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/gitops-pipeline.md:1149`
+    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/gitops-pipeline.md:1139`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/monitor-bridge-checks.md:480`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/tests/test_probe_health.py:348`
     * `docs/archive/docs-ui-and-adrs/design.md:27` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
     * `docs/archive/docs-ui-and-adrs/design.md:27` and `scripts/lib/b2.py:21`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/archive/post-merge-automation.md:268`
-    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/gitops-pipeline.md:1149`
+    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/gitops-pipeline.md:1139`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/monitor-bridge-checks.md:480`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/tests/test_probe_health.py:348`
-    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:622`
-    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1149`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:617`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1139`
     * `docs/archive/post-merge-automation.md:268` and `docs/monitor-bridge-checks.md:480`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/tests/test_probe_health.py:348`
-    * `docs/gitops-pipeline.md:622` and `docs/gitops-pipeline.md:1149`
-    * `docs/gitops-pipeline.md:622` and `docs/monitor-bridge-checks.md:480`
-    * `docs/gitops-pipeline.md:622` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
-    * `docs/gitops-pipeline.md:622` and `scripts/diagnostics/tests/test_probe_health.py:348`
-    * `docs/gitops-pipeline.md:1149` and `docs/monitor-bridge-checks.md:480`
-    * `docs/gitops-pipeline.md:1149` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
-    * `docs/gitops-pipeline.md:1149` and `scripts/diagnostics/tests/test_probe_health.py:348`
+    * `docs/gitops-pipeline.md:617` and `docs/gitops-pipeline.md:1139`
+    * `docs/gitops-pipeline.md:617` and `docs/monitor-bridge-checks.md:480`
+    * `docs/gitops-pipeline.md:617` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/gitops-pipeline.md:617` and `scripts/diagnostics/tests/test_probe_health.py:348`
+    * `docs/gitops-pipeline.md:1139` and `docs/monitor-bridge-checks.md:480`
+    * `docs/gitops-pipeline.md:1139` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/gitops-pipeline.md:1139` and `scripts/diagnostics/tests/test_probe_health.py:348`
     * `docs/monitor-bridge-checks.md:480` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/monitor-bridge-checks.md:480` and `scripts/diagnostics/tests/test_probe_health.py:348`
     * `docs/target-architecture/contracts.md:333` and `docs/target-architecture/deploy/d2-first-leaf.md:748`
@@ -211,7 +211,7 @@ generated_sha: 30af9b2f2b
     * `docs/target-architecture/monitoring/m6-status/b5.md:42` and `prek.toml:502`
     * `hosts/components/claude-code/templates/claude-triage-poll.service.j2:20` and `hosts/components/claude-code/templates/claude-triage@.service.j2:40`
     * `scripts/deploy_tools/tests/test_chained_timeout.py:279` and `scripts/deploy_tools/tests/test_chained_timeout.py:289`
-    * `scripts/dev/fanout_lib/brief.py:338` and `scripts/dev/findings_lib/history_cli.py:200`
+    * `scripts/dev/fanout_lib/brief.py:340` and `scripts/dev/findings_lib/history_cli.py:200`
     * `scripts/dev/findings_lib/claim_cli.py:30` and `scripts/dev/findings_lib/export_cli.py:37`
     * `scripts/dev/findings_lib/claim_cli.py:30` and `scripts/dev/findings_lib/history_cli.py:32`
     * `scripts/dev/findings_lib/export_cli.py:37` and `scripts/dev/findings_lib/history_cli.py:32`
@@ -612,7 +612,7 @@ generated_sha: 30af9b2f2b
 | role `tasks/` and `handlers/` comment-only edits stay out of this set (#4926). maps a SHARED role to no tag of its own, and a service role's own edit keeps its one tag, because a task file has its own defer channel (`deploy_changes.comment_only_k8s_defaults`' docstring). | `scripts/deploy_tools/deploy_lib/tags.py:347` | 2026-11-06 |
 | ownership is this lock, never the pid in the directory name. playbook in a process whose pid is not the one in the name, and the name's pid is dead for the whole life of a detached deploy -- a pid-based reaper deleted the worktree out from under the running playbook. A process cannot lie about holding a flock. (ADR-0017) | `scripts/deploy_tools/deploy_lib/under_locks.py:230` | 2026-09-24 |
 | the lock order is whatever `deploy_locks.plan` returns, taken top to bottom, and this module neither names a lock nor sorts a tag. The deployer walks the same `plan()` for its own locks, so the two orders are one function rather than two agreeing ones. This run takes the tree lock, snapshots, RELEASES the tree lock and only then takes service locks, while the GitOps deployer holds the tree lock across its service locks; there is no cycle because this run never re-takes the tree lock after releasing it. (ADR-0017) | `scripts/deploy_tools/deploy_lib/under_locks.py:436` | 2026-09-24 |
-| a usage error is not a landing, so it annotates nothing. SystemExit(2) before a Landing or a Ledger exists, so the only line this could write is `pr=unknown verdict=aborted` -- a row meaning "you typed the command wrong" in the same stream the Landings board counts. The bash original annotated it because its EXIT trap was installed before the arg loop, and this port reproduced that until issue #1304 measured 592 such rows in Loki's 744h window. The wrapper below still annotates nothing: it only renumbers the code, and `--help` (exit 0) passes through untouched. | `scripts/deploy_tools/land.py:185` | 2026-09-06 |
+| a usage error is not a landing, so it annotates nothing. SystemExit(2) before a Landing or a Ledger exists, so the only line this could write is `pr=unknown verdict=aborted` -- a row meaning "you typed the command wrong" in the same stream the Landings board counts. The bash original annotated it because its EXIT trap was installed before the arg loop, and this port reproduced that until issue #1304 measured 592 such rows in Loki's 744h window. The wrapper below still annotates nothing: it only renumbers the code, and `--help` (exit 0) passes through untouched. | `scripts/deploy_tools/land.py:184` | 2026-09-06 |
 | an `ok`, `canary` or `no-green` builder that has not reached the merge is lagging | `scripts/deploy_tools/land_lib/host_published.py:56` | 2026-11-03 |
 | `--no-sync`. HOST_INPUTS member, so a synced render would upgrade that venv at the merge commit and downgrade it at the first parent while the tick may be using it. A render that needs a dependency the venv lacks fails instead, and a failed render waits on every host. | `scripts/deploy_tools/land_lib/host_wait.py:81` | 2026-10-17 |
 | the schedule is read in UTC. host runs Etc/UTC (`weekly_reboot_timezone` in group_vars/all.yml records the same fact for the reboot cron). | `scripts/deploy_tools/land_lib/host_wait.py:123` | 2026-10-17 |
@@ -621,21 +621,16 @@ generated_sha: 30af9b2f2b
 | `except Exception`, because any failure here must print the role tag. derivation shells out to git and decodes the output. An escape would kill a landing that has already merged, over a note the whole-role tag answers correctly. | `scripts/deploy_tools/land_lib/land_tags.py:128` | 2026-09-24 |
 | fire on ANY change to secrets.yml, and never try to name which keys moved. Naming them means decrypting both revisions, and no plaintext may reach a terminal, a transcript or a log. `.gitattributes` sets `diff=sops`, so even `git diff ansible/vars/secrets.yml` renders the values, which is why a hook denies that form. Over-firing on a key that needed no redeploy costs one exit code; under-firing leaves a rotated credential stale in a consumer this file list cannot show. | `scripts/deploy_tools/land_lib/land_tags.py:228` | 2026-09-01 |
 | fire on the tag-carrying path too, which is the opposite of what deploy_logic.alert_secrets_deferred does for the deployer. Not a contradiction, a different reader: that alert is unattended, so a false fire on the /add-secret happy path is noise nobody can act on. Here an operator is reading land.sh's output, and a PR shipping secrets.yml WITH one consuming template still cannot show the OTHER consumers -- PR #695's token had two, in two planes, and the landing got neither. | `scripts/deploy_tools/land_lib/land_tags.py:235` | 2026-09-01 |
-| this REPORTS the tick's state, it does not re-verdict the landing. | `scripts/deploy_tools/land_lib/landing.py:418` | 2026-09-25 |
-| this samples on every attempt, including an uncontended first one, where bash's `note_lock_contention` only ran fuser+ps after an attempt had already lost the lock. That is a real parity delta (#1085 item 4) and it stays: reverting to bash's post-failure sample reintroduces the #1031 race this pre-sample exists to close, and `test_the_lock_holder_is_sampled_before_the_attempt` (tests/test_land_tick.py) plus its deploy.py sibling would go red on the revert. The cost is two short-lived processes per attempt against a 10-15 minute landing. | `scripts/deploy_tools/land_lib/landing.py:496` | 2026-09-04 |
 | only a path both master and the PR changed makes a green head stale (operator ruling 2026-10-29, #6565). The update never cancelled an in-flight run; its cost was a second full CI run, about 22% of ci.yml runner-minutes. The accepted risk is the shape of #2922 and #2266, which went red on master from a path the PR never touched. A conflict, a capped compare list and a capped file listing still update, since overlap is unknown. | `scripts/deploy_tools/land_lib/merge.py:325` | 2026-10-29 |
 | a stale approved head is refused, not updated and not merged. would make a head the operator's approval does not name, so the policy would refuse it anyway, and merging it untested is what this check exists to stop. The rebase moves the merge base to master, so the re-approved head goes stale only if master moves again between the approval and the landing. | `scripts/deploy_tools/land_lib/merge.py:341` | 2026-10-10 |
 | hold the merge while two master runs are unfinished. against a 20-job runner cap, so a second unfinished sweep already queues (#5526). A cap of 1 was tried from 2026-10-25 (#6308), on the theory that a re-tested PR merged into an idle master more often merges the tree it tested, so `prove` skips the push sweep. It did not raise that share (#6309). Before the change, 74 of 155 master push runs ran only `prove` and `prek`; from 2026-10-26 to 2026-10-29, 46 of 89 did. With three or more merges in the hour before, the share was 61 of 140 before and 27 of 64 after. The cap of 1 did move merges onto an idle master: 11 of 89 merged while a master run was unfinished, against 67 of 155 before. Yet only 46 of 78 idle-master merges skipped the sweep, against 65 of 88 before, so the untested tree comes from master moving during the PR's re-test, which no merge-time read prevents. Batching the merges is the remaining route (#6521). | `scripts/deploy_tools/land_lib/options.py:48` | 2026-10-29 |
 | an unfinished run created more than 2 hours ago is not counted. slowest master run took 61 minutes from creation to finish, so a run still unfinished at twice that is wedged rather than queued, and counting it would hold every landing until GitHub expires its jobs after 24 hours. | `scripts/deploy_tools/land_lib/pace.py:37` | 2026-10-24 |
 | a held landing's cap rises by one per 15 minutes held, and pacing ends once the whole wait reaches `merge_timeout`. On 2026-10-28 eight landers raced for one slot and each lost often enough to run out its 2700s budget, so five ended `merge-timeout` and needed a hand re-run (#6466). Ending pacing at the budget alone would release every lander that arrived together at once, the pile #5526 measured; the rising cap lets the longest-held landers merge first, one at a time. The budget stays `merge_timeout` rather than growing, because `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` sizes LAND_DEADLINE on it. | `scripts/deploy_tools/land_lib/pace.py:42` | 2026-10-29 |
 | an absent `last-good` refuses rather than falling back to `prod` or to "no range". `promote` seeds the tag on its first run, so its absence means the promotion plane is not running yet, and a bump merged then has nothing that would hold it. | `scripts/deploy_tools/land_lib/pin_gate.py:183` | 2026-10-16 |
-| the fast path is skipped when THE TICK IS THE APPLY for part of this range -- `tick_is_the_apply`, which is `self_applied or remaining_setup`. It is not skipped for every broad prefix: a `Landing.plane` that is not self-applied is by definition what a HAND applies, so no tick can settle it and a tags-plus-plane PR keeps the fast path. A landing the predicate catches awaits the tick here. | `scripts/deploy_tools/land_lib/pipeline.py:107` | 2026-09-17 |
-| `suspended`, every published tag suspended, ends the landing as `nothing-to-deploy`, exit 0, unless a host package changed, which the host wait still waits on, the tick applies part of the PR, whose state `no_tag_outcome` and the health step grade, or a plane or another host is owed a hand, which ends `needs-manual-apply` as in `no_tag_outcome`. The suspend PR itself owes none of these and ends at exit 0, so a failure verdict would be wrong for it. Exit 75 would be wrong too: `land_probe` reads 75 as a resume point, and a re-run waits on the same suspended tag again. A change that raced the gate onto a suspended tag never ends here: land-wait leaves it to `promote.py decide`'s `suspended-changed` hold. | `scripts/deploy_tools/land_lib/promotion.py:194` | 2026-10-16 |
-| a non-zero exit here is LOGGED AND IGNORED, where `run_tick` below ends the | `scripts/deploy_tools/land_lib/tick.py:30` | 2026-09-16 |
-| a second `systemctl start` after the gate, rather than a deferred one. | `scripts/deploy_tools/land_lib/tick.py:68` | 2026-09-17 |
-| NO tree lock is taken. | `scripts/deploy_tools/land_lib/tools.py:205` | 2026-10-23 |
-| under `tempfile.mkdtemp`, NOT under HOMELAB_DEPLOY_SNAPSHOT_ROOT. | `scripts/deploy_tools/land_lib/tools.py:213` | 2026-09-24 |
-| the parent directory is PINNED to GATE_TMP_ROOT rather than left to `mkdtemp`'s | `scripts/deploy_tools/land_lib/tools.py:222` | 2026-09-16 |
+| `suspended`, every published tag suspended, ends the landing as `nothing-to-deploy`, exit 0, unless a host package changed, which the host wait still waits on, or a plane is owed a hand, which ends `needs-manual-apply` as in `no_tag_outcome`. The suspend PR itself owes neither and ends at exit 0, so a failure verdict would be wrong for it. Exit 75 would be wrong too: `land_probe` reads 75 as a resume point, and a re-run waits on the same suspended tag again. A change that raced the gate onto a suspended tag never ends here: land-wait leaves it to `promote.py decide`'s `suspended-changed` hold. | `scripts/deploy_tools/land_lib/promotion.py:189` | 2026-10-16 |
+| NO tree lock is taken. | `scripts/deploy_tools/land_lib/tools.py:118` | 2026-10-23 |
+| under `tempfile.mkdtemp`, NOT under HOMELAB_DEPLOY_SNAPSHOT_ROOT. | `scripts/deploy_tools/land_lib/tools.py:126` | 2026-09-24 |
+| the parent directory is PINNED to GATE_TMP_ROOT rather than left to `mkdtemp`'s | `scripts/deploy_tools/land_lib/tools.py:135` | 2026-09-16 |
 | ` on `is_doc` says why that | `scripts/deploy_tools/narrow_lib/paths.py:28` | 2026-09-30 |
 | ` comment says why), and refusing on them made the role's most-edited task file narrow nothing. A file whose ONLY tag is `always` still refuses, since no tag is left to name its work. | `scripts/deploy_tools/narrow_lib/task_walk.py:32` | 2026-10-11 |
 | a shipped file this role renders only through another role's task file refuses here; it is not resolved through that task file's readers (#3322). The check-timer templates reach gitops_deploy and k3s only through `common/tasks/check_timer.yml`, so a change to them falls back to the whole-role tag. That costs a longer apply and never misses one. Those templates changed twice in the repo's history, and each routing layer added from 2026-10-01 on found the next indirection, so one more layer was not worth its code. Reopen it if the trigger recurs or the fallback grows costlier than a longer apply; #3322's close reason is the long form. | `scripts/deploy_tools/narrow_setup.py:616` | 2026-10-03 |
@@ -657,7 +652,7 @@ generated_sha: 30af9b2f2b
 | `role_tags`' `playbook` argument IS the capability under test, so no input separates this rule from the signature (#2363). `foreign_tags` needs the playbook to know which other roles are in scope; a `role_tags` without it cannot refuse a shared tag at all. Today's behaviour is what the pair below holds, and it does: making `role_tags` intersect against an empty set instead of `foreign_tags(...)` fails `test_a_tag_another_role_in_the_playbook_declares_is_flagged` with DID NOT RAISE and leaves its accepting half green, measured 2026-09-24. | `scripts/deploy_tools/tests/test_narrow_setup_edges.py:365` | 2026-09-24 |
 | pace is 2 landings started per run (#5526: CI demand already exceeds the 20-runner | `scripts/dev/fanout_lib/autoland.py:37` | 2026-10-18 |
 | a daniel-server that cannot be read is a logged line and exit 0, not a failure. | `scripts/dev/fanout_lib/autoland.py:40` | 2026-10-18 |
-| a call-time import. | `scripts/dev/fanout_lib/brief.py:338` | 2026-10-10 |
+| a call-time import. | `scripts/dev/fanout_lib/brief.py:340` | 2026-10-10 |
 | both legs run the `fanout_place.py` shim, not `fanout.py place`, from the PRIMARY checkout. A batch launched before #4346 has no `fanout.py`; the shim exists in old and new checkouts alike. The worktree's own copy is not run: it is frozen at the batch's launch and kept every squash-merged batch launched before #6552 (#6571). Full reasoning in this function's docstring. | `scripts/dev/fanout_lib/clean.py:483` | 2026-10-29 |
 | the gone-tree leg keeps its own `gh pr list` merged check in shell rather than calling `lib.worktrees.is_merged`. The interpreter leg starts only for a tree that is still a checkout, and a gone tree has no cwd for it to judge (Ruling 30). The shell answers before an interpreter is needed. It asks only the forge question because a squash-merged branch fails every local layer. Full reasoning in this function's docstring. | `scripts/dev/fanout_lib/clean.py:493` | 2026-10-09 |
 | not `remote`, although a read spends ssh and a `gh api` call (#6758). serves a remote source's reading to any wait with the same arguments and cwd for 0.9 of the interval. In practice that wait is the same orchestrator's next one, started just after it launched into the `room` the previous wait ended on. `room` is the one state a launch undoes, so the replay ended the next wait `room` on a host that launch had filled, and the launch after it was refused (2026-10-31, 2026-11-01). Sharing saves nothing across sessions, because the cache key carries the cwd. | `scripts/dev/fanout_lib/headroom_probe.py:121` | 2026-11-01 |
@@ -737,7 +732,7 @@ generated_sha: 30af9b2f2b
 | `` | `scripts/lib/ansible_jinja_env.py:20` | 2026-10-09 |
 | ` | `scripts/lib/b2.py:21` | 2026-10-09 |
 | not age-gated, unlike `behind_park_lines` and monitor-bridge's `gitops_status`. | `scripts/lib/deployer_park.py:273` | 2026-10-11 |
-| deploy.sh and the tick print that same shape under their OWN prefix rather than under `VERDICT:`. A landing runs the tick as a subprocess with stdout INHERITED (`land_lib/tools.py:run_tick`), so its lines reach the landing's own logfile ABOVE its verdict -- and `grep -m1 '^VERDICT:'` takes the FIRST match, which would report the tick's outcome as the landing's on every landing, with nothing failing. One format, three prefixes, one renderer. Issue #2853 asked for a bare `VERDICT:` from all three; the PR that closed it carries the measurement. | `scripts/lib/exit_messages.py:33` | 2026-10-12 |
+| deploy.sh, the tick wrapper and probe.py print that same shape under their OWN prefix rather than under `VERDICT:`. A landing's logfile can carry their lines ABOVE its verdict -- and `grep -m1 '^VERDICT:'` takes the FIRST match, which would report theirs as the landing's on every landing, with nothing failing. One format, three prefixes, one renderer. Issue #2853 asked for a bare `VERDICT:` from all three; the PR that closed it carries the measurement. | `scripts/lib/exit_messages.py:33` | 2026-11-07 |
 | a path atom hashes EXISTENCE, not content. for the rule and the measurement behind it. | `scripts/lib/facts/atoms.py:141` | 2026-09-28 |
 | {c.selector}" in ln | `scripts/lib/facts/atoms.py:172` | 2026-10-10 |
 | (?P<sel>\S.*)$")), | `scripts/lib/facts/citations.py:53` | 2026-09-19 |
@@ -876,18 +871,17 @@ generated_sha: 30af9b2f2b
 | no | `docs/crowdsec-waf-record.md:32` | 2026-09-29 |
 | ` marker on that tolerance in | `docs/crowdsec-waf-record.md:226` | 2026-10-10 |
 | ` at `chained_timeout.py:VERIFY_CAP_S` records | `docs/flux-deploy-plane.md:1293` | 2026-10-22 |
-| ` marker above `_BROAD_MANUAL_PREFIXES` in | `docs/gitops-pipeline.md:215` | 2026-10-10 |
-| ` marker. | `docs/gitops-pipeline.md:622` | 2026-10-24 |
-| ` marker and the measurement. | `docs/gitops-pipeline.md:711` | 2026-10-10 |
-| ` at that task says why the | `docs/gitops-pipeline.md:900` | 2026-10-10 |
-| ` marker | `docs/gitops-pipeline.md:1149` | 2026-10-10 |
+| ` marker above `_BROAD_MANUAL_PREFIXES` in | `docs/gitops-pipeline.md:216` | 2026-10-10 |
+| ` marker. | `docs/gitops-pipeline.md:617` | 2026-10-24 |
+| ` marker and the measurement. | `docs/gitops-pipeline.md:706` | 2026-10-10 |
+| ` at that task says why the | `docs/gitops-pipeline.md:892` | 2026-10-10 |
+| ` marker | `docs/gitops-pipeline.md:1139` | 2026-10-10 |
 | ` marker in `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean | `docs/homepage-widgets-and-layout.md:153` | 2026-09-29 |
 | ` the names stay generated, and a label sits beside them. | `docs/issue-claiming-and-fanout.md:251` | 2026-10-11 |
 | HMAC-SHA256 under a host-local key` | `docs/k8s-manifest-cycle-record.md:366` | 2026-10-02 |
 | this digest names the bytes` | `docs/k8s-manifest-cycle-record.md:392` | 2026-10-02 |
 | ` marker on `PACE_MASTER_RUNS` in | `docs/landing.md:100` | 2026-10-29 |
 | ` marker on `descendant_verdict` records why that is accepted. | `docs/landing.md:276` | 2026-10-12 |
-| this role is emptied`, so an apply | `docs/landing.md:653` | 2026-10-25 |
 | ` in `healthchecks_verdict`). | `docs/monitor-bridge-checks.md:257` | 2026-10-10 |
 | ` at the fetch in `checks/host_edge.py`. | `docs/monitor-bridge-checks.md:348` | 2026-10-10 |
 | ` marker for the | `docs/monitor-bridge-checks.md:467` | 2026-10-30 |

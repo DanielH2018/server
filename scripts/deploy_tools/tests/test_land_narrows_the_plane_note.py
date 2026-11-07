@@ -1,14 +1,10 @@
 """Whether `land.sh`'s `needs-manual-apply` note narrows the tag, and when it must not.
 
 The deferral for an unapplyable setup role ends in a command that applies the role and clears
-its `manual_plane` line. After the tick it awaited, the landing reads the deployer's receipt
-for the tick that crossed its merge commit (#3391) and quotes that tick's narrowing of the
-role. The receipt is scoped to one range containing this PR, so nothing has to be re-derived
-to tie it to the PR — which is what the `manual_plane_tags` sidecar needed, since its row
-spans every range that made the role pending. No receipt, a receipt for a range that does not
-contain the PR, and a role the receipt could not narrow all keep the whole-role tag.
+its `manual_plane` line. The landing quotes the narrowing derived from the PR's own range,
+and keeps the whole-role tag when that derivation refuses.
 
-Run: uv run pytest scripts/deploy_tools/tests/test_land_reads_the_tick_receipt.py
+Run: uv run pytest scripts/deploy_tools/tests/test_land_narrows_the_plane_note.py
 """
 
 import dataclasses
@@ -17,7 +13,7 @@ import json
 import pytest
 
 from deploy_tools.land_lib import land_tags, land_tags_cli
-from _land_fakes import RECEIPTS, Fakes, build_classifier
+from _land_fakes import Fakes, build_classifier
 from _narrow_fixtures import Tree, _refs
 
 RBAC = "ansible/roles/setup/k3s/templates/readonly-rbac.yaml.j2"
@@ -102,130 +98,6 @@ def test_the_plane_cli_names_a_changed_bringup_playbook_over_a_range(tmp_path, c
     out = capsys.readouterr().out
     assert "`uv run ansible-playbook ansible/k3s-bringup.yml --tags k3s`" in out
     assert "<role>" not in out
-
-
-# ── the landing reads the receipt for the tick that crossed its merge commit ───────────
-
-_RBAC_PR = {"files": [{"path": RBAC}], "changedFiles": 1}
-
-
-def _receipt(manual: dict[str, list[str]]) -> str:
-    return json.dumps(
-        {"origin": "f" * 40, "base": "e" * 40, "applied": {}, "manual": manual}
-    )
-
-
-def _landing(
-    land_run,
-    receipts: str,
-    is_ancestor_rc: int = 0,
-    plane_note=None,
-    ancestry=None,
-):
-    f = Fakes(
-        gh_views={"files,changedFiles": _RBAC_PR},
-        derived=([], "pr"),
-        state={RECEIPTS: receipts},
-        is_ancestor_rc=is_ancestor_rc,
-        is_ancestor_of=ancestry or {"e" * 40: 1},
-    )
-    classifier = dataclasses.replace(
-        build_classifier(f), plane_note=plane_note or land_tags.plane_note
-    )
-    return land_run([], f, classifier=classifier)
-
-
-def test_the_receipts_narrowing_reaches_the_verdict_after_the_tick(land_run):
-    _rc, out, _err, _calls, _ = _landing(land_run, _receipt({"k3s": ["kubeconfig"]}))
-    assert "ansible/k3s-bringup.yml --tags kubeconfig" in out
-    assert "--tags k3s`" not in out
-
-
-def test_a_receipt_row_needing_nothing_leaves_the_role_out_after_the_tick(land_run):
-    """The tick wrote no `manual_plane` line, so neither apply nor clear is owed (#4408).
-
-    `role-not-narrowed` below, an empty row, is the rejecting half.
-    """
-    _rc, out, _err, _calls, _ = _landing(
-        land_run, _receipt({"k3s": ["narrowed-to-nothing"]})
-    )
-    assert "k3s-bringup.yml" not in out
-    assert "clear-owed manual_plane k3s" not in out
-
-
-@pytest.mark.parametrize(
-    ("receipts", "is_ancestor_rc"),
-    [
-        ("", 0),
-        ("not json", 0),
-        (_receipt({"k3s": []}), 0),
-        (_receipt({"k3s": ["kubeconfig"]}), 1),
-    ],
-    ids=["no-receipt", "torn-receipt", "role-not-narrowed", "range-without-this-pr"],
-)
-def test_without_a_receipt_covering_this_pr_the_verdict_keeps_the_role_tag(
-    land_run, receipts, is_ancestor_rc
-):
-    """The last case is the stale row the sidecar needed a re-derivation to catch: a receipt
-    for a range whose origin does not contain this merge commit is somebody else's."""
-    _rc, out, _err, _calls, _ = _landing(land_run, receipts, is_ancestor_rc)
-    assert "ansible/k3s-bringup.yml --tags k3s`" in out
-    assert "--tags kubeconfig" not in out
-
-
-def test_a_later_ranges_receipt_is_not_quoted_for_this_pr(land_run):
-    """The crossing tick wrote no receipt — another session's ff-merge crossed this PR — and
-    the next broad tick's receipt has an origin containing it too. Its base contains it as
-    well, so that range started past this PR and its tags are somebody else's."""
-    _rc, out, _err, _calls, _ = _landing(
-        land_run, _receipt({"k3s": ["kubeconfig"]}), ancestry={"e" * 40: 0}
-    )
-    assert "ansible/k3s-bringup.yml --tags k3s`" in out
-    assert "--tags kubeconfig" not in out
-
-
-def test_a_plane_note_that_raises_after_the_tick_keeps_the_role_tag(land_run):
-    """A raise in the re-render ends in the step 1 note, not in a traceback.
-
-    `plane_note` already ran on these inputs in step 1, so this is unlikely. `land.py`
-    returning a traceback instead of a VERDICT costs the operator the whole landing; the role
-    tag costs them a wider apply.
-    """
-    calls_made = []
-
-    def plane_note(paths, *, quiet=False, narrow_tags=None):
-        calls_made.append(narrow_tags)
-        if narrow_tags:
-            raise RuntimeError("the re-render blew up")
-        return land_tags.plane_note(paths, quiet=quiet)
-
-    _rc, out, _err, _calls, _ = _landing(
-        land_run, _receipt({"k3s": ["kubeconfig"]}), plane_note=plane_note
-    )
-    assert calls_made[-1] == {"k3s": frozenset({"kubeconfig"})}, (
-        "the re-render was tried"
-    )
-    assert "VERDICT" in out
-    assert "ansible/k3s-bringup.yml --tags k3s`" in out
-
-
-def test_the_narrowed_render_reads_step_1s_inputs_and_only_adds_the_tags(land_run):
-    """Both renders take their paths and quiet paths from the one frozen `Classification`,
-    so the only argument that differs is the narrowing (#3665)."""
-    seen = []
-
-    def plane_note(paths, *, quiet=(), narrow_tags=None):
-        seen.append((list(paths), set(quiet), narrow_tags))
-        return land_tags.plane_note(paths, quiet=quiet, narrow_tags=narrow_tags)
-
-    _rc, out, _err, _calls, _ = _landing(
-        land_run,
-        _receipt({"k3s": ["kubeconfig"]}),
-        plane_note=plane_note,
-    )
-    assert [s[2] for s in seen] == [None, {"k3s": frozenset({"kubeconfig"})}]
-    assert seen[0][:2] == seen[1][:2]
-    assert "ansible/k3s-bringup.yml --tags kubeconfig" in out
 
 
 # ── a landing that deploys its own merge commit narrows from its own range ──────

@@ -411,15 +411,15 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             LAND_FAILED,
             "LAND_FAILED",
-            "CI red or unproven, a change needing a hand, a tag no k8s entry declares, a failed tick "
-            "or promotion, a failed health gate, or a PR closed, conflicting or with red CI.",
+            "CI red or unproven, a change needing a hand, a tag no k8s entry declares, "
+            "a held or failed promotion, a failed health gate, or a PR closed, conflicting or with red CI.",
         ),
         _c(LAND_BAD_ARGS, "LAND_BAD_ARGS", "the command line is wrong."),
         _c(
             LAND_GAVE_UP,
             "LAND_GAVE_UP",
-            "gave up waiting — a budget elapsed, the tick was skipped for lock contention every "
-            "time, the tick has not yet crossed origin, no promotion covered the merge in time, "
+            "gave up waiting — a budget elapsed, no promotion covered the merge in time, "
+            "the health gate could not read its store, "
             "or no host package containing the merge is published.",
         ),
     ),

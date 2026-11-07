@@ -2217,6 +2217,10 @@ the `manual_plane` clearing, and *Rollback*'s
     line. It carries the proof for H6's deployer-coupled checks. `gitops_deploy/tasks/teardown.yml`'s
     removals become legacy entries in the packages of the hosts it applied to. Its revert needs the
     operator's `--tags gitops_deploy` re-apply ON daniel-box (**operator-only**).
+    It also deletes `scripts/deploy_tools/gitops_tick.sh` with `test_gitops_tick_wrapper.py`, the
+    wrapper cases of `test_gitops_manual_trigger.py` and the `TICK_*` exit codes. The operator
+    removes the `Bash(./scripts/deploy_tools/gitops_tick.sh:*)` allow entry from the Claude
+    settings file in the same PR (#7536).
 29. **H7.53.** H7.19b deletes the deployer's code once its timer is gone, and H7.19c then fails
     the census on any setup task left. H7.19b may still split in two, the re-home first. It
     carries the deployer-import census and the legacy entries, and names

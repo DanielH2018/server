@@ -94,8 +94,6 @@ def test_a_hosts_only_landing_deploys_nothing_and_waits_for_the_host(land_run):
         rc == 0
         and f"VERDICT: settled (PR #999, {MERGE_SHA}, tags: , hosts: daniel-pi)" in out
     )
-    # The tick was awaited at step 4, because the PR has no tag.
-    assert _names(calls).index("tick") < _names(calls).index("wait_for_hosts")
     [wait] = [c for c in calls if c[0] == "wait_for_hosts"]
     assert wait[1][:2] == (["daniel-pi"], MERGE_SHA)
 
@@ -178,9 +176,9 @@ def test_a_suspended_tag_with_no_host_is_not_named_as_a_service_deployed(landing
 
 
 def test_a_hosts_only_landing_never_reads_services_deployed(landing, capsys):
-    """The tick applied a setup role of its own, and the wording still names the hosts."""
-    ln = _deployed(landing, [], [PI], state={"behind_since": "1"})
-    ln.classification = Classification(self_applied=True)
+    """A plane owed beside a host package still names the hosts, not services."""
+    ln = _deployed(landing, [], [PI])
+    ln.classification = Classification(plane="`x`")
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)
     out = capsys.readouterr().out + exc.value.detail
