@@ -1,41 +1,71 @@
 # Deploying by hand
 
-The path an operator drives. The automatic pull-based path is the
-[GitOps pipeline](gitops-pipeline.md), and reaching for the wrong one is the usual mistake —
-GitOps decides what to deploy on its own, this is you deciding.
+`scripts/deploy.sh` deploys no workload. `promote` and Flux apply every k8s change, the
+[GitOps pipeline](gitops-pipeline.md) applies setup roles, and the Pi's services ship in its host
+package. This page says which path applies a change, and what the wrapper still does.
 
-## Use the wrapper
+## Which path applies a change
 
-```bash
-./scripts/deploy.sh --tags "<service>"
-```
+- **A k8s role, an inventory value or a shared template:** merge through `land.sh`. `promote`
+  publishes the merge commit, Flux applies it, and `land.sh` gates the tags the PR changed. The
+  `land-after-merge` skill has the commands, and [Landing](landing.md) has the verdicts. To apply
+  a green master commit that no promotion followed, dispatch `promote` with its full 40-hex SHA:
+  `gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>`.
+- **A setup role:** the GitOps deployer applies it on the tick after the merge. A role the tick
+  cannot apply becomes a `manual_plane` line in `owed.jsonl`, and
+  `uv run python scripts/deploy_tools/owed_run.py <role>` clears it. By hand, run the playbook
+  and tag that the `Applied by:` line of the role's `CLAUDE.md` names. Neither follows from the
+  role's name: `chezmoi_setup` takes the tag `chezmoi`, and `k3s` applies through
+  `k3s-bringup.yml`, where the same page names narrower tags than the maximal `k3s`. Ansible
+  exits 0 on a tag that matches nothing.
+- **A bring-up playbook:** the deployer never applies these, so run the playbook by hand.
+- **A Pi Compose service or anything under `hosts/`:** the builder publishes the package and the
+  host's updater installs it ([Host packages](host-packages.md)).
 
-Not a bare `ansible-playbook`. The wrapper does four things the bare form does not:
+## What the wrapper still does
+
+The wrapper runs `ansible/deploy.yml` and no other playbook. That playbook's first play runs no
+role on any host, because no `containers_list` entry is `platform: docker`. Its second play
+runs no role either, because every entry carries `owner: flux` and `ansible_owned` drops each one.
+What each form does follows from that:
+
+- **A k8s tag in `--tags`:** exit 5, under `--check` and `--dry-run` too
+  (`scripts/deploy_tools/deploy_lib/owners.py:refuse_k8s_tags`).
+- **`--changed [<ref>]`:** a read of what a branch owes by hand. A broad range exits 3 and prints
+  the setup or bring-up command. Any other range derives no tag and ends with the verdict
+  `nothing-to-deploy`.
+- **No `--tags`:** takes the locks, cuts the snapshot and runs `deploy.yml`. Its one remaining
+  effect on daniel-box is `ansible/tasks/k8s_retire.yml`, once for each name in
+  `k8s_retired_services`. A run that finds nothing left reports `ok`.
+- **`-e target=daniel-pi`:** runs the secrets preamble against the Pi and no role, so it deploys
+  nothing. `wg-easy` passes the tag check because daniel-box's list carries it too, and any other
+  Pi service name is a tag miss (exit 2).
+- **`--check` and `--dry-run`:** unlocked, from the working tree, and with no role to render, so
+  neither shows a manifest to anything. *Checking a k8s change before it merges* below has what
+  does.
+- **`--list-services`:** prints every valid tag, and names each k8s tag on stderr.
+
+## The gates and locks of a run
+
+A run of the wrapper does four things a bare `ansible-playbook` does not:
 
 - Takes `/var/lock/server-git-tree.lock` to snapshot `HEAD`, then one
-  `/var/lock/server-deploy-<tag>.lock` per service for the playbook, so the deploy cannot
+  `/var/lock/server-deploy-<tag>.lock` per service for the playbook, so the run cannot
   interleave with any [tree-lock holder](#who-holds-the-tree-lock) on the tree, nor with
-  another deploy of the same service on the cluster
+  another run on the same service
   ([ADR-0011](adr/0011-one-lock-serialises-every-deploy-path.md),
-  [ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)). Two sessions
-  deploying different services run at the same time.
-- Renders from a detached worktree of `HEAD` under `/tmp/homelab-deploy-snapshots/`, not from
-  the working tree. **An uncommitted edit is not deployed.** `--check` and `--dry-run` are the
+  [ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)).
+- Runs from a detached worktree of `HEAD` under `/tmp/homelab-deploy-snapshots/`, not from
+  the working tree. **An uncommitted edit is not read.** `--check` and `--dry-run` are the
   exceptions and still read the working tree. `--at <sha>` snapshots that commit instead of
-  `HEAD`, and asks the tag check and the staleness gate about it too. `land.sh` passes the
-  merge commit of the pull request it is landing, so a landing deploys without waiting for the
-  GitOps tick to fast-forward the primary checkout onto that commit.
+  `HEAD`, and asks the tag check and the staleness gate about it too.
 - Checks the tags against `containers_list` first, because Ansible itself exits 0 on a tag
   that matches nothing.
-- Refuses a tree that is behind `origin/master` on something the deploy renders, because a
-  stale tree renders stale templates and reverts live config while every repo-side check reads
-  green. With `--tags` the question is narrowed to those tags: a commit behind that touches
-  only other roles prints a note and deploys, while one reaching a deployed tag or a broad path
-  (shared templates, `ansible/inventory/`, the setup plane) refuses and names the commits. An
-  unscoped run refuses on any commit behind.
-
-The bare forms still work and are what the wrapper runs. Use them only when you deliberately
-want none of the above.
+- Refuses a tree that is behind `origin/master` on something the run reads. With `--tags` the
+  question is narrowed to those tags: a commit behind that touches only other roles prints a
+  note and proceeds, while one reaching a named tag or a broad path (shared templates,
+  `ansible/inventory/`, the setup plane) refuses and names the commits. An unscoped run refuses
+  on any commit behind.
 
 Once its gates pass, the wrapper also clears the temp directories that dead Ansible runs left
 under `~/.ansible/tmp`. A controller killed mid-task leaves an `ansible-tmp-*` directory. Any
@@ -89,23 +119,23 @@ typed it wrong" for both entry points (#3024).
 `DEPLOY_FLUX_OWNED` (5) means the tag is not Ansible's to deploy at all. Its `containers_list`
 entry is `platform: k8s`, so Flux applies it through `promote` and no Ansible path may. The
 wrapper refuses the whole `--tags` list, before any lock, under `--check` and `--dry-run` too,
-and `--skip-tag-check` does not bypass it. Merge the change and let `promote` publish it, or
-drop the tag to deploy the rest. `--changed` leaves such a tag out and names it instead of
-refusing. A list that leaves empty deploys nothing and exits 0, and its verdict line reads
-`nothing-to-deploy` rather than `deployed`. A shared k8s role typed into `--tags` is a tag miss.
-`--list-services` names each k8s tag on stderr.
+and `--skip-tag-check` does not bypass it. Merge the change and let `promote` publish it.
+`--changed` leaves such a tag out and names it instead of refusing. A list that leaves empty
+deploys nothing and exits 0, and its verdict line reads `nothing-to-deploy` rather than
+`deployed`. A shared k8s role typed into `--tags` is a tag miss. `--list-services` names each
+k8s tag on stderr.
 
 Being *ahead* of master is normal branch work and is never refused.
 
-## Checking a change without deploying it
+## Checking a k8s change before it merges
 
-The `deploy` skill (`.claude/skills/deploy/SKILL.md`) owns the three-mode table (`prek run --all-files`, `--check`, `--dry-run`) and the two limits of a green dry run. Only `--dry-run` shows the manifests to an API server.
-
-A dry run writes nothing on the node either. Every host-plane task in a role carries `when: not k8s_dry_run | bool` (#2614), and `ansible/tests/deploy/test_k8s_dry_run_host_writes.py::test_every_host_write_outside_manifests_is_guarded` fails on one that does not.
+The `deploy` skill (`.claude/skills/deploy/SKILL.md`) owns the table of what `prek run --all-files`,
+the renderer and CI's render-diff gates each catch. `deploy.sh --check` and `--dry-run` catch no
+manifest fault, because neither runs a role.
 
 ## Verify twice
 
-A deploy has two questions and one command only answers the first.
+A landed change has two questions and one command only answers the first.
 
 ```bash
 uv run python scripts/diagnostics/probe.py health <service>
@@ -128,45 +158,29 @@ So exercise the thing you actually changed as well.
 
 ## Working alongside other sessions
 
-- Deploys of the same service serialize; the tree lock is held for the snapshot only, so two
-  deploys of different services run at once (ADR-0017). Neither lock queues fairly. Exit 75
-  means a lock was busy and nothing was deployed — retry. The queued path reports it only
-  after the full `LOCK_WAIT`; `--detach` probes the tree lock with `flock -n` and reports it at
-  once, so 75 from a `--detach` run says nothing about how long the holder has held it.
-- Scope your deploy to your own services. A shared SHA range covers other sessions' work too,
-  and deploying another session's half-finished landing is not yours to do.
-- **`--detach` returning is not a verified deploy.** It backgrounds the rollout wait, which is
-  most of the deploy. `deploy.sh --tags <svc> --detach && cc-wait deploy <svc>` waits for the
-  notifier's health gate and exits 0 only when it settled (#3934). For `--changed` or a shared
-  role's tag, use the `wait:` line `--detach` prints, because those deploys run other tags.
-- A `--detach` run holds its service locks until its notifier's health gate has posted. A
-  second deploy of the same service queues behind the gate rather than rolling the workload
-  under its sample (#3817).
+- Runs on the same service serialize; the tree lock is held for the snapshot only (ADR-0017).
+  Neither lock queues fairly. Exit 75 means a lock was busy and nothing ran, so retry. The
+  queued path reports it only after the full `LOCK_WAIT`; `--detach` probes the tree lock with
+  `flock -n` and reports it at once, so 75 from a `--detach` run says nothing about how long the
+  holder has held it.
+- Scope a landing to your own PR. A shared SHA range covers other sessions' work too, and
+  landing another session's half-finished work is not yours to do.
+- **`--detach` returning is not a finished run.** It backgrounds the playbook and the notifier's
+  health gate. To wait for the gate, run the `wait:` line `--detach` prints, which exits 0 only
+  when the run settled (#3934).
+- A `--detach` run holds its service locks until its notifier's health gate has posted (#3817).
 - A `--detach` verdict the host could not post to Discord is not lost. The notifier queues it
   in `/var/lib/gitops-deploy/detach_spool`, and the next GitOps deployer tick sends it with a
   `(delayed: first attempt <UTC time>)` line (#3987). The detach log holds the verdict either way.
 
 ## Retiring a k8s service
 
-Deleting a role from the repo removes nothing live. `kubectl apply` never deletes, and the
-role's own prune cannot run once the role is gone. To retire a k8s service, delete its role and
-its `containers_list` entry, then add its name to `k8s_retired_services` in
-`ansible/inventory/group_vars/all.yml`, all in one PR.
+To retire a k8s service, follow
+[*Retiring a flux-owned service*](flux-deploy-plane.md#retiring-a-flux-owned-service). Arm 4 of
+the render-diff gates refuses a flux-owned name in `k8s_retired_services`, and every entry is
+flux-owned, so that list only keeps the service retired before the move to Flux.
 
-The next k8s deploy runs `ansible/tasks/k8s_retire.yml` for each entry, whatever its `--tags`.
-The task file deletes every object the service's staged directory under
-`/etc/rancher/k3s/manifests/` declares, its Secret and its `claim-<name>.yaml` included. It
-then removes that directory and the service's release and render records. A run that finds
-nothing reports `ok`.
-
-Deleting the claim deletes its Longhorn volume, because the `longhorn` StorageClass reclaims
-with `Delete`. Land the entry before the next hourly run of the `longhorn-reconcile` CronJob
-and the gate Job that runs with each revision of its role: either returns a `longhorn`-class
-volume in no routing list to the `default` group, and a volume outside
-`k3s_longhorn_r2_volumes` then backs up daily to B2. `k3s-bringup.yml --tags longhorn` no
-longer does this: since H1.6 it applies only the backup-store poll interval.
-
-The teardown does not delete the volume's existing Longhorn backups. Once the volume is gone,
+Retiring a service does not delete the volume's existing Longhorn backups. Once the volume is gone,
 no RecurringJob selects it, so no `retain` ever prunes them. To finish the retirement, read
 which target holds them from the BackupVolume's `spec.backupTargetName`:
 

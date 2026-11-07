@@ -318,9 +318,8 @@ Steps:
    then attaches the volume on daniel-box from its local replica.
 4. Verify with `probe.py targets` and `probe.py health <svc>` for each service you brought back.
 5. Once daniel-server is back, Longhorn rebuilds its replicas from daniel-box. Bring back each
-   shed service by the shed scenario's step 4, below: it reads `DEPLOY_HOLD` first, resumes
-   each flux-owned service and redeploys each Ansible-owned one. The rescheduled pods stay on
-   daniel-box until their next rollout.
+   shed service by the shed scenario's step 4, below: it reads `DEPLOY_HOLD` first, then resumes
+   each flux-owned service. The rescheduled pods stay on daniel-box until their next rollout.
 
 ### Scenario: one node is down and the survivor runs short of memory
 
@@ -356,9 +355,8 @@ suspended before it is scaled and resumed rather than redeployed.
     ```
 
    A suspend frees the reconcile worker that the tag holds only when that worker's current
-   wait ends, which can take up to the tag's `timeout`. Scale each Ansible-owned service to
-   zero as it stands. Start with the largest, and use the k3s admin kubeconfig, because plain
-   `kubectl` on daniel-box is read-only.
+   wait ends, which can take up to the tag's `timeout`. Start with the largest, and use the k3s
+   admin kubeconfig, because plain `kubectl` on daniel-box is read-only.
 4. Once the node is back, and before any resume, read the hold with
    `gh variable get DEPLOY_HOLD -R DanielH2018/server` and compare it with step 2's reason.
    Step 2 does not stop a `promote` run that was already past `decide`, because `decide`
@@ -383,10 +381,6 @@ suspended before it is scaled and resumed rather than redeployed.
       Flux's next reconcile restores the rendered replica count. Wait until each tag reads
       Ready, then clear the hold with
       `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`.
-
-   Redeploy each Ansible-owned service with `./scripts/deploy.sh --tags <svc>`, as before.
-   The deploy applies the replica count its manifests declare, so it scales the service back
-   up.
 
 ### Scenario: Longhorn backups must stop and the disarm PR cannot reach the cluster
 
@@ -434,8 +428,8 @@ If your own working machine is what's gone, the lab itself needs nothing done to
    before doing anything else. **Operator-only:** this prints every secret, and the agent
    guard denies it (`docs/claude-shell-permissions.md`, *Inspecting a secret without
    decrypting it*).
-3. From there, operate normally — `./scripts/deploy.sh`, `probe.py`, etc., per the
-   repo-root CLAUDE.md command tables.
+3. From there, operate normally — `land.sh`, `probe.py`, etc., per the repo-root CLAUDE.md
+   command tables.
 
 ### Scenario: `systemctl restart k3s` never returns after an API-server flag change
 

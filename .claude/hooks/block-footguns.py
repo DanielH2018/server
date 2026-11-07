@@ -132,8 +132,9 @@ def rollout_restart_problem(stage: list[str]) -> str | None:
     return (
         "Plain kubectl authenticates as the read-only ServiceAccount, which is Forbidden on "
         'rollout restart — and a Forbidden restart still prints "successfully rolled out", so '
-        "the refusal and a real restart are indistinguishable. Deploy the role instead: "
-        "`./scripts/deploy.sh --tags <service>`."
+        "the refusal and a real restart are indistinguishable. To roll a pod, merge the change "
+        "it reads through `land.sh`: Flux applies it, and the renderer's `checksum/restart` "
+        "annotation rolls the pod (docs/flux-deploy-plane.md, *Restart triggers*)."
     )
 
 

@@ -1062,10 +1062,10 @@ eligible commit.
 for every failed name equals `last-good`'s, and `settle` would set `DEPLOY_HOLD` to `none` once
 it verifies. A hold in any other form, and a `failed=` hold that names `soak`, never qualify.
 
-**`probe.py landing` shows both holds** while the deployer and `promote` coexist:
+**`probe.py landing` shows both holds:**
 
 ```text
-hold_sha (GitOps deployer, Ansible-owned tags): none
+hold_sha (GitOps deployer, setup plane): none
 DEPLOY_HOLD (promote workflow, Flux-owned tags): none
 prod: 3cf44936 sha256:4e55da43005e   last-good: the same digest as prod
 ```

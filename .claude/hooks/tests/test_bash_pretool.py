@@ -127,7 +127,7 @@ def test_accept_a_rollout_restart_is_denied(sandbox, monkeypatch, capsys):
     out = dispatch("kubectl rollout restart deploy/x", sandbox, monkeypatch, capsys)
     assert out["permissionDecision"] == "deny"
     assert out["permissionDecisionReason"].startswith("[block-footguns] ")
-    assert "deploy.sh" in out["permissionDecisionReason"]
+    assert "checksum/restart" in out["permissionDecisionReason"]
 
 
 def test_reject_a_rollout_status_is_not_denied(sandbox, monkeypatch, capsys):

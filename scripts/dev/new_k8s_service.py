@@ -294,8 +294,8 @@ def write_role(args, roles_dir: Path | None = None) -> list[Path]:
 def parse_args(argv=None):
     parser = ArgumentParser(
         description="Scaffold a k3s service role and its containers_list entry.",
-        epilog="Review the TODOs in the generated CLAUDE.md, then commit and deploy with "
-        "./scripts/deploy.sh --tags <name>.",
+        epilog="Review the TODOs in the generated CLAUDE.md, then commit and land the PR with "
+        "land.sh. Flux applies the tag once `promote` publishes the merge.",
     )
     parser.add_argument("name", help="service and role name, e.g. miniflux")
     parser.add_argument("--image", required=True, help="image reference for the pin")
@@ -366,12 +366,11 @@ def next_steps(args, role: Path) -> str:
         if args.route
         else ""
     )
-    # observability is on the denylist, so a merge of it is a person's, and nothing else loads the route's
-    # blackbox target, and until then `probe.py health` skips the probe half (#5346).
+    # The route's blackbox target renders in observability, and until Flux applies that render
+    # `probe.py health` skips the probe half (#5346).
     probe_step = (
-        f"Once {args.name} is live, deploy `observability` "
-        f"(./scripts/deploy.sh --tags observability) to load its ingress probe, then gate "
-        f"it with `probe.py health {args.name}`.\n"
+        f"Once Flux has applied `observability`, which loads {args.name}'s ingress probe, "
+        f"gate it with `probe.py health {args.name}`.\n"
         if args.route
         else ""
     )

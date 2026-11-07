@@ -212,10 +212,9 @@ def unprobed_route(tag, query):
     The blackbox job's static labels reach its `up` series, so `up{service="<tag>"}` exists
     exactly when Prometheus has loaded the tag's target. With the target loaded, no probe
     series means the probe stopped reporting (blackbox-exporter down reads `up` 0), which
-    fails. With the job loaded and the target absent, the route was added since
-    `observability` last deployed: `observability` is denylisted from auto-deploy, so a new
-    service's first gate would otherwise fail a healthy rollout (#5346). That passes with a
-    note. With no `up` series for the job at all, the job is broken, which fails.
+    fails. With the job loaded and the target absent, Flux has not applied the `observability`
+    render that carries the route yet, so a new service's first gate would otherwise fail a
+    healthy rollout (#5346). That passes with a note. With no `up` series for the job at all, the job is broken, which fails.
 
     `/api/v1/targets` would answer the same question, but Prometheus' IngressRoute admits
     `/api/v1/query` alone.
@@ -230,8 +229,8 @@ def unprobed_route(tag, query):
             f"  the {PROBE_JOB} job has no targets loaded, so {tag}'s route is unprobed"
         ], []
     return [], [
-        f"  note: {tag} has an ingress route that Prometheus does not probe yet; deploy "
-        f"`observability` to load its {PROBE_JOB} target, then re-run this gate"
+        f"  note: {tag} has an ingress route that Prometheus does not probe yet; Flux loads "
+        f"its {PROBE_JOB} target when it applies `observability`, so re-run this gate then"
     ]
 
 

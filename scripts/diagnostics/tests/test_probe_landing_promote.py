@@ -62,7 +62,7 @@ def _lines(snap: dict) -> dict[str, str]:
     return {line.split(":", 1)[0]: line for line in hold_lines(snap)}
 
 
-HOLD_SHA = "hold_sha (GitOps deployer, Ansible-owned tags)"
+HOLD_SHA = "hold_sha (GitOps deployer, setup plane)"
 DEPLOY_HOLD = "DEPLOY_HOLD (promote workflow, Flux-owned tags)"
 
 

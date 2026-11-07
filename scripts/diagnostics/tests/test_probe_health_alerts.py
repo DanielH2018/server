@@ -264,7 +264,7 @@ def test_a_mid_rollout_0_followed_by_a_1_is_clean():
     [
         (TAG, 1, "probe target is loaded but reported no probe_success"),
         (None, 1, "job has no targets loaded"),
-        ("other", 0, "deploy `observability`"),  # a route added since it last deployed
+        ("other", 0, "applies `observability`"),  # a route Flux has not applied yet
     ],
     ids=["loaded_is_flagged", "job_broken_is_flagged", "not_yet_loaded_is_clean"],
 )

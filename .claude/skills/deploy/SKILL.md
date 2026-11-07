@@ -1,79 +1,54 @@
 ---
 name: deploy
-description: Deploy a k3s workload using Ansible. The Pi's Docker services ship in its host package instead. Use when the user wants to deploy or redeploy a specific service, or to check a k8s manifest change without deploying it (`prek` vs `--check` vs `--dry-run`).
+description: Apply a change through the path that owns it — `land.sh`, `promote` and Flux for a k3s workload, the GitOps deployer or `initial_setup.yml` for a setup role, the host package for the Pi. `scripts/deploy.sh` deploys none of these. Use when the user wants to deploy or redeploy a service, when `deploy.sh` exits 5, or to check a k8s manifest change before it merges (`prek` vs the renderer vs the render-diff gates).
 allowed-tools: Bash, Glob
 ---
 
-Deploy a service using Ansible.
+Apply a change through the path that owns it.
 
-If the user provided a service name as an argument, use it directly. Otherwise ask which service to deploy.
+**`scripts/deploy.sh` deploys no workload.** Every `containers_list` entry is `platform: k8s`
+with `owner: flux`, and daniel-pi's and daniel-server's lists are empty. *What `deploy.sh` still
+does* below has the rest.
 
-**A deploy that follows a merge is not this skill's.** When the deploy is the follow-through
-on a PR (`CLAUDE.md` → *After a PR Merges — Pull, Deploy, Verify*), use the `land-after-merge`
-skill: `land.sh` merges, waits for master CI, waits on the `promote` run that applies the
-merge commit, and gates the health. Do not deploy a merge by hand from `/home/ubuntu/server`.
+**First, determine what the change touches:**
 
-**First, determine the platform** — the verification step differs and the Docker one is dead
-on the cluster nodes:
-
-- Role under `ansible/roles/k8s/<service>/`, entry has `platform: k8s` in
-  `host_vars/daniel-box.yml` → **k3s workload** (this is nearly everything).
-- Entry in `compose_services` in `host_vars/daniel-pi.yml` → **Docker on the Pi**
-  (docker-proxy, wg-easy, alloy, autoheal). `deploy.sh` does not deploy these: the
-  `homelab-daniel-pi` package renders them from `hosts/components/pi-compose/services/<name>/`,
-  and the Pi's updater installs a merged change (`docs/host-packages.md`). Since H5.12 there is
-  no Ansible Compose path, so `deploy.sh --tags <svc> -e target=daniel-pi` deploys nothing.
+- Role under `ansible/roles/k8s/<service>/`, an inventory value or a shared template → **k3s
+  workload** (this is nearly everything). It lands through `land.sh`, `promote` and Flux.
+- Role under `ansible/roles/setup/<name>/` → **setup role**. The GitOps deployer applies it.
+- Entry in `compose_services` in `host_vars/daniel-pi.yml`, or anything under `hosts/` → **host
+  package**. For the Pi's docker-proxy, wg-easy, alloy and autoheal, the `homelab-daniel-pi`
+  package renders them from `hosts/components/pi-compose/services/<name>/`, and the Pi's updater
+  installs a merged change (`docs/host-packages.md`).
 
 `daniel-server` and `daniel-box` have had **no Docker since 2026-08-14** — never verify a
 deploy there with a `docker` command; it doesn't exist on those hosts.
 
-## Checking a k8s change without deploying it
+## Checking a k8s change before it merges
 
-Three modes, and they check genuinely different things — reaching for the wrong one is how a
-manifest bug reaches production.
+These check genuinely different things, and reaching for the wrong one is how a manifest bug
+reaches production.
 
-| Mode | What sees the manifests | Catches |
+| Check | What sees the manifests | Catches |
 |---|---|---|
 | `prek run --all-files` | nothing (renders locally, then parses and schema-checks) | Jinja indent bugs, invalid YAML, duplicate keys, **undefined fields and wrong types** — everything but CRDs, which have no upstream schema |
-| `--check` | nothing — the apply is **skipped**, so no API server is involved | task-level wiring; not the manifests themselves |
-| `--dry-run` | the **live API server**, via `kubectl apply --dry-run=server` | what prek catches, plus **CRD** schemas, CRD-ordering mistakes and admission rejections |
+| `uv run python scripts/renderer/homelab_render.py cluster --out <dir> --role <tag>` | nothing — it reads the git tree alone | what Flux would receive for the tag, the secret rules and the renderer's refusals; read the files under `<dir>/cluster/<tag>/` |
+| `uv run python scripts/validate/render_diff_gates.py --base origin/master`, which CI's `pr_gates` job runs, and CI's flux round trip job | nothing — the gates compare commits, so **commit first**: an uncommitted edit is invisible to them | a removed object with no `Removes-Object:` line, and a render `flux build` cannot build |
+| `takeover-check` on daniel-box (operator's account) | the **live API server**, through a server-side dry run | CRD schemas, admission rejections and field conflicts, for the tags it names |
 
-`--dry-run` renders to a temp dir, applies with `--dry-run=server`, and discards the temp dir.
-Nothing is staged, applied, patched or rolled. It runs unlocked, because it mutates nothing. It
-does **not** catch scheduling, PVC binding, probe or rollout behaviour — those need a real deploy.
+`deploy.sh --check` and `--dry-run` are not on this list. Neither runs a role, so neither shows a
+manifest to anything, and a k8s tag in `--tags` exits 5 under both.
 
-Two limits worth knowing before you trust a green dry run:
-- **A role's own cluster writes are skipped, not exercised.** Sidecar ConfigMaps built with
-  `kubectl create`, netpol-probe Jobs and `exec -i` into a live pod all sit outside
-  `roles/k8s/manifests` and are guarded on `k8s_no_mutate`, so a dry run proves the manifests
-  and not those. `ansible/tests/deploy/test_k8s_dry_run.py` refuses a role that grows such a
-  write without the guard.
-- **A brand-new service is only half-checked.** Its `k8s_claims` are applied with
-  `--dry-run=server`, which validates the claim object and provisions nothing, and nothing at
-  admission verifies that a referenced PVC exists. So the Deployment validates while the volume
-  is never proven provisionable.
+No check here covers scheduling, PVC binding, probe or rollout behaviour. Those show only after
+Flux applies the tag.
 
-Steps:
-1. Confirm the service name matches a role, and note which of the two trees it's in.
-2. Ask if they want a dry run first. For a k8s workload that means `--dry-run`, which is the
-   only mode that shows the manifests to an API server; `--check` answers a different question
-   and is the right choice only when the doubt is about task wiring.
-3. If dry run: `./scripts/deploy.sh --tags "<service>" --dry-run` (or `--check`, per step 2)
-4. If dry run passes or they skip it: `./scripts/deploy.sh --tags "<service>"`
+## Applying a k3s workload
 
-   Deploy through `scripts/deploy.sh`, not `ansible-playbook` directly — it takes
-   the git-tree lock (its holders are listed in
-   [docs/deploying.md](../../../docs/deploying.md#who-holds-the-tree-lock)) long enough to
-   copy `HEAD` into a snapshot worktree, then runs
-   the playbook from that snapshot under `/var/lock/server-deploy-<tag>.lock`, one per
-   service. So deploys of the same service serialize and deploys of different services do
-   not. `--check` runs
-   unlocked, from the working tree. **The snapshot is of `HEAD`: an uncommitted edit is not
-   deployed.** On a non-zero exit, read the run's last two lines
-   ([below](#when-a-run-fails-read-its-last-two-lines)).
-5. **Verify it actually came up healthy** — Ansible reporting `ok`/`changed` only means the
-   playbook ran, not that the workload is up (it can apply cleanly then crash-loop or fail
-   its probes).
+1. Confirm the service name matches a role and a `containers_list` entry.
+2. Run `prek` and the renderer, commit, run the render-diff gates, then open the PR.
+3. Land it with the `land-after-merge` skill: `land.sh` merges, waits for master CI, waits on the
+   `promote` run that applies the merge commit, and gates the health.
+4. **Verify it actually came up healthy.** Flux reporting `Ready` only means the apply finished,
+   not that the workload is up (it can apply cleanly then crash-loop or fail its probes).
    - **k3s:** `uv run python scripts/diagnostics/probe.py health <service>` is the primary check —
      allow-listed, k8s-native. Exit 0 only when the rollout is fully complete (observed
      generation caught up, every replica updated/ready/available) **and** no container
@@ -96,88 +71,10 @@ Steps:
      scripts/diagnostics/probe.py health <service> --docker` — exit 0 = running + healthy;
      allow-listed. Run it from daniel-box as written: `--docker` reaches the Pi's Docker daemon
      over ssh itself.
-   - For a config-only run (`--skip-tags deploy`), the workload isn't recreated, so this is
-     just a liveness check, not a deploy verification.
-6. Report the result, including the verification line. If the gate fails, surface the failing
+5. Report the result, including the verification line. If the gate fails, surface the failing
    probe/event and pull recent logs (`kubectl logs`, or
    `uv run python scripts/diagnostics/probe.py loki-query '{container="<service>"}'`) before declaring
    success.
-
-Run all commands from the root of the checkout you mean to deploy: `deploy.sh` deploys the
-checkout containing your working directory. A playbook run outside `deploy.sh` goes through
-`uv run` — bare `ansible-playbook` (the uv-tool shim) lacks the module deps and fails. A setup
-play aimed at the Pi takes `-e target=daniel-pi` (the playbooks default `hosts:` to the local
-hostname — `--limit` alone matches nothing).
-
-## The command reference
-
-Every deploy goes through `deploy.sh`. Its arguments other than its own flags pass through to
-`ansible-playbook` in order, so `--check`, `--skip-tags` and `-e` work as they do on the
-playbook. A bare `uv run ansible-playbook ansible/deploy.yml` has none of the locks, the
-snapshot, the tag check or the staleness check.
-
-```bash
-# Deploy a specific service
-./scripts/deploy.sh --tags "<service-name>"
-
-# Deploy a commit that is not this checkout's HEAD: the snapshot is cut from <sha>, and the
-# staleness gate and the tag check are asked about <sha> too. A k8s tag still refuses with exit 5.
-# Any committish this checkout's object store resolves; --at with --changed is a bad command line.
-./scripts/deploy.sh --tags "<service-name>" --at <sha>
-
-# Deploy everything. Without --tags the staleness gate refuses any commit behind origin/master.
-./scripts/deploy.sh
-
-# Check mode (task wiring only — the apply is skipped, no API server is involved)
-./scripts/deploy.sh --tags "<service-name>" --check
-
-# Validate the k8s manifests against the live API server without applying them
-./scripts/deploy.sh --tags "<service-name>" --dry-run
-
-# Config-only: render dirs/templates/host config WITHOUT touching the container.
-# Every container-role task is block-tagged config/deploy/cron, and tags UNION in Ansible,
-# so scope with --skip-tags. `--skip-tags config` is NOT supported — the registered
-# config-change facts feed docker_deploy's recreate decision.
-./scripts/deploy.sh --tags "<service-name>" --skip-tags deploy
-
-# Edit encrypted secrets
-sops ansible/vars/secrets.yml
-
-# Trigger a GitOps tick now instead of waiting for the 10-min timer (daniel-box only).
-# Runs the identical code path the timer runs — there is no dry-run mode.
-./scripts/deploy_tools/gitops_tick.sh
-
-# Initial server setup. The first-host bring-up ORDER (uv -> SOPS onboarding -> this) is in
-# ansible/README.md
-uv run ansible-playbook ansible/initial_setup.yml
-```
-
-## Why `deploy.sh` rather than the playbook
-
-It takes two kinds of lock ([ADR-0017](../../../docs/adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)).
-The git-tree lock — the lock every job in
-[docs/deploying.md's holder list](../../../docs/deploying.md#who-holds-the-tree-lock)
-takes — guards the local git tree every deploy renders from,
-which gitops-deploy rewrites with a `git pull` mid-run; `deploy.sh` holds it only to copy
-`HEAD` into a detached worktree under `/tmp/homelab-deploy-snapshots/`. It then releases that
-and holds one `/var/lock/server-deploy-<tag>.lock` per service across the playbook, which is
-what stops two deploys of the same service racing.
-
-Because the snapshot is of `HEAD`, **an uncommitted edit is not deployed** — commit first.
-
-## When a run fails, read its last two lines
-
-`deploy.sh` prints what its exit code means on every non-zero exit, as its last two lines; act
-on those rather than on the number. What the codes mean as a group is
-[docs/deploying.md's *Exit codes are resume points*](../../../docs/deploying.md#exit-codes-are-resume-points),
-and a fact an operator needs at a failed run belongs in `CONTRACTS` in `scripts/lib/exit_codes.py`,
-not in this skill: a copy here drifted once already (#2853).
-
-**A k8s tag is never yours to deploy.** When its `containers_list` entry is `platform: k8s`,
-`deploy.sh --tags` refuses the whole list with exit 5, and no flag bypasses that. Its change
-lands through `promote` once it merges; drop the tag to deploy the rest. `--changed` leaves such
-a tag out and names it, and a shared role's name is a tag miss. `--list-services` marks each k8s
-tag on stderr.
 
 To apply a green master commit that no promotion followed, dispatch `promote` with the commit's
 full 40-hex SHA. `promote` refuses a commit without green CI:
@@ -186,44 +83,84 @@ full 40-hex SHA. `promote` refuses a commit without green CI:
 gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>
 ```
 
-## What `--tags`, `--at` and `--detach` change
+## Applying a setup role
 
-**With `--tags`, only a commit reaching those tags makes the tree stale.** The staleness gate
-classifies every path in `HEAD..origin/master` with the deployer's own mapper. A path reaching
-one of the tags refuses, and so does any broad path (shared templates, `ansible/inventory/`,
-the setup plane). The refusal names the commits and paths responsible. A tail that touches
-only other roles prints one line saying how far behind the tree is, and the deploy proceeds.
-Without `--tags` the deploy is unscoped, so any commit behind refuses. The narrowing matters
-because the GitOps deployer fast-forwards to the newest GREEN commit in its range rather than
-to the tip, so the primary checkout is legitimately behind a pending tip while every landing
-deploys from it.
+The GitOps deployer applies a setup role on the tick after the merge, and the `gitops-tick` skill
+triggers a tick by hand. A role the tick cannot apply becomes a `manual_plane` line in `owed.jsonl`.
 
-**With `--at <sha>`, the question is about `<sha>`, not about this checkout.** The run renders
-a snapshot of `<sha>`, so the staleness gate asks what `<sha>..origin/master` carries and the
-tag check reads `containers_list` at `<sha>`. A checkout behind master therefore deploys a
-current commit, while a `<sha>` that is itself behind on the requested tags still refuses as
-stale. An `--at` with no value is a bad command line rather than a fall-back to `HEAD`, so an
-`--at "$sha"` whose variable came back empty deploys nothing.
+A playbook goes through `uv run`, because bare `ansible-playbook` (the uv-tool shim) lacks the
+module deps and fails. A setup play aimed at the Pi takes `-e target=daniel-pi`, because the
+playbooks default `hosts:` to the local hostname and `--limit` alone matches nothing.
 
-With `--detach`, the completion notifier's health gate renders that same snapshot: it is kept
-until the notifier has run. The gate enumerates the workloads to check from the manifests of
-the commit that was deployed, never from the working tree, which under `--at` is a different
-commit and even without it can carry uncommitted edits.
-
-The `--detach` playbook run is a grandchild in its own session, outside the caller's process
-tree, so a Bash call killed at its time limit does not kill it. Started from a systemd user
-unit, it also moves into its own `deploy-<pid>.scope`, so stopping that unit does not kill it.
-The deploy log names the scope (`lib/detach_fork.py`).
-
-A returned `--detach` is not a verified deploy. To wait for its health gate, chain the wait:
+To apply one setup role by hand, read the playbook and tag from the `Applied by:` line of the
+role's `CLAUDE.md`. Neither follows from the role's name: `chezmoi_setup` takes the tag `chezmoi`,
+and `k3s` applies through `k3s-bringup.yml`, where the same page names narrower tags than the
+maximal `k3s`. Ansible exits 0 on a tag that matches nothing, so a wrong guess reads as a green
+recap.
 
 ```bash
-./scripts/deploy.sh --tags "<svc>" --detach && cc-wait deploy <svc>
+# Clear the owed line your own merged PR created
+uv run python scripts/deploy_tools/owed_run.py <role>
+
+# Apply one setup role by hand, with the playbook and tag its Applied by: line names
+uv run ansible-playbook ansible/<playbook> --tags <tag>
+
+# Trigger a GitOps tick now instead of waiting for the 10-min timer (daniel-box only).
+# Runs the identical code path the timer runs — there is no dry-run mode.
+./scripts/deploy_tools/gitops_tick.sh
+
+# Initial server setup. The first-host bring-up ORDER (uv -> SOPS onboarding -> this) is in
+# ansible/README.md
+uv run ansible-playbook ansible/initial_setup.yml
+
+# Edit encrypted secrets
+sops ansible/vars/secrets.yml
 ```
 
-`cc-wait deploy` ends `settled` (exit 0) once the notifier's health gate passes, and `failed` or
-`died` (exit 1) otherwise; the detail is the notifier's verdict line. It waits at most 570s.
-Exit 75 means the deploy is still running: re-run only the `cc-wait` command, never
-`deploy.sh`. `--detach` also prints the exact wait command with `--log`. Use that printed
-command for a `--changed` deploy or a long tag list, because the bare form finds the log by the tags typed. The probe is
-`scripts/deploy_tools/deploy_lib/detach_probe.py`.
+## What `deploy.sh` still does
+
+The wrapper runs `ansible/deploy.yml` and no other playbook, and that playbook runs no role.
+Run it from the root of the checkout you mean to act on, because it reads the checkout containing
+your working directory. Its arguments other than its own flags pass through to `ansible-playbook`.
+A bare `uv run ansible-playbook ansible/deploy.yml` has none of the locks, the snapshot, the tag
+check or the staleness check.
+
+```bash
+# What a branch owes by hand. A broad range exits 3 and prints the setup or bring-up command.
+# Any other range derives no tag and ends with the verdict nothing-to-deploy.
+./scripts/deploy.sh --changed
+
+# Every valid tag, with each k8s tag named on stderr
+./scripts/deploy.sh --list-services
+
+# The locks, the snapshot and the k8s_retired_services teardown, and no role.
+# It refuses any commit behind origin/master.
+./scripts/deploy.sh
+```
+
+- **The other flags still parse, and none of them reaches a role.** `--at <sha>` cuts the snapshot
+  from that commit, and `--at` with `--changed` is a bad command line. `--detach` backgrounds the
+  playbook and prints a `wait:` line that waits for its health gate; exit 75 from that line means
+  the run is still going, so re-run only the wait. `--check` and `--dry-run` run unlocked, from
+  the working tree. `-e target=daniel-pi` runs the secrets preamble against the Pi and deploys
+  nothing.
+- **A k8s tag is never yours to deploy.** When its `containers_list` entry is `platform: k8s`, a
+  `--tags` list naming it exits 5 as a whole, and no flag bypasses that. Its change lands through
+  `promote` once it merges. `--changed` leaves such a tag out and names it, and a shared role's
+  name is a tag miss.
+- **A commit behind origin/master refuses as stale.** `--tags` narrows the question to those tags,
+  so a tail that touches only other roles prints one line and proceeds, while a broad path
+  (shared templates, `ansible/inventory/`, the setup plane) still refuses. Under `--at <sha>` the
+  question is what `<sha>..origin/master` carries.
+
+[docs/deploying.md](../../../docs/deploying.md#the-gates-and-locks-of-a-run) has the locks and the
+snapshot, including
+[the tree lock's holders](../../../docs/deploying.md#who-holds-the-tree-lock).
+
+## When a run fails, read its last two lines
+
+`deploy.sh` prints what its exit code means on every non-zero exit, as its last two lines; act
+on those rather than on the number. What the codes mean as a group is
+[docs/deploying.md's *Exit codes are resume points*](../../../docs/deploying.md#exit-codes-are-resume-points),
+and a fact an operator needs at a failed run belongs in `CONTRACTS` in `scripts/lib/exit_codes.py`,
+not in this skill: a copy here drifted once already (#2853).

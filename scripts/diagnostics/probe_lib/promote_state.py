@@ -1,9 +1,8 @@
 """`probe.py landing`'s promotion lines: both holds, `prod` and `last-good`, then suspensions.
 
-Until slice D6 deletes the GitOps deployer, two holds coexist. The deployer's `hold_sha`
-holds the Ansible-owned tags, and the `promote` workflow's repository variable `DEPLOY_HOLD`
-holds the Flux-owned ones. `hold_lines` prints a line for each on every run, even when it
-reads `none`, so neither can be forgotten.
+Two holds coexist. The deployer's `hold_sha` holds the setup plane, and the `promote`
+workflow's repository variable `DEPLOY_HOLD` holds the Flux-owned tags. `hold_lines` prints a
+line for each on every run, even when it reads `none`, so neither can be forgotten.
 
 The first three reads are the ones docs/target-architecture/deploy/d2-first-leaf.md (*What
 `probe.py landing` reads, and what it costs*) prices: one `api.github.com` call, two `ghcr.io`
@@ -278,7 +277,7 @@ def hold_lines(snap: dict) -> list[str]:
 
     same = bool(prod and last_good and last_good["digest"] == prod["digest"])
     return [
-        "hold_sha (GitOps deployer, Ansible-owned tags): "
+        "hold_sha (GitOps deployer, setup plane): "
         + ("unknown" if hold is None else hold["sha"][:8] or "none"),
         "DEPLOY_HOLD (promote workflow, Flux-owned tags): "
         + ("unknown" if deploy_hold is None else deploy_hold or "none")
