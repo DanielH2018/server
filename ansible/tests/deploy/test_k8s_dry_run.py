@@ -30,7 +30,7 @@ import re
 from pathlib import Path
 
 from lib import yaml_fast
-from _helpers import ALL_VARS, REPO, load_tasks
+from _helpers import ALL_VARS, REPO
 from _role_census import role_dirs, role_task_files
 
 # The `when:`-coverage scanners, shared with test_k8s_dry_run_host_writes.py beside this file.
@@ -43,152 +43,7 @@ from _k8s_guards import (
 )
 
 _REPO = REPO
-_MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
 _K8S_ROLES = _REPO / "ansible/roles/k8s"
-
-_REAL_DIR = "/etc/rancher/k3s/manifests"
-_GUARD = "not k8s_dry_run | bool"
-
-
-def _named(tasks: list[dict], fragment: str) -> dict:
-    for task in tasks:
-        if fragment in str(task.get("name", "")):
-            return task
-    raise AssertionError(f"no task whose name contains {fragment!r}")
-
-
-def _cmd(task: dict) -> str:
-    for key in ("ansible.builtin.command", "ansible.builtin.shell"):
-        mod = task.get(key)
-        if isinstance(mod, dict):
-            return str(mod.get("cmd", ""))
-        if isinstance(mod, str):
-            return mod
-    return ""
-
-
-def _when(task: dict) -> str:
-    return str(task.get("when", ""))
-
-
-def test_render_and_apply_share_one_directory_fact() -> None:
-    """Rendering and applying must never name the directory independently."""
-    tasks = load_tasks(_MANIFESTS)
-    for fragment in ("Render manifests", "Render secret manifests"):
-        dest = str(_named(tasks, fragment)["ansible.builtin.template"]["dest"])
-        assert "manifests_dest_dir" in dest, (
-            f"{fragment!r} renders to {dest!r} rather than manifests_dest_dir. A dry run would "
-            "validate one directory and stage another. See the module docstring."
-        )
-    assert "manifests_dest_dir" in _cmd(_named(tasks, "Apply manifests")), (
-        "the apply no longer reads manifests_dest_dir, so it applies the real staging tree "
-        "while the dry run rendered elsewhere."
-    )
-
-
-def test_no_task_hardcodes_the_real_staging_path() -> None:
-    """The real path may appear only in the fact that chooses between the two."""
-    offenders = [
-        t.get("name")
-        for t in load_tasks(_MANIFESTS)
-        if _REAL_DIR in str(t)
-        and "manifests_dest_dir" not in str(t.get("ansible.builtin.set_fact", ""))
-    ]
-    assert not offenders, (
-        f"tasks hardcode {_REAL_DIR}: {offenders}. Under k8s_dry_run these write the live "
-        "staging tree, where the next `kubectl apply -f <dir>/` picks them up."
-    )
-
-
-def test_dry_run_renders_to_a_tempdir_and_discards_it() -> None:
-    tasks = load_tasks(_MANIFESTS)
-    create = _named(tasks, "throwaway render directory")
-    assert "ansible.builtin.tempfile" in create, (
-        "the dry-run render dir is no longer a tempfile"
-    )
-    assert "k8s_dry_run" in _when(create)
-
-    discard = _named(tasks, "Discard the throwaway render directory")
-    assert discard["ansible.builtin.file"]["state"] == "absent", (
-        "the dry-run temp dir is no longer removed, so every dry run leaks a directory of "
-        "rendered manifests — some of them Secrets."
-    )
-
-
-def test_apply_is_server_dry_run_under_the_flag() -> None:
-    cmd = _cmd(_named(load_tasks(_MANIFESTS), "Apply manifests"))
-    assert "--dry-run=server" in cmd, (
-        "the apply lost --dry-run=server, so k8s_dry_run now runs a REAL deploy."
-    )
-    assert "k8s_dry_run" in cmd, (
-        "--dry-run=server is unconditional — it would break real deploys"
-    )
-    assert "--dry-run=client" not in cmd, (
-        "client dry-run never reaches the API server, so it validates nothing this mode "
-        "exists to validate — no CRDs, no admission, no defaulting."
-    )
-
-
-def test_apply_reports_unchanged_under_the_flag() -> None:
-    changed_when = str(
-        _named(load_tasks(_MANIFESTS), "Apply manifests").get("changed_when", "")
-    )
-    assert "k8s_dry_run" in changed_when, (
-        "changed_when no longer excludes dry-run. Dry-run stdout carries the same "
-        "'created'/'configured' words as a real apply, so the run reports changed and the "
-        "stabilisation gate soaks a workload nothing touched."
-    )
-
-
-def test_mutating_downstream_tasks_are_guarded() -> None:
-    """Each of these writes to the live cluster and must carry the explicit guard.
-
-    Explicit, not inherited from the change conditions: a dry run renders into a fresh temp dir
-    every time, so `manifests_render is changed` is always true.
-    """
-    tasks = load_tasks(_MANIFESTS)
-    must_guard = [
-        "Reconcile secret keys",
-        "Roll the deployment after a config change",
-        "Queue the batch drain for the rollout",
-        "Roll the extra deployments",
-        "Queue the batch drain for the extra rollouts",
-    ]
-    for fragment in must_guard:
-        assert _GUARD in _when(_named(tasks, fragment)), (
-            f"{fragment!r} is no longer guarded by k8s_dry_run, so it mutates the live cluster "
-            "on a dry run. See the module docstring."
-        )
-
-
-def test_prune_is_skipped_under_the_flag() -> None:
-    """The prune loop reads manifests_staged, which is not registered under dry-run."""
-    tasks = load_tasks(_MANIFESTS)
-    for fragment in ("Find staged manifests", "Prune staged manifests"):
-        assert _GUARD in _when(_named(tasks, fragment)), (
-            f"{fragment!r} runs under dry-run; the prune loop would then dereference an "
-            "unregistered manifests_staged and fail the play."
-        )
-
-
-def test_the_render_directory_fact_survives_every_tag_selection() -> None:
-    """manifests_dest_dir is read by config-tagged renders AND the deploy-tagged apply.
-
-    `[config, deploy]` looks like it covers both and does the opposite: tags union, so the task
-    is skipped by `--skip-tags deploy` — the config-only form CLAUDE.md documents — and the
-    renders then die on `'manifests_dest_dir' is undefined`. Only `always` survives all three selections.
-    """
-    tasks = load_tasks(_MANIFESTS)
-    for fragment in (
-        "throwaway render directory",
-        "Select the render directory",
-        "Discard the throwaway render directory",
-    ):
-        tags = _named(tasks, fragment).get("tags", [])
-        assert tags == ["always"], (
-            f"{fragment!r} is tagged {tags}, not ['always']. Any narrower tag is dropped by one "
-            "of --tags config / --tags deploy / --skip-tags deploy."
-        )
 
 
 def _all_vars() -> dict:
@@ -264,35 +119,6 @@ def _guarded_at_entry(role: Path) -> bool:
     loop.
     """
     return bool(_mutates_outside_manifests(role)) and not _unguarded_mutations(role)
-
-
-def test_every_role_that_mutates_outside_manifests_guards_itself() -> None:
-    """Every role takes the `k8s_no_mutate` guard; there is no refusal list.
-
-    That is the invariant to keep: a new role that mutates outside
-    `roles/k8s/manifests` half-applies under a dry run unless it guards itself.
-    """
-    scanned = [
-        role
-        for role in role_dirs()
-        if role.name != "manifests" and (role / "tasks").is_dir()
-    ]
-    # Non-vacuity: the census must keep finding the roles this rule exists for.
-    assert {r.name for r in scanned} >= {
-        "image-builder",
-        "volume-snapshot",
-    }, "the role census stopped finding the roles that mutate outside manifests"
-    unguarded = sorted(
-        role.name
-        for role in scanned
-        if (_mutates_outside_manifests(role) or _bypasses_manifests(role))
-        and not _guarded_at_entry(role)
-    )
-    assert not unguarded, (
-        f"{unguarded} apply objects outside roles/k8s/manifests without a k8s_no_mutate "
-        "guard, so a dry run naming one of them half-applies. Guard tasks/main.yml on "
-        "k8s_no_mutate (#2588)."
-    )
 
 
 def _roles_included_by_other_roles() -> set[str]:

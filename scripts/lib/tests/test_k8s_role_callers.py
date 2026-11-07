@@ -24,8 +24,6 @@ _HELPERS = frozenset(
         "arr-notification",
         "image-builder",
         "longhorn-api",
-        "manifests",
-        "volume-revert",
         "volume-snapshot",
     }
 )
@@ -43,7 +41,23 @@ def test_every_named_helper_has_at_least_one_caller(callers):
 
 
 def test_the_include_role_form_resolves(callers):
+    assert callers["longhorn-api"] == {"volume-revert"}
+
+
+def test_the_defaults_form_resolves(callers):
     assert {"code-server", "n8n"} <= callers["image-builder"]
+    assert "freshrss" in callers["volume-snapshot"]
+
+
+def test_a_defaults_key_is_an_edge_and_a_mention_in_a_comment_is_not(tmp_path):
+    roles = tmp_path / "ansible" / "roles" / "k8s"
+    for role, text in (
+        ("builder", "image_builder_builds: []\n"),
+        ("mentions", "# image_builder_builds lives elsewhere\n"),
+    ):
+        (roles / role / "defaults").mkdir(parents=True)
+        (roles / role / "defaults" / "main.yml").write_text(text)
+    assert role_callers(tmp_path) == {"image-builder": {"builder"}}
 
 
 def test_the_lookup_form_resolves(callers):

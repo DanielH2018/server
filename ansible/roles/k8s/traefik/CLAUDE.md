@@ -4,7 +4,7 @@ Traefik terminates TLS. Every routed k8s role depends on it, and through it on t
 `traefik-crds` tag that holds the IngressRoute/Middleware CRDs those roles' manifests use.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=traefik`
   with exit 5
 - **Images:** `traefik` (`traefik_k8s_image`), `alpine` (`traefik_k8s_logrotate_image`)
@@ -23,11 +23,9 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
 ## Flux applies it
 
 - **Flux applies traefik, not Ansible** (D5, traefik's own window, #5707). Its
-  `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
-  deployer all skip it, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle.
-- **Where the tasks went.** `tasks/main.yml` holds the include of `k8s/manifests` alone, and
-  no Flux path runs it. The CRD install and its "established" wait became the `traefik-crds`
+- **Where the tasks went.** The CRD install and its "established" wait became the `traefik-crds`
   tag, which traefik's Kustomization depends on. The RBAC staging under `/etc/rancher/k3s`
   and its apply became `rbac.yaml` in this tag's `manifests_files`. The reserved-VIP assert
   became observability's `TraefikIngressAddressNotPinned`, which carries `verify="true"`, so

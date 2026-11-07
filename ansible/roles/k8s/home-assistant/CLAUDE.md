@@ -5,7 +5,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
 (this file is the editing-gotchas reference).
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=home-assistant` with exit 5
 - **Images:** `lscr.io/linuxserver/homeassistant` (`home_assistant_k8s_image`), `alpine`
@@ -22,7 +22,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   macro tests, `sanctioned_writers.yml` and the skills all anchor here, and its ConfigMap
   ships `files/` into the cluster. Edit HA config HERE, then merge; `promote` applies it.
 - **Flux applies it, not Ansible** (D5.11, an own-window flip). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Deployment is `Recreate`, so a
   change that rolls it takes HA down for the length of the pod restart, about 2 minutes. The
@@ -42,8 +42,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `homelab-cluster-vars`.** Their values are `${<key>}` placeholders in the published
   render, and Flux substitutes the values from the `homelab-cluster-vars` Secret. A rotation
   reaches the cluster only through `cluster_vars.py write`.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays until R4 deletes it. Its pre-apply snapshot through
+- **Where the task went.** Its pre-apply snapshot through
   `k8s/volume-snapshot` became the
   `home-assistant-snapshot` Job, and the Kustomization's `wait` replaces the rollout wait.
 - **Port 8123, no Authelia**, so the companion app works unchanged. MQTT goes via the
@@ -79,7 +78,7 @@ because a role doc is loaded on every task in this directory whether it is neede
   `home_assistant_script_files` (`!include_dir_merge_named`), `home_assistant_template_files`
   and `home_assistant_root_files`. The validator checks the directory and the list agree.
 - **Git is the source of truth; HA UI edits are overwritten on deploy.** A config edit changes
-  the rendered ConfigMap, so `k8s/manifests` rolls the Deployment (~120s).
+  the rendered ConfigMap, so the renderer's restart annotation rolls the Deployment (~120s).
 
 
 ## Testing

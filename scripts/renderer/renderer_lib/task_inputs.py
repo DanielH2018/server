@@ -1,8 +1,7 @@
 """The render metadata and image builds a role's `defaults/main.yml` gives the renderer.
 
 `include_vars` reads a role's render metadata, and `image_builder_sites` reads its builds. No
-value comes from a role's `tasks/`. A role whose `tasks/` still sets a key of that metadata is
-refused (`lib.k8s_roles.refuse_moved_keys_in_tasks`) rather than rendered without it.
+value comes from a role's `tasks/`.
 
 `derived_facts` computes the one value a template reads that no file states,
 `k8s_built_image_tags`, with each tag by `derived.content_tag`.
@@ -27,7 +26,7 @@ from typing import cast
 import jinja2
 
 from lib import yaml_fast
-from lib.k8s_roles import RENDER_KEYS, refuse_moved_keys_in_tasks
+from lib.k8s_roles import RENDER_KEYS
 from lib.repo_paths import ANSIBLE, K8S_ROLES
 from renderer.renderer_lib.derived import content_tag
 from renderer.renderer_lib.environment import evaluate, renderer_env
@@ -81,9 +80,8 @@ def include_vars(role_dir: Path) -> dict:
     resolve.
 
     Raises:
-        ValueError: The role has no `defaults/main.yml`, or its `tasks/` sets a moved key.
+        ValueError: The role has no `defaults/main.yml`.
     """
-    refuse_moved_keys_in_tasks(role_dir)
     return render_defaults(role_dir)
 
 
@@ -112,9 +110,8 @@ def image_builder_sites(role_dir: Path) -> list[BuildSite]:
     """`role_dir`'s builds, as its `image_builder_builds` lists them.
 
     Raises:
-        ValueError: The role has no `defaults/main.yml`, or its `tasks/` sets a moved key.
+        ValueError: The role has no `defaults/main.yml`.
     """
-    refuse_moved_keys_in_tasks(role_dir)
     return [
         BuildSite(
             {k: v for k, v in build.items() if k != "when"},

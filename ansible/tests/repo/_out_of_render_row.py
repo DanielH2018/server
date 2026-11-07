@@ -1,6 +1,6 @@
 """The census row of what the shadow render does not cover: role tasks that write the cluster.
 
-Target slice R1's exit criterion 3. The renderer reproduces what the manifests role renders,
+Target slice R1's exit criterion 3. The renderer renders manifests,
 and nothing a role task applies, creates, patches, runs or writes through `exec` itself. This
 row names every task file that does, with the slice that owns moving it. It sits in its own
 module because `test_census_rows_roles.py`, which imports it into `ROWS`, is near the cap
@@ -31,31 +31,16 @@ def _writing_chunks(subject: Subject) -> list[str]:
 
 
 def _role_task_files() -> list[str]:
-    return [
-        rel
-        for rel in tracked("ansible/roles/k8s/*/tasks/*.yml")
-        if not rel.startswith("ansible/roles/k8s/manifests/")
-    ]
+    return tracked("ansible/roles/k8s/*/tasks/*.yml")
 
 
 _K8S = "ansible/roles/k8s/"
-_VERIFY = "D5: the verify task's exec or pod check is converted or granted"
 
 # Each writing task file, with the slice whose document moves what it writes. Two owners where
 # the file's tasks split between slices.
 ALLOW = {
-    _K8S + "flux/tasks/main.yml": (
-        "R4: flux-owned since D5's flux PR, so no path runs it; flux-deferred applies the "
-        "sync objects and its prune deletes the drill, and R4 deletes the file"
-    ),
-    _K8S + "image-builder/tasks/main.yml": (
-        "D5.4: CI builds and pushes each image by its content tag"
-    ),
     _K8S + "volume-revert/tasks/claim.yml": (
         "H7.16b: a task-free command replaces the revert runbook"
-    ),
-    _K8S + "volume-snapshot/tasks/claim.yml": (
-        "D5.2a: the snapshot and its prune become a Job per role revision"
     ),
 }
 
@@ -68,7 +53,7 @@ _APPLY = (
 OUT_OF_RENDER = Census(
     name="render-does-not-cover-role-writes",
     reason=(
-        "homelab-render reproduces what the manifests role renders, and nothing a role task "
+        "homelab-render renders manifests, and nothing a role task "
         "writes to the cluster itself (target slice R1, exit criterion 3). Every task file "
         "that writes is listed here with the slice that owns its move. A new writing file is "
         "a new object outside the render: add it to `ALLOW` in "
@@ -80,23 +65,10 @@ OUT_OF_RENDER = Census(
     count=lambda s: len(_writing_chunks(s)),
     red=(Subject("widget/tasks/main.yml", _APPLY),),
     green=(Subject("widget/tasks/main.yml", _APPLY.replace(" apply -f", " get -f")),),
-    # 58 writing tasks in 28 files of 23 roles when the row landed (2026-10-13); 49 once
-    # n8n's flip deleted its probe tasks (#5546); 44 once media-volume's flip deleted its
-    # hardlink probe tasks (#5652); 43 once authelia's TOTP seed became an initContainer
-    # (#5647); 41 once the flip of tdarr and qbittorrent deleted their verify tasks; 39 once
-    # traefik's flip rendered its CRDs and RBAC (#5707); 37 once crowdsec's machine
-    # registration and allowlists became an initContainer (#5741); 33 once observability's
-    # flip deleted its dashboard apply and its restart tasks; 30 once the flip of janitorr and
-    # jellyfin deleted their verify and cap tasks; 27 once headlamp's flip deleted its
-    # observability RBAC apply and its isolation probe; 21 once pihole's flip deleted its
-    # roll, apply and gravity tasks; 15 once registry's flip deleted its self-test and netpol
-    # probe tasks; 12 once netpol-baseline's flip deleted its probe and apply tasks; 10 once
-    # the cronjob-gate role, with its delete and create tasks, was retired (#5716); 8 once
-    # crowdsec's follow-up deleted the ban and lift tasks in its verify.yml.
-    min_matches=8,
+    min_matches=1,
     must_find=frozenset(
         {
-            _K8S + "image-builder/tasks/main.yml",
+            _K8S + "volume-revert/tasks/claim.yml",
         }
     ),
     allow=ALLOW,

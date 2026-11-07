@@ -2,9 +2,7 @@
 
 A CronJob in `longhorn-system` that labels Longhorn Volume CRs with the recurring-job group
 their tier names and sets each Volume's backup target. It replaced the label, weekly-shard and
-legacy-label tasks that `setup/k3s` ran from `tasks/longhorn.yml` and
-`tasks/longhorn-weekly-shard.yml` (H1.6), and the two target-routing tasks of
-`tasks/longhorn-backup.yml` (H1.7a).
+legacy-label tasks that `setup/k3s` ran (H1.6, H1.7a).
 
 It does not touch the CSI sidecar Deployments. From H1.6 until #5958 it patched their memory
 request, and longhorn-manager cleared it on its own hourly tick, so each of the four
@@ -13,7 +11,7 @@ Deployments rolled about twice an hour. The request is the `longhorn` role's
 add a Deployment write back here.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=longhorn-reconcile` with exit 5
 - **Image:** `python` (`longhorn_reconcile_k8s_image`)
@@ -23,8 +21,7 @@ add a Deployment write back here.
 
 - **Flux applies it, not Ansible** (H1.6). Its `containers_list` entry carries `owner: flux` and
   `depends_on: [longhorn]`, because its objects live in the `longhorn-system` namespace that
-  `longhorn`'s vendored file creates. `tasks/main.yml` holds the include of `k8s/manifests` and
-  no Flux path runs it. It is a tag of its own, not part of `longhorn`, because its ConfigMap
+  `longhorn`'s vendored file creates. It is a tag of its own, not part of `longhorn`, because its ConfigMap
   renders from `containers_list`: inside `longhorn`, every claim or tier change would change a
   forward-only tag. This tag is not forward-only and prunes by default.
 - **`NEVER_SHED` omits the tag and it has no `tier:`.** It renders a CronJob and nothing to

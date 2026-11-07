@@ -8,7 +8,7 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
 `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=registry` with exit 5
 - **Images:** `registry` (`registry_k8s_image`), `python` (`registry_k8s_ghcr_resume_image`),
@@ -200,9 +200,7 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   - Both rules are `warning`, the deleted tile's channel mix. Their deadline is the script's
     `DEADLINE_S`, which equals the deleted tile's interval.
 - **The job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this
-  role's own manifest directory** (#1669). `k8s/manifests` prunes every file in
-  `manifests/registry/` outside the role's file list, which deleted them on every deploy.
-  Their `-job.yaml` suffix keeps them out of the derived list. The two mirror GC manifests are
+  role's own manifest directory** (#1669). Their `-job.yaml` suffix keeps them out of the derived list. The two mirror GC manifests are
   the ones that mattered: `registry-gc.sh` reads them at run time, so the prune left a window in
   which GC failed on a missing manifest. daniel-box's package ships them, the script, the state
   directory and the timer from `hosts/components/registry-gc/`, because a Flux-owned role runs
@@ -212,7 +210,7 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   `hosts/components/registry-gc/tests/test_registry_gc_component.py` holds them equal to this
   role's.
 - **Flux owns registry (D5, Wave D).** `promote` applies it, and no Ansible run reaches
-  `tasks/main.yml`, which keeps only the `k8s/manifests` include until R4 deletes it. The self-tests
+  the role. The self-tests
   and the netpol probe are the `registry-verify`
   Jobs in `templates/verify/`, which the renderer emits once the `registry` Kustomization
   reads Ready. `files/registry_verify.py` runs one check per Job:

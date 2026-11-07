@@ -30,7 +30,7 @@ from _helpers import REPO
 
 # The directories whose modules a deploy copies beside a consumer in another role.
 # `scripts/deploy_tools` holds `changed_set.py`, which the soak Job's ConfigMap carries
-# beside `flux_soak.py`. `k8s/manifests/files` holds `flux_job_connect.py`, which a verify
+# beside `flux_soak.py`. `scripts/renderer/job_files` holds `flux_job_connect.py`, which a verify
 # Job's ConfigMap carries beside its role's script, such as sonarr's `sonarr_verify.py`.
 SHIPPED_BESIDE = (
     REPO / "hosts/lib",
@@ -38,7 +38,7 @@ SHIPPED_BESIDE = (
     REPO / "ansible/roles/k8s/monitor-bridge/files",
     # `jobs_metrics.py`, the check exporter autofix-bridge's ConfigMap carries beside autofix.py.
     REPO / "ansible/roles/k8s/crowdsec/files",
-    REPO / "ansible/roles/k8s/manifests/files",
+    REPO / "scripts/renderer/job_files",
     REPO / "scripts/deploy_tools",
 )
 
@@ -48,7 +48,7 @@ SHIPPED_BESIDE = (
 MUST_FIND = frozenset(
     {
         ".claude/hooks/block-footguns.py",
-        "ansible/roles/k8s/manifests/files/secret_hmac.py",
+        "ansible/roles/k8s/crowdsec/files/crowdsec_verify.py",
         "ansible/roles/k8s/monitor-bridge/files/check.py",
         "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
         "ansible/roles/k8s/ical-proxy/files/ical_proxy.py",

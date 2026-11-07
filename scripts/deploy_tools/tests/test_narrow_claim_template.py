@@ -14,7 +14,6 @@ import pytest
 from deploy_tools.deploy_lib import tags as deploy_tags
 from deploy_tools.narrow_lib import role_reads
 from deploy_tools.narrow_lib import templates as narrow_templates
-from lib import yaml_fast
 from lib.git import git_stdout
 from lib.narrow_git import CannotNarrow
 from lib.repo_paths import REPO
@@ -24,20 +23,11 @@ from _narrow_fixtures import Tree, build_tree
 CLAIM_NAME = "claim-default.yaml.j2"
 CLAIM = f"ansible/templates/{CLAIM_NAME}"
 MACRO_NAME = "container-resources.yml.j2"
-RENDERER = "ansible/roles/k8s/manifests/tasks/main.yml"
 
 
 @pytest.fixture
 def tree(tmp_path) -> Tree:
     t = build_tree(tmp_path)
-    # `manifests` is a shared role with no tag and, in this fixture, no caller: without the
-    # claim rule a hit in it refuses, so a green answer below is the rule's own work.
-    t.write(
-        RENDERER,
-        "- ansible.builtin.template:\n"
-        "    src: '{{ playbook_dir }}/templates/claim-default.yaml.j2'\n"
-        '  loop: "{{ k8s_claims | default([]) }}"\n',
-    )
     t.write(CLAIM, "{{ manifests_claim.name }}\n")
     t.write(
         "ansible/roles/k8s/sonarr/defaults/main.yml",
@@ -62,7 +52,7 @@ def test_k8s_claims_set_through_include_vars_is_flagged(tree: Tree):
     """A key set outside a role's defaults reaches a role the declarer scan cannot name."""
     tree.write(
         "ansible/roles/k8s/radarr/tasks/main.yml",
-        "- ansible.builtin.include_role:\n    name: k8s/manifests\n"
+        "- ansible.builtin.include_role:\n    name: k8s/volume-revert\n"
         "  vars:\n    k8s_claims: [{name: r, size: 1Gi, storage_class: longhorn}]\n",
     )
     tree.commit("radarr sets the key at its include")
@@ -120,14 +110,6 @@ def test_the_real_claim_template_reaches_exactly_its_declarers():
     ctx = role_reads.context_for("HEAD", REPO)
     roles = role_reads.template_importers(CLAIM_NAME, "HEAD", REPO, {CLAIM_NAME})
     assert role_reads.role_tags(roles, ctx) == declarers
-
-
-def test_manifests_renders_the_claim_template_only_per_k8s_claims_entry():
-    """The fact the claim rule rests on: one task names the template, and it loops the key."""
-    tasks = yaml_fast.safe_load((REPO / RENDERER).read_text())
-    naming = [t for t in tasks if "claim-default.yaml.j2" in str(t)]
-    assert len(naming) == 1
-    assert "k8s_claims" in naming[0]["loop"]
 
 
 _MACRO_BEFORE = (

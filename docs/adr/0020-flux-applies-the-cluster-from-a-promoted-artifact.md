@@ -85,7 +85,7 @@ completes this record.
 - The deployer routes every path under `ansible/roles/k8s/<role>/` to `cs.flux` and reads no
   `owner`. `ansible/roles/setup/gitops_deploy/tests/test_changeset_has_no_service_fields.py`
   holds that the deleted `ChangeSet` fields stay deleted.
-- `ansible/tests/deploy/test_owner_readers_agree.py` holds the two remaining readers of
+- `test_owner_readers_agree.py` holds the two remaining readers of
   `owner` equal.
 
 **Removing a tag from the bundle deletes its objects.** D6.20 ([#7487](https://github.com/DanielH2018/server/pull/7487))

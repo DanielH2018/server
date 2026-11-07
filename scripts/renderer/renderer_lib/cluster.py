@@ -63,7 +63,7 @@ from lib.k8s_roles import (
 )
 from lib.k8s_context import resolve_vars
 from lib.render_guard import SHARED_TPL, StrictChainableUndefined
-from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, HOST_VARS, K8S_ROLES
+from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, HOST_VARS, JOB_FILES, K8S_ROLES
 from renderer.renderer_lib.bundle import (
     KUSTOMIZATION,
     SHARED_KINDS,
@@ -101,7 +101,7 @@ from toposort import K8S_APPLIES_LAST, build_k8s_dep_map, filter_by_platform
 
 LABEL_WRAPPER = SHARED_TPL / "role-labelled.yaml.j2"
 FLUX_DEFAULTS = K8S_ROLES / "flux" / "defaults" / "main.yml"
-FLUX_JOB_CONNECT = K8S_ROLES / "manifests" / "files" / "flux_job_connect.py"
+FLUX_JOB_CONNECT = JOB_FILES / "flux_job_connect.py"
 GROUP_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 # Each group variable naming a namespace that a role creates, mapped to that role. A deferred
 # document in that namespace gives `<tag>-deferred` an edge to the role (D4.2).

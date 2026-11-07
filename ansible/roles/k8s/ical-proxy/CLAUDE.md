@@ -4,7 +4,7 @@ Small Flask app that merges several ICS calendars into one feed for the Homepage
 calendar widget. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=ical-proxy` with exit 5
 - **Image:** `ghcr.io/danielh2018/ical-proxy` (`ical_proxy_k8s_image`)
@@ -20,7 +20,7 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
 - **Host:** daniel-box (k8s), since 2026-08-10 — slice-7 Phase C
 - **The route guards by ClientIP** so only Homepage reads the unauthenticated private feeds
 - **Flux applies it, not Ansible** (D5.14, the first Wave C PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. traefik
   stays Ansible-owned, so the
   Kustomization records it in its `homelab/ansible-owned-deps` annotation, not in `dependsOn`.
@@ -41,8 +41,7 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
   through `cluster_vars.py write`, which the operator runs after the hand rotation: all three
   keys are `assisted`-tier in `ansible/secret_rotation.yml`. The rotation rolls the pod through
   the restart checksum.
-- **Where the tasks went.** `tasks/main.yml` holds two includes, and no Flux path runs either.
-  They stay until R4 deletes them. The `k8s/image-builder` include became promote's `images` job
+- **Where the tasks went.** The `k8s/image-builder` include became promote's `images` job
   (D5.4a2) and the GHCR ref (D5.4b). The role's `manifests_rollout:
   ical-proxy` names the Deployment for the stabilisation gate and the shared restart. The
   Kustomization's `wait` replaces the gate, and the restart checksum the renderer stamps

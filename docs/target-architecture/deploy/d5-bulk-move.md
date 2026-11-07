@@ -1023,7 +1023,7 @@ reconciliation of a flux-owned role. D5.1b rewrites the sentence in
   `rollout restart`). A host script that writes an object Flux renders is a second writer
   under C4. `kubectl exec` into an app writes no object and passes. The red fixture is a copy
   of `registry-gc.sh.j2`'s `scale` call, held in the test, which
-  `ansible/tests/repo/test_host_write_rows.py` holds to the template's line. That call on
+  `test_host_write_rows.py` holds to the template's line. That call on
   `deploy/registry` is why D5 retires the push store's GC rather than moving it, to the host
   or into the cluster (Wave D's registry bullet, Open question 15). The same call on
   `deploy/ghcr-mirror` stays, under the operator's field-ownership exception (#5732).
@@ -1300,7 +1300,7 @@ API server with the pod's ServiceAccount token, and Prometheus or an app over HT
   until kube-router learns its address (the MEMORY note on kube-router's source-pod lag). A
   test once enforced it for prowlarr's netpol probe alone, and prowlarr's flip retired both
   (#5594);
-  `ansible/roles/k8s/manifests/tests/test_flux_job_connect.py::test_a_refused_connect_is_retried_until_the_server_listens`
+  `scripts/renderer/tests/test_flux_job_connect.py::test_a_refused_connect_is_retried_until_the_server_listens`
   holds the helper below to it. Every Job that reads a fenced Service opens
   its first connection through one shared helper, which retries a refused or timed-out
   connection for 60 seconds. The helper tells a refusal apart from an empty answer, and never
@@ -5283,7 +5283,7 @@ round covers it.
 ### Host-write census fold (2026-10-16)
 
 - **The baseline omitted four host writes that D5.1c's census finds (#5266).** Confirmed
-  against the census in `ansible/tests/repo/_host_write_rows.py`. Fixed, one mover per
+  against the census in `_host_write_rows.py`. Fixed, one mover per
   write:
     - media-volume's three media directories move to `k8s_host_files` in media-volume's
       own conversion PR. H7 replaces them with `tmpfiles.d` lines, which the cross-slice

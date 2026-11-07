@@ -11,7 +11,7 @@ repo's first Traefik→host route. Two facts follow:
   is that rule, not the daemon.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=deploy-ui` with exit 5
 - **Route:** `deploy.local.<domain>` (LAN only), Authelia two_factor
@@ -19,10 +19,9 @@ repo's first Traefik→host route. Two facts follow:
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5.6, the second Wave A PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays until R4 deletes it. Its `manifests_rollout: ''` default has
+- **Where the task went.** Its `manifests_rollout: ''` default has
   nothing
   to replace: there is no workload to roll, so the Kustomization's `wait` checks only that the
   Service, EndpointSlice and IngressRoute applied.

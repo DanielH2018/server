@@ -3,7 +3,7 @@
 CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLAUDE.md`.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=livesync` with exit 5
 - **Image:** `couchdb` (`livesync_k8s_image`)
@@ -19,7 +19,7 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
   LiveSync client uses basic auth and can't pass Authelia 2FA
 - **Depends on:** traefik
 - **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. traefik
   stays Ansible-owned, so the
   Kustomization records it in its `homelab/ansible-owned-deps` annotation, not in `dependsOn`.
@@ -43,8 +43,7 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
   `cluster_vars.py write`, which the operator runs after a hand rotation and the rotation cron
   runs after it rotates an `auto`-tier key. The renderer stamps a restart checksum on the
   Deployment, so a changed value or a `local.ini` edit rolls the pod.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays until R4 deletes it. Its pre-apply snapshot through
+- **Where the task went.** Its pre-apply snapshot through
   `k8s/volume-snapshot` became the `livesync-snapshot` Job, and the Kustomization's `wait`
   replaces the rollout wait. The renderer reads the role's `manifests_exclude_files:
   [ingressroute.yaml]`, so the published render holds no IngressRoute, and traefik's

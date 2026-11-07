@@ -31,7 +31,7 @@ covers routes through the skill listing rather than this table.
 
 | If you're… | Start here |
 |---|---|
-| Adding / changing a service (k3s — the default) | `/new-k8s-service` skill (no sibling copying) · `ansible/roles/k8s/manifests/CLAUDE.md` for the render → apply → queue contract every k8s role includes |
+| Adding / changing a service (k3s — the default) | `/new-k8s-service` skill (no sibling copying) · `docs/homelab-render.md` for the render contract every k8s role meets |
 | A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below (the directive and *When to wait*) · `/land-after-merge` skill (the commands) |
 | Picking up an open issue, or working through the backlog | `findings.py next` names what is free to take · `/issue-fanout` skill for several at once. Claim before you start: `findings.py claim <n> --worktree <branch>`; `findings.py claim --help` has the rest. |
 | A Bash or `kubectl` command keeps prompting, or you need the full permission tables | `## Shell Commands — Shape Them to Auto-Approve` below (summary) · `docs/claude-shell-permissions.md` (full detail) |
