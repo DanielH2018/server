@@ -83,6 +83,26 @@ returned 5xx for 17 minutes.
 **`--detach` returning is not a verified deploy.** It backgrounds the rollout wait, which is
 most of the deploy.
 
+## Amendment 2026-11-06: ADR-0020 supersedes this record in part
+
+The operator approved [ADR-0020](0020-flux-applies-the-cluster-from-a-promoted-artifact.md) and
+this note on 2026-11-06. The decision text above stays as accepted. ADR-0020 overtakes the
+statements below, because every k8s `containers_list` entry is Flux-owned and no Ansible k8s
+play applies one (`ansible/deploy.yml` drops them through `ansible_owned`).
+
+- *Consequences*, "denylisted from auto-deploy": the `k8s_autodeploy: false` flag only stops
+  Renovate from merging an image bump for that role unattended. `promote` and Flux apply every merged
+  change, and the soak Job gates it.
+- *Consequences*, "a role's deploy rolls every workload it declares as an extra rollout": no
+  Ansible k8s deploy runs. The render code in `scripts/renderer/renderer_lib/restart.py` stamps
+  the restarts for `manifests_rollout` and for each `manifests_extra_rollouts` entry whose
+  `restart_on` names `config` or `secret`.
+- *Consequences*, "`--detach` returning is not a verified deploy": `--detach` applies to the
+  setup plane and the Pi only, because `deploy.sh` refuses a k8s tag with exit 5.
+- *Governs*, the Ansible gate in the shared rollout tasks: those tasks (`drain.yml` and
+  `post_tasks/k8s_stabilise_gate.yml`) gate no k8s deploy. `probe.py health` stays the gate
+  that `land.sh` runs after a promotion.
+
 ## Governs
 
 No single line. `governs:` is empty. The Ansible gate lives in `scripts/diagnostics/probe.py health`

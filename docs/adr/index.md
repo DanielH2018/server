@@ -54,7 +54,7 @@ wrong is worth more than the record of one that did not.
 | [0007](0007-backup-tiering-r2-daily-b2-weekly.md) | Backups are tiered — R2 daily, B2 weekly and sharded across the week | Accepted | 2026-08-16 |
 | [0008](0008-16-mib-longhorn-blocks.md) | New Longhorn volumes use 16 MiB blocks | Accepted | 2026-08-16 |
 | [0009](0009-networkpolicy-default-deny-ingress.md) | Every pod is fenced by a default-deny ingress NetworkPolicy | Accepted | 2026-08-16 |
-| [0010](0010-pull-based-gitops-over-argo-and-flux.md) | The homelab keeps its own pull-based deployer instead of Argo CD or Flux | Accepted | 2026-08-21 |
+| [0010](0010-pull-based-gitops-over-argo-and-flux.md) | The homelab keeps its own pull-based deployer instead of Argo CD or Flux | Superseded by ADR-0020 | 2026-08-21 |
 | [0011](0011-one-lock-serialises-every-deploy-path.md) | One lock serialises every path that writes the git tree | Accepted | 2026-08-23 |
 | [0012](0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md) | A deploy is not finished until the rollout completes and the pod stays up | Accepted | 2026-08-20 |
 | [0013](0013-daniel-pi-stays-on-docker.md) | daniel-pi stays on Docker and out of the cluster | Accepted | 2026-08-01 |
@@ -64,7 +64,7 @@ wrong is worth more than the record of one that did not.
 | [0017](0017-the-tree-lock-guards-the-tree-not-the-cluster.md) | The tree lock guards the tree, and per-service locks guard the cluster | Accepted | 2026-09-11 |
 | [0018](0018-the-repository-stays-public-and-ci-stays-hosted.md) | The repository stays public, and CI stays on GitHub-hosted runners | Accepted | 2026-09-28 |
 | [0019](0019-fact-support-stops-at-the-repo-store.md) | Fact support stops at the repo store, and the lock carries its own retirement test | Accepted | 2026-10-10 |
-| [0020](0020-flux-applies-the-cluster-from-a-promoted-artifact.md) | Flux applies the cluster from a promoted artifact | Proposed | 2026-10-12 |
+| [0020](0020-flux-applies-the-cluster-from-a-promoted-artifact.md) | Flux applies the cluster from a promoted artifact | Accepted | 2026-10-12 |
 | [0021](0021-the-host-package-builder-trusts-master-plus-green-ci.md) | The host-package builder trusts master plus green CI, and checks no signature | Accepted | 2026-10-14 |
 | [0022](0022-the-cluster-decrypts-its-own-file-with-its-own-key.md) | The cluster decrypts its own file with its own key, and never secrets.yml | Accepted | 2026-10-15 |
 | [0023](0023-fact-support-is-a-diff-notice.md) | Fact support is a diff notice, and the lock is retired | Accepted | 2026-10-17 |

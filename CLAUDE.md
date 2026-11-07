@@ -41,7 +41,7 @@ covers routes through the skill listing rather than this table.
 | Writing a Python module or a test, and deciding where it goes | `.claude/rules/python-layout.md` — the `sys.path` bootstrap a cross-directory import needs, the `tests/` sibling rule and the `ansible/tests/` taxonomy. Read it first when you are choosing the path. |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `ansible/roles/k8s/monitor-bridge/files/registry.py` (the check registry) **first** — mature setup, most are handled |
 | Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server (`docs/claude-tooling.md`). **Grafana is the exception**: drive it with `uv run pytest -m ui -k grafana`. |
-| A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. `ansible/roles/k8s/manifests/CLAUDE.md` has the central rollout-restart, and `ansible/roles/k8s/monitor-bridge/templates/script-configmap.yaml.j2` is the worked example. Content that reaches the cluster another way needs its own `checksum/<thing>` pod annotation from `ansible/templates/checksum-annotation.yml.j2`. |
+| A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. `scripts/renderer/renderer_lib/restart.py` stamps the restart annotation on each restart target's pod template, and `ansible/roles/k8s/monitor-bridge/templates/script-configmap.yaml.j2` is the worked example. Content that reaches the cluster another way needs its own `checksum/<thing>` pod annotation from `ansible/templates/checksum-annotation.yml.j2`. |
 | A config edit won't recreate the container (Docker, the Pi) | The `new-container` skill · `hosts/components/pi-compose/services/alloy/compose.yaml.j2` is the worked example |
 | Starting Claude Code sessions from a phone | `hosts/components/claude-code/CLAUDE.md`, *The two Remote Control modes are different features* |
 | Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract*. A host component's timer owes one too. `ansible/tests/repo/test_role_claude_md.py`, `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py` and `ansible/tests/repo/_component_contract_row.py` enforce it |
@@ -56,15 +56,17 @@ Docker at all, so a Compose service there deploys nothing.
 - **k3s** → the `new-k8s-service` skill, which opens with `scripts/dev/new_k8s_service.py`.
 - **Docker on `daniel-pi`** → the `new-container` skill.
 
-**`containers_list` position does not matter for a k8s entry.** `ansible/deploy.yml` toposorts
-the k8s play (`ansible/filter_plugins/toposort.py`). An ordering no template carries goes in
-`depends_on:` on the entry, never in its list position.
+**`containers_list` position does not matter for a k8s entry.** The renderer toposorts the k8s
+entries (`ansible/filter_plugins/toposort.py`) into the bundle's `dependsOn` edges. An ordering
+no template carries goes in `depends_on:` on the entry, never in its list position.
 
 ## Common Commands
 Run ansible through `uv run` so it uses the repo's pinned env
 (`docs/python-code-organization.md`). Bare `ansible-playbook` lacks the module deps, and deploys
 fail.
-**Deploy through `./scripts/deploy.sh --tags "<service>"`**, not the playbook directly.
+**A k8s service deploys through `promote`, never through Ansible.** `deploy.sh` exits 5 for a
+k8s tag, `--check` and `--dry-run` included. The merge is the deploy, and `land.sh` follows it.
+**The setup plane and the Pi deploy through `./scripts/deploy.sh`**, not the playbook directly.
 `docs/deploying.md` owns the lock rules and lists the holders.
 
 **It deploys `HEAD`, not your working tree.** An uncommitted edit is not deployed, and nothing
@@ -75,8 +77,8 @@ on the run says so. Commit first. `--check` and `--dry-run` still read the worki
 initial setup.
 
 ### Checking a k8s change without deploying it
-Only `--dry-run` shows the manifests to an API server. The `deploy` skill has the table of what
-`prek run --all-files`, `--check` and `--dry-run` each catch.
+`prek run --all-files` and the PR's `render-diff` job check a k8s change before it merges.
+`docs/homelab-render.md` has the renderer commands that show the manifests a change produces.
 
 ## After a PR Merges — Pull, Deploy, Verify
 
@@ -142,8 +144,9 @@ conditions.
   path only that command applies. `deploy.sh` exits 5 for a k8s tag, and that is no reason to
   wait: `promote` and Flux apply the change.
 - The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.
-- The change is in the policies-first ordering plane, where a partial run leaves the exact state
-  the ordering exists to prevent.
+- The `DEPLOY_HOLD` repository variable reads anything but `none`: `promote` holds the cluster.
+  `land.sh` ends `deploy-failed` with cause `promote-held`, and clearing the hold is the
+  operator's decision (`docs/landing.md`).
 - A classifier denial. Report the denied command; do not reach for a bypass flag.
 
 ## Shell Commands — Shape Them to Auto-Approve
@@ -160,8 +163,8 @@ Write exploratory commands so they auto-approve; expect a prompt for the rest.
 
 ### `kubectl` — what actually decides
 Plain `kubectl` authenticates as a **read-only ServiceAccount**, so RBAC refuses every write
-verb, and `sudo` and `kubectl delete` are denied outright. **Ansible is the only write path to
-this cluster**: deploy through `./scripts/deploy.sh --tags <svc>`.
+verb, and `sudo` and `kubectl delete` are denied outright. **`promote` and Flux are the only
+write path to this cluster's workloads**: merge the change and let `land.sh` follow it.
 
 ## Claude Tooling in This Repo (`.claude/`)
 One directive per tool. `docs/claude-tooling.md` is the full reference, and a hook that

@@ -16,7 +16,7 @@ Full procedure: CLAUDE.md → "After a PR Merges — Pull, Deploy, Verify".
 
 ## Deploy
 
-- [ ] Deployed after merge (`./scripts/deploy.sh --changed <pre-merge-SHA>` from `/home/ubuntu/server`)
+- [ ] Deployed after merge (`land.sh` printed `VERDICT: settled`)
 - [ ] Deliberately deferred — reason:
 - [ ] Nothing to deploy (docs-, test-, or `tasks/`-only)
 
