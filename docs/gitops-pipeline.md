@@ -152,8 +152,8 @@ A setup role the deployer cannot apply is a fourth case. `k3s` lives in `k3s-bri
 fast-forwards and records the role instead of parking; see *A role only a hand can apply is
 recorded, not parked* below.
 
-A setup role can ship another setup role's file by path. The `deploy_ui`
-role installs the deployer's `files/gitops_markers.py` and `files/gitops_ledger.py` that way.
+A setup role can ship another setup role's file by path, as `gitops_deploy` and
+`initial_setup` both import `common/tasks/stamp_deployed.yml`.
 `deploy_changes.setup_roles_for` maps a change to such a file to its owner AND every role listed
 for it in `SETUP_FILES_SHIPPED_BY_OTHER_ROLES`. `ChangeSet.setup_roles` and `setup_tags_for` both
 read the table, so the `manual_plane` ledger class, the narrowed apply, the `hold_plane` coverage
@@ -181,8 +181,6 @@ hand-run of such a role (`land_reach._reads_no_changed_key`). A change to the ke
 `tasks/agent_access.yml`, runs only inside the agent include, whose tasks all carry that one
 tag. The same test file derives these rows from the tree, and the table must equal them
 (#4357).
-`deploy_ui` reads `k3s_agent_node_ips`, so a k3s defaults change records `k3s` in
-`manual_plane` and applies `deploy_ui`.
 A word match that is not a read, such as a bash local in a template, is exempted in that test
 with the reason.
 

@@ -5,7 +5,7 @@ The tick runs on ONE host (`has_gitops`, daniel-box), and `initial_setup.yml` ru
 one host per invocation, so a role it reaches on more hosts than that leaves the others
 unconverged after a green tick. `setup_role_hosts` reads the role's own gate
 in the playbook, or, for a role the playbook does not gate, the gates on its own tasks
-(`deploy_ui` is one `block:` under `when: has_gitops`); `setup_file_hosts`
+(a role whose main.yml is one `block:` under `when: has_gitops`); `setup_file_hosts`
 reads the gate on the task that ships a changed file, which is what decides where a FILE
 lands when the role reaches more hosts than the file does (box-only cron
 templates under the ungated `initial_setup` role would otherwise read as reaching every host);
@@ -134,8 +134,8 @@ def setup_role_hosts(
     that guard passes (`setup_gates.role_end_hosts`), whatever its playbook gate says.
 
     A role with no playbook gate is read from its own tasks instead of assumed to reach
-    every host. `deploy_ui` wraps its whole `tasks/main.yml` in one `block:` under `when:
-    has_gitops`, so the play visits all three hosts and every task skips on two of them; a
+    every host. A role that wraps its whole `tasks/main.yml` in one `block:` under `when:
+    has_gitops` (deploy_ui's shape until H7.50), so the play visits all three hosts and every task skips on two of them; a
     change to its `defaults/`, `handlers/` or `tasks/main.yml` -- none of which names a
     shipped file -- would read as owing those two a hand-run of a play in which nothing
     fires. The gate that decides is the union over the role's leaf tasks:
@@ -174,7 +174,7 @@ def _hosts_passing(
 
     An empty chain -- an ungated leaf -- passes everywhere, so its presence settles every
     host before a single gate is read. The rest are deduplicated first: every leaf under
-    deploy_ui's one block carries the same `("has_gitops",)`, and `_eval_when` re-parses
+    one block carries the same `("has_gitops",)`, and `_eval_when` re-parses
     group_vars/all.yml per gate per host, which put a 40-path `initial_setup` note at 4.7s
     against 0.24s before the role-level read existed.
     """

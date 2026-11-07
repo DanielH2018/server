@@ -62,10 +62,9 @@ _TEMPLATE_EDGE = re.compile(r"{%-?\s*(?:import|include|from)\s")
 def foreign_tags(role: str, playbook_text: str | None, ref: str, repo: str) -> set[str]:
     """Every tag the OTHER setup roles in this playbook declare.
 
-    A tag two roles declare does not select one of them. `firewall` is carried by tasks in
-    both `deploy_ui` and `initial_setup`, so `initial_setup.yml --tags firewall` runs both
-    roles' firewall tasks — the printed command would apply a role the change never touched
-    (#2350). The derivation refuses such a tag and the caller prints the whole-role tag, which
+    A tag two roles declare does not select one of them. `firewall` was carried by tasks in
+    two roles, so `initial_setup.yml --tags firewall` ran both roles' firewall tasks — the
+    printed command would apply a role the change never touched (#2350). The derivation refuses such a tag and the caller prints the whole-role tag, which
     is the direction this module always fails in.
 
     Raises:

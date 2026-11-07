@@ -2948,9 +2948,12 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
    `probe.py releases`. The operator wants a live view of landings in progress, and the page's
    in-flight panel is the only one in a browser. So the daemon, its route and its firewall rule
    stay through D6, with the in-flight panel, the land and cancel controls and the hold clear.
-   Resolution: this settles the button half. The `DEPLOY_HOLD` half and whether the daemon
-   retires with the deployer stay with the operator in D6.15's review (**operator-only**). The
-   design's open question 4 names this.
+   Resolution: this settles the button half. On 2026-11-07 the operator ruled that the daemon
+   does not retire with the deployer
+   ([#7419](https://github.com/DanielH2018/server/issues/7419)): H7.50 re-homes it with its
+   in-flight panel into daniel-box's host package, and H7.19b removes the hold clear with the
+   deployer's state. D6.15's review recorded no move onto `DEPLOY_HOLD`, so that half is closed.
+   The design's open question 4 names this.
 2. **Do ADR-0011, ADR-0012 and ADR-0017 need amendments?** `gitops-deploy.service` still takes
    the tree lock for the host plane, and `deploy.sh` still takes it for the Pi. design.md
    leaves the amendments to the operator, and R4's open question 8 asks the same about 0012.

@@ -988,11 +988,14 @@ excluded. Each lands in one of four groups.
   `narrow_lib` modules D6 hands over: `setup_index`, `setup_playbook`, `task_walk`,
   `filters`, `foreign_keys`, `paths` and `templates`. `paths.py`'s lazy
   `deploy_logic.is_doc` import goes with it.
-- **H7.19a deletes deploy_ui, if D6 kept it.** `deploy_ui.py` imports
-  `gitops_markers.STATE_DIR`, `deploy_ui_reads.py` imports all three state modules, and
-  `deploy_ui_writes.py` imports `gitops_hold.Hold` and `HOLD_PLANE_SEP`. Each action it
-  offers, starting `deploy.sh` and clearing `hold_sha`, has no subject once H7.19a and
-  H7.19b land. H7.11 states the one exception.
+- **H7.50 re-homes deploy_ui with its in-flight panel; H7.19b removes its deployer reads.**
+  `deploy_ui.py` imports `gitops_markers.STATE_DIR`, `deploy_ui_reads.py` imports all three
+  state modules, and `deploy_ui_writes.py` imports `gitops_hold.Hold` and `HOLD_PLANE_SEP`.
+  The operator ruled on #7419 (2026-11-07) that the page stays, because `land.sh` outlives the
+  deployer and the in-flight panel is the only browser view of landings in progress. The hold
+  panel, the hold clear and the land refusal under a hold keep a subject while the deployer
+  writes `hold_sha`, so H7.50 packages them unchanged, and H7.19b deletes them with the reads
+  above. The in-flight panel and the land and cancel controls stay.
 - **H7.19b re-homes or switches them, because they survive:**
     - `land_lib/tools.py` imports `deploy_locks.TREE_LOCK`. `TREE_LOCK` moves to
       `scripts/lib/tree_lock.py`, and `test_tree_lock_single_definition.py` holds that
@@ -1266,7 +1269,7 @@ refuses a PR that bumps only one side.
 - `nut_host` on daniel-box reads the `nut` Service's ClusterIP with kubectl. H7.8 first
   pins `spec.clusterIP` in `ansible/roles/k8s/nut/` to the live value. That is a no-op on the
   live Service, because the value is unchanged. Then it renders the secondary from the pin.
-- `deploy_ui`'s firewall sources and the builder's ufw rule already read inventory only.
+- The deploy-ui component's ufw rules and the builder's read inventory only.
 - pi-peer-backup's rsync target reads `hostvars['daniel-pi'].server_ip` and a role default
   user in place of `ansible_host` and `ansible_user` (H7.18d).
 
@@ -1634,7 +1637,9 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
   H7.10a have moved its rows by then, and H7.18c turns its absent arms into legacy entries
   and deletes D5's render test for it. Its directory goes in H7.20a.
 - **Emptied in H7.19a:** the deployer role, whose directory goes in H7.20a.
-- **Removed in H7.19a:** deploy_ui's Python modules and tests, if D6 kept it (H7.11);
+- **Removed in H7.19b:** deploy-ui's hold panel, hold clear and deployer-state reads (H7.50
+  re-homed the rest);
+- **Removed in H7.19a:**
   monitor-bridge's gitops checks and its `/var/lib/gitops-deploy` mount, in the first PR;
   `gitops-deploy.timer` as a legacy entry; land.sh's tick step, `land_lib/tick.py`,
   `tools.py:run_tick`, their call sites and `gitops_tick.sh`, with the setup arm's reads
@@ -1883,7 +1888,7 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.48 Absent arms become legacy entries; `k8s_host_files` empties | H7.18c | no: its list of record is H7.23's report taken after every row has moved | H7.25, H7.35, H7.36, H7.40, H7.64, H2.2c, H2.3d, H2.3f, H2.4c, H2.5b to H2.5d, H2.8b, D5 |
 | H7.49a land.sh stops running the tick | H7.19a's third PR | yes | H7.41, D6 |
 | H7.49b monitor-bridge's gitops checks go | H7.19a's first PR | yes; it merges only when H7.52 is ready to merge next, because it leaves the deployer unwatched until H7.52's merge | H7.49a, H7.51 live, and every other edge of H7.52 |
-| H7.50 deploy_ui retires | H7.19a's second PR | yes | H7.37, H7.41, D6 |
+| H7.50 deploy_ui re-homes with its in-flight panel | H7.19a's second PR | yes | H7.37, H7.41, D6 |
 | H7.51 `homelab-checkout-sync` beside the deployer | H7.19a's fourth PR | yes | H7.41, H7.47, D6, the H6 PR that lands the window test |
 | H7.52 The deployer's timer retires | H7.19a's fifth PR | no: it deletes H6's seven deployer-coupled items, so it starts once they merge | H7.49a, H7.49b live, H7.51 live, H7.24a, H7.24b, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H7.60, H7.62, H6 |
 | H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.24a to H7.41, H7.24b, H7.44, H7.45, H7.48, H7.50, H7.58 to H7.64 |
@@ -1914,7 +1919,7 @@ items inside each file. Every path sits under `ansible/roles/setup/`.
 | H7.44 | `k3s/tasks/coredns.yml`, `k3s/tasks/main.yml`, `k3s/tasks/server.yml` |
 | H7.45 | `k3s/tasks/storage_smoke.yml` |
 | H7.48 | `docker_install/tasks/main.yml`, `docker_install/tasks/teardown.yml`, `k8s_host_files/tasks/configarr.yml`, `k8s_host_files/tasks/crowdsec.yml`, `k8s_host_files/tasks/janitorr.yml`, `k8s_host_files/tasks/main.yml`, `k8s_host_files/tasks/observability.yml`, `k8s_host_files/tasks/qbittorrent.yml`, `k8s_host_files/tasks/registry.yml`, `k8s_host_files/tasks/traefik.yml`; the cron absent arms of `initial_setup/tasks/crons.yml` and `k3s/tasks/health-crons.yml`; the two absent arms of `k8s_host_files/tasks/registry.yml` |
-| H7.50 | `deploy_ui/tasks/code.yml`, `deploy_ui/tasks/firewall.yml`, `deploy_ui/tasks/main.yml`, `deploy_ui/tasks/service.yml` |
+| H7.50 | `deploy_ui/tasks/code.yml`, `deploy_ui/tasks/firewall.yml`, `deploy_ui/tasks/service.yml`; `deploy_ui/tasks/main.yml` stays as an `end_role` stub until H7.20a |
 | H7.52 | `gitops_deploy/tasks/code.yml`, `gitops_deploy/tasks/install.yml`, `gitops_deploy/tasks/main.yml`, `gitops_deploy/tasks/service.yml`, `gitops_deploy/tasks/teardown.yml` |
 | H7.55, which deletes these `end_role` stubs with their roles | `claude_code/tasks/main.yml`, `config_files/tasks/main.yml`, `homelab_builder/tasks/main.yml`, `nut_host/tasks/main.yml`, `optimize_pi/tasks/main.yml`, `sops_setup/tasks/main.yml` |
 | H7.58 to H7.60 | `initial_setup/tasks/access.yml`, `initial_setup/tasks/accounting.yml`, `initial_setup/tasks/audit-and-kernel.yml`, `initial_setup/tasks/integrity.yml`; `initial_setup/tasks/system-tuning.yml` without its git hooks; the swap, apt and package tasks of `initial_setup/tasks/host-basics.yml`; the witness, the file absent arms and the `ansible.log` tasks of `initial_setup/tasks/crons.yml` |
@@ -2247,8 +2252,10 @@ the `manual_plane` clearing, and *Rollback*'s
       independently, so one PR could not fix that order. The deployer runs unwatched only for
       the gap between the two merges. Its revert restores the checks, which need
       `/var/lib/gitops-deploy`.
-26. **H7.50** stays alone, a deletion of about 2,300 lines. Its revert needs the operator's
-    `--tags deploy_ui` re-apply ON daniel-box (**operator-only**).
+26. **H7.50** stays alone. It moves the daemon, its page and its tests into the `deploy-ui`
+    component of `homelab-daniel-box` rather than deleting them (#7419), and empties the role.
+    Its revert needs the operator's `--tags deploy_ui` re-apply ON daniel-box after
+    `homelab_host_applied_info` shows the reverted version (**operator-only**).
 27. **H7.51** stays alone, because it must be live and fast-forwarding before H7.52 removes
     the timer. It carries the checkout-sync proofs and the window-test exemption.
 28. **H7.52** stays alone. It merges only while `hold_sha` is empty and `owed.jsonl` holds no
@@ -2691,16 +2698,16 @@ the `manual_plane` clearing, and *Rollback*'s
 11. **H7.11 daniel-box: Renovate and fake_remux.** `renovate_agent`, `renovate_notify`,
     `fake_remux`, and the two GitHub check timers from `gitops_deploy`. renovate_agent's
     reads of `gitops_hold` and `gitops_markers` move with it, and H7.19b switches them.
-    - **deploy_ui is not packaged.** If D6 kept it, it reads and writes only the
-      deployer's state and starts `deploy.sh`, and none of those outlive H7.19b. H7.19a
-      retires it with the deployer: its units become legacy entries in
-      `homelab-daniel-box`, and the PR deletes its tasks, its Python modules and their
-      tests. The one exception is a deploy_ui that D6.15's operator review already moved
-      onto C2's `DEPLOY_HOLD`. That one is packaged here, and H7.19b deletes its remaining
-      deployer reads in `deploy_ui.py`, `deploy_ui_reads.py` and `deploy_ui_writes.py`.
-      The deployer-import census covers it in both cases.
+    - **deploy_ui is re-homed with its in-flight panel (H7.50).** The operator ruled on #7419
+      (2026-11-07) that the page stays: `land.sh` outlives the deployer, and the in-flight
+      panel is the only browser view of landings in progress. The `deploy-ui` component ships
+      the daemon in `homelab-daniel-box` with the route's port, its auth gates and its ufw
+      rules, and starts no `deploy.sh`, which #7413 removed. The hold panel and the hold clear
+      read the deployer's state, so they stay until H7.19b deletes them with the deployer
+      reads in `deploy_ui.py`, `deploy_ui_reads.py` and `deploy_ui_writes.py`. The
+      deployer-import census covers it.
     - **What H7.37 did (#7504).** D6.15's review recorded no move onto `DEPLOY_HOLD`, so
-      deploy_ui took the first branch and has no line in the package. #7419 holds the rest.
+      deploy_ui stayed out of the package until H7.50 (#7419).
       The three roles are emptied, as *Roles are emptied before H7.20a, never deleted*
       requires, and four components hold their content: `renovate-notify`,
       `renovate-agent`, `fake-remux` and `github-checks`. A package cannot resolve a
@@ -2998,10 +3005,10 @@ the `manual_plane` clearing, and *Rollback*'s
           `ansible/tests/k8s/test_rendered_properties.py` (*Path readers*). The role's
           `CLAUDE.md` restates its `nodeSelector` as the etcd drill's. The deployer runs
           unwatched from this merge until the fifth PR's.
-        - The second retires deploy_ui as H7.11 states: its units become legacy entries in
-          `homelab-daniel-box`, and the PR empties the role and deletes its Python modules
-          and tests. It deletes about 2,300 of the 2,438 lines in the role's 16 files at
-          `70591c307`, and adds under 50. It is a deletion sized by subject, as H7.20's are.
+        - The second, H7.50, re-homes deploy_ui with its in-flight panel, as H7.11 states:
+          the `deploy-ui` component ships the daemon, its page and its ufw rules in
+          `homelab-daniel-box`, the role's units, files and rules become legacy entries, and
+          the PR empties the role. It names no `deploy.sh` start, which #7413 removed.
         - The third stops land.sh running the tick, as *land.sh stops running the tick*
           lists, with the red-half test, and `brief.py:APPLY_OWED` drops its reads. It
           deletes about 1,040 lines of whole files at `70591c307` (`gitops_tick.sh` 329,
