@@ -128,6 +128,26 @@ snapshot: the full run's tag enumeration (`deploy_tags.py list` through `uv run`
 per run (`REAP_MAX_PER_RUN`; the rest wait for the next locked run), so a slow venv or a root
 full of dead directories cannot turn "seconds" into the deployer's whole `TimeoutStartSec`.
 
+## Amendment 2026-11-06: ADR-0020 supersedes this record in part
+
+The operator approved [ADR-0020](0020-flux-applies-the-cluster-from-a-promoted-artifact.md) and
+this note on 2026-11-06. The decision text above stays as accepted. ADR-0020 overtakes the
+statements below for the k8s plane. They still describe the host plane and the Pi.
+
+- *Decision* and *Consequences*, per-tag locks and "two deploys of different services run
+  together": no k8s service takes a per-tag lock. `refuse_k8s_tags` in
+  `scripts/deploy_tools/deploy_lib/owners.py` exits 5 for a k8s tag before `deploy.sh` reaches
+  the lock step (`scripts/deploy_tools/deploy_lib/run.py`).
+- *Consequences*, `/var/lib/homelab/k8s-releases.d/<svc>.json` and `tree_dirty`: no k8s
+  deploy writes the record. `release_stamp.yml` runs inside the manifests role, and
+  `ansible/deploy.yml` drops every Flux-owned entry (`ansible_owned`) before that role runs.
+  `render_record.yml` still writes a `tree_dirty` field into a render record, but only when an
+  operator passes `-e manifests_render_record=true` to a dry run.
+- *Consequences*, "the two k8s terms in the timeout sum": the sum holds one term. The broad
+  setup apply is the only phase a tick runs under the lock, and `_worst_lock_hold()` in
+  `ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py` sums it.
+  `deploy_locks.locked_budget` still shares one deadline between the lock wait and that phase.
+
 ## Governs
 
 The `# DECIDED:` marker recording the lock order in

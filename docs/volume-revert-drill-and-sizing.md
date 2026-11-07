@@ -22,7 +22,11 @@ mode. Read the failing task's name to see which claim it stopped on, then:
    pod IP — the ClusterIP is a coin flip, see `k8s/longhorn-api`.
 3. Decide per claim whether to finish the revert or to accept the volumes as they are. Reverting
    the remaining claims by hand is the same sequence the role runs.
-4. Deploy the service to bring it back up: `./scripts/deploy.sh --tags <service>`.
+4. Resume the service's Kustomizations to bring it back up. `deploy.sh --tags <service>` exits 5
+   for a flux-owned tag and applies nothing. The apply that restores `replicas: 1` is Flux
+   reconciling `<s>` after the operator resumes it, `<s>-snapshot` first. Branch 1 of *The revert
+   runbook* in `docs/volume-snapshot-drills.md` owns the whole order (suspend, revert, reset
+   `prod`, resume) and the resume command.
 
 **A timeout is not proof the revert did not happen.** `volume_revert_api_timeout` bounds the
 client, not the server: a `snapshotRevert` that timed out may still have been performed. Read the

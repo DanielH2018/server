@@ -345,8 +345,8 @@ third redeploy without touching a different commit at all.
 
 **This is not hypothetical for a rollback specifically.** `gitops-deploy`'s hold only skips the
 exact held SHA (`skip_hold` matches `origin_head == hold_sha`); redeploying that same failed
-commit again — including a hand-run `./scripts/deploy.sh --tags <service>` while an operator
-debugs a partial revert per `k8s/volume-revert/CLAUDE.md`'s recovery steps — takes another fresh
+commit again — including a hand-run redeploy of the commit while an operator
+debugs a partial revert per `docs/volume-revert-drill-and-sizing.md`'s recovery steps — takes another fresh
 snapshot of it under the same commit's tag. A third such redeploy of the SAME failed SHA (at the
 default `retain: 3`) prunes the ORIGINAL pre-deploy snapshot out of the window, and any further
 automated rollback of that commit then finds no snapshot to revert to — the fail-closed "no

@@ -1,7 +1,7 @@
 ---
 id: "0020"
 title: Flux applies the cluster from a promoted artifact
-status: Proposed
+status: Accepted
 date: 2026-10-12
 governs: []
 ---
@@ -10,10 +10,14 @@ governs: []
 
 ## Status
 
-Proposed. The operator approved starting slice D1 on 2026-10-12. Acceptance is
-**operator-only** and is requested in slice D6, which is also where
-[ADR-0010](0010-pull-based-gitops-over-argo-and-flux.md) becomes `Superseded by ADR-0020`.
-Until then ADR-0010 stays `Accepted`.
+Accepted. The operator approved starting slice D1 on 2026-10-12, when this record opened as
+`Proposed`. The last pull request of slice D6 (D6.21) completed it from what D5 and D6 paid
+and set it to `Accepted`.
+
+This record supersedes [ADR-0010](0010-pull-based-gitops-over-argo-and-flux.md), whose status
+reads `Superseded by ADR-0020`. The operator ruled on 2026-11-06, in the session that orchestrates slice D6, to approve this
+record and to amend ADR-0012 and ADR-0017. Each of those two carries a dated *Amendment*
+section that names the statements this record overtakes. ADR-0011 stays unchanged.
 
 ## Context
 
@@ -35,39 +39,110 @@ The answer was:
 
 > The Target Architecture docs are the source of truth
 
-That ruling adopts slice D1 as
-[planned](../target-architecture/deploy/d1-flux-installed.md). This record is the ruling's
-written form, in `Proposed` status, opened by
-[#4695](https://github.com/DanielH2018/server/issues/4695).
+That ruling adopts the slices from D1 on, beginning with
+[D1](../target-architecture/deploy/d1-flux-installed.md). [#4695](https://github.com/DanielH2018/server/issues/4695)
+opened this record.
 
 ## Decision
 
-The cluster's deploy plane moves to Flux, which applies a rendered artifact that CI publishes
-and a `promote` workflow promotes. [Contracts](../target-architecture/contracts.md) C2 owns the
-artifact and its promotion, and C3 owns the Flux objects. The move starts with slice D1,
-which installs `source-controller`, `kustomize-controller` and `notification-controller` in
-`flux-system`. Those controllers follow `oci://ghcr.io/danielh2018/homelab-manifests:prod`, whose root
-Kustomization is empty. Under D1, Flux owns no object outside `flux-system`, and Ansible still
-deploys every service. Ownership of a live object moves only in D2 and later slices, under the
-two-writer rule (C4).
+CI renders every k8s manifest and publishes the result as an OCI artifact. A `promote`
+workflow moves the tag that Flux follows, and Flux applies the artifact server-side with prune
+and wait. Neither the GitOps deployer nor Ansible applies a k8s workload.
+[Contracts](../target-architecture/contracts.md) C2 owns the artifact and its promotion, and
+C3 owns the Flux objects.
+
+Every k8s `containers_list` entry carries `owner: flux`, and a service stays Flux-owned or
+retires. The operator ruled on 2026-11-06 ([#7464](https://github.com/DanielH2018/server/issues/7464))
+that a service does not move back to Ansible. A bad role change reverts through `promote` or
+holds through the `DEPLOY_HOLD` repository variable.
+
+The GitOps deployer keeps the host plane. It applies a setup-role change as
+`initial_setup.yml --tags <role>` until slice H7 retires it. `daniel-pi` stays on Docker
+([ADR-0013](0013-daniel-pi-stays-on-docker.md)).
 
 ## Consequences
 
-- **Two deploy planes coexist from D1 to D6.** The GitOps deployer and `deploy.sh` keep every
-  service. Flux runs beside them and applies only its own namespace. A reader who finds Flux
-  controllers running reads this record for why ADR-0010 still says `Accepted`.
-- **Deploys gain a dependency on GitHub and GHCR.** The artifact lives in GHCR, and
-  `promote` runs in GitHub Actions. The break-glass promotion in C2 covers an outage of either.
-- **Flux's CRDs and controllers become something to upgrade.** The Flux release the plan
-  measured lists compatibility only up to Kubernetes 1.36, while the cluster runs 1.37. The D1
-  plan's Open question 1 owns that gap.
-- **Reversal is cheap until D2.** Flux owns nothing outside `flux-system` before D2's flip, so
-  removing the namespace and the CRDs reverses D1 without touching a service.
-- **Validation covers the Flux kinds before any manifest renders them.**
-  `scripts/validate/refresh_vendored_schemas.py:VENDORED` lists `OCIRepository`, `Kustomization`,
-  `Provider` and `Alert`, and `CORE_GROUP_FILES` lists the `apiextensions.k8s.io` group that the
-  Flux CRDs belong to.
+Each item below comes from the tree, a merged pull request or a plan at the commit that
+completes this record.
+
+**The deployer and the landing code shrank, the landing code less than planned.**
+
+- The deployer's Python under `ansible/roles/setup/gitops_deploy/files/` measured 9,620 lines
+  at `70591c307` and 7,763 lines at the commit before this record's acceptance. The command is
+  `git archive <rev> ansible/roles/setup/gitops_deploy/files | tar -xO | wc -l`.
+- `land.sh`, `land.py` and `land_lib/` measured 6,258 lines at `70591c307` and 8,639 lines
+  after D6.18b, by the same method with `--exclude='*/tests/*'`. D1 to D5 added the
+  promotion waits before D6 removed the k8s arms, so the landing code ends above its baseline.
+  D6's exit 6 bounds it at 8,800 lines.
+- `scripts/deploy_tools/promote.py` is 492 lines against a bound of 900.
+
+**A k8s tag has one writer, and the tree enforces it.**
+
+- `deploy.sh` exits 5 for a k8s tag, `--check` and `--dry-run` included
+  (`scripts/deploy_tools/deploy_lib/owners.py:refuse_k8s_tags`).
+- The census row `every-k8s-entry-is-flux-owned` in `ansible/tests/repo/_flux_ownership_row.py`
+  fails a commit that drops `owner: flux` from an entry.
+- The deployer routes every path under `ansible/roles/k8s/<role>/` to `cs.flux` and reads no
+  `owner`. `ansible/roles/setup/gitops_deploy/tests/test_changeset_has_no_service_fields.py`
+  holds that the deleted `ChangeSet` fields stay deleted.
+- `ansible/tests/deploy/test_owner_readers_agree.py` holds the two remaining readers of
+  `owner` equal.
+
+**Removing a tag from the bundle deletes its objects.** D6.20 ([#7487](https://github.com/DanielH2018/server/pull/7487))
+switched 65 `<tag>` Kustomizations to the default deletion policy, which follows `prune`.
+Seven of them render `prune: false`, so they still delete nothing. Fifty-two Kustomizations and
+the root keep `deletionPolicy: Orphan`: `flux`, every `-deferred`, `-snapshot`, `-prepull`,
+`-precheck` and `-verify` kind, and the shared kinds.
+
+- The renderer labels every PersistentVolumeClaim and Namespace with a prune exemption
+  (`scripts/renderer/renderer_lib/prune_label.py:EXEMPT_KINDS`), so a retired tag leaves its
+  data in place. A PersistentVolume has no exemption: `scripts/deploy_tools/tag_rule.py`
+  refuses to drop a tag whose render at `prod` holds one.
+- A retired tag leaves its `-snapshot` and `-prepull` objects behind, because those kinds keep
+  `Orphan`. The operator deletes them by hand
+  ([#7485](https://github.com/DanielH2018/server/issues/7485) tracks the follow-up).
+- The deletion is not reversible. A revert of D6.20 restores `Orphan` and returns no object
+  already deleted.
+- The `flux-deletion-drill` job proves the policy in a throwaway kind cluster. The ruleset
+  requires that check (D6 Open question 10, ruled 2026-10-25).
+- At D6.20's base, `owner: flux` showed 0 moves back to Ansible, 1 retirement (uptime-kuma, 2026-11-04) and
+  0 renames since D2.
+
+**`promote` and `DEPLOY_HOLD` replace the deployer's rollback and hold.**
+
+- A promotion that fails its verification makes `promote`'s `settle` job write `DEPLOY_HOLD`,
+  and `land.sh` ends `deploy-failed` with cause `promote-held`. Clearing the hold is the
+  operator's decision (`docs/landing.md`).
+- `promote.py` refuses a bundle that loses an object no `Removes-Object` trailer declares
+  (`scripts/deploy_tools/object_loss.py`).
+- `promote` defers a promotion that the weekly reboot window would cut short
+  (`scripts/deploy_tools/promote_lib/reboot_window.py`).
+
+**Deploys depend on GitHub and GHCR.** The artifact lives in GHCR and `promote` runs in GitHub
+Actions. Break-glass promotion covers an outage of either (`docs/break-glass.md`). It needs an
+operator-held key pair and keeps the in-cluster registry in service. The `flux-deletion-drill`
+workflow runs a break-glass case with a throwaway key, and `docs/break-glass.md` states which steps the
+drill never runs.
+
+**Flux's controllers and CRDs are something to upgrade.** Renovate opens a manual pull request
+for each `fluxcd/flux2` release, because the vendored install needs regenerating
+(`docs/flux-deploy-plane.md`, *Upgrading Flux*). At the time of this decision the Flux release
+in use listed Kubernetes up to 1.36 while the cluster ran 1.37. The operator accepted that gap
+on 2026-10-12.
+
+**Two codebases remain until later slices.**
+
+- The Ansible k8s mechanics stay in the tree until slice R4: the `manifests` role's tasks and
+  the k8s play of `ansible/deploy.yml`. Nothing runs them for a k8s tag.
+- The deployer's setup arm, its fast-forward and `deploy_ui` stay until slice H7.
+- `hold_sha` covers the host plane only, and `DEPLOY_HOLD` covers the cluster.
+
+**ADR-0012 and ADR-0017 differ from the tree, and each carries an *Amendment* section.** The
+operator ruled on 2026-11-06 that ADR-0011 stays unchanged, because its decision, one lock on
+every path that writes the git tree, still holds for the host plane.
 
 ## Governs
 
-No line in the tree enforces this decision yet, so `governs:` is empty.
+No `# DECIDED:` marker names this record, so `governs:` is empty. The tests named under
+*Consequences* enforce the decision: the census row, the owner-reader and `ChangeSet` tests,
+and the deletion drill.

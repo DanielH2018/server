@@ -19,8 +19,7 @@ k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "state coupled outside the volume — reverting qbittorrent-config to a snapshot rewinds in-flight torrent bookkeeping while the media-data volume it references does not move; the snapshot Job and the operator revert work fine and are not the blocker"  # noqa var-naming[no-role-prefix]
 # The claim snapshotted before each revision applies. Under Flux the renderer turns this
 # list into the qbittorrent-snapshot Kustomization, whose Job snapshots it before qbittorrent applies
-# (D5.2a). After a handback, k8s/manifests takes the same snapshot through k8s/volume-snapshot.
-# Declared regardless of k8s_autodeploy.
+# (D5.2a). Declared regardless of k8s_autodeploy.
 k8s_autodeploy_snapshot_pvcs: [qbittorrent-config]  # noqa var-naming[no-role-prefix]
 
 # The gate Job Flux runs in `qbittorrent-verify`, copied from the drift check's jobTemplate
@@ -128,8 +127,7 @@ qbittorrent_k8s_prefs_check_cpu_request: "10m"
 qbittorrent_k8s_prefs_check_mem_request: 32Mi
 
 # The claim the renderer emits for this role. The qbittorrent Kustomization applies it after the
-# qbittorrent-snapshot Job; after a handback, k8s/manifests applies it ahead of the pre-apply
-# snapshot.
+# qbittorrent-snapshot Job.
 # media-data is not here: it is the shared media claim, mounted by this role and owned elsewhere.
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ qbittorrent_k8s_claim }}"

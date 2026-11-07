@@ -1,7 +1,7 @@
 ---
 id: "0010"
 title: The homelab keeps its own pull-based deployer instead of Argo CD or Flux
-status: Accepted
+status: Superseded by ADR-0020
 date: 2026-08-21
 governs: []
 ---
@@ -10,12 +10,12 @@ governs: []
 
 ## Status
 
-Accepted. Evaluated 2026-08-21; no controller is installed and none is scheduled.
+Superseded by [ADR-0020](0020-flux-applies-the-cluster-from-a-promoted-artifact.md). The
+decision was accepted on 2026-08-21, when no controller was installed and none was scheduled.
 
-2026-10-12: [ADR-0020](0020-flux-applies-the-cluster-from-a-promoted-artifact.md) proposes
-that Flux apply the cluster. From slice D1.2 on, Flux's three controllers run in `flux-system`
-owning nothing, and Ansible still deploys every service, so this decision stands until
-ADR-0020 is accepted.
+ADR-0020 moves the cluster's deploy plane to Flux. The GitOps deployer this record kept applies
+the host plane only, until slice H7 retires it. The text below stays as written, because the
+record of a decision that was later reversed is worth more than a rewrite.
 
 ## Context
 

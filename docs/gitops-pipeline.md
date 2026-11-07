@@ -224,19 +224,11 @@ renderer reads the change at the merge commit, `promote` publishes the bundle, a
 it. `land.sh` waits on that promotion, and land-wait's changed set names the tags the landing
 gates (`docs/landing.md`).
 
-**HISTORY — until D6.12 the tick narrowed and applied the deploy plane.** `handle_broad` asked
-`deploy_tags.py narrow` which services the range reached and ran `ansible/deploy.yml --tags`
-over them. A refusal deferred the plane as `k8s_unapplied` lines (#4333), and a failed narrowed
-apply held the plane as `ansible/deploy.yml <tags>`. A `narrow-shadow:` line compared each
-service's applied digest with a render record.
+**HISTORY — until D6.12 the tick narrowed and applied the deploy plane.** The
+[archived page](archive/gitops-deploy-plane-narrowing.md) has that path and the play-file rule it
+applied. D6.15 removed the `narrow` subcommand. The two rules below remain in
+`scripts/deploy_tools/narrow_lib/`.
 
-D6.15 removed the `narrow` subcommand, and D6.18b deleted the rules it applied. Their
-record follows.
-
-- **A play file whose parsed YAML is unchanged maps to no tags.** A comment or layout edit to
-  `ansible/deploy.yml`, or to a file under `ansible/pre_tasks/`, `ansible/tasks/` or
-  `ansible/post_tasks/`, records `narrowed-to-nothing`. Any other edit to a play file refuses,
-  and so does an edit to a play-level file that is not YAML, such as `ansible.cfg`.
 - **A shared template maps to the roles that import it.** A name inside a Jinja `{# #}` comment is
   not an import. `claim-default.yaml.j2` maps to the roles whose `defaults/main.yml` declares
   `k8s_claims`, not to every caller of `k8s/manifests`, and the derivation refuses if
