@@ -74,9 +74,9 @@ legacy:
   - {path: /etc/apt/sources.list.d/github-cli.list}
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
-  # H7.61: the copies initial_setup installed, which sit ahead of /usr/bin/uv and /usr/bin/vale on
-  # PATH.
-  - {path: /usr/local/bin/uv}
+  # H7.61: the copy initial_setup installed, which sits ahead of /usr/bin/vale on PATH.
+  # /usr/local/bin/uv is not listed yet: this host's Ansible-era Loki witness still runs it, and no
+  # tick re-renders that script here. H7.59 lists it when it moves the witness.
   - {path: /usr/local/bin/vale}
   # H7.31: the maintenance wrapper the crons ran, and the Healthchecks.io key file the reboot cron
   # sourced. No other job on this host reads the key file.

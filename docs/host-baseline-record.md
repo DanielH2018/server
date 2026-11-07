@@ -40,7 +40,8 @@ the name:
   `initial_setup_packaged_hosts` lists daniel-server under `dev_tooling`, `vale` and
   `worktree_holders`. `/usr/bin/uv` and `/usr/bin/vale` are one-line execs of the `homelab-tools`
   binaries, and the dotfiles repo installs the per-user uv, prek and Python. On daniel-server the
-  role keeps only `ansible-core` and `ansible-lint`, which `~/.local/bin/uv` installs.
+  role keeps only `ansible-core` and `ansible-lint`, which `/usr/bin/uv` installs. The stale
+  `/usr/local/bin/uv` stays there, with no writer, for the Loki witness until H7.59 retires both.
 - **Every tool this role installs is pinned, and a bump needs its digest regenerated** (#2148).
   uv's version, installer URL and sha256 sit together at
   `initial_setup_uv_version` in the role's `defaults/main.yml`, so

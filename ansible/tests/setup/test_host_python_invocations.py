@@ -278,7 +278,7 @@ def test_the_hooks_use_the_uv_that_exists_without_the_tooling_tag():
     """There are exactly two correct absolute uv paths, and picking the wrong one fails silently.
 
     `/usr/local/bin/uv` is a copy the `tooling` tag of `initial_setup` publishes on daniel-box, and
-    daniel-server's package retires it for `/usr/bin/uv`. The Claude hooks avoid both. They
+    `/usr/bin/uv` is the `uv` component's wrapper. The Claude hooks avoid both. They
     must also work on a host that never ran the `tooling` tag, and `/home/<user>/.local/bin/uv`
     exists wherever uv is installed without depending on a `become: true` copy task having
     run. It is what their sibling hooks already use. The hooks route stderr to /dev/null and

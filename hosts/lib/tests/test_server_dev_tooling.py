@@ -10,10 +10,12 @@ Run: uv run pytest hosts/lib/tests/test_server_dev_tooling.py
 
 import json
 
+import jinja2
 import pytest
 
 from deploy_tools.setup_lib.setup_gates import packaged_guard_hosts
 from lib import yaml_fast
+from lib.estate import role_defaults
 from lib.repo_paths import ANSIBLE
 from renderer.renderer_lib import host as host_mode
 
@@ -86,10 +88,17 @@ def _wrapper_execs(package: host_mode.Package, tool: str) -> bool:
     return mode == 0o755 and f'exec /usr/lib/homelab/bin/{tool} "$@"' in body.decode()
 
 
-def test_uv_reaches_both_hosts_and_only_daniel_server_retires_the_old_copy(server, box):
+def test_uv_reaches_both_hosts_and_the_old_copy_outlives_its_ansible_readers(
+    server, box
+):
     assert _wrapper_execs(server, "uv")
     assert _wrapper_execs(box, "uv")
-    assert "/usr/local/bin/uv" in _legacy_paths(server)
+    # daniel-server's Loki witness is the role's script until H7.59, and no tick re-renders it.
+    assert (
+        "/usr/local/bin/uv"
+        in (ROLE / "templates/loki-read-route-health.sh.j2").read_text()
+    )
+    assert "/usr/local/bin/uv" not in _legacy_paths(server)
     assert "/usr/local/bin/uv" not in _legacy_paths(box)
     assert "homelab-tools" in server.depends and "homelab-tools" in box.depends
 
@@ -112,12 +121,44 @@ def test_the_role_skips_the_subject_on_daniel_server_and_keeps_daniel_box(
     assert packaged_guard_hosts([when], (HOST, "daniel-box"), ROLE) == {HOST}
 
 
-def test_the_ansible_tools_keep_running_on_daniel_server():
-    # ansible-core and ansible-lint stay until H7.63, and the home resolver with them.
+def _task(name: str) -> dict:
     tasks = yaml_fast.safe_load((ROLE / "tasks" / "host-basics.yml").read_text())
-    for name in (
+    return next(t for t in tasks if t.get("name") == name)
+
+
+def test_the_ansible_tools_keep_running_on_daniel_server():
+    # ansible-core and ansible-lint stay until H7.63, and only prek leaves.
+    install = _task("Install Python CLI tooling as uv tools")
+    assert [item.partition("==")[0] for item in install["loop"]] == [
+        "ansible-core",
+        "ansible-lint",
+    ]
+    assert packaged_guard_hosts([install["when"]], (HOST,), ROLE) == frozenset()
+    assert [
+        item.partition("==")[0] for item in _task("Install prek as a uv tool")["loop"]
+    ] == ["prek"]
+
+
+@pytest.mark.parametrize(
+    ("host", "uv"),
+    [(HOST, "/usr/bin/uv"), ("daniel-box", "/home/op/.local/bin/uv")],
+)
+@pytest.mark.parametrize(
+    "name",
+    [
         "Install Python CLI tooling as uv tools",
         "Read the uv tools this host already has",
-    ):
-        when = next(t for t in tasks if t.get("name") == name)["when"]
-        assert packaged_guard_hosts([when], (HOST,), ROLE) == frozenset()
+    ],
+)
+def test_the_tool_tasks_run_the_uv_their_host_is_sure_to_have(name, host, uv):
+    # A rebuilt daniel-server has no ~/.local/bin/uv until the dotfiles repo has run.
+    task = _task(name)
+    rendered = jinja2.Template(task["vars"]["initial_setup_tool_uv"]).render(
+        inventory_hostname=host,
+        initial_setup_packaged_hosts=role_defaults(ROLE)[
+            "initial_setup_packaged_hosts"
+        ],
+        initial_setup_user_home={"stdout": "/home/op"},
+    )
+    assert rendered.strip() == uv
+    assert "{{ initial_setup_tool_uv }}" in task["ansible.builtin.command"]

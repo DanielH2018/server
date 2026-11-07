@@ -255,7 +255,13 @@
   # below compares its pins against. A `creates:` guard on the tool directory would be
   # satisfied by any version, so a pin here would never reach a host that already has the
   # tool.
-  ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv tool list"
+  vars:
+    # A rebuilt host whose package owns dev_tooling gets ~/.local/bin/uv from the dotfiles repo,
+    # which need not have run yet, and the package ships this path.
+    initial_setup_tool_uv: >-
+      {{ '/usr/bin/uv' if inventory_hostname in initial_setup_packaged_hosts['dev_tooling']
+         else initial_setup_user_home.stdout ~ '/.local/bin/uv' }}
+  ansible.builtin.command: "{{ initial_setup_tool_uv }} tool list"
   register: initial_setup_uv_tools
   changed_when: false
   failed_when: false
@@ -274,7 +280,12 @@
   #                    one the tests and `uv run ansible-playbook` resolve.
   #   ansible-lint  == prek.toml's ansible/ansible-lint rev (the hook's own version).
   # Renovate rewrites each pin here in the same PR as its twin (renovate.json groups them).
-  ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv tool install --python 3.15 {{ item }}"
+  vars:
+    # The same choice as the read above.
+    initial_setup_tool_uv: >-
+      {{ '/usr/bin/uv' if inventory_hostname in initial_setup_packaged_hosts['dev_tooling']
+         else initial_setup_user_home.stdout ~ '/.local/bin/uv' }}
+  ansible.builtin.command: "{{ initial_setup_tool_uv }} tool install --python 3.15 {{ item }}"
   loop:
     - ansible-core==2.22.0rc2
     - ansible-lint==26.10.1

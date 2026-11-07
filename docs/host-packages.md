@@ -736,21 +736,29 @@ daniel-server installs from daniel-box's repository, so daniel-box and the repos
     sudo k3s kubectl get node daniel-server
     ```
 
+1. As the operator, apply the dotfiles. They install the per-user uv, `prek` and the pinned Python,
+   which the host's `uv` units read because they run with `--no-python-downloads`. The chezmoi
+   binary comes from `homelab-tools`:
+
+    ```bash
+    /usr/lib/homelab/bin/chezmoi init --apply --promptBool work=false,agent=false \
+        --promptString profile=server DanielH2018/dotfiles
+    ~/.local/bin/uv python list --only-installed
+    ```
+
+1. To commit from the host, clone the repo and install its git hooks. No package or role runs this:
+
+    ```bash
+    git clone https://github.com/DanielH2018/server.git ~/server
+    cd ~/server
+    ~/.local/bin/prek install
+    ```
+
 Until H7.34 lands, the node this section builds lacks the items that *What the packages do not hold
 yet* lists, so it does not yet serve the cluster.
 
 The agent keeps the server token, because k3s documents no switch to an agent-scoped token for an
 agent that has already joined.
-
-### Installing the git hooks after a rebuild
-
-To commit from a rebuilt daniel-server, install the git hooks once in the operator's clone. The
-dotfiles repo installs `prek`, and no package or role runs this step there:
-
-```bash
-cd ~/server
-prek install
-```
 
 ### Rebuilding with GitHub or GHCR unreachable
 

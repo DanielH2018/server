@@ -9,9 +9,10 @@
 # package that stops writing /usr/local/bin/uv lists it as a legacy entry beside this component. The
 # per-user uv under ~/.local/bin is the dotfiles repo's.
 #
-# DECIDED: the setup roles that only daniel-box applies keep naming /usr/local/bin/uv until H7.62.
-# The GitOps tick re-renders them within ten minutes of a merge, while daniel-box's package waits on
-# the rollout gate, so a repoint there would run a path that does not exist yet.
+# DECIDED: the setup roles keep naming /usr/local/bin/uv until their host's own move. On daniel-box
+# the GitOps tick re-renders them within ten minutes of a merge, while the package waits on the
+# rollout gate, so a repoint there would run a path that does not exist yet. On daniel-server no tick
+# re-renders the Loki witness, so retiring the path there waits for H7.59, which moves the witness.
 depends:
   - homelab-tools
 files:
