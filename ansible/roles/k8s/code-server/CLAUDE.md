@@ -5,7 +5,7 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 `daniel-box.yml`.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=code-server` with exit 5
 - **Image:** `ghcr.io/danielh2018/code-server` (`code_server_k8s_image`)
@@ -19,7 +19,7 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   k8s/image-builder before D5.16.
 - **Host:** daniel-box (k3s), pinned by a required node affinity · **Port:** 8443
 - **Flux applies it, not Ansible** (D5.16, Wave C). Its `containers_list` entry carries
-  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged
+  `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy:
   false` still stops Renovate's
   automerge of a base-image or build-pin bump.
@@ -45,8 +45,7 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   Kustomization (below) pulls the image onto the node while the old pod still serves, so the
   Deployment keeps the default rollout budget and the editor is down only for the container
   start.
-- **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/image-builder` and
-  `k8s/manifests`, and no Flux path runs either. They stay until R4 deletes them. The defaults name
+- **Where the tasks went.** The defaults name
   `<k8s_registry_pull_host>/code-server`; the renderer rewrites both refs to the GHCR one with
   `imagePullPolicy: IfNotPresent` (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). The
   snapshot Job replaces k8s/volume-snapshot's pre-apply snapshot, and the Kustomization's

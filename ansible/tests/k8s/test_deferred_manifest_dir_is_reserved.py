@@ -29,15 +29,6 @@ from test_no_role_stages_files_in_a_pruned_manifest_dir import (
     owning_roles,
 )
 
-# Named rather than counted, so a rename cannot empty the census and leave the invariant below
-# passing over nothing (.claude/rules/python-layout.md).
-KNOWN_DEFERRED_DIRS = {
-    "pihole-instance-2": "pihole",
-    "headlamp-observability": "headlamp",
-    "netpol-baseline-observability": "netpol-baseline",
-    "flux-sync": "flux",
-}
-
 
 def deferred_dirs(roles_dir: Path) -> dict[str, str]:
     """Deferred directory name -> the role that hands it to `k8s/manifests`."""
@@ -105,11 +96,6 @@ def test_a_service_claiming_a_deferred_directory_is_flagged(tmp_path):
     root = write_fixture_role(tmp_path, "gadget", _DEFERRER)
     write_fixture_role(root, "second", _CLAIMER.format(service="gadget-instance-2"))
     assert set(deferred_name_claims(root)) == {"gadget-instance-2"}
-
-
-def test_the_census_finds_the_known_deferred_directories():
-    """Non-vacuity: an empty reader makes the invariant below pass over nothing."""
-    assert deferred_dirs(K8S_ROLES) == KNOWN_DEFERRED_DIRS
 
 
 def test_no_manifests_service_claims_a_deferred_manifest_directory():

@@ -20,7 +20,7 @@
 #
 # The reads below are deliberately NOT guarded on k8s_no_mutate, and carry `check_mode: false` so
 # `--check` runs them for real, matching every other guarded task in this file — but the caller in
-# roles/k8s/manifests gates the WHOLE include of this role on `not (k8s_no_mutate | bool)`, so
+# ansible/volume-revert.yml gates the WHOLE include of this role on `not (k8s_no_mutate | bool)`, so
 # neither `--check` nor `--dry-run` ever reaches this file at all. See CLAUDE.md's "The guard is
 # k8s_no_mutate" section: these two tasks are correct in isolation and untested as reached.
 - name: Resolve the Longhorn volume backing {{ volume_revert_claim }}
@@ -141,7 +141,7 @@
   # Guarded on `k8s_no_mutate` like every other decision that stops the play, and REPORTS the
   # absence in the next task instead of aborting, rather than failing `--check`/`--dry-run` too.
   # Defence in depth only — the include of this whole role is itself gated on
-  # `not (k8s_no_mutate | bool)` in roles/k8s/manifests, so neither mode reaches this task in the
+  # `not (k8s_no_mutate | bool)` in ansible/volume-revert.yml, so neither mode reaches this task in the
   # one call site that exists today. See CLAUDE.md's "The guard is k8s_no_mutate" section.
   ansible.builtin.fail:
     msg: >-
@@ -163,7 +163,7 @@
 - name: Report a dry run with nothing to revert for {{ volume_revert_claim }}
   tags: [deploy]
   # The dry-run half of the task above. Unreachable today (see the note on that task): the
-  # include of this role never runs under `--check`/`--dry-run` in roles/k8s/manifests, so this
+  # include of this role never runs under `--check`/`--dry-run` in ansible/volume-revert.yml, so this
   # debug never fires in this repo. Kept as defence in depth for a future call site that includes
   # this role unconditionally — see CLAUDE.md.
   when:

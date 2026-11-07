@@ -86,23 +86,6 @@ def test_a_role_that_builds_and_renders_no_workload_is_flagged(tmp_path):
     assert split_build_roles(tmp_path) == {"widget-images"}
 
 
-def test_the_split_build_census_still_sees_real_builders():
-    """Non-vacuity. An emptied caller graph would make the clean test pass over nothing.
-
-    n8n and code-server each include image-builder AND render the workload that runs it, so
-    they must be seen by one half of the census and rejected by the other.
-    """
-    callers = role_callers().get(BUILDER) or set()
-    k8s_roles = REPO / "ansible" / "roles" / "k8s"
-    for name in ("n8n", "code-server"):
-        assert name in callers, (
-            f"the census no longer sees {name} include k8s/{BUILDER}"
-        )
-        assert _renders_a_workload(k8s_roles / name), (
-            f"the census no longer sees {name}'s workload manifest"
-        )
-
-
 # --- class 2: a sibling `import_tasks` under-reports callers ----------------------------------
 #
 # `lib.k8s_roles.role_callers` recognised two spellings of "this role runs that role's tasks":
@@ -188,19 +171,6 @@ def test_a_sibling_path_import_is_flagged(tmp_path):
             "{{ role_path }}/../widget-lib/tasks/render.yml"
         ]
     }
-
-
-def test_the_tasks_file_census_is_not_empty():
-    """Non-vacuity. A glob that matched nothing would make the clean test pass over nothing.
-
-    No live k8s role imports a tasks file by path since H2.5c, when janitorr dropped its
-    cross-plane imports of setup/common, so the cross-plane-is-not-a-sibling discriminator is
-    held by the fixture in `test_a_sibling_path_import_is_flagged` alone. The named member here
-    holds the census: a role tree every k8s deploy reads.
-    """
-    seen = {p.relative_to(REPO).as_posix() for p in k8s_tasks_files()}
-    assert len(seen) >= 50, f"the k8s tasks-file census collapsed to {len(seen)} files"
-    assert "ansible/roles/k8s/manifests/tasks/main.yml" in seen
 
 
 # --- class 3: an entry declaring a second tag hides a recording caller -------------------------

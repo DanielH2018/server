@@ -86,7 +86,3 @@ def test_a_readme_under_a_roles_files_dir_ships_with_no_task():
         shipped = ha_defaults[key]
         assert shipped, key
         assert [n for n in shipped if n.endswith(".md")] == [], key
-    configarr_tasks = (
-        _REPO_ROOT / "ansible/roles/k8s/configarr/tasks/main.yml"
-    ).read_text()
-    assert "README" not in configarr_tasks

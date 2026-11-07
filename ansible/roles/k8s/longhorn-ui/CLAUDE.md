@@ -5,7 +5,7 @@ vendored upstream manifest (H1.5a), which Flux applies — this role adds only t
 and the middlewares it references, nothing else.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=longhorn-ui` with exit 5
 - **Route:** `longhorn.local.<domain>` (LAN only), Authelia two_factor
@@ -13,11 +13,10 @@ and the middlewares it references, nothing else.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5.6, the second Wave A PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays until R4 deletes it. Its three vars map onto the render:
-    - `manifests_prune_namespace` is gone from the apply. Every object carries
+- **Where the task went.** Its three vars map onto the render:
+    - The prune namespace is gone from the apply. Every object carries
       `namespace: longhorn-system` in its template, and kustomize-controller applies them
       there; its `cluster-reconciler-flux-system` binding grants `cluster-admin`
       (`ansible/roles/k8s/flux/files/gotk-components.yaml`). Flux's prune follows its own

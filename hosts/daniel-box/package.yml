@@ -129,8 +129,3 @@ files:
 legacy:
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
-  # H7.32: the maintenance wrapper the crons ran, and the firmware cron, which host-maintenance's
-  # own legacy list cannot name because only a `has_fwupd` host carries it. /etc/healthchecks
-  # stays: the k3s role's health crons on this host read the key file in it.
-  - {path: /usr/local/bin/host-maintenance.sh}
-  - {cron: "Weekly firmware update", user: root}

@@ -33,7 +33,7 @@ work already executed.
 
 ```
 ansible/          # Playbooks, roles, inventory, templates   ← EDIT HERE
-  deploy.yml          # Deploy playbook — a k8s play (dependency-ordered) + a Docker play with no entries
+  deploy.yml          # A Docker play with no entries, so it runs no role
   k3s-bringup.yml     # Cluster foundation (k3s, Longhorn, Traefik CRDs, …)
   initial_setup.yml   # Host hardening / bootstrap
   roles/k8s/          # One role per k8s workload (manifests rendered from templates)
@@ -95,17 +95,10 @@ namespace. Where policies do exist, **ingress** rules are enforced; **egress** r
 
 ## How deploys work
 
-`deploy.yml` runs two plays over the host's `containers_list`, split by each entry's
-`platform:` key:
+A k3s workload deploys through `promote` and Flux once its PR merges. `./scripts/deploy.sh`
+exits 5 for a k8s tag.
 
-- **Docker play** (`platform: docker`) — deploys nothing, because no host lists a Docker entry:
-  `scripts/validate/compose_templates.py:undeployed_docker_entries` refuses one. The Pi's
-  containers are `compose_services` entries that its `homelab-daniel-pi` package deploys, so
-  `deploy.yml` never starts them. The Pi's ordering, docker-proxy before autoheal and alloy, is
-  each service file's `depends_on`, and
-  `ansible/tests/deploy/test_platform_filter_real_inventory.py` pins it.
-
-- **k8s play** (`platform: k8s`) — toposorts `roles/k8s/<name>` with `build_k8s_dep_map` /
+- **The render** — `homelab_render.py` orders `roles/k8s/<name>` with `build_k8s_dep_map` /
   `toposort_containers` (`ansible/filter_plugins/toposort.py`, unit-tested in
   `ansible/tests/deploy/test_toposort.py`). A role rendering a Traefik CRD gets an edge onto
   `traefik`, which installs the CRDs every later `IngressRoute` depends on; `use_authelia: true` gets one onto
@@ -114,15 +107,19 @@ namespace. Where policies do exist, **ingress** rules are enforced; **egress** r
   traefik, for the LAPI machine credential) is declared as `depends_on:` on the entry instead.
   List order in `host_vars/daniel-box.yml` is only the sort's tiebreak.
 
-Both plays run against the host named by `-e target=` — but `daniel-server` and `daniel-box`
+- **`deploy.yml`** — runs a Docker play that deploys nothing, because no host lists a Docker
+  entry: `scripts/validate/compose_templates.py:undeployed_docker_entries` refuses one. The Pi's
+  containers are `compose_services` entries that its `homelab-daniel-pi` package deploys, so
+  `deploy.yml` never starts them. The Pi's ordering, docker-proxy before autoheal and alloy, is
+  each service file's `depends_on`, and
+  `ansible/tests/deploy/test_platform_filter_real_inventory.py` pins it.
+
+Ansible plays run against the host named by `-e target=` — but `daniel-server` and `daniel-box`
 are `ansible_connection=local` in `hosts.ini`, so `-e target=` only selects whose *variables*
 to use while tasks still execute locally. A pre-task refuses that case outright. Only
 `daniel-pi` is genuinely remote, so the setup plays' `-e target=daniel-pi` works as it reads.
 
 ```bash
-uv run ansible-playbook ansible/deploy.yml --tags "<service>"          # deploy one service (+ unmet deps)
-uv run ansible-playbook ansible/deploy.yml --tags "<service>" --check  # dry run
-uv run ansible-playbook ansible/deploy.yml                             # deploy everything
 uv run ansible-playbook ansible/k3s-bringup.yml                        # cluster foundation
 uv run ansible-playbook ansible/initial_setup.yml                      # host bootstrap/hardening
 ```
@@ -179,7 +176,7 @@ prek run --all-files
 Almost every new service is a **k8s** workload: add a role under `ansible/roles/k8s/<name>/`
 rendering its manifests (Deployment/Service/IngressRoute/PVC), then an entry in
 `host_vars/daniel-box.yml` `containers_list` with `platform: k8s`. Position in the list
-doesn't matter — the k8s play toposorts on derived Traefik-CRD and authelia edges, plus any
+doesn't matter — the renderer toposorts on derived Traefik-CRD and authelia edges, plus any
 `depends_on:` the entry declares — so add it wherever reads best. Deploy tags derive from
 the name.
 

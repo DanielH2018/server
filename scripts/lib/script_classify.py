@@ -53,6 +53,9 @@ __all__ = [
 # whose name says it is not an entry point.
 _EXCLUDED_PREFIXES = ("test_", "_")
 _EXCLUDED_NAMES = {"conftest.py"}
+# A Job's ConfigMap carries these files, and a pod runs them. No person or cron runs one, and
+# editing one renames the Job, so the entry-point rules do not reach them.
+_JOB_FILES = "job_files"
 
 SUFFIXES = (".py", ".sh")
 
@@ -522,6 +525,7 @@ def is_candidate(path: Path) -> bool:
         and path.suffix in SUFFIXES
         and path.name not in _EXCLUDED_NAMES
         and not path.name.startswith(_EXCLUDED_PREFIXES)
+        and _JOB_FILES not in path.parts
     )
 
 

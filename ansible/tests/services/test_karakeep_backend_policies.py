@@ -26,14 +26,9 @@ rendered manifests behind a non-vacuity assertion:
 Run: uv run pytest ansible/tests/services/test_karakeep_backend_policies.py
 """
 
-from lib.k8s_roles import resolved_manifest_files
 import pytest
-from _helpers import REPO
-from _role_census import manifests_service_of
 from _k8s_render import rendered_docs
-from lib import yaml_fast
 
-KARAKEEP_TASKS = REPO / "ansible/roles/k8s/karakeep/tasks/main.yml"
 
 # backend workload -> (the policy file that must be staged, the port wait-for-deps dials)
 BACKENDS = {
@@ -176,22 +171,4 @@ def test_each_backend_policy_opens_the_port_the_init_container_dials(
     ), (
         f"{backend}'s policy must admit {CONSUMER} on exactly {port}, the port wait-for-deps "
         f"dials. A policy on another port applies cleanly and drops the traffic"
-    )
-
-
-@pytest.mark.parametrize("backend", sorted(BACKENDS))
-def test_each_backend_policy_is_staged_by_the_deploy_task(backend):
-    """Rendering it is not shipping it — the resolved `manifests_files` is what reaches the cluster."""
-    policy_file, _port = BACKENDS[backend]
-    tasks = yaml_fast.safe_load(KARAKEEP_TASKS.read_text())
-    deploys = [
-        task for task in tasks if manifests_service_of(task, CONSUMER) == CONSUMER
-    ]
-    assert len(deploys) == 1, (
-        f"expected exactly one task deploying the karakeep manifests, found {len(deploys)}"
-    )
-    files, _secret = resolved_manifest_files(CONSUMER)
-    assert policy_file in files, (
-        f"{policy_file} must be in the karakeep role's resolved manifests_files; got "
-        f"{sorted(files)!r}. Only the names in that list are staged and applied"
     )

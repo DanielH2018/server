@@ -4,9 +4,8 @@ This role renders no manifest and starts no workload. It declares one *arr app's
 "Connect" notification over the app's own API, so the notification is repo state rather than
 UI state. Under Flux the declaration runs as a seed Job in sonarr's and radarr's
 `templates/verify/` (*The Job form*, below), which reads this role's script and defaults by
-`lookup()`. Those lookups are the role's only callers: sonarr and radarr included it from their
-`tasks/main.yml` with `arr_notification_app` until #5561, which dropped the includes because
-no Ansible path ran them after the Flux flip (D5.20). `tasks/` stays until R4 deletes it.
+`lookup()`. Those lookups are the role's only callers: sonarr and radarr included it until #5561, which dropped the includes because
+no Ansible path ran them after the Flux flip (D5.20).
 
 **Why it exists.** A Connect notification is a row in `sonarr.db` / `radarr.db` on the app's
 config PVC. No manifest reproduces it, so a Longhorn revert past its creation, or anyone
@@ -80,12 +79,12 @@ ARR_APP=… ARR_HOST=<clusterIP> ARR_API_KEY=… ARR_DISCORD_WEBHOOK_URL=… \
 ARR_NOTIFICATION_NAME='Discord (health)' ARR_NOTIFICATION_USERNAME=Sonarr \
 ARR_NOTIFICATION_TRIGGERS='["onHealthIssue","onHealthRestored"]' \
 ARR_NOTIFICATION_INCLUDE_HEALTH_WARNINGS=false \
-PYTHONPATH=ansible/roles/k8s/manifests/files \
+PYTHONPATH=scripts/renderer/job_files \
 uv run python ansible/roles/k8s/arr-notification/files/seed_arr_notification.py --test
 ```
 
 `PYTHONPATH` is there because the script opens every connection through
-`flux_job_connect.py`, which lives in `k8s/manifests`. `tasks/main.yml` sets the same path.
+`flux_job_connect.py`, which lives in `scripts/renderer/job_files/`.
 
 ## The Job form
 

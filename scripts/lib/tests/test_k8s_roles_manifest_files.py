@@ -209,13 +209,3 @@ def test_a_folded_list_in_defaults_is_read(tmp_path):
         {"deployment.yaml", "route.yaml"},
         {"secret.yaml"},
     )
-
-
-def test_a_file_list_set_in_tasks_is_flagged(tmp_path):
-    role = _role(tmp_path, "widget", "---\n")
-    (role / "tasks").mkdir()
-    (role / "tasks" / "main.yml").write_text(
-        "---\n- name: Deploy widget\n  vars:\n    manifests_files: [a.yaml]\n"
-    )
-    with pytest.raises(ValueError, match=r"manifests_files.*tasks/main\.yml"):
-        resolved_manifest_files("widget", tmp_path)

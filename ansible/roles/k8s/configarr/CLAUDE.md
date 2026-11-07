@@ -12,7 +12,7 @@ reputation**. A `[NTRX] … (BD Remux 1080p AVC …)` grab in 2026-07 shipped a 
 x265 re-encode instead, which made Jellyfin buffer and seek slowly.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=configarr` with exit 5
 - **Images:** `ghcr.io/raydak-labs/configarr` (`configarr_k8s_image`), `python`
@@ -22,7 +22,7 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5, Wave D). Its `containers_list` entry carries
-  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
+  `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Host: daniel-box (k8s CronJob).** This role renders `templates/config/config.yml.j2` and
   stages `files/configarr_lib/configarr_status.py` into a ConfigMap. Edit the config HERE.
@@ -40,7 +40,7 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
 - **The health reader was a daniel-box host cron until H2.5b.** The absent arms for the cron,
   `/opt/configarr-health`, `/usr/local/bin/configarr-health.sh` and the `configarr` drift
   fragment live in `ansible/roles/setup/k8s_host_files/tasks/configarr.yml`, which the setup
-  plane applies. D5's conversion PR moved them out of `tasks/main.yml` ahead of the Flux flip.
+  plane applies. D5's conversion PR moved them out of the role's tasks ahead of the Flux flip.
 - **`flux_cronjob_gates` in `defaults/main.yml` names the two gate Jobs.** The renderer copies
   each CronJob's `jobTemplate` into `configarr-verify` as `<cronjob>-deploy-gate-<spec
   digest8>`, so the reconcile's Job is `configarr-deploy-gate-<spec digest8>` and the reader's

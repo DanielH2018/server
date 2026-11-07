@@ -55,9 +55,9 @@ units:
   homelab-registry-gc.service: {policy: manual, when: registry_k8s_manage_gc}
 enable:
   homelab-registry-gc.timer: {target: timers.target, when: registry_k8s_manage_gc}
-# What k8s_host_files installed. Reconcile retires each after it has tried to start the timer, and
-# it retires them even when that start failed. The two Job manifests keep their paths, and dpkg
-# replaces the unowned files.
+# What k8s_host_files installed. Reconcile retires each once the timer has started, and keeps
+# each while that start fails. The two Job manifests keep their paths, and dpkg replaces the
+# unowned files.
 legacy:
   - {cron_file: registry-gc}
   - {path: /usr/local/bin/registry-gc.sh}

@@ -107,7 +107,7 @@ else.
     - Test docstrings and failure messages: "six workloads" and "these six" in
       `test_observability_stabilise_coverage.py`; "its six workloads",
       "the two workloads that read one", "names the six", "restarts all six" and "Five of the
-      six" in `ansible/tests/k8s/test_self_rollouts_follow_the_apply.py`; "eight manifests"
+      six" in `test_self_rollouts_follow_the_apply.py`; "eight manifests"
       in `ansible/tests/services/test_observability_config_rolls_one_workload.py`.
 
   A past-tense account of an incident, such as "snapshotted all six workloads" (#3133), stays
@@ -170,7 +170,7 @@ else.
   A Traefik middleware reads the third, and no pod does. The release record decides each
   rollout's `restart` from the same register, in
   `ansible/roles/k8s/manifests/tasks/release_stamp.yml`.
-  `ansible/tests/k8s/test_self_rollouts_follow_the_apply.py` pins that behaviour in
+  `test_self_rollouts_follow_the_apply.py` pins that behaviour in
   `test_observability_a_changed_secret_expects_only_its_two_readers_to_roll` and
   `test_observability_private_restart_reads_the_same_facts_as_the_record`. The first one
   asserts that the rollouts marked `restart: true` are exactly `{"prometheus", "grafana"}`. It
@@ -961,7 +961,7 @@ and those edits must land with the workload.
       `alertmanager` beside `kube-state-metrics`, because it mounts a Secret and no role
       ConfigMap. Its failure message names both reasons.
 
-  In `ansible/tests/k8s/test_self_rollouts_follow_the_apply.py`,
+  In `test_self_rollouts_follow_the_apply.py`,
   `test_observability_a_changed_secret_expects_only_its_two_readers_to_roll` becomes
   `test_observability_a_changed_secret_expects_only_its_secret_readers_to_roll`. Its expected
   set gains `alertmanager`, because it reads the real defaults (*Baseline*), and its docstring
@@ -1101,7 +1101,7 @@ and those edits must land with the workload.
   exit criterion 4. It is also the shape of every later edit, because M2 to M6 edit that
   value.
 - Test edits in the same PR:
-    - In `ansible/tests/k8s/test_self_rollouts_follow_the_apply.py`, rewrite two tests for
+    - In `test_self_rollouts_follow_the_apply.py`, rewrite two tests for
       the stamp's `restart: false` and the amend:
       `test_observability_a_changed_secret_expects_only_its_secret_readers_to_roll`, under
       PR 2's name, and `test_observability_private_restart_reads_the_same_facts_as_the_record`.
@@ -1397,7 +1397,7 @@ Each risk names its class from `docs/failure-classes.md`.
       `alertmanager` row joins `netpol_baseline_probe_targets`, under PR 1's `policy` test.
       `ansible/tests/k8s/test_pod_template_hygiene.py` passes unchanged, because the tier is
       one of its four classes. The validator gains the Go-template survival pair.
-      In `ansible/tests/k8s/test_self_rollouts_follow_the_apply.py`, the two-readers test is
+      In `test_self_rollouts_follow_the_apply.py`, the two-readers test is
       renamed for its secret readers and its expected set gains `alertmanager`. The count
       words in the docstrings and failure messages of that file and of
       `test_observability_stabilise_coverage.py` and
@@ -1436,7 +1436,7 @@ Each risk names its class from `docs/failure-classes.md`.
       fragment's `generated_from` header names the observability defaults.
 - **PR 5.**
     - Tests: the two rewritten tests (the secret-readers test under PR 2's name) in
-      `ansible/tests/k8s/test_self_rollouts_follow_the_apply.py`; the per-Secret pair, the
+      `test_self_rollouts_follow_the_apply.py`; the per-Secret pair, the
       snapshot pair, the Grafana password sync pair, the `no_log` run and the fingerprint pair
       in `test_observability_secret_restarts.py`; and the `restart_secrets`
       census in

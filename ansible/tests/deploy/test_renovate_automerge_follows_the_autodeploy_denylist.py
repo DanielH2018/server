@@ -258,30 +258,6 @@ def test_the_landers_denylist_output_is_the_list_this_rule_reads(
     assert set(capsys.readouterr().out.strip().split(",")) == _denylist()
 
 
-def _fixture_role(ansible: Path, name: str, stance: str) -> None:
-    (ansible / "roles" / "k8s" / name / "defaults").mkdir(parents=True)
-    (ansible / "roles" / "k8s" / name / "defaults" / "main.yml").write_text(
-        f'k8s_autodeploy: {stance}\nk8s_autodeploy_reason: "because"\n'
-    )
-
-
-def test_the_landers_denylist_output_names_a_role_whose_stance_flips(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    (tmp_path / "roles" / "k8s" / "manifests").mkdir(parents=True)
-    _fixture_role(tmp_path, "denied", "false")
-    _fixture_role(tmp_path, "flips", "true")
-    assert k8s_autodeploy_counts.print_denylist(tmp_path) == 0
-    assert capsys.readouterr().out == "denied\n"
-
-    (tmp_path / "roles" / "k8s" / "flips" / "defaults" / "main.yml").write_text(
-        'k8s_autodeploy: false\nk8s_autodeploy_reason: "because"\n'
-    )
-    assert k8s_autodeploy_counts.print_denylist(tmp_path) == 0
-    assert capsys.readouterr().out == "denied,flips\n"
-
-
 def test_the_landers_denylist_output_is_empty_when_the_derivation_raises(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

@@ -5,7 +5,7 @@ daniel-server entirely). Pinned to daniel-server — the APC UPS is USB-attached
 the pin is physical and never unwinds.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=nut`
   with exit 5
 - **Image:** `ghcr.io/danielh2018/nut` (`nut_k8s_image`)
@@ -34,8 +34,7 @@ the pin is physical and never unwinds.
   adds nothing to the restart checksum the renderer stamps on nut, and adding it rolled
   nothing.
 - **Flux applies it, not Ansible** (D5.17, Wave C's UPS PR, which went alone). Its
-  `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
-  deployer all skip it. A merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. The Deployment is `Recreate`, so every roll stops upsd for the container
   start, plus a pull
   when the content tag moved. That gap is time without power-cut shutdown coverage. The flip
@@ -47,8 +46,7 @@ the pin is physical and never unwinds.
   does not serve it yet (`scripts/deploy_tools/ci_images.py`). So a merged edit to
   `files/entrypoint.sh`, `files/upssched-cmd` or `templates/Dockerfile.j2` moves the content
   tag, and the next promotion builds the image and rolls the pod.
-- **Where the tasks went.** `tasks/main.yml` holds two includes, and no Flux path runs either.
-  They stay until R4 deletes them. The `k8s/image-builder` include became promote's `images` job
+- **Where the tasks went.** The `k8s/image-builder` include became promote's `images` job
   (D5.4a2) and the GHCR ref (D5.4b). The role's `manifests_rollout: nut`
   names the Deployment for the stabilisation gate and the shared restart. The Kustomization's
   `wait` replaces the gate, and the restart checksum the renderer stamps replaces the restart.

@@ -4,7 +4,7 @@ Eclipse Mosquitto, the broker every Zigbee device event and HA automation trigge
 web UI, no route — infra role.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=mosquitto` with exit 5
 - **Image:** `eclipse-mosquitto` (`mosquitto_k8s_image`)
@@ -13,14 +13,12 @@ web UI, no route — infra role.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5.20, a Wave D PR with sonarr and radarr). Its
-  `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
-  deployer all skip it, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. zigbee2mqtt is Flux-owned too and depends on it. The Deployment is
   `Recreate`, so a change
   that rolls it drops every MQTT client briefly. `mosquitto-data` is on `longhorn-nobackup`,
   and the role declares no snapshot claim, so the tag renders no `-snapshot` Job.
-- **Where the tasks went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays until R4 deletes it. Its two asserts each have a successor.
+- **Where the tasks went.** Its two asserts each have a successor.
   The colon refusal moved into `cluster_vars.py write` (below). The LAN-address assert became
   observability's `MosquittoLanAddressNotPinned` rule, which the soak reads. The
   Kustomization's `wait` replaces the rollout wait.

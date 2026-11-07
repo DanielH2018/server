@@ -9,7 +9,7 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 > only git history has it; `containers/n8n/data` is on disk.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=n8n`
   with exit 5
 - **Images:** `ghcr.io/danielh2018/n8n` (`n8n_k8s_image`), `ghcr.io/danielh2018/n8n-runners`
@@ -20,7 +20,7 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (#5546, Wave C). Its `containers_list` entry carries
-  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
+  `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy: false`
   still stops Renovate's
   automerge of a base-digest bump.
@@ -42,9 +42,7 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
   affinity would close that gap, at the cost of no failover while daniel-box is down; that
   is an operator choice this role has not made. `defaults/main.yml` has the measurements, and
   `docs/flux-deploy-plane.md`, *The pre-pull Job*, has the mechanism.
-- **Where the tasks went.** `tasks/main.yml` holds the two `k8s/image-builder` includes and
-  the `k8s/manifests` include, and no Flux path runs any of them. They stay until R4 deletes them.
-  The builds became the `images` job, and the Kustomization's `wait` replaces the rollout
+- **Where the tasks went.** The builds became the `images` job, and the Kustomization's `wait` replaces the rollout
   wait. The broker-isolation probe that followed them became the `n8n-verify` Job, and its
   tasks were deleted.
 - **Base images:** each Dockerfile is `FROM` the upstream `:stable` channel tag with a digest
