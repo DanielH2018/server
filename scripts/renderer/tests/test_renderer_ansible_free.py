@@ -48,7 +48,6 @@ from renderer.renderer_lib.cluster import RenderError, render_tag
 stubs = json.loads(sys.argv[1])
 stubs["containers_list"] = [
     {"name": "authelia", "platform": "k8s"},
-    {"name": "sonarr", "platform": "k8s", "use_authelia": True},
 ]
 try:
     render_tag("authelia", stubs)

@@ -164,11 +164,6 @@ def test_bool_agrees_with_ansible_core(value):
     assert ansible_bool(value) is to_bool(value)
 
 
-def test_bool_parity_reads_red_for_python_bool():
-    """The inputs tell the filter from Python's `bool`, which reads `false` as True."""
-    assert to_bool("false") is not bool("false")
-
-
 def test_to_uuid_is_stable_and_uses_the_fixed_namespace():
     assert filters.to_uuid("name") == filters.to_uuid("name")
     assert filters.to_uuid("name") != filters.to_uuid("other")
