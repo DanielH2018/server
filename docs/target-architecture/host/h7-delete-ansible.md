@@ -2320,9 +2320,11 @@ the `manual_plane` clearing, and *Rollback*'s
       thing that made `/var/lib/node-exporter-textfile` writable by the sys user here, so the
       component gains a `tmpfiles.d` line, which also holds it on a rebuilt host. The
       `rsyslog-filter` component lists `rsyslog` as a `Depends`, and reconcile runs
-      `rsyslogd -N1` before its try-restart, which replaces the role's parse check. The role's
-      copies of the witness script and reader go with its tasks, and
-      `loki_route_witness_hosts` goes with them. daniel-server held neither Kuma file on
+      `rsyslogd -N1` before its try-restart, which replaces the role's parse check.
+      `loki_route_witness_hosts` goes with the tasks. The role's copies of the witness script
+      and reader stay until H7.60 with no task naming them: daniel-server's setup-drift reader
+      reports a missing source as drift until reconcile retires the two fragments that name
+      them. daniel-server held neither Kuma file on
       2026-11-07, so as on the Pi its package lists neither.
 35. **H7.61 and H7.62 land the dev tooling and the worktree holder scan in canary order.**
     Only `dev_tooling_hosts` and the `has_claude_code` hosts run these tasks, and both lists

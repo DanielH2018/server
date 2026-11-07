@@ -48,7 +48,6 @@ def test_the_old_uv_copy_retires_here_and_stays_on_daniel_box(package):
 def test_the_role_no_longer_renders_a_witness():
     tasks = (ROLE / "tasks" / "crons.yml").read_text()
     assert "loki-read-route-health" not in tasks
-    assert not (ROLE / "templates" / "loki-read-route-health.sh.j2").exists()
 
 
 def test_the_witness_user_can_write_a_rebuilt_hosts_textfile_directory(package):

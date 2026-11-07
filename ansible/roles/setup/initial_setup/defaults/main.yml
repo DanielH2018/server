@@ -58,6 +58,9 @@ initial_setup_worktree_holders_group: worktree-holders
 #           and bootstrap step 4 own them on a listed host (H7.58, H7.59). host_basics covers the
 #           swap, apt and package tasks of host-basics.yml, and leaves its tooling tasks.
 #   rsyslog_filter: the rsyslog info filter. The rsyslog-filter component ships it (H7.59).
+# No task names templates/loki-read-route-health.sh.j2 or files/loki_route_health.py. They stay
+# byte-identical until H7.60, because daniel-server's setup-drift reader compares them until
+# reconcile retires the two fragments that name them, and a missing source reads as drift.
 #   dev_tooling: the per-user uv, prek and Python, the /usr/local/bin/uv copy and the git hooks.
 #           The dotfiles repo installs the per-user tools, the uv component ships /usr/bin/uv and
 #           the cluster-node procedure runs `prek install`. ansible-core and ansible-lint stay on
