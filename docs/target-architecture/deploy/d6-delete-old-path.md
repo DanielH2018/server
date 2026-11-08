@@ -1040,15 +1040,21 @@ play has no job left, and R4 deletes it with the play.
   Secret in place when the root prunes the `cluster-vars` Kustomization. Under the default
   policy, a `cluster-vars` that left the bundle would delete the Secret, and every
   substituting tag would then fail to build. C3 gives Secrets no prune exemption.
-- **The root `homelab` and every other per-tag kind: `<tag>-snapshot`, `<tag>-prepull`,
-  `<tag>-precheck` and `<tag>-verify`.** Their Jobs expire under D5.1a3's TTL census. The same
-  directories also hold ServiceAccounts, Roles, RoleBindings and ConfigMaps, and `-snapshot`
-  holds a ClusterRole and a ClusterRoleBinding, which a retired tag leaves behind.
-  `docs/flux-deploy-plane.md`'s retirement procedure says which of them a first PR removes and
-  which the operator deletes.
+- **The root `homelab` and the per-tag kinds `<tag>-precheck` and `<tag>-verify`.** Their
+  Jobs expire under D5.1a3's TTL census. The same directories can also hold ServiceAccounts,
+  RBAC and ConfigMaps, which `docs/flux-deploy-plane.md`'s retirement procedure removes in a
+  first PR that empties their templates.
+- **Amended by #7485: `<tag>-snapshot` and `<tag>-prepull` take the default policy.** The
+  renderer derives both from the role's claims and defaults, so no emptied template reaches
+  them, and under `Orphan` a retired tag left a ClusterRole, a ClusterRoleBinding, Roles, a
+  ServiceAccount and ConfigMaps behind. Every object they render is named `snapshot-<tag>` or
+  `prepull-<tag>`, so no other Kustomization adopts one, and the `-deferred` race has no
+  counterpart. When a role drops its last snapshot claim or its prepull timeout while the tag
+  stays, the kind's finalizer deletes its scaffolding, which nothing else uses.
 
 **The switched set is defined positively, and the kept set is everything else.** D6.7
-switches the per-tag `<tag>` Kustomizations, one per deploy tag, except `flux`. Every other
+switches the per-tag `<tag>` Kustomizations, one per deploy tag, except `flux`. #7485 adds
+each tag's `-snapshot` and `-prepull`, `flux`'s again excepted. Every other
 Kustomization the renderer emits keeps `Orphan`. A later shared kind therefore keeps `Orphan`
 without an edit to this list.
 
@@ -1582,8 +1588,9 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18b, and D6.1
     - **Written ahead: yes.** The census row's floor is the count of k8s entries that D5
       ends with, so the writer fills that number in at rebase.
     - **Waits on:** D6.12, merged. It builds on D6.12's changed-set wiring.
-    - **Operator gates:** in its review, the operator decides whether `deploy_ui` retires with
-      the deployer (**operator-only**, Open question 1).
+    - **Operator gates:** in its review, the operator decided whether `deploy_ui` retires with
+      the deployer. It does not: #7419 ruled on 2026-11-07 that H7.50 re-homes it (Open
+      question 1).
     - **Before merge:** the `k8s_remediation` symbol grep, `land.py --help`,
       `deploy_tags.py changed origin/master`, the fallback test's red run, and D6.12's four
       landing tests.
@@ -2948,9 +2955,12 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
    `probe.py releases`. The operator wants a live view of landings in progress, and the page's
    in-flight panel is the only one in a browser. So the daemon, its route and its firewall rule
    stay through D6, with the in-flight panel, the land and cancel controls and the hold clear.
-   Resolution: this settles the button half. The `DEPLOY_HOLD` half and whether the daemon
-   retires with the deployer stay with the operator in D6.15's review (**operator-only**). The
-   design's open question 4 names this.
+   Resolution: this settles the button half. On 2026-11-07 the operator ruled that the daemon
+   does not retire with the deployer
+   ([#7419](https://github.com/DanielH2018/server/issues/7419)): H7.50 re-homes it with its
+   in-flight panel into daniel-box's host package, and H7.19b removes the hold clear with the
+   deployer's state. D6.15's review recorded no move onto `DEPLOY_HOLD`, so that half is closed.
+   The design's open question 4 names this.
 2. **Do ADR-0011, ADR-0012 and ADR-0017 need amendments?** `gitops-deploy.service` still takes
    the tree lock for the host plane, and `deploy.sh` still takes it for the Pi. design.md
    leaves the amendments to the operator, and R4's open question 8 asks the same about 0012.

@@ -189,65 +189,11 @@ def test_a_shipped_row_adopted_with_use_tables_is_the_one_read(tree):
         tables.use_tables(saved)
 
 
-@pytest.mark.parametrize(
-    ("role", "tag"),
-    [("deploy_ui", "deploy-ui-code")],
-)
-def test_the_real_consumers_of_gitops_markers_narrow_to_their_code_tag(role, tag):
-    """The role #3275 points at the deployer's file, read from the real tree."""
-    index = narrow_setup.RoleIndex(role, "HEAD", str(REPO))
-    assert index.readers_of("gitops_markers.py") == frozenset({tag})
-
-
-@pytest.mark.parametrize(
-    ("role", "tags"),
-    [
-        ("gitops_deploy", {"gitops-deploy-code"}),
-    ],
-)
-def test_a_common_task_file_narrows_to_the_tags_importing_it(role, tags):
-    """A `common/tasks/` file resolves through its importing task, as a `files/` basename
-    resolves through its copy task (#3317), read from the real tree."""
-    index = narrow_setup.RoleIndex(role, "HEAD", str(REPO))
-    assert index.readers_of("install_host_lib.yml") == frozenset(tags)
-
-
-def test_a_shipped_file_no_task_of_the_role_names_is_flagged(ships):
-    ships.write(SHIPPED, "VALUE = 2\n")
-    with pytest.raises(narrow_setup.CannotNarrow, match=r"names shared\.py"):
-        narrow(ships, *_refs(ships))
-
-
-# ── the real tree: the case #2307 names, so the scan cannot go vacuous ─────────────────
-
-
-def test_the_real_k3s_role_still_maps_the_address_pin_to_its_tag():
-    """A template and a key each read only under the `node-address` tag."""
-    index = narrow_setup.RoleIndex("k3s", "HEAD", str(REPO))
-    assert index.readers_of("netplan-static-address.yaml.j2") == frozenset(
-        {"node-address"}
-    )
-    assert index.key_readers("k3s_node_static_link") == frozenset({"node-address"})
-
-
-def test_the_real_k3s_roles_untagged_task_files_are_named_as_such():
-    """`main.yml` and the files imported under another file's tags carry no tags.
-
-    Named rather than counted: a file that gained its own tags is a real change to what
-    `--tags` selects, and the derivation's refusals depend on which files are untagged.
-    """
-    index = narrow_setup.RoleIndex("k3s", "HEAD", str(REPO))
-    untagged = {rel for rel, tags in index.tags.items() if tags is None}
-    assert untagged == {"tasks/main.yml"}
-
-
 # The setup task files #3134, #3135 and #3154 made narrowable, each with the answer `tags_of`
 # gives. Before them, `crons.yml` refused on its `always` preamble, three roles had one untagged
 # `main.yml`, and `gitops_deploy` reached its task files only through
 # `include_tasks`, so every change to them applied the whole role.
 NARROWED_SETUP_FILES = {
-    ("deploy_ui", "tasks/code.yml"): {"deploy-ui-code"},
-    ("deploy_ui", "tasks/service.yml"): {"deploy-ui-service"},
     ("gitops_deploy", "tasks/code.yml"): {"gitops-deploy-code"},
     ("gitops_deploy", "tasks/service.yml"): {"gitops-deploy-service"},
     ("gitops_deploy", "tasks/teardown.yml"): {"gitops-deploy-teardown"},

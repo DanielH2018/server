@@ -2,13 +2,13 @@
 
 `ansible/roles/setup/gitops_deploy/files/gitops_markers.py` is the one source for the state
 directory, the marker basenames and the line parsers, and `gitops_ledger.py` beside it is the
-one source for the JSON-lines markers. deploy-ui and renovate-agent install the
-source itself into `/opt`, and `scripts/dev/gen_gitops_markers.py` copies it into
+one source for the JSON-lines markers. The deploy-ui and renovate-agent components ship the
+source itself in daniel-box's package, and `scripts/dev/gen_gitops_markers.py` copies it into
 monitor-bridge, which ships its own `files/` into a pod (the generator's docstring has why).
 This is the freshness half of that arrangement, the same shape as
 `test_every_committed_fragment_matches_what_the_generator_writes_now` for the docs fragments:
 a committed copy that differs from what the generator writes now fails here, and so does a
-consumer whose ship list does not carry the module.
+component that does not ship the module.
 
 Non-vacuity is a named census rather than a count: `EXPECTED_COPIES` is every copy this test
 knows, so a copy dropped from the generator fails by name, and the generator gaining a
@@ -19,6 +19,7 @@ Run: uv run pytest ansible/tests/deploy/test_gitops_markers_copies.py
 
 import re
 
+import pytest
 from _helpers import REPO
 from lib import yaml_fast
 
@@ -33,28 +34,12 @@ EXPECTED_COPIES = frozenset(
     }
 )
 
-# The loop item that installs the source itself, as the setup consumers spell it.
-SOURCE_ITEM = "{{ role_path }}/../gitops_deploy/files/gitops_markers.py"
-
-# The copy task that installs each setup consumer's files under /opt, by task file and task
-# name. The loop is what reaches the host: the stamp pair beside it records provenance only,
-# so a substring search over the whole task file would pass on the stamp entry alone while
-# the module never lands and the unit dies at import. monitor-bridge is separate below (its
-# module list drives the ConfigMap and the mount), and `test_gitops_deploy_ship_list.py`
-# covers the deployer's own loop.
-_COPY_TASKS = {
-    "deploy_ui": (
-        "ansible/roles/setup/deploy_ui/tasks/code.yml",
-        "Install the deploy-ui files",
-    ),
-}
-
 # Literals outside Python that must name the same directory: two manifests hand the directory
 # to a unit and a pod. They cannot import anything, so they are pinned here rather than
 # generated. The tick wrapper read the markers from a shell until #3931; it prints
 # `probe.py gitops-state`, which imports `STATE_DIR`, so it names no directory of its own.
 _DIRECTORY_LITERALS = {
-    "ansible/roles/setup/deploy_ui/templates/deploy-ui.service.j2": re.compile(
+    "hosts/components/deploy-ui/templates/deploy-ui.service.j2": re.compile(
         r"^Environment=DEPLOY_UI_STATE=(\S+)$", re.M
     ),
     "ansible/roles/k8s/monitor-bridge/templates/deployment.yaml.j2": re.compile(
@@ -101,41 +86,13 @@ def test_a_copy_carries_the_provenance_banner_and_the_source_does_not():
         ), target
 
 
-def _tasks_named(task_file: str, name: str) -> list[dict]:
-    """Every task called `name` in `task_file`, descending into `block:` lists."""
-
-    def walk(tasks):
-        for task in tasks:
-            if task.get("name") == name:
-                yield task
-            yield from walk(task.get("block", []))
-
-    return list(walk(yaml_fast.safe_load((REPO / task_file).read_text())))
-
-
-def test_every_setup_consumer_copy_loop_installs_the_source():
-    for task_file, task_name in _COPY_TASKS.values():
-        tasks = _tasks_named(task_file, task_name)
-        assert len(tasks) == 1, f"{task_file}: {len(tasks)} tasks named {task_name!r}"
-        assert SOURCE_ITEM in tasks[0]["loop"], (
-            f"{task_file}: the {task_name!r} loop does not install {SOURCE}"
-        )
-
-
-def test_the_setup_copy_loops_install_the_ledger_beside_the_markers():
-    """deploy-ui imports `gitops_ledger` for its panels."""
-    task_file, task_name = _COPY_TASKS["deploy_ui"]
-    (task,) = _tasks_named(task_file, task_name)
-    assert "{{ role_path }}/../gitops_deploy/files/gitops_ledger.py" in task["loop"]
-
-
-def test_the_renovate_agent_package_ships_the_state_modules_it_imports():
-    """renovate-agent imports all three: its hold skip names the planes (#3392)."""
-    spec = (REPO / "hosts/components/renovate-agent/component.yml").read_text()
+@pytest.mark.parametrize("component", ["deploy-ui", "renovate-agent"])
+def test_each_package_consumer_ships_the_state_modules_it_imports(component):
+    """deploy-ui reads all three for its panels and its hold clear, and renovate-agent's hold
+    skip names the planes (#3392). A module the package does not ship kills the unit at import."""
+    spec = (REPO / f"hosts/components/{component}/component.yml").read_text()
     for name in ("gitops_markers.py", "gitops_ledger.py", "gitops_hold.py"):
-        assert (
-            f"{{shared: {name}, dst: /usr/lib/homelab/renovate-agent/{name}}}" in spec
-        )
+        assert f"{{shared: {name}, dst: /usr/lib/homelab/{component}/{name}}}" in spec
 
 
 def test_the_monitor_bridge_module_list_carries_the_copy():
@@ -149,7 +106,7 @@ def test_the_monitor_bridge_module_list_carries_the_copy():
 
 
 def test_the_source_is_import_free():
-    """The module runs in a pod, a hook and three /opt directories; only the stdlib is common."""
+    """The module runs in a pod, a hook, the deployer and two host packages; only the stdlib is common."""
     for line in (REPO / SOURCE).read_text().splitlines():
         if line.startswith(("import ", "from ")):
             assert line == "from typing import NamedTuple", line

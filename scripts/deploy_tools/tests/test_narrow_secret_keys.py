@@ -154,41 +154,6 @@ def test_deploy_tags_refuses_most_of_the_fleet_naming_it(tree: Tree, capsys):
     assert _deploy_tags(tree, capsys) == (DEPLOY_BROAD, "bazarr,lidarr,radarr,sonarr")
 
 
-SHIPPED_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
-
-
-def _ship_k3s_defaults(tree: Tree, deploy_ui_reads: str) -> None:
-    """k3s's defaults build one key from a secret, and deploy_ui ships the file.
-
-    The shape is the real tree's row in `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` (#4303), which
-    this reads unpatched: a change to that row changes what these tests exercise.
-    """
-    tree.write(
-        SHIPPED_DEFAULTS,
-        'setup_built_token: "{{ setup_only_token }}"\nsetup_plain: 1\n',
-    )
-    tree.write(
-        "ansible/roles/setup/deploy_ui/tasks/main.yml",
-        f"- name: Read\n  debug: {{msg: '{{{{ {deploy_ui_reads} }}}}'}}\n",
-    )
-    tree.commit("a shipped defaults file")
-    tree.write(SECRETS, _with(BASE_SECRETS, "setup_only_token", "xxx"))
-
-
-def test_a_shipper_reading_none_of_the_secrets_keys_is_unread(tree: Tree, capsys):
-    """deploy_ui ships k3s's defaults for one plain key, so a secret skips it."""
-    _ship_k3s_defaults(tree, "setup_plain")
-    rc, out = _setup_readers(tree, capsys)
-    assert rc == 0 and out["unread"] == {SHIPPED_DEFAULTS: ["deploy_ui"]}
-
-
-def test_a_shipper_reading_a_key_built_from_the_secret_is_a_reader(tree: Tree, capsys):
-    """The rejecting half: the key built from the secret reaches deploy_ui's task."""
-    _ship_k3s_defaults(tree, "setup_built_token")
-    rc, out = _setup_readers(tree, capsys)
-    assert rc == 0 and SHIPPED_DEFAULTS in out["paths"] and out["unread"] == {}
-
-
 def _role_tags(tree: Tree, old: str, new: str) -> frozenset[str]:
     return narrow_setup.role_tags(
         "claude_code",
@@ -231,27 +196,6 @@ def test_a_secret_the_role_does_not_read_leaves_its_answer(setup_tree: Tree):
     setup_tree.write(SECRETS, _with(BASE_SECRETS, "jellyfin_api_key", "zzz"))
     with pytest.raises(narrow_setup.NothingToApply):
         _role_tags(setup_tree, *_refs(setup_tree))
-
-
-def test_a_shipper_reading_none_of_the_secrets_keys_keeps_its_narrow_answer(
-    tree: Tree,
-):
-    """`role_tags` takes the routing's rule: deploy_ui's prose edit still needs nothing."""
-    _ship_k3s_defaults(tree, "setup_plain")
-    tree.write(
-        "ansible/initial_setup.yml", SETUP_PLAY.replace("claude_code", "deploy_ui")
-    )
-    tree.write("ansible/roles/setup/deploy_ui/CLAUDE.md", "# deploy_ui\n")
-    old, new = _refs(tree)
-    with pytest.raises(narrow_setup.NothingToApply):
-        narrow_setup.role_tags(
-            "deploy_ui",
-            "deploy_ui",
-            old,
-            new,
-            str(tree.root),
-            "ansible/initial_setup.yml",
-        )
 
 
 def test_the_deployer_reads_the_scripts_refusal_code_and_no_crash_shares_it():

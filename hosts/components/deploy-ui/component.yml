@@ -1,0 +1,47 @@
+# The deploy UI daemon on daniel-box, the host half of deploy.local (H7.50,
+# docs/target-architecture/host/h7-delete-ansible.md). Until H7.50 the deploy_ui setup role installed
+# it. CLAUDE.md beside this file holds the rules.
+#
+# The unit keeps the name deploy-ui.service, so the Ansible copy under /etc/systemd/system shadows
+# the packaged one. Reconcile's shadow handoff removes it, runs one daemon-reload and restarts the
+# daemon, which keeps port 8790 from being bound twice.
+files:
+  - {src: files/deploy_ui.py, dst: /usr/lib/homelab/deploy-ui/deploy_ui.py}
+  - {src: files/deploy_ui.html, dst: /usr/lib/homelab/deploy-ui/deploy_ui.html}
+  - {src: files/deploy_ui_lib/deploy_ui_reads.py, dst: /usr/lib/homelab/deploy-ui/deploy_ui_lib/deploy_ui_reads.py}
+  - {src: files/deploy_ui_lib/deploy_ui_writes.py, dst: /usr/lib/homelab/deploy-ui/deploy_ui_lib/deploy_ui_writes.py}
+  # The deployer's state modules, for the hold panel and the hold clear, until H7.19b.
+  - {shared: gitops_markers.py, dst: /usr/lib/homelab/deploy-ui/gitops_markers.py}
+  - {shared: gitops_ledger.py, dst: /usr/lib/homelab/deploy-ui/gitops_ledger.py}
+  - {shared: gitops_hold.py, dst: /usr/lib/homelab/deploy-ui/gitops_hold.py}
+  - {lib: host_lib.py, dst: /usr/lib/homelab/deploy-ui/host_lib.py}
+  - {src: templates/deploy-ui.service.j2, dst: /usr/lib/systemd/system/deploy-ui.service}
+enable:
+  deploy-ui.service: multi-user.target
+# The daemon does no authentication, so the port admits the cluster only: the pod CIDR and both node
+# IPs, because flannel masquerades a pod's traffic to the LAN to the sending node's address. Never
+# lan_subnet, which would put the land button in front of Authelia rather than behind it.
+ufw:
+  rules:
+    - {id: deploy-ui-pods, spec: "allow from {{ k3s_pod_cidr }} to any port {{ deploy_ui_port }} proto tcp"}
+    - {id: deploy-ui-daniel-box, spec: "allow from {{ server_ip }} to any port {{ deploy_ui_port }} proto tcp"}
+    - {id: deploy-ui-daniel-server, spec: "allow from {{ hostvars['daniel-server'].server_ip }} to any port {{ deploy_ui_port }} proto tcp"}
+  # The Ansible rules carried this comment. The arm relabels each live rule in place.
+  legacy:
+    - {spec: "allow from {{ k3s_pod_cidr }} to any port {{ deploy_ui_port }} proto tcp", comment: deploy-ui from the k3s cluster, replaced_by: deploy-ui-pods}
+    - {spec: "allow from {{ server_ip }} to any port {{ deploy_ui_port }} proto tcp", comment: deploy-ui from the k3s cluster, replaced_by: deploy-ui-daniel-box}
+    - {spec: "allow from {{ hostvars['daniel-server'].server_ip }} to any port {{ deploy_ui_port }} proto tcp", comment: deploy-ui from the k3s cluster, replaced_by: deploy-ui-daniel-server}
+# What the deploy_ui role installed before H7.50.
+legacy:
+  - {path: /etc/systemd/system/deploy-ui.service}
+  - {path: /etc/systemd/system/multi-user.target.wants/deploy-ui.service}
+  - {path: /opt/deploy-ui/deploy_ui.py}
+  - {path: /opt/deploy-ui/deploy_ui.html}
+  - {path: /opt/deploy-ui/deploy_ui_lib/deploy_ui_reads.py}
+  - {path: /opt/deploy-ui/deploy_ui_lib/deploy_ui_writes.py}
+  - {path: /opt/deploy-ui/gitops_markers.py}
+  - {path: /opt/deploy-ui/gitops_ledger.py}
+  - {path: /opt/deploy-ui/gitops_hold.py}
+  - {path: /opt/deploy-ui/host_lib.py}
+  - {path: /var/lib/homelab/setup-render-manifest.d/deploy-ui}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/deploy-ui}
