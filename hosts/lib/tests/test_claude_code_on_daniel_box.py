@@ -15,7 +15,7 @@ import pytest
 import yaml
 
 from lib.estate import Inventory
-from lib.repo_paths import REPO
+from lib.repo_paths import HOST_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 
 ROLE = REPO / "ansible" / "roles" / "setup" / "claude_code"
@@ -214,9 +214,7 @@ def test_every_packaged_agent_takes_the_dotfiles_so_no_operator_config_copy_is_o
 ):
     # The package ships no copy of the operator config subset: the role runs it only for an
     # agent without the dotfiles. A host that turned them off would lose its subset silently.
-    host_vars = yaml.safe_load(
-        (REPO / "ansible" / "inventory" / "host_vars" / f"{host}.yml").read_text()
-    )
+    host_vars = yaml.safe_load((HOST_VARS / f"{host}.yml").read_text())
     assert host_vars["claude_code_agent_dotfiles"] is True
 
 
@@ -253,7 +251,7 @@ def test_the_rc_host_rolled_back_to_the_operator_reaches_the_operators_bus(tmp_p
     # The rollback sets claude_code_user to ubuntu and leaves claude_code_user_uid at the
     # agent's 996, so the unit must take the operator's uid from claude_code_login_uid.
     host_vars = tmp_path / "host_vars"
-    shutil.copytree(REPO / "ansible" / "inventory" / "host_vars", host_vars)
+    shutil.copytree(HOST_VARS, host_vars)
     path = host_vars / "daniel-box.yml"
     path.write_text(
         yaml.safe_dump(
@@ -282,9 +280,7 @@ def test_each_host_caps_its_own_agents_slice_and_the_operator_only_where_listed(
 def test_each_hosts_users_entry_names_its_live_uid_and_follows_the_agent_toggle(host):
     # The users arm takes no `when:`, so switching the agent off means deleting the entry.
     spec = yaml.safe_load((REPO / "hosts" / host / "package.yml").read_text())
-    host_vars = yaml.safe_load(
-        (REPO / "ansible" / "inventory" / "host_vars" / f"{host}.yml").read_text()
-    )
+    host_vars = yaml.safe_load((HOST_VARS / f"{host}.yml").read_text())
     declared = {u["name"]: u["uid"] for u in spec.get("users") or []}
     assert host_vars["claude_code_agent_user_enabled"] == ("claude" in declared)
     assert declared.get("claude") == AGENT_UID[host]
@@ -313,7 +309,7 @@ def retired_textfiles(package) -> set[str]:
 @pytest.mark.parametrize("toggle", sorted(TIMER_TEXTFILES))
 def test_disarming_a_timer_retires_its_textfiles(tmp_path, toggle):
     host_vars = tmp_path / "host_vars"
-    shutil.copytree(REPO / "ansible" / "inventory" / "host_vars", host_vars)
+    shutil.copytree(HOST_VARS, host_vars)
     path = host_vars / "daniel-box.yml"
     path.write_text(yaml.safe_dump({**yaml.safe_load(path.read_text()), toggle: False}))
 

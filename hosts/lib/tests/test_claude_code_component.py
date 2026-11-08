@@ -15,7 +15,7 @@ import pytest
 import yaml
 
 from lib.estate import Inventory
-from lib.repo_paths import REPO
+from lib.repo_paths import HOST_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.cluster import RenderRefused
 from secrets_mgmt import host_secrets
@@ -253,7 +253,7 @@ BG_RESUME = (
 def render_daniel_server_with(tmp_path, **overrides):
     """daniel-server rendered with `overrides` laid over its host_vars."""
     host_vars = tmp_path / "host_vars"
-    shutil.copytree(REPO / "ansible" / "inventory" / "host_vars", host_vars)
+    shutil.copytree(HOST_VARS, host_vars)
     path = host_vars / "daniel-server.yml"
     path.write_text(yaml.safe_dump({**yaml.safe_load(path.read_text()), **overrides}))
     return host_mode.render_host(
@@ -331,7 +331,9 @@ def visudo_check(tmp_path, grant: bytes) -> subprocess.CompletedProcess:
     path = tmp_path / "grant"
     path.write_bytes(grant)
     path.chmod(0o440)
-    return subprocess.run([VISUDO, "-cf", str(path)], capture_output=True, text=True)
+    return subprocess.run(
+        [VISUDO, "-cf", str(path)], capture_output=True, text=True, timeout=60
+    )
 
 
 def test_the_packaged_sudoers_grant_parses(package, tmp_path):

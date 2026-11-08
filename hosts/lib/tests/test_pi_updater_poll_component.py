@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from lib.proc_testing import fake_bin, run
+from lib.proc_testing import fake_bin, run, write_exec
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
@@ -102,9 +102,9 @@ class Pi:
         self.masked = root / "masked"
         self.active = root / "active"
         self.active.write_text("")
-        self.script = root / "homelab-updater-poll"
-        self.script.write_bytes(package.files[SCRIPT][0])
-        self.script.chmod(0o755)
+        self.script = write_exec(
+            root / "homelab-updater-poll", package.files[SCRIPT][0].decode()
+        )
         self.bin = fake_bin(
             root / "bin",
             hostname="echo daniel-pi\n",

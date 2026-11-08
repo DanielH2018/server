@@ -12,7 +12,7 @@ import json
 import re
 
 from _bootstrap_host import group
-from lib.repo_paths import REPO
+from lib.repo_paths import ALL_VARS, HOST_VARS, REPO
 
 SCRIPT = (REPO / "hosts" / "bootstrap-host.sh").read_text()
 TOOLS = (REPO / "hosts" / "packages" / "homelab-tools" / "package.yml").read_text()
@@ -36,9 +36,8 @@ def package_pins(package: str) -> str:
 
 
 def test_the_sys_user_and_swap_file_equal_the_inventory():
-    inventory = REPO / "ansible" / "inventory"
-    all_vars = (inventory / "group_vars" / "all.yml").read_text()
-    pi_vars = (inventory / "host_vars" / "daniel-pi.yml").read_text()
+    all_vars = ALL_VARS.read_text()
+    pi_vars = (HOST_VARS / "daniel-pi.yml").read_text()
     for name, value in (
         ("SYS_USER", group(r"^sys_user: (\S+)", all_vars, re.MULTILINE)),
         ("PI_SWAPFILE", group(r"^pi_swapfile_path: (\S+)", pi_vars, re.MULTILINE)),

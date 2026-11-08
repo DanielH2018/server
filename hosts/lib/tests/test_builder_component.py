@@ -19,7 +19,7 @@ import pytest
 from _checkout_package import render_daniel_box
 
 from lib import yaml_fast
-from lib.repo_paths import REPO
+from lib.repo_paths import ALL_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 
 UNITS = "/usr/lib/systemd/system"
@@ -186,7 +186,7 @@ def test_the_interpreter_installs_in_exec_start_pre_and_only_exec_start_forbids_
 
 
 def _group_vars() -> str:
-    return (REPO / "ansible/inventory/group_vars/all.yml").read_text()
+    return ALL_VARS.read_text()
 
 
 def test_a_unit_that_sets_the_download_ban_for_the_install_too_is_flagged(package):

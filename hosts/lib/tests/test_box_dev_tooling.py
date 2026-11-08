@@ -67,6 +67,7 @@ def test_every_setup_role_reader_names_the_packaged_uv():
         text=True,
         check=False,
         cwd=REPO,
+        timeout=60,
     ).stdout.split()
     assert readers == []
     for reader in MOVED_UV_READERS:

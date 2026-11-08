@@ -15,7 +15,8 @@ import subprocess
 import yaml
 
 from lib.estate import Inventory
-from lib.repo_paths import REPO
+from lib.proc_testing import write_exec
+from lib.repo_paths import HOST_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 
 SCRIPT = "/usr/lib/homelab/claude-agent-browser"
@@ -32,7 +33,7 @@ NODE_STUB = STUB + '[ "$1" = -p ] && echo "{version}"\nexit 0\n'
 
 def render_script(tmp_path, home, homelab_ui: bool) -> str:
     host_vars = tmp_path / "host_vars"
-    shutil.copytree(REPO / "ansible" / "inventory" / "host_vars", host_vars)
+    shutil.copytree(HOST_VARS, host_vars)
     path = host_vars / "daniel-box.yml"
     overrides = {
         "claude_code_agent_user_home": str(home),
@@ -43,29 +44,23 @@ def render_script(tmp_path, home, homelab_ui: bool) -> str:
         "daniel-box", inventory=Inventory(host_vars=host_vars)
     )
     script = tmp_path / "claude-agent-browser"
-    script.write_bytes(package.files[SCRIPT][0])
-    script.chmod(0o755)
-    return str(script)
-
-
-def stub(path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    path.chmod(0o755)
+    return str(write_exec(script, package.files[SCRIPT][0].decode()))
 
 
 def lay_home(tmp_path, mcp_version: str = MCP):
     home = tmp_path / "home"
     log = tmp_path / "calls.log"
     bin_dir = home / ".local" / "share" / "node" / f"node-v{NODE}-linux-x64" / "bin"
-    stub(bin_dir / "node", NODE_STUB.format(log=log, version=mcp_version))
-    stub(bin_dir / "npm", STUB.format(log=log))
-    stub(home / ".local" / "bin" / "claude", STUB.format(log=log))
+    write_exec(bin_dir / "node", NODE_STUB.format(log=log, version=mcp_version))
+    write_exec(bin_dir / "npm", STUB.format(log=log))
+    write_exec(home / ".local" / "bin" / "claude", STUB.format(log=log))
     return home, log
 
 
 def run(script: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["bash", script], capture_output=True, text=True, check=True)
+    return subprocess.run(
+        ["bash", script], capture_output=True, text=True, check=True, timeout=60
+    )
 
 
 def calls(log) -> list[str]:

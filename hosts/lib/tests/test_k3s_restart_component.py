@@ -15,7 +15,8 @@ import pytest
 import yaml
 from deployer_lib import deploy_locks
 
-from lib.repo_paths import REPO
+from lib.ansible_jinja_env import make_ansible_env
+from lib.repo_paths import ALL_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.host_sources import lib_source
@@ -99,7 +100,7 @@ def test_daniel_box_takes_the_deploy_lock_and_skips_the_server_restart_guard(pac
 
 
 def test_an_agent_host_render_adds_the_guard_and_drops_the_lock(package):
-    env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
     template = env.from_string(
         (COMPONENT / "units/homelab-k3s-restart.service.j2").read_text()
     )
@@ -126,7 +127,7 @@ def test_the_timer_carries_the_window_and_the_two_accuracy_settings(package):
 
 
 def test_a_host_without_a_window_fails_the_render():
-    env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
     template = env.from_string(
         (COMPONENT / "units/homelab-k3s-restart.timer.j2").read_text()
     )
@@ -171,12 +172,7 @@ def test_the_lock_entry_owner_is_the_user_the_deployer_runs_as(package):
         REPO / "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2"
     ).read_text()
     assert re.search(r"^User=\{\{ sys_user \}\}$", unit, re.M)
-    assert (
-        owner
-        == yaml.safe_load((REPO / "ansible/inventory/group_vars/all.yml").read_text())[
-            "sys_user"
-        ]
-    )
+    assert owner == yaml.safe_load(ALL_VARS.read_text())["sys_user"]
 
 
 def test_the_manifest_lists_the_unit_so_reconcile_manages_it(package):

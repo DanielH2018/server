@@ -235,6 +235,7 @@ def test_the_local_build_installs_three_packages_in_one_call_and_leaves_the_clon
         capture_output=True,
         text=True,
         check=True,
+        timeout=60,
     )
     assert status.stdout == ""
 

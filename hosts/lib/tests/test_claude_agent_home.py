@@ -25,7 +25,8 @@ import pytest
 import yaml
 
 from lib.estate import Inventory
-from lib.repo_paths import REPO
+from lib.proc_testing import fake_bin, write_exec
+from lib.repo_paths import HOST_VARS
 from renderer.renderer_lib import host as host_mode
 
 SCRIPT = "/usr/lib/homelab/claude-agent-home"
@@ -54,7 +55,7 @@ def rendered(tmp_path_factory):
         "operator_memory": root / "operator" / "memory",
     }
     host_vars = root / "host_vars"
-    shutil.copytree(REPO / "ansible" / "inventory" / "host_vars", host_vars)
+    shutil.copytree(HOST_VARS, host_vars)
     path = host_vars / "daniel-box.yml"
     overrides = {
         "claude_code_agent_user": getpass.getuser(),
@@ -70,14 +71,10 @@ def rendered(tmp_path_factory):
     package = host_mode.render_host(
         "daniel-box", inventory=Inventory(host_vars=host_vars)
     )
-    script = root / "claude-agent-home"
-    script.write_bytes(package.files[SCRIPT][0])
-    script.chmod(0o755)
+    script = write_exec(root / "claude-agent-home", package.files[SCRIPT][0].decode())
     paths["raw"] = {name: package.files[name][0].decode() for name in (SETUP, SCRIPT)}
     # The packaged chezmoi exists only on a host, so the script copies a stand-in from the root.
-    chezmoi = root / "packaged-chezmoi"
-    chezmoi.write_text("#!/bin/sh\nexit 0\n")
-    chezmoi.chmod(0o755)
+    chezmoi = write_exec(root / "packaged-chezmoi", "exit 0\n")
     # The setup script's fixed paths move under the temporary root.
     paths["setup_text"] = (
         paths["raw"][SETUP]
@@ -90,13 +87,10 @@ def rendered(tmp_path_factory):
     )
     paths["setup"] = root / "claude-agent-setup"
     paths["setup"].write_text(paths["setup_text"])
-    stubs = root / "stubs"
-    stubs.mkdir()
-    (stubs / "runuser").write_text(RUNUSER)
-    for name in ("usermod", "groupadd", "getent", "loginctl", "setfacl"):
-        (stubs / name).write_text("#!/bin/sh\nexit 0\n")
-    for stub in stubs.iterdir():
-        stub.chmod(0o755)
+    no_ops = ("usermod", "groupadd", "getent", "loginctl", "setfacl")
+    stubs = fake_bin(
+        root / "stubs", runuser=RUNUSER, **dict.fromkeys(no_ops, "exit 0\n")
+    )
     return script, stubs, paths
 
 
@@ -117,7 +111,7 @@ def run(rendered, check: bool = True) -> subprocess.CompletedProcess:
     script, stubs, _ = rendered
     env = {"PATH": f"{stubs}:/usr/local/bin:/usr/bin:/bin"}
     result = subprocess.run(
-        ["bash", str(script)], env=env, capture_output=True, text=True
+        ["bash", str(script)], env=env, capture_output=True, text=True, timeout=60
     )
     assert not check or result.returncode == 0, result.stderr
     return result
@@ -172,9 +166,7 @@ def test_a_copy_that_fails_partway_removes_the_index_so_the_next_run_retries(
 ):
     (home["operator_memory"] / "MEMORY.md").write_text("the operator's\n")
     # The agent's cp copies everything, then fails.
-    cp = home["home"] / ".local" / "bin" / "cp"
-    cp.write_text('#!/bin/sh\n/bin/cp "$@"\nexit 1\n')
-    cp.chmod(0o755)
+    fake_bin(home["home"] / ".local" / "bin", cp='/bin/cp "$@"\nexit 1\n')
     result = run(rendered, check=False)
     assert result.returncode != 0
     assert "the next run copies again" in result.stderr
