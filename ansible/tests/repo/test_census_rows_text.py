@@ -14,6 +14,7 @@ from functools import cache
 import pytest
 from _workflow_rows import WORKFLOW_ROWS
 from _shimmed_path_row import PREPENDED_PATHS, RESET_PATHS, SHIMMED_PATHS
+from _test_script_bodies_row import TEST_SCRIPT_BODIES
 from _component_contract_row import COMPONENT_TIMERS_CARRY_A_CONTRACT
 from _etcd_snapshot_flags_row import ETCD_SNAPSHOT_LONG_FLAGS
 from _kuma_census_row import KUMA_IDENTIFIERS, KUMA_MENTIONS
@@ -414,6 +415,7 @@ ROWS += (
     SHIMMED_PATHS,
     PREPENDED_PATHS,
     RESET_PATHS,
+    TEST_SCRIPT_BODIES,
     ETCD_SNAPSHOT_LONG_FLAGS,
     KUMA_IDENTIFIERS,
     KUMA_MENTIONS,
