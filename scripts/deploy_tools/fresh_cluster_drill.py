@@ -15,7 +15,7 @@ does for the other cases.
 - `check` prints one `case=fresh-cluster verdict=<pass|fail>` line, then one problem per line.
 
 Run (the workflow's form):
-    uv run python scripts/renderer/fresh_cluster_drill.py build --bg-pubkey bg.pub --out DIR
+    uv run python scripts/deploy_tools/fresh_cluster_drill.py build --bg-pubkey bg.pub --out DIR
 """
 
 import json

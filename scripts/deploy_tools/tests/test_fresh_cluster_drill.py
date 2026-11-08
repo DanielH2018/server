@@ -1,6 +1,6 @@
 """The fresh-cluster case's files, archives and verdict (#7555, `fresh_cluster_drill.py`).
 
-Run: uv run pytest scripts/renderer/tests/test_fresh_cluster_drill.py
+Run: uv run pytest scripts/deploy_tools/tests/test_fresh_cluster_drill.py
 """
 
 import ipaddress
@@ -9,7 +9,7 @@ import tarfile
 
 import pytest
 from lib import yaml_fast
-from renderer import fresh_cluster_drill as fresh
+import fresh_cluster_drill as fresh
 
 DIGEST = "sha256:" + "a" * 64
 OTHER = "sha256:" + "b" * 64

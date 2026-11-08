@@ -22,7 +22,7 @@ name: Flux deletion drill
 #                    name, the controllers and the
 #                    registry run from image archives, the registry role's render serves the
 #                    key-signed bundle, and the bundle reaches Ready
-#                    (scripts/renderer/fresh_cluster_drill.py)
+#                    (scripts/deploy_tools/fresh_cluster_drill.py)
 #
 # The job holds no secret and no age key, never pushes to GHCR and reaches no homelab host.
 # The private keys are generated here and discarded with the runner; the kit's private half
@@ -73,6 +73,7 @@ jobs:
           "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
           if git diff --quiet "origin/$BASE_REF...HEAD" -- \
               scripts/renderer/ \
+              scripts/deploy_tools/fresh_cluster_drill.py \
               ansible/roles/k8s/flux/defaults/main.yml \
               ansible/roles/k8s/flux/templates/sync.yaml.j2 \
               ansible/roles/k8s/flux/templates/secret.yaml.j2 \
@@ -289,7 +290,7 @@ jobs:
           kind delete cluster --name drill
           docker rm -f kind-registry
           f="$RUNNER_TEMP/fresh"
-          uv run python scripts/renderer/fresh_cluster_drill.py build \
+          uv run python scripts/deploy_tools/fresh_cluster_drill.py build \
             --bg-pubkey "$RUNNER_TEMP/keys/green/cosign.pub" --out "$f"
           crane_image=$(awk '/^registry_k8s_crane_image:/ {print $2}' ansible/roles/k8s/registry/defaults/main.yml)
           [ -n "$crane_image" ]
@@ -298,7 +299,7 @@ jobs:
           while read -r ref tar; do
             docker run --rm --user "$(id -u):$(id -g)" -v "$f/kit:/kit" "$crane_image" \
               pull --format=oci "$ref" "/kit/${tar%.tar}"
-            uv run python scripts/renderer/fresh_cluster_drill.py archive \
+            uv run python scripts/deploy_tools/fresh_cluster_drill.py archive \
               --layout "$f/kit/${tar%.tar}" --ref "$ref" --out "$f/kit/$tar"
           done < "$f/kit.txt"
 
@@ -395,7 +396,7 @@ jobs:
           kubectl apply -f "$f/hand/secret.yaml"
           kubectl apply -f "$f/hand/ocirepository.yaml"
           kubectl apply -f "$f/hand/root.yaml"
-          JUDGE_SCRIPT=scripts/renderer/fresh_cluster_drill.py BUDGET=60 judge
+          JUDGE_SCRIPT=scripts/deploy_tools/fresh_cluster_drill.py BUDGET=60 judge
           kubectl -n flux-system get ocirepository homelab -o jsonpath='{range .status.conditions[*]}{.type}={.status}: {.message}{"\n"}{end}'
 
       - name: Dump the Flux objects and controller logs

@@ -107,12 +107,12 @@ otherwise; none of the values below are secrets themselves, only names and locat
    OCI layout, because the manifests name the index digest. Docker's classic image store saves
    one platform's image under a manifest of its own, so a node that imports that archive holds
    the image under a digest no Deployment names. crane writes the same archive whichever store
-   the saving machine runs. `scripts/renderer/fresh_cluster_drill.py build` writes the list to `images.json`, and
+   the saving machine runs. `scripts/deploy_tools/fresh_cluster_drill.py build` writes the list to `images.json`, and
    `flux-deletion-drill` writes each archive with two commands:
 
    ```bash
    crane pull --format=oci "$ref" layout/
-   uv run python scripts/renderer/fresh_cluster_drill.py archive --layout layout/ --ref "$ref" --out image.tar
+   uv run python scripts/deploy_tools/fresh_cluster_drill.py archive --layout layout/ --ref "$ref" --out image.tar
    ```
 
    The second command checks that the layout holds the pinned digest and names it for
