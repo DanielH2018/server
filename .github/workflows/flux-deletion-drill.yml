@@ -337,7 +337,13 @@ jobs:
           while read -r ref tar; do
             # No --digests: it adds an import-DATE@<index.json digest> alias that fails CreateContainer.
             docker exec -i "$node" ctr -n k8s.io images import --all-platforms - < "$f/kit/$tar"
-            if ! docker exec "$node" crictl inspecti "$ref" > /dev/null; then
+            # CRI learns of an imported image from containerd's event stream, so it can lag the import (run 42527932176).
+            served=0
+            for _ in 1 2 3 4 5 6 7 8 9 10; do
+              if docker exec "$node" crictl inspecti "$ref" > /dev/null 2>&1; then served=1; break; fi
+              sleep 2
+            done
+            if [ "$served" -ne 1 ]; then
               echo "the node holds no image for $ref after the load; it holds:"
               docker exec "$node" ctr -n k8s.io images ls -q
               exit 1
