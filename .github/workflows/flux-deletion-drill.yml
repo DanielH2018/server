@@ -408,3 +408,8 @@ jobs:
           kubectl -n homelab logs deployment/registry --tail=100 || true
           kubectl -n flux-system logs deployment/source-controller --tail=150 || true
           kubectl -n flux-system logs deployment/kustomize-controller --tail=200 || true
+          kubectl -n flux-system describe pods || true
+          kubectl get events -A --sort-by=.lastTimestamp | tail -40 || true
+          docker exec fresh-control-plane crictl images --digests || true
+          docker exec fresh-control-plane ctr -n k8s.io images ls || true
+          docker exec fresh-control-plane journalctl -u containerd --no-pager | tail -60 || true
