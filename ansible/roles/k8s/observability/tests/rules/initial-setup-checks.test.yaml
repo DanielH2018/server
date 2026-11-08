@@ -22,6 +22,21 @@ tests:
     input_series: []
     alert_rule_test:
       - eval_time: 200h
+        alertname: CheckoutSyncNotReporting
+        exp_alerts:
+          - exp_labels: {check: checkout-sync, origin: daniel-box, severity: warning, service: daniel-box}
+            exp_annotations:
+              summary: daniel-box's primary checkout sync has stopped reporting.
+              description: >-
+                No checkout-sync verdict newer than 2 hours reached Prometheus from daniel-box's
+                textfile collector, so nothing confirms the primary checkout follows master. A
+                fetch that keeps failing or a git-tree lock held for hours writes no verdict. Read
+                `systemctl status homelab-checkout-sync` and `journalctl -t homelab-checkout-sync`
+                on daniel-box, then /var/lib/node-exporter-textfile/checkout_sync.prom on the host.
+      - eval_time: 200h
+        alertname: CheckoutSyncFailed
+        exp_alerts: []
+      - eval_time: 200h
         alertname: DocsRefreshNotReporting
         exp_alerts:
           - exp_labels: {check: docs-refresh, origin: daniel-box, severity: warning, service: daniel-box}
@@ -675,3 +690,48 @@ tests:
       - eval_time: 10h
         alertname: LokiReadRouteNotReporting
         exp_alerts: []
+
+  # checkout-sync refused (a dirty tree, say) from hour 3, and its timestamp froze at 0.
+  - interval: 1h
+    input_series:
+      - series: 'homelab_check_success{check="checkout-sync", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x3 0x3'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: CheckoutSyncFailed
+        exp_alerts: []
+      - eval_time: 4h
+        alertname: CheckoutSyncFailed
+        exp_alerts:
+          - exp_labels: {check: checkout-sync, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
+            exp_annotations:
+              summary: daniel-box's primary checkout sync is refusing to fast-forward.
+              description: >-
+                homelab-checkout-sync on daniel-box refused its last run, so the primary checkout
+                is not following master. homelab_checkout_sync_refused names the reason: a dirty
+                tree (an untracked file counts), a branch other than master, a HEAD that
+                origin/master does not descend from, an empty CI context set or walk bound, or a
+                missing or refused GitHub token. Read `journalctl -t homelab-checkout-sync` on
+                daniel-box.
+  - interval: 1h
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="checkout-sync", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x4'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x4'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: CheckoutSyncNotReporting
+        exp_alerts: []
+      - eval_time: 3h
+        alertname: CheckoutSyncNotReporting
+        exp_alerts:
+          - exp_labels: {check: checkout-sync, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
+            exp_annotations:
+              summary: daniel-box's primary checkout sync has stopped reporting.
+              description: >-
+                No checkout-sync verdict newer than 2 hours reached Prometheus from daniel-box's
+                textfile collector, so nothing confirms the primary checkout follows master. A
+                fetch that keeps failing or a git-tree lock held for hours writes no verdict. Read
+                `systemctl status homelab-checkout-sync` and `journalctl -t homelab-checkout-sync`
+                on daniel-box, then /var/lib/node-exporter-textfile/checkout_sync.prom on the host.

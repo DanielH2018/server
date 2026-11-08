@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-08 00:48 UTC
-generated_sha: ba2284c2ea
+generated_at: 2026-11-08 01:52 UTC
+generated_sha: 75baa08e56
 ---
 
 !!! warning "Generated file — do not edit"
@@ -627,8 +627,8 @@ generated_sha: ba2284c2ea
 | this gate fails OPEN on anything but a usage error. not a published API, so a moved import or a changed exit code leaves the deploy running exactly as it did before this gate existed. Refusing every deploy over a renamed ansible module would be a worse failure than the one being fixed. | `scripts/deploy_tools/deploy_lib/flags.py:77` | 2026-11-06 |
 | the four `blockers` report lines are status, not complaints, so they open with this bare prefix rather than `error:`/`warning:`. land.sh reads only the exit code (#4498). | `scripts/deploy_tools/deploy_lib/tags.py:283` | 2026-10-11 |
 | role `tasks/` and `handlers/` comment-only edits stay out of this set (#4926). maps a SHARED role to no tag of its own, and a service role's own edit keeps its one tag, because a task file has its own defer channel (`deploy_changes.comment_only_k8s_defaults`' docstring). | `scripts/deploy_tools/deploy_lib/tags.py:347` | 2026-11-06 |
-| ownership is this lock, never the pid in the directory name. playbook in a process whose pid is not the one in the name, and the name's pid is dead for the whole life of a detached deploy -- a pid-based reaper deleted the worktree out from under the running playbook. A process cannot lie about holding a flock. (ADR-0017) | `scripts/deploy_tools/deploy_lib/under_locks.py:230` | 2026-09-24 |
-| the lock order is whatever `deploy_locks.plan` returns, taken top to bottom, and this module neither names a lock nor sorts a tag. The deployer walks the same `plan()` for its own locks, so the two orders are one function rather than two agreeing ones. This run takes the tree lock, snapshots, RELEASES the tree lock and only then takes service locks, while the GitOps deployer holds the tree lock across its service locks; there is no cycle because this run never re-takes the tree lock after releasing it. (ADR-0017) | `scripts/deploy_tools/deploy_lib/under_locks.py:436` | 2026-09-24 |
+| ownership is this lock, never the pid in the directory name. playbook in a process whose pid is not the one in the name, and the name's pid is dead for the whole life of a detached deploy -- a pid-based reaper deleted the worktree out from under the running playbook. A process cannot lie about holding a flock. (ADR-0017) | `scripts/deploy_tools/deploy_lib/under_locks.py:231` | 2026-09-24 |
+| the lock order is whatever `deploy_locks.plan` returns, taken top to bottom, and this module neither names a lock nor sorts a tag. The deployer walks the same `plan()` for its own locks, so the two orders are one function rather than two agreeing ones. This run takes the tree lock, snapshots, RELEASES the tree lock and only then takes service locks, while the GitOps deployer holds the tree lock across its service locks; there is no cycle because this run never re-takes the tree lock after releasing it. (ADR-0017) | `scripts/deploy_tools/deploy_lib/under_locks.py:437` | 2026-09-24 |
 | a usage error is not a landing, so it annotates nothing. SystemExit(2) before a Landing or a Ledger exists, so the only line this could write is `pr=unknown verdict=aborted` -- a row meaning "you typed the command wrong" in the same stream the Landings board counts. The bash original annotated it because its EXIT trap was installed before the arg loop, and this port reproduced that until issue #1304 measured 592 such rows in Loki's 744h window. The wrapper below still annotates nothing: it only renumbers the code, and `--help` (exit 0) passes through untouched. | `scripts/deploy_tools/land.py:184` | 2026-09-06 |
 | an `ok`, `canary` or `no-green` builder that has not reached the merge is lagging | `scripts/deploy_tools/land_lib/host_published.py:56` | 2026-11-03 |
 | `--no-sync`. HOST_INPUTS member, so a synced render would upgrade that venv at the merge commit and downgrade it at the first parent while the tick may be using it. A render that needs a dependency the venv lacks fails instead, and a failed render waits on every host. | `scripts/deploy_tools/land_lib/host_wait.py:81` | 2026-10-17 |
@@ -1038,8 +1038,8 @@ generated_sha: ba2284c2ea
 | 3 GiB even though 85% of the 20Gi claim also breaches at 3 GiB free. | `ansible/tests/services/test_storage_rule_literals.py:188` | 2026-10-31 |
 | ` marker in the template. | `ansible/tests/services/test_wg_easy_peer_cluster_drop.py:14` | 2026-09-24 |
 | ` marker has the measurement. | `ansible/tests/setup/test_aide_check.py:13` | 2026-11-02 |
-| relative_to(_REPO), not a suffix match -- the container contexts this skips are named by their in-repo path. | `ansible/tests/setup/test_host_python_invocations.py:131` | 2026-08-23 |
-| match the word, not a command position. an env assignment, `sudo`, `env`, a cron user field and Ansible's `shell:`/`cmd:`, and a list of shell grammar stays one shape short. A path (`/usr/bin/python3`) and a package or flag name (`python3-venv`, `--python 3.14.6`) do not match. | `ansible/tests/setup/test_host_python_invocations.py:381` | 2026-10-12 |
+| relative_to(_REPO), not a suffix match -- the container contexts this skips are named by their in-repo path. | `ansible/tests/setup/test_host_python_invocations.py:133` | 2026-08-23 |
+| match the word, not a command position. an env assignment, `sudo`, `env`, a cron user field and Ansible's `shell:`/`cmd:`, and a list of shell grammar stays one shape short. A path (`/usr/bin/python3`) and a package or flag name (`python3-venv`, `--python 3.14.6`) do not match. | `ansible/tests/setup/test_host_python_invocations.py:390` | 2026-10-12 |
 | ` | `ansible/tests/setup/test_initial_setup_host_gates.py:14` | 2026-11-07 |
 | ` comment in its file. | `ansible/tests/setup/test_initial_setup_host_gates.py:66` | 2026-09-29 |
 | ` marker has the evidence. | `ansible/tests/setup/test_rkhunter_check.py:14` | 2026-10-12 |

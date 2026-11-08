@@ -1,0 +1,57 @@
+# The primary checkout's fast-forward on daniel-box (H7.51, docs/target-architecture/host/
+# h7-delete-ansible.md, *The deployer retires last, and checkout-sync replaces its fast-forward*).
+# It runs beside the GitOps deployer until H7.52 retires the deployer's timer. Both take the
+# git-tree lock, and a fast-forward to a commit HEAD already contains does nothing, so the two
+# never race.
+#
+# homelab-checkout-sync.timer starts homelab-checkout-sync.service every 10 minutes as sys_user in
+# /home/<sys_user>/server. hosts/lib/checkout_sync.py does the work, and its docstring lists the
+# steps. The run writes checkout_sync.prom: CheckoutSyncFailed pages while a refusal lasts, and
+# CheckoutSyncNotReporting pages when no verdict lands within the 2-hour deadline
+# (roles/k8s/observability/files/rules/initial-setup-checks.yaml). A crashed run pages through
+# `homelab-alert@` (the `failure-alert` component).
+#
+# A host that lists this component lists `secrets-unit`, `failure-alert` and `uv` (for /usr/bin/uv)
+# too, and has `sys_user`, `server_git_tree_lock`, `host_python_version`,
+# `ci_required_contexts` and `ci_ancestor_walk_max` in its inventory.
+#
+# Autonomous-role contract (it moves the primary checkout's HEAD with no human in the loop).
+# - Scope / exclusions: a `git merge --ff-only` of `master` in the primary checkout, to the newest
+#   first-parent commit of origin/master whose required CI is green, within the walk bound. Never
+#   a red, pending or cancelled commit, never a non-fast-forward, never another branch, never a
+#   dirty tree. It applies nothing: it reads no `DEPLOY_HOLD` and no `hold_sha`.
+# - Mode (explicit and reversible): the timer's enable link in this package arms it. Dropping the
+#   link from a package version, or reverting this component, stops the timer on the install that
+#   drops it. `systemctl stop homelab-checkout-sync.timer` stops it until the next package install.
+# - Abort valves: the git-tree lock (a held lock skips the run), the branch and dirty-tree gates,
+#   the ancestry gate, the CI gate with its refusal of an empty context set or a non-positive
+#   walk bound, the missing-token refusal, the walk's 100-second budget, and
+#   `TimeoutStartSec=150`.
+# - Authoritative sources: origin/master as fetched this run, and GitHub's check-runs and
+#   check-suites for each graded commit, read with the builder's token. No verdict is cached.
+# - Required evidence: a `homelab-checkout-sync` journal line naming the merged commit and its
+#   distance below the tip, or the refusal and its reason; checkout_sync.prom in the
+#   node-exporter textfile directory with `homelab_checkout_sync_success_timestamp_seconds`,
+#   `homelab_checkout_dirty`, `homelab_checkout_sync_refused{reason}` and check `checkout-sync`'s
+#   `homelab_check_*` series, which CheckoutSyncFailed and CheckoutSyncNotReporting read.
+# - Next-run review: before widening scope, read `journalctl -t homelab-checkout-sync` for the
+#   last week's refusals. A `dirty` refusal parks the checkout until the stray file moves.
+#
+# ENFORCED: hosts/lib/tests/test_checkout_sync.py (the sync over a fixture repository) and
+# hosts/lib/tests/test_checkout_sync_component.py (the units), and
+# ansible/tests/services/test_initial_setup_check_rule_literals.py (the rule's deadline).
+defaults:
+  checkout_sync_github_repo: DanielH2018/server
+depends:
+  - git
+credentials:
+  - homelab_builder_github_token
+files:
+  - {lib: checkout_sync.py, dst: /usr/lib/homelab/checkout-sync/checkout_sync.py, mode: "0755"}
+  - {lib: ci_verdict.py, dst: /usr/lib/homelab/checkout-sync/ci_verdict.py, mode: "0644"}
+  - {lib: builder_ci_grade.py, dst: /usr/lib/homelab/checkout-sync/builder_ci_grade.py, mode: "0644"}
+  - {lib: host_lib.py, dst: /usr/lib/homelab/checkout-sync/host_lib.py, mode: "0644"}
+  - {src: units/homelab-checkout-sync.service.j2, dst: /usr/lib/systemd/system/homelab-checkout-sync.service}
+  - {src: units/homelab-checkout-sync.timer, dst: /usr/lib/systemd/system/homelab-checkout-sync.timer}
+enable:
+  homelab-checkout-sync.timer: timers.target

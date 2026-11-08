@@ -114,10 +114,12 @@ _CONTAINER_CONTEXT = re.compile(
     r"Dockerfile|docker-compose|deployment\.yaml|healthcheck"
 )
 
-# The one invocation that deliberately keeps uv's self-healing download. See the comment above its
-# ExecStart: hard-failing the deploy pipeline on a missing interpreter removes the machine that
-# would ship the fix.
-_DOWNLOADS_EXEMPT = "gitops-deploy.service.j2"
+# The deploy pipeline's invocations, which deliberately keep uv's self-healing download. See the
+# comment above each ExecStart: hard-failing either on a missing interpreter blocks every landing,
+# including the one that would ship the fix.
+_DOWNLOADS_EXEMPT = frozenset(
+    {"gitops-deploy.service.j2", "homelab-checkout-sync.service.j2"}
+)
 
 
 def _candidate_files():
@@ -246,31 +248,38 @@ def test_pinned_uv_invocations_disable_project_discovery():
 def test_the_pin_is_enforced_everywhere_except_the_deploy_pipeline():
     """uv's python-downloads default is `automatic`, so `--python 3.14.6` against a host lacking
     that build fetches one rather than failing — making the pin a request, not enforcement.
-    `--no-python-downloads` closes that, and every host invocation carries it except one.
+    `--no-python-downloads` closes that, and every host invocation carries it except the deploy
+    pipeline's.
 
-    gitops-deploy is exempt on purpose: there, the hard failure would be the deploy pipeline
-    refusing to start, which removes the ability to ship the correction. This test pins BOTH
-    halves, so neither the rule nor its exception can drift silently.
+    gitops-deploy and homelab-checkout-sync are exempt on purpose. The deployer applies changes,
+    and checkout-sync fast-forwards the primary checkout that owed_run.py, probe.py and land.sh
+    refuse to work from when stale. A hard failure in either blocks every landing, including the
+    one that ships the correction. This test pins BOTH halves, so neither the rule nor its
+    exceptions can drift silently.
     """
     missing = [
         f"{p.relative_to(_REPO)}:{n}: {s[:100]}"
         for p, n, s in _pinned_uv_lines()
-        if p.name != _DOWNLOADS_EXEMPT and "--no-python-downloads" not in s
+        if p.name not in _DOWNLOADS_EXEMPT and "--no-python-downloads" not in s
     ]
     assert not missing, (
         "these pin an interpreter but let uv silently download it if absent, so the pin is not "
         "enforced:\n  " + "\n  ".join(sorted(missing))
     )
 
-    exempt = [(p, s) for p, _, s in _pinned_uv_lines() if p.name == _DOWNLOADS_EXEMPT]
-    assert exempt, (
-        f"{_DOWNLOADS_EXEMPT} no longer has a pinned uv invocation. If that unit was renamed or "
+    exempt = [(p, s) for p, _, s in _pinned_uv_lines() if p.name in _DOWNLOADS_EXEMPT]
+    stale = sorted(_DOWNLOADS_EXEMPT - {p.name for p, _ in exempt})
+    assert not stale, (
+        f"{stale} no longer has a pinned uv invocation. If that unit was renamed or "
         "retired, update _DOWNLOADS_EXEMPT — do not leave a stale exemption behind."
     )
-    assert all("--no-python-downloads" not in s for _, s in exempt), (
-        f"{_DOWNLOADS_EXEMPT} has gained --no-python-downloads. That was excluded deliberately: a "
-        "missing interpreter would stop the deploy pipeline, which is the machine that ships the "
-        "fix. If this is now wanted, remove the exemption here and the comment on its ExecStart."
+    gained = sorted(
+        str(p.relative_to(_REPO)) for p, s in exempt if "--no-python-downloads" in s
+    )
+    assert not gained, (
+        f"{gained} has gained --no-python-downloads. That was excluded deliberately: a "
+        "missing interpreter would stop the deploy pipeline and block every landing, including "
+        "the fix. If this is now wanted, remove the exemption here and the comment on its ExecStart."
     )
 
 
