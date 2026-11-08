@@ -1,31 +1,80 @@
 #!/usr/bin/env bash
-# Builds the host_packages test image for one Ubuntu release through BuildKit's GitHub Actions
-# cache, so a run with an unchanged Dockerfile fetches nothing from snapshot.ubuntu.com (#7133).
+# Makes the host_packages test image `homelab-host-test:<release>` for one Ubuntu release (#7664).
 #
-#   build-image.sh 24.04 [--seed]
+#   build-image.sh 24.04             pull the image image.pins names, or build it
+#   build-image.sh 24.04 --publish   push this Dockerfile's image to GHCR unless already there
 #
-# The caller sets up the prerequisites: docker/setup-buildx-action, because the default `docker`
-# driver cannot export to `type=gha`, and crazy-max/ghaction-github-runtime, because a `run:` step
-# otherwise has no token for the cache service.
+# A plain run pulls the pinned digest when image.pins was written for this Dockerfile, so a PR
+# that changes no image input fetches nothing from snapshot.ubuntu.com. A stale or empty pin pulls
+# this Dockerfile's write-once tag instead, which master publishes after the merge. A PR that
+# changes the Dockerfile has no such tag yet, so it builds from the Dockerfile, as does a pull that fails.
 #
-# Each release and architecture has one scope, since the fetched layers differ across both.
-# BuildKit reads an empty scope or a failed import as a miss, and builds from the mirror.
+# --publish tags the image `<release>-<arch>-<inputs>` and prints the image.pins line for it.
+# The tag is write-once: an existing one is never rebuilt, so the digest a pin names stays tagged.
 #
-# --seed also writes the scope, and only the host-test-image-cache workflow passes it. There is
-# no ignore-error, so a write that fails turns that workflow red instead of leaving PRs on the
-# mirror with nothing to show why.
+# GHCR_TOKEN and GHCR_USER, when set, log in to GHCR first. A private package needs them.
 set -euo pipefail
 
 release=$1
-scope="host-test-image-$release-$(dpkg --print-architecture)"
+mode=${2:-}
+here=$(dirname "$0")
+arch=$(dpkg --print-architecture)
+repo=ghcr.io/danielh2018/homelab-host-test
+local_tag="homelab-host-test:$release"
+# DECIDED: only the Dockerfile is hashed. The script passes RELEASE alone as a build argument and
+# the tag carries it, so an edit to the pull logic here still exercises the pull.
+inputs=$(sha256sum "$here/Dockerfile" | cut -c1-64)
+remote_tag="$repo:$release-$arch-${inputs:0:12}"
 
-cache=(--cache-from "type=gha,scope=$scope")
-if [[ "${2:-}" == --seed ]]; then
-  cache+=(--cache-to "type=gha,scope=$scope,mode=min")
+pin() { awk -v key="$1" '$1 == key { print $2 }' "$here/image.pins"; }
+
+build() {
+  docker buildx build --load --progress=plain \
+    --build-arg "RELEASE=$release" \
+    --label "org.homelab.dockerfile-sha256=$inputs" \
+    --secret "id=runner-ca,src=/etc/ssl/certs/ca-certificates.crt" \
+    -t "$local_tag" \
+    "$here"
+}
+
+if [[ -n "${GHCR_TOKEN:-}" ]]; then
+  printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "${GHCR_USER:?}" --password-stdin \
+    || echo "::warning::docker login ghcr.io failed; a private image will not pull"
 fi
 
-docker buildx build --load --progress=plain "${cache[@]}" \
-  --build-arg "RELEASE=$release" \
-  --secret "id=runner-ca,src=/etc/ssl/certs/ca-certificates.crt" \
-  -t "homelab-host-test:$release" \
-  "$(dirname "$0")"
+if [[ "$mode" == --publish ]]; then
+  if ! answer=$(docker buildx imagetools inspect "$remote_tag" 2>&1); then
+    # Only a "not found" means absent; a registry or auth error would overwrite a pinned tag.
+    if [[ "$answer" != *"not found"* ]]; then
+      echo "::error::Whether $remote_tag exists is unknown, so nothing is pushed: $answer" >&2
+      exit 1
+    fi
+    build
+    docker tag "$local_tag" "$remote_tag"
+    docker push "$remote_tag"
+  fi
+  digest=$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$remote_tag")
+  echo "$release-$arch $digest"
+  exit 0
+fi
+
+# Pulls $1 as $local_tag, naming the digest it got.
+pull() {
+  docker pull "$1" || return 1
+  docker tag "$1" "$local_tag"
+  echo "::notice::Pulled $1 as $local_tag ($(docker inspect --format '{{index .RepoDigests 0}}' "$1"))."
+}
+
+digest=$(pin "$release-$arch")
+if [[ "$(pin inputs)" == "$inputs" && -n "$digest" ]]; then
+  pull "$repo@$digest" && exit 0
+  echo "::warning::Pulling the pinned $repo@$digest failed."
+fi
+if pull "$remote_tag"; then
+  if [[ "$(pin inputs)" != "$inputs" ]]; then
+    echo "::warning::image.pins is stale for this Dockerfile. Copy the lines from the host-test-image run's summary into it."
+  fi
+  exit 0
+fi
+echo "::notice::No image is published for this Dockerfile, so it is built from the Dockerfile."
+build

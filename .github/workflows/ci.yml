@@ -1564,13 +1564,16 @@ jobs:
     needs: [prove, host_packages_build]
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' }}
     runs-on: ubuntu-26.04
-    # The image build fetches from snapshot.ubuntu.com, which answers 5xx often enough that
-    # apt's retries can take minutes. Each leg boots a container per case, and four of the
-    # bootstrap cases render and build the host packages from a clone (H7.15a).
-    # Measured 2026-11-04 with the mirror at 28-129 kB/s: 2min of steps before the build, a
-    # 33min 45s image build and 20min 33s of cases, so about 56min at worst (#7128).
+    # Each leg boots a container per case, and four of the bootstrap cases render and build the
+    # host packages from a clone (H7.15a). The image step pulls the pinned image, but a PR that
+    # changes the Dockerfile builds it from snapshot.ubuntu.com, so the budget stays sized to
+    # the build. Measured 2026-11-04 with the mirror at 28-129 kB/s: 2min of steps before the
+    # build, a 33min 45s image build and 20min 33s of cases, so about 56min at worst (#7128).
     # scripts/deploy_tools/land_lib/options.py:CI_TIMEOUT_S moves with this value.
     timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read  # the pinned test image, while its GHCR package is private
     strategy:
       # Each leg reports its own conclusion, so one release's failure does not hide the other's.
       fail-fast: false
@@ -1611,22 +1614,11 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/bin/nfpm" --version
 
-      - name: Set up Buildx for the image cache
-        if: >-
-          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
-          || needs.host_packages_build.outputs.cases == 'true'
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Give the build step the cache service's token
-        if: >-
-          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
-          || needs.host_packages_build.outputs.cases == 'true'
-        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
-
-      # Step 4. The Dockerfile pins the release by digest and the packages by snapshot. The
-      # runner's CA bundle reaches the build only, for the snapshot archive's https redirect.
-      # This job is skipped on a proven master push, so host-test-image-cache.yml seeds the
-      # layer cache that a PR run reads.
+      # Step 4. The Dockerfile pins the release by digest and the packages by snapshot.
+      # build-image.sh pulls the image hosts/lib/tests/container/image.pins names by digest,
+      # which host-test-image.yml publishes, or this Dockerfile's published tag when the pin is
+      # stale. A Dockerfile PR has no published image, so it builds. A build reaches the
+      # runner's CA bundle, for the snapshot archive's https redirect.
       # The early exit is in the script, not the `if:`, because a dispatch must reach this
       # step (test_ci_dispatch_sweeps_everything.py) and a dispatch of master must stay green.
       - name: Build the test image for this release
@@ -1636,6 +1628,8 @@ jobs:
         env:
           RELEASE: ${{ matrix.release }}
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if [ "$UPGRADE" != true ]; then
@@ -1687,9 +1681,13 @@ jobs:
     needs: [prove, host_packages_build]
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' }}
     runs-on: ubuntu-24.04-arm
-    # Builds host_packages' test image from the same mirror. Measured 2026-11-04 with the mirror
-    # slow: this job's build reached 29min 05s and host_packages' 33min 45s (#7128).
+    # Pulls the pinned test image as host_packages does, and builds it from the same mirror on a
+    # Dockerfile change. Measured 2026-11-04 with the mirror slow: this job's build reached
+    # 29min 05s and host_packages' 33min 45s (#7128).
     timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read  # the pinned test image, while its GHCR package is private
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -1703,15 +1701,10 @@ jobs:
           name: homelab-tools-arm64
           path: ${{ runner.temp }}/debs
 
-      - name: Set up Buildx for the image cache
-        if: steps.download.outcome == 'success'
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Give the build step the cache service's token
-        if: steps.download.outcome == 'success'
-        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
-
       - name: Install the build in the test image and run each tool
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           shopt -s nullglob
