@@ -72,6 +72,7 @@ from renderer.renderer_lib.ordering import (
     NO_ORDERING,
     PRECHECK_SUFFIX,
     PREPULL_SUFFIX,
+    SNAPSHOT_SUFFIX,
     SUSPENDED_DEPS,
     TAG_KIND_SUFFIXES,
     VERIFY_SUFFIX,
@@ -98,6 +99,9 @@ UNCLASSIFIED = "_unclassified"
 # The root Kustomization the flux role applies. It reads `./flux`, so it applies every file
 # `flux/kustomization.yaml` lists.
 ROOT = "homelab"
+# The suffixes of the Kustomizations that take the default deletion policy, `<tag>`'s own
+# among them. Every other Kustomization keeps `Orphan` (C3 *Deletion policy*).
+DELETING_SUFFIXES = ("", SNAPSHOT_SUFFIX, PREPULL_SUFFIX)
 FLUX_NAMESPACE = "flux-system"
 # C3's one substitution Secret. D3 produces it, and D2.6c's source gate refuses a tag that
 # names it until a Kustomization in the same bundle generates it.
@@ -380,7 +384,8 @@ def flux_files(
                 own.get("suspend", False),
                 (contents or {}).get(name) if name == tag else None,
                 own.get("health_check_exprs") if name == tag else None,
-                orphan=name != tag or tag == FLUX_TAG,
+                orphan=tag == FLUX_TAG
+                or name.removeprefix(tag) not in DELETING_SUFFIXES,
             )
             for name in names
         ]

@@ -93,6 +93,8 @@ switched 65 `<tag>` Kustomizations to the default deletion policy, which follows
 Seven of them render `prune: false`, so they still delete nothing. Fifty-two Kustomizations and
 the root keep `deletionPolicy: Orphan`: `flux`, every `-deferred`, `-snapshot`, `-prepull`,
 `-precheck` and `-verify` kind, and the shared kinds.
+[#7485](https://github.com/DanielH2018/server/issues/7485) later moved every `-snapshot` and `-prepull` but `flux`'s to the default policy, because
+their objects carry the tag's name and no emptied template reaches them at a retirement.
 
 - The renderer labels every PersistentVolumeClaim and Namespace with a prune exemption
   (`scripts/renderer/renderer_lib/prune_label.py:EXEMPT_KINDS`), so a retired tag leaves its

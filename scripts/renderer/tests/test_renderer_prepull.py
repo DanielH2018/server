@@ -79,6 +79,43 @@ def test_the_prepull_kustomization_takes_the_roles_prepull_timeout(rendered):
     assert docs[f"{TAG}-snapshot"]["spec"]["timeout"] == "600s"
 
 
+def _objects(out, kind: str) -> list[tuple[str, str]]:
+    """Each object in `cluster/<TAG>-<kind>/` as its kind and name."""
+    return [
+        (doc["kind"], doc["metadata"]["name"])
+        for path in sorted((out / "cluster" / f"{TAG}-{kind}").glob("*.yaml"))
+        if path.name != "kustomization.yaml"
+        for doc in yaml_fast.safe_load_all(path.read_text())
+        if doc
+    ]
+
+
+def _not_tag_scoped(objects: list[tuple[str, str]], prefix: str) -> list[str]:
+    """Each name in `objects` that is neither `prefix` nor starts with `prefix-`."""
+    return [
+        name
+        for _, name in objects
+        if name != prefix and not name.startswith(f"{prefix}-")
+    ]
+
+
+def test_every_snapshot_and_prepull_object_is_tag_scoped(rendered):
+    # The default deletion policy on both kinds relies on no other tag adopting these names.
+    snapshot = _objects(rendered, "snapshot")
+    prepull = _objects(rendered, "prepull")
+    assert {"ClusterRole", "ClusterRoleBinding", "ConfigMap", "Job"} <= {
+        kind for kind, _ in snapshot
+    }
+    assert {"ConfigMap", "Job"} <= {kind for kind, _ in prepull}
+    assert _not_tag_scoped(snapshot, f"snapshot-{TAG}") == []
+    assert _not_tag_scoped(prepull, f"prepull-{TAG}") == []
+
+
+def test_a_snapshot_object_named_for_no_tag_is_flagged():
+    objects = [("ClusterRole", "snapshot-shared"), ("Job", f"snapshot-{TAG}-0a1b2c3d")]
+    assert _not_tag_scoped(objects, f"snapshot-{TAG}") == ["snapshot-shared"]
+
+
 def test_the_job_pulls_the_deployments_ghcr_ref_under_its_placement(rendered):
     deployment = _pod_spec(rendered / "cluster" / TAG / "deployment.yaml")
     job = _pod_spec(rendered / "cluster" / f"{TAG}-prepull" / "job.yaml")
