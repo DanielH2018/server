@@ -134,7 +134,6 @@ _PROSE_HOLDERS = {
             "ansible/roles/k8s/observability/templates/prometheus.yaml.j2",
             "ansible/roles/k8s/pi-peer-backup/files/pull-pi-peers.sh",
             "ansible/roles/k8s/qbittorrent/files/prefs_check.py",
-            "ansible/roles/k8s/qbittorrent/templates/deployment.yaml.j2",
             "hosts/components/fake-remux/templates/fake-remux-health.sh.j2",
             "hosts/components/github-checks/templates/github-interaction-limit.sh.j2",
             "hosts/components/github-checks/templates/github-ruleset-drift.sh.j2",

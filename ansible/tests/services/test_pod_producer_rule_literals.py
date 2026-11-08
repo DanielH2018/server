@@ -15,7 +15,7 @@ from _k8s_render import render_role_template
 from lib import yaml_fast
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "pod-producers.yaml"
-# The rule names per role, and the Kuma tile each ports, so a tile rename is a deliberate edit.
+# The rule names per role, so a rule rename is a deliberate edit.
 ROLES = {
     "configarr": ("ConfigarrSyncFailed", "ConfigarrHealthNotReporting"),
     "janitorr": ("JanitorrErrorsFound", "JanitorrHealthNotReporting"),
