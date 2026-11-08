@@ -333,7 +333,8 @@ jobs:
           kubectl -n kube-system rollout restart deployment/coredns
           kubectl -n kube-system rollout status deployment/coredns --timeout=120s
           while read -r ref tar; do
-            kind load image-archive --name fresh "$f/kit/$tar"
+            # No --digests: it adds an import-DATE@<index.json digest> alias that fails CreateContainer.
+            docker exec -i "$node" ctr -n k8s.io images import --all-platforms - < "$f/kit/$tar"
             if ! docker exec "$node" crictl inspecti "$ref" > /dev/null; then
               echo "the node holds no image for $ref after the load; it holds:"
               docker exec "$node" ctr -n k8s.io images ls -q

@@ -118,7 +118,7 @@ def name_layout(layout: Path, ref: str) -> None:
 
 
 def archive(layout: Path, ref: str, out: Path) -> None:
-    """Name `layout` for `ref` and write it as the tar `kind load image-archive` reads."""
+    """Name `layout` for `ref` and write it as the tar `ctr images import` reads."""
     name_layout(layout, ref)
     with tarfile.open(out, "w") as tar:
         for path in sorted(layout.rglob("*")):

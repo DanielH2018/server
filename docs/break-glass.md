@@ -748,8 +748,11 @@ longer matches `PROD_DIGEST`. That is expected. The break-glass path neither rea
 registry nor the Flux controllers. Run these after the render and before the push:
 
 1. Import item 8's image archives on each node with
-   `sudo k3s ctr -n k8s.io images import --all-platforms --digests <archive>`. Then check that
-   `sudo k3s crictl inspecti <ref>` answers for each pinned reference.
+   `sudo k3s ctr -n k8s.io images import --all-platforms <archive>`. Leave out `--digests`: it
+   adds an `import-<date>@<digest>` alias for the archive's whole `index.json`, and containerd
+   2.x's CRI then fails every container create from that image with "failed to check if this is
+   a checkpoint image". Then check that `sudo k3s crictl inspecti <ref>` answers for each pinned
+   reference.
 1. Apply the rendered `cluster/cluster-base/` and `cluster/homelab-namespace/` directories, as
    `docs/flux-deploy-plane.md`'s *Bootstrapping Flux on a rebuilt cluster* applies them. Flux's
    pods and the registry's pod name the PriorityClass `homelab-critical`, and the registry runs
@@ -767,8 +770,8 @@ that resolves no name outside the cluster. Neither the node nor a pod resolves o
 CoreDNS forwards to a dead port, so source-controller cannot reach ghcr.io or Sigstore by
 name. A control on the node and one in a pod check this before the case is judged. The case
 was added on 2026-11-08 (#7669), so read its `case=fresh-cluster` line in the latest run
-before you rely on it. It differs from a rebuild in five ways. `kind load image-archive` runs the
-`ctr` import, so k3s's image import directory is not drilled. The case applies the vendored
+before you rely on it. It differs from a rebuild in five ways. The case runs `ctr images import`
+in the node over `docker exec`, so k3s's image import directory is not drilled. The case applies the vendored
 `gotk-components.yaml`, as the drill's other cases do, rather than the role's rendered
 `components.yaml`. A stand-in `longhorn-nobackup` class on kind's own provisioner binds the
 claims. The case drops the registry's node pin, because no kind node is daniel-box. The runner
