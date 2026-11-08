@@ -1147,10 +1147,14 @@ H7.19b.
   neither unsafe. The deployer's `hold_sha` existed because the deployer applied what it
   merged, and checkout-sync applies nothing. The H7 ADR records this narrowing as a decision.
 - It writes `homelab_checkout_sync_success_timestamp_seconds`, `homelab_checkout_dirty`, and
-  `homelab_checkout_sync_refused{reason}` with the reasons `dirty`, `branch`, `ci` and
-  `token`. Its
-  journal line names the merged commit and its distance below the tip, as the deployer's
-  does.
+  `homelab_checkout_sync_refused{reason}` with the reasons `dirty`, `branch`, `ci`, `token`
+  and `ancestry`. `ancestry` is a HEAD that is not an ancestor of the fetched tip, which it
+  refuses before it grades anything (Amended 2026-11-07, on H7.51's PR). Its journal line names
+  the merged commit and its distance below the tip, as the deployer's does. The same file
+  carries M3's four `homelab_check_*` series for check `checkout-sync`, with a 2-hour deadline.
+  `CheckoutSyncFailed` pages while a refusal lasts, which takes over the deployer's dirty-tree
+  page, and `CheckoutSyncNotReporting` pages a sync that stops writing. A run that crashes pages
+  through `homelab-alert@`.
 - Its component carries an `## Autonomous-role contract` header: scope, a fast-forward of
   `master` only; mode, the timer's enable link; abort valves, the lock, the dirty and branch
   gates and the CI gate; evidence, the metrics and the journal.

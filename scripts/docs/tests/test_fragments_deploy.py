@@ -128,6 +128,7 @@ def test_tree_lock_holders_in_the_real_tree_include_every_known_job():
     jobs = {h["job"] for h in fd.tree_lock_holders()}
     assert {
         "gitops-deploy.service",
+        "homelab-checkout-sync.service",
         "docs-refresh",
         "eval-run",
         "deploy.sh",

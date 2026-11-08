@@ -4,7 +4,7 @@
 required contexts, and `ci_walk_candidates` bounds the ancestor walk that runs when the tip is
 not green. Stdlib only and importing nothing first-party, because the GitOps deployer ships it
 beside its own modules in `/opt/gitops-deploy/`, the host packages' builder grades the same
-rule, and `homelab-checkout-sync` will grade the fetched tip with it (H7.2e). The deployer's
+rule, and `homelab-checkout-sync` grades the fetched tip with it (H7.51). The deployer's
 `deploy_git.py` imports the names from here until H7.19a retires it.
 """
 

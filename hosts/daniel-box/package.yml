@@ -78,6 +78,8 @@ components:
   - apt-github-cli
   - failure-alert
   - builder
+  # H7.51: fast-forwards the primary checkout beside the deployer, which H7.52 retires.
+  - checkout-sync
   - unattended-upgrades
   - sshd
   - host-tuning
