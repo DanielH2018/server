@@ -1,0 +1,6 @@
+# The published test images build-image.sh pulls, by digest (#7664).
+#
+# `inputs` is the sha256 of the Dockerfile these images were built from. When it differs from the
+# Dockerfile's, every CI leg builds the image instead. To move the pins after a Dockerfile change
+# merges, copy the lines the host-test-image workflow's run summary prints, inputs line included.
+inputs -
