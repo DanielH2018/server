@@ -59,6 +59,7 @@ def rendered(tmp_path_factory):
     path = host_vars / "daniel-box.yml"
     overrides = {
         "claude_code_agent_user": getpass.getuser(),
+        "claude_code_user": getpass.getuser(),
         "sys_user": getpass.getuser(),
         "claude_code_agent_user_home": str(home),
         "claude_code_agent_signing_key": str(paths["signing"]),
