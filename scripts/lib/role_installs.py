@@ -191,8 +191,7 @@ def role_entry(spelled: str, holder: Path) -> Path:
     """The file a role command runs: a tree path, or the staged copy of an installed one.
 
     A path the copy task does not spell resolves by name among the copies the same file
-    makes: `release_bin.yml` runs its pruner through `current`, where it copied it to a
-    per-SHA directory. Fails closed: a command that maps to no file raises.
+    makes, such as a copy under a per-SHA directory run through a `current` link. Fails closed: a command that maps to no file raises.
     """
     role = _role_of(holder)
     path = _render(spelled, role)
@@ -238,8 +237,8 @@ def role_entries() -> list[tuple[Path, tuple[str, ...]]]:
 def command_text(path: Path) -> str:
     """`path`'s text with its comment lines dropped.
 
-    A comment line drops out rather than going blank: release_bin.yml comments inside its argv
-    list, and a blank line ends a command.
+    A comment line drops out rather than going blank: a task may comment inside its argv list,
+    and a blank line ends a command.
     """
     return "\n".join(
         line

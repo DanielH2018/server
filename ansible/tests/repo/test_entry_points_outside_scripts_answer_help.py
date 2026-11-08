@@ -174,8 +174,7 @@ def test_a_script_that_checks_argv_first_is_clean(tmp_path):
 
 # The role scripts #4487 moved off argparse's 2 for a usage error. A role ships only its own
 # `files/`, so none can import `scripts/lib/cli_help.ArgumentParser`, and each holds a local
-# `USAGE_ERROR = 64` instead. `prune_releases.py` is here for the same reason: release_bin.yml
-# copies it onto a host alone. Named rather than derived, because a script that takes no
+# `USAGE_ERROR = 64` instead. Named rather than derived, because a script that takes no
 # flags at all has no usage error to report.
 EXIT_64_ON_A_BAD_FLAG = (
     "ansible/roles/k8s/monitor-bridge/files/check.py",
@@ -184,7 +183,6 @@ EXIT_64_ON_A_BAD_FLAG = (
     "hosts/components/loki-route-witness/loki_route_health.py",
     "ansible/roles/setup/initial_setup/files/worktree_holders.py",
     "hosts/components/renovate-agent/files/land_renovate_pr.py",
-    "scripts/deploy_tools/prune_releases.py",
 )
 
 

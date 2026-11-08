@@ -50,7 +50,6 @@ MUST_INCLUDE = frozenset(
         "hosts/components/fake-remux/files/fake_remux.py",
         "hosts/components/fake-remux/files/mkv_attachment_repair.py",
         "hosts/components/fake-remux/files/state_push.py",
-        "scripts/deploy_tools/prune_releases.py",
         "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_toolbox.py",
     }
 )
