@@ -59,7 +59,7 @@ from deployer_lib.deploy_changes import (
     tick_applies_setup_role,
 )
 from deployer_lib.deploy_config import WARNING, Config, log
-from deployer_lib.deploy_setup_roles import SecretReadersRefused, setup_role_agent_hosts
+from deployer_lib.deploy_setup_roles import SecretReadersRefused
 from deployer_lib.deploy_remediation import (
     broad_park_reason,
     broad_remediation,
@@ -475,7 +475,6 @@ def record(
             setup_role_tag(role),
             now,
             setup_role_host(role),
-            setup_role_agent_hosts(role),
         )
     ]
     for role in roles:

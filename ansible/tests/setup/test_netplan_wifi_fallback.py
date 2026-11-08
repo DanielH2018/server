@@ -6,7 +6,7 @@ would move the node's traffic onto WiFi with the cable in, and a missing `option
 hold k3s at boot until WiFi associates. Both fail with nothing visibly broken.
 """
 
-from lib.repo_paths import HOST_VARS, K3S_ROLE
+from lib.repo_paths import HOST_VARS, K3S_ROLE, REPO
 from lib import yaml_fast
 from _setup_render import render_setup_text
 
@@ -118,3 +118,16 @@ def test_emptying_the_wifi_link_removes_the_file_and_reapplies() -> None:
     assert all(flag in t["when"][-1] for t in commands), (
         "removal does not trigger netplan"
     )
+
+
+def test_both_k3s_components_ship_the_same_wifi_installer() -> None:
+    """Each node's package carries its own copy, so a fix to one must land in both."""
+    components = REPO / "hosts" / "components"
+    for rel in (
+        "files/homelab-netplan-wifi",
+        "units/homelab-netplan-wifi.service",
+        "templates/netplan-wifi-fallback.json.j2",
+    ):
+        server = (components / "k3s-server" / rel).read_bytes()
+        agent = (components / "k3s-agent" / rel).read_bytes()
+        assert server == agent, f"k3s-server/{rel} and k3s-agent/{rel} differ"

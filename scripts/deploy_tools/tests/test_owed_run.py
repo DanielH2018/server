@@ -18,7 +18,7 @@ from lib.repo_paths import PRIMARY_CHECKOUT
 
 
 def _owed(subject: str, playbook: str, *tags: str, **keys) -> str:
-    """One `manual_plane` ledger line owing `tags`, with any `host`/`agent_hosts` keys."""
+    """One `manual_plane` ledger line owing `tags`, with any `host` key."""
     line = {"class": "manual_plane", "subject": subject, "origin": "abc123def4567890"}
     return json.dumps(
         {**line, "at": 1000, "playbook": playbook, "tags": sorted(tags), **keys}

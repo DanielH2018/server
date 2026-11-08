@@ -17,14 +17,6 @@ import pytest
 import checks.gitops
 from _fake_sources import FakeSources
 from gitops_markers import HOLD_CLEAR_CMD
-import gitops_markers
-
-
-@pytest.fixture(autouse=True)
-def _agent_tables_hold_k3s(monkeypatch):
-    """The printers' tables are empty since H7.34, and H7.53 deletes the printers with the deployer."""
-    monkeypatch.setitem(gitops_markers.AGENT_JOIN_TAGS, "k3s", "k3s_agent")
-    monkeypatch.setitem(gitops_markers.AGENT_PIN_TAGS, "k3s", "node-address")
 
 
 _LATE = 1000.0 + 7 * 3600
@@ -181,88 +173,3 @@ def test_a_role_owed_on_daniel_server_pages_the_apply_over_ssh(cfg):
         'uv run ansible-playbook ansible/initial_setup.yml --tags hypervisor"` by hand'
         in msg
     )
-
-
-def test_a_whole_role_k3s_page_names_the_agent_join_before_the_clear(cfg):
-    """#5627: `--tags k3s` on daniel-box never reaches an agent node (#5606).
-
-    The pod cannot import the deployer's routing, so the agent hosts come off the line.
-    """
-    owed = _owed(
-        subject="k3s",
-        at=1000,
-        playbook="ansible/k3s-bringup.yml",
-        tags=[],
-        agent_hosts=["daniel-server"],
-    )
-    ok, msg = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
-    assert not ok
-    parts = (
-        "ansible/k3s-bringup.yml --tags k3s",
-        "ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent",
-        "ansible/k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address",
-        "clear-owed manual_plane k3s",
-    )
-    at = [msg.find(p) for p in parts]
-    assert -1 not in at, (
-        f"missing {[p for p, i in zip(parts, at, strict=True) if i < 0]} in {msg}"
-    )
-    assert at == sorted(at), f"{parts} out of order in {msg}"
-
-
-_JOIN = "ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent"
-_PIN = "ansible/k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address"
-
-# A narrowed k3s row splits: `k3s_agent` goes on the join command, the rest on the server
-# command, and a row of `k3s_agent` alone prints no server command at all (#5628). A row of
-# `node-address` keeps the server command and adds the pin play, run on the agent (#5918). The
-# clear names the whole row either way.
-_SPLIT_ROWS = [
-    pytest.param(
-        ["k3s_agent"],
-        (_JOIN, "clear-owed manual_plane k3s --applied k3s_agent"),
-        "k3s-bringup.yml --tags",
-        id="agent-only",
-    ),
-    pytest.param(
-        ["k3s_agent", "k3s_server"],
-        (
-            "ansible/k3s-bringup.yml --tags k3s_server",
-            _JOIN,
-            "clear-owed manual_plane k3s --applied k3s_agent,k3s_server",
-        ),
-        "--tags k3s_agent,",
-        id="both-halves",
-    ),
-    pytest.param(
-        ["node-address"],
-        (
-            "ansible/k3s-bringup.yml --tags node-address",
-            _PIN,
-            "(run on daniel-server)",
-            "clear-owed manual_plane k3s --applied node-address",
-        ),
-        "join_agent",
-        id="pin-play",
-    ),
-]
-
-
-@pytest.mark.parametrize(("tags", "parts", "absent"), _SPLIT_ROWS)
-def test_a_narrowed_k3s_page_puts_its_agent_tag_on_the_join(cfg, tags, parts, absent):
-    owed = _owed(
-        subject="k3s",
-        at=1000,
-        playbook="ansible/k3s-bringup.yml",
-        tags=tags,
-        agent_hosts=["daniel-server"],
-    )
-    ok, msg = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
-    assert not ok
-    at = [msg.find(p) for p in parts]
-    assert -1 not in at, (
-        f"missing {[p for p, i in zip(parts, at, strict=True) if i < 0]} in {msg}"
-    )
-    assert at == sorted(at), f"{parts} out of order in {msg}"
-    assert absent not in msg, msg
-    assert "``" not in msg, msg

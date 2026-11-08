@@ -232,9 +232,8 @@ def owed_clear_cmd(cls: str, subject: str, tags=()) -> str:
 
 
 # The setup roles whose whole-role tag is a blunt instrument, and the narrowed tags that still
-# reach the tasks that make it one. `--tags k3s` reapplies MetalLB, Longhorn, the backup
-# targets, the crons, CoreDNS and the node config; every task in `roles/setup/k3s/tasks/
-# server.yml` carries `k3s_server`, so a narrowing that lands on that tag arms the installer
+# reach the tasks that make it one. `--tags k3s` reapplies the k3s server install and the
+# CoreDNS release marker; every task in `roles/setup/k3s/tasks/server.yml` carries `k3s_server`, so a narrowing that lands on that tag arms the installer
 # restart and the key re-encryption as surely as the whole-role tag does.
 #
 # The DATA lives here because three surfaces need it and two of them cannot reach the
@@ -278,111 +277,6 @@ def maximal_apply_warning(role: str, tags) -> str:
     return ""
 
 
-# Setup roles whose playbook applies a second half to other hosts through an opt-in play,
-# and the tag that selects it. `k3s-bringup.yml` runs `tasks/agent.yml` only from the join
-# plays, which match no host without `-e join_agent=<host>`, so `--tags k3s` on daniel-box
-# leaves every agent node unapplied (#5606). The data lives here, beside
-# `MAXIMAL_ROLE_WARNING`, for the same reason: the banner and monitor-bridge print the join
-# from a `manual_plane` row and cannot import the deployer's routing (#5627).
-#
-# DECIDED: a row's agent-join tag goes on the join command and never on the server one (#5628).
-# `narrow_setup.py` resolves the join play's `include_role ... tasks_from: agent`, so a change
-# reaching `tasks/agent.yml` narrows to `k3s_agent`, and one reaching a file both halves read
-# narrows to `k3s_agent,k3s_server`. `--tags k3s_agent` on the server play selects
-# nothing and exits 0, so every printer splits the row through `server_tags` and
-# `agent_join_cmds`: an agent-only row prints the join alone. The whole-role tag still gets
-# both commands, because a refusal says nothing about which half the change reached. Pinned by
-# test_deploy_remediation_agent.py::test_an_agent_only_change_narrows_to_the_join_alone.
-# Empty since H7.34: bootstrap-host.sh and the host package own the agent half.
-AGENT_JOIN_TAGS: dict[str, str] = {}
-
-
-def server_tags(role: str, tags) -> frozenset[str]:
-    """The tags the server-play command for `role` prints, or empty when it prints none.
-
-    Args:
-        role: the role, under the `--tags` value that selects it.
-        tags: the role's row, or `{role}` for the whole-role tag.
-
-    The row minus `AGENT_JOIN_TAGS[role]`, which `agent_join_cmds` prints instead. Empty means
-    the row reaches only the agent half, and the printer names no server command at all.
-    """
-    return frozenset(tags) - {AGENT_JOIN_TAGS.get(role)}
-
-
-def agent_join_cmds(role: str, playbook: str, tags, agent_hosts) -> list[str]:
-    """The join-play commands that apply `role`'s agent half, or [] when it has none.
-
-    Args:
-        role: the role, under the `--tags` value that selects it.
-        playbook: the playbook the server-half command names.
-        tags: the tags that command prints, as an iterable of strings.
-        agent_hosts: the hosts the join plays apply the agent half to, from the routing or
-            from a `manual_plane` line's `agent_hosts` key.
-
-    The whole-role tag gets them, and so does a row holding `AGENT_JOIN_TAGS[role]`, for the
-    reason the `DECIDED:` marker above gives. A role with no known agent host, such as one an older deployer recorded, gets a visible
-    placeholder rather than a guessed host. No `on_host`: `-e target=` selects a host's
-    vars and still runs on the operator's machine, while the join play opens its own SSH
-    connection to the host `join_agent` names.
-    """
-    tags = frozenset(tags)
-    if role not in AGENT_JOIN_TAGS or (
-        tags != {role} and AGENT_JOIN_TAGS[role] not in tags
-    ):
-        return []
-    return [
-        f"{PLAYBOOK_CMD} {playbook} -e join_agent={host} --tags {AGENT_JOIN_TAGS[role]}"
-        for host in (tuple(agent_hosts) or ("<agent host>",))
-    ]
-
-
-# Setup roles whose playbook re-runs a task file the server play also reaches, on each agent
-# node through a second opt-in play, and the tag that selects it there. `k3s-bringup.yml`'s
-# pin play imports `tasks/static-address.yml` under `node-address` and matches no host without
-# `-e pin_agent_address=<host>`, so `--tags node-address` pins daniel-box alone (#5918).
-#
-# DECIDED: the pin command goes BESIDE the server command, never in place of it. `tasks/main.yml`
-# imports the same file, so the server play under `node-address` is daniel-box's own pin, and
-# `server_tags` keeps the tag. Unlike the join, the pin play runs ON the agent: hosts.ini gives
-# it `ansible_connection=local`, and its preamble refuses one run from another machine. Every
-# printer therefore names the host to run it on. Pinned by
-# test_deploy_remediation_agent.py::test_a_static_address_change_prints_the_pin_play_beside_the_server.
-# Empty since H7.34: daniel-server's package owns its pin, so no agent owes the pin play.
-AGENT_PIN_TAGS: dict[str, str] = {}
-
-
-def agent_pin_cmds(
-    role: str, playbook: str, tags, agent_hosts
-) -> list[tuple[str, str]]:
-    """The pin-play commands for `role`'s agent nodes, as `(host to run it on, command)`.
-
-    Args:
-        role: the role, under the `--tags` value that selects it.
-        playbook: the playbook the server-half command names.
-        tags: the role's row, or `{role}` for the whole-role tag.
-        agent_hosts: the hosts the opt-in plays apply the agent half to, the same list
-            `agent_join_cmds` reads.
-
-    The whole-role tag gets them, and so does a row holding `AGENT_PIN_TAGS[role]`. The
-    server command keeps that tag, as the `DECIDED:` marker above says. A role with no known
-    agent host gets the `<agent host>` placeholder `agent_join_cmds` prints.
-    """
-    tags = frozenset(tags)
-    if role not in AGENT_PIN_TAGS or (
-        tags != {role} and AGENT_PIN_TAGS[role] not in tags
-    ):
-        return []
-    return [
-        (
-            host,
-            f"{PLAYBOOK_CMD} {playbook} -e pin_agent_address={host} "
-            f"--tags {AGENT_PIN_TAGS[role]}",
-        )
-        for host in (tuple(agent_hosts) or ("<agent host>",))
-    ]
-
-
 # How long a contention streak may run before monitor-bridge pages on it and the SessionStart
 # banner names it: the deployer's longest apply budget, `gitops_deploy_broad_timeout_s` =
 # 1800 s, so a holder past it has outlived every legitimate deploy. The bridge's own default
@@ -406,9 +300,6 @@ class ManualPlaneEntry(NamedTuple):
             already listed.
         host: the one host the playbook gates the role onto, for a role the tick's host
             does not run, else None.
-        agent_hosts: the hosts the playbook's join plays apply the role's agent half to, from
-            the routing when the deployer recorded the line (#5627). Empty for every role
-            `AGENT_JOIN_TAGS` does not name. Every printer passes it to `agent_join_cmds`.
         hosts: the hosts beyond the tick's own that a change to a role the tick applied
             still reaches (#6510). The tick's own apply never clears such a line.
 
@@ -420,7 +311,6 @@ class ManualPlaneEntry(NamedTuple):
     role: str
     at: float
     host: str | None = None
-    agent_hosts: tuple[str, ...] = ()
     hosts: tuple[str, ...] = ()
 
     def apply_hosts(self) -> tuple[str, ...]:
