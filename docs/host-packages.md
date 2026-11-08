@@ -705,14 +705,64 @@ daniel-box serves the repository, so it builds its own packages from the clone.
    `/etc/rancher/k3s/etcd-s3.env` from the host's SOPS file, and the package links it there. Follow
    *Restoring* in [the etcd restore doc](k3s-etcd-restore.md), which also reads the config the
    package installed.
+1. **On a new cluster only**, move the CoreDNS marker aside before the first start. The package
+   ships `/var/lib/rancher/k3s/server/manifests/coredns.yaml.skip`, and k3s never applies its
+   bundled CoreDNS while that file exists. Flux's `source-controller` resolves GHCR through cluster
+   DNS, so a first start with the marker leaves no CoreDNS, and Flux cannot fetch the `coredns` tag
+   that replaces it. A cluster restored from etcd already holds the CoreDNS objects, so skip this
+   step there:
+
+    ```bash
+    sudo mv /var/lib/rancher/k3s/server/manifests/coredns.yaml.skip /root/coredns.yaml.skip
+    ```
+
 1. Start k3s. No package enable link names `k3s.service`, and reconcile never starts a `windowed`
    unit, so this hand command is the only start on the package path. A link would start k3s at any
    reboot before the restores above, and this command also writes the link every later boot reads:
 
     ```bash
     sudo systemctl enable --now k3s.service
-    sudo k3s kubectl get node daniel-box
+    sudo k3s kubectl wait --for=condition=Ready node/daniel-box --timeout=300s
     sudo systemctl start homelab-k3s-kubeconfig.service
+    ```
+
+1. **On a new cluster only**, put the marker back once k3s has created CoreDNS. The marker then
+   releases CoreDNS to Flux's `coredns` tag, and `dpkg --verify` reads the package whole again:
+
+    ```bash
+    sudo k3s kubectl -n kube-system wait --for=create deployment/coredns --timeout=300s
+    sudo mv /root/coredns.yaml.skip /var/lib/rancher/k3s/server/manifests/coredns.yaml.skip
+    sudo dpkg --verify homelab-daniel-box
+    ```
+
+1. Check that the server came up with the flags the package's
+   `/etc/rancher/k3s/config.yaml.d/50-homelab.yaml` sets. Each read has one expected answer:
+    - the first prints daniel-box's `server_ip` from `ansible/inventory/host_vars/daniel-box.yml`.
+      Any other address means k3s picked a second NIC, and every pod would dial the
+      apiserver on it;
+    - the second prints `etcd`. Without it, `cluster-init` did not take and k3s runs on SQLite;
+    - the third prints nothing. A bundled Traefik, `svclb` or local-path pod means the `disable`
+      list did not take;
+    - the fourth prints `Encryption Status: Enabled`. Right after a start the supervisor can
+      refuse with `secret-encrypt error ID 21789`, so repeat the read until it answers.
+
+    ```bash
+    sudo k3s kubectl get node daniel-box -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
+    sudo test -d /var/lib/rancher/k3s/server/db/etcd && echo etcd
+    sudo k3s kubectl -n kube-system get pods -o name | grep -E 'traefik|svclb|local-path-provisioner'
+    sudo k3s secrets-encrypt status
+    ```
+
+    When the status's stage is not `reencrypt_finished`, Secrets written before the flag are still
+    plaintext in etcd. Rotate the key, which re-encrypts every Secret, then repeat the status read
+    until the stage reads `reencrypt_finished`. Restart k3s only after that, because a restart
+    during the rotation strands it part-done. On k3s v1.30 and later, `rotate-keys` is the whole
+    procedure, and bare `reencrypt` is invalid from the `start` stage:
+
+    ```bash
+    sudo k3s secrets-encrypt rotate-keys
+    sudo k3s secrets-encrypt status
+    sudo systemctl restart k3s.service
     ```
 
 1. Bring up Flux:
@@ -805,7 +855,27 @@ daniel-server installs from daniel-box's repository, so daniel-box and the repos
     ```
 
     ```bash
-    sudo k3s kubectl get node daniel-server
+    sudo k3s kubectl wait --for=condition=Ready node/daniel-server --timeout=300s
+    ```
+
+1. From daniel-box, read the node's registration and its Longhorn node. Longhorn must be up, so
+   on a new cluster this step waits for the `longhorn` tag in [Bootstrapping Flux on a rebuilt
+   cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster). The first read prints
+   daniel-server's `server_ip`. The last prints `true`, Longhorn's default, which lets the node
+   hold replicas again:
+
+    ```bash
+    sudo k3s kubectl get node daniel-server -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
+    sudo k3s kubectl -n longhorn-system wait --for=create nodes.longhorn.io/daniel-server --timeout=120s
+    sudo k3s kubectl -n longhorn-system get nodes.longhorn.io daniel-server -o jsonpath='{.spec.allowScheduling}'
+    ```
+
+    When the last read prints `false`, re-enable scheduling, or Longhorn rebuilds no replica on
+    the node:
+
+    ```bash
+    sudo k3s kubectl -n longhorn-system patch nodes.longhorn.io daniel-server --type=merge \
+        -p '{"spec":{"allowScheduling":true}}'
     ```
 
 1. As the operator, apply the dotfiles. They install the per-user uv, `prek` and the pinned Python,
@@ -844,7 +914,8 @@ To rebuild without GitHub or GHCR, take every fetch from the break-glass kit:
 ### The guest drill
 
 The guest drill proves daniel-box's procedure above on production hardware. It waits for the k3s
-upgrade. *The proofs* in [H7](target-architecture/host/h7-delete-ansible.md) holds its fence, its
+upgrade. It runs neither the CoreDNS marker steps nor the server checks
+([#7699](https://github.com/DanielH2018/server/issues/7699)). *The proofs* in [H7](target-architecture/host/h7-delete-ansible.md) holds its fence, its
 identity and its three guest-local deviations.
 
 To run it, use a checkout on daniel-server whose `HEAD` is a green first-parent commit of master,
