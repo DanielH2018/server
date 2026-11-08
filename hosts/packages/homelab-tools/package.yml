@@ -98,14 +98,14 @@ tools:
   coredns:
     amd64:
       # renovate: datasource=github-release-attachments depName=coredns/coredns
-      version: v1.14.7
-      sha256: 9a09356438c6d9591cb80011a2a7a52f87fc3a113f6690e41f243f98b98faac9
+      version: v1.15.0
+      sha256: 2495c5b8f3fab6d0a336c397f1227b75406d86e6ec7125744a29df9e936ab8cd
       url: https://github.com/coredns/coredns/releases/download/{version}/coredns_{bare}_linux_amd64.tgz
       member: coredns
     arm64:
       # renovate: datasource=github-release-attachments depName=coredns/coredns
-      version: v1.14.7
-      sha256: bf26782d19b5340e3e6cb50f1ed6df72f58e4a30932c79d167f0f0a8b1e92e16
+      version: v1.15.0
+      sha256: 73a5bf107c9791d57741ccd59ad138ab00bcd5bb3f62e2e28c999f5c047334a4
       url: https://github.com/coredns/coredns/releases/download/{version}/coredns_{bare}_linux_arm64.tgz
       member: coredns
   # nfpm and uv stay the last two blocks: hosts/bootstrap-host.sh embeds this tail byte for byte.
