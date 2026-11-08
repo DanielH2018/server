@@ -54,11 +54,11 @@ def kind_pins(
 
 
 def _proof_env() -> dict[str, str]:
-    steps = yaml_fast.safe_load((_REPO / CI_WORKFLOW).read_text())["jobs"][
+    job = yaml_fast.safe_load((_REPO / CI_WORKFLOW).read_text())["jobs"][
         "sops_manifest_type_proof"
-    ]["steps"]
-    env: dict[str, str] = {}
-    for step in steps:
+    ]
+    env: dict[str, str] = dict(job.get("env") or {})
+    for step in job["steps"]:
         env.update(step.get("env") or {})
     return env
 

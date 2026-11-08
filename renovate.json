@@ -197,7 +197,7 @@
     },
     {
       "customType": "regex",
-      "description": "The kind binary CI's `sops_manifest_type_proof` job creates its throwaway cluster with (target slice D3, PR D3.3d, issue #5173). It is pinned by version and by the sha256 of `kind-linux-amd64`, and this manager moves both in one PR, in the nfpm manager's shape: ONE matchString spans the `# renovate:` annotation, the `KIND_VERSION` line and the `KIND_SHA256` line of the step's env, so currentValue and currentDigest come from one match. The github-release-attachments datasource computes the new digest from the release's `kind-linux-amd64.sha256sum`. The node image the cluster boots is the manager below, and the `kind` packageRule puts both in one PR, because each kind release lists the node images it built. ENFORCED by scripts/tests/test_renovate_kind_pins.py.",
+      "description": "The kind binary CI's `sops_manifest_type_proof` job creates its throwaway cluster with (target slice D3, PR D3.3d, issue #5173). It is pinned by version and by the sha256 of `kind-linux-amd64`, and this manager moves both in one PR, in the nfpm manager's shape: ONE matchString spans the `# renovate:` annotation, the `KIND_VERSION` line and the `KIND_SHA256` line of the job's env, so currentValue and currentDigest come from one match. The github-release-attachments datasource computes the new digest from the release's `kind-linux-amd64.sha256sum`. The node image the cluster boots is the manager below, and the `kind` packageRule puts both in one PR, because each kind release lists the node images it built. ENFORCED by scripts/tests/test_renovate_kind_pins.py.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/"
       ],
