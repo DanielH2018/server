@@ -84,6 +84,40 @@ Reopen this record when one of these holds:
 A pod design starts from `kubernetes-sigs/agent-sandbox` (a Sandbox CRD with sandboxed container
 runtimes) in a namespace that enforces PodSecurity `restricted`.
 
+## Amendment 2026-11-08: the per-batch MemoryHigh stays
+
+The operator kept the per-batch `MemoryHigh` (`BATCH_MEMORY_HIGH`, 4 GiB) on 2026-11-08, after
+its first week (#6769). It landed on 2026-10-31 as `dd4bc2a787`. Both windows below are
+`[7d]` queries through `probe.py metric`, ending 2026-10-29T00:00Z and 2026-11-08T20:00Z.
+
+| | daniel-box before | daniel-box after | daniel-server before | daniel-server after |
+|---|---|---|---|---|
+| batches | 63 | 116 | 125 | 166 |
+| fleet memory PSI, full / some (us/s) | 116 / 140 | 55 / 67 | 0.6 / 0.6 | 9.3 / 11.2 |
+| fleet peak `memory.current` (GiB) | 14.0 | 13.3 | 15.5 | 16.1 |
+| fleet `memory.events` `high` | 96,865 | 236,328 | 0 | 125,773 |
+| median batch wall time (min) | 20 | 37 | 25 | 40 |
+| median CPU per batch (CPU-min) | 6.7 | 19.7 | 19.4 | 23.8 |
+
+Neither host recorded a `max` or `oom_kill` event, so no batch was killed.
+
+The issue's rule removed the limit if either the `high` count or the wall time failed, and both
+failed as written. Neither measures the limit:
+
+- `claude-cgroup-metrics.sh` reads the hierarchical `memory.events`, so the fleet's `high` count
+  includes every batch's own `MemoryHigh` throttling. daniel-server's count rose from 0 to
+  125,773 while its fleet stayed 2 GiB under its 18G cap. The count cannot be compared with
+  the 2026-10-29 baseline. #7679 exports `memory.events.local` so a later reading can.
+- Memory PSI is hierarchical too, so it bounds the stall the limit causes. daniel-server's
+  11 us/s is about 0.001% of wall time, or about 26 ms in a 40-minute batch. The limit cannot
+  explain a 15-minute rise in median wall time.
+
+On daniel-box, CPU per batch tripled, which fits its longer wall time. On daniel-server, CPU
+per batch rose 23% and host CPU pressure fell from 6.3% to 5.0%, so neither the limit nor CPU
+contention explains its rise. The batch mix and the landing waits are not measured here.
+The limit did what it was for on daniel-box: fleet PSI halved and the fleet stayed under its
+cap while batches nearly doubled.
+
 ## Governs
 
 The per-batch limits are set in `systemd_run_command` in `scripts/dev/fanout_lib/launch.py`.
