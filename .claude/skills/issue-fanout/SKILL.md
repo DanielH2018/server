@@ -191,9 +191,11 @@ landing a server batch's PR by hand, because `land.sh` holds no per-PR lock and 
 arm the merge twice. The orchestrator lands every other server PR, `--no-review` batches included,
 after that wait. A red CI verdict resumes the agent once, with
 each failed check's name and the end of its job's log, and the pipeline waits again on the new
-head. A batch whose CI is still red then ends `needs input:` naming the checks. A `cancelled` run
-is no verdict: the pipeline waits on it again, and a wait that spends its 35 minutes with no
-verdict also ends `needs input:`. Only this repo's batches wait, on either host; another repo's
+head. When the resume pushed nothing, the pipeline first re-runs the failed jobs once, because
+half the red-after-resume batches measured were flakes. A batch whose CI is still red then ends
+`needs input:` naming the checks. A `cancelled` run is no verdict: the pipeline waits on it
+again. A wait that spends its 35 minutes with no verdict also ends `needs input:`, unless the
+head's checks are still running, which extends it to 60 minutes. Only this repo's batches wait, on either host; another repo's
 batch does not. The review's counts and costs go on the PR as
 a comment, with only the actionable findings listed and security findings as a count only. The full record goes to `~/.local/state/fanout-review/`.
 Each phase's Claude Code telemetry also carries `fanout_batch` and `fanout_phase` labels in

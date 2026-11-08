@@ -27,9 +27,8 @@
 #   /var/lib/homelab-updater-poll/triggered, so a failed, held or lock-refused run waits for the
 #   daily timer instead of repeating every 15 minutes (#6911's memory limit). It skips, without
 #   recording, while homelab-updater.timer is masked or while homelab-docker-engine,
-#   homelab-updater, homelab-reconcile, apt-daily or apt-daily-upgrade is running (a oneshot reads
-#   `activating` while it runs). The updater's
-#   own hold (docs/host-packages.md) still refuses an install. The poll does not avoid man-db's
+#   homelab-updater, homelab-reconcile, homelab-reconcile-wait, apt-daily or apt-daily-upgrade is
+#   running (a oneshot reads `activating` while it runs). The updater's own hold (docs/host-packages.md) still refuses an install. The poll does not avoid man-db's
 #   01:00 to 03:00 window, which the daily fire was placed after: it only fires the updater on a
 #   publish, and man-db holds no dpkg lock.
 # - Required evidence, every cycle: a notice line in the journal for every start or skip, and the

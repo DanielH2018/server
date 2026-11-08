@@ -110,9 +110,11 @@ class Record:
     # The VERDICT line of the landing the pipeline ran (#3960), "" when it ran none.
     verdict: str = ""
     # The CI wait a batch that does not land runs (#4737): "" when it ran none, else its
-    # result in words, and whether the implementer was resumed for a red verdict.
+    # result in words, whether the implementer was resumed for a red verdict, and whether
+    # the failed jobs were re-run after a resume that pushed nothing (#7674).
     ci_gate: str = ""
     ci_resumed: bool = False
+    ci_rerun: bool = False
     # Per phase: wall-clock seconds, and the tool calls the classifier denied.
     durations: dict[str, float] = field(default_factory=dict)
     permission_denials: dict[str, int] = field(default_factory=dict)

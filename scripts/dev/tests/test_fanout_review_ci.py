@@ -14,6 +14,7 @@ from fanout_lib.launch import REVIEW_RUNTIME_MAX_S, RUNTIME_MAX_S
 from fanout_lib.review.review_ci import (
     CI_RECHECK_S,
     CI_SLICE_S,
+    CI_WAIT_MAX_S,
     CI_WAIT_S,
     MERGEABLE_RECHECK_S,
     READY_POLL_S,
@@ -166,22 +167,78 @@ def test_ci_that_runs_twenty_minutes_on_a_loaded_host_still_ends_done(tmp_path):
     assert len(run.ci_calls) == 5 and clock.sleeps == []
 
 
-def test_ci_still_running_at_the_budget_ends_needs_input_naming_the_time_waited(
+def test_ci_still_running_past_the_budget_is_waited_on_and_ends_done(tmp_path):
+    # PR #7059's run passed at 48.5 minutes, after the 35-minute budget (#7673).
+    pipeline, run, _ = _server_batch(tmp_path, _clean_review())
+    running = (75, "WAIT: timeout still running after 300s; re-run: cc-wait ...\n")
+    run.ci = [running] * 10 + [PASSED]
+    assert pipeline.run_all()["result"] == f"Opened {PR}"
+
+
+def test_ci_still_running_at_the_cap_ends_needs_input_naming_the_time_waited(
     tmp_path,
 ):
     pipeline, run, _ = _server_batch(tmp_path, _clean_review())
     run.ci = [(75, "WAIT: timeout still running after 300s; re-run: cc-wait ...\n")]
     final = pipeline.run_all()
-    assert "within its wait of 35 min (WAIT: timeout still running" in final["result"]
+    assert "within its wait of 60 min (WAIT: timeout still running" in final["result"]
+    assert len(run.ci_calls) == CI_WAIT_MAX_S // CI_SLICE_S
+    assert "(waited 60 min)" in _record(tmp_path)["ci_gate"]
+
+
+def test_a_head_with_no_check_runs_still_stops_at_the_budget(tmp_path):
+    pipeline, run, _ = _server_batch(tmp_path, _clean_review())
+    run.ci = [(75, "WAIT: timeout still pending after 300s; re-run: cc-wait ...\n")]
+    final = pipeline.run_all()
+    assert "within its wait of 35 min (WAIT: timeout still pending" in final["result"]
     assert len(run.ci_calls) == CI_WAIT_S // CI_SLICE_S
-    assert "(waited 35 min)" in _record(tmp_path)["ci_gate"]
 
 
 def test_two_full_ci_waits_fit_in_a_review_batchs_run_time_and_still_leave_room_to_land():
     # The implementer can use RUNTIME_MAX_S; the CI waits and the landing share what is left.
     slack = REVIEW_RUNTIME_MAX_S - RUNTIME_MAX_S
-    assert 2 * CI_WAIT_S + WAIT_MARGIN_S <= slack
-    assert 2 * CI_WAIT_S + LAND_MARGIN_S <= slack
+    assert 2 * CI_WAIT_MAX_S + WAIT_MARGIN_S <= slack
+    assert 2 * CI_WAIT_MAX_S + LAND_MARGIN_S <= slack
+
+
+def _flaky_batch(tmp_path, report="Nothing to fix; the failure looks flaky."):
+    reports = [*_clean_review(), _report(f"{report} {PR}")]
+    pipeline, run, clock = _server_batch(tmp_path, reports)
+    run.ci = [FAILED, PASSED]
+    run.rollup = [{"name": "pytest", "conclusion": "FAILURE", "detailsUrl": JOB_URL}]
+    run.failed_runs = [[8, 1], [9, 1]]
+    return pipeline, run, clock
+
+
+def test_a_resume_that_pushes_nothing_re_runs_the_failed_jobs_before_the_wait(tmp_path):
+    pipeline, run, _ = _flaky_batch(tmp_path)
+    assert pipeline.run_all()["result"].endswith(PR)
+    (rerun,) = run.reruns
+    assert rerun[3:5] == ["9", "--failed"]
+    assert run.log[-1] == ("gh-ci",)
+    record = _record(tmp_path)
+    assert record["ci_rerun"] is True and record["outcome"] == "pr"
+    assert (
+        record["ci_gate"] == "passed after one resume and a re-run of the failed jobs"
+    )
+
+
+def test_a_resume_that_pushes_a_fix_re_runs_nothing(tmp_path):
+    pipeline, run, _ = _flaky_batch(tmp_path, "Fixed the weight record.")
+    run.fix_pushes = True
+    pipeline.run_all()
+    assert run.reruns == []
+    assert _record(tmp_path)["ci_gate"] == "passed after one resume"
+
+
+def test_a_re_run_that_never_registers_waits_on_the_old_failure(tmp_path):
+    pipeline, run, clock = _flaky_batch(tmp_path)
+    run.ci = [FAILED]
+    run.attempts = [1]
+    final = pipeline.run_all()
+    assert len(run.reruns) == 1 and READY_POLL_S in clock.sleeps
+    assert _record(tmp_path)["ci_rerun"] is False
+    assert final["result"].startswith("needs input: CI is red after one resume,")
 
 
 def test_a_daniel_box_batch_with_red_ci_is_resumed_once_then_lands(tmp_path):
