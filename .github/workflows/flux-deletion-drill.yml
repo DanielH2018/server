@@ -343,7 +343,8 @@ jobs:
           done < "$f/kit.txt"
 
       # The Namespace and the PriorityClasses go first, as on a rebuild. The registry is the
-      # role's own render less its node pin, and its claims bind through kind's provisioner.
+      # role's own render less its node pin. Its push store's claim binds to the runbook's
+      # hostPath PV, whose directory the runbook creates on the node first.
       - name: Fresh cluster - install the controllers and the registry from the archives
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         run: |
@@ -351,6 +352,11 @@ jobs:
           f="$RUNNER_TEMP/fresh"
           kubectl apply -f "$f/prereq/namespace.yaml"
           kubectl apply -f "$f/prereq"
+          [ -s "$f/volumes/dirs.txt" ]
+          while read -r uid gid dir; do
+            docker exec fresh-control-plane install -d -o "$uid" -g "$gid" "$dir"
+          done < "$f/volumes/dirs.txt"
+          kubectl apply -f "$f/volumes"
           kubectl apply --server-side -f ansible/roles/k8s/flux/files/gotk-components.yaml
           for d in source-controller kustomize-controller notification-controller; do
             kubectl -n flux-system rollout status "deployment/$d" --timeout=180s
@@ -404,7 +410,7 @@ jobs:
         if: failure() && (github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true')
         run: |
           kubectl -n flux-system get ocirepository,kustomization -o yaml || true
-          kubectl get deployment,pvc -A || true
+          kubectl get deployment,pvc,pv -A || true
           kubectl get pods -A || true
           kubectl -n homelab logs deployment/registry --tail=100 || true
           kubectl -n flux-system logs deployment/source-controller --tail=150 || true
