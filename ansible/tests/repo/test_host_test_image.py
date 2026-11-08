@@ -33,24 +33,33 @@ def _inputs() -> str:
     return hashlib.sha256((CONTEXT / "Dockerfile").read_bytes()).hexdigest()
 
 
+def _tag() -> str:
+    return f"{IMAGE}:24.04-arm64-{_inputs()[:12]}"
+
+
 def _build(
     tmp_path: Path,
     *args: str,
     pins: str,
-    pull_exit: int = 0,
+    pullable: tuple[str, ...] = (),
     inspect: str = "missing",
 ) -> tuple[subprocess.CompletedProcess, list[str]]:
-    """Run build-image.sh 24.04 with `pins` as image.pins, returning the result and each docker argv."""
+    """Run build-image.sh 24.04 with `pins` as image.pins, returning the result and each docker argv.
+
+    A `docker pull` succeeds only for a ref in `pullable`.
+    """
     context = tmp_path / "context"
     context.mkdir()
     for name in ("build-image.sh", "Dockerfile"):
         shutil.copy2(CONTEXT / name, context / name)
     (context / "image.pins").write_text(pins)
     calls = tmp_path / "calls"
+    pull_cases = "".join(f'  "pull {ref}") exit 0 ;;\n' for ref in pullable)
     docker = f"""#!/bin/bash
 printf '%s\\n' "$*" >> "{calls}"
 case "$1 $2" in
-  "pull "*) exit {pull_exit} ;;
+{pull_cases}  "pull "*) exit 1 ;;
+  "inspect "*) echo "{IMAGE}@{DIGEST}" ;;
   "buildx imagetools")
     [[ "$*" == *--format* ]] && {{ echo {DIGEST}; exit 0; }}
     case "{inspect}" in
@@ -71,40 +80,65 @@ def _matching_pins() -> str:
     return f"inputs {_inputs()}\n24.04-arm64 {DIGEST}\n"
 
 
+def _stale_pins() -> str:
+    return f"inputs {'0' * 64}\n24.04-arm64 {DIGEST}\n"
+
+
+def _docker_verbs(calls: list[str]) -> list[str]:
+    """Each call's verb, with the inspect that names a pulled digest left out."""
+    return [
+        " ".join(call.split()[:2] if call.startswith("buildx") else call.split()[:1])
+        for call in calls
+        if not call.startswith("inspect ")
+    ]
+
+
 def test_a_pin_for_this_dockerfile_pulls_by_digest_and_never_builds(
+    tmp_path: Path,
+) -> None:
+    pinned = f"{IMAGE}@{DIGEST}"
+    result, calls = _build(tmp_path, pins=_matching_pins(), pullable=(pinned,))
+    assert result.returncode == 0, result.stderr
+    assert [c for c in calls if not c.startswith("inspect ")] == [
+        f"pull {pinned}",
+        f"tag {pinned} homelab-host-test:24.04",
+    ]
+
+
+def test_a_stale_pin_pulls_this_dockerfiles_published_tag_and_warns(
+    tmp_path: Path,
+) -> None:
+    result, calls = _build(tmp_path, pins=_stale_pins(), pullable=(_tag(),))
+    assert result.returncode == 0, result.stderr
+    assert f"pull {_tag()}" in calls
+    assert f"{IMAGE}@{DIGEST}" not in " ".join(c for c in calls if c.startswith("pull"))
+    assert "buildx build" not in _docker_verbs(calls)
+    assert "image.pins is stale" in result.stdout
+
+
+def test_a_dockerfile_with_no_published_image_is_built(tmp_path: Path) -> None:
+    result, calls = _build(tmp_path, pins=_stale_pins())
+    assert result.returncode == 0, result.stderr
+    assert _docker_verbs(calls) == ["pull", "buildx build"]
+    assert calls[0] == f"pull {_tag()}"
+    assert "-t homelab-host-test:24.04" in calls[-1]
+
+
+def test_a_failed_pinned_pull_falls_back_to_the_tag_then_the_build(
     tmp_path: Path,
 ) -> None:
     result, calls = _build(tmp_path, pins=_matching_pins())
     assert result.returncode == 0, result.stderr
-    assert calls == [
-        f"pull {IMAGE}@{DIGEST}",
-        f"tag {IMAGE}@{DIGEST} homelab-host-test:24.04",
-    ]
-
-
-def test_a_pin_for_another_dockerfile_builds_without_pulling(tmp_path: Path) -> None:
-    result, (call,) = _build(
-        tmp_path, pins=f"inputs {'0' * 64}\n24.04-arm64 {DIGEST}\n"
-    )
-    assert result.returncode == 0, result.stderr
-    assert call.startswith("buildx build --load")
-    assert "-t homelab-host-test:24.04" in call
-
-
-def test_a_failed_pull_falls_back_to_the_build(tmp_path: Path) -> None:
-    result, calls = _build(tmp_path, pins=_matching_pins(), pull_exit=1)
-    assert result.returncode == 0, result.stderr
-    assert calls[0] == f"pull {IMAGE}@{DIGEST}"
-    assert calls[1].startswith("buildx build --load")
-    assert "Pulling" in result.stdout
+    assert calls[:2] == [f"pull {IMAGE}@{DIGEST}", f"pull {_tag()}"]
+    assert calls[2].startswith("buildx build --load")
+    assert "Pulling the pinned" in result.stdout
 
 
 def test_a_publish_pushes_a_missing_tag_and_prints_its_pin(tmp_path: Path) -> None:
     result, calls = _build(tmp_path, "--publish", pins="inputs -\n")
     assert result.returncode == 0, result.stderr
-    tag = f"{IMAGE}:24.04-arm64-{_inputs()[:12]}"
     assert any(call.startswith("buildx build --load") for call in calls)
-    assert f"push {tag}" in calls
+    assert f"push {_tag()}" in calls
     assert result.stdout.splitlines()[-1] == f"24.04-arm64 {DIGEST}"
 
 
@@ -136,6 +170,8 @@ def _pin_problems(text: str, sites: set[tuple[str, str]]) -> list[str]:
     )
     if "inputs" not in pins:
         return ["no inputs line"]
+    if pins["inputs"] != "-" and not re.fullmatch(r"[0-9a-f]{64}", pins["inputs"]):
+        return [f"inputs is no Dockerfile sha256: {pins['inputs']}"]
     keys = {f"{release}-{_ARCH[runner]}" for runner, release in sites}
     problems = [f"{key} is no build site" for key in pins.keys() - keys - {"inputs"}]
     problems += [
@@ -162,9 +198,13 @@ def test_a_pin_file_missing_a_site_or_holding_a_tag_is_flagged() -> None:
         "26.04-amd64 is not a digest: latest",
         "24.04-arm64 has no pin",
     ]
+    assert _pin_problems("inputs latest\n", sites) == [
+        "inputs is no Dockerfile sha256: latest"
+    ]
 
 
 def test_image_pins_pins_each_ci_build_site_by_digest() -> None:
+    # Not held equal to the Dockerfile's hash: a Dockerfile PR runs before its image can exist.
     text = (CONTEXT / "image.pins").read_text()
     assert _pin_problems(text, _build_sites(CI_WORKFLOW)) == []
 

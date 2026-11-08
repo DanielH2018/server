@@ -1447,9 +1447,9 @@ jobs:
 
       # Step 4. The Dockerfile pins the release by digest and the packages by snapshot.
       # build-image.sh pulls the image hosts/lib/tests/container/image.pins names by digest,
-      # which host-test-image.yml publishes, and builds it when the pin is for another
-      # Dockerfile or the pull fails. A build reaches the runner's CA bundle, for the snapshot
-      # archive's https redirect.
+      # which host-test-image.yml publishes, or this Dockerfile's published tag when the pin is
+      # stale. A Dockerfile PR has no published image, so it builds. A build reaches the
+      # runner's CA bundle, for the snapshot archive's https redirect.
       # The early exit is in the script, not the `if:`, because a dispatch must reach this
       # step (test_ci_dispatch_sweeps_everything.py) and a dispatch of master must stay green.
       - name: Build the test image for this release

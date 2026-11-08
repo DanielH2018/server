@@ -5,8 +5,9 @@
 #   build-image.sh 24.04 --publish   push this Dockerfile's image to GHCR unless already there
 #
 # A plain run pulls the pinned digest when image.pins was written for this Dockerfile, so a PR
-# that changes no image input fetches nothing from snapshot.ubuntu.com. A PR that changes the
-# Dockerfile, an empty pin and a failed pull each build from the Dockerfile instead.
+# that changes no image input fetches nothing from snapshot.ubuntu.com. A stale or empty pin pulls
+# this Dockerfile's write-once tag instead, which master publishes after the merge. A PR that
+# changes the Dockerfile has no such tag yet, so it builds from the Dockerfile, as does a pull that fails.
 #
 # --publish tags the image `<release>-<arch>-<inputs>` and prints the image.pins line for it.
 # The tag is write-once: an existing one is never rebuilt, so the digest a pin names stays tagged.
@@ -57,16 +58,23 @@ if [[ "$mode" == --publish ]]; then
   exit 0
 fi
 
+# Pulls $1 as $local_tag, naming the digest it got.
+pull() {
+  docker pull "$1" || return 1
+  docker tag "$1" "$local_tag"
+  echo "::notice::Pulled $1 as $local_tag ($(docker inspect --format '{{index .RepoDigests 0}}' "$1"))."
+}
+
 digest=$(pin "$release-$arch")
-if [[ "$(pin inputs)" != "$inputs" ]]; then
-  echo "::notice::image.pins was not written for this Dockerfile, so the image is built from it."
-elif [[ -z "$digest" ]]; then
-  echo "::notice::image.pins names no image for $release-$arch, so the image is built."
-elif docker pull "$repo@$digest"; then
-  docker tag "$repo@$digest" "$local_tag"
-  echo "::notice::Pulled $repo@$digest as $local_tag."
-  exit 0
-else
-  echo "::warning::Pulling $repo@$digest failed, so the image is built from the Dockerfile."
+if [[ "$(pin inputs)" == "$inputs" && -n "$digest" ]]; then
+  pull "$repo@$digest" && exit 0
+  echo "::warning::Pulling the pinned $repo@$digest failed."
 fi
+if pull "$remote_tag"; then
+  if [[ "$(pin inputs)" != "$inputs" ]]; then
+    echo "::warning::image.pins is stale for this Dockerfile. Copy the lines from the host-test-image run's summary into it."
+  fi
+  exit 0
+fi
+echo "::notice::No image is published for this Dockerfile, so it is built from the Dockerfile."
 build

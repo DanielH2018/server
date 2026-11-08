@@ -1047,8 +1047,9 @@ They need no secrets, and they do these steps:
    (`snapshot.ubuntu.com`) at a pinned timestamp, so a rebuild resolves the same versions.
    `hosts/lib/tests/container/build-image.sh` pulls the image `image.pins` beside it names by
    digest, so an unchanged Dockerfile fetches nothing from the mirror. The `host-test-image`
-   workflow publishes one image per release and architecture to GHCR on master. A pin written
-   for another Dockerfile, or a failed pull, builds from the mirror (#7664).
+   workflow publishes one image per release and architecture to GHCR on master, under a
+   write-once tag carrying the Dockerfile's hash. A stale pin pulls that tag instead, and a
+   Dockerfile with no published image builds from the mirror (#7664).
    The build step writes `dpkg-query -W systemd python3` to the job summary. The image also
    carries these three, so every case, the cold install included, starts with them:
     - the textfile directory, with M3's owner and mode, which `optimize_pi` creates on the Pi;

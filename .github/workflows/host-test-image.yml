@@ -2,8 +2,8 @@ name: host-test-image
 
 # Publishes the test images ci.yml's host_packages and host_tools_arm64 jobs pull, so a PR run
 # with an unchanged Dockerfile fetches nothing from snapshot.ubuntu.com (#7664). Those jobs pull
-# the digest hosts/lib/tests/container/image.pins names, and build from the Dockerfile when the pin
-# was written for another Dockerfile or the pull fails.
+# the digest hosts/lib/tests/container/image.pins names, or this Dockerfile's tag while the pin is
+# stale, and build from the Dockerfile when neither pulls.
 #
 # Each image is tagged `<release>-<arch>-<inputs>` and written once: a run that finds the tag
 # already on GHCR rebuilds nothing. A build that needs the mirror therefore runs here, off every
