@@ -141,7 +141,6 @@ from fanout_lib.review.review_record import (
     held_for_findings,
     held_for_green,
     issues_section,
-    outcome,
 )
 from fanout_lib.launch import (
     BUDGET_USD,
@@ -554,9 +553,10 @@ class Pipeline:
             red = self._red(issues) if self.red_green else None
         except ResetFailed as exc:
             self.record.red_gate = f"reset failed: {exc}"
-            self.record.outcome = "failed"
+            report = {"type": "result", "is_error": True, "result": f"failed: {exc}"}
+            self.record.settle(report, has_pr=False)
             self._save()
-            return {"type": "result", "is_error": True, "result": f"failed: {exc}"}
+            return report
         brief = self.brief
         if red is not None:
             brief = brief.replace(ISSUES_HEADING, red_section(*red) + ISSUES_HEADING, 1)
@@ -571,7 +571,7 @@ class Pipeline:
         if impl.failed or not found.url:
             # Saved whether or not the batch is red-green: a batch that never reached a PR is
             # the failure rate the records exist to measure (#3940).
-            self.record.outcome = outcome(report, has_pr=False)
+            self.record.settle(report, has_pr=False)
             self._save()
             return report
         self.record.pr = found.url
@@ -657,7 +657,7 @@ class Pipeline:
         comment = ["gh", "pr", "comment", self.record.pr, "--body-file", "-"]
         self.run(comment, comment_body(self.record))
         final = final or self._finish(last)
-        self.record.outcome = outcome(final, has_pr=True)
+        self.record.settle(final, has_pr=True)
         self._save()
         held = sum(1 for f in self.record.remaining if is_held(f))
         if held:

@@ -39,6 +39,10 @@ Each row also carries what a change cost to get right, and what CI cost to judge
 - `reverted_by` is the merged PR that reverted this one (`reverts` has the two forms).
 - `review_findings` and `fix_rounds` come from the batch's review record.
 
+After the PR rows, the summary lists every batch in the window that ended `needs-input` or
+`failed`, read from the review records whether or not it opened a PR, with the `blocker` line
+the agent stopped on (#7686).
+
 The summary prints the first-time-green rate, the share reverted with each pair listed,
 and the CI queue and wall medians. The pairs are listed because a planned drill's revert
 counts too, so a person judges which were failures. A fix that lands as a new PR without
@@ -81,6 +85,8 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from fanout_lib import operator_waits
+from fanout_lib.review.api import RECORD_NAME, SAVED_FORMAT
+from fanout_lib.stops import load_stops, stop_lines
 from lib.cli_help import ArgumentParser, answer_help
 from lib.gh import gh_json
 
@@ -110,7 +116,6 @@ GAPS = ("issue_to_batch", "batch_to_pr", "pr_to_land", "land_to_merge", "merge_t
 _JOURNAL_LINE = re.compile(r"^(?P<ts>\d+(?:\.\d+)?) \S+ \S+: (?P<msg>.*)$")
 _FIELD = re.compile(r'(\w+)=("[^"]*"|\S*)')
 _HOLD = re.compile(r"#(?P<pr>\d+) batch \S+ ineligible, (?P<why>[^:(]*)")
-_RECORD_NAME = re.compile(r"^(?P<batch>\d+)\S*-(?P<saved>\d{8}T\d{6}Z)\.json$")
 _PR_URL = re.compile(r"/pull/(\d+)$")
 _REVERTS = re.compile(r"(?im)^Reverts \S*#(\d+)\s*$")
 _REVERT_TITLE = re.compile(r"^Revert\b")
@@ -186,7 +191,7 @@ def load_reviews(directory: Path) -> dict[int, dict]:
     """
     out: dict[int, dict] = {}
     for path in sorted(directory.glob("*.json")):
-        name = _RECORD_NAME.match(path.name)
+        name = RECORD_NAME.match(path.name)
         if not name:
             continue
         try:
@@ -196,7 +201,7 @@ def load_reviews(directory: Path) -> dict[int, dict]:
         pr = _PR_URL.search(str(record.get("pr") or ""))
         if not pr:
             continue
-        saved = datetime.strptime(name["saved"], "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
+        saved = datetime.strptime(name["saved"], SAVED_FORMAT).replace(tzinfo=UTC)
         phases = {
             k: v
             for k, v in (record.get("durations") or {}).items()
@@ -594,8 +599,10 @@ def main(argv: list[str] | None = None) -> int:
             )
         directories.append(copy)
     reviews: dict[int, dict] = {}
+    stops: list[dict] = []
     for directory in directories:
         reviews |= load_reviews(directory)
+        stops += load_stops(directory, since)
     waits = operator_waits.read_stamps(args.waits_file)
     rows = join(prs, issues, landings, holds, reviews, ci, jobs, waits)
 
@@ -603,7 +610,10 @@ def main(argv: list[str] | None = None) -> int:
     snapshot = args.out / f"{datetime.now(UTC).date().isoformat()}.jsonl"
     with snapshot.open("a") as fh:
         fh.writelines(json.dumps(r, sort_keys=True) + "\n" for r in rows)
-    print(json.dumps(rows, indent=2) if args.json else summarize(rows))
+    if args.json:
+        print(json.dumps(rows, indent=2))
+    else:
+        print("\n".join([summarize(rows), *stop_lines(stops)]))
     print(f"appended {len(rows)} rows to {snapshot}", file=_sys.stderr)
     return 0
 
