@@ -218,6 +218,7 @@ def test_a_masked_updater_timer_skips_without_recording(pi):
         "homelab-docker-engine.service",
         "homelab-updater.service",
         "homelab-reconcile.service",
+        "homelab-reconcile-wait.service",
         "apt-daily-upgrade.service",
     ],
 )

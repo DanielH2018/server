@@ -27,7 +27,7 @@
 #
 # DECIDED: the units keep the `kuma-check-` prefix, by the operator's ruling in ADR 0026.
 #
-# NO TAGS IN THIS FILE, matching release_bin.yml and the stamp files. Tags union in Ansible, so
+# NO TAGS IN THIS FILE, matching the stamp files. Tags union in Ansible, so
 # a tag here would also inherit the caller's and become selectable two ways. `when:` on the
 # caller's import_tasks applies to every task here, because the import is static.
 #
@@ -52,8 +52,8 @@
 - name: Render the kuma-check units for {{ check_timer_name }}
   when: check_timer_state == 'present'
   # `src` names the owning role outright. A task file imported from another role resolves a bare
-  # basename against the role that owns the file, which happens to be this one, but
-  # release_bin.yml records that trap and the explicit path does not depend on it.
+  # basename against the role that owns the file, which happens to be this one; the explicit
+  # path does not depend on that.
   ansible.builtin.template:
     src: "{{ playbook_dir }}/roles/setup/common/templates/check-timer.{{ item }}.j2"
     dest: "/etc/systemd/system/kuma-check-{{ check_timer_name }}.{{ item }}"

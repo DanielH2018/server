@@ -10,6 +10,7 @@ component ships; the reconcile-size census counts both against one line ceiling.
 
 Usage: homelab-reconcile        (exit 0 when every step succeeded, 1 otherwise)
        homelab-reconcile --metrics   (rewrite the metrics file from the record; acts on nothing)
+       homelab-reconcile --wait-for-apt   (block until dpkg's frontend lock is free; exit 0)
 
 `--metrics` is what `homelab-reconcile-metrics.service` runs at boot, so the file stops reading
 `homelab_host_reboot_pending 1` once the boot has cleared the flag (#6188). It takes no lock and
@@ -18,6 +19,12 @@ writes no record. It drops each pending unit that has restarted since, as a full
 It takes dpkg's frontend lock with a blocking lockf, so a start from a postinst waits until the
 whole apt transaction has finished. Under the lock it reads the manifest, its own state and both
 packages' status, then releases the lock before its first systemctl call.
+
+`--wait-for-apt` is what `homelab-reconcile-wait.service` runs. homelab-reconcile.service wants
+that unit and is ordered after it, so the wait for apt's post-invoke hooks spends the wait
+unit's start timeout, not reconcile's (#7648). Its journal line is `wait for apt to release the
+dpkg lock`, and a full run's own `wait for the dpkg lock` then reads near zero. The wait unit has
+no enable link and is inactive once it exits, so no reconcile step starts or restarts it.
 
 The manifest, /usr/lib/homelab/manifest.json, which the host package ships:
 
@@ -35,7 +42,8 @@ The manifest, /usr/lib/homelab/manifest.json, which the host package ships:
 `units` names every unit reconcile manages, another homelab package's and another package's
 drop-in target included. `enable_links` names each unit whose enable link the manifest's
 packages ship. `handoffs` pairs each spec's legacy entries with the units that spec ships, and
-step 4 keeps an entry while one of those units failed to start in this run. `reconcilers` lists
+step 4 keeps an entry while one of those units failed to start in this run, or its step 3b
+activation call failed. `reconcilers` lists
 the arms the manifest carries state for. The four arms are in
 ARMS, and each section's schema is the docstring of its reconcile_lib module, so a manifest
 listing another kind fails the run here. The udev arm (H4.3b1) is not one of them: it hashes the
@@ -263,6 +271,17 @@ def valid_handoff(group: object) -> bool:
         and isinstance(legacy, list)
         and all(map(valid_legacy, legacy))
     )
+
+
+def wait_for_apt() -> int:
+    """`--wait-for-apt`: block until no apt or dpkg frontend holds the lock, then release it."""
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(LOCK, os.O_RDWR | os.O_CREAT, 0o640)
+    timed(
+        "wait for apt to release the dpkg lock", lambda: fcntl.lockf(fd, fcntl.LOCK_EX)
+    )
+    os.close(fd)
+    return 0
 
 
 def read_under_lock(packages: list[str]) -> tuple[str | None, dict, dict]:
@@ -763,14 +782,16 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     pending = activate.refresh_pending(
         raw_pending if isinstance(raw_pending, dict) else {}, manifest["activations"]
     )
+    called = {unit: unit not in failed for unit in restart_set}
     activated, files_state = activate.activate(
         manifest["activations"],
         raw_files if isinstance(raw_files, dict) else {},
         units,
-        {unit: unit not in failed for unit in restart_set},
+        called,
         pending,
     )
     ok = ok and activated
+    activation_failed = {unit for unit, result in called.items() if not result} - failed
     if not secrets_ran:
         failed.add(SECRETS_UNIT)
     for unit, (new, old) in hashes.items():
@@ -822,8 +843,11 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
             start_failed.add(unit)
             ok = False
 
-    # Step 4c: the other entries. One stays while a unit of its spec failed to start in this run.
-    kept_for = replacement_failed(manifest["handoffs"], start_failed | failed)
+    # Step 4c: the other entries. One stays while a unit of its spec failed to start in this run,
+    # step 3b's activation restart included.
+    kept_for = replacement_failed(
+        manifest["handoffs"], start_failed | failed | activation_failed
+    )
     removed = False
     for entry in plain:
         key = legacy_key(entry)
@@ -953,6 +977,8 @@ def metrics(host: str) -> int:
 
 
 def main() -> int:
+    if sys.argv[1:] == ["--wait-for-apt"]:
+        return wait_for_apt()
     host = run("hostname").stdout.strip()
     if sys.argv[1:] == ["--metrics"]:
         return metrics(host)

@@ -169,3 +169,11 @@ hypervisor_etcd_drill_fence_longhorn_url: http://10.43.152.244/v1/nodes
 hypervisor_suc_rehearsal_helper_path: "{{ hypervisor_etcd_drill_share_dir }}/suc_rehearsal.py"
 hypervisor_suc_rehearsal_guest_script_path: "{{ hypervisor_etcd_drill_share_dir }}/suc-rehearsal-guest-run.sh"
 hypervisor_suc_rehearsal_deadline: 2400
+
+# The bootstrap drill mode of the orchestrator (`--rehearse-bootstrap`, H7.15c's host half). The
+# guest-side script is copied into the guest for the run. One detached step may take the step
+# deadline: the full bootstrap-host.sh run builds a venv, installs three packages and writes the
+# first AIDE baseline. The ready deadline bounds the check after k3s.service starts.
+hypervisor_bootstrap_drill_guest_script_path: "{{ hypervisor_etcd_drill_share_dir }}/bootstrap-drill-guest-run.sh"
+hypervisor_bootstrap_drill_step_deadline: 5400
+hypervisor_bootstrap_drill_ready_deadline: 900

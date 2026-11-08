@@ -12,8 +12,9 @@ Shipped with the deployer (`tasks/code.yml`) and imported from the checkout thro
 `sys.path` insert as `gitops_markers`. monitor-bridge carries a copy beside its `gitops_markers`
 copy, written by `scripts/dev/gen_gitops_markers.py`, because it pages on `manual_plane` and
 names the `hold_plane` entries: a class it reads can move into the ledger only once that copy
-reads it. deploy-ui installs this source beside its `gitops_markers`, for its hold panel and
-Clear. renovate-agent installs it for the plane its hold skip names.
+reads it. The deploy-ui host component (`hosts/components/deploy-ui/`) ships this source beside
+its `gitops_markers`, for its hold panel and Clear. The renovate-agent host component
+(`hosts/components/renovate-agent/`) ships it for the plane its hold skip names.
 
 Stdlib only, plus `gitops_markers`.
 """

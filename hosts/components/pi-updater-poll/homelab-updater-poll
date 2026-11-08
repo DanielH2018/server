@@ -18,7 +18,7 @@
 #      lock-refused run therefore waits for the daily timer, never for this poll's next fire;
 #   5. skips, recording nothing, while anything that owns dpkg or the updater is busy:
 #      homelab-docker-engine.service, a masked homelab-updater.timer (the engine's interlock),
-#      the updater or reconcile itself, or apt's two daily services. The next poll retries;
+#      the updater, reconcile or its wait unit, or apt's two daily services. The next poll retries;
 #   6. starts homelab-updater.service without waiting for it, then records the version.
 #
 # The index is not verified here: the poll trusts nothing it reads. The updater fetches the
@@ -37,7 +37,7 @@ TRIGGERED=$STATE/triggered
 SOURCES=$ROOT/etc/apt/sources.list.d/homelab.sources
 HOST_PKG=homelab-$(hostname)
 # The units whose activity means dpkg or the updater is spoken for (step 5).
-BUSY="homelab-docker-engine.service homelab-updater.service homelab-reconcile.service apt-daily.service apt-daily-upgrade.service"
+BUSY="homelab-docker-engine.service homelab-updater.service homelab-reconcile-wait.service homelab-reconcile.service apt-daily.service apt-daily-upgrade.service"
 
 say() { echo "homelab-updater-poll: $*" >&2; }
 

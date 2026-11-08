@@ -14,8 +14,8 @@ the deployer reads them. A reader names no marker basename and parses no raw mar
 `read_field` reads one of those fields the same way, for a reader whose answer must not
 depend on a sibling marker it never asked for (#3972).
 
-Shipped with the deployer (`tasks/code.yml`) and installed by path beside deploy-ui's and
-renovate-agent's `gitops_ledger`, which is why it is stdlib only plus `gitops_markers` and
+Shipped with the deployer (`tasks/code.yml`), and beside `gitops_ledger` by the deploy-ui and
+renovate-agent host components (`hosts/components/deploy-ui/`, `hosts/components/renovate-agent/`), which is why it is stdlib only plus `gitops_markers` and
 `gitops_ledger`: those daemons run outside the repo venv and can import nothing else.
 monitor-bridge carries a generated copy (`scripts/dev/gen_gitops_markers.py`). Code that runs
 from the checkout imports it through the `GITOPS_DEPLOY_FILES` path insert. `gitops_ledger`

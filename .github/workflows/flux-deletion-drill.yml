@@ -6,7 +6,7 @@ name: Flux deletion drill
 # renderer's own writers (scripts/renderer/deletion_drill.py), so a green drill shows that the
 # form the renderer writes is one that Flux honours.
 #
-# Five cases run in every drill, each printing one `case=<name> verdict=<pass|fail>` line:
+# Seven cases run in every drill, each printing one `case=<name> verdict=<pass|fail>` line:
 #   revision-1       all three fixture tags reach Ready, so every fixture claim bound under
 #                    kind's WaitForFirstConsumer class
 #   as-rendered      prune-drill leaves the bundle. Under Orphan its Deployment stays, and
@@ -18,6 +18,11 @@ name: Flux deletion drill
 #   break-glass      a bundle signed with a throwaway key reaches Ready through the flux
 #                    role's break-glass source form
 #   break-glass-red  a bundle signed with a second key the cluster does not hold is refused
+#   fresh-cluster    on a second cluster where neither the node nor a pod resolves an outside
+#                    name, the controllers and the
+#                    registry run from image archives, the registry role's render serves the
+#                    key-signed bundle, and the bundle reaches Ready
+#                    (scripts/deploy_tools/fresh_cluster_drill.py)
 #
 # The job holds no secret and no age key, never pushes to GHCR and reaches no homelab host.
 # The private keys are generated here and discarded with the runner; the kit's private half
@@ -40,7 +45,7 @@ jobs:
   drill:
     name: flux-deletion-drill
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       REGISTRY: kind-registry:5000
       PUSH: 127.0.0.1:5001
@@ -55,8 +60,8 @@ jobs:
           persist-credentials: false
 
       # A dispatch always runs the drill. A pull request runs it when the diff touches the
-      # renderer, the fixture tree, the flux role's defaults or sync objects, the break-glass
-      # page or this file, and prints `skipped` otherwise.
+      # renderer, the fixture tree, the flux role's defaults or sync objects, the registry role,
+      # the PriorityClasses, the break-glass page or this file, and prints `skipped` otherwise.
       - name: Check whether this PR touches the drill's inputs
         id: scope
         if: github.event_name == 'pull_request'
@@ -68,14 +73,17 @@ jobs:
           "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
           if git diff --quiet "origin/$BASE_REF...HEAD" -- \
               scripts/renderer/ \
+              scripts/deploy_tools/fresh_cluster_drill.py \
               ansible/roles/k8s/flux/defaults/main.yml \
               ansible/roles/k8s/flux/templates/sync.yaml.j2 \
               ansible/roles/k8s/flux/templates/secret.yaml.j2 \
               ansible/roles/k8s/flux/files/gotk-components.yaml \
+              ansible/roles/k8s/registry/ \
+              ansible/roles/k8s/cluster-base/templates/priorityclass.yaml.j2 \
               docs/break-glass.md \
               .github/workflows/flux-deletion-drill.yml; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "skipped: no renderer, fixture, flux role, break-glass page or workflow change"
+            echo "skipped: no renderer, fixture, flux or registry role, break-glass page or workflow change"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
@@ -143,12 +151,12 @@ jobs:
             --bg-pubkey "$RUNNER_TEMP/keys/green/cosign.pub" \
             --bg-red-pubkey "$RUNNER_TEMP/keys/red/cosign.pub" --out "$RUNNER_TEMP/drill"
           # `judge <case> [args]` retries a case until it passes or the budget ends, and prints
-          # the verdict lines either way.
+          # the verdict lines either way. JUDGE_SCRIPT names another module's `check`.
           cat > "$RUNNER_TEMP/judge.sh" <<'JUDGE'
           judge() {
-            local budget=${BUDGET:-60} out
+            local budget=${BUDGET:-60} out script=${JUDGE_SCRIPT:-scripts/renderer/deletion_drill.py}
             for _ in $(seq "$budget"); do
-              if out=$($SNAP | uv run python scripts/renderer/deletion_drill.py check "$@"); then
+              if out=$($SNAP | uv run python "$script" check "$@"); then
                 echo "$out"
                 return 0
               fi
@@ -272,10 +280,143 @@ jobs:
           BUDGET=40 judge break-glass-red
           kubectl -n flux-system get ocirepository homelab -o jsonpath='{range .status.conditions[*]}{.type}={.status}: {.message}{"\n"}{end}'
 
+      # The fresh-cluster case (#7555) needs a second cluster, so the first one goes. crane
+      # writes each pinned image's whole index as an OCI layout, which keeps the digest the
+      # manifests name whichever image store the runner's Docker uses.
+      - name: Fresh cluster - delete the drill cluster and archive the kit's images
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          kind delete cluster --name drill
+          docker rm -f kind-registry
+          f="$RUNNER_TEMP/fresh"
+          uv run python scripts/deploy_tools/fresh_cluster_drill.py build \
+            --bg-pubkey "$RUNNER_TEMP/keys/green/cosign.pub" --out "$f"
+          crane_image=$(awk '/^registry_k8s_crane_image:/ {print $2}' ansible/roles/k8s/registry/defaults/main.yml)
+          [ -n "$crane_image" ]
+          mkdir -p "$f/kit"
+          jq -r '.[] | "\(.ref) \(.archive)"' "$f/images.json" > "$f/kit.txt"
+          while read -r ref tar; do
+            docker run --rm --user "$(id -u):$(id -g)" -v "$f/kit:/kit" "$crane_image" \
+              pull --format=oci "$ref" "/kit/${tar%.tar}"
+            uv run python scripts/deploy_tools/fresh_cluster_drill.py archive \
+              --layout "$f/kit/${tar%.tar}" --ref "$ref" --out "$f/kit/$tar"
+          done < "$f/kit.txt"
+
+      # The node's resolver points at a port nothing serves, so no name resolves on the node,
+      # ghcr.io and Docker Hub among them. CoreDNS forwards to a dead port too, so pods,
+      # source-controller among them, resolve only cluster names. kind's own images are in its
+      # node image. Each archive must then serve its digest reference through CRI, as the
+      # kubelet looks it up.
+      - name: Fresh cluster - create a cluster that resolves no outside name, and load the kit
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          f="$RUNNER_TEMP/fresh"
+          node_image=$(awk '/KIND_NODE_IMAGE: / {print $2; exit}' .github/workflows/ci.yml)
+          [ -n "$node_image" ]
+          kind create cluster --name fresh --image "$node_image" --config "$f/kind.yaml" --wait 120s
+          node=fresh-control-plane
+          docker exec "$node" sh -c 'echo "nameserver 127.0.0.1" > /etc/resolv.conf'
+          for host in ghcr.io registry-1.docker.io; do
+            if docker exec "$node" getent hosts "$host"; then
+              echo "the node still resolves $host, so this case cannot prove an offline bring-up"
+              exit 1
+            fi
+          done
+          echo "the node resolves neither ghcr.io nor registry-1.docker.io"
+          kubectl -n kube-system get configmap coredns -o json \
+            | jq '.data.Corefile |= sub("forward \\. /etc/resolv\\.conf"; "forward . 127.0.0.1:1")' \
+            > "$RUNNER_TEMP/coredns.json"
+          grep -q 'forward . 127.0.0.1:1' "$RUNNER_TEMP/coredns.json"
+          kubectl replace -f "$RUNNER_TEMP/coredns.json"
+          kubectl -n kube-system rollout restart deployment/coredns
+          kubectl -n kube-system rollout status deployment/coredns --timeout=120s
+          while read -r ref tar; do
+            # No --digests: it adds an import-DATE@<index.json digest> alias that fails CreateContainer.
+            docker exec -i "$node" ctr -n k8s.io images import --all-platforms - < "$f/kit/$tar"
+            if ! docker exec "$node" crictl inspecti "$ref" > /dev/null; then
+              echo "the node holds no image for $ref after the load; it holds:"
+              docker exec "$node" ctr -n k8s.io images ls -q
+              exit 1
+            fi
+          done < "$f/kit.txt"
+
+      # The Namespace and the PriorityClasses go first, as on a rebuild. The registry is the
+      # role's own render less its node pin. Its push store's claim binds to the runbook's
+      # hostPath PV, whose directory the runbook creates on the node first.
+      - name: Fresh cluster - install the controllers and the registry from the archives
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          f="$RUNNER_TEMP/fresh"
+          kubectl apply -f "$f/prereq/namespace.yaml"
+          kubectl apply -f "$f/prereq"
+          [ -s "$f/volumes/dirs.txt" ]
+          while read -r uid gid dir; do
+            docker exec fresh-control-plane install -d -o "$uid" -g "$gid" "$dir"
+          done < "$f/volumes/dirs.txt"
+          kubectl apply -f "$f/volumes"
+          kubectl apply --server-side -f ansible/roles/k8s/flux/files/gotk-components.yaml
+          for d in source-controller kustomize-controller notification-controller; do
+            kubectl -n flux-system rollout status "deployment/$d" --timeout=180s
+          done
+          kubectl apply -k "$f/registry"
+          kubectl -n homelab rollout status deployment/registry --timeout=180s
+          # A pod resolves the registry's Service and nothing outside the cluster.
+          registry_ref=$(jq -r '.[] | select(.name | startswith("docker.io/library/registry@")) | .ref' "$f/images.json")
+          kubectl -n homelab run dns-probe --image="$registry_ref" --restart=Never --command -- \
+            sh -c 'nslookup registry.homelab.svc.cluster.local && ! nslookup ghcr.io && ! nslookup rekor.sigstore.dev'
+          if ! kubectl -n homelab wait pod/dns-probe --for=jsonpath='{.status.phase}'=Succeeded --timeout=120s; then
+            echo "a pod resolves an outside name, or not the registry's, so this case cannot prove an offline bring-up"
+            kubectl -n homelab logs pod/dns-probe || true
+            exit 1
+          fi
+          kubectl -n homelab logs pod/dns-probe
+          echo "pods resolve the registry's Service and neither ghcr.io nor rekor.sigstore.dev"
+
+      # The runner pushes through a port-forward, because the registry's hostPort is on the
+      # node's loopback. source-controller fetches at the role's own address,
+      # flux_break_glass_url, through the Service.
+      - name: Fresh cluster - push and sign through the in-cluster registry, then judge it
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        env:
+          COSIGN_PASSWORD: ""
+        run: |
+          set -euo pipefail
+          source "$RUNNER_TEMP/judge.sh"
+          f="$RUNNER_TEMP/fresh"
+          repo=$(jq -r .repository "$f/push.json")
+          tag=$(jq -r .tag "$f/push.json")
+          kubectl -n homelab port-forward deployment/registry 5010:5000 \
+            > "$RUNNER_TEMP/port-forward.log" 2>&1 &
+          for _ in $(seq 30); do
+            curl -fsS http://127.0.0.1:5010/v2/ > /dev/null 2>&1 && break
+            sleep 2
+          done
+          digest=$(flux push artifact "oci://127.0.0.1:5010/$repo:$tag" --path="$f/bundle" \
+            --source=flux-deletion-drill --revision="$tag@sha1:$GITHUB_SHA" --insecure-registry \
+            --output=json | jq -r .digest)
+          printf '%s' "$digest" | grep -Eqx 'sha256:[0-9a-f]{64}'
+          cosign sign --key "$RUNNER_TEMP/keys/green/cosign.key" --tlog-upload=false \
+            --use-signing-config=false --allow-http-registry --yes "127.0.0.1:5010/$repo@$digest"
+          kubectl apply -f "$f/hand/secret.yaml"
+          kubectl apply -f "$f/hand/ocirepository.yaml"
+          kubectl apply -f "$f/hand/root.yaml"
+          JUDGE_SCRIPT=scripts/deploy_tools/fresh_cluster_drill.py BUDGET=60 judge
+          kubectl -n flux-system get ocirepository homelab -o jsonpath='{range .status.conditions[*]}{.type}={.status}: {.message}{"\n"}{end}'
+
       - name: Dump the Flux objects and controller logs
         if: failure() && (github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true')
         run: |
           kubectl -n flux-system get ocirepository,kustomization -o yaml || true
-          kubectl get deployment,pvc -A || true
+          kubectl get deployment,pvc,pv -A || true
+          kubectl get pods -A || true
+          kubectl -n homelab logs deployment/registry --tail=100 || true
           kubectl -n flux-system logs deployment/source-controller --tail=150 || true
           kubectl -n flux-system logs deployment/kustomize-controller --tail=200 || true
+          kubectl -n flux-system describe pods || true
+          kubectl get events -A --sort-by=.lastTimestamp | tail -40 || true
+          docker exec fresh-control-plane crictl images --digests || true
+          docker exec fresh-control-plane ctr -n k8s.io images ls || true
+          docker exec fresh-control-plane journalctl -u containerd --no-pager | tail -60 || true

@@ -37,6 +37,18 @@ budget and ended `needs input:` on green CI (#6195). The last line of such a wai
 "timeout still running after 300s" because the budget is three 300s slices. It is not a
 single slice. 35 minutes is about 1.5 times the longest run measured, 1404s.
 
+A wait whose last line reads `timeout still running` goes on to `CI_WAIT_MAX_S` (#7673). That
+line means check runs exist on the head and some have not finished. Between 2026-10-29 and
+2026-11-08, three batches spent the 35 minutes on such a line, and their PRs' runs then passed
+at 37.8, 38.2 and 48.5 minutes (#7059, #7118, #7658). A head with no check runs, or a cancelled
+run, still stops at `CI_WAIT_S`.
+
+THE RE-RUN (#7674). A resume that pushes nothing leaves the failed run on the head, so the
+second wait would read the same failure at once. The gate instead re-runs that run's failed jobs
+once (`gh run rerun --failed`) and waits on the new attempt. Of the 8 batches that ended `failed
+after one resume` between 2026-10-25 and 2026-11-08, 4 had pushed nothing and passed on a
+re-run of the same commit (#7110, #7169, #7643, #7647).
+
 THE FAILURE the resumed implementer gets is read from the PR's `statusCheckRollup`: each failed
 check's name and the tail of its job's log (`gh run view --job <id> --log-failed`). A failed
 check with no job log, such as an external app's, is named with an empty tail.
@@ -69,6 +81,9 @@ if TYPE_CHECKING:
 
 # The longest one wait lasts. Derived from measured `ci.yml` run durations in the docstring.
 CI_WAIT_S = 35 * 60
+# The longest one wait lasts while the head's check runs are still running.
+CI_WAIT_MAX_S = 60 * 60
+STILL_RUNNING = re.compile(r"^WAIT: timeout still running\b")
 # One `cc-wait` call lasts at most this long, so the wait rechecks the unit's time left.
 CI_SLICE_S = 300
 # The pause after a wait that ended without a verdict and without using its slice.
@@ -177,17 +192,20 @@ def wait_for_ci(
     sleep: Callable[[float], None],
     time_left: Callable[[], float],
 ) -> CiResult:
-    """Wait up to `CI_WAIT_S` for the PR head's CI verdict.
+    """Wait up to `CI_WAIT_S` for the PR head's CI verdict, or `CI_WAIT_MAX_S` while it runs.
 
     A pass or a failure ends the wait at once. Anything else, a cancelled run included, is
-    waited on again until the budget is spent, and then returns `NO_VERDICT`. A budget cut
+    waited on again until the budget is spent, and then returns `NO_VERDICT`. The budget is
+    `CI_WAIT_MAX_S` while the last `WAIT:` line reads `timeout still running`. A budget cut
     short by `time_left()` is the same.
     """
     pr = pr_url.rstrip("/").rsplit("/", 1)[-1]
     start = clock()
-    end = start + min(CI_WAIT_S, time_left() - WAIT_MARGIN_S)
+    cap = time_left() - WAIT_MARGIN_S
+    soft = start + min(CI_WAIT_S, cap)
+    hard = start + min(CI_WAIT_MAX_S, cap)
     line = ""
-    while (left := end - clock()) > 0:
+    while (left := (hard if STILL_RUNNING.match(line) else soft) - clock()) > 0:
         budget = str(min(CI_SLICE_S, math.ceil(left)))
         wait = ["cc-wait", "--budget", budget, "gh-ci", "--pr", pr, "--repo", repo]
         done = run(login(wait), None)
@@ -222,6 +240,74 @@ def _ci_run_ids(run: Runner, repo: str, sha: str) -> set[int] | None:
     except ValueError:
         return None
     return {i for i in ids if isinstance(i, int)} if isinstance(ids, list) else None
+
+
+def pr_head(run: Runner, pr: str, repo: str) -> str:
+    """The PR's head commit, "" when the read fails."""
+    out = run(["gh", "pr", "view", pr, "-R", repo, "--json", "headRefOid"], None)
+    try:
+        return str(json.loads(out.stdout).get("headRefOid") or "")
+    except ValueError, AttributeError:
+        return ""
+
+
+def rerun_failed(
+    run: Runner,
+    repo: str,
+    sha: str,
+    clock: Callable[[], float],
+    sleep: Callable[[float], None],
+) -> bool:
+    """Re-run the failed jobs of the failed `ci.yml` run on `sha`, and wait for the new attempt.
+
+    Returns True once GitHub reports the run's next attempt. Returns False when no failed run
+    is on `sha`, when `gh run rerun` fails, or when no new attempt registers within
+    `READY_WAIT_S`. Until it registers, the head still carries the failed check runs, and a
+    wait started then would read the old failure.
+    """
+    out = run(
+        [
+            "gh",
+            "api",
+            f"repos/{repo}/actions/workflows/ci.yml/runs"
+            f"?head_sha={sha}&event=pull_request&status=failure",
+            "--jq",
+            "[.workflow_runs[] | [.id, .run_attempt]]",
+        ],
+        None,
+    )
+    try:
+        found = json.loads(out.stdout) if out.returncode == 0 else []
+    except ValueError:
+        return False
+    runs = [
+        (r[0], r[1])
+        for r in (found if isinstance(found, list) else [])
+        if isinstance(r, list) and len(r) == 2 and all(isinstance(x, int) for x in r)
+    ]
+    if not runs:
+        return False
+    run_id, attempt = max(runs)
+    rerun = run(["gh", "run", "rerun", str(run_id), "--failed", "-R", repo], None)
+    if rerun.returncode != 0:
+        return False
+    end = clock() + READY_WAIT_S
+    while clock() < end:
+        now = run(
+            [
+                "gh",
+                "api",
+                f"repos/{repo}/actions/runs/{run_id}",
+                "--jq",
+                ".run_attempt",
+            ],
+            None,
+        )
+        if now.returncode == 0 and now.stdout.strip().isdigit():
+            if int(now.stdout) > attempt:
+                return True
+        sleep(READY_POLL_S)
+    return False
 
 
 def _mergeable(run: Runner, pr: str, repo: str, sleep: Callable[[float], None]) -> str:
@@ -342,6 +428,8 @@ def awaits_ci(target: Target) -> bool:
 def ci_gate(pipe: "Pipeline", last: Phase) -> tuple[Phase, dict | None]:
     """Wait for the PR's CI and resume the implementer once on red (#4737).
 
+    A resume that pushes nothing is followed by one re-run of the failed jobs (#7674).
+
     Returns the last phase whose report names the PR, and a `needs input:` report when CI is
     still red after the one resume, or gave no verdict within the budget; else None.
     """
@@ -365,14 +453,21 @@ def ci_gate(pipe: "Pipeline", last: Phase) -> tuple[Phase, dict | None]:
         return last, ci_hold(record, result, contest)
     if result.state == FAILED and pipe.session:
         record.ci_resumed = True
+        repo = pipe.target.repo
+        before = pr_head(pipe.run, record.pr, repo)
         fix = pipe._claude(
             "ci-fix",
             pipe._resume(),
             ci_fix_prompt(record.pr, result.line, result.failures),
         )
         last = fix if PR_URL.search(fix.text) else last
+        if before and pr_head(pipe.run, record.pr, repo) == before:
+            record.ci_rerun = rerun_failed(
+                pipe.run, repo, before, pipe.clock, pipe.sleep
+            )
         result = wait()
     again = " after one resume" if record.ci_resumed else ""
+    again += " and a re-run of the failed jobs" if record.ci_rerun else ""
     if result.state == PASSED:
         record.ci_gate = f"passed{again}"
         return last, None

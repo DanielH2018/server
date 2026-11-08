@@ -279,7 +279,7 @@ pass_filenames = false
 # would leave the hook's selector matching a 197-line facade while its subject sat elsewhere.
 # A host component's templates are in scope since H3.8b, with its component.yml, whose
 # defaults the render reads, and each host's package.yml, which names the host it renders for.
-files = "^(scripts/renderer/renderer_lib/jinja_filters\\.py|hosts/components/.*|hosts/[^/]+/package\\.yml|scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate/shell_templates\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|release_bin_groups|render_context|render_guard|repo_paths|yaml_fast)\\.py|scripts/validate/validate_lib/(cron_checks|cron_targets|shell_lint)\\.py|ansible/filter_plugins/[^/]+\\.py)$"
+files = "^(scripts/renderer/renderer_lib/jinja_filters\\.py|hosts/components/.*|hosts/[^/]+/package\\.yml|scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate/shell_templates\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py|scripts/validate/validate_lib/(cron_checks|cron_targets|shell_lint)\\.py|ansible/filter_plugins/[^/]+\\.py)$"
 
 # Render every systemd unit template (*.service.j2 / *.timer.j2) with stubbed vars PLUS the
 # owning role's real defaults, and verify the output with `systemd-analyze verify`. Neither
@@ -367,7 +367,7 @@ files = "^(scripts/renderer/renderer_lib/jinja_filters\\.py|scripts/validate/val
 # PATH under `uv run`), which the shellcheck hook above cannot do — identify tags a workflow as
 # yaml, so the shell embedded in it is invisible to a shell-typed hook.
 #
-# Via the actionlint-py wheel + `uv run`, matching the other local hooks, NOT the upstream
+# Via the actionlint-py package + `uv run`, matching the other local hooks, NOT the upstream
 # rhysd/actionlint pre-commit repo: that hook is `language = "golang"`, which on a machine
 # without Go (daniel-box) makes prek fetch a ~270 MB managed toolchain and build from source.
 #
@@ -839,7 +839,7 @@ files = "^(\\.claude/hooks/[^/]+\\.(sh|py)|\\.claude/settings\\.json|scripts/dev
 
 # Lint first-party Python for real bugs only — pyflakes (unused imports/undefined names),
 # syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]; vendored
-# collections excluded there). ruff is pinned in uv.lock (dev group) so the gate is
+# collections excluded there). ruff is pinned in uv.lock (lint group) so the gate is
 # reproducible and lockFileMaintenance refreshes it weekly. Runs once when any .py is staged.
 #
 # `files` names pyproject.toml and uv.lock as well as the code, the way the `ty` hook below

@@ -34,9 +34,8 @@ incident, the pin derivations and the Go runtime measurements.
 - No task adds the connecting user to the `docker` group. The one Pi heartbeat that runs
   `docker`, `homelab-pi-recovery.service`, grants the group itself with
   `SupplementaryGroups=docker`.
-- `initial_setup`'s `host-basics.yml` keeps the engine hold until H7.60, and it skips the Pi through
-  `initial_setup_packaged_hosts`. `homelab-docker-engine.service` holds the packages when it
-  installs them.
+- No setup task holds the engine: H7.60 deleted `initial_setup`'s hold with the dist-upgrade it
+  guarded. `homelab-docker-engine.service` holds the packages when it installs them.
 
 ## Teardown (`tasks/teardown.yml`, `has_docker: false`)
 Reaps what an imperative Docker uninstall leaves behind: any `docker-compose-*.service` unit

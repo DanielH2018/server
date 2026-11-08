@@ -15,8 +15,7 @@ from the tree, though, so it is measured rather than enumerated.
 WHAT IT MEASURES. A task that deploys a file to a host bin directory (`template:`/`copy:` with a
 `src` and a `dest` under /usr/local/bin or /opt/homelab) whose SOURCE references a secret name
 from `ansible/secret_rotation.yml`. The registry is plaintext by design — names, dates and tiers,
-never values — so this needs no SOPS key and runs anywhere, the same reasoning
-`test_release_bin_groups_have_no_secrets.py` records for reading it.
+never values — so this needs no SOPS key and runs anywhere.
 
 WHAT IT DOES NOT MEASURE. A script that SOURCES a token from a separate env file
 holds no secret itself and is correctly absent; the env file it reads is already covered
@@ -51,7 +50,7 @@ HOST_BIN_PREFIXES = ("/usr/local/bin", "/opt/homelab")
 
 # Names too generic to match on — a substring hit would flag every file mentioning the word.
 # Empty today; kept as the documented escape hatch so a future generic name is handled here
-# rather than by weakening the regex, matching test_release_bin_groups_have_no_secrets.py.
+# rather than by weakening the regex.
 #
 # DECIDED: `email` was the first candidate for this set (#1183) and went to the registry's
 # `ignore` tier instead, because it is an address rather than a credential — it renders as an

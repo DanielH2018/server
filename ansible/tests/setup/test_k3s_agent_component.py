@@ -196,6 +196,39 @@ def test_a_rendered_file_netplan_refuses_leaves_the_old_one(tmp_path):
     ).read_text() == "old\n"
 
 
+# Each node's package ships its own copy of the wifi installer; a fix to one must reach both.
+WIFI_COPIES = (
+    "files/homelab-netplan-wifi",
+    "units/homelab-netplan-wifi.service",
+    "templates/netplan-wifi-fallback.json.j2",
+)
+
+
+def wifi_copies_that_differ(server, agent) -> list[str]:
+    """The `WIFI_COPIES` whose bytes differ between the two component directories."""
+    return [
+        name
+        for name in WIFI_COPIES
+        if (server / name).read_bytes() != (agent / name).read_bytes()
+    ]
+
+
+def test_the_server_and_agent_wifi_copies_are_equal():
+    server = REPO / "hosts" / "components" / "k3s-server"
+    assert wifi_copies_that_differ(server, COMPONENT) == []
+
+
+def test_a_wifi_copy_edited_on_one_node_is_flagged(tmp_path):
+    for side in ("server", "agent"):
+        for name in WIFI_COPIES:
+            (tmp_path / side / name).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / side / name).write_text("same\n")
+    (tmp_path / "agent" / WIFI_COPIES[1]).write_text("edited\n")
+    assert wifi_copies_that_differ(tmp_path / "server", tmp_path / "agent") == [
+        WIFI_COPIES[1]
+    ]
+
+
 def test_the_join_task_file_refuses_and_names_the_bootstrap():
     (task,) = load_tasks(K3S_ROLE / "tasks" / "agent.yml")
     assert "bootstrap-host.sh" in task["ansible.builtin.fail"]["msg"]

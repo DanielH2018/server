@@ -27,6 +27,14 @@ from _fence_probe import (
     ROLE_CHECK_LIB,
     rendered_orchestrator,
 )
+from _drill_mode import (
+    LOGGER,
+    QEMU_IMG,
+    VIRSH,
+    Run,
+    assert_cleaned_up,
+    assert_drill_evidence_untouched,
+)
 from _helpers import REPO
 from _suc_bundle import (
     DIGEST,
@@ -42,21 +50,6 @@ FILES = HYPERVISOR / "files"
 # The guest-side subcommands, in the order the orchestrator runs them.
 STEPS = ["k3s", "flux-cli", "base", "publish"]
 
-VIRSH = """\
-#!/bin/bash
-echo "virsh $*" >>"$EVENTS"
-case "$3" in
-  domstate) [[ -e "$T/running" ]] && echo running || exit 1 ;;
-  create) touch "$T/running" ;;
-  destroy) rm -f "$T/running" ;;
-esac
-exit 0
-"""
-QEMU_IMG = """\
-#!/bin/bash
-[[ "$1" == convert ]] && touch "${@: -1}"
-exit 0
-"""
 # Stands in for `ssh <guest> ...`. The orchestrator hands it the guest-side subcommand after
 # `sudo /usr/local/bin/suc-rehearsal-guest-run`, or a shell snippet that ships a file or a tar.
 SSH = """\
@@ -79,8 +72,6 @@ case "$sub" in
 esac
 exit 0
 """
-LOGGER = "#!/bin/bash\nexit 0\n"
-
 DRIVER = """\
 #!/usr/bin/env bash
 source "$ORCH" "$@"
@@ -101,26 +92,6 @@ if [[ -n "$PROBE_ONLY" ]]; then
 fi
 rehearse_suc
 """
-
-
-class Run:
-    """One orchestrator run: its exit status and everything the stubs recorded."""
-
-    def __init__(self, tmp_path):
-        self.t = tmp_path
-        self.done = None
-
-    @property
-    def events(self):
-        path = self.t / "events"
-        return path.read_text().splitlines() if path.exists() else []
-
-    @property
-    def steps(self):
-        return [e.split()[1] for e in self.events if e.startswith("step ")]
-
-    def evidence(self, name):
-        return (self.t / "evidence" / name).read_text()
 
 
 def run(
@@ -188,23 +159,6 @@ def run(
         timeout=120,
     )
     return result
-
-
-def assert_cleaned_up(r):
-    """The guest is gone, its disk is deleted, nothing was defined: the exit-path guarantee."""
-    assert not (r.t / "disk.qcow2").exists(), "the guest's disk outlived the run"
-    assert not (r.t / "running").exists(), "the guest was left running"
-    created = any(" create " in e for e in r.events)
-    destroyed = any(" destroy " in e for e in r.events)
-    assert destroyed or not created, "a created guest was never destroyed"
-    assert not any(" define " in e for e in r.events), "the rehearsal defined a domain"
-
-
-def assert_drill_evidence_untouched(r):
-    assert not (r.t / "stamp").exists(), "a rehearsal wrote the monthly drill's stamp"
-    assert not list((r.t / "textfile").iterdir()), (
-        "a rehearsal wrote a textfile verdict"
-    )
 
 
 @pytest.mark.parametrize(

@@ -5,6 +5,7 @@
 # Usage: etcd-restore-drill-vm.sh [-h|--help]
 #        etcd-restore-drill-vm.sh --rehearse-suc --repo DIR --rendered DIR --expect upgrade|red
 #                                 [--guest-version VERSION] [--plan NAME]
+#        etcd-restore-drill-vm.sh --rehearse-bootstrap --repo DIR
 # With no arguments it is the monthly drill. homelab-etcd-restore-drill.service (schedule
 # etcd_drill_full_cron) runs it as root on daniel-server, and its output goes to the journal.
 # Running it by hand starts a real guest and a real
@@ -47,14 +48,24 @@
 # guest to its version and the Kustomization reads Ready; --expect red passes when the Plan's Job
 # fails and the Kustomization is not Ready. The guest is handed no token and no R2 credential, and
 # the run writes no stamp and no textfile, so the monthly drill's evidence is untouched. docs/hypervisor-libvirt-internals.md has the long form.
+#
+# --rehearse-bootstrap (H7.15c's host half) is the operator's guest drill of daniel-box's rebuild,
+# never scheduled. It renders daniel-box's packages from --repo to learn which units to mask, then
+# builds the same guest behind the same fence, names it daniel-box, clones the repository from
+# GitHub at --repo's HEAD and runs bootstrap-host.sh in it with the three guest-local deviations
+# docs/host-packages.md, *The guest drill*, lists. It passes when the three packages are installed,
+# k3s.service is the only k3s unit, node daniel-box reads Ready and ufw is active. Like the SUC
+# rehearsal it stages no credential and writes no stamp and no textfile.
 set -uo pipefail
 
 REHEARSE=0
+BOOTSTRAP=0
 RH_REPO="" RH_RENDERED="" RH_EXPECT="" RH_VERSION="" RH_PLAN=k3s-server
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
     --rehearse-suc) REHEARSE=1; shift ;;
+    --rehearse-bootstrap) REHEARSE=1; BOOTSTRAP=1; shift ;;
     --repo | --rendered | --expect | --guest-version | --plan)
       [[ $# -ge 2 ]] || { echo "$1 needs a value" >&2; exit 2; }
       case "$1" in
@@ -103,6 +114,13 @@ SUC_GUEST_SCRIPT="{{ hypervisor_suc_rehearsal_guest_script_path }}"
 # pulls), and how often the verdict is read. Polled in short ssh calls, never one held session.
 RH_DEADLINE="{{ hypervisor_suc_rehearsal_deadline }}"
 RH_POLL=15
+# The bootstrap drill's guest-side script, how long one detached bootstrap step may run (step 7's
+# AIDE baseline dominates), and how long the started k3s may take to pass the check.
+BD_GUEST_SCRIPT="{{ hypervisor_bootstrap_drill_guest_script_path }}"
+BD_STEP_DEADLINE="{{ hypervisor_bootstrap_drill_step_deadline }}"
+BD_READY_DEADLINE="{{ hypervisor_bootstrap_drill_ready_deadline }}"
+# Where the guest sees the orchestrator's ssh come from: the staging bridge.
+STAGING_GATEWAY="{{ hypervisor_staging_net_gateway }}"
 STAMP_DIR="{{ hypervisor_etcd_drill_stamp_dir }}"
 LOG_ROOT="{{ hypervisor_etcd_drill_log_dir }}"
 LOG_RETENTION_DAYS="{{ hypervisor_etcd_drill_log_retention_days }}"
@@ -134,7 +152,9 @@ TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 # DECIDED: a rehearsal writes no textfile verdict and no stamp. Both verdicts and the stamp answer
 # "did the MONTHLY drill run", and a rehearsal that refreshed them would hide a month the timer
 # skipped. Its syslog lines carry their own tag for the same reason.
-if [[ "$REHEARSE" == 1 ]]; then
+if [[ "$BOOTSTRAP" == 1 ]]; then
+  TAG=etcd-drill-bootstrap-drill
+elif [[ "$REHEARSE" == 1 ]]; then
   TAG=etcd-drill-suc-rehearsal
 fi
 
@@ -546,6 +566,115 @@ rehearse_suc() {
   fail "SUC rehearsal FAILED (expect $RH_EXPECT, Plan $RH_PLAN, guest k3s $from): ${verdict:-no verdict in ${RH_DEADLINE}s}"
 }
 
+# ── The bootstrap drill mode (H7.15c's host half) ────────────────────────────────────────────
+# The units the guest keeps unmasked. coredns-host.service is the fourth beside the three *The
+# proofs* names: step 6 refuses to stop systemd-resolved until it answers on 127.0.0.1.
+BD_UNMASKED=(k3s.service homelab-reconcile.service homelab-secrets.service coredns-host.service)
+
+bd() {
+  local -a argv
+  mapfile -t argv < <(ssh_argv)
+  timeout "${BD_STEP_TIMEOUT:-300}" "${argv[@]}" sudo /usr/local/bin/bootstrap-drill-guest-run "$@"
+}
+
+bd_evidence() {
+  BD_STEP_TIMEOUT=120 bd state >"$LOG_DIR/bootstrap-state.txt" 2>&1 || true
+}
+
+# Every timer, service and socket the rendered packages ship or enable, less BD_UNMASKED.
+bd_masks() {
+  find "$1" -path '*/usr/lib/systemd/system/*' \
+    \( -name '*.service' -o -name '*.timer' -o -name '*.socket' \) -printf '%f\n' \
+    | grep -vxF "${BD_UNMASKED[@]/#/-e}" | sort -u
+}
+
+# bd_run STEP [ARGS]: start STEP detached in the guest and poll its exit code over fresh ssh
+# sessions. Its output goes to the evidence on every path, and a failure ends the run.
+bd_run() {
+  local step="$1" rc="" deadline
+  bd detached "$@" >/dev/null || { bd_evidence; fail "could not start $step in the guest"; }
+  deadline=$((SECONDS + BD_STEP_DEADLINE))
+  # Poll before judging the deadline: SECONDS is whole seconds, so a short budget can read as spent.
+  while :; do
+    guest_running || { rc=guest-exited; break; }
+    sleep "$RH_POLL"
+    rc="$(BD_STEP_TIMEOUT=60 bd rc "$step" 2>/dev/null)" || rc=""
+    [[ -n "$rc" ]] && break
+    (( SECONDS < deadline )) || { rc=timeout; break; }
+  done
+  BD_STEP_TIMEOUT=60 bd out "$step" >"$LOG_DIR/$step.out" 2>&1 || true
+  [[ "$rc" == 0 ]] && return 0
+  bd_evidence
+  case "$rc" in
+    guest-exited) fail "the guest exited during $step" ;;
+    timeout) fail "$step did not finish in ${BD_STEP_DEADLINE}s; see $LOG_DIR/$step.out" ;;
+  esac
+  fail "$step exited $rc in the guest: $(tail -n 1 "$LOG_DIR/$step.out")"
+}
+
+# Runs bootstrap-host.sh in a guest playing daniel-box and judges it. The guest gets no token and
+# no R2 credential, so nothing here reads $S3_ENV or $AGENT_ENV.
+rehearse_bootstrap() {
+  [[ -z "$RH_RENDERED$RH_EXPECT$RH_VERSION" ]] \
+    || fail "--rendered, --expect and --guest-version belong to --rehearse-suc"
+  [[ -d "$RH_REPO" ]] || fail "--repo must name a checkout"
+  local f
+  for f in "$XML" "$BASE_IMAGE" "$SEED" "$GUEST_HOSTKEY_PUB" "$IDENTITY" "$BD_GUEST_SCRIPT"; do
+    [[ -r "$f" ]] || fail "$f missing — run etcd-drill-prepare"
+  done
+  command -v qemu-img >/dev/null || fail "qemu-img not on PATH"
+  RH_PY="$RH_REPO/.venv/bin/python"
+  [[ -x "$RH_PY" ]] || fail "$RH_PY is missing: run uv run python --version in $RH_REPO first"
+  local sha
+  sha="$(git -C "$RH_REPO" rev-parse HEAD)" || fail "cannot read HEAD of $RH_REPO"
+
+  teardown
+  WORK="$(mktemp -d)"
+  chmod 700 "$WORK"
+  # The guest's clone is checked out at the same commit, so the masks name the units it installs.
+  # homelab-updater ships the timer daniel-box's package enables.
+  (cd "$RH_REPO" \
+    && "$RH_PY" scripts/renderer/homelab_render.py host --host daniel-box --out "$WORK/render" \
+    && "$RH_PY" scripts/renderer/homelab_render.py package --name homelab-updater --out "$WORK/render") \
+    >"$LOG_DIR/render.log" 2>&1 || fail "rendering the packages at $sha failed; see $LOG_DIR/render.log"
+  install -d "$WORK/stage"
+  bd_masks "$WORK/render" >"$WORK/stage/masks"
+  [[ -s "$WORK/stage/masks" ]] || fail "the render at $sha ships no unit to mask"
+  cp "$WORK/stage/masks" "$LOG_DIR/masks.txt"
+  log "bootstrap drill of daniel-box at $sha, masking $(wc -l <"$WORK/stage/masks") units"
+
+  boot_guest
+  ssh_guest 'sudo tee /usr/local/bin/bootstrap-drill-guest-run >/dev/null && sudo chmod 755 /usr/local/bin/bootstrap-drill-guest-run' \
+    <"$BD_GUEST_SCRIPT" || fail "could not ship the guest-side script"
+  tar -C "$WORK/stage" -cf - . \
+    | ssh_guest 'sudo install -d -m 700 /var/tmp/bootstrap-drill && sudo tar -C /var/tmp/bootstrap-drill --warning=no-timestamp -xf -' \
+    || fail "staging the mask list into the guest failed"
+
+  bd_run prepare "$sha"
+  bd_run until4
+  bd deviate "$GUEST_IP" "$STAGING_GATEWAY" >"$LOG_DIR/deviate.out" 2>&1 \
+    || { bd_evidence; fail "the guest-local deviations failed; see $LOG_DIR/deviate.out"; }
+  bd_run bootstrap
+  bd start >"$LOG_DIR/start.out" 2>&1 || { bd_evidence; fail "k3s.service did not start"; }
+
+  local verdict="" ok=0 deadline=$((SECONDS + BD_READY_DEADLINE))
+  while :; do
+    guest_running || { verdict="the guest exited during the check"; break; }
+    verdict="$(BD_STEP_TIMEOUT=60 bd check 2>&1)" && { ok=1; break; }
+    (( SECONDS < deadline )) || break
+    sleep "$RH_POLL"
+  done
+  printf '%s\n' "$verdict" >"$LOG_DIR/bootstrap-verdict.txt"
+  bd_evidence
+  teardown
+
+  if (( ok )); then
+    report up "bootstrap drill passed at $sha: $(paste -sd, <"$LOG_DIR/bootstrap-verdict.txt")"
+    return 0
+  fi
+  fail "bootstrap drill FAILED at $sha: $(paste -sd, <"$LOG_DIR/bootstrap-verdict.txt")"
+}
+
 main() {
   # The flag is the timer's switch. The rehearsal is run by hand and uses no R2 credential, so a
   # disarmed drill does not block it.
@@ -565,6 +694,10 @@ main() {
   exec >>"$LOG_DIR/orchestrator.log" 2>&1
   prune_old_evidence
 
+  if [[ "$BOOTSTRAP" == 1 ]]; then
+    rehearse_bootstrap
+    exit $?
+  fi
   if [[ "$REHEARSE" == 1 ]]; then
     rehearse_suc
     exit $?

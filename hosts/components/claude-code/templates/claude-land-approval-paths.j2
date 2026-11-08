@@ -52,8 +52,9 @@ uv.toml
 .python-version
 # CI, which decides what "green" means for the merge.
 .github/
-# sudo, ssh and the operator's own login.
-ansible/roles/setup/initial_setup/tasks/access.yml
+# sudo, ssh and the operator's own login: the sudo cache, the SSH directory and sshd's AllowGroups.
+hosts/components/host-hardening/
+hosts/components/sshd/
 # The secrets and who can decrypt them.
 ansible/.sops.yaml
 ansible/vars/secrets.yml

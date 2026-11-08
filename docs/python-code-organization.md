@@ -46,11 +46,15 @@ source are recorded so the next reader can check whether the reason still holds.
 [uv](https://docs.astral.sh/uv/) manages the dev and test tooling from `pyproject.toml` and
 `uv.lock`. A virtual project pins its dependencies and the pytest config. `[project]
 dependencies` holds only what the renderer imports at runtime, `pyyaml` and `jinja2`. The
-`dev` group holds everything else: the test deps, the lint tools, the deploy-side
-`ansible-core`, and the `community.docker` deps `requests` and `docker`. The `dev` group is
-uv's default for `uv run`. `promote.yml` sets `UV_NO_DEV`, so a promotion installs those two
-packages and no dev tool. A dependency that a promote job imports therefore goes in `[project]
-dependencies`. `test_promote_runtime_imports.py` traces every script `promote.yml` runs and fails on a
+`lint` group holds the tools that only prek hooks and hand-run commands call: ruff, ty,
+`actionlint-py`, `zizmor` and `mkdocs-material`. The `dev` group holds everything else: the test
+deps, the deploy-side `ansible-core`, and the `community.docker` deps `requests` and `docker`.
+`[tool.uv] default-groups` names both groups, so `uv run` installs both. `promote.yml` sets
+`UV_NO_DEV` and `UV_NO_GROUP=lint`, so a promotion installs those two packages and no tool. A
+dependency that a promote job imports therefore goes in `[project] dependencies`. Each
+`ci.yml` job that runs no prek hook sets `UV_NO_GROUP=lint`. actionlint-py ships no wheel and
+fetches its binary from a GitHub release, so its install failed every job during a release
+outage (#7625). `test_ci_lint_group.py` holds the split. `test_promote_runtime_imports.py` traces every script `promote.yml` runs and fails on a
 third-party import outside that list's closure.
 `uv run pytest` syncs
 the env from `uv.lock` first, and needs [uv installed][uv-install] once. The
@@ -74,10 +78,8 @@ mode ([pytest good practices][pytest-good]); that advice is knowingly declined h
 unique-basename rule for tests is the price.
 
 Re-examined on 2026-09-28 (#2809) and kept. Packaging `scripts/` as the uv project would retire
-the `sys.path` bootstraps and the layout meta-guards, but it would not reach the hosts. Roles
-still copy `scripts/` modules to hosts that have no checkout and no install step:
-`ansible/roles/setup/common/tasks/release_bin.yml` ships
-`scripts/deploy_tools/prune_releases.py` that way.
+the `sys.path` bootstraps and the layout meta-guards, but it would not reach the hosts,
+which have no checkout and no install step.
 
 ### PEP 420 namespace packages, no `__init__.py` anywhere
 

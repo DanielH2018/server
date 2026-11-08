@@ -369,7 +369,7 @@
  "ansible/tests/repo/test_host_package_case_inputs_census.py": 0.12,
  "ansible/tests/repo/test_host_package_cases_run_on_their_inputs.py": 76.05,
  "ansible/tests/repo/test_host_package_scans_run_on_every_pr.py": 0.01,
- "ansible/tests/repo/test_host_test_image_cache.py": 0.09,
+ "ansible/tests/repo/test_host_test_image.py": 0.09,
  "ansible/tests/repo/test_installed_units_log_level.py": 0.01,
  "ansible/tests/repo/test_k8s_render_prebuild.py": 7.16,
  "ansible/tests/repo/test_k8s_render_role_template.py": 0.2,
@@ -579,7 +579,6 @@
  "ansible/tests/setup/test_disk_health_deadline.py": 0.36,
  "ansible/tests/setup/test_disk_health_textfile.py": 0.43,
  "ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.py": 1.8,
- "ansible/tests/setup/test_docker_engine_is_held_before_apt_upgrade.py": 0.02,
  "ansible/tests/setup/test_docs_refresh_failure_path.py": 0.73,
  "ansible/tests/setup/test_docs_refresh_heartbeat.py": 0.43,
  "ansible/tests/setup/test_docs_refresh_records_shard_weights.py": 0.02,
@@ -647,9 +646,7 @@
  "ansible/tests/setup/test_pi_recovery_restarts_and_reports.py": 11.39,
  "ansible/tests/setup/test_pi_service_lists_census.py": 14.08,
  "ansible/tests/setup/test_pi_watchdog_alert.py": 1.56,
- "ansible/tests/setup/test_pi_watchdog_restarts_after_provisioning.py": 0.19,
  "ansible/tests/setup/test_register_producers_carry_consumer_tags.py": 0.74,
- "ansible/tests/setup/test_release_bin_groups_have_no_secrets.py": 0.62,
  "ansible/tests/setup/test_renovate_agent_identity.py": 0.29,
  "ansible/tests/setup/test_renovate_agent_unit.py": 0.53,
  "ansible/tests/setup/test_repo_checkout_gate.py": 0.43,
@@ -900,7 +897,6 @@
  "scripts/deploy_tools/tests/test_promote_settle_retry.py": 0.29,
  "scripts/deploy_tools/tests/test_promote_stateful_hold.py": 0.38,
  "scripts/deploy_tools/tests/test_promote_supersede.py": 1.61,
- "scripts/deploy_tools/tests/test_prune_releases.py": 0.01,
  "scripts/deploy_tools/tests/test_publish_pr.py": 0.55,
  "scripts/deploy_tools/tests/test_publish_pr_unlanded.py": 0.07,
  "scripts/deploy_tools/tests/test_reach.py": 0.15,
@@ -1283,5 +1279,6 @@
  "scripts/validate/tests/test_validate_setup_templates.py": 5.91,
  "scripts/validate/tests/test_validate_shell_templates.py": 4.95,
  "scripts/validate/tests/test_validate_unit_templates.py": 36.75,
- "scripts/z2m/tests/test_set_device_option.py": 4.19
+ "scripts/z2m/tests/test_set_device_option.py": 4.19,
+ "ansible/tests/setup/test_docker_engine_hold_list.py": 0.02
 }

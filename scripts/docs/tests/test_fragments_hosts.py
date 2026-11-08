@@ -164,8 +164,8 @@ def test_the_tree_scan_finds_every_known_loadbalancer():
     } <= found
 
 
-def test_the_audit_tasks_still_carry_the_identity_watches():
-    watches = h.parse_audit_watches(h.AUDIT_TASKS.read_text())
+def test_the_audit_rules_still_carry_the_identity_watches():
+    watches = h.parse_audit_watches(h.AUDIT_RULES.read_text())
     assert ("/etc/sudoers", "wa", "actions") in watches
     assert {key for _, _, key in watches} >= {"identity", "sshd", "actions"}
 

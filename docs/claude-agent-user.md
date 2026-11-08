@@ -267,8 +267,8 @@ truth, with a reason beside each entry. It holds:
 - `pyproject.toml`, `uv.lock`, `uv.toml` and `.python-version`, which set the interpreter and
   the packages `uv run` syncs before `land.py` starts
 - `.github/`
-- `ansible/roles/setup/initial_setup/tasks/access.yml`, which holds sudo, ssh and the
-  operator's login
+- `hosts/components/host-hardening/` and `hosts/components/sshd/`, which hold the sudo cache,
+  ssh and the operator's login
 - `ansible/.sops.yaml` and `ansible/vars/secrets.yml`
 - alert-triggered triage: every `templates/claude-triage*` template, which includes the pins
   template that sets the run's caps, the rule `templates/50-claude-triage.rules.j2`,

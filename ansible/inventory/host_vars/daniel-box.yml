@@ -259,7 +259,7 @@ containers_list:
     netpol_role_owned: true
     netpol_from:
       - traefik  # the only caller: every human path runs the Authelia middleware first
-  # Route-only: the backend is deploy-ui.service on this host (roles/setup/deploy_ui), reached
+  # Route-only: the backend is deploy-ui.service on this host (hosts/components/deploy-ui/), reached
   # through a selector-less Service. use_authelia is the whole access control, and the tier is
   # two_factor because the page starts land.sh and clears the deployer's hold on a
   # stolen password alone.
@@ -1181,7 +1181,10 @@ claude_code_agent_user_enabled: true
 # apply after this lands restarts the host and drops live sessions, copies the operator's memory
 # store into the agent's once, and needs one interactive `/login` as `claude` afterwards
 # (docs/claude-agent-user.md, slice 4). Rollback: set it to `ubuntu`, or delete this line.
-claude_code_user: "{{ claude_code_agent_user }}"
+# Rolled back to `ubuntu` on 2026-11-08 while GitHub support restores the agent account's
+# GitHub access. To move the phone's sessions back to the agent, set this to
+# "{{ claude_code_agent_user }}".
+claude_code_user: ubuntu
 # That account's uid, which must equal the `claude` entry in hosts/daniel-box/package.yml's
 # `users:`. claude-rc.service binds /run/user/<uid> into its sandbox and points the user bus
 # there, so `systemd-run --user` works from a phone session (#6764). It has no default: a host

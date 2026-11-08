@@ -21,13 +21,15 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib import yaml_fast
 from lib.estate import Estate
-from lib.repo_paths import ALL_VARS, K8S_ROLES, REPO, ROLES
+from lib.repo_paths import ALL_VARS, K8S_ROLES, REPO
 
 PI_TUNING = REPO / "hosts" / "components" / "pi-tuning"
 VALHEIM_ROLE = K8S_ROLES / "valheim"
 JELLYFIN_ROLE = K8S_ROLES / "jellyfin"
 RENOVATE_AGENT_ROLE = REPO / "hosts" / "components" / "renovate-agent"
-AUDIT_TASKS = ROLES / "setup" / "initial_setup" / "tasks" / "audit-and-kernel.yml"
+AUDIT_RULES = (
+    REPO / "hosts" / "components" / "host-hardening" / "templates" / "hardening.rules"
+)
 
 
 def _rel(path: _Path) -> str:
@@ -153,8 +155,8 @@ def render_audit_watches(watches: list[tuple[str, str, str]]) -> str:
 
 
 def _auditd_watches() -> tuple[str, list[str]]:
-    return render_audit_watches(parse_audit_watches(AUDIT_TASKS.read_text())), [
-        _rel(AUDIT_TASKS)
+    return render_audit_watches(parse_audit_watches(AUDIT_RULES.read_text())), [
+        _rel(AUDIT_RULES)
     ]
 
 

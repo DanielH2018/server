@@ -187,14 +187,14 @@ with the reason.
 - A `common/tasks/` file is in the table too. An `import_tasks` is static, so its tasks run under
   each importer's tags, and `narrow_setup` resolves the basename through the importing task.
   `setup_roles_for` drops `common` itself for a file with consumers, so the importers apply
-  rather than the resolv.conf remediation `common` would print.
+  rather than the consumer-less remediation `common` would print.
 - A `common/templates/` file a common task file renders inherits that task file's importers. The
   kuma-check pair routes to the roles importing `check_timer.yml`. `narrow_setup` finds no
   reader of the template in `gitops_deploy` or `k3s`, so those apply or are
   recorded under their whole-role tag.
-- `resolv.conf.j2` is the exception (`SETUP_FILES_ROUTED_TO_OWNER`). `k3s` renders it and is a hand
-  apply, since it runs from `k3s-bringup.yml`, so the file routes `common` to `manual_plane`, whose
-  remediation names the commands.
+- A setup template that only host components render through `role:`, such as `resolv.conf.j2`,
+  routes nowhere (`SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES`). The host package applies it, so
+  the tick records no `manual_plane` line, and `land.sh` waits on the host instead.
 
 A k8s role can read a `common` file too. `configarr` and `janitorr` stage `host_lib.py` into
 their health CronJobs' ConfigMaps. The deployer applies no k8s role since D6.12, so the role's
@@ -384,9 +384,6 @@ of the file reaches another host. Three rows show the three outcomes:
   apply, because `comment_only_broad_changes` reads only `.yml` and `.yaml` paths.
 - `hosts/lib/ci_verdict.py` routes to `gitops_deploy`. The tick applies the role, and its only
   host is daniel-box, so the file owes no line.
-- `scripts/deploy_tools/prune_releases.py` routes to `k3s`, which the tick cannot apply. The
-  derivation skips the role, and `deploy_defer.record` writes a `manual_plane` line with no
-  `hosts` key.
 
 A shipped file with no row takes no broad arm and writes no line, and `land.sh` alone names its
 hosts. `ansible/tests/setup/test_setup_cross_role_files.py` fails on a literal `src:` copy that

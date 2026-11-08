@@ -31,8 +31,10 @@ THE PHASES, each one `claude -p` in the batch's worktree:
 5b. CI wait — on a host that does not land, for this repo's batch only (#4737), `review_ci`
    waits for the PR's CI with `cc-wait gh-ci --pr` before the comment and before the filing
    session. A red verdict resumes the implementer once, as the `ci-fix` phase, with each failed
-   check's name and log tail, and the wait runs again on the new head. A batch still red, or
-   given no verdict within `review_ci.CI_WAIT_S`, ends `needs input:` and nothing lands it. A
+   check's name and log tail, and the wait runs again on the new head. A resume that pushed
+   nothing re-runs the failed jobs once before that wait. A batch still red, or given no
+   verdict within `review_ci.CI_WAIT_S` (`CI_WAIT_MAX_S` while its checks are still running),
+   ends `needs input:` and nothing lands it. A
    `cancelled` run is no verdict and is waited on again. The result goes in the record as
    `ci_gate` and on the PR comment.
 
@@ -139,7 +141,6 @@ from fanout_lib.review.review_record import (
     held_for_findings,
     held_for_green,
     issues_section,
-    outcome,
 )
 from fanout_lib.launch import (
     BUDGET_USD,
@@ -552,9 +553,10 @@ class Pipeline:
             red = self._red(issues) if self.red_green else None
         except ResetFailed as exc:
             self.record.red_gate = f"reset failed: {exc}"
-            self.record.outcome = "failed"
+            report = {"type": "result", "is_error": True, "result": f"failed: {exc}"}
+            self.record.settle(report, has_pr=False)
             self._save()
-            return {"type": "result", "is_error": True, "result": f"failed: {exc}"}
+            return report
         brief = self.brief
         if red is not None:
             brief = brief.replace(ISSUES_HEADING, red_section(*red) + ISSUES_HEADING, 1)
@@ -569,7 +571,7 @@ class Pipeline:
         if impl.failed or not found.url:
             # Saved whether or not the batch is red-green: a batch that never reached a PR is
             # the failure rate the records exist to measure (#3940).
-            self.record.outcome = outcome(report, has_pr=False)
+            self.record.settle(report, has_pr=False)
             self._save()
             return report
         self.record.pr = found.url
@@ -655,7 +657,7 @@ class Pipeline:
         comment = ["gh", "pr", "comment", self.record.pr, "--body-file", "-"]
         self.run(comment, comment_body(self.record))
         final = final or self._finish(last)
-        self.record.outcome = outcome(final, has_pr=True)
+        self.record.settle(final, has_pr=True)
         self._save()
         held = sum(1 for f in self.record.remaining if is_held(f))
         if held:

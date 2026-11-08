@@ -46,18 +46,6 @@ KNOWN_HITS = frozenset(
     }
 )
 
-# Tasks that are FIXED rather than gated. Listed so a fix
-# that regresses — the pruner reaching back into `{{ playbook_dir }}` — fails as a named
-# member, not as one more entry in the gated list. `release_bin.yml` ships the pruner inside
-# the release and runs it through `current`; the release-commit read runs on the
-# controller with `delegate_to: localhost`.
-KNOWN_FIXED = frozenset(
-    {
-        "Prune superseded releases for {{ release_bin_group }}",
-        "Read the deploy commit for host scripts",
-    }
-)
-
 
 def _clauses(when: object) -> list:
     if when is None:
@@ -161,27 +149,6 @@ def test_the_census_finds_the_tasks_it_is_meant_to_check():
     names = {name for _f, name, _w, _h in _census()}
     missing = KNOWN_HITS - names
     assert not missing, f"census no longer finds: {sorted(missing)}"
-
-
-def test_a_fixed_task_stays_off_the_checkout():
-    """A task that was fixed rather than gated must not reappear in the census at all. Gating
-    it again would pass the test below and quietly re-open the hole the fix closed."""
-    names = {name for _f, name, _w, _h in _census()}
-    regressed = KNOWN_FIXED & names
-    assert not regressed, f"reads the checkout on the target again: {sorted(regressed)}"
-
-
-def test_the_fixed_tasks_still_exist():
-    """Non-vacuity for the test above: a renamed task would pass it by vanishing."""
-    names = set()
-    for tasks_file in task_files(SETUP_ROLES):
-        try:
-            parsed = yaml_fast.safe_load(tasks_file.read_text())
-        except yaml.YAMLError:
-            continue
-        names |= {t.get("name") for t in _flatten(parsed)}
-    missing = KNOWN_FIXED - names
-    assert not missing, f"no task named: {sorted(missing)}"
 
 
 @pytest.mark.parametrize("entry", _census(), ids=lambda e: f"{e[0]}::{e[1]}")

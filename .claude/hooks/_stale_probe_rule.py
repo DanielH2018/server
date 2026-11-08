@@ -7,7 +7,7 @@
 in: the role's rendered manifests, the k8s host_vars `owner`, and the alert-gate tables. An
 orchestrator worktree locked hours behind master ran its post-merge gates from that tree, so
 a role merged after the lock was graded against the old definition or not found at all
-(#5909, #5912). `health_checkout.stale_checkout_reason` refuses two of those inputs inside the
+(#5909, #5912). `health_checkout.stale_checkout_reason` refuses the first of those inside the
 probe; this rule refuses the run itself, before any input is read (#6110).
 
 The rule denies `probe.py health` and `probe.py takeover` when the probe's checkout is a linked worktree and HEAD
@@ -16,7 +16,7 @@ under `ansible/` or `scripts/`. Three cases stay clean:
 
 - The primary checkout, the remedy #5912 names. The GitOps tick fast-forwards it, so it lags
   `origin/master` by at most one tick, and inside that window `stale_checkout_reason` still
-  refuses a stale role or owner.
+  refuses a stale role.
 - A worktree whose branch already holds master's change. After a squash merge the branch
   lacks the squash commit but carries the same files, so a commit count alone would refuse it.
 - Any failure to read git. The rule only adds a refusal, the way the probe's own check does.

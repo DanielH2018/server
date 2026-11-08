@@ -45,6 +45,7 @@ EMITTED = frozenset(
         "claude_cgroup_memory_current_bytes",
         "claude_cgroup_memory_swap_current_bytes",
         "claude_cgroup_memory_events_total",
+        "claude_cgroup_memory_events_local_total",
         "claude_cgroup_memory_pressure_stalled_usec_total",
         "claude_cgroup_cpu_usage_usec_total",
         "claude_cgroup_pids_current",

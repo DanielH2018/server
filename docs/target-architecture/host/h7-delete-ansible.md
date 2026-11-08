@@ -1550,7 +1550,11 @@ halves (exit 4).
       therefore writes `/etc/rancher/k3s/config.yaml.d/90-drill.yaml`, which sets both to
       the guest's own address. Before step 5 it also masks every timer and long-running
       service the rendered package ships, except `k3s.service`, `homelab-reconcile.service`
-      and `homelab-secrets.service`, so nothing the package schedules runs. Reconcile then
+      and `homelab-secrets.service`, so nothing the package schedules runs.
+      `coredns-host.service` also stays unmasked, because step 6 refuses to stop
+      systemd-resolved until it answers on 127.0.0.1. The masks cover sockets too, and they
+      go under `/run/systemd/system`, which outranks the package's `/usr/lib` and dies with
+      the guest. Reconcile then
       reports the masked units as refused starts, which the drill expects and does not
       grade. The package's netplan file is `activate: manual:systemd-networkd.service`
       (H7.9b), and the transient guest never reboots, so it never takes the LAN address.
@@ -1567,8 +1571,7 @@ halves (exit 4).
       server token and the guest holds no copy of the archive signing key. The guest's age
       key is fresh and is no SOPS recipient, so `homelab-secrets` decrypts nothing. k3s's
       etcd-s3 credential is a Secret that Flux applies from `cluster-base`, which the guest
-      never receives. If k3s refuses to start with `etcd-s3` on and no Secret, the override
-      file also sets `etcd-s3: false`, and the PR body records which happened.
+      never receives, so the override file also sets `etcd-s3: false`.
     - *Blast radius.* The drill touches a transient domain and its disk on daniel-server,
       and the existing `staging` network and fence. It takes CPU and memory from the agent
       node for one run, sized like the etcd drill's guest. Every service keeps serving,
@@ -1901,7 +1904,7 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | no: its two census greps run at its base | H7.54, H7.55, H5 |
 | H7.57 The ADR | H7.20c | yes | H7.55 |
 | H7.58 Pi: `initial_setup`, part 3 | new | yes | H7.26, H7.30, H7.42 |
-| H7.59 daniel-server: `initial_setup`, part 3, and its Loki witness | new | yes, with H7.58 | H7.58 live, H7.31, H4 |
+| H7.59 daniel-server: `initial_setup`, part 3, and its Loki witness | new | yes, with H7.58 | H7.58 live, H7.31, H7.61 live, H4 |
 | H7.60 daniel-box: `initial_setup`, part 3 | new | yes, with H7.58 | H7.59 live, H7.32, H6.2 |
 | H7.61 daniel-server: dev tooling and the worktree holder scan; `/usr/bin/uv` on both cluster hosts | new | yes | H7.38, H7.39, H7.41a |
 | H7.62 daniel-box: dev tooling, the worktree holder scan, `chezmoi_setup` and `github_cli` | new | yes, with H7.61 | H7.61 live, H7.40, H6.2 |
@@ -1928,7 +1931,7 @@ items inside each file. Every path sits under `ansible/roles/setup/`.
 | H7.55, which deletes these `end_role` stubs with their roles | `claude_code/tasks/main.yml`, `config_files/tasks/main.yml`, `homelab_builder/tasks/main.yml`, `nut_host/tasks/main.yml`, `optimize_pi/tasks/main.yml`, `sops_setup/tasks/main.yml` |
 | H7.58 to H7.60 | `initial_setup/tasks/access.yml`, `initial_setup/tasks/accounting.yml`, `initial_setup/tasks/audit-and-kernel.yml`, `initial_setup/tasks/integrity.yml`; `initial_setup/tasks/system-tuning.yml` without its git hooks; the swap, apt and package tasks of `initial_setup/tasks/host-basics.yml`; the witness, the file absent arms and the `ansible.log` tasks of `initial_setup/tasks/crons.yml` |
 | H7.61 and H7.62 | `chezmoi_setup/tasks/main.yml` and `github_cli/tasks/main.yml` (H7.62); the tooling tasks of `initial_setup/tasks/host-basics.yml`, the git hooks of `initial_setup/tasks/system-tuning.yml` and the worktree holder tasks of `initial_setup/tasks/crons.yml` |
-| H7.63 | `common/tasks/agent_user.yml`, `common/tasks/alert_unit.yml`, `common/tasks/check_timer.yml`, `common/tasks/install_host_lib.yml`, `common/tasks/release_bin.yml`, `common/tasks/stamp_deployed.yml`, `common/tasks/stamp_render.yml`, `initial_setup/tasks/main.yml`; what `initial_setup/tasks/crons.yml` and `initial_setup/tasks/host-basics.yml` still hold |
+| H7.63 | `common/tasks/agent_user.yml`, `common/tasks/alert_unit.yml`, `common/tasks/check_timer.yml`, `common/tasks/install_host_lib.yml` (`common/tasks/release_bin.yml` went earlier, in #7652), `common/tasks/stamp_deployed.yml`, `common/tasks/stamp_render.yml`, `initial_setup/tasks/main.yml`; what `initial_setup/tasks/crons.yml` and `initial_setup/tasks/host-basics.yml` still hold |
 | H7.64 | the `Manage the registry garbage collection` block of `k8s_host_files/tasks/registry.yml` |
 
 ### What each re-sliced PR carries
@@ -2222,7 +2225,7 @@ the `manual_plane` clearing, and *Rollback*'s
     `docs/break-glass.md` and `docs/host-packages.md`, and H7.15d's host census is their one
     test. It carries R4 PR 7b's kind drill run on this PR, the guest drill with its blast
     radius (**operator-only**, exit observation 4), and the D6 case that Open question 14
-    asks for. The guest drill's runner waits for H7.34's move of the orchestrator
+    asks for. The guest drill's runner is the orchestrator's `--rehearse-bootstrap` mode
     ([#7554](https://github.com/DanielH2018/server/issues/7554)), and the D6 case waits for a
     hosted run ([#7555](https://github.com/DanielH2018/server/issues/7555)). It merges before
     H7.53. H7.42 merged with `k3s`'s tasks still in place, so
@@ -2375,6 +2378,19 @@ the `manual_plane` clearing, and *Rollback*'s
       reports a missing source as drift until reconcile retires the two fragments that name
       them. daniel-server held neither Kuma file on
       2026-11-07, so as on the Pi its package lists neither.
+    - **Amended at H7.60:** five facts the row did not state.
+        - daniel-box held neither Kuma file on 2026-11-07 either, so its package lists neither.
+          Its two legacy entries are the absent arms that ran there, the old holder sudoers rule
+          and `cert-expiry-webhook.env`. The holder-scan removal and the secret-rotation wrappers
+          never ran there, because `has_claude_code` and `has_gitops` are true. The Pi held no
+          `worktree-holders` group, so the group arm goes with no legacy entry.
+        - The role's five handlers lost their notifiers, so `handlers/main.yml` goes, and
+          `initial_setup_packaged_hosts` goes with its last subject.
+        - The `auditd-watches` docs fragment reads the component's `hardening.rules`.
+        - The lander's approval floor named `access.yml`. It names `host-hardening` and `sshd`
+          instead, the components that ship the sudo cache and the SSH settings.
+        - `has_low_memory_board` and `has_raspi_kernel` gate no task, and they stay in the
+          inventory until a deploy-plane PR deletes them.
 35. **H7.61 and H7.62 land the dev tooling and the worktree holder scan in canary order.**
     Only `dev_tooling_hosts` and the `has_claude_code` hosts run these tasks, and both lists
     name daniel-server and daniel-box. H7.61 adds daniel-server to
@@ -2388,7 +2404,11 @@ the `manual_plane` clearing, and *Rollback*'s
       The per-user uv install, `prek` in `Install Python CLI tooling` and `Install the pinned
       host Python` go. Each PR body quotes `uv python list` for the sys user, because units
       run `uv` with `--no-python-downloads`. Bumps stop landing in both repos at H7.62's merge,
-      and the `tools.toml` comment naming H7.39 changes in a dotfiles PR then. The twin test
+      and the `tools.toml` comment naming H7.39 changes in a dotfiles PR then.
+      [DanielH2018/dotfiles#1174](https://github.com/DanielH2018/dotfiles/pull/1174) rewrote it
+      on 2026-11-07, and [DanielH2018/dotfiles#1164](https://github.com/DanielH2018/dotfiles/pull/1164)
+      had moved prek to 0.5.9. daniel-server's package retires the root-owned
+      `/usr/local/bin/prek` (0.4.3) that no tracked file wrote. The twin test
       `test_host_tool_pins_match_their_twins.py` and `asset_pins.py` retarget.
     - **`/usr/local/bin/uv` has readers, so it gets a replacement.** The readers include
       `hosts/components/claude-code/`, `hosts/components/loki-route-witness/`,
@@ -2404,7 +2424,10 @@ the `manual_plane` clearing, and *Rollback*'s
       daniel-box's package waits on the rollout gate, so daniel-box's Ansible readers stay on the
       old path and H7.62 repoints them. daniel-server's Ansible-era witness still runs the old
       path and no tick re-renders it there, so H7.59 lists `/usr/local/bin/uv` as that host's
-      legacy entry when it moves the witness.
+      legacy entry when it moves the witness. That makes the edge run from H7.59 to H7.61
+      live: daniel-server's packaged readers, the moved witness among them, run `/usr/bin/uv`,
+      which H7.61's `uv` component ships. The witness was the only Ansible-rendered reader of
+      the old path on daniel-server; every other reader rendered on daniel-box.
       **Amended at H7.62:** the PR repoints daniel-box's readers and does not list the path. The
       k3s health script only reaches a host through a hand apply of `k3s-bringup.yml`, and a package
       install waits on no such apply, so a legacy entry here could delete the binary under a live
@@ -3959,6 +3982,10 @@ progress.
 
     Resolution: D6's break-glass drill on kind adds a fresh-cluster case with no registry
     and no GHCR, and H7.15c's PR quotes it. This is a cross-slice request to D6.
+    Update (#7555): `flux-deletion-drill`'s case `fresh-cluster` is that case, proven by its
+    first passing `case=fresh-cluster` line. It imports
+    the archives with `ctr`, as `kind load image-archive` does, so k3s's image import
+    directory stays undrilled.
 
 ## Review log
 

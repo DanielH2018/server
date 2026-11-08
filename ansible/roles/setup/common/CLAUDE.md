@@ -15,22 +15,23 @@ left this role's `files/` in H7.2e) or to a `tasks/*.yml` file
 re-applies the setup roles that copy or import it
 (`deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, #3312, #3317): the initial_setup
 consumers apply on the tick.
-`common` itself is not recorded for those files. Its line would print the resolv.conf
-remediation, which names the wrong roles, and leave one more marker to clear after the
-consumers are applied. A PR may add a file and its table entry together: the tick classifies
+`common` itself is not recorded for those files. Its line would name no consumer, and leave
+one more marker to clear after the consumers are applied. A PR may add a file and its table entry together: the tick classifies
 a range that edits `deploy_cross_role.py` with origin's copy of it, not the installed one
 (#3512). The check-timer templates route to the importers of
 `check_timer.yml`, the task file that renders them (#3319), and the alert pair routes
 to the importers of `alert_unit.yml` the same way. No k8s role imports
 `install_host_lib.yml` or `stamp_deployed.yml` since H2.5c. A change to `host_lib.py`
 moves the render of `configarr` and `janitorr`, whose health CronJobs stage the file into their
-ConfigMaps, and `promote` applies it; the tick applies no k8s role since D6.12. `resolv.conf.j2` still records `common`, for the reason its `DECIDED:` marker in
-`deploy_cross_role` gives. For that, `land.sh` names each consumer's playbook and tag, then the
-`gitops_state.py clear-owed manual_plane common` that clears the deployer's marker.
+ConfigMaps, and `promote` applies it; the tick applies no k8s role since D6.12.
+
+`resolv.conf.j2` records nothing. The host packages render it, so the deployer maps it to no
+role (`ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py:SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES`),
+and `land.sh` waits on each host's package instead. A `common` file in no table still records
+`common`, and its line names the commands that apply it.
 
 | File | What it gives a caller |
 |---|---|
-| `tasks/release_bin.yml` | Deploys a group of host scripts as a versioned release under `/opt/homelab/releases/<group>/<sha>/`, with `/usr/local/bin/<name>` a symlink through `current/`. No role imports it since H7.35, and H7.63 deletes it. Provenance is readable and rollback is one symlink. It ships repo content only. An upstream download (a binary, an installer, an APT key, a tarball) stays a `get_url` in its own role, verified there or not at all (the two claude.ai/install.sh fetches carry no checksum, and a `DECIDED:` marker at each says why): `ansible/roles/setup/common/tasks/release_bin.yml:DECIDED: repo content only` (#3728). |
 | `tasks/install_host_lib.yml` | Copies `hosts/lib/host_lib.py` beside a consumer script so `import host_lib` resolves — every consumer is a directly-invoked script with only its own directory on `sys.path`. |
 | `tasks/stamp_render.yml` | Records the source checksum of a group of rendered templates, one fragment per group, so a tag-scoped run leaves the other groups' fragments stale and the drift check reports the truth. |
 | `tasks/stamp_deployed.yml` | Records `{live, src}` pairs for `copy:`-deployed artifacts, so `setup-drift-check.sh` can compare live bytes against the repo in either direction. |

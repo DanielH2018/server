@@ -183,6 +183,27 @@ guest before it touches production. It is run by hand and never scheduled. The H
 - **Not proven.** The guest has no Longhorn and one node. It proves the server Plan and the Flux
   apply, not the gates or the agent's wait.
 
+## The bootstrap drill mode
+
+`/usr/lib/homelab/etcd-restore-drill-vm --rehearse-bootstrap --repo <checkout>` runs H7.15c's
+host half: `bootstrap-host.sh` rebuilds daniel-box in this guest. It is run by hand and never
+scheduled. [The host packages runbook](host-packages.md), *The guest drill*, has the command and
+the pass check. This section holds what the code does.
+
+- **Before the guest exists.** The orchestrator renders `homelab-daniel-box` and
+  `homelab-updater` from the checkout with its `.venv/bin/python`. Every `.service`, `.timer`
+  and `.socket` the render ships or enables goes into the mask list, less the four units the
+  guest keeps. `homelab-updater` is rendered because daniel-box's package enables its timer.
+- **What runs.** After the fence check it ships `files/bootstrap-drill-guest-run.sh` and the mask
+  list, and nothing else. The guest renames itself `daniel-box`, clones GitHub at the checkout's
+  `HEAD`, and runs `bootstrap-host.sh` to step 4. Then come the deviations, the full run and
+  `systemctl enable --now k3s.service`. The three long steps run detached, and the orchestrator
+  polls each one's exit file over fresh ssh sessions for `hypervisor_bootstrap_drill_step_deadline`.
+- **What it leaves alone.** It stages no cluster token and no R2 credential. It writes no stamp and
+  no textfile verdict, and it ignores `hypervisor_etcd_drill_armed`, as the SUC rehearsal does.
+- **Not proven.** The guest has 2 GiB and two virtual CPUs, the drill guest's size. It skips the token and
+  signing-key restores, and Flux never runs in it.
+
 ## Why monitor-bridge never reads this drill's local stamp
 
 Nothing in the cluster reads the full drill's local stamp directly. monitor-bridge reads

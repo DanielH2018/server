@@ -56,8 +56,17 @@ MAX_LIVE_BATCHES_PER_HOST = 3
 # 4th batch yields to them under contention. daniel-box stays at 3: its fleet slice sat at
 # its 14G cap again, with 96,855 MemoryHigh events in the week (436 before) and PSI of
 # 116-140 us/s (20 before), though the CPU (2.6 of 16 cores at p95) and anon (2.2 GiB at 3
-# batches) would fit a 4th. Raise it only if a week shows the cap refusing launches while
-# that PSI and event count fall.
+# batches) would fit a 4th. The 2026-11-08 re-read (#6763), the first week under the per-batch
+# MemoryHigh, keeps daniel-box at 3. Its fleet PSI fell to 55-67 us/s with 116 batches (63
+# before), and the fleet peaked at 13.3 GiB of 14G, so a 4th 2 GiB reservation still does not
+# fit. The cap rarely binds: daniel-box sat at 3 live for 10% of the week, and both hosts were
+# full together for 5% of the minutes both ran batches, the only time a launch finds no host.
+# daniel-server sat at 4 live for 9.6% of the week. The fleet `high` count (236,328) is no
+# longer comparable with 96,855: memory.events is hierarchical, so it now counts each batch's
+# own MemoryHigh, and daniel-server's went from 0 to 125,773 with its fleet under its cap.
+# Read the fleet's own hits from `claude_cgroup_memory_events_local_total` instead.
+# Raise daniel-box only if a week shows both hosts full for long stretches while its fleet PSI
+# stays low and its fleet peak leaves room for a 4th reservation.
 LIVE_BATCH_CAP_BY_HOST = {"daniel-server": 4}
 
 

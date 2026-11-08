@@ -2,10 +2,10 @@
 """The deployer's state directory, its marker basenames, and the parsers for their formats.
 
 ONE SOURCE, SHIPPED FROM HERE. Every tree that reads the markers under
-`/var/lib/gitops-deploy` gets this file. The deployer runs from `/opt/gitops-deploy`, and the
-deploy-ui and renovate-agent roles install this same file into their own `/opt` directories by
-path, which `deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes so a change here
-re-applies all three (#3306). Code that runs from the checkout (`scripts/lib/deployer_park.py`,
+`/var/lib/gitops-deploy` gets this file. The deployer runs from `/opt/gitops-deploy`. The
+deploy-ui and renovate-agent host components (`hosts/components/deploy-ui/`,
+`hosts/components/renovate-agent/`) ship this same file with a `shared:` entry, so a change here
+reaches them with the next `homelab-daniel-box` package. Code that runs from the checkout (`scripts/lib/deployer_park.py`,
 `scripts/deploy_tools/gitops_state.py`) imports it through a `sys.path` insert of this
 directory. Until issue #2063 each reader restated the directory and the basenames it read, and
 three of them parsed the same `contention_since` and `manual_plane` line formats
@@ -229,9 +229,9 @@ def owed_clear_cmd(cls: str, subject: str, tags=()) -> str:
 
 
 # The setup roles whose whole-role tag is a blunt instrument, and the narrowed tags that still
-# reach the tasks that make it one. `--tags k3s` reapplies the k3s server install and the
-# CoreDNS release marker; every task in `roles/setup/k3s/tasks/server.yml` carries `k3s_server`, so a narrowing that lands on that tag arms the installer
-# restart and the key re-encryption as surely as the whole-role tag does.
+# reach the tasks that make it one. Every task in `roles/setup/k3s/tasks/server.yml` carries
+# `k3s_server`, so a narrowing that lands on that tag arms the installer restart and the key
+# re-encryption as surely as the whole-role tag does.
 #
 # The DATA lives here because three surfaces need it and two of them cannot reach the
 # deployer's tree: `deploy_remediation` composes the long prose for the journal, the Discord

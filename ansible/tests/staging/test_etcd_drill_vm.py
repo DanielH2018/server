@@ -343,6 +343,7 @@ def test_every_path_the_scripts_read_is_a_path_the_package_installs():
             "hypervisor_etcd_drill_vm_xml",
             "hypervisor_suc_rehearsal_helper_path",
             "hypervisor_suc_rehearsal_guest_script_path",
+            "hypervisor_bootstrap_drill_guest_script_path",
         )
     } | {f"{share}/user-data.in", f"{share}/meta-data"}
     assert wanted <= set(package.files), wanted - set(package.files)

@@ -664,6 +664,14 @@ until the whole apt transaction has finished. Every start inside one transaction
 that one job, which reads the manifest only after the lock is free. The updater's synchronous
 start in step 7 joins the same job, or starts a fresh one.
 
+The unit `Wants=` and is ordered `After=` `homelab-reconcile-wait.service`, a oneshot that runs
+`homelab-reconcile --wait-for-apt` under `TimeoutStartSec=5min`. That mode blocks on the same
+lock and exits once it is free. A start job queued behind it is not yet activating, so apt's
+`DPkg::Post-Invoke` hooks spend the wait unit's limit rather than reconcile's 30 minutes. On the
+Pi those hooks held the lock for 179 s to 206 s after dpkg finished (#7648). A wait unit that
+times out still lets reconcile start, because `Wants=` does not propagate the failure, and
+reconcile then waits on the lock inside its own limit.
+
 It holds the lock only while it reads. It reads `/usr/lib/homelab/manifest.json`, its own
 last state in `/var/lib/homelab-reconcile/applied.json`, and the status and version of both
 packages from `dpkg-query`. If either package's status is not `ii `, it records a failed
@@ -1045,10 +1053,12 @@ They need no secrets, and they do these steps:
    to (C5). Each leg's image starts from its release pinned by digest and installs
    `systemd`, `systemd-sysv` and `python3` from Ubuntu's snapshot archive
    (`snapshot.ubuntu.com`) at a pinned timestamp, so a rebuild resolves the same versions.
-   `hosts/lib/tests/container/build-image.sh` reads BuildKit's GitHub Actions cache, one scope
-   per release and architecture, so an unchanged Dockerfile fetches nothing from the mirror.
-   The `host-test-image-cache` workflow seeds those scopes on master, because a proven master
-   push skips this job. A cache miss builds from the mirror.
+   `hosts/lib/tests/container/build-image.sh` pulls the image `image.pins` beside it names by
+   digest, so an unchanged Dockerfile fetches nothing from the mirror. The `host-test-image`
+   workflow publishes one image per release and architecture to GHCR on master, under a tag
+   carrying the Dockerfile's hash. A stale pin pulls that tag instead, and keeps the image only
+   when its `org.homelab.dockerfile-sha256` label matches the Dockerfile. A Dockerfile with no
+   usable published image builds from the mirror (#7664, #7671).
    The build step writes `dpkg-query -W systemd python3` to the job summary. The image also
    carries these three, so every case, the cold install included, starts with them:
     - the textfile directory, with M3's owner and mode, which `optimize_pi` creates on the Pi;

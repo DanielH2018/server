@@ -99,10 +99,11 @@ permissions: {}
 # of the try that succeeded, so a capture never holds a failed try's error body.
 # prune-artifacts.yml carries a copy, and test_prune_artifacts_workflow.py holds the two equal.
 env:
-  # Every `uv run` here installs pyproject.toml's [project] dependencies and skips the dev group,
-  # so an unreachable dev-tool download (actionlint-py's build, #7625) cannot block a promotion.
-  # test_promote_workflow.py fails a workflow without it.
+  # Every `uv run` here installs pyproject.toml's [project] dependencies and skips both default
+  # groups, so an unreachable tool download (actionlint-py's build, #7625) cannot block a
+  # promotion. UV_NO_DEV drops only `dev`. test_promote_workflow.py fails a workflow without them.
   UV_NO_DEV: "1"
+  UV_NO_GROUP: lint
   RETRY_FUNCTIONS: |
     retry() {
       local try out status
@@ -142,6 +143,9 @@ jobs:
       packages: read  # the tag rule's pull of the bundle at `prod`
     outputs:
       sha: ${{ steps.ancestry.outputs.sha }}
+    env:
+      # The gitleaks release assets' common URL prefix, in job env so the cache key can read it.
+      GITLEAKS_URL: https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_
     steps:
       # The triggering commit's tree is the bundle. A dispatch has no workflow_run event, so it
       # renders the `sha` input, or master's tip when the input is empty.
@@ -247,19 +251,33 @@ jobs:
       # The same gitleaks release as the `rev` in prek.toml, checked against the release's own
       # checksums file. A renovate.json custom manager moves the version in both URLs, and its
       # `gitleaks (prek.toml and the promote workflow)` group moves this copy and prek.toml's in
-      # one PR.
+      # one PR. The download is cached under that URL, so a release outage (#7625) blocks only
+      # the promotion that first needs a new version; the checksum check still runs every time.
+      - name: Cache the gitleaks release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/pinned/gitleaks
+          key: gitleaks-${{ runner.os }}-${{ env.GITLEAKS_URL }}
+
       - name: Scan the bundle for secrets
         id: gitleaks
         run: |
           set -euo pipefail
-          cd "$RUNNER_TEMP"
-          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLO \
-            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
-          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo checksums.txt \
-            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_checksums.txt
+          dl="$RUNNER_TEMP/pinned/gitleaks"
+          asset="$(basename "${GITLEAKS_URL}linux_x64.tar.gz")"
+          if [[ -f "$dl/$asset" && -f "$dl/checksums.txt" ]]; then
+            echo "gitleaks: cached $asset"
+          else
+            mkdir -p "$dl"
+            curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$dl/$asset" \
+              "${GITLEAKS_URL}linux_x64.tar.gz"
+            curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$dl/checksums.txt" \
+              "${GITLEAKS_URL}checksums.txt"
+          fi
+          cd "$dl"
           # --ignore-missing skips the other platforms' lines; a run that verifies no file fails.
           sha256sum -c --ignore-missing --strict checksums.txt
-          tar -xzf gitleaks_*_linux_x64.tar.gz gitleaks
+          tar -xzf "$asset" -C "$RUNNER_TEMP" gitleaks
           cd "$GITHUB_WORKSPACE"
           "$RUNNER_TEMP/gitleaks" dir out --config .gitleaks.toml --no-banner --redact
 

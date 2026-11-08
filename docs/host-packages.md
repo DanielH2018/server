@@ -386,14 +386,17 @@ schedule outgrows. The map lists daniel-pi (job `node-pi`, 90000 seconds), added
 ## Clearing a host's hold
 
 A failed reconcile makes a host's updater write `/var/lib/homelab-updater/hold`, and
-`HostReconcileFailed` pages 15 minutes later. Each lever runs as root on the held host, from a
-LAN session:
+`HostReconcileFailed` pages 15 minutes later. The hold stops the updater only. No setup apply
+upgrades a host's packages since H7.60 (#7491), but a hand `apt upgrade` still can. Each lever runs
+as root on the held host, from a LAN session:
 
 1. Read `journalctl -u homelab-updater -u homelab-reconcile` and fix the cause. Reconcile logs
    `<action> starts` and `<action> took <N>s` around every command it calls. A run its start
    timeout killed ends on the `starts` line of the action it was in, when the time ran out inside
    a command or the `dpkg` lock wait. Python work between commands has no line, so a long gap after
-   a `took` line means that work.
+   a `took` line means that work. The wait for the apt transaction, post-invoke hooks included, runs
+   first in `homelab-reconcile-wait.service` under its own 5-minute limit, and logs `wait for apt
+   to release the dpkg lock took <N>s` with the same tag.
 1. When the installed package is fine and the failure was transient, rerun reconcile. The
    command clears the hold only if reconcile passes:
 
@@ -642,7 +645,8 @@ No other LVM volume exists on either node.
 
 1. To give the root volume the whole disk, extend it. The Ubuntu installer creates the one LVM
    volume a node uses, `ubuntu-vg/ubuntu-lv`, and leaves it at about half the disk. Neither
-   `bootstrap-host.sh` nor a package changes it. Skip this when `sudo vgs` shows no free space:
+   `bootstrap-host.sh` nor a package changes it, but the script's step 1 warns about a volume
+   group with more than 10G unallocated. Skip this when `sudo vgs` shows no free space:
 
     ```bash
     sudo lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv
@@ -842,20 +846,38 @@ To rebuild without GitHub or GHCR, take every fetch from the break-glass kit:
 ### The guest drill
 
 The guest drill proves daniel-box's procedure above on production hardware. It waits for the k3s
-upgrade. No script in the tree runs it yet, so the operator cannot run it from this page until
-[#7554](https://github.com/DanielH2018/server/issues/7554) adds the runner. *The proofs* in
-[H7](target-architecture/host/h7-delete-ansible.md) holds its fence, its identity and its three
-guest-local deviations.
+upgrade. *The proofs* in [H7](target-architecture/host/h7-delete-ansible.md) holds its fence, its
+identity and its three guest-local deviations.
+
+To run it, use a checkout on daniel-server whose `HEAD` is a green first-parent commit of master,
+with its environment built by `uv run python --version`. Then run, as root on daniel-server:
+
+```bash
+sudo /usr/lib/homelab/etcd-drill-prepare
+sudo /usr/lib/homelab/etcd-restore-drill-vm --rehearse-bootstrap --repo <checkout>
+```
+
+The orchestrator renders daniel-box's packages from the checkout to learn which units to mask, and
+the guest clones GitHub at that checkout's `HEAD`. The run's directory under
+`/var/log/etcd-restore-drill/` holds each step's output, `masks.txt`, `bootstrap-verdict.txt` and
+`bootstrap-state.txt`. The run writes no stamp and no textfile verdict, and its syslog tag is
+`etcd-drill-bootstrap-drill`.
 
 - **What it runs.** A transient guest on the `staging` network plays daniel-box, with the clone
   fetched from GitHub. The drill skips the token and key restores, so the guest holds no production
-  credential. The deviations go in before the install, and k3s starts by hand:
+  credential. The guest is renamed `daniel-box` first, because step 1 refuses any other name.
+  It also waits for cloud-init and stops the apt-daily jobs, because step 5's install does not
+  wait for the `dpkg` lock. The
+  deviations go in before the install, and k3s starts by hand:
     1. `bootstrap-host.sh daniel-box --until 4 --local-build <clone>`;
-    1. the three guest-local deviations;
+    1. the three guest-local deviations. The masks live under `/run/systemd/system`, and
+       `coredns-host.service` stays unmasked, because step 6 refuses to stop systemd-resolved
+       until it answers on 127.0.0.1;
     1. `bootstrap-host.sh daniel-box --local-build <clone>`;
     1. `systemctl enable --now k3s.service`.
 - **What passes.** The guest has `homelab-tools`, `homelab-updater` and `homelab-daniel-box`
-  installed, `k3s.service` is the only k3s unit, and `k3s kubectl get node daniel-box` reads Ready.
+  installed, `k3s.service` is the only k3s unit, `k3s kubectl get node daniel-box` reads Ready,
+  and `ufw` is active. The orchestrator polls that check over fresh ssh sessions.
 - **Blast radius.** The drill creates one transient domain and its disk on daniel-server, and it
   takes CPU and memory from the agent node for one run. It uses the existing `staging` network and
   its fence. Every service keeps serving, because the guest reaches no LAN address. The rollback
@@ -963,9 +985,13 @@ then daniel-pi, then daniel-box. Each step is **operator-only**, apart from the 
 
 1. To make the host's package one the suite has tested on the target, merge a PR that adds the
    release to the `host_packages` matrix in `.github/workflows/ci.yml`, with the suite green. The
-   PR makes the same edit to `.github/workflows/host-test-image-cache.yml`, which
-   `ansible/tests/repo/test_host_test_image_cache.py` holds equal to `ci.yml`. Skip this step when
-   the matrix already lists the release.
+   PR makes the same edit to `.github/workflows/host-test-image.yml`, which
+   `ansible/tests/repo/test_host_test_image.py` holds equal to `ci.yml`, and adds a
+   `<release>-<arch> -` line per new leg to `hosts/lib/tests/container/image.pins`, which the same
+   test requires. Until that workflow has published the new release's image and a later PR copies
+   its digest into `image.pins` and adds the leg to that test's `PUBLISHED` set, the new leg
+   pulls the published tag or builds from the Dockerfile. Skip this step when the matrix already lists the
+   release.
 1. Stop updates on the host, as *Stopping updates on one host* describes, so no package installs
    during the upgrade. `HostUpdateStale` can fire while the timer stays masked, which is expected.
 1. On a cluster node, pause system-upgrade-controller and check the cluster, both from daniel-box.
@@ -980,11 +1006,43 @@ then daniel-pi, then daniel-box. Each step is **operator-only**, apart from the 
       --ca-file /var/lib/rancher/k3s/agent/server-ca.crt
     ```
 
-1. Upgrade the host and reboot it:
+1. Open a root shell with `sudo -i`, keep it open, and upgrade the host from it. Do not reboot
+   yet.
 
     ```bash
-    sudo do-release-upgrade
-    sudo reboot
+    do-release-upgrade
+    ```
+
+1. Check that the upgraded sudo still reads the host-hardening drop-in, from the held root shell.
+   From 26.04 on, `/usr/bin/sudo` is an alternative. `ubuntu-minimal` and
+   `ubuntu-server-minimal` depend on `sudo-rs`, which registers at priority 50 against classic
+   sudo's `/usr/bin/sudo.ws` at 40, so the upgrade selects sudo-rs. sudo-rs's `visudo` rejects
+   `timestamp_type` in `/etc/sudoers.d/10-timestamp` (`unknown setting: 'timestamp_type'`), and
+   sudo-rs keeps one credential record per terminal, so it cannot honour `global`.
+
+    ```bash
+    update-alternatives --query sudo
+    visudo -c
+    ```
+
+    Then, from a second SSH session as the operator, run `sudo -k && sudo true`. Record in
+    the PR or issue that tracks the upgrade whether sudo-rs refused the call or only warned
+    about the line. If `visudo -c` fails or the second session's sudo refuses, select classic
+    sudo from the held root shell and check again:
+
+    ```bash
+    update-alternatives --set sudo /usr/bin/sudo.ws
+    visudo -c
+    ```
+
+    Do not edit `/etc/sudoers.d/10-timestamp` on the host. The `host-hardening` package owns
+    it, so the verify step's `dpkg --verify` reports the edit and the next update restores the
+    file. To run sudo-rs on a host instead, first merge a change to
+    `hosts/components/host-hardening/templates/10-timestamp` that drops `timestamp_type` for
+    that host. Reboot only once the second session's sudo works:
+
+    ```bash
+    reboot
     ```
 
 1. Verify the host against the release. `lsb_release -rs` prints the target release, `dpkg --verify`

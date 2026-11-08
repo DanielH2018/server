@@ -7,7 +7,7 @@
 # `host_secrets.py sync daniel-server` rewrites it (operator-only).
 # Since H7.28 it ships the first three subjects of initial_setup, the same components as daniel-pi:
 # apt's unattended upgrades, the sshd drop-ins and the kernel, journald, limits and login hardening.
-# initial_setup skips each on this host through `initial_setup_packaged_hosts`. No file needs a
+# initial_setup keeps no task for them. No file needs a
 # credential.
 #
 # #6413 adds `k3s-gates` alone: the k3s-agent Plan's `prepare` runs /usr/lib/homelab/k3s_gates.py
@@ -28,8 +28,7 @@
 # fail2ban group (fail2ban, integrity-scans for rkhunter and AIDE, postfix and accounting), the
 # maintenance timers (host-maintenance: the weekly reboot, apt autoremove and dpkg purge; this
 # host has neither Docker nor fwupd) and ufw (ssh-firewall). check-lib ships the textfile library
-# the scans and the maintenance wrapper source. initial_setup skips each subject on this host
-# through `initial_setup_packaged_hosts`. The scans and the reboot read one more credential,
+# the scans and the maintenance wrapper source. initial_setup keeps no task for them. The scans and the reboot read one more credential,
 # `healthchecks_ping_key` (`host_secrets.py sync daniel-server`, operator-only).
 #
 # #6815 adds `worktree-sweep`, the weekly removal of merged worktrees and unreachable objects
@@ -39,14 +38,13 @@
 #
 # H7.61 adds the dev tooling and the worktree holder scan. `uv` and `vale` put the homelab-tools
 # binaries on PATH as /usr/bin/uv and /usr/bin/vale, and `worktree-holders` ships the scan's socket.
-# initial_setup skips each subject on this host through `initial_setup_packaged_hosts`. The dotfiles
+# initial_setup keeps no task for them. The dotfiles
 # repo owns the per-user uv, prek and Python, and the cluster-node procedure runs `prek install`.
 #
 # H7.59 adds the host baseline and the Loki witness: `host-hardening` ships the sudo cache,
 # auditd's rules, the module blacklist, the core-dump drop-in, the login banner, the i915 option
 # and the base packages; `rsyslog-filter` ships the info filter; `loki-route-witness` replaces the
-# Ansible-era timer. initial_setup skips each on this host through
-# `initial_setup_packaged_hosts`, which ends the role's dist-upgrade here. No file needs a
+# Ansible-era timer. initial_setup keeps no task for them, which ends the role's dist-upgrade here. No file needs a
 # credential. The `unattended-upgrades` component above applies the regular updates pocket, this
 # host has no Docker to hold, and no homelab origin is allowed.
 #
@@ -88,6 +86,8 @@ legacy:
   # /usr/bin/uv on PATH. The Ansible-era Loki witness was the last reader of the uv copy here.
   - {path: /usr/local/bin/vale}
   - {path: /usr/local/bin/uv}
+  # #7537: a prek 0.4.3 no tracked file writes; the dotfiles repo owns prek, in ~/.local/bin.
+  - {path: /usr/local/bin/prek}
   # #6716: the Compose-era CrowdSec hub update the retired traefik role installed in root's crontab
   # (`docker exec crowdsec cscli hub update && … upgrade`, 07:15 daily). This host has had no
   # Docker since 2026-08-14, so it fails every day, and no other tree path retires it.

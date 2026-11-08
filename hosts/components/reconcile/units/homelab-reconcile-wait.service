@@ -1,0 +1,15 @@
+# Shipped by every host package. homelab-reconcile.service wants this unit and is ordered after
+# it, so the wait for apt's transaction, post-invoke hooks included, spends this unit's start
+# timeout and not reconcile's (#7648). It has no install section: only reconcile pulls it in.
+[Unit]
+Description=Wait for apt to release the dpkg lock before reconcile starts
+
+[Service]
+Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
+ExecStart=/usr/lib/homelab/homelab-reconcile --wait-for-apt
+# On a timeout reconcile still starts, because it only Wants= this unit, and waits on the lock
+# inside its own limit. homelab-updater.service's TimeoutStartSec budgets this limit too;
+# hosts/lib/tests/test_updater_package.py holds the inequality.
+TimeoutStartSec=5min

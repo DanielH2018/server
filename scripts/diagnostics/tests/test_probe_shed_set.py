@@ -26,31 +26,23 @@ def test_a_set_with_nothing_to_scale_is_inconclusive():
     assert code == 2 and text.startswith("INCONCLUSIVE")
 
 
-def test_a_flux_owned_service_gets_its_suspend_command_and_an_ansible_one_none():
-    owners = ss.service_owners(
-        {"texbrain": {"name": "texbrain"}, "sonarr": {"name": "sonarr"}},
-        {"texbrain": "flux"},
-    )
+def test_each_scalable_service_gets_its_suspend_and_resume_commands():
     text, code = ss.format_shed_set(
-        {
-            "texbrain": [("homelab", "Deployment", "texbrain")],
-            "sonarr": [("homelab", "Deployment", "sonarr")],
-        },
-        owners,
+        {"sonarr": [("homelab", "Deployment", "sonarr")], "node-exporter": []}
     )
     assert code == 0
-    assert ss.suspend_command("texbrain") in text
-    assert ss.suspend_command("texbrain", suspend=False) in text
-    assert "kustomization sonarr" not in text
-    assert "--field-manager=homelab-operator" in ss.suspend_command("texbrain")
-    rows = {line.split()[0]: line for line in text.splitlines() if "homelab/" in line}
-    assert rows["texbrain"].endswith("owner=flux")
-    assert rows["sonarr"].endswith("owner=ansible")
+    assert ss.suspend_command("sonarr") in text
+    assert ss.suspend_command("sonarr", suspend=False) in text
+    assert "kustomization node-exporter" not in text
+    assert "--field-manager=homelab-operator" in ss.suspend_command("sonarr")
 
 
-def test_an_entry_with_its_own_tags_is_owned_through_each_tag():
-    owners = ss.service_owners(
-        {"game-stats": {"name": "game-stats", "tags": ["game-stats", "stats"]}},
-        {"stats": "flux"},
+def test_an_entry_with_its_own_tags_is_suspended_through_each_tag():
+    tags = ss.service_tags(
+        {"game-stats": {"name": "game-stats", "tags": ["game-stats", "stats"]}}
     )
-    assert owners == {"game-stats": {"game-stats": "ansible", "stats": "flux"}}
+    text, _ = ss.format_shed_set(
+        {"game-stats": [("homelab", "Deployment", "terraria-stats")]}, tags
+    )
+    assert ss.suspend_command("game-stats") in text
+    assert ss.suspend_command("stats") in text
