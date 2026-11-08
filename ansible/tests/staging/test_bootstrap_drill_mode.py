@@ -125,7 +125,7 @@ LOG_DIR="$T/evidence"; mkdir -p "$LOG_DIR"
 NAME=etcd-drill DISK="$T/disk.qcow2" WORK="" STAMP_DIR="$T/stamp" LOCK="$T/lock"
 XML="$T/xml" BASE_IMAGE="$T/base" SEED="$T/seed" GUEST_HOSTKEY_PUB="$T/hostkey.pub" IDENTITY="$T/id"
 S3_ENV="$T/absent-s3.env" AGENT_ENV="$T/absent-agent.env"
-BD_GUEST_SCRIPT="$GUEST_SCRIPT" BD_STEP_DEADLINE=1 BD_READY_DEADLINE="${READY_DEADLINE:-1}" RH_POLL=0.1
+BD_GUEST_SCRIPT="$GUEST_SCRIPT" BD_STEP_DEADLINE="${STEP_DEADLINE:-1}" BD_READY_DEADLINE="${READY_DEADLINE:-1}" RH_POLL=0.1
 for f in "$XML" "$BASE_IMAGE" "$SEED" "$GUEST_HOSTKEY_PUB" "$IDENTITY"; do echo x >"$f"; done
 ssh_argv() { printf '%s\\n' "$STUBS/guest-ssh"; }
 fence_check() { echo fence >>"$EVENTS"; [[ -z "$LEAK" ]] || fail "egress fence BROKEN: PRODVIP answered"; }
@@ -142,6 +142,7 @@ KNOBS = (
     "render_fails",
     "render_empty",
     "ready_deadline",
+    "step_deadline",
 )
 
 
@@ -245,6 +246,13 @@ def test_a_detached_step_that_never_finishes_fails_at_its_deadline_and_tears_dow
     assert "start" not in r.steps
     assert_cleaned_up(r)
     assert_drill_evidence_untouched(r)
+
+
+@pytest.mark.parametrize("knob", ["step_deadline", "ready_deadline"])
+def test_a_spent_deadline_still_polls_once_before_it_fails(tmp_path, knob):
+    r = run(tmp_path, **{knob: "0"})
+    assert r.done.returncode == 0, r.done.stdout + r.done.stderr
+    assert r.steps == STEPS
 
 
 def test_a_fence_leak_ships_nothing_into_the_guest(tmp_path):
