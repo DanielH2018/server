@@ -516,6 +516,23 @@ def gate_complaints(
 # runs and rewrites only the rows that drifted (#6178). Each module takes the median of what the
 # logs measured, because one module measured about 8s on one run and 15.6s on the next (#3604).
 # `--record-runner LOG...` is the by-hand full rewrite from logs you downloaded yourself.
+#
+# EACH LEG'S READINGS ARE SCALED TO ONE REFERENCE RUNNER FIRST, because the hardware a leg draws
+# sets the speed of every module in it. Over three master runs on 2026-11-08 (42529937412,
+# 42532417368, 42532752393) one unchanged shard ran 0.67x its table on one leg and 1.22x on the
+# next, and the six legs of one run spread 140s to 290s on a split projected flat (#7708). That
+# spread is wider than `DRIFT_RATIO`, and every module in a shard shares it, so the medians of
+# three runs moved 63 to 94 rows on each refresh, correlated by shard. The leg's own cold
+# `uv sync` bytecode compile measures the same hardware before any test runs. Its seconds per
+# file predicted the leg's factor within ±8% on all 18 legs, and scaling by it cut a module's
+# spread across the three runs from a median of 1.41x to 1.12x.
+_COMPILE_LINE = re.compile(r"Bytecode compiled (\d+) files in ([0-9.]+)(ms|s)\b")
+# The cold compile's seconds per file on a leg that measures its modules at their table weight.
+# A fixed constant, so the table's scale does not move with the runs a refresh happens to read.
+REFERENCE_COMPILE_SECONDS_PER_FILE = 0.00085
+# A compile faster than this per file found its bytecode already built, so it measures no CPU.
+# Cold compiles measured 0.53-1.0 ms per file and warm ones 0.03-0.06 ms (#7708).
+_COLD_COMPILE_FLOOR_SECONDS_PER_FILE = 0.0002
 RUNNER_WEIGHTS_PATH = (
     Path(__file__).resolve().with_name("pytest_shard_runner_weights.json")
 )
@@ -541,16 +558,35 @@ def drifted(recorded: float, measured: float) -> bool:
     return high > DRIFT_RATIO * low
 
 
+def leg_speed(text: str) -> float:
+    """How many times slower than the reference runner the leg that wrote `text` ran.
+
+    The slowest bytecode-compile line in the log is the cold `uv sync` one. A log without a
+    cold compile reads 1.0, so its readings are taken as measured.
+    """
+    per_file = [
+        float(seconds) / (1000 if unit == "ms" else 1) / int(files)
+        for files, seconds, unit in _COMPILE_LINE.findall(text)
+        if int(files)
+    ]
+    cold = max(per_file, default=0.0)
+    if cold < _COLD_COMPILE_FLOOR_SECONDS_PER_FILE:
+        return 1.0
+    return cold / REFERENCE_COMPILE_SECONDS_PER_FILE
+
+
 def runner_weights(reports: list[str]) -> dict[str, float]:
     """Each module's median seconds across CI `--durations` reports, one report per shard log.
 
     A module appears in one shard per run, so with logs from three runs each module takes the
-    median of its three measurements.
+    median of its three measurements, each divided by its leg's `leg_speed`.
     """
     seen: dict[str, list[float]] = {}
     for text in reports:
-        for module, seconds in parse_durations(_LOG_NOISE.sub("", text)).items():
-            seen.setdefault(module, []).append(seconds)
+        clean = _LOG_NOISE.sub("", text)
+        speed = leg_speed(clean)
+        for module, seconds in parse_durations(clean).items():
+            seen.setdefault(module, []).append(seconds / speed)
     return {m: round(statistics.median(v), 2) for m, v in sorted(seen.items())}
 
 
