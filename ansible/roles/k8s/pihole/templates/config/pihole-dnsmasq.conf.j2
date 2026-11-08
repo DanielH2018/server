@@ -13,13 +13,14 @@
         after. During a Pi-hole outage — the exact case that failover exists for — in-cluster
         `.local.` lookups reach 1.1.1.1 and still land on the right VIP BECAUSE of the public
         record. Drop it and that degradation becomes NXDOMAIN.
-     2. daniel-box's own host resolver falls through to the public resolvers whenever Pi-hole
-        does not answer (roles/setup/k3s/templates/resolv.conf.j2 — Pi-hole first, 1.1.1.1
-        behind it, re-tried in that order on every query). Until 2026-09-01 that resolver was
-        pinned to the public servers UNCONDITIONALLY, so this was a permanent dependency;
-        now it is the same failover dependency as (1), on the same outage. Drop the record
-        and host-level `.local.` lookups on the control-plane node go NXDOMAIN for exactly
-        as long as Pi-hole is down.
+     2. daniel-box's own host resolver has the same failover. Its /etc/resolv.conf names
+        only 127.0.0.1 (roles/setup/common/templates/resolv.conf.j2, which
+        hosts/components/k3s-host-dns/ renders), and the host CoreDNS forwarder behind it
+        (hosts/components/k3s-host-dns/templates/host-corefile.j2) forwards `policy
+        sequential` with health_check, Pi-hole's VIP first and 1.1.1.1 and 1.0.0.1 after. It
+        serves no `.local.` zone of its own, so during a Pi-hole outage host-level `.local.`
+        lookups reach 1.1.1.1 too. Drop the record and those lookups on the control-plane
+        node go NXDOMAIN for exactly as long as Pi-hole is down.
 
    The exposure is reconnaissance only: 10.0.0.240 is unroutable from the internet, so the
    record discloses an RFC1918 address and the existence of the naming scheme, nothing more.
