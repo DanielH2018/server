@@ -42,7 +42,6 @@ HOST_LIB_SRC = "hosts/lib/host_lib.py"
 # is exactly what this exists to catch, and `<=` would wave it through.
 EXPECTED_CONSUMERS = frozenset(
     {
-        "deploy_ui",
         "gitops_deploy",
     }
 )

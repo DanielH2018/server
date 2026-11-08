@@ -56,17 +56,8 @@ _REFERENCE = re.compile(
 # Named members, so a scan that stops matching fails by name rather than agreeing with an
 # empty table.
 KNOWN_EDGES = {
-    "ansible/roles/setup/common/tasks/install_host_lib.yml": {
-        "deploy_ui",
-        "gitops_deploy",
-    },
-    "hosts/lib/host_lib.py": {
-        "deploy_ui",
-        "gitops_deploy",
-    },
-    "ansible/roles/setup/gitops_deploy/files/gitops_markers.py": {
-        "deploy_ui",
-    },
+    "ansible/roles/setup/common/tasks/install_host_lib.yml": {"gitops_deploy"},
+    "hosts/lib/host_lib.py": {"gitops_deploy"},
     # Reached only through check_timer.yml, so this is the transitive edge.
     "ansible/roles/setup/common/templates/check-timer.timer.j2": {
         "gitops_deploy",

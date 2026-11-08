@@ -95,7 +95,7 @@ from gitops_hold import DeployerSnapshot
 from gitops_ledger import held_planes
 
 # deploy-ui's daemon on the deployer's host: `deploy_ui_port` in
-# `ansible/roles/setup/deploy_ui/defaults/main.yml`. Its ufw rule admits every node IP, which
+# `hosts/components/deploy-ui/defaults/main.yml`. Its ufw rules admit every node IP, which
 # is what lets a session on daniel-server read it.
 DEPLOY_UI_PORT = 8790
 HTTP_TIMEOUT_S = 5

@@ -391,11 +391,11 @@ def test_deploy_ui_url_is_the_host_vars_server_ip_not_the_hostname(tmp_path):
     assert landing.deploy_ui_url(host_vars) == "http://192.0.2.7:8790"
 
 
-def test_deploy_ui_port_is_the_roles_default():
+def test_deploy_ui_port_is_the_components_default():
     from lib import yaml_fast
 
     defaults = yaml_fast.safe_load(
-        (REPO / "ansible/roles/setup/deploy_ui/defaults/main.yml").read_text()
+        (REPO / "hosts/components/deploy-ui/defaults/main.yml").read_text()
     )
     assert landing.DEPLOY_UI_PORT == defaults["deploy_ui_port"]
 

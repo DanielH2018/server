@@ -221,7 +221,7 @@ ROWS = (
             "ansible/roles/setup/gitops_deploy/files/gitops_*.py": (
                 "the `gitops_*` copies: `scripts/dev/gen_gitops_markers.py` copies "
                 "gitops_hold, gitops_ledger and gitops_markers verbatim into monitor-bridge's "
-                "flat `files/`, and deploy_ui and renovate_agent install them into /opt from "
+                "flat `files/`, and the deploy-ui and renovate-agent host components ship them from "
                 "these paths"
             ),
         },
