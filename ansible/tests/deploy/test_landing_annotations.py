@@ -262,7 +262,7 @@ def _exprs_without_the_fixture_filter(exprs: list[str]) -> list[str]:
     `pr=999999` — which is how the two extra fixture rows were found — and would match a
     real PR 1999 once the repo reaches it.
     """
-    assert len(exprs) >= 13, exprs
+    assert len(exprs) >= 11, exprs
     return [e for e in exprs if _FIXTURE_FILTER not in e]
 
 

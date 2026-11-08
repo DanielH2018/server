@@ -16,7 +16,7 @@ SHA = "0123456789abcdef0123456789abcdef01234567"
 
 
 def _fields(line: str) -> dict[str, str]:
-    """The logfmt line as a dict; `holder` keeps its quotes, which is what the board reads."""
+    """The logfmt line as a dict."""
     return dict(token.split("=", 1) for token in line.split(" ") if "=" in token)
 
 
@@ -26,15 +26,11 @@ def _filled() -> Ledger:
         t_start=100.0,
         t_merged=110.0,
         t_ci=140.0,
-        t_tick=200.0,
         t_deploy=500.0,
         merge_sha=SHA,
         verdict="deploy-failed",
         cause="tag-miss",
         tags_label="sonarr,radarr",
-        lock_waited=61,
-        lock_holder="42 flock deploy",
-        kick="joined",
     )
 
 
@@ -49,21 +45,19 @@ def _filled() -> Ledger:
         ("exit", "1"),
         ("wait_merge", "10"),
         ("wait_ci", "30"),
-        ("tick", "60"),
-        ("deploy", "300"),
+        ("deploy", "360"),
         ("total", "400"),
         ("tags", "sonarr,radarr"),
-        ("lock", "61"),
-        ("kick", "joined"),
     ],
 )
 def test_every_field_of_a_filled_ledger(field, value):
     assert _fields(annotation_line(_filled(), 1, 400.0))[field] == value
 
 
-def test_the_holder_is_quoted_because_it_contains_spaces():
-    """logfmt needs the quotes: `42 flock deploy` would otherwise parse as three fields."""
-    assert 'holder="42 flock deploy"' in annotation_line(_filled(), 1, 400.0)
+def test_the_line_carries_no_field_of_the_tick_land_sh_no_longer_runs():
+    """H7.49a stopped land.sh running the GitOps tick, so nothing writes these four."""
+    fields = _fields(annotation_line(_filled(), 1, 400.0))
+    assert not {"tick", "lock", "holder", "kick"} & fields.keys()
 
 
 @pytest.mark.parametrize(
@@ -75,11 +69,8 @@ def test_the_holder_is_quoted_because_it_contains_spaces():
         ("cause", ""),
         ("wait_merge", ""),
         ("wait_ci", ""),
-        ("tick", ""),
         ("deploy", ""),
         ("tags", "none"),
-        ("lock", "0"),
-        ("kick", ""),
     ],
 )
 def test_an_unreached_stamp_leaves_its_field_empty(field, value):
@@ -89,10 +80,10 @@ def test_an_unreached_stamp_leaves_its_field_empty(field, value):
 
 
 def test_a_partial_landing_stamps_the_phases_it_reached_and_no_later_one():
-    """Reaching the tick but not the deploy leaves `deploy=` empty, not 0."""
-    ledger = Ledger(pr="7", t_start=0.0, t_merged=1.0, t_ci=5.0, t_tick=9.0)
+    """Reaching master CI but not the deploy leaves `deploy=` empty, not 0."""
+    ledger = Ledger(pr="7", t_start=0.0, t_merged=1.0, t_ci=5.0)
     fields = _fields(annotation_line(ledger, 1, 9.0))
-    assert (fields["wait_ci"], fields["tick"], fields["deploy"]) == ("4", "4", "")
+    assert (fields["wait_ci"], fields["deploy"]) == ("4", "")
 
 
 def test_every_cause_a_phase_writes_is_in_the_vocabulary():

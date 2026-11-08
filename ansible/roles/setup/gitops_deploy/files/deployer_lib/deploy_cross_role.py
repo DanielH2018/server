@@ -29,12 +29,7 @@ from pathlib import Path
 # `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree, and
 # `test_setup_cross_role_reads.py` holds its `defaults/` rows.
 _COMMON = "ansible/roles/setup/common"
-_HOST_LIB = frozenset(
-    {
-        "deploy_ui",
-        "gitops_deploy",
-    }
-)
+_HOST_LIB = frozenset({"gitops_deploy"})
 _STAMPED = _HOST_LIB | {"initial_setup"}
 _CHECK_TIMER = frozenset({"gitops_deploy", "initial_setup"})
 _ALERT_UNIT = frozenset({"gitops_deploy"})
@@ -54,16 +49,6 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/templates/check-timer-boot.service.j2": _CHECK_TIMER,
     f"{_COMMON}/tasks/stamp_deployed.yml": _STAMPED,
     f"{_COMMON}/tasks/stamp_render.yml": _STAMPED,
-    "ansible/roles/setup/gitops_deploy/files/gitops_markers.py": frozenset(
-        {"deploy_ui"}
-    ),
-    "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py": frozenset(
-        {"deploy_ui"}
-    ),
-    "ansible/roles/setup/gitops_deploy/files/gitops_hold.py": frozenset({"deploy_ui"}),
-    # deploy_ui's firewall sources include `k3s_agent_node_ips` (#4357). Only `k3s-bringup.yml`
-    # runs k3s, so a change here records k3s in `manual_plane` and the tick applies deploy_ui.
-    "ansible/roles/setup/k3s/defaults/main.yml": frozenset({"deploy_ui"}),
 }
 
 

@@ -96,7 +96,8 @@ has_igpu: false
 #
 # Whether this host's board has so little RAM that a heavy apt step OOM-kills without a
 # disk-backed swapfile. False by default; daniel-pi (a 512 MB Zero 2 W) overrides it true.
-# Gates initial_setup's swapfile + watchdog-stop preamble and the apt-show-versions purge.
+# initial_setup's host-basics tasks gate on it, and they skip daniel-pi, so on the Pi
+# bootstrap step 4 (hosts/bootstrap-host.sh) creates the swap file instead.
 has_low_memory_board: false
 # Whether this host boots a Raspberry Pi kernel, so it needs the `linux-raspi` package.
 # Separate from the flag above on purpose: "is a Pi board" and "is memory-constrained" are
@@ -724,10 +725,9 @@ has_docker: false
 # (homelab-firmware-update.timer). False by default; daniel-box overrides it true. The Pi's
 # pi-tuning component purges fwupd, and daniel-server has never had it.
 has_fwupd: false
-# The Docker engine packages, listed once because three readers must agree on the set:
-# homelab-daniel-pi's engine pins (hosts/components/pi-docker) install them, initial_setup's
-# host-basics HOLDS them before its dist-upgrade, and docker_install's teardown unholds them
-# before its purge. An upgrade of
+# The Docker engine packages, listed once because two readers must agree on the set:
+# homelab-daniel-pi's engine pins (hosts/components/pi-docker) install and hold them, and
+# docker_install's teardown unholds them before its purge. An upgrade of
 # docker-ce or containerd.io restarts the daemon and replaces the containerd shim under every
 # running container, so on a has_docker host these move
 # only through homelab-docker-engine.service, which stops the containers first and recreates

@@ -143,7 +143,7 @@ pythonpath = [
   "hosts/lib",
   "ansible/roles/k8s/game-stats/files",
   "ansible/roles/setup/gitops_deploy/files",
-  "ansible/roles/setup/deploy_ui/files",
+  "hosts/components/deploy-ui/files",
   "ansible/roles/k8s/monitor-bridge/files",
   # crowdsec/files: jobs_metrics.py is the same cross-role pattern, staged into autofix-bridge's
   # ConfigMap rather than duplicated (M6 batch B7). Without this, `from jobs_metrics import ...`
@@ -339,7 +339,7 @@ extra-paths = [
   "ansible/roles/setup/initial_setup/files",
   "hosts/lib",
   "ansible/roles/setup/gitops_deploy/files",
-  "ansible/roles/setup/deploy_ui/files",
+  "hosts/components/deploy-ui/files",
   "ansible/roles/k8s/monitor-bridge/files",
   "ansible/roles/k8s/game-stats/files",
   "ansible/roles/k8s/gpu-exporter/files",

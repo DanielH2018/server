@@ -72,7 +72,6 @@ def _step_ci(ln: Landing) -> None:
     """
     ci.wait_master_ci(ln, ln.merge_sha)
     ln.ledger.t_ci = ln.tools.clock()
-    ln.ledger.t_tick = ln.ledger.t_ci  # the board's `tick` column stays, at zero
     classify.narrow_plane(ln)
     if not ln.host_candidate:
         return

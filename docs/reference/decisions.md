@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-08 02:27 UTC
-generated_sha: 2bdd86668a
+generated_at: 2026-11-08 03:09 UTC
+generated_sha: 1232149138
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 2bdd86668a
 
 # Decisions
 
-835 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
+836 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -119,6 +119,7 @@ generated_sha: 2bdd86668a
     * `ansible/roles/k8s/wg-easy/CLAUDE.md` and `prek.toml`: ` marker in
     * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/claude_code/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/config_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
+    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/deploy_ui/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/fake_remux/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/github_cli/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/homelab_builder/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
@@ -129,6 +130,7 @@ generated_sha: 2bdd86668a
     * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/config_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
+    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/deploy_ui/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/fake_remux/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/github_cli/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/homelab_builder/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
@@ -141,6 +143,7 @@ generated_sha: 2bdd86668a
     * `ansible/roles/setup/common/CLAUDE.md` and `ansible/tests/_ratchet.py`: ` marker in
     * `ansible/roles/setup/common/CLAUDE.md` and `docs/target-architecture/monitoring/m6-status/b5.md`: ` marker in
     * `ansible/roles/setup/common/CLAUDE.md` and `prek.toml`: ` marker in
+    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/deploy_ui/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/fake_remux/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/github_cli/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/homelab_builder/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
@@ -150,6 +153,15 @@ generated_sha: 2bdd86668a
     * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
+    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/fake_remux/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
+    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/github_cli/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
+    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/homelab_builder/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
+    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/hypervisor/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
+    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/nut_host/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
+    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/optimize_pi/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
+    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
+    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
+    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/fake_remux/tasks/main.yml` and `ansible/roles/setup/github_cli/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/fake_remux/tasks/main.yml` and `ansible/roles/setup/homelab_builder/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/fake_remux/tasks/main.yml` and `ansible/roles/setup/hypervisor/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
@@ -547,7 +559,7 @@ generated_sha: 2bdd86668a
 | the units keep the `kuma-check-` prefix, by the operator's ruling in ADR 0026. | `ansible/roles/setup/common/tasks/check_timer.yml` | 2026-11-04 |
 | repo content only, never an upstream download. controller's commit, which is true provenance only for bytes that commit holds. A pinned upstream artifact (sops, an installer script, an APT key, a release tarball) is versioned by its own pin. Filing it under a repo SHA would claim a provenance it lacks, and a rollback that swings `current` would not change which upstream bytes are on disk. Those downloads stay plain `get_url` tasks in their own roles. #3728 classified every one of them and found none that fits here. This marker says nothing about how each download is verified. Most carry a `checksum:`, but the two claude.ai/install.sh fetches (claude_code, agent_user.yml) carry no checksum, for the reason the decision marker at each of those tasks gives. | `ansible/roles/setup/common/tasks/release_bin.yml` | 2026-10-09 |
 | this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. | `ansible/roles/setup/config_files/tasks/main.yml` | 2026-10-25 |
-| a pod inside the cluster reaches the daemon without Authelia. | `ansible/roles/setup/deploy_ui/CLAUDE.md` | 2026-09-10 |
+| this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. | `ansible/roles/setup/deploy_ui/tasks/main.yml` | 2026-11-08 |
 | this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. | `ansible/roles/setup/fake_remux/tasks/main.yml` | 2026-11-07 |
 | this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. | `ansible/roles/setup/github_cli/tasks/main.yml` | 2026-11-07 |
 | ` marker). | `ansible/roles/setup/gitops_deploy/CLAUDE.md` | 2026-10-10 |
@@ -1076,6 +1088,7 @@ generated_sha: 2bdd86668a
 | a failure goes to the journal, and only the run that REACHES the threshold writes to stderr. The old script mailed every failure: 145 messages reached /var/mail/ubuntu between 2026-08-20 and 2026-09-24, nobody reads that spool, and a peer that is simply powered off is the common case. The unit sends stderr to the journal as `sync-artifacts` since #6162, because mail was never shipped anywhere, so the threshold line is one journal line per outage that Loki keeps. The verdict recorded after the loop is the monitor (#2516). | `hosts/components/claude-code/templates/sync-artifacts.sh.j2` | 2026-09-24 |
 | no file-age staleness check. at 30 days, so the newest file's age measures how often sessions on the peer write artifacts, not whether this sync runs — a quiet week on daniel-server would page. A successful rsync --delete leaves the mirror equal to the peer by construction, so the failure streak covers a broken transport and the NotReporting deadline covers a timer that stopped running at all. | `hosts/components/claude-code/templates/sync-artifacts.sh.j2` | 2026-09-25 |
 | the tag stays `claude-otel-health`. `status=` line selects it (claude-otel-health.sh.j2). | `hosts/components/claude-code/units/homelab-claude-otel-health.service.j2` | 2026-11-01 |
+| a pod inside the cluster reaches the daemon without Authelia. | `hosts/components/deploy-ui/CLAUDE.md` | 2026-11-08 |
 | renaming the attachment is safe, and this is the load-bearing correctness claim. subtitle script references a font by its INTERNAL family name (the `Style:` line's fontname), never by the attachment's filename, so libass still matches the font after the header rewrite. mkvpropedit rewrites the header in place without touching or re-encoding any track. | `hosts/components/fake-remux/files/mkv_attachment_repair.py` | 2026-08-29 |
 | takes fake_remux_lock, though it shares no ledger with the other two. deletes and swaps the same mkv files this rewrites the header of, and mkvpropedit rewriting a header mid-swap corrupts the file it was called to fix. The lock costs a wait. | `hosts/components/fake-remux/units/homelab-mkv-attachment-repair.service.j2` | 2026-11-07 |
 | this script RECONCILES, where its sibling github-ruleset-drift.sh only alerts. ruleset is a setting a human changes on purpose, and reconciling it would undo that change with no signal. The limit is not: the only way it changes without a human is by expiring, and re-applying an expired setting is restoring the declared state, not overriding a decision. A human who wants it off changes `gitops_deploy_interaction_limit` in defaults/main.yml — this script applies whatever that declares, and `none` disarms it by way of a DELETE. | `hosts/components/github-checks/templates/github-interaction-limit.sh.j2` | 2026-09-06 |

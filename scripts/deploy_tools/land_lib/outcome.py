@@ -76,7 +76,7 @@ VERDICTS = frozenset(Verdict)
 class Cause(StrEnum):
     """Which deploy failure a `deploy-failed` verdict was, for the board's `by (cause)`.
 
-    The verdict alone cannot tell a tag nothing applies from a failed tick or a held promotion.
+    The verdict alone cannot tell a tag nothing applies from a held promotion or a failed soak.
 
     PROMOTE_* NAME HOW A WAIT ON PROMOTION ENDED (`promote.py land-wait`), for a PR whose tag
     Flux applies. `promote-held` is DEPLOY_HOLD holding, beside `deploy-failed`.
@@ -87,8 +87,6 @@ class Cause(StrEnum):
     `deferred`: the promotion applies this PR itself, and a later one may still cover it.
     """
 
-    TICK_HELD = "tick-held"
-    TICK_FAILED = "tick-failed"
     TAG_MISS = "tag-miss"
     PROMOTE_HELD = "promote-held"
     PROMOTE_TIMEOUT = "promote-timeout"

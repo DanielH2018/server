@@ -37,8 +37,8 @@ has_gitops: false
 # containers_list and compose_services below runs on it.
 has_docker: true
 # A 512 MB Zero 2 W: the one host where a heavy apt step OOM-kills without the disk-backed
-# swapfile, so initial_setup's swap + watchdog-stop preamble and its apt-show-versions purge
-# run here and nowhere else. group_vars/all.yml defaults both flags false.
+# swapfile, which bootstrap step 4 (hosts/bootstrap-host.sh) creates here.
+# group_vars/all.yml defaults the flag false.
 has_low_memory_board: true
 # Boots the Raspberry Pi kernel, so `linux-raspi` is a real package here.
 has_raspi_kernel: true

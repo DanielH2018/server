@@ -1,0 +1,2 @@
+deploy_ui_port: 8790
+deploy_ui_dir: /usr/lib/homelab/deploy-ui

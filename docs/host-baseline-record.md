@@ -108,8 +108,8 @@ the name:
   a k3s node would reload the ruleset under kube-router (the 2026-10-25 outage).
 - **On daniel-box (H7.32), the arm owns the two SSH rules beside the builder's two repository
   allows, and initial_setup keeps no UFW task for any host.** H7.35 declares the k3s join rules
-  `keep` and adopts the coredns-host metrics allows. The `deploy_ui` role labels its allows
-  with a comment that does not start `homelab:`, so the arm leaves them. As on daniel-server, the live defaults match and the arm runs no
+  `keep` and adopts the coredns-host metrics allows. H7.50 declares the deploy-ui
+  allows, and the arm relabels the role's commented rules in place. As on daniel-server, the live defaults match and the arm runs no
   `ufw default`.
 - **UFW owns a SECOND sysctl file**, `/etc/ufw/sysctl.conf` (`IPT_SYSCTL` in
   `/etc/default/ufw`), re-applied on every `ufw enable` or `reload`. Ubuntu ships it with

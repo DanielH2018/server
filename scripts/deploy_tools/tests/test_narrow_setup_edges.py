@@ -382,9 +382,9 @@ def test_a_tag_only_this_role_declares_narrows(tree):
 
 
 def test_a_tag_another_role_in_the_playbook_declares_is_flagged(tree):
-    """`firewall` is carried by tasks in both `deploy_ui` and `initial_setup`.
+    """A tag two roles in the playbook carry selects both of them.
 
-    `initial_setup.yml --tags firewall` runs both roles' firewall tasks, so the printed
+    `initial_setup.yml --tags firewall` would run both roles' firewall tasks, so the printed
     command would apply a role the change never touched.
     """
     old = _two_role_tree(tree, "firewall")
@@ -393,19 +393,6 @@ def test_a_tag_another_role_in_the_playbook_declares_is_flagged(tree):
         narrow_setup.CannotNarrow, match="also declared by another role"
     ):
         _narrow_two(tree, old, tree.commit("edit alpha"))
-
-
-def test_the_real_setup_tree_has_a_tag_two_roles_declare():
-    """Non-vacuity: the rule above has a live subject, so it is not guarding an empty set.
-
-    `foreign_tags` finds its subject by pattern — every other role the playbook lists — and
-    would return an empty set, silently, if the playbook parse or the tree walk broke.
-    """
-    from lib.repo_paths import REPO
-
-    text = (REPO / "ansible/initial_setup.yml").read_text()
-    shared = narrow_setup.foreign_tags("initial_setup", text, "HEAD", str(REPO))
-    assert "firewall" in shared, sorted(shared)
 
 
 # ── another role's task file that is not a list of tasks ────────────────────────────────
