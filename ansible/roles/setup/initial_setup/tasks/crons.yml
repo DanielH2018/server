@@ -1,5 +1,5 @@
 ---
-# Host crons: the ansible.log cron's removal and the setup-drift check. The checkout timers
+# Host crons: the absent arms of retired crons and the setup-drift check. The checkout timers
 # (secret rotation, docs refresh, infra map, eval sweep, git repair) and the Loki witness are
 # host-package components.
 
@@ -47,17 +47,6 @@
     - "Weekly secret rotation (auto tier)"
   become: true
 
-- name: Remove the secret-rotation wrappers from any non-gitops host
-  tags: [crons, secret-rotation]
-  when: not has_gitops
-  ansible.builtin.file:
-    path: "/usr/local/bin/{{ item }}"
-    state: absent
-  loop:
-    - secret-rotation-audit.sh
-    - secret-rotate.sh
-  become: true
-
 - name: Remove the weekly ansible.log truncation cron
   # H7.36 deletes the job, and the census allowlists the item `Clear ansible log file` as
   # deleted. The task stays as an absent arm until H7.20a, because daniel-server and daniel-pi
@@ -70,120 +59,19 @@
   become: true
   tags: [crons, ansible-log]
 
-- name: Find the ansible.log files the removed log_path left in each checkout
-  tags: [crons, ansible-log]
-  when: has_repo_checkout
-  # ansible.cfg set `log_path = ./ansible.log` until #6217, so the primary checkout and every
-  # `.claude/worktrees/<name>` checkout grew their own copy, and a `--diff` run wrote rendered
-  # bodies into it. Nothing writes the file any more; this and the task below delete the copies
-  # left behind, and find nothing once they are gone. Depth 2 reaches `worktrees/<name>/`.
-  ansible.builtin.find:
-    paths:
-      - "/home/{{ sys_user }}/server"
-      - "/home/{{ sys_user }}/server/.claude/worktrees"
-    patterns: ansible.log
-    file_type: file
-    recurse: true
-    depth: 2
-  register: initial_setup_stale_ansible_logs
-  check_mode: false # read-only query; must run under --check or the loop below breaks
-  become: true
-
-- name: Delete the ansible.log files the removed log_path left behind
-  tags: [crons, ansible-log]
-  when: has_repo_checkout
-  ansible.builtin.file:
-    path: "{{ item.path }}"
-    state: absent
-  loop: "{{ initial_setup_stale_ansible_logs.files }}"
-  loop_control:
-    label: "{{ item.path }}"
-  become: true
-
-- name: Remove the worktree holder scan's old sudoers rule
-  tags: [crons, worktree-sweep]
-  # The way out of the sudo grant #4270 and #4296 installed, on every host: the socket replaced
-  # it, and a NOPASSWD root rule must not outlive its purpose.
-  ansible.builtin.file:
-    path: /etc/sudoers.d/20-worktree-holders
-    state: absent
-  become: true
-
-- name: Read whether the worktree holder scan's socket is installed
-  tags: [crons, worktree-sweep]
-  when: not has_claude_code
-  ansible.builtin.stat:
-    path: /etc/systemd/system/worktree-holders.socket
-  register: initial_setup_worktree_holders_socket_unit
-
-- name: Stop the worktree holder scan's socket on a host with no Claude sessions
-  tags: [crons, worktree-sweep]
-  # Before its unit file goes, because systemd cannot stop a unit it no longer finds.
-  when:
-    - not has_claude_code
-    - initial_setup_worktree_holders_socket_unit.stat.exists
-  ansible.builtin.systemd_service:
-    name: worktree-holders.socket
-    enabled: false
-    state: stopped
-  become: true
-
-- name: Remove the worktree holder scan from a host with no Claude sessions
-  tags: [crons, worktree-sweep]
-  # The way out: a host that stops running Claude sessions keeps a root service otherwise.
-  when: not has_claude_code
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /etc/systemd/system/worktree-holders.socket
-    - /etc/systemd/system/worktree-holders@.service
-    - /usr/local/libexec/worktree-holders
-    - /etc/worktree-holders.json
-    - /var/lib/homelab/setup-deployed-manifest.d/worktree-holders
-  register: initial_setup_worktree_holders_removed
-  become: true
-
-- name: Forget the removed worktree holder scan units
-  tags: [crons, worktree-sweep]
-  when:
-    - not has_claude_code
-    - initial_setup_worktree_holders_removed is changed
-  ansible.builtin.systemd_service:
-    daemon_reload: true
-  become: true
-
-- name: Remove the worktree holder scan's socket group from a host with no Claude sessions
-  tags: [crons, worktree-sweep]
-  when: not has_claude_code
-  ansible.builtin.group:
-    name: "{{ initial_setup_worktree_holders_group }}"
-    state: absent
-  become: true
-
-- name: Retire the TLS cert-expiry watch
+- name: Remove the TLS cert-expiry watch cron
   tags: [crons, cert-expiry]
   # Reaps the retired TLS cert-expiry watcher. Traefik serves ONE certificate -- a wildcard
   # whose SANs cover `*.<domain>`, `*.local.<domain>` and the apex -- and observability's
   # edge.yaml pages on that leaf's `traefik_tls_certs_not_after`. `probe.py cert <host>` keeps
-  # the per-host served-chain view for an operator.
-  #
-  # Deleting the installing tasks alone would leave the crontab entry and the credentials file
-  # on daniel-box forever, so this task removes them. It runs on every host rather than behind
+  # the per-host served-chain view for an operator. It runs on every host rather than behind
   # the `ops_cron_host` gate, because asking cron to remove an absent entry is free and a host
   # that was once the ops cron host still has the entry.
+  ansible.builtin.cron:
+    name: "TLS cert-expiry watch"
+    state: absent
+    user: "{{ sys_user }}"
   become: true
-  block:
-    - name: Remove the TLS cert-expiry watch cron
-      ansible.builtin.cron:
-        name: "TLS cert-expiry watch"
-        state: absent
-        user: "{{ sys_user }}"
-
-    - name: Remove the cert-expiry webhook credentials file
-      ansible.builtin.file:
-        path: /etc/homelab/cert-expiry-webhook.env
-        state: absent
 
 # homelab-check-lib.sh is sourced by the host checks M6 moves off Kuma, with a `|| exit 1` guard.
 # `tags: [always]`, matching the copy task it records.
@@ -209,18 +97,6 @@
         src: ansible/roles/setup/initial_setup/files/setup-drift-lib.sh
 
 # ── setup-plane drift reader on every host that renders setup templates ───────────────────────
-# Nothing removes a file the role stops declaring. M6 batch B2's Cutover-2 stopped
-# setup-drift-check.sh sourcing /etc/homelab/kuma-push.env, so this retires the host copy. It
-# holds a Kuma push token in a 0640 file, which a retired credential must not outlive. No `when:`,
-# so a host that left setup_drift_check_hosts loses its copy too. /etc/homelab itself stays: the
-# etcd drill's env file lives there.
-- name: Retire the setup-drift Kuma push credentials
-  tags: [crons, setup_drift]
-  ansible.builtin.file:
-    path: /etc/homelab/kuma-push.env
-    state: absent
-  become: true
-
 - name: Deploy the setup-plane drift check
   tags: [crons, setup_drift]
   when: inventory_hostname in setup_drift_check_hosts

@@ -18,30 +18,11 @@ initial_setup_worktree_sweep_cron_hour: 4
 initial_setup_worktree_sweep_cron_weekday: 0  # Sunday
 
 # The group whose members may connect to the worktree holder scan's socket,
-# /run/worktree-holders.sock (#4297). The worktree-holders component adds sys_user to it, and
-# tasks/crons.yml removes it from a host with no Claude sessions. The claude-code component's
-# claude-agent-setup adds each
+# /run/worktree-holders.sock (#4297). The worktree-holders component adds sys_user to it. The
+# claude-code component's claude-agent-setup adds each
 # present agent user, because that script's group list is exact and would strip a membership
 # granted anywhere else.
 initial_setup_worktree_holders_group: worktree-holders
-
-# The hosts whose package owns a subject (docs/target-architecture/host/h7-delete-ansible.md,
-# *Moving one host at a time*). Each task of a listed subject carries
-# `when: inventory_hostname not in initial_setup_packaged_hosts['<subject>']`, so the role writes
-# the subject only on the hosts the map does not list. The map sits here, never in `host_vars`,
-# because an `inventory/` edit is a deploy-plane change. The last host's PR deletes the subject's
-# tasks and its entry.
-#   access, accounting, audit_and_kernel, integrity, host_basics: the `host-hardening` component
-#           and bootstrap step 4 own them on a listed host (H7.58, H7.59). host_basics covers the
-#           swap, apt and package tasks of host-basics.yml, and leaves the tasks that install `ansible-core` and `ansible-lint`.
-#   rsyslog_filter: the rsyslog info filter. The rsyslog-filter component ships it (H7.59).
-initial_setup_packaged_hosts:
-  access: [daniel-pi, daniel-server]
-  accounting: [daniel-pi, daniel-server]
-  audit_and_kernel: [daniel-pi, daniel-server]
-  integrity: [daniel-pi, daniel-server]
-  host_basics: [daniel-pi, daniel-server]
-  rsyslog_filter: [daniel-server]
 
 # Where the rkhunter and AIDE scripts source homelab-check-lib.sh from. crons.yml installs it
 # under /usr/local/lib; the integrity-scans host component sets /usr/lib/homelab, where the

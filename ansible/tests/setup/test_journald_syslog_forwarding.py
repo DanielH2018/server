@@ -10,20 +10,14 @@ fires -- a log stream simply stops, or starts, and the next person to notice is 
 the records months later.
 """
 
-from pathlib import Path
-
 import pytest
 from lib import yaml_fast
-from _helpers import ALL_VARS, HOST_VARS, SETUP_ROLES
+from _helpers import ALL_VARS, HOST_VARS
 from _host_packages import HOSTS, shipped_text
 from lib.repo_paths import REPO
 
-ROLE = SETUP_ROLES / "initial_setup"
-SYSTEM_TUNING = ROLE / "tasks" / "system-tuning.yml"
-
 # The host-tuning component ships the journald drop-in in every host package. The rsyslog-filter
-# component ships the filter below on the hosts that list it, and initial_setup writes it on the
-# other has_rsyslog hosts.
+# component ships the filter below on every has_rsyslog host.
 JOURNALD_DEST = "/etc/systemd/journald.conf.d/50-homelab.conf"
 FILTER_DEST = "/etc/rsyslog.d/49-homelab-info-filter.conf"
 FILTER_COMPONENT = "rsyslog-filter"
@@ -35,35 +29,14 @@ FILTER_COMPONENT = "rsyslog-filter"
 MUST_BE_EXEMPT = {"auth", "authpriv", "kern", "mail"}
 
 
-def iter_tasks(tasks):
-    """Every task, descending into block/rescue/always."""
-    for task in tasks or []:
-        if not isinstance(task, dict):
-            continue
-        yield task
-        for key in ("block", "rescue", "always"):
-            yield from iter_tasks(task.get(key))
-
-
-def copy_content(path: Path, dest: str) -> str:
-    """The `content:` of the ansible.builtin.copy task writing `dest`."""
-    for task in iter_tasks(yaml_fast.safe_load(path.read_text())):
-        copy = task.get("ansible.builtin.copy")
-        if isinstance(copy, dict) and copy.get("dest") == dest:
-            return copy.get("content", "")
-    return ""
-
-
 def lists_the_filter(host: str) -> bool:
     spec = yaml_fast.safe_load((REPO / "hosts" / host / "package.yml").read_text())
     return FILTER_COMPONENT in spec["components"]
 
 
 def filter_text(host: str) -> str:
-    """The filter `host` takes from its package, or else the role's copy."""
-    if lists_the_filter(host):
-        return shipped_text(host, FILTER_DEST)
-    return copy_content(SYSTEM_TUNING, FILTER_DEST)
+    """The filter `host` takes from its package, or nothing when it does not list one."""
+    return shipped_text(host, FILTER_DEST) if lists_the_filter(host) else ""
 
 
 def has_rsyslog(host: str) -> bool:
@@ -111,13 +84,14 @@ def test_journald_forwards_at_info(host: str):
 def test_raising_the_forwarding_level_requires_the_syslog_filter(host: str):
     """The two are one change. Forwarding at info without the filter is the expensive half.
 
-    Read statically, so it holds wherever the filter block RUNS; the block skips on a host
-    with no rsyslog (`test_the_filter_is_gated_on_has_rsyslog`), where forwarding reaches
-    nothing and the filter has nothing to pair with.
+    A host with no rsyslog skips: forwarding reaches nothing there, and the filter has nothing
+    to pair with.
     """
     # fact: ansible/roles/setup/initial_setup/CLAUDE.md#Rules the task files do not state
     if setting(shipped_text(host, JOURNALD_DEST), "MaxLevelSyslog") != "info":
         pytest.skip("forwarding is not raised, so the filter is not required")
+    if not has_rsyslog(host):
+        pytest.skip("rsyslog is masked here, so forwarding reaches nothing")
     content = filter_text(host)
     assert content, (
         f"MaxLevelSyslog=info but nothing renders {FILTER_DEST}, so every info line on the "
@@ -127,7 +101,7 @@ def test_raising_the_forwarding_level_requires_the_syslog_filter(host: str):
     assert "stop" in content, f"{FILTER_DEST} discards nothing"
 
 
-@pytest.mark.parametrize("host", HOSTS)
+@pytest.mark.parametrize("host", [h for h in HOSTS if has_rsyslog(h)])
 def test_filter_exempts_every_facility_that_bypasses_journald(host: str):
     missing = MUST_BE_EXEMPT - exempted_facilities(filter_text(host))
     assert not missing, (
@@ -138,51 +112,22 @@ def test_filter_exempts_every_facility_that_bypasses_journald(host: str):
     )
 
 
-def filter_block_when(path: Path):
-    """The `when` of the task or block that renders the rsyslog filter."""
-    for task in yaml_fast.safe_load(path.read_text()) or []:
-        if not isinstance(task, dict):
-            continue
-        for inner in iter_tasks(task.get("block")):
-            copy = inner.get("ansible.builtin.copy")
-            if isinstance(copy, dict) and copy.get("dest") == FILTER_DEST:
-                return task.get("when")
-    return None
+def filter_listing_errors(hosts, lists, rsyslog) -> list[str]:
+    """Each host whose package lists the filter where `has_rsyslog` says it must not, or the
+    reverse."""
+    return [h for h in hosts if lists(h) != rsyslog(h)]
 
 
-def test_the_filter_is_gated_on_has_rsyslog():
-    """rsyslog is masked on daniel-pi, and a masked unit fails the restart handler.
-
-    Without the gate, `initial_setup.yml -e target=daniel-pi` applies every task and then fails
-    at `Restart rsyslog`, so the recap reads failed=1 for a run whose changes are all live. The
-    gate is a declared host flag, not a live check of
-    the unit, so the play never renders config for a logger the host has retired.
-    """
-    assert "has_rsyslog" in filter_block_when(SYSTEM_TUNING), (
-        "the block rendering the rsyslog filter is not `when: has_rsyslog`, so it runs on "
-        "daniel-pi, notifies Restart rsyslog, and fails the play on the masked unit"
-    )
-    assert yaml_fast.safe_load(ALL_VARS.read_text()).get("has_rsyslog") is True, (
-        "has_rsyslog has no true default in group_vars/all.yml -- an undefined flag fails "
-        "the when on every host rather than skipping only the Pi"
-    )
-    pi = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
-    assert pi.get("has_rsyslog") is False, (
-        "daniel-pi does not set has_rsyslog: false, so the filter block runs on the one host "
-        "whose rsyslog is masked"
-    )
-
-
-def test_the_filter_component_lists_only_on_hosts_with_rsyslog():
+def test_the_filter_component_lists_exactly_on_hosts_with_rsyslog():
     """A masked rsyslog has no use for the filter, and `rsyslogd -N1` would hold the host."""
+    # fact: ansible/roles/setup/initial_setup/CLAUDE.md#Rules the task files do not state
     assert lists_the_filter("daniel-server")
+    assert lists_the_filter("daniel-box")
     assert not lists_the_filter("daniel-pi")
-    assert not [h for h in HOSTS if lists_the_filter(h) and not has_rsyslog(h)]
-
-
-def test_the_component_ships_the_bytes_the_role_writes():
-    assert shipped_text("daniel-server", FILTER_DEST) == copy_content(
-        SYSTEM_TUNING, FILTER_DEST
+    assert filter_listing_errors(HOSTS, lists_the_filter, has_rsyslog) == []
+    assert yaml_fast.safe_load(ALL_VARS.read_text()).get("has_rsyslog") is True, (
+        "has_rsyslog has no true default in group_vars/all.yml, so a new host would list no "
+        "filter while its rsyslog runs"
     )
 
 
@@ -195,8 +140,14 @@ def test_a_notice_forwarding_level_is_detected():
     assert setting("[Journal]\nMaxLevelSyslog=notice\n", "MaxLevelSyslog") == "notice"
 
 
-def test_a_missing_filter_is_detected():
-    assert copy_content(SYSTEM_TUNING, "/etc/rsyslog.d/does-not-exist.conf") == ""
+def test_a_host_with_rsyslog_and_no_filter_is_detected():
+    hosts = ["a", "b"]
+    assert filter_listing_errors(hosts, lambda h: h == "a", lambda h: True) == ["b"]
+
+
+def test_a_filter_on_a_host_without_rsyslog_is_detected():
+    hosts = ["a", "b"]
+    assert filter_listing_errors(hosts, lambda h: True, lambda h: h == "a") == ["b"]
 
 
 @pytest.mark.parametrize("dropped", sorted(MUST_BE_EXEMPT))
@@ -206,16 +157,3 @@ def test_dropping_an_exempt_facility_is_detected(dropped: str):
         f' and ($syslogfacility-text != "{f}")' for f in sorted(kept)
     )
     assert MUST_BE_EXEMPT - exempted_facilities(crippled) == {dropped}
-
-
-def test_an_ungated_filter_block_is_detected(tmp_path: Path):
-    ungated = tmp_path / "system-tuning.yml"
-    ungated.write_text(
-        "- name: filter\n"
-        "  block:\n"
-        "    - name: render\n"
-        "      ansible.builtin.copy:\n"
-        f"        dest: {FILTER_DEST}\n"
-        "        content: stop\n"
-    )
-    assert filter_block_when(ungated) is None
