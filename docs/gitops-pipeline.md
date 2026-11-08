@@ -384,9 +384,6 @@ of the file reaches another host. Three rows show the three outcomes:
   apply, because `comment_only_broad_changes` reads only `.yml` and `.yaml` paths.
 - `hosts/lib/ci_verdict.py` routes to `gitops_deploy`. The tick applies the role, and its only
   host is daniel-box, so the file owes no line.
-- `scripts/deploy_tools/prune_releases.py` routes to `k3s`, which the tick cannot apply. The
-  derivation skips the role, and `deploy_defer.record` writes a `manual_plane` line with no
-  `hosts` key.
 
 A shipped file with no row takes no broad arm and writes no line, and `land.sh` alone names its
 hosts. `ansible/tests/setup/test_setup_cross_role_files.py` fails on a literal `src:` copy that

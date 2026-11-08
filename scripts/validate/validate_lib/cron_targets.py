@@ -4,8 +4,8 @@
 The cron rules in `scripts/validate/validate_lib/cron_checks.py` only apply to a script cron actually runs, so
 the hard part is not the rule but the resolution: a cron `job:` names a path under
 `/usr/local/bin/`, and the template that produced it may have a different basename, may be
-deployed by a `loop:`, or may reach the host through `release_bin.yml`'s group indirection.
-All three shapes are parsed here, once, so no two consumers can disagree about which
+or may be deployed by a `loop:`.
+Both shapes are parsed here, once, so no two consumers can disagree about which
 templates are in scope — a selector that drifts from its sibling's is how a guard ends up
 covering less than the hazard it names.
 
@@ -24,8 +24,8 @@ import yaml
 # scripts/ root here, the same way its siblings reach it.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from lib import release_bin_groups, yaml_fast
-from lib.repo_paths import REPO, ROLES
+from lib import yaml_fast
+from lib.repo_paths import ROLES
 
 # cron's PATH (/usr/bin:/bin) omits /usr/local/bin, where the k3s install script puts `k3s`
 # (and the `kubectl` it aliases). A script that calls either by bare name only works when RUN
@@ -130,29 +130,6 @@ def _template_pairs(task: dict, mod: dict):
             yield str(item["src"]), str(item["dest"])
 
 
-def _release_bin_pairs(task: dict, task_file: Path):
-    """Yield (repo-relative src, dest) for a group deployed by release_bin.yml.
-
-    A third deploy shape, after the direct `template:` and the looped one. A role hands
-    release_bin.yml a GROUP NAME and the file list lives in that role's defaults, so nothing in
-    the task file itself names a template — which made every script in a converted group
-    invisible to this resolver. That is the same coverage loss the looped form causes: the cron
-    rules would read `[ok]` because no rule applied, not because the script satisfied one.
-
-    The resolution lives in `scripts/lib/release_bin_groups.py` because the secrets guard needs
-    the same answer, and two resolvers that can disagree about a group's contents is the defect
-    this shape already caused once: `release_bin_templates` parses as a folded Jinja string, and
-    the guard's own copy iterated it into nothing and passed having scanned zero files.
-
-    The host name of a rendered script is its basename minus `.j2`, which is release_bin.yml's
-    own rule for the same derivation. Only `.j2` sources yield a pair — the consumer filters on
-    shell templates anyway, and a `files` entry may be renamed on the host.
-    """
-    for src in release_bin_groups.task_sources(task, task_file):
-        if src.endswith(".j2"):
-            yield src, f"/usr/local/bin/{release_bin_groups.host_name(src)}"
-
-
 def iter_cron_targets(roles: Path = ROLES):
     """Yield (template_path, task_file, cron_task) for every cron-scheduled shell template.
 
@@ -176,17 +153,10 @@ def iter_cron_targets(roles: Path = ROLES):
         if not isinstance(tasks, list):
             continue
 
-        # Maps to an absolute template PATH, not a bare src, because the two deploy shapes
-        # resolve from different roots: a `template:` src is relative to the role's templates/
-        # dir, while a release_bin src is repo-relative. Resolving at insert time, where the
-        # shape is known, keeps that difference out of every consumer below.
         dest_to_src: dict[str, Path] = {}
         for task in tasks:
             if not isinstance(task, dict):
                 continue
-            for src, dest in _release_bin_pairs(task, task_file):
-                if src.endswith(".sh.j2") and dest.startswith("/usr/local/bin/"):
-                    dest_to_src[Path(dest).name] = REPO / src
             mod = task.get("ansible.builtin.template")
             if not isinstance(mod, dict):
                 continue

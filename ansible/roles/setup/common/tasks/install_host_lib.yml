@@ -22,11 +22,10 @@
 # `src` is absolute off `{{ playbook_dir }}` rather than a bare basename. A task file imported
 # from another role resolves `copy:` src against the role that OWNS the file, so a bare
 # `host_lib.py` would look in roles/setup/common/files, which no longer holds it. The
-# two k8s callers (configarr, janitorr) import this from a different plane entirely, and
-# release_bin.yml records the same resolution trap for `template:`. Naming the path outright
+# two k8s callers (configarr, janitorr) import this from a different plane entirely. Naming the path outright
 # means the answer does not depend on which role imported it.
 #
-# NO TAGS IN THIS FILE, deliberately, matching release_bin.yml, stamp_render.yml and
+# NO TAGS IN THIS FILE, deliberately, matching stamp_render.yml and
 # stamp_deployed.yml. Tags UNION in Ansible, so a tag here would also inherit the caller's and
 # become selectable two ways. Carrying none means the copy is selected by exactly the caller's
 # tag — which is the only correct answer, because host_lib is only ever wanted alongside the
@@ -34,7 +33,7 @@
 #
 # Callers pass:
 #   host_lib_dir      the directory the consumer script runs from, e.g. /opt/gitops-deploy
-#   host_lib_owner    optional, defaults to root (matching release_bin_owner's default)
+#   host_lib_owner    optional, defaults to root
 #   host_lib_mode     optional, defaults to 0755
 #   host_lib_notify   optional handler name(s); defaults to none. An empty list rather than
 #                     `omit` so the no-handler case is a real value Ansible can iterate.

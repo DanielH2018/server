@@ -1036,7 +1036,6 @@
  "scripts/deploy_tools/tests/test_promote_settle_retry.py": 0.13,
  "scripts/deploy_tools/tests/test_promote_stateful_hold.py": 0.24,
  "scripts/deploy_tools/tests/test_promote_supersede.py": 0.98,
- "scripts/deploy_tools/tests/test_prune_releases.py": 0.02,
  "scripts/deploy_tools/tests/test_publish_pr.py": 0.27,
  "scripts/deploy_tools/tests/test_publish_pr_unlanded.py": 0.0,
  "scripts/deploy_tools/tests/test_reach.py": 0.06,

@@ -62,8 +62,7 @@ DEFAULTS = """\
 demo_alpha_mode: fast
 demo_beta_mode: slow
 demo_orphan_key: nobody-reads-this
-# A host script's template named in a data structure rather than in a task's `src:` — the
-# shape `setup/k3s` uses for its cron scripts, through `k3s_render_stamp_groups`.
+# A host script's template named in a data structure rather than in a task's `src:`.
 demo_release_groups:
   - name: demo-beta
     templates:

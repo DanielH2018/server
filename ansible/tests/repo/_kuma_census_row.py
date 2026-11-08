@@ -145,7 +145,6 @@ _PROSE_HOLDERS = {
             "hosts/components/registry-gc/templates/registry-gc.sh.j2",
             "ansible/roles/setup/nut_host/templates/ups-secondary-health.sh.j2",
             "hosts/components/renovate-agent/files/renovate_agent.py",
-            "scripts/deploy_tools/prune_releases.py",
         ),
         _SHIPPED_COMMENT,
     ),

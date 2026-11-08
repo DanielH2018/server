@@ -15,8 +15,7 @@ expression. A whole-body match would flag a script that only names a secret in a
 `ups-secondary-health.sh.j2` says where `nut_monitor_password` lives and reads it from
 `/etc/nut/upsmon.conf` — and a comment renders nothing. The registry is plaintext by design
 (names, never values), so this runs on a CI runner with no SOPS key. The name list
-(`_helpers.registry_secret_names`) is shared with the release_bin guard so the two cannot
-disagree about what counts as a secret.
+(`_helpers.registry_secret_names`) comes from that registry.
 
 NO NAMED MEMBER. The census had one, registry-gc.sh.j2, and M6 batch B6c's Cutover-2 retired it
 when that script's push, and its inline token, went. No other script renders a secret, so the
