@@ -3069,9 +3069,10 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     cluster that resolves no outside name, on the node or in a pod, applies the registry role's render, and verifies the
     key-signed bundle at `flux_break_glass_url`. The kit's archives keep each pinned index,
     because `docker save` from Docker's classic image store drops the digest the manifests
-    name. The registry's claims on a
-    cluster without Longhorn stay open
-    ([#7667](https://github.com/DanielH2018/server/issues/7667)).
+    name. Update (#7667, ruled by the operator on 2026-11-08): on a cluster without
+    Longhorn, the runbook binds the push store's claim to a hostPath PV pre-bound by
+    `claimRef`, which `fresh_cluster_drill.py volumes` writes. The drill runs the same step
+    with no stand-in StorageClass.
 
 ## Review log
 

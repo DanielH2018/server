@@ -9,13 +9,17 @@ writes what the workflow applies and judges what the cluster reports, as `deleti
 does for the other cases.
 
 - `build` writes `kind.yaml` (the cluster's CIDRs, so the Service's pinned ClusterIP is
-  valid), `images.json` (each image the case loads), `prereq/`, `registry/`, `bundle/`,
-  `hand/` and `push.json`.
+  valid), `images.json` (each image the case loads), `prereq/`, `volumes/`, `registry/`,
+  `bundle/`, `hand/` and `push.json`.
 - `archive` names a crane OCI layout for containerd and tars it, as the kit holds an image.
+- `volumes` writes a hostPath PersistentVolume pre-bound to each claim the registry's push
+  store mounts, and prints the command that creates each one's directory. The runbook and
+  the drill both run it, because a rebuilt cluster has no Longhorn to serve the claims.
 - `check` prints one `case=fresh-cluster verdict=<pass|fail>` line, then one problem per line.
 
 Run (the workflow's form):
     uv run python scripts/deploy_tools/fresh_cluster_drill.py build --bg-pubkey bg.pub --out DIR
+    uv run python scripts/deploy_tools/fresh_cluster_drill.py volumes --out DIR
 """
 
 import json
@@ -56,8 +60,8 @@ FRESH = "fresh-drill"
 FRESH_MARKER = "fresh-marker"
 COMPONENTS = K8S_ROLES / "flux" / "files" / "gotk-components.yaml"
 REGISTRY_DEFAULTS = K8S_ROLES / "registry" / "defaults" / "main.yml"
-# kind's own provisioner, preloaded in its node image, stands in for Longhorn.
-STAND_IN_PROVISIONER = "rancher.io/local-path"
+REGISTRY_DEPLOYMENT = "registry"
+VOLUME_ROOT = "/var/lib/homelab-break-glass"
 # The annotation containerd's importer takes verbatim as the image's name.
 CONTAINERD_NAME = "io.containerd.image.name"
 IMAGE_LINE = re.compile(r"^\s+image: (\S+)$", re.MULTILINE)
@@ -162,23 +166,8 @@ def registry_files() -> dict[str, str]:
     return files
 
 
-def claim_classes(files: dict[str, str]) -> set[str]:
-    """Every StorageClass a claim in `files` names."""
-    return {
-        doc["spec"]["storageClassName"]
-        for text in files.values()
-        for doc in yaml_fast.safe_load_all(text)
-        if doc and doc.get("kind") == "PersistentVolumeClaim"
-    }
-
-
-def prereq_files(classes: set[str]) -> dict[str, str]:
-    """What the registry's pod needs before it schedules.
-
-    The `homelab` Namespace and the PriorityClasses come from their own renders, as on a
-    rebuild. Each class in `classes` is a stand-in on kind's provisioner, which only the
-    drill uses.
-    """
+def prereq_files() -> dict[str, str]:
+    """The `homelab` Namespace and the PriorityClasses, from their own renders as on a rebuild."""
     files = {
         name: yaml.safe_dump(doc, sort_keys=False)
         for name, doc in namespace_documents().items()
@@ -186,17 +175,102 @@ def prereq_files(classes: set[str]) -> dict[str, str]:
     files["priorityclass.yaml"] = render_tag("cluster-base", _stubs()).files[
         "priorityclass.yaml"
     ]
-    for cls in sorted(classes):
-        doc = {
-            "apiVersion": "storage.k8s.io/v1",
-            "kind": "StorageClass",
-            "metadata": {"name": cls},
-            "provisioner": STAND_IN_PROVISIONER,
-            "volumeBindingMode": "WaitForFirstConsumer",
-            "reclaimPolicy": "Delete",
-        }
-        files[f"storageclass-{cls}.yaml"] = yaml.safe_dump(doc, sort_keys=False)
     return files
+
+
+def push_store_volumes(files: dict[str, str]) -> tuple[dict[str, str], list[dict]]:
+    """A hostPath PersistentVolume pre-bound to each claim the push store's pod mounts.
+
+    The PV copies the claim's class, size and access modes, so the claim binds although no
+    StorageClass serves that class. A hostPath volume ignores the pod's `fsGroup`, so the
+    directory must exist first, owned by the pod's user and group; `type: Directory` refuses
+    to mount one that does not.
+
+    Returns:
+        The PV manifests by file name, and one `{"path", "uid", "gid"}` entry per directory.
+
+    Raises:
+        ValueError: The render holds no `registry` Deployment, or it mounts no claim.
+    """
+    docs = [
+        d
+        for text in files.values()
+        for d in yaml_fast.safe_load_all(text)
+        if d and d.get("kind") in ("Deployment", "PersistentVolumeClaim")
+    ]
+    deployment = next(
+        (
+            d
+            for d in docs
+            if (d["kind"], d["metadata"]["name"]) == ("Deployment", REGISTRY_DEPLOYMENT)
+        ),
+        None,
+    )
+    if deployment is None:
+        raise ValueError(
+            f"the registry render holds no Deployment {REGISTRY_DEPLOYMENT}"
+        )
+    pod = deployment["spec"]["template"]["spec"]
+    mounted = {
+        v["persistentVolumeClaim"]["claimName"]
+        for v in pod.get("volumes", [])
+        if "persistentVolumeClaim" in v
+    }
+    if not mounted:
+        raise ValueError(f"Deployment {REGISTRY_DEPLOYMENT} mounts no claim")
+    security = pod.get("securityContext", {})
+    volumes, dirs = {}, []
+    for claim in docs:
+        name = claim["metadata"]["name"]
+        if claim["kind"] != "PersistentVolumeClaim" or name not in mounted:
+            continue
+        path = f"{VOLUME_ROOT}/{name}"
+        volumes[f"pv-{name}.yaml"] = yaml.safe_dump(
+            {
+                "apiVersion": "v1",
+                "kind": "PersistentVolume",
+                "metadata": {"name": f"break-glass-{name}"},
+                "spec": {
+                    "capacity": claim["spec"]["resources"]["requests"],
+                    "accessModes": claim["spec"]["accessModes"],
+                    "storageClassName": claim["spec"]["storageClassName"],
+                    "persistentVolumeReclaimPolicy": "Retain",
+                    "claimRef": {
+                        "namespace": claim["metadata"]["namespace"],
+                        "name": name,
+                    },
+                    "hostPath": {"path": path, "type": "Directory"},
+                },
+            },
+            sort_keys=False,
+        )
+        dirs.append(
+            {
+                "path": path,
+                "uid": security.get("runAsUser", 0),
+                "gid": security.get("fsGroup", security.get("runAsGroup", 0)),
+            }
+        )
+    return volumes, dirs
+
+
+def mkdir_command(entry: dict) -> str:
+    """The command that creates one PV's directory on the node, owned for the pod."""
+    return f"install -d -o {entry['uid']} -g {entry['gid']} {entry['path']}"
+
+
+def write_volumes(out: Path) -> list[dict]:
+    """Write the push store's PVs and `dirs.txt` under `out`, and return the directories.
+
+    `dirs.txt` holds one `<uid> <gid> <path>` line per PV. It is not a manifest, so
+    `kubectl apply -f <out>` skips it.
+    """
+    volumes, dirs = push_store_volumes(render_tag("registry", _stubs()).files)
+    out.mkdir(parents=True, exist_ok=True)
+    _write_all(out, volumes)
+    lines = "".join(f"{d['uid']} {d['gid']} {d['path']}\n" for d in dirs)
+    (out / "dirs.txt").write_text(lines)
+    return dirs
 
 
 def break_glass_source(pubkey: str) -> tuple[dict, dict]:
@@ -233,7 +307,8 @@ def build(out: Path, pubkey: str) -> None:
     (out / "kind.yaml").write_text(dump(kind_config(), sort_keys=False))
     (out / "images.json").write_text(json.dumps(images, indent=1) + "\n")
     (out / "push.json").write_text(json.dumps(push_target(source)) + "\n")
-    _write_all(out / "prereq", prereq_files(claim_classes(registry)))
+    _write_all(out / "prereq", prereq_files())
+    write_volumes(out / "volumes")
     _write_all(out / "registry", registry)
     _write_all(out / "bundle", bundle((FRESH,), drill_image(), keep_pvcs=False))
     _write_all(
@@ -291,12 +366,25 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--layout", type=Path, required=True, help="the layout directory")
     a.add_argument("--ref", required=True, help="the digest-pinned reference it holds")
     a.add_argument("--out", type=Path, required=True, help="the tar to write")
+    v = sub.add_parser(
+        "volumes", help="write the PVs the registry's push store binds on a rebuild"
+    )
+    v.add_argument("--out", type=Path, required=True, help="an absent directory")
     sub.add_parser("check", help="judge `kubectl get ... -o json` read from stdin")
     args = parser.parse_args(argv)
     if args.command == "build":
         args.out.mkdir(parents=True)
         build(args.out, args.bg_pubkey.read_text())
         print(f"built {args.out}")
+        return OK
+    if args.command == "volumes":
+        args.out.mkdir(parents=True)
+        dirs = write_volumes(args.out)
+        print(
+            f"wrote {len(dirs)} PersistentVolume(s) to {args.out}; on the registry node run:"
+        )
+        for entry in dirs:
+            print(f"sudo {mkdir_command(entry)}")
         return OK
     if args.command == "archive":
         try:
