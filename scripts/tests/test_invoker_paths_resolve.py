@@ -9,7 +9,7 @@ sites.
 a prek hook invokes the script directly, with no pytest involved, so a stale path there raises
 nothing pytest can see. This test reads the same invocation sites a human would check by hand
 after a rename -- prek's `entry =`, a GitHub Actions `run:` step, an `ansible.builtin.cron`
-`job:`, the shell templates crons wrap, a systemd unit's `ExecStart*=`, a `.claude/hooks`
+`job:`, the shell templates timers wrap, a systemd unit's `ExecStart*=`, a `.claude/hooks`
 wrapper, and `.claude/settings*.json`'s permission strings -- and asserts every `scripts/...`
 token found there names a file that exists on disk.
 
@@ -18,7 +18,7 @@ File discovery and field extraction (WHICH files, WHICH field) live in
 place that walks these same sites, to say HOW a script is run rather than whether it exists.
 What stays local to this file is the token regex below and the comment-line filtering: this
 test deliberately takes a conservative superset for the shell categories (the `initial_setup`
-`*.sh.j2` templates and the `.claude/hooks` wrappers), where the generator excludes comment
+and host-component `*.sh.j2` templates and the `.claude/hooks` wrappers), where the generator excludes comment
 lines, backtick prose and `echo` lines. Extraction is scoped to the exact field each mechanism
 executes, not a blind grep for the substring `scripts/` over whole files. That substring also
 shows up in comments and docstrings that execute nothing, and in `docs/archive/` (deliberately
@@ -27,7 +27,7 @@ fixture proving a stale path is not re-linked). Neither is one of the invocation
 test reads, so neither needs excluding here -- but if this test is ever extended to a new
 source, re-check that both stay out of scope rather than relying on a regex to skip them.
 
-For the two shell-syntax categories (the `initial_setup` `*.sh.j2` templates and the
+For the two shell-syntax categories (the `initial_setup` and host-component `*.sh.j2` templates and the
 `.claude/hooks` `*.sh`/`*.py` wrappers) a whole-line `#` comment is skipped; anything else on a
 non-comment line is scanned, including a `scripts/...` mention embedded in a string argument
 (e.g. a `gh pr create --body` message) -- a conservative superset, not a gap, since a stale
@@ -47,6 +47,7 @@ from lib.invocation_sites import (
     workflow_run_steps as _shared_workflow_run_steps,
 )
 
+from _shell_render import rendered_shell_texts
 from lib.repo_paths import REPO
 
 _TOKEN_RE = re.compile(r"scripts/[\w./-]+\.(?:py|sh)")
@@ -98,7 +99,7 @@ def cron_jobs() -> list[tuple[str, str]]:
 
 
 def sh_j2_templates() -> list[tuple[str, str]]:
-    """Every `scripts/...` token on a non-comment line of an initial_setup `*.sh.j2`."""
+    """Every `scripts/...` token on a non-comment line of an initial_setup or component `*.sh.j2`."""
     out = []
     for tpl in _shared_sh_j2_templates(REPO):
         if tpl.parent.parent.name != "initial_setup":
@@ -106,6 +107,18 @@ def sh_j2_templates() -> list[tuple[str, str]]:
         for lineno, line in _non_comment_lines(tpl):
             for token in _tokens(line):
                 out.append((f"{tpl.relative_to(REPO)}:{lineno}", token))
+    for plane, component, name, text in rendered_shell_texts():
+        if plane != "components":
+            continue
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if not line.strip().startswith("#"):
+                for token in _tokens(line):
+                    out.append(
+                        (
+                            f"hosts/components/{component}/templates/{name}:{lineno}",
+                            token,
+                        )
+                    )
     return out
 
 
@@ -145,7 +158,7 @@ _SOURCES = {
     "prek.toml entry=": prek_entries,
     "workflow run: steps": workflow_run_steps,
     "crons.yml job:": cron_jobs,
-    "initial_setup *.sh.j2": sh_j2_templates,
+    "initial_setup and component *.sh.j2": sh_j2_templates,
     "systemd ExecStart*=": systemd_exec_lines,
     ".claude/hooks wrappers": claude_hook_wrappers,
     ".claude/settings*.json": claude_settings,

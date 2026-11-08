@@ -127,8 +127,8 @@ def is_diverged(
     """True when origin and local have DIVERGED — they differ, neither an ancestor of the other.
 
     The deployer can neither fast-forward (`origin_ahead`) nor is this the healthy
-    committed-but-unpushed local state (`local_ahead`, which secret-rotate owns and which stays
-    a plain noop). A diverged tree noops forever while origin's new commits — a
+    committed-but-unpushed local state (`local_ahead`, a cron's commit awaiting its push, which
+    stays a plain noop). A diverged tree noops forever while origin's new commits — a
     Renovate/security bump — never deploy, and both GitOps monitors stay green (last_run keeps
     ticking, no hold). The deployer records this so GitOps Status surfaces it instead of
     camouflaging it as a healthy noop (2026-07-15 review L3).

@@ -4,7 +4,7 @@
 which takes the same locks through the functions here and forks before the playbook.
 
 TWO LOCKS, GUARDING TWO DIFFERENT THINGS (ADR-0017). The git-tree lock guards
-the git tree and nothing else: gitops-deploy.service, the weekly secret-rotate cron, the
+the git tree and nothing else: gitops-deploy.service, the
 docs refresh and the eval sweep all rewrite the tree every deploy renders from. This module holds it only long
 enough to copy the commit into a detached worktree under /tmp/homelab-deploy-snapshots --
 seconds -- and runs the playbook against that snapshot. `/var/lock/server-deploy-<tag>.lock`

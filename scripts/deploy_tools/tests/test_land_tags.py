@@ -337,7 +337,6 @@ def test_a_secrets_rotation_is_flagged():
         "already left. `consumers ruleset_drift_push_token` prints that PR's two missing "
         "deploys, one per plane"
     )
-    assert "consumer_tags()" in note, "and the name routing behind it"
 
 
 def test_a_pr_without_secrets_is_clean():

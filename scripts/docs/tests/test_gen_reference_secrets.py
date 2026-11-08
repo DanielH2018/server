@@ -22,7 +22,7 @@ def _registry(tmp_path):
         entries:
           arr_autoblock_push_token:
             last_rotated: '2026-08-10'
-            tier: auto
+            tier: assisted
           authelia_storage_key:
             last_rotated: '2025-10-08'
             tier: pinned
@@ -74,7 +74,7 @@ def test_never_spawns_a_subprocess(tmp_path, monkeypatch):
 
 def test_rows_carry_name_tier_and_dates(tmp_path):
     rows = {r["name"]: r for r in g.build_rows(_registry(tmp_path), TODAY)}
-    assert rows["arr_autoblock_push_token"]["tier"] == "auto"
+    assert rows["arr_autoblock_push_token"]["tier"] == "assisted"
     assert rows["arr_autoblock_push_token"]["last_rotated"] == "2026-08-10"
 
 
@@ -88,7 +88,7 @@ def test_due_dates_come_from_secret_rotation(tmp_path):
 
     rows = {r["name"]: r for r in g.build_rows(_registry(tmp_path), TODAY)}
     expected = due_date(
-        "arr_autoblock_push_token", {"last_rotated": "2026-08-10", "tier": "auto"}
+        "arr_autoblock_push_token", {"last_rotated": "2026-08-10", "tier": "assisted"}
     )
     assert expected is not None
     assert rows["arr_autoblock_push_token"]["due"] == expected.isoformat()
@@ -97,7 +97,7 @@ def test_due_dates_come_from_secret_rotation(tmp_path):
 def test_pinned_tier_is_rendered_first(tmp_path):
     """pinned is the tier where following the generic procedure causes damage."""
     out = g.render_markdown(g.build_rows(_registry(tmp_path), TODAY))
-    assert out.index("## pinned") < out.index("## auto")
+    assert out.index("## pinned") < out.index("## assisted")
     assert "DANGER" in out
 
 

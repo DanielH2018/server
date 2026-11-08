@@ -102,8 +102,8 @@ def test_dockerhub_refs_name_each_docker_io_image_by_its_cached_path():
     ]
 
 
-def _run(tmp_path: Path, failing_rollout: str = "none") -> tuple[list[str], str]:
-    """Run the whole top-level sequence; return every stubbed call and the reported result.
+def _run(tmp_path: Path, failing_rollout: str = "none") -> tuple[list[str], str, int]:
+    """Run the whole top-level sequence; return every stubbed call, the result and the exit code.
 
     The rollout of the Deployment named `failing_rollout` never completes.
     """
@@ -151,8 +151,8 @@ trap scale_up_and_report EXIT
         "DIGEST": DIGEST,
         "FAILING_ROLLOUT": failing_rollout,
     }
-    run(["bash", "-c", script], env=env, check=False)
-    return calls.read_text().splitlines(), (tmp_path / "result").read_text()
+    rc = run(["bash", "-c", script], env=env, check=False).returncode
+    return calls.read_text().splitlines(), (tmp_path / "result").read_text(), rc
 
 
 def _index(calls: list[str], needle: str) -> int:
@@ -161,7 +161,7 @@ def _index(calls: list[str], needle: str) -> int:
 
 
 def test_the_dockerhub_mirror_is_collected_only_once_the_ghcr_mirror_serves(tmp_path):
-    calls, result = _run(tmp_path)
+    calls, result, rc = _run(tmp_path)
 
     ghcr_up = _index(calls, "scale deploy/ghcr-mirror --replicas=1")
     down = _index(calls, "scale deploy/dockerhub-mirror --replicas=0")
@@ -181,11 +181,12 @@ def test_the_dockerhub_mirror_is_collected_only_once_the_ghcr_mirror_serves(tmp_
     assert status == "up", msg
     assert "ghcr-mirror: 1 revision(s) pruned" in msg, msg
     assert "; dockerhub-mirror: 1 revision(s) pruned" in msg, msg
+    assert rc == 0, msg
 
 
 def test_a_stranded_dockerhub_mirror_is_restored_before_its_phase(tmp_path):
     (tmp_path / "dockerhub-mirror-down").touch()
-    calls, _ = _run(tmp_path)
+    calls, _, _ = _run(tmp_path)
 
     first = [c for c in calls if " scale deploy/dockerhub-mirror " in c]
     assert "--replicas=1" in first[0], calls
@@ -201,7 +202,7 @@ def test_a_stranded_dockerhub_mirror_is_restored_when_the_ghcr_mirror_does_not_r
     """The run stops before the dockerhub phase, but restoring a stranded mirror scales nothing
     down, so it must not wait another week."""
     (tmp_path / "dockerhub-mirror-down").touch()
-    calls, result = _run(tmp_path, failing_rollout="ghcr-mirror")
+    calls, result, _ = _run(tmp_path, failing_rollout="ghcr-mirror")
 
     dockerhub = [c for c in calls if " scale deploy/dockerhub-mirror " in c]
     assert len(dockerhub) == 1 and "--replicas=1" in dockerhub[0], calls
@@ -210,3 +211,12 @@ def test_a_stranded_dockerhub_mirror_is_restored_when_the_ghcr_mirror_does_not_r
     status, msg = result.split("|", 1)
     assert status == "down", msg
     assert "dockerhub-mirror not collected" in msg, msg
+
+
+def test_a_run_that_completes_down_exits_non_zero(tmp_path):
+    """The unit's result must agree with the textfile, so systemd marks a down run failed."""
+    _, result, rc = _run(tmp_path, failing_rollout="dockerhub-mirror")
+
+    status, msg = result.split("|", 1)
+    assert status == "down", msg
+    assert rc == 1, msg

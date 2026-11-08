@@ -359,8 +359,7 @@ def _setup_apply_command(role: str, host: str, local_host: str = "") -> str:
     A `_LOCAL_CONNECTION_HOSTS` remote host (daniel-server, when it is not `local_host`)
     renders from ITS OWN checkout: `ansible_connection=local` means the play there runs as
     its own controller against its own `/home/ubuntu/server`, and nothing keeps that current
-    -- the crons that `git pull` (secret-rotate.sh.j2, docs-refresh.sh.j2) are both `when:
-    has_gitops`, daniel-box only. Skipping the pull renders the PRE-merge tree and reports
+    -- the cron that does `git pull` (docs-refresh.sh.j2) runs on daniel-box only. Skipping the pull renders the PRE-merge tree and reports
     `changed=0`, the exact trap `broad_remediation`'s docstring records -- so the pull is
     folded into the same command rather than left as a
     separate step a copy-paste can drop. daniel-pi has no such hazard: `-e target=daniel-pi`

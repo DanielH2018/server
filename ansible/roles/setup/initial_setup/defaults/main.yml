@@ -35,9 +35,6 @@ initial_setup_worktree_holders_group: worktree-holders
 #           and bootstrap step 4 own them on a listed host (H7.58, H7.59). host_basics covers the
 #           swap, apt and package tasks of host-basics.yml, and leaves the tasks that install `ansible-core` and `ansible-lint`.
 #   rsyslog_filter: the rsyslog info filter. The rsyslog-filter component ships it (H7.59).
-# No task names templates/loki-read-route-health.sh.j2 or files/loki_route_health.py. They stay
-# byte-identical until H7.60, because daniel-server's setup-drift reader compares them until
-# reconcile retires the two fragments that name them, and a missing source reads as drift.
 initial_setup_packaged_hosts:
   access: [daniel-pi, daniel-server]
   accounting: [daniel-pi, daniel-server]

@@ -6,9 +6,11 @@ only when the script sleeps. `run` drives `flux_soak.main` over it.
 
 import copy
 import hashlib
+import http.server
 import io
 import json
 import tarfile
+import threading
 from datetime import UTC, datetime
 
 import flux_soak
@@ -114,6 +116,8 @@ class World:
         self.pods = {"authelia": [pod("authelia", "authelia-1")], "media": []}
         self.replicasets = {}
         self.forbidden = set()
+        # Each path's queued errors, raised one per read before the path answers.
+        self.api_errors = {}
         self.unmapped = set()
         self.ready_samples = None
         self.scrape_gaps = []
@@ -142,6 +146,8 @@ class World:
 
     def api(self, path):
         self.reads_of.append(path)
+        if self.api_errors.get(path):
+            raise self.api_errors[path].pop(0)
         if path == flux_soak.OCIREPOSITORIES:
             return {"items": self._sources()}
         if path == flux_soak.KUSTOMIZATIONS:
@@ -253,6 +259,37 @@ def run(world, tmp_path, wait_seconds=600):
         reads=world.reads(),
     )
     return code, log.read_text() if log.exists() else ""
+
+
+class _Answers(http.server.BaseHTTPRequestHandler):
+    """Answers with the status the path names, or drops the connection at `/reset`."""
+
+    def do_GET(self):
+        if self.path.startswith("/reset/"):
+            self.close_connection = True
+            return
+        self.send_response(int(self.path.split("/")[1]))
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def log_message(self, format, *args):
+        pass
+
+
+def answered(tmp_path, answer: str) -> Exception:
+    """The error `live_reads` raises when a real server answers `answer`, or `reset`."""
+    server = http.server.HTTPServer(("127.0.0.1", 0), _Answers)
+    threading.Thread(target=server.handle_request, daemon=True).start()
+    token = tmp_path / "token"
+    token.write_text("t")
+    url = f"http://127.0.0.1:{server.server_port}/{answer}"
+    try:
+        flux_soak.live_reads(url, str(token)).prometheus_start()
+    except flux_soak.SoakError as err:
+        return err
+    finally:
+        server.server_close()
+    raise AssertionError(f"a {answer} answer raised nothing")
 
 
 def alert(service="authelia", severity="critical", **labels):
