@@ -7,6 +7,7 @@ Job whose pod template's `homelab/role-digest8` equals Kustomization `<tag>`'s
 Run: uv run pytest scripts/diagnostics/tests/test_probe_health_cronjob_flux_revision.py
 """
 
+import dataclasses
 import json
 import subprocess
 from pathlib import Path
@@ -262,3 +263,25 @@ def test_run_health_reads_the_revision_for_a_flux_owned_cronjob_role(capsys):
     )
     assert code == 1
     assert "no gate Job carries the revision Flux applies" in capsys.readouterr().out
+
+
+def test_a_role_the_owner_map_misses_still_reads_its_revision():
+    """No tag is Ansible-owned, so a miss in `tag_owners` must not drop the Flux reference."""
+    role = "volume-snapshot"  # a k8s role with no `containers_list` entry
+    kustomization_args = tuple(
+        role if arg == "longhorn-reconcile" else arg for arg in KUSTOMIZATION_ARGS
+    )
+
+    base = _tools([], None)
+
+    def run(argv, timeout):
+        if tuple(argv[3:]) == kustomization_args:
+            return subprocess.CompletedProcess(
+                argv, 0, json.dumps(_kustomization()), ""
+            )
+        return base.run(argv, timeout)
+
+    tools = dataclasses.replace(base, run=run)
+    *_, revision = health._fetch_cronjob(role, "snapshot", NS, "prod", tools)
+    assert isinstance(revision, health_cronjob.FluxRevision)
+    assert revision.digest8 == CONTENT[:8]

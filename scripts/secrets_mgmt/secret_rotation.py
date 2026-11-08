@@ -334,7 +334,7 @@ def build_parser() -> ArgumentParser:
 
 
 def main(argv=None) -> int:
-    """Dispatch to the `sync`/`consumers`/`audit`/`rotate`/`record` subcommand and return its exit code."""
+    """Dispatch to the `sync`/`consumers`/`audit`/`record` subcommand and return its exit code."""
     args = build_parser().parse_args(argv)
     # One `RotationTools` per run, built here and threaded down: every git call, sops call,
     # registry read or write and clock read a subcommand makes goes through it.

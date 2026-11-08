@@ -2,7 +2,7 @@
 """Guards k8s/image-builder's content tag — the immutable second name every build pushes.
 
 WHY IT EXISTS. A mutable `:latest` alone can answer "is the running pod the image this commit
-describes" only by reading a registry digest (post_tasks/k8s_image_drift_gate.yml).
+describes" only by reading a registry digest.
 `<name>:sha-<12 hex>`, derived from the build inputs, makes that a comparison of NAMES.
 
 The failure this file is written against is not a build that breaks — it is a tag that stays
