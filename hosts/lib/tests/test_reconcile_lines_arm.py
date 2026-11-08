@@ -174,7 +174,7 @@ def test_edits_sharing_a_path_ask_dpkg_about_it_once_and_all_apply(node):
     assert len(node.calls("dpkg-query")) == 2  # the status read, then one conffile list
 
 
-def test_every_edit_on_a_refused_path_is_refused_when_the_answer_is_reused(node):
+def test_a_cached_refusal_still_refuses_every_edit_on_its_path(node):
     write(node, "/etc/demo/app.conf", "keep=1\n")
     own(node, "/etc/demo/app.conf", conffile=False)
     first = {**SWAPPY, "path": "/etc/demo/app.conf"}
@@ -185,6 +185,7 @@ def test_every_edit_on_a_refused_path_is_refused_when_the_answer_is_reused(node)
     assert result.returncode == 1
     assert result.stderr.count("does not list it as a conffile; refusing") == 2
     assert read(node, "/etc/demo/app.conf") == "keep=1\n"
+    assert len(node.calls("dpkg")) == 1
 
 
 def owned_non_conffile_is_refused(node: Node) -> None:
