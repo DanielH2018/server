@@ -528,10 +528,10 @@ needs more than a scale: Flux's drift correction restores the rendered `replicas
 suspended before it is scaled and resumed rather than redeployed.
 
 1. Print the shed set: `uv run python scripts/diagnostics/probe.py shed-set`. It lists the
-   Deployments and StatefulSets of every service with no `tier:` in `containers_list`, each
-   with its owner. Every tiered service is left off it, and so is the cluster plumbing that
-   `ansible/filter_plugins/service_tier.py:NEVER_SHED` names. For each flux-owned service it
-   also prints the suspend and resume commands used below.
+   Deployments and StatefulSets of every service with no `tier:` in `containers_list`. Every
+   tiered service is left off it, and so is the cluster plumbing that
+   `ansible/filter_plugins/service_tier.py:NEVER_SHED` names. Every k8s service is flux-owned,
+   so for each one it also prints the suspend and resume commands used below.
 2. If the set holds a flux-owned service, set the promotion hold first:
    `gh variable set DEPLOY_HOLD --body <reason> -R DanielH2018/server`. Note the reason you
    set. A hand suspend is not in `digests.json`, so when a suspended tag is in a later

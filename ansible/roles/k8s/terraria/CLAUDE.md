@@ -22,8 +22,8 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
   What changed is how an update lands. Renovate's built-in dockerfile manager still raises a
   digest-bump PR, and built images carry `automerge: false`, so a person merges it. The merge
   changes the context, so the content tag moves, the `images` job pushes the new tag, and
-  `promote` rolls the pod. `image_builder_force` has no Flux-era use: a package refresh that no
-  pin moves is a hand PR that bumps a `rebuild_stamp` data key in the context
+  `promote` rolls the pod. A package refresh that no pin moves is a hand PR that bumps a
+  `rebuild_stamp` data key in the context
   (`ansible/roles/k8s/image-builder/CLAUDE.md`). All of this matters because the volume holds
   irreplaceable world data.
 - **Flux applies it, not Ansible** (D5.15, Wave C). Its `containers_list` entry carries
