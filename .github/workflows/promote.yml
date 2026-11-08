@@ -99,6 +99,10 @@ permissions: {}
 # of the try that succeeded, so a capture never holds a failed try's error body.
 # prune-artifacts.yml carries a copy, and test_prune_artifacts_workflow.py holds the two equal.
 env:
+  # Every `uv run` here installs pyproject.toml's [project] dependencies and skips the dev group,
+  # so an unreachable dev-tool download (actionlint-py's build, #7625) cannot block a promotion.
+  # test_promote_workflow.py fails a workflow without it.
+  UV_NO_DEV: "1"
   RETRY_FUNCTIONS: |
     retry() {
       local try out status
