@@ -28,6 +28,12 @@ made yesterday. `git blame` fails on an uncommitted line (a file this worktree a
 edited and hasn't committed), and that failure is rendered as "unknown" rather than raised —
 the page should still list the marker.
 
+NO LINE NUMBERS. A row names its file, never its line. A line number moves under every edit
+above the marker, so a page carrying them changed on nearly every PR, and two in-flight PRs
+that each regenerated it conflicted on it (#7612). Without them the body changes only when a
+marker is added, removed, reworded or moved to another file. `.claude/rules/facts.md` rejects
+a `file:line` citation for the same reason.
+
 POSSIBLE DUPLICATES. Two markers whose first sentence normalises (lowercased, whitespace
 collapsed) to a near-identical string are flagged at the top of the page. A near-duplicate
 usually means the same trade-off was re-decided in two places, or a marker was copied and
@@ -424,7 +430,8 @@ def render_markdown(rows: list[dict[str, str]], root: Path = REPO) -> str:
         "written so a reviewer trips over the reasoning "
         "before re-opening a decision that already has one. A reviewer brief greps the "
         "literal marker text before flagging something as new; this page exists so a human "
-        "can browse the same set instead of guessing a phrase to grep.\n"
+        "can browse the same set instead of guessing a phrase to grep. Each row names its "
+        "file, not its line; `rg -n` on the marker text finds the line.\n"
     )
 
     duplicates = find_possible_duplicates(rows)
@@ -437,8 +444,8 @@ def render_markdown(rows: list[dict[str, str]], root: Path = REPO) -> str:
         )
         for row_a, row_b in duplicates:
             parts.append(
-                f"    * `{row_a['path']}:{row_a['line']}` and "
-                f"`{row_b['path']}:{row_b['line']}`"
+                f"    * `{row_a['path']}` and `{row_b['path']}`: "
+                f"{md_cell(row_a['first_sentence'])}"
             )
         parts.append("")
 
@@ -451,7 +458,7 @@ def render_markdown(rows: list[dict[str, str]], root: Path = REPO) -> str:
             "it sends a reader to is not.\n"
         )
         for row, pointer in unresolved:
-            parts.append(f"    * `{row['path']}:{row['line']}` → `{pointer}`")
+            parts.append(f"    * `{row['path']}` → `{pointer}`")
         parts.append("")
 
     # Two prefixes can share a plane name, and a plane renders once.
@@ -464,8 +471,7 @@ def render_markdown(rows: list[dict[str, str]], root: Path = REPO) -> str:
         parts.append("|---|---|---|")
         for row in sorted(plane_rows, key=lambda r: (r["path"], int(r["line"]))):
             parts.append(
-                f"| {md_cell(row['text'])} | `{row['path']}:{row['line']}` | "
-                f"{row['decided']} |"
+                f"| {md_cell(row['text'])} | `{row['path']}` | {row['decided']} |"
             )
         parts.append("")
 
