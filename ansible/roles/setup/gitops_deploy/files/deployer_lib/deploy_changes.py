@@ -496,6 +496,9 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         # what parks the tick.
         if is_doc(p):
             continue
+        # The host package applies it, and `land.sh` waits on that host (`HOST_INPUTS`).
+        if deploy_cross_role.rendered_only_by_host_packages(p):
+            continue
         if p == _SECRETS_FILE:
             cs.secrets = True
             continue
@@ -536,6 +539,8 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
 
 def setup_roles_for(path: str) -> set[str]:
     """Every setup role a change to `path` re-applies: owner, shippers, or filter callers."""
+    if deploy_cross_role.rendered_only_by_host_packages(path):
+        return set()
     at = role_of(path)
     if at is None or at.plane != "setup":
         return deploy_cross_role.setup_roles_outside_the_tree(path)

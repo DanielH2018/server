@@ -47,6 +47,9 @@ def _write_cgroup_fixture(cgroot: Path, rel: str) -> Path:
     (d / "memory.events").write_text(
         "low 0\nhigh 3\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n"
     )
+    (d / "memory.events.local").write_text(
+        "low 0\nhigh 1\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n"
+    )
     (d / "memory.pressure").write_text(
         "some avg10=0.00 avg60=0.00 avg300=0.00 total=291\n"
         "full avg10=0.00 avg60=0.00 avg300=0.00 total=291\n"
@@ -96,6 +99,7 @@ def test_emits_every_metric_family_for_both_cgroups(
         "claude_cgroup_memory_current_bytes",
         "claude_cgroup_memory_swap_current_bytes",
         "claude_cgroup_memory_events_total",
+        "claude_cgroup_memory_events_local_total",
         "claude_cgroup_memory_pressure_stalled_usec_total",
         "claude_cgroup_cpu_usage_usec_total",
         "claude_cgroup_pids_current",
@@ -110,6 +114,10 @@ def test_emits_every_metric_family_for_both_cgroups(
     # The counter the script exists for: memory.events' `high` field, which counts every time
     # MemoryHigh throttled the cgroup.
     assert 'claude_cgroup_memory_events_total{cgroup="claude-rc",event="high"} 3' in out
+    # The local file, read apart: the fleet's own MemoryHigh, not its batches'.
+    assert (
+        'claude_cgroup_memory_events_local_total{cgroup="fleet",event="high"} 1' in out
+    )
 
 
 def test_output_is_valid_prometheus_text_format(

@@ -86,6 +86,8 @@ legacy:
   # /usr/bin/uv on PATH. The Ansible-era Loki witness was the last reader of the uv copy here.
   - {path: /usr/local/bin/vale}
   - {path: /usr/local/bin/uv}
+  # #7537: a prek 0.4.3 no tracked file writes; the dotfiles repo owns prek, in ~/.local/bin.
+  - {path: /usr/local/bin/prek}
   # #6716: the Compose-era CrowdSec hub update the retired traefik role installed in root's crontab
   # (`docker exec crowdsec cscli hub update && … upgrade`, 07:15 daily). This host has had no
   # Docker since 2026-08-14, so it fails every day, and no other tree path retires it.

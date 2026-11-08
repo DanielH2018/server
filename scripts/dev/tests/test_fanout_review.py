@@ -39,6 +39,13 @@ def test_a_batch_that_opens_no_pr_still_writes_a_record_naming_its_outcome(tmp_p
     assert set(record["durations"]) == {"implement"}
 
 
+def test_a_batch_that_stops_records_the_line_it_stopped_on(tmp_path):
+    text = "Read the issue.\nneeds input: the brief names no SOPS key\nDetails follow."
+    pipeline, _run = _pipeline(tmp_path, [_report(text)])
+    pipeline.run_all()
+    assert _record(tmp_path)["blocker"] == "needs input: the brief names no SOPS key"
+
+
 def test_a_resumed_phase_records_only_what_it_added_to_the_session(tmp_path):
     """`--resume` reports the session's running total, so the fix costs 4.0 - 3.0."""
     reports = [

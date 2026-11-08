@@ -57,6 +57,24 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
 # `common/templates/resolv.conf.j2`, through the `pi-resolver` and `k3s-host-dns` components.
 SETUP_FILES_ROUTED_TO_OWNER: dict[str, frozenset[str]] = {}
 
+# A setup-tree template that only host packages render, through a component's `role:`, and no
+# setup task names. The package applies it, so a change re-applies no setup role and owes no
+# `manual_plane` line. `test_setup_cross_role_files.py` holds it equal to the components.
+_INITIAL_SETUP = "ansible/roles/setup/initial_setup/templates"
+_NUT_HOST = "ansible/roles/setup/nut_host/templates"
+SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES: frozenset[str] = frozenset(
+    {
+        f"{_COMMON}/templates/resolv.conf.j2",
+        f"{_INITIAL_SETUP}/98_aide_local.conf.j2",
+        f"{_INITIAL_SETUP}/aide-check.sh.j2",
+        f"{_INITIAL_SETUP}/fail2ban_homelab.conf.j2",
+        f"{_INITIAL_SETUP}/rkhunter-check.sh.j2",
+        f"{_INITIAL_SETUP}/rkhunter.conf.local.j2",
+        f"{_NUT_HOST}/host-upsmon.conf.j2",
+        f"{_NUT_HOST}/ups-secondary-health.sh.j2",
+    }
+)
+
 # A filter plugin mapped to the setup roles whose rendered state calls one of its filters
 # (#3874). `ansible/deploy.yml` runs no setup role, so no deploy-plane apply, narrowed or
 # whole, re-renders these. `setup_roles_for` returns them, and the tick
@@ -71,6 +89,7 @@ CROSS_ROLE_FILE = (
     "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py"
 )
 TABLE_NAMES = (
+    "SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES",
     "SETUP_FILES_ROUTED_TO_OWNER",
     "SETUP_FILES_SHIPPED_BY_OTHER_ROLES",
     "SETUP_ROLES_CALLING_FILTER_PLUGINS",
@@ -190,6 +209,14 @@ def setup_roles_outside_the_tree(path: str) -> set[str]:
     """
     callers = globals()["SETUP_ROLES_CALLING_FILTER_PLUGINS"].get(path, ())
     return {*callers, *globals()["SETUP_FILES_SHIPPED_BY_OTHER_ROLES"].get(path, ())}
+
+
+def rendered_only_by_host_packages(path: str) -> bool:
+    """Whether `path` is a setup-tree file no setup role applies, only a host package.
+
+    Read from this module's globals, so a copy `use_tables` adopted answers.
+    """
+    return path in globals()["SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES"]
 
 
 def owner_routed_consumers(owner: str) -> frozenset[str]:

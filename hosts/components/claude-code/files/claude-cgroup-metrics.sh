@@ -92,6 +92,19 @@ trap 'rm -f "$TMP"' EXIT
     done < "$f"
   done
 
+  # memory.events counts descendants too, so the fleet's `high` includes each fan-out batch's
+  # own MemoryHigh. memory.events.local counts only the cgroup's own limit firing.
+  printf '# HELP claude_cgroup_memory_events_local_total memory.events.local counters: events from the cgroup'"'"'s own limits, not its descendants'"'"'.\n'
+  printf '# TYPE claude_cgroup_memory_events_local_total counter\n'
+  for label in "${!CGROUPS[@]}"; do
+    f="$CGROOT/${CGROUPS[$label]}/memory.events.local"
+    [ -r "$f" ] || continue
+    while read -r event count; do
+      [ -n "$event" ] || continue
+      printf 'claude_cgroup_memory_events_local_total{cgroup="%s",event="%s"} %s\n' "$label" "$event" "$count"
+    done < "$f"
+  done
+
   # PSI: cumulative stalled-time counters (the `total=` field), not the kernel's own
   # avg10/60/300 — a counter survives a `rate()` the way the kernel's own decaying averages do
   # not, and matches how node_pressure_* already exposes PSI host-wide.

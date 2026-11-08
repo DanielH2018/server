@@ -406,6 +406,8 @@ def test_a_failed_reset_fails_the_batch_before_the_implementer_runs(tmp_path):
     assert [phase for _, _, phase in run.claude] == ["red"]
     assert report["is_error"] and report["result"].startswith("failed: `git reset")
     assert pipeline.record.red_gate.startswith("reset failed:")
+    assert pipeline.record.outcome == "failed"
+    assert pipeline.record.blocker.startswith("failed: `git reset")
 
 
 def test_a_pr_still_failing_the_green_gate_after_the_fix_is_not_landed(tmp_path):
