@@ -48,6 +48,8 @@ jobs:
       matrix:
         leg: [green, no-sops-age, root-first]
     env:
+      # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
+      UV_NO_GROUP: lint
       REGISTRY: kind-registry:5000
       LEG: ${{ matrix.leg }}
       # `--field-manager` of every hand apply in steps 3, 5, 6 and 9: the root's own manager.

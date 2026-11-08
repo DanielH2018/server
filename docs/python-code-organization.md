@@ -51,11 +51,13 @@ dependencies` holds only what the renderer imports at runtime, `pyyaml` and `jin
 deps, the deploy-side `ansible-core`, and the `community.docker` deps `requests` and `docker`.
 `[tool.uv] default-groups` names both groups, so `uv run` installs both. `promote.yml` sets
 `UV_NO_DEV` and `UV_NO_GROUP=lint`, so a promotion installs those two packages and no tool. A
-dependency that a promote job imports therefore goes in `[project] dependencies`. Each
-`ci.yml` job that runs no prek hook sets `UV_NO_GROUP=lint`. actionlint-py ships no wheel and
+dependency that a promote job imports therefore goes in `[project] dependencies`. The four
+`ci.yml` validator jobs (`pr_gates`, `flux_roundtrip`, `host_packages_build` and
+`sops_manifest_type_proof`) set both variables too. Every other job in any workflow that runs
+no prek hook sets `UV_NO_GROUP=lint`. actionlint-py ships no wheel and
 fetches its binary from a GitHub release, so its install failed every job during a release
-outage (#7625). `test_ci_lint_group.py` holds the split. `test_promote_runtime_imports.py` traces every script `promote.yml` runs and fails on a
-third-party import outside that list's closure.
+outage (#7625). `test_ci_lint_group.py` holds the split. `test_promote_runtime_imports.py` traces every script a `UV_NO_DEV` job runs, in `promote.yml`
+and `ci.yml`, and fails on a third-party import outside that list's closure.
 `uv run pytest` syncs
 the env from `uv.lock` first, and needs [uv installed][uv-install] once. The
 `validate-compose-templates` hook shells out to `uv` too, so a full `prek run` needs it as well.

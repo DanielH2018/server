@@ -42,6 +42,8 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     env:
+      # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
+      UV_NO_GROUP: lint
       REGISTRY: kind-registry:5000
       PUSH: 127.0.0.1:5001
       SNAP: >-

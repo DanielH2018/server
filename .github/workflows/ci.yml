@@ -301,7 +301,7 @@ jobs:
       # each release archive, checks it against its release's sums file, and unpacks the
       # binary into alert-tools/ under the git common dir, .git/alert-tools/ in this checkout.
       # Alloy is not fetched here: its 167 MB release is provisioned on first use, by the
-      # red-proof step below.
+      # red-proof step below, from the zip the Alloy cache step restores.
       # It is the tool path the hook itself calls, so CI and a worktree provision the same way.
       # The script's stamps skip every tool the restored cache already holds. Alloy stays out of
       # the entry: it is 570 MB unpacked. The children are listed, because a `!` pattern
@@ -320,8 +320,26 @@ jobs:
       # The tools' red proof. Each one must accept its good fixture and reject its bad one
       # with the expected message under scripts/validate/tests/fixtures/alert_rules/. The
       # pytest shards install none of the binaries, so without this step nothing shows the hook's
-      # tool phase can fail.
+      # tool phase can fail. ALERT_TOOLS_ARCHIVES keeps Alloy's verified zip and SHA256SUMS in a
+      # directory cached under the Alloy image pin, so the 167 MB download runs once per bump.
+      - name: Read the Alloy pin
+        id: alloy
+        run: |
+          set -euo pipefail
+          version=$(sed -nE 's/^loki_homelab_k8s_alloy_image: *[^:]+:v?([0-9]+\.[0-9]+\.[0-9]+)(@.*)?$/\1/p' \
+            ansible/roles/k8s/loki-homelab/defaults/main.yml)
+          [ -n "$version" ] || { echo "::error::loki-homelab pins no Alloy image tag"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the Alloy release zip
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/pinned/alloy
+          key: alloy-zip-${{ runner.os }}-${{ steps.alloy.outputs.version }}
+
       - name: Prove each alert tool rejects its bad fixture
+        env:
+          ALERT_TOOLS_ARCHIVES: ${{ runner.temp }}/pinned/alloy
         run: uv run python scripts/validate/alert_rules.py --prove-red
 
       # A PR run is a full sweep. Every hook runs over the whole tree, and so does ansible-lint in
@@ -480,6 +498,8 @@ jobs:
     env:
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
+      # Its scripts import only [project] dependencies (test_promote_runtime_imports.py).
+      UV_NO_DEV: "1"
     steps:
       # The gates read HEAD^1 and the PR's commits, so the checkout keeps history.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -890,6 +910,8 @@ jobs:
     env:
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
+      # Its scripts import only [project] dependencies (test_promote_runtime_imports.py).
+      UV_NO_DEV: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -980,6 +1002,8 @@ jobs:
     env:
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
+      # Its scripts import only [project] dependencies (test_promote_runtime_imports.py).
+      UV_NO_DEV: "1"
       # In job env so the kind cache key can read them.
       # renovate: datasource=github-release-attachments depName=kubernetes-sigs/kind
       KIND_VERSION: v0.33.0
@@ -1245,6 +1269,8 @@ jobs:
       NFPM_SHA256: 6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
+      # Its scripts import only [project] dependencies (test_promote_runtime_imports.py).
+      UV_NO_DEV: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
