@@ -13,7 +13,7 @@ import subprocess
 from lib.repo_paths import REPO
 
 # 13652 once #7586 split the soak Job's reads into soak_reads.py and retried a transient API error.
-LINE_CEILING = 13652
+LINE_CEILING = 13651
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 
