@@ -3,8 +3,7 @@
 
 Used by gitops_deploy.py, renovate_notify.py, janitorr_health.py, configarr_health.py,
 longhorn_backup_health_logic.py, longhorn_reap_lib/logic.py, live_drift_check.py,
-the triage poller and runner, deploy_ui.py, the fake-remux scripts and secret rotation's
-rotation_tools.py. Each runs via
+the triage poller and runner, deploy_ui.py and the fake-remux scripts. Each runs via
 ``uv run --no-project --python <pin>`` (host_python_version in
 ansible/inventory/group_vars/all.yml) or directly under cron, and is deployed into its own
 ``/opt`` dir, where it does a ``sys.path.insert(0, <own dir>)`` so ``from host_lib import ...``
