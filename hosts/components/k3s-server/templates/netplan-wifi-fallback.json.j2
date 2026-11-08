@@ -1,8 +1,8 @@
 {#- The role's netplan-wifi-fallback.yaml.j2 as JSON, which netplan's YAML parser reads. A `format:
     json` output is the only form in which homelab-secrets escapes each value for its string, so
     a quote or backslash in the password cannot change the file's meaning. No comment can survive
-    in JSON: that template has the routing argument, and test_box_k3s_host_half.py holds the
-    two equal. -#}
+    in JSON: that template has the routing argument, and test_box_k3s_host_half.py and
+    test_k3s_agent_component.py hold the two equal. -#}
 {
   "network": {
     "version": 2,

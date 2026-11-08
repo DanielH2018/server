@@ -56,15 +56,12 @@ from gitops_markers import (
     HOLD_CLEAR_CMD,
     MARKERS,
     PLAYBOOK_CMD,
-    agent_join_cmds,
-    agent_pin_cmds,
     by_hand,
     STATE_DIR,
     maximal_apply_warning,
     owed_clear_cmd,
     parse_behind,
     parse_contention,
-    server_tags,
     on_hosts,
 )
 
@@ -96,43 +93,18 @@ def _owed_rows(owed: str | None, now: float) -> dict[str, list[dict]]:
     entries, narrow = manual_plane_entries(owed)
     for e in entries:
         selected = narrow.get(e.role) or frozenset({e.role})
-        server = server_tags(e.role, selected)
         hand = by_hand(e.playbook)
-        warning = maximal_apply_warning(e.role, server)
-        # No server command for a row reaching only the agent half: it would select nothing.
-        apply = (
-            [
-                (
-                    hand
-                    or on_hosts(
-                        f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(server))}",
-                        e.apply_hosts(),
-                    )
-                )
-                + (f" (WARNING: {warning})" if warning else "")
-            ]
-            if hand or server
-            else []
-        )
-        agents = (
-            [] if hand else agent_join_cmds(e.role, e.playbook, selected, e.agent_hosts)
-        )
-        pins = (
-            []
-            if hand
-            else [
-                f"{cmd} (run on {host})"
-                for host, cmd in agent_pin_cmds(
-                    e.role, e.playbook, selected, e.agent_hosts
-                )
-            ]
+        warning = maximal_apply_warning(e.role, selected)
+        apply = hand or on_hosts(
+            f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(selected))}",
+            e.apply_hosts(),
         )
         rows[OWED_MANUAL_PLANE].append(
             {
                 "subject": e.role,
                 "origin": e.origin,
                 "age_s": int(now - e.at),
-                "do": " and ".join([*apply, *agents, *pins]),
+                "do": apply + (f" (WARNING: {warning})" if warning else ""),
                 "clear": owed_clear_cmd(OWED_MANUAL_PLANE, e.role, selected),
             }
         )

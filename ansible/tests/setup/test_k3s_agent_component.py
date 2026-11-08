@@ -16,7 +16,6 @@ import types
 import pytest
 from _helpers import load_tasks, load_yaml
 from _setup_render import render_setup_text
-from gitops_markers import agent_join_cmds, agent_pin_cmds
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
 from lib.proc_testing import run, write_exec
@@ -200,18 +199,6 @@ def test_a_rendered_file_netplan_refuses_leaves_the_old_one(tmp_path):
 def test_the_join_task_file_refuses_and_names_the_bootstrap():
     (task,) = load_tasks(K3S_ROLE / "tasks" / "agent.yml")
     assert "bootstrap-host.sh" in task["ansible.builtin.fail"]["msg"]
-
-
-def test_no_printer_names_an_agent_play_for_the_k3s_role():
-    """The package owns the agent half, so a `manual_plane` line owes that host nothing."""
-    assert (
-        agent_join_cmds("k3s", "ansible/k3s-bringup.yml", {"k3s"}, ["daniel-server"])
-        == []
-    )
-    assert (
-        agent_pin_cmds("k3s", "ansible/k3s-bringup.yml", {"k3s"}, ["daniel-server"])
-        == []
-    )
 
 
 def _wifi_file(package, ssid: str, password: str) -> dict:
