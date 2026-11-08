@@ -43,7 +43,7 @@ KNOWN_DOWNLOADS = {
 def _cache_paths(step: dict) -> list[str]:
     raw = str((step.get("with") or {}).get("path", ""))
     return [
-        line.strip().replace("${{ runner.temp }}", "$RUNNER_TEMP")
+        line.strip().replace("${{ runner.temp }}", "$RUNNER_TEMP").removesuffix("/*")
         for line in raw.splitlines()
         if line.strip() and not line.strip().startswith("!")
     ]

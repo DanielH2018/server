@@ -1,8 +1,8 @@
-"""Every third-party module the promote jobs import installs without the dev group.
+"""Every third-party module the promote jobs import installs without the dependency groups.
 
-`promote.yml` sets `UV_NO_DEV`, so its jobs get only pyproject.toml's `[project] dependencies`
-and what those require. PR CI runs the same scripts with the dev group installed, so a
-dev-only import there passes every job and then fails every promotion on master. This test
+`promote.yml` sets `UV_NO_DEV` and `UV_NO_GROUP=lint`, so its jobs get only pyproject.toml's
+`[project] dependencies` and what those require. PR CI runs the same scripts with the dev group
+installed, so a dev-only import there passes every job and then fails every promotion on master. This test
 traces each script `promote.yml` runs with `modulefinder`, which reads imports statically
 (function-level ones included) and resolves first-party modules from `pythonpath`. An import it
 cannot resolve there is third-party, and its distribution must be in that closure.

@@ -304,12 +304,13 @@ jobs:
       # red-proof step below.
       # It is the tool path the hook itself calls, so CI and a worktree provision the same way.
       # The script's stamps skip every tool the restored cache already holds. Alloy stays out of
-      # the entry: it is 570 MB unpacked.
+      # the entry: it is 570 MB unpacked. The children are listed, because a `!` pattern
+      # filters only paths the globs above it expand, never a directory's contents.
       - name: Cache promtool, amtool, pint and lokitool
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            .git/alert-tools
+            .git/alert-tools/*
             !.git/alert-tools/alloy-*
           key: alert-tools-${{ runner.os }}-${{ hashFiles('scripts/validate/alert_tools.sh', 'ansible/roles/k8s/observability/defaults/main.yml', 'ansible/roles/k8s/loki-homelab/defaults/main.yml') }}
 

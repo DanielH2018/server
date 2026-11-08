@@ -367,7 +367,7 @@ files = "^(scripts/renderer/renderer_lib/jinja_filters\\.py|scripts/validate/val
 # PATH under `uv run`), which the shellcheck hook above cannot do — identify tags a workflow as
 # yaml, so the shell embedded in it is invisible to a shell-typed hook.
 #
-# Via the actionlint-py wheel + `uv run`, matching the other local hooks, NOT the upstream
+# Via the actionlint-py package + `uv run`, matching the other local hooks, NOT the upstream
 # rhysd/actionlint pre-commit repo: that hook is `language = "golang"`, which on a machine
 # without Go (daniel-box) makes prek fetch a ~270 MB managed toolchain and build from source.
 #
@@ -839,7 +839,7 @@ files = "^(\\.claude/hooks/[^/]+\\.(sh|py)|\\.claude/settings\\.json|scripts/dev
 
 # Lint first-party Python for real bugs only — pyflakes (unused imports/undefined names),
 # syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]; vendored
-# collections excluded there). ruff is pinned in uv.lock (dev group) so the gate is
+# collections excluded there). ruff is pinned in uv.lock (lint group) so the gate is
 # reproducible and lockFileMaintenance refreshes it weekly. Runs once when any .py is staged.
 #
 # `files` names pyproject.toml and uv.lock as well as the code, the way the `ty` hook below

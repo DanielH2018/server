@@ -48,7 +48,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
 lint = [
   "ruff>=0.16",                     # first-party Python lint gate (prek hook); pinned via uv.lock.
   # The floor is the version the [tool.ruff] `*.md` exclusion was written against.
-  "actionlint-py",                  # workflow lint gate (prek hook); ships the actionlint binary as a wheel
+  "actionlint-py",                  # workflow lint gate (prek hook); its build fetches the actionlint binary
   "mkdocs-material>=9.5",           # the docs site; `uv run mkdocs build` renders docs/ into site/
   "zizmor>=1.0",
   "ty==0.0.99",                     # first-party Python type gate (prek hook). Pinned exactly, not
