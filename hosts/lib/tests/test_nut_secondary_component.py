@@ -200,6 +200,7 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
         {"path": "/usr/local/bin/sops"},
         {"path": "/usr/local/bin/vale"},
         {"path": "/usr/local/bin/uv"},
+        {"path": "/usr/local/bin/prek"},
         {"cron": "Update Crowdsec Hub", "user": "root"},
         {"path": "/var/lib/node-exporter-textfile/eval-run.prom"},
         {"path": "/etc/sudoers.d/20-worktree-holders"},
