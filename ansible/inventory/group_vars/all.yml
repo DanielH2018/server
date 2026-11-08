@@ -278,11 +278,8 @@ k8s_primary_node: daniel-box
 k3s_server_hosts:
   - daniel-box
 
-# Hosts k3s-bringup.yml's opt-in join plays apply the AGENT half of the k3s role to, one run
-# per host: `-e join_agent=<host> --tags k3s_agent`. `--tags k3s` on daniel-box never reaches
-# them, so the deployer's printed remediation for a whole-role k3s change names one join
-# command per host listed here (#5606). The join play's own assert admits each of them,
-# ENFORCED by ansible/tests/setup/test_k3s_agent_hosts.py.
+# The k3s agent nodes. Each one's host package owns its agent half (H7.34), and
+# k3s-bringup.yml's join plays name it until H7.20a retires them.
 k3s_agent_hosts:
   - daniel-server
 
@@ -748,11 +745,6 @@ docker_engine_packages:
 # landed in the RAM-backed log2ram tmpfs), so initial_setup's rsyslog filter tasks skip it --
 # their `Restart rsyslog` handler fails on a masked unit.
 has_rsyslog: true
-# Whether this host runs VMs under KVM/libvirt. Default OFF and opted into per host, like
-# has_github_cli: exactly one host needs it (daniel-server, for the monthly etcd restore
-# drill's throwaway guest), and a hypervisor appearing on a node by default is a third writer
-# of firewall state next to k3s and any container runtime. daniel-server overrides this true.
-has_hypervisor: false
 # Whether this host holds a checkout of THIS repository at ~/server. True by default — every
 # host built by initial_setup.yml has had one, which is why a handful of tasks reach for
 # `{{ playbook_dir }}` or `~/server/...` with no gate at all. No host overrides it false; the
@@ -774,8 +766,8 @@ has_repo_checkout: true
 # gateway and matches its netmask.
 staging_net_cidr: "192.168.140.0/24"
 # The full etcd restore drill, run monthly in a throwaway guest on the hypervisor host (the
-# mechanism is the hypervisor_etcd_drill_* block in roles/setup/hypervisor). That role installs
-# the cron and renders the deadline as the drill's DEADLINE_S.
+# mechanism is the hypervisor_etcd_drill_* block in hosts/components/hypervisor/). That
+# component's timer reads this cadence and renders the deadline as the drill's DEADLINE_S.
 #
 # Monthly, 1st, 11:20 UTC. The value of a restore drill is in the last time it PASSED, so it
 # runs as often as it is cheap — one ~8 MB snapshot download from R2 and ~5 minutes of a 2-vCPU

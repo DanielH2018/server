@@ -28,10 +28,6 @@ has_docker: false
 # the code-side half of the gate.
 has_gitops: false
 
-# The VM host. This is the only host with VT-x, spare RAM and no control-plane role. It runs
-# the monthly etcd restore drill's throwaway guest — see roles/setup/hypervisor/CLAUDE.md.
-has_hypervisor: true
-
 # Claude Code session host for issue-fanout agents. The Remote Control unit
 # stays on daniel-box; agents here stop at `gh pr create` and a daniel-box session lands the
 # PR, because the k8s play, the connection=local pin and the per-host lock keep deploys there.

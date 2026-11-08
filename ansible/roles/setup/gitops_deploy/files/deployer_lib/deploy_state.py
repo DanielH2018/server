@@ -266,7 +266,7 @@ class DeployerState:
     # ── the setup roles this deployer cannot apply itself ─────────────────────────────────
     #
     # The `owed` ledger's `manual_plane` class (#3392), one line per role carrying its
-    # `playbook`, `tags`, `host` and `agent_hosts` keys.
+    # `playbook`, `tags`, `host` and `hosts` keys.
 
     def _manual_plane(self) -> tuple[list[ManualPlaneEntry], dict[str, frozenset[str]]]:
         """Every pending role and its tags."""
@@ -289,13 +289,12 @@ class DeployerState:
         role: str,
         now: float,
         host: str | None = None,
-        agent_hosts: tuple[str, ...] = (),
         hosts: tuple[str, ...] = (),
     ) -> bool:
         """Record that `role` changed in `origin`'s range and no tick can apply it.
 
         Args:
-            origin, playbook, role, host, agent_hosts, hosts: the line's fields, as
+            origin, playbook, role, host, hosts: the line's fields, as
                 `ManualPlaneEntry` names them. `origin` is the SHA the tick fast-forwarded to.
             now: a first-seen stamp, in `time.time()` terms.
 
@@ -323,9 +322,7 @@ class DeployerState:
                     ),
                 )
             return False
-        entry = ManualPlaneEntry(
-            origin, playbook, role, now, host, tuple(agent_hosts), tuple(hosts)
-        )
+        entry = ManualPlaneEntry(origin, playbook, role, now, host, tuple(hosts))
         self.write("owed", put_manual_plane(self.read("owed"), entry, frozenset()))
         return True
 

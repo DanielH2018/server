@@ -19,16 +19,12 @@ from deployer_lib.deploy_changes import (
     setup_role_playbook,
     setup_role_tag,
 )
-from deployer_lib.deploy_setup_roles import setup_role_agent_hosts
 from gitops_ledger import OWED_MANUAL_PLANE
 from gitops_markers import (
     MAXIMAL_ROLE_GATED_TAGS,
-    agent_join_cmds,
-    agent_pin_cmds,
     PLAYBOOK_CMD,
     owed_clear_cmd,
     on_hosts,
-    server_tags,
 )
 
 # The branch `broad_remediation` names when a caller does not say. gitops_deploy.py reads the
@@ -369,41 +365,24 @@ def _role_command(
     narrow_tags: dict[str, frozenset[str]],
     hosts: dict[str, tuple[str, ...]],
 ) -> str:
-    """The commands that apply a routed setup role, with its maximal-tag warning.
-
-    The server-play command and then one join command per agent host, split through
-    `server_tags` and `agent_join_cmds` as the `DECIDED:` marker at `AGENT_JOIN_TAGS` says. A
-    row reaching only the agent half prints the join alone. A row reaching the pin play gets
-    one `agent_pin_cmds` command per agent host after them, naming the host it runs on.
-    """
+    """The command that applies a routed setup role, with its maximal-tag warning."""
     role_tag = setup_role_tag(role)
     narrowed = _narrowed_tags(role, narrow_tags)
     selected = narrowed or {role_tag}
-    server = server_tags(role, selected)
     gated = setup_role_host(role)
     targets = hosts.get(role_tag) or ((gated,) if gated else ())
-    apply = f"{PLAYBOOK_CMD} {playbook} --tags {','.join(sorted(server))}"
+    apply = f"{PLAYBOOK_CMD} {playbook} --tags {','.join(sorted(selected))}"
     cmd = f"`{on_hosts(apply, targets)}`"
     if not narrowed:
         warning = maximal_tag_warning(role)
-    elif server & MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset()):
+    elif selected & MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset()):
         warning = _MAXIMAL_ROLE_GATED_WARNING[role]
     else:
         warning = ""
     # Parenthesised, not appended after a dash: `manual_plane_remediation` adds ", then
     # <clear command>" after this list, and an unbracketed warning made that clause read
     # as a continuation of the warning's own last sentence.
-    out = [f"{cmd} (WARNING: {warning})" if warning else cmd] if server else []
-    agent_hosts = setup_role_agent_hosts(role)
-    agents = agent_join_cmds(role, playbook, selected, agent_hosts)
-    pins = agent_pin_cmds(role, playbook, selected, agent_hosts)
-    return " and ".join(
-        [
-            *out,
-            *(f"`{a}`" for a in agents),
-            *(f"`{cmd}` (run on {host})" for host, cmd in pins),
-        ]
-    )
+    return f"{cmd} (WARNING: {warning})" if warning else cmd
 
 
 def _consumers_command(role: str) -> str:

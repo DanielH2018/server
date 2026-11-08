@@ -27,9 +27,8 @@ multipath drop-in, the inotify key, the join rules and the address pin, and
 `hosts/bootstrap-host.sh` installs and joins k3s. `tasks/agent.yml` and `tasks/agent_verify.yml`
 are each one task that refuses, because `k3s-bringup.yml`'s join plays name them until H7.20a.
 `tasks/static-address.yml` writes nothing on either node: `k3s_packaged_hosts` in
-`defaults/main.yml` names both, and each of its tasks skips those hosts. The deployer's join and
-pin printers (`ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_join_cmds`)
-therefore name no agent command for this role.
+`defaults/main.yml` names both, and each of its tasks skips those hosts. No remediation the
+deployer prints names an agent command for this role.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
