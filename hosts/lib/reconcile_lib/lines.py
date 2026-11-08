@@ -15,7 +15,7 @@ directory above it is created 0700 with that owner. Rewriting an existing file k
 mode. Both rules exist because sshd's `StrictModes` rejects an authorized_keys file or a `~/.ssh`
 the arm left with the wrong ones.
 
-Before it writes, the arm runs `dpkg -S` on the path. It accepts an unowned file, and an owned file
+Before it writes, the arm runs `dpkg -S` on the path, once per path per run. It accepts an unowned file, and an owned file
 only when every owner lists the path among its conffiles. It refuses any other owned file, so it
 can never fight dpkg, and a refusal is a fault: the package shipped something wrong. The arm never
 removes a line, so it keeps no record and reports no drift.
@@ -153,8 +153,11 @@ def write(target: Path, text: str, mode: str) -> None:
     os.replace(tmp, target)
 
 
-def apply(edit: dict) -> bool:
-    problem = refusal(edit["path"])
+def apply(edit: dict, refusals: dict[str, str | None]) -> bool:
+    """Apply one edit; `refusals` caches `refusal()` by path for the rest of the run."""
+    if edit["path"] not in refusals:
+        refusals[edit["path"]] = refusal(edit["path"])
+    problem = refusals[edit["path"]]
     if problem:
         log(f"lines: {problem}; refusing the edit", ERR)
         return False
@@ -174,4 +177,5 @@ def apply(edit: dict) -> bool:
 def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, None, int]:
     """Run the arm. Return whether every edit applied; it keeps no record and counts no drift."""
     edits = section["edits"] if section else []
-    return all([apply(edit) for edit in edits]), None, 0
+    refusals: dict[str, str | None] = {}
+    return all([apply(edit, refusals) for edit in edits]), None, 0

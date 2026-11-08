@@ -60,6 +60,10 @@ exit 0
 def guest(tmp_path, *args, **env):
     stage = tmp_path / "stage"
     stage.mkdir(exist_ok=True)
+    # Written once: rewriting a stub truncates it under a detached step that may be exec'ing it.
+    stubs = tmp_path / "bin"
+    if not stubs.is_dir():
+        fake_bin(stubs, **GUEST_STUBS)
     defaults = {"UNITS": "k3s.service", "UFW": "active", "MISSING": "", "READY": "True"}
     return subprocess.run(
         ["bash", str(GUEST_SCRIPT), *args],
@@ -67,7 +71,7 @@ def guest(tmp_path, *args, **env):
         text=True,
         timeout=60,
         env={
-            "PATH": path_with(fake_bin(tmp_path / "bin", **GUEST_STUBS)),
+            "PATH": path_with(stubs),
             "T": str(tmp_path),
             "BOOTSTRAP_DRILL_STAGE": str(stage),
             "BOOTSTRAP_DRILL_ROOT": str(tmp_path / "root"),

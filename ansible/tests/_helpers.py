@@ -64,8 +64,7 @@ def registry_secret_names() -> list[str]:
     """Every credential name in `ansible/secret_rotation.yml`, minus the generic ones.
 
     The registry is plaintext by design — names, dates and tiers, never values — so a guard
-    built on it needs no SOPS key and runs on a CI runner. Shared by the release_bin guard and
-    the no_log census so the two cannot disagree about what counts as a secret.
+    built on it needs no SOPS key and runs on a CI runner. Read by the no_log census.
     """
     data = load_yaml(SECRET_REGISTRY) or {}
     return sorted(set(data.get("entries", {})) - GENERIC_SECRET_NAMES)

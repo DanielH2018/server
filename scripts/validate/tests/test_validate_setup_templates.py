@@ -78,7 +78,7 @@ def test_a_defined_variable_is_clean(tmp_path, ctx, known):
     tpl.parent.mkdir(parents=True)
     tpl.write_text(
         'secret: "{{ longhorn_b2_key_id }}"\n'  # SOPS registry
-        'runtime: "{{ common_release_sha }}"\n'  # set_fact in a setup-plane task
+        'runtime: "{{ k3s_node_ip }}"\n'  # register in a setup-plane task
         'inventory: "{{ domain }}"\n'  # group_vars/all.yml
         'magic: "{{ inventory_hostname }}"\n'  # Ansible-supplied
         'required: "{{ nut_monitor_password | mandatory }}"\n'  # the Ansible filter
@@ -131,16 +131,23 @@ def test_a_jinja_syntax_error_is_flagged(tmp_path, ctx, known):
     assert "render error" in problems[0]
 
 
-def test_runtime_vars_reads_both_set_fact_spellings():
-    """`ansible.builtin.set_fact` is what this repo writes; matching the bare name found none.
+def test_runtime_vars_reads_both_set_fact_spellings(tmp_path):
+    """`ansible.builtin.set_fact` is what this repo writes; matching the bare name found none."""
+    tasks = tmp_path / "role" / "tasks" / "main.yml"
+    tasks.parent.mkdir(parents=True)
+    tasks.write_text(
+        "- ansible.builtin.set_fact: {long_spelling: 1}\n- set_fact: {short_spelling: 1}\n"
+    )
+    assert v.runtime_vars(tmp_path) == {"long_spelling", "short_spelling"}
 
-    A named member in the assertion: this is a derivation replacing no list, so the way it fails
+
+def test_runtime_vars_reads_the_setup_tree():
+    """A named member in the assertion: this is a derivation replacing no list, so the way it fails
     is by returning a set narrower than the tree, which only a named member catches.
     """
     names = v.runtime_vars()
-    assert "common_release_sha" in names  # ansible.builtin.set_fact
-    # 54 once H7.60 deleted eight of initial_setup's registers (62 before).
-    assert len(names) >= 54
+    assert "k3s_node_ip" in names  # register
+    assert len(names) >= 48
 
 
 def test_an_ansible_magic_var_is_allowed_and_an_unknown_name_is_not():

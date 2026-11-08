@@ -81,28 +81,6 @@ docker_network: proxy
 # Intel iGPU/QuickSync passthrough (jellyfin/tdarr hardware transcode via /dev/dri).
 # False by default — override to true in a host's host_vars if the machine has one.
 has_igpu: false
-# ── Host hardware capability flags ─────────────────────────────────────────────────
-# Each names ONE hardware fact that a task in roles/setup/initial_setup gates on. They
-# replace `inventory_hostname == '<host>'` literals, so replacing a machine is a host_vars
-# edit rather than a sweep through three task files.
-#
-# They live here rather than in the role's defaults for the reason `ops_cron_host` gives
-# below: `scripts/deploy_tools/setup_lib/setup_gates.py:_eval_when` resolves a gate against
-# `group_vars/all.yml` + `host_vars` only, and a name it cannot resolve reads as "every
-# host" — an over-broad verdict.
-#
-# ENFORCED by ansible/tests/setup/test_initial_setup_host_gates.py, which censuses the gates
-# and asserts each flag's effective value on all three hosts.
-#
-# Whether this host's board has so little RAM that a heavy apt step OOM-kills without a
-# disk-backed swapfile. False by default; daniel-pi (a 512 MB Zero 2 W) overrides it true.
-# initial_setup's host-basics tasks gate on it, and they skip daniel-pi, so on the Pi
-# bootstrap step 4 (hosts/bootstrap-host.sh) creates the swap file instead.
-has_low_memory_board: false
-# Whether this host boots a Raspberry Pi kernel, so it needs the `linux-raspi` package.
-# Separate from the flag above on purpose: "is a Pi board" and "is memory-constrained" are
-# two facts, and a 4 GB Pi would carry this one alone.
-has_raspi_kernel: false
 # Physical LAN subnet, narrow /24 (not the broader RFC1918 range — see traefik's trustedIPs
 # comment for why that distinction matters). Same for every host so far; override per-host
 # if a new host sits on a different LAN.
@@ -742,8 +720,9 @@ docker_engine_packages:
 # Whether rsyslog runs on this host. True by default -- it writes /var/log/{syslog,auth.log},
 # which promtail ships and the crowdsec node agent tails. daniel-pi overrides this false:
 # rsyslog is MASKED there (journald is the log of record, and rsyslog's text logs
-# landed in the RAM-backed log2ram tmpfs), so initial_setup's rsyslog filter tasks skip it --
-# their `Restart rsyslog` handler fails on a masked unit.
+# landed in the RAM-backed log2ram tmpfs), so its host package never lists the
+# `rsyslog-filter` component (hosts/components/rsyslog-filter/). ENFORCED by
+# ansible/tests/setup/test_journald_syslog_forwarding.py.
 has_rsyslog: true
 # Whether this host holds a checkout of THIS repository at ~/server. True by default — every
 # host built by initial_setup.yml has had one, which is why a handful of tasks reach for

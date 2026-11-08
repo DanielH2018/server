@@ -78,10 +78,8 @@ mode ([pytest good practices][pytest-good]); that advice is knowingly declined h
 unique-basename rule for tests is the price.
 
 Re-examined on 2026-09-28 (#2809) and kept. Packaging `scripts/` as the uv project would retire
-the `sys.path` bootstraps and the layout meta-guards, but it would not reach the hosts. Roles
-still copy `scripts/` modules to hosts that have no checkout and no install step:
-`ansible/roles/setup/common/tasks/release_bin.yml` ships
-`scripts/deploy_tools/prune_releases.py` that way.
+the `sys.path` bootstraps and the layout meta-guards, but it would not reach the hosts,
+which have no checkout and no install step.
 
 ### PEP 420 namespace packages, no `__init__.py` anywhere
 

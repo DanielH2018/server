@@ -364,7 +364,7 @@ def test_a_notified_handler_exists_in_the_calling_role():
 def test_the_shared_task_file_carries_no_tags():
     """Tags UNION in Ansible, so a tag here would also inherit the caller's.
 
-    Same rule release_bin.yml, stamp_render.yml and stamp_deployed.yml state in their headers:
+    Same rule stamp_render.yml and stamp_deployed.yml state in their headers:
     an imported task must be selected by exactly the caller's tag.
     """
     shared = ROLES / "setup" / "common" / "tasks" / "install_host_lib.yml"
