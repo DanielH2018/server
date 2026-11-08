@@ -754,14 +754,24 @@ daniel-box serves the repository, so it builds its own packages from the clone.
     ```
 
     When the status's stage is not `reencrypt_finished`, Secrets written before the flag are still
-    plaintext in etcd. Rotate the key, which re-encrypts every Secret, then repeat the status read
-    until the stage reads `reencrypt_finished`. Restart k3s only after that, because a restart
-    during the rotation strands it part-done. On k3s v1.30 and later, `rotate-keys` is the whole
-    procedure, and bare `reencrypt` is invalid from the `start` stage:
+    plaintext in etcd. Rotate the key, which re-encrypts every Secret. On k3s v1.30 and later,
+    `rotate-keys` is the whole procedure, and bare `reencrypt` is invalid from the `start` stage:
 
     ```bash
     sudo k3s secrets-encrypt rotate-keys
-    sudo k3s secrets-encrypt status
+    ```
+
+    `rotate-keys` returns once k3s accepts the request, and the re-encryption runs in the
+    background. Wait until the stage reads `reencrypt_finished`. The old role allowed five minutes:
+
+    ```bash
+    until sudo k3s secrets-encrypt status | grep -q reencrypt_finished; do sleep 10; done
+    ```
+
+    Restart k3s only after that wait returns, because a restart during the rotation strands it
+    part-done:
+
+    ```bash
     sudo systemctl restart k3s.service
     ```
 
