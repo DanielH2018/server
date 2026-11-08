@@ -171,15 +171,21 @@ def test_push_store_volumes_is_flagged_without_the_push_stores_claim(drop, messa
 def test_the_volumes_directory_applies_only_manifests_and_lists_each_directory(
     tmp_path,
 ):
-    dirs = fresh.write_volumes(tmp_path / "volumes")
     out = tmp_path / "volumes"
+    fresh.write_volumes(out)
     assert sorted(p.name for p in out.iterdir()) == [
         "dirs.txt",
         "pv-registry-data.yaml",
     ]
-    assert (out / "dirs.txt").read_text() == "".join(
-        f"{d['uid']} {d['gid']} {d['path']}\n" for d in dirs
-    )
+    pod = next(
+        d
+        for d in _docs(fresh.registry_files())
+        if (d["kind"], d["metadata"]["name"]) == ("Deployment", "registry")
+    )["spec"]["template"]["spec"]["securityContext"]
+    (pv,) = _docs({"pv": (out / "pv-registry-data.yaml").read_text()})
+    uid, gid, path = (out / "dirs.txt").read_text().splitlines()[0].split(" ")
+    assert (int(uid), int(gid)) == (pod["runAsUser"], pod["fsGroup"])
+    assert path == pv["spec"]["hostPath"]["path"]
 
 
 def test_the_source_follows_the_roles_own_registry_address_and_names_its_secret():
