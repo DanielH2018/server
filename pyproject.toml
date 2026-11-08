@@ -2,6 +2,12 @@
 name = "server-homelab"
 version = "0.0.0"
 requires-python = ">=3.15"
+# The renderer's whole runtime closure. promote.yml sets UV_NO_DEV, so a package listed only in
+# the dev group is absent from every promote job; a dev-only tool's download cannot block it.
+dependencies = [
+  "pyyaml",
+  "jinja2>=3",
+]
 
 [tool.uv]
 package = false                      # virtual project: manage deps/lock, do not build the repo
@@ -23,8 +29,6 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   # Pinned exactly, not `>=`: the hosts install the same literal as a uv tool
   # (initial_setup/tasks/host-basics.yml) and a lockstep test holds the two
   # equal, so this is the one place the deploy-side ansible version is chosen.
-  "pyyaml",                         # validate.compose_templates
-  "jinja2>=3",                      # validate.compose_templates
   "requests",                       # community.docker modules
   "docker",                         # community.docker SDK-backed modules
   "flask",                          # ical-proxy ical_proxy.py imports flask at module top (test_app.py)

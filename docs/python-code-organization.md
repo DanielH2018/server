@@ -44,9 +44,14 @@ source are recorded so the next reader can check whether the reason still holds.
 ### A virtual uv project, not a package
 
 [uv](https://docs.astral.sh/uv/) manages the dev and test tooling from `pyproject.toml` and
-`uv.lock`. A virtual project pins only its `dev` dependency group and the pytest config.
-That group is uv's default for `uv run`, and it holds the test deps plus the deploy-side
-`ansible-core` and the `community.docker` deps `requests` and `docker`. `uv run pytest` syncs
+`uv.lock`. A virtual project pins its dependencies and the pytest config. `[project]
+dependencies` holds only what the renderer imports at runtime, `pyyaml` and `jinja2`. The
+`dev` group holds everything else: the test deps, the lint tools, the deploy-side
+`ansible-core`, and the `community.docker` deps `requests` and `docker`. The `dev` group is
+uv's default for `uv run`. `promote.yml` sets `UV_NO_DEV`, so a promotion installs those two
+packages and no dev tool. A dependency that a promote job imports therefore goes in `[project]
+dependencies`. `test_promote_workflow.py` fails when either package is missing from that list.
+`uv run pytest` syncs
 the env from `uv.lock` first, and needs [uv installed][uv-install] once. The
 `validate-compose-templates` hook shells out to `uv` too, so a full `prek run` needs it as well.
 
