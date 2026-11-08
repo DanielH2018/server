@@ -580,7 +580,6 @@
  "ansible/tests/setup/test_disk_health_deadline.py": 0.36,
  "ansible/tests/setup/test_disk_health_textfile.py": 0.43,
  "ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.py": 1.8,
- "ansible/tests/setup/test_docker_engine_is_held_before_apt_upgrade.py": 0.02,
  "ansible/tests/setup/test_docs_refresh_failure_path.py": 0.73,
  "ansible/tests/setup/test_docs_refresh_heartbeat.py": 0.43,
  "ansible/tests/setup/test_docs_refresh_records_shard_weights.py": 0.02,
@@ -649,7 +648,6 @@
  "ansible/tests/setup/test_pi_recovery_restarts_and_reports.py": 11.39,
  "ansible/tests/setup/test_pi_service_lists_census.py": 14.08,
  "ansible/tests/setup/test_pi_watchdog_alert.py": 1.56,
- "ansible/tests/setup/test_pi_watchdog_restarts_after_provisioning.py": 0.19,
  "ansible/tests/setup/test_register_producers_carry_consumer_tags.py": 0.74,
  "ansible/tests/setup/test_release_bin_groups_have_no_secrets.py": 0.62,
  "ansible/tests/setup/test_renovate_agent_identity.py": 0.29,
@@ -1285,5 +1283,6 @@
  "scripts/validate/tests/test_validate_setup_templates.py": 5.91,
  "scripts/validate/tests/test_validate_shell_templates.py": 4.95,
  "scripts/validate/tests/test_validate_unit_templates.py": 36.75,
- "scripts/z2m/tests/test_set_device_option.py": 4.19
+ "scripts/z2m/tests/test_set_device_option.py": 4.19,
+ "ansible/tests/setup/test_docker_engine_hold_list.py": 0.02
 }

@@ -31,8 +31,7 @@
 # `credentials:` are unchanged, and the Pi's SOPS file needs no new key.
 #
 # Since H7.27 it ships the first three subjects of initial_setup: apt's unattended upgrades, the
-# sshd drop-ins and the kernel, journald, limits and login hardening. initial_setup skips each on
-# this host through `initial_setup_packaged_hosts`. No file here needs a credential.
+# sshd drop-ins and the kernel, journald, limits and login hardening. initial_setup keeps no task for them. No file here needs a credential.
 #
 # Since H7.25 it ships the optimize_pi role's subjects: the memory, log and watchdog tuning
 # (pi-tuning), the node exporter unit and its textfile directory (pi-node-exporter), the resolver
@@ -47,8 +46,7 @@
 # Since H7.30 it ships the rest of initial_setup's Pi subjects: the fail2ban group (fail2ban,
 # integrity-scans for rkhunter and AIDE, postfix and accounting), the maintenance timers
 # (host-maintenance: the weekly reboot, apt autoremove, dpkg purge and the Docker prune) and ufw
-# (ssh-firewall and the rules below). initial_setup skips each on this host through
-# `initial_setup_packaged_hosts`. The timers read one new credential, so the Pi's
+# (ssh-firewall and the rules below). initial_setup keeps no task for them. The timers read one new credential, so the Pi's
 # SOPS file must hold `healthchecks_ping_key` (`host_secrets.py sync daniel-pi`, operator-only).
 #
 # Since #7065 it ships pi-updater-poll: a 15-minute timer that starts homelab-updater.service once
@@ -56,8 +54,7 @@
 # until the daily fire. The daily timer below stays the fallback. No file here needs a credential.
 #
 # Since H7.58 it ships the host baseline (host-hardening): the sudo cache, auditd's rules, the module
-# blacklist, the core-dump drop-in, the login banner and the base packages. initial_setup skips each
-# on this host through `initial_setup_packaged_hosts`, which ends the role's dist-upgrade here. No
+# blacklist, the core-dump drop-in, the login banner and the base packages. initial_setup keeps no task for them, which ends the role's dist-upgrade here. No
 # file here needs a credential.
 description: daniel-pi's homelab host package
 components: [reconcile, secrets-unit, pi-heartbeats, pi-updater-poll, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, host-hardening]

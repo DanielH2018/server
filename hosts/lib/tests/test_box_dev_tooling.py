@@ -113,7 +113,7 @@ def test_the_census_holds_no_item_of_the_moved_subjects():
 
 def test_the_map_drops_the_subjects_that_have_no_tasks_left():
     defaults = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
-    map_ = defaults["initial_setup_packaged_hosts"]
+    map_ = defaults.get("initial_setup_packaged_hosts", {})
     assert not {"dev_tooling", "vale", "worktree_holders"} & set(map_)
     assert "initial_setup_uv_version" not in defaults
 

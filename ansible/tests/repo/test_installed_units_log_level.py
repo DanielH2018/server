@@ -1,7 +1,7 @@
 """The census row that holds every repo-installed systemd service to a stored log level.
 
 journald stores notice and above (`MaxLevelStore=notice`,
-`ansible/roles/setup/initial_setup/tasks/system-tuning.yml`). It forwards info to rsyslog, and
+`hosts/components/host-tuning/templates/50-homelab-journald.conf`). It forwards info to rsyslog, and
 `49-homelab-info-filter.conf` then stops info for every facility except auth, authpriv, kern
 and mail. A unit's stdout and stderr reach journald at its `SyslogLevel=`, which defaults to
 info, so a unit left on the default loses every line it prints (#6160). The row runs on

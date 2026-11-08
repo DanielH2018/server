@@ -229,9 +229,9 @@ ROWS = (
                 "- ansible.builtin.copy:\n    src: ~/control-side\n    dest: /x\n",
             ),
         ),
-        # 56 once H7.34 deleted four of hypervisor's task files (60 before).
-        min_matches=56,
-        must_find=frozenset({"ansible/roles/setup/initial_setup/tasks/access.yml"}),
+        # 51 once H7.60 deleted five of initial_setup's task files (56 before).
+        min_matches=51,
+        must_find=frozenset({"ansible/roles/setup/initial_setup/tasks/crons.yml"}),
     ),
     Census(
         name="bespoke-netpol-says-why-it-is-not-a-callers-fence",

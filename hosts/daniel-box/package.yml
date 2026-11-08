@@ -9,16 +9,20 @@
 #
 # Since H7.29 it ships the first three subjects of initial_setup, the same components as daniel-pi
 # and daniel-server: apt's unattended upgrades, the sshd drop-ins and the kernel, journald, limits
-# and login hardening. initial_setup skips each on this host through `initial_setup_packaged_hosts`.
-# No file needs a credential. The rsyslog info filter stays an Ansible task gated on has_rsyslog.
+# and login hardening. No file needs a credential.
 #
 # Since H7.32 it ships the rest of initial_setup's subjects, the same components as daniel-pi and
 # daniel-server: the fail2ban group (fail2ban, integrity-scans for rkhunter and AIDE, postfix and
 # accounting), the maintenance timers (host-maintenance: the weekly reboot, apt autoremove, dpkg
 # purge and, as `has_fwupd` is true only here, the firmware update; this host has no Docker) and
-# ufw (ssh-firewall). initial_setup skips each subject on every host through
-# `initial_setup_packaged_hosts`. The scans and the reboot read one more credential,
+# ufw (ssh-firewall). The scans and the reboot read one more credential,
 # `healthchecks_ping_key` (`host_secrets.py sync daniel-box`, operator-only).
+#
+# H7.60 adds the host baseline, the same components as daniel-pi and daniel-server: `host-hardening`
+# ships the sudo cache, auditd's rules, the module blacklist, the core-dump drop-in, the login banner
+# and the base packages, and `rsyslog-filter` ships the info filter. The role's tasks for these
+# subjects are deleted on every host, which ends its dist-upgrade here. No file needs a credential,
+# and `has_igpu` is false here, so no i915 option ships.
 #
 # The deploy-ui allows are the one live ufw rule set the package does not declare: `setup/deploy_ui`
 # still writes them, with no `homelab:` label, so the arm leaves them.
@@ -94,6 +98,8 @@ components:
   - uv
   - vale
   - worktree-holders
+  - host-hardening
+  - rsyslog-filter
 units:
   k3s.service: {policy: windowed}
 credentials:
@@ -172,3 +178,6 @@ legacy:
   # H7.62: the copies initial_setup installed, ahead of /usr/bin/vale and /usr/bin/uv on PATH.
   - {path: /usr/local/bin/vale}
   - {path: /usr/local/bin/uv}
+  # H7.60: the absent arms of initial_setup's crons.yml that reached this host.
+  - {path: /etc/sudoers.d/20-worktree-holders}
+  - {path: /etc/homelab/cert-expiry-webhook.env}

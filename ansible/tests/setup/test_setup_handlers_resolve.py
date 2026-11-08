@@ -96,10 +96,10 @@ def test_a_handler_with_no_notifier_is_flagged() -> None:
     assert unnotified(owners, {"Reload y": {"y"}}) == ["Restart x"]
 
 
-def test_the_census_finds_the_initial_setup_notifies() -> None:
-    """Non-vacuity: initial_setup's notifies of its own handlers are in the census."""
+def test_the_census_finds_a_roles_notify_of_its_own_handler() -> None:
+    """Non-vacuity: gitops_deploy's notify of its own reload handler is in the census."""
     notifies = notified(play_roles())
-    assert "initial_setup" in notifies["Start Watchdog after provisioning"]
+    assert "gitops_deploy" in notifies["Reload systemd for gitops_deploy"]
 
 
 def test_a_notify_with_no_handler_is_flagged() -> None:
