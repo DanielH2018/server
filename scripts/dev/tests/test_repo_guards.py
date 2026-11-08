@@ -4,7 +4,6 @@ Run: uv run pytest scripts/dev/tests/test_repo_guards.py
 """
 
 import subprocess
-from datetime import date
 
 import pytest
 import repo_guards
@@ -40,25 +39,38 @@ def test_a_run_names_every_guard_and_returns_pytests_exit_code(code):
     assert kwargs["cwd"] == REPO
 
 
-def test_a_drop_candidate_is_older_than_the_window_and_holds_no_hook_file():
-    guards = {
-        "old_test.py": "2026-09-01",
-        "recent_test.py": "2026-10-20",
-        "hook_tests": "2026-09-01",
-    }
+def test_a_drop_candidate_holds_no_failing_module_and_no_hook_file():
+    guards = ["quiet_test.py", "failing_tests", "node_test.py::test_x", "hook_tests"]
     hooks = ["hook_tests/test_ratchet.py"]
-    today = date(2026, 11, 6)
-    assert repo_guards.drop_candidates(guards, hooks, today, 8) == ["old_test.py"]
-    assert repo_guards.drop_candidates(guards, hooks, today, 1) == [
-        "old_test.py",
-        "recent_test.py",
-    ]
+    failing = {"failing_tests/test_one.py", "node_test.py", "failing_tests_other.py"}
+    assert repo_guards.drop_candidates(guards, hooks, failing) == ["quiet_test.py"]
 
 
-def test_drop_candidates_prints_the_stale_guard_and_runs_nothing(capsys):
+def test_drop_candidates_prints_the_quiet_guard_and_runs_nothing(capsys):
     def run(argv, **kwargs):
         pytest.fail(f"ran {argv}")
 
-    guards = {"old_test.py": "2020-01-01"}
-    assert repo_guards.main(["--drop-candidates"], guards, run) == 0
-    assert "old_test.py: last counted failure 2020-01-01" in capsys.readouterr().out
+    windows = []
+
+    def survey(since, until):
+        windows.append((until - since).days)
+        return {"failing_test.py"}
+
+    guards = ["quiet_test.py", "failing_test.py"]
+    assert repo_guards.main(["--drop-candidates"], guards, run, survey) == 0
+    out = capsys.readouterr().out
+    assert "quiet_test.py: no CI failure since" in out
+    assert "failing_test.py" not in out
+    assert windows == [7 * repo_guards.DEFAULT_WEEKS]
+
+
+def test_drop_candidates_fails_when_the_survey_cannot_reach_github(capsys):
+    def survey(since, until):
+        raise subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 401")
+
+    assert (
+        repo_guards.main(["--drop-candidates"], ["quiet_test.py"], survey=survey) == 1
+    )
+    captured = capsys.readouterr()
+    assert "HTTP 401" in captured.err
+    assert captured.out == ""

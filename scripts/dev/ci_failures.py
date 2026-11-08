@@ -247,6 +247,34 @@ def render(
     return out
 
 
+def survey(
+    since: date, until: date
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[tuple[list[tuple[str, str, str]], bool]],
+]:
+    """Return the runs in the range, their red attempts, and each attempt's rows and readability.
+
+    Raises `CalledProcessError` or `TimeoutExpired` when a `gh` call that lists runs, attempts
+    or jobs fails.
+    """
+    runs = runs_in_range(since, until)
+    needing_a_read = [r for r in runs if r["run_attempt"] > 1 or r["conclusion"] in RED]
+    with ThreadPoolExecutor(READERS) as pool:
+        attempts = [
+            a for found in pool.map(red_attempts, needing_a_read) for a in found
+        ]
+        read = list(pool.map(read_attempt, attempts))
+    return runs, attempts, read
+
+
+def failing_test_modules(since: date, until: date) -> set[str]:
+    """Return every test module a red attempt in the range reported failing."""
+    _, _, read = survey(since, until)
+    return {module for rows, _ in read for _, _, module in rows if module != NO_VALUE}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = ArgumentParser(description=__doc__.partition("\n")[0])
     parser.add_argument("--since", type=date.fromisoformat, required=True)
@@ -255,15 +283,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     try:
-        runs = runs_in_range(args.since, args.until)
-        needing_a_read = [
-            r for r in runs if r["run_attempt"] > 1 or r["conclusion"] in RED
-        ]
-        with ThreadPoolExecutor(READERS) as pool:
-            attempts = [
-                a for found in pool.map(red_attempts, needing_a_read) for a in found
-            ]
-            read = list(pool.map(read_attempt, attempts))
+        runs, attempts, read = survey(args.since, args.until)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         print(f"gh failed: {exc.stderr or exc}", file=sys.stderr)
         return FAILED
