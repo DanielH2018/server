@@ -749,7 +749,7 @@
  "ansible/tests/setup/test_ufw_sysctl_keeps_log_martians.py": 2.5,
  "ansible/tests/setup/test_unattended_origins_pattern.py": 0.0,
  "ansible/tests/setup/test_wan_probe_urls_match_the_bridge.py": 0.0,
- "ansible/tests/setup/test_worktree_holders_install.py": 0.0,
+ "ansible/tests/setup/test_worktree_holders_install.py": 4.68,
  "ansible/tests/setup/test_worktree_sweep_cron_reports_its_exit.py": 0.12,
  "ansible/tests/staging/test_etcd_drill_vm.py": 0.05,
  "ansible/tests/staging/test_staging_egress_fence.py": 0.0,

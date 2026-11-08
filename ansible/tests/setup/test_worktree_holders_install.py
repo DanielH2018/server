@@ -88,13 +88,6 @@ def _retires_the_old_sudoers_rule(legacy: list[dict]) -> bool:
     return {"path": OLD_SUDOERS} in legacy
 
 
-@pytest.mark.parametrize("host", ["daniel-box", "daniel-pi", "daniel-server"])
-def test_every_host_package_retires_the_old_sudoers_rule_is_clean(host):
-    # #4297: a host that had the sudo grant keeps a NOPASSWD root rule unless something
-    # deletes it, and no setup task does since H7.60.
-    assert _retires_the_old_sudoers_rule(host_mode.render_host(host).legacy)
-
-
 def test_a_package_that_keeps_the_old_sudoers_rule_is_flagged():
     assert not _retires_the_old_sudoers_rule([{"path": "/usr/local/bin/uv"}])
 
@@ -102,6 +95,16 @@ def test_a_package_that_keeps_the_old_sudoers_rule_is_flagged():
 @pytest.fixture(scope="module", params=sorted(KNOWN_CLAUDE_HOSTS))
 def package(request) -> tuple[str, host_mode.Package]:
     return request.param, host_mode.render_host(request.param)
+
+
+def test_every_claude_host_package_retires_the_old_sudoers_rule_is_clean(package):
+    # #4297: a host that had the sudo grant keeps a NOPASSWD root rule unless something
+    # deletes it, and no setup task does since H7.60.
+    assert _retires_the_old_sudoers_rule(package[1].legacy)
+
+
+def test_the_pi_package_retires_the_old_sudoers_rule_is_clean():
+    assert _retires_the_old_sudoers_rule(host_mode.render_host("daniel-pi").legacy)
 
 
 def _text(package: host_mode.Package, dst: str) -> str:
