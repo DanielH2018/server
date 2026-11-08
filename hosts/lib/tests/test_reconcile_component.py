@@ -34,6 +34,7 @@ LIBRARY_MEMBERS = frozenset(
 )
 SERVICE = "/usr/lib/systemd/system/homelab-reconcile.service"
 METRICS_SERVICE = "/usr/lib/systemd/system/homelab-reconcile-metrics.service"
+WAIT_SERVICE = "/usr/lib/systemd/system/homelab-reconcile-wait.service"
 MANIFEST = "/usr/lib/homelab/manifest.json"
 
 
@@ -53,13 +54,14 @@ def test_the_library_glob_finds_its_members():
 def test_the_component_renders_the_script_its_library_and_its_unit(package):
     modules = [f"{MODULES}/{path.name}" for path in library_files()]
     assert sorted(package.files) == sorted(
-        [SCRIPT, *modules, SERVICE, METRICS_SERVICE, MANIFEST]
+        [SCRIPT, *modules, SERVICE, METRICS_SERVICE, WAIT_SERVICE, MANIFEST]
     )
     assert package.files[SCRIPT] == (RECONCILE.read_bytes(), 0o755)
     for path in library_files():
         assert package.files[f"{MODULES}/{path.name}"] == (path.read_bytes(), 0o644)
     assert package.units() == [
         "homelab-reconcile-metrics.service",
+        "homelab-reconcile-wait.service",
         "homelab-reconcile.service",
     ]
     unit = package.files[SERVICE][0].decode()
@@ -106,6 +108,18 @@ def test_the_metrics_unit_rewrites_the_textfile_once_per_boot(package):
             "../homelab-reconcile-metrics.service"
         )
     }
+
+
+def test_reconcile_starts_behind_its_wait_unit_and_survives_its_failure(package):
+    # A queued start job is not activating, so apt's wait spends the wait unit's limit (#7648).
+    unit = package.files[SERVICE][0].decode()
+    assert "Wants=homelab-reconcile-wait.service\n" in unit
+    assert "After=homelab-reconcile-wait.service\n" in unit
+    assert "Requires=" not in unit
+    wait = package.files[WAIT_SERVICE][0].decode()
+    assert f"ExecStart={SCRIPT} --wait-for-apt\n" in wait
+    assert "Type=oneshot\n" in wait
+    assert "\n[Install]\n" not in f"\n{wait}"
 
 
 def test_a_leveled_reconcile_line_carries_its_priority_only_on_the_journal(

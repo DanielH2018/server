@@ -664,6 +664,14 @@ until the whole apt transaction has finished. Every start inside one transaction
 that one job, which reads the manifest only after the lock is free. The updater's synchronous
 start in step 7 joins the same job, or starts a fresh one.
 
+The unit `Wants=` and is ordered `After=` `homelab-reconcile-wait.service`, a oneshot that runs
+`homelab-reconcile --wait-for-apt` under `TimeoutStartSec=5min`. That mode blocks on the same
+lock and exits once it is free. A start job queued behind it is not yet activating, so apt's
+`DPkg::Post-Invoke` hooks spend the wait unit's limit rather than reconcile's 30 minutes. On the
+Pi those hooks held the lock for 179 s to 206 s after dpkg finished (#7648). A wait unit that
+times out still lets reconcile start, because `Wants=` does not propagate the failure, and
+reconcile then waits on the lock inside its own limit.
+
 It holds the lock only while it reads. It reads `/usr/lib/homelab/manifest.json`, its own
 last state in `/var/lib/homelab-reconcile/applied.json`, and the status and version of both
 packages from `dpkg-query`. If either package's status is not `ii `, it records a failed

@@ -1,5 +1,8 @@
 """The rendered `homelab-updater` package: its named members, and its timeout above reconcile's.
 
+The updater's synchronous start of reconcile runs the wait unit reconcile is ordered after, then
+reconcile itself, so both start limits count against the updater's.
+
 Run: uv run pytest hosts/lib/tests/test_updater_package.py
 """
 
@@ -18,6 +21,7 @@ SOURCES = "/etc/apt/sources.list.d/homelab.sources"
 KEYRING = "/usr/share/keyrings/homelab-archive-keyring.gpg"
 KEYRING_FILE = REPO / "hosts" / "keys" / "homelab-archive-keyring.gpg"
 RECONCILE_SERVICE = "/usr/lib/systemd/system/homelab-reconcile.service"
+WAIT_SERVICE = "/usr/lib/systemd/system/homelab-reconcile-wait.service"
 
 _SPAN = re.compile(r"(\d+)\s*(h|min|m|s)?")
 _UNITS = {"h": 3600, "min": 60, "m": 60, "s": 1, None: 1}
@@ -29,10 +33,20 @@ def package() -> host_mode.Package:
 
 
 @pytest.fixture(scope="module")
-def reconcile_unit(tmp_path_factory) -> str:
+def reconcile_package(tmp_path_factory) -> host_mode.Package:
+    return render_reconcile(tmp_path_factory.mktemp("reconcile"))
+
+
+@pytest.fixture(scope="module")
+def reconcile_unit(reconcile_package) -> str:
     """The rendered `homelab-reconcile.service`, from the `reconcile` component."""
-    rendered = render_reconcile(tmp_path_factory.mktemp("reconcile"))
-    return rendered.files[RECONCILE_SERVICE][0].decode()
+    return reconcile_package.files[RECONCILE_SERVICE][0].decode()
+
+
+@pytest.fixture(scope="module")
+def wait_unit(reconcile_package) -> str:
+    """The rendered `homelab-reconcile-wait.service`, which reconcile waits behind."""
+    return reconcile_package.files[WAIT_SERVICE][0].decode()
 
 
 def test_the_package_renders_its_named_members(package):
@@ -82,41 +96,61 @@ def lock_timeout_s(script: str | None = None) -> int:
 
 
 def timeout_holds(
-    updater_unit: str, reconcile_unit: str, script: str | None = None
+    updater_unit: str, reconcile_unit: str, wait_unit: str, script: str | None = None
 ) -> bool:
-    return timeout_start_s(updater_unit) > timeout_start_s(
-        reconcile_unit
-    ) + lock_timeout_s(script)
+    return timeout_start_s(updater_unit) > (
+        timeout_start_s(reconcile_unit)
+        + timeout_start_s(wait_unit)
+        + lock_timeout_s(script)
+    )
 
 
-def test_the_updater_timeout_exceeds_reconcile_plus_the_lock_wait_is_clean(
-    package, reconcile_unit
+def with_limit(unit: str, span: str) -> str:
+    """`unit` with only its `TimeoutStartSec=` changed; a unit without exactly one fails."""
+    changed, count = re.subn(
+        r"^TimeoutStartSec=.+$", f"TimeoutStartSec={span}", unit, flags=re.M
+    )
+    assert count == 1
+    return changed
+
+
+def test_the_updater_timeout_exceeds_reconcile_its_wait_and_the_lock_wait_is_clean(
+    package, reconcile_unit, wait_unit
 ):
-    assert timeout_holds(package.files[SERVICE][0].decode(), reconcile_unit)
+    assert timeout_holds(package.files[SERVICE][0].decode(), reconcile_unit, wait_unit)
     assert timeout_start_s(reconcile_unit) == 30 * 60
 
 
-def test_an_updater_timeout_of_20_minutes_is_flagged(reconcile_unit):
-    assert not timeout_holds("[Service]\nTimeoutStartSec=20min\n", reconcile_unit)
-
-
-def test_a_reconcile_timeout_raised_to_45_minutes_is_flagged(package, reconcile_unit):
-    # The rendered unit with only its limit changed, so a unit that moved the directive
-    # elsewhere, or dropped it, fails the substitution rather than passing on a stand-in.
-    raised, count = re.subn(
-        r"^TimeoutStartSec=.+$", "TimeoutStartSec=45min", reconcile_unit, flags=re.M
+def test_an_updater_timeout_of_20_minutes_is_flagged(reconcile_unit, wait_unit):
+    assert not timeout_holds(
+        "[Service]\nTimeoutStartSec=20min\n", reconcile_unit, wait_unit
     )
-    assert count == 1
-    assert not timeout_holds(package.files[SERVICE][0].decode(), raised)
 
 
-def test_a_step_6_retry_that_waits_on_the_lock_too_is_flagged(package, reconcile_unit):
+def test_a_reconcile_timeout_raised_to_45_minutes_is_flagged(
+    package, reconcile_unit, wait_unit
+):
+    raised = with_limit(reconcile_unit, "45min")
+    assert not timeout_holds(package.files[SERVICE][0].decode(), raised, wait_unit)
+
+
+def test_a_wait_unit_timeout_raised_to_10_minutes_is_flagged(
+    package, reconcile_unit, wait_unit
+):
+    # Reconcile's 30 minutes, the 600s install lock wait and 10 minutes fill the 50.
+    raised = with_limit(wait_unit, "10min")
+    assert not timeout_holds(package.files[SERVICE][0].decode(), reconcile_unit, raised)
+
+
+def test_a_step_6_retry_that_waits_on_the_lock_too_is_flagged(
+    package, reconcile_unit, wait_unit
+):
     # Two 600s waits and reconcile's 30 minutes fill the whole 50-minute limit.
     retrying = UPDATER_SCRIPT.read_text().replace(
         "DPkg::Lock::Timeout=0", "DPkg::Lock::Timeout=600"
     )
     assert not timeout_holds(
-        package.files[SERVICE][0].decode(), reconcile_unit, retrying
+        package.files[SERVICE][0].decode(), reconcile_unit, wait_unit, retrying
     )
 
 
