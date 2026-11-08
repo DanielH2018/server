@@ -114,12 +114,12 @@ the per-volume map and each exclusion's rationale:
 
 ## Procedure (fresh host, total loss)
 
-1. **Base OS + SOPS onboarding** — as in `ansible/README.md` first-host bring-up: install
-   uv, install the host package and create the operator's age key (README §5), add its pubkey to
-   `ansible/.sops.yaml`, `sops updatekeys` from a host that can decrypt (or use the
-   off-box recovery key if no host survives), commit, pull.
+1. **Base OS + SOPS onboarding**: follow
    [Rebuilding a cluster node](host-packages.md#rebuilding-a-cluster-node) in
-   `docs/host-packages.md` is the package path, and it lists what the packages do not hold yet.
+   `docs/host-packages.md`, which installs the host package and lists what the packages do not
+   hold yet. Without the old node's age key, the script's step 3 creates a fresh one: add its
+   public key to `ansible/.sops.yaml`, run `sops updatekeys` from a host that can decrypt (or use
+   the off-box recovery key if no host survives), commit and pull.
 2. **Cluster bring-up and Flux**: follow [Bootstrapping Flux on a rebuilt cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster) in
    `docs/flux-deploy-plane.md`. That section owns the bring-up and DR order: k3s bring-up,
    the Flux install, the plumbing tags, steps 3 and 4 below as its steps 7 and 8, and the root

@@ -284,11 +284,11 @@ The decision recorded with H7.24b on 2026-10-30:
 
 daniel-server keeps its own SOPS key, so decryption still works without the recovery key.
 
-1. Follow `docs/longhorn-disaster-recovery.md` → *Procedure (fresh host, total loss)*, step 1:
-   bring up a replacement daniel-box with `ansible/bootstrap.yml`, add its pubkey to
-   `ansible/.sops.yaml`, `sops updatekeys` from daniel-server, commit, pull.
+1. Bring up a replacement daniel-box by
    [Rebuilding a cluster node](host-packages.md#rebuilding-a-cluster-node) in
-   `docs/host-packages.md` is the package path, and it lists what the packages do not hold yet.
+   `docs/host-packages.md`, which lists what the packages do not hold yet. Without the old
+   node's age key, the script's step 3 creates a fresh one: add its public key to
+   `ansible/.sops.yaml`, run `sops updatekeys` from daniel-server, commit and pull.
 2. Decide whether cluster **objects** (Deployments, Secrets, PVC bindings) are also lost —
    if so, restore etcd first per `docs/k3s-etcd-restore.md` (needs item 2, the cluster
    token, if this is a genuinely new host rather than the same disk).
