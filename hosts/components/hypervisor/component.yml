@@ -25,6 +25,7 @@ files:
   - {src: files/etcd-drill-guest-run.sh, dst: /usr/lib/homelab/etcd-drill/etcd-drill-guest-run.sh, mode: "0755"}
   - {src: files/suc_rehearsal.py, dst: /usr/lib/homelab/etcd-drill/suc_rehearsal.py, mode: "0755"}
   - {src: files/suc-rehearsal-guest-run.sh, dst: /usr/lib/homelab/etcd-drill/suc-rehearsal-guest-run.sh, mode: "0755"}
+  - {src: files/bootstrap-drill-guest-run.sh, dst: /usr/lib/homelab/etcd-drill/bootstrap-drill-guest-run.sh, mode: "0755"}
   - {src: templates/etcd-drill-vm.xml.j2, dst: /usr/lib/homelab/etcd-drill/etcd-drill.xml}
   - {src: templates/etcd-drill-meta-data.j2, dst: /usr/lib/homelab/etcd-drill/meta-data}
   - {src: templates/etcd-drill-user-data.j2, dst: /usr/lib/homelab/etcd-drill/user-data.in}
