@@ -36,7 +36,7 @@ def test_enum_values_finds_the_verdicts_and_causes_land_prints():
     assert {"settled", "deploy-failed", "unbuilt"} <= set(
         fd.enum_values(outcome, "Verdict")
     )
-    assert {"tick-held", "tag-miss", "promote-timeout"} <= set(
+    assert {"soak-failed", "tag-miss", "promote-timeout"} <= set(
         fd.enum_values(outcome, "Cause")
     )
 

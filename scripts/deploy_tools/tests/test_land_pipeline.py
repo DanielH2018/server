@@ -295,7 +295,6 @@ def test_settled_end_to_end(land_run):
     assert "verdict=settled cause= exit=0" in logline and "tags=sonarr" in logline
     for k in ("wait_merge", "wait_ci", "deploy"):
         assert f"{k}=" in logline and f"{k}= " not in logline
-    assert "tick=0 " in logline
 
 
 def test_the_diff_fallback_derives_between_the_ci_wait_and_the_promotion_wait(land_run):
@@ -406,7 +405,7 @@ def test_the_real_classifier_derives_a_tag_from_a_real_path(land_run):
     )
     rc, out, _, calls, logline = land_run([], fakes, classifier=Classifier())
     assert (rc, "VERDICT: settled" in out) == (0, True)
-    assert "tags=sonarr " in logline
+    assert "tags=sonarr" in logline.split()
     assert [c[1] for c in calls if c[0] == "gate"] == [(["sonarr"],)]
 
 
