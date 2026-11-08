@@ -1,8 +1,10 @@
-"""Every release download in ci.yml sits behind an actions/cache keyed on its pin.
+"""Every release download in ci.yml and promote.yml sits behind an actions/cache keyed on its pin.
 
 On 2026-11-08 a GitHub release asset answered HTTP 504 for over an hour (#7625), longer than
-any step's `curl --retry` window, so each job that downloaded a pinned binary failed. With the
-download cached under its version, a run fetches it only when the pin moves.
+any step's `curl --retry` window, so each job that downloaded a pinned binary failed, and in
+promote.yml that blocks a deploy. With the download cached under its version, a run fetches it
+only when the pin moves. A piped `| curl` is a registry or API call, not a download, and is
+out of scope.
 
 A step that curls holds three properties: an earlier step of its job caches the
 `$RUNNER_TEMP/pinned/<tool>` directory the step writes to, that cache's key reads the pin
@@ -20,7 +22,8 @@ import pytest
 from _helpers import REPO
 from lib import yaml_fast
 
-CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
+WORKFLOWS = REPO / ".github" / "workflows"
+CHECKED = ("ci.yml", "promote.yml")
 CACHE = "actions/cache@"
 PINNED = re.compile(r"\$RUNNER_TEMP/pinned/([\w-]+)")
 PIN_EXPRESSION = re.compile(r"\$\{\{[^}]*\b(?:env\.|steps\.|hashFiles\()")
@@ -31,12 +34,13 @@ SCRIPT_CACHES = {
 }
 # Steps the census must find, so a reshaped workflow cannot pass empty.
 KNOWN_DOWNLOADS = {
-    ("hooks", "Install Vale"),
-    ("hooks", "Provision promtool, amtool, pint and lokitool"),
-    ("pytest", "Install sops and age for the cluster_vars tests"),
-    ("sops_manifest_type_proof", "Install sops, age and kind"),
-    ("host_packages_build", "Fetch the pinned nfpm and check its sha256"),
-    ("host_packages_build", "Scan the named package roots for secrets"),
+    ("ci.yml", "hooks", "Install Vale"),
+    ("ci.yml", "hooks", "Provision promtool, amtool, pint and lokitool"),
+    ("ci.yml", "pytest", "Install sops and age for the cluster_vars tests"),
+    ("ci.yml", "sops_manifest_type_proof", "Install sops, age and kind"),
+    ("ci.yml", "host_packages_build", "Fetch the pinned nfpm and check its sha256"),
+    ("ci.yml", "host_packages_build", "Scan the named package roots for secrets"),
+    ("promote.yml", "render", "Scan the bundle for secrets"),
 }
 
 
@@ -109,9 +113,13 @@ def problems(workflow: dict) -> list[str]:
     return found
 
 
+def _load(name: str) -> dict:
+    return yaml_fast.safe_load((WORKFLOWS / name).read_text(encoding="utf-8"))
+
+
 @pytest.fixture(scope="module")
 def workflow() -> dict:
-    return yaml_fast.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    return _load("ci.yml")
 
 
 def _job_steps(workflow: dict, job: str) -> list[dict]:
@@ -122,12 +130,26 @@ def _step(workflow: dict, job: str, name: str) -> dict:
     return next(s for s in _job_steps(workflow, job) if s.get("name") == name)
 
 
-def test_the_census_finds_the_known_downloads(workflow):
-    assert KNOWN_DOWNLOADS <= downloads(workflow), sorted(downloads(workflow))
+def test_the_census_finds_the_known_downloads():
+    found = {(name, *pair) for name in CHECKED for pair in downloads(_load(name))}
+    assert KNOWN_DOWNLOADS <= found, sorted(found)
 
 
-def test_every_release_download_is_cached(workflow):
-    assert problems(workflow) == []
+@pytest.mark.parametrize("name", CHECKED)
+def test_every_release_download_is_cached(name):
+    assert problems(_load(name)) == []
+
+
+def test_an_uncached_promote_download_is_flagged():
+    broken = _load("promote.yml")
+    steps = broken["jobs"]["render"]["steps"]
+    steps.remove(
+        next(s for s in steps if s.get("name") == "Cache the gitleaks release")
+    )
+    assert problems(broken) == [
+        "render: Scan the bundle for secrets: "
+        "no earlier actions/cache step caches $RUNNER_TEMP/pinned/gitleaks"
+    ]
 
 
 def test_a_download_without_its_cache_is_flagged(workflow):
