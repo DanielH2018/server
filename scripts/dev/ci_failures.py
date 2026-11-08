@@ -269,10 +269,17 @@ def survey(
     return runs, attempts, read
 
 
-def failing_test_modules(since: date, until: date) -> set[str]:
-    """Return every test module a red attempt in the range reported failing."""
+def failing_test_modules(since: date, until: date) -> tuple[set[str], int]:
+    """Return every test module a red attempt in the range reported failing.
+
+    Also return how many red attempts had no readable log: a module that failed only in one
+    of those is missing from the set.
+    """
     _, _, read = survey(since, until)
-    return {module for rows, _ in read for _, _, module in rows if module != NO_VALUE}
+    modules = {
+        module for rows, _ in read for _, _, module in rows if module != NO_VALUE
+    }
+    return modules, sum(not readable for _, readable in read)
 
 
 def main(argv: list[str] | None = None) -> int:

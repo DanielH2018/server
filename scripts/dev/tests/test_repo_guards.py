@@ -54,7 +54,7 @@ def test_drop_candidates_prints_the_quiet_guard_and_runs_nothing(capsys):
 
     def survey(since, until):
         windows.append((until - since).days)
-        return {"failing_test.py"}
+        return {"failing_test.py"}, 0
 
     guards = ["quiet_test.py", "failing_test.py"]
     assert repo_guards.main(["--drop-candidates"], guards, run, survey) == 0
@@ -74,3 +74,16 @@ def test_drop_candidates_fails_when_the_survey_cannot_reach_github(capsys):
     captured = capsys.readouterr()
     assert "HTTP 401" in captured.err
     assert captured.out == ""
+
+
+def test_drop_candidates_warns_when_a_red_attempt_had_no_readable_log(capsys):
+    def survey(since, until):
+        return set(), 2
+
+    assert (
+        repo_guards.main(["--drop-candidates"], ["quiet_test.py"], survey=survey) == 0
+    )
+    out = capsys.readouterr().out
+    assert "2 red attempts since" in out
+    assert "had no readable log" in out
+    assert "quiet_test.py: no CI failure since" in out

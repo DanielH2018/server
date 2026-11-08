@@ -113,7 +113,7 @@ def run_guards(run: Run = subprocess.run) -> int:
     return run(argv, cwd=REPO, check=False).returncode
 
 
-Survey = Callable[[date, date], set[str]]
+Survey = Callable[[date, date], tuple[set[str], int]]
 
 
 def main(
@@ -140,10 +140,15 @@ def main(
     today = datetime.now(UTC).date()
     since = today - timedelta(weeks=args.weeks)
     try:
-        failing = survey(since, today)
+        failing, unread = survey(since, today)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         print(f"gh failed: {exc.stderr or exc}", file=sys.stderr)
         return FAILED
+    if unread:
+        print(
+            f"{unread} red attempts since {since} had no readable log, so a guard "
+            "named below may have failed in one of them"
+        )
     candidates = drop_candidates(guards, hook_files(), failing)
     for path in candidates:
         print(f"{path}: no CI failure since {since}")
