@@ -38,7 +38,7 @@ def _build(
     *args: str,
     pins: str,
     pull_exit: int = 0,
-    tag_exists: bool = False,
+    inspect: str = "missing",
 ) -> tuple[subprocess.CompletedProcess, list[str]]:
     """Run build-image.sh 24.04 with `pins` as image.pins, returning the result and each docker argv."""
     context = tmp_path / "context"
@@ -53,7 +53,11 @@ case "$1 $2" in
   "pull "*) exit {pull_exit} ;;
   "buildx imagetools")
     [[ "$*" == *--format* ]] && {{ echo {DIGEST}; exit 0; }}
-    exit {0 if tag_exists else 1} ;;
+    case "{inspect}" in
+      exists) exit 0 ;;
+      missing) echo "ERROR: ghcr.io/x: not found" >&2; exit 1 ;;
+      *) echo "ERROR: unexpected status code 503" >&2; exit 1 ;;
+    esac ;;
 esac
 """
     result = run(
@@ -105,26 +109,64 @@ def test_a_publish_pushes_a_missing_tag_and_prints_its_pin(tmp_path: Path) -> No
 
 
 def test_a_publish_never_rebuilds_a_tag_that_exists(tmp_path: Path) -> None:
-    result, calls = _build(tmp_path, "--publish", pins="inputs -\n", tag_exists=True)
+    result, calls = _build(tmp_path, "--publish", pins="inputs -\n", inspect="exists")
     assert result.returncode == 0, result.stderr
     assert not any(call.startswith(("buildx build", "push")) for call in calls)
     assert result.stdout.splitlines()[-1] == f"24.04-arm64 {DIGEST}"
 
 
-def test_every_pin_names_an_image_by_digest() -> None:
-    pins = {}
-    for line in (CONTEXT / "image.pins").read_text().splitlines():
-        if line.strip() and not line.startswith("#"):
-            key, value = line.split()
-            pins[key] = value
-    assert "inputs" in pins, "image.pins lost its inputs line"
-    images = {key: value for key, value in pins.items() if key != "inputs"}
-    bad = {
-        key: value for key, value in images.items() if not DIGEST_RE.fullmatch(value)
-    }
-    assert not bad, (
-        f"a pin that is not a digest makes a PR run reproduce nothing: {bad}"
+def test_a_publish_that_cannot_tell_whether_the_tag_exists_pushes_nothing(
+    tmp_path: Path,
+) -> None:
+    result, calls = _build(tmp_path, "--publish", pins="inputs -\n", inspect="error")
+    assert result.returncode == 1
+    assert not any(call.startswith(("buildx build", "push")) for call in calls)
+    assert "503" in result.stderr
+
+
+_ARCH = {"ubuntu-26.04": "amd64", "ubuntu-24.04-arm": "arm64"}
+
+
+def _pin_problems(text: str, sites: set[tuple[str, str]]) -> list[str]:
+    """Why image.pins `text` does not pin one image by digest per CI build site."""
+    pins = dict(
+        line.split()
+        for line in text.splitlines()
+        if line.strip() and not line.startswith("#")
     )
+    if "inputs" not in pins:
+        return ["no inputs line"]
+    keys = {f"{release}-{_ARCH[runner]}" for runner, release in sites}
+    problems = [f"{key} is no build site" for key in pins.keys() - keys - {"inputs"}]
+    problems += [
+        f"{key} is not a digest: {value}"
+        for key, value in pins.items()
+        if key != "inputs" and not DIGEST_RE.fullmatch(value)
+    ]
+    # `inputs -` is the state before the first publish, when every leg builds.
+    if pins["inputs"] != "-":
+        problems += [f"{key} has no pin" for key in sorted(keys - pins.keys())]
+    return problems
+
+
+def test_a_complete_pin_file_is_clean() -> None:
+    sites = _build_sites(CI_WORKFLOW)
+    lines = [f"{r}-{_ARCH[runner]} {DIGEST}" for runner, r in sites]
+    assert _pin_problems("\n".join([f"inputs {_inputs()}", *lines]), sites) == []
+
+
+def test_a_pin_file_missing_a_site_or_holding_a_tag_is_flagged() -> None:
+    sites = _build_sites(CI_WORKFLOW)
+    text = f"inputs {_inputs()}\n24.04-amd64 {DIGEST}\n26.04-amd64 latest\n"
+    assert _pin_problems(text, sites) == [
+        "26.04-amd64 is not a digest: latest",
+        "24.04-arm64 has no pin",
+    ]
+
+
+def test_image_pins_pins_each_ci_build_site_by_digest() -> None:
+    text = (CONTEXT / "image.pins").read_text()
+    assert _pin_problems(text, _build_sites(CI_WORKFLOW)) == []
 
 
 def _build_lines(workflow: Path) -> list[tuple[dict, str]]:

@@ -10,8 +10,8 @@ name: host-test-image
 # PR's path, and a mirror outage delays only the publish. The summary prints the image.pins lines
 # to commit after a Dockerfile change merges.
 #
-# The weekly run republishes a tag that went missing. The pin then names an untagged digest, the
-# pull fails, CI builds, and the summary prints the new pin.
+# The weekly run republishes a tag that went missing. The pinned digest went with it, so the pull
+# fails, CI builds, and the summary prints the new pin.
 #
 # ansible/tests/repo/test_host_test_image.py holds these jobs equal to ci.yml's build sites,
 # because the tag carries the release and the runner's architecture.
@@ -28,6 +28,11 @@ on:
   workflow_dispatch:
 
 permissions: {}
+
+# Two overlapping runs would both find a tag absent and both push it.
+concurrency:
+  group: host-test-image
+  cancel-in-progress: false
 
 jobs:
   amd64:

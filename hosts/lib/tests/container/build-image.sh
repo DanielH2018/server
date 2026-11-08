@@ -42,7 +42,12 @@ if [[ -n "${GHCR_TOKEN:-}" ]]; then
 fi
 
 if [[ "$mode" == --publish ]]; then
-  if ! docker buildx imagetools inspect "$remote_tag" > /dev/null 2>&1; then
+  if ! answer=$(docker buildx imagetools inspect "$remote_tag" 2>&1); then
+    # Only a "not found" means absent; a registry or auth error would overwrite a pinned tag.
+    if [[ "$answer" != *"not found"* ]]; then
+      echo "::error::Whether $remote_tag exists is unknown, so nothing is pushed: $answer" >&2
+      exit 1
+    fi
     build
     docker tag "$local_tag" "$remote_tag"
     docker push "$remote_tag"
