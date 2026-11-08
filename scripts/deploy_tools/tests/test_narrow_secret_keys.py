@@ -13,6 +13,7 @@ import pytest
 import narrow_setup
 import secret_setup_readers
 from deploy_tools.narrow_lib import role_reads
+from deployer_lib import deploy_cross_role
 from deployer_lib.deploy_setup_roles import SECRET_READERS_REFUSED_EXIT
 from lib.exit_codes import DEPLOY_BROAD, FAILED
 from lib.narrow_git import CannotNarrow
@@ -152,6 +153,59 @@ def test_deploy_tags_refuses_most_of_the_fleet_naming_it(tree: Tree, capsys):
     tree.commit("three more readers")
     tree.write(SECRETS, _with(BASE_SECRETS, "bazarr_api_key", "xxx"))
     assert _deploy_tags(tree, capsys) == (DEPLOY_BROAD, "bazarr,lidarr,radarr,sonarr")
+
+
+SHIPPED_DEFAULTS = "ansible/roles/setup/demo_owner/defaults/main.yml"
+
+
+@pytest.fixture
+def shipped_defaults(tree: Tree):
+    """A row naming `demo_shipper` as a shipper of `demo_owner`'s defaults, adopted as a landing
+    adopts the merge commit's tables. Those defaults build one key from `setup_only_token`.
+
+    Returns a function taking the key demo_shipper's task reads.
+    """
+    saved = deploy_cross_role.current_tables()
+    shipped = {
+        **deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
+        SHIPPED_DEFAULTS: frozenset({"demo_shipper"}),
+    }
+    deploy_cross_role.use_tables(
+        {**saved, "SETUP_FILES_SHIPPED_BY_OTHER_ROLES": shipped}
+    )
+
+    def ship(shipper_reads: str) -> None:
+        tree.write(
+            SHIPPED_DEFAULTS,
+            'setup_built_token: "{{ setup_only_token }}"\nsetup_plain: 1\n',
+        )
+        tree.write(
+            "ansible/roles/setup/demo_shipper/tasks/main.yml",
+            f"- name: Read\n  debug: {{msg: '{{{{ {shipper_reads} }}}}'}}\n",
+        )
+        tree.commit("a shipped defaults file")
+        tree.write(SECRETS, _with(BASE_SECRETS, "setup_only_token", "xxx"))
+
+    yield ship
+    deploy_cross_role.use_tables(saved)
+
+
+def test_a_shipper_reading_none_of_the_secrets_keys_is_unread(
+    tree: Tree, capsys, shipped_defaults
+):
+    """demo_shipper ships the defaults for one plain key, so the secret skips it."""
+    shipped_defaults("setup_plain")
+    rc, out = _setup_readers(tree, capsys)
+    assert rc == 0 and out["unread"] == {SHIPPED_DEFAULTS: ["demo_shipper"]}
+
+
+def test_a_shipper_reading_a_key_built_from_the_secret_is_a_reader(
+    tree: Tree, capsys, shipped_defaults
+):
+    """The rejecting half: the key built from the secret reaches demo_shipper's task."""
+    shipped_defaults("setup_built_token")
+    rc, out = _setup_readers(tree, capsys)
+    assert rc == 0 and SHIPPED_DEFAULTS in out["paths"] and out["unread"] == {}
 
 
 def _role_tags(tree: Tree, old: str, new: str) -> frozenset[str]:
