@@ -9,7 +9,9 @@ nothing about what they hold. A host another apply already reached still read as
 - `stamp_render.yml`'s fragments hold the source hash of each template the host last rendered,
   so the fragment's line is compared with the merge commit's hash. A fragment proves only the
   renders that run whenever it is written, so the line counts only when every task in the role
-  that may render the template does (#7406).
+  that may render the template does (#7406). A stamp in a file a play in `ansible/*.yml` runs by
+  `tasks_from:`, or in a file that one imports, proves no render, because that play's tags are
+  not the walk's (#7411).
 
 Both are read per host: a stamp or a render whose `when:` skips a host asks nothing of it. A
 template every render of which is skipped on a host, with no stamp there, is held without a read,
