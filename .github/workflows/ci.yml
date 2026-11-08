@@ -227,6 +227,9 @@ jobs:
     # the `workflow-runners-are-pinned` row of ansible/tests/repo/test_census_rows_text.py.
     runs-on: ubuntu-26.04
     timeout-minutes: 20  # cap a wedged network hook so it can't burn to the 6h default
+    env:
+      # The Vale release the `vale` hook runs, in job env so the cache key below can read it.
+      VALE_URL: https://github.com/vale-cli/vale/releases/download/v3.26.0/vale_3.26.0_Linux_64-bit.tar.gz
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -260,12 +263,35 @@ jobs:
       # the pinned URL, an upstream asset rename) exits 0 and writes the error body to
       # /tmp/vale.tar.gz, so the step dies two lines down at `tar xzf` with "not in gzip
       # format" — naming the tarball instead of the URL that was never fetched.
+      #
+      # Each GitHub release download in this file sits behind an actions/cache keyed on its pin,
+      # so it runs once per version bump and a release outage (#7625) fails only the bump's run.
+      # The cache holds the download, never the installed binary, and each run checks its digest
+      # where it has one. ENFORCED by ansible/tests/repo/test_ci_release_downloads_are_cached.py.
+      - name: Cache the Vale release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/pinned/vale
+          key: vale-${{ runner.os }}-${{ env.VALE_URL }}
+
+      # vale.sh's stamp skips `vale sync` when the restored package matches .vale.ini's pin.
+      - name: Cache the Vale style package
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: styles/Google
+          key: vale-styles-${{ runner.os }}-${{ hashFiles('.vale.ini') }}
+
       - name: Install Vale
         run: |
           set -euo pipefail
-          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSL -o /tmp/vale.tar.gz \
-            https://github.com/vale-cli/vale/releases/download/v3.26.0/vale_3.26.0_Linux_64-bit.tar.gz
-          tar xzf /tmp/vale.tar.gz -C /usr/local/bin vale
+          archive="$RUNNER_TEMP/pinned/vale/vale.tar.gz"
+          if [[ -f "$archive" ]]; then
+            echo "Vale: cached $VALE_URL"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/vale"
+            curl --retry 5 --retry-all-errors --retry-delay 5 -fsSL -o "$archive" "$VALE_URL"
+          fi
+          tar xzf "$archive" -C /usr/local/bin vale
           vale --version
           scripts/validate/vale.sh
 
@@ -277,6 +303,16 @@ jobs:
       # Alloy is not fetched here: its 167 MB release is provisioned on first use, by the
       # red-proof step below.
       # It is the tool path the hook itself calls, so CI and a worktree provision the same way.
+      # The script's stamps skip every tool the restored cache already holds. Alloy stays out of
+      # the entry: it is 570 MB unpacked.
+      - name: Cache promtool, amtool, pint and lokitool
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .git/alert-tools
+            !.git/alert-tools/alloy-*
+          key: alert-tools-${{ runner.os }}-${{ hashFiles('scripts/validate/alert_tools.sh', 'ansible/roles/k8s/observability/defaults/main.yml', 'ansible/roles/k8s/loki-homelab/defaults/main.yml') }}
+
       - name: Provision promtool, amtool, pint and lokitool
         run: scripts/validate/alert_tools.sh
 
@@ -608,21 +644,41 @@ jobs:
       # amd64 `version` and `sha256` of `sops` in homelab-tools' package.yml, as the
       # sops_manifest_type_proof job does, so a sops bump has no CI copy to move. Renovate moves
       # the version and the digest together there. age comes from apt, as the hosts install it.
-      - name: Install sops and age for the cluster_vars tests
+      - name: Read the sops pin
+        id: sops
         run: |
           set -euo pipefail
           tools=hosts/packages/homelab-tools/package.yml
           sops_version=$(awk '/^  sops:/ {s=1} s && /version:/ {print $2; exit}' "$tools")
           sops_sha256=$(awk '/^  sops:/ {s=1} s && /sha256:/ {print $2; exit}' "$tools")
           [ -n "$sops_version" ] && [ -n "$sops_sha256" ]
-          mkdir -p "$RUNNER_TEMP/bin"
-          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$RUNNER_TEMP/bin/sops" \
-            "https://github.com/getsops/sops/releases/download/$sops_version/sops-$sops_version.linux.amd64"
-          echo "$sops_sha256  $RUNNER_TEMP/bin/sops" | sha256sum -c --strict || {
-            echo "::error::sops $sops_version does not match its sha256 in hosts/packages/homelab-tools/package.yml"
+          echo "version=$sops_version" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sops_sha256" >> "$GITHUB_OUTPUT"
+      - name: Cache the sops release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/pinned/sops
+          key: sops-${{ runner.os }}-${{ steps.sops.outputs.version }}-${{ steps.sops.outputs.sha256 }}
+      - name: Install sops and age for the cluster_vars tests
+        env:
+          SOPS_VERSION: ${{ steps.sops.outputs.version }}
+          SOPS_SHA256: ${{ steps.sops.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          sops="$RUNNER_TEMP/pinned/sops/sops"
+          if [[ -f "$sops" ]]; then
+            echo "sops $SOPS_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/sops"
+            curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$sops" \
+              "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
+          fi
+          echo "$SOPS_SHA256  $sops" | sha256sum -c --strict || {
+            echo "::error::sops $SOPS_VERSION does not match its sha256 in hosts/packages/homelab-tools/package.yml"
             exit 1
           }
-          chmod +x "$RUNNER_TEMP/bin/sops"
+          mkdir -p "$RUNNER_TEMP/bin"
+          install -m 0755 "$sops" "$RUNNER_TEMP/bin/sops"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           sudo apt-get install -y --no-install-recommends age \
             || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends age; }
@@ -923,6 +979,10 @@ jobs:
     env:
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
+      # In job env so the kind cache key can read them.
+      # renovate: datasource=github-release-attachments depName=kubernetes-sigs/kind
+      KIND_VERSION: v0.33.0
+      KIND_SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -966,26 +1026,60 @@ jobs:
 
       # sops comes from the hosts' pin itself, read out of homelab-tools' package.yml, so this job
       # holds no copy that could drift. age comes from apt, as the hosts install it.
-      - name: Install sops, age and kind
+      - name: Read the sops pin
+        id: sops
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
-        env:
-          # renovate: datasource=github-release-attachments depName=kubernetes-sigs/kind
-          KIND_VERSION: v0.33.0
-          KIND_SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
         run: |
           set -euo pipefail
           tools=hosts/packages/homelab-tools/package.yml
           sops_version=$(awk '/^  sops:/ {s=1} s && /version:/ {print $2; exit}' "$tools")
           sops_sha256=$(awk '/^  sops:/ {s=1} s && /sha256:/ {print $2; exit}' "$tools")
           [ -n "$sops_version" ] && [ -n "$sops_sha256" ]
+          echo "version=$sops_version" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sops_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the sops release
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/pinned/sops
+          key: sops-${{ runner.os }}-${{ steps.sops.outputs.version }}-${{ steps.sops.outputs.sha256 }}
+
+      - name: Cache the kind release
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/pinned/kind
+          key: kind-${{ runner.os }}-${{ env.KIND_VERSION }}-${{ env.KIND_SHA256 }}
+
+      - name: Install sops, age and kind
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        env:
+          SOPS_VERSION: ${{ steps.sops.outputs.version }}
+          SOPS_SHA256: ${{ steps.sops.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          sops="$RUNNER_TEMP/pinned/sops/sops"
+          if [[ -f "$sops" ]]; then
+            echo "sops $SOPS_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/sops"
+            curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$sops" \
+              "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
+          fi
+          echo "$SOPS_SHA256  $sops" | sha256sum -c --strict
+          kind="$RUNNER_TEMP/pinned/kind/kind"
+          if [[ -f "$kind" ]]; then
+            echo "kind $KIND_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/kind"
+            curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$kind" \
+              "https://github.com/kubernetes-sigs/kind/releases/download/$KIND_VERSION/kind-linux-amd64"
+          fi
+          echo "$KIND_SHA256  $kind" | sha256sum -c --strict
           mkdir -p "$RUNNER_TEMP/bin"
-          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$RUNNER_TEMP/bin/sops" \
-            "https://github.com/getsops/sops/releases/download/$sops_version/sops-$sops_version.linux.amd64"
-          echo "$sops_sha256  $RUNNER_TEMP/bin/sops" | sha256sum -c --strict
-          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$RUNNER_TEMP/bin/kind" \
-            "https://github.com/kubernetes-sigs/kind/releases/download/$KIND_VERSION/kind-linux-amd64"
-          echo "$KIND_SHA256  $RUNNER_TEMP/bin/kind" | sha256sum -c --strict
-          chmod +x "$RUNNER_TEMP/bin/sops" "$RUNNER_TEMP/bin/kind"
+          install -m 0755 "$sops" "$RUNNER_TEMP/bin/sops"
+          install -m 0755 "$kind" "$RUNNER_TEMP/bin/kind"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           sudo apt-get install -y --no-install-recommends age \
             || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends age; }
@@ -1161,14 +1255,26 @@ jobs:
 
       # 12 retries 30s apart outlast a release-host outage, as TOOL_RETRY_WINDOW_S does for the
       # pins below. A persistent outage fails at the first download, inside the job's timeout.
+      - name: Cache the nfpm release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/pinned/nfpm
+          key: nfpm-${{ runner.os }}-${{ env.NFPM_VERSION }}-${{ env.NFPM_SHA256 }}
+
       - name: Fetch the pinned nfpm and check its sha256
         run: |
           set -euo pipefail
+          archive="$RUNNER_TEMP/pinned/nfpm/nfpm.tar.gz"
+          if [[ -f "$archive" ]]; then
+            echo "nfpm $NFPM_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/nfpm"
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$archive" \
+              "https://github.com/goreleaser/nfpm/releases/download/$NFPM_VERSION/nfpm_${NFPM_VERSION#v}_Linux_x86_64.tar.gz"
+          fi
+          echo "$NFPM_SHA256  $archive" | sha256sum -c --strict
           mkdir -p "$RUNNER_TEMP/bin"
-          curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$RUNNER_TEMP/nfpm.tar.gz" \
-            "https://github.com/goreleaser/nfpm/releases/download/$NFPM_VERSION/nfpm_${NFPM_VERSION#v}_Linux_x86_64.tar.gz"
-          echo "$NFPM_SHA256  $RUNNER_TEMP/nfpm.tar.gz" | sha256sum -c --strict
-          tar -xzf "$RUNNER_TEMP/nfpm.tar.gz" -C "$RUNNER_TEMP/bin" nfpm
+          tar -xzf "$archive" -C "$RUNNER_TEMP/bin" nfpm
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/bin/nfpm" --version
 
@@ -1275,19 +1381,41 @@ jobs:
       # checksums file, so the version has one home and Renovate's prek.toml manager moves it.
       # `prove-scan` runs first: it shows the binary exempts a token at a package's ciphertext
       # path and flags the same token anywhere else.
-      - name: Scan the named package roots for secrets
+      - name: Read the gitleaks pin
+        id: gitleaks
         run: |
           set -euo pipefail
           version=$(sed -n '/repo = "https:\/\/github.com\/gitleaks\/gitleaks"/{n;s/^rev = "v\(.*\)"$/\1/p}' prek.toml)
           [ -n "$version" ] || { echo "::error::prek.toml pins no gitleaks rev"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the gitleaks release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/pinned/gitleaks
+          key: gitleaks-${{ runner.os }}-${{ steps.gitleaks.outputs.version }}
+
+      - name: Scan the named package roots for secrets
+        env:
+          GITLEAKS_VERSION: ${{ steps.gitleaks.outputs.version }}
+        run: |
+          set -euo pipefail
+          version="$GITLEAKS_VERSION"
+          dl="$RUNNER_TEMP/pinned/gitleaks"
+          archive="gitleaks_${version}_linux_x64.tar.gz"
+          if [[ -f "$dl/$archive" && -f "$dl/checksums.txt" ]]; then
+            echo "gitleaks $version: cached"
+          else
+            mkdir -p "$dl"
+            base="https://github.com/gitleaks/gitleaks/releases/download/v$version"
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$dl/$archive" "$base/$archive"
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$dl/checksums.txt" "$base/gitleaks_${version}_checksums.txt"
+          fi
           mkdir -p "$RUNNER_TEMP/leaks"
-          cd "$RUNNER_TEMP/leaks"
-          base="https://github.com/gitleaks/gitleaks/releases/download/v$version"
-          curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLO "$base/gitleaks_${version}_linux_x64.tar.gz"
-          curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo checksums.txt "$base/gitleaks_${version}_checksums.txt"
+          cd "$dl"
           # --ignore-missing skips the other platforms' lines; a run that verifies no file fails.
           sha256sum -c --ignore-missing --strict checksums.txt
-          tar -xzf "gitleaks_${version}_linux_x64.tar.gz" gitleaks
+          tar -xzf "$archive" -C "$RUNNER_TEMP/leaks" gitleaks
           cd "$GITHUB_WORKSPACE"
           uv run python scripts/validate/host_packages.py prove-scan \
             --gitleaks "$RUNNER_TEMP/leaks/gitleaks" --config .gitleaks.toml
