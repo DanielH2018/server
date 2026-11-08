@@ -31,11 +31,14 @@ PIN_EXPRESSION = re.compile(r"\$\{\{[^}]*\b(?:env\.|steps\.|hashFiles\()")
 SCRIPT_CACHES = {
     "scripts/validate/alert_tools.sh": ".git/alert-tools",
     "scripts/validate/vale.sh": "styles/Google",
+    # Provisions Alloy through alert_tools.sh, keeping the zip in ALERT_TOOLS_ARCHIVES.
+    "scripts/validate/alert_rules.py --prove-red": "$RUNNER_TEMP/pinned/alloy",
 }
 # Steps the census must find, so a reshaped workflow cannot pass empty.
 KNOWN_DOWNLOADS = {
     ("ci.yml", "hooks", "Install Vale"),
     ("ci.yml", "hooks", "Provision promtool, amtool, pint and lokitool"),
+    ("ci.yml", "hooks", "Prove each alert tool rejects its bad fixture"),
     ("ci.yml", "pytest", "Install sops and age for the cluster_vars tests"),
     ("ci.yml", "sops_manifest_type_proof", "Install sops, age and kind"),
     ("ci.yml", "host_packages_build", "Fetch the pinned nfpm and check its sha256"),
@@ -195,3 +198,13 @@ def test_a_curl_outside_the_pinned_tree_is_flagged():
         }
     }
     assert "j: s: curls outside $RUNNER_TEMP/pinned/" in problems(workflow)
+
+
+def test_an_uncached_alloy_zip_is_flagged(workflow):
+    broken = copy.deepcopy(workflow)
+    steps = _job_steps(broken, "hooks")
+    steps.remove(_step(broken, "hooks", "Cache the Alloy release zip"))
+    assert problems(broken) == [
+        "hooks: Prove each alert tool rejects its bad fixture: "
+        "no earlier actions/cache step caches $RUNNER_TEMP/pinned/alloy"
+    ]

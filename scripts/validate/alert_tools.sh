@@ -36,6 +36,11 @@
 # zipped), against about 100 MB for each other tool, and only the Alloy config check runs it.
 # The other four tools do not wait on that fetch.
 #
+# ALERT_TOOLS_ARCHIVES KEEPS THE DOWNLOADS. When it names a directory, each verified archive and
+# its sums file are copied to `$ALERT_TOOLS_ARCHIVES/<name>-<version>/`, and a later fetch of
+# that version reads them from there instead of curling. The digest is checked either way. CI
+# points it at a cached directory for Alloy, whose unpacked tree is too large to cache (#7653).
+#
 # With no arguments the script provisions the four other tools and exits 0. That is how CI
 # provisions before the hooks run. With `promtool ...`, `amtool ...`, `pint ...`,
 # `lokitool ...` or `alloy ...` it provisions, then runs that tool with the remaining arguments.
@@ -93,7 +98,7 @@ image_version() {
 #######################################
 # Fetch, verify and unpack one tool unless its stamped version directory already exists.
 # Globals:
-#   cache, tmp (set while a fetch is in progress)
+#   cache, tmp (set while a fetch is in progress), ALERT_TOOLS_ARCHIVES (optional)
 # Arguments:
 #   The cache name (prometheus, alertmanager, pint or loki), its version, the release download
 #   URL, the archive's name without its extension, that extension (`tar.gz` or `zip`), the
@@ -105,7 +110,10 @@ provision() {
   local name="$1" version="$2" url="$3" base="$4" ext="$5" sums="$6" member="$7" binary="$8"
   local dir="$cache/$name-$version"
   local stamp="$dir/.provisioned"
-  local want got
+  local want got kept=""
+  if [[ -n "${ALERT_TOOLS_ARCHIVES:-}" ]]; then
+    kept="$ALERT_TOOLS_ARCHIVES/$name-$version"
+  fi
 
   if [[ "$(cat "$stamp" 2>/dev/null || true)" == "$base" ]]; then
     return 0
@@ -125,13 +133,22 @@ provision() {
     tmp="$(mktemp -d "$cache/.fetch.XXXXXX")"
     # The speed bound aborts a connection that stalls below 1 KB/s for a minute, so a hung fetch
     # cannot block a commit forever. --retry rides out a transient 5xx from the release host.
-    curl -fsSL --retry 5 --retry-delay 10 --speed-limit 1024 --speed-time 60 -o "$tmp/$base.$ext" "$url/$base.$ext"
-    curl -fsSL --retry 5 --retry-delay 10 --speed-limit 1024 --speed-time 60 -o "$tmp/$sums" "$url/$sums"
+    if [[ -n "$kept" && -f "$kept/$base.$ext" && -f "$kept/$sums" ]]; then
+      echo "alert_tools.sh: $name $version: using the kept archive in $kept" >&2
+      cp "$kept/$base.$ext" "$kept/$sums" "$tmp/"
+    else
+      curl -fsSL --retry 5 --retry-delay 10 --speed-limit 1024 --speed-time 60 -o "$tmp/$base.$ext" "$url/$base.$ext"
+      curl -fsSL --retry 5 --retry-delay 10 --speed-limit 1024 --speed-time 60 -o "$tmp/$sums" "$url/$sums"
+    fi
     want="$(awk -v f="$base.$ext" '$2 == f {print $1}' "$tmp/$sums")"
     got="$(sha256sum "$tmp/$base.$ext" | cut -d' ' -f1)"
     if [[ -z "$want" || "$want" != "$got" ]]; then
       echo "alert_tools.sh: $base.$ext has sha256 $got, and $sums lists '${want:-nothing}'" >&2
       return 1
+    fi
+    if [[ -n "$kept" ]]; then
+      mkdir -p "$kept"
+      cp "$tmp/$base.$ext" "$tmp/$sums" "$kept/"
     fi
     # Prometheus's tarballs hold `<base>/promtool`, pint's holds `pint-linux-<arch>` at its
     # root, and Loki's zip holds `lokitool-linux-<arch>` at its root, so the member is

@@ -143,9 +143,11 @@ def checkout(tmp_path):
     return repo
 
 
-def _run(repo: Path, *args: str):
+def _run(repo: Path, *args: str, **env_vars: str):
     env = scrubbed_env(
-        CURL_LOG=str(repo.parent / "curl.log"), RELEASES=str(repo.parent / "releases")
+        CURL_LOG=str(repo.parent / "curl.log"),
+        RELEASES=str(repo.parent / "releases"),
+        **env_vars,
     )
     return run(
         [str(repo / "scripts" / "validate" / "alert_tools.sh"), *args],
@@ -250,3 +252,29 @@ def test_every_fetch_retries_a_transient_server_error_is_clean(checkout):
     calls = (checkout.parent / "curl.log.args").read_text().splitlines()
     assert len(calls) >= 2, calls
     assert all("--retry 5 --retry-delay 10" in call for call in calls), calls
+
+
+def test_a_kept_archive_is_reused_with_no_fetch_is_clean(checkout):
+    kept = checkout.parent / "kept"
+    assert _run(checkout, ALERT_TOOLS_ARCHIVES=str(kept)).returncode == 0
+    shutil.rmtree(checkout / ".git" / "alert-tools")
+    (checkout.parent / "curl.log").unlink()
+
+    result = _run(checkout, "lokitool", "--version", ALERT_TOOLS_ARCHIVES=str(kept))
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "lokitool --version"
+    assert _fetches(checkout) == []
+    assert (kept / f"loki-{LOKI_VERSION}" / "SHA256SUMS").is_file()
+
+
+def test_a_kept_archive_with_a_wrong_digest_is_flagged(checkout):
+    kept = checkout.parent / "kept"
+    assert _run(checkout, ALERT_TOOLS_ARCHIVES=str(kept)).returncode == 0
+    shutil.rmtree(checkout / ".git" / "alert-tools")
+    (kept / f"loki-{LOKI_VERSION}" / f"lokitool-linux-{ARCH}.zip").write_bytes(b"x")
+
+    result = _run(checkout, "lokitool", "--version", ALERT_TOOLS_ARCHIVES=str(kept))
+
+    assert result.returncode != 0
+    assert "SHA256SUMS lists" in result.stderr, result.stderr

@@ -2,8 +2,8 @@
 name = "server-homelab"
 version = "0.0.0"
 requires-python = ">=3.15"
-# The renderer's whole runtime closure. promote.yml sets UV_NO_DEV and UV_NO_GROUP=lint, so a
-# package listed only in a group is absent from every promote job; its download cannot block it.
+# The renderer's whole runtime closure. promote.yml and ci.yml's validator jobs set UV_NO_DEV and
+# UV_NO_GROUP=lint, so a package listed only in a group is absent there; its download cannot block them.
 dependencies = [
   "pyyaml",
   "jinja2>=3",
