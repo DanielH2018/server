@@ -55,14 +55,14 @@ runs:
       if: inputs.uv == 'true'
       uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3  # no floating major tag is published; pin the exact release
       with:
-        # Most prek hooks shell out to `uv run`, which resolves the whole `dev` group
+        # Most prek hooks shell out to `uv run`, which resolves the `dev` and `lint` groups
         # (ansible-core, pytest, docker, flask, ruff, ty, shellcheck-py) before the first one
         # executes. Without this the download is repaid on every run. Keyed on uv.lock by
         # the action itself, so a lock change invalidates it exactly.
         enable-cache: true
-        # The cache saves only on a miss, so a UV_NO_DEV job sharing the dev key would leave
-        # every dev job a near-empty entry to re-download around.
-        cache-suffix: ${{ env.UV_NO_DEV == '1' && 'runtime' || 'dev' }}
+        # The cache saves only on a miss, so a UV_NO_DEV or UV_NO_GROUP=lint job sharing the
+        # full key would leave every lint job a partial entry to re-download around.
+        cache-suffix: ${{ env.UV_NO_DEV == '1' && 'runtime' || env.UV_NO_GROUP == 'lint' && 'test' || 'dev' }}
 
     # pyproject.toml forces PyYAML's libyaml extension, so a source build (an interpreter
     # PyYAML ships no wheel for) needs these headers or fails.
@@ -72,7 +72,7 @@ runs:
       run: dpkg -s libyaml-dev >/dev/null 2>&1 || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libyaml-dev; }
 
     # Whichever job finishes first writes the cache entry, so every job syncs the whole
-    # profile here, even one that never runs `uv`. UV_NO_DEV still narrows it.
+    # profile here, even one that never runs `uv`. UV_NO_DEV and UV_NO_GROUP still narrow it.
     - name: Sync the uv environment
       if: inputs.uv == 'true'
       shell: bash
