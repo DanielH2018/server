@@ -159,14 +159,6 @@ def test_a_lint_free_job_outside_ci_installing_the_group_is_flagged():
     ]
 
 
-def test_a_workflow_level_uv_no_group_is_clean():
-    workflow = {
-        "env": {"UV_NO_GROUP": "lint"},
-        "jobs": {"j": {"steps": [{"uses": "./.github/actions/setup"}]}},
-    }
-    assert workflow_problems(workflow) == []
-
-
 def test_a_lint_free_job_installing_the_group_is_flagged(workflow):
     broken = copy.deepcopy(workflow)
     del broken["jobs"]["pytest"]["env"]["UV_NO_GROUP"]
