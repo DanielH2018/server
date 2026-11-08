@@ -1289,6 +1289,30 @@ jobs:
       # wrong digest or a 404 URL fails here, and a Renovate bump of a pin reaches master only
       # if its new digest verifies. The cache is keyed by digest, so the base and head trees
       # share one download.
+      #
+      # The cache directory persists across runs under a key hashed from every rendered
+      # tools.json, base and head (#7449). A run with unchanged pins restores it and requests no
+      # release URL. A pin bump changes the key and misses, so the new pin is downloaded and
+      # verified. No restore-keys, so an entry never carries a retired pin into the hand-off.
+      # `download_tool` checks a cached file against its pin on every use, so a bad entry is
+      # fetched anew.
+      - name: Key the homelab-tools cache by the rendered pins
+        id: tools-key
+        if: >-
+          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+          || steps.render.outputs.cases == 'true'
+        run: |
+          set -euo pipefail
+          pins=$(find "$RUNNER_TEMP/render" -name tools.json -print0 | sort -z | xargs -0r cat | sha256sum)
+          echo "key=homelab-tools-${pins%% *}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the homelab-tools cache
+        if: steps.tools-key.outputs.key != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: ${{ steps.tools-key.outputs.key }}
+
       - name: Fetch the pinned homelab-tools binaries and check their sha256
         if: >-
           github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
