@@ -1550,7 +1550,11 @@ halves (exit 4).
       therefore writes `/etc/rancher/k3s/config.yaml.d/90-drill.yaml`, which sets both to
       the guest's own address. Before step 5 it also masks every timer and long-running
       service the rendered package ships, except `k3s.service`, `homelab-reconcile.service`
-      and `homelab-secrets.service`, so nothing the package schedules runs. Reconcile then
+      and `homelab-secrets.service`, so nothing the package schedules runs.
+      `coredns-host.service` also stays unmasked, because step 6 refuses to stop
+      systemd-resolved until it answers on 127.0.0.1. The masks cover sockets too, and they
+      go under `/run/systemd/system`, which outranks the package's `/usr/lib` and dies with
+      the guest. Reconcile then
       reports the masked units as refused starts, which the drill expects and does not
       grade. The package's netplan file is `activate: manual:systemd-networkd.service`
       (H7.9b), and the transient guest never reboots, so it never takes the LAN address.
@@ -1567,8 +1571,7 @@ halves (exit 4).
       server token and the guest holds no copy of the archive signing key. The guest's age
       key is fresh and is no SOPS recipient, so `homelab-secrets` decrypts nothing. k3s's
       etcd-s3 credential is a Secret that Flux applies from `cluster-base`, which the guest
-      never receives. If k3s refuses to start with `etcd-s3` on and no Secret, the override
-      file also sets `etcd-s3: false`, and the PR body records which happened.
+      never receives, so the override file also sets `etcd-s3: false`.
     - *Blast radius.* The drill touches a transient domain and its disk on daniel-server,
       and the existing `staging` network and fence. It takes CPU and memory from the agent
       node for one run, sized like the etcd drill's guest. Every service keeps serving,
@@ -2222,7 +2225,7 @@ the `manual_plane` clearing, and *Rollback*'s
     `docs/break-glass.md` and `docs/host-packages.md`, and H7.15d's host census is their one
     test. It carries R4 PR 7b's kind drill run on this PR, the guest drill with its blast
     radius (**operator-only**, exit observation 4), and the D6 case that Open question 14
-    asks for. The guest drill's runner waits for H7.34's move of the orchestrator
+    asks for. The guest drill's runner is the orchestrator's `--rehearse-bootstrap` mode
     ([#7554](https://github.com/DanielH2018/server/issues/7554)), and the D6 case waits for a
     hosted run ([#7555](https://github.com/DanielH2018/server/issues/7555)). It merges before
     H7.53. H7.42 merged with `k3s`'s tasks still in place, so

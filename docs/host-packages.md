@@ -842,20 +842,36 @@ To rebuild without GitHub or GHCR, take every fetch from the break-glass kit:
 ### The guest drill
 
 The guest drill proves daniel-box's procedure above on production hardware. It waits for the k3s
-upgrade. No script in the tree runs it yet, so the operator cannot run it from this page until
-[#7554](https://github.com/DanielH2018/server/issues/7554) adds the runner. *The proofs* in
-[H7](target-architecture/host/h7-delete-ansible.md) holds its fence, its identity and its three
-guest-local deviations.
+upgrade. *The proofs* in [H7](target-architecture/host/h7-delete-ansible.md) holds its fence, its
+identity and its three guest-local deviations.
+
+To run it, use a checkout on daniel-server whose `HEAD` is a green first-parent commit of master,
+with its environment built by `uv run python --version`. Then run, as root on daniel-server:
+
+```bash
+sudo /usr/lib/homelab/etcd-drill-prepare
+sudo /usr/lib/homelab/etcd-restore-drill-vm --rehearse-bootstrap --repo <checkout>
+```
+
+The orchestrator renders daniel-box's packages from the checkout to learn which units to mask, and
+the guest clones GitHub at that checkout's `HEAD`. The run's directory under
+`/var/log/etcd-restore-drill/` holds each step's output, `masks.txt`, `bootstrap-verdict.txt` and
+`bootstrap-state.txt`. The run writes no stamp and no textfile verdict, and its syslog tag is
+`etcd-drill-bootstrap-drill`.
 
 - **What it runs.** A transient guest on the `staging` network plays daniel-box, with the clone
   fetched from GitHub. The drill skips the token and key restores, so the guest holds no production
-  credential. The deviations go in before the install, and k3s starts by hand:
+  credential. The guest is renamed `daniel-box` first, because step 1 refuses any other name. The
+  deviations go in before the install, and k3s starts by hand:
     1. `bootstrap-host.sh daniel-box --until 4 --local-build <clone>`;
-    1. the three guest-local deviations;
+    1. the three guest-local deviations. The masks live under `/run/systemd/system`, and
+       `coredns-host.service` stays unmasked, because step 6 refuses to stop systemd-resolved
+       until it answers on 127.0.0.1;
     1. `bootstrap-host.sh daniel-box --local-build <clone>`;
     1. `systemctl enable --now k3s.service`.
 - **What passes.** The guest has `homelab-tools`, `homelab-updater` and `homelab-daniel-box`
-  installed, `k3s.service` is the only k3s unit, and `k3s kubectl get node daniel-box` reads Ready.
+  installed, `k3s.service` is the only k3s unit, `k3s kubectl get node daniel-box` reads Ready,
+  and `ufw` is active. The orchestrator polls that check over fresh ssh sessions.
 - **Blast radius.** The drill creates one transient domain and its disk on daniel-server, and it
   takes CPU and memory from the agent node for one run. It uses the existing `staging` network and
   its fence. Every service keeps serving, because the guest reaches no LAN address. The rollback
