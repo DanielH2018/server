@@ -394,7 +394,9 @@ as root on the held host, from a LAN session:
    `<action> starts` and `<action> took <N>s` around every command it calls. A run its start
    timeout killed ends on the `starts` line of the action it was in, when the time ran out inside
    a command or the `dpkg` lock wait. Python work between commands has no line, so a long gap after
-   a `took` line means that work.
+   a `took` line means that work. The wait for the apt transaction, post-invoke hooks included, runs
+   first in `homelab-reconcile-wait.service` under its own 5-minute limit, and logs `wait for apt
+   to release the dpkg lock took <N>s` with the same tag.
 1. When the installed package is fine and the failure was transient, rerun reconcile. The
    command clears the hold only if reconcile passes:
 
