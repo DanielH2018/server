@@ -95,9 +95,9 @@ groups:
           summary: daniel-box's secret-rotation audit reported a failure.
           description: >-
             secret-rotation-audit.sh on daniel-box ended with a non-zero exit code: a secret is
-            past its rotation window, a secret in secrets.yml is missing from the registry, or a
-            prior weekly secret-rotate left the tree dirty or unpushed. Run `secret_rotation.py
-            audit` by hand to read which.
+            past its rotation window, a secret in secrets.yml is missing from the registry, a
+            registry row carries a tier with no cadence, or the gh CLI token is not
+            authenticated. Run `secret_rotation.py audit` by hand to read which.
       - alert: SecretRotationAuditNotReporting
         expr: |
           (

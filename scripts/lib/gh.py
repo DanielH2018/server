@@ -1,7 +1,7 @@
 """One way to run the GitHub CLI from a script, with no prompt and no notifier.
 
 WHY. `lib.git` exists because five scripts each carried a private `_git()` that disagreed on
-the two things that matter. `gh` is heading the same way: the docs-refresh and secret-rotate
+the two things that matter. `gh` is heading the same way: the docs-refresh and eval-run
 crons call it inline, `land.sh` calls it inline, and `findings.py` is the first Python caller
 that WRITES through it. A `gh` that prompts (`GH_PROMPT_DISABLED` unset) hangs a cron or a
 background job forever, and the update notifier writes to stderr on the first call of the

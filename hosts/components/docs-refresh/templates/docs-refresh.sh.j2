@@ -25,9 +25,8 @@
 # alternative -- rendering at serve time -- is always current and completely invisible: a
 # generator bug would reach the page with nothing to catch it.
 #
-# IT OPENS A PR. It used to write straight to master, on the stated grounds that
-# secret-rotate.sh already did and "the path and its permissions are proven". They were
-# not. A repository ruleset rejects every direct write to master:
+# IT OPENS A PR. It used to write straight to master, on the stated grounds that "the path
+# and its permissions are proven". They were not. A repository ruleset rejects every direct write to master:
 #
 #   remote: - Required status check "prek (lint + validate + tests + secrets)" is expected.
 #   ! [remote rejected]   (declined due to repository rule violations)
@@ -43,14 +42,10 @@
 # acceptable because every byte it commits was produced by a generator whose output is itself
 # tested.
 #
-# secret-rotate.sh had the same bug and got its own change (#427), for the reason noted here:
-# it rotates live credentials, so its failure mode and its remedy are different. It publishes
-# through a PR too now.
-#
 # ONE UNLANDED BRANCH AT A TIME. After publishing one this script resets master back to
 # origin, so the next run regenerates the same diff and would publish a duplicate. It asks
 # `publish_pr.py unlanded` first and exits instead. That gate reads origin rather than the
-# open-PR list, which is secret-rotate's reasoning: `gh pr create` runs after the push, so a
+# open-PR list: `gh pr create` runs after the push, so a
 # create failure leaves the branch on origin with no PR and no local trace at all, and an
 # open-PR check reads exactly that state as clean (#1066).
 #
@@ -121,7 +116,7 @@ DEGRADED_MSG=""
 # "${LOG:-}".
 on_exit() {
   rm -f "${LOG:-}"
-  # `status=` prefix, matching secret-rotate.sh: that token marks a host check's verdict in
+  # `status=` prefix: that token marks a host check's verdict in
   # syslog and Loki, and the message lives only in this line.
   logger -t docs-refresh "status=${PUSH_STATUS} ${PUSH_MSG}"
   # The textfile verdict, which DocsRefreshFailed and DocsRefreshNotReporting read. Every exit
@@ -365,7 +360,7 @@ fi
 # and it does not need the PR) and stop. If CI is stuck the PRs would otherwise accumulate
 # one per run, twice a day, with nobody looking.
 #
-# GATED ON ORIGIN, not on the open-PR list, which is secret-rotate's reasoning applied here:
+# GATED ON ORIGIN, not on the open-PR list:
 # `gh pr create` runs AFTER the push inside the publisher, so a create failure -- a `gh`
 # timeout against the 60/hour quota is enough -- leaves docs-refresh/<stamp> on origin with no
 # PR and no local trace at all. An open-PR check reads that state as "nothing open" and
@@ -537,8 +532,7 @@ if git diff --cached --quiet; then
   exit 0
 fi
 
-# Commit-stage hooks run. Unlike secret-rotate, this commit has no live-but-uncommitted state
-# to strand: if a hook rejects it, nothing has been deployed and the right outcome is a clean
+# Commit-stage hooks run. This commit has no live-but-uncommitted state to strand: if a hook rejects it, nothing has been deployed and the right outcome is a clean
 # abort. None of them runs the suite, so this script runs it itself below.
 #
 # A hook that can fail on GENERATED content wedges this cron permanently -- it would abort,
@@ -606,7 +600,7 @@ if [ "$COMMIT_RC" -ne 0 ]; then
 fi
 
 # Branch, push, reset master, PR, landing: scripts/deploy_tools/publish_pr.py, shared with
-# eval-run and secret-rotate. Its header carries the ordering and the HEAD~1 reasoning. It
+# eval-run. Its header carries the ordering and the HEAD~1 reasoning. It
 # prints one line to alert with, and its exit code says where the commit is: 1 while it is
 # still local on master, 2 once the branch is on origin without a PR.
 PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \

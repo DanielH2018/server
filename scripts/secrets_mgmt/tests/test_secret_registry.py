@@ -40,8 +40,8 @@ def _reg(*entries):
 # ── staggered seeding ───────────────────────────────────────────────────────
 def test_seed_is_deterministic():
     today = dt.date(2026, 6, 11)
-    assert seed_last_rotated("x_push_token", "auto", today) == seed_last_rotated(
-        "x_push_token", "auto", today
+    assert seed_last_rotated("x_push_token", "assisted", today) == seed_last_rotated(
+        "x_push_token", "assisted", today
     )
 
 
@@ -49,8 +49,8 @@ def test_seed_never_immediately_overdue_and_within_window():
     today = dt.date(2026, 6, 11)
     # Explicit tiers: `external` is set by a registry edit, never by `classify` (#3749).
     for name, tier in (
-        ("a_push_token", "auto"),
-        ("b_push_token", "auto"),
+        ("a_push_token", "assisted"),
+        ("b_push_token", "assisted"),
         ("grafana_admin_password", "assisted"),
         ("cloudflare_dns_token", "external"),
     ):
@@ -73,13 +73,13 @@ def test_seeds_spread_due_dates_no_single_day_pileup():
     today = dt.date(2026, 6, 11)
     names = ["mb_%d_push_token" % i for i in range(20)]
     due = []
-    cadence = DEFAULT_TIER_DAYS["auto"]
+    cadence = DEFAULT_TIER_DAYS["assisted"]
     assert cadence is not None
     for n in names:
-        seeded = seed_last_rotated(n, "auto", today)
+        seeded = seed_last_rotated(n, "assisted", today)
         assert seeded is not None
-        due.append(due_date(n, {"tier": "auto", "last_rotated": seeded}))
-    # 20 auto secrets must not all fall on the same day — expect many distinct due dates.
+        due.append(due_date(n, {"tier": "assisted", "last_rotated": seeded}))
+    # 20 assisted secrets must not all fall on the same day — expect many distinct due dates.
     assert len(set(due)) >= 12
 
 
@@ -89,17 +89,16 @@ def test_seeds_spread_due_dates_no_single_day_pileup():
 # proves it piles up. Without the second half the first is only ever observed passing, and
 # a stagger that stopped applying would read green.
 BATCH = ["mb_%d_push_token" % i for i in range(30)]
-ROTATED_ON = "2026-09-05"  # one `rotate --commit` run stamps today on every name
+ROTATED_ON = "2026-09-05"  # one commit changed every name in the batch
 
 
 def test_same_day_batch_rotation_fans_due_dates_out_is_clean():
     """A batch rotation must not collapse the tier onto one due date.
 
-    `rotate` stamps `now` on every secret it touches and `advance_last_rotated` snaps a
-    hand-rotated one to its ciphertext's commit date, so `last_rotated` is identical across
-    a batch. The spread has to come from the cadence, not from the stamp.
+    `advance_last_rotated` snaps every secret one commit changed to that commit's date, so
+    `last_rotated` is identical across a batch. The spread has to come from the cadence, not from the stamp.
     """
-    due = [due_date(n, {"tier": "auto", "last_rotated": ROTATED_ON}) for n in BATCH]
+    due = [due_date(n, {"tier": "assisted", "last_rotated": ROTATED_ON}) for n in BATCH]
     assert len(set(due)) >= 10, "30 secrets rotated on one day share too few due dates"
     busiest = max(due.count(d) for d in set(due))
     assert busiest <= 5, "%d of 30 still land on one day" % busiest
@@ -107,7 +106,7 @@ def test_same_day_batch_rotation_fans_due_dates_out_is_clean():
 
 def test_same_day_batch_without_the_stagger_piles_up_is_flagged():
     """The red proof: the pre-fix formula on the same batch gives one due date for all 30."""
-    cadence = DEFAULT_TIER_DAYS["auto"]
+    cadence = DEFAULT_TIER_DAYS["assisted"]
     assert cadence is not None
     unstaggered = {
         dt.date.fromisoformat(ROTATED_ON) + dt.timedelta(days=cadence) for _ in BATCH
@@ -136,14 +135,14 @@ def test_stagger_only_ever_pulls_a_due_date_earlier():
 def test_audit_flags_overdue():
     today = dt.date(2026, 6, 11)
     reg = _reg(
-        ("old_push_token", "auto", "2025-01-01"),  # long overdue
-        ("fresh_push_token", "auto", "2026-06-01"),  # fine
+        ("old_push_token", "assisted", "2025-01-01"),  # long overdue
+        ("fresh_push_token", "assisted", "2026-06-01"),  # fine
     )
     res = audit(reg, today)
     overdue_names = [r[0] for r in res["overdue"]]
     assert "old_push_token" in overdue_names
     assert "fresh_push_token" not in overdue_names
-    assert res["by_tier"].get("auto") == 1
+    assert res["by_tier"].get("assisted") == 1
 
 
 def test_audit_ignores_tiers_without_a_cadence():
@@ -172,7 +171,7 @@ def test_due_date_is_none_for_a_tier_without_a_cadence():
 # ── sync ────────────────────────────────────────────────────────────────────
 def test_sync_adds_missing_and_preserves_existing():
     today = dt.date(2026, 6, 11)
-    reg = _reg(("kept_push_token", "auto", "2026-05-05"))
+    reg = _reg(("kept_push_token", "assisted", "2026-05-05"))
     added, _stale = sync(reg, ["kept_push_token", "new_push_token"], today)
     assert added == ["new_push_token"]
     assert (
@@ -183,7 +182,7 @@ def test_sync_adds_missing_and_preserves_existing():
 
 def test_sync_reports_stale_registry_entries():
     today = dt.date(2026, 6, 11)
-    reg = _reg(("gone_push_token", "auto", "2026-05-05"))
+    reg = _reg(("gone_push_token", "assisted", "2026-05-05"))
     _added, stale = sync(reg, [], today)
     assert stale == ["gone_push_token"]
 

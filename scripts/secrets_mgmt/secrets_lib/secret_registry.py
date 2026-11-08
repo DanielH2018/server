@@ -81,9 +81,8 @@ def due_date(
     The cadence carries a deterministic per-name stagger, and `name` is a required
     positional argument so that no caller can drop it and silently un-stagger the tier.
     Seeding staggers `last_rotated` once, at registration; that alone does not survive a
-    rotation, because `rotate` stamps today's date on every secret in the batch and
-    `advance_last_rotated` moves a hand-rotated one to its ciphertext's commit date. A
-    batch event would otherwise collapse a whole tier onto one due-date and re-stamp the
+    rotation, because `advance_last_rotated` moves every secret one commit changed to that
+    commit's date. A batch event would otherwise collapse a whole tier onto one due-date and re-stamp the
     cluster intact every cycle. Staggering here instead makes the spread a property of the
     cadence, so it is re-derived after every rotation however `last_rotated` was set.
 
@@ -122,6 +121,19 @@ def audit(reg: dict, today: dt.date, tier_days: Mapping = DEFAULT_TIER_DAYS) -> 
 
 # DECIDED: the registry tracks SOPS keys only; a hand-added non-SOPS name reads as stale, fails
 # cmd_audit and every secrets PR, and no tier value rescues it.
+def unknown_tiers(reg: dict, tier_days: Mapping = DEFAULT_TIER_DAYS) -> list[str]:
+    """Registry rows whose tier `tier_days` has no entry for, sorted.
+
+    `due_date` returns None for such a row, so `audit` would skip it silently and nothing
+    would ever report it due. A row with no `tier` reads as `assisted`, as in `due_date`.
+    """
+    return sorted(
+        name
+        for name, entry in reg.get("entries", {}).items()
+        if entry.get("tier", "assisted") not in tier_days
+    )
+
+
 def registry_drift(registered: set, present: set) -> tuple[list, list]:
     """Pure registry-vs-secrets.yml drift.
 
@@ -135,7 +147,7 @@ def registry_drift(registered: set, present: set) -> tuple[list, list]:
 
 # The registry value that marks a key SOPS only records: the app holds the credential, nothing
 # in the tree writes it there, and `sops set` alone rotates nothing. `sync` never touches an
-# existing entry, so the field survives it; `rotate` refuses the key in both of its paths.
+# existing entry, so the field survives it.
 # docs/secret-rotation.md names each key's mechanism.
 RECORD_SOURCE = "record"
 
@@ -149,12 +161,3 @@ def is_record(reg: dict, name: str) -> bool:
 def record_names(reg: dict) -> list[str]:
     """Every key marked `source: record`, sorted."""
     return sorted(n for n in reg.get("entries", {}) if is_record(reg, n))
-
-
-def record_refusal(name: str) -> str:
-    """The one-line reason `rotate` prints when refusing a record key."""
-    return (
-        "%s is `source: record` — SOPS holds a copy of a credential the app owns, and "
-        "nothing in the tree writes it there. Rotate it in the app, then `sops set` the new "
-        "value here by hand (docs/secret-rotation.md, 'Record keys')." % name
-    )

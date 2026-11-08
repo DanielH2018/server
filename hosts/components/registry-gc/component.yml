@@ -33,8 +33,8 @@
 # - Required evidence, every run: the `registry-gc` textfile under
 #   /var/lib/node-exporter-textfile/, which RegistryGcFailed and RegistryGcNotReporting read, a
 #   ping to the `registry-gc` Healthchecks.io check, /var/lib/registry-gc/state.json, and both
-#   mirror phases in `journalctl -t registry-gc`. A run that ends `status=down` can still exit 0,
-#   so the textfile is the verdict and the unit's result is not.
+#   mirror phases in `journalctl -t registry-gc`. The EXIT trap exits 1 from a run that ends
+#   `status=down`, so the unit's result agrees with the textfile. The alerts read the textfile.
 # - Next-run review: `/var/lib/registry-gc/<mirror>-down` left behind names a mirror a killed run
 #   stranded at zero. The next run restores it first. Read the registry-gc-<mirror> Job logs
 #   before changing a keep count.

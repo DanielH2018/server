@@ -119,7 +119,7 @@ def test_a_failed_reset_reports_master_still_ahead_and_stops_before_the_pr():
 
 
 def test_a_failed_pr_create_reports_the_branch_as_published():
-    """Exit 2 is the state the secret-rotate audit watches for: a branch on origin, no PR."""
+    """Exit 2 is the state `publish_pr.py unlanded` gates on: a branch on origin, no PR."""
     rec = Recorder({"gh pr create": cp(1, err="HTTP 401: Bad credentials")})
     out = _publish(rec)
     assert out.rc == publish_pr.PUBLISH_PUSHED_NO_PR

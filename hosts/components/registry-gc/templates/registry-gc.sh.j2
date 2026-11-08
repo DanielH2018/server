@@ -228,6 +228,8 @@ scale_up_and_report() {
   local msg="${DONE_MSG}${DONE_MSG:+${MIRROR_MSG:+; }}${MIRROR_MSG}"
   [[ -n "$msg" ]] && MSG="$msg"
   finish
+  # A down run fails the unit, whatever the script's last command returned.
+  [[ "$STATUS" == up ]] || exit 1
 }
 trap scale_up_and_report EXIT
 

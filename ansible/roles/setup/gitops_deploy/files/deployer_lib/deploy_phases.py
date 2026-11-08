@@ -102,7 +102,7 @@ def assess(tools: DeployTools, state: DeployerState, config: Config) -> TickTarg
     # Divergence watchdog: if local and origin differ but neither is an ancestor of the other, the
     # deployer can't fast-forward and every tick noops while origin's new commits never deploy —
     # invisible otherwise (last_run keeps ticking, no hold). Record it so GitOps Status pages; clear
-    # it once resolved. A committed-but-unpushed local commit (local_ahead — secret-rotate's domain)
+    # it once resolved. A committed-but-unpushed local commit (local_ahead)
     # is a plain noop, NOT flagged here. Managed every tick regardless of `action`.
     local_ahead = tools.is_ancestor(config.repo, origin, local)
     state.write(
