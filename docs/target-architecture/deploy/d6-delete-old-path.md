@@ -1040,15 +1040,21 @@ play has no job left, and R4 deletes it with the play.
   Secret in place when the root prunes the `cluster-vars` Kustomization. Under the default
   policy, a `cluster-vars` that left the bundle would delete the Secret, and every
   substituting tag would then fail to build. C3 gives Secrets no prune exemption.
-- **The root `homelab` and every other per-tag kind: `<tag>-snapshot`, `<tag>-prepull`,
-  `<tag>-precheck` and `<tag>-verify`.** Their Jobs expire under D5.1a3's TTL census. The same
-  directories also hold ServiceAccounts, Roles, RoleBindings and ConfigMaps, and `-snapshot`
-  holds a ClusterRole and a ClusterRoleBinding, which a retired tag leaves behind.
-  `docs/flux-deploy-plane.md`'s retirement procedure says which of them a first PR removes and
-  which the operator deletes.
+- **The root `homelab` and the per-tag kinds `<tag>-precheck` and `<tag>-verify`.** Their
+  Jobs expire under D5.1a3's TTL census. The same directories can also hold ServiceAccounts,
+  RBAC and ConfigMaps, which `docs/flux-deploy-plane.md`'s retirement procedure removes in a
+  first PR that empties their templates.
+- **Amended by #7485: `<tag>-snapshot` and `<tag>-prepull` take the default policy.** The
+  renderer derives both from the role's claims and defaults, so no emptied template reaches
+  them, and under `Orphan` a retired tag left a ClusterRole, a ClusterRoleBinding, Roles, a
+  ServiceAccount and ConfigMaps behind. Every object they render is named `snapshot-<tag>` or
+  `prepull-<tag>`, so no other Kustomization adopts one, and the `-deferred` race has no
+  counterpart. When a role drops its last snapshot claim or its prepull timeout while the tag
+  stays, the kind's finalizer deletes its scaffolding, which nothing else uses.
 
 **The switched set is defined positively, and the kept set is everything else.** D6.7
-switches the per-tag `<tag>` Kustomizations, one per deploy tag, except `flux`. Every other
+switches the per-tag `<tag>` Kustomizations, one per deploy tag, except `flux`. #7485 adds
+each tag's `-snapshot` and `-prepull`, `flux`'s again excepted. Every other
 Kustomization the renderer emits keeps `Orphan`. A later shared kind therefore keeps `Orphan`
 without an edit to this list.
 
