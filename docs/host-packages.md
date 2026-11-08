@@ -643,7 +643,8 @@ No other LVM volume exists on either node.
 
 1. To give the root volume the whole disk, extend it. The Ubuntu installer creates the one LVM
    volume a node uses, `ubuntu-vg/ubuntu-lv`, and leaves it at about half the disk. Neither
-   `bootstrap-host.sh` nor a package changes it. Skip this when `sudo vgs` shows no free space:
+   `bootstrap-host.sh` nor a package changes it, but the script's step 1 warns about a volume
+   group with more than 10G unallocated. Skip this when `sudo vgs` shows no free space:
 
     ```bash
     sudo lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv
