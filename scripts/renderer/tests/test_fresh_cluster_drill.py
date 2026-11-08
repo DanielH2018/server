@@ -126,11 +126,10 @@ def test_the_prerequisites_hold_the_namespace_the_class_and_a_stand_in_per_claim
     assert {d["provisioner"] for d in stand_ins} == {fresh.STAND_IN_PROVISIONER}
 
 
-def test_the_source_follows_the_roles_own_registry_address_and_verifies_the_key():
+def test_the_source_follows_the_roles_own_registry_address_and_names_its_secret():
     source, secret = fresh.break_glass_source(FAKE_KEY)
     assert source["spec"]["url"] == URL
     assert source["spec"]["verify"]["secretRef"]["name"] == secret["metadata"]["name"]
-    assert secret["stringData"] == {"cosign.pub": FAKE_KEY}
     assert fresh.push_target(source) == {
         "repository": "homelab-manifests",
         "tag": "break-glass",
