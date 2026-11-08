@@ -6,7 +6,8 @@ script, never the `/usr/local/bin/k3s` it execs (#7663). This row reads those bo
 module a body is a string literal that opens with a shebang, follows a shell's `-c` in an argv
 literal, or is passed to `.write_text()`. Every shell script or tracked executable under a
 `tests/` directory is one body, read whole. A test module's own docstrings and asserts name
-shimmed paths as text, so the rest of the module is left out.
+shimmed paths as text, so the rest of the module is left out. Each body is read for a
+hardcoded shimmed path, a PATH prepend and a PATH reset.
 """
 
 import ast
@@ -14,11 +15,16 @@ import re
 from functools import cache
 
 from _row_table import Census, Subject, tracked
-from _shimmed_path_row import _SCRIPT_SUFFIXES, _executables, hardcoded_shimmed_paths
+from _shimmed_path_row import (
+    _SCRIPT_SUFFIXES,
+    _executables,
+    hardcoded_shimmed_paths,
+    prepended_paths,
+    reset_paths,
+)
 
-# Each predicate reads one script body. #7662's PATH-prepend and PATH-reset predicates join it
-# once they land on master (#7676).
-_BODY_OFFENCES = (hardcoded_shimmed_paths,)
+# Each predicate reads one script body.
+_BODY_OFFENCES = (hardcoded_shimmed_paths, prepended_paths, reset_paths)
 
 _SHELLS = frozenset({"bash", "sh", "dash", "zsh"})
 _COMMAND_FLAG = re.compile(r"-[a-z]*c")  # -c, -ec, -euc
@@ -130,7 +136,9 @@ TEST_SCRIPT_BODIES = Census(
         "leakguard shims `SHIMMED_BINARIES` for a test's direct child only. A script a test "
         "writes and runs that names `/usr/local/bin/k3s` itself reaches the real binary with "
         "nothing recorded (#7623, #7663). Call the bare name so the test's PATH resolves it to "
-        "a stub, or read the path from a variable the test sets."
+        "a stub, or read the path from a variable the test sets. A body that puts a fixed "
+        "directory ahead of PATH, or sets PATH to fixed directories, hides or drops the stub "
+        "directory the same way (#7676): append to the inherited PATH instead."
     ),
     files=script_bodies_in_tests,
     offence=offending_bodies,
@@ -150,6 +158,11 @@ TEST_SCRIPT_BODIES = Census(
             "e/tests/test_e.py",
             'p.write_text("set -e\\n/usr/local/bin/kubectl get pods\\n")\n',
         ),
+        Subject(
+            "f/tests/test_f.py",
+            '"#!/bin/sh\\nexport PATH=\\"/usr/local/bin:${PATH}\\"\\nk3s ctr images ls\\n"\n',
+        ),
+        Subject("g/tests/stub.sh", "#!/bin/sh\nPATH=/usr/bin:/bin\ncurl -fsS x\n"),
     ),
     green=(
         Subject(
@@ -164,6 +177,10 @@ TEST_SCRIPT_BODIES = Census(
         Subject("c/tests/stub.sh", "#!/bin/sh\nk3s kubectl get pods\n"),
         Subject(
             "d/tests/test_d.py", 'assert argv == ["ssh", "-c", "/usr/local/bin/k3s"]\n'
+        ),
+        Subject(
+            "e/tests/test_e.py",
+            '"#!/bin/sh\\nexport PATH=\\"${PATH}:/usr/local/bin\\"\\nk3s ctr images ls\\n"\n',
         ),
     ),
     min_matches=1250,
