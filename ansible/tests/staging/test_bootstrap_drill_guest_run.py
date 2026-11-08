@@ -182,7 +182,12 @@ def test_a_detached_step_reports_no_code_while_it_runs_then_its_code_and_output(
             "the detached step never wrote its exit code"
         )
         time.sleep(0.1)
-    assert rc == "3"
+    # Read the file, not `out`: whatever failed the step can fail the guest script again.
+    out = tmp_path / "stage" / "until4.out"
+    assert rc == "3", (
+        f"until4 exited {rc}; until4.out:\n"
+        f"{out.read_text() if out.exists() else '<missing>'}"
+    )
     clone = tmp_path / "stage" / "clone"
     assert guest(tmp_path, "out", "until4").stdout.strip() == (
         f"bootstrap-host.sh daniel-box --until 4 --local-build {clone}"

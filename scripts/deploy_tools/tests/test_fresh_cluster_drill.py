@@ -8,6 +8,7 @@ import json
 import tarfile
 
 import pytest
+import yaml
 from lib import yaml_fast
 import fresh_cluster_drill as fresh
 
@@ -114,16 +115,77 @@ def test_the_registry_render_loses_its_node_pin_and_keeps_its_claim_and_address(
     assert ipaddress.ip_address(service["spec"]["clusterIP"]) in subnet
 
 
-def test_the_prerequisites_hold_the_namespace_the_class_and_a_stand_in_per_claim_class():
-    registry = fresh.registry_files()
-    classes = fresh.claim_classes(registry)
-    assert "longhorn-nobackup" in classes
-    docs = _docs(fresh.prereq_files(classes))
+def test_the_prerequisites_hold_the_namespace_and_the_class_and_no_storage_class():
+    docs = _docs(fresh.prereq_files())
     named = {(d["kind"], d["metadata"]["name"]) for d in docs}
     assert {("Namespace", "homelab"), ("PriorityClass", "homelab-critical")} <= named
-    stand_ins = [d for d in docs if d["kind"] == "StorageClass"]
-    assert {d["metadata"]["name"] for d in stand_ins} == classes
-    assert {d["provisioner"] for d in stand_ins} == {fresh.STAND_IN_PROVISIONER}
+    assert not [d for d in docs if d["kind"] == "StorageClass"]
+
+
+def test_the_push_stores_claim_binds_a_pre_bound_host_path_volume_owned_for_its_pod():
+    registry = fresh.registry_files()
+    claim = next(
+        d
+        for d in _docs(registry)
+        if (d["kind"], d["metadata"]["name"])
+        == ("PersistentVolumeClaim", "registry-data")
+    )
+    volumes, dirs = fresh.push_store_volumes(registry)
+    assert list(volumes) == ["pv-registry-data.yaml"]
+    (pv,) = _docs(volumes)
+    assert pv["spec"]["claimRef"] == {"namespace": "homelab", "name": "registry-data"}
+    assert pv["spec"]["storageClassName"] == claim["spec"]["storageClassName"]
+    assert pv["spec"]["capacity"] == claim["spec"]["resources"]["requests"]
+    assert pv["spec"]["accessModes"] == claim["spec"]["accessModes"]
+    assert pv["spec"]["hostPath"] == {"path": dirs[0]["path"], "type": "Directory"}
+    pod = next(
+        d
+        for d in _docs(registry)
+        if (d["kind"], d["metadata"]["name"]) == ("Deployment", "registry")
+    )["spec"]["template"]["spec"]
+    assert dirs[0]["uid"] == pod["securityContext"]["runAsUser"] != 0
+
+
+@pytest.mark.parametrize(
+    ("drop", "message"),
+    [("Deployment", "holds no Deployment"), ("volumes", "mounts no claim")],
+)
+def test_push_store_volumes_is_flagged_without_the_push_stores_claim(drop, message):
+    files = {}
+    for name, text in fresh.registry_files().items():
+        docs = [d for d in yaml_fast.safe_load_all(text) if d]
+        for doc in docs:
+            if (
+                doc.get("kind") == "Deployment"
+                and doc["metadata"]["name"] == "registry"
+            ):
+                if drop == "Deployment":
+                    doc["metadata"]["name"] = "renamed"
+                else:
+                    doc["spec"]["template"]["spec"]["volumes"] = []
+        files[name] = yaml.safe_dump_all(docs)
+    with pytest.raises(ValueError, match=message):
+        fresh.push_store_volumes(files)
+
+
+def test_the_volumes_directory_applies_only_manifests_and_lists_each_directory(
+    tmp_path,
+):
+    out = tmp_path / "volumes"
+    fresh.write_volumes(out)
+    assert sorted(p.name for p in out.iterdir()) == [
+        "dirs.txt",
+        "pv-registry-data.yaml",
+    ]
+    pod = next(
+        d
+        for d in _docs(fresh.registry_files())
+        if (d["kind"], d["metadata"]["name"]) == ("Deployment", "registry")
+    )["spec"]["template"]["spec"]["securityContext"]
+    (pv,) = _docs({"pv": (out / "pv-registry-data.yaml").read_text()})
+    uid, gid, path = (out / "dirs.txt").read_text().splitlines()[0].split(" ")
+    assert (int(uid), int(gid)) == (pod["runAsUser"], pod["fsGroup"])
+    assert path == pv["spec"]["hostPath"]["path"]
 
 
 def test_the_source_follows_the_roles_own_registry_address_and_names_its_secret():

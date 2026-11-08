@@ -333,10 +333,9 @@ def narrow_tags_for(
     `deploy_narrow._one_setup_role` gives: the script and this copy can be different ages.
 
     The role tag applies far more than any one change to it needs: `--tags k3s` reapplies
-    MetalLB, Longhorn, the crons, CoreDNS and the node config and arms two gated
-    control-plane tasks, where a `templates/readonly-rbac.yaml.j2` edit needs `--tags
-    kubeconfig` (#2294, #2307). `scripts/deploy_tools/narrow_setup.py` maps the changed paths
-    to the tags of the tasks that read them.
+    every task in the role and arms two gated control-plane tasks, where most edits need one
+    task file's own tag (#2294, #2307). `scripts/deploy_tools/narrow_setup.py` maps the
+    changed paths to the tags of the tasks that read them.
 
     ANY failure is None, which every reader renders as today's role tag. A derivation that
     cannot answer must widen: a `--tags` value matching nothing makes Ansible exit 0 having

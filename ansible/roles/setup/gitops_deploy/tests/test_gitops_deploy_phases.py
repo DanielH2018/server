@@ -246,6 +246,7 @@ def test_plan_tick_routes_a_new_shared_file_with_the_tables_its_own_range_adds(
     if origin_copy:
         tick.files = {
             f"{ORIGIN}:{installed_tables.CROSS_ROLE_FILE}": (
+                "SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES = frozenset()\n"
                 "SETUP_FILES_ROUTED_TO_OWNER = {}\n"
                 f"SETUP_FILES_SHIPPED_BY_OTHER_ROLES = {{{new_file!r}: frozenset({{'claude_code'}})}}\n"
                 "SETUP_ROLES_CALLING_FILTER_PLUGINS = {}\n"

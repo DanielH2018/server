@@ -2,6 +2,10 @@
 # starts it synchronously. Reconcile marks this unit `manual`, so it never restarts itself.
 [Unit]
 Description=Reconcile this host's units and legacy entries with its homelab packages
+# A start job ordered after the wait unit stays queued, not activating, so TimeoutStartSec below
+# starts counting only once apt has released the dpkg lock (#7648).
+Wants=homelab-reconcile-wait.service
+After=homelab-reconcile-wait.service
 
 [Service]
 Type=oneshot
