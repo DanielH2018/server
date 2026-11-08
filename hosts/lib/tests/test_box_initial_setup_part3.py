@@ -12,7 +12,7 @@ import json
 
 import pytest
 from lib import yaml_fast
-from lib.repo_paths import ANSIBLE
+from lib.repo_paths import ANSIBLE, REPO
 from test_pi_initial_setup_part3 import BLACKLIST, BLACKLIST_WRITTEN, WRITTEN
 
 from renderer.renderer_lib import host as host_mode
@@ -68,7 +68,17 @@ def test_daniel_box_ships_the_filter_and_adopts_the_blacklist(package):
     assert "".join(edits) == BLACKLIST_WRITTEN
 
 
-def test_daniel_box_ships_no_i915_option(package):
+def test_the_has_igpu_gate_keeps_the_i915_option_off_daniel_box(package):
+    spec = yaml_fast.safe_load(
+        (REPO / "hosts" / "daniel-box" / "package.yml").read_text()
+    )
+    assert "host-hardening" in spec["components"]
+    component = yaml_fast.safe_load(
+        (REPO / "hosts" / "components" / "host-hardening" / "component.yml").read_text()
+    )
+    entry = next(f for f in component["files"] if f["dst"] == I915)
+    assert entry["when"] == "has_igpu"
+    assert "/etc/sudoers.d/10-timestamp" in package.files
     assert I915 not in package.files
 
 

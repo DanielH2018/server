@@ -72,8 +72,9 @@ are in the record page.
   false on the Pi. ENFORCED:
   `ansible/tests/setup/test_journald_syslog_forwarding.py::test_raising_the_forwarding_level_requires_the_syslog_filter`,
   `ansible/tests/setup/test_journald_syslog_forwarding.py::test_the_filter_component_lists_exactly_on_hosts_with_rsyslog`.
-- **Handlers live in `handlers/main.yml`**, and a `notify:` from any role in the play can reach
-  them. Each handler needs a notifier. ENFORCED:
+- **The role defines no handlers since H7.60.** A `notify:` here resolves against every role in
+  the play, so it can reach another role's handler. A handler this role needs goes in a new
+  `handlers/main.yml`, and each handler needs a notifier. ENFORCED:
   `ansible/tests/setup/test_setup_handlers_resolve.py::test_every_notify_in_initial_setup_resolves_to_a_handler`,
   `ansible/tests/setup/test_setup_handlers_resolve.py::test_every_handler_in_the_play_has_a_notifier`.
 
