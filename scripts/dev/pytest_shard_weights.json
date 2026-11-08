@@ -1337,6 +1337,7 @@
  "scripts/renderer/tests/test_flux_snapshot.py": 0.19,
  "scripts/renderer/tests/test_flux_soak.py": 0.02,
  "scripts/renderer/tests/test_flux_soak_scope.py": 0.02,
+ "scripts/renderer/tests/test_fresh_cluster_drill.py": 1.24,
  "scripts/renderer/tests/test_renderer_ansible_free.py": 24.46,
  "scripts/renderer/tests/test_renderer_autofix_bridge_script.py": 1.01,
  "scripts/renderer/tests/test_renderer_bootstrap_documents.py": 2.84,
