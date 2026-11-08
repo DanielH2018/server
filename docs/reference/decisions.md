@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-07 23:43 UTC
-generated_sha: b97b1e3561
+generated_at: 2026-11-08 00:13 UTC
+generated_sha: 2849a4dc09
 ---
 
 !!! warning "Generated file — do not edit"
@@ -1040,8 +1040,8 @@ generated_sha: b97b1e3561
 | 3 GiB even though 85% of the 20Gi claim also breaches at 3 GiB free. | `ansible/tests/services/test_storage_rule_literals.py:188` | 2026-10-31 |
 | ` marker in the template. | `ansible/tests/services/test_wg_easy_peer_cluster_drop.py:14` | 2026-09-24 |
 | ` marker has the measurement. | `ansible/tests/setup/test_aide_check.py:13` | 2026-11-02 |
-| relative_to(_REPO), not a suffix match -- the container contexts this skips are named by their in-repo path. | `ansible/tests/setup/test_host_python_invocations.py:131` | 2026-08-23 |
-| match the word, not a command position. an env assignment, `sudo`, `env`, a cron user field and Ansible's `shell:`/`cmd:`, and a list of shell grammar stays one shape short. A path (`/usr/bin/python3`) and a package or flag name (`python3-venv`, `--python 3.14.6`) do not match. | `ansible/tests/setup/test_host_python_invocations.py:381` | 2026-10-12 |
+| relative_to(_REPO), not a suffix match -- the container contexts this skips are named by their in-repo path. | `ansible/tests/setup/test_host_python_invocations.py:133` | 2026-08-23 |
+| match the word, not a command position. an env assignment, `sudo`, `env`, a cron user field and Ansible's `shell:`/`cmd:`, and a list of shell grammar stays one shape short. A path (`/usr/bin/python3`) and a package or flag name (`python3-venv`, `--python 3.14.6`) do not match. | `ansible/tests/setup/test_host_python_invocations.py:390` | 2026-10-12 |
 | ` | `ansible/tests/setup/test_initial_setup_host_gates.py:14` | 2026-11-07 |
 | ` comment in its file. | `ansible/tests/setup/test_initial_setup_host_gates.py:66` | 2026-09-29 |
 | ` marker has the evidence. | `ansible/tests/setup/test_rkhunter_check.py:14` | 2026-10-12 |
