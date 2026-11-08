@@ -748,6 +748,7 @@
  "ansible/tests/setup/test_wan_probe_urls_match_the_bridge.py": 0.0,
  "ansible/tests/setup/test_worktree_holders_install.py": 0.0,
  "ansible/tests/setup/test_worktree_sweep_cron_reports_its_exit.py": 0.12,
+ "ansible/tests/staging/test_bootstrap_drill_mode.py": 4.34,
  "ansible/tests/staging/test_etcd_drill_vm.py": 0.05,
  "ansible/tests/staging/test_staging_egress_fence.py": 0.0,
  "ansible/tests/staging/test_staging_egress_fence_fires.py": 0.4,
