@@ -107,20 +107,19 @@ def _leg_log(compile_seconds: float, readings: dict[str, float]) -> str:
 
 
 def test_a_runner_refresh_reads_a_slow_and_a_fast_leg_as_the_same_modules(tmp_path):
-    """One shard's modules on a 1.2x leg and on a 0.67x leg, as master ran them (#7708).
+    """The same modules on a leg twice as slow as two others (#7708 measured 0.66x to 1.22x).
 
-    The compile seconds are the reference runner's times each factor, so both legs scale back
-    to the table and no row drifts.
+    Read as measured, the fast legs' median sits 2x under what the slow leg recorded and both
+    rows drift. Each leg's compile ran at its leg's speed, so every reading scales the same.
     """
     a, b = FILES[:2]
     table = tmp_path / "runner.json"
-    table.write_text(json.dumps({a: 10.0, b: 20.0}))
-    reference = 2000 * shard_weight_gate.REFERENCE_COMPILE_SECONDS_PER_FILE
-    slow = _leg_log(1.2 * reference, {a: 12.0, b: 24.0})
-    fast = _leg_log(0.67 * reference, {a: 6.7, b: 13.4})
+    slow = _leg_log(2.4, {a: 12.0, b: 24.0})
+    fast = _leg_log(1.2, {a: 6.0, b: 12.0})
+    recorded = shard_weight_gate.write_runner_weights([slow], [a, b], table)
 
-    assert pytest_shard.refresh_runner_weights([slow, slow, fast], [a, b], table) == []
-    assert shard_weight_gate.runner_weights([fast]) == {a: 10.0, b: 20.0}
+    assert pytest_shard.refresh_runner_weights([fast, fast, slow], [a, b], table) == []
+    assert json.loads(table.read_text()) == recorded
 
 
 @pytest.mark.parametrize(
