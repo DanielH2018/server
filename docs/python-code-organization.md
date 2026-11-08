@@ -50,7 +50,8 @@ dependencies` holds only what the renderer imports at runtime, `pyyaml` and `jin
 `ansible-core`, and the `community.docker` deps `requests` and `docker`. The `dev` group is
 uv's default for `uv run`. `promote.yml` sets `UV_NO_DEV`, so a promotion installs those two
 packages and no dev tool. A dependency that a promote job imports therefore goes in `[project]
-dependencies`. `test_promote_workflow.py` fails when either package is missing from that list.
+dependencies`. `test_promote_runtime_imports.py` traces every script `promote.yml` runs and fails on a
+third-party import outside that list's closure.
 `uv run pytest` syncs
 the env from `uv.lock` first, and needs [uv installed][uv-install] once. The
 `validate-compose-templates` hook shells out to `uv` too, so a full `prek run` needs it as well.

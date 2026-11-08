@@ -17,7 +17,6 @@ Run: uv run pytest ansible/tests/repo/test_promote_workflow.py
 
 import copy
 import re
-import tomllib
 
 import pytest
 from _helpers import REPO
@@ -25,9 +24,6 @@ from lib import yaml_fast
 
 WORKFLOW = REPO / ".github" / "workflows" / "promote.yml"
 FLUX_DEFAULTS = REPO / "ansible" / "roles" / "k8s" / "flux" / "defaults" / "main.yml"
-PYPROJECT = REPO / "pyproject.toml"
-# The renderer's third-party imports, which must install without the dev group.
-RENDER_RUNTIME = {"pyyaml", "jinja2"}
 DEV_GROUP_FLAG = re.compile(
     r"\buv (?:run|sync)\b[^\n]*--(?:dev|only-dev|group|all-groups)\b"
 )
@@ -333,18 +329,6 @@ def flux_version() -> str:
 
 def test_the_promote_workflow_holds_every_property(workflow, flux_version):
     assert problems(workflow, flux_version) == []
-
-
-def test_the_renderer_runtime_installs_without_the_dev_group():
-    """UV_NO_DEV leaves only [project] dependencies, so the renderer's imports must be there."""
-    project = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]
-    names = {
-        re.split(r"[<>=!~\[ ]", dep, maxsplit=1)[0].lower()
-        for dep in project.get("dependencies", [])
-    }
-    assert RENDER_RUNTIME <= names, (
-        f"[project] dependencies lack {sorted(RENDER_RUNTIME - names)}"
-    )
 
 
 def _drop_guard(wf):
