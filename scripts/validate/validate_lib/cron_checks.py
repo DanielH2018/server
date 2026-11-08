@@ -65,7 +65,7 @@ def cron_path_error(
     return (
         "calls kubectl/k3s bare but is a cron job target "
         f"({rel_task_file}) — cron's PATH omits /usr/local/bin. Add "
-        '`export PATH="/usr/local/bin:${PATH}"` (see registry-gc.sh.j2), call k3s/'
+        '`export PATH="${PATH}:/usr/local/bin"` (see registry-gc.sh.j2), call k3s/'
         "kubectl by absolute path, or set a crontab-level PATH via env: yes on the cron task."
     )
 

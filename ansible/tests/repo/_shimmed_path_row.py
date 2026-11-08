@@ -1,4 +1,4 @@
-"""The census row that refuses a shipped script's hardcoded path to a leakguard-shimmed binary.
+"""The census rows that keep a shipped script from reaching a leakguard-shimmed binary for real.
 
 `leakguard`'s `Popen` wrapper swaps an absolute shimmed program for its shim, but only for the
 test's direct child (#6463). A script a test runs that names `/usr/bin/logger` itself execs
@@ -6,6 +6,12 @@ the real binary, and nothing records it (#6485). This row reads the scripts a te
 shell and Python sources, their `.j2` templates, and every tracked executable, outside the
 tests' own directories. Unit files, cron `job:` lines and k8s manifests are left out because
 no test execs them, and a manifest's `/usr/bin/kubectl` is a path inside a container image.
+
+The second row reads the same scripts for a `PATH` that puts a fixed directory in front of the
+one the script inherited, such as `export PATH="/usr/local/bin:${PATH}"`. leakguard puts its
+stub directory first on the test's `PATH`, so that line hands every bare `k3s` or `kubectl`
+after it the real binary (#7623). Appending the directory keeps it reachable from a bare
+environment and keeps a test's stubs first.
 """
 
 import re
@@ -122,6 +128,137 @@ SHIMMED_PATHS = Census(
         "scripts/validate/validate_lib/secrets_case.py": (
             "`DOCKER_STUB_PATH` is where the case writes a stub INSIDE a test container; "
             "it names no binary on this host"
+        ),
+    },
+)
+
+
+# `PATH=/dir...:$PATH` or `PATH="/dir...:${PATH}"`: a fixed directory ahead of the inherited PATH.
+_PREPENDED_PATH = re.compile(r"(?<![\w$])PATH=[\"']?/[^\s\"';]*:\$\{?PATH\b")
+
+
+def prepended_paths(subject: Subject) -> list[str]:
+    """Each non-comment line that puts a fixed directory ahead of the inherited `PATH`."""
+    return [
+        f"line {n}: {line.strip()}"
+        for n, line in enumerate(subject.text.splitlines(), 1)
+        if not line.lstrip().startswith("#") and _PREPENDED_PATH.search(line)
+    ]
+
+
+PREPENDED_PATHS = Census(
+    name="scripts-append-to-path-rather-than-prepend",
+    reason=(
+        "leakguard's stub directory is first on a test's PATH. A script under test that puts "
+        "`/usr/local/bin` in front of the PATH it inherited runs the real `k3s`, `kubectl`, "
+        "`crictl` or `ctr` for every bare call after that line, with nothing recorded (#7623). "
+        'Append instead: `export PATH="${PATH}:/usr/local/bin"`.'
+    ),
+    files=scripts_a_test_can_run,
+    offence=prepended_paths,
+    red=(
+        Subject("a.sh.j2", 'export PATH="/usr/local/bin:${PATH}"\n'),
+        Subject(
+            "b.sh", "PATH=/usr/local/sbin:/usr/local/bin:$PATH k3s kubectl get pods\n"
+        ),
+    ),
+    green=(
+        Subject("a.sh.j2", 'export PATH="${PATH}:/usr/local/bin"\n'),
+        Subject("b.sh", '# was: export PATH="/usr/local/bin:${PATH}"\n'),
+        Subject("c.sh", 'PATH="$STUBS:$PATH" bash driver.sh\n'),
+    ),
+    min_matches=500,
+    must_find=frozenset(
+        {
+            "hosts/components/hypervisor/templates/etcd-restore-drill-vm.sh.j2",
+            "hosts/components/registry-gc/templates/registry-gc.sh.j2",
+        }
+    ),
+)
+
+
+# A `PATH` set to fixed directories alone: `PATH=/usr/bin:/bin` in shell, `"PATH": "/usr/bin"`
+# in Python. A value that still names the inherited `$PATH` is the prepend row's subject.
+_RESET_PATH = re.compile(
+    r"(?<![\w$])PATH=[\"']?/[^\s\"';]*"
+    r"|[\"']PATH[\"']\s*(?::|\]\s*=)\s*[\"']/[^\"']*[\"']"
+)
+
+
+def reset_paths(subject: Subject) -> list[str]:
+    """Each non-comment line that sets `PATH` to fixed directories, dropping the inherited one."""
+    return [
+        f"line {n}: {line.strip()}"
+        for n, line in enumerate(subject.text.splitlines(), 1)
+        if not line.lstrip().startswith("#")
+        and any("$" not in m.group(0) for m in _RESET_PATH.finditer(line))
+        and not _PREPENDED_PATH.search(line)
+    ]
+
+
+RESET_PATHS = Census(
+    name="scripts-keep-the-inherited-path-or-say-why",
+    reason=(
+        "leakguard's stub directory is first on a test's PATH. A script under test that sets "
+        "PATH to fixed directories drops it, and every bare `curl`, `gh`, `kubectl` or `k3s` "
+        "after that line runs the real binary with nothing recorded (#7623, #7661). Keep the "
+        "inherited PATH and append to it, or add an `allow` entry naming how every test that "
+        "runs the script keeps its stubs in front."
+    ),
+    files=scripts_a_test_can_run,
+    offence=reset_paths,
+    red=(
+        Subject("a.sh.j2", "export PATH=/usr/local/bin:/usr/bin:/bin\ncurl -fsS x\n"),
+        Subject("b.sh", "PATH=/usr/bin:/bin gh api user\n"),
+        Subject("c.py", 'ENV = {"PATH": "/usr/sbin:/usr/bin", "LC_ALL": "C"}\n'),
+    ),
+    green=(
+        Subject("a.sh.j2", 'export PATH="${PATH}:/usr/local/bin"\n'),
+        Subject("b.sh", "# cron runs this with PATH=/usr/bin:/bin\n"),
+        Subject("c.sh", 'PATH="$STUBS:$PATH" bash driver.sh\n'),
+        Subject("d.py", 'env = {"PATH": os.environ["PATH"]}\n'),
+    ),
+    min_matches=500,
+    must_find=frozenset(
+        {
+            "hosts/components/github-checks/templates/github-ruleset-drift.sh.j2",
+            "hosts/components/claude-code/files/homelab-takeover-check.sh",
+        }
+    ),
+    allow={
+        "hosts/components/claude-code/files/homelab-takeover-check.sh": (
+            "it runs under sudo and must not trust the caller's PATH; every cluster binary it "
+            "runs comes from a variable (`KUBECTL`, `FLUX`, `UV`, `USER_KUBECTL`) that "
+            "`test_takeover_check.py` points at a stub through `HOMELAB_TC_*`"
+        ),
+        "hosts/components/claude-code/files/homelab_rootq.py": (
+            "root's children get a fixed environment; its tests import it, so each child is "
+            "the test's direct child and leakguard's `Popen` wrapper shims that `env`"
+        ),
+        "hosts/components/claude-code/files/homelab_rootq_socket.py": (
+            "root's children get a fixed environment; it runs only `/usr/local/sbin/"
+            "homelab-rootq` by absolute path, which is no shimmed binary"
+        ),
+        "hosts/components/github-checks/templates/github-ruleset-drift.sh.j2": (
+            "cron ships a bare PATH; `_ruleset_drift.py` rewrites this exact line to put its "
+            "stub directory first, and asserts the line is still there"
+        ),
+        "hosts/components/github-checks/templates/github-interaction-limit.sh.j2": (
+            "cron ships a bare PATH; `test_github_interaction_limit.py` rewrites this exact "
+            "line to put its stub directory first, and asserts the line is still there"
+        ),
+        "hosts/components/worktree-sweep/templates/worktree-sweep.sh.j2": (
+            "the reset prefixes one `uv` command, named by absolute path and stubbed under "
+            "the test's fake home; the `curl` after it reads the inherited PATH"
+        ),
+        "hosts/components/renovate-agent/templates/renovate-agent-setup.sh.j2": (
+            "the reset applies only under root's `runuser`, which every test stubs, and the "
+            "commands it carries (`mkdir`, `cp`, `git`, the agent's `uv` and installer) are "
+            "none of `SHIMMED_BINARIES`"
+        ),
+        "scripts/dev/run_as_cron.sh": (
+            "reproducing cron's bare PATH is its purpose; `test_run_as_cron.py` runs only "
+            "shell builtins and `echo` through it"
         ),
     },
 )
