@@ -425,6 +425,7 @@
  "ansible/tests/repo/test_gitleaks_secret_key_name_allowlist.py": 0.0,
  "ansible/tests/repo/test_guard_tests_read_renders_not_templates.py": 10.12,
  "ansible/tests/repo/test_helpers.py": 0.0,
+ "ansible/tests/repo/test_host_package_build_step.py": 0.1,
  "ansible/tests/repo/test_host_package_case_inputs_census.py": 0.02,
  "ansible/tests/repo/test_host_package_cases_run_on_their_inputs.py": 36.65,
  "ansible/tests/repo/test_host_package_scans_run_on_every_pr.py": 0.0,
