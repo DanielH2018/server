@@ -22,8 +22,8 @@ from _updater_host import Host
 from _updater_host import reconcile_ok as _ok
 
 from lib import yaml_fast
-from lib.proc_testing import run
-from lib.repo_paths import REPO
+from lib.proc_testing import run, write_exec
+from lib.repo_paths import ALL_VARS, REPO
 from reconcile_lib import lines
 from renderer.renderer_lib import host as host_mode
 
@@ -94,12 +94,11 @@ class Engine:
         self.project = self.root / "usr/lib/homelab/compose/compose.yaml"
         self.project.write_text("include: []\n")
         for command in STUBBED:
-            wrapper = self.bin / command
-            wrapper.write_text(
-                f"#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(str(STUB))} "
-                f'{command} "$@"\n'
+            write_exec(
+                self.bin / command,
+                f"exec {shlex.quote(sys.executable)} {shlex.quote(str(STUB))} "
+                f'{command} "$@"\n',
             )
-            wrapper.chmod(0o755)
         self.state: dict = {
             "installed": {},
             "offered": {},
@@ -365,11 +364,7 @@ def test_a_wait_at_reconciles_thirty_minutes_is_flagged(package):
 
 def engine_moves(nfpm: dict, files: dict) -> list[str]:
     """What in a rendered package could move a held engine package without the engine unit."""
-    held = set(
-        yaml_fast.safe_load(
-            (REPO / "ansible/inventory/group_vars/all.yml").read_text()
-        )["docker_engine_packages"]
-    )
+    held = set(yaml_fast.safe_load(ALL_VARS.read_text())["docker_engine_packages"])
     depends = {re.split(r"[\s(]", d, maxsplit=1)[0] for d in nfpm.get("depends", [])}
     found = [f"Depends on {name}" for name in sorted(depends & held)]
     found += [dst for dst in files if dst.startswith("/etc/apt/preferences")]
@@ -380,9 +375,7 @@ def test_the_package_cannot_move_the_engine_is_clean(package):
     nfpm = {"depends": package.depends}
     assert engine_moves(nfpm, package.files) == []
     assert _pins(package).keys() == set(
-        yaml_fast.safe_load(
-            (REPO / "ansible/inventory/group_vars/all.yml").read_text()
-        )["docker_engine_packages"]
+        yaml_fast.safe_load(ALL_VARS.read_text())["docker_engine_packages"]
     )
 
 
@@ -458,10 +451,10 @@ def test_an_external_network_the_unit_omits_is_flagged(package):
 @pytest.mark.parametrize("pending", ["0", "1"])
 def test_the_updater_reports_the_value_the_engine_script_prints(tmp_path, pending):
     host = Host(tmp_path)
-    engine = host.root / "usr/lib/homelab/docker-engine"
-    engine.parent.mkdir(parents=True)
-    engine.write_text(f'#!/bin/sh\n[ "$1" = pending ] && echo {pending}\n')
-    engine.chmod(0o755)
+    write_exec(
+        host.root / "usr/lib/homelab/docker-engine",
+        f'[ "$1" = pending ] && echo {pending}\n',
+    )
 
     result = host.run()
 
@@ -476,10 +469,10 @@ def test_the_updater_reports_the_value_the_engine_script_prints(tmp_path, pendin
 def test_an_engine_answer_that_is_not_zero_or_one_writes_no_series(tmp_path):
     """A pins file the script cannot read must not reach the textfile as a malformed sample."""
     host = Host(tmp_path)
-    engine = host.root / "usr/lib/homelab/docker-engine"
-    engine.parent.mkdir(parents=True)
-    engine.write_text("#!/bin/sh\necho 'docker-engine: pins missing'\n")
-    engine.chmod(0o755)
+    write_exec(
+        host.root / "usr/lib/homelab/docker-engine",
+        "echo 'docker-engine: pins missing'\n",
+    )
 
     assert host.run().returncode == 0
     assert "homelab_docker_engine_pending" not in host.metrics()

@@ -100,7 +100,7 @@ def test_visudo_accepts_the_sudoers_file_and_rejects_a_broken_copy(package, tmp_
     if not Path(visudo).exists():
         pytest.skip("needs a visudo")
     version = subprocess.run(
-        [visudo, "--version"], capture_output=True, text=True, check=False
+        [visudo, "--version"], capture_output=True, text=True, check=False, timeout=60
     ).stdout
     # The hosts run classic sudo. The ubuntu-26.04 runner's visudo rejects `timestamp_type`.
     if not version.startswith("visudo version"):
@@ -109,11 +109,13 @@ def test_visudo_accepts_the_sudoers_file_and_rejects_a_broken_copy(package, tmp_
     good.write_bytes(package.files[SUDOERS][0])
     good.chmod(0o440)
     check = [visudo, "-cf"]
-    assert subprocess.run([*check, str(good)], check=False).returncode == 0
+    assert subprocess.run([*check, str(good)], check=False, timeout=60).returncode == 0
     broken = tmp_path / "broken"
     broken.write_bytes(package.files[SUDOERS][0] + b"Defaults =\n")
     broken.chmod(0o440)
-    assert subprocess.run([*check, str(broken)], check=False).returncode != 0
+    assert (
+        subprocess.run([*check, str(broken)], check=False, timeout=60).returncode != 0
+    )
 
 
 def test_a_live_banner_is_left_alone_and_a_stock_one_is_replaced(package):
@@ -150,6 +152,7 @@ def test_apt_parses_the_conffile_option_unattended_upgrade_requires(package, tmp
         capture_output=True,
         text=True,
         check=True,
+        timeout=60,
     ).stdout
     assert 'DPkg::Options:: "--force-confold";' in dump
 

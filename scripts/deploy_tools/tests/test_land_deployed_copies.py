@@ -225,11 +225,14 @@ def _render(*tags, src="setup-drift-check.sh.j2", when="True"):
 """
 
 
-def _demo_role_holds(tmp_path, tasks, entry="[]\n"):
+def _demo_role_holds(tmp_path, tasks, entry="[]\n", plays=""):
     """Does a host with a current `demo` fragment hold `TEMPLATE`, for a role with these tasks?
 
-    `entry` is the text of a task file `main.yml` does not reach.
+    `entry` is the text of a task file `main.yml` does not reach unless `tasks` imports it.
+    `plays` is the text of the one playbook beside the role.
     """
+    (tmp_path / "plays").mkdir()
+    (tmp_path / "plays" / "site.yml").write_text(plays or "[]\n")
     (tmp_path / "demo" / "tasks").mkdir(parents=True)
     (tmp_path / "demo" / "tasks" / "stamp.yml").write_text("[]\n")
     (tmp_path / "demo" / "tasks" / "entry.yml").write_text(entry)
@@ -242,6 +245,7 @@ def _demo_role_holds(tmp_path, tasks, entry="[]\n"):
         ref="HEAD",
         repo=REPO,
         read_host=lambda plan, host: {"stat": {}, "files": {fragment: row}},
+        playbooks_dir=tmp_path / "plays",
     ).holds("demo", TEMPLATE, "daniel-server")
 
 
@@ -268,6 +272,31 @@ def test_a_render_whose_only_proving_stamp_is_gated_off_the_host_keeps_it_owed(
 def test_a_stamp_main_does_not_reach_proves_no_render(tmp_path):
     """A `tasks_from` play can run the untagged stamp under a tag that skips the render."""
     assert not _demo_role_holds(tmp_path, _render("a"), entry=_stamp())
+
+
+IMPORT_ENTRY = """
+- name: Import the stamp
+  tags: [a]
+  ansible.builtin.import_tasks: entry.yml
+"""
+ENTRY_PLAY = """
+- hosts: all
+  tasks:
+    - ansible.builtin.include_role: {name: demo, tasks_from: entry}
+      tags: [b]
+"""
+
+
+def test_a_stamp_main_imports_and_no_play_runs_alone_proves_its_render(tmp_path):
+    assert _demo_role_holds(tmp_path, _render("a") + IMPORT_ENTRY, entry=_stamp())
+
+
+def test_a_stamp_main_imports_that_a_tasks_from_play_also_runs_proves_no_render(
+    tmp_path,
+):
+    """The play runs the stamp under `b`, which skips the render tagged `a` (#7411)."""
+    tasks = _render("a") + IMPORT_ENTRY
+    assert not _demo_role_holds(tmp_path, tasks, entry=_stamp(), plays=ENTRY_PLAY)
 
 
 def _import_with_state(state):

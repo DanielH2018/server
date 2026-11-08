@@ -39,6 +39,7 @@ def test_host_lib_imports_with_no_sibling_module(tmp_path):
         capture_output=True,
         text=True,
         check=False,
+        timeout=60,
     )
     assert proc.returncode == 0, proc.stderr
 

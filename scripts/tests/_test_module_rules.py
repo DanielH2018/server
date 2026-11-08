@@ -21,8 +21,7 @@ from pathlib import Path
 from _row_table import parse, tracked
 from test_script_bootstraps_present import is_pytest_only
 
-# Every `testpaths` entry that holds Python, plus `.claude/tests`, except `hosts/lib/tests`,
-# where four rows still report offences (#7616).
+# Every `testpaths` entry that holds Python, plus `.claude/tests`.
 _TEST_ROOTS = (
     "scripts/",
     "ansible/tests/",
@@ -31,6 +30,7 @@ _TEST_ROOTS = (
     ".claude/tests/",
     "evals/",
     "hosts/components/",
+    "hosts/lib/",
 )
 
 

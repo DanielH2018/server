@@ -9,7 +9,9 @@ nothing about what they hold. A host another apply already reached still read as
 - `stamp_render.yml`'s fragments hold the source hash of each template the host last rendered,
   so the fragment's line is compared with the merge commit's hash. A fragment proves only the
   renders that run whenever it is written, so the line counts only when every task in the role
-  that may render the template does (#7406).
+  that may render the template does (#7406). A stamp in a file a play in `ansible/*.yml` runs by
+  `tasks_from:`, or in a file that one imports, proves no render, because that play's tags are
+  not the walk's (#7411).
 
 Both are read per host: a stamp or a render whose `when:` skips a host asks nothing of it. A
 template every render of which is skipped on a host, with no stamp there, is held without a read,
@@ -35,11 +37,12 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.narrow_lib.setup_playbook import play_role_includes
 from deploy_tools.setup_lib.setup_gates import _eval_when
 from diagnostics.probe_lib import core
 from lib import yaml_fast
 from lib.git import git_process
-from lib.repo_paths import ALL_VARS, HOST_VARS
+from lib.repo_paths import ALL_VARS, ANSIBLE, HOST_VARS
 
 GIT_TIMEOUT_S = 30
 # `stamp_render.yml`'s directory on a host.
@@ -129,11 +132,15 @@ def _bound_gate(gate: object, bound: dict[str, str]) -> object:
 
 
 class _Walked(NamedTuple):
-    """One task as the walk reaches it: its effective tags and each `when:` above and on it."""
+    """One task as the walk reaches it: its effective tags and each `when:` above and on it.
+
+    `source` is the task file that holds it.
+    """
 
     task: dict
     tags: frozenset[str]
     gates: tuple
+    source: Path
 
 
 class _Stamp(NamedTuple):
@@ -181,7 +188,7 @@ def _flatten(
         )
         scope = _bound_by(task, bound or {})
         chain = (*gates, _bound_gate(task["when"], scope)) if "when" in task else gates
-        yield _Walked(task, tags, chain)
+        yield _Walked(task, tags, chain, on_walk[-1])
         for section in ("block", "rescue", "always"):
             yield from _flatten(
                 task.get(section), tags, role_dir, on_walk, seen, chain, scope
@@ -204,7 +211,8 @@ def _role_tasks(role_dir: Path) -> tuple[list[_Walked], list[_Walked]]:
     """A role's tasks: those `tasks/main.yml` reaches, then those in any other file.
 
     The second list's tags are a lower bound, because a file `main.yml` does not reach runs
-    under tags this walk cannot read, such as a `tasks_from` play's.
+    under tags this walk cannot read, such as a `tasks_from` play's. `_tasks_from_files` names
+    the files in the first list that carry the same doubt.
     """
     role_dir = role_dir.resolve()
     main = role_dir / "tasks" / "main.yml"
@@ -223,6 +231,29 @@ def _role_tasks(role_dir: Path) -> tuple[list[_Walked], list[_Walked]]:
                 _parsed_tasks(path), frozenset(), role_dir, (path,), seen
             )
     return from_main, others
+
+
+def _tasks_from_files(role_dir: Path, playbooks_dir: Path) -> frozenset[Path]:
+    """The task files a play in `playbooks_dir` runs by `tasks_from:`, with each file they import.
+
+    Such a file also runs under the including play task's tags, which `main.yml`'s walk never
+    reads. A templated `tasks_from:` is not followed, as `play_role_includes` leaves it out.
+    """
+    role_dir = role_dir.resolve()
+    found: set[Path] = set()
+    for play in sorted(playbooks_dir.glob("*.yml")):
+        for name, _ in play_role_includes(play.read_text(), role_dir.name):
+            entry = (role_dir / "tasks" / name).with_suffix(Path(name).suffix or ".yml")
+            if not entry.is_file() or entry.resolve() in found:
+                continue
+            entry = entry.resolve()
+            seen = {entry}
+            for _ in _flatten(
+                _parsed_tasks(entry), frozenset(), role_dir, (entry,), seen
+            ):
+                pass
+            found |= seen
+    return frozenset(found)
 
 
 def _stamps_of(task: dict) -> Iterable[tuple[str, str]]:
@@ -309,6 +340,7 @@ class DeployedCopies:
       read_host: `host_reader.read_host`.
       all_vars: the `group_vars/all.yml` a stamp's or a render's `when:` reads.
       host_vars_dir: the `host_vars/` directory that overrides it.
+      playbooks_dir: the directory whose `*.yml` plays may run a role's file by `tasks_from:`.
     """
 
     def __init__(
@@ -320,6 +352,7 @@ class DeployedCopies:
         read_host: Callable[[dict, str], dict],
         all_vars: Path = ALL_VARS,
         host_vars_dir: Path = HOST_VARS,
+        playbooks_dir: Path = ANSIBLE,
     ) -> None:
         self._files = frozenset(files)
         self._roles_dir = roles_dir
@@ -328,6 +361,7 @@ class DeployedCopies:
         self._read_host = read_host
         self._all_vars = all_vars
         self._host_vars_dir = host_vars_dir
+        self._playbooks_dir = playbooks_dir
         self._docs: dict[str, dict] = {}
 
     @cached_property
@@ -337,6 +371,7 @@ class DeployedCopies:
         for role_dir in self._roles_dir.iterdir():
             try:
                 from_main, others = _role_tasks(role_dir)
+                entries = _tasks_from_files(role_dir, self._playbooks_dir)
             except _CannotWalk:
                 continue
             walked = from_main + others
@@ -346,8 +381,9 @@ class DeployedCopies:
                 ]
                 if renders:
                     found[(role_dir.name, src)] = _Evidence([], renders)
-            for tasks, tags_known in ((from_main, True), (others, False)):
-                for task, tags, gates in tasks:
+            for tasks, from_main_only in ((from_main, True), (others, False)):
+                for task, tags, gates, source in tasks:
+                    tags_known = from_main_only and source not in entries
                     for src, record in _stamps_of(task):
                         if src not in self._files:
                             continue
