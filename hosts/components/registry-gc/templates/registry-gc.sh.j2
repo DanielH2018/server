@@ -89,7 +89,7 @@ DEADLINE_S=612000
 
 # The k3s installer puts the binary in /usr/local/bin. A run from a bare environment lacks it, and
 # every kubectl call below would silently resolve to nothing.
-export PATH="/usr/local/bin:${PATH}"
+export PATH="${PATH}:/usr/local/bin"
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 NS="{{ k8s_namespace }}"

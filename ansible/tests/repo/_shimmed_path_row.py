@@ -1,4 +1,4 @@
-"""The census row that refuses a shipped script's hardcoded path to a leakguard-shimmed binary.
+"""The census rows that keep a shipped script from reaching a leakguard-shimmed binary for real.
 
 `leakguard`'s `Popen` wrapper swaps an absolute shimmed program for its shim, but only for the
 test's direct child (#6463). A script a test runs that names `/usr/bin/logger` itself execs
@@ -6,6 +6,12 @@ the real binary, and nothing records it (#6485). This row reads the scripts a te
 shell and Python sources, their `.j2` templates, and every tracked executable, outside the
 tests' own directories. Unit files, cron `job:` lines and k8s manifests are left out because
 no test execs them, and a manifest's `/usr/bin/kubectl` is a path inside a container image.
+
+The second row reads the same scripts for a `PATH` that puts a fixed directory in front of the
+one the script inherited, such as `export PATH="/usr/local/bin:${PATH}"`. leakguard puts its
+stub directory first on the test's `PATH`, so that line hands every bare `k3s` or `kubectl`
+after it the real binary (#7623). Appending the directory keeps it reachable from a bare
+environment and keeps a test's stubs first.
 """
 
 import re
@@ -124,4 +130,48 @@ SHIMMED_PATHS = Census(
             "it names no binary on this host"
         ),
     },
+)
+
+
+# `PATH=/dir...:$PATH` or `PATH="/dir...:${PATH}"`: a fixed directory ahead of the inherited PATH.
+_PREPENDED_PATH = re.compile(r"(?<![\w$])PATH=[\"']?/[^\s\"';]*:\$\{?PATH\b")
+
+
+def prepended_paths(subject: Subject) -> list[str]:
+    """Each non-comment line that puts a fixed directory ahead of the inherited `PATH`."""
+    return [
+        f"line {n}: {line.strip()}"
+        for n, line in enumerate(subject.text.splitlines(), 1)
+        if not line.lstrip().startswith("#") and _PREPENDED_PATH.search(line)
+    ]
+
+
+PREPENDED_PATHS = Census(
+    name="scripts-append-to-path-rather-than-prepend",
+    reason=(
+        "leakguard's stub directory is first on a test's PATH. A script under test that puts "
+        "`/usr/local/bin` in front of the PATH it inherited runs the real `k3s`, `kubectl`, "
+        "`crictl` or `ctr` for every bare call after that line, with nothing recorded (#7623). "
+        'Append instead: `export PATH="${PATH}:/usr/local/bin"`.'
+    ),
+    files=scripts_a_test_can_run,
+    offence=prepended_paths,
+    red=(
+        Subject("a.sh.j2", 'export PATH="/usr/local/bin:${PATH}"\n'),
+        Subject(
+            "b.sh", "PATH=/usr/local/sbin:/usr/local/bin:$PATH k3s kubectl get pods\n"
+        ),
+    ),
+    green=(
+        Subject("a.sh.j2", 'export PATH="${PATH}:/usr/local/bin"\n'),
+        Subject("b.sh", '# was: export PATH="/usr/local/bin:${PATH}"\n'),
+        Subject("c.sh", 'PATH="$STUBS:$PATH" bash driver.sh\n'),
+    ),
+    min_matches=500,
+    must_find=frozenset(
+        {
+            "hosts/components/hypervisor/templates/etcd-restore-drill-vm.sh.j2",
+            "hosts/components/registry-gc/templates/registry-gc.sh.j2",
+        }
+    ),
 )

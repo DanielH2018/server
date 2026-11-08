@@ -84,7 +84,10 @@ command string gets the same swap for each word naming such a path, such as
 hardcodes `/usr/bin/logger` and runs it itself would still reach the real binary. The
 `scripts-run-no-shimmed-binary-by-hardcoded-path` row of
 `ansible/tests/repo/test_census_rows_text.py` refuses that path in every script a test can run,
-unless it is only the default of a variable the test can set.
+unless it is only the default of a variable the test can set. A script that puts a fixed
+directory ahead of the `PATH` it inherited, such as `export PATH="/usr/local/bin:${PATH}"`,
+hides this stub directory the same way, and the `scripts-append-to-path-rather-than-prepend`
+row refuses it (#7623). A script that replaces `PATH` outright is not covered.
 
 ## Ansible's local temp directory points at a temp directory
 
