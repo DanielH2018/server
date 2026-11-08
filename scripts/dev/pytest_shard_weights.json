@@ -811,6 +811,7 @@
  "hosts/lib/tests/test_box_dev_tooling.py": 5.83,
  "hosts/lib/tests/test_box_initial_setup_part1.py": 3.0,
  "hosts/lib/tests/test_box_initial_setup_part2.py": 14.26,
+ "hosts/lib/tests/test_box_initial_setup_part3.py": 2.76,
  "hosts/lib/tests/test_box_k3s_host_half.py": 6.68,
  "hosts/lib/tests/test_builder_component.py": 0.24,
  "hosts/lib/tests/test_claude_agent_browser.py": 7.15,
