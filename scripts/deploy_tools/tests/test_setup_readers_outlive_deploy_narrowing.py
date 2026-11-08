@@ -78,7 +78,6 @@ READER_TESTS = (
     "test_narrow_secret_keys.py::test_a_key_the_play_reads_refuses_the_setup_answer",
     "test_narrow_secret_keys.py::test_deploy_tags_names_the_k8s_reader_of_a_rotated_key",
     "test_narrow_secret_keys.py::test_deploy_tags_refuses_most_of_the_fleet_naming_it",
-    "test_narrow_secret_keys.py::test_a_shipper_reading_none_of_the_secrets_keys_is_unread",
     "test_narrow_inventory_keys.py::test_a_moved_key_a_setup_template_reads_names_that_template",
     "test_narrow_inventory_keys.py::test_key_readers_merges_the_secrets_half_beside_the_inventory_half",
 )

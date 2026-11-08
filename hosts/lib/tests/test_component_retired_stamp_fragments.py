@@ -40,6 +40,8 @@ RECORDED = {
     "fake-remux": {("render", "fake-remux"), ("deployed", "fake-remux")},
     # 3b3e4abb1:ansible/roles/setup/gitops_deploy/tasks/github_checks.yml
     "github-checks": {("render", "gitops-deploy-github-checks")},
+    # 57f107926:ansible/roles/setup/deploy_ui/tasks/{service,code}.yml
+    "deploy-ui": {("render", "deploy-ui"), ("deployed", "deploy-ui")},
     # cb61ae0d94:ansible/roles/setup/initial_setup/tasks/crons.yml
     "worktree-holders": {("deployed", "worktree-holders")},
     # cb61ae0d9:ansible/roles/setup/initial_setup/tasks/crons.yml

@@ -3,14 +3,13 @@
 #
 # WHY A SIBLING COPY AND NOT A SHARED PATH. Every consumer is a directly-invoked script, so it
 # gets its own directory on `sys.path` and nothing else (`.claude/rules/python-layout.md` states
-# the rule). Eight callers across seven roles therefore need a copy of the SAME file in their own
-# /opt directory. This file holds the source path, the `host_lib.py` basename and the 0755 mode
+# the rule). Each caller therefore needs a copy of the SAME file in its own /opt directory; the
+# host packages ship theirs with a `lib:` entry, and `gitops_deploy` is the last role that copies it. This file holds the source path, the `host_lib.py` basename and the 0755 mode
 # in one place, so a change to any of them has one place to make.
 #
-# WHAT THIS FILE DELIBERATELY DOES NOT DO: write the stamp_deployed pair. All eight sites
-# record `/opt/<x>/host_lib.py` in their role's `stamp_deployed_pairs` (claude_code, deploy_ui, fake_remux, gitops_deploy, renovate_agent,
-# renovate_notify, and k3s twice).
-# Emitting a fragment here would change host state at those. Worse, a fragment is named per
+# WHAT THIS FILE DELIBERATELY DOES NOT DO: write the stamp_deployed pair. A caller records
+# `/opt/<x>/host_lib.py` in its role's `stamp_deployed_pairs`.
+# Emitting a fragment here would change host state there. Worse, a fragment is named per
 # GROUP and holds the whole group's pairs, so a second fragment written from here under the
 # caller's own name would overwrite the pairs the caller declared. The
 # copy↔pair invariant is therefore held by a test rather than by this file:

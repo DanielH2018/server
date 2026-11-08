@@ -1,35 +1,10 @@
 ---
-# The deploy UI lives on the host that owns the GitOps checkout: it reads the same marker
-# directory the deployer writes and runs land.sh in the same checkout, as the same
-# user. has_gitops picks the host, the way it does for gitops_deploy.
-#
-# One task file per subject, each under its own tag, so the GitOps deployer can apply a code
-# change (`--tags deploy-ui-code`) or a unit change (`--tags deploy-ui-service`) rather than
-# the whole role (#3135). `narrow_setup` reads a task file's OWN tags, so each task in the
-# imported files carries its tag, and each import below repeats it so an edit to this file
-# narrows too. The firewall rule has a file of its own because `firewall` is also an
-# initial_setup tag: a change reaching it cannot narrow, and keeping it apart stops that
-# refusal from spreading to the code and the unit.
+# The deploy UI daemon is package-owned: hosts/components/deploy-ui ships it in homelab-daniel-box
+# (H7.50). docs/target-architecture/host/h7-delete-ansible.md.
 
-- name: Install the deploy UI
-  when: has_gitops
-  block:
-    - name: Create the deploy-ui directory
-      tags: [deploy-ui-code, deploy-ui-service]
-      ansible.builtin.file:
-        path: "{{ deploy_ui_dir }}"
-        state: directory
-        mode: "0755"
-      become: true
-
-    - name: Install the deploy-ui code
-      tags: [deploy-ui-code]
-      ansible.builtin.import_tasks: code.yml
-
-    - name: Allow the cluster to reach the deploy UI
-      tags: [firewall]
-      ansible.builtin.import_tasks: firewall.yml
-
-    - name: Install and start the deploy-ui unit
-      tags: [deploy-ui-service]
-      ansible.builtin.import_tasks: service.yml
+# DECIDED: this role is emptied, never deleted, until H7.20a. A play that names a missing role
+# fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the
+# deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role
+# keeps the playbook line, and the tick applies the role on daniel-box as a no-op.
+- name: End the role, whose work the host package owns
+  ansible.builtin.meta: end_role
