@@ -9,7 +9,6 @@ import os
 import sys
 from types import SimpleNamespace
 
-import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -150,90 +149,3 @@ def test_the_manual_plane_apply_names_the_pinned_playbook_command(tmp_path):
         "do:   uv run ansible-playbook ansible/initial_setup.yml --tags optimize_pi"
         " -e target=daniel-pi" in out
     ), out
-
-
-def test_a_whole_role_k3s_row_names_the_agent_join_before_the_clear(tmp_path):
-    """#5627: `--tags k3s` on daniel-box never reaches an agent node (#5606)."""
-    _state(
-        tmp_path,
-        owed=_owed(
-            "manual_plane",
-            "k3s",
-            playbook="ansible/k3s-bringup.yml",
-            tags=[],
-            agent_hosts=["daniel-server"],
-        ),
-    )
-    out = view.format_text(view.collect(tmp_path, NOW))
-    parts = (
-        "ansible/k3s-bringup.yml --tags k3s",
-        "ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent",
-        "ansible/k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address",
-        "clear-owed manual_plane k3s",
-    )
-    at = [out.find(p) for p in parts]
-    assert -1 not in at, (
-        f"missing {[p for p, i in zip(parts, at, strict=True) if i < 0]} in {out}"
-    )
-    assert at == sorted(at), f"{parts} out of order in {out}"
-
-
-_JOIN = "ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent"
-_PIN = "ansible/k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address"
-
-# A narrowed k3s row splits: `k3s_agent` goes on the join command, the rest on the server
-# command, and a row of `k3s_agent` alone prints no server command at all (#5628). A row of
-# `node-address` keeps the server command and adds the pin play, run on the agent (#5918). The
-# clear names the whole row either way.
-_SPLIT_ROWS = [
-    pytest.param(
-        ["k3s_agent"],
-        (_JOIN, "clear-owed manual_plane k3s --applied k3s_agent"),
-        "k3s-bringup.yml --tags",
-        id="agent-only",
-    ),
-    pytest.param(
-        ["k3s_agent", "k3s_server"],
-        (
-            "ansible/k3s-bringup.yml --tags k3s_server",
-            _JOIN,
-            "clear-owed manual_plane k3s --applied k3s_agent,k3s_server",
-        ),
-        "--tags k3s_agent,",
-        id="both-halves",
-    ),
-    pytest.param(
-        ["node-address"],
-        (
-            "ansible/k3s-bringup.yml --tags node-address",
-            _PIN,
-            "(run on daniel-server)",
-            "clear-owed manual_plane k3s --applied node-address",
-        ),
-        "join_agent",
-        id="pin-play",
-    ),
-]
-
-
-@pytest.mark.parametrize(("tags", "parts", "absent"), _SPLIT_ROWS)
-def test_a_narrowed_k3s_row_puts_its_agent_tag_on_the_join(
-    tmp_path, tags, parts, absent
-):
-    _state(
-        tmp_path,
-        owed=_owed(
-            "manual_plane",
-            "k3s",
-            playbook="ansible/k3s-bringup.yml",
-            tags=tags,
-            agent_hosts=["daniel-server"],
-        ),
-    )
-    out = view.format_text(view.collect(tmp_path, NOW))
-    at = [out.find(p) for p in parts]
-    assert -1 not in at, (
-        f"missing {[p for p, i in zip(parts, at, strict=True) if i < 0]} in {out}"
-    )
-    assert at == sorted(at), f"{parts} out of order in {out}"
-    assert absent not in out, out

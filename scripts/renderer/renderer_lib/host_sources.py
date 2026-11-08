@@ -42,7 +42,7 @@ SHARED_FILES = {
     "longhorn_etcd_s3_logic.py": f"{_LONGHORN_LIB}/longhorn_etcd_s3_logic.py",
     "longhorn_restore_drill_stamps.py": f"{_LONGHORN_LIB}/longhorn_restore_drill_stamps.py",
     "longhorn_skipped_volumes_logic.py": f"{_LONGHORN_LIB}/longhorn_skipped_volumes_logic.py",
-    # The deployer's state modules, which the renovate-agent component reads until H7.19b.
+    # The deployer's state modules, which the renovate-agent and deploy-ui components read until H7.19b.
     "gitops_markers.py": "ansible/roles/setup/gitops_deploy/files/gitops_markers.py",
     "gitops_ledger.py": "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py",
     "gitops_hold.py": "ansible/roles/setup/gitops_deploy/files/gitops_hold.py",

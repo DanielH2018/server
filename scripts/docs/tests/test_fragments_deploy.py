@@ -36,7 +36,7 @@ def test_enum_values_finds_the_verdicts_and_causes_land_prints():
     assert {"settled", "deploy-failed", "unbuilt"} <= set(
         fd.enum_values(outcome, "Verdict")
     )
-    assert {"tick-held", "tag-miss", "promote-timeout"} <= set(
+    assert {"soak-failed", "tag-miss", "promote-timeout"} <= set(
         fd.enum_values(outcome, "Cause")
     )
 
@@ -128,6 +128,7 @@ def test_tree_lock_holders_in_the_real_tree_include_every_known_job():
     jobs = {h["job"] for h in fd.tree_lock_holders()}
     assert {
         "gitops-deploy.service",
+        "homelab-checkout-sync.service",
         "docs-refresh",
         "eval-run",
         "deploy.sh",

@@ -137,8 +137,8 @@ def test_a_setup_plane_pr_is_not_nothing_to_deploy():
     tags, _ = land_tags.derive(files, changed_files=3)
     assert tags == [], "no service tag should be derived from these paths"
     assert "k3s-bringup.yml" in land_tags.plane_note(files)
-    # deploy_ui reads k3s_agent_node_ips, so the tick applies it beside the k3s hand apply (#4357).
-    assert "--tags deploy_ui" in land_tags.self_applied_command(files)
+    # No setup role the tick applies reads k3s's defaults since H7.50 moved deploy_ui's firewall.
+    assert land_tags.self_applied_command(files) == ""
 
 
 def test_a_self_applied_setup_role_is_not_owed_to_a_hand():
@@ -392,17 +392,18 @@ _PR_843 = [
     "scripts/backup/etcd_restore_drill.sh",
 ]
 _K3S_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
+_GITOPS_DEFAULTS = "ansible/roles/setup/gitops_deploy/defaults/main.yml"
 
 
 def test_a_comment_only_setup_role_edit_is_owed_to_nobody():
     """A file list with one broad path read as comments only.
 
-    The PR's drill script is self-applied since #6411 (hypervisor copies it), so the quiet
-    path's own contribution is read alone: loud, the tick applies deploy_ui for it.
+    The PR's drill script is self-applied since #6411 (hypervisor copies it). A quiet path's own
+    contribution is read alone: loud, the tick applies its role; quiet, nothing.
     """
     assert land_tags.plane_note(_PR_843, quiet={_K3S_DEFAULTS}) == ""
-    assert land_tags.self_applied([_K3S_DEFAULTS]) is True
-    assert land_tags.self_applied([_K3S_DEFAULTS], quiet={_K3S_DEFAULTS}) is False
+    assert land_tags.self_applied([_GITOPS_DEFAULTS]) is True
+    assert land_tags.self_applied([_GITOPS_DEFAULTS], quiet={_GITOPS_DEFAULTS}) is False
 
 
 def test_the_same_pr_with_a_real_edit_still_names_the_playbook():

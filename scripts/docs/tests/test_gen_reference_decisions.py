@@ -218,14 +218,21 @@ def test_markdown_renders_the_duplicates_warning(tmp_path):
     _write(tmp_path, "b.py", "# DECIDED: Use the retry flag.\n")
     out = g.render_markdown(_rows(tmp_path))
     assert "Possible duplicates" in out
-    assert "a.py:1" in out
-    assert "b.py:1" in out
+    assert "* `a.py` and `b.py`: use the retry flag." in out
 
 
 def test_markdown_omits_the_duplicates_warning_when_none_found(tmp_path):
     _write(tmp_path, "a.py", "# DECIDED: use the retry flag.\n")
     out = g.render_markdown(_rows(tmp_path))
     assert "Possible duplicates" not in out
+
+
+def test_lines_added_above_a_marker_leave_the_page_unchanged(tmp_path):
+    """Two PRs that each shift a marker down must not both rewrite the page (#7612)."""
+    _write(tmp_path, "a.py", "# DECIDED: use the retry flag.\n")
+    before = g.render_markdown(_rows(tmp_path), tmp_path)
+    _write(tmp_path, "a.py", "import os\nimport sys\n# DECIDED: use the retry flag.\n")
+    assert g.render_markdown(_rows(tmp_path), tmp_path) == before
 
 
 def test_markdown_ends_with_exactly_one_newline(tmp_path):
@@ -414,7 +421,7 @@ def test_markdown_renders_the_unresolved_pointers_warning(tmp_path):
     (tmp_path / "docs" / "adr").mkdir(parents=True)
     out = g.render_markdown(_rows(tmp_path), tmp_path)
     assert "Unresolved pointers" in out
-    assert "scripts/foo.py:1" in out
+    assert "* `scripts/foo.py` → `ADR-0099`" in out
     assert "ADR-0099" in out
 
 

@@ -1,7 +1,7 @@
 ---
 # The tag stays alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
-speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest@sha256:14d56d7c4ff0af18f0a09be8494352ba40d23196e78c5f812cee69afaa1edc45
+speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest@sha256:3851956ddff5b230a096c5414bfdf005e91aff3af48da9bcb4327dc41eff49e4
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Auto-deploy is on although strategy is Recreate and speedtest_k8s_claim below is seeded

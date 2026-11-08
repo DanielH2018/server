@@ -142,7 +142,11 @@ def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
             when `deploy_lib/under_locks.py` no longer reads the lock path.
     """
     holders = []
-    for unit in sorted((repo / SETUP_ROLES).glob("*/templates/*.service.j2")):
+    units = [
+        *sorted((repo / SETUP_ROLES).glob("*/templates/*.service.j2")),
+        *sorted((repo / HOST_COMPONENTS).glob("*/units/*.service.j2")),
+    ]
+    for unit in units:
         if _UNIT_LOCK.search(unit.read_text()):
             holders.append(
                 {

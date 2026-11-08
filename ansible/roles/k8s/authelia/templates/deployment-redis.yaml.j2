@@ -7,11 +7,10 @@
 # lives in this role rather than in netpol-baseline precisely so a `--tags authelia` deploy
 # ships the two together (#1609).
 #
-# In `manifests_extra_rollouts` with `restart_on: []` only, and that empty list is the one thing
-# here not to change. Any restart signal there rolls this Deployment whenever the ROLE's
-# manifests change, which for authelia is several times a day. Rolling redis on that cadence
-# would destroy the sessions this workload exists to keep, so redis rolls only when its own
-# template changes and `kubectl apply` notices; the entry makes the deploy wait on that roll.
+# In `manifests_extra_rollouts` with `restart_on: ['secret']`, so `checksum/restart` here hashes
+# only the `authelia-redis` Secret this pod reads. Keep this pod off every ConfigMap and Secret
+# of the portal's: each one it named would roll the session store, and log everyone out, on a
+# portal config change.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

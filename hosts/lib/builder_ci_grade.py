@@ -3,7 +3,8 @@
 Split from host_package_builder.py (H3.12), which imports it. The
 builder cannot import `deploy_git`, so this module carries its own copy of `ci_verdict`, the two
 conclusion sets and `read_check_pages`, and a test holds the copy equal to the deployer's.
-Stdlib only, because the builder ships beside it with nothing else.
+Stdlib only, because the builder ships beside it with nothing else. checkout_sync.py imports
+its `read_check_pages` and `token_refused`, and the `checkout-sync` component ships it too.
 """
 
 from __future__ import annotations

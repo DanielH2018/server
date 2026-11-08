@@ -730,6 +730,10 @@ wheels = [
 name = "server-homelab"
 version = "0.0.0"
 source = { virtual = "." }
+dependencies = [
+    { name = "jinja2" },
+    { name = "pyyaml" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -737,12 +741,10 @@ dev = [
     { name = "ansible-core" },
     { name = "docker" },
     { name = "flask" },
-    { name = "jinja2" },
     { name = "jsonschema" },
     { name = "mkdocs-material" },
     { name = "pytest" },
     { name = "pytest-xdist" },
-    { name = "pyyaml" },
     { name = "requests" },
     { name = "ruff" },
     { name = "shellcheck-py" },
@@ -751,6 +753,10 @@ dev = [
 ]
 
 [package.metadata]
+requires-dist = [
+    { name = "jinja2", specifier = ">=3" },
+    { name = "pyyaml" },
+]
 
 [package.metadata.requires-dev]
 dev = [
@@ -758,12 +764,10 @@ dev = [
     { name = "ansible-core", specifier = "==2.22.0rc2" },
     { name = "docker" },
     { name = "flask" },
-    { name = "jinja2", specifier = ">=3" },
     { name = "jsonschema" },
     { name = "mkdocs-material", specifier = ">=9.5" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-xdist" },
-    { name = "pyyaml" },
     { name = "requests" },
     { name = "ruff", specifier = ">=0.16" },
     { name = "shellcheck-py", specifier = "==0.11.0.1" },

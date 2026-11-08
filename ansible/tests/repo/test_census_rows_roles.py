@@ -147,15 +147,10 @@ ROWS = (
             Subject("a.yml", "- ansible.builtin.copy:\n    src: deploy_logic.py\n"),
             Subject("b.yml", "# src: test_commented.py is not a ship\n"),
         ),
-        # 83 ship lines across 15 files when the row landed (2026-10-03); H7.34, H7.35, H7.37 and
-        # H7.62 moved roles out.
-        min_matches=36,
-        must_find=frozenset(
-            {
-                "ansible/roles/setup/gitops_deploy/tasks/code.yml",
-                "ansible/roles/setup/deploy_ui/tasks/code.yml",
-            }
-        ),
+        # 83 ship lines across 15 files when the row landed (2026-10-03); H7.34, H7.35, H7.37,
+        # H7.50 and H7.62 moved roles out.
+        min_matches=29,
+        must_find=frozenset({"ansible/roles/setup/gitops_deploy/tasks/code.yml"}),
     ),
     Census(
         name="no-role-ships-a-markdown-file",
@@ -229,8 +224,9 @@ ROWS = (
                 "- ansible.builtin.copy:\n    src: ~/control-side\n    dest: /x\n",
             ),
         ),
-        # 51 once H7.60 deleted five of initial_setup's task files (56 before).
-        min_matches=51,
+        # 56 once H7.34 deleted four of hypervisor's task files (60 before), 53 once H7.50 deleted
+        # three of deploy_ui's, 48 once H7.60 deleted five of initial_setup's.
+        min_matches=48,
         must_find=frozenset({"ansible/roles/setup/initial_setup/tasks/crons.yml"}),
     ),
     Census(

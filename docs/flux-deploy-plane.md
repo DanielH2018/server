@@ -1324,7 +1324,8 @@ The bundle holds:
   `./cluster/<tag>` from the `OCIRepository` `homelab` with `prune: true`, `wait: true`, the
   default deletion policy and `scripts/lib/k8s_roles.py:ROLLOUT_TIMEOUT_DEFAULT`.
   The default policy follows `prune`, so deleting the Kustomization deletes the objects it
-  applied. `flux` and every other Kustomization in the bundle set `deletionPolicy: Orphan`
+  applied. A tag's `-snapshot` and `-prepull` take the default policy too. `flux` and every
+  other Kustomization in the bundle set `deletionPolicy: Orphan`
   (`docs/target-architecture/contracts.md`, *Deletion policy*).
   A role's `defaults/main.yml` changes two of those fields. `flux_prune: false` renders
   `prune: false`, and `manifests_rollout_timeout` replaces the default `timeout`. Each must
@@ -1975,12 +1976,14 @@ A flux-owned service retires through its own render, in this order:
    root prunes `<tag>`, whose finalizer deletes the objects of `cluster/<tag>/`. The Kustomization still exists
    when this PR merges, and the merge is what makes the root prune it. `land.sh` does not read
    the Kustomization before the merge.
-1. **Delete what the kept kinds leave behind by hand (operator-only).** The renderer derives
-   `<tag>-snapshot` and `<tag>-prepull` from the role's claims and defaults, so no emptied
-   template reaches them, and `Orphan` keeps their objects when the root prunes them. A
-   `-snapshot` directory holds a ServiceAccount, Roles, RoleBindings, a ClusterRole, a
-   ClusterRoleBinding and a ConfigMap, and a `-prepull` directory holds a ConfigMap, all
-   beside Jobs whose TTL expires them.
+   `<tag>-snapshot` and `<tag>-prepull` need no first PR. The renderer derives them from
+   the role's claims and defaults, and both take the default deletion policy, so the root's
+   prune of each deletes its objects with it. A `-snapshot` directory holds a
+   ServiceAccount, Roles, RoleBindings, a ClusterRole, a ClusterRoleBinding, a ConfigMap and
+   a Job, and a `-prepull` directory holds a ConfigMap and Jobs. Each is named
+   `snapshot-<tag>` or `prepull-<tag>`.
+   A tag retired before #7485 left these objects behind under `Orphan`, and the operator
+   deletes them by hand (**operator-only**).
 1. **Delete the claim by hand (operator-only).** Prune never deletes a claim labelled
    `kustomize.toolkit.fluxcd.io/prune: disabled`, so the claim and its Longhorn volume
    outlive the retirement. Once the retiring PR is on master, and only when the data is no

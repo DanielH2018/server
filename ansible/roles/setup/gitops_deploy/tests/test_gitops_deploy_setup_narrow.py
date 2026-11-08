@@ -35,10 +35,8 @@ RENOVATE_TEMPLATE = "ansible/roles/setup/renovate_notify/templates/notify.sh.j2"
 # `ansible/requirements.yml` is the setup-plane path that maps to no role directory at all —
 # `initial_setup` installs the collections, and the tag is `collections`.
 REQUIREMENTS = "ansible/requirements.yml"
-# A file another role copies, so every edit to it names that role beside the owner (#3312).
-SHIPPED_FILE = "ansible/roles/setup/gitops_deploy/files/gitops_hold.py"
-# Another role's defaults file a setup role reads one key of (#4303): deploy_ui for k3s's.
-K3S_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
+# A `common` task file two setup roles import, so every edit to it names both (#3317).
+SHIPPED_FILE = "ansible/roles/setup/common/tasks/stamp_deployed.yml"
 # What `narrow_setup.py` answers for a role the range reaches no host through (#4361).
 NOTHING = (deploy_narrow.NARROW_SETUP_NOTHING_EXIT, deploy_narrow.NARROWED_TO_NOTHING)
 
@@ -267,22 +265,22 @@ def test_the_narrowing_loop_stops_asking_once_its_budget_is_spent():
 def test_a_shipped_file_applies_and_holds_every_role_that_ships_it(
     gitops_deploy, tick, state
 ):
-    """deploy_ui installs the deployer's markers by path (#3306).
+    """gitops_deploy and initial_setup both import `stamp_deployed.yml` (#3317).
 
     A range touching only that file applies both roles' blocks, and a failed apply holds
-    each block under its own role, so no apply of the owner alone can clear the hold.
+    each block under its own role, so no apply of one role alone can clear the hold.
     """
-    tick.paths = ["ansible/roles/setup/gitops_deploy/files/gitops_markers.py"]
+    tick.paths = [SHIPPED_FILE]
     tick.narrow_setup = {
         "gitops_deploy": (0, "gitops-deploy-code"),
-        "deploy_ui": (0, "deploy-ui-code"),
+        "initial_setup": (0, "integrity"),
     }
     tick.playbook_outcomes = [RuntimeError("boom")]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert _playbook_argv(tick)[-1] == "deploy-ui-code,gitops-deploy-code"
+    assert _playbook_argv(tick)[-1] == "gitops-deploy-code,integrity"
     assert state.hold_plane == (
-        "ansible/initial_setup.yml deploy_ui:deploy-ui-code,"
-        "gitops_deploy:gitops-deploy-code"
+        "ansible/initial_setup.yml gitops_deploy:gitops-deploy-code,"
+        "initial_setup:integrity"
     )
     assert state.manual_plane_pending() == []
 
@@ -290,16 +288,15 @@ def test_a_shipped_file_applies_and_holds_every_role_that_ships_it(
 def test_a_role_needing_no_tag_is_left_out_of_the_apply_and_the_hold(
     gitops_deploy, tick, state
 ):
-    """An initial_setup default renovate_agent never reads plans no renovate_agent tag (#4361).
+    """A role the row names but the edit reaches no task of plans no tag (#4361).
 
-    The row names renovate_agent for every edit to the file. Before this answer the tick applied
-    the whole `renovate_agent` tag, and a failure there held the deployer over a change
-    renovate_agent never read.
+    The row names initial_setup for every edit to the file. Before this answer the tick applied
+    the whole `initial_setup` tag, and a failure there held the deployer over a change
+    initial_setup never ran.
     """
     tick.paths = [SHIPPED_FILE]
     tick.narrow_setup = {
-        "renovate_agent": NOTHING,
-        "deploy_ui": NOTHING,
+        "initial_setup": NOTHING,
         "gitops_deploy": (0, "prune"),
     }
     tick.playbook_outcomes = [RuntimeError("boom")]
@@ -312,13 +309,13 @@ def test_exit_three_without_the_nothing_line_applies_the_whole_role_tag(
     gitops_deploy, tick, state
 ):
     """The rejecting half: the exit code alone is not the answer, so it stays doubt."""
-    tick.paths = ["ansible/roles/setup/gitops_deploy/files/gitops_markers.py"]
+    tick.paths = [SHIPPED_FILE]
     tick.narrow_setup = {
-        "deploy_ui": (deploy_narrow.NARROW_SETUP_NOTHING_EXIT, ""),
+        "initial_setup": (deploy_narrow.NARROW_SETUP_NOTHING_EXIT, ""),
         "gitops_deploy": (0, "prune"),
     }
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert _playbook_argv(tick)[-1] == "deploy_ui,prune"
+    assert _playbook_argv(tick)[-1] == "initial_setup,prune"
 
 
 def test_a_range_no_setup_role_needs_a_tag_for_runs_no_playbook(
@@ -326,18 +323,18 @@ def test_a_range_no_setup_role_needs_a_tag_for_runs_no_playbook(
 ):
     """An empty `--tags` value runs the whole playbook, so nothing runs and the receipt says so.
 
-    A k3s default deploy_ui never reads: k3s is recorded for a hand, and deploy_ui, the one
-    role the tick would apply, needs nothing.
+    A shared task file whose edit reaches no task of either role that imports it: both roles
+    need nothing.
     """
-    tick.paths = [K3S_DEFAULTS]
-    tick.narrow_setup = {"deploy_ui": NOTHING}
+    tick.paths = [SHIPPED_FILE]
+    tick.narrow_setup = {"gitops_deploy": NOTHING, "initial_setup": NOTHING}
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.playbooks == []
     assert tick.merges == [ORIGIN]
     assert receipt_applied(state) == {
         "ansible/initial_setup.yml": (deploy_narrow.NARROWED_TO_NOTHING,)
     }
-    assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
+    assert state.manual_plane_pending() == []
 
 
 # ── a secrets.yml key a setup role reads (#5436) ──────────────────────────────────────────────

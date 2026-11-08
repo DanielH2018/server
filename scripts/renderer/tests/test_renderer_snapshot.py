@@ -83,7 +83,7 @@ def test_a_snapshot_role_gets_snapshot_kustomization_with_its_upstream_edge(rend
         "cluster-vars",
         f"{TAG}-snapshot",
     ]
-    assert snapshot["wait"] is True and snapshot["deletionPolicy"] == "Orphan"
+    assert snapshot["wait"] is True and "deletionPolicy" not in snapshot
 
 
 def test_the_job_embeds_the_digest8_that_digests_json_records(rendered):

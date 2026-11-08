@@ -95,7 +95,7 @@ from gitops_hold import DeployerSnapshot
 from gitops_ledger import held_planes
 
 # deploy-ui's daemon on the deployer's host: `deploy_ui_port` in
-# `ansible/roles/setup/deploy_ui/defaults/main.yml`. Its ufw rule admits every node IP, which
+# `hosts/components/deploy-ui/defaults/main.yml`. Its ufw rules admit every node IP, which
 # is what lets a session on daniel-server read it.
 DEPLOY_UI_PORT = 8790
 HTTP_TIMEOUT_S = 5
@@ -237,8 +237,6 @@ def manual_plane_rows(owed: str | None, now: float) -> list[dict]:
             "apply": r.apply,
             "by_hand": r.by_hand,
             "warning": r.warning,
-            "agents": list(r.agents),
-            "pins": [list(pin) for pin in r.pins],
             "clear": r.clear,
         }
         for r, line in zip(remedies, lines, strict=True)
@@ -491,16 +489,6 @@ def owed_lines(row: dict) -> list[str]:
         if row["warning"]:
             lines.append(f"  WARNING: {row['warning']}")
         lines += ["  Apply it by hand:", f"    {row['apply']}"]
-        if row["agents"]:
-            lines.append("  Then join each agent node:")
-            lines += [f"    {a}" for a in row["agents"]]
-        # The pin play runs ON the agent, so each command gets its own host line (#5918).
-        for host, cmd in row["pins"]:
-            lines += [f"  Then pin its LAN address, run on {host}:", f"    {cmd}"]
-    elif row["agents"]:
-        # A row reaching only the agent half: the server play would select nothing (#5628).
-        lines.append("  Join each agent node by hand:")
-        lines += [f"    {a}" for a in row["agents"]]
     else:
         lines.append(f"  {row['by_hand'][:1].upper()}{row['by_hand'][1:]}.")
     lines += ["  Then clear its ledger line:", f"    {row['clear']}"]

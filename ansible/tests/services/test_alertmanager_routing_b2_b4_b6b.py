@@ -49,6 +49,8 @@ EXPECTED = {
         "LokiReadRouteNotReporting/daniel-box": DISCORD,
         "LokiReadRouteFailed/daniel-server": DISCORD,
         "LokiReadRouteNotReporting/daniel-server": DISCORD,
+        "CheckoutSyncFailed/daniel-box": DISCORD,
+        "CheckoutSyncNotReporting/daniel-box": DISCORD,
     },
     "b4": {
         "UpsSecondaryFailed/daniel-box": BOTH,

@@ -321,8 +321,7 @@ nothing would apply it.
 deployer's own 10-minute timer still fast-forwards the primary checkout and applies a setup
 role, and `land.sh` neither starts, awaits nor grades that. A landing waits on the promotion
 for a PR's k8s tags, on the host wait for a host package, and on the health gate, and nothing
-else. `tick=0` stays on the Landings board so its columns hold, and `lock` reads 0, `holder` and
-`kick` read empty.
+else.
 
 **A PR that reaches only a setup role the deployer applies waits for master CI and the
 promotion, then ends `nothing-to-deploy`.** Its author reads the outcome on the host: the changed
@@ -711,11 +710,10 @@ and `./scripts/deploy.sh --tags pihole-exporter` deployed it a minute later (iss
 ## The annotation, and the Landings board
 
 Every run writes one logfmt line to syslog on exit (`logger -t landing-annotation`): the PR, the
-merge SHA, the verdict, and seconds spent in each phase — `wait_merge`, `wait_ci`, `tick`,
-`deploy`, `total` — plus `lock`, `holder` and `kick`. `deploy` is step 4's time, which is the
-promotion wait. `tick`, `lock`, `holder` and `kick` described the GitOps tick that `land.sh`
-no longer runs: `tick` and `lock` read 0, and `holder` and `kick` read empty, so the board's
-columns hold.
+merge SHA, the verdict, and seconds spent in each phase — `wait_merge`, `wait_ci`, `deploy`,
+`total`. `deploy` runs from master CI's answer to the end of the promotion wait. Lines written
+before H7.49a also carry `tick`, `lock`, `holder` and `kick`, which described the GitOps tick
+`land.sh` no longer runs. Loki keeps them until about 2026-12-07, and no panel reads them.
 
 Promtail ships it to Loki and the **Landings** Grafana board (Infrastructure folder) plots it, so
 "sessions wait too long" is answered by the phase medians there rather than by memory:

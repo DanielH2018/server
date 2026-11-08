@@ -16,6 +16,7 @@ Run: uv run pytest ansible/tests/repo/test_promote_workflow.py
 """
 
 import copy
+import re
 
 import pytest
 from _helpers import REPO
@@ -23,6 +24,9 @@ from lib import yaml_fast
 
 WORKFLOW = REPO / ".github" / "workflows" / "promote.yml"
 FLUX_DEFAULTS = REPO / "ansible" / "roles" / "k8s" / "flux" / "defaults" / "main.yml"
+DEV_GROUP_FLAG = re.compile(
+    r"\buv (?:run|sync)\b[^\n]*--(?:dev|only-dev|group|all-groups)\b"
+)
 
 # The reset_to_last_good dispatch's two jobs (D5.2b2), guarded by RESET_GUARDS instead.
 RESET_JOBS = ("reset-check", "reset-move")
@@ -252,6 +256,21 @@ def _pin_problems(jobs: dict, flux_version: str) -> list[str]:
     return found
 
 
+def _dev_group_problems(wf: dict) -> list[str]:
+    found = []
+    if (wf.get("env") or {}).get("UV_NO_DEV") != "1":
+        found.append(
+            "the workflow env does not set UV_NO_DEV, so `uv run` installs the dev group"
+        )
+    for name, job in (wf.get("jobs") or {}).items():
+        for scope in [job, *_steps(job)]:
+            if "UV_NO_DEV" in (scope.get("env") or {}):
+                found.append(f"{name}: overrides UV_NO_DEV")
+            if DEV_GROUP_FLAG.search(str(scope.get("run", ""))):
+                found.append(f"{name}: a `uv` call asks for a dependency group")
+    return found
+
+
 def problems(wf: dict, flux_version: str) -> list[str]:
     """Every property of the workflow that is broken, as one line each."""
     found = []
@@ -294,6 +313,7 @@ def problems(wf: dict, flux_version: str) -> list[str]:
     found += _ancestry_problems(jobs.get("render", {}))
     found += _handoff_problems(jobs)
     found += _pin_problems(jobs, flux_version)
+    found += _dev_group_problems(wf)
     return found
 
 
@@ -395,6 +415,19 @@ def _reset_without_its_input(wf):
     job["if"] = job["if"].replace(RESET_GUARDS[0], "true")
 
 
+def _dev_group_installed(wf):
+    del wf["env"]["UV_NO_DEV"]
+
+
+def _render_job_reenables_dev(wf):
+    wf["jobs"]["render"].setdefault("env", {})["UV_NO_DEV"] = ""
+
+
+def _step_asks_for_a_group(wf):
+    step = next(s for s in wf["jobs"]["render"]["steps"] if s.get("id") == "build")
+    step["run"] = step["run"].replace("uv run python", "uv run --group dev python", 1)
+
+
 RED = {
     "a trigger guard removed": (
         _drop_guard,
@@ -443,6 +476,12 @@ RED = {
         _reset_without_its_input,
         "reset-check: its `if` lacks the reset guard inputs.reset_to_last_good",
     ),
+    "the dev group installed": (_dev_group_installed, "does not set UV_NO_DEV"),
+    "render re-enables the dev group": (
+        _render_job_reenables_dev,
+        "render: overrides UV_NO_DEV",
+    ),
+    "a step asks for a group": (_step_asks_for_a_group, "render: a `uv` call asks for"),
 }
 
 
