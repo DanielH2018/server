@@ -1158,6 +1158,7 @@
  "scripts/dev/tests/test_renovate_branch_sweep.py": 0.0,
  "scripts/dev/tests/test_renovate_rebase.py": 0.0,
  "scripts/dev/tests/test_repo_guards.py": 0.0,
+ "scripts/dev/tests/test_repo_guards_survey.py": 1.09,
  "scripts/dev/tests/test_review_metrics.py": 0.0,
  "scripts/dev/tests/test_run_as_cron.py": 0.04,
  "scripts/dev/tests/test_smoke_extract.py": 0.0,
