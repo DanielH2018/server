@@ -18,7 +18,8 @@ name: Flux deletion drill
 #   break-glass      a bundle signed with a throwaway key reaches Ready through the flux
 #                    role's break-glass source form
 #   break-glass-red  a bundle signed with a second key the cluster does not hold is refused
-#   fresh-cluster    on a second cluster whose node resolves no name, the controllers and the
+#   fresh-cluster    on a second cluster where neither the node nor a pod resolves an outside
+#                    name, the controllers and the
 #                    registry run from image archives, the registry role's render serves the
 #                    key-signed bundle, and the bundle reaches Ready
 #                    (scripts/renderer/fresh_cluster_drill.py)
@@ -302,9 +303,11 @@ jobs:
           done < "$f/kit.txt"
 
       # The node's resolver points at a port nothing serves, so no name resolves on the node,
-      # ghcr.io and Docker Hub among them. kind's own images are in its node image. Each
-      # archive must then serve its digest reference through CRI, as the kubelet looks it up.
-      - name: Fresh cluster - create a cluster whose node resolves no name, and load the kit
+      # ghcr.io and Docker Hub among them. CoreDNS forwards to a dead port too, so pods,
+      # source-controller among them, resolve only cluster names. kind's own images are in its
+      # node image. Each archive must then serve its digest reference through CRI, as the
+      # kubelet looks it up.
+      - name: Fresh cluster - create a cluster that resolves no outside name, and load the kit
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         run: |
           set -euo pipefail
@@ -321,6 +324,13 @@ jobs:
             fi
           done
           echo "the node resolves neither ghcr.io nor registry-1.docker.io"
+          kubectl -n kube-system get configmap coredns -o json \
+            | jq '.data.Corefile |= sub("forward \\. /etc/resolv\\.conf"; "forward . 127.0.0.1:1")' \
+            > "$RUNNER_TEMP/coredns.json"
+          grep -q 'forward . 127.0.0.1:1' "$RUNNER_TEMP/coredns.json"
+          kubectl replace -f "$RUNNER_TEMP/coredns.json"
+          kubectl -n kube-system rollout restart deployment/coredns
+          kubectl -n kube-system rollout status deployment/coredns --timeout=120s
           while read -r ref tar; do
             kind load image-archive --name fresh "$f/kit/$tar"
             if ! docker exec "$node" crictl inspecti "$ref" > /dev/null; then
@@ -345,6 +355,17 @@ jobs:
           done
           kubectl apply -k "$f/registry"
           kubectl -n homelab rollout status deployment/registry --timeout=180s
+          # A pod resolves the registry's Service and nothing outside the cluster.
+          registry_ref=$(jq -r '.[] | select(.name | startswith("docker.io/library/registry@")) | .ref' "$f/images.json")
+          kubectl -n homelab run dns-probe --image="$registry_ref" --restart=Never --command -- \
+            sh -c 'nslookup registry.homelab.svc.cluster.local && ! nslookup ghcr.io && ! nslookup rekor.sigstore.dev'
+          if ! kubectl -n homelab wait pod/dns-probe --for=jsonpath='{.status.phase}'=Succeeded --timeout=120s; then
+            echo "a pod resolves an outside name, or not the registry's, so this case cannot prove an offline bring-up"
+            kubectl -n homelab logs pod/dns-probe || true
+            exit 1
+          fi
+          kubectl -n homelab logs pod/dns-probe
+          echo "pods resolve the registry's Service and neither ghcr.io nor rekor.sigstore.dev"
 
       # The runner pushes through a port-forward, because the registry's hostPort is on the
       # node's loopback. source-controller fetches at the role's own address,

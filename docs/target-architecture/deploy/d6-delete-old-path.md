@@ -3064,8 +3064,9 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     fresh-cluster case once H7 Open question 14 rules that the offline bring-up runs
     through this runbook. Until then, D6.7c's two cases cover a running cluster only.
     Update (#7555): H7 Open question 14 ruled so, and `flux-deletion-drill` gained the case
-    `fresh-cluster`. It loads the controllers and the registry from OCI-layout archives on
-    a kind node that resolves no name, applies the registry role's render, and verifies the
+    `fresh-cluster`. Its first passing run is the proof, which the PR that added it awaited
+    from CI. It loads the controllers and the registry from OCI-layout archives on a kind
+    cluster that resolves no outside name, on the node or in a pod, applies the registry role's render, and verifies the
     key-signed bundle at `flux_break_glass_url`. The kit's archives keep each pinned index,
     because `docker save` from Docker's classic image store drops the digest the manifests
     name. The registry's claims on a
