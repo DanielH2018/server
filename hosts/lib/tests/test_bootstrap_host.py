@@ -298,8 +298,8 @@ def test_a_volume_group_with_free_space_is_named_in_a_warning(host):
     assert "lvextend -r" in warnings[0]
 
 
-def test_a_volume_group_with_no_free_space_draws_no_warning(host):
-    host._stub("vgs", "printf '  ubuntu-vg   0\\n'")
+def test_a_volume_group_with_exactly_10g_free_draws_no_warning(host):
+    host._stub("vgs", "printf '  ubuntu-vg   10.00\\n'")
 
     result = host.run("daniel-pi", "--until", "1")
 
@@ -307,11 +307,11 @@ def test_a_volume_group_with_no_free_space_draws_no_warning(host):
     assert "unallocated" not in result.stderr
 
 
-def test_a_host_without_vgs_skips_the_warning_and_continues(host):
+def test_a_host_without_vgs_prints_nothing_and_continues(host):
     assert shutil.which("vgs", path=str(host.bin) + ":/usr/bin:/bin") is None
 
-    result = host.run("daniel-pi", "--until", "2")
+    result = host.run("daniel-pi", "--until", "1")
 
     assert result.returncode == 0, result.stderr
-    assert "unallocated" not in result.stderr
-    assert "stopped after step 2" in result.stdout
+    assert result.stderr == ""
+    assert "stopped after step 1" in result.stdout

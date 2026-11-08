@@ -237,16 +237,15 @@ if [ -n "$tools_seed" ]; then
     [ -d "$tools_seed" ] || die "--tools-seed: $tools_seed is not a directory"
 fi
 
-# The Ubuntu installer leaves the root LV at about half the disk. This warns and changes nothing.
-if command -v vgs > /dev/null 2>&1; then
-    vgs --noheadings --nosuffix --units g -o vg_name,vg_free 2> /dev/null |
-        awk 'NF == 2 && $2 + 0 > 10 {
-            print "bootstrap-host: warning: volume group " $1 " has " $2 "G unallocated, so" \
-                " the root LV is probably still at the installer default. Extend it with" \
-                " lvextend -r -l +100%FREE, as docs/host-packages.md, Preparing the installer" \
-                " on either node, says"
-        }' >&2 || true
-fi
+# The Ubuntu installer leaves the root LV at about half the disk. This warns and changes nothing;
+# a host without vgs, such as the Pi, prints nothing.
+vgs --noheadings --nosuffix --units g -o vg_name,vg_free 2> /dev/null |
+    awk 'NF == 2 && $2 + 0 > 10 {
+        print "bootstrap-host: warning: volume group " $1 " has " $2 "G unallocated, so" \
+            " the root LV is probably still at the installer default. Extend it with" \
+            " lvextend -r -l +100%FREE, as docs/host-packages.md, Preparing the installer" \
+            " on either node, says"
+    }' >&2 || true
 
 # Step 1 is the hostname check and the volume-group warning above; --until 1 stops here.
 stop_after() {
