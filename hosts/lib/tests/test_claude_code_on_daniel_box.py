@@ -238,11 +238,28 @@ def test_daniel_box_declares_the_agent_with_its_own_uid(box):
     )
 
 
-def test_the_rc_host_binds_the_runtime_dir_of_the_uid_the_package_declares(box):
+def render_box_with_rc_user(tmp_path, rc_user: str):
+    host_vars = tmp_path / "host_vars"
+    shutil.copytree(HOST_VARS, host_vars)
+    path = host_vars / "daniel-box.yml"
+    path.write_text(
+        yaml.safe_dump(
+            {**yaml.safe_load(path.read_text()), "claude_code_user": rc_user}
+        )
+    )
+    return host_mode.render_host("daniel-box", inventory=Inventory(host_vars=host_vars))
+
+
+def test_the_rc_host_moved_to_the_agent_binds_the_runtime_dir_of_the_uid_the_package_declares(
+    tmp_path,
+):
     # claude_code_user_uid sits in host_vars and the uid in package.yml; the bind follows one.
-    users = json.loads(box.files["/usr/lib/homelab/manifest.json"][0])["users"]["users"]
+    moved = render_box_with_rc_user(tmp_path, "claude")
+    users = json.loads(moved.files["/usr/lib/homelab/manifest.json"][0])["users"][
+        "users"
+    ]
     uid = {u["name"]: u["uid"] for u in users}["claude"]
-    unit = box.files[f"{UNITS}/homelab-claude-rc.service"][0].decode()
+    unit = moved.files[f"{UNITS}/homelab-claude-rc.service"][0].decode()
     assert re.findall(r"^BindPaths=(\S+)$", unit, re.M) == [f"/run/user/{uid}"]
     assert f"Environment=XDG_RUNTIME_DIR=/run/user/{uid}\n" in unit
 
@@ -250,17 +267,7 @@ def test_the_rc_host_binds_the_runtime_dir_of_the_uid_the_package_declares(box):
 def test_the_rc_host_rolled_back_to_the_operator_reaches_the_operators_bus(tmp_path):
     # The rollback sets claude_code_user to ubuntu and leaves claude_code_user_uid at the
     # agent's 996, so the unit must take the operator's uid from claude_code_login_uid.
-    host_vars = tmp_path / "host_vars"
-    shutil.copytree(HOST_VARS, host_vars)
-    path = host_vars / "daniel-box.yml"
-    path.write_text(
-        yaml.safe_dump(
-            {**yaml.safe_load(path.read_text()), "claude_code_user": "ubuntu"}
-        )
-    )
-    rolled_back = host_mode.render_host(
-        "daniel-box", inventory=Inventory(host_vars=host_vars)
-    )
+    rolled_back = render_box_with_rc_user(tmp_path, "ubuntu")
     unit = rolled_back.files[f"{UNITS}/homelab-claude-rc.service"][0].decode()
     assert re.findall(r"^Environment=(XDG_RUNTIME_DIR=\S+)$", unit, re.M) == [
         "XDG_RUNTIME_DIR=/run/user/1000"
