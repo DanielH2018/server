@@ -40,9 +40,9 @@ and the failure message says so.
     volume_revert_sha: 1a2b3c4d            # the deploy tag the snapshot was named with
 ```
 
-`ansible/volume-revert.yml` is the role's one caller, the fallback entry point for a flux-owned
-role until the snapshot drill passes through `scripts/backup/volume_revert.py`, the script the
-hold post prints, and takes all three as `-e` inputs. The runbook is *The revert
+`ansible/volume-revert.yml` is the role's one caller, and takes all three as `-e` inputs. The
+2026-11-08 drill passed through `scripts/backup/volume_revert.py`, the script the hold post
+prints, so the playbook is no longer the fallback, and H7.55 deletes the playbook. The runbook is *The revert
 runbook* in `docs/volume-snapshot-drills.md`. The playbook includes this role alone, never runs
 `deploy.yml`, and gathers facts through the shared preamble, because `k8s/longhorn-api` reads
 `ansible_hostname`.
