@@ -125,8 +125,16 @@ def test_a_host_lib_change_reaches_its_consumers_and_not_common():
     consumers = {"gitops_deploy"}
     assert services_from_changed_paths(host_lib).setup_roles == consumers
     assert setup_tags_for(host_lib) == consumers
+    unshipped = ["ansible/roles/setup/common/templates/unshipped.j2"]
+    assert services_from_changed_paths(unshipped).setup_roles == {"common"}
+
+
+def test_a_template_only_host_packages_render_owes_no_setup_role():
+    """The package applies `resolv.conf.j2`, so no `common` `manual_plane` line is recorded."""
     resolv = ["ansible/roles/setup/common/templates/resolv.conf.j2"]
-    assert services_from_changed_paths(resolv).setup_roles == {"common"}
+    cs = services_from_changed_paths(resolv)
+    assert (cs.setup_roles, cs.broad, cs.broad_setup) == (set(), False, False)
+    assert setup_roles_for(resolv[0]) == set()
 
 
 def test_a_table_holding_only_the_old_host_lib_key_routes_the_moved_file_nowhere():

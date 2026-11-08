@@ -23,8 +23,11 @@ own. The scan sees a `host_lib.py` consumer through its `stamp_deployed_pairs` e
 A `templates/` file a shared task file renders inherits that task file's importers (#3319): the
 kuma-check pair reaches a host only through `check_timer.yml`, which names it under its own
 role, so the direct scan alone finds no consumer. `SETUP_FILES_ROUTED_TO_OWNER` is the one
-exclusion, and its `DECIDED:` marker in `deploy_cross_role` says why `resolv.conf.j2` records
-`common` instead.
+exclusion, and it is empty since H7.35.
+
+A setup template that only a host component renders, through `role:`, and that no setup task
+names is in `SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES`. The package applies it, so the
+deployer re-applies no role and records no `manual_plane` line for it.
 
 A repo file a setup task copies from the checkout by a literal `src: "{{ playbook_dir
 }}/../<path>"` is a row too (#6411). It sits under no role, so without one the deployer maps
@@ -41,11 +44,12 @@ Run: uv run pytest ansible/tests/setup/test_setup_cross_role_files.py
 import fnmatch
 import re
 
-from _helpers import ROLES
+from _helpers import ROLES, load_yaml
 from _role_census import role_dirs, role_task_files
 
 
 from deployer_lib.deploy_cross_role import (
+    SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES,
     SETUP_FILES_ROUTED_TO_OWNER,
     SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
 )
@@ -301,3 +305,57 @@ def test_a_templated_or_commented_checkout_source_is_clean():
         '    creates: "{{ playbook_dir }}/../.git/hooks/pre-commit"\n'
     )
     assert checkout_files({"ansible/roles/setup/owner/tasks/main.yml": text}, {}) == {}
+
+
+def package_only_templates(specs: list[dict], task_texts: dict[str, str]) -> set[str]:
+    """Each setup template a component renders with `role:` that no setup task names.
+
+    Every list in a spec counts, so a `files:` entry and an `outputs:` one alike.
+
+    Args:
+        specs: the parsed `component.yml` files.
+        task_texts: the setup roles' task text, by role.
+    """
+    named = "\n".join(task_texts.values())
+    found = set()
+    for spec in specs:
+        role = spec.get("role")
+        entries = [e for v in spec.values() if isinstance(v, list) for e in v]
+        for entry in entries:
+            src = str(entry.get("src", "")) if isinstance(entry, dict) else ""
+            name = src.removeprefix("role:")
+            if role and name != src and name.removesuffix(".j2") not in named:
+                found.add(f"ansible/roles/setup/{role}/templates/{name}")
+    return found
+
+
+def _component_specs() -> list[dict]:
+    components = ROLES.parent.parent / "hosts" / "components"
+    return [load_yaml(p) or {} for p in sorted(components.glob("*/component.yml"))]
+
+
+def test_the_package_only_table_equals_the_templates_only_components_render():
+    found = package_only_templates(_component_specs(), _setup_task_texts())
+    assert "ansible/roles/setup/common/templates/resolv.conf.j2" in found
+    assert found == SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES
+
+
+def test_a_role_template_only_a_component_renders_is_flagged():
+    spec = {
+        "role": "nut_host",
+        "files": [{"src": "role:a.sh.j2"}],
+        "outputs": [{"src": "role:b.conf.j2"}],
+    }
+    assert package_only_templates([spec], {"k3s": ""}) == {
+        "ansible/roles/setup/nut_host/templates/a.sh.j2",
+        "ansible/roles/setup/nut_host/templates/b.conf.j2",
+    }
+
+
+def test_a_role_template_a_setup_task_names_is_clean():
+    spec = {
+        "role": "k3s",
+        "files": [{"src": "role:netplan.yaml.j2"}, {"src": "templates/own.j2"}],
+    }
+    task = 'src: "{{ item }}.j2"\nloop: [netplan.yaml]\n'
+    assert package_only_templates([spec], {"k3s": task}) == set()

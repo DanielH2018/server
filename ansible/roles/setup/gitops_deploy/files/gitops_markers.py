@@ -229,9 +229,9 @@ def owed_clear_cmd(cls: str, subject: str, tags=()) -> str:
 
 
 # The setup roles whose whole-role tag is a blunt instrument, and the narrowed tags that still
-# reach the tasks that make it one. `--tags k3s` reapplies the k3s server install and the
-# CoreDNS release marker; every task in `roles/setup/k3s/tasks/server.yml` carries `k3s_server`, so a narrowing that lands on that tag arms the installer
-# restart and the key re-encryption as surely as the whole-role tag does.
+# reach the tasks that make it one. Every task in `roles/setup/k3s/tasks/server.yml` carries
+# `k3s_server`, so a narrowing that lands on that tag arms the installer restart and the key
+# re-encryption as surely as the whole-role tag does.
 #
 # The DATA lives here because three surfaces need it and two of them cannot reach the
 # deployer's tree: `deploy_remediation` composes the long prose for the journal, the Discord
