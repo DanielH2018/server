@@ -81,14 +81,14 @@ tools:
   vale:
     amd64:
       # renovate: datasource=github-release-attachments depName=vale-cli/vale
-      version: v3.25.1
-      sha256: 4bf5c5176b682b1da0830f471584d3494f1c2e27ee3029e1ad6f6661d4962182
+      version: v3.26.0
+      sha256: 22aa69a556558e4a9dfc63c17030777383d8d3c48dcdfad655fa98e839d666ed
       url: https://github.com/vale-cli/vale/releases/download/{version}/vale_{bare}_Linux_64-bit.tar.gz
       member: vale
     arm64:
       # renovate: datasource=github-release-attachments depName=vale-cli/vale
-      version: v3.25.1
-      sha256: 2a69755b68118c612c455fc0c5ea1b9438519aa1c852e3fb303b3ad97141bbb0
+      version: v3.26.0
+      sha256: 3154179f4611140c9af54a8b3bc6a90bc02b73fe6c1f635369604dde0490406d
       url: https://github.com/vale-cli/vale/releases/download/{version}/vale_{bare}_Linux_arm64.tar.gz
       member: vale
   # The host DNS forwarder on daniel-box (k3s-host-dns). The arm64 block exists because the renderer
