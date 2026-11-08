@@ -861,7 +861,9 @@ the guest clones GitHub at that checkout's `HEAD`. The run's directory under
 
 - **What it runs.** A transient guest on the `staging` network plays daniel-box, with the clone
   fetched from GitHub. The drill skips the token and key restores, so the guest holds no production
-  credential. The guest is renamed `daniel-box` first, because step 1 refuses any other name. The
+  credential. The guest is renamed `daniel-box` first, because step 1 refuses any other name.
+  It also waits for cloud-init and stops the apt-daily jobs, because step 5's install does not
+  wait for the `dpkg` lock. The
   deviations go in before the install, and k3s starts by hand:
     1. `bootstrap-host.sh daniel-box --until 4 --local-build <clone>`;
     1. the three guest-local deviations. The masks live under `/run/systemd/system`, and

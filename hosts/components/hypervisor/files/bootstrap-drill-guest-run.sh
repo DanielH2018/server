@@ -50,6 +50,11 @@ cmd_prepare() {
   # guest etcd-drill.
   hostnamectl set-hostname daniel-box || die "cannot set the hostname"
   grep -q '[[:space:]]daniel-box$' /etc/hosts || echo "127.0.1.1 daniel-box" >>/etc/hosts
+  # A first boot's cloud-init and apt-daily jobs hold dpkg's lock, and step 5's install does not
+  # wait for it. The stop waits for a running job to end.
+  cloud-init status --wait >/dev/null 2>&1 || true
+  systemctl stop apt-daily.timer apt-daily-upgrade.timer apt-daily.service apt-daily-upgrade.service \
+    || die "cannot stop the apt-daily jobs"
   apt-get update || die "apt-get update failed"
   apt-get install -y git gnupg curl || die "apt-get install git gnupg curl failed"
   rm -rf "$CLONE"

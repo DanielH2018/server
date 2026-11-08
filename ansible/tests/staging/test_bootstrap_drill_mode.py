@@ -20,7 +20,6 @@ import tarfile
 
 import pytest
 from _drill_mode import (
-    LOGGER,
     QEMU_IMG,
     VIRSH,
     Run,
@@ -70,6 +69,8 @@ MASKS = [
     "homelab-updater.timer",
 ]
 GIT = '#!/bin/bash\necho "$SHA"\n'
+# Records each syslog line, so a test can read which tag the run logged under.
+LOGGER = '#!/bin/bash\necho "logger $*" >>"$EVENTS"\n'
 # Stands in for `ssh <guest> ...`. A detached step reports exit 1 through `rc` when it is FAIL_AT,
 # and nothing at all when it is NEVER_DONE; a direct step exits 1 when it is FAIL_AT.
 SSH = """\
@@ -178,6 +179,9 @@ def test_a_passing_drill_runs_every_step_after_the_fence_and_touches_no_drill_ev
     )
     assert "step deviate 192.168.140.11 192.168.140.1" in events
     assert "Ready: True" in r.evidence("bootstrap-verdict.txt")
+    logged = [e for e in events if e.startswith("logger ")]
+    assert any("-t etcd-drill-bootstrap-drill status=up" in e for e in logged), logged
+    assert not any("-t etcd-restore-drill-vm" in e for e in logged), logged
     assert_cleaned_up(r)
     assert_drill_evidence_untouched(r)
     with tarfile.open(r.t / "staged.tar") as staged:
