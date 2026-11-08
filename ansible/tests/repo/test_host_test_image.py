@@ -43,10 +43,12 @@ def _build(
     pins: str,
     pullable: tuple[str, ...] = (),
     inspect: str = "missing",
+    label: str | None = None,
 ) -> tuple[subprocess.CompletedProcess, list[str]]:
     """Run build-image.sh 24.04 with `pins` as image.pins, returning the result and each docker argv.
 
-    A `docker pull` succeeds only for a ref in `pullable`.
+    A `docker pull` succeeds only for a ref in `pullable`, and a pulled image carries `label` as
+    its Dockerfile hash, this Dockerfile's by default.
     """
     context = tmp_path / "context"
     context.mkdir()
@@ -59,7 +61,9 @@ def _build(
 printf '%s\\n' "$*" >> "{calls}"
 case "$1 $2" in
 {pull_cases}  "pull "*) exit 1 ;;
-  "inspect "*) echo "{IMAGE}@{DIGEST}" ;;
+  "inspect "*)
+    [[ "$*" == *Labels* ]] && {{ echo "{label or _inputs()}"; exit 0; }}
+    echo "{IMAGE}@{DIGEST}" ;;
   "buildx imagetools")
     [[ "$*" == *--format* ]] && {{ echo {DIGEST}; exit 0; }}
     case "{inspect}" in
@@ -113,7 +117,19 @@ def test_a_stale_pin_pulls_this_dockerfiles_published_tag_and_warns(
     assert f"pull {_tag()}" in calls
     assert f"{IMAGE}@{DIGEST}" not in " ".join(c for c in calls if c.startswith("pull"))
     assert "buildx build" not in _docker_verbs(calls)
-    assert "image.pins is stale" in result.stdout
+    assert "image.pins pins no digest" in result.stdout
+
+
+def test_a_tag_built_from_another_dockerfile_is_refused_and_built(
+    tmp_path: Path,
+) -> None:
+    result, calls = _build(
+        tmp_path, pins=_stale_pins(), pullable=(_tag(),), label="0" * 64
+    )
+    assert result.returncode == 0, result.stderr
+    assert f"tag {_tag()} homelab-host-test:24.04" not in calls
+    assert _docker_verbs(calls)[-1] == "buildx build"
+    assert "is not used" in result.stdout
 
 
 def test_a_dockerfile_with_no_published_image_is_built(tmp_path: Path) -> None:
@@ -170,18 +186,18 @@ def _pin_problems(text: str, sites: set[tuple[str, str]]) -> list[str]:
     )
     if "inputs" not in pins:
         return ["no inputs line"]
-    if pins["inputs"] != "-" and not re.fullmatch(r"[0-9a-f]{64}", pins["inputs"]):
+    if not re.fullmatch(r"[0-9a-f]{64}", pins["inputs"]):
         return [f"inputs is no Dockerfile sha256: {pins['inputs']}"]
     keys = {f"{release}-{_ARCH[runner]}" for runner, release in sites}
     problems = [f"{key} is no build site" for key in pins.keys() - keys - {"inputs"}]
     problems += [
         f"{key} is not a digest: {value}"
         for key, value in pins.items()
-        if key != "inputs" and not DIGEST_RE.fullmatch(value)
+        if key != "inputs" and value != "-" and not DIGEST_RE.fullmatch(value)
     ]
-    # `inputs -` is the state before the first publish, when every leg builds.
-    if pins["inputs"] != "-":
-        problems += [f"{key} has no pin" for key in sorted(keys - pins.keys())]
+    problems += [f"{key} has no pin" for key in sorted(keys - pins.keys())]
+    if not any(DIGEST_RE.fullmatch(value) for value in pins.values()):
+        problems.append("no image is pinned by digest")
     return problems
 
 
@@ -200,6 +216,11 @@ def test_a_pin_file_missing_a_site_or_holding_a_tag_is_flagged() -> None:
     ]
     assert _pin_problems("inputs latest\n", sites) == [
         "inputs is no Dockerfile sha256: latest"
+    ]
+    assert _pin_problems("inputs -\n", sites) == ["inputs is no Dockerfile sha256: -"]
+    unpublished = "".join(f"{r}-{_ARCH[runner]} -\n" for runner, r in sites)
+    assert _pin_problems(f"inputs {_inputs()}\n{unpublished}", sites) == [
+        "no image is pinned by digest"
     ]
 
 
