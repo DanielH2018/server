@@ -40,9 +40,8 @@ the name:
   `/usr/bin/vale` are one-line execs of the `homelab-tools` binaries, the `worktree-holders`
   component ships the root-run holder scan, and the dotfiles repo installs the per-user uv, prek and
   Python. The role keeps only `ansible-core` and `ansible-lint` until H7.63, which `/usr/bin/uv`
-  installs. daniel-server's package retires `/usr/local/bin/uv`. A stale copy stays on daniel-box
-  with no writer, and [#7566](https://github.com/DanielH2018/server/issues/7566) retires it after the k3s apply that repoints that role's
-  last reader.
+  installs. Each cluster host's package lists `/usr/local/bin/uv` as a legacy entry, so the
+  install removes the copy that `initial_setup` wrote.
 - **The two tools this role installs are pinned, and each equals a twin** (#2148).
   `ansible-core` and `ansible-lint` equal `pyproject.toml` and `prek.toml`
   (`ansible/tests/repo/test_host_tool_pins_match_their_twins.py`), and the install is version-gated

@@ -147,7 +147,7 @@ def _prepare(tmp_path) -> tuple[Path, Path]:
     write_exec(stubs / "usermod", f'#!/bin/sh\necho "usermod $*" >> {calls}\n')
     write_exec(stubs / "chgrp", "#!/bin/sh\n")
     write_exec(stubs / "curl", f'#!/bin/sh\necho "curl" >> {calls}\n')
-    # Drain stdin: a stub that exits first can SIGPIPE the script's `echo |` under pipefail.
+    # The stub drains stdin: under pipefail, `echo | sha256sum` fails at random on SIGPIPE otherwise.
     write_exec(stubs / "sha256sum", "#!/bin/sh\ncat > /dev/null\nexit 0\n")
     write_exec(
         stubs / "ssh-keygen",
@@ -205,7 +205,7 @@ def test_prepare_refuses_a_base_image_that_differs_from_the_pin(tmp_path):
     """The guest is built only from the reviewed image, so a mismatch stops the run."""
     _prepare(tmp_path)
     root = tmp_path / "root"
-    write_exec(tmp_path / "bin" / "sha256sum", "#!/bin/sh\nexit 1\n")
+    write_exec(tmp_path / "bin" / "sha256sum", "#!/bin/sh\ncat > /dev/null\nexit 1\n")
     result = run(
         [str(tmp_path / "prepare")],
         env={"HOMELAB_ROOT": str(root), "PATH": os.environ["PATH"]},

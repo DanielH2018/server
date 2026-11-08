@@ -181,7 +181,6 @@ EXIT_64_ON_A_BAD_FLAG = (
     "ansible/roles/k8s/monitor-bridge/files/check.py",
     "ansible/roles/k8s/monitor-bridge/files/cli.py",
     "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py",
-    "ansible/roles/setup/initial_setup/files/loki_route_health.py",
     "hosts/components/loki-route-witness/loki_route_health.py",
     "ansible/roles/setup/initial_setup/files/worktree_holders.py",
     "hosts/components/renovate-agent/files/land_renovate_pr.py",
