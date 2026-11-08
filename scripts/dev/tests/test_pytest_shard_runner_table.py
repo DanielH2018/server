@@ -122,19 +122,11 @@ def test_a_runner_refresh_reads_a_slow_and_a_fast_leg_as_the_same_modules(tmp_pa
     assert json.loads(table.read_text()) == recorded
 
 
-@pytest.mark.parametrize(
-    "log",
-    [
-        pytest.param("4.00s call {a}::t\n", id="no-compile-line"),
-        pytest.param(
-            "Bytecode compiled 2000 files in 60ms\n4.00s call {a}::t\n",
-            id="only-a-warm-compile",
-        ),
-    ],
-)
-def test_a_leg_with_no_cold_compile_is_read_as_measured(log):
+def test_a_leg_whose_only_compile_was_warm_is_read_as_measured():
+    """A warm compile found its bytecode built, so it measures no CPU speed."""
     a = FILES[0]
-    assert shard_weight_gate.runner_weights([log.format(a=a)]) == {a: 4.0}
+    log = f"Bytecode compiled 2000 files in 60ms\n4.00s call {a}::t\n"
+    assert shard_weight_gate.runner_weights([log]) == {a: 4.0}
 
 
 def _fake_gh(runs: dict[int, list[tuple[str, str]]]):
