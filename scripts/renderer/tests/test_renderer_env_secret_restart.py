@@ -20,7 +20,10 @@ from lib.exit_codes import RENDER_OK
 from render_share import placeholder_renderer
 from renderer import homelab_render
 from renderer.renderer_lib.cluster import DEFERRED_SUFFIX
+from lib.repo_paths import K8S_ROLES
+from renderer.renderer_lib.cluster import tag_context
 from renderer.renderer_lib.restart import RESTART_ANNOTATION, pod_template
+from renderer.renderer_lib.restart import outside_secrets, restart_targets
 
 # secretKeyRef on an extra rollout, envFrom.secretRef, a DaemonSet, a workload rendered in a
 # deferred directory, and redis, whose `restart_on: []` leaves it unstamped.
@@ -154,3 +157,90 @@ def test_a_planted_env_secret_workload_without_the_annotation_is_flagged(
     shutil.copytree(render, out)
     _strip_annotation(out / "cluster" / tag / file)
     assert _unstamped(out, flux_tags) == [(tag, workload)]
+
+
+def _env_secret_names(template: dict) -> set[str]:
+    spec = template.get("spec") or {}
+    names = set()
+    for container in [
+        *(spec.get("containers") or []),
+        *(spec.get("initContainers") or []),
+    ]:
+        for source in container.get("envFrom") or []:
+            if (source.get("secretRef") or {}).get("name"):
+                names.add(source["secretRef"]["name"])
+        for env in container.get("env") or []:
+            ref = (env.get("valueFrom") or {}).get("secretKeyRef") or {}
+            if ref.get("name"):
+                names.add(ref["name"])
+    return names
+
+
+def unhashed_env_secrets(
+    template: dict,
+    admitted: Iterable[str],
+    rendered: Iterable[str],
+    outside: Iterable[str],
+) -> set[str]:
+    """The Secrets `template` reads through env that its `checksum/restart` does not hash.
+
+    `restart_values` hashes a Secret only when the target's `restart_on` admits the kind, and
+    only when the tag renders it or lists it in `manifests_outside_secrets`. A SOPS-shipped
+    Secret counts as unhashed here, because the placeholder render leaves it out.
+    """
+    if "Secret" not in set(admitted):
+        return _env_secret_names(template)
+    return _env_secret_names(template) - set(rendered) - set(outside)
+
+
+def _reads(*secrets: str) -> dict:
+    env = [
+        {"name": s, "valueFrom": {"secretKeyRef": {"name": s, "key": "k"}}}
+        for s in secrets
+    ]
+    return {"spec": {"containers": [{"name": "c", "env": env}]}}
+
+
+def test_an_env_secret_the_checksum_admits_is_clean():
+    assert unhashed_env_secrets(_reads("own"), {"Secret"}, {"own"}, set()) == set()
+    assert (
+        unhashed_env_secrets(_reads("theirs"), {"Secret"}, set(), {"theirs"}) == set()
+    )
+
+
+def test_an_env_secret_behind_a_config_only_restart_on_is_flagged():
+    """`restart_on: [config]` stamps a ConfigMap-only value, which a rotation never moves."""
+    assert unhashed_env_secrets(_reads("own"), {"ConfigMap"}, {"own"}, set()) == {"own"}
+
+
+def test_an_outside_env_secret_missing_from_outside_secrets_is_flagged():
+    assert unhashed_env_secrets(
+        _reads("own", "theirs"), {"ConfigMap", "Secret"}, {"own"}, set()
+    ) == {"theirs"}
+
+
+def test_every_env_secret_a_workload_reads_moves_its_checksum_is_clean(
+    render, flux_tags
+):
+    found = {}
+    for tag in sorted(flux_tags):
+        documents = _documents(render, tag)
+        rendered = {
+            obj["metadata"]["name"]
+            for _, obj in documents
+            if obj.get("kind") == "Secret"
+        }
+        if not rendered:
+            continue
+        targets = restart_targets(tag, tag_context(K8S_ROLES / tag, tag, {}))
+        outside = outside_secrets(tag)
+        for _, obj in documents:
+            template = pod_template(obj)
+            if template is None or not _env_secret_names(template):
+                continue
+            name = obj["metadata"]["name"]
+            found[(tag, name)] = unhashed_env_secrets(
+                template, targets.get(name, ()), rendered, outside
+            )
+    assert MEMBERS <= set(found)
+    assert {k: v for k, v in found.items() if v} == {}
