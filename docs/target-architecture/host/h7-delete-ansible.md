@@ -1,6 +1,6 @@
 # H7 — Remaining roles, then delete Ansible
 
-Status: IN PROGRESS. Partial landings through 2026-11-01, named by PR: [#6081](https://github.com/DanielH2018/server/pull/6081), [#6087](https://github.com/DanielH2018/server/pull/6087), [#6084](https://github.com/DanielH2018/server/pull/6084), [#6138](https://github.com/DanielH2018/server/pull/6138), [#6169](https://github.com/DanielH2018/server/pull/6169), [#6190](https://github.com/DanielH2018/server/pull/6190), [#6201](https://github.com/DanielH2018/server/pull/6201), [#6224](https://github.com/DanielH2018/server/pull/6224), [#6242](https://github.com/DanielH2018/server/pull/6242), [#6248](https://github.com/DanielH2018/server/pull/6248), [#6264](https://github.com/DanielH2018/server/pull/6264), [#6230](https://github.com/DanielH2018/server/pull/6230), [#6339](https://github.com/DanielH2018/server/pull/6339), [#6593](https://github.com/DanielH2018/server/pull/6593), [#6600](https://github.com/DanielH2018/server/pull/6600), [#6637](https://github.com/DanielH2018/server/pull/6637), [#6683](https://github.com/DanielH2018/server/pull/6683), [#6701](https://github.com/DanielH2018/server/pull/6701), [#6717](https://github.com/DanielH2018/server/pull/6717), [#6719](https://github.com/DanielH2018/server/pull/6719), [#6782](https://github.com/DanielH2018/server/pull/6782), [#6788](https://github.com/DanielH2018/server/pull/6788), [#6806](https://github.com/DanielH2018/server/pull/6806), [#6856](https://github.com/DanielH2018/server/pull/6856), [#6871](https://github.com/DanielH2018/server/pull/6871). Which numbered steps are complete is not recorded.
+Status: IN PROGRESS. Partial landings through 2026-11-01, named by PR: [#6081](https://github.com/DanielH2018/server/pull/6081), [#6087](https://github.com/DanielH2018/server/pull/6087), [#6084](https://github.com/DanielH2018/server/pull/6084), [#6138](https://github.com/DanielH2018/server/pull/6138), [#6169](https://github.com/DanielH2018/server/pull/6169), [#6190](https://github.com/DanielH2018/server/pull/6190), [#6201](https://github.com/DanielH2018/server/pull/6201), [#6224](https://github.com/DanielH2018/server/pull/6224), [#6242](https://github.com/DanielH2018/server/pull/6242), [#6248](https://github.com/DanielH2018/server/pull/6248), [#6264](https://github.com/DanielH2018/server/pull/6264), [#6230](https://github.com/DanielH2018/server/pull/6230), [#6339](https://github.com/DanielH2018/server/pull/6339), [#6593](https://github.com/DanielH2018/server/pull/6593), [#6600](https://github.com/DanielH2018/server/pull/6600), [#6637](https://github.com/DanielH2018/server/pull/6637), [#6683](https://github.com/DanielH2018/server/pull/6683), [#6701](https://github.com/DanielH2018/server/pull/6701), [#6717](https://github.com/DanielH2018/server/pull/6717), [#6719](https://github.com/DanielH2018/server/pull/6719), [#6782](https://github.com/DanielH2018/server/pull/6782), [#6788](https://github.com/DanielH2018/server/pull/6788), [#6806](https://github.com/DanielH2018/server/pull/6806), [#6856](https://github.com/DanielH2018/server/pull/6856), [#6871](https://github.com/DanielH2018/server/pull/6871), [#7524](https://github.com/DanielH2018/server/pull/7524), [#7642](https://github.com/DanielH2018/server/pull/7642). Which numbered steps are complete is not recorded.
 Depends on: H2, H5, H6, R4, per PR (the *Waits on* column of *Steps, as PRs*)
 Unblocks: none (it closes Area 3)
 
@@ -1889,7 +1889,7 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.42 `bootstrap-host.sh`, complete | H7.15a | yes | H7.24a, H6.1b, H6.2 |
 | H7.43 The Pi runbook and the Pi rebuild | H7.15b | the runbook yes; the rebuild no, because it needs every Pi PR live | H7.25, H7.26, H7.27, H7.30, H7.42, H7.58, H5, all live |
 | H7.44 The cluster-node procedure, adding a host and release upgrades | H7.15c, H7.15d, H7.15e | yes; the guest drill needs H6 live | H7.42, R4 PR 7b, H6, H7.34, H7.35, H7.60, H7.62 |
-| H7.45 Scripts for the operator playbooks | H7.16a, H7.16b | yes | R4 |
+| H7.45 Scripts for the operator playbooks | H7.16a, H7.16b | landed as [#7524](https://github.com/DanielH2018/server/pull/7524); the drill passed on 2026-11-08 (item 21) | R4 |
 | H7.46 The last Ansible imports | H7.17 | yes | R4, D6.13 |
 | H7.47 Closing the readers | H7.18a, H7.18b, H7.18d | yes | H7.36, H7.40, H5 |
 | H7.48 Absent arms become legacy entries; `k8s_host_files` empties | H7.18c | no: its list of record is H7.23's report taken after every row has moved | H7.25, H7.35, H7.36, H7.40, H7.64, H2.2c, H2.3d, H2.3f, H2.4c, H2.5b to H2.5d, H2.8b, D5 |
@@ -2236,6 +2236,16 @@ the `manual_plane` clearing, and *Rollback*'s
     also gains H7.60's and H7.62's steps.
 21. **H7.45.** Both steps replace an operator playbook or runbook role with a script. The
     operator drills the snapshot command once (**operator-only**).
+    **Landed as [#7524](https://github.com/DanielH2018/server/pull/7524).** It added
+    `scripts/backup/prune_backups.py`, `scripts/backup/seed_volume_backup.py`,
+    `scripts/backup/volume_revert.py` and `scripts/diagnostics/storage_smoke.py`. The
+    operator drilled `volume_revert.py` on 2026-11-08, and
+    [#7642](https://github.com/DanielH2018/server/pull/7642) records the drill in
+    `docs/volume-snapshot-drills.md`. The operator ruled on 2026-11-08
+    ([#7509](https://github.com/DanielH2018/server/issues/7509)) that `preflight.yml` gets
+    no script. H7.55 deletes it with the other playbooks, and its volume-group warning
+    moves into `bootstrap-host.sh` under
+    [#7635](https://github.com/DanielH2018/server/issues/7635).
 22. **H7.46** stays alone. It carries the renders-without-ansible-core proof and lands the
     deletion census with its allowlist.
 23. **H7.47.** Each step points a reader of the setup tree at the packages: the docs
@@ -3124,7 +3134,7 @@ the `manual_plane` clearing, and *Rollback*'s
     - **H7.20c** the ADR, `ansible/README.md`, the archived bring-up sections, and the
       setup half of `ansible/tests/repo/test_role_claude_md.py`;
     - **H7.20d** the Pi's `containers_list` key, after H7.20a. The key must outlive every
-      Ansible reader: `preflight.yml` asserts it until H7.16a, `deploy.sh` and `land.sh`'s
+      Ansible reader: `preflight.yml` asserts it until H7.55, `deploy.sh` and `land.sh`'s
       Pi arms read it until H7.19b, and `deploy.yml`'s Docker play and the restored tasks
       of a rollback re-apply read it until H7.20a. The PR does these things:
         - deletes `containers_list: []` from `ansible/inventory/host_vars/daniel-pi.yml`;
