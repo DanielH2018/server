@@ -8,8 +8,8 @@ The orchestrator half asserts the properties the mode promises on every run:
   guest-side script and the mask list: no cluster token and no R2 credential.
 
 `virsh`, `qemu-img`, `ssh`, `git`, `logger` and the repo's python are stubbed; the python stub
-writes a small rendered tree in place of the real renderer. The guest-side half runs the guest
-script itself with `id`, `systemctl`, `ufw`, `dpkg-query` and `k3s` stubbed.
+writes a small rendered tree in place of the real renderer. The guest-side script has its own
+tests in test_bootstrap_drill_guest_run.py.
 
 Run: uv run pytest ansible/tests/staging/test_bootstrap_drill_mode.py
 """
@@ -33,7 +33,7 @@ from _fence_probe import (
     ROLE_CHECK_LIB,
     rendered_orchestrator,
 )
-from lib.proc_testing import fake_bin, path_with
+from lib.proc_testing import fake_bin
 
 GUEST_SCRIPT = HYPERVISOR / "files" / "bootstrap-drill-guest-run.sh"
 SHA = "c0ffee" * 6 + "abcd"
@@ -47,6 +47,12 @@ RENDER = """\
 #!/bin/bash
 echo "render $2" >>"$EVENTS"
 out="${@: -1}"
+[[ -n "$RENDER_FAILS" ]] && exit 1
+if [[ -n "$RENDER_EMPTY" ]]; then
+  u="$out/hosts/daniel-box/root/usr/lib/systemd/system"
+  mkdir -p "$u" && touch "$u/k3s.service" "$u/coredns-host.service"
+  exit 0
+fi
 if [[ "$2" == host ]]; then
   u="$out/hosts/daniel-box/root/usr/lib/systemd/system"
   mkdir -p "$u/k3s.service.d" "$u/timers.target.wants" "$u/multi-user.target.wants"
@@ -72,19 +78,32 @@ GIT = '#!/bin/bash\necho "$SHA"\n'
 # Records each syslog line, so a test can read which tag the run logged under.
 LOGGER = '#!/bin/bash\necho "logger $*" >>"$EVENTS"\n'
 # Stands in for `ssh <guest> ...`. A detached step reports exit 1 through `rc` when it is FAIL_AT,
-# and nothing at all when it is NEVER_DONE; a direct step exits 1 when it is FAIL_AT.
+# and nothing at all when it is NEVER_DONE; a direct step exits 1 when it is FAIL_AT, and so do
+# the ship and the stage. NO_START refuses to start that detached step. CRASH_AT makes the guest
+# exit when that step runs, after which ssh to it fails.
 SSH = """\
 #!/bin/bash
 args="$*"
 case "$args" in
   true) exit 0 ;;
-  *"tee /usr/local/bin/bootstrap-drill-guest-run"*) cat >/dev/null; echo "ssh ship" >>"$EVENTS"; exit 0 ;;
-  *"tar -C /var/tmp/bootstrap-drill"*) cat >"$T/staged.tar"; echo "ssh stage" >>"$EVENTS"; exit 0 ;;
+  *"tee /usr/local/bin/bootstrap-drill-guest-run"*)
+    cat >/dev/null; echo "ssh ship" >>"$EVENTS"; [[ "$FAIL_AT" == ship ]] && exit 1; exit 0 ;;
+  *"tar -C /var/tmp/bootstrap-drill"*)
+    cat >"$T/staged.tar"; echo "ssh stage" >>"$EVENTS"; [[ "$FAIL_AT" == stage ]] && exit 1; exit 0 ;;
 esac
 read -ra sub <<<"${args##*bootstrap-drill-guest-run }"
+step="${sub[0]}"
+[[ "$step" == detached ]] && step="${sub[1]}"
+if [[ -n "$CRASH_AT" && "$step" == "$CRASH_AT" && "${sub[0]}" != rc && "${sub[0]}" != out ]]; then
+  rm -f "$T/running"
+  [[ "${sub[0]}" == detached ]] || exit 255
+fi
 case "${sub[0]}" in
-  detached) echo "step ${sub[*]:1}" >>"$EVENTS"; exit 0 ;;
+  detached)
+    [[ "${sub[1]}" == "$NO_START" ]] && exit 1
+    echo "step ${sub[*]:1}" >>"$EVENTS"; exit 0 ;;
   rc)
+    [[ "${sub[1]}" == "$CRASH_AT" ]] && exit 255
     [[ "${sub[1]}" == "$NEVER_DONE" ]] && exit 0
     [[ "${sub[1]}" == "$FAIL_AT" ]] && echo 1 || echo 0
     exit 0 ;;
@@ -106,7 +125,7 @@ LOG_DIR="$T/evidence"; mkdir -p "$LOG_DIR"
 NAME=etcd-drill DISK="$T/disk.qcow2" WORK="" STAMP_DIR="$T/stamp" LOCK="$T/lock"
 XML="$T/xml" BASE_IMAGE="$T/base" SEED="$T/seed" GUEST_HOSTKEY_PUB="$T/hostkey.pub" IDENTITY="$T/id"
 S3_ENV="$T/absent-s3.env" AGENT_ENV="$T/absent-agent.env"
-BD_GUEST_SCRIPT="$GUEST_SCRIPT" BD_STEP_DEADLINE=1 BD_READY_DEADLINE=1 RH_POLL=0.1
+BD_GUEST_SCRIPT="$GUEST_SCRIPT" BD_STEP_DEADLINE=1 BD_READY_DEADLINE="${READY_DEADLINE:-1}" RH_POLL=0.1
 for f in "$XML" "$BASE_IMAGE" "$SEED" "$GUEST_HOSTKEY_PUB" "$IDENTITY"; do echo x >"$f"; done
 ssh_argv() { printf '%s\\n' "$STUBS/guest-ssh"; }
 fence_check() { echo fence >>"$EVENTS"; [[ -z "$LEAK" ]] || fail "egress fence BROKEN: PRODVIP answered"; }
@@ -114,7 +133,20 @@ rehearse_bootstrap
 """
 
 
-def run(tmp_path, *, fail_at="", never_done="", leak="", args=()):
+KNOBS = (
+    "fail_at",
+    "never_done",
+    "leak",
+    "no_start",
+    "crash_at",
+    "render_fails",
+    "render_empty",
+    "ready_deadline",
+)
+
+
+def run(tmp_path, *, args=(), **knobs):
+    assert set(knobs) <= set(KNOBS), knobs
     body = rendered_orchestrator()
     assert CHECK_LIB in body, "the harness's substitution is gone"
     assert body.rstrip().endswith(ENTRYPOINT)
@@ -152,9 +184,7 @@ def run(tmp_path, *, fail_at="", never_done="", leak="", args=()):
             "EVENTS": str(tmp_path / "events"),
             "GUEST_SCRIPT": str(GUEST_SCRIPT),
             "SHA": SHA,
-            "FAIL_AT": fail_at,
-            "NEVER_DONE": never_done,
-            "LEAK": leak,
+            **{k.upper(): knobs.get(k, "") for k in KNOBS},
         },
         capture_output=True,
         text=True,
@@ -233,103 +263,56 @@ def test_a_suc_rehearsal_flag_is_refused_before_a_guest_exists(tmp_path):
     assert_drill_evidence_untouched(r)
 
 
-# ── The guest-side script ────────────────────────────────────────────────────────────────────
-
-GUEST_STUBS = {
-    "id": "#!/bin/bash\necho 0\n",
-    "systemctl": """\
-#!/bin/bash
-echo "systemctl $*" >>"$T/calls"
-[[ "$1" == list-unit-files ]] && printf '%s enabled enabled\\n' $UNITS
-exit 0
-""",
-    "ufw": """\
-#!/bin/bash
-echo "ufw $*" >>"$T/calls"
-[[ "$1" == status ]] && echo "Status: $UFW"
-exit 0
-""",
-    "dpkg-query": '#!/bin/bash\n[[ "${@: -1}" == "$MISSING" ]] || printf "install ok installed"\n',
-    "k3s": '#!/bin/bash\nprintf "%s" "$READY"\n',
-}
-
-
-def guest(tmp_path, *args, **env):
-    stage = tmp_path / "stage"
-    stage.mkdir(exist_ok=True)
-    defaults = {"UNITS": "k3s.service", "UFW": "active", "MISSING": "", "READY": "True"}
-    return subprocess.run(
-        ["bash", str(GUEST_SCRIPT), *args],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        env={
-            "PATH": path_with(fake_bin(tmp_path / "bin", **GUEST_STUBS)),
-            "T": str(tmp_path),
-            "BOOTSTRAP_DRILL_STAGE": str(stage),
-            "BOOTSTRAP_DRILL_ROOT": str(tmp_path / "root"),
-            **defaults,
-            **env,
-        },
-    )
-
-
-def test_deviate_writes_the_override_the_masks_and_the_one_ssh_rule(tmp_path):
-    (tmp_path / "stage").mkdir()
-    (tmp_path / "stage" / "masks").write_text(
-        "homelab-builder.timer\nclaude-triage@.service\n"
-    )
-    done = guest(tmp_path, "deviate", "192.168.140.11", "192.168.140.1")
-    assert done.returncode == 0, done.stderr
-    root = tmp_path / "root"
-    override = root / "etc/rancher/k3s/config.yaml.d/90-drill.yaml"
-    assert override.read_text().splitlines() == [
-        'node-ip: "192.168.140.11"',
-        'advertise-address: "192.168.140.11"',
-        "etcd-s3: false",
-    ]
-    runtime = root / "run/systemd/system"
-    assert sorted(p.name for p in runtime.iterdir()) == [
-        "claude-triage@.service",
-        "homelab-builder.timer",
-    ]
-    assert all(os.readlink(p) == "/dev/null" for p in runtime.iterdir())
-    calls = (tmp_path / "calls").read_text().splitlines()
-    assert calls == [
-        "systemctl daemon-reload",
-        "ufw allow from 192.168.140.1 to any port 22 proto tcp",
-    ]
-
-
-def test_deviate_refuses_a_mask_line_that_is_not_a_unit_name(tmp_path):
-    (tmp_path / "stage").mkdir()
-    (tmp_path / "stage" / "masks").write_text("../../etc/passwd.service\n")
-    done = guest(tmp_path, "deviate", "192.168.140.11", "192.168.140.1")
-    assert done.returncode == 1
-    assert "not a unit name" in done.stderr
-    assert not (tmp_path / "root/etc/passwd.service").exists()
-
-
-def test_check_passes_when_every_part_of_the_host_half_holds(tmp_path):
-    done = guest(tmp_path, "check")
-    assert done.returncode == 0, done.stdout
-    assert "node daniel-box Ready: True" in done.stdout
+@pytest.mark.parametrize(
+    ("knobs", "message"),
+    [
+        ({"fail_at": "ship"}, "could not ship the guest-side script"),
+        ({"fail_at": "stage"}, "staging the mask list into the guest failed"),
+        ({"no_start": "until4"}, "could not start until4 in the guest"),
+    ],
+    ids=["ship-fails", "stage-fails", "detached-start-fails"],
+)
+def test_a_failure_shipping_or_starting_tears_the_guest_down(tmp_path, knobs, message):
+    r = run(tmp_path, **knobs)
+    assert r.done.returncode == 1
+    assert message in r.done.stdout
+    assert "bootstrap" not in r.steps
+    assert_cleaned_up(r)
+    assert_drill_evidence_untouched(r)
 
 
 @pytest.mark.parametrize(
-    ("env", "line"),
+    ("crash_at", "message"),
     [
-        ({"MISSING": "homelab-updater"}, "homelab-updater: not installed"),
-        (
-            {"UNITS": "k3s.service k3s-agent.service"},
-            "k3s units: k3s.service k3s-agent.service",
-        ),
-        ({"READY": "False"}, "node daniel-box Ready: False"),
-        ({"UFW": "inactive"}, "ufw: Status: inactive"),
+        ("bootstrap", "the guest exited during bootstrap"),
+        ("check", "the guest exited during the check"),
     ],
-    ids=["package-missing", "second-k3s-unit", "node-not-ready", "ufw-inactive"],
 )
-def test_check_fails_and_names_the_part_that_does_not_hold(tmp_path, env, line):
-    done = guest(tmp_path, "check", **env)
-    assert done.returncode == 1
-    assert line in done.stdout
+def test_a_guest_that_exits_mid_run_fails_and_its_disk_is_still_deleted(
+    tmp_path, crash_at, message
+):
+    r = run(tmp_path, crash_at=crash_at, ready_deadline="30")
+    assert r.done.returncode == 1
+    assert message in r.done.stdout
+    assert not (r.t / "disk.qcow2").exists(), "the guest's disk outlived the run"
+    assert not any(" define " in e for e in r.events)
+    assert_drill_evidence_untouched(r)
+
+
+@pytest.mark.parametrize(
+    ("knobs", "message"),
+    [
+        ({"render_fails": "1"}, "rendering the packages at"),
+        ({"render_empty": "1"}, "ships no unit to mask"),
+    ],
+    ids=["render-fails", "nothing-to-mask"],
+)
+def test_a_render_that_cannot_name_the_masks_is_refused_before_a_guest_exists(
+    tmp_path, knobs, message
+):
+    r = run(tmp_path, **knobs)
+    assert r.done.returncode == 1
+    assert message in r.done.stdout
+    assert not any(" create " in e for e in r.events)
+    assert not (r.t / "disk.qcow2").exists()
+    assert_drill_evidence_untouched(r)

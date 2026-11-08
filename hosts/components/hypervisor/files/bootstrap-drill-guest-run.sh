@@ -41,7 +41,7 @@ cmd_detached() {
   rm -f "$STAGE/$step.rc" "$STAGE/$step.out"
   # shellcheck disable=SC2016 # the inner shell expands these
   OUT="$STAGE/$step.out" RC="$STAGE/$step.rc" nohup bash -c '"$@" >"$OUT" 2>&1; echo $? >"$RC"' \
-    _ "$0" "$step" "$@" >/dev/null 2>&1 </dev/null &
+    _ bash "$0" "$step" "$@" >/dev/null 2>&1 </dev/null &
   echo "started $step (pid $!)"
 }
 
@@ -49,7 +49,7 @@ cmd_prepare() {
   # Step 1 of bootstrap-host.sh refuses any hostname but the one it is given; the seed names the
   # guest etcd-drill.
   hostnamectl set-hostname daniel-box || die "cannot set the hostname"
-  grep -q '[[:space:]]daniel-box$' /etc/hosts || echo "127.0.1.1 daniel-box" >>/etc/hosts
+  grep -q '[[:space:]]daniel-box$' "$ROOT/etc/hosts" || echo "127.0.1.1 daniel-box" >>"$ROOT/etc/hosts"
   # A first boot's cloud-init and apt-daily jobs hold dpkg's lock, and step 5's install does not
   # wait for it. The stop waits for a running job to end.
   cloud-init status --wait >/dev/null 2>&1 || true
