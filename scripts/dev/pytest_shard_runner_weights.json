@@ -369,7 +369,7 @@
  "ansible/tests/repo/test_host_package_case_inputs_census.py": 0.12,
  "ansible/tests/repo/test_host_package_cases_run_on_their_inputs.py": 76.05,
  "ansible/tests/repo/test_host_package_scans_run_on_every_pr.py": 0.01,
- "ansible/tests/repo/test_host_test_image_cache.py": 0.09,
+ "ansible/tests/repo/test_host_test_image.py": 0.09,
  "ansible/tests/repo/test_installed_units_log_level.py": 0.01,
  "ansible/tests/repo/test_k8s_render_prebuild.py": 7.16,
  "ansible/tests/repo/test_k8s_render_role_template.py": 0.2,

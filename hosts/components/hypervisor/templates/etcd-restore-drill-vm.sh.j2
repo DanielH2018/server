@@ -591,17 +591,16 @@ bd_masks() {
 # bd_run STEP [ARGS]: start STEP detached in the guest and poll its exit code over fresh ssh
 # sessions. Its output goes to the evidence on every path, and a failure ends the run.
 bd_run() {
-  local step="$1" rc="" deadline=$((SECONDS + BD_STEP_DEADLINE))
+  local step="$1" rc="" deadline
   bd detached "$@" >/dev/null || { bd_evidence; fail "could not start $step in the guest"; }
-  while [[ -z "$rc" ]]; do
-    if ! guest_running; then
-      rc=guest-exited
-    elif (( SECONDS >= deadline )); then
-      rc=timeout
-    else
-      sleep "$RH_POLL"
-      rc="$(BD_STEP_TIMEOUT=60 bd rc "$step" 2>/dev/null)" || rc=""
-    fi
+  deadline=$((SECONDS + BD_STEP_DEADLINE))
+  # Poll before judging the deadline: SECONDS is whole seconds, so a short budget can read as spent.
+  while :; do
+    guest_running || { rc=guest-exited; break; }
+    sleep "$RH_POLL"
+    rc="$(BD_STEP_TIMEOUT=60 bd rc "$step" 2>/dev/null)" || rc=""
+    [[ -n "$rc" ]] && break
+    (( SECONDS < deadline )) || { rc=timeout; break; }
   done
   BD_STEP_TIMEOUT=60 bd out "$step" >"$LOG_DIR/$step.out" 2>&1 || true
   [[ "$rc" == 0 ]] && return 0
@@ -659,9 +658,10 @@ rehearse_bootstrap() {
   bd start >"$LOG_DIR/start.out" 2>&1 || { bd_evidence; fail "k3s.service did not start"; }
 
   local verdict="" ok=0 deadline=$((SECONDS + BD_READY_DEADLINE))
-  while (( SECONDS < deadline )); do
+  while :; do
     guest_running || { verdict="the guest exited during the check"; break; }
     verdict="$(BD_STEP_TIMEOUT=60 bd check 2>&1)" && { ok=1; break; }
+    (( SECONDS < deadline )) || break
     sleep "$RH_POLL"
   done
   printf '%s\n' "$verdict" >"$LOG_DIR/bootstrap-verdict.txt"

@@ -228,6 +228,26 @@ def test_a_failed_start_keeps_the_legacy_entry(node):
     assert node.applied()["retired"] == []
 
 
+def test_a_failed_activation_restart_keeps_the_legacy_entry(node):
+    cron = replaced_cron(node)
+    node.manifest["legacy"].clear()
+    settled(node)
+    node.manifest["legacy"].append(CRON_ENTRY)
+    setup = node.root / "usr/lib/homelab/gc-setup"
+    setup.parent.mkdir(parents=True, exist_ok=True)
+    setup.write_text("#!/bin/sh\n")
+    node.manifest["activations"] = {"/usr/lib/homelab/gc-setup": f"try-restart:{TIMER}"}
+    node.state["fail"].append(f"try-restart {TIMER}")
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert ["try-restart", TIMER] in node.actions()
+    assert cron.exists()
+    assert node.applied()["retired"] == []
+    assert f"{TIMER} failed to start" in result.stdout + result.stderr
+
+
 def test_a_failed_unit_of_another_spec_keeps_no_legacy_entry(node):
     cron = replaced_cron(node)
     node.unit("homelab-other.timer", linked=True)

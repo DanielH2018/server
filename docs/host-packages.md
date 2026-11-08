@@ -643,7 +643,8 @@ No other LVM volume exists on either node.
 
 1. To give the root volume the whole disk, extend it. The Ubuntu installer creates the one LVM
    volume a node uses, `ubuntu-vg/ubuntu-lv`, and leaves it at about half the disk. Neither
-   `bootstrap-host.sh` nor a package changes it. Skip this when `sudo vgs` shows no free space:
+   `bootstrap-host.sh` nor a package changes it, but the script's step 1 warns about a volume
+   group with more than 10G unallocated. Skip this when `sudo vgs` shows no free space:
 
     ```bash
     sudo lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv
@@ -982,9 +983,11 @@ then daniel-pi, then daniel-box. Each step is **operator-only**, apart from the 
 
 1. To make the host's package one the suite has tested on the target, merge a PR that adds the
    release to the `host_packages` matrix in `.github/workflows/ci.yml`, with the suite green. The
-   PR makes the same edit to `.github/workflows/host-test-image-cache.yml`, which
-   `ansible/tests/repo/test_host_test_image_cache.py` holds equal to `ci.yml`. Skip this step when
-   the matrix already lists the release.
+   PR makes the same edit to `.github/workflows/host-test-image.yml`, which
+   `ansible/tests/repo/test_host_test_image.py` holds equal to `ci.yml`. Until that workflow has
+   published the new release's image and `hosts/lib/tests/container/image.pins` names it, the new
+   leg builds its image from the Dockerfile. Skip this step when the matrix already lists the
+   release.
 1. Stop updates on the host, as *Stopping updates on one host* describes, so no package installs
    during the upgrade. `HostUpdateStale` can fire while the timer stays masked, which is expected.
 1. On a cluster node, pause system-upgrade-controller and check the cluster, both from daniel-box.
@@ -999,11 +1002,43 @@ then daniel-pi, then daniel-box. Each step is **operator-only**, apart from the 
       --ca-file /var/lib/rancher/k3s/agent/server-ca.crt
     ```
 
-1. Upgrade the host and reboot it:
+1. Open a root shell with `sudo -i`, keep it open, and upgrade the host from it. Do not reboot
+   yet.
 
     ```bash
-    sudo do-release-upgrade
-    sudo reboot
+    do-release-upgrade
+    ```
+
+1. Check that the upgraded sudo still reads the host-hardening drop-in, from the held root shell.
+   From 26.04 on, `/usr/bin/sudo` is an alternative. `ubuntu-minimal` and
+   `ubuntu-server-minimal` depend on `sudo-rs`, which registers at priority 50 against classic
+   sudo's `/usr/bin/sudo.ws` at 40, so the upgrade selects sudo-rs. sudo-rs's `visudo` rejects
+   `timestamp_type` in `/etc/sudoers.d/10-timestamp` (`unknown setting: 'timestamp_type'`), and
+   sudo-rs keeps one credential record per terminal, so it cannot honour `global`.
+
+    ```bash
+    update-alternatives --query sudo
+    visudo -c
+    ```
+
+    Then, from a second SSH session as the operator, run `sudo -k && sudo true`. Record in
+    the PR or issue that tracks the upgrade whether sudo-rs refused the call or only warned
+    about the line. If `visudo -c` fails or the second session's sudo refuses, select classic
+    sudo from the held root shell and check again:
+
+    ```bash
+    update-alternatives --set sudo /usr/bin/sudo.ws
+    visudo -c
+    ```
+
+    Do not edit `/etc/sudoers.d/10-timestamp` on the host. The `host-hardening` package owns
+    it, so the verify step's `dpkg --verify` reports the edit and the next update restores the
+    file. To run sudo-rs on a host instead, first merge a change to
+    `hosts/components/host-hardening/templates/10-timestamp` that drops `timestamp_type` for
+    that host. Reboot only once the second session's sudo works:
+
+    ```bash
+    reboot
     ```
 
 1. Verify the host against the release. `lsb_release -rs` prints the target release, `dpkg --verify`

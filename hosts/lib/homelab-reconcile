@@ -35,7 +35,8 @@ The manifest, /usr/lib/homelab/manifest.json, which the host package ships:
 `units` names every unit reconcile manages, another homelab package's and another package's
 drop-in target included. `enable_links` names each unit whose enable link the manifest's
 packages ship. `handoffs` pairs each spec's legacy entries with the units that spec ships, and
-step 4 keeps an entry while one of those units failed to start in this run. `reconcilers` lists
+step 4 keeps an entry while one of those units failed to start in this run, or its step 3b
+activation call failed. `reconcilers` lists
 the arms the manifest carries state for. The four arms are in
 ARMS, and each section's schema is the docstring of its reconcile_lib module, so a manifest
 listing another kind fails the run here. The udev arm (H4.3b1) is not one of them: it hashes the
@@ -763,14 +764,16 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     pending = activate.refresh_pending(
         raw_pending if isinstance(raw_pending, dict) else {}, manifest["activations"]
     )
+    called = {unit: unit not in failed for unit in restart_set}
     activated, files_state = activate.activate(
         manifest["activations"],
         raw_files if isinstance(raw_files, dict) else {},
         units,
-        {unit: unit not in failed for unit in restart_set},
+        called,
         pending,
     )
     ok = ok and activated
+    activation_failed = {unit for unit, result in called.items() if not result} - failed
     if not secrets_ran:
         failed.add(SECRETS_UNIT)
     for unit, (new, old) in hashes.items():
@@ -822,8 +825,11 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
             start_failed.add(unit)
             ok = False
 
-    # Step 4c: the other entries. One stays while a unit of its spec failed to start in this run.
-    kept_for = replacement_failed(manifest["handoffs"], start_failed | failed)
+    # Step 4c: the other entries. One stays while a unit of its spec failed to start in this run,
+    # step 3b's activation restart included.
+    kept_for = replacement_failed(
+        manifest["handoffs"], start_failed | failed | activation_failed
+    )
     removed = False
     for entry in plain:
         key = legacy_key(entry)

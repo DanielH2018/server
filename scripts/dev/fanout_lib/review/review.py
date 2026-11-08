@@ -31,8 +31,10 @@ THE PHASES, each one `claude -p` in the batch's worktree:
 5b. CI wait — on a host that does not land, for this repo's batch only (#4737), `review_ci`
    waits for the PR's CI with `cc-wait gh-ci --pr` before the comment and before the filing
    session. A red verdict resumes the implementer once, as the `ci-fix` phase, with each failed
-   check's name and log tail, and the wait runs again on the new head. A batch still red, or
-   given no verdict within `review_ci.CI_WAIT_S`, ends `needs input:` and nothing lands it. A
+   check's name and log tail, and the wait runs again on the new head. A resume that pushed
+   nothing re-runs the failed jobs once before that wait. A batch still red, or given no
+   verdict within `review_ci.CI_WAIT_S` (`CI_WAIT_MAX_S` while its checks are still running),
+   ends `needs input:` and nothing lands it. A
    `cancelled` run is no verdict and is waited on again. The result goes in the record as
    `ci_gate` and on the PR comment.
 

@@ -36,16 +36,9 @@ has_gitops: false
 # opts IN to the engine (group_vars/all.yml defaults it false). Every service in
 # containers_list and compose_services below runs on it.
 has_docker: true
-# A 512 MB Zero 2 W: the one host where a heavy apt step OOM-kills without the disk-backed
-# swapfile, which bootstrap step 4 (hosts/bootstrap-host.sh) creates here.
-# group_vars/all.yml defaults the flag false.
-has_low_memory_board: true
-# Boots the Raspberry Pi kernel, so `linux-raspi` is a real package here.
-has_raspi_kernel: true
 # rsyslog is masked here (journald is the log of record; rsyslog's text logs landed in
-# the RAM-backed log2ram tmpfs), so initial_setup must not render its rsyslog filter or
-# notify `Restart rsyslog` -- a masked unit fails that handler and the recap reads failed=1
-# for a run whose changes are all live. See group_vars/all.yml for the default.
+# the RAM-backed log2ram tmpfs), so homelab-daniel-pi must not list the `rsyslog-filter`
+# component: its try-restart has nothing to restart. See group_vars/all.yml for the default.
 has_rsyslog: false
 # Disk-backed swap for the 512 MB Zero 2 W. The RAM-resident zram (hosts/components/pi-tuning/) can't add
 # real capacity, so heavy one-shot apt/dpkg steps (apt-show-versions cache build, `upgrade: dist`,

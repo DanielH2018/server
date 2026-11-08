@@ -1,9 +1,8 @@
 """No `initial_setup` task gates on a host-name literal.
 
 A gate names the fact it reads, not the host that has it, so replacing a host edits one host_vars
-entry. H7.60 deleted the last tasks that gated on a hardware flag (`has_low_memory_board`,
-`has_raspi_kernel`), so the rule left is the rejecting half: a new bare literal fails until it is
-recorded here.
+entry. H7.60 deleted the last tasks that gated on a hardware flag, so the rule left is the
+rejecting half: a new bare literal fails until it is recorded here.
 
 A gate that reads HOST HISTORY rather than hardware may keep a literal behind a `DECIDED:`
 comment, and none does today.

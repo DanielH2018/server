@@ -99,10 +99,24 @@ otherwise; none of the values below are secrets themselves, only names and locat
    Sigstore is unreachable*), so a refresh covers that use too. Beside it the kit holds the
    **break-glass private key**, a password-protected cosign key whose public half the flux role
    commits (`flux_break_glass_public_key`). It is a second signing identity: it never enters
-   the repo, CI or a host, and its only use is the scenario below. The kit also holds the three
-   Flux controller images at `flux_version` (`ansible/roles/k8s/flux/defaults/main.yml`),
-   saved as image archives and refreshed with the bundle, for a rebuilt cluster that cannot
-   reach GHCR.
+   the repo, CI or a host, and its only use is the scenario below. The kit also holds image
+   archives for a rebuilt cluster that cannot reach GHCR or Docker Hub, refreshed with the
+   bundle. It holds the three Flux controller images that
+   `ansible/roles/k8s/flux/files/gotk-components.yaml` pins at `flux_version`, and the
+   registry's image (`registry_k8s_image`). Each archive is the pinned image's whole index as an
+   OCI layout, because the manifests name the index digest. Docker's classic image store saves
+   one platform's image under a manifest of its own, so a node that imports that archive holds
+   the image under a digest no Deployment names. crane writes the same archive whichever store
+   the saving machine runs. `scripts/deploy_tools/fresh_cluster_drill.py build` writes the list to `images.json`, and
+   `flux-deletion-drill` writes each archive with two commands:
+
+   ```bash
+   crane pull --format=oci "$ref" layout/
+   uv run python scripts/deploy_tools/fresh_cluster_drill.py archive --layout layout/ --ref "$ref" --out image.tar
+   ```
+
+   The second command checks that the layout holds the pinned digest and names it for
+   containerd.
    Source: `docs/longhorn-disaster-recovery.md` ("The off-site recovery kit").
     - **The offline bootstrap files.** `sudo hosts/bootstrap-host.sh <host> --offline <kit-dir>`
       reads every fetch from one directory and checks each file against the pin the download
@@ -627,6 +641,15 @@ If your own working machine is what's gone, the lab itself needs nothing done to
    `land.sh` follows it. [Deploying by hand](deploying.md) says which path applies a setup role
    or a Pi change.
 
+### Scenario: sudo refuses after a host's Ubuntu release upgrade
+
+Ubuntu 26.04 selects sudo-rs as `/usr/bin/sudo`, and sudo-rs's `visudo` rejects the
+`timestamp_type` line in `/etc/sudoers.d/10-timestamp`. The release-upgrade procedure in
+[Upgrading a host's Ubuntu release](host-packages.md#upgrading-a-hosts-ubuntu-release) checks
+this from a held root shell before the reboot. If a host already rebooted and sudo refuses, get
+root at the host's console or in recovery mode, then run
+`update-alternatives --set sudo /usr/bin/sudo.ws` to select classic sudo.
+
 ### Scenario: `systemctl restart k3s` never returns after an API-server flag change
 
 `k3s_server_config` (`hosts/components/k3s-server/component.yml`) holds the server's flags,
@@ -721,11 +744,38 @@ steps below on production.
 longer matches `PROD_DIGEST`. That is expected. The break-glass path neither reads nor clears
 `DEPLOY_HOLD`, which needs GitHub.
 
-**A fresh or rebuilt cluster needs two more steps first.** It holds neither the in-cluster
-registry nor the Flux controllers. Apply the rendered `cluster/registry/` directory before the
-artifact push. Install the Flux controllers from the image archives that item 8's kit
-carries, not from GHCR. Neither step is drilled (Open question 17 of the D6 plan), so the
-drill covers a running cluster only.
+**A fresh or rebuilt cluster needs more steps first.** It holds neither the in-cluster
+registry nor the Flux controllers. Run these after the render and before the push:
+
+1. Import item 8's image archives on each node with
+   `sudo k3s ctr -n k8s.io images import --all-platforms <archive>`. Leave out `--digests`: it
+   adds an `import-<date>@<digest>` alias for the archive's whole `index.json`, and containerd
+   2.x's CRI then fails every container create from that image with "failed to check if this is
+   a checkpoint image". Then check that `sudo k3s crictl inspecti <ref>` answers for each pinned
+   reference.
+1. Apply the rendered `cluster/cluster-base/` and `cluster/homelab-namespace/` directories, as
+   `docs/flux-deploy-plane.md`'s *Bootstrapping Flux on a rebuilt cluster* applies them. Flux's
+   pods and the registry's pod name the PriorityClass `homelab-critical`, and the registry runs
+   in the `homelab` Namespace.
+1. Install the Flux controllers as step 3 of that section does, and wait for all three.
+1. Apply the rendered `cluster/registry/` directory, and wait for `deployment/registry` in
+   `homelab`.
+
+The registry's claims name `longhorn-nobackup`, which no fresh cluster serves before Longhorn
+runs. k3s here disables its bundled local-path provisioner, so the claims stay Pending. That
+step has no drilled answer yet ([#7667](https://github.com/DanielH2018/server/issues/7667)).
+
+`flux-deletion-drill`'s case `fresh-cluster` is written to run these steps on a kind cluster
+that resolves no name outside the cluster. Neither the node nor a pod resolves one, because
+CoreDNS forwards to a dead port, so source-controller cannot reach ghcr.io or Sigstore by
+name. A control on the node and one in a pod check this before the case is judged. The case
+was added on 2026-11-08 (#7669), so read its `case=fresh-cluster` line in the latest run
+before you rely on it. It differs from a rebuild in five ways. The case runs `ctr images import`
+in the node over `docker exec`, so k3s's image import directory is not drilled. The case applies the vendored
+`gotk-components.yaml`, as the drill's other cases do, rather than the role's rendered
+`components.yaml`. A stand-in `longhorn-nobackup` class on kind's own provisioner binds the
+claims. The case drops the registry's node pin, because no kind node is daniel-box. The runner
+pushes through a `kubectl port-forward` instead of the node's loopback port.
 
 **The way back to GHCR.** Re-pointing at GHCR first applies `prod`, which predates the
 emergency change, and silently reverts it. So order the steps:
@@ -753,7 +803,7 @@ what each source records — not what "should" have happened.
 | SOPS decrypt with the recovery age key alone (no host key) | **No record found.** No drill of this specific path is recorded anywhere in the repo. | absence of any citation — see *Annual drill* below |
 | SOPS onboarding (`age-keygen` → `sops updatekeys` → onboard) | **Yes, routinely** — the standard way every host (daniel-pi, whose key was removed on 2026-10-03, and daniel-box) was onboarded. Never specifically exercised as a *total-loss* recovery (starting from the recovery key rather than a host's own fresh key). | `ansible/README.md` §5; the `sops_setup` role created the key until H7.24b |
 | daniel-pi rebuild from a blank SD card (*daniel-pi must be rebuilt from a blank SD card*) | **No.** The operator's rebuild at the Pi's console is outstanding. CI's bootstrap cases run the script in a container against stub or simulated installs, so they cover neither the console steps nor the WireGuard restore. | `scripts/validate/validate_lib/bootstrap_repo_case.py` |
-| Break-glass promotion (*GitHub, GHCR or Sigstore is unreachable*) | **Partly.** `flux-deletion-drill` verifies a bundle signed with a throwaway key through the flux role's break-glass source form on a kind cluster, and refuses one signed with another key. Not drilled: the runbook on production, source-controller's fetch through the registry's NetworkPolicy (kind enforces none), and the fresh-cluster steps. | `.github/workflows/flux-deletion-drill.yml`, cases `break-glass` and `break-glass-red` |
+| Break-glass promotion (*GitHub, GHCR or Sigstore is unreachable*) | **Partly.** `flux-deletion-drill` verifies a bundle signed with a throwaway key through the flux role's break-glass source form on a kind cluster, and refuses one signed with another key. Its `fresh-cluster` case, added on 2026-11-08 (#7669), is written to run the fresh-cluster steps on a second kind cluster that resolves no name outside the cluster, on the node or in a pod: the controllers and the registry run from image archives, and the registry role's render serves the bundle at `flux_break_glass_url`. Read its `case=fresh-cluster` line in the latest run before you count it as drilled. Not drilled: the runbook on production, source-controller's fetch through the registry's NetworkPolicy (kind enforces none), k3s's image import directory, and the registry's claims on a cluster without Longhorn. | `.github/workflows/flux-deletion-drill.yml`, cases `break-glass`, `break-glass-red` and `fresh-cluster` |
 | Rebuilding a cluster node on the package path (`docs/host-packages.md`) | **No.** Its guest drill is **operator-only** and waits for the k3s upgrade. CI runs `bootstrap-host.sh` only as far as a simulated install. | `docs/target-architecture/host/h7-delete-ansible.md`, *The proofs* |
 | Full total-loss sequence end to end (etcd + Longhorn + redeploy, in order, on hardware with nothing pre-existing) | **No.** Each piece above has partial or full drill coverage on its own; the sequence has not been run together. | inferred from the above — no doc claims otherwise |
 
