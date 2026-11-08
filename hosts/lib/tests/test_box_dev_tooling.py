@@ -32,10 +32,6 @@ DISTRO_PACKAGES = {
     "zsh-syntax-highlighting",
 }
 OLD_UV = "/usr/local/bin/uv"
-# The one reader left: daniel-server's Ansible-era witness, until H7.59 moves it.
-OLD_UV_READERS = {
-    "ansible/roles/setup/initial_setup/templates/loki-read-route-health.sh.j2"
-}
 # Readers the census must have moved, so a narrowed grep cannot pass over nothing.
 MOVED_UV_READERS = (
     "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
@@ -60,9 +56,8 @@ def test_vale_reaches_daniel_box_and_retires_the_old_copy(box):
     assert "/usr/local/bin/vale" in _legacy_paths(box)
 
 
-def test_the_old_uv_copy_outlives_the_k3s_apply_that_repoints_its_reader(box):
-    # The tick cannot apply k3s, and a package install does not wait for that hand apply.
-    assert OLD_UV not in _legacy_paths(box)
+def test_daniel_box_retires_the_old_uv_copy(box):
+    assert OLD_UV in _legacy_paths(box)
 
 
 def test_every_setup_role_reader_names_the_packaged_uv():
@@ -73,7 +68,7 @@ def test_every_setup_role_reader_names_the_packaged_uv():
         check=False,
         cwd=REPO,
     ).stdout.split()
-    assert set(readers) == OLD_UV_READERS
+    assert readers == []
     for reader in MOVED_UV_READERS:
         assert "/usr/bin/uv" in (REPO / reader).read_text()
 

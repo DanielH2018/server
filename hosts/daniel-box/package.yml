@@ -92,8 +92,7 @@ components:
   - renovate-agent
   - fake-remux
   - github-checks
-  # H7.61: this package's own units name /usr/bin/uv. initial_setup keeps writing
-  # /usr/local/bin/uv here until this host's own move, H7.62, for the setup roles still reading it.
+  # H7.61: this package's own units name /usr/bin/uv.
   - uv
   - vale
   - worktree-holders
@@ -172,7 +171,6 @@ legacy:
   # own legacy list cannot name because only a `has_fwupd` host carries it.
   - {path: /usr/local/bin/host-maintenance.sh}
   - {cron: "Weekly firmware update", user: root}
-  # H7.62: the copy initial_setup installed, which sits ahead of /usr/bin/vale on PATH.
-  # /usr/local/bin/uv is not listed: k3s's health script reads it until an apply of that role,
-  # which the tick cannot run, and a package install does not wait for that apply.
+  # H7.62: the copies initial_setup installed, ahead of /usr/bin/vale and /usr/bin/uv on PATH.
   - {path: /usr/local/bin/vale}
+  - {path: /usr/local/bin/uv}
