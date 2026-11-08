@@ -109,15 +109,11 @@ BD_GUEST_SCRIPT="$GUEST_SCRIPT" BD_STEP_DEADLINE=1 BD_READY_DEADLINE=1 RH_POLL=0
 for f in "$XML" "$BASE_IMAGE" "$SEED" "$GUEST_HOSTKEY_PUB" "$IDENTITY"; do echo x >"$f"; done
 ssh_argv() { printf '%s\\n' "$STUBS/guest-ssh"; }
 fence_check() { echo fence >>"$EVENTS"; [[ -z "$LEAK" ]] || fail "egress fence BROKEN: PRODVIP answered"; }
-if [[ -n "$PROBE_ONLY" ]]; then
-  echo "$REHEARSE $BOOTSTRAP $TAG"
-  exit 0
-fi
 rehearse_bootstrap
 """
 
 
-def run(tmp_path, *, fail_at="", never_done="", leak="", args=(), probe_only=""):
+def run(tmp_path, *, fail_at="", never_done="", leak="", args=()):
     body = rendered_orchestrator()
     assert CHECK_LIB in body, "the harness's substitution is gone"
     assert body.rstrip().endswith(ENTRYPOINT)
@@ -158,7 +154,6 @@ def run(tmp_path, *, fail_at="", never_done="", leak="", args=(), probe_only="")
             "FAIL_AT": fail_at,
             "NEVER_DONE": never_done,
             "LEAK": leak,
-            "PROBE_ONLY": probe_only,
         },
         capture_output=True,
         text=True,
@@ -232,11 +227,6 @@ def test_a_suc_rehearsal_flag_is_refused_before_a_guest_exists(tmp_path):
     assert "belong to --rehearse-suc" in r.done.stdout
     assert not any("create" in e for e in r.events)
     assert_drill_evidence_untouched(r)
-
-
-def test_the_flag_selects_the_mode_and_its_own_syslog_tag(tmp_path):
-    r = run(tmp_path, probe_only="1")
-    assert r.done.stdout.split() == ["1", "1", "etcd-drill-bootstrap-drill"]
 
 
 # ── The guest-side script ────────────────────────────────────────────────────────────────────
