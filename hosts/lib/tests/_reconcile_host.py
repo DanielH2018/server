@@ -10,7 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from lib.proc_testing import run
+from lib.proc_testing import run, write_exec
 from lib.repo_paths import REPO
 
 RECONCILE = REPO / "hosts" / "lib" / "homelab-reconcile"
@@ -58,12 +58,11 @@ class Node:
         for directory in (self.root, self.stub, self.bin):
             directory.mkdir()
         for command in COMMANDS:
-            wrapper = self.bin / command
-            wrapper.write_text(
-                f"#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(str(STUB))} "
-                f'{command} "$@"\n'
+            write_exec(
+                self.bin / command,
+                f"exec {shlex.quote(sys.executable)} {shlex.quote(str(STUB))} "
+                f'{command} "$@"\n',
             )
-            wrapper.chmod(0o755)
         self.lock = self.root / "var/lib/dpkg/lock-frontend"
         self.lock.parent.mkdir(parents=True)
         self.lock.touch()

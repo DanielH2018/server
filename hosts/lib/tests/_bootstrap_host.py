@@ -15,6 +15,7 @@ import subprocess
 import tarfile
 from pathlib import Path
 
+from lib.proc_testing import write_exec
 from lib.repo_paths import REPO
 
 SCRIPT = REPO / "hosts" / "bootstrap-host.sh"
@@ -149,9 +150,7 @@ class FakeHost:
         )
 
     def _stub(self, name: str, body: str) -> None:
-        stub = self.bin / name
-        stub.write_text(f"#!/bin/sh\n{body}\n")
-        stub.chmod(0o755)
+        write_exec(self.bin / name, f"{body}\n")
 
     def pin(self, old: str, new: str) -> None:
         """Replace the production digest `old` with `new` in the scratch copy of the script."""
@@ -195,10 +194,15 @@ class FakeHost:
             "-c",
             "user.email=t@example.invalid",
         ]
-        subprocess.run([*git, "init", "-q"], check=True, capture_output=True)
-        subprocess.run([*git, "add", "."], check=True, capture_output=True)
         subprocess.run(
-            [*git, "commit", "-q", "-m", "x"], check=True, capture_output=True
+            [*git, "init", "-q"], check=True, capture_output=True, timeout=60
+        )
+        subprocess.run([*git, "add", "."], check=True, capture_output=True, timeout=60)
+        subprocess.run(
+            [*git, "commit", "-q", "-m", "x"],
+            check=True,
+            capture_output=True,
+            timeout=60,
         )
         return clone
 

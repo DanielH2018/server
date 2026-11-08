@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 import checkout_sync as cs
+from lib.proc_testing import fake_bin
 
 GREEN = [{"name": "prek", "status": "completed", "conclusion": "success"}]
 RED = [{"name": "prek", "status": "completed", "conclusion": "failure"}]
@@ -207,12 +208,8 @@ def test_a_missing_credential_never_falls_back_to_the_gh_login(
     lab, tmp_path, monkeypatch
 ):
     # sys_user's gh is logged in as the repo owner, so a fallback would spend that token.
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
     ran = tmp_path / "gh-ran"
-    gh = bin_dir / "gh"
-    gh.write_text(f"#!/bin/sh\ntouch {ran}\necho operator-token\n")
-    gh.chmod(0o755)
+    bin_dir = fake_bin(tmp_path / "bin", gh=f"touch {ran}\necho operator-token\n")
     monkeypatch.setenv("PATH", f"{bin_dir}:/usr/bin:/bin")
     tip = lab.push("a")
     lab.ci[tip] = GREEN

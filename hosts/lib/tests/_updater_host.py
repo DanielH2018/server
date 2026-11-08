@@ -9,7 +9,7 @@ import shlex
 import sys
 from pathlib import Path
 
-from lib.proc_testing import run
+from lib.proc_testing import run, write_exec
 from lib.repo_paths import REPO
 
 UPDATER = REPO / "hosts" / "lib" / "homelab-updater"
@@ -40,12 +40,11 @@ class Host:
         for directory in (self.root, self.stub, self.bin):
             directory.mkdir()
         for command in COMMANDS:
-            wrapper = self.bin / command
-            wrapper.write_text(
-                f"#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(str(STUB))} "
-                f'{command} "$@"\n'
+            write_exec(
+                self.bin / command,
+                f"exec {shlex.quote(sys.executable)} {shlex.quote(str(STUB))} "
+                f'{command} "$@"\n',
             )
-            wrapper.chmod(0o755)
         self.textfile = self.root / "var/lib/node-exporter-textfile"
         self.textfile.mkdir(parents=True)
         self.state_dir = self.root / "var/lib/homelab-updater"

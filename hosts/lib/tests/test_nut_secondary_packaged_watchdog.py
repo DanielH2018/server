@@ -62,7 +62,9 @@ def test_the_packaged_render_succeeds_with_every_secret_stripped():
 def test_the_packaged_render_is_valid_shell(tmp_path):
     path = tmp_path / "ups-secondary-health.sh"
     path.write_text(render(ROLE / "templates"))
-    result = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True)
+    result = subprocess.run(
+        ["bash", "-n", str(path)], capture_output=True, text=True, timeout=60
+    )
     assert result.returncode == 0, result.stderr
 
 
