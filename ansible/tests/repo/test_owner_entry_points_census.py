@@ -98,7 +98,12 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
     ),
     "`probe.py health T`": (
         Link(
-            "scripts/diagnostics/probe_lib/health.py", "_with_alert_plane", "tag_owners"
+            "scripts/diagnostics/probe_lib/health.py", "_fetch_cronjob", "flux_revision"
+        ),
+        Link(
+            "scripts/diagnostics/probe_lib/health_alerts.py",
+            "alert_reference",
+            "flux_reference",
         ),
     ),
     "`gen_role_glance.py`, `service_catalog.py`": (
@@ -116,6 +121,7 @@ NOT_A_TREE_READER = {
     "`deploy.sh --changed`": "it leaves out a tag by the platform of its entry",
     "`deploy.sh --list-services`": "it marks a tag by the platform of its entry",
     "GitOps deployer": "it routes every k8s role path to `cs.flux` with no ownership read",
+    "`probe.py health T`": "it reads T's Kustomization for every tag, with no ownership read",
 }
 
 Source = Callable[[str], str | None]
@@ -224,14 +230,11 @@ def test_a_renamed_entry_point_is_flagged():
 
 
 def test_an_entry_point_that_stops_reading_ownership_is_flagged():
-    rel = "scripts/diagnostics/probe_lib/health.py"
-    text = (
-        (REPO / rel)
-        .read_text()
-        .replace("tag_owners().get(role), _render", "{}.get(role), _render")
-    )
+    rel = "scripts/docs/gen_role_glance.py"
+    text = (REPO / rel).read_text().replace("owners = tag_owners(", "owners = dict(")
     assert census_problems(_plan(), source=_source_with(rel, text)) == [
-        f"`probe.py health T`: {rel}:_with_alert_plane no longer calls `tag_owners`"
+        f"`gen_role_glance.py`, `service_catalog.py`: {rel}:stale_k8s_docs no longer "
+        "calls `tag_owners`"
     ]
 
 

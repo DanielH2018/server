@@ -10,7 +10,7 @@ Two halves, each judged against a reference time:
 
   - Alerts. A firing alert in the gated set fails the gate only when it became active
     (`ALERTS_FOR_STATE`) after the tag's reference time: the time its Kustomization first
-    reported its current revision for an `owner: flux` tag. With no reference time every gated
+    reported its current revision. With no reference time every gated
     alert fails. Older alerts, and firing alerts
     outside the gated set, print as notes.
   - Probes. The newest `probe_success{service="<tag>"}` sample of each target must postdate
@@ -343,22 +343,22 @@ def has_ingress_route(entry):
     return bool(ingress_probe_targets([entry]))
 
 
-def alert_reference(tag, owner, query):
+def alert_reference(tag, query):
     """The time after which a firing alert of `tag` counts against this deploy (C7).
 
-    When an `owner: flux` tag's Kustomization first reported its current revision. None when
-    that is unreadable or `tag` is not flux-owned, and then every gated alert fails.
+    When `tag`'s Kustomization first reported its current revision. None when that is
+    unreadable or `tag` has no Kustomization, and then every gated alert fails.
     """
-    return flux_reference(tag, query) if owner == "flux" else None
+    return flux_reference(tag, query)
 
 
-def check(tag, owner, ready_at, entry, tools=DEFAULT_PROM):
-    """`gate` for `tag`, with both reference times derived from its ownership and rollout.
+def check(tag, ready_at, entry, tools=DEFAULT_PROM):
+    """`gate` for `tag`, with both reference times derived from its Kustomization and rollout.
 
     The probe reference is the later of the alert reference and the newest pod Ready
     transition: a sample before it may be the old pod's 1 or a mid-rollout 0.
     """
-    reference = alert_reference(tag, owner, tools.query)
+    reference = alert_reference(tag, tools.query)
     rolled = [t for t in (reference, ready_at) if t is not None]
     probe_reference = max(rolled) if rolled else tools.clock()
     return gate(tag, reference, probe_reference, has_ingress_route(entry), tools)

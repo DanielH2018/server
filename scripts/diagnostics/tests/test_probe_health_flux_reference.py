@@ -123,12 +123,12 @@ def test_a_flux_reference_holds_across_a_revision_that_leaves_the_tag_unchanged(
         (t2, "master@sha1:bbbb", "sha256:x"),
     ]
     fake = FluxHistoryProm(revisions, now=t2 + 300)
-    assert health_alerts.alert_reference(TAG, "flux", fake.query) == T1
+    assert health_alerts.alert_reference(TAG, fake.query) == T1
 
     fake = FluxHistoryProm(
         [*revisions, (t3, "master@sha1:cccc", "sha256:y")], now=t3 + 300
     )
-    assert health_alerts.alert_reference(TAG, "flux", fake.query) == t3
+    assert health_alerts.alert_reference(TAG, fake.query) == t3
 
 
 def test_an_alert_after_the_content_change_still_fails_once_an_unrelated_commit_reconciles():
@@ -139,6 +139,6 @@ def test_an_alert_after_the_content_change_still_fails_once_an_unrelated_commit_
         now=t2 + 300,
         alert_active=active,
     )
-    code, lines = health_alerts.check(TAG, "flux", T1 + 60, {"name": TAG}, fake.tools())
+    code, lines = health_alerts.check(TAG, T1 + 60, {"name": TAG}, fake.tools())
     assert code == 1, lines
     assert any("SomethingBroke" in line and "note:" not in line for line in lines)

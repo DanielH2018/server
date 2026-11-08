@@ -293,10 +293,8 @@ def _with_alert_plane(role, text, code, ready_at, prom, read):
         text, code = health_plumbing.with_checks(role, text, read)
     if code:
         return text, code
-    from lib.k8s_roles import tag_owners
-
-    owner, entry = tag_owners().get(role), _render_context()[1].get(role)
-    plane_code, lines = health_alerts.check(role, owner, ready_at, entry, prom)
+    entry = _render_context()[1].get(role)
+    plane_code, lines = health_alerts.check(role, ready_at, entry, prom)
     if plane_code:
         head = f"{role}: the alert plane FAILED the gate after a healthy rollout"
         return "\n".join([head, *lines, text]), 1
@@ -306,11 +304,8 @@ def _with_alert_plane(role, text, code, ready_at, prom, read):
 def _fetch_cronjob(role, name, namespace, cluster, tools=DEFAULT_TOOLS):
     """(CronJob or None, its latest owned Job or None, that Job's pods or None, reference).
 
-    The reference is the `health_cronjob.FluxRevision` of an `owner: flux` `role`, and None
-    otherwise.
+    The reference is `role`'s `health_cronjob.FluxRevision`.
     """
-    from lib.k8s_roles import tag_owners
-
     cronjob = _read(cluster, k8s_cronjob_args(name, namespace), tools)
     jobs = _read(cluster, k8s_jobs_args(namespace), tools)
     latest_job = latest_owned_job(jobs, name)
@@ -318,8 +313,6 @@ def _fetch_cronjob(role, name, namespace, cluster, tools=DEFAULT_TOOLS):
     if latest_job:
         job_name = (latest_job.get("metadata") or {}).get("name")
         pods = _read(cluster, k8s_job_pods_args(job_name, namespace), tools)
-    if tag_owners().get(role) != "flux":
-        return cronjob, latest_job, pods, None
     kustomization = _read(cluster, k8s_kustomization_args(role), tools)
     revision = health_cronjob.flux_revision(kustomization, jobs, name)
     return cronjob, latest_job, pods, revision
