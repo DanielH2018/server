@@ -3978,6 +3978,9 @@ progress.
 
     Resolution: D6's break-glass drill on kind adds a fresh-cluster case with no registry
     and no GHCR, and H7.15c's PR quotes it. This is a cross-slice request to D6.
+    Update (#7555): `flux-deletion-drill`'s case `fresh-cluster` is that case. It imports
+    the archives with `ctr`, as `kind load image-archive` does, so k3s's image import
+    directory stays undrilled.
 
 ## Review log
 

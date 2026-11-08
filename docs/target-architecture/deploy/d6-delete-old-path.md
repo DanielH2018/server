@@ -3063,6 +3063,13 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     images at `flux_version`, refreshed with item 8's bundle. The drill gains a
     fresh-cluster case once H7 Open question 14 rules that the offline bring-up runs
     through this runbook. Until then, D6.7c's two cases cover a running cluster only.
+    Update (#7555): H7 Open question 14 ruled so, and `flux-deletion-drill` gained the case
+    `fresh-cluster`. It loads the controllers and the registry from OCI-layout archives on
+    a kind node that resolves no name, applies the registry role's render, and verifies the
+    key-signed bundle at `flux_break_glass_url`. The kit's archives keep each pinned index,
+    because `docker save` drops the digest the manifests name. The registry's claims on a
+    cluster without Longhorn stay open
+    ([#7667](https://github.com/DanielH2018/server/issues/7667)).
 
 ## Review log
 
