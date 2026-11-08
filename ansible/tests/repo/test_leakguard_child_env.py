@@ -5,7 +5,8 @@ its child an explicit `env` used to drop it, and a check script the child ran wr
 verdict into node_exporter's real directory (#6191, #6238). The same wrapper shims a
 hand-built PATH without overriding a test's own stub or un-hiding a binary (#6418), and swaps
 a real binary started by absolute path for its shim (#6463), a `shell=True` string's
-included (#6485). These run in this process, under
+included (#6485). `k3s`, the binary `kubectl` links to, is shimmed under each of its names
+(#7569). These run in this process, under
 the plugin `pyproject.toml` loads, because the wrapper is what they check.
 
 Run: uv run pytest ansible/tests/repo/test_leakguard_child_env.py
@@ -203,3 +204,35 @@ def test_a_shell_command_swaps_only_a_real_shimmed_word(tmp_path: Path) -> None:
     assert swap("/usr/bin/loggerd x | /opt/bin/logger") == (
         "/usr/bin/loggerd x | /opt/bin/logger"
     )
+
+
+_RUNS_THE_K3S_BINARY = """
+import subprocess
+
+
+def test_it_runs_the_binary():
+    subprocess.run(["{name}", "etcd-snapshot", "ls"], check=False)
+    subprocess.run(["{bin_dir}/{name}", "etcd-snapshot", "ls"], check=False)
+"""
+
+
+@pytest.mark.parametrize("name", ["k3s", "crictl", "ctr"])
+def test_a_test_that_runs_the_k3s_multicall_binary_is_failed(
+    tmp_path: Path, name: str
+) -> None:
+    """`kubectl`'s own binary under another name, by PATH or by absolute path, is shimmed.
+
+    The real one self-extracts into `./data/` when its data dir resolves empty (#7569).
+    """
+    ran = tmp_path / "ran"
+    bin_dir = fake_bin(tmp_path / "bin", **{name: f'echo "$0" >> {ran}\n'})
+    child = tmp_path / "child"
+    child.mkdir()
+    proc = _run_child(
+        child,
+        _RUNS_THE_K3S_BINARY.format(name=name, bin_dir=bin_dir),
+        extra_env={"PATH": f"{bin_dir}:/usr/bin:/bin"},
+    )
+    assert not ran.exists(), f"the binary ran unshimmed: {ran.read_text()}"
+    assert proc.returncode != 0, proc.stdout
+    assert "test_it_runs_the_binary" in proc.stdout, proc.stdout

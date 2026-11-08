@@ -83,6 +83,7 @@ SHIMMED_PATHS = Census(
         Subject("a.sh", "printf x | /usr/bin/logger -t check\n"),
         Subject("b.sh.j2", 'export LONGHORN_JOURNALCTL="/usr/bin/journalctl"\n'),
         Subject("c.py", 'subprocess.run(["/usr/local/bin/kubectl", "get", "pods"])\n'),
+        Subject("e.sh", "/usr/local/bin/k3s etcd-snapshot ls\n"),
         Subject("d.sh", 'X="${A:-/usr/bin/curl}" /usr/bin/curl -fsS "$URL"\n'),
     ),
     green=(
@@ -106,6 +107,17 @@ SHIMMED_PATHS = Census(
             "it runs under sudo, so a binary path read from the environment would let the "
             "caller choose what root runs; its tests import it, so leakguard's `Popen` "
             "wrapper still sees each launch as the test's direct child"
+        ),
+        "hosts/components/claude-code/files/homelab-takeover-check.sh": (
+            "it runs under sudo and ignores every override as root, for rootq's reason; as "
+            "non-root it takes `HOMELAB_TC_KUBECTL`, which its tests set"
+        ),
+        "hosts/bootstrap-host.sh": (
+            "every use is `$ROOT$K3S_BIN`, and its tests point `HOMELAB_ROOT` at a fake root"
+        ),
+        "hosts/components/k3s-host-checks/templates/longhorn-backup-health.sh.j2": (
+            "the shim only exports the command; the reader runs it, and every test that runs "
+            "the reader passes `LONGHORN_BACKUP_KUBECTL` a stub"
         ),
         "scripts/validate/validate_lib/secrets_case.py": (
             "`DOCKER_STUB_PATH` is where the case writes a stub INSIDE a test container; "

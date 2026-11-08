@@ -153,11 +153,14 @@ import pytest
 SHIMMED_BINARIES = (
     "at",
     "busctl",
+    "crictl",
     "crontab",
+    "ctr",
     "curl",
     "docker",
     "gh",
     "journalctl",
+    "k3s",  # crictl, ctr and kubectl link to it; it can self-extract into ./data (#7569)
     "kubectl",
     "logger",
     "mosquitto_pub",
