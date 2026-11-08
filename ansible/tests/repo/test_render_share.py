@@ -151,6 +151,7 @@ def test_with_no_run_id_one_process_computes_once_and_copies_each_call(
 KNOWN_CONSUMERS = frozenset(
     {
         "scripts/renderer/tests/test_renderer_collision_census.py",
+        "scripts/renderer/tests/test_renderer_env_secret_restart.py",
         "scripts/renderer/tests/test_renderer_restart.py",
         "scripts/renderer/tests/test_renderer_secret_checks_tree.py",
         "scripts/renderer/tests/test_renderer_standalone_map.py",

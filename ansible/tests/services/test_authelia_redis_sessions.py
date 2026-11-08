@@ -14,16 +14,18 @@ real rendered manifests behind a non-vacuity assertion:
 - **The three ports agree at 6379.** The containerPort, the Service port and the
   NetworkPolicy's port are written in three files across two roles. Any two of them agreeing is
   not enough — a policy on the wrong port renders, applies, and silently drops the traffic.
-- **Nothing restarts `authelia-redis` with the portal.** It is in `manifests_extra_rollouts`
-  so the drain waits on its roll (#4564), and only with `restart_on: []`. Any restart signal
-  there rolls it on every change to the authelia role's manifests, several times a day, which
-  would destroy the sessions this setup exists to keep, and would read as a tidy-up.
+- **`authelia-redis` restarts on its own Secret only.** It is in `manifests_extra_rollouts`
+  so the drain waits on its roll (#4564), with `restart_on: ['secret']`, and its pod names no
+  ConfigMap or Secret but `authelia-redis`. Its `checksum/restart` then moves when the redis
+  password or redis.conf does (#7575), and never on a portal config change, which would roll
+  the session store several times a day and destroy the sessions this setup exists to keep.
 """
 
 import pytest
 from _helpers import REPO, render_expr
 from _k8s_render import rendered_docs
 from lib import yaml_fast
+from renderer.renderer_lib.restart import pod_references, pod_template
 from renderer.renderer_lib.task_inputs import include_vars
 
 REDIS_PORT = 6379
@@ -41,18 +43,22 @@ def sessions_are_stored_in_redis(session):
     return redis.get("host") == REDIS_SERVICE and redis.get("port") == REDIS_PORT
 
 
-def the_session_store_is_not_rolled_with_the_portal(extra_rollouts):
-    """True when no entry restarts the redis Deployment.
+def redis_restarts_on_its_secret_only(extra_rollouts):
+    """True when every entry naming the redis Deployment restarts it on `secret` alone.
 
-    An entry naming redis is allowed only with an explicit empty `restart_on`: that queues it
-    for the drain and turns off every signal the shared extra restart fires on. An entry with
-    no `restart_on` gets all three signals by default.
+    An entry with no `restart_on` gets every signal by default, so a ConfigMap it named would
+    roll it. An empty `restart_on` stamps nothing, so a rotated password never reaches redis.
     """
-    return not any(
-        (entry or {}).get("name") == REDIS_SERVICE
-        and (entry or {}).get("restart_on") != []
+    return all(
+        (entry or {}).get("restart_on") == ["secret"]
         for entry in extra_rollouts or []
+        if (entry or {}).get("name") == REDIS_SERVICE
     )
+
+
+def redis_reads_only_its_own_secret(references):
+    """True when the redis pod names the `authelia-redis` Secret and nothing else."""
+    return set(references) == {("Secret", REDIS_SERVICE)}
 
 
 GOOD_SESSION: dict[str, object] = {
@@ -77,24 +83,41 @@ def test_a_redis_block_on_the_wrong_port_is_flagged():
 
 
 def test_no_extra_rollouts_is_clean():
-    assert the_session_store_is_not_rolled_with_the_portal([])
-    assert the_session_store_is_not_rolled_with_the_portal(
+    assert redis_restarts_on_its_secret_only([])
+    assert redis_restarts_on_its_secret_only(
         [{"name": "authelia-something-else", "image": "x"}]
     )
 
 
-def test_rolling_redis_with_the_portal_is_flagged():
-    assert not the_session_store_is_not_rolled_with_the_portal(
+def test_restarting_redis_on_every_signal_is_flagged():
+    assert not redis_restarts_on_its_secret_only(
         [{"name": REDIS_SERVICE, "image": "redis:7.4-alpine"}]
     )
-    assert not the_session_store_is_not_rolled_with_the_portal(
+    assert not redis_restarts_on_its_secret_only(
+        [{"name": REDIS_SERVICE, "restart_on": ["config", "secret"]}]
+    )
+
+
+def test_never_restarting_redis_is_flagged():
+    """The state #7575 found: a rotated redis password reached the Secret and never redis."""
+    assert not redis_restarts_on_its_secret_only(
+        [{"name": REDIS_SERVICE, "restart_on": []}]
+    )
+
+
+def test_restarting_redis_on_its_secret_is_clean():
+    assert redis_restarts_on_its_secret_only(
         [{"name": REDIS_SERVICE, "restart_on": ["secret"]}]
     )
 
 
-def test_waiting_on_redis_without_restarting_it_is_clean():
-    assert the_session_store_is_not_rolled_with_the_portal(
-        [{"name": REDIS_SERVICE, "restart_on": []}]
+def test_a_redis_pod_reading_only_its_secret_is_clean():
+    assert redis_reads_only_its_own_secret({("Secret", REDIS_SERVICE)})
+
+
+def test_a_redis_pod_reading_the_portal_config_is_flagged():
+    assert not redis_reads_only_its_own_secret(
+        {("Secret", REDIS_SERVICE), ("Secret", "authelia-config")}
     )
 
 
@@ -158,15 +181,32 @@ def test_the_rendered_redis_ports_agree(redis_ports):
     )
 
 
-def test_the_role_does_not_roll_redis_with_the_portal():
+def test_the_role_restarts_redis_on_its_secret_only():
     declared = include_vars(AUTHELIA_ROLE)["manifests_extra_rollouts"]
     for lever in (True, False):
         extra = render_expr(declared, authelia_k8s_redis_sessions=lever)
-        assert the_session_store_is_not_rolled_with_the_portal(extra), (
-            f"{REDIS_SERVICE} is in manifests_extra_rollouts without `restart_on: []`; got "
-            f"{extra!r}. Any restart signal rolls it on every manifest change to this role, "
-            f"which would destroy the sessions redis is here to keep"
+        assert redis_restarts_on_its_secret_only(extra), (
+            f"{REDIS_SERVICE} is in manifests_extra_rollouts without `restart_on: ['secret']`; "
+            f"got {extra!r}. Another signal could roll the session store with the portal, and "
+            f"none leaves a rotated redis password unread"
         )
+
+
+def test_the_rendered_redis_pod_reads_only_its_own_secret():
+    found = [
+        pod_references(template)
+        for _role, _tpl, doc in rendered_docs()
+        if (doc.get("metadata") or {}).get("name") == REDIS_SERVICE
+        and (template := pod_template(doc)) is not None
+    ]
+    assert len(found) == 1, (
+        f"expected one rendered {REDIS_SERVICE} workload; got {len(found)}"
+    )
+    assert redis_reads_only_its_own_secret(found[0]), (
+        f"the {REDIS_SERVICE} pod names {sorted(found[0])}; every input it names moves its "
+        f"checksum/restart, so a portal ConfigMap or Secret here logs everyone out on a "
+        f"portal config change"
+    )
 
 
 def test_the_drain_waits_on_redis_only_while_the_lever_deploys_it():

@@ -62,15 +62,17 @@ turns on. All three sit behind the lever.
 role also deploys. Without it the provider is in-memory and every roll of the portal destroys every
 session, remember-me included.
 
-- **`authelia-redis` is in `manifests_extra_rollouts` only with `restart_on: []`**: the drain
-  waits on its roll, and a restart signal would roll the session store on every manifest change,
-  handing back the original bug. `ansible/tests/services/test_authelia_redis_sessions.py`
-  pins that, the provider block, the `wait-for-redis` gate and the 6379 agreement.
+- **`authelia-redis` is in `manifests_extra_rollouts` with `restart_on: ['secret']`**: the drain
+  waits on its roll, and the restart checksum the renderer stamps on it hashes only the
+  `authelia-redis` Secret its pod reads. Its pod must name none of the portal's ConfigMaps or
+  Secrets, or a portal config change would roll the session store and hand back the original
+  bug.
+  `ansible/tests/services/test_authelia_redis_sessions.py` pins that, the provider block, the
+  `wait-for-redis` gate and the 6379 agreement.
 - **The store is an emptyDir and persists nothing**, so a node reboot or an image bump still logs
   everyone out — and a Longhorn volume here would be a backed-up disk of session credentials.
-- **Rotating `authelia_redis_password` needs redis rolled by hand**, because changing
-  `templates/redis-secret.yaml.j2` rolls the *authelia* Deployment while redis keeps the old
-  password. **The rollback lever** is `authelia_k8s_redis_sessions: false` plus a redeploy.
+- **Rotating `authelia_redis_password` or editing redis.conf rolls redis** through its
+  restart checksum (#7575), which logs everyone out once. **The rollback lever** is `authelia_k8s_redis_sessions: false` plus a redeploy.
 - **Verify by surviving a restart, not by a health gate.** `probe.py health authelia` reads green on
   the in-memory version: log in with remember-me ticked, roll the Deployment, reload a route.
 

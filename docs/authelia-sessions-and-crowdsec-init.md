@@ -50,13 +50,13 @@ the portal destroyed every session, including remember-me ones. `remember_me: '1
 cookie's lifetime and overrides the inactivity timer; it does not change where the session is
 stored. Three rolls in one day on 2026-09-10 is what surfaced it.
 
-**A roll is cheap here, which is why this matters.** The central rollout-restart fires whenever
-this role's rendered manifests change, and with several worktrees editing this role at once
-that is several times a day. `authelia-redis` is deliberately **not** in
-`manifests_extra_rollouts`: putting it there would roll the session store on that same cadence
-and hand back the original bug. `ansible/tests/services/test_authelia_redis_sessions.py` pins
-that, the redis provider block, and the 6379 agreement between the containerPort, the Service
-and the NetworkPolicy.
+**A roll is cheap here, which is why this matters.** The portal rolls whenever its config
+changes, and with several worktrees editing this role at once that is several times a day.
+`authelia-redis` restarts on its own Secret only: its `manifests_extra_rollouts` entry carries
+`restart_on: ['secret']`, and its pod reads nothing but the `authelia-redis` Secret, so its
+`checksum/restart` never moves with the portal's config.
+`ansible/tests/services/test_authelia_redis_sessions.py` pins that, the redis provider block,
+and the 6379 agreement between the containerPort, the Service and the NetworkPolicy.
 
 **`authelia_secret` is load-bearing now.** The pinned template says it "is only used with Redis
 / Redis Sentinel," so until the redis block existed it encrypted nothing.
@@ -67,14 +67,9 @@ Renovate bump of `authelia_k8s_redis_image` still logs everyone out. A roll of t
 longer does, which is the whole point. A Longhorn volume here would be a backed-up disk holding
 live session credentials.
 
-**Rotating `authelia_redis_password` needs redis rolled by hand.** `templates/redis-secret.yaml.j2`
-is a secret manifest, so changing it fires the rollout-restart against the *authelia*
-Deployment. Redis keeps the old password in its running process and authentication then fails
-until it is rolled:
-
-```
-kubectl -n homelab rollout restart deploy/authelia-redis
-```
+**Rotating `authelia_redis_password` rolls redis.** The password and redis.conf live in the
+`authelia-redis` Secret, so a change to either moves redis's `checksum/restart` and Flux rolls
+it (#7575). Redis reads both only at start, and the roll logs everyone out once.
 
 **The rollback lever is `authelia_k8s_redis_sessions: false` plus a redeploy.** Authelia goes
 back to memory sessions; the redis Deployment and Service stay applied but unused, because

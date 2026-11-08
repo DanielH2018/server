@@ -14,7 +14,8 @@ from lib.repo_paths import REPO
 
 # 13652 once #7586 split the soak Job's reads into soak_reads.py and retried a transient API error.
 # 13657 once #7485 gave the -snapshot and -prepull Kustomizations the default deletion policy.
-LINE_CEILING = 13657
+# 13656 once #7624 shrank the restart-target code by a line.
+LINE_CEILING = 13656
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 

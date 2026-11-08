@@ -94,8 +94,7 @@ def restart_targets(
 
     The kinds are `ConfigMap` and `Secret`, as the target's `restart_on` admits them. An
     extra-rollouts entry whose `restart_on` names neither, such as `[]`, is waited on and never
-    restarted by Ansible, so it is no target here (scrutiny's influxdb and collector,
-    authelia's redis).
+    restarted by Ansible, so it is no target here (scrutiny's influxdb and collector).
 
     A `manifests_self_rollouts` entry admits both kinds, whatever its `restart_on` names
     (D5.1e).
