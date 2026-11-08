@@ -154,8 +154,8 @@ sudo .venv/bin/python -B scripts/backup/volume_revert.py --service <s> --namespa
   second claim leaves the service up. A failure after the scale-down leaves the service at zero
   replicas, and `docs/volume-revert-drill-and-sizing.md` has the hand recovery.
 - **Nothing runs it unattended.** No cron, unit or workflow calls it.
-- **`ansible/volume-revert.yml` stays as the fallback until the drill below passes through the
-  script.** H7.55 deletes the playbook.
+- **The 2026-11-08 drill passed through the script**, so `ansible/volume-revert.yml` is no
+  longer the fallback. H7.55 deletes the playbook.
 
 ### The drill
 
@@ -179,6 +179,15 @@ The full evidence for each drill is in `docs/target-architecture/deploy/d5-bulk-
   kept the field manager `homelab-operator`. The held soak Job failed on its own after the
   reset, with no pod delete. speedtest read 1/1 at 15:09:58Z, and the revert
   [#6008](https://github.com/DanielH2018/server/pull/6008) cleared the hold at about 15:14Z.
+- **2026-11-08, through `volume_revert.py` (#7509).**
+  [#7637](https://github.com/DanielH2018/server/pull/7637) broke the probe, and `promote`
+  wrote `2a2090cc… stateful=speedtest`. Both classify reads printed `prod@sha256:939b8243…`.
+  The dry run named `autodeploy-speedtest-7f4407a7-config-20261108142446`, and
+  `--apply` reverted `speedtest-config` to it and left the Deployment at 0/0. The reset moved
+  `homelab` to last-good `1af64196`. After the resumes the snapshot Job ran again, and
+  speedtest read 1/1 at about 14:45Z with `probe.py health speedtest` ok. The revert
+  [#7641](https://github.com/DanielH2018/server/pull/7641) merged, and the operator cleared
+  the hold at about 15:15Z.
 
 ## The maintenance-mode attach was never reached by a deploy, and #2740 retired it
 
