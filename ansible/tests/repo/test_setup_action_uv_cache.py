@@ -6,9 +6,9 @@ On 2026-11-08 promote's `render` job (UV_NO_DEV, three packages) wrote an 8 MB e
 ci.yml's `ansible-lint` job (no `uv` call at all) wrote a 1 KB one. Every CI job then
 re-downloaded the dev group and rebuilt actionlint-py from a GitHub release on every run.
 
-Two properties close it. The cache key carries the install profile, so a runtime-only job
-never writes the dev key, and the action syncs the whole profile itself, so a job that runs no
-`uv` command still saves a complete entry.
+Two properties close it. The cache key carries the install profile, so a runtime-only or
+lint-free job never writes the full key, and the action syncs the whole profile itself, so a
+job that runs no `uv` command still saves a complete entry.
 
 Run: uv run pytest ansible/tests/repo/test_setup_action_uv_cache.py
 """
@@ -47,8 +47,10 @@ def problems(action: dict) -> list[str]:
         return ["no astral-sh/setup-uv step"]
     found = []
     args = steps[at].get("with") or {}
-    if "UV_NO_DEV" not in str(args.get("cache-suffix", "")):
-        found.append("the uv cache key does not carry the UV_NO_DEV install profile")
+    suffix = str(args.get("cache-suffix", ""))
+    for var in ("UV_NO_DEV", "UV_NO_GROUP"):
+        if var not in suffix:
+            found.append(f"the uv cache key does not carry the {var} install profile")
     syncs = [
         s
         for s in steps[at + 1 :]
@@ -76,6 +78,13 @@ def _drop_suffix(action):
     del step["with"]["cache-suffix"]
 
 
+def _suffix_without_the_lint_profile(action):
+    step = next(
+        s for s in _steps(action) if str(s.get("uses", "")).startswith(SETUP_UV + "@")
+    )
+    step["with"]["cache-suffix"] = "${{ env.UV_NO_DEV == '1' && 'runtime' || 'dev' }}"
+
+
 def _drop_sync(action):
     _steps(action)[:] = [
         s for s in _steps(action) if "uv sync" not in str(s.get("run", ""))
@@ -96,6 +105,10 @@ def _sync_a_group(action):
 
 RED = {
     "no profile in the cache key": (_drop_suffix, "does not carry the UV_NO_DEV"),
+    "no lint-group profile in the cache key": (
+        _suffix_without_the_lint_profile,
+        "does not carry the UV_NO_GROUP",
+    ),
     "no sync step": (_drop_sync, "no `uv sync --frozen` step"),
     "sync before uv is installed": (
         _sync_before_setup_uv,

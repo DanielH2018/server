@@ -730,6 +730,7 @@ wheels = [
 name = "server-homelab"
 version = "0.0.0"
 source = { virtual = "." }
+default-groups = ["dev", "lint"]
 dependencies = [
     { name = "jinja2" },
     { name = "pyyaml" },
@@ -737,17 +738,22 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "actionlint-py" },
     { name = "ansible-core" },
     { name = "docker" },
     { name = "flask" },
     { name = "jsonschema" },
-    { name = "mkdocs-material" },
+    { name = "mkdocs" },
+    { name = "pygments" },
+    { name = "pymdown-extensions" },
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "requests" },
-    { name = "ruff" },
     { name = "shellcheck-py" },
+]
+lint = [
+    { name = "actionlint-py" },
+    { name = "mkdocs-material" },
+    { name = "ruff" },
     { name = "ty" },
     { name = "zizmor" },
 ]
@@ -760,17 +766,22 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "actionlint-py" },
     { name = "ansible-core", specifier = "==2.22.0rc2" },
     { name = "docker" },
     { name = "flask" },
     { name = "jsonschema" },
-    { name = "mkdocs-material", specifier = ">=9.5" },
+    { name = "mkdocs" },
+    { name = "pygments" },
+    { name = "pymdown-extensions" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-xdist" },
     { name = "requests" },
-    { name = "ruff", specifier = ">=0.16" },
     { name = "shellcheck-py", specifier = "==0.11.0.1" },
+]
+lint = [
+    { name = "actionlint-py" },
+    { name = "mkdocs-material", specifier = ">=9.5" },
+    { name = "ruff", specifier = ">=0.16" },
     { name = "ty", specifier = "==0.0.99" },
     { name = "zizmor", specifier = ">=1.0" },
 ]
