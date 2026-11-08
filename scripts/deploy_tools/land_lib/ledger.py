@@ -1,18 +1,15 @@
 """What the Landings board reads: one logfmt line per landing, from a Ledger of stamps.
 
 This is the only record of where a landing's time goes: how long the merge took to arrive,
-how long master CI took after it, the tick, the deploy.
-
-`tick`, `lock`, `holder` and `kick` stay on the line so the Landings board keeps its columns,
-but land.sh runs no tick: `tick` reads 0, `lock` reads 0, and `holder` and `kick` are empty.
+how long master CI took after it, the deploy.
 
 `cause` is a one-token reason beside a `deploy-failed` verdict. One exit-75 verdict carries one
 too: `deferred` with `promote-timeout`, the wait on a promotion that no promotion covered in
 time. Every other verdict leaves it empty. The Landings board's cause panel selects `cause!=""`,
 so it counts that one beside the `deploy-failed` causes (#4998). The verdict alone cannot tell
-a tag nothing applies from a failed tick or a held promotion, so `cause` lets the board split
+a tag nothing applies from a held promotion, so `cause` lets the board split
 them. Its vocabulary is `outcome.Cause` and it is checked HERE, on assignment,
-because the board groups by the field: a value invented at one of the seven writing sites
+because the board groups by the field: a value invented at one of the writing sites
 becomes a bar on the dashboard, and nothing downstream would reject it.
 """
 
@@ -38,7 +35,6 @@ class Ledger:
     t_start: float
     t_merged: float | None = None
     t_ci: float | None = None
-    t_tick: float | None = None
     t_deploy: float | None = None
     # Wall-clock seconds at resolve, which `host_wait` counts updater fires after.
     merged_at: float = 0.0
@@ -46,9 +42,6 @@ class Ledger:
     verdict: str = ""
     cause: str = ""
     tags_label: str = ""
-    lock_waited: int = 0
-    lock_holder: str = ""
-    kick: str = ""
 
     def __setattr__(self, name: str, value: object) -> None:
         """Coerce a `cause` outside `outcome.CAUSES` to `Cause.INVALID`; "" is no cause.
@@ -71,14 +64,7 @@ def _phase(a: float | None, b: float | None) -> str:
 
 
 def annotation_line(ledger: Ledger, rc: int, total: float) -> str:
-    """The logfmt record; an unreached stamp leaves its field empty, as land.sh did.
-
-    `lock` counts the waits a wrapper rode out inside its own flock as well as the attempts
-    that lost it, so it is non-zero on a landing whose every attempt exited 0.
-
-    `host_lib.logfmt` quotes it (#6161). `holder` is quoted even when empty, because the
-    line has always written it that way.
-    """
+    """The logfmt record, quoted by `host_lib.logfmt`; an unreached stamp leaves its field empty."""
     return logfmt(
         {
             "event": "landing",
@@ -89,13 +75,8 @@ def annotation_line(ledger: Ledger, rc: int, total: float) -> str:
             "exit": rc,
             "wait_merge": _phase(ledger.t_start, ledger.t_merged),
             "wait_ci": _phase(ledger.t_merged, ledger.t_ci),
-            "tick": _phase(ledger.t_ci, ledger.t_tick),
-            "deploy": _phase(ledger.t_tick, ledger.t_deploy),
+            "deploy": _phase(ledger.t_ci, ledger.t_deploy),
             "total": int(total),
             "tags": ledger.tags_label or "none",
-            "lock": ledger.lock_waited,
-            "holder": ledger.lock_holder,
-            "kick": ledger.kick,
-        },
-        always_quote=("holder",),
+        }
     )

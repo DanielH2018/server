@@ -16,7 +16,6 @@ def _ready(landing, fakes=None, **opts):
     ln, calls = landing(fakes, **opts)
     ln.merge_sha = MERGE_SHA
     ln.ledger.t_ci = 2.0
-    ln.ledger.t_tick = 3.0
     return ln, calls
 
 
