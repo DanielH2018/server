@@ -302,3 +302,25 @@ def test_tally_row_carries_job_step_module_branches_and_last_seen(tmp_path):
     assert "fix-gamma" not in row and "test_other" not in row, (
         f"two modules merged: {row}"
     )
+
+
+def test_flaky_section_tallies_only_runs_green_on_a_rerun(tmp_path):
+    flaky = _run(
+        46000000001,
+        _attempt(_pytest_job(96000000001, "test_flaky")),
+        _green_attempt(),
+        event="pull_request",
+    )
+    still_red = _run(
+        46000000002,
+        _attempt(_pytest_job(96000000002, "test_broken")),
+        _attempt(_pytest_job(96000000003, "test_broken")),
+        event="pull_request",
+    )
+    out = _survey(tmp_path, flaky, still_red).stdout
+    head, found, rest = out.partition("flaky: red, then green on a re-run")
+    assert found, f"the survey printed no flaky section:\n{out}"
+    section = rest.partition("red attempts")[0]
+    assert "test_flaky" in section, section
+    assert "test_broken" not in section, section
+    assert "test_broken" in head, f"the full tally lost the still-red run:\n{out}"
