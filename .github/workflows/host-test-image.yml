@@ -1,0 +1,97 @@
+name: host-test-image
+
+# Publishes the test images ci.yml's host_packages and host_tools_arm64 jobs pull, so a PR run
+# with an unchanged Dockerfile fetches nothing from snapshot.ubuntu.com (#7664). Those jobs pull
+# the digest hosts/lib/tests/container/image.pins names, or this Dockerfile's tag while the pin is
+# stale, and build from the Dockerfile when neither pulls.
+#
+# Each image is tagged `<release>-<arch>-<inputs>` and written once: a run that finds the tag
+# already on GHCR rebuilds nothing. A build that needs the mirror therefore runs here, off every
+# PR's path, and a mirror outage delays only the publish. The summary prints the image.pins lines
+# to commit after a Dockerfile change merges.
+#
+# The weekly run republishes a tag that went missing. The pinned digest went with it, so the legs
+# pull the republished tag, and the summary prints the new pin.
+#
+# ansible/tests/repo/test_host_test_image.py holds these jobs equal to ci.yml's build sites,
+# because the tag carries the release and the runner's architecture.
+
+on:
+  schedule:
+    - cron: "23 4 * * 1"
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/host-test-image.yml
+      - hosts/lib/tests/container/Dockerfile
+      - hosts/lib/tests/container/build-image.sh
+  workflow_dispatch:
+
+permissions: {}
+
+# Two overlapping runs would both find a tag absent and both push it.
+concurrency:
+  group: host-test-image
+  cancel-in-progress: false
+
+jobs:
+  amd64:
+    # A dispatch from a branch would publish that branch's Dockerfile under a write-once tag.
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-26.04
+    # A cold build took 14-39 minutes per leg on 2026-11-04 with the mirror slow (#7133).
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ["24.04", "26.04"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false  # the push uses the token below, not git
+
+      - name: Publish the test image and print its pin
+        env:
+          RELEASE: ${{ matrix.release }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          line=$(hosts/lib/tests/container/build-image.sh "$RELEASE" --publish | tail -n 1)
+          {
+            echo "### image.pins, ubuntu:$RELEASE amd64"
+            echo '```'
+            echo "inputs $(sha256sum hosts/lib/tests/container/Dockerfile | cut -c1-64)"
+            echo "$line"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  arm64:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false  # the push uses the token below, not git
+
+      - name: Publish the test image and print its pin
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          line=$(hosts/lib/tests/container/build-image.sh 24.04 --publish | tail -n 1)
+          {
+            echo "### image.pins, ubuntu:24.04 arm64"
+            echo '```'
+            echo "inputs $(sha256sum hosts/lib/tests/container/Dockerfile | cut -c1-64)"
+            echo "$line"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

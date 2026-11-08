@@ -983,9 +983,11 @@ then daniel-pi, then daniel-box. Each step is **operator-only**, apart from the 
 
 1. To make the host's package one the suite has tested on the target, merge a PR that adds the
    release to the `host_packages` matrix in `.github/workflows/ci.yml`, with the suite green. The
-   PR makes the same edit to `.github/workflows/host-test-image-cache.yml`, which
-   `ansible/tests/repo/test_host_test_image_cache.py` holds equal to `ci.yml`. Skip this step when
-   the matrix already lists the release.
+   PR makes the same edit to `.github/workflows/host-test-image.yml`, which
+   `ansible/tests/repo/test_host_test_image.py` holds equal to `ci.yml`. Until that workflow has
+   published the new release's image and `hosts/lib/tests/container/image.pins` names it, the new
+   leg builds its image from the Dockerfile. Skip this step when the matrix already lists the
+   release.
 1. Stop updates on the host, as *Stopping updates on one host* describes, so no package installs
    during the upgrade. `HostUpdateStale` can fire while the timer stays masked, which is expected.
 1. On a cluster node, pause system-upgrade-controller and check the cluster, both from daniel-box.
