@@ -64,6 +64,7 @@ MAX_LIVE_BATCHES_PER_HOST = 3
 # daniel-server sat at 4 live for 9.6% of the week. The fleet `high` count (236,328) is no
 # longer comparable with 96,855: memory.events is hierarchical, so it now counts each batch's
 # own MemoryHigh, and daniel-server's went from 0 to 125,773 with its fleet under its cap.
+# Read the fleet's own hits from `claude_cgroup_memory_events_local_total` instead.
 # Raise daniel-box only if a week shows both hosts full for long stretches while its fleet PSI
 # stays low and its fleet peak leaves room for a 4th reservation.
 LIVE_BATCH_CAP_BY_HOST = {"daniel-server": 4}

@@ -125,7 +125,11 @@ def test_red_ci_after_the_one_resume_ends_needs_input_naming_the_checks(tmp_path
     assert final["result"].endswith(PR.removeprefix("https://"))
     assert [p for _, _, p in run.claude].count("ci-fix") == 1
     assert "CI gate: failed after one resume: pytest." in run.comments[0]
-    assert _record(tmp_path)["outcome"] == "needs-input"
+    record = _record(tmp_path)
+    assert record["outcome"] == "needs-input"
+    assert record["blocker"] == (
+        "needs input: CI is red after one resume, so the PR needs a hand: pytest."
+    )
 
 
 def test_a_cancelled_run_is_waited_on_again_and_never_resumes_the_agent(tmp_path):

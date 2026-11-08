@@ -3,5 +3,9 @@
 # `inputs` is the sha256 of the Dockerfile these images were built from. When it differs from the
 # Dockerfile's, a CI leg pulls that Dockerfile's published tag with a warning, or builds when none
 # is published. To move the pins after a Dockerfile change merges, copy the lines the
-# host-test-image workflow's run summary prints, inputs line included.
-inputs -
+# host-test-image workflow's run summary prints, inputs line included. A site added to the matrix
+# is pinned `-` until the publisher has run for it.
+inputs c80db5adceafb1d68f5e3a43b3833641b174d9db8e7e8057486ccd244116b40a
+24.04-amd64 sha256:d981530d052c384f4ce996731c73293f3b74a996a932107ec39dab2654a0edb5
+26.04-amd64 sha256:74ca426e924a350dcf520ecb2704693ecec320f009e3ea1fc7ed2473a6ef3395
+24.04-arm64 sha256:f958a54a90a251d59528957308dbf93f21d02d2afd08aae4995fbf7d1736a9b0

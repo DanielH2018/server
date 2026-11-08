@@ -15,18 +15,20 @@ left this role's `files/` in H7.2e) or to a `tasks/*.yml` file
 re-applies the setup roles that copy or import it
 (`deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, #3312, #3317): the initial_setup
 consumers apply on the tick.
-`common` itself is not recorded for those files. Its line would print the resolv.conf
-remediation, which names the wrong roles, and leave one more marker to clear after the
-consumers are applied. A PR may add a file and its table entry together: the tick classifies
+`common` itself is not recorded for those files. Its line would name no consumer, and leave
+one more marker to clear after the consumers are applied. A PR may add a file and its table entry together: the tick classifies
 a range that edits `deploy_cross_role.py` with origin's copy of it, not the installed one
 (#3512). The check-timer templates route to the importers of
 `check_timer.yml`, the task file that renders them (#3319), and the alert pair routes
 to the importers of `alert_unit.yml` the same way. No k8s role imports
 `install_host_lib.yml` or `stamp_deployed.yml` since H2.5c. A change to `host_lib.py`
 moves the render of `configarr` and `janitorr`, whose health CronJobs stage the file into their
-ConfigMaps, and `promote` applies it; the tick applies no k8s role since D6.12. `resolv.conf.j2` still records `common`, for the reason its `DECIDED:` marker in
-`deploy_cross_role` gives. For that, `land.sh` names each consumer's playbook and tag, then the
-`gitops_state.py clear-owed manual_plane common` that clears the deployer's marker.
+ConfigMaps, and `promote` applies it; the tick applies no k8s role since D6.12.
+
+`resolv.conf.j2` records nothing. The host packages render it, so the deployer maps it to no
+role (`ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py:SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES`),
+and `land.sh` waits on each host's package instead. A `common` file in no table still records
+`common`, and its line names the commands that apply it.
 
 | File | What it gives a caller |
 |---|---|

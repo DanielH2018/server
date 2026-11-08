@@ -394,7 +394,9 @@ as root on the held host, from a LAN session:
    `<action> starts` and `<action> took <N>s` around every command it calls. A run its start
    timeout killed ends on the `starts` line of the action it was in, when the time ran out inside
    a command or the `dpkg` lock wait. Python work between commands has no line, so a long gap after
-   a `took` line means that work.
+   a `took` line means that work. The wait for the apt transaction, post-invoke hooks included, runs
+   first in `homelab-reconcile-wait.service` under its own 5-minute limit, and logs `wait for apt
+   to release the dpkg lock took <N>s` with the same tag.
 1. When the installed package is fine and the failure was transient, rerun reconcile. The
    command clears the hold only if reconcile passes:
 
@@ -984,9 +986,11 @@ then daniel-pi, then daniel-box. Each step is **operator-only**, apart from the 
 1. To make the host's package one the suite has tested on the target, merge a PR that adds the
    release to the `host_packages` matrix in `.github/workflows/ci.yml`, with the suite green. The
    PR makes the same edit to `.github/workflows/host-test-image.yml`, which
-   `ansible/tests/repo/test_host_test_image.py` holds equal to `ci.yml`. Until that workflow has
-   published the new release's image and `hosts/lib/tests/container/image.pins` names it, the new
-   leg builds its image from the Dockerfile. Skip this step when the matrix already lists the
+   `ansible/tests/repo/test_host_test_image.py` holds equal to `ci.yml`, and adds a
+   `<release>-<arch> -` line per new leg to `hosts/lib/tests/container/image.pins`, which the same
+   test requires. Until that workflow has published the new release's image and a later PR copies
+   its digest into `image.pins` and adds the leg to that test's `PUBLISHED` set, the new leg
+   pulls the published tag or builds from the Dockerfile. Skip this step when the matrix already lists the
    release.
 1. Stop updates on the host, as *Stopping updates on one host* describes, so no package installs
    during the upgrade. `HostUpdateStale` can fire while the timer stays masked, which is expected.
