@@ -386,8 +386,9 @@ schedule outgrows. The map lists daniel-pi (job `node-pi`, 90000 seconds), added
 ## Clearing a host's hold
 
 A failed reconcile makes a host's updater write `/var/lib/homelab-updater/hold`, and
-`HostReconcileFailed` pages 15 minutes later. Each lever runs as root on the held host, from a
-LAN session:
+`HostReconcileFailed` pages 15 minutes later. The hold stops the updater only. No setup apply
+upgrades a host's packages since H7.60 (#7491), but a hand `apt upgrade` still can. Each lever runs
+as root on the held host, from a LAN session:
 
 1. Read `journalctl -u homelab-updater -u homelab-reconcile` and fix the cause. Reconcile logs
    `<action> starts` and `<action> took <N>s` around every command it calls. A run its start
