@@ -430,8 +430,7 @@ class RoleIndex:
 
         THE THREE KINDS OF HIT UNION, they do not shadow each other (#2344). A template can be
         named in a task's `src:` AND in a `defaults/` structure a different task file renders
-        from — `k3s_render_stamp_groups` handed to `common/tasks/release_bin.yml` is that
-        shape. Stopping at the first kind returned one reader's tags and dropped the other's,
+        from, such as a list of groups a role hands to an imported task file. Stopping at the first kind returned one reader's tags and dropped the other's,
         so the operator cleared the marker over a partly applied change. A `defaults/` key that
         names it but that NOTHING reads still refuses, through `key_readers`: that is the
         fail-closed half, and it is unchanged.
@@ -483,8 +482,8 @@ class RoleIndex:
         """The `defaults/` and `vars/` keys whose value names `name`, or an empty set.
 
         A host script's template is often named in a data structure rather than in a `src:`:
-        `setup/k3s` collects them in `k3s_render_stamp_groups` and hands the group to
-        `common/tasks/release_bin.yml` through a `vars:` block on the import. The task file
+        a role collects them in a defaults list and hands a group to an imported task file through
+        a `vars:` block on the import. The task file
         naming the KEY is the one that renders the template, so its tags are part of the
         answer — wider than the one import site, and still far narrower than the whole role.
 

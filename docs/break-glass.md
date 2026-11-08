@@ -627,6 +627,15 @@ If your own working machine is what's gone, the lab itself needs nothing done to
    `land.sh` follows it. [Deploying by hand](deploying.md) says which path applies a setup role
    or a Pi change.
 
+### Scenario: sudo refuses after a host's Ubuntu release upgrade
+
+Ubuntu 26.04 selects sudo-rs as `/usr/bin/sudo`, and sudo-rs's `visudo` rejects the
+`timestamp_type` line in `/etc/sudoers.d/10-timestamp`. The release-upgrade procedure in
+[Upgrading a host's Ubuntu release](host-packages.md#upgrading-a-hosts-ubuntu-release) checks
+this from a held root shell before the reboot. If a host already rebooted and sudo refuses, get
+root at the host's console or in recovery mode, then run
+`update-alternatives --set sudo /usr/bin/sudo.ws` to select classic sudo.
+
 ### Scenario: `systemctl restart k3s` never returns after an API-server flag change
 
 `k3s_server_config` (`hosts/components/k3s-server/component.yml`) holds the server's flags,

@@ -1904,7 +1904,7 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | no: its two census greps run at its base | H7.54, H7.55, H5 |
 | H7.57 The ADR | H7.20c | yes | H7.55 |
 | H7.58 Pi: `initial_setup`, part 3 | new | yes | H7.26, H7.30, H7.42 |
-| H7.59 daniel-server: `initial_setup`, part 3, and its Loki witness | new | yes, with H7.58 | H7.58 live, H7.31, H4 |
+| H7.59 daniel-server: `initial_setup`, part 3, and its Loki witness | new | yes, with H7.58 | H7.58 live, H7.31, H7.61 live, H4 |
 | H7.60 daniel-box: `initial_setup`, part 3 | new | yes, with H7.58 | H7.59 live, H7.32, H6.2 |
 | H7.61 daniel-server: dev tooling and the worktree holder scan; `/usr/bin/uv` on both cluster hosts | new | yes | H7.38, H7.39, H7.41a |
 | H7.62 daniel-box: dev tooling, the worktree holder scan, `chezmoi_setup` and `github_cli` | new | yes, with H7.61 | H7.61 live, H7.40, H6.2 |
@@ -1931,7 +1931,7 @@ items inside each file. Every path sits under `ansible/roles/setup/`.
 | H7.55, which deletes these `end_role` stubs with their roles | `claude_code/tasks/main.yml`, `config_files/tasks/main.yml`, `homelab_builder/tasks/main.yml`, `nut_host/tasks/main.yml`, `optimize_pi/tasks/main.yml`, `sops_setup/tasks/main.yml` |
 | H7.58 to H7.60 | `initial_setup/tasks/access.yml`, `initial_setup/tasks/accounting.yml`, `initial_setup/tasks/audit-and-kernel.yml`, `initial_setup/tasks/integrity.yml`; `initial_setup/tasks/system-tuning.yml` without its git hooks; the swap, apt and package tasks of `initial_setup/tasks/host-basics.yml`; the witness, the file absent arms and the `ansible.log` tasks of `initial_setup/tasks/crons.yml` |
 | H7.61 and H7.62 | `chezmoi_setup/tasks/main.yml` and `github_cli/tasks/main.yml` (H7.62); the tooling tasks of `initial_setup/tasks/host-basics.yml`, the git hooks of `initial_setup/tasks/system-tuning.yml` and the worktree holder tasks of `initial_setup/tasks/crons.yml` |
-| H7.63 | `common/tasks/agent_user.yml`, `common/tasks/alert_unit.yml`, `common/tasks/check_timer.yml`, `common/tasks/install_host_lib.yml`, `common/tasks/release_bin.yml`, `common/tasks/stamp_deployed.yml`, `common/tasks/stamp_render.yml`, `initial_setup/tasks/main.yml`; what `initial_setup/tasks/crons.yml` and `initial_setup/tasks/host-basics.yml` still hold |
+| H7.63 | `common/tasks/agent_user.yml`, `common/tasks/alert_unit.yml`, `common/tasks/check_timer.yml`, `common/tasks/install_host_lib.yml` (`common/tasks/release_bin.yml` went earlier, in #7652), `common/tasks/stamp_deployed.yml`, `common/tasks/stamp_render.yml`, `initial_setup/tasks/main.yml`; what `initial_setup/tasks/crons.yml` and `initial_setup/tasks/host-basics.yml` still hold |
 | H7.64 | the `Manage the registry garbage collection` block of `k8s_host_files/tasks/registry.yml` |
 
 ### What each re-sliced PR carries
@@ -2420,7 +2420,10 @@ the `manual_plane` clearing, and *Rollback*'s
       daniel-box's package waits on the rollout gate, so daniel-box's Ansible readers stay on the
       old path and H7.62 repoints them. daniel-server's Ansible-era witness still runs the old
       path and no tick re-renders it there, so H7.59 lists `/usr/local/bin/uv` as that host's
-      legacy entry when it moves the witness.
+      legacy entry when it moves the witness. That makes the edge run from H7.59 to H7.61
+      live: daniel-server's packaged readers, the moved witness among them, run `/usr/bin/uv`,
+      which H7.61's `uv` component ships. The witness was the only Ansible-rendered reader of
+      the old path on daniel-server; every other reader rendered on daniel-box.
       **Amended at H7.62:** the PR repoints daniel-box's readers and does not list the path. The
       k3s health script only reaches a host through a hand apply of `k3s-bringup.yml`, and a package
       install waits on no such apply, so a legacy entry here could delete the binary under a live
