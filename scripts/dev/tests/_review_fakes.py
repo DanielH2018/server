@@ -97,6 +97,13 @@ class FakeRunner:
         self.draft = False
         self.readied = []
         self.ci_runs = [[1]]
+        # The re-run step: whether the `ci-fix` resume moves the PR's head, the failed
+        # `ci.yml` runs on the head as [id, attempt] pairs, each `gh run rerun` call, and the
+        # attempt each run read answers with in order (the last repeats).
+        self.fix_pushes = False
+        self.failed_runs = []
+        self.reruns = []
+        self.attempts = [2]
         # Every `gh pr ready`, run-id read and `cc-wait gh-ci` call, in the order they ran.
         self.log = []
 
@@ -128,14 +135,28 @@ class FakeRunner:
         if argv[:3] == ["gh", "issue", "view"]:
             return subprocess.CompletedProcess(argv, 0, json.dumps(self.labels), "")
         if argv[:3] == ["gh", "pr", "view"]:
+            fixed = any(phase == "ci-fix" for *_, phase in self.claude)
             out = json.dumps(
                 {
                     "statusCheckRollup": self.rollup,
                     "isDraft": self.draft,
-                    "headRefOid": "bbb",
+                    "headRefOid": "ccc" if self.fix_pushes and fixed else "bbb",
                 }
             )
             return subprocess.CompletedProcess(argv, 0, out, "")
+        if argv[:3] == ["gh", "run", "rerun"]:
+            self.reruns.append(argv)
+            self.log.append(("rerun", argv[3]))
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        if argv[:2] == ["gh", "api"] and "status=failure" in argv[2]:
+            return subprocess.CompletedProcess(
+                argv, 0, json.dumps(self.failed_runs), ""
+            )
+        if argv[:2] == ["gh", "api"] and "/actions/runs/" in argv[2]:
+            attempt = (
+                self.attempts.pop(0) if len(self.attempts) > 1 else self.attempts[0]
+            )
+            return subprocess.CompletedProcess(argv, 0, f"{attempt}\n", "")
         if argv[:3] == ["gh", "pr", "ready"]:
             self.readied.append(argv)
             self.log.append(("undo" if "--undo" in argv else "ready",))

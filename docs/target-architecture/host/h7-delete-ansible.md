@@ -2404,7 +2404,11 @@ the `manual_plane` clearing, and *Rollback*'s
       The per-user uv install, `prek` in `Install Python CLI tooling` and `Install the pinned
       host Python` go. Each PR body quotes `uv python list` for the sys user, because units
       run `uv` with `--no-python-downloads`. Bumps stop landing in both repos at H7.62's merge,
-      and the `tools.toml` comment naming H7.39 changes in a dotfiles PR then. The twin test
+      and the `tools.toml` comment naming H7.39 changes in a dotfiles PR then.
+      [DanielH2018/dotfiles#1174](https://github.com/DanielH2018/dotfiles/pull/1174) rewrote it
+      on 2026-11-07, and [DanielH2018/dotfiles#1164](https://github.com/DanielH2018/dotfiles/pull/1164)
+      had moved prek to 0.5.9. daniel-server's package retires the root-owned
+      `/usr/local/bin/prek` (0.4.3) that no tracked file wrote. The twin test
       `test_host_tool_pins_match_their_twins.py` and `asset_pins.py` retarget.
     - **`/usr/local/bin/uv` has readers, so it gets a replacement.** The readers include
       `hosts/components/claude-code/`, `hosts/components/loki-route-witness/`,
@@ -3978,6 +3982,10 @@ progress.
 
     Resolution: D6's break-glass drill on kind adds a fresh-cluster case with no registry
     and no GHCR, and H7.15c's PR quotes it. This is a cross-slice request to D6.
+    Update (#7555): `flux-deletion-drill`'s case `fresh-cluster` is that case, proven by its
+    first passing `case=fresh-cluster` line. It imports
+    the archives with `ctr`, as `kind load image-archive` does, so k3s's image import
+    directory stays undrilled.
 
 ## Review log
 

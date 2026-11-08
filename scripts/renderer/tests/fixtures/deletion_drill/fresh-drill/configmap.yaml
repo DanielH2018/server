@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fresh-marker
+  namespace: fresh-drill
+data:
+  applied: "true"

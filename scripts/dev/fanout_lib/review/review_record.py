@@ -4,6 +4,7 @@ Split from `review.py`, which runs the phases, so the record's shape and its ren
 without that module crossing its length cap. `review.py` re-exports every name here.
 """
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -25,6 +26,11 @@ ACTIONABLE_SEVERITIES = frozenset({"critical", "high", "medium"})
 CONFIDENCE_FLOOR = 0.5
 REVIEW_EFFORT = "medium"
 HOLD_CONFIDENCE = 0.8
+# A record's `blocker` keeps this much of the line, enough to read why the batch stopped.
+BLOCKER_CHARS = 500
+# The name `review.Pipeline._save` gives a record, `<batch>-<saved>.json`, as its readers parse it.
+SAVED_FORMAT = "%Y%m%dT%H%M%SZ"
+RECORD_NAME = re.compile(r"^(?P<batch>\d+)\S*-(?P<saved>\d{8}T\d{6}Z)\.json$")
 # The `test` findings the fix round takes at any severity: a test that checks nothing. The
 # severity floor dropped 46 of the reviewer's 50 test findings, these among them (#4023).
 # `scaffold` was acted on too until #3675 judged it: 1 of 7 actionable scaffold findings was
@@ -102,6 +108,9 @@ class Record:
     # `failed`, `needs-input` or `no-pr` before a PR exists, then `pr` once one does, or
     # `failed` / `needs-input` when the last phase says so.
     outcome: str = ""
+    # The `needs input:` or `failed:` line the last phase's report ended on, "" when it ended
+    # on none, so the records can say why a batch stopped as well as that it did (#7686).
+    blocker: str = ""
     # The head the last reviewer read: the head the first review read, or the fix round's head
     # when a delta review read that (#5496). `fanout_lib.autoland` lands a PR unattended only
     # while GitHub still shows this head, so a push after the review stops at the PR. "" in a
@@ -110,12 +119,19 @@ class Record:
     # The VERDICT line of the landing the pipeline ran (#3960), "" when it ran none.
     verdict: str = ""
     # The CI wait a batch that does not land runs (#4737): "" when it ran none, else its
-    # result in words, and whether the implementer was resumed for a red verdict.
+    # result in words, whether the implementer was resumed for a red verdict, and whether
+    # the failed jobs were re-run after a resume that pushed nothing (#7674).
     ci_gate: str = ""
     ci_resumed: bool = False
+    ci_rerun: bool = False
     # Per phase: wall-clock seconds, and the tool calls the classifier denied.
     durations: dict[str, float] = field(default_factory=dict)
     permission_denials: dict[str, int] = field(default_factory=dict)
+
+    def settle(self, report: dict, has_pr: bool) -> None:
+        """Set `outcome` and `blocker` from the report the batch's last phase printed."""
+        self.outcome = outcome(report, has_pr)
+        self.blocker = blocker(report)
 
 
 def outcome(report: dict, has_pr: bool) -> str:
@@ -128,6 +144,15 @@ def outcome(report: dict, has_pr: bool) -> str:
             "needs-input" if blocker.group(0).lower().startswith("needs") else "failed"
         )
     return "pr" if has_pr else NO_PR
+
+
+def blocker(report: dict) -> str:
+    """The `needs input:` or `failed:` line in `report`'s result, capped at `BLOCKER_CHARS`."""
+    text = str(report.get("result") or "")
+    found = BLOCKER.search(text)
+    if not found:
+        return ""
+    return text[found.start() :].split("\n", 1)[0].strip()[:BLOCKER_CHARS]
 
 
 def actionable(findings: Sequence[dict]) -> list[dict]:

@@ -944,6 +944,7 @@
  "scripts/deploy_tools/tests/test_deploy_tree_lock_hold_is_bounded.py": 2.53,
  "scripts/deploy_tools/tests/test_forge_check_run_pages.py": 0.0,
  "scripts/deploy_tools/tests/test_forge_status_pages.py": 0.0,
+ "scripts/deploy_tools/tests/test_fresh_cluster_drill.py": 1.13,
  "scripts/deploy_tools/tests/test_gate_render_source.py": 0.0,
  "scripts/deploy_tools/tests/test_gitops_state.py": 0.31,
  "scripts/deploy_tools/tests/test_gitops_state_hold.py": 0.1,

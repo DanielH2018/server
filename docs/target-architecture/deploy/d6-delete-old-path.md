@@ -3063,6 +3063,16 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     images at `flux_version`, refreshed with item 8's bundle. The drill gains a
     fresh-cluster case once H7 Open question 14 rules that the offline bring-up runs
     through this runbook. Until then, D6.7c's two cases cover a running cluster only.
+    Update (#7555): H7 Open question 14 ruled so, and `flux-deletion-drill` gained the case
+    `fresh-cluster`. Its first passing run is the proof, which the PR that added it awaited
+    from CI. It loads the controllers and the registry from OCI-layout archives on a kind
+    cluster that resolves no outside name, on the node or in a pod, applies the registry role's render, and verifies the
+    key-signed bundle at `flux_break_glass_url`. The kit's archives keep each pinned index,
+    because `docker save` from Docker's classic image store drops the digest the manifests
+    name. Update (#7667, ruled by the operator on 2026-11-08): on a cluster without
+    Longhorn, the runbook binds the push store's claim to a hostPath PV pre-bound by
+    `claimRef`, which `fresh_cluster_drill.py volumes` writes. The drill runs the same step
+    with no stand-in StorageClass.
 
 ## Review log
 

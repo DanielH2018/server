@@ -173,21 +173,45 @@ def _waiting_on(lock: Path) -> bool:
         return any("->" in line and f":{inode} " in line for line in locks)
 
 
+def _held_while_it_waits(node: Node, process: subprocess.Popen) -> None:
+    """Return once `process` has waited on the lock the caller holds for SLOW_SECONDS."""
+    deadline = time.monotonic() + 30
+    while not _waiting_on(node.lock):
+        assert process.poll() is None, process.communicate()
+        assert time.monotonic() < deadline, "reconcile never waited on the lock"
+        time.sleep(0.01)
+    time.sleep(SLOW_SECONDS)
+
+
 def test_the_wait_for_the_dpkg_lock_reports_its_time(node):
-    # A postinst starts reconcile during the apt transaction, so this wait spends the same budget.
+    # A start outside homelab-reconcile-wait.service, such as one by hand, still waits here.
     with node.lock.open("r+") as held:
         fcntl.lockf(held, fcntl.LOCK_EX)
         process = node.start()
-        deadline = time.monotonic() + 30
-        while not _waiting_on(node.lock):
-            assert process.poll() is None, process.communicate()
-            assert time.monotonic() < deadline, "reconcile never waited on the lock"
-            time.sleep(0.01)
-        time.sleep(SLOW_SECONDS)
+        _held_while_it_waits(node, process)
 
     _, stderr = process.communicate(timeout=60)
 
     assert longest(stderr, "lock") >= AT_LEAST
+
+
+def test_wait_for_apt_returns_once_the_lock_is_free_and_acts_on_nothing(node):
+    # homelab-reconcile-wait.service runs this, so apt's post-invoke hooks spend its limit (#7648).
+    argv, env = node.command()
+    with node.lock.open("r+") as held:
+        fcntl.lockf(held, fcntl.LOCK_EX)
+        process = subprocess.Popen(
+            [*argv, "--wait-for-apt"], env=env, stderr=subprocess.PIPE, text=True
+        )
+        _held_while_it_waits(node, process)
+
+    _, stderr = process.communicate(timeout=60)
+
+    assert process.returncode == 0
+    assert longest(stderr, "wait for apt to release the dpkg lock") >= AT_LEAST
+    assert not timed_lines(stderr, "wait for the dpkg lock")
+    assert node.calls() == []
+    assert not node.applied_path.exists()
 
 
 def test_a_timing_line_is_at_a_priority_this_hosts_journal_stores(node, tmp_path):
