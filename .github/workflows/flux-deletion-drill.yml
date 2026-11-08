@@ -280,7 +280,7 @@ jobs:
 
       # The fresh-cluster case (#7555) needs a second cluster, so the first one goes. crane
       # writes each pinned image's whole index as an OCI layout, which keeps the digest the
-      # manifests name; `docker save` re-serializes the manifest and drops it.
+      # manifests name whichever image store the runner's Docker uses.
       - name: Fresh cluster - delete the drill cluster and archive the kit's images
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         run: |
@@ -337,12 +337,12 @@ jobs:
         run: |
           set -euo pipefail
           f="$RUNNER_TEMP/fresh"
+          kubectl apply -f "$f/prereq/namespace.yaml"
+          kubectl apply -f "$f/prereq"
           kubectl apply --server-side -f ansible/roles/k8s/flux/files/gotk-components.yaml
           for d in source-controller kustomize-controller notification-controller; do
             kubectl -n flux-system rollout status "deployment/$d" --timeout=180s
           done
-          kubectl apply -f "$f/prereq/namespace.yaml"
-          kubectl apply -f "$f/prereq"
           kubectl apply -k "$f/registry"
           kubectl -n homelab rollout status deployment/registry --timeout=180s
 

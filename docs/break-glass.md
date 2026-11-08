@@ -104,9 +104,10 @@ otherwise; none of the values below are secrets themselves, only names and locat
    bundle. It holds the three Flux controller images that
    `ansible/roles/k8s/flux/files/gotk-components.yaml` pins at `flux_version`, and the
    registry's image (`registry_k8s_image`). Each archive is the pinned image's whole index as an
-   OCI layout, because the manifests name the index digest. `docker save` writes a manifest of
-   its own, so a node that imports its archive holds the image under a digest no Deployment
-   names. `scripts/renderer/fresh_cluster_drill.py build` writes the list to `images.json`, and
+   OCI layout, because the manifests name the index digest. Docker's classic image store saves
+   one platform's image under a manifest of its own, so a node that imports that archive holds
+   the image under a digest no Deployment names. crane writes the same archive whichever store
+   the saving machine runs. `scripts/renderer/fresh_cluster_drill.py build` writes the list to `images.json`, and
    `flux-deletion-drill` writes each archive with two commands:
 
    ```bash
@@ -747,12 +748,13 @@ longer matches `PROD_DIGEST`. That is expected. The break-glass path neither rea
 registry nor the Flux controllers. Run these after the render and before the push:
 
 1. Import item 8's image archives on each node with
-   `ctr -n k8s.io images import --all-platforms --digests <archive>`. Then check that
-   `crictl inspecti <ref>` answers for each pinned reference.
-1. Apply `ansible/roles/k8s/flux/files/gotk-components.yaml`, and wait for the three
-   controllers to roll out.
-1. Apply the rendered `cluster/homelab-namespace/` and `cluster/cluster-base/` directories. The
-   registry's pod names the `homelab` Namespace and the PriorityClass `homelab-critical`.
+   `sudo k3s ctr -n k8s.io images import --all-platforms --digests <archive>`. Then check that
+   `sudo k3s crictl inspecti <ref>` answers for each pinned reference.
+1. Apply the rendered `cluster/cluster-base/` and `cluster/homelab-namespace/` directories, as
+   `docs/flux-deploy-plane.md`'s *Bootstrapping Flux on a rebuilt cluster* applies them. Flux's
+   pods and the registry's pod name the PriorityClass `homelab-critical`, and the registry runs
+   in the `homelab` Namespace.
+1. Install the Flux controllers as step 3 of that section does, and wait for all three.
 1. Apply the rendered `cluster/registry/` directory, and wait for `deployment/registry` in
    `homelab`.
 
@@ -761,11 +763,12 @@ runs. k3s here disables its bundled local-path provisioner, so the claims stay P
 step has no drilled answer yet ([#7667](https://github.com/DanielH2018/server/issues/7667)).
 
 `flux-deletion-drill`'s case `fresh-cluster` runs these steps on a kind cluster whose node
-resolves no name. It differs from a rebuild in four ways. `kind load image-archive` runs the
-`ctr` import, so k3s's image import directory is not drilled. A stand-in `longhorn-nobackup`
-class on kind's own provisioner binds the claims. The case drops the registry's node pin,
-because no kind node is daniel-box. The runner pushes through a `kubectl port-forward`
-instead of the node's loopback port.
+resolves no name. It differs from a rebuild in five ways. `kind load image-archive` runs the
+`ctr` import, so k3s's image import directory is not drilled. The case applies the vendored
+`gotk-components.yaml`, as the drill's other cases do, rather than the role's rendered
+`components.yaml`. A stand-in `longhorn-nobackup` class on kind's own provisioner binds the
+claims. The case drops the registry's node pin, because no kind node is daniel-box. The runner
+pushes through a `kubectl port-forward` instead of the node's loopback port.
 
 **The way back to GHCR.** Re-pointing at GHCR first applies `prod`, which predates the
 emergency change, and silently reverts it. So order the steps:

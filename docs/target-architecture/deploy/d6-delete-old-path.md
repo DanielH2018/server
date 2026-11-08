@@ -3067,7 +3067,8 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     `fresh-cluster`. It loads the controllers and the registry from OCI-layout archives on
     a kind node that resolves no name, applies the registry role's render, and verifies the
     key-signed bundle at `flux_break_glass_url`. The kit's archives keep each pinned index,
-    because `docker save` drops the digest the manifests name. The registry's claims on a
+    because `docker save` from Docker's classic image store drops the digest the manifests
+    name. The registry's claims on a
     cluster without Longhorn stay open
     ([#7667](https://github.com/DanielH2018/server/issues/7667)).
 
