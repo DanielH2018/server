@@ -262,10 +262,15 @@ def _dev_group_problems(wf: dict) -> list[str]:
         found.append(
             "the workflow env does not set UV_NO_DEV, so `uv run` installs the dev group"
         )
+    if (wf.get("env") or {}).get("UV_NO_GROUP") != "lint":
+        found.append(
+            "the workflow env does not set UV_NO_GROUP=lint, so `uv run` installs the lint group"
+        )
     for name, job in (wf.get("jobs") or {}).items():
         for scope in [job, *_steps(job)]:
-            if "UV_NO_DEV" in (scope.get("env") or {}):
-                found.append(f"{name}: overrides UV_NO_DEV")
+            for var in ("UV_NO_DEV", "UV_NO_GROUP"):
+                if var in (scope.get("env") or {}):
+                    found.append(f"{name}: overrides {var}")
             if DEV_GROUP_FLAG.search(str(scope.get("run", ""))):
                 found.append(f"{name}: a `uv` call asks for a dependency group")
     return found
@@ -419,6 +424,10 @@ def _dev_group_installed(wf):
     del wf["env"]["UV_NO_DEV"]
 
 
+def _lint_group_installed(wf):
+    del wf["env"]["UV_NO_GROUP"]
+
+
 def _render_job_reenables_dev(wf):
     wf["jobs"]["render"].setdefault("env", {})["UV_NO_DEV"] = ""
 
@@ -477,6 +486,10 @@ RED = {
         "reset-check: its `if` lacks the reset guard inputs.reset_to_last_good",
     ),
     "the dev group installed": (_dev_group_installed, "does not set UV_NO_DEV"),
+    "the lint group installed": (
+        _lint_group_installed,
+        "does not set UV_NO_GROUP=lint",
+    ),
     "render re-enables the dev group": (
         _render_job_reenables_dev,
         "render: overrides UV_NO_DEV",

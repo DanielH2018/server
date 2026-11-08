@@ -440,6 +440,9 @@ jobs:
     name: PR gates (cross-plane order + cluster pins)
     runs-on: ubuntu-26.04
     timeout-minutes: 15  # the two steps' own timeouts sum to 10, plus setup
+    env:
+      # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
+      UV_NO_GROUP: lint
     steps:
       # The gates read HEAD^1 and the PR's commits, so the checkout keeps history.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -586,6 +589,8 @@ jobs:
     # The `git-refs` custom manager in renovate.json proposes each bump as its own PR.
     env:
       DOTFILES_SHA: 070fc7d1853da8daa3c4ce4d0933bad01a977090
+      # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
+      UV_NO_GROUP: lint
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -825,6 +830,9 @@ jobs:
     name: flux round trip (placeholder render against stub render)
     runs-on: ubuntu-26.04
     timeout-minutes: 30
+    env:
+      # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
+      UV_NO_GROUP: lint
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -912,6 +920,9 @@ jobs:
     name: sops-manifest-type-proof (an all-digit stringData value stays a string)
     runs-on: ubuntu-26.04
     timeout-minutes: 20
+    env:
+      # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
+      UV_NO_GROUP: lint
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -1137,6 +1148,8 @@ jobs:
       # renovate: datasource=github-release-attachments depName=goreleaser/nfpm
       NFPM_VERSION: v2.48.0
       NFPM_SHA256: 6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750
+      # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
+      UV_NO_GROUP: lint
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -1414,6 +1427,9 @@ jobs:
         include:
           - {release: "24.04", python: "3.12"}
           - {release: "26.04", python: "3.14"}
+    env:
+      # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
+      UV_NO_GROUP: lint
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

@@ -2,8 +2,8 @@
 name = "server-homelab"
 version = "0.0.0"
 requires-python = ">=3.15"
-# The renderer's whole runtime closure. promote.yml sets UV_NO_DEV, so a package listed only in
-# the dev group is absent from every promote job; a dev-only tool's download cannot block it.
+# The renderer's whole runtime closure. promote.yml sets UV_NO_DEV and UV_NO_GROUP=lint, so a
+# package listed only in a group is absent from every promote job; its download cannot block it.
 dependencies = [
   "pyyaml",
   "jinja2>=3",
@@ -11,6 +11,7 @@ dependencies = [
 
 [tool.uv]
 package = false                      # virtual project: manage deps/lock, do not build the repo
+default-groups = ["dev", "lint"]     # `uv run` installs both; UV_NO_DEV drops only `dev`
 # DECIDED: compile at sync, as the syncing user, so a root importer finds fresh bytecode and
 # writes no root-owned __pycache__ a session cannot delete. Costs ~0.4s per cold sync on 16
 # cores and ~1.2s on 2 (measured in #6984).
@@ -32,14 +33,22 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "requests",                       # community.docker modules
   "docker",                         # community.docker SDK-backed modules
   "flask",                          # ical-proxy ical_proxy.py imports flask at module top (test_app.py)
-  "ruff>=0.16",                     # first-party Python lint gate (prek hook); pinned via uv.lock.
-  # The floor is the version the [tool.ruff] `*.md` exclusion was written against.
   "shellcheck-py==0.11.0.1",        # validate.shell_templates; pinned to match prek.toml's shellcheck-py rev
-  "actionlint-py",                  # workflow lint gate (prek hook); ships the actionlint binary as a wheel
   "pytest-xdist",                   # -n auto in addopts below; pytest was 13.5s of CI's hook budget
   "jsonschema",                     # validate.k8s_manifests checks every object against the
   # schemas vendored in scripts/validate/schemas/: Kubernetes'
   # own OpenAPI files for core kinds, the catalog's for CRDs.
+  "mkdocs",                         # test_mkdocs_repo_links renders with mkdocs.yml's extensions
+  "pymdown-extensions",             # through the hook module, which imports mkdocs.utils.
+  "pygments",
+]
+# Tools only prek hooks and hand-run commands call, never a test. The CI jobs that run no lint
+# hook set UV_NO_GROUP=lint, so a lint tool's install (actionlint-py downloads its binary from
+# GitHub releases) cannot fail them. ansible/tests/repo/test_ci_lint_group.py holds both halves.
+lint = [
+  "ruff>=0.16",                     # first-party Python lint gate (prek hook); pinned via uv.lock.
+  # The floor is the version the [tool.ruff] `*.md` exclusion was written against.
+  "actionlint-py",                  # workflow lint gate (prek hook); ships the actionlint binary as a wheel
   "mkdocs-material>=9.5",           # the docs site; `uv run mkdocs build` renders docs/ into site/
   "zizmor>=1.0",
   "ty==0.0.99",                     # first-party Python type gate (prek hook). Pinned exactly, not
