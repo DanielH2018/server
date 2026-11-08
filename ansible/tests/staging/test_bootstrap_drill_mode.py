@@ -249,7 +249,7 @@ def test_a_detached_step_that_never_finishes_fails_at_its_deadline_and_tears_dow
 
 
 @pytest.mark.parametrize("knob", ["step_deadline", "ready_deadline"])
-def test_a_spent_deadline_still_polls_once_before_it_fails(tmp_path, knob):
+def test_a_spent_deadline_still_reads_a_finished_step(tmp_path, knob):
     r = run(tmp_path, **{knob: "0"})
     assert r.done.returncode == 0, r.done.stdout + r.done.stderr
     assert r.steps == STEPS
