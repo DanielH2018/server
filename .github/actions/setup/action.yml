@@ -60,6 +60,9 @@ runs:
         # executes. Without this the download is repaid on every run. Keyed on uv.lock by
         # the action itself, so a lock change invalidates it exactly.
         enable-cache: true
+        # The cache saves only on a miss, so a UV_NO_DEV job sharing the dev key would leave
+        # every dev job a near-empty entry to re-download around.
+        cache-suffix: ${{ env.UV_NO_DEV == '1' && 'runtime' || 'dev' }}
 
     # pyproject.toml forces PyYAML's libyaml extension, so a source build (an interpreter
     # PyYAML ships no wheel for) needs these headers or fails.
@@ -67,6 +70,13 @@ runs:
       if: inputs.uv == 'true'
       shell: bash
       run: dpkg -s libyaml-dev >/dev/null 2>&1 || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libyaml-dev; }
+
+    # Whichever job finishes first writes the cache entry, so every job syncs the whole
+    # profile here, even one that never runs `uv`. UV_NO_DEV still narrows it.
+    - name: Sync the uv environment
+      if: inputs.uv == 'true'
+      shell: bash
+      run: uv sync --frozen
 
     # Several ansible/tests read the Galaxy collections, and the ansible-lint hook's own entry
     # runs `ansible-galaxy collection install` before linting — warm that is a 0.4s no-op, cold
