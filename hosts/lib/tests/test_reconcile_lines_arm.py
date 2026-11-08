@@ -160,7 +160,6 @@ def test_a_line_in_a_conffile_is_kept_and_a_block_in_one_too(node):
 
 
 def test_edits_sharing_a_path_ask_dpkg_about_it_once_and_all_apply(node):
-    # The Pi's run checked /etc/sysctl.conf 22 times, at up to 8s each under swap (#7490).
     edits = [
         {"path": SYSCTL, "line": f"{key}=1", "regexp": rf"^{key}="}
         for key in ("a", "b", "c")
