@@ -5,7 +5,7 @@
 the helper the package installs. If those drift apart, every caller falls back to the
 unprivileged scan, or every removal is refused. The root map both the helper and the caller
 read names each user's worktree root, and it must name every agent user a host package
-declares (#4295, #6831). The sudo grant the socket replaced must be gone from every host (#4297).
+declares (#4295, #6831). Every host package retires the sudo grant the socket replaced (#4297).
 
 Both hosts get all of it from the `worktree-holders` component (H7.61, H7.62).
 
@@ -15,18 +15,11 @@ Run: uv run pytest ansible/tests/setup/test_worktree_holders_install.py
 import json
 
 import pytest
-from _helpers import (
-    HOST_VARS,
-    REPO,
-    SETUP_ROLES,
-    load_tasks,
-    task_named,
-)
+from _helpers import HOST_VARS, REPO
 from lib import yaml_fast
 from lib.worktrees import WORKTREE_HOLDER_ROOTS, WORKTREE_HOLDERS_SOCKET
 from renderer.renderer_lib import host as host_mode
 
-CRONS = SETUP_ROLES / "initial_setup" / "tasks" / "crons.yml"
 COMPONENT = REPO / "hosts" / "components" / "worktree-holders" / "component.yml"
 UNITS = "/usr/lib/systemd/system"
 PACKAGED_HELPER = "/usr/lib/homelab/worktree-holders"
@@ -38,7 +31,6 @@ RETIRED_PATHS = {
     "/usr/local/libexec/worktree-holders",
     "/var/lib/homelab/setup-deployed-manifest.d/worktree-holders",
 }
-SUDOERS = "Remove the worktree holder scan's old sudoers rule"
 # A has_claude_code host the agent-list copy must cover, so an empty host census fails.
 KNOWN_CLAUDE_HOSTS = {"daniel-box", "daniel-server"}
 
@@ -89,38 +81,30 @@ def _package_agent_roots() -> dict[str, dict[str, str]]:
     return out
 
 
-def _sudoers_removed_everywhere(tasks: list[dict]) -> bool:
-    task = task_named(tasks, SUDOERS)
-    return (
-        task.get("ansible.builtin.file")
-        == {"path": "/etc/sudoers.d/20-worktree-holders", "state": "absent"}
-        and "when" not in task
-    )
+OLD_SUDOERS = "/etc/sudoers.d/20-worktree-holders"
 
 
-def test_the_old_sudoers_rule_is_removed_on_every_host_is_clean():
-    # #4297: a host that had the sudo grant keeps a NOPASSWD root rule unless something
-    # deletes it. The has_claude_code hosts are exactly the ones that have it.
-    tasks = load_tasks(CRONS)
-
-    assert _sudoers_removed_everywhere(tasks)
-    assert not any(
-        "sudoers" in str(t.get("ansible.builtin.copy", {}).get("dest", ""))
-        for t in tasks
-    )
+def _retires_the_old_sudoers_rule(legacy: list[dict]) -> bool:
+    return {"path": OLD_SUDOERS} in legacy
 
 
-def test_a_sudoers_removal_only_off_claude_hosts_is_flagged():
-    tasks = load_tasks(CRONS)
-    task = task_named(tasks, SUDOERS)
-    gated = [{**t, "when": "not has_claude_code"} if t is task else t for t in tasks]
-
-    assert not _sudoers_removed_everywhere(gated)
+def test_a_package_that_keeps_the_old_sudoers_rule_is_flagged():
+    assert not _retires_the_old_sudoers_rule([{"path": "/usr/local/bin/uv"}])
 
 
 @pytest.fixture(scope="module", params=sorted(KNOWN_CLAUDE_HOSTS))
 def package(request) -> tuple[str, host_mode.Package]:
     return request.param, host_mode.render_host(request.param)
+
+
+def test_every_claude_host_package_retires_the_old_sudoers_rule_is_clean(package):
+    # #4297: a host that had the sudo grant keeps a NOPASSWD root rule unless something
+    # deletes it, and no setup task does since H7.60.
+    assert _retires_the_old_sudoers_rule(package[1].legacy)
+
+
+def test_the_pi_package_retires_the_old_sudoers_rule_is_clean():
+    assert _retires_the_old_sudoers_rule(host_mode.render_host("daniel-pi").legacy)
 
 
 def _text(package: host_mode.Package, dst: str) -> str:
@@ -193,15 +177,3 @@ def test_reconcile_retires_what_the_role_installed(package):
     spec = yaml_fast.safe_load(COMPONENT.read_text())
     assert {f.get("when") for f in spec["files"]} == {"has_claude_code"}
     assert spec["enable"]["worktree-holders.socket"]["when"] == "has_claude_code"
-
-
-def test_the_role_writes_nothing_of_the_scan_on_a_claude_host():
-    # Only the sudoers removal and the `not has_claude_code` absent arms stay in the role.
-    writers = [
-        t["name"]
-        for t in load_tasks(CRONS)
-        if "worktree-sweep" in (t.get("tags") or [])
-        and t["name"] != SUDOERS
-        and "not has_claude_code" not in str(t.get("when"))
-    ]
-    assert writers == []

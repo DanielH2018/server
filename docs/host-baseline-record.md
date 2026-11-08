@@ -13,23 +13,18 @@ task file for what a block does. What follows is what a task file does not say o
 The role's `CLAUDE.md` lists the tag names; these are the ones whose scope is not obvious from
 the name:
 
-- `pi-swap` — the Pi swapfile plus its watchdog-stop preamble.
-- `apt-upgrade` — the Docker-engine hold, then the full dist-upgrade. The `docker_install`
-  role's `CLAUDE.md` has why the hold sits here.
-- `tooling` — uv and the CLI tools; `packages` is the apt baseline.
+- `tooling` — `ansible-core` and `ansible-lint` as uv tools.
 - `crons` — every cron-removal arm and kuma-check timer in `crons.yml`. Each `crons` task also
   answers to a subject tag, so `--tags crons` is never the only way to reach it:
   `secret-rotation` (the removal of the old audit and rotation crons), `ansible-log`,
-  `worktree-sweep`, `cert-expiry` (the retired TLS watch's removal), `infra-map`,
-  `setup_drift`, `docs` and `evals`.
+  `cert-expiry` (the retired TLS watch's removal) and `setup_drift`.
   `ansible/tests/setup/test_initial_setup_tasks_have_a_subject_tag.py` refuses a task whose only
   tag is `crons`.
-- `debloat` — the networkd-dispatcher mask. Step 4 of `hosts/bootstrap-host.sh` removes
-  daniel-server's LXD snap and its bases on a rebuilt host.
-- `kernel-modules` — the blacklist plus WireGuard.
-- `igpu` — i915 GuC for QuickSync. daniel-server, the one `has_igpu` host, takes it from the
-  `host-hardening` component, so this tag writes nothing on any host today.
-- `banners` — the login banners. `coredumps` — systemd-coredump suppression.
+
+The host packages own every other subject the role once tagged: the swap, apt and base packages,
+the sudo cache, the SSH directory, auditd, the kernel modules, the banners, core dumps, the
+networkd-dispatcher mask and the i915 option. H7.58 to H7.60 moved them into the `host-hardening`
+component and step 4 of `hosts/bootstrap-host.sh`, and deleted the tasks.
 
 ## Tooling, pins and the root HOME trap
 
@@ -53,8 +48,7 @@ the name:
   To bump it, land the dotfiles' `python` pin, run `chezmoi apply` on daniel-box and daniel-server,
   read `~/.local/bin/uv python list --only-installed` on each, and then merge this repo's bump. No
   test can hold the two equal, because the dotfiles repo is not in this tree.
-- **This play becomes root, so `~` is `/root` — SSH paths are absolute only** (#2413).
-  `ansible/tests/setup/test_ssh_dir_paths_are_absolute.py` pins the fix, and the
+- **This play becomes root, so `~` is `/root` — SSH paths are absolute only** (#2413). The
   `role-tasks-write-no-home-relative-path` row of `ansible/tests/repo/test_census_rows_roles.py`
   ratchets the class. The home-dir resolver task
   exists for the same reason. The role doc's fact-dependency rule says a `register:` carries
@@ -407,11 +401,10 @@ and `mail` must be exempt because they do *not* arrive via journald — rsyslog 
 messages itself through `imklog`, and postfix writes to its own listen socket — so discarding
 their info would remove lines from `kern.log` and `mail.log` that are present today. Measured
 cost of the pair: +0.34 MB/day/host, against a +7 MB/day/host floor without the filter.
-**`validate:` cannot be used on the filter** — AppArmor confines `rsyslogd` to
-`/etc/rsyslog.conf` and `/etc/rsyslog.d/**`, and Ansible validates a candidate in a temp
-directory, so the role checks the config in place afterwards and undoes the write on failure.
-On daniel-server the `rsyslog-filter` component ships the file, and reconcile runs
-`rsyslogd -N1` before the try-restart, so a fragment that does not parse holds the host.
+The `rsyslog-filter` component ships the file on every host whose `has_rsyslog` is true, and
+reconcile runs `rsyslogd -N1` before the try-restart, so a fragment that does not parse holds the
+host. AppArmor confines `rsyslogd` to `/etc/rsyslog.conf` and `/etc/rsyslog.d/**`, so a parse
+check of a candidate in a temporary directory fails on every run.
 
 **What the cap costs a forensic read, and how to read a boot in spite of it.** Priority-info
 lines are gone from the journal, and from `/var/log/syslog` for every facility except `kern`,
@@ -438,18 +431,17 @@ reset.
 
 The `host-hardening` component ships `/etc/modprobe.d/i915.conf` (`options i915 enable_guc=2`)
 under `has_igpu`, and the rebuild procedure in `docs/host-packages.md` runs `update-initramfs -u`
-by hand. The role's `igpu` tag writes the same file and rebuilds the
-initramfs on a host the map does not list, but **never reboots** — unlike the Pi's `Reboot Pi` handler, this fires on the machine
-running the whole homelab, so it only prints a reboot reminder.
+and the reboot by hand. Nothing reboots the host for it: the option tunes the machine running the
+whole homelab.
 
-It is gated on `has_igpu` AND `/sys/module/i915` existing. `has_igpu` alone is the wrong gate: it
-means it passes `/dev/dri` through to jellyfin and tdarr, which is vendor-neutral, since AMD does
-VAAPI through the same node, while `enable_guc` is Intel-only. The driver check keeps this
-correct on a future AMD or NVIDIA host without hostname-gating it.
+`has_igpu` means the host passes `/dev/dri` through to jellyfin and tdarr, which is
+vendor-neutral, since AMD does VAAPI through the same node, while `enable_guc` is Intel-only. The
+role's task also checked that `/sys/module/i915` exists, and the package has no such check. A
+future AMD or NVIDIA host with `has_igpu: true` needs its own flag before it lists this file.
 
 ## See also
 
 - `ansible/roles/setup/initial_setup/CLAUDE.md` — the rules, the granular tag inventory and the
   two autonomous-role contracts.
 - [Pi host tuning record](pi-host-tuning-record.md) — the Pi's own tuning, including the
-  `has_rsyslog: false` mask this role's filter block reads.
+  `has_rsyslog: false` mask that keeps the `rsyslog-filter` component off the Pi.

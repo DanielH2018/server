@@ -10,6 +10,7 @@ Run: uv run pytest hosts/lib/tests/test_deploy_ui_component.py
 import json
 
 import pytest
+from _reconcile_arms import live_unit
 from test_pi_initial_setup_part1 import seeded_pi
 
 from lib import yaml_fast
@@ -91,6 +92,8 @@ def test_reconcile_relabels_the_live_allows_rather_than_deleting_them(
         "homelab-daniel-pi"
     )
     node.state["users"] = {u["name"]: u["uid"] for u in manifest["users"]["users"]}
+    # H7.60's filter restarts rsyslog, which the Pi fixture masks.
+    live_unit(node, "rsyslog.service")
     declared = [r for r in manifest["ufw"]["rules"] if r.get("keep")]
     others = [r for r in manifest["ufw"]["rules"] if not r.get("keep")]
     port_rules = _port_rules(manifest)

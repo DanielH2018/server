@@ -329,6 +329,7 @@ def test_tmpfiles_creates_the_textfile_directory_setgid_and_the_updater_can_writ
         ["systemd-tmpfiles", "--create", f"--root={root}", str(config)],
         check=True,
         capture_output=True,
+        timeout=60,
     )
 
     directory = root / "var/lib/node-exporter-textfile"
@@ -337,6 +338,7 @@ def test_tmpfiles_creates_the_textfile_directory_setgid_and_the_updater_can_writ
         ["sh", "-c", f"printf 'x 1\\n' > {directory}/homelab_host.prom"],
         capture_output=True,
         check=False,
+        timeout=60,
     )
     assert (stub.returncode == 0) is line_kept
     if line_kept:

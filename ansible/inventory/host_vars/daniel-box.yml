@@ -259,7 +259,7 @@ containers_list:
     netpol_role_owned: true
     netpol_from:
       - traefik  # the only caller: every human path runs the Authelia middleware first
-  # Route-only: the backend is deploy-ui.service on this host (roles/setup/deploy_ui), reached
+  # Route-only: the backend is deploy-ui.service on this host (hosts/components/deploy-ui/), reached
   # through a selector-less Service. use_authelia is the whole access control, and the tier is
   # two_factor because the page starts land.sh and clears the deployer's hold on a
   # stolen password alone.

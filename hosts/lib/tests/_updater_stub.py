@@ -72,7 +72,9 @@ def dpkg_query(state: dict, args: list[str]) -> int:
 
 def dpkg(state: dict, args: list[str]) -> int:
     if args[0] == "--compare-versions":
-        return subprocess.run(["/usr/bin/dpkg", *args], check=False).returncode
+        return subprocess.run(
+            ["/usr/bin/dpkg", *args], check=False, timeout=60
+        ).returncode
     if args[0] == "--audit":
         print(state["audit"], end="")
         return 0
@@ -121,7 +123,9 @@ def systemctl(state: dict, args: list[str]) -> int:
     if state.get("reconcile_run"):
         # The real reconcile runs and writes its own record, which the updater then reads.
         job = state["reconcile_run"]
-        subprocess.run(job["argv"], env=job["env"], capture_output=True, check=False)
+        subprocess.run(
+            job["argv"], env=job["env"], capture_output=True, check=False, timeout=60
+        )
         RECORD.parent.mkdir(parents=True, exist_ok=True)
         RECORD.write_text(Path(job["record"]).read_text())
         return 0 if json.loads(RECORD.read_text())["result"]["ok"] else 1
@@ -156,7 +160,7 @@ def _newest(versions: list[str]) -> str:
     best = versions[0]
     for version in versions[1:]:
         newer = ["/usr/bin/dpkg", "--compare-versions", version, "gt", best]
-        if subprocess.run(newer, check=False).returncode == 0:
+        if subprocess.run(newer, check=False, timeout=60).returncode == 0:
             best = version
     return best
 

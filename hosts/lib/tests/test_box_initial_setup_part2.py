@@ -12,6 +12,7 @@ Run: uv run pytest hosts/lib/tests/test_box_initial_setup_part2.py
 import json
 
 import pytest
+from _reconcile_arms import live_unit
 from test_pi_initial_setup_part1 import seeded_pi
 from test_pi_initial_setup_part2 import (
     LAN,
@@ -127,6 +128,8 @@ def test_reconcile_adopts_the_ssh_rules_and_leaves_the_rules_it_already_holds(
         "homelab-daniel-pi"
     )
     node.state["users"] = {u["name"]: u["uid"] for u in manifest["users"]["users"]}
+    # H7.60's filter restarts rsyslog, which the Pi fixture masks.
+    live_unit(node, "rsyslog.service")
     lan = context["lan_subnet"]
     k3s = [
         r

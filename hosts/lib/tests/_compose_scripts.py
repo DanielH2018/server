@@ -13,6 +13,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from lib.proc_testing import fake_bin, write_exec
 from lib.repo_paths import REPO
 
 COMPONENT = REPO / "hosts" / "components" / "pi-compose"
@@ -52,13 +53,7 @@ class Pi:
         self.textfiles = tmp_path / "textfile"
         for directory in (self.stub, self.bin, self.textfiles):
             directory.mkdir()
-        for name, body in (
-            ("docker", DOCKER),
-            ("dpkg-query", DPKG_QUERY),
-            ("logger", LOGGER),
-        ):
-            (self.bin / name).write_text(body)
-            (self.bin / name).chmod(0o755)
+        fake_bin(self.bin, docker=DOCKER, **{"dpkg-query": DPKG_QUERY}, logger=LOGGER)
         self.compose = self.root / "usr/lib/homelab/compose"
         self.compose.mkdir(parents=True)
         (self.compose / "compose.yaml").write_text("name: homelab\ninclude: []\n")
@@ -114,7 +109,12 @@ class Pi:
             "HOMELAB_COMPOSE_WAIT_TIMEOUT": "730",
         }
         return subprocess.run(
-            [str(script), *args], env=env, capture_output=True, text=True, check=False
+            [str(script), *args],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
         )
 
     def adopt(self, script: Path = ADOPT) -> subprocess.CompletedProcess:
@@ -148,13 +148,9 @@ def mutate(script: Path, tmp_path: Path, old: str, new: str) -> Path:
     text = script.read_text()
     assert old in text, f"{script.name} no longer holds {old!r}"
     directory = tmp_path / "fixture"
-    directory.mkdir(exist_ok=True)
-    fixture = directory / script.name
-    fixture.write_text(text.replace(old, new))
-    fixture.chmod(0o755)
+    fixture = write_exec(directory / script.name, text.replace(old, new))
     if script != ADOPT:
-        (directory / "compose-adopt").write_text(ADOPT.read_text())
-        (directory / "compose-adopt").chmod(0o755)
+        write_exec(directory / "compose-adopt", ADOPT.read_text())
     return fixture
 
 

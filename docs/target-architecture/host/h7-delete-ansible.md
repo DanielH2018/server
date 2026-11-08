@@ -2378,6 +2378,19 @@ the `manual_plane` clearing, and *Rollback*'s
       reports a missing source as drift until reconcile retires the two fragments that name
       them. daniel-server held neither Kuma file on
       2026-11-07, so as on the Pi its package lists neither.
+    - **Amended at H7.60:** five facts the row did not state.
+        - daniel-box held neither Kuma file on 2026-11-07 either, so its package lists neither.
+          Its two legacy entries are the absent arms that ran there, the old holder sudoers rule
+          and `cert-expiry-webhook.env`. The holder-scan removal and the secret-rotation wrappers
+          never ran there, because `has_claude_code` and `has_gitops` are true. The Pi held no
+          `worktree-holders` group, so the group arm goes with no legacy entry.
+        - The role's five handlers lost their notifiers, so `handlers/main.yml` goes, and
+          `initial_setup_packaged_hosts` goes with its last subject.
+        - The `auditd-watches` docs fragment reads the component's `hardening.rules`.
+        - The lander's approval floor named `access.yml`. It names `host-hardening` and `sshd`
+          instead, the components that ship the sudo cache and the SSH settings.
+        - `has_low_memory_board` and `has_raspi_kernel` gate no task, and they stay in the
+          inventory until a deploy-plane PR deletes them.
 35. **H7.61 and H7.62 land the dev tooling and the worktree holder scan in canary order.**
     Only `dev_tooling_hosts` and the `has_claude_code` hosts run these tasks, and both lists
     name daniel-server and daniel-box. H7.61 adds daniel-server to

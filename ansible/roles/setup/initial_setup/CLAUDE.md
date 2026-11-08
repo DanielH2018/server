@@ -1,15 +1,14 @@
 # initial_setup — host baseline + security hardening
 
-The host-bring-up role: base packages, `ansible-core` and `ansible-lint`, the sudo credential cache,
-auditd and kernel-module hardening, and the setup-drift check. The host packages own the rest of
-the baseline (sshd, fail2ban, unattended upgrades, sysctls, the journald cap, the maintenance
-jobs, the integrity scans and the firewall), and this role keeps no task for them. On daniel-pi
-the `host-hardening` component and step 4 of `hosts/bootstrap-host.sh` also own the base packages,
-the sudo cache, auditd and the kernel modules, so
-`ansible/roles/setup/initial_setup/defaults/main.yml:initial_setup_packaged_hosts` skips those
-tasks there, and no setup apply upgrades the Pi's packages. The cluster hosts' packages and the
-dotfiles repo own the rsyslog info filter on daniel-server, the dev tooling, Vale and the worktree
-holder scan (H7.59, H7.61, H7.62), so the role keeps no task for the last three. `files/worktree_holders.py` stays here as the component's input.
+The host-bring-up role: `ansible-core` and `ansible-lint`, the pinned collections, the absent arms
+of retired crons, and the setup-drift check. The host packages own the whole baseline on every
+host (sshd, fail2ban, unattended upgrades, sysctls, the journald cap and the rsyslog filter, the
+sudo cache, auditd, the kernel modules, the banners, the base packages, the maintenance jobs, the
+integrity scans and the firewall), with step 4 of `hosts/bootstrap-host.sh` for the swap, the
+`ssh-users` group and the networkd-dispatcher mask (H7.58 to H7.60). The cluster hosts' packages
+and the dotfiles repo own the dev tooling, Vale and the worktree holder scan (H7.61, H7.62). This
+role keeps no task for any of them, and no setup apply upgrades a host's packages.
+`files/worktree_holders.py` stays here as the component's input.
 **Not a container role** — a host-setup role under `ansible/roles/setup/`, run by
 `initial_setup.yml`, not `deploy.yml`. It is a large setup role, so **`--check` first** and scope
 with `--tags` when iterating. `docs/host-baseline-record.md` carries the per-block traps, the two
@@ -35,12 +34,11 @@ every host — Pi-specific tasks self-guard. Its `collections` tag installs the 
 collections from `ansible/requirements.yml`, the tag the deployer applies a bump with.
 
 ## Hardware gates are capability flags, not host names
-A hardware gate names the FACT it reads, not the host that has it —
-`ansible/inventory/group_vars/all.yml:has_low_memory_board`,
-`ansible/inventory/group_vars/all.yml:has_raspi_kernel`. Each defaults false there and is true in
-every carrying host's `host_vars` (#2981), so replacing a machine is a `host_vars` edit. They
-sit in `group_vars` because `scripts/deploy_tools/setup_routing.py` resolves a gate against
-those two files only, and an unknown name there leaves the role unplaced.
+A hardware gate names the FACT it reads, not the host that has it, so replacing a machine is a
+`host_vars` edit (#2981). No task here gates on hardware since H7.60. A new flag defaults false
+in `group_vars/all.yml` and is true in every carrying host's `host_vars`, because
+`scripts/deploy_tools/setup_routing.py` resolves a gate against those two files only, and an
+unknown name there leaves the role unplaced.
 `scripts/deploy_tools/setup_lib/setup_gates.py:_eval_when` also reads the role's defaults, but
 only when its caller passes them.
 
@@ -50,8 +48,8 @@ capability names it, and it deletes itself once the host converges. ENFORCED:
 refuses a new bare literal.
 
 ## Granular tags (run one block without the whole role)
-Every task carries a block tag placed right under `name:`, so `--tags sudo-timestamp` or
-`--tags "ssh,banners"` runs just that slice. The live list is the tree's, not a copy here:
+Every task carries a block tag placed right under `name:`, so `--tags setup_drift` or
+`--tags "tooling,collections"` runs just that slice. The live list is the tree's, not a copy here:
 
 ```bash
 grep -rho 'tags: \[.*\]' ansible/roles/setup/initial_setup/tasks/ | sort -u
@@ -70,11 +68,13 @@ are in the record page.
 
 - **The journal cap and the rsyslog info filter are one change.** The cap ships in
   `hosts/components/host-tuning/templates/50-homelab-journald.conf`. The filter is the
-  `rsyslog-filter` component's on daniel-server, and this role's on daniel-box. Both follow
-  `has_rsyslog`, which is false on the Pi. ENFORCED:
-  `ansible/tests/setup/test_journald_syslog_forwarding.py::test_raising_the_forwarding_level_requires_the_syslog_filter`.
-- **Handlers live in `handlers/main.yml`**, and a `notify:` from any role in the play can reach
-  them. Each handler needs a notifier. ENFORCED:
+  `rsyslog-filter` component's, and every host whose `has_rsyslog` is true lists it. The flag is
+  false on the Pi. ENFORCED:
+  `ansible/tests/setup/test_journald_syslog_forwarding.py::test_raising_the_forwarding_level_requires_the_syslog_filter`,
+  `ansible/tests/setup/test_journald_syslog_forwarding.py::test_the_filter_component_lists_exactly_on_hosts_with_rsyslog`.
+- **The role defines no handlers since H7.60.** A `notify:` here resolves against every role in
+  the play, so it can reach another role's handler. A handler this role needs goes in a new
+  `handlers/main.yml`, and each handler needs a notifier. ENFORCED:
   `ansible/tests/setup/test_setup_handlers_resolve.py::test_every_notify_in_initial_setup_resolves_to_a_handler`,
   `ansible/tests/setup/test_setup_handlers_resolve.py::test_every_handler_in_the_play_has_a_notifier`.
 

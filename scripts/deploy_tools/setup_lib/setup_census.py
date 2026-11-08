@@ -44,26 +44,9 @@ from renderer.renderer_lib import host as host_mode
 
 # The items the migration deletes rather than moves, each with the reason. A name here is an
 # item's `name`, whatever its role or host, so a name that still runs on another host stays out.
-_PI_SWAP = (
-    "moved: bootstrap-host.sh step 4 creates the Pi's swap file, and a live Pi keeps it"
-)
 ALLOWLIST = {
     "Clear ansible log file": (
         "deleted: the log it clears belongs to ansible-playbook, which H7.20a removes"
-    ),
-    "Create swap file (Pi)": _PI_SWAP,
-    "Secure swap file permissions (Pi)": _PI_SWAP,
-    "Format swap file (Pi)": _PI_SWAP,
-    "Persist swap file in fstab (Pi)": _PI_SWAP,
-    "Activate swap file (Pi)": _PI_SWAP,
-    "Stop the hardware watchdog during provisioning (Pi)": (
-        "deleted: it guards only the dist-upgrade, which a package cannot run"
-    ),
-    "Hold the Docker engine packages (Docker hosts)": (
-        "deleted: homelab-docker-engine.service sets the hold when it installs the packages"
-    ),
-    "Remove apt-show-versions (daniel-pi — apt-hook tax on 512 MB)": (
-        "deleted: no tracked file reads its output, and nothing installs it on the Pi"
     ),
 }
 

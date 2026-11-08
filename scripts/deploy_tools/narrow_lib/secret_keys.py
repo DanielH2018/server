@@ -51,10 +51,8 @@ from secrets_mgmt.consumers import _CENSUS_SKIP_FILES
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deployer_lib.deploy_changes import _is_test_only_path, is_doc
-from deployer_lib.deploy_cross_role import (
-    SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
-    k8s_lookup_map,
-)
+from deployer_lib import deploy_cross_role
+from deployer_lib.deploy_cross_role import k8s_lookup_map
 from deploy_tools.narrow_lib.foreign_keys import keys_reaching
 from deploy_tools.narrow_lib.setup_index import RoleIndex
 
@@ -197,7 +195,8 @@ def setup_readers_of(keys: set[str], ctx, pathspecs: list[str]) -> SetupReaders:
     edge that sends a file another role ships to that role too. A `.md`, a test file and a
     `_CENSUS_SKIP_FILES` name drop, as they do for `key_tags`. A shipped vars file is read
     only key by key, so its shippers are checked with `reads_through`: a defaults file may name
-    a key while the role that ships it reads one unrelated key.
+    a key while the role that ships it reads one unrelated key. The table is read at call time,
+    so a landing that adopted the merge commit's with `deploy_cross_role.use_tables` reads it.
 
     Args:
         keys: the moved keys.
@@ -207,6 +206,7 @@ def setup_readers_of(keys: set[str], ctx, pathspecs: list[str]) -> SetupReaders:
     Raises:
         CannotNarrow: `git grep` failed.
     """
+    shipped = deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES
     found: set[str] = set()
     read_by: dict[str, set[str]] = {}
     for key in sorted(keys):
@@ -216,14 +216,14 @@ def setup_readers_of(keys: set[str], ctx, pathspecs: list[str]) -> SetupReaders:
         for hit in hits:
             if not is_vars_file(hit):
                 continue
-            for role in SETUP_FILES_SHIPPED_BY_OTHER_ROLES.get(hit, ()):
+            for role in shipped.get(hit, ()):
                 index = RoleIndex(role, ctx.ref, str(ctx.cwd))
                 if reads_through(index, hit, key, ctx.ref, ctx.cwd):
                     read_by.setdefault(hit, set()).add(role)
     unread = {
-        hit: set(SETUP_FILES_SHIPPED_BY_OTHER_ROLES[hit]) - read_by.get(hit, set())
+        hit: set(shipped[hit]) - read_by.get(hit, set())
         for hit in found
-        if is_vars_file(hit) and hit in SETUP_FILES_SHIPPED_BY_OTHER_ROLES
+        if is_vars_file(hit) and hit in shipped
     }
     return SetupReaders(found, {h: r for h, r in unread.items() if r})
 

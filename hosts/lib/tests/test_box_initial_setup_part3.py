@@ -1,0 +1,105 @@
+"""daniel-box's host baseline moves into its package, and the role's tasks for it go (H7.60).
+
+`test_pi_initial_setup_part3.py` holds the `host-hardening` component's content against the bytes
+the role wrote. These tests hold what is specific to the last host: daniel-box ships the same
+bytes, takes no i915 option, retires what the role's absent arms removed, and no task is left in
+`initial_setup` that writes a baseline path or upgrades a host's packages.
+
+Run: uv run pytest hosts/lib/tests/test_box_initial_setup_part3.py
+"""
+
+import json
+
+import pytest
+from lib import yaml_fast
+from lib.repo_paths import ANSIBLE, REPO
+from test_pi_initial_setup_part3 import BLACKLIST, BLACKLIST_WRITTEN, WRITTEN
+
+from renderer.renderer_lib import host as host_mode
+
+ROLE = ANSIBLE / "roles" / "setup" / "initial_setup"
+FILTER = "/etc/rsyslog.d/49-homelab-info-filter.conf"
+I915 = "/etc/modprobe.d/i915.conf"
+BASELINE_PATHS = {*WRITTEN, BLACKLIST, FILTER, I915, "/etc/issue", "/etc/issue.net"}
+
+
+@pytest.fixture(scope="module")
+def package() -> host_mode.Package:
+    return host_mode.render_host("daniel-box")
+
+
+def _walk(tasks):
+    for task in tasks or []:
+        if isinstance(task, dict):
+            yield task
+            for key in ("block", "rescue", "always"):
+                yield from _walk(task.get(key))
+
+
+def _role_tasks() -> list[dict]:
+    return [
+        task
+        for path in sorted((ROLE / "tasks").glob("*.yml"))
+        for task in _walk(yaml_fast.safe_load(path.read_text()))
+    ]
+
+
+def _writes_a_baseline_path(task: dict) -> bool:
+    return any(
+        isinstance(args, dict)
+        and (args.get("dest") or args.get("path")) in BASELINE_PATHS
+        for args in task.values()
+    )
+
+
+def _upgrades_packages(task: dict) -> bool:
+    apt = task.get("ansible.builtin.apt")
+    return isinstance(apt, dict) and "upgrade" in apt
+
+
+@pytest.mark.parametrize("dst", sorted(WRITTEN))
+def test_daniel_box_ships_the_bytes_the_role_wrote(package, dst):
+    assert package.files[dst][0].decode() == WRITTEN[dst]
+
+
+def test_daniel_box_ships_the_filter_and_adopts_the_blacklist(package):
+    assert FILTER in package.files
+    edits = [edit["line"] + "\n" for edit in package.lines if edit["path"] == BLACKLIST]
+    assert "".join(edits) == BLACKLIST_WRITTEN
+
+
+def test_the_has_igpu_gate_keeps_the_i915_option_off_daniel_box(package):
+    spec = yaml_fast.safe_load(
+        (REPO / "hosts" / "daniel-box" / "package.yml").read_text()
+    )
+    assert "host-hardening" in spec["components"]
+    component = yaml_fast.safe_load(
+        (REPO / "hosts" / "components" / "host-hardening" / "component.yml").read_text()
+    )
+    entry = next(f for f in component["files"] if f["dst"] == I915)
+    assert entry["when"] == "has_igpu"
+    assert "/etc/sudoers.d/10-timestamp" in package.files
+    assert I915 not in package.files
+
+
+def test_the_cert_expiry_credentials_retire_here(package):
+    legacy = json.loads(package.files["/usr/lib/homelab/manifest.json"][0])["legacy"]
+    assert {"path": "/etc/homelab/cert-expiry-webhook.env"} in legacy
+
+
+def test_the_role_keeps_no_baseline_task_on_any_host():
+    tasks = _role_tasks()
+    assert any(
+        task.get("name") == "Install Python CLI tooling as uv tools" for task in tasks
+    )
+    assert [t["name"] for t in tasks if _writes_a_baseline_path(t)] == []
+    assert [t["name"] for t in tasks if _upgrades_packages(t)] == []
+    assert not (ROLE / "handlers").exists()
+
+
+def test_a_baseline_write_and_an_upgrade_are_flagged():
+    write = {"ansible.builtin.copy": {"dest": FILTER, "content": "stop"}}
+    upgrade = {"ansible.builtin.apt": {"update_cache": True, "upgrade": "dist"}}
+    assert _writes_a_baseline_path(write)
+    assert _upgrades_packages(upgrade)
+    assert not _upgrades_packages({"ansible.builtin.apt": {"name": "jq"}})

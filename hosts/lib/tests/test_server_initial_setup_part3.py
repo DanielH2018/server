@@ -1,8 +1,8 @@
 """daniel-server's host baseline and Loki witness move into its package (H7.59).
 
 `test_pi_initial_setup_part3.py` holds the `host-hardening` component's content. These tests hold
-what is specific to this host: the i915 option, the role's guards, the witness's uv path and
-textfile directory on a rebuilt host, and the retirement of what the role left behind.
+what is specific to this host: the i915 option, the witness's uv path and textfile directory on a
+rebuilt host, and the retirement of what the role left behind.
 
 Run: uv run pytest hosts/lib/tests/test_server_initial_setup_part3.py
 """
@@ -10,10 +10,8 @@ Run: uv run pytest hosts/lib/tests/test_server_initial_setup_part3.py
 import json
 
 import pytest
-from lib import yaml_fast
 from lib.repo_paths import ANSIBLE
 
-from deploy_tools.setup_lib.setup_gates import packaged_guard_hosts
 from renderer.renderer_lib import host as host_mode
 
 ROLE = ANSIBLE / "roles" / "setup" / "initial_setup"
@@ -78,44 +76,3 @@ def test_only_daniel_server_ships_the_i915_option(package):
     assert data == b"options i915 enable_guc=2\n"
     assert mode == 0o644
     assert I915 not in host_mode.render_host("daniel-pi").files
-
-
-@pytest.mark.parametrize(
-    "file, name, subject",
-    [
-        ("host-basics.yml", "Update and upgrade system packages", "host_basics"),
-        ("host-basics.yml", "Install required packages", "host_basics"),
-        (
-            "host-basics.yml",
-            "Install apt-show-versions (roomy hosts only)",
-            "host_basics",
-        ),
-        (
-            "system-tuning.yml",
-            "Keep the info-level forwarding out of /var/log/syslog",
-            "rsyslog_filter",
-        ),
-    ],
-)
-def test_the_role_skips_each_subject_here_and_keeps_daniel_box(file, name, subject):
-    tasks = yaml_fast.safe_load((ROLE / "tasks" / file).read_text())
-    when = next(task for task in tasks if task["name"] == name)["when"]
-    assert f"initial_setup_packaged_hosts['{subject}']" in str(when)
-    guards = when if isinstance(when, list) else [when]
-    assert packaged_guard_hosts(guards, (HOST, "daniel-box"), ROLE) == {HOST}
-
-
-@pytest.mark.parametrize(
-    "subject", ["access", "accounting", "audit_and_kernel", "integrity"]
-)
-def test_each_whole_file_subject_skips_daniel_server_at_its_import(subject):
-    imports = yaml_fast.safe_load((ROLE / "tasks" / "main.yml").read_text())
-    entry = next(task for task in imports if subject in str(task.get("when")))
-    hosts = ("daniel-pi", "daniel-box", HOST)
-    assert packaged_guard_hosts([entry["when"]], hosts, ROLE) == {"daniel-pi", HOST}
-
-
-def test_the_role_no_longer_reverts_the_governor_or_removes_the_snaps():
-    tasks = (ROLE / "tasks" / "system-tuning.yml").read_text()
-    assert "scaling_governor" not in tasks
-    assert "community.general.snap" not in tasks

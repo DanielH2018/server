@@ -1,7 +1,6 @@
 # The host baseline initial_setup applied on every host (H7.58 to H7.60,
-# docs/target-architecture/host/h7-delete-ansible.md, step 34). daniel-pi lists it first. The role's
-# `access`, `accounting`, `audit_and_kernel`, `integrity` and `host_basics` subjects skip a host
-# named in `initial_setup_packaged_hosts`.
+# docs/target-architecture/host/h7-delete-ansible.md, step 34). daniel-pi listed it first and
+# daniel-box last, and H7.60 deleted the role's tasks for these subjects.
 #
 # Owners, measured on the live Pi with `dpkg -S` on 2026-11-07:
 #

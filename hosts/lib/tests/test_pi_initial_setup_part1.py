@@ -121,7 +121,9 @@ def test_sshd_accepts_both_drop_ins_and_widens_forwarding_only_for_the_sys_user(
     (drop_ins / "50-cloud-init.conf").write_text("PasswordAuthentication yes\n")
     key = tmp_path / "host_key"
     subprocess.run(
-        ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)], check=True
+        ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)],
+        check=True,
+        timeout=60,
     )
     config = tmp_path / "sshd_config"
     config.write_text(f"Include {drop_ins}/*.conf\nHostKey {key}\n")
@@ -140,6 +142,7 @@ def test_sshd_accepts_both_drop_ins_and_widens_forwarding_only_for_the_sys_user(
             capture_output=True,
             text=True,
             check=False,
+            timeout=60,
         )
         assert done.returncode == 0, done.stderr
         return dict(line.split(None, 1) for line in done.stdout.splitlines())

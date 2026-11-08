@@ -5,6 +5,7 @@ import stat
 import types
 from typing import Any
 
+from lib.proc_testing import write_exec
 from lib.repo_paths import REPO
 
 SCRIPT = REPO / "hosts" / "lib" / "homelab-secrets"
@@ -33,13 +34,11 @@ class Host:
         self.module: Any = types.ModuleType("homelab_secrets")
         exec(compile(SCRIPT.read_text(), str(SCRIPT), "exec"), self.module.__dict__)
         self.module._chown = lambda *args: self.chowns.append(args)
-        self.sops = self.path("/usr/lib/homelab/bin/sops")
-        self.sops.parent.mkdir(parents=True)
         ciphertext = f"{self.root}{SOPS_FILE}"
-        self.sops.write_text(
-            STUB_SOPS.format(ciphertext=ciphertext, log=self.log, plain=self.plain)
+        self.sops = write_exec(
+            self.path("/usr/lib/homelab/bin/sops"),
+            STUB_SOPS.format(ciphertext=ciphertext, log=self.log, plain=self.plain),
         )
-        self.sops.chmod(0o755)
 
     def path(self, absolute):
         return self.root / absolute.lstrip("/")

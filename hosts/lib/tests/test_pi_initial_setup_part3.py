@@ -1,8 +1,9 @@
 """The Pi's host baseline as the `host-hardening` component (H7.58).
 
 The component replaces initial_setup's access, accounting, audit-and-kernel and integrity tasks
-and the package tasks of host-basics on daniel-pi. These tests hold the bytes the tasks wrote,
-the line-arm edits that adopt what they wrote, and the guards that stop the role writing them.
+and the package tasks of host-basics on daniel-pi. H7.60 deleted those tasks, so `WRITTEN` and the
+constants beside it carry what they wrote. These tests hold the shipped bytes to them, and the
+line-arm edits that adopt them.
 
 Run: uv run pytest hosts/lib/tests/test_pi_initial_setup_part3.py
 """
@@ -12,14 +13,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from lib import yaml_fast
-from lib.repo_paths import ANSIBLE
-
-from deploy_tools.setup_lib.setup_gates import packaged_guard_hosts
 from reconcile_lib import lines
 from renderer.renderer_lib import host as host_mode
 
-ROLE = ANSIBLE / "roles" / "setup" / "initial_setup"
 SUDOERS = "/etc/sudoers.d/10-timestamp"
 BLACKLIST = "/etc/modprobe.d/blacklist-rare-network.conf"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-hardening.conf"
@@ -29,6 +25,50 @@ BANNER = (
     "All connections are monitored and recorded.\n"
     "Disconnect immediately if you are not an authorized user.\n"
 )
+# The bytes initial_setup's tasks wrote to each path before H7.60 deleted them.
+WRITTEN = {
+    SUDOERS: (
+        "# Managed by Ansible (roles/setup/initial_setup) — edits here are overwritten.\n"
+        "Defaults timestamp_type=global, timestamp_timeout=60\n"
+    ),
+    "/etc/audit/rules.d/hardening.rules": (
+        "# Identity file changes\n"
+        "-w /etc/passwd -p wa -k identity\n"
+        "-w /etc/group -p wa -k identity\n"
+        "-w /etc/shadow -p wa -k identity\n"
+        "# SSH configuration changes\n"
+        "-w /etc/ssh/sshd_config -p wa -k sshd\n"
+        "# Privilege escalation changes\n"
+        "-w /etc/sudoers -p wa -k actions\n"
+        "-w /etc/sudoers.d -p wa -k actions\n"
+    ),
+    "/etc/modules-load.d/wireguard.conf": "wireguard\n",
+    "/etc/systemd/coredump.conf.d/disable.conf": (
+        "[Coredump]\nStorage=none\nProcessSizeMax=0\n"
+    ),
+}
+BLACKLIST_WRITTEN = (
+    "install dccp /bin/true\n"
+    "install sctp /bin/true\n"
+    "install rds /bin/true\n"
+    "install tipc /bin/true\n"
+)
+# `Restrict sensitive file permissions`, path to mode.
+RESTRICTED = {
+    "/etc/ssh/sshd_config": "0600",
+    "/etc/crontab": "0600",
+    "/boot/grub/grub.cfg": "0600",
+    "/etc/cron.d": "0700",
+    "/etc/cron.daily": "0700",
+    "/etc/cron.hourly": "0700",
+    "/etc/cron.weekly": "0700",
+    "/etc/cron.monthly": "0700",
+}
+# `Install required packages`, `Install Raspberry Pi-specific packages` and `Install auditd`.
+INSTALLED = {
+    *("unzip", "unattended-upgrades", "update-notifier-common", "fail2ban"),
+    *("libpam-tmpdir", "debsums", "jq", "linux-raspi", "wireguard", "auditd"),
+}
 
 
 @pytest.fixture(scope="module")
@@ -36,53 +76,22 @@ def package() -> host_mode.Package:
     return host_mode.render_host("daniel-pi")
 
 
-def _task(file: str, name: str) -> dict:
-    tasks = yaml_fast.safe_load((ROLE / "tasks" / file).read_text())
-    return next(task for task in tasks if task["name"] == name)
-
-
 def _edits(package: host_mode.Package, path: str) -> list[dict]:
     return [edit for edit in package.lines if edit["path"] == path]
 
 
 @pytest.mark.parametrize(
-    "file, name, module, dst, mode",
+    "dst, mode",
     [
-        (
-            "access.yml",
-            "Scope the sudo credential cache to the user rather than the terminal",
-            "ansible.builtin.copy",
-            SUDOERS,
-            0o440,
-        ),
-        (
-            "audit-and-kernel.yml",
-            "Configure audit rules",
-            "ansible.builtin.copy",
-            "/etc/audit/rules.d/hardening.rules",
-            0o640,
-        ),
-        (
-            "audit-and-kernel.yml",
-            "Persist the WireGuard kernel module across reboots",
-            "ansible.builtin.copy",
-            "/etc/modules-load.d/wireguard.conf",
-            0o644,
-        ),
-        (
-            "integrity.yml",
-            "Disable core dumps via systemd coredump",
-            "ansible.builtin.copy",
-            "/etc/systemd/coredump.conf.d/disable.conf",
-            0o644,
-        ),
+        (SUDOERS, 0o440),
+        ("/etc/audit/rules.d/hardening.rules", 0o640),
+        ("/etc/modules-load.d/wireguard.conf", 0o644),
+        ("/etc/systemd/coredump.conf.d/disable.conf", 0o644),
     ],
 )
-def test_each_shipped_file_holds_the_bytes_and_mode_its_task_wrote(
-    package, file, name, module, dst, mode
-):
+def test_each_shipped_file_holds_the_bytes_and_mode_its_task_wrote(package, dst, mode):
     data, shipped_mode = package.files[dst]
-    assert data.decode() == _task(file, name)[module]["content"]
+    assert data.decode() == WRITTEN[dst]
     assert shipped_mode == mode
 
 
@@ -91,7 +100,7 @@ def test_visudo_accepts_the_sudoers_file_and_rejects_a_broken_copy(package, tmp_
     if not Path(visudo).exists():
         pytest.skip("needs a visudo")
     version = subprocess.run(
-        [visudo, "--version"], capture_output=True, text=True, check=False
+        [visudo, "--version"], capture_output=True, text=True, check=False, timeout=60
     ).stdout
     # The hosts run classic sudo. The ubuntu-26.04 runner's visudo rejects `timestamp_type`.
     if not version.startswith("visudo version"):
@@ -100,11 +109,13 @@ def test_visudo_accepts_the_sudoers_file_and_rejects_a_broken_copy(package, tmp_
     good.write_bytes(package.files[SUDOERS][0])
     good.chmod(0o440)
     check = [visudo, "-cf"]
-    assert subprocess.run([*check, str(good)], check=False).returncode == 0
+    assert subprocess.run([*check, str(good)], check=False, timeout=60).returncode == 0
     broken = tmp_path / "broken"
     broken.write_bytes(package.files[SUDOERS][0] + b"Defaults =\n")
     broken.chmod(0o440)
-    assert subprocess.run([*check, str(broken)], check=False).returncode != 0
+    assert (
+        subprocess.run([*check, str(broken)], check=False, timeout=60).returncode != 0
+    )
 
 
 def test_a_live_banner_is_left_alone_and_a_stock_one_is_replaced(package):
@@ -120,9 +131,7 @@ def test_a_live_banner_is_left_alone_and_a_stock_one_is_replaced(package):
 
 def test_the_blacklist_edits_adopt_the_lines_the_task_wrote(package):
     edits = _edits(package, BLACKLIST)
-    written = _task(
-        "audit-and-kernel.yml", "Blacklist unused rare network kernel modules"
-    )["ansible.builtin.copy"]["content"]
+    written = BLACKLIST_WRITTEN
     assert [edit["line"] + "\n" for edit in edits] == written.splitlines(keepends=True)
     adopted = written
     for edit in edits:
@@ -143,64 +152,22 @@ def test_apt_parses_the_conffile_option_unattended_upgrade_requires(package, tmp
         capture_output=True,
         text=True,
         check=True,
+        timeout=60,
     ).stdout
     assert 'DPkg::Options:: "--force-confold";' in dump
 
 
 def test_the_tmpfiles_lines_cover_the_ssh_directory_and_every_restricted_path(package):
-    task = _task("audit-and-kernel.yml", "Restrict sensitive file permissions")
     rows = [
         line.split()
         for line in package.files[TMPFILES][0].decode().splitlines()
         if line and not line.startswith("#")
     ]
     assert rows[0] == ["Z", "/home/ubuntu/.ssh", "~0700", "ubuntu", "ubuntu", "-"]
-    assert {(row[1], row[2]) for row in rows if row[0] == "z"} == {
-        (item["path"], item["mode"]) for item in task["loop"]
-    }
+    assert {(row[1], row[2]) for row in rows if row[0] == "z"} == set(
+        RESTRICTED.items()
+    )
 
 
 def test_the_package_depends_on_what_the_package_tasks_installed(package):
-    required = _task("host-basics.yml", "Install required packages")[
-        "ansible.builtin.apt"
-    ]
-    raspi = _task("host-basics.yml", "Install Raspberry Pi-specific packages")[
-        "ansible.builtin.apt"
-    ]
-    assert {*required["name"], *raspi["name"], "auditd"} <= set(package.depends)
-
-
-def test_daniel_box_stays_on_the_role_until_its_own_pr():
-    files = host_mode.render_host("daniel-box").files
-    assert "/etc/audit/rules.d/hardening.rules" not in files
-
-
-@pytest.mark.parametrize(
-    "import_file, subject",
-    [
-        ("access.yml", "access"),
-        ("accounting.yml", "accounting"),
-        ("audit-and-kernel.yml", "audit_and_kernel"),
-        ("integrity.yml", "integrity"),
-    ],
-)
-def test_each_whole_file_subject_skips_the_pi_at_its_import(import_file, subject):
-    imports = yaml_fast.safe_load((ROLE / "tasks" / "main.yml").read_text())
-    entry = next(
-        task for task in imports if task["ansible.builtin.import_tasks"] == import_file
-    )
-    assert subject in entry["when"]
-    hosts = ("daniel-pi", "daniel-box", "daniel-server")
-    assert packaged_guard_hosts([entry["when"]], hosts, ROLE) == {
-        "daniel-pi",
-        "daniel-server",
-    }
-
-
-def test_the_setup_apply_runs_no_apt_upgrade_on_the_pi():
-    upgrade = _task("host-basics.yml", "Update and upgrade system packages")
-    hosts = ("daniel-pi", "daniel-box", "daniel-server")
-    assert packaged_guard_hosts([upgrade["when"]], hosts, ROLE) == {
-        "daniel-pi",
-        "daniel-server",
-    }
+    assert INSTALLED <= set(package.depends)

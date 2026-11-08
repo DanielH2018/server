@@ -13,9 +13,9 @@ through a named `sys.path` insert of `GITOPS_DEPLOY_FILES` (`scripts/lib/deploye
 `gitops_state.py`). `gitops_ledger.py`, the JSON-lines markers, is copied the same way: it
 imports `gitops_markers`, and monitor-bridge reads its `manual_plane` and `hold_plane`
 ledger classes (#3392). `gitops_hold.py` is copied too: its `DeployerSnapshot`
-is how the GitOps Status check reads every marker it judges (#3703). deploy-ui and renovate-agent install `gitops_markers.py`
-and `gitops_ledger.py` into `/opt` with a `src:` naming the deployer's `files/`, and `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes a change to each file to
-the roles that install it (#3275, #3306). monitor-bridge is the exception: it ships its own
+is how the GitOps Status check reads every marker it judges (#3703). The deploy-ui and renovate-agent host components ship
+`gitops_markers.py`, `gitops_ledger.py` and `gitops_hold.py` with `shared:` entries in their
+`component.yml`. monitor-bridge is the exception: it ships its own
 `files/` into a pod through a ConfigMap built from `monitor_bridge_modules`, so the module has
 to sit in that directory. A committed copy with a freshness test is the single source there,
 the arrangement `scripts/docs/gen_doc_fragments.py` already uses for the docs fragments.
