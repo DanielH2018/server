@@ -5,11 +5,12 @@
 #   build-image.sh 24.04 --publish   push this Dockerfile's image to GHCR unless already there
 #
 # A plain run pulls the pinned digest when image.pins was written for this Dockerfile, so a PR
-# that changes no image input fetches nothing from snapshot.ubuntu.com. A stale pin, or a site
-# pinned `-`, pulls this Dockerfile's tag instead, which master publishes after the merge. Any
-# token with packages: write can repoint a tag, so a tag pull keeps the image only when its
-# org.homelab.dockerfile-sha256 label is this Dockerfile's hash. A PR that changes the Dockerfile
-# has no such tag yet, so it builds from the Dockerfile, as does a pull that fails or is refused.
+# that changes no image input fetches nothing from snapshot.ubuntu.com. When that pull fails it
+# builds, never falling back to the tag: only the digest fixes which image runs. A stale pin, or
+# a site pinned `-`, pulls this Dockerfile's tag instead, which master publishes after the merge.
+# The label check refuses a tag pushed from another Dockerfile; it cannot catch a deliberate
+# repoint, since the pusher sets the label. A PR that changes the Dockerfile has no such tag yet,
+# so it builds from the Dockerfile, as does a tag pull that fails or is refused.
 #
 # --publish tags the image `<release>-<arch>-<inputs>` and prints the image.pins line for it.
 # The publisher never rebuilds an existing tag, so the digest a pin names stays tagged.
@@ -76,12 +77,12 @@ pull() {
 digest=$(pin "$release-$arch")
 if [[ "$(pin inputs)" == "$inputs" && "$digest" == sha256:* ]]; then
   pull "$repo@$digest" && exit 0
-  echo "::warning::Pulling the pinned $repo@$digest failed."
+  echo "::warning::Pulling the pinned $repo@$digest failed, so it is built from the Dockerfile."
+  build
+  exit 0
 fi
 if pull "$remote_tag"; then
-  if [[ "$(pin inputs)" != "$inputs" || "$digest" != sha256:* ]]; then
-    echo "::warning::image.pins pins no digest of this Dockerfile for $release-$arch. Copy the lines from the host-test-image run's summary into it."
-  fi
+  echo "::warning::image.pins pins no digest of this Dockerfile for $release-$arch. Copy the lines from the host-test-image run's summary into it."
   exit 0
 fi
 echo "::notice::No image of this Dockerfile pulled, so it is built from the Dockerfile."

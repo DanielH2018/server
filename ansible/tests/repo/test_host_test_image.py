@@ -140,13 +140,14 @@ def test_a_dockerfile_with_no_published_image_is_built(tmp_path: Path) -> None:
     assert "-t homelab-host-test:24.04" in calls[-1]
 
 
-def test_a_failed_pinned_pull_falls_back_to_the_tag_then_the_build(
+def test_a_failed_pinned_pull_builds_and_never_pulls_the_tag(
     tmp_path: Path,
 ) -> None:
-    result, calls = _build(tmp_path, pins=_matching_pins())
+    result, calls = _build(tmp_path, pins=_matching_pins(), pullable=(_tag(),))
     assert result.returncode == 0, result.stderr
-    assert calls[:2] == [f"pull {IMAGE}@{DIGEST}", f"pull {_tag()}"]
-    assert calls[2].startswith("buildx build --load")
+    assert calls[0] == f"pull {IMAGE}@{DIGEST}"
+    assert f"pull {_tag()}" not in calls
+    assert calls[1].startswith("buildx build --load")
     assert "Pulling the pinned" in result.stdout
 
 
@@ -175,10 +176,16 @@ def test_a_publish_that_cannot_tell_whether_the_tag_exists_pushes_nothing(
 
 
 _ARCH = {"ubuntu-26.04": "amd64", "ubuntu-24.04-arm": "arm64"}
+# The sites whose image the publisher has pushed. A site joins in the PR that copies its first
+# digest into image.pins; until then the matrix PR pins it `-`.
+PUBLISHED = frozenset({"24.04-amd64", "26.04-amd64", "24.04-arm64"})
 
 
 def _pin_problems(text: str, sites: set[tuple[str, str]]) -> list[str]:
-    """Why image.pins `text` does not pin one image by digest per CI build site."""
+    """Why image.pins `text` does not pin one image by digest per CI build site.
+
+    A site outside PUBLISHED may read `-`, because its image exists only after its PR merges.
+    """
     pins = dict(
         line.split()
         for line in text.splitlines()
@@ -196,8 +203,11 @@ def _pin_problems(text: str, sites: set[tuple[str, str]]) -> list[str]:
         if key != "inputs" and value != "-" and not DIGEST_RE.fullmatch(value)
     ]
     problems += [f"{key} has no pin" for key in sorted(keys - pins.keys())]
-    if not any(DIGEST_RE.fullmatch(value) for value in pins.values()):
-        problems.append("no image is pinned by digest")
+    problems += [
+        f"{key} is published, so it needs its digest"
+        for key in sorted(keys & PUBLISHED)
+        if pins.get(key) == "-"
+    ]
     return problems
 
 
@@ -218,10 +228,20 @@ def test_a_pin_file_missing_a_site_or_holding_a_tag_is_flagged() -> None:
         "inputs is no Dockerfile sha256: latest"
     ]
     assert _pin_problems("inputs -\n", sites) == ["inputs is no Dockerfile sha256: -"]
-    unpublished = "".join(f"{r}-{_ARCH[runner]} -\n" for runner, r in sites)
-    assert _pin_problems(f"inputs {_inputs()}\n{unpublished}", sites) == [
-        "no image is pinned by digest"
+    unpinned = (
+        f"inputs {_inputs()}\n24.04-amd64 {DIGEST}\n26.04-amd64 -\n24.04-arm64 -\n"
+    )
+    assert _pin_problems(unpinned, sites) == [
+        "24.04-arm64 is published, so it needs its digest",
+        "26.04-amd64 is published, so it needs its digest",
     ]
+
+
+def test_a_site_not_yet_published_may_be_pinned_dash() -> None:
+    sites = _build_sites(CI_WORKFLOW) | {("ubuntu-26.04", "28.04")}
+    lines = [f"{key} {DIGEST}" for key in sorted(PUBLISHED)]
+    text = "\n".join([f"inputs {_inputs()}", *lines, "28.04-amd64 -"])
+    assert _pin_problems(text, sites) == []
 
 
 def test_image_pins_pins_each_ci_build_site_by_digest() -> None:
