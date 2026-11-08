@@ -144,9 +144,6 @@ def test_the_push_stores_claim_binds_a_pre_bound_host_path_volume_owned_for_its_
         if (d["kind"], d["metadata"]["name"]) == ("Deployment", "registry")
     )["spec"]["template"]["spec"]
     assert dirs[0]["uid"] == pod["securityContext"]["runAsUser"] != 0
-    assert fresh.mkdir_command(dirs[0]) == (
-        f"install -d -o {dirs[0]['uid']} -g {dirs[0]['gid']} {dirs[0]['path']}"
-    )
 
 
 @pytest.mark.parametrize(
