@@ -617,6 +617,9 @@ jobs:
       # homelab/upgrade-gates status on that PR's head (H1.1b).
       pull-requests: read
       statuses: read
+      # The in-flight wait lists the in-progress promote runs, so a run that ended without
+      # its `settle` is named rather than waited on (#7863).
+      actions: read
     outputs:
       verdict: ${{ steps.decide.outputs.verdict }}
       target: ${{ steps.decide.outputs.target }}

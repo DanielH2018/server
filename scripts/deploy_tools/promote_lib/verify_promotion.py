@@ -129,8 +129,12 @@ POLL_S = 30
 # `promote_lib/supersede.py` lets T supersede the run, D7), which
 # it does only between a run's `tag` and its `settle`, at two HEADs a poll. And `tag` moves
 # `prod` only while it still names the digest `decide` read, which closes the gap between one
-# run's `decide` and an earlier run's `tag` (promote.yml, the `Move prod` step). A run that never settles stalls promotion as `current`, which D2.6d's
-# `PromotionStalled` alert pages once it lands. The long form is docs/flux-deploy-plane.md,
+# run's `decide` and an earlier run's `tag` (promote.yml, the `Move prod` step). A run that
+# never settles stalls promotion as `current`, which D2.6d's `PromotionStalled` alert pages.
+# When no other promote run past its decide is in progress for LOST_SETTLE_S, the run that
+# moved `prod` finished without a `settle` (#7863): the wait ends `current` at once, naming
+# the operator's two ways out (`lost_settle`). `decide` never moves `last-good` itself: its job holds no write to the
+# registry, and it cannot read `verify`'s verdict. The long form is docs/flux-deploy-plane.md,
 # *Verification*.
 #
 # Longer than the `verify` job's timeout-minutes plus `settle`'s, with ten minutes for runner
@@ -140,6 +144,11 @@ POLL_S = 30
 # inside GitHub's 6-hour job limit with 10 minutes to spare.
 IN_FLIGHT_WAIT_S = 350 * 60
 IN_FLIGHT_POLL_S = 30
+
+# How long the wait sees no other promote run in progress before it reads `prod` != `last-good`
+# as a run that finished without its `settle`. Twice `settle`'s timeout-minutes, so a run
+# listing that lags a live run cannot end a wait on a verification still in flight.
+LOST_SETTLE_S = 10 * 60
 
 # A wait that runs the full IN_FLIGHT_WAIT_S reads DEPLOY_HOLD about 700 times and the
 # registry's tags two or three times as often, so one 5xx among them ended a wait that would
@@ -590,6 +599,8 @@ def wait_settled(
     clock: Callable[[], float],
     revert_rule: bool,
     supersedable: Callable[[str], bool] | None = None,
+    other_runs: Callable[[], list[dict]] | None = None,
+    prod_commit: Callable[[], str | None] | None = None,
 ) -> Settled:
     """Read DEPLOY_HOLD, then wait while `prod` and `last-good` name different digests.
 
@@ -606,12 +617,17 @@ def wait_settled(
         revert_rule: whether a `failed=` hold may be passed.
         supersedable: whether T may take over the run that `prod`'s digest names (D7). When
             it answers True under a `none` hold, the wait ends at once with `in_flight`.
+        other_runs: the other promote runs in progress past their `promote` job, so not a
+            later run queued behind this one. Once it has answered none for
+            LOST_SETTLE_S, the wait ends `current` with `lost_settle`'s reason.
+        prod_commit: the commit `prod` names, which that reason quotes.
 
     Raises:
         Whatever `hold`, `digest` and `supersedable` raise, other than a 5xx they recover
         from within READ_ATTEMPTS reads.
     """
     started = clock()
+    idle_since: float | None = None
     while True:
         value = _read(hold, forge.HOLD_VARIABLE, sleep)
         if value is None:
@@ -634,6 +650,14 @@ def wait_settled(
             and _read(functools.partial(supersedable, prod), SUPERSEDING_TAG, sleep)
         ):
             return Settled(None, held, prod, last_good, value, in_flight=True)
+        if other_runs is not None:
+            if _other_runs_live(other_runs, sleep):
+                idle_since = None
+            elif idle_since is None:
+                idle_since = clock()
+            elif clock() - idle_since >= LOST_SETTLE_S:
+                commit = _read(prod_commit, PROD_TAG, sleep) if prod_commit else None
+                return Settled(("current", lost_settle(prod, last_good, commit)))
         waited = int(clock() - started)
         if waited >= IN_FLIGHT_WAIT_S:
             return Settled(
@@ -649,3 +673,43 @@ def wait_settled(
             file=sys.stderr,
         )
         sleep(IN_FLIGHT_POLL_S)
+
+
+def _other_runs_live(
+    other_runs: Callable[[], list[dict]], sleep: Callable[[float], None]
+) -> bool:
+    """Whether another promote run is in progress, reading True when the listing fails.
+
+    The listing only names a stall, so a failed read keeps the wait going rather than ending
+    a wait that would have promoted.
+    """
+    try:
+        return bool(_read(other_runs, "the in-progress promote runs", sleep))
+    except forge.ForgeError as err:
+        print(
+            f"promote.py: listing the in-progress promote runs failed ({err}); "
+            "waiting as though one is in progress",
+            file=sys.stderr,
+        )
+        return True
+
+
+def lost_settle(prod: str, last_good: str, commit: str | None) -> str:
+    """The reason for a `prod` that differs from `last-good` with no promote run in progress.
+
+    The run that moved `prod` ended without a `settle` that moved `last-good` or wrote a hold,
+    as when GitHub never created the job (#7863). Both ways out are operator-only.
+    """
+    commit = commit or "<prod's commit>"
+    repo = forge.REPOSITORY
+    return (
+        f"prod {prod} is still not last-good {last_good}, and no other promote run past its "
+        f"decide has been in progress for {LOST_SETTLE_S}s: the run that moved prod to {commit} ended "
+        "without a settle that moved last-good or wrote a hold. If that run's verify job "
+        "logged verdict=good, move "
+        "last-good (operator-only): flux tag artifact "
+        f"oci://{forge.REGISTRY}/{forge.ARTIFACT}@{prod} --tag last-good. Otherwise hold "
+        f"and reset (operator-only): gh variable set {forge.HOLD_VARIABLE} --body "
+        f"'{commit} unverified' -R {repo}, then gh workflow run promote.yml -R {repo} "
+        "--ref master -f reset_to_last_good=true, then clear the hold once the reset lands"
+    )

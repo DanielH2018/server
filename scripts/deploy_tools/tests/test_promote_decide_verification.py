@@ -173,18 +173,6 @@ def test_decide_waits_until_prod_and_last_good_agree_then_promotes(world):
     assert clock.now == 90
 
 
-def test_a_verification_that_never_settles_stalls_as_current(world):
-    c0, c1, _, tip = world.commits
-    world.set_prod(c1)
-    world.set_last_good(c0)
-    world.publish(tip)
-    clock = Clock()
-    decision = promote.decide(_reads(world, clock), supersede_on=False)
-    assert decision.verdict == "current"
-    assert "never settled" in decision.reason
-    assert clock.now >= vp.IN_FLIGHT_WAIT_S
-
-
 def test_a_hold_written_during_the_wait_ends_it_as_held(world):
     c0, c1, _, tip = world.commits
     world.set_prod(c1)

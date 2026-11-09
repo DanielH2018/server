@@ -197,6 +197,27 @@ class GitHub:
             raise ForgeError(f"{workflow} runs: the body has no workflow_runs list")
         return runs
 
+    def run_jobs(self, run_id: object) -> list[dict]:
+        """The jobs of one workflow run, the newest attempt's, 100 to a page.
+
+        A promote run has nine jobs, so one page holds them all.
+
+        Raises:
+            ForgeError: any status but 200, a body without a `jobs` list, or no answer.
+        """
+        url = (
+            f"https://api.github.com/repos/{self.repository}/actions/runs/{run_id}/jobs"
+            "?per_page=100"
+        )
+        response = self._transport("GET", url, self._rest_headers())
+        if response.status != 200:
+            raise ForgeError(f"run {run_id} jobs: HTTP {response.status}")
+        jobs = _json(response, f"run {run_id} jobs")
+        jobs = jobs.get("jobs") if isinstance(jobs, dict) else None
+        if not isinstance(jobs, list):
+            raise ForgeError(f"run {run_id} jobs: the body has no jobs list")
+        return jobs
+
     def statuses(self, sha: str, since: datetime | None = None) -> dict[str, str]:
         """The newest commit status per context on commit `sha`, as `{context: state}`.
 
