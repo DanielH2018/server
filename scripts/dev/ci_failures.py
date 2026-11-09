@@ -6,7 +6,8 @@ reads as green. This tool lists the runs in windows under the search cap, asks e
 for its earlier attempts, and reads the log of each failed step. It prints three sections: a
 tally by failing job, step and test module, with distinct branches and last-seen date; the same
 tally over the flaky attempts alone, the red ones whose run went green on a later attempt of the
-same commit; and one line per red attempt. A red attempt is a `failure`, `timed_out` or
+same commit; and one line per red attempt, followed by its failed job, step and module rows,
+so a tally row leads to the run whose log to read. A red attempt is a `failure`, `timed_out` or
 `startup_failure`; a `cancelled` attempt gave no verdict, so it does not count.
 
 `gh run view --log-failed` usually labels every line `UNKNOWN STEP` and returns the whole failed
@@ -237,7 +238,7 @@ def render(
     read: list[tuple[list[tuple[str, str, str]], bool]],
     latest: dict[int, dict[str, Any]],
 ) -> list[str]:
-    """Render the report: a header, the tally, the flake tally, then one line per red attempt."""
+    """Render the report: a header, the tally, the flake tally, then each red attempt's rows."""
     runs = {attempt["id"] for attempt in attempts}
     unread = sum(not readable for _, readable in read)
     out = [
@@ -255,7 +256,11 @@ def render(
     out += ["", "flaky: red, then green on a re-run of the same commit", header]
     out += _tally([a for a, _ in flaky], [entry for _, entry in flaky])
     out += ["", "red attempts"]
-    for attempt in sorted(attempts, key=lambda a: (a["run_started_at"], a["id"])):
+    ordered = sorted(
+        zip(attempts, read, strict=True),
+        key=lambda entry: (entry[0]["run_started_at"], entry[0]["id"]),
+    )
+    for attempt, (rows, _) in ordered:
         final = latest[attempt["id"]]
         later = (
             f"  {final['conclusion']} on attempt {final['run_attempt']}"
@@ -267,6 +272,7 @@ def render(
             f"  {attempt['run_started_at'][:10]}  {attempt['head_branch']}"
             f"  {attempt['name']}{later}"
         )
+        out += [f"    {' / '.join(row)}" for row in rows]
     return out
 
 
