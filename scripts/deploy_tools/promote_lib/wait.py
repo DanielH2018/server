@@ -72,6 +72,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 # `forge`, `changed_set` and `flux_host` import bare, from scripts/deploy_tools.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib.exit_codes import FAILED, LAND_GAVE_UP, OK
+from lib.progress import OnChange
 from lib.repo_paths import HOST_LIB_FILES
 
 _sys.path.insert(0, str(HOST_LIB_FILES))
@@ -379,7 +380,10 @@ def land_wait(
     # The earlier commit last read in flight, and when it was first read so.
     earlier, earlier_since = "", 0.0
     expected = _Expected(reads, merge)
-    last = widened = ""
+    widened = ""
+    progress = OnChange(
+        lambda line: print(f"  promote.py land-wait: {line}", flush=True)
+    )
     paused, all_paused = [], False
     tags = own = sorted(set(services))
     while True:
@@ -480,9 +484,7 @@ def land_wait(
                 cap_end += min(left, window_grace_s)
             window_seen = True
         line += note + window_note
-        if line != last:
-            print(f"  promote.py land-wait: {line}", flush=True)
-            last = line
+        progress(line)
         if now >= deadline or (cap_end is not None and now >= cap_end):
             return WaitResult(
                 "gave-up",
