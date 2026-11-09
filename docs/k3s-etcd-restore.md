@@ -75,7 +75,7 @@ volumes into them.
 
 ### Since 2026-08-20, a snapshot alone cannot give you the Secrets back — the CLUSTER TOKEN is what must survive
 
-`--secrets-encryption` is armed (`k3s_secrets_encryption` in the k3s role), so Secrets are stored
+`--secrets-encryption` is armed (`k3s_server_config` in `hosts/components/k3s-server/component.yml`), so Secrets are stored
 in etcd encrypted with a key held at `/var/lib/rancher/k3s/server/cred/encryption-config.json` on
 daniel-box.
 

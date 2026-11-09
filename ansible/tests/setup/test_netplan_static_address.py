@@ -7,15 +7,15 @@ kept daniel-box's k3s crash-looping on `bind: cannot assign requested address` f
 must switch DHCPv4 off rather than run it alongside (the template says why).
 """
 
-from lib.repo_paths import ALL_VARS, ANSIBLE, HOST_VARS, K3S_ROLE
+import functools
+
+from lib.repo_paths import ALL_VARS, HOST_VARS
 from lib import yaml_fast
 from _setup_render import render_setup_text
+from renderer.renderer_lib import host as host_mode
 
 _TEMPLATE = "netplan-static-address.yaml.j2"
-# Each node's package owns its pin, so each task of the file skips both.
-PACKAGED_GUARD = "inventory_hostname not in k3s_packaged_hosts['node-address']"
-# Both k3s nodes. daniel-box's pin runs from k3s-bringup.yml's server play, daniel-server's
-# from its agent-address play (#3891).
+# Both k3s nodes; each one's package ships its pin.
 _NODES = ("daniel-box", "daniel-server")
 
 
@@ -112,146 +112,51 @@ def test_an_address_other_than_server_ip_is_flagged() -> None:
     assert problems == ["addresses are ['10.0.0.215/24'], not 10.0.0.216"]
 
 
-def test_emptying_the_link_removes_the_pin_and_reapplies() -> None:
-    """The way back: an emptied variable must not leave DHCPv4 off on the link."""
-    tasks = yaml_fast.safe_load((K3S_ROLE / "tasks" / "static-address.yml").read_text())
-    dest = "/etc/netplan/90-homelab-static-address.yaml"
-    removal = [
-        t
-        for t in tasks
-        if t.get("ansible.builtin.file", {}).get("path") == dest
-        and t["ansible.builtin.file"].get("state") == "absent"
-    ]
-    assert len(removal) == 1, (
-        "no task removes the pin when k3s_node_static_link is empty"
-    )
-    assert removal[0]["when"] == [PACKAGED_GUARD, "k3s_node_static_link | length == 0"]
-    flag = f"{removal[0]['register']}.changed"
-    commands = [t for t in tasks if "ansible.builtin.command" in t]
-    assert {t["ansible.builtin.command"]["cmd"] for t in commands} == {
-        "netplan generate",
-        "netplan apply",
-    }
-    assert all(flag in t["when"][-1] for t in commands), (
-        "removal does not trigger netplan"
-    )
-
-
-def _agent_pin_play_problems(plays: list[dict]) -> list[str]:
-    """What keeps k3s-bringup.yml from pinning the agent's address without a re-join.
-
-    The pin must arrive by a static `import_role`, so `--tags node-address` selects it (a
-    dynamic `include_role` is what kept #3891 open), and the server play must resolve to no
-    hosts while the opt-in is set, or its server-host guard refuses the agent first.
-    """
-    problems = []
-    pin_plays = [
-        play
-        for play in plays
-        if any(
-            (task.get("ansible.builtin.import_role") or {}).get("tasks_from")
-            == "static-address"
-            for task in play.get("tasks", [])
-        )
-    ]
-    if len(pin_plays) != 1:
-        problems.append(f"{len(pin_plays)} plays import static-address, not 1")
-    elif "pin_agent_address" not in pin_plays[0]["hosts"]:
-        problems.append("the pin play's hosts do not read pin_agent_address")
-    if "pin_agent_address" not in plays[0]["hosts"]:
-        problems.append("the server play still runs while pin_agent_address is set")
-    return problems
-
-
-def test_the_agent_pin_play_is_selectable_by_its_tag_is_clean() -> None:
-    plays = yaml_fast.safe_load((ANSIBLE / "k3s-bringup.yml").read_text())
-    assert _agent_pin_play_problems(plays) == []
-
-
-def test_an_agent_pin_by_dynamic_include_is_flagged() -> None:
-    server = {
-        "hosts": "{{ pin_agent_address | default([]) is truthy | ternary([], 'x') }}"
-    }
-    pin = {
-        "hosts": "{{ pin_agent_address | default([]) }}",
-        "tasks": [
-            {
-                "ansible.builtin.include_role": {
-                    "name": "k3s",
-                    "tasks_from": "static-address",
-                }
-            }
-        ],
-    }
-    assert _agent_pin_play_problems([server, pin]) == [
-        "0 plays import static-address, not 1"
-    ]
-    server["hosts"] = "{{ target }}"
-    pin["tasks"][0] = {
-        "ansible.builtin.import_role": pin["tasks"][0].pop(
-            "ansible.builtin.include_role"
-        )
-    }
-    assert _agent_pin_play_problems([server, pin]) == [
-        "the server play still runs while pin_agent_address is set"
-    ]
-
-
 _LINKDOWN_FILE = "/etc/sysctl.d/90-homelab-static-link.conf"
 
 
-def linkdown_sysctl_problems(tasks: list[dict]) -> list[str]:
+def linkdown_sysctl_problems(text: str, link: str) -> list[str]:
     """What keeps the pinned link's dead default routes from losing to a fallback (#4510, #4561).
 
     `ignore-carrier` keeps the pinned routes installed with no carrier, and the kernel still routes
     over a linkdown route unless `ignore_routes_with_linkdown` is 1 on that link, per family.
     """
+    keys = {
+        line.split("=", 1)[0].strip(): line.split("=", 1)[1].strip()
+        for line in text.splitlines()
+        if "=" in line and not line.lstrip().startswith("#")
+    }
     problems = []
-    sets = [t for t in tasks if "ansible.posix.sysctl" in t]
-    if len(sets) != 1:
-        return [f"{len(sets)} tasks set a sysctl, not 1"]
-    task, args = sets[0], sets[0]["ansible.posix.sysctl"]
-    if args.get("name") != (
-        "net.{{ item }}.conf.{{ k3s_node_static_link }}.ignore_routes_with_linkdown"
-    ):
-        problems.append(f"sets {args.get('name')}, not the link's linkdown key")
-    if sorted(task.get("loop") or []) != ["ipv4", "ipv6"]:
-        problems.append(f"covers {task.get('loop')}, not ipv4 and ipv6")
-    if str(args.get("value")) != "1":
-        problems.append(f"value is {args.get('value')!r}, not '1'")
-    if args.get("sysctl_file") != _LINKDOWN_FILE:
-        problems.append(f"writes {args.get('sysctl_file')}, not {_LINKDOWN_FILE}")
-    if task.get("when") != [PACKAGED_GUARD, "k3s_node_static_link | length > 0"]:
-        problems.append("does not run exactly when a link is pinned")
-    removal = [
-        t
-        for t in tasks
-        if t.get("ansible.builtin.file", {}).get("path") == _LINKDOWN_FILE
-        and t["ansible.builtin.file"].get("state") == "absent"
-        and t.get("when") == [PACKAGED_GUARD, "k3s_node_static_link | length == 0"]
-    ]
-    if len(removal) != 1:
-        problems.append("no task removes the sysctl file when the link is emptied")
+    for family in ("ipv4", "ipv6"):
+        key = f"net.{family}.conf.{link}.ignore_routes_with_linkdown"
+        if keys.get(key) != "1":
+            problems.append(f"{key} is {keys.get(key)!r}, not '1'")
     return problems
 
 
-def _static_address_tasks() -> list[dict]:
-    return yaml_fast.safe_load((K3S_ROLE / "tasks" / "static-address.yml").read_text())
+@functools.cache
+def _linkdown_text(host: str) -> str:
+    return host_mode.render_host(host).files[_LINKDOWN_FILE][0].decode()
 
 
-def test_the_pinned_link_ignores_its_routes_without_carrier() -> None:
-    assert linkdown_sysctl_problems(_static_address_tasks()) == []
+def test_each_pinned_link_ignores_its_routes_without_carrier() -> None:
+    for host in _NODES:
+        link = _host_vars(host)["k3s_node_static_link"]
+        assert linkdown_sysctl_problems(_linkdown_text(host), link) == [], host
 
 
 def test_a_linkdown_key_left_at_the_kernel_default_is_flagged() -> None:
-    tasks = _static_address_tasks()
-    next(t for t in tasks if "ansible.posix.sysctl" in t)["ansible.posix.sysctl"][
-        "value"
-    ] = "0"
-    assert linkdown_sysctl_problems(tasks) == ["value is '0', not '1'"]
+    text = _linkdown_text("daniel-box").replace(
+        "net.ipv6.conf.eno1.ignore_routes_with_linkdown=1",
+        "net.ipv6.conf.eno1.ignore_routes_with_linkdown=0",
+    )
+    assert linkdown_sysctl_problems(text, "eno1") == [
+        "net.ipv6.conf.eno1.ignore_routes_with_linkdown is '0', not '1'"
+    ]
 
 
 def test_a_linkdown_key_set_for_ipv4_only_is_flagged() -> None:
-    tasks = _static_address_tasks()
-    next(t for t in tasks if "ansible.posix.sysctl" in t)["loop"] = ["ipv4"]
-    assert linkdown_sysctl_problems(tasks) == ["covers ['ipv4'], not ipv4 and ipv6"]
+    text = "net.ipv4.conf.eno1.ignore_routes_with_linkdown=1\n"
+    assert linkdown_sysctl_problems(text, "eno1") == [
+        "net.ipv6.conf.eno1.ignore_routes_with_linkdown is None, not '1'"
+    ]

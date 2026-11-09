@@ -41,12 +41,9 @@ component and step 4 of `hosts/bootstrap-host.sh`, and deleted the tasks.
 - **This play becomes root, so `~` is `/root` — SSH paths are absolute only** (#2413). The
   `role-tasks-write-no-home-relative-path` row of `ansible/tests/repo/test_census_rows_roles.py`
   ratchets the class. The home-dir resolver task
-  exists for the same reason. The role doc's fact-dependency rule says a `register:` carries
-  every consumer's tag. That rule is a
-  check rather than prose since the GitOps deployer began deriving and applying narrow setup
-  tags (#3120). ENFORCED:
-  `ansible/tests/setup/test_register_producers_carry_consumer_tags.py::test_every_register_producer_carries_its_consumers_tags`,
-  over every setup role rather than this one.
+  exists for the same reason. The role doc's fact-dependency rule said a `register:` carries
+  every consumer's tag. A check held it over every setup role until H7.44 emptied the last
+  role with a `register:`.
 - **`become` vs HOME:** `ansible_facts.env.HOME` is root's under the play's `become: true`. The
   `Resolve the deploy user's home directory` task registers the deploy user's home, and no task
   reads it since H7.62. H7.63 deletes it.

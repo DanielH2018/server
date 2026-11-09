@@ -71,9 +71,9 @@ def test_a_play_hosts_bounds_the_role_only_when_it_names_a_host(
     )
 
 
-def test_the_k3s_server_half_walks_on_daniel_box_and_the_agent_half_on_daniel_server():
+def test_the_emptied_k3s_role_walks_only_the_files_its_join_plays_name():
     files = applied_hosts.task_files("k3s", K3S)
-    assert files["daniel-box"] == ["main", "agent_verify"]
+    assert files["daniel-box"] == ["agent_verify"]
     assert files["daniel-server"] == ["static-address", "agent"]
     assert "daniel-pi" not in files
 

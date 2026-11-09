@@ -56,9 +56,7 @@ _REFERENCE = re.compile(
     r"(?:roles/setup/|\{\{ role_path \}\}/\.\./)([a-z0-9_]+)/(files|tasks|templates)/([\w./-]*\w)"
 )
 # No live setup role ships another's file since H7.63 deleted `common/tasks/`, so the table and
-# the tree agree on nothing. The scan's non-vacuity is a live role whose tasks it must read, and
-# the synthetic cases below prove each edge shape is found.
-LIVE_ROLE = "k3s"
+# the tree agree on nothing. The synthetic cases below prove each edge shape is found.
 # A module the setup roles ship that sits outside the setup tree since H7.2e: the shared
 # `hosts/lib/` modules and the `scripts/lib/longhorn_lib/` package. No role owns them, so every
 # role naming one is a shipper. The lookbehind keeps `old_hosts/lib/x.py`-shaped words out.
@@ -217,13 +215,6 @@ def test_the_deployers_table_equals_the_trees_cross_role_files():
     assert {path: roles for path, roles in _tree_edges().items() if roles} == shipped
 
 
-def test_the_scan_reads_a_live_roles_tasks():
-    assert not runs_on_no_host(SETUP_ROLES / LIVE_ROLE)
-    assert _setup_task_texts().get(LIVE_ROLE), (
-        f"the scan read no task text for {LIVE_ROLE}"
-    )
-
-
 def test_the_owner_routed_template_names_the_roles_that_render_it():
     # The exclusion is a decision about a real edge; one that no role names is dead weight.
     # The consumers are what `common`'s remediation prints (#4316), so a third renderer the
@@ -233,10 +224,11 @@ def test_the_owner_routed_template_names_the_roles_that_render_it():
         assert direct.get(path) == roles, path
 
 
-def test_the_emptied_roles_run_on_no_host():
-    assert runs_on_no_host(SETUP_ROLES / "gitops_deploy")
-    assert runs_on_no_host(SETUP_ROLES / "initial_setup")
-    assert not runs_on_no_host(SETUP_ROLES / LIVE_ROLE)
+def test_every_setup_role_runs_on_no_host():
+    """k3s was the last role with tasks (H7.44); H7.53's strict census needs none left."""
+    roles = [r for r in role_dirs(SETUP_ROLES) if (r / "tasks" / "main.yml").is_file()]
+    assert {"gitops_deploy", "initial_setup", "k3s"} <= {r.name for r in roles}
+    assert [r.name for r in roles if not runs_on_no_host(r)] == []
 
 
 def test_a_row_naming_an_emptied_role_is_dropped_and_a_live_one_is_kept():

@@ -2,8 +2,8 @@
 """Guards that the k3s nodes never get Docker installed on them.
 
 One invariant, pinned at both layers: the inventory must not ask for Docker on a k3s node,
-and the k3s role must refuse to install onto a host that already has it. Each layer is the
-reason the other is not enough on its own.
+and hosts/bootstrap-host.sh must refuse to install k3s onto a host that already has it. Each
+layer is the reason the other is not enough on its own.
 
 THE INVENTORY LAYER. k3s ships its own containerd plus flannel/kube-proxy iptables rules,
 and daniel-box was chosen to host the cluster first precisely because it had no container
@@ -11,45 +11,32 @@ runtime — see docs/archive/k3s-migration/slice-0-cluster-foundation.md.
 
 A bare `initial_setup.yml` run (no --tags) installs Docker on a host where docker_install
 is unconditional. That puts Docker's DOCKER/DOCKER-USER chains and FORWARD-policy handling
-alongside k3s networking, and trips the k3s role's own fail-closed guard:
+alongside k3s networking, and trips the install-time refusal.
 
-    Docker is installed on daniel-box. This role targets a host with no container
-    runtime; k3s brings its own containerd and its iptables rules would land [...]
-
-which blocks k3s-bringup.yml from re-running.
-
-The k3s role's guard catches this at k3s-install time, but only *after* Docker is
-already on the host. `has_docker` is the half that stops it landing in the first
+That refusal catches this at k3s-install time, but only *after* Docker is already on the
+host. `has_docker` is the half that stops it landing in the first
 place; relying on a remembered `--tags` is what lets it happen.
 
-THE ROLE LAYER. The install-time guard lives in tasks/server.yml, carrying a comment that
-names the hazard exactly. hosts/bootstrap-host.sh carries the same refusal for an agent:
-hosts/lib/tests/test_bootstrap_host_k3s.py holds that half. An agent without it can run a
-second container runtime next to k3s while every repo-side check reads green.
+THE INSTALL LAYER. hosts/bootstrap-host.sh refuses to install k3s on a host running Docker,
+server and agent alike, and hosts/lib/tests/test_bootstrap_host_k3s.py holds that half. A node
+without it can run a second container runtime next to k3s while every repo-side check reads
+green.
 
 Run: uv run pytest ansible/tests/setup/test_k3s_host_has_no_docker.py
 """
 
-import re
 from pathlib import Path
 
 import pytest
 from lib import yaml_fast
 from _helpers import ANSIBLE
-from lib.repo_paths import ALL_VARS, HOST_VARS, K3S_ROLE
+from lib.repo_paths import ALL_VARS, HOST_VARS
 
 
 # The k3s-bringup.yml play asserts `inventory_hostname == 'daniel-box'`, so the
 # cluster *server* is a single named host rather than an inventory group.
 # daniel-server is an agent node with Docker uninstalled — both nodes must stay Docker-free.
 K3S_HOSTS = ("daniel-box", "daniel-server")
-
-K3S_TASKS = K3S_ROLE / "tasks"
-
-# The two node roles. Named explicitly rather than globbed: a new tasks file in this role
-# is not automatically a node-install path, and globbing would make this test fail for
-# reasons that have nothing to do with the guard.
-NODE_TASK_FILES = ["server.yml"]
 
 
 def _load(path: Path):
@@ -149,23 +136,3 @@ def test_docker_entry_detector_flags_a_docker_platform_and_an_absent_one():
             {"name": "c", "platform": "k8s"},
         ]
     ) == ["a", "b"]
-
-
-@pytest.mark.parametrize("task_file", NODE_TASK_FILES)
-def test_node_role_stats_the_docker_binary(task_file):
-    text = (K3S_TASKS / task_file).read_text()
-    assert "/usr/bin/docker" in text, (
-        f"{task_file} does not stat /usr/bin/docker. Both k3s node roles must refuse to "
-        f"install onto a host running Docker -- see this module's docstring for the "
-        f"eight days that cost."
-    )
-
-
-@pytest.mark.parametrize("task_file", NODE_TASK_FILES)
-def test_node_role_asserts_docker_is_absent(task_file):
-    """The stat alone proves nothing -- it is the assert that fails the run."""
-    text = (K3S_TASKS / task_file).read_text()
-    assert re.search(r"that:\s*not \w*docker\w*\.stat\.exists", text), (
-        f"{task_file} stats the Docker binary but does not assert on the result. A "
-        f"registered stat with no assert reads like a guard and enforces nothing."
-    )

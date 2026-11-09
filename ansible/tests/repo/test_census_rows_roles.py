@@ -16,7 +16,6 @@ from _drill_keys_row import DRILL_KEYS
 from _flux_born_keys_row import FLUX_BORN_KEYS
 from _flux_ownership_row import K8S_ROLES_ARE_REACHABLE
 from _host_script_row import HOST_SCRIPT_WRITES
-from _k3s_write_verbs_row import K3S_WRITE_VERBS
 from _out_of_render_row import OUT_OF_RENDER
 from _retired_cron_row import RETIRED_CRON_ARMS
 from _row_table import Census, Subject, check, proof_problems, tracked
@@ -196,8 +195,9 @@ ROWS = (
             Subject("b.yml", "example_config_files:\n  - settings.yaml\n"),
         ),
         # 501 files under those directories before H7.52 deleted gitops_deploy's four task files
-        # and its handlers, 493 before H7.63 deleted initial_setup's and common's.
-        min_matches=484,
+        # and its handlers, 493 before H7.63 deleted initial_setup's and common's, 484 before
+        # H7.44 deleted three of k3s's and its handlers.
+        min_matches=480,
         # The `*_files` lists the bare-entry alternative exists for, and the deployer's own role.
         must_find=frozenset(
             {
@@ -248,9 +248,9 @@ ROWS = (
         # common/tasks/release_bin.yml went, 40 once H7.48 emptied k8s_host_files, 39 once
         # H7.48 deleted docker_install's teardown.yml, 34 once H7.52 deleted four of
         # gitops_deploy's and common's alert_unit.yml, 28 once H7.63 deleted common's four and
-        # two of initial_setup's.
-        min_matches=28,
-        must_find=frozenset({"ansible/roles/setup/k3s/tasks/server.yml"}),
+        # two of initial_setup's, 25 once H7.44 deleted three of k3s's.
+        min_matches=25,
+        must_find=frozenset({"ansible/roles/k8s/volume-revert/tasks/claim.yml"}),
     ),
     Census(
         name="bespoke-netpol-says-why-it-is-not-a-callers-fence",
@@ -430,7 +430,6 @@ ROWS = (
     ),
     HOST_SCRIPT_WRITES,
     OUT_OF_RENDER,
-    K3S_WRITE_VERBS,
     K8S_ROLES_ARE_REACHABLE,
     FLUX_BORN_KEYS,
     DRILL_KEYS,

@@ -12,9 +12,8 @@ import pathlib
 
 import pytest
 
-from deployer_lib import deploy_remediation
 
-from lib.repo_paths import K3S_ROLE, REPO
+from lib.repo_paths import REPO
 
 from deployer_lib import deploy_defer
 from deployer_lib.deploy_changes import (
@@ -302,53 +301,3 @@ def test_the_manual_plane_remediation_carries_the_warning_too():
     cmd = manual_plane_remediation({"k3s"})
     assert "WARNING" in cmd
     assert "--tags kubeconfig" not in cmd.split("WARNING")[0]
-
-
-_K3S_TASKS = K3S_ROLE / "tasks"
-
-
-def test_every_narrower_tag_the_warning_names_exists_in_the_role():
-    """The warning points at real tags, or it sends an operator after a no-op.
-
-    `--tags <nothing>` makes Ansible exit 0 having run no task, which is the silent-success
-    failure `setup_tags_for` exists to avoid. The tag list is a
-    module constant rather than prose this test re-parses, so a tag renamed in `tasks/`
-    breaks this and a reworded warning does not.
-    """
-    import re
-
-    task_files = sorted(_K3S_TASKS.glob("*.yml"))
-    assert len(task_files) >= 5, f"only {len(task_files)} k3s task files found"
-    declared = set()
-    for path in task_files:
-        for block in re.findall(r"tags:\s*\[([^\]]*)\]", path.read_text()):
-            declared.update(x.strip() for x in block.split(",") if x.strip())
-    assert "k3s_server" in declared, (
-        "the k3s role no longer declares a `k3s_server` tag"
-    )
-
-    offered = set(deploy_remediation._K3S_NARROWER_TAGS)
-    assert offered, "the k3s warning offers no narrower tag at all"
-    assert offered <= declared, (
-        f"the k3s warning offers tags the role does not declare: {sorted(offered - declared)}"
-    )
-    for tag in offered:
-        assert f"`{tag}`" in maximal_tag_warning("k3s"), (
-            f"{tag} dropped out of the warning"
-        )
-
-
-def test_every_gate_the_warning_names_is_read_by_the_role():
-    """The warning says the control-plane tasks are GATED; the gates must still be there.
-
-    Asserting the identifiers against `tasks/server.yml` rather than the warning's sentence:
-    a gate removed there makes the warning understate what `--tags k3s` does, which is the
-    direction that gets an operator hurt. The claims come from reading that file.
-    """
-    server = (_K3S_TASKS / "server.yml").read_text()
-    assert "secrets-encrypt rotate-keys" in server
-    for gate in deploy_remediation._K3S_CONTROL_PLANE_GATES:
-        assert gate in server, f"`{gate}` is no longer read by tasks/server.yml"
-        assert f"`{gate}`" in maximal_tag_warning("k3s"), (
-            f"{gate} dropped out of the warning"
-        )

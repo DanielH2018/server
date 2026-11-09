@@ -6,12 +6,11 @@ would move the node's traffic onto WiFi with the cable in, and a missing `option
 hold k3s at boot until WiFi associates. Both fail with nothing visibly broken.
 """
 
-from lib.repo_paths import HOST_VARS, K3S_ROLE, REPO
+from lib.repo_paths import HOST_VARS, REPO
 from lib import yaml_fast
 from _setup_render import render_setup_text
 
 _TEMPLATE = "netplan-wifi-fallback.yaml.j2"
-_DEST = "/etc/netplan/80-homelab-wifi-fallback.yaml"
 _NODES = ("daniel-box", "daniel-server")
 # The pinned link's route metric, from netplan-static-address.yaml.j2.
 _PINNED_METRIC = 100
@@ -84,40 +83,6 @@ def test_a_fallback_that_holds_boot_is_flagged() -> None:
     assert wifi_fallback_problems(doc, "wlo1", "home", "pw") == [
         "optional is not true, so boot waits for WiFi"
     ]
-
-
-def _tasks() -> list[dict]:
-    return yaml_fast.safe_load((K3S_ROLE / "tasks" / "static-address.yml").read_text())
-
-
-def test_the_fallback_file_is_written_without_logging_its_password() -> None:
-    writes = [
-        t
-        for t in _tasks()
-        if t.get("ansible.builtin.template", {}).get("dest") == _DEST
-    ]
-    assert len(writes) == 1
-    assert writes[0].get("no_log") is True and writes[0].get("diff") is False
-
-
-def test_emptying_the_wifi_link_removes_the_file_and_reapplies() -> None:
-    tasks = _tasks()
-    removal = [
-        t
-        for t in tasks
-        if t.get("ansible.builtin.file", {}).get("path") == _DEST
-        and t["ansible.builtin.file"].get("state") == "absent"
-    ]
-    assert len(removal) == 1, (
-        "no task removes the fallback when k3s_node_wifi_link is empty"
-    )
-    assert removal[0]["when"][-1] == "k3s_node_wifi_link | length == 0"
-    flag = f"{removal[0]['register']}.changed"
-    commands = [t for t in tasks if "ansible.builtin.command" in t]
-    assert len(commands) == 2
-    assert all(flag in t["when"][-1] for t in commands), (
-        "removal does not trigger netplan"
-    )
 
 
 def test_both_k3s_components_ship_the_same_wifi_installer() -> None:

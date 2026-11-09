@@ -52,18 +52,12 @@ from _role_census import task_files
 
 
 # The retried tasks the census must still find, so a rename or a move cannot empty it and
-# leave every assertion below passing over nothing. One member per fix shape, named rather
-# than counted so the failure says which one went missing.
+# leave every assertion below passing over nothing. Named rather than counted, so the failure
+# says which one went missing. Each is skipped under `--check` by a `k8s_no_mutate` guard.
 KNOWN_RETRIED_COMMAND_TASKS = frozenset(
     {
-        # opted out with `check_mode: false` — reads of pre-existing state
-        "Read the secrets-encryption status",
-        # The bounded read of Deployment `coredns` that precedes the `.skip` marker (H1.4).
-        "Wait for k3s to create its CoreDNS Deployment",
-        # skipped with `when: not ansible_check_mode` — waits and mutations
-        "Wait for the re-encryption to finish",
-        # skipped by an ancestor guard the per-task read cannot see
-        "Wait for the PVC to reach Bound",
+        "Wait for the detach that precedes the attach for {{ volume_revert_claim }}",
+        "Wait for the maintenance-mode attach of {{ volume_revert_claim }}",
     }
 )
 

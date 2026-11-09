@@ -4,8 +4,9 @@
 timers and resolves each item against the host packages (H7.2f). Three properties make the list
 trustworthy:
 
-1. It finds the named members of each kind on the real tree. A census that stops matching
-   fails by name here instead of agreeing with an empty set.
+1. It finds the named members of each kind on a fixture role holding the shapes the last
+   setup role held. A census that stops matching fails by name here instead of agreeing with
+   the real tree's empty set.
 2. Each module that writes something is an item, and only a control or read-only module is not.
    A module that leaks into the control list drops out of the report silently, so the red case
    passes such a list and shows the census no longer reports apt and get_url.
@@ -61,41 +62,67 @@ def _names(left: dict[str, list[Item]], host: str) -> set[str]:
 # --- the real tree ----------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
-def real_tree() -> dict[str, list[Item]]:
-    """The census of the few roles the named members live in, on every host."""
-    roles = frozenset(
-        {
-            "initial_setup",
-            "k3s",
-            "nut_host",
-            "k8s_host_files",
-        }
-    )
-    return items_left(roles=roles)
+def test_the_real_tree_leaves_no_item_on_any_host():
+    """H7.53's strict census: every setup role is emptied, so nothing is left to replace."""
+    left = items_left(hosts=("daniel-box", "daniel-server", "daniel-pi"))
+    assert {
+        host: [i.line() for i in items] for host, items in left.items() if items
+    } == {}
 
 
+# The shapes the last setup role held before it emptied: a guarded netplan template and a sysctl
+# looped over both address families. A census that stops matching either fails here by name.
 NAMED_MEMBERS = [
-    ("template", "Pin the node's LAN address in netplan"),
-    ("sysctl", "Stop routing over the pinned link while it has no carrier"),
+    {
+        "name": "Pin the node's LAN address in netplan",
+        "ansible.builtin.template": {
+            "src": "netplan-static-address.yaml.j2",
+            "dest": "/etc/netplan/90-homelab-static-address.yaml",
+        },
+        "when": ["inventory_hostname not in demo_packaged_hosts['node-address']"],
+    },
+    {
+        "name": "Stop routing over the pinned link while it has no carrier",
+        "ansible.posix.sysctl": {
+            "name": "net.{{ item }}.conf.{{ link }}.ignore_routes_with_linkdown",
+            "value": "1",
+        },
+        "loop": ["ipv4", "ipv6"],
+    },
 ]
 
 
-@pytest.mark.parametrize(("kind", "name"), NAMED_MEMBERS)
-def test_the_census_finds_each_named_member(real_tree, kind, name):
-    found = [
-        item
-        for items in real_tree.values()
-        for item in items
-        if item.kind == kind and item.name == name
-    ]
+@pytest.fixture(scope="module")
+def named_tree(tmp_path_factory) -> list[Item]:
+    tmp_path = tmp_path_factory.mktemp("named")
+    left = items_left(
+        hosts=HOSTS,
+        setup=_fixture_role(tmp_path, NAMED_MEMBERS),
+        hosts_root=tmp_path / "hosts",
+        reach_of=lambda role: frozenset({"daniel-box"}),
+        ctx_of=lambda role_dir, host: {"link": "eno1"},
+        repo=tmp_path,
+    )
+    return left["daniel-box"]
+
+
+@pytest.mark.parametrize(
+    ("kind", "name"),
+    [
+        ("template", "Pin the node's LAN address in netplan"),
+        ("sysctl", "Stop routing over the pinned link while it has no carrier"),
+    ],
+)
+def test_the_census_finds_each_named_member(named_tree, kind, name):
+    found = [item for item in named_tree if item.kind == kind and item.name == name]
     assert found, f"no {kind} item named {name!r} in the census"
 
 
-def test_a_shipped_file_and_a_target_are_both_searchable(real_tree):
-    items = [i for items in real_tree.values() for i in items]
-    assert any(i.mentions("k3s/tasks/static-address.yml") for i in items)
-    assert any(i.mentions("ignore_routes_with_linkdown") for i in items)
+def test_a_shipped_file_and_a_target_are_both_searchable(named_tree):
+    assert any(i.mentions("netplan-static-address.yaml.j2") for i in named_tree)
+    assert any(
+        i.mentions("net.ipv6.conf.eno1.ignore_routes_with_linkdown") for i in named_tree
+    )
 
 
 # --- what an item is --------------------------------------------------------------------------

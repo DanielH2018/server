@@ -281,28 +281,6 @@ def test_the_package_side_retires_the_optimize_pi_interim_files():
     assert INTERIM_LEGACY <= set(packages["daniel-pi"])
 
 
-def test_k3s_writes_the_cluster_nodes_and_never_the_pi():
-    ansible, _ = _tree()
-    installer = ("path", "/usr/local/bin/k3s-install.sh")
-    assert (
-        "ansible/roles/setup/k3s/tasks/server.yml" in ansible["daniel-box"][installer]
-    )
-    assert installer not in ansible["daniel-pi"]
-
-
-def test_k3s_writes_its_server_only_task_files_on_the_server_alone():
-    ansible, _ = _tree()
-    key = ("path", "/etc/rancher/k3s/config.yaml.d/50-homelab.yaml")
-    written = ansible["daniel-box"].get(("path", "/usr/local/bin/k3s-install.sh"), [])
-    assert "ansible/roles/setup/k3s/tasks/server.yml" in written
-    assert not [
-        file
-        for files in ansible["daniel-server"].values()
-        for file in files
-        if file == "ansible/roles/setup/k3s/tasks/server.yml"
-    ], key
-
-
 def test_the_agents_registries_yaml_has_the_package_as_its_one_writer():
     """H6.5a moved it into daniel-server's package and deleted `tasks/agent.yml`'s task."""
     ansible, packages = _tree()
