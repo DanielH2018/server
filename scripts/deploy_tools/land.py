@@ -78,7 +78,7 @@ Exit codes:
       unmerged, conflicts with master, or its own CI is red
   64  bad arguments
   75  gave up waiting -- the merge budget or CI budget elapsed, no promotion covered the
-      merge in time, the health gate could not read its store, or the builder has not
+      merge in time, the health gate or the owed ledger could not be read, or the builder has not
       published a host package that contains the merge
 
 Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
@@ -93,7 +93,8 @@ applies it, and this landing does not watch that apply, so read the host (or `ow
 for the outcome.
 `deferred` means this landing gave up waiting and a re-run completes it: no promotion covered
 the merge in time, the builder has not published the host package, or the health gate could
-not read its store (exit 75), so the deploy went ungraded. Re-run land.sh to grade it.
+not read its store (exit 75), so the deploy went ungraded. Re-run land.sh to grade it. It also
+means the owed ledger could not be read while the PR changes a setup role the tick does not apply.
 `refused` is every other exit-1 stop: the landing policy, a PR closed unmerged or with
 changes requested, a read or a fetch that failed, or a checkout whose landing code master
 has changed since (`classify.refuse_stale_code`, and before `--arm-merge` merges anything,
@@ -138,7 +139,7 @@ from lib.exit_codes import LAND_BAD_ARGS
 from lib.git import git
 from deploy_tools.land_lib import detach, handoff, pin_gate, pipeline
 from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.ledger import annotation_line
+from deploy_tools.land_lib.ledger import annotation_line, result_line
 from deploy_tools.land_lib.options import HANDOFF_ENV, Options, parse_args
 from deploy_tools.land_lib.outcome import Outcome, write_verdict_file
 from deploy_tools.land_lib.tools import Classifier, Tools
@@ -306,6 +307,7 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
     try:
         outcome = pipeline.run(ln)
         rc = outcome.rc
+        print(result_line(ln.ledger, outcome))
         outcome.emit()
         line = outcome.file_line()
     except Exception as exc:
@@ -315,6 +317,7 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
         # refusal.
         reason = " ".join(f"{type(exc).__name__}: {exc}".split())
         crashed = Outcome(1, f"PR #{opts.pr} — the landing raised {reason}")
+        print(result_line(ln.ledger, crashed))
         crashed.emit()
         line = crashed.file_line()
         raise

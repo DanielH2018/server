@@ -11,7 +11,6 @@ import json
 import subprocess
 from pathlib import Path
 
-from deploy_tools.deploy_lib import detach_notify
 from diagnostics.probe_lib import health, health_alerts, health_checkout
 from lib import kubectl
 from lib.exit_codes import PROBE_UNREADABLE
@@ -32,7 +31,6 @@ def test_a_role_only_on_origin_is_unreadable_not_a_failure(tmp_path, capsys):
     assert "exists on origin/master but not in this checkout" in captured.err
     assert health_checkout.STALE_CHECKOUT in captured.err
     assert "no Deployment or DaemonSet" not in captured.out + captured.err
-    assert not [m for m in detach_notify.NOT_APPLICABLE_MARKERS if m in captured.err]
 
 
 def test_a_tag_absent_from_origin_too_keeps_the_guess_path(tmp_path):
@@ -225,7 +223,6 @@ def test_health_from_a_checkout_behind_the_roles_merge_is_unreadable(
     captured = capsys.readouterr()
     assert code == PROBE_UNREADABLE, captured.out
     assert "origin/master" in captured.err
-    assert not [m for m in detach_notify.NOT_APPLICABLE_MARKERS if m in captured.err]
 
 
 def test_a_squash_merged_branch_holding_origins_role_is_not_stale(

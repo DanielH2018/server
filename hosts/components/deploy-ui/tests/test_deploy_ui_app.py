@@ -1,5 +1,6 @@
 """The app's routing over an injected runner: every read degrades, every write is guarded."""
 
+import io
 import json
 import pathlib
 import subprocess
@@ -8,7 +9,7 @@ import pytest
 
 import deploy_ui
 from deploy_ui_lib import deploy_ui_reads as reads
-from deployer_lib.deploy_locks import TREE_LOCK
+from lib.tree_lock import TREE_LOCK
 
 TREE_LOCK_NAME = pathlib.PurePath(TREE_LOCK).name
 
@@ -431,6 +432,33 @@ def test_request_line_quotes_a_path_logfmt_would_split_is_flagged():
     )
 
 
+class _ClosedSocket(io.BufferedIOBase):
+    def __init__(self, error):
+        self.error = error
+
+    def write(self, data):
+        raise self.error
+
+
+@pytest.mark.parametrize("error", [BrokenPipeError, ConnectionResetError])
+def test_client_closing_mid_response_logs_one_line_no_traceback_is_flagged(
+    app, capsys, error
+):
+    """A disconnect raised out of the handler, and socketserver printed its traceback,
+    which HostLogErrors counts (#7921)."""
+    handler = object.__new__(deploy_ui.make_handler(app))
+    handler.rfile = io.BytesIO(b"GET / HTTP/1.1\r\nRemote-User: daniel\r\n\r\n")
+    handler.wfile = _ClosedSocket(error())
+    handler.client_address = ("10.42.0.113", 40000)
+    handler.close_connection = False
+    handler.handle_one_request()
+    assert handler.close_connection
+    assert capsys.readouterr().err.splitlines() == [
+        "request method=GET path=/ status=200 user=daniel",
+        "client-disconnected method=GET path=/ status=200 user=daniel",
+    ]
+
+
 def test_lock_names_agree_with_deploy_locks_is_clean(monkeypatch):
     """The daemon runs outside the venv and cannot import the lock names, so this is
     the literal-agreement guard: the service-lock shape the page watches is the one
@@ -451,8 +479,4 @@ def test_lock_names_agree_with_deploy_locks_is_clean(monkeypatch):
 def test_the_service_lock_glob_does_not_match_the_tree_lock_is_flagged():
     """The reject half: a glob loose enough to take the tree lock for a service lock would
     show the tick as a deploy of a service called `git-tree`."""
-    from deployer_lib import deploy_locks
-
-    assert not pathlib.PurePath(deploy_locks.TREE_LOCK).match(
-        deploy_ui.SERVICE_LOCK_GLOB
-    )
+    assert not pathlib.PurePath(TREE_LOCK).match(deploy_ui.SERVICE_LOCK_GLOB)

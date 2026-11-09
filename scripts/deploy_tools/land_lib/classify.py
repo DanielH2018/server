@@ -12,7 +12,13 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import BRANCH, Classification, Landing
 from deploy_tools.land_lib.own_checkout import OWN_CHECKOUT
-from deploy_tools.land_lib.outcome import Outcome, Verdict, say
+from deploy_tools.land_lib.outcome import (
+    UNREADABLE_LEDGER_NOTE,
+    Outcome,
+    Verdict,
+    say,
+)
+from deploy_tools.land_lib import land_tags
 from deploy_tools.land_lib.land_tags import DeriveSource
 from deploy_tools.land_lib.promotion import moves_the_bundle
 from lib.exit_codes import LAND_BAD_ARGS
@@ -184,12 +190,66 @@ def adopt_cross_role_tables(ln: Landing) -> None:
         )
 
 
+def _tasks_remain(ln: Landing, role: str) -> bool:
+    """Whether setup role `role` still has a task file at the merge commit.
+
+    A tree that cannot be read counts as remaining: the role then stays loud, which is the
+    direction a wrong answer must fall.
+    """
+    prefix = f"ansible/roles/setup/{role}/tasks/"
+    listed = ln.git("ls-tree", "-r", "-z", "--full-tree", ln.merge_sha, "--", prefix)
+    if listed.returncode != 0:
+        return True
+    return any(
+        record.partition("\t")[2].startswith(prefix)
+        for record in listed.stdout.split("\0")
+    )
+
+
+def deletions_owing_nothing(ln: Landing, files) -> frozenset[str]:
+    """The paths the PR deletes that no apply is owed for.
+
+    No playbook applies a deleted file. A deleted path in a setup role still counts when the
+    role keeps a task file, because the PR may edit another of its files and the deletion
+    then changes what the role does (#7906). So a deleted path owes nothing only outside a
+    setup role, or in a role whose whole task set the PR deletes.
+    """
+    kept: dict[str, bool] = {}
+    out = set()
+    for f in files:
+        path = f["path"]
+        if f.get("changeType") != "DELETED":
+            continue
+        roles = land_tags.setup_roles_of(path)
+        for role in roles:
+            if role not in kept:
+                kept[role] = _tasks_remain(ln, role)
+        if not any(kept[role] for role in roles):
+            out.add(path)
+    return frozenset(out)
+
+
+def owed_manual_planes(
+    ln: Landing, paths: list[str], quiet: frozenset[str]
+) -> frozenset[str]:
+    """The role tags the owed ledger holds as `manual_plane`; an unreadable ledger defers."""
+    try:
+        return land_tags.owed_for(
+            paths, quiet, ln.opts.deployer_state, ln.tools.read_owed
+        )
+    except land_tags.LedgerUnreadable as exc:
+        print(UNREADABLE_LEDGER_NOTE)
+        ln.finish(Verdict.DEFERRED, 75, f"PR #{ln.opts.pr}: {exc}")
+
+
 def classify(ln: Landing) -> None:
     """Tags and the plane a hand must apply."""
     c = ln.classifier
     adopt_cross_role_tables(ln)
     view = ln.view("files,changedFiles")
-    paths = [f["path"] for f in view.get("files", [])]
+    files = view.get("files", [])
+    paths = [f["path"] for f in files]
+    deleted = frozenset() if ln.resolved_tags else deletions_owing_nothing(ln, files)
     recorded = pr_range(ln)
     quiet = c.quiet_paths(paths, recorded)
     # `--tags` named the services, so the plane is left unread: the operator's list wins over
@@ -198,10 +258,22 @@ def classify(ln: Landing) -> None:
     # services -- and the broad half a `--tags` landing must not skip is caught earlier, by
     # `ci.preflight`'s blockers read over the incoming range.
     declared = None if ln.resolved_tags else _declared_at_merge(ln)
+    owed = (
+        frozenset()
+        if ln.resolved_tags
+        else owed_manual_planes(ln, paths, frozenset(quiet) | deleted)
+    )
     plane = (
         ""
         if ln.resolved_tags
-        else _classified(ln, "plane classification", c.plane_note, paths, quiet=quiet)
+        else _classified(
+            ln,
+            "plane classification",
+            c.plane_note,
+            paths,
+            quiet=frozenset(quiet) | deleted,
+            owed=owed,
+        )
     )
     ln.classification = Classification(
         pr_paths=tuple(paths),
@@ -209,6 +281,8 @@ def classify(ln: Landing) -> None:
         quiet=frozenset(quiet),
         declared=None if declared is None else frozenset(declared),
         plane=plane,
+        deleted=deleted,
+        owed=owed,
     )
     if ln.resolved_tags:
         return
@@ -256,8 +330,9 @@ def narrow_plane(ln: Landing) -> None:
         if narrow:
             ln.narrowed_plane = ln.classifier.plane_note(
                 list(cl.pr_paths),
-                quiet=cl.quiet,
+                quiet=cl.plane_quiet,
                 narrow_tags=narrow,
+                owed=cl.owed,
             )
     except Exception as exc:
         say(f"narrowing not read ({type(exc).__name__}) — keeping the role tag")

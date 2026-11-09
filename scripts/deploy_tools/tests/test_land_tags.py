@@ -136,7 +136,9 @@ def test_a_setup_plane_pr_is_not_nothing_to_deploy():
     ]
     tags, _ = land_tags.derive(files, changed_files=3)
     assert tags == [], "no service tag should be derived from these paths"
-    assert "k3s-bringup.yml" in land_tags.plane_note(files)
+    assert "k3s-bringup.yml" in land_tags.plane_note(
+        files, owed=land_tags.forecast_owed(files)
+    )
     # No setup role the tick applies reads k3s's defaults since H7.50 moved deploy_ui's firewall.
     assert land_tags.self_applied_command(files) == ""
 
@@ -149,14 +151,14 @@ def test_a_self_applied_setup_role_is_not_owed_to_a_hand():
         "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py",
         "ansible/roles/setup/renovate_notify/files/renovate_notify.py",
     ]
-    assert land_tags.plane_note(files) == ""
+    assert land_tags.plane_note(files, owed=land_tags.forecast_owed(files)) == ""
     assert land_tags.self_applied(files) is True
 
 
 def test_a_deploy_plane_change_is_promotes_to_apply():
     """The tick runs no `ansible/deploy.yml` since D6.12, so no hand and no tick owes it."""
     files = ["ansible/templates/resources.yml.j2"]
-    assert land_tags.plane_note(files) == ""
+    assert land_tags.plane_note(files, owed=land_tags.forecast_owed(files)) == ""
     assert land_tags.self_applied(files) is False
 
 
@@ -166,7 +168,7 @@ def test_a_bringup_playbook_is_still_owed_to_a_hand():
     The tick parks on these outright, so the deployer's state can never say they were applied.
     """
     files = ["ansible/bootstrap.yml"]
-    assert land_tags.plane_note(files) != ""
+    assert land_tags.plane_note(files, owed=land_tags.forecast_owed(files)) != ""
     assert land_tags.self_applied(files) is False
 
 
@@ -186,7 +188,12 @@ def test_an_ordinary_service_pr_needs_no_manual_apply():
     needs-manual-apply and train the operator to ignore it.
     """
     assert (
-        land_tags.plane_note(["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"])
+        land_tags.plane_note(
+            ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"],
+            owed=land_tags.forecast_owed(
+                ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"]
+            ),
+        )
         == ""
     )
 
@@ -202,7 +209,7 @@ def test_a_mixed_pr_reports_both_a_tag_and_a_manual_apply():
     ]
     tags, _ = land_tags.derive(files, changed_files=2)
     assert tags == ["sonarr"]
-    assert land_tags.plane_note(files) != ""
+    assert land_tags.plane_note(files, owed=land_tags.forecast_owed(files)) != ""
 
 
 # A real PR's file list, read from `gh pr view <n> --json files`. 22 of its role directories
@@ -265,7 +272,9 @@ def test_pr_617_reports_only_the_setup_plane():
 
     Dropped from the report along with the setup plane would be the silence again.
     """
-    note = land_tags.plane_note(_PR_617_FILES)
+    note = land_tags.plane_note(
+        _PR_617_FILES, owed=land_tags.forecast_owed(_PR_617_FILES)
+    )
     assert "manifests" not in note and "ansible/deploy.yml" not in note
     # `k3s-bringup.yml`, NOT `initial_setup.yml`. The k3s role appears only in the bring-up
     # playbook, so `initial_setup.yml` is a command that exits 0 having matched no task — see
@@ -279,7 +288,7 @@ def test_a_shared_role_with_callers_derives_no_tag_of_its_own():
     files = ["ansible/roles/k8s/volume-snapshot/tasks/main.yml"]
     tags, source = land_tags.derive(files, changed_files=1)
     assert (tags, source) == ([], "pr")
-    assert land_tags.plane_note(files) == ""
+    assert land_tags.plane_note(files, owed=land_tags.forecast_owed(files)) == ""
 
 
 def test_an_ordinary_service_role_is_neither_dropped_nor_reported():
@@ -291,7 +300,7 @@ def test_an_ordinary_service_role_is_neither_dropped_nor_reported():
     files = ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"]
     tags, _ = land_tags.derive(files, changed_files=1)
     assert tags == ["sonarr"]
-    assert land_tags.plane_note(files) == ""
+    assert land_tags.plane_note(files, owed=land_tags.forecast_owed(files)) == ""
 
 
 def test_the_shared_roles_are_still_undeclared(monkeypatch):
@@ -329,7 +338,7 @@ def test_a_secrets_rotation_is_flagged():
     assert (tags, source) == ([], "pr"), (
         "a rotation maps to no service tag by construction"
     )
-    note = land_tags.plane_note(files)
+    note = land_tags.plane_note(files, owed=land_tags.forecast_owed(files))
     assert note != "", "a rotation must not read as nothing-to-deploy"
     assert "secret_rotation.py consumers" in note, (
         "the note must name the RUNNABLE resolver, like both sibling notes do, not just say a "
@@ -351,7 +360,7 @@ def test_a_pr_without_secrets_is_clean():
         "ansible/secret_rotation.yml",
         "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
     ]
-    assert land_tags.plane_note(files) == ""
+    assert land_tags.plane_note(files, owed=land_tags.forecast_owed(files)) == ""
 
 
 def test_a_secrets_rotation_beside_a_service_is_flagged():
@@ -367,7 +376,7 @@ def test_a_secrets_rotation_beside_a_service_is_flagged():
     ]
     tags, _ = land_tags.derive(files, changed_files=2)
     assert tags == ["sonarr"]
-    assert land_tags.plane_note(files) != ""
+    assert land_tags.plane_note(files, owed=land_tags.forecast_owed(files)) != ""
 
 
 # --- a broad path whose change is comments only --------------------------------
@@ -401,7 +410,12 @@ def test_a_comment_only_setup_role_edit_is_owed_to_nobody():
     The PR's drill script is self-applied since #6411 (hypervisor copies it). A quiet path's own
     contribution is read alone: loud, the tick applies its role; quiet, nothing.
     """
-    assert land_tags.plane_note(_PR_843, quiet={_K3S_DEFAULTS}) == ""
+    assert (
+        land_tags.plane_note(
+            _PR_843, quiet={_K3S_DEFAULTS}, owed=land_tags.forecast_owed(_PR_843)
+        )
+        == ""
+    )
     assert land_tags.self_applied([_GITOPS_DEFAULTS]) is True
     assert land_tags.self_applied([_GITOPS_DEFAULTS], quiet={_GITOPS_DEFAULTS}) is False
 
@@ -412,13 +426,17 @@ def test_the_same_pr_with_a_real_edit_still_names_the_playbook():
     Without this pair, a filter that emptied the note unconditionally would look the same
     from the passing side.
     """
-    assert "k3s-bringup.yml --tags k3s" in land_tags.plane_note(_PR_843)
+    assert "k3s-bringup.yml --tags k3s" in land_tags.plane_note(
+        _PR_843, owed=land_tags.forecast_owed(_PR_843)
+    )
 
 
 def test_a_quiet_path_does_not_excuse_the_loud_one_beside_it():
     """One dropped path must not take the rest of the broad half with it."""
     files = [*_PR_843, "ansible/bootstrap.yml"]
-    note = land_tags.plane_note(files, quiet={_K3S_DEFAULTS})
+    note = land_tags.plane_note(
+        files, quiet={_K3S_DEFAULTS}, owed=land_tags.forecast_owed(files)
+    )
     assert "`uv run ansible-playbook ansible/bootstrap.yml`" in note
 
 
@@ -431,7 +449,9 @@ def test_a_quiet_path_never_mutes_a_secrets_rotation():
     """
     files = ["ansible/vars/secrets.yml", _K3S_DEFAULTS]
     note = land_tags.plane_note(
-        files, quiet={_K3S_DEFAULTS, "ansible/vars/secrets.yml"}
+        files,
+        quiet={_K3S_DEFAULTS, "ansible/vars/secrets.yml"},
+        owed=land_tags.forecast_owed(files),
     )
     assert "secrets.yml" in note
 
@@ -472,3 +492,11 @@ def test_a_range_covering_the_file_list_is_read(monkeypatch):
         land_tags.deploy_tags, "comment_only_paths", lambda paths, old, new: {"a.yml"}
     )
     assert land_tags.quiet_paths(["a.yml", "b.yml"], "old..new") == {"a.yml"}
+
+
+def test_a_check_table_change_lands_with_its_own_role_alone():
+    tags, source = land_tags.derive(
+        ["ansible/roles/k8s/monitor-bridge/files/check_table.py"], changed_files=1
+    )
+    assert source == "pr"
+    assert tags == ["monitor-bridge"]

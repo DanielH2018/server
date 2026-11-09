@@ -43,7 +43,9 @@ def _status_of_batch_whose_pr_merged_at(merged_at, tmp_path, capsys):
             rows, launched_at
         ),
     )
-    code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
+    code = main(
+        ["status", run.run_id, "--all", "--manifest-root", str(tmp_path)], tools
+    )
     return code, capsys.readouterr().out
 
 

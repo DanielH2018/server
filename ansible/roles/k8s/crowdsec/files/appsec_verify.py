@@ -15,8 +15,8 @@ tile's heartbeat survives an engine restart without paging the same cause three 
 
 It was `crowdsec-appsec-verify.sh`, a daniel-box root cron that ran `cscli` through `k3s kubectl
 exec`, until H2.4b. It runs every 15 minutes in the `crowdsec-jobs` sidecar of the crowdsec pod,
-started by `crowdsec_jobs.py`, which pushes the "CrowdSec AppSec" Kuma monitor from this
-module's exit code and last stdout line.
+started by `crowdsec_jobs.py`, which exports this module's exit code as the job's verdict
+gauge and logs its last stdout line.
 
 Usage:
 

@@ -31,8 +31,8 @@ TTL until the cap refused the remote exits this list exists for (#6709). The way
 way to see it is `cscli allowlists inspect remote-ips`.
 
 Runs every 5 minutes in the `crowdsec-jobs` sidecar of the crowdsec pod, started by
-`crowdsec_jobs.py`, which owns the Kuma push and the log line. This module owns the decision.
-Its last stdout line is the summary the scheduler pushes. The functions above `main` are pure
+`crowdsec_jobs.py`, which owns the verdict gauge and the log line. This module owns the decision.
+Its last stdout line is the summary the scheduler logs. The functions above `main` are pure
 and are what `tests/test_remote_allowlist.py` exercises.
 
 Usage:
@@ -307,7 +307,7 @@ if __name__ == "__main__":
     except subprocess.CalledProcessError as exc:
         tail = (exc.stderr or exc.stdout or "").strip().splitlines()
         # Name the verb that failed (`cscli allowlists add`, `kubectl logs`), never the
-        # address it was given — the summary line lands in Kuma and syslog.
+        # address it was given — the summary line lands in the pod log and Loki.
         words = [Path(exc.cmd[0]).name, *exc.cmd[1:]]
         verb = " ".join([w for w in words if not w.startswith("-")][:3])
         print(

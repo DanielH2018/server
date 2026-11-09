@@ -32,7 +32,8 @@ Prometheus query that returned no series. On 75 the failed read is on stderr, an
 response is to retry rather than to investigate the thing probed (#4444). Each verdict
 subcommand's `--help` states what 0 and 1 mean for it.
 
-A verdict subcommand's last stdout line is `PROBE-VERDICT: <ok|fail|unreadable> (<detail>)`.
+A verdict subcommand's last stdout line is `PROBE-VERDICT: <ok|fail|unreadable> (<detail>)`,
+or `skip` when `health` exits 3 because the tag names nothing it can check.
 `main()` prints it from the exit code through `lib.exit_messages.verdict_line`, so every subcommand
 shares one vocabulary (#4454). `--json` and `--dry-run` print no verdict line, because a trailing
 line would break a JSON document or a command list. The prefix is not bare `VERDICT:`, because a
@@ -231,13 +232,15 @@ newest Job, which is that gate or a later firing. When no Job has landed since t
 check falls back to the CronJob's own daily/weekly schedule: the
 previous run must have succeeded and not be more than twice its interval old. Any other
 schedule shape fails closed rather than guess an interval. A role with neither a workload nor a CronJob (media-volume, netpol-baseline) still
-reports "declares no rollout-checkable workload," which the deploy notifier skips.
+reports "declares no rollout-checkable workload" and exits 3 (`PROBE-VERDICT: skip`), which
+the deploy notifier skips.
 
 ### `landing [--json]`
 
 `landing` answers CLAUDE.md's *When to wait* list from a running session. It prints three
 things: what would stop a landing now, the `land.sh` and `deploy.sh` runs in flight, and the
-worktrees with the issues each has claimed. Exit 1 means something blocks. `--json` prints one
+worktrees with the issues each has claimed. While something blocks, the text view lists the
+worktrees holding a claim and counts the rest; otherwise it prints only the count. Exit 1 means something blocks. `--json` prints one
 document, which the [deck mod](#the-deck-mod-claudepluginsdeck) reads every minute.
 
 A blocker is one of three states: a non-empty `hold_sha`, a red master CI run, or an owed
@@ -859,8 +862,22 @@ cannot grow, because the remote-control wire path truncates at 8,000 chars / 200
 budgets are the payload's, not one doc's, so a head that fills the payload defers the next doc
 to the next command.
 
+Each session or subagent has a byte budget, `SESSION_BUDGET_BYTES` (8,000), for role
+`CLAUDE.md` files and `facts.md` (#7899). The hook inlines those docs, whole or as a head, while
+their blocks fit what is left of the budget. After that, a doc arrives as its outline: its
+headings and a read pointer, logged `form=outline`. The hook records an outlined doc as
+injected, so it does not return when budget frees. The rules in `ALWAYS_WHOLE`, `secrets.md`
+and `generated-docs.md`, are always inlined in full and never charged to the budget, because a
+read-only grep is where the secrets rule matters. Only a session's first injection carries the
+full preamble; later ones carry a one-line tag. The payload arithmetic still charges the full
+preamble, so the `--report` budgets do not depend on it. A replay of the 851 `bash_path_match`
+rows logged to 2026-11-09 projects the mean per session from 16.0 KB to 8.0 KB and the worst
+from 121 KB to 19.7 KB. That excludes the `generated-docs.md` reads the change adds: 3.6 KB
+once in each session that reads under `docs/**`, `scripts/docs/**` or a role `CLAUDE.md`, at
+least 51 of the 279 sessions, or about 0.7 KB on the mean.
+
 An editing rule arrives with a write, not a read (#2811). Every rule outside `READ_RULES`
-(`secrets.md` and `facts.md`, which a read needs) is injected only for a path the command
+(`secrets.md`, `generated-docs.md` and `facts.md`, which a read needs) is injected only for a path the command
 writes, as `block-protected-bash`'s `written_paths` finds it, or for every named path when the
 command runs an inline interpreter such as `python3 -`. Rules are not dropped from Bash
 entirely, because writes to rule-scoped paths also go through Bash and nothing else would
@@ -938,6 +955,12 @@ the lines that ask for an action ahead of the lines that only inform.
 The fan-out section names a batch only within a day of its launch. Older batches whose
 worktree `fanout.py place clean` never removed fold into one count per host, so a run nobody
 cleaned stops listing its batches in every session.
+
+The hook prints SessionStart's JSON form, which splits its output by reader.
+`hookSpecificOutput.additionalContext` carries what the agent acts on: the health banner, the
+other live sessions and the unlabelled-worktree prompt. `systemMessage` carries the operator's
+housekeeping, which the model never sees: the removable worktrees and the fan-out section.
+A failed `hooklib` import is reported in the fan-out section, so it reaches the operator only.
 
 ### `fanout-stop` (Stop)
 

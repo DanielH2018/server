@@ -34,7 +34,7 @@ REPO = _SCRIPTS.parent
 def deploy_line(paths: list[str]) -> str:
     """What `land.sh` would make of a PR that touches exactly `paths`."""
     cs = reach.reach(paths).changes
-    note = land_tags.plane_note(paths)
+    note = land_tags.plane_note(paths, owed=land_tags.forecast_owed(paths))
     parts = []
     if cs.flux or cs.broad_deploy:
         parts.append(

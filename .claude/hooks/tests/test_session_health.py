@@ -164,7 +164,10 @@ def test_a_deployer_only_banner_names_probe_landing(monkeypatch, capsys):
         parked=["  ✗ the GitOps deployer has not fast-forwarded for 40 min ..."],
     )
     assert run_main() == 0
-    triage = capsys.readouterr().out.splitlines()[-1]
+    context = json.loads(capsys.readouterr().out)["hookSpecificOutput"][
+        "additionalContext"
+    ]
+    triage = context.splitlines()[-1]
     assert "`uv run python scripts/diagnostics/probe.py landing`" in triage
 
 
@@ -275,9 +278,12 @@ def test_the_worktree_read_is_bounded_well_inside_the_hook_budget():
     assert _mod.WORKTREE_TIMEOUT_S <= min(budgets) / 2
 
 
-def test_main_prints_warn_and_removal_lines_before_the_session_list(
-    monkeypatch, capsys
-):
+def _hook_output(capsys):
+    out = json.loads(capsys.readouterr().out)
+    return out["hookSpecificOutput"]["additionalContext"], out.get("systemMessage", "")
+
+
+def test_main_prints_the_health_lines_before_the_session_list(monkeypatch, capsys):
     run_main = _run_main(
         monkeypatch,
         '{"source":"startup"}',
@@ -286,11 +292,12 @@ def test_main_prints_warn_and_removal_lines_before_the_session_list(
         worktrees=["WARN: 1 merged worktree(s) can be removed:"],
     )
     assert run_main() == 0
-    out = capsys.readouterr().out
-    assert out.index("loki") < out.index("merged worktree") < out.index("other-branch")
+    context, operator = _hook_output(capsys)
+    assert context.index("loki") < context.index("other-branch")
+    assert "merged worktree" in operator
 
 
-def test_main_cuts_the_banner_to_its_budget_and_keeps_the_warn_lines(
+def test_main_cuts_the_agent_context_to_its_budget_and_keeps_the_health_lines(
     monkeypatch, capsys
 ):
     sessions = [
@@ -304,10 +311,11 @@ def test_main_cuts_the_banner_to_its_budget_and_keeps_the_warn_lines(
         worktrees=["WARN: 1 merged worktree(s) can be removed:"],
     )
     assert run_main() == 0
-    out = capsys.readouterr().out
-    assert len(out.encode()) <= _mod.BANNER_BUDGET_BYTES
-    assert "loki" in out and "merged worktree" in out
-    assert out.splitlines()[-1].endswith("cut at the banner's 2000-byte budget")
+    context, operator = _hook_output(capsys)
+    assert len(context.encode()) <= _mod.BANNER_BUDGET_BYTES
+    assert "loki" in context
+    assert context.splitlines()[-1].endswith("cut at the banner's 2000-byte budget")
+    assert "merged worktree" in operator
 
 
 # `other_live_sessions` imports lib.worktrees off a hand-built sys.path. That path must point

@@ -178,7 +178,7 @@ def r2_usage_verdict(
 ) -> tuple[bool, str]:
     """(ok, msg) from month-to-date R2 usage against the free-tier limits.
 
-    Reports all three arms every cycle whether or not any breaches, so the Kuma message carries
+    Reports all three arms every cycle whether or not any breaches, so the check message carries
     the trend and not just the alarm — the point of the monitor is to see a runaway client early.
 
     Args:

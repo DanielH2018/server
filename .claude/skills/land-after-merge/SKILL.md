@@ -112,7 +112,9 @@ pre-squash commits, so the follow-up PR opens CONFLICTING and GitHub runs no che
 
 ## Reading the verdict
 
-The `VERDICT:` line is the last line of the log. `land.sh --help` lists the closed vocabulary;
+The `VERDICT:` line is the last line of the log. The line above it,
+`LAND-RESULT: verdict=… cause=… exit=… pr=… sha=… tags=<count>`, carries the same
+outcome as logfmt for a script to read. `land.sh --help` lists the closed vocabulary;
 `land_lib/outcome.py:Verdict` is where it is defined. Seven of them need a decision from you:
 
 | Verdict | What to do |

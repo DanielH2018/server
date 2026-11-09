@@ -38,10 +38,12 @@ import contextlib
 import datetime as dt
 import importlib
 import json
+import re
 import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import traceback
 from pathlib import Path
 
@@ -270,6 +272,33 @@ def run_generators() -> list[str]:
     return failed
 
 
+MKDOCS_LOG = Path(tempfile.gettempdir()) / "build_docs-mkdocs.log"
+_MKDOCS_FINDING = re.compile(r"\s*(ERROR|WARNING|CRITICAL|Aborted)\b")
+DECIDING_LINES = 20
+
+
+def deciding_lines(stderr: str) -> str:
+    """The lines of mkdocs' stderr that fail the build, or its last few when none match.
+
+    `--strict` turns each warning into the failure, so those lines and mkdocs' closing
+    `Aborted` line are the whole diagnosis. The rest is progress output.
+    """
+    lines = stderr.strip().splitlines()
+    found = [ln for ln in lines if _MKDOCS_FINDING.match(ln)]
+    return "\n".join((found or lines)[-DECIDING_LINES:])
+
+
+def report_failed_build(stderr: str, returncode: int, log: Path = MKDOCS_LOG) -> None:
+    """Print the deciding lines of a failed mkdocs build, and save the whole log to `log`."""
+    log.write_text(stderr)
+    print(deciding_lines(stderr), file=sys.stderr)
+    print(
+        f"build_docs: mkdocs build FAILED rc={returncode}; the previous site is left "
+        f"serving. The full log is {log}; reproduce it with `uv run mkdocs build --strict`.",
+        file=sys.stderr,
+    )
+
+
 def stderr_tail(text: str, limit: int) -> str:
     """The last `limit` characters of `text`, cut at a line start.
 
@@ -341,13 +370,7 @@ def build_site(site_dir: str, generators: str = "ok") -> bool:
         check=False,
     )
     if result.returncode != 0:
-        print(stderr_tail(result.stderr, 4000), file=sys.stderr)
-        print(
-            f"build_docs: mkdocs build FAILED rc={result.returncode}; the previous site is "
-            "left serving. The last line above is the deciding error; reproduce it with "
-            "`uv run mkdocs build --strict`.",
-            file=sys.stderr,
-        )
+        report_failed_build(result.stderr, result.returncode)
         shutil.rmtree(staging, ignore_errors=True)
         return False
 

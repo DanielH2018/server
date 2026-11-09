@@ -30,6 +30,7 @@ tags too, when only some were. Either way the gate leaves the suspended tags out
 """
 
 import subprocess
+from collections.abc import Sequence
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -79,6 +80,9 @@ def gated_tags(ln: Landing) -> list[str]:
 # What `FluxReads.k8s_tags_at` raises when the service list cannot be read.
 OWNER_READ_ERRORS = (ValueError, subprocess.SubprocessError, OSError)
 
+# The most tags one landing line lists; a broader set prints as a count.
+TAGS_LISTED_UP_TO = 10
+
 
 def split_k8s(ln: Landing) -> None:
     """Take every k8s tag out of `resolved_tags`; a `--tags` one joins `flux_tags` for the wait.
@@ -105,6 +109,7 @@ def split_k8s(ln: Landing) -> None:
     if not k8s:
         return
     ln.resolved_tags = [tag for tag in ln.resolved_tags if tag not in declared]
+    ln.named_k8s_tags = k8s
     if ln.opts.tags:
         ln.flux_tags = k8s
         for tag in k8s:
@@ -156,6 +161,20 @@ def _print_what_else_it_owes(ln: Landing) -> None:
         print(host_not_waited_note(ln.host_targets))
 
 
+def changed_set_line(tags: Sequence[str], named: list[str], widened: bool) -> str:
+    """The line that reports the changed set's tags without repeating ones already printed.
+
+    The PR's own tags were named once already, so a set that grew from them lists only the
+    rest. A set nothing named, or one widened to every Kustomization, lists its tags only up
+    to `TAGS_LISTED_UP_TO`; the health count and `--verdict-file` carry a bigger one.
+    """
+    line = f"the changed set names {len(tags)} tag(s)"
+    if named and not widened:
+        extras = [t for t in tags if t not in named]
+        return f"{line}, beyond this PR's own: {','.join(extras)}" if extras else line
+    return f"{line}: {','.join(tags)}" if len(tags) <= TAGS_LISTED_UP_TO else line
+
+
 def wait_on_promotion(ln: Landing) -> None:
     """Wait until a promotion covers the merge commit; return on `settled`, else end the landing.
 
@@ -173,7 +192,7 @@ def wait_on_promotion(ln: Landing) -> None:
     ln.ledger.tags_label = ",".join(ln.flux_tags)
     tags = ",".join(ln.flux_tags) or "homelab"
     if result.tags:
-        say(f"the changed set names {','.join(result.tags)}")
+        say(changed_set_line(result.tags, ln.named_k8s_tags, bool(result.widened)))
     if result.widened:
         say(f"land-wait waited on every Kustomization: {result.widened}")
     if result.suspended:

@@ -128,6 +128,11 @@ The daemon writes one logfmt line per request to its unit journal (#2864):
 Traefik forwards, and `-` for a caller that reached the port around Authelia. The query
 string is dropped, so a log path never reaches the journal.
 
+A client that closes the connection mid-response adds a second line,
+`client-disconnected method=GET path=/ status=200 user=<Remote-User>`, in place of a
+`BrokenPipeError` traceback that HostLogErrors would count (#7921). It opens with a word
+other than `request`, so the count below does not see the request twice.
+
 The page polls four panels every 10 seconds, so an open tab writes about 24 lines a minute,
 and 18 while the finished list is hidden, because the page skips its fetch.
 An open landing viewer polls `/api/log` every 2 seconds and adds 30 more. Those polls show a tab was open, not that anyone used it. Count page

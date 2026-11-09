@@ -448,16 +448,17 @@ def test_a_first_parent_with_no_enable_link_ends_deferred_naming_the_start_comma
     assert sleeps == []
 
 
-def test_a_mid_day_merge_waits_until_the_host_applies():
+def test_a_mid_day_merge_waits_until_the_host_applies_printing_its_wait_once(capsys):
     stale, _ = _prom(_series(sha="c" * 12))
     fresh, _ = _prom(_series())
-    answers = iter([stale] * 3 + [fresh] * 3)
+    answers = iter([stale] * 9 + [fresh] * 3)
     outcome, sleeps = _wait(
         _pi(),
         lambda url, timeout: next(answers)(url, timeout),
-        [_at(12, 0), _at(12, 1)],
+        [_at(12, 0), _at(12, 1), _at(12, 2), _at(12, 3)],
     )
-    assert outcome is None and sleeps == [host_wait.POLL_S]
+    assert outcome is None and sleeps == [host_wait.POLL_S] * 3
+    assert capsys.readouterr().out.count("waiting for hosts to apply: daniel-pi") == 1
 
 
 def test_a_merge_in_the_pi_quiet_hours_ends_deferred_naming_the_next_fire():

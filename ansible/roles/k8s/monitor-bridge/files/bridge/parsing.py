@@ -93,7 +93,7 @@ def parse_rfc3339(ts: str) -> datetime:
 def endpoint_label(url: str) -> str:
     """host:port for `url` — deliberately NOT the path or query.
 
-    This ends up in Kuma messages and therefore in Discord. `_get_json` is used for the
+    This ends up in check messages, which the pod log and Loki keep. `_get_json` is used for the
     Discord webhook probe, whose URL carries the webhook token IN THE PATH, so including
     the path would publish that token to the very channel it authenticates. Some *arr
     callers put keys in headers rather than the URL, but host:port is enough to name the

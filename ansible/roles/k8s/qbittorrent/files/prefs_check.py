@@ -7,8 +7,8 @@ evidence; `probe.py loki-query '{container="qbittorrent-prefs-check"}'` reads it
 the daniel-box host cron `qbittorrent prefs drift check` at H2.5d
 (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 15).
 
-It never writes to qBittorrent and pushes no Kuma monitor: a low-urgency drift check does not
-earn a push token. Applying a changed DESIRED value stays a human decision, made by hand.
+It never writes to qBittorrent and pages nobody: a low-urgency drift check does not earn an
+alert. Applying a changed DESIRED value stays a human decision, made by hand.
 
 The exit status follows apply_prefs.py's contract. Drift (EXIT_DRIFT, 3) is a result, not a
 failure, so it exits 0 as a match does. An unreachable WebUI, a rejected login, a missing

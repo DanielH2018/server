@@ -28,6 +28,7 @@ from a resume point without reading the verdict text. A `deferred` whose log car
 publish refusal does not clear on its own. So does one carrying `outcome.UNREADABLE_GATE_NOTE`:
 the health gate could not read its store, and nothing gates health again (#5543). So does one
 carrying `outcome.STALE_GATE_NOTE`: the gate's tree was older than `origin/master` (#7816).
+So does one carrying `outcome.UNREADABLE_LEDGER_NOTE`: the owed ledger did not read (#7906).
 """
 
 import json
@@ -39,8 +40,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import detach
 from deploy_tools.land_lib.outcome import (
     PROMOTE_TIMEOUT_NOTE,
+    Cause,
     STALE_GATE_NOTE,
     UNREADABLE_GATE_NOTE,
+    UNREADABLE_LEDGER_NOTE,
     Verdict,
 )
 from lib.cli_help import ArgumentParser, refuse_help_under_describe
@@ -64,6 +67,7 @@ _VERDICT_TOKEN = re.compile(r"^VERDICT: (\S+)")
 _PROMOTE_TIMEOUT = PROMOTE_TIMEOUT_NOTE.splitlines()[0].strip()
 _UNREADABLE_GATE = UNREADABLE_GATE_NOTE.splitlines()[0].strip()
 _STALE_GATE = STALE_GATE_NOTE.splitlines()[0].strip()
+_UNREADABLE_LEDGER = UNREADABLE_LEDGER_NOTE.splitlines()[0].strip()
 
 # A landing's phase lines: `== 4/6  deploying ...`. The newest one is the progress detail.
 _PHASE = re.compile(r"^== (.+)$", re.MULTILINE)
@@ -140,13 +144,20 @@ def read(log: Path, now: float | None = None) -> dict:
 
 def _is_plain_deferral(log: Path, verdict: str) -> bool:
     """Whether a landing's 75 is `deferred` with no give-up note beside it."""
-    token = _VERDICT_TOKEN.match(verdict)
-    if not token or token.group(1) != Verdict.DEFERRED:
+    result = detach.result_in(log)
+    notes = (_UNREADABLE_GATE, _STALE_GATE, _UNREADABLE_LEDGER)
+    if result is not None:
+        token = result.get("verdict")
+        if result.get("cause") == Cause.PROMOTE_TIMEOUT:
+            return False
+    else:
+        match = _VERDICT_TOKEN.match(verdict)
+        token = match.group(1) if match else None
+        notes += (_PROMOTE_TIMEOUT,)
+    if token != Verdict.DEFERRED:
         return False
     text = log.read_text(errors="replace")
-    return not any(
-        note in text for note in (_PROMOTE_TIMEOUT, _UNREADABLE_GATE, _STALE_GATE)
-    )
+    return not any(note in text for note in notes)
 
 
 def main(argv: list[str] | None = None) -> int:

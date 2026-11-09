@@ -63,13 +63,7 @@ def test_health_resolves_a_vendored_workload_as_a_target(tmp_path):
 
 
 def test_health_fails_a_vendored_role_that_resolves_no_workload(tmp_path, capsys):
-    """Exit 1, and a line the deploy notifier cannot read as a skip.
-
-    The notifier reports a tag `skipped` when the gate's line carries one of
-    `NOT_APPLICABLE_MARKERS`, and a vendored role with no workload is a failed gate.
-    """
-    from deploy_tools.deploy_lib import detach_notify
-
+    """Exit 1, never the skip code: a vendored role with no workload is a failed gate."""
     _role(tmp_path, upstream={"app.yaml": _manifest("ConfigMap", "config")})
     code = health.run_health(
         _FIXTURE_ROLE, cluster="prod", served="prod", roles_dir=tmp_path
@@ -77,7 +71,6 @@ def test_health_fails_a_vendored_role_that_resolves_no_workload(tmp_path, capsys
     out = capsys.readouterr().out
     assert code == 1
     assert "resolve no Deployment, DaemonSet or StatefulSet" in out
-    assert not [m for m in detach_notify.NOT_APPLICABLE_MARKERS if m in out], out
 
 
 def test_a_role_without_vendored_files_may_resolve_no_workload(tmp_path):

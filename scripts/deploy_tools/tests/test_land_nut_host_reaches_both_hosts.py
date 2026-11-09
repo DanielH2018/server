@@ -33,7 +33,7 @@ def test_the_tick_self_applies_nut_host_on_its_own_host():
     assert land_tags.self_applied(files) is True
     assert "--tags nut_host" in land_tags.self_applied_command(files)
     # Routable, so not owed to a hand by plane_note -- the deployer's own state grades it.
-    assert land_tags.plane_note(files) == ""
+    assert land_tags.plane_note(files, owed=land_tags.forecast_owed(files)) == ""
 
 
 def test_the_landing_owes_daniel_server_no_run():

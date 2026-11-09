@@ -105,13 +105,21 @@ class Outcome(Exception):
     `refused`, so every exit-1 end prints a `VERDICT:` line too (#4451). Exit 64, a usage
     error, prints none.
 
-    `error` is the `land: <error>` stderr line, and "" means there is none: `Landing.finish`
-    raises without one. It is a `str` rather than `str | None` so a caller that reads it
-    needs no narrowing.
+    `recorded` is the detail `--verdict-file` records when it differs from the printed one,
+    such as a broad landing's full tag list where the VERDICT line prints a count.
+
+    `error` is the `land: <error>` stderr line, printed only when no VERDICT line carries it.
+    "" means there is none: `Landing.finish` raises without one. It is a `str` rather than
+    `str | None` so a caller that reads it needs no narrowing.
     """
 
     def __init__(
-        self, rc: int, detail: str, verdict: str | None = None, error: str = ""
+        self,
+        rc: int,
+        detail: str,
+        verdict: str | None = None,
+        error: str = "",
+        recorded: str = "",
     ) -> None:
         if verdict is not None and verdict not in VERDICTS:
             raise ValueError(f"unknown verdict {verdict!r}")
@@ -124,19 +132,28 @@ class Outcome(Exception):
         self.detail = detail
         self.verdict = verdict
         self.error = error
+        self.recorded = recorded or detail
 
     def emit(self) -> None:
-        """Print `land: <error>` (stderr) and `VERDICT: <verdict> (<detail>)` (stdout), as present."""
-        if self.error:
+        """Print `VERDICT: <verdict> (<detail>)` on stdout, else `land: <error>` on stderr.
+
+        The VERDICT detail already carries the error, so a stop prints the sentence once.
+        """
+        if self.error and not self.verdict:
             print(f"land: {self.error}", file=sys.stderr)
         if self.verdict:
             print(f"VERDICT: {self.verdict} ({self.detail})")
 
+    def add_notes(self, notes: list[str]) -> None:
+        """Append `notes` to the detail, both the printed and the recorded one."""
+        self.detail = "; ".join((self.detail, *notes))
+        self.recorded = "; ".join((self.recorded, *notes))
+
     def file_line(self) -> str:
         """The one line `--verdict-file` records: the VERDICT line, or why it stopped without one."""
         if self.verdict:
-            return f"VERDICT: {self.verdict} ({self.detail})"
-        return f"STOPPED: rc={self.rc} {self.detail}"
+            return f"VERDICT: {self.verdict} ({self.recorded})"
+        return f"STOPPED: rc={self.rc} {self.recorded}"
 
 
 def write_verdict_file(path: str, line: str) -> None:
@@ -186,6 +203,17 @@ STALE_GATE_NOTE = (
     "  The health gate's tree held an older role definition than origin/master, so those "
     "workloads were not graded. This is NOT the ordinary deferral: nothing gates health again.\n"
     "  Re-run land.sh; it gates from the origin/master it reads then. No store failed to answer."
+)
+
+
+# What a `deferred` from step 1 means when the owed ledger could not be read and the PR touches a
+# setup role the tick does not apply (#7906). The ledger is the one record of what a hand owes,
+# so the landing guesses neither way. `land_probe` reports it as `gave-up`, a resume point, as
+# it does for UNREADABLE_GATE_NOTE.
+UNREADABLE_LEDGER_NOTE = (
+    "  The owed ledger could not be read, so what a hand owes for this PR's setup roles is "
+    "unknown. This is NOT the ordinary deferral: no updater will answer it.\n"
+    "  Re-run land.sh once the ledger reads."
 )
 
 

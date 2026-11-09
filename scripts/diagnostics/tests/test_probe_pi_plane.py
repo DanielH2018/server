@@ -6,7 +6,14 @@ equivalent.
 """
 
 import json
+import os
+import sys
 
+# `probe.py` sits in `scripts/diagnostics`, which `pythonpath` leaves out, so this test module
+# puts its own parent directory on `sys.path`.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import probe
 from diagnostics.probe_lib import core, pi_plane
 
 
@@ -172,3 +179,39 @@ def test_run_pi_targets_end_to_end_reports_a_missing_job(monkeypatch, capsys):
     assert pi_plane.run_pi_targets(Ns()) == 1
     out = capsys.readouterr().out
     assert "alloy-pi: MISSING" in out
+
+
+def test_format_targets_all_up_is_clean():
+    text, code = pi_plane.format_targets([_target("node"), _target("loki")])
+    assert (code, text) == (0, "2/2 targets up")
+
+
+def test_format_targets_flags_only_the_down_target():
+    """The healthy target prints no row: the view is the exceptions and a count (#7896)."""
+    active = [_target("node"), _target("loki", health="down", last_error="refused")]
+    active[1]["labels"]["job"] = "loki"
+    text, code = pi_plane.format_targets(active)
+    assert code == 1
+    assert text.splitlines() == ["  ✗ loki [daniel-pi] refused", "1/2 targets up"]
+
+
+def test_run_targets_prints_the_count(capsys):
+    payload = {"data": {"activeTargets": [_target("node")]}}
+
+    class Ns:
+        pi = False
+
+    code = pi_plane.run_targets(
+        Ns(), fetch_json=lambda url, resolve=None: (payload, None)
+    )
+    assert code == 0
+    assert capsys.readouterr().out == "1/1 targets up\n"
+
+
+def test_plain_targets_names_a_verdict_and_json_names_none():
+    """Plain `targets` judges; `--json` is the raw document the SessionStart hook parses."""
+    from diagnostics.probe_lib.cli_parser import _build_parser
+
+    parse = _build_parser().parse_args
+    assert probe.verdict_path(parse(["targets"])) == "targets"
+    assert probe.verdict_path(parse(["targets", "--json"])) is None

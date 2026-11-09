@@ -7,7 +7,7 @@ from pathlib import PurePath
 import pytest
 
 from deploy_ui_lib import deploy_ui_reads as reads
-from deployer_lib.deploy_locks import TREE_LOCK
+from lib.tree_lock import TREE_LOCK
 
 PS = """\
   412     1  9001 /usr/bin/bash

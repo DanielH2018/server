@@ -56,7 +56,7 @@ def _land(land_run_main, paths: list[str], sim: Sim, changed_files=None, **kwarg
             }
         },
         derived=tuple(land_tags.derive(paths, changed_files)),
-        plane=land_tags.plane_note(paths),
+        plane=land_tags.plane_note(paths, owed=land_tags.forecast_owed(paths)),
         k8s_tags={MERGE_SHA: set(FLUX) | {"sonarr", "radarr"}},
         gate=(True, []),
         **kwargs,

@@ -58,5 +58,14 @@ def test_a_unit_no_role_installs_is_not_listed() -> None:
         "/etc/systemd/system/kuma-check-render-records.timer",
         # H7.63 retired the setup-drift timer, so its units page again.
         "/etc/systemd/system/kuma-check-setup-drift.timer",
+        # The host packages install these under /usr/lib/systemd/system, so the /etc copies page.
+        "/etc/systemd/system/coredns-host.service",
+        "/etc/systemd/system/worktree-holders.socket",
+        "/etc/systemd/system/worktree-holders@.service",
+        "/etc/systemd/system/kuma-check-github-ruleset-drift.timer",
+        "/etc/systemd/system/kuma-check-github-interaction-limit-boot.service",
+        "/etc/systemd/system/kuma-check-loki-read-route.service",
+        "/etc/systemd/system/k3s.service.d/10-log-to-file.conf",
+        "/etc/systemd/system/k3s-agent.service.d/10-log-to-file.conf",
     ):
         assert unlisted({path}, pattern) == [path]

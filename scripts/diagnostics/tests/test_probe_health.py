@@ -17,6 +17,7 @@ from _probe_health_fixtures import NOW, pods
 
 from diagnostics.probe_lib import health, health_docker, health_rollout
 from diagnostics.probe_lib import health_kubectl
+from lib.exit_codes import PROBE_NOT_APPLICABLE
 
 
 def _inspect(state, restarts=0):
@@ -109,7 +110,7 @@ def test_health_exited_exits_one():
 def test_health_absent_and_undeclared_is_clean():
     """An undeclared name is a block tag or a typo — the one absence the notifier may skip."""
     text, code = health_docker.format_health([], "nope", declared=False)
-    assert code == 1
+    assert code == PROBE_NOT_APPLICABLE
     assert "not a declared service on any host" in text
 
 
@@ -435,9 +436,22 @@ def test_role_health_all_present_is_clean():
         ],
         NOW,
     )
-    assert code == 0
-    assert "all 2 workloads healthy" in text
-    assert "observability/grafana" in text
+    assert (code, text) == (0, "observability: all 2 workloads healthy")
+
+
+def test_role_health_prints_a_row_only_for_the_failed_workload():
+    """A healthy workload is in the count, not a row of its own (#7896)."""
+    text, code = health.format_role_health(
+        "observability",
+        [
+            _target("observability", "Deployment", "grafana", _deploy(), pods()),
+            _target("observability", "Deployment", "loki", None, None),
+        ],
+        NOW,
+    )
+    assert code == 1
+    assert "observability/loki: MISSING" in text
+    assert "observability/grafana" not in text
 
 
 def test_role_health_absent_workload_is_flagged():

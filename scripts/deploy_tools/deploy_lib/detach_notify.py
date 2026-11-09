@@ -11,8 +11,8 @@ for; it does not invent a second alert path.
 Degrades to a log-only note, never a crash, when:
   - a tag isn't a k8s workload OR a Pi Docker container (a block tag like
     `config`/`deploy`/`cron`, a name that matches neither, or a role whose manifests declare no
-    workload at all -- netpol-baseline, media-volume) -- skipped from the verdict rather than
-    counted as a failure
+    workload at all -- netpol-baseline, media-volume) -- probe.py exits `PROBE_NOT_APPLICABLE`,
+    and the tag is skipped from the verdict rather than counted as a failure
   - the gitops-deploy webhook config isn't present on this host -- deploy.sh normally runs on
     daniel-box, where it is; anywhere else this just prints and returns
 
@@ -38,11 +38,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.cli_help import ArgumentParser
 
 from lib.repo_paths import HOST_VARS, REPO
+from lib.summary import grouped
 
 # `tag_platforms` is the reader of containers_list that says which probe can see a tag's workload.
 from deploy_tools.deploy_lib import tags as deploy_tags
 from diagnostics.probe_lib.health_checkout import STALE_CHECKOUT
-from lib.exit_codes import DEPLOY_NO_HOSTS, PROBE_UNREADABLE
+from lib.exit_codes import DEPLOY_NO_HOSTS, PROBE_NOT_APPLICABLE, PROBE_UNREADABLE
 
 # The inventory directory as a path relative to a checkout root. `check_one` reads the
 # inventory from whichever tree the probe renders the manifests from, which is not always this
@@ -61,23 +62,6 @@ DETACH_SPOOL_DIR = Path("/var/lib/gitops-deploy/detach_spool")
 # sample newer than the rollout, a 60s re-read of a would-fail verdict, and a second probe
 # wait on that re-read (`probe_lib/health_alerts.py`), on top of the render and kubectl reads.
 PROBE_TIMEOUT_S = 300
-
-# Emitted by probe.py's health command when a tag names nothing health-checkable -- a block tag
-# like config/deploy/cron, a typo --skip-tag-check let through, or a role (netpol-baseline,
-# media-volume) whose manifests declare no workload at all.
-#
-# THESE MUST STAY UNAMBIGUOUS. A message that fits both "this tag names no container" and "the
-# container that should exist is absent" must not be on this list, or a failed deploy would
-# report `skipped` and the verdict would stay `settled`. probe.py says which of the two
-# happened, and its docstring records the rule: a name GUESSED from the tag may skip when
-# absent, a name RESOLVED from the role's own manifests may not. `test_deploy_detach_notify.py`
-# asserts every message probe.py emits for an absent workload matches none of these, so a
-# rewording cannot quietly reopen the hole.
-NOT_APPLICABLE_MARKERS = (
-    "no Deployment or DaemonSet",
-    "declares no rollout-checkable workload",
-    "not a declared service on any host",
-)
 
 
 @dataclass(frozen=True)
@@ -105,8 +89,14 @@ class CheckResult(NamedTuple):
     detail: str
 
 
+# How the gate's count line names each `check_one` state.
+COUNTED_AS = {"ok": "healthy", "unreadable": "not graded"}
+
+
 class GateResult(NamedTuple):
-    """The notification's headline verdict, and the per-tag lines behind it.
+    """The notification's headline verdict, a count line, and a line per tag not healthy.
+
+    A healthy or skipped tag is only counted, so a broad landing's log stays short (#7894).
 
     `unreadable` is True when the gate is unsettled only because a probe could not read its
     store (`PROBE_UNREADABLE`): no tag was found unhealthy, and at least one was not graded at
@@ -190,9 +180,6 @@ def check_one(
         out = (res.stdout or res.stderr or "").strip()
         return res.returncode, out.splitlines()[0] if out else ""
 
-    def not_applicable(line: str) -> bool:
-        return any(marker in line for marker in NOT_APPLICABLE_MARKERS)
-
     def graded(code: int) -> str:
         if code == 0:
             return "ok"
@@ -211,9 +198,7 @@ def check_one(
 
     if platforms == {"k8s"}:
         code, line = probe([])
-        # The marker before the exit code: a role with no workload exits 0 (#3596) and is
-        # still reported as `skipped`, not as a workload that was checked and found healthy.
-        if not_applicable(line):
+        if code == PROBE_NOT_APPLICABLE:
             return CheckResult("skipped", line)
         return CheckResult(graded(code), line)
 
@@ -222,7 +207,7 @@ def check_one(
         docker_code, docker_line = probe(["--docker"])
         line = f"{k8s_line}; {docker_line}"
         states = {graded(docker_code)}
-        if not not_applicable(k8s_line):
+        if k8s_code != PROBE_NOT_APPLICABLE:
             states.add(graded(k8s_code))
         # One side found unhealthy outranks the other side being unreadable.
         for state in ("unhealthy", "unreadable"):
@@ -233,11 +218,11 @@ def check_one(
     code, line = probe([])
     if code == 0:
         return CheckResult("ok", line)
-    if not_applicable(line):
+    if code == PROBE_NOT_APPLICABLE:
         code, line = probe(["--docker"])
         if code == 0:
             return CheckResult("ok", line)
-        if not_applicable(line):
+        if code == PROBE_NOT_APPLICABLE:
             return CheckResult("skipped", line)
     return CheckResult(graded(code), line)
 
@@ -259,14 +244,12 @@ def gate(
     """
     if not ansible_ok:
         return GateResult(False, ["ansible-playbook exited non-zero -- see the log."])
-    lines = []
+    lines, counted = [], []
     unhealthy = unreadable = stale = False
     for tag in tags:
         state, detail = check_one(tag, tools=tools, cwd=cwd)
-        if state == "skipped":
-            lines.append(
-                f"{tag}: not a health-checkable workload (skipped) -- {detail}"
-            )
+        counted.append((tag, COUNTED_AS.get(state, state)))
+        if state in ("ok", "skipped"):
             continue
         if state == "unreadable" and STALE_CHECKOUT in detail:
             lines.append(
@@ -283,6 +266,8 @@ def gate(
         lines.append(detail or f"{tag}: {state}")
         if state == "unhealthy":
             unhealthy = True
+    if counted:
+        lines.insert(0, f"health: {grouped(counted, named_up_to=0)}")
     return GateResult(
         not (unhealthy or unreadable),
         lines,
@@ -391,6 +376,8 @@ def main(argv: list[str] | None = None, tools: NotifyTools | None = None) -> int
     content = "\n".join(
         [
             f"deploy --detach {headline} ({who} exit {ns.status})",
+            # The gate's count line names no tag, so the post names what it gated.
+            *([f"tags: {', '.join(tags)}"] if tags else []),
             *lines,
             f"log: {ns.log}",
         ]

@@ -148,8 +148,8 @@ def b2_authorize(cfg: Config, src: Sources) -> tuple[bool, str]:
 
     Basic auth with the key id + application key is the whole protocol for b2_authorize_account,
     sent by b2_authorize_data. _get_json re-raises HTTPError with the response body appended, so a cap breach arrives here as
-    "HTTP Error 403: ... transaction_cap_exceeded ..." and that string is what reaches Kuma and
-    Discord — the named cause G3 asked for.
+    "HTTP Error 403: ... transaction_cap_exceeded ..." and that string is what the check's log
+    line carries — the named cause G3 asked for.
     """
     data = b2_authorize_data(cfg, src)
     # A 200 from something that isn't B2 must not read as healthy. Accept EITHER field rather than

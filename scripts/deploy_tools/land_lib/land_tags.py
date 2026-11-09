@@ -22,6 +22,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_tags.py
 
 import subprocess
 import sys
+from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
 from typing import NamedTuple
@@ -46,6 +47,8 @@ sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 
 sys.path.insert(0, str(HOST_LIB_FILES))
+from gitops_ledger import OWED_MANUAL_PLANE, owed_line_key
+from gitops_markers import MARKERS, STATE_DIR
 from deployer_lib.deploy_logic import (
     broad_remediation,
     setup_role_playbook,
@@ -148,17 +151,106 @@ def _needs_nothing(role: str, narrow_tags: dict[str, frozenset[str]] | None) -> 
     return narrow_tags is not None and tag in narrow_tags and not narrow_tags[tag]
 
 
+def manual_planes_in(text: str) -> frozenset[str]:
+    """The subjects of the owed ledger's `manual_plane` lines in `text`.
+
+    A torn line counts, as `gitops_hold._held_subjects` counts one: it still names a line
+    that `clear-owed` can clear.
+    """
+    keys = (owed_line_key(line) for line in text.splitlines())
+    return frozenset(k[1].strip() for k in keys if k and k[0] == OWED_MANUAL_PLANE)
+
+
+DEPLOYER_STATE = Path(STATE_DIR)
+
+
+def read_owed(deployer_state: Path) -> frozenset[str]:
+    """The role tags the owed ledger in `deployer_state` holds as `manual_plane`.
+
+    Empty when the ledger is absent. ABSENT AND UNREADABLE ARE DIFFERENT ANSWERS, as for
+    `tools.read_state`, but this raises the read error (`OSError`, `UnicodeDecodeError`) where
+    that returns None, so the caller can name it in the verdict it ends with.
+    """
+    try:
+        text = (deployer_state / MARKERS["owed"]).read_text()
+    except FileNotFoundError:
+        return frozenset()
+    return manual_planes_in(text)
+
+
+class LedgerUnreadable(Exception):
+    """The owed ledger did not read, and this PR's paths nominate a role it would answer for."""
+
+
+def owed_for(
+    files,
+    quiet,
+    deployer_state: Path,
+    read: Callable[[Path], frozenset[str]] = read_owed,
+) -> frozenset[str]:
+    """The role tags the ledger holds as `manual_plane`, for the `owed` of `plane_note`.
+
+    An unreadable ledger raises `LedgerUnreadable` naming the read error, because the ledger
+    is the one record of what a hand owes and a guess either way is wrong (#7906). That holds
+    only when a path nominates a role for the ledger to answer: a PR that touches no such
+    role reads nothing from it, so a broken ledger cannot defer that PR.
+    """
+    try:
+        return read(deployer_state)
+    except (OSError, UnicodeDecodeError) as exc:
+        roles = sorted(manual_role_candidates(files, quiet))
+        if not roles:
+            return frozenset()
+        raise LedgerUnreadable(
+            f"the PR changes setup role {', '.join(roles)}, and the owed ledger "
+            f"{deployer_state / MARKERS['owed']} could not be read "
+            f"({type(exc).__name__}: {exc})"
+        ) from exc
+
+
+def setup_roles_of(path: str) -> frozenset[str]:
+    """The setup roles `path` belongs to; empty for a path outside every setup role."""
+    return frozenset(reach.reach([path]).changes.setup_roles)
+
+
+def manual_role_candidates(
+    files, quiet=(), narrow_tags: dict[str, frozenset[str]] | None = None
+) -> frozenset[str]:
+    """The setup roles this PR's paths could have left on the ledger as `manual_plane`.
+
+    Those are the roles the tick does not apply (`k3s` lives in k3s-bringup.yml, `common` in
+    no playbook of its own, `optimize_pi` is gated off the tick's host), minus any role
+    `narrow_tags` maps to an empty set. A path only NOMINATES a role here: `plane_note` owes a
+    hand for a nominee only when the ledger holds its line.
+    """
+    return frozenset(
+        r
+        for r in reach.reach(list(files), quiet).changes.setup_roles
+        if not tick_applies_setup_role(r) and not _needs_nothing(r, narrow_tags)
+    )
+
+
+def forecast_owed(files) -> frozenset[str]:
+    """The `owed` that makes `plane_note` name every role `files` nominates.
+
+    For a forecast made before any ledger exists, such as a brief that says what a change
+    would owe a hand if the deployer recorded its line.
+    """
+    return frozenset(setup_role_tag(r) for r in manual_role_candidates(files))
+
+
 def plane_note(
     files,
     quiet=(),
     narrow_tags: dict[str, frozenset[str]] | None = None,
+    *,
+    owed: frozenset[str],
 ) -> str:
     """What this PR still needs a HUMAN to apply, or "" if nothing.
 
     A deploy tag covers roles/k8s. It does not cover the setup plane,
     which `deploy.yml` cannot apply at all -- so a PR touching only roles/setup derives zero
-    tags. That must not read as `nothing-to-deploy`: a setup-role change needs its own
-    `initial_setup.yml --tags <role>` run.
+    tags. That must not read as `nothing-to-deploy` when the ledger owes a setup-role apply.
 
     Returned for the tag-carrying case too. A PR can touch a k8s role AND the setup plane,
     where the deploy genuinely succeeds and half the change is still unapplied -- the harder
@@ -178,6 +270,11 @@ def plane_note(
     `narrow_tags` is role tag -> the tags that role's change needs. A role mapped to an
     empty set needs none over this range (`own_narrow_tags`), so the note leaves it out,
     clear command included: `deploy_defer.record` writes no `manual_plane` line for it.
+
+    `owed` is the role tags the owed ledger holds as `manual_plane` (`manual_planes_in`). It
+    decides which setup roles the note names, and the paths only nominate them
+    (`manual_role_candidates`). The ledger is the one record of what is owed, so the note never
+    sends an operator after a line the host lacks.
     """
     files = list(files)
     quiet = set(quiet)
@@ -195,10 +292,16 @@ def plane_note(
     # applying exactly those roles. land.sh reads the deployer's own state for
     # that case instead.
     loud = reach.reach(files, quiet)
+    # DECIDED: the owed ledger decides which setup role is owed a hand, and the paths only name
+    # the roles whose line this PR could have created (#7906). A path-derived verdict named
+    # work no one owes once H7.52 retired the tick, the only writer of `manual_plane` lines: a
+    # modified `k3s` role with an empty ledger ended `needs-manual-apply` over a line that does
+    # not exist. The bring-up playbooks stay path-derived (`loud.manual`): the tick parked on
+    # them and never wrote a line, so a ledger test would mute them for good.
     unroutable = {
         r
-        for r in loud.changes.setup_roles
-        if not tick_applies_setup_role(r) and not _needs_nothing(r, narrow_tags)
+        for r in manual_role_candidates(files, quiet, narrow_tags)
+        if setup_role_tag(r) in owed
     }
     if loud.manual or unroutable:
         notes.append(
@@ -211,9 +314,8 @@ def plane_note(
             )
         )
     if unroutable and not loud.manual:
-        # The tick MERGED this PR and recorded the role in `manual_plane`, so applying it by
-        # hand is only half the job: a role left in the marker stays on the SessionStart banner
-        # over work that is already live.
+        # A role the ledger holds in `manual_plane` stays on the SessionStart banner after the
+        # hand apply until it is cleared.
         #
         # `not manual` because `deploy_defer.parks_the_tick` gives `cs.broad_manual` priority:
         # a range carrying BOTH a bring-up playbook and an unapplyable role parks outright and

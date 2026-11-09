@@ -68,6 +68,7 @@ remedy instead.
 
 import re
 import subprocess
+from collections.abc import Callable
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -75,6 +76,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonObject, as_list, as_object, as_object_list
+from lib.progress import OnChange
 from lib import removes_object
 from deploy_tools import await_ci
 from deploy_tools.land_lib import gh_read, pace, pin_gate, policy
@@ -197,10 +199,7 @@ def _leave_for_a_direct_merge(ln: Landing, subject: str) -> None:
             1,
         )
     ln.direct_merge_subject = subject
-    say(
-        f"PR #{pr}: not arming auto-merge — merging directly once CI is green, at the head "
-        "CI checked"
-    )
+    say(f"PR #{pr}: merging directly once CI is green, at the head CI checked")
 
 
 def squash_body(commits: list[CommitMessage]) -> str:
@@ -222,6 +221,21 @@ def squash_body(commits: list[CommitMessage]) -> str:
         return ""
     trailers = "\n".join(f"{removes_object.KEY}: {line}" for line in sorted(lines))
     return "\n\n".join([*messages, trailers]) + "\n"
+
+
+# gh's header line and HTTP status around a rule-violation refusal, which name no reason.
+_REFUSAL_NOISE = re.compile(r"^gh: Repository rule violations found$|\s*\(HTTP \d+\)$")
+_REQUIRED_CHECK = re.compile(r'^Required status check "([^"]+)" is (.+?)\.?$')
+
+
+def refusal_reason(stderr: str) -> str:
+    """gh's merge refusal as one line, e.g. `required check prek in progress`."""
+    reasons = []
+    for line in stderr.splitlines():
+        line = _REFUSAL_NOISE.sub("", line.strip()).strip()
+        if line:
+            reasons.append(_REQUIRED_CHECK.sub(r"required check \1 \2", line))
+    return "; ".join(reasons)
 
 
 def _merge_directly(ln: Landing, head: str) -> str:
@@ -248,7 +262,7 @@ def _merge_directly(ln: Landing, head: str) -> str:
             *(arg for field in fields for arg in ("-f", field)),
         )
     except subprocess.CalledProcessError as exc:
-        return (exc.stderr or "").strip() or f"gh exited {exc.returncode}"
+        return refusal_reason(exc.stderr or "") or f"gh exited {exc.returncode}"
     except subprocess.TimeoutExpired:
         return "gh timed out"
     say(f"merged directly at the checked head: {ln.direct_merge_subject}")
@@ -314,8 +328,13 @@ def _pr_paths(ln: Landing) -> set[str] | None:
     return {p for pair in names for p in pair if p}
 
 
-def _stale_paths(ln: Landing, head: str, conflicting: bool) -> list[str]:
+def _stale_paths(
+    ln: Landing, head: str, conflicting: bool, note: Callable[[str], None]
+) -> list[str]:
     """The paths that make `head` stale enough to update; [] to merge it as it stands.
+
+    `note` takes the line that says master moved only on paths the PR leaves alone; the wait
+    passes an `OnChange`, so a merge attempt repeated on the same master does not repeat it.
 
     `head` is stale when master changed a path the PR changes since its tested base, or when
     `conflicting` says GitHub reads the PR as conflicting with master. Dies instead when `head`
@@ -332,7 +351,7 @@ def _stale_paths(ln: Landing, head: str, conflicting: bool) -> list[str]:
         if pr_paths is not None:
             overlap = sorted(set(moved) & pr_paths)
             if not overlap:
-                say(
+                note(
                     f"{BRANCH} changed {len(moved)} path(s) since PR #{ln.opts.pr}'s base, "
                     "none of them one the PR changes; merging without a branch update"
                 )
@@ -578,7 +597,8 @@ def await_merge(ln: Landing) -> None:
     o, t = ln.opts, ln.tools
     waited = 0
     conflicting = 0
-    last_refusal = ""
+    refused = OnChange(say)
+    no_overlap = OnChange(say)
     # await_ci's last answer when it was `pending`, for the merge-timeout message; else empty.
     ci_pending = ""
     # The pacing hold the last green poll printed (`pace.py`), for the merge-timeout message.
@@ -680,7 +700,11 @@ def await_merge(ln: Landing) -> None:
             paced = hold
             if rc == CI_GREEN and ln.direct_merge_subject and not hold:
                 conflicts = view.get("mergeable") == "CONFLICTING"
-                moved = [] if updated_from else _stale_paths(ln, head, conflicts)
+                moved = (
+                    []
+                    if updated_from
+                    else _stale_paths(ln, head, conflicts, no_overlap)
+                )
                 if moved:
                     _update_branch(ln, head, moved)
                     updated_from = head
@@ -694,12 +718,7 @@ def await_merge(ln: Landing) -> None:
                     refusal = _merge_directly(ln, head)
                     if not refusal:
                         continue
-                    if refusal != last_refusal:
-                        say(
-                            f"GitHub refused the direct merge at {head[:8]}; waiting: "
-                            f"{refusal}"
-                        )
-                        last_refusal = refusal
+                    refused(f"merge refused at {head[:8]}: {refusal}; waiting")
         if not hold and waited + held >= wait_ends_at:
             # A run cancelled on the head never supplies a verdict on its own (#5931). A run
             # skipped as a draft names its own remedy in await_ci's line, because a re-run of
