@@ -121,7 +121,7 @@ def test_a_landing_that_stopped_without_a_verdict_reports_why(tmp_path, capsys):
         tmp_path, line=line, status={"Result": "exit-code", "ExecMainStatus": "1"}
     )
     assert rc == 1
-    assert "land: PR #3633 — refused by the landing policy" in capsys.readouterr().err
+    assert "refused by the landing policy" in capsys.readouterr().out
 
 
 def test_an_earlier_landings_verdict_is_never_reported_as_this_ones(tmp_path, capsys):
@@ -133,12 +133,12 @@ def test_an_earlier_landings_verdict_is_never_reported_as_this_ones(tmp_path, ca
         stderr="Job for homelab-claude-land@3633.service failed.",
         status={"Result": "exit-code", "ExecMainStatus": "1"},
     )
-    out, err = capsys.readouterr()
+    out = capsys.readouterr().out
     assert rc == 1
     assert LANDED not in out
     assert (
         "ended without a verdict (Job for homelab-claude-land@3633.service failed.)"
-        in err
+        in out
     )
 
 
@@ -165,9 +165,9 @@ def test_a_unit_that_ends_without_a_verdict_names_its_journal(
     tmp_path, capsys, fake, reason
 ):
     rc, _ = _hand_off(tmp_path, **fake)
-    err = capsys.readouterr().err
+    out = capsys.readouterr().out
     assert rc == 1
-    assert reason in err and f"journalctl -u {INSTANCE}" in err
+    assert reason in out and f"journalctl -u {INSTANCE}" in out
 
 
 def test_a_code_land_sh_never_exits_with_is_reported_as_1(tmp_path):

@@ -30,7 +30,7 @@ and frozen; `plane` is a read-only property over it and `narrowed_plane`:
 | `ci.wait_master_ci` | `merge_sha`, `opts.ci_timeout` | `ledger.t_ci` |
 | `host_wait.host_targets` (in step 3, only when `host_candidate`) | `host_candidate`, `merge_sha`, `opts.primary` | `host_targets`, and `host_candidate` cleared when none differ |
 | `classify.narrow_plane` (in step 3, after the CI wait) | `classification`, `opts.primary` | `narrowed_plane` |
-| `deploy.deploy_phase` | `resolved_tags`, `needs_diff`, `host_targets`, `classification`, `opts.since`, `merge_sha` | `resolved_tags`, `flux_tags`, `suspended_tags`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.t_deploy` |
+| `deploy.deploy_phase` | `resolved_tags`, `needs_diff`, `host_targets`, `classification`, `opts.since`, `merge_sha` | `resolved_tags`, `named_k8s_tags`, `flux_tags`, `suspended_tags`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.t_deploy` |
 | `host_wait.wait_for_hosts` (step 6) | `host_targets`, `merge_sha`, `opts.pr`, `opts.primary` | -- |
 | `health_verdict.health` | `resolved_tags`, `host_targets`, `flux_tags`, `suspended_tags`, `deployed_at`, `plane`, `classification` | `ledger.cause` |
 
@@ -117,7 +117,7 @@ def run(ln: Landing) -> Outcome:
         _phases(ln)
     except Outcome as outcome:
         ln.ledger.verdict = outcome.verdict or ""
-        outcome.detail = "; ".join((outcome.detail, *ln.warnings))
+        outcome.add_notes(ln.warnings)
         return outcome
     # Unreachable: the last step is `health_verdict.health`, which is `NoReturn`. Returned
     # rather than raised, because `run`'s own `except Outcome` above would not catch an

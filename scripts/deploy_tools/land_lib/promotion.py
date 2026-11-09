@@ -105,6 +105,7 @@ def split_k8s(ln: Landing) -> None:
     if not k8s:
         return
     ln.resolved_tags = [tag for tag in ln.resolved_tags if tag not in declared]
+    ln.named_k8s_tags = k8s
     if ln.opts.tags:
         ln.flux_tags = k8s
         for tag in k8s:
@@ -173,7 +174,10 @@ def wait_on_promotion(ln: Landing) -> None:
     ln.ledger.tags_label = ",".join(ln.flux_tags)
     tags = ",".join(ln.flux_tags) or "homelab"
     if result.tags:
-        say(f"the changed set names {','.join(result.tags)}")
+        # The PR's own tags were named once already, so a broad set lists only the rest.
+        extras = [t for t in result.tags if t not in ln.named_k8s_tags]
+        beyond = f", beyond this PR's own: {','.join(extras)}" if extras else ""
+        say(f"the changed set names {len(result.tags)} tag(s){beyond}")
     if result.widened:
         say(f"land-wait waited on every Kustomization: {result.widened}")
     if result.suspended:

@@ -14,6 +14,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.deploy_lib.detach_notify import GateResult
 from deploy_tools.land_lib import promotion
+from lib.summary import NAMED_UP_TO
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import (
     STALE_GATE_NOTE,
@@ -152,8 +153,20 @@ def _gate_until_readable(ln: Landing) -> GateResult:
 
 def health(ln: Landing) -> NoReturn:
     """Gate every deployed tag, then settle, or name what is still open."""
-    pr, sha, tags = ln.opts.pr, ln.merge_sha, ",".join(promotion.gated_tags(ln))
+    pr, sha, gated = ln.opts.pr, ln.merge_sha, promotion.gated_tags(ln)
+    listed = ",".join(gated)
+    # A broad landing's VERDICT line counts its tags; the verdict file keeps the list.
+    shown = f"{len(gated)} (broad)" if len(gated) > NAMED_UP_TO else listed
     done = applied_wording(ln)
+
+    def end(verdict: str, rc: int, tail: str = "") -> NoReturn:
+        ln.finish(
+            verdict,
+            rc,
+            f"PR #{pr}, {sha}, tags: {shown}{tail}",
+            recorded=f"PR #{pr}, {sha}, tags: {listed}{tail}",
+        )
+
     result = _gate_until_readable(ln)
     for line in result.lines:
         say(line)
@@ -161,22 +174,20 @@ def health(ln: Landing) -> NoReturn:
         print(f"  STILL UNAPPLIED, and no deploy tag covers it: {ln.plane}")
     if result.stale:
         print(STALE_GATE_NOTE)
-        ln.finish(
+        end(
             Verdict.DEFERRED,
             75,
-            f"PR #{pr}, {sha}, tags: {tags} — deployed, but the health gate's tree was "
-            "older than origin/master",
+            " — deployed, but the health gate's tree was older than origin/master",
         )
     if result.unreadable:
         print(UNREADABLE_GATE_NOTE)
-        ln.finish(
+        end(
             Verdict.DEFERRED,
             75,
-            f"PR #{pr}, {sha}, tags: {tags} — deployed, but the health gate could not "
-            "read its store",
+            " — deployed, but the health gate could not read its store",
         )
     if not result.settled:
-        ln.finish(Verdict.UNHEALTHY, 1, f"PR #{pr}, {sha}, tags: {tags}")
+        end(Verdict.UNHEALTHY, 1)
     if ln.plane:
         ln.finish(
             Verdict.NEEDS_MANUAL_APPLY,
@@ -184,8 +195,4 @@ def health(ln: Landing) -> NoReturn:
             f"PR #{pr}, {sha} — {done}, the plane above not",
         )
     hosts = ", ".join(t.host for t in ln.host_targets)
-    ln.finish(
-        Verdict.SETTLED,
-        0,
-        f"PR #{pr}, {sha}, tags: {tags}" + (f", hosts: {hosts}" if hosts else ""),
-    )
+    end(Verdict.SETTLED, 0, f", hosts: {hosts}" if hosts else "")

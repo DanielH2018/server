@@ -146,9 +146,9 @@ def test_a_comparison_git_could_not_make_refuses():
 
 def test_a_stale_checkout_ends_the_landing_refused_before_it_classifies(land_run):
     fakes = Fakes(stale_code=["scripts/lib/render_guard.py"])
-    rc, out, err, calls, _ = land_run([], fakes)
+    rc, out, _, calls, _ = land_run([], fakes)
     assert rc == 1 and "VERDICT: refused" in out
-    assert "scripts/lib/render_guard.py" in err
+    assert "scripts/lib/render_guard.py" in out
     assert not any(c[0] == "deploy_tags" for c in calls)
 
 
@@ -169,9 +169,9 @@ def test_an_armed_landing_from_a_stale_checkout_refuses_before_it_merges(land_ru
         },
         stale_code=["scripts/lib/render_guard.py"],
     )
-    rc, out, err, calls, _ = land_run(["--arm-merge", "--await-merge"], fakes)
+    rc, out, _, calls, _ = land_run(["--arm-merge", "--await-merge"], fakes)
     assert rc == 1 and "VERDICT: refused" in out
-    assert "scripts/lib/render_guard.py" in err
+    assert "scripts/lib/render_guard.py" in out
     merges = [
         c for c in calls if c[0] == "gh" and any(a.endswith("/merge") for a in c[1])
     ]
@@ -261,9 +261,9 @@ def test_a_comparison_git_could_not_make_refuses_before_it_merges(land_run):
         },
         stale_code=None,
     )
-    rc, out, err, calls, _ = land_run(["--arm-merge", "--await-merge"], fakes)
+    rc, out, _, calls, _ = land_run(["--arm-merge", "--await-merge"], fakes)
     assert rc == 1 and "VERDICT: refused" in out
-    assert "git could not compare" in err
+    assert "git could not compare" in out
     merges = [
         c for c in calls if c[0] == "gh" and any(a.endswith("/merge") for a in c[1])
     ]

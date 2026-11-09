@@ -58,21 +58,29 @@ HERE = _Path(__file__).resolve().parents[1]
 # What `uv run` reads to find an existing venv instead of building one where it stands.
 UV_PROJECT_ENVIRONMENT = "UV_PROJECT_ENVIRONMENT"
 # `uv run` resolves the venv from cwd, PRIMARY here, which may predate `deploy_cli.py` (#4347).
-DEPLOY_TAGS_ARGV = ("uv", "run", "python", "scripts/deploy_tools/deploy_tags.py")
+DEPLOY_TAGS_ARGV = ("uv", "run", "-q", "python", "scripts/deploy_tools/deploy_tags.py")
 # The parent a gate snapshot is made in, and the env var that moves it for a test.
 GATE_TMP_ROOT = "/tmp"
 GATE_TMP_ROOT_ENV = "LAND_GATE_TMPDIR"
 
 
 def run_deploy_tags(primary: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
-    """Run deploy_tags.py in the primary checkout; stdout captured, stderr inherited."""
-    return subprocess.run(
+    """Run deploy_tags.py in the primary checkout; stdout captured, stderr shown on failure.
+
+    The caller's `VIRTUAL_ENV` names another checkout's venv, so uv would only warn about it.
+    """
+    env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+    res = subprocess.run(
         [*DEPLOY_TAGS_ARGV, *args],
         cwd=primary,
-        stdout=subprocess.PIPE,
+        env=env,
+        capture_output=True,
         text=True,
         check=False,
     )
+    if res.returncode and res.stderr:
+        print(res.stderr, end="", file=_sys.stderr)
+    return res
 
 
 @contextlib.contextmanager

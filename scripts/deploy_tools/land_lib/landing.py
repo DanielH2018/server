@@ -83,6 +83,9 @@ class Landing:
             str
         ] = []  # the k8s tags a promotion applies and step 6 gates
         self.suspended_tags: list[str] = []  # suspended at M; the gate skips them
+        self.named_k8s_tags: list[
+            str
+        ] = []  # the k8s tags the PR's paths or --tags named
         # The merge commit, set once step 4 starts: the primary checkout may not carry it
         # yet. The health verdict reads it to gate from a tree holding this PR.
         self.deployed_at = ""
@@ -120,7 +123,7 @@ class Landing:
         self.warnings.append(line)
 
     def die(self, msg: str, rc: int, verdict: str | None = None) -> NoReturn:
-        """Stop with `land: <msg>` on stderr, and a VERDICT line on stdout.
+        """Stop with a VERDICT line naming `msg` on stdout, or `land: <msg>` on stderr without one.
 
         `rc` has no default: one of 2 collided with three other meanings of 2 (#4451), so
         every caller names a code land.sh documents. An exit-1 stop with no `verdict` prints
@@ -128,9 +131,11 @@ class Landing:
         """
         raise Outcome(rc, f"PR #{self.opts.pr} — {msg}", verdict, error=msg)
 
-    def finish(self, verdict: str, rc: int, detail: str) -> NoReturn:
-        """Stop with a VERDICT line and nothing on stderr."""
-        raise Outcome(rc, detail, verdict)
+    def finish(
+        self, verdict: str, rc: int, detail: str, recorded: str = ""
+    ) -> NoReturn:
+        """Stop with a VERDICT line and nothing on stderr; `recorded` is `Outcome`'s."""
+        raise Outcome(rc, detail, verdict, recorded=recorded)
 
     # -- shared reads -------------------------------------------------------------------
 
