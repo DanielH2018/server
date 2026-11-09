@@ -2336,6 +2336,15 @@ the `manual_plane` clearing, and *Rollback*'s
     carries the deployer-import census and the legacy entries, and names
     `/var/lib/gitops-deploy/` as the operator's cleanup. Exit observation 5 holds once its
     version is live on daniel-box.
+    **Split in two on 2026-11-09, the re-home first.** The first PR moves `TREE_LOCK` to
+    `scripts/lib/tree_lock.py` and `k8s_lookup_map` to `scripts/lib/k8s_lookups.py`.
+    `deploy_locks.py` keeps its own `TREE_LOCK` until H7.20a, and
+    `test_tree_lock_single_definition.py` holds the two equal. The `role_paths.py` grep moves to the deleting PR, because `land_tags.py` imports
+    `land_shared` and only the setup arm's deletion shows whether that import survives. The
+    deleting PR and the strict census wait on
+    [#7888](https://github.com/DanielH2018/server/issues/7888): `k3s/tasks/` still holds
+    `server.yml` and `coredns.yml` (H7.44's code half), `storage_smoke.yml` (H7.45) and the
+    guarded `static-address.yml` (H7.34, H7.35), and the census lists each of them.
 30. **H7.54** stays alone. Its parity proof covers 361 modules.
     **Landed as [#7856](https://github.com/DanielH2018/server/pull/7856).**
     The test env moved to `ansible/tests/_jinja_env.py` and registers

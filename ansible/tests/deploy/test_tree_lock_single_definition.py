@@ -1,17 +1,16 @@
 """The git-tree lock's path has one definition per language, and the two agree.
 
 Host templates render `server_git_tree_lock` from `group_vars/all.yml`; Python imports
-`deploy_locks.TREE_LOCK`. A drift between them splits the lock in two: the deployer's unit
-and `deploy.sh` would each serialise against a different file, and a tick could rewrite the
-tree under a snapshot (#3276).
+`lib.tree_lock.TREE_LOCK`. A drift between them splits the lock in two: the host crons and
+the Python readers would each serialise against a different file (#3276).
 
 Run: uv run pytest ansible/tests/deploy/test_tree_lock_single_definition.py
 """
 
 from _helpers import load_yaml
-from deployer_lib.deploy_locks import TREE_LOCK
-
+from deployer_lib import deploy_locks
 from lib.repo_paths import ALL_VARS, REPO
+from lib.tree_lock import TREE_LOCK
 
 
 def _group_var() -> str:
@@ -20,6 +19,10 @@ def _group_var() -> str:
 
 def test_the_template_var_and_the_python_constant_agree_is_clean():
     assert _group_var() == TREE_LOCK
+
+
+def test_the_deployer_copy_agrees_until_h7_20a_deletes_it():
+    assert deploy_locks.TREE_LOCK == TREE_LOCK
 
 
 # The host crons that take the git-tree lock, and the one macro they all take it through (#3722).
