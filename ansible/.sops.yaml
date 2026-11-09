@@ -38,7 +38,7 @@
 #   2. Append the printed pubkey to the comma-separated `age:` string of ALL THREE rules
 #      below. Each is ONE quoted scalar, not a YAML list, so a per-key trailing comment is
 #      impossible; extend the position->host note above the generic rule instead.
-#   3. On a host that can already decrypt (daniel-server), from ansible/, once per file.
+#   3. On a host that can already decrypt (daniel-box), from ansible/, once per file.
 #      Each command shows the recipient change and asks before writing:
 #        sops updatekeys vars/secrets.yml
 #        sops updatekeys vars/cluster-vars.sops.env
@@ -58,15 +58,15 @@ creation_rules:
   # Cluster rules. Unanchored at the start, like the generic rule, so each matches a path
   # relative to ansible/, relative to the repo root, absolute, or given as --filename-override.
   # First key = the CLUSTER key: its private half is the `sops-age` Secret in flux-system and
-  # the operator's password manager, and kustomize-controller decrypts with it. The other three
-  # are the generic rule's host keys, in the same order.
+  # the operator's password manager, and kustomize-controller decrypts with it. The other two
+  # are the generic rule's keys, in the same order.
   - path_regex: vars/cluster-vars\.sops\.env$
-    age: "age1wf2js7pakyty3qgn3mxwuz8gc277jdgd3guy283cmphgxdj62qeqk6tmnc,age1shgt54wq7y9pk4nksxcfr5s539rh2g5uqkh9t2jlx6wj4a8aq34q4cyg7k,age1nplxuas350e777k3cqvfe8v2tccm8t7rqh66t7z692f6zyt9ra2svwfeyp,age1h29wmm6fa9zfq3ld72l4efen3fwf59s9xxyzva8xqulzp997td0qpwsjc4"
+    age: "age1wf2js7pakyty3qgn3mxwuz8gc277jdgd3guy283cmphgxdj62qeqk6tmnc,age1nplxuas350e777k3cqvfe8v2tccm8t7rqh66t7z692f6zyt9ra2svwfeyp,age1h29wmm6fa9zfq3ld72l4efen3fwf59s9xxyzva8xqulzp997td0qpwsjc4"
   # A manifest stays a readable Secret: only data and stringData are encrypted, so Flux and
   # the renderer can read apiVersion, kind and metadata without a key.
   - path_regex: vars/cluster-manifests/[^/]+\.sops\.yaml$
     encrypted_regex: ^(data|stringData)$
-    age: "age1wf2js7pakyty3qgn3mxwuz8gc277jdgd3guy283cmphgxdj62qeqk6tmnc,age1shgt54wq7y9pk4nksxcfr5s539rh2g5uqkh9t2jlx6wj4a8aq34q4cyg7k,age1nplxuas350e777k3cqvfe8v2tccm8t7rqh66t7z692f6zyt9ra2svwfeyp,age1h29wmm6fa9zfq3ld72l4efen3fwf59s9xxyzva8xqulzp997td0qpwsjc4"
+    age: "age1wf2js7pakyty3qgn3mxwuz8gc277jdgd3guy283cmphgxdj62qeqk6tmnc,age1nplxuas350e777k3cqvfe8v2tccm8t7rqh66t7z692f6zyt9ra2svwfeyp,age1h29wmm6fa9zfq3ld72l4efen3fwf59s9xxyzva8xqulzp997td0qpwsjc4"
   # A per-host file (H4) ships inside that host's package and is decrypted on that host with its
   # own key, so the creation rule names the host's key, daniel-box's key and the recovery key.
   # It goes ahead of the generic rule, whose pattern also matches ansible/vars/hosts/. Keys in
@@ -85,9 +85,11 @@ creation_rules:
     age: "age1h29wmm6fa9zfq3ld72l4efen3fwf59s9xxyzva8xqulzp997td0qpwsjc4,age1nplxuas350e777k3cqvfe8v2tccm8t7rqh66t7z692f6zyt9ra2svwfeyp"
   - path_regex: .*(vars|secrets)\/.*\.ya?ml$
     # Recipients (multi-recipient = OR; ANY one key decrypts the whole file).
-    # First key = daniel-server, second = OFF-BOX RECOVERY key (private half lives only in the
-    # operator's password manager — the DR escape hatch if every host's
-    # ~/.config/sops/age/keys.txt is lost), third = daniel-box.
+    # First key = OFF-BOX RECOVERY key (private half lives only in the operator's password
+    # manager — the DR escape hatch if every host's ~/.config/sops/age/keys.txt is lost),
+    # second = daniel-box.
     # daniel-pi was a recipient until 2026-10-03. It is driven over ssh and never decrypts, so
     # its key was removed with `sops rotate --rm-age` and the private half destroyed.
-    age: "age1shgt54wq7y9pk4nksxcfr5s539rh2g5uqkh9t2jlx6wj4a8aq34q4cyg7k,age1nplxuas350e777k3cqvfe8v2tccm8t7rqh66t7z692f6zyt9ra2svwfeyp,age1h29wmm6fa9zfq3ld72l4efen3fwf59s9xxyzva8xqulzp997td0qpwsjc4"
+    # daniel-server's user-home key was a recipient until the 2026-11-09 ruling (#6643). Its
+    # package decrypts only vars/hosts/daniel-server.sops.yaml, with /etc/homelab/age.key.
+    age: "age1nplxuas350e777k3cqvfe8v2tccm8t7rqh66t7z692f6zyt9ra2svwfeyp,age1h29wmm6fa9zfq3ld72l4efen3fwf59s9xxyzva8xqulzp997td0qpwsjc4"

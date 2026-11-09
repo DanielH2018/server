@@ -19,10 +19,12 @@ otherwise; none of the values below are secrets themselves, only names and locat
 
 1. **The off-box recovery age key.** A password-manager-held age keypair, added as a SOPS
    recipient on 2026-06-11 so `ansible/vars/secrets.yml` survives losing every host's own key.
-   The host recipients are `daniel-server` and `daniel-box`; `daniel-pi`'s key was removed on
-   2026-10-03, because the Pi is driven over ssh and never decrypts. The recovery key decrypts
-   the SOPS-encrypted secrets file; nothing else in this list works without it if every
-   cluster host's own key is also gone.
+   The host recipient of `secrets.yml` and the cluster files is `daniel-box`. `daniel-pi`'s
+   key was removed on 2026-10-03, because the Pi is driven over ssh and never decrypts.
+   `daniel-server`'s user-home key was retired on 2026-11-09 (#6643), so the recovery key and
+   `daniel-box`'s key are the only two that decrypt those files. The recovery key decrypts
+   the SOPS-encrypted secrets file; nothing else in this list works without it if
+   `daniel-box`'s own key is also gone.
    Source: `ansible/.sops.yaml` (recipient comments above the `age:` line) and
    `ansible/roles/setup/sops_setup/CLAUDE.md` ("Notable" section).
 
@@ -200,30 +202,33 @@ otherwise; none of the values below are secrets themselves, only names and locat
 
 11. **daniel-server's host age key.** `/etc/homelab/age.key` (root, mode 0600) is the key
     `homelab-secrets.service` decrypts `ansible/vars/hosts/daniel-server.sops.yaml` with. It
-    is the same keypair as daniel-server's key in `~ubuntu/.config/sops/age/keys.txt`, copied
-    rather than generated (H4.2), so one key lives at two paths on one host. Its public half
-    is the first recipient of the generic rule in `ansible/.sops.yaml`. The recovery key
-    (item 1) is a recipient of every file this key decrypts, so it is the way back when the
-    host loses the key.
+    is the same keypair that H4.2 copied from daniel-server's user-home key. The 2026-11-09
+    ruling (#6643) retired the user-home copy, so the key now lives at this one path and
+    decrypts only that host file. Its public half is the first recipient of the
+    `vars/hosts/daniel-server\.sops\.yaml$` rule in `ansible/.sops.yaml`, and of no other
+    rule. The recovery key (item 1) is a recipient of the host file, so it is the way back
+    when the host loses the key.
     - **To restore it** onto a rebuilt daniel-server, place the recovery key (item 1) at
       `~ubuntu/.config/sops/age/keys.txt`, as item 7 describes, and copy that file to
-      `/etc/homelab/age.key` (root, mode 0600). Or let `sudo hosts/bootstrap-host.sh
-      daniel-server` create a fresh key at the second path (its step 3) and print the public
-      key. A fresh key then needs the recipient steps in the header of `ansible/.sops.yaml`,
-      applied to every file that rotation list names, before the host decrypts anything.
+      `/etc/homelab/age.key` (root, mode 0600), then delete the user-home copy. Or let
+      `sudo hosts/bootstrap-host.sh daniel-server` create a fresh key at the second path (its
+      step 3) and print the public key. A fresh key then needs the recipient steps in the
+      header of `ansible/.sops.yaml`, applied to `vars/hosts/daniel-server.sops.yaml` only,
+      from daniel-box or any host holding the recovery key, before the host decrypts
+      anything.
     - **A lost or exposed key means rotating every value the host held**, not only re-keying
       the host. A re-key protects future revisions. Git history and every published
       package keep ciphertext encrypted to the old key. The rotation list is derived, not
       remembered: every value in every SOPS file whose creation rule in `ansible/.sops.yaml`
       lists the host's public key. To print the rules, take the public key from
       `age-keygen -y` on the surviving copy of the key, or from the first recipient of the
-      generic rule, and run, from the repo root:
+      host's own rule, and run, from the repo root:
       `uv run python -c 'import sys, yaml; [print(r["path_regex"]) for r in yaml.safe_load(open("ansible/.sops.yaml"))["creation_rules"] if sys.argv[1] in r["age"]]' <public key>`.
-      For daniel-server the rules are the cluster file, the cluster manifests,
-      `vars/hosts/daniel-server.sops.yaml` and the generic rule, so the list is every value in
-      `secrets.yml`, in the cluster file and manifests, and in its host file. Rotate through
-      `docs/secret-rotation.md`, then `host_secrets.py sync daniel-server` (**operator-only**)
-      to refresh the host file's copies.
+      For daniel-server the only rule is `vars/hosts/daniel-server.sops.yaml`, so the list is
+      every value in its host file. Past revisions in git history still wrap `secrets.yml` and
+      the cluster files to the retired user-home key, so deleting that key's private half
+      is what closes it. Rotate through `docs/secret-rotation.md`, then `host_secrets.py sync daniel-server`
+      (**operator-only**) to refresh the host file's copies.
    Source: `docs/target-architecture/host/h4-secrets-unit.md` ("Which ciphertext each host
    carries") and `hosts/bootstrap-host.sh` (step 3).
 12. **daniel-pi's host age key.** `/etc/homelab/age.key` (root, mode 0600) on the Pi is the
@@ -265,15 +270,18 @@ Each host holds up to two age keys, and they have different readers.
   lookups, the operator's `sops` edits, the `add-secret` skill and the secret rotation timer
   read it. They decrypt `ansible/vars/secrets.yml` and the cluster files.
 
-The decision recorded with H7.24b on 2026-10-30:
+The decision recorded with H7.24b on 2026-10-30, and the ruling of 2026-11-09 (#6643):
 
 - **daniel-box keeps its user-home key.** The deployer, `deploy.sh` and the rotation timer run
   there as the operator, and every one of them reads it.
-- **daniel-server's user-home key is removed only after the operator confirms that nothing on
-  daniel-server reads it.** H4.2 left it there as a duplicate. Its public key stays a
-  recipient in `ansible/.sops.yaml` until the removal, and the removal deletes it from all
-  three rules (`ansible/roles/setup/sops_setup/CLAUDE.md`, *Notable*). Both steps are
-  **operator-only**.
+- **daniel-server holds no user-home key.** H4.2 left a duplicate there. The operator ruled on
+  2026-11-09 to retire it and to rely on the recovery key (item 1) for the case where
+  daniel-box is dead. The key is deleted from the generic rule and both cluster rules of
+  `ansible/.sops.yaml`, and the operator rotates `secrets.yml`, the cluster file and each
+  cluster manifest with `sops rotate -i --rm-age <key>`. Then the operator removes
+  `~/.config/sops/age/keys.txt` from daniel-server. The rotation and the removal are
+  **operator-only**. daniel-server keeps its host key, `/etc/homelab/age.key` (item 11),
+  which decrypts only `vars/hosts/daniel-server.sops.yaml`.
 - **daniel-pi holds no user-home key**, since 2026-10-03.
 - **No playbook creates a user-home key.** The retired `sops_setup` role did. A new host that
   runs Ansible gets one by hand, as `ansible/README.md` §5 says.
@@ -282,13 +290,18 @@ The decision recorded with H7.24b on 2026-10-30:
 
 ### Scenario: daniel-box is dead, daniel-server survives
 
-daniel-server keeps its own SOPS key, so decryption still works without the recovery key.
+daniel-server cannot decrypt `secrets.yml` or the cluster files. Since the 2026-11-09 ruling
+(#6643) its host key decrypts only `vars/hosts/daniel-server.sops.yaml`, so this scenario needs
+the recovery key (item 1).
 
-1. Bring up a replacement daniel-box by
+1. Place the recovery key at `~/.config/sops/age/keys.txt` on the machine you work from, as
+   item 7 describes. Bring up a replacement daniel-box by
    [Rebuilding a cluster node](host-packages.md#rebuilding-a-cluster-node) in
    `docs/host-packages.md`, which lists what the packages do not hold yet. Without the old
    node's age key, the script's step 3 creates a fresh one: add its public key to
-   `ansible/.sops.yaml`, run `sops updatekeys` from daniel-server, commit and pull.
+   `ansible/.sops.yaml`, run `sops updatekeys` from the machine that holds the recovery
+   key, commit and pull. Delete the recovery key from that machine once the new
+   daniel-box decrypts on its own.
 2. Decide whether cluster **objects** (Deployments, Secrets, PVC bindings) are also lost —
    if so, restore etcd first per `docs/k3s-etcd-restore.md` (needs item 2, the cluster
    token, if this is a genuinely new host rather than the same disk).
