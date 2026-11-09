@@ -107,7 +107,7 @@ def test_the_mirror_reaches_ghcr_through_a_loopback_resume_sidecar():
     relay to ghcr.io, and it runs the role's own script from a ConfigMap the pod mounts.
     """
     pod = _pod(_deployments()["ghcr-mirror"])
-    (resume,) = [c for c in pod["containers"] if c["name"] == "ghcr-resume"]
+    (resume,) = [c for c in pod["initContainers"] if c["name"] == "ghcr-resume"]
     env = _env(resume)
     assert env["LISTEN_HOST"] == "127.0.0.1", env
     assert env["LISTEN_PORT"] == str(CTX["registry_k8s_ghcr_resume_port"]), env
@@ -120,6 +120,23 @@ def test_the_mirror_reaches_ghcr_through_a_loopback_resume_sidecar():
     assert volume["configMap"]["name"] == configmap["metadata"]["name"]
     script = (K8S / ROLE / "files" / "ghcr_resume_proxy.py").read_text()
     assert configmap["data"] == {"ghcr_resume_proxy.py": script}
+
+
+def test_the_resume_sidecar_listens_before_the_mirror_starts():
+    """distribution's NewApp panics when REGISTRY_PROXY_REMOTEURL refuses a dial (#7792).
+
+    As a peer container the sidecar raced the mirror, which restarted on every rollout and failed
+    the registry health gate. A native sidecar's startupProbe holds every regular container until
+    it passes, so the probe must dial the port the mirror's remote names.
+    """
+    # fact: ansible/roles/k8s/registry/CLAUDE.md#Notable
+    pod = _pod(_deployments()["ghcr-mirror"])
+    assert "ghcr-resume" not in {c["name"] for c in pod["containers"]}
+    (resume,) = [c for c in pod["initContainers"] if c["name"] == "ghcr-resume"]
+    assert resume["restartPolicy"] == "Always", resume
+    dial = " ".join(resume["startupProbe"]["exec"]["command"])
+    port = CTX["registry_k8s_ghcr_resume_port"]
+    assert f"('127.0.0.1', {port})" in dial, dial
 
 
 def test_the_mirror_is_its_own_deployment():

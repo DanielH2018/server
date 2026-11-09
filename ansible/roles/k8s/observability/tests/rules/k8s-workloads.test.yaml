@@ -191,6 +191,9 @@ tests:
   # - backup's pod is Job-owned in homelab, outside the pod mapping's domain. It fires with
   #   service="unmapped", and WorkloadServiceUnmapped stays silent although the pod has had no
   #   mapping for longer than that alert's 30m hold.
+  # - qbittorrent's wireguard is a native sidecar, so its restarts are in the init-container
+  #   family and it fires. Its pod's plain init container, wait-for-vpn, restarts as often and
+  #   stays silent: a plain init container's restarts are its own retries.
   - interval: 1m
     input_series:
       - series: 'kube_pod_container_status_restarts_total{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", pod="zigbee2mqtt-6d9f7c-x2k4p", uid="u1", container="zigbee2mqtt"}'
@@ -202,6 +205,16 @@ tests:
       - series: 'kube_pod_container_status_restarts_total{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", pod="backup-29341-q8z7m", uid="u2", container="backup"}'
         values: '0x30 1 2 3 4 4x40'
       - series: 'kube_pod_owner{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", pod="backup-29341-q8z7m", uid="u2", owner_kind="Job", owner_name="backup-29341", owner_is_controller="true"}'
+        values: '1x74'
+      - series: 'kube_pod_init_container_status_restarts_total{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", pod="qbittorrent-d4bf4c96d-425hp", uid="u3", container="wireguard"}'
+        values: '0x30 1 2 3 4 4x40'
+      - series: 'kube_pod_init_container_info{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", pod="qbittorrent-d4bf4c96d-425hp", uid="u3", container="wireguard", restart_policy="Always"}'
+        values: '1x74'
+      - series: 'kube_pod_init_container_status_restarts_total{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", pod="qbittorrent-d4bf4c96d-425hp", uid="u3", container="wait-for-vpn"}'
+        values: '0x30 1 2 3 4 4x40'
+      - series: 'kube_pod_init_container_info{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", pod="qbittorrent-d4bf4c96d-425hp", uid="u3", container="wait-for-vpn"}'
+        values: '1x74'
+      - series: 'homelab:pod_service:info{namespace="homelab", pod="qbittorrent-d4bf4c96d-425hp", service="qbittorrent"}'
         values: '1x74'
     alert_rule_test:
       - alertname: K8sContainerCrashLooping
@@ -234,6 +247,18 @@ tests:
             exp_annotations:
               summary: Container backup in homelab/backup-29341-q8z7m is crash looping.
               description: backup restarted more than 3 times in the last hour, at least once in the last 30 minutes. Readiness can pass between restarts, so the replica alerts may stay quiet.
+          - exp_labels:
+              job: kube-state-metrics
+              instance: kube-state-metrics:8080
+              namespace: homelab
+              pod: qbittorrent-d4bf4c96d-425hp
+              uid: u3
+              container: wireguard
+              service: qbittorrent
+              severity: warning
+            exp_annotations:
+              summary: Container wireguard in homelab/qbittorrent-d4bf4c96d-425hp is crash looping.
+              description: wireguard restarted more than 3 times in the last hour, at least once in the last 30 minutes. Readiness can pass between restarts, so the replica alerts may stay quiet.
       - alertname: K8sContainerCrashLooping
         eval_time: 66m
         exp_alerts: []

@@ -128,13 +128,27 @@ groups:
       # A pod
       # outside homelab:pod_service:info's domain, such as a Job's pod, fires with
       # service="unmapped", which WorkloadServiceUnmapped does not flag.
+      #
+      # A native sidecar (an initContainer with restartPolicy: Always) reports its restarts in the
+      # init-container family, so the second arm counts those. A plain init container's
+      # restarts are its own retries, such as a wait-for-<dependency> gate, so it stays out.
       - alert: K8sContainerCrashLooping
         expr: |
           (
               (
-                  increase(kube_pod_container_status_restarts_total[1h]) > 3
-                and
-                  increase(kube_pod_container_status_restarts_total[30m]) > 0
+                  (
+                      increase(kube_pod_container_status_restarts_total[1h]) > 3
+                    and
+                      increase(kube_pod_container_status_restarts_total[30m]) > 0
+                  )
+                or
+                  (
+                      increase(kube_pod_init_container_status_restarts_total[1h]) > 3
+                    and
+                      increase(kube_pod_init_container_status_restarts_total[30m]) > 0
+                    and on(namespace, pod, container)
+                      kube_pod_init_container_info{restart_policy="Always"}
+                  )
               )
             * on(namespace, pod) group_left(service)
               homelab:pod_service:info
@@ -142,9 +156,19 @@ groups:
           or
           label_replace(
               (
-                  increase(kube_pod_container_status_restarts_total[1h]) > 3
-                and
-                  increase(kube_pod_container_status_restarts_total[30m]) > 0
+                  (
+                      increase(kube_pod_container_status_restarts_total[1h]) > 3
+                    and
+                      increase(kube_pod_container_status_restarts_total[30m]) > 0
+                  )
+                or
+                  (
+                      increase(kube_pod_init_container_status_restarts_total[1h]) > 3
+                    and
+                      increase(kube_pod_init_container_status_restarts_total[30m]) > 0
+                    and on(namespace, pod, container)
+                      kube_pod_init_container_info{restart_policy="Always"}
+                  )
               )
             unless on(namespace, pod)
               homelab:pod_service:info,

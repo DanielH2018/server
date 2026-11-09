@@ -23,7 +23,7 @@ RULES = K8S_ROLES / "observability" / "files" / "rules" / "k8s-workloads.yaml"
 
 CRASH_LOOP = "K8sContainerCrashLooping"
 RESTART_INCREASE = re.compile(
-    r"increase\(kube_pod_container_status_restarts_total\[(\w+)\]\)\s*>\s*(\d+)"
+    r"increase\(kube_pod_(?:init_)?container_status_restarts_total\[(\w+)\]\)\s*>\s*(\d+)"
 )
 # The `DECIDED: 30m` floor in k8s-workloads.yaml: the worst observed restart spacing was
 # 15-19 minutes, and a recency window inside it goes up in the gaps and flaps.
@@ -69,7 +69,8 @@ def rule_alerts() -> dict[str, dict]:
 def crash_loop_windows(expr: str) -> tuple[tuple[str, int], tuple[str, int]] | None:
     """The crash-loop rule's (evidence window, max) and (recency window, 0), or None.
 
-    The join writes the condition twice, once per side of its `or`, so both copies must agree.
+    The join writes the condition four times, for regular containers and native sidecars on
+    each side of its `or`, so every copy must agree.
     """
     found = {(w, int(n)) for w, n in RESTART_INCREASE.findall(expr)}
     recent = [pair for pair in found if pair[1] == 0]
