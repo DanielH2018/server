@@ -27,8 +27,7 @@ See repo-root `CLAUDE.md` for shared conventions.
   the verdict as a log line and on the verdict ConfigMap (below). No gate Job runs it: the role's defaults
   declare no `flux_cronjob_gates`, so `janitorr-verify` holds no copy of this CronJob.
 - **The health reader was a daniel-box host cron until H2.5c.** The cron,
-  `/opt/janitorr-health`, `/usr/local/bin/janitorr-health.sh` and the `janitorr` drift fragment
-  are `legacy:` entries in `hosts/daniel-box/package.yml` since H7.48, and `homelab-reconcile`
+  `/usr/local/bin/janitorr-health.sh` and the `janitorr` drift fragment are `legacy:` entries in `hosts/daniel-box/package.yml` since H7.48, and `homelab-reconcile`
   removes each from a host that still holds it.
 - **The pod holds no Secret.** The reader's code ships in the `janitorr-health` ConfigMap,
   beside `host_lib.py`. No secret goes in the ConfigMap (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).

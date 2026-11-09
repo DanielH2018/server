@@ -38,8 +38,7 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   run does not count toward its dead-man monitor, and that role's CLAUDE.md has the other side
   of the choice.
 - **The health reader was a daniel-box host cron until H2.5b.** The cron,
-  `/opt/configarr-health`, `/usr/local/bin/configarr-health.sh` and the `configarr` drift
-  fragment are `legacy:` entries in `hosts/daniel-box/package.yml` since H7.48, and
+  `/usr/local/bin/configarr-health.sh` and the `configarr` drift fragment are `legacy:` entries in `hosts/daniel-box/package.yml` since H7.48, and
   `homelab-reconcile` removes each from a host that still holds it.
 - **`flux_cronjob_gates` in `defaults/main.yml` names the two gate Jobs.** The renderer copies
   each CronJob's `jobTemplate` into `configarr-verify` as `<cronjob>-deploy-gate-<spec

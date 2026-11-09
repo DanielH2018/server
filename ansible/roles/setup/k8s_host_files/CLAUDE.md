@@ -25,9 +25,10 @@ D5 moved the host writes of each k8s role here before the role flipped to Flux
 - The absent arms are `legacy:` entries in `hosts/daniel-box/package.yml`, under the H7.48
   comment, and `homelab-reconcile` removes each from a host that still holds it. They cover
   the retired host crons of configarr, janitorr, crowdsec, qbittorrent and traefik with their
-  scripts and code directories, configarr's and janitorr's drift fragments, observability's
-  dashboard staging trees, the push store's GC Job manifest and the apply-time SHA-256 record
-  directory. `ansible/tests/repo/_retired_cron_row.py` holds the crons and fragments to that list.
+  scripts, configarr's and janitorr's drift fragments, the push store's GC Job manifest and the
+  apply-time SHA-256 record directory. Reconcile removes a directory only when it is empty, so
+  the readers' code directories and observability's dashboard staging trees have no entry.
+  Nothing reads them once their crons are gone. `ansible/tests/repo/_retired_cron_row.py` holds the crons and fragments to that list.
 
 ## Rollback
 A revert of H7.48 restores the task files and their tests. The tick then applies the role on
