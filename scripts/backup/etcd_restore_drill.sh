@@ -348,7 +348,7 @@ ISOLATION_ARGS=(--data-dir "$SCRATCH"
                 # accepts any address. `none` also leaves the restored `kubernetes` Endpoints
                 # untouched, so the drill reads the snapshot's object rather than one it rewrote.
                 --kube-apiserver-arg=endpoint-reconciler-type=none
-                # The live server encrypts Secrets at rest (secrets-encryption), and the
+                # The live server encrypts Secrets at rest (k3s_secrets_encryption), and the
                 # key rides inside the snapshot's bootstrap blob. Without this flag the restore
                 # stage's reconcile has no path to write it to ("Unable to lookup path to
                 # reconcile EncryptionConfig") and the scratch API server then cannot list a
