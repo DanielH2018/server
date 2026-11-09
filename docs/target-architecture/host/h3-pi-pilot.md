@@ -1047,7 +1047,7 @@ They need no secrets, and they do these steps:
    be computed, rather than reading as no change (#5071).
 3. It builds both renders with nfpm pinned by version and sha256, and runs the
    maintainer-script lint and the `type: config` lint.
-4. It builds the test image from `hosts/lib/tests/container/Dockerfile`. The job does not
+4. It pulls or builds the test image from `hosts/lib/tests/container/Dockerfile`. The job does not
    rely on what the stock image carries, which is a minimal root filesystem. The job is a
    matrix over `ubuntu:24.04` and `ubuntu:26.04`, the releases the fleet runs or is moving
    to (C5). Each leg's image starts from its release pinned by digest and installs

@@ -1281,8 +1281,8 @@ jobs:
   # render. When no rendered tree differs, its build and lint steps skip and it ends green.
   # Otherwise it builds both renders with the pinned nfpm, lints them, and hands the build on:
   # the arm64 homelab-tools .deb to `host_tools_arm64`, and the render, the debs, nfpm and the
-  # actions/cache key of the verified homelab-tools downloads to `host_packages`. Each `host_packages` matrix leg builds the test image for its Ubuntu release
-  # and runs the updater cases in it (steps 4 and 5).
+  # actions/cache key of the verified homelab-tools downloads to `host_packages`. Each `host_packages` matrix leg pulls the pinned test image for its Ubuntu
+  # release, or builds it on a Dockerfile change, and runs the updater cases in it (steps 4 and 5).
   #
   # The build is a job of its own so that `host_tools_arm64` waits for the build alone (#6151).
   # As one job, the arm64 job started only after both legs' 36s image build and 243s of cases,
@@ -1690,6 +1690,7 @@ jobs:
     # changes the Dockerfile builds it from snapshot.ubuntu.com, so the budget stays sized to
     # the build. Measured 2026-11-04 with the mirror at 28-129 kB/s: 2min of steps before the
     # build, a 33min 45s image build and 20min 33s of cases, so about 56min at worst (#7128).
+    # Pulling, 2026-11-08 to 11-09: the image step took 10-32s, the longest leg 31min 47s (#7665).
     # scripts/deploy_tools/land_lib/options.py:CI_TIMEOUT_S moves with this value.
     timeout-minutes: 60
     permissions:
