@@ -1641,11 +1641,17 @@ jobs:
       # with the same nfpm. One tarball carries all three, because an artifact's zip does not
       # keep a file's mode and the render ships executable maintainer scripts. The tools cache
       # stays out of it: the legs restore it from actions/cache under the `tools-key` output.
+      # The excludes drop the homelab-tools binaries the cases never read, about 1.9 of 2.0 GB:
+      # the cases install only the head amd64 .deb, and `host_tools_arm64` has its own artifact.
       - name: Hand the render, the debs and nfpm to the cases legs
         if: >-
           github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
           || steps.render.outputs.cases == 'true'
-        run: tar -cf "$RUNNER_TEMP/host-packages-build.tar" -C "$RUNNER_TEMP" render debs bin/nfpm
+        run: >-
+          tar -cf "$RUNNER_TEMP/host-packages-build.tar" -C "$RUNNER_TEMP"
+          --exclude='render/*/packages/homelab-tools'
+          --exclude='debs/base/homelab-tools_*' --exclude='debs/*/homelab-tools_*_arm64.deb'
+          render debs bin/nfpm
 
       - name: Upload the hand-off for the cases legs
         if: >-
