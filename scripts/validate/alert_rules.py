@@ -17,7 +17,8 @@ the render `probe.py health` uses, with secrets stubbed. It extracts each render
   the config names its template by that relative path. The credentials are `*_file` paths,
   which amtool does not open.
 - `promtool check rules` on every rule file in the role's `files/rules/`.
-- `promtool test rules` on every test file in the role's `tests/rules/`.
+- `promtool test rules` on every test file in the role's `tests/rules/`, each split into one
+  part per CPU (`validate_lib/rule_test_parts.py`) so its groups run in parallel.
 - `amtool template render` of each notification define in `homelab.tmpl` against each group
   under the role's `tests/alertmanager/`, compared with its expected text
   (`scripts/validate/notification_renders.py`).
@@ -125,6 +126,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -135,6 +137,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser
 from lib.repo_paths import K8S_ROLES, REPO
 from validate.notification_renders import RENDER_CASES, render_problems
+from validate.validate_lib.rule_test_parts import split_rule_test
 from validate.alert_conventions import (
     RULE_TESTS_DIR,
     RULES_CONFIGMAP,
@@ -610,6 +613,7 @@ def check_tree(
     loki_rules_dir: Path = LOKI_RULES_DIR,
     render_cases: Path = RENDER_CASES,
     render_alloy: Callable[[], str] | None = None,
+    jobs: int = len(os.sched_getaffinity(0)),
 ) -> list[str]:
     """Render the role, apply the floors and the rule conventions, and run every tool check.
 
@@ -626,6 +630,9 @@ def check_tree(
         render_cases: The alert groups and expected text of the notification renders.
         render_alloy: Returns loki-homelab's rendered Alloy config; `rendered_alloy_config`
             unless a test passes another.
+        jobs: The most tool calls to run at once, and the most parts a rule-test file is
+            split into (`validate_lib/rule_test_parts.py`). `run` must be safe to call from
+            that many threads.
     """
     try:
         found = (render or rendered_files)()
@@ -654,12 +661,29 @@ def check_tree(
         for key, text in found.items():
             paths[key] = Path(tmp) / key
             paths[key].write_text(text)
+        parts_dir = Path(tmp) / "rule-test-parts"
+        parts_dir.mkdir()
+        runs = []
         for argv in tool_checks(paths, rules_dir, tests_dir, loki_rules_dir):
-            code, output = run(argv)
+            if argv[:3] != ["promtool", "test", "rules"]:
+                runs.append((" ".join(argv), argv))
+                continue
+            parts = split_rule_test(Path(argv[-1]), jobs, parts_dir)
+            for part, groups in parts:
+                label = " ".join(argv)
+                if len(parts) > 1:
+                    label += (
+                        f" (its test groups {', '.join(str(g + 1) for g in groups)})"
+                    )
+                runs.append((label, [*argv[:-1], str(part)]))
+        with ThreadPoolExecutor(max_workers=jobs) as pool:
+            results = list(pool.map(run, [argv for _label, argv in runs]))
+        for (label, _argv), (code, output) in zip(runs, results, strict=True):
             if code != 0:
-                problems.append(f"`{' '.join(argv)}` exited {code}:\n{output.rstrip()}")
+                problems.append(f"`{label}` exited {code}:\n{output.rstrip()}")
         alloy_path = Path(tmp) / ALLOY_CONFIG_KEY
         alloy_path.write_text(alloy_config)
+        # After the pool: a load slowed past ALLOY_LOAD_SECONDS by contention reads as a pass.
         code, output = run(["alloy", "run", str(alloy_path)])
         if code != 0:
             problems.append(
