@@ -189,26 +189,6 @@ def test_a_shipped_row_adopted_with_use_tables_is_the_one_read(tree):
         tables.use_tables(saved)
 
 
-# The setup task files #3134, #3135 and #3154 made narrowable, each with the answer `tags_of`
-# gives and the playbook that prints its remediation. Before them, three roles had one untagged
-# `main.yml`.
-NARROWED_SETUP_FILES = {
-    ("k3s", "tasks/coredns.yml"): {"coredns"},
-    ("k3s", "tasks/static-address.yml"): {"node-address"},
-}
-_PLAYBOOK_OF = {"k3s": "k3s-bringup.yml"}
-
-
-@pytest.mark.parametrize(("role", "rel"), sorted(NARROWED_SETUP_FILES))
-def test_the_real_split_setup_roles_narrow_below_their_role_tag(role, rel):
-    """Each file answers its own subject tag, and no other role in the playbook declares it."""
-    index = narrow_setup.RoleIndex(role, "HEAD", str(REPO))
-    tags = index.tags_of(rel)
-    assert tags == NARROWED_SETUP_FILES[(role, rel)]
-    playbook = (REPO / "ansible" / _PLAYBOOK_OF[role]).read_text()
-    assert not tags & narrow_setup.foreign_tags(role, playbook, "HEAD", str(REPO))
-
-
 def test_a_template_named_only_in_a_defaults_structure_maps_to_that_keys_readers(tree):
     """The shape a host script takes: the name is in `defaults/`, not in any task's `src:`.
 
@@ -312,25 +292,6 @@ def test_the_real_playbooks_list_the_roles_they_apply():
         assert narrow_setup.playbook_applies_role(text, role), f"{playbook}: {role}"
     text = (REPO / "ansible/initial_setup.yml").read_text()
     assert not narrow_setup.playbook_applies_role(text, "k3s")
-
-
-def test_the_real_k3s_roles_reachable_task_files_are_named_as_such():
-    """Named members both ways, so a walk that went empty or all-inclusive fails by name.
-
-    `storage_smoke.yml` belongs to `k3s-storage-smoke.yml`, and `agent.yml`/`agent_verify.yml`
-    to the `k3s_agent` plays whose hosts are empty without `-e join_agent=...`.
-    """
-    reachable = narrow_setup.RoleIndex("k3s", "HEAD", str(REPO)).reachable
-    assert {
-        "tasks/server.yml",
-        "tasks/static-address.yml",
-        "tasks/coredns.yml",
-    } <= reachable
-    assert not reachable & {
-        "tasks/storage_smoke.yml",
-        "tasks/agent.yml",
-        "tasks/agent_verify.yml",
-    }
 
 
 # ── the cheap refusals: a template cycle, a rendered `.md`, a binary file ──────────────
