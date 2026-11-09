@@ -9,6 +9,7 @@ Run: uv run pytest scripts/validate/tests/test_validate_alert_rules.py
 """
 
 import re
+import threading
 
 import yaml
 
@@ -87,6 +88,41 @@ def test_every_discovered_input_gets_its_tool_check(tmp_path):
 
 def test_the_tree_with_tools_that_pass_is_clean():
     assert alert_rules.check_tree(run=_tools_pass) == []
+
+
+def test_the_rule_tests_run_concurrently():
+    """The first two rule-test parts wait for each other, so a serial run breaks the barrier."""
+    barrier = threading.Barrier(2, timeout=10)
+    waiting = [2]
+    lock = threading.Lock()
+
+    def run(argv: list[str]) -> tuple[int, str]:
+        if argv[:3] == ["promtool", "test", "rules"]:
+            with lock:
+                wait = waiting[0] > 0
+                waiting[0] -= 1
+            if wait:
+                barrier.wait()
+        return _tools_pass(argv)
+
+    assert alert_rules.check_tree(run=run, jobs=2) == []
+
+
+def test_a_failing_rule_test_part_names_its_source_file_and_groups():
+    problems = alert_rules.check_tree(
+        run=lambda argv: (
+            (1, "FAILED: expected alert")
+            if argv[-1].endswith("host-checks.part0.test.yaml")
+            else _tools_pass(argv)
+        ),
+        jobs=4,
+    )
+    assert len(problems) == 1, problems
+    assert re.search(
+        r"promtool test rules \S+/tests/rules/host-checks\.test\.yaml "
+        r"\(its test groups \d+(, \d+)*\)` exited 1",
+        problems[0],
+    ), problems
 
 
 def test_a_tool_rejecting_the_rendered_config_is_flagged():
