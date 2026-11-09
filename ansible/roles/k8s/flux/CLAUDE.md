@@ -43,14 +43,17 @@ so a regeneration diffs as the pipeline plus upstream's change.
   that module's lists only as a decision the PR states.
   Renovate cannot regenerate the file, so its PR is manual (`renovate.json`'s `fluxcd/flux2`
   rule) and the header test fails until the file is regenerated. The same PR moves the
-  `version:` of all three `fluxcd/flux2/action` steps in `.github/workflows/promote.yml`, of the
-  two in `.github/workflows/ci.yml`'s `flux_roundtrip` and `sops_manifest_type_proof` jobs, the
-  one in `.github/workflows/bootstrap-drill.yml`, the one in `.github/workflows/flux-deletion-drill.yml`, and the action's commit pin, so the CLI that pushes and tags the artifact and the CLI that proves
-  the round trip move with the controllers. `sops_manifest_type_proof` also applies this file
-  as it stands to a kind cluster, so a regeneration re-runs D3.3d's in-cluster proof on the
-  new controller images. A `# renovate:` comment above each input is what Renovate reads, and
-  `scripts/tests/test_renovate_flux_cli.py` fails a step that lost it (#4822). For a bump by
-  hand, set all three yourself. `ansible/tests/repo/test_promote_workflow.py` fails a drift.
+  `FLUX_VERSION` and `FLUX_SHA256` env pin in `.github/workflows/promote.yml`, in
+  `.github/workflows/ci.yml`'s `flux_roundtrip` and `sops_manifest_type_proof` jobs, in
+  `.github/workflows/bootstrap-drill.yml` and in `.github/workflows/flux-deletion-drill.yml`.
+  So the CLI that pushes and tags the artifact and the CLI that proves the round trip move
+  with the controllers. Each job restores the CLI tarball from an `actions/cache` keyed on that
+  pin and fetches the release only on a miss (#7778). `sops_manifest_type_proof` also applies
+  this file as it stands to a kind cluster, so a regeneration re-runs D3.3d's in-cluster proof
+  on the new controller images. A `# renovate:` comment above each pin is what Renovate reads,
+  and `scripts/tests/test_renovate_flux_cli.py` fails a pin that lost it (#4822). For a bump by
+  hand, set every pin and the homelab-tools `flux` blocks yourself.
+  `ansible/tests/repo/test_promote_workflow.py` fails a drift.
 
 ## How the render meets the fleet guards
 
