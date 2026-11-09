@@ -75,18 +75,82 @@ REREAD_WAIT_S = 60
 FLUX_LOOKBACK = "7d"
 
 
-def prom_query(promql, endpoint=None, fetch=None):
-    """The `result` list of one instant query.
+# The query door's Traefik `rate-limit` is 300/min per client, and every gate on a host shares
+# one client address, so concurrent landings drain it together (#7721). The budget is per
+# probe.py process and stays far inside detach_notify.PROBE_TIMEOUT_S, whose expiry grades a
+# tag unhealthy rather than unread.
+RATE_LIMITED = 429
+RETRY_DELAYS_S = (2, 4, 8, 16)
+RETRY_BUDGET_S = 30
 
-    `endpoint` and `fetch` default to `core.prom_endpoint` and `core.fetch_parsed`, read at
-    call time; a test passes its own.
+
+class RetryBudget:
+    """The seconds of 429 backoff one probe process may still sleep.
+
+    Attributes:
+        left: the seconds not yet spent.
+    """
+
+    def __init__(self, seconds):
+        self.left = seconds
+
+    def take(self, delay):
+        """Spend `delay` seconds and return True, or return False when too few are left."""
+        if delay > self.left:
+            return False
+        self.left -= delay
+        return True
+
+
+PROCESS_BUDGET = RetryBudget(RETRY_BUDGET_S)
+
+
+def _get_json(url, resolve, get, sleep, budget):
+    """The parsed body of a GET on `url`, re-sent after a 429 while `budget` allows.
 
     Raises:
-        core.Unreadable: curl failed, or Prometheus did not answer `success`.
+        core.Unreadable: curl failed.
+        core.NonJsonResponse: the body is not JSON, a 429 that outlasted the retries included.
+    """
+    for delay in (*RETRY_DELAYS_S, None):
+        status, body = get(url, resolve=resolve)
+        if status != RATE_LIMITED or delay is None or not budget.take(delay):
+            break
+        sleep(delay)
+    if status == 0:
+        raise core.Unreadable(f"curl {url} failed: {body}")
+    return core.parse_json(url, body)
+
+
+def prom_query(promql, endpoint=None, fetch=None, get=None, sleep=None, budget=None):
+    """The `result` list of one instant query.
+
+    Args:
+        promql: the instant query.
+        endpoint: returns `(base_url, resolve_pin)`; defaults to `core.prom_endpoint`.
+        fetch: returns the parsed body of `(url, resolve=)`. When given, it replaces the
+            status-aware read and its 429 retry.
+        get: returns `(http_status, body)` for `(url, resolve=)`, status 0 for a failed curl;
+            defaults to `core.get_status`.
+        sleep: the backoff sleep; defaults to `time.sleep`.
+        budget: the `RetryBudget` the backoff spends; defaults to `PROCESS_BUDGET`.
+
+    Raises:
+        core.Unreadable: curl failed, the edge kept answering 429, or Prometheus did not
+            answer `success`.
     """
     base, pin = (endpoint or core.prom_endpoint)()
     url = prom_query_url(base, promql)
-    data = (fetch or core.fetch_parsed)(url, resolve=pin)
+    if fetch is not None:
+        data = fetch(url, resolve=pin)
+    else:
+        data = _get_json(
+            url,
+            pin,
+            get or core.get_status,
+            sleep or time.sleep,
+            budget or PROCESS_BUDGET,
+        )
     if not isinstance(data, dict) or data.get("status") != "success":
         raise core.Unreadable(f"Prometheus refused {promql}: {str(data)[:300]}")
     return (data.get("data") or {}).get("result") or []
