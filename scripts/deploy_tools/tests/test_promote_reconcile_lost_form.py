@@ -155,5 +155,7 @@ def test_a_lost_settle_that_changes_a_snapshot_role_tells_the_operator_not_to_re
 ):
     _, c1 = _snapshot_world(tmp_path, monkeypatch)
     err = capsys.readouterr().err
-    assert f"the hold is '{c1} stateful=unverified'" in err
-    assert "Do not reset prod" in err
+    assert f"--body '{c1} stateful=unverified'" in err
+    assert "--tag held. Do not reset prod" in err
+    assert "reset_to_last_good" not in err
+    assert f"'{c1} unverified'" not in err

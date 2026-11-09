@@ -41,7 +41,8 @@ class Decision:
             failed verification writes DEPLOY_HOLD as T's SHA alone and leaves `prod` on T.
         stateful: the snapshot roles T changes against `last-good`. When any is named, a
             failed verification writes DEPLOY_HOLD as `<T> stateful=<names>` and leaves
-            `prod` on T, whatever `no_reset` says.
+            `prod` on T, whatever `no_reset` says. On a lost settle, `no_reset` and
+            `stateful` name what `prod` changes against `last-good`, for `reconcile`.
         stateful_record: what the hold's post prints (`stateful.record`).
         hold: what `decide` writes to DEPLOY_HOLD itself: T's SHA on a `held` from the
             forward-only gate or the backstop, `<T> suspended-changed=<tags>` on one from the
@@ -210,13 +211,8 @@ def _lost_settle(reads: Reads, settled: verify.Settled) -> Decision:
         forward_only.changed_tags(prod_digests, base or {}), flagged
     )
     if record["stateful"] or no_reset:
-        form = f"{commit} stateful=unverified" if record["stateful"] else commit
-        changes = ",".join(sorted(set(record["stateful"]) | no_reset))
-        reason += (
-            f". {commit} changes {changes}, a snapshot role or a forward-only tag, so "
-            f"without a good verdict the hold is '{form}' with {digest} tagged held. "
-            "Do not reset prod"
-        )
+        hold = f"{commit} stateful=unverified" if record["stateful"] else commit
+        reason = verify.lost_settle(digest, last_good or "", commit, hold)
     return Decision(
         verdict,
         reason=reason,
