@@ -272,6 +272,7 @@ nav:
       - Recovery and upgrades:
           - k3s control-plane upgrade: k3s-upgrade.md
           - Longhorn upgrade: longhorn-upgrade.md
+          - Ubuntu 26.04 upgrade plan: ubuntu-26.04-upgrade-plan.md
           - Longhorn disaster recovery: longhorn-disaster-recovery.md
           - k3s etcd restore: k3s-etcd-restore.md
           - Registry push store collection: registry-push-store-gc.md
