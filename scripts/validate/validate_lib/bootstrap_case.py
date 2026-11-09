@@ -9,6 +9,9 @@ systemd loads that unit:
   * `--local-build` on a container named after each host the script knows. `--tools-seed` gives
     it the pins the kit's tools-cache holds, and it fetches uv's packages and, on a cluster node,
     k3s from the network, then builds the three packages from a scratch clone of the checkout.
+  * `--local-build` on daniel-box with no k3s in its seed, so install.sh downloads the release
+    binary and checks its sha256 (#7754). It runs only under `--k3s-download`, in a CI step that
+    cannot fail the PR, so a GitHub release outage cannot fail the run.
   * `--local-build --offline <kit>` on daniel-box, in a container with no network at all, which
     is stricter than the spec's unresolvable GitHub and GHCR hostnames. The kit is stocked on the
     runner from the script's own pins. Its output says the clone is unchecked.
@@ -98,6 +101,8 @@ TOOLS_SEED = "/srv/tools-seed"
 AGENT_ENV = "K3S_URL=https://192.0.2.10:6443 K3S_TOKEN=bootstrap-case-token"
 UNITS = {"daniel-box": "k3s.service", "daniel-server": "k3s-agent.service"}
 INSTALL_REFUSED = "apt-get install of the local build failed"
+# install.sh's verify_binary prints this after download_binary.
+K3S_VERIFIED = "Verifying binary download"
 
 
 def script_value(script: str, name: str) -> str:
@@ -498,6 +503,9 @@ class Planned(NamedTuple):
         apt_says: What apt must print when a red run's refusal is apt's; None when the
             refusal comes before any install.
         seed: The directory `--tools-seed` reads, or None for an offline run, which has the kit.
+        absent: A line a green run must not print, or None for the default: the anchor's
+            accept line offline, and nothing online.
+        gates: False for the case only `--k3s-download` runs, outside the PR's verdict.
     """
 
     name: str
@@ -509,6 +517,8 @@ class Planned(NamedTuple):
     clone: str = "green"
     apt_says: str | None = None
     seed: Path | None = None
+    absent: str | None = None
+    gates: bool = True
 
 
 def plan(work: Path, green: Path) -> list[Planned]:
@@ -526,6 +536,20 @@ def plan(work: Path, green: Path) -> list[Planned]:
         )
         for host in script_value(script, "HOSTS").split()
     ]
+    # The kit's tools-cache never holds k3s, so install.sh downloads the release binary here.
+    cases.append(
+        Planned(
+            "bootstrap daniel-box with --local-build, downloading k3s from its release",
+            "k3s-download",
+            "daniel-box",
+            None,
+            K3S_VERIFIED,
+            None,
+            seed=green / "tools-cache",
+            absent="Skipping k3s download and verify",  # INSTALL_K3S_SKIP_DOWNLOAD's line
+            gates=False,
+        )
+    )
     cases.append(
         Planned(
             "bootstrap daniel-box offline from the kit",
@@ -585,6 +609,11 @@ def plan(work: Path, green: Path) -> list[Planned]:
     return cases
 
 
+def selected(planned: list[Planned], k3s_download: bool) -> list[Planned]:
+    """The cases one run takes: the gating ones, or under `--k3s-download` the rest."""
+    return [item for item in planned if item.gates != k3s_download]
+
+
 def bootstrap_for(cases, item: Planned, clones: dict[str, Path]) -> Bootstrap:
     """The run `item` plans."""
     return Bootstrap(
@@ -606,7 +635,7 @@ def run(cases) -> None:
             ),
         }
         stock_kit(cases, clone, green)
-        planned = plan(cases.work, green)
+        planned = selected(plan(cases.work, green), cases.k3s_download)
     except (CaseFailed, OSError, subprocess.SubprocessError, StopIteration) as exc:
         cases.failed.append("prepare the bootstrap cases")
         print(f"[FAIL] prepare the bootstrap cases: {exc}", file=sys.stderr)
@@ -619,7 +648,7 @@ def run(cases) -> None:
             )
         else:
             # Offline the script makes neither GitHub read, so the anchor stub must not run.
-            absent = ANCHOR_ACCEPTS if item.kit is not None else None
+            absent = item.absent or (ANCHOR_ACCEPTS if item.kit is not None else None)
             body = functools.partial(
                 _expect_green, bootstrap, item.marker or "", absent
             )

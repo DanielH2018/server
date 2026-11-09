@@ -53,3 +53,28 @@ def test_one_cluster_node_case_requires_install_sh_s_binary_download(tmp_path):
         " binary download and flags one without it: "
         f"{[(item.name, item.marker) for item in online_nodes]}"
     )
+
+
+def test_the_default_run_leaves_out_the_k3s_download_case(tmp_path):
+    green = tmp_path / "bootstrap-kit" / "green"
+    green.mkdir(parents=True)
+    planned = case.plan(tmp_path, green)
+
+    gating = case.selected(planned, k3s_download=False)
+
+    assert "k3s-download" in {p.label for p in planned}
+    assert "k3s-download" not in {p.label for p in gating}
+
+
+def test_the_k3s_download_run_takes_only_the_unseeded_daniel_box_case(tmp_path):
+    green = tmp_path / "bootstrap-kit" / "green"
+    green.mkdir(parents=True)
+
+    (download,) = case.selected(case.plan(tmp_path, green), k3s_download=True)
+
+    assert (download.label, download.host, download.kit) == (
+        "k3s-download",
+        "daniel-box",
+        None,
+    )
+    assert download.seed == green / "tools-cache"

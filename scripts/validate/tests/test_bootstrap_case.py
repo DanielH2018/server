@@ -65,7 +65,7 @@ def test_the_plan_runs_every_host_online_then_offline_with_three_reds(tmp_path):
     green.mkdir(parents=True)
     (green / "k3s").write_text("k3s")
 
-    planned = case.plan(tmp_path, green)
+    planned = case.selected(case.plan(tmp_path, green), k3s_download=False)
 
     online = [p.host for p in planned if p.kit is None]
     assert {"daniel-box", "daniel-server", "daniel-pi"} <= set(online)
