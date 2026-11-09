@@ -5,9 +5,11 @@ the snapshot selection, the manifests include, and the seam and input checks tha
 `test_volume_revert.py` -- and each reads the same task files through these.
 """
 
+import re
 from pathlib import Path
 
 from _helpers import REPO as _REPO
+from _helpers import jinja_env
 from _helpers import load_tasks as _tasks
 from _helpers import task_named
 
@@ -26,6 +28,28 @@ _DEFAULTS = _ROLE / "defaults/main.yml"
 _VALIDATOR = _REPO / "scripts/lib/k8s_roles.py"
 
 _GUARD = "not (k8s_no_mutate | bool)"
+
+
+def _regex_search(value, pattern: str) -> str | None:
+    """ansible-core 2.22's `regex_search` with no group arguments: the matched text, or None."""
+    found = re.search(pattern, str(value))
+    return found.group() if found else None
+
+
+def _render(expression: str, **context):
+    """Render one of the role's expressions, as Ansible evaluates it.
+
+    The renderer's filter set lacks `regex_escape`, `regex_search`, `split` and the `match` test,
+    because no rendered template uses them; only this role's tasks do, and H7.55 deletes those.
+    """
+    env = jinja_env()
+    env.filters["regex_escape"] = re.escape
+    env.filters["regex_search"] = _regex_search
+    env.filters["split"] = lambda value, sep=None: str(value).split(sep)
+    env.tests["match"] = lambda value, pattern: (
+        re.match(pattern, str(value)) is not None
+    )
+    return env.from_string(expression).render(**context)
 
 
 def _task_names(path: Path) -> list[str]:

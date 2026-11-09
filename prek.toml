@@ -638,7 +638,7 @@ name = "Census rows over the pytest-only modules (git, subprocess, render and pa
 entry = "uv run --frozen pytest -q -n 2 -p no:cacheprovider scripts/tests/test_census_rows_test_modules.py scripts/tests/test_census_rows_test_renders.py"
 language = "system"
 pass_filenames = false
-files = "^((scripts|ansible/roles|\\.claude/hooks|evals|hosts/components|hosts/lib)/(.*/)?((test_[^/]*|conftest)\\.py|tests/.*\\.py)|(ansible|\\.claude)/tests/.*\\.py|scripts/lib/[^/]+\\.py|prek\\.toml|pyproject\\.toml|uv\\.lock)$"
+files = "^((scripts|ansible/roles|\\.claude/hooks|evals|hosts/components|hosts/lib)/(.*/)?((test_[^/]*|conftest)\\.py|tests/.*\\.py)|(ansible|\\.claude)/tests/.*\\.py|scripts/lib/[^/]+\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/renderer/renderer_lib/jinja_filters\\.py|prek\\.toml|pyproject\\.toml|uv\\.lock)$"
 
 # Eleven more cheap ratchet and census modules, which failed 15 PR runs across 13 PRs between
 # 2026-10-15 and 2026-10-17 (#5481). They sit in sibling hooks rather than in the entry above,
@@ -783,7 +783,7 @@ name = "Landings board groups by labels the landing ledger writes"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/deploy/test_landing_annotations.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/k8s/observability/files/dashboards/Infrastructure/landings\\.json|scripts/deploy_tools/land_lib/(ledger|outcome)\\.py|ansible/roles/setup/gitops_deploy/files/gitops_markers\\.py|hosts/lib/[^/]+\\.py|scripts/lib/[^/]+\\.py|ansible/tests/(_[^/]+|deploy/test_landing_annotations)\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(ansible/roles/k8s/observability/files/dashboards/Infrastructure/landings\\.json|scripts/deploy_tools/land_lib/(ledger|outcome)\\.py|ansible/roles/setup/gitops_deploy/files/gitops_markers\\.py|hosts/lib/[^/]+\\.py|scripts/lib/[^/]+\\.py|ansible/tests/(_[^/]+|deploy/test_landing_annotations)\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/renderer/renderer_lib/jinja_filters\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # The GitOps deployer imports only the modules it ships beside it and host_lib.
 [[repos.hooks]]
@@ -792,7 +792,7 @@ name = "GitOps deployer imports only what it ships"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/deploy/test_gitops_deploy_imports.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/setup/gitops_deploy/files/.*\\.py|hosts/lib/[^/]+\\.py|ansible/tests/(_[^/]+|deploy/_gitops_deploy_allowed|deploy/test_gitops_deploy_imports)\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(ansible/roles/setup/gitops_deploy/files/.*\\.py|hosts/lib/[^/]+\\.py|ansible/tests/(_[^/]+|deploy/_gitops_deploy_allowed|deploy/test_gitops_deploy_imports)\\.py|scripts/lib/[^/]+\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/renderer/renderer_lib/jinja_filters\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # The alert conventions over the rendered rules. The gate is validate-alert-rules's, whose
 # render this node reads, plus the test module.

@@ -11,7 +11,7 @@
   each such file.
 - The filter census. Every filter and test name a tracked `*.j2` uses is registered in the
   renderer's strict environment: Jinja's built-ins, `renderer_lib/jinja_filters.py` and the
-  repo's filter plugins. H7.54 rebuilds `_helpers.py`'s env on that set.
+  repo's filter plugins. `_helpers.jinja_env` renders on that set.
 
 The deletion census runs a 40-second collection, so it is not a row of
 `test_census_rows_python.py`, which prek runs at every commit.
@@ -35,11 +35,11 @@ from renderer.renderer_lib.environment import strict_env
 
 CHILD = Path(__file__).with_name("_collect_without_ansible.py")
 ALLOW = {
-    "ansible/tests/_helpers.py": "H7.54 rebuilds the test env on the renderer's filters",
     "scripts/deploy_tools/deploy_lib/flags.py": "H7.53 deletes the deployer's PlaybookCLI read",
     "ansible/tests/setup/test_pi_escalation_timeout.py": "H7.55 deletes it with the playbooks",
     "scripts/deploy_tools/tests/test_deploy_flags.py": "H7.53, with flags.py, its subject",
 }
+PI_TIMEOUT = "ansible/tests/setup/test_pi_escalation_timeout.py"
 IN_A_STRING = {
     "ansible/tests/repo/test_leakguard.py": "H7.56 deletes leakguard's temp-dir sweep",
     "scripts/renderer/tests/test_renderer_ansible_free.py": "the shim of its red half",
@@ -67,8 +67,8 @@ def _collect(tmp_path: Path, *pytest_args: str) -> dict[str, list[str]]:
 
 def test_the_suite_collects_with_ansible_core_refused_outside_the_allowlist(tmp_path):
     importers = _collect(tmp_path)
-    assert "ansible/tests/_helpers.py" in importers, (
-        "the collection never reached _helpers.py"
+    assert PI_TIMEOUT in importers, (
+        "the collection never reached test_pi_escalation_timeout.py"
     )
     offenders = {rel: names for rel, names in importers.items() if rel not in ALLOW}
     assert not offenders, f"these files import ansible-core: {offenders}"
@@ -81,7 +81,7 @@ def importers_by_text(paths: list[str]) -> list[str]:
 
 def test_no_tracked_python_names_ansible_core_in_an_import_outside_the_allowlist():
     found = importers_by_text(tracked("*.py"))
-    assert "ansible/tests/_helpers.py" in found, "the grep no longer finds _helpers.py"
+    assert PI_TIMEOUT in found, "the grep no longer finds test_pi_escalation_timeout.py"
     offenders = sorted(set(found) - set(ALLOW) - set(IN_A_STRING))
     assert not offenders, f"these files import ansible-core: {offenders}"
 

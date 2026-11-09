@@ -4,8 +4,8 @@ Run as a child process from the repo root:
 `python _collect_without_ansible.py <out.json> <allowed,files> [pytest args...]`.
 A wrapper around `builtins.__import__` refuses every `ansible` and `ansible.*` import, as
 `sys.modules['ansible'] = None` would, unless the importing file is one of the allowed ones.
-`ansible/tests/_helpers.py` stays allowed until H7.54, and a conftest imports it, so a refusal
-there would abort the whole collection rather than one module. The wrapper sees an import
+A conftest imports `ansible/tests/_helpers.py`, so an ansible import there would abort the
+whole collection rather than one module. The wrapper sees an import
 that an earlier caller already cached, which a `meta_path` finder would not.
 
 `<out.json>` maps each importing file, allowed or not, to the modules it asked for. No
