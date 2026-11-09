@@ -634,6 +634,7 @@
  "ansible/tests/setup/test_aide_check.py": 0.7,
  "ansible/tests/setup/test_aide_check_classify.py": 4.02,
  "ansible/tests/setup/test_aide_check_names_its_config.py": 0.0,
+ "ansible/tests/setup/test_aide_check_package_activity.py": 0.6,
  "ansible/tests/setup/test_aide_check_role_written.py": 0.1,
  "ansible/tests/setup/test_apt_keyring_permissions.py": 0.03,
  "ansible/tests/setup/test_artifacts_sync_alerts_once_per_outage.py": 3.34,
