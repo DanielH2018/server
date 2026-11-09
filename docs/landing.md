@@ -24,6 +24,15 @@ so the harness moved it to the background, where fan-out `claude -p` agents neve
 from, so `--detach` resolves it before the arm. Reading it afterwards would capture the tip that
 includes this PR and derive nothing.
 
+**A landing refuses when its own checkout is older than master's landing code.** `land.sh`
+runs `land.py` from the checkout it lives in, so a worktree branched before a master change to
+a reader runs that older reader against the merge commit. On 2026-11-09 such a reader read the
+#7767 merge commit as declaring no k8s tags (#7820). After resolving the merge commit, step 1
+compares every module the landing has loaded from its checkout with the merge commit's first
+parent. It ends `refused` when master changed one the checkout lacks, and names the checkout to
+re-run from: the primary when it carries that parent, else a detached worktree at the merge.
+`land_lib/classify.py:refuse_stale_code` has the rule.
+
 **Without `--detach`, redirect stdout and stderr to a file yourself.** A backgrounded Bash call
 hands the script a non-blocking pipe, and Ansible refuses to start on one:
 
@@ -574,12 +583,23 @@ hook never sees the gate above.
 A gate that could not read is not a failed gate. `probe.py health` exits 75
 (`PROBE_UNREADABLE`) when it cannot reach the store it reads, such as Traefik answering `no
 available server` while Prometheus rolls. The workload was not graded, healthy or not. When no
-other tag reads unhealthy, the landing ends `deferred`, exit 75, and prints
-`outcome.UNREADABLE_GATE_NOTE`. No tick gates health, so `cc-wait land` reports this
-deferral as `gave-up`: re-run `land.sh` to grade the deploy. PR #5533's landing read
-`unhealthy` this way on 2026-10-18 while its pod was `1/1 Running` (#5543). `land.sh` does not
-retry the gate itself. The store's roll takes about 30s, and a re-run of `land.sh` is the
-resume point that already exists.
+other tag reads unhealthy, `land.sh` asks the gate again every 30 seconds for up to 5
+minutes (`health_verdict.UNREADABLE_RETRY_S`). The PRs that hit this roll the store
+themselves, and the store's roll takes about 30s. Only a store still unreadable after that
+ends the landing `deferred`, exit 75, with `outcome.UNREADABLE_GATE_NOTE`. No tick gates
+health, so `cc-wait land` reports this deferral as `gave-up`: re-run `land.sh` to grade the
+deploy. PR #5533's landing read `unhealthy` this way on 2026-10-18 while its pod was `1/1
+Running` (#5543). Before the retry, 29 landings in the 14 days to 2026-11-09 deferred on an
+unreadable store, and 22 of them were never re-run.
+
+The gate's worktree sits at `origin/master` whenever that contains the deployed commit, not at
+the merge commit. `probe.py health` refuses a role whose files `origin/master` changed after
+its tree's HEAD, so a gate pinned to the merge commit deferred on every re-run once a later
+commit touched a landed role (#7816). The tip can carry a role change `promote` has not applied
+yet. The gate then grades the live workload against that newer definition, which the probe
+would otherwise refuse to grade at all. When master moves while the gate runs, the probe still
+refuses, and the landing ends `deferred` with `outcome.STALE_GATE_NOTE` rather than the store
+wording. `cc-wait land` reports that deferral as `gave-up` too: re-run `land.sh`.
 
 **Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the 180s
 restart window. It cannot see whether *your change* took effect: an Authelia 302 fires in the
@@ -589,8 +609,8 @@ middleware before the backend is reached, and 19 dead Grafana panels sat behind 
 
 `deferred` (`LAND_GAVE_UP`, exit 75) means the landing gave up waiting and a re-run of
 `land.sh` completes it: no promotion covered the merge commit in time (cause `promote-timeout`),
-a host's package is not yet applied, or the health gate could not read its store (see *The
-health gate*). `cc-wait land` ends the wait as `gave-up`, exit 3, for each of those that
+a host's package is not yet applied, or the health gate could not read its store or found
+its tree older than `origin/master` (see *The health gate*). `cc-wait land` ends the wait as `gave-up`, exit 3, for each of those that
 prints a note naming the re-run, and as `deferred`, exit 4, for any other.
 
 `nothing-to-deploy` also covers a PR that reaches only a setup role the deployer applies.
@@ -598,8 +618,9 @@ prints a note naming the re-run, and as `deferred`, exit 4, for any other.
 apply nor a failure of it, and it names no other host the role reaches. Read the host: the
 changed state itself, or `probe.py gitops-state`, which prints `last_run`, `hold_sha` and
 `owed.jsonl`. The deployer records a `manual_plane` line for a role it cannot apply, and for a
-role it applied on daniel-box whose change reaches another host (#6510). A `hold_sha` pages
-**GitOps Deploy — Status**, so a failed apply does not go unseen.
+role it applied on daniel-box whose change reaches another host (#6510). No check pages on a
+`hold_sha`. A failed apply shows in the deployer's Discord post, in the SessionStart banner and
+as `deploy-failed` from every later `land.sh` run.
 
 **Read every remediation line, not the first one.** One PR can reach two of these at once, for
 example a plane a hand applies and a host package, and the verdict then prints one line per
@@ -664,7 +685,10 @@ It ends `deferred` in three cases:
   re-run the same `land.sh` command. daniel-box, daniel-server and the Pi ship the link, so
   this case reaches only the merge that first adds a link (#6218 added daniel-box's).
 - The host's deadline is more than 45 minutes away. The deadline is the second updater fire
-  after the merge plus 10 minutes, read from the first parent's rendered drop-in.
+  after the wait's first query plus 10 minutes, read from the first parent's rendered
+  drop-in. That query follows master CI going green at the merge, because no host can apply
+  the merge before the builder publishes it. Counted from the merge instead, the deadline
+  had passed before CI went green on 24 of 51 host deferrals in the 14 days to 2026-11-09.
 - The host is still unsettled past its deadline. The line gives the host's last success
   timestamp.
 

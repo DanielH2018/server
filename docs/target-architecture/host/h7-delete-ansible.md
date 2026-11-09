@@ -65,7 +65,9 @@ The exit criterion is seven observations:
    `homelab_host_applied_info{host="daniel-pi"}` at the installed version, which shows the
    package recreated the textfile directory the updater writes. A WireGuard client connects through it. The
    repo gains at most two commits: the recipient commit, and the host-key pin unless the
-   break-glass kit restored the old host keys.
+   break-glass kit restored the old host keys. The operator waived this observation on
+   2026-11-08 ([#7505](https://github.com/DanielH2018/server/issues/7505)), so no step waits
+   on it.
 3. **The libvirt drill.** The etcd restore drill in a throwaway guest runs green on
    daniel-server from its package timer. It reads the join token from the agent's installer
    env file, `/etc/systemd/system/k3s-agent.service.env`, which H6 leaves in place.
@@ -1908,20 +1910,20 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.41a daniel-box: the builder's tooling | H7.14, first half | yes | H3, H6.2, H7.24a |
 | H7.41b daniel-box: the builder hosts itself | H7.14, second half | no: it waits for H7.41a live on daniel-box | H7.41a live, H3, H6.2, H7.24a |
 | H7.42 `bootstrap-host.sh`, complete | H7.15a | yes | H7.24a, H6.1b, H6.2 |
-| H7.43 The Pi runbook and the Pi rebuild | H7.15b | the runbook yes; the rebuild no, because it needs every Pi PR live | H7.25, H7.26, H7.27, H7.30, H7.42, H7.58, H5, all live |
+| H7.43 The Pi runbook and the Pi rebuild | H7.15b | done: the runbook landed in `docs/break-glass.md` ([#7518](https://github.com/DanielH2018/server/pull/7518)); the operator waived the rebuild on 2026-11-08 ([#7505](https://github.com/DanielH2018/server/issues/7505)), so H7.43 counts as done for H7.55 | H7.25, H7.26, H7.27, H7.30, H7.42, H7.58, H5, all live |
 | H7.44 The cluster-node procedure, adding a host and release upgrades | H7.15c, H7.15d, H7.15e | yes; the guest drill needs H6 live | H7.42, R4 PR 7b, H6, H7.34, H7.35, H7.60, H7.62 |
 | H7.45 Scripts for the operator playbooks | H7.16a, H7.16b | landed as [#7524](https://github.com/DanielH2018/server/pull/7524); the drill passed on 2026-11-08 (item 21) | R4 |
 | H7.46 The last Ansible imports | H7.17 | landed as [#7756](https://github.com/DanielH2018/server/pull/7756) (item 22) | R4, D6.13 |
 | H7.47 Closing the readers | H7.18a, H7.18b, H7.18d | landed as [#7222](https://github.com/DanielH2018/server/pull/7222) (item 23) | H7.36, H7.40, H5 |
 | H7.48 Absent arms become legacy entries; `k8s_host_files` empties | H7.18c | no: its list of record is H7.23's report taken after every row has moved | H7.25, H7.35, H7.36, H7.40, H7.64, H2.2c, H2.3d, H2.3f, H2.4c, H2.5b to H2.5d, H2.8b, D5 |
 | H7.49a land.sh stops running the tick | H7.19a's third PR | yes | H7.41, D6 |
-| H7.49b monitor-bridge's gitops checks go | H7.19a's first PR | yes; it merges only when H7.52 is ready to merge next, because it leaves the deployer unwatched until H7.52's merge | H7.49a, H7.51 live, and every other edge of H7.52 |
+| H7.49b monitor-bridge's gitops checks go | H7.19a's first PR | yes, written as [#7806](https://github.com/DanielH2018/server/pull/7806); it merges only when H7.52 is ready to merge next, because it leaves the deployer unwatched until H7.52's merge | H7.49a, H7.51 live, and every other edge of H7.52 |
 | H7.50 deploy_ui re-homes with its in-flight panel | H7.19a's second PR | yes | H7.37, H7.41, D6 |
 | H7.51 `homelab-checkout-sync` beside the deployer | H7.19a's fourth PR | yes | H7.41, H7.47, D6, the H6 PR that lands the window test |
 | H7.52 The deployer's timer retires | H7.19a's fifth PR | written as [#7828](https://github.com/DanielH2018/server/pull/7828), to merge right after #7806; it deletes H6's seven deployer-coupled items, so it started once they merged | H7.49a, H7.49b live, H7.51 live, H7.24a, H7.24b, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H7.60, H7.62, H6 |
 | H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.24a to H7.41, H7.24b, H7.44, H7.45, H7.48, H7.50, H7.58 to H7.64 |
 | H7.54 The test env leaves ansible-core | H7.19d | no: its parity proof runs over the suite as H7.48 and H7.52 leave it | H7.46, H7.48, H7.52 |
-| H7.55 Delete the playbooks and the role directories | H7.20a | no: it deletes what H7.53 leaves | H7.53 live on daniel-box, H7.43, H7.44, H7.45 |
+| H7.55 Delete the playbooks and the role directories | H7.20a | no: it deletes what H7.53 leaves | H7.53 live on daniel-box, H7.43 (done: its rebuild half was waived), H7.44, H7.45 |
 | H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | no: its two census greps run at its base | H7.54, H7.55, H5 |
 | H7.57 The ADR | H7.20c | yes | H7.55 |
 | H7.58 Pi: `initial_setup`, part 3 | new | yes | H7.26, H7.30, H7.42 |
@@ -2241,7 +2243,10 @@ the `manual_plane` clearing, and *Rollback*'s
 18. **H7.42** stays alone. It carries the bootstrap, offline and bootstrap-pins proofs.
 19. **H7.43** stays alone, because the operator's rebuild is exit observation 2. The operator
     rebuilds at the Pi's console and keeps the old SD card as the rollback
-    (**operator-only**). The cluster's wg-easy on 51820 is proven first.
+    (**operator-only**). The cluster's wg-easy on 51820 is proven first. The runbook half
+    landed ([#7518](https://github.com/DanielH2018/server/pull/7518)). The operator ruled on
+    2026-11-08 not to run the rebuild ([#7505](https://github.com/DanielH2018/server/issues/7505)),
+    so H7.43 is done and H7.55 does not wait on the rebuild.
 20. **H7.44.** All three steps are procedures built on H7.42's script, in
     `docs/break-glass.md` and `docs/host-packages.md`, and H7.15d's host census is their one
     test. It carries R4 PR 7b's kind drill run on this PR, the guest drill with its blast

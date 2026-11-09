@@ -47,8 +47,8 @@ the script that pins its throwaway key (#6245; `validate_lib/bootstrap_repo_case
 case runs step 3 with real apt on an image holding no age (`validate_lib/bootstrap_age_case.py`).
 
 `--k3s-download` runs one case and nothing else: daniel-box's `--local-build` with no k3s seeded,
-so install.sh downloads and checks the release binary. CI runs it in a step that cannot fail the
-PR (#7754).
+so install.sh downloads and checks the release binary. CI runs it in a job that cannot fail the
+PR (#7754, #7810).
 
 Every case that reaches step 3 asserts that the server log holds its `GET` of
 `dists/homelab/InRelease` or `dists/homelab/Release`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test

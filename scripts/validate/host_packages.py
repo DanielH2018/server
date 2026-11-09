@@ -31,8 +31,8 @@ binary, and `placeholders` fails on a `${key}` the root's SOPS file does not car
 runs them on every PR, ahead of its steps that stand down on an unchanged tree.
 
 `job-changed` says whether any `--job` it names parses differently at a commit than in the
-working tree. CI's two host package jobs build what the container cases read and invoke them, so
-a PR that edits either runs the cases (#5004, #6151). The comparison is of the parsed YAML, so an
+working tree. CI's host package jobs build what the container cases read and invoke them, so
+a PR that edits any of them runs the cases (#5004, #6151). The comparison is of the parsed YAML, so an
 edit to a comment alone does not count.
 
 `fixture-changed` says whether the container cases' fixture `homelab-daniel-pi` renders
@@ -50,7 +50,8 @@ Usage:
     uv run python scripts/validate/host_packages.py scan-roots /tmp/head --gitleaks BIN --config FILE
     uv run python scripts/validate/host_packages.py placeholders /tmp/head
     uv run python scripts/validate/host_packages.py job-changed BASE_SHA \
-        --workflow .github/workflows/ci.yml --job host_packages_build --job host_packages
+        --workflow .github/workflows/ci.yml --job host_packages_build --job host_packages \
+        --job k3s_download
     uv run python scripts/validate/host_packages.py fixture-changed /tmp/base-tree .
 
 Exit codes: 0 the render, diff or lint succeeded and the lint found nothing; 1 the lint found a

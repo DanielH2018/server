@@ -403,6 +403,7 @@ extra-paths = [
   "ansible/roles/k8s/jellyfin/files",
   "ansible/roles/k8s/registry/files",
   "ansible/roles/k8s/netpol-baseline/files",
+  "ansible/roles/k8s/system-upgrade/files",
   "scripts/backup/tests",
   "scripts/deploy_tools/tests",
   "scripts/docs/tests",

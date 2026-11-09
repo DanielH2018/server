@@ -1,0 +1,18 @@
+#!/bin/bash
+# Refreshes rkhunter's file-properties baseline after a package change, outside apt's lock (#7680).
+# A start while the unit is active does nothing, so a dpkg run that lands during a refresh is
+# caught here: the loop runs again until dpkg's status file holds still across a whole refresh.
+set -euo pipefail
+
+lib_dir=${HOMELAB_LIB_DIR:-/usr/lib/homelab}
+status=${DPKG_STATUS:-/var/lib/dpkg/status}
+
+while :; do
+  "$lib_dir/homelab-reconcile" --wait-for-apt
+  # dpkg replaces the status file by rename, so the inode changes on every write.
+  before=$(stat -c '%i %Y' "$status")
+  rkhunter --propupd --nolog --nocolors
+  [[ $(stat -c '%i %Y' "$status") == "$before" ]] && break
+  echo "dpkg changed packages during the refresh; refreshing again"
+done
+echo "rkhunter baseline refreshed"

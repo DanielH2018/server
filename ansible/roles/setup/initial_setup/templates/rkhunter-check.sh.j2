@@ -75,8 +75,9 @@ summary_count() {
 # and daniel-box and daniel-pi one week each, every one a package or the operator adding an
 # account. It pages, because a new account is what this scan exists to catch. rkhunter stores its
 # copy of passwd and group on every run, so running this script again by hand acknowledges the
-# change and clears the alert. Suspect files read 0 in every log kept, because APT_AUTOGEN refreshes
-# the baseline after package upgrades, so a suspect file is a binary that changed outside apt.
+# change and clears the alert. Suspect files read 0 in every log kept, because a refresh after every
+# dpkg run rebaselines package upgrades (homelab-rkhunter-propupd.service since #7680), so a
+# suspect file is a binary that changed outside apt.
 if [[ -z "$SUMMARY" ]]; then
   STATUS=down
   # The first line that names an error, else the first line of output at all.

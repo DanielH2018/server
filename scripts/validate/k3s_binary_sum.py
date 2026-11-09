@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Refuse a PR that moves `k3s_version` and leaves `k3s_binary_sha256_amd64` unchanged (H6.3e).
 
-The `binary` mode of `hosts/lib/k3s_gates.py` compares each node's k3s binary with the sum in
+The `system-upgrade-verify` Jobs compare each node's k3s binary with the sum in
 `k3s_binary_sha256_amd64`, the `k3s` line of the release's `sha256sum-amd64.txt`. A bump of the
 version that keeps the old sum would turn the verify Jobs red on every healthy node, or, worse,
 get the sum "fixed" from the node. Both keys live in

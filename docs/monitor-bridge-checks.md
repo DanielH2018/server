@@ -114,38 +114,8 @@ checks each gate suppresses.
   public trackers from the offender list. It is set to `The Pirate Bay,1337x`, because their
   backends flap for hours and the remaining indexers cover the same searches. Pure
   `indexers_down()` is unit-tested.)
-- **`gitops_alive`** (reads `/gitops-state/last_run`, a bind-mounted host timestamp the
-  `gitops_deploy` deployer rewrites each non-crashing tick. `down` once it is older than
-  `GITOPS_MAX_AGE_MIN`, which means the deployer stalled or the host is down. See
-  `ansible/roles/setup/gitops_deploy/CLAUDE.md`)
-- **`gitops_status`** (reads `/gitops-state/hold_sha`, `/gitops-state/diverged_sha`,
-  `/gitops-state/contention_since`, `/gitops-state/manual_plane` **and
-  `/gitops-state/behind_since`**. `down` while a rolled-back commit is held pending the operator
-  reverting the offending PR (self-heals when the hold clears), OR while local and origin have
-  **diverged**, so the deployer cannot fast-forward and silently noops forever (the deployer
-  records the diverged SHA each tick, 2026-07-15 review L3), OR while the host has sat **behind
-  origin** longer than `GITOPS_BEHIND_MAX_MIN` (360 = 6 h).
-  That last arm is the general case the other two are instances of. A deferred **broad** change
-  never fast-forwards, so the host parks on an old tree with `last_run` still ticking and
-  `is_diverged` false (origin is a strict descendant). daniel-server ran a 12-commit-old tree for
-  hours on 2026-08-02 with every GitOps signal green. The arm is age-gated, not presence-gated: a
-  routine push is behind for one tick, and the deployer's dirty-tree path is behind for a whole
-  edit session by design, so only sustained behind-ness is a fault. hold/diverged are reported
-  ahead of it, because they name the cause where "behind" names the symptom.
-  The **busy service lock** arm (`contention_since`, #1847) comes next. A tick that finds an
-  operator `deploy.sh` still holding a service lock for its whole budget resets its tree and
-  returns 0, so `last_run` advances, `hold_sha` stays empty and only `behind_since` ages toward the
-  six-hour threshold, which is sized for a dirty tree. The deployer records the streak's first tick
-  in `contention_since`, and this pages once it is older than `GITOPS_CONTENTION_MAX_MIN` (30 = the
-  deployer's longest apply budget, `gitops_deploy_broad_timeout_s`), naming the lock. The tick
-  clears the marker on its next run that is not deferred, and `gitops_state.py clear-contention`
-  clears it by hand.
-  Pure `gitops_status()` and its parsers are unit-tested, and an unparseable marker reads as not-behind
-  rather than paging forever on garbage.)
 - **`host_packages`** (`host_packages`, reads the host-package builder's two textfile series
-  through daniel-box's node exporter, the `node` job. It is a row of its own, because
-  `gitops_status` reads the deployer's state directory outside the Prometheus gate, and a
-  Prometheus-sourced arm there would page on every Prometheus outage. The row is `gate="prometheus"`
+  through daniel-box's node exporter, the `node` job. The row is `gate="prometheus"`
   and sits under `EXPORTER_DEPENDENT["node"]`, so a dead exporter pages once through `ScrapeTargetDown`
   instead of also as an absent builder series. It goes `down` on either arm. The **fetch arm**:
   `homelab_builder_fetch_timestamp_seconds` is older than `BUILDER_MAX_FETCH_AGE_S` (1800 s,
@@ -360,7 +330,7 @@ checks each gate suppresses.
   had no gate until a single WAN outage on 2026-09-18 turned 11 tiles red inside 90 minutes,
   including four host crons and `b2_reachable`, `r2_usage`, `discord`, the since-deleted Kuma
   Notification Delivery tile, `cloudflare-ip-drift`, the since-deleted Swallowed Push Verdicts
-  tile and `gitops_alive`. It gates the `wan_reachable` rows:
+  tile and `gitops_alive` (since removed). It gates the `wan_reachable` rows:
   `r2_usage`, `cloudflare_ips_drift`, `healthchecks_drift`, `discord`.
   **DOWN only when NEITHER endpoint answers.** One provider's outage is that provider's problem,
   and suppressing on it would turn Cloudflare's own tiles green during a Cloudflare outage. The

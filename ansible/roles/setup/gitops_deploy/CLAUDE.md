@@ -14,8 +14,9 @@ minutes the unit fetched `origin/master`, mapped each changed path to a service 
 `--ff-only` merged, and applied the setup roles it could.
 
 Config is `/etc/gitops-deploy/config.env` (0600), from the SOPS var
-`gitops_deploy_discord_webhook`; liveness is `/var/lib/gitops-deploy/last_run`, read by
-`monitor-bridge`. This file carries the rules; `docs/gitops-pipeline.md`'s *The
+`gitops_deploy_discord_webhook`; liveness is `/var/lib/gitops-deploy/last_run`. No check pages
+on it or on `hold_sha`: monitor-bridge's two gitops checks left in H7.49b, so the deployer runs
+unwatched until H7.52 retires its timer. This file carries the rules; `docs/gitops-pipeline.md`'s *The
 deployer's record* carries the incident behind each, the budget arithmetic, the module layout
 and the trade-offs.
 
@@ -50,8 +51,8 @@ D6.12: `promote` publishes the bundle and Flux applies it.
   cached verdict, never the working tree.
 - **Abort valves:** the CI gate; `hold_sha` and `hold_plane`; `BROAD_DEPLOY_TIMEOUT_S`, which
   bounds one tick's apply.
-- **Required evidence:** `last_run` every tick (GitOps-Alive expires without it), a Discord post
-  per apply, hold and deferral, and a `hold_sha` that pages **GitOps Deploy — Status**.
+- **Required evidence:** `last_run` every tick, a Discord post per apply, hold and deferral,
+  and a `hold_sha` that the SessionStart banner and `land.sh` read.
 - **Next-run review:** before widening scope, read the last week's Discord log for the holds that
   fired; the record page lists what an earlier widening cost.
   `increase(gitops_tick_runs_total[7d])` counts the same week by outcome, lock skips and

@@ -34,4 +34,9 @@ On that filter it would return True for all 8 `probe: false` entries, so C-4a mo
 
 #### PR C-4b
 
-Nothing recorded.
+[#7835](https://github.com/DanielH2018/server/issues/7835) deletes
+`ansible/filter_plugins/kuma_monitors.py`, its import and its `kuma_ingress_monitors`
+registration in `scripts/lib/ansible_jinja_env.py`. D6 had already deleted
+`narrow_lib/containers.py`, so no `FILTER_FIELDS` row was left to remove. The plugin's other
+filter, `kuma_malformed_push_tokens`, had no caller left, so it went with the file. The census
+row's allowlist loses C-4b's two entries, which closes exit criterion 3's C-4b wait.

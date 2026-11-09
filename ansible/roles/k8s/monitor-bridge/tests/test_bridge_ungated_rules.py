@@ -3,7 +3,7 @@
 M6's batch A6-6 ports the rows that name no gate. Four things must hold, and the table is the
 only source for each:
 
-- the family is exactly the five rows with no `gate` value that are not gate rows, so a sixth
+- the family is exactly the three rows with no `gate` value that are not gate rows, so a fourth
   ungated row, or a row that gains a gate, fails here until its rule is placed;
 - a rule selects each row by its `check` label and carries no `requires` label, because no
   inhibit rule reaches an ungated row;
@@ -23,8 +23,6 @@ from lib.repo_paths import K8S_ROLES
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "bridge-exporter.yaml"
 FAMILY = [
     "arr_queue",
-    "gitops_alive",
-    "gitops_status",
     "etcd_restore_drill",
     "ha_heartbeat",
 ]
@@ -70,7 +68,7 @@ def problems(rules: list[dict]) -> list[str]:
     return found
 
 
-def test_the_ungated_family_is_the_five_named_rows():
+def test_the_ungated_family_is_the_three_named_rows():
     assert ungated() == FAMILY
 
 

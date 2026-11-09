@@ -168,7 +168,7 @@ groups:
             A drain is nearly free, but a prune pays per deleted backup, so read
             longhorn-backup-tiering before deleting anything.
           runbook_url: https://docs.local.daniel-hunter.com/longhorn-backup-tiering/
-      # THE UNGATED FAMILY (A6-6): the five rows with no `gate` column value. None reads
+      # THE UNGATED FAMILY (A6-6): the three rows with no `gate` column value. None reads
       # Prometheus, Loki or the WAN, and none is a `startup_grace` row, so no rule here carries
       # a `requires` label or a `for:`. `arr_queue` and `ha_heartbeat` streak one arm inside the
       # body (ARR_FETCH_CONSECUTIVE, HA_CONSECUTIVE) while their other arms page at once, and a
@@ -187,29 +187,6 @@ groups:
             which is the shape of the 2026-07-01 fake-episode .exe. An arr API that stays
             unreachable past ARR_FETCH_CONSECUTIVE cycles pages the same way. The monitor-bridge
             log in the homelab namespace names the release and the app.
-      - alert: GitOpsDeployerNotTicking
-        expr: homelab_check_success{job="monitor-bridge", check="gitops_alive"} == 0
-        labels:
-          severity: warning
-          service: gitops-deploy
-        annotations:
-          summary: The pull-based deployer on daniel-box has stopped ticking.
-          description: >-
-            The deployer's last_run marker is older than GITOPS_MAX_AGE_MIN, missing or unparseable.
-            Run `systemctl status gitops-deploy.timer` on daniel-box and read the SessionStart
-            banner's parked state.
-      - alert: GitOpsDeployerParked
-        expr: homelab_check_success{job="monitor-bridge", check="gitops_status"} == 0
-        labels:
-          severity: warning
-          service: gitops-deploy
-        annotations:
-          summary: The deployer is parked or owes an apply.
-          description: >-
-            One of these holds: a held SHA after a failed health gate, a diverged tree, a busy
-            service lock, a tree behind origin for 6h, a setup role only a hand can apply, or an
-            image bump a broad tick deferred for lack of budget. The monitor-bridge log names
-            which. gitops_state.py clears a marker once the cause is fixed.
       - alert: EtcdRestoreDrillFailing
         expr: homelab_check_success{job="monitor-bridge", check="etcd_restore_drill"} == 0
         labels:

@@ -23,6 +23,7 @@ MODULES = frozenset(
         "deploy",
         "promotion",
         "health_verdict",
+        "own_checkout",
         "pipeline",
         "detach",
         "handoff",
@@ -53,6 +54,7 @@ ALLOWED = {
     # The classifier libraries the Tools defaults wrap (#4349 moved them in from beside land.py).
     "tools": {
         "land_flux",
+        "own_checkout",
         "land_reach",
         "land_tags",
         "land_tested_base",
@@ -93,7 +95,7 @@ ALLOWED = {
     # Its boundaries. It imports `promote.py`'s `last-good` reader, outside land_lib.
     "pin_reads": set(),
     "policy": {"landing", "outcome", "pr_json", "gh_read"},
-    "classify": {"landing", "outcome", "land_tags", "promotion"},
+    "classify": {"landing", "outcome", "land_tags", "own_checkout", "promotion"},
     "closing_refs": {"gh_read", "landing", "outcome"},
     "ci": {"landing", "outcome"},
     "deploy": {
@@ -104,6 +106,7 @@ ALLOWED = {
     # The split of a landing's tags and the wait on promotion, step 5's work (D2.3).
     "promotion": {"landing", "outcome"},
     "health_verdict": {"landing", "outcome", "promotion"},
+    "own_checkout": set(),
     # The fork, the logfile and the verdict wait. It imports no phase: `land.py` hands it a
     # callable and it never knows what a landing is.
     "detach": set(),
