@@ -46,3 +46,23 @@ def test_the_bootstrap_job_covers_every_release_the_legs_run():
     assert {job_id: _releases(jobs[job_id]) for job_id in _bootstrap_jobs()} == {
         "host_packages_bootstrap": legs
     }
+
+
+def test_the_bootstrap_jobs_steps_run_on_the_legs_conditions():
+    """`test_host_package_cases_run_on_their_inputs.py` simulates the legs' `if:`s alone."""
+    jobs = _jobs()
+    legs = {step.get("name"): step.get("if") for step in jobs[LEGS_JOB]["steps"]}
+    legs_cases = next(
+        step.get("if")
+        for step in jobs[LEGS_JOB]["steps"]
+        if CASES_ENTRY in str(step.get("run", ""))
+    )
+    drifted = {}
+    for step in jobs["host_packages_bootstrap"]["steps"]:
+        name = step.get("name")
+        runs_cases = CASES_ENTRY in str(step.get("run", ""))
+        expected = legs_cases if runs_cases else legs.get(name, step.get("if"))
+        if step.get("if") != expected:
+            drifted[name] = step.get("if")
+    assert len(jobs["host_packages_bootstrap"]["steps"]) >= 6
+    assert drifted == {}

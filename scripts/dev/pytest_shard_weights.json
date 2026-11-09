@@ -394,7 +394,7 @@
  "ansible/tests/repo/test_census_rows_roles.py": 1.42,
  "ansible/tests/repo/test_census_rows_suite.py": 0.06,
  "ansible/tests/repo/test_census_rows_text.py": 3.86,
- "ansible/tests/repo/test_ci_bootstrap_cases_own_job.py": 0.02,
+ "ansible/tests/repo/test_ci_bootstrap_cases_own_job.py": 0.01,
  "ansible/tests/repo/test_ci_contexts_match_workflows.py": 0.0,
  "ansible/tests/repo/test_ci_dispatch_sweeps_everything.py": 0.0,
  "ansible/tests/repo/test_ci_empty_pr_merge_fails.py": 0.19,
