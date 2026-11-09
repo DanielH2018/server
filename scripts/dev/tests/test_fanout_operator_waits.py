@@ -178,11 +178,17 @@ def test_each_issue_lands_in_one_state_and_manual_wins():
         _issue(4, "not-before:2026-10-17"),
         _issue(5, "manual", "claimed"),
         _issue(6, "manual", "not-before:2026-10-20"),
+        {
+            **_issue(7, "claimed"),
+            "blockedBy": {"nodes": [{"number": 9, "state": "OPEN"}]},
+        },
+        {**_issue(8), "blockedBy": {"nodes": [{"number": 9, "state": "CLOSED"}]}},
     ]
     assert operator_waits.issue_states(issues, "2026-10-18") == {
-        "free": 2,
+        "free": 3,
         "claimed": 1,
         "deferred": 1,
+        "blocked": 1,
         "manual": 2,
     }
 

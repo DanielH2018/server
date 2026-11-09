@@ -24,6 +24,7 @@ from dev.findings_lib.issue_model import (
     NOT_PLANNED_PREFIX,
     NOT_BEFORE_PREFIX,
     NOT_BEFORE_STYLE,
+    PR_REPO,
     PROJECT_TITLE,
     _REOBSERVED,
     claim_comment,
@@ -32,6 +33,7 @@ from dev.findings_lib.issue_model import (
     label_names,
     not_before,
     not_before_label,
+    open_blockers,
     release_comment,
     reobservations,
     trailer,
@@ -97,6 +99,45 @@ def plan_defer(
         ["issue", "comment", n, "--body", f"Deferred until {until.isoformat()}."]
     )
     return plans
+
+
+def plan_block(issue: dict, *, on: list[str], clear: bool) -> list[list[str]]:
+    """Plans the gh argv that marks ``issue`` blocked by other issues, or removes that.
+
+    Writes GitHub's native "blocked by" relationship. `next` and `claim` withhold the issue
+    while any blocker is open, and it frees itself when the last one closes, so a block
+    never needs clearing for that.
+
+    Args:
+        on: the blocking issues, each a number or an issue URL (another repository's
+            issue needs the URL). With ``clear``, an empty list removes every blocker.
+        clear: remove the relationship instead of adding it.
+
+    Raises:
+        ClaimRefused: the issue is closed, would block itself, or ``clear`` finds no
+            blocker to remove.
+    """
+    if issue.get("state", "OPEN") != "OPEN":
+        raise ClaimRefused("closed — nothing to block")
+    n = str(issue["number"])
+    if not clear:
+        if n in on:
+            raise ClaimRefused("an issue cannot block itself")
+        return [["issue", "edit", n, "--add-blocked-by", ",".join(on)]]
+    if not on:
+        nodes = (issue.get("blockedBy") or {}).get("nodes") or []
+        on = [_blocker_ref(node) for node in nodes]
+        if not on:
+            raise ClaimRefused("not blocked — no blocker to remove")
+    return [["issue", "edit", n, "--remove-blocked-by", ",".join(on)]]
+
+
+def _blocker_ref(node: dict) -> str:
+    """How `gh issue edit` names a blocker: its number in this repo, its URL elsewhere."""
+    url = node.get("url") or ""
+    if url.lower().startswith(f"https://github.com/{PR_REPO.lower()}/issues/"):
+        return str(node["number"])
+    return url or str(node["number"])
 
 
 def plan_release_held(issue: dict, *, when: str, reason: str) -> list[list[str]]:
@@ -234,8 +275,8 @@ def plan_claim(
 
     Raises:
         ClaimRefused: the issue is closed, lacks the `claude` label, is labelled `manual`,
-            carries a `not-before:` date after ``today``, or another worktree already holds
-            it.
+            carries a `not-before:` date after ``today``, has an open blocker, or another
+            worktree already holds it.
     """
     if issue.get("state", "OPEN") != "OPEN":
         raise ClaimRefused("closed — nothing to work")
@@ -259,6 +300,12 @@ def plan_claim(
         # dispatch. The way out is named, unlike `manual`'s.
         raise ClaimRefused(
             f"deferred until {day.isoformat()} — `defer {issue['number']} --clear` lifts it"
+        )
+    blockers = open_blockers(issue)
+    if blockers:
+        raise ClaimRefused(
+            f"blocked by {', '.join(blockers)} — it frees itself when they close; "
+            f"`block {issue['number']} --clear` lifts it"
         )
     n = str(issue["number"])
     add_label = ["issue", "edit", n, "--add-label", "claimed"]

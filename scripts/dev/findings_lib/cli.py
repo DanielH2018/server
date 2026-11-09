@@ -100,6 +100,14 @@ def _parser(description: str) -> argparse.ArgumentParser:
         "precondition (a metric window, a cron firing) is not met before it",
     )
     o.add_argument(
+        "--blocked-by",
+        action="append",
+        metavar="ISSUE",
+        help="withhold from `next` and `claim` until this issue closes; for a finding that "
+        "waits on other work rather than a date. Repeatable. On an issue the dedup matches, "
+        "adds the blocker there too",
+    )
+    o.add_argument(
         "--manual",
         action="store_true",
         help="reserve for the operator: `next` withholds it and `claim` refuses it. On an "
@@ -128,6 +136,26 @@ def _parser(description: str) -> argparse.ArgumentParser:
     )
     when.add_argument(
         "--clear", action="store_true", help="remove the not-before date now"
+    )
+
+    bk = sub.add_parser(
+        "block",
+        help="withhold an issue from `next` and `claim` until other issues close, or clear that",
+    )
+    _add_dry_run(bk, suppress=True)
+    _add_repo(bk)
+    bk.add_argument("number", type=int)
+    bk.add_argument(
+        "--on",
+        action="append",
+        metavar="ISSUE",
+        help="a blocking issue's number, or its URL in another repository; repeat it or "
+        "comma-separate several. With --clear, removes only these",
+    )
+    bk.add_argument(
+        "--clear",
+        action="store_true",
+        help="remove the blockers now; every one of them when --on is not given",
     )
 
     mn = sub.add_parser(

@@ -3,6 +3,7 @@
 |---|---|
 | `open` | file a finding, or touch/reopen the existing issue |
 | `defer` | withhold an issue from `next` and `claim` until a date, or clear that |
+| `block` | withhold an issue from `next` and `claim` until other issues close, or clear that |
 | `manual` | reserve an issue for the operator, releasing any claim on it, or clear that |
 | `touch` | record a re-observation; the third adds escalated |
 | `comment` | post a plain comment: no label, no re-observation; a correction to an issue's body, say |

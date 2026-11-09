@@ -25,8 +25,8 @@ after its PR landed, or a worktree somebody pruned. `prune_worktrees.py --prune`
 weekly sweep cron runs, also reaps once it has removed a tree. A failed reap only warns,
 because each claim still reaps a stale claim on the issue it takes.
 
-`next` withholds `manual` issues, issues deferred to a later date, anything a LIVE claim
-holds, and anything an open PR already closes — every row it prints is free to take. An issue
+`next` withholds `manual` issues, issues deferred to a later date, issues an open issue
+blocks, anything a LIVE claim holds, and anything an open PR already closes — every row it prints is free to take. An issue
 whose claim is stale is offered, marked `[stale claim by ...]`; `claim` reaps that claim itself
 on the way past, so a refusal from `claim` means the claim is live and another session is
 really working it.
@@ -38,6 +38,12 @@ metric window, a cron that has not fired — and #1288 cost six dispatches reach
 conclusion before `next` could say it (#1739). When an agent finds an issue is date-gated,
 `findings.py defer <n> --until <date>` records it, and `next` offers the issue again on that
 date with nothing to clear.
+
+A blocked issue is named under a `blocked: #<n> by #<m>` line in the same place, and the same
+rule holds. When an agent finds an issue waits on other work rather than a date, it runs
+`findings.py block <n> --on <m>`, naming the issue that work closes. `next` offers the issue
+again the moment `#<m>` closes. Never guess a date for work that waits on another issue: the
+date passes before the work lands, or the issue sits idle after it has.
 
 Group the results so that **no two agents touch the same Ansible role, and no two agents
 touch the same file**. Read each issue's cited file to find its role; two agents editing one

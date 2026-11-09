@@ -127,6 +127,19 @@ def test_render_says_so_when_nothing_is_deferred():
     assert "No deferred findings." in md and not _deferred_lines(md)
 
 
+def test_render_lists_blocked_findings_with_their_blockers():
+    rows = [_row(2, blocked_by=["#9", "#11"]), _row(1)]
+    md = g.render_markdown(rows, today=date(2026, 10, 31))
+    section = md.split("## Blocked on other issues", 1)[1].split("\n## ", 1)[0]
+    assert "| [#2](https://github.com/o/r/issues/2) | #9, #11 | t |" in section
+    assert "[#1]" not in section
+
+
+def test_render_says_so_when_nothing_is_blocked():
+    md = g.render_markdown([_row(1)], today=date(2026, 10, 31))
+    assert "No blocked findings." in md
+
+
 # --- the settled register ---------------------------------------------------------------
 
 
