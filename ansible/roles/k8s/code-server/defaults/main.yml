@@ -136,7 +136,7 @@ code_server_k8s_extensions:
 # finish on its PR (`asset_pins.py --refresh node`). The URL sits beside the digest so
 # `scripts/validate/asset_pins.py` pairs the two and fetches it.
 # renovate: datasource=node-version depName=node
-code_server_k8s_node_version: "24.22.1"
+code_server_k8s_node_version: "24.22.2"
 code_server_k8s_node_url: "https://nodejs.org/dist/v{{ code_server_k8s_node_version }}/node-v{{ code_server_k8s_node_version }}-linux-x64.tar.xz"
 code_server_k8s_node_sha256: 6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6
 
