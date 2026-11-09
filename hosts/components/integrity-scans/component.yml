@@ -24,10 +24,13 @@
 # `WEB_CMD="/bin/false"`, which rkhunter 1.4.6 rejects as a relative pathname, so an update can
 # only fail. Setting a working `WEB_CMD` would let rkhunter fetch as root on every host.
 #
-# Autonomous-role contract (each scan runs weekly with no human in the loop). Both read the
-# filesystem and report; the AIDE check also advances its own baseline.
+# Autonomous-role contract (each scan runs weekly with no human in the loop, and the rkhunter
+# baseline refresh runs after every dpkg run). Both scans read the filesystem and report; the AIDE
+# check also advances its own baseline. The refresh advances rkhunter's baseline, outside apt's
+# lock, by the same `rkhunter --propupd` that rkhunter's APT_AUTOGEN hook ran inside it (#7680).
 #
-# - Scope / exclusions: `rkhunter --check` and `aide --update` at idle CPU and IO priority, and
+# - Scope / exclusions: `rkhunter --check`, `aide --update` and `rkhunter --propupd` at idle CPU
+#   and IO priority, and
 #   the `rkhunter-check` and `aide-check` textfiles in node_exporter's textfile directory. The AIDE check moves `aide.db.new` over `aide.db` after
 #   a run whose every difference a package explains (#4599). It never advances on a DOWN, and
 #   never creates an `aide.db` that is missing. Nothing reaches another host.
@@ -38,7 +41,8 @@
 #   rkhunter's log summary; each script's header has why the exit code alone cannot say.
 # - Abort valves: a DOWN advances no baseline, and a missing `aide.db` stays missing.
 # - Required evidence, every run: an `aide-check` or `rkhunter-check` line in the journal and the
-#   textfile the `host-checks` rule group reads (#6168).
+#   textfile the `host-checks` rule group reads (#6168). Each refresh logs a
+#   `rkhunter baseline refreshed` line under the `rkhunter-propupd` tag.
 role: initial_setup
 defaults:
   initial_setup_host_lib_dir: /usr/lib/homelab
@@ -66,13 +70,20 @@ files:
   - {src: units/homelab-rkhunter-check.timer, dst: /usr/lib/systemd/system/homelab-rkhunter-check.timer}
   - {src: units/homelab-aide-check.service.j2, dst: /usr/lib/systemd/system/homelab-aide-check.service}
   - {src: units/homelab-aide-check.timer, dst: /usr/lib/systemd/system/homelab-aide-check.timer}
+  # The baseline refresh after every package change (#7680). The hook starts the unit without
+  # blocking. The unit needs no enable link, because only the hook starts it.
+  - {src: templates/91homelab-rkhunter-propupd, dst: /etc/apt/apt.conf.d/91homelab-rkhunter-propupd}
+  - {src: files/rkhunter-propupd, dst: /usr/lib/homelab/rkhunter-propupd, mode: "0755"}
+  - {src: units/homelab-rkhunter-propupd.service, dst: /usr/lib/systemd/system/homelab-rkhunter-propupd.service}
 enable:
   homelab-rkhunter-check.timer: timers.target
   homelab-aide-check.timer: timers.target
 lines:
-  # With APT_AUTOGEN, rkhunter's apt hook refreshes the baseline after every package change, so the
-  # weekly scan flags only changes no trusted package event explains. No package owns the file.
-  - {path: /etc/default/rkhunter, line: 'APT_AUTOGEN="true"', regexp: '^APT_AUTOGEN='}
+  # The weekly scan flags only changes no package event explains, because the refresh unit above
+  # rebaselines after every dpkg run. rkhunter's own 90rkhunter hook ran that refresh inside apt
+  # and held the dpkg lock for about 2 minutes on the Pi (#7680), so APT_AUTOGEN stays off.
+  # No package owns the file.
+  - {path: /etc/default/rkhunter, line: 'APT_AUTOGEN="false"', regexp: '^APT_AUTOGEN='}
 legacy:
   - {cron: "Weekly rkhunter malware scan", user: root}
   - {cron: "Weekly AIDE file integrity check", user: root}
