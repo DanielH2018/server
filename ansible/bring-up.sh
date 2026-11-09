@@ -98,7 +98,7 @@ if [[ "$SCAFFOLD" == true ]]; then
 
 Scaffolding written. Edit both before continuing (README §4):
     $HOSTS_INI  — the connection fields are NOT optional
-    $HOST_VARS  — server_ip, ssh_config_path, containers_list, has_gitops: false
+    $HOST_VARS  — server_ip, ssh_config_path, has_gitops: false, and containers_list on a Docker host
 
 Then re-run without --scaffold.
 EOF

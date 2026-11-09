@@ -26,8 +26,9 @@ from _helpers import REPO
 # `table_rows` returns the header row's first cell with the others.
 HEADER = "Entry point"
 
-# The two readers of the `owner` flag. Every chain that reads the tree ends at one of them.
-READERS = frozenset({"tag_owners"})
+# The readers of the `owner` flag: `tag_owners` reads the service list, and `entry_owners`, which
+# it calls, reads entries a caller has already loaded. Every chain that reads the tree ends at one.
+READERS = frozenset({"tag_owners", "entry_owners"})
 
 
 @dataclass(frozen=True)
@@ -107,8 +108,8 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
         ),
     ),
     "`gen_role_glance.py`, `service_catalog.py`": (
-        Link("scripts/docs/gen_role_glance.py", "stale_k8s_docs", "tag_owners"),
-        Link("scripts/docs/service_catalog.py", "build_rows", "tag_owners"),
+        Link("scripts/docs/gen_role_glance.py", "stale_k8s_docs", "entry_owners"),
+        Link("scripts/docs/service_catalog.py", "build_rows", "entry_owners"),
     ),
 }
 
@@ -231,10 +232,10 @@ def test_a_renamed_entry_point_is_flagged():
 
 def test_an_entry_point_that_stops_reading_ownership_is_flagged():
     rel = "scripts/docs/gen_role_glance.py"
-    text = (REPO / rel).read_text().replace("owners = tag_owners(", "owners = dict(")
+    text = (REPO / rel).read_text().replace("owners = entry_owners(", "owners = dict(")
     assert census_problems(_plan(), source=_source_with(rel, text)) == [
         f"`gen_role_glance.py`, `service_catalog.py`: {rel}:stale_k8s_docs no longer "
-        "calls `tag_owners`"
+        "calls `entry_owners`"
     ]
 
 

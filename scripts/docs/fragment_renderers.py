@@ -323,7 +323,7 @@ def render_lan_addresses(
          "`k3s_metallb_ingress_vip`"),
         ("Pi-hole DNS VIP (MetalLB)", dns_vip, "`dns_k8s_vip`"),
         ("WireGuard UDP port, wg-easy on daniel-box", f"{wg_port}/udp",
-         "`udp_port` on the k8s `wg-easy` entry in `host_vars/daniel-box.yml`"),
+         "`udp_port` on the k8s `wg-easy` entry in `cluster/services.yml`"),
         ("WireGuard UDP port, the Pi's LAN-only wg-easy", f"{pi_wg_port}/udp",
          "`udp_port` on `wg-easy` in `host_vars/daniel-pi.yml`"),
         ("Home LAN subnet", lan_subnet, "`lan_subnet`"),

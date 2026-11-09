@@ -20,7 +20,7 @@
 # netpol-baseline role default and does not resolve in this role.
 #
 # The port and caller list are the `netpol_fences` item for `karakeep-chrome` on this role's
-# containers_list entry (inventory/host_vars/daniel-box.yml). Its `role_owned: true` keeps
+# containers_list entry (cluster/services.yml). Its `role_owned: true` keeps
 # netpol-baseline's callers loop from rendering a second copy. A missing item fails the render
 # rather than shipping no policy.
 {% set fence = container_item.netpol_fences | selectattr('app', 'equalto', 'karakeep-chrome') | first %}

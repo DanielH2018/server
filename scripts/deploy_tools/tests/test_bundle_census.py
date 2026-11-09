@@ -181,20 +181,20 @@ def test_a_tag_without_owner_is_absent_from_the_bundle_and_the_census_is_clean(
     # The CLI runs the publish gates too, and the host gate's named member is this route.
     domain = bundle_gates.inventory_domain()
     (out / "cluster" / "bento-pdf" / "ingressroute.yaml").write_text(route(domain))
-    assert promote.main(["check-bundle", str(out), "--host-vars", str(host_vars)]) == OK
+    assert promote.main(["check-bundle", str(out), "--services", str(host_vars)]) == OK
 
 
 def test_a_flux_owned_tag_missing_from_the_bundle_is_flagged(tmp_path, capsys):
     host_vars = _host_vars(tmp_path, {"bento-pdf": "flux", "sonarr": "flux"})
     out = _bundle(tmp_path, ["bento-pdf"])
-    code = promote.main(["check-bundle", str(out), "--host-vars", str(host_vars)])
+    code = promote.main(["check-bundle", str(out), "--services", str(host_vars)])
     assert code == FAILED
     assert "flux/sonarr.yaml is missing" in capsys.readouterr().err
 
 
 def test_published_tags_prints_nothing_when_no_tag_is_flux_owned(tmp_path, capsys):
     host_vars = _host_vars(tmp_path, {"sonarr": None})
-    assert promote.main(["published-tags", "--host-vars", str(host_vars)]) == OK
+    assert promote.main(["published-tags", "--services", str(host_vars)]) == OK
     assert capsys.readouterr().out == ""
 
 
@@ -482,7 +482,7 @@ def test_check_bundle_fails_a_published_plumbing_tag_that_drops_a_named_member(
 ):
     host_vars = _host_vars(tmp_path, {"cluster-base": "flux"})
     out = _cluster_base(tmp_path, CLUSTER_BASE.replace("homelab-critical", "x"))
-    code = promote.main(["check-bundle", str(out), "--host-vars", str(host_vars)])
+    code = promote.main(["check-bundle", str(out), "--services", str(host_vars)])
     assert code == FAILED
     assert (
         "cluster-base renders no PriorityClass homelab-critical"

@@ -95,7 +95,6 @@ from lib.cli_help import ArgumentParser
 from lib.docs_provenance import write_if_body_changed
 from lib.ansible_inventory import (
     K8S_HOST,
-    K8S_HOST_VARS,
     PI_HOST,
     PI_HOST_VARS,
     pi_entries_in,
@@ -106,6 +105,7 @@ from lib.repo_paths import (
     K3S_HOST_CHECKS,
     K3S_ROLE,
     K8S_ROLES,
+    K8S_SERVICES,
     LONGHORN_BACKUP_ROLE,
     REPO,
     ROLES,
@@ -251,7 +251,7 @@ def _lan() -> tuple[str, list[str]]:
         str(group["wg_client_subnet"]),
     ), [
         ALL_VARS.relative_to(REPO).as_posix(),
-        K8S_HOST_VARS.relative_to(REPO).as_posix(),
+        K8S_SERVICES.relative_to(REPO).as_posix(),
         PI_HOST_VARS.relative_to(REPO).as_posix(),
     ]
 

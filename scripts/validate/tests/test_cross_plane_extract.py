@@ -14,7 +14,7 @@ import pytest
 from lib.git_testing import commit, init_repo
 from validate import render_diff_gates as gate
 
-TREES = ("ansible", "scripts", "hosts")
+TREES = gate.RENDER_TREES
 
 
 @pytest.fixture

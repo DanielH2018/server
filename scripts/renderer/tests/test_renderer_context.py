@@ -10,8 +10,8 @@ import yaml
 from lib.ansible_inventory import inventory_hosts
 from lib.ansible_jinja_env import template_env
 from lib.estate import Inventory
-from lib.render_guard import StrictChainableUndefined, host_files, load_yaml
-from lib.repo_paths import ANSIBLE, HOST_VARS, HOSTS_INI, K8S_ROLES
+from lib.render_guard import StrictChainableUndefined, host_files, host_layer, load_yaml
+from lib.repo_paths import ANSIBLE, HOST_VARS, HOSTS_INI, K8S_ROLES, K8S_SERVICES
 from renderer import shadow_diff
 from renderer.renderer_lib.context import play_containers_list, play_context
 from toposort import build_k8s_dep_map, filter_by_platform, toposort_containers
@@ -29,7 +29,7 @@ def _names(entries):
 
 
 def test_containers_list_is_the_play_view_in_toposort_order(ctx):
-    raw = load_yaml(HOST_VARS / "daniel-box.yml")["containers_list"]
+    raw = load_yaml(K8S_SERVICES)["containers_list"]
     k8s = filter_by_platform(raw, "k8s")
     expected = _names(toposort_containers(k8s, build_k8s_dep_map(k8s, str(ANSIBLE))))
     assert _names(ctx["containers_list"]) == expected
@@ -38,7 +38,7 @@ def test_containers_list_is_the_play_view_in_toposort_order(ctx):
 def test_play_containers_list_drops_docker_entries_and_sorts_a_reordered_list():
     # The real file is already in toposort order (test_k8s_toposort.py holds it there), so
     # only a reordered list shows that the view is sorted rather than copied.
-    raw = load_yaml(HOST_VARS / "daniel-box.yml")["containers_list"]
+    raw = load_yaml(K8S_SERVICES)["containers_list"]
     reordered = [*reversed(raw), {"name": "a-docker-service"}]
     view = _names(play_containers_list(reordered))
     assert "a-docker-service" not in view
@@ -86,11 +86,11 @@ def test_a_name_no_layer_supplies_is_flagged(ctx):
 
 
 def _inventory(tmp_path, **edits):
-    """The real inventory with each host_vars file named in `edits` passed through its edit."""
+    """Each host's layer as the renderer reads it, those named in `edits` edited."""
     host_vars = tmp_path / "host_vars"
     host_vars.mkdir()
     for path in host_files(HOST_VARS):
-        layer = load_yaml(path)
+        layer = host_layer(HOST_VARS, path.stem)
         edit = edits.get(path.stem.replace("-", "_"))
         (host_vars / path.name).write_text(
             yaml.safe_dump(edit(layer) if edit else layer)
@@ -103,7 +103,7 @@ def test_play_context_installs_the_play_view_over_a_reordered_list(tmp_path):
         return {**layer, "containers_list": layer["containers_list"][::-1]}
 
     inventory = _inventory(tmp_path, daniel_box=reverse)
-    reordered = reverse(load_yaml(HOST_VARS / "daniel-box.yml"))["containers_list"]
+    reordered = reverse(host_layer(HOST_VARS, "daniel-box"))["containers_list"]
     ctx = play_context(ROLE, shadow_diff.stub_vars(), inventory=inventory)
 
     expected = _names(play_containers_list(reordered))

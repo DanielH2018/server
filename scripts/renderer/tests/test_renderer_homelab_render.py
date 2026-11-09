@@ -123,7 +123,7 @@ def test_a_flux_owned_tag_with_role_is_clean(out, tmp_path):
     assert cluster_mod.select_tags(["littlelink"], host_vars=host_vars) == [
         "littlelink"
     ]
-    flux_owned = cluster_mod.flux_owned_tags(host_vars=host_vars)
+    flux_owned = cluster_mod.flux_owned_tags(host_vars / "daniel-box.yml")
     assert flux_owned == {"littlelink"}
     # A fixture cluster file, so the bundle copies fake ciphertext rather than the tree's.
     dotenv = tmp_path / "cluster-vars"

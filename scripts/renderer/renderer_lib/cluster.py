@@ -59,8 +59,9 @@ from lib.k8s_roles import (
     tag_owners,
 )
 from lib.k8s_context import resolve_vars
-from lib.render_guard import SHARED_TPL, StrictChainableUndefined
+from lib.render_guard import SHARED_TPL, StrictChainableUndefined, containers_entries
 from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, HOST_VARS, JOB_FILES, K8S_ROLES
+from lib.repo_paths import K8S_SERVICES
 from renderer.renderer_lib.bundle import (
     KUSTOMIZATION,
     SHARED_KINDS,
@@ -215,16 +216,13 @@ def select_tags(
     return tags
 
 
-def flux_owned_tags(host: str = K8S_HOST, host_vars: Path = HOST_VARS) -> set[str]:
-    """The deploy tags of `host`'s k8s entries that carry `owner: flux` (C4).
+def flux_owned_tags(services: Path = K8S_SERVICES) -> set[str]:
+    """The deploy tags of the k8s entries in `services` that carry `owner: flux` (C4).
 
     `tag_owners` maps them, the reader `promote.py published-tags` uses too, so the tags this
     refusal checks are the tags the bundle publishes.
     """
-    path = host_vars / f"{host}.yml"
-    if not path.exists():
-        return set()
-    return {tag for tag, owner in tag_owners(path).items() if owner == "flux"}
+    return {tag for tag, owner in tag_owners(services).items() if owner == "flux"}
 
 
 def bundle_ordering(
@@ -250,8 +248,7 @@ def bundle_ordering(
     problems += after_problems
     if problems:
         raise ValueError("; ".join(problems))
-    entries = yaml_fast.safe_load((host_vars / f"{host}.yml").read_text())
-    k8s = filter_by_platform(entries.get("containers_list") or [], "k8s")
+    k8s = filter_by_platform(containers_entries(host_vars / f"{host}.yml"), "k8s")
     group = yaml_fast.safe_load(group_vars.read_text())
     return Ordering(
         deps=build_k8s_dep_map(k8s, str(ANSIBLE)),

@@ -34,12 +34,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.git import git, git_stdout
-from lib.ansible_inventory import containers_entries_in
+from lib.ansible_inventory import K8S_HOST, containers_entries_in
 from lib.repo_paths import (
     ALL_VARS,
     ANSIBLE,
     HOST_VARS,
     INVENTORY,
+    K8S_SERVICES,
     REPO,
     SHARED_TPL,
 )
@@ -53,7 +54,9 @@ __all__ = [
     "HOST_VARS",
     "HOST_VARS_IN_TREE",
     "INVENTORY",
+    "K8S_HOST",
     "REPO",
+    "SERVICES_IN_TREE",
     "SHARED_TPL",
     "StrictChainableUndefined",
     "StubUndefined",
@@ -65,6 +68,7 @@ __all__ = [
     "entry_tags",
     "entry_tags_at",
     "host_files",
+    "host_layer",
     "load_yaml",
     "make_env",
     "pad_to_source_newlines",
@@ -73,6 +77,8 @@ __all__ = [
     "service_records_at_or_none",
     "service_tags_at",
     "service_tags_at_or_none",
+    "services_file",
+    "with_services",
 ]
 
 # k8s/image-builder publishes `k8s_built_image_tags` as a play fact at deploy time (image name ->
@@ -236,14 +242,52 @@ def host_files(host_vars: Path = HOST_VARS) -> list[Path]:
     return sorted(p for p in host_vars.glob("*.yml") if not p.name.startswith("_"))
 
 
+def services_file(host_vars: Path) -> Path:
+    """``cluster/services.yml`` in the tree whose ``ansible/inventory/host_vars`` is `host_vars`."""
+    return host_vars.resolve().parents[2] / K8S_SERVICES.relative_to(REPO)
+
+
+def with_services(host: str, layer: dict, services: dict) -> dict:
+    """`layer` with the k8s host's ``containers_list`` taken from the parsed service list.
+
+    Only ``K8S_HOST`` gains the list, and only when `services` declares it, so a tree from
+    before the list left ``host_vars`` reads as it did.
+
+    Raises:
+        ValueError: the k8s host's host_vars file declares ``containers_list`` as well.
+    """
+    if host != K8S_HOST or "containers_list" not in services:
+        return layer
+    if "containers_list" in layer:
+        raise ValueError(
+            f"{K8S_HOST}'s host_vars and {K8S_SERVICES.relative_to(REPO)} both declare "
+            "containers_list; the k8s services live in the second alone"
+        )
+    return {**layer, "containers_list": services["containers_list"]}
+
+
+def host_layer(host_vars: Path, host: str) -> dict:
+    """`host`'s host_vars file as the renderer reads it, ``{}`` for a host without one.
+
+    The k8s host's ``containers_list`` comes from ``cluster/services.yml`` beside the
+    inventory (`with_services`), so every reader of that host's layer sees the k8s services
+    under the variable name the templates use.
+    """
+    layer = load_yaml(host_vars / f"{host}.yml")
+    if host != K8S_HOST:
+        return layer
+    return with_services(host, layer, load_yaml(services_file(host_vars)))
+
+
 def containers_entries(path: Path) -> list[dict]:
-    """The named ``containers_list`` entries in one host_vars file."""
-    return containers_entries_in(load_yaml(path))
+    """The named ``containers_list`` entries of the host whose host_vars file is `path`."""
+    return containers_entries_in(host_layer(path.parent, path.stem))
 
 
 # host_vars as git names it: ``git show`` and ``git ls-tree`` address a path in a tree, not on
 # disk.
 HOST_VARS_IN_TREE = HOST_VARS.relative_to(REPO).as_posix()
+SERVICES_IN_TREE = K8S_SERVICES.relative_to(REPO).as_posix()
 
 
 def entry_tags(entry: dict) -> list[str]:
@@ -301,19 +345,29 @@ def containers_entries_at(ref: str, cwd: Path) -> list[tuple[str, dict]]:
     unreadable ref, as its caller's docstring says, and ``yaml_fast.UnparsableYaml`` on a file
     that does not load at ``ref``.
     """
+    services = (
+        _mapping_at(ref, SERVICES_IN_TREE, cwd)
+        if git_stdout("ls-tree", "--name-only", ref, "--", SERVICES_IN_TREE, cwd=cwd)
+        else {}
+    )
     entries: list[tuple[str, dict]] = []
     for name in git_stdout(
         "ls-tree", "--name-only", f"{ref}:{HOST_VARS_IN_TREE}", cwd=cwd
     ).splitlines():
         if not name.endswith(".yml") or name.startswith("_"):
             continue
-        loaded = yaml_fast.parse_yaml(
-            git("show", f"{ref}:{HOST_VARS_IN_TREE}/{name}", cwd=cwd).stdout
-        )
         host = name.removesuffix(".yml")
-        for entry in containers_entries_in(loaded if isinstance(loaded, dict) else {}):
+        layer = with_services(
+            host, _mapping_at(ref, f"{HOST_VARS_IN_TREE}/{name}", cwd), services
+        )
+        for entry in containers_entries_in(layer):
             entries.append((host, entry))
     return entries
+
+
+def _mapping_at(ref: str, path: str, cwd: Path) -> dict:
+    loaded = yaml_fast.parse_yaml(git("show", f"{ref}:{path}", cwd=cwd).stdout)
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def entry_tags_at(ref: str, cwd: Path) -> dict[str, set[str]]:

@@ -1,7 +1,8 @@
 # R4 — Delete the k8s Ansible path
 
-Status: DONE when R4.9 merges. R4.1 to R4.8 merged by 2026-11-07, and R4.6 was skipped
-because `ansible/volume-revert.yml` exists. R4.9 retires the render-diff gate and keeps the
+Status: DONE. R4.9 merged on 2026-11-07 as
+[#7581](https://github.com/DanielH2018/server/pull/7581), after R4.1 to R4.8. R4.6 was skipped
+because `ansible/volume-revert.yml` exists. R4.9 retired the render-diff gate and kept the
 `render-diff` job as an advisory one (Open question 12, option 2). Exit 6 overran: the
 renderer held 13,549 non-test lines against 2,600, and the operator accepted the overrun on
 2026-11-07 in [#7580](https://github.com/DanielH2018/server/issues/7580).

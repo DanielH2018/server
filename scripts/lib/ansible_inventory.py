@@ -41,8 +41,9 @@ from lib.repo_paths import HOST_VARS, HOSTS_INI
 GITOPS_HOST = "daniel-box"
 # The one host whose host_vars set `has_docker: true`, driven over ssh with `-e target=`.
 PI_HOST = "daniel-pi"
-# The one host whose `containers_list` declares the `platform: k8s` entries. The same host as
-# GITOPS_HOST today, but a different fact: moving the deployer would not move the services.
+# The host whose `containers_list` the renderer fills from `cluster/services.yml`, the
+# group_vars `k8s_primary_node`. The same host as GITOPS_HOST, but a different fact: moving the
+# deployer would not move the services.
 K8S_HOST = "daniel-box"
 
 
@@ -51,7 +52,6 @@ def host_vars_file(host: str, host_vars: Path = HOST_VARS) -> Path:
     return host_vars / f"{host}.yml"
 
 
-K8S_HOST_VARS = host_vars_file(K8S_HOST)
 PI_HOST_VARS = host_vars_file(PI_HOST)
 
 

@@ -39,7 +39,7 @@ from lib.k8s_roles import (
     k8s_entries,
     resolved_manifest_files,
 )
-from lib.render_guard import SHARED_TPL
+from lib.render_guard import SHARED_TPL, host_layer
 from lib.repo_paths import ANSIBLE, K8S_ROLES
 from renderer import shadow_diff
 from renderer.renderer_lib.cluster import LABEL_WRAPPER, tag_context
@@ -307,7 +307,7 @@ def definitions(tree: Tree, walk: _Walk) -> dict[str, list[tuple[str, object]]]:
         add(_rel(tree, path), _mapping(path))
     add(
         f"inventory/host_vars/{tree.host}.yml",
-        _mapping(inventory / "host_vars" / f"{tree.host}.yml"),
+        host_layer(inventory / "host_vars", tree.host),
     )
     for role, sites in sorted(walk.include_vars.items()):
         for caller, task_vars in sites:
@@ -385,7 +385,7 @@ def census(
     """
     walk = walk_roles(tree, tags)
     result = Census(set_by_tasks=walk.set_by_tasks, derived=derived)
-    host_vars = _mapping(tree.ansible / "inventory" / "host_vars" / f"{tree.host}.yml")
+    host_vars = host_layer(tree.ansible / "inventory" / "host_vars", tree.host)
     containers = filter_by_platform(host_vars.get("containers_list") or [], "k8s")
     reader = Reader(tree.ansible, containers)
     pending: list[tuple[str, str]] = []

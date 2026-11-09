@@ -9,17 +9,15 @@ Run: uv run pytest ansible/tests/deploy/test_containers_list_names_unique.py
 from collections import Counter
 
 import pytest
-from lib import yaml_fast
-from lib.ansible_inventory import containers_entries_in
+from lib.render_guard import containers_entries
 
 from _helpers import HOST_VARS
 
 
 def _lists() -> dict[str, list[dict]]:
-    """Each host_vars file's named entries, the `_example.yml` template included."""
+    """Each host's named entries as the renderer reads them, the `_example.yml` template included."""
     return {
-        path.stem: containers_entries_in(yaml_fast.safe_load(path.read_text()))
-        for path in sorted(HOST_VARS.glob("*.yml"))
+        path.stem: containers_entries(path) for path in sorted(HOST_VARS.glob("*.yml"))
     }
 
 

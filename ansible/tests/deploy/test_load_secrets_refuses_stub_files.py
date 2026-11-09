@@ -264,19 +264,23 @@ def test_the_docker_play_allows_a_stub_file_only_on_a_host_with_no_docker_entry(
     docker_play = _deploy_allowed_expressions()[0]
     assert isinstance(docker_play, str)
     verdicts = {}
-    # H5.9 emptied the Pi's containers_list, so the Pi has no docker entry any more. The
-    # synthetic host keeps the refusing side of the rule under test.
+    # H5.9 emptied the Pi's containers_list, so the Pi has no docker entry any more, and
+    # daniel-box's host_vars declare none at all. The synthetic host keeps the refusing side
+    # of the rule under test.
     lists = {
-        host: yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text())[
+        host: yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()).get(
             "containers_list"
-        ]
+        )
         for host in ("daniel-box", "daniel-pi")
     }
+    assert lists["daniel-box"] is None
     lists["a host with a docker entry"] = [{"name": "wg-easy"}]
     env = strict_env(SHARED_TPL)
     for host, containers_list in lists.items():
         verdicts[host] = evaluate(
-            env, docker_play, {"containers_list": containers_list}
+            env,
+            docker_play,
+            {} if containers_list is None else {"containers_list": containers_list},
         )
     assert verdicts == {
         "daniel-box": True,

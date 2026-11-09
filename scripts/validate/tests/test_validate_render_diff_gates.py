@@ -72,6 +72,7 @@ def test_a_flip_that_moves_the_render_and_gains_edges_is_clean():
 
 # The real-render pairs. One HEAD copy per test, rendered for the two roles the edits reach.
 ROLES = ("bento-pdf", "authelia")
+SERVICES = "cluster/services.yml"
 SHELL = "ansible/templates/workload-shell.yml.j2"
 # The macro body's line, not the header comment's mention of the same field.
 SHELL_EDIT = (
@@ -83,7 +84,7 @@ SHELL_EDIT = (
 @pytest.fixture(scope="module")
 def head_tree(tmp_path_factory) -> Path:
     tree = tmp_path_factory.mktemp("head")
-    gate.extract("HEAD", tree, ("ansible", "scripts", "hosts"))
+    gate.extract("HEAD", tree, gate.RENDER_TREES)
     return tree
 
 
@@ -106,7 +107,7 @@ def edited(dest: Path, head: Path, edits: dict[str, tuple[str, str]]) -> gate.Sn
 
 
 def _bento_entry_edit(field: str, value: str, new: str) -> tuple[str, str]:
-    text = (gate.REPO / gate.HOST_VARS).read_text()
+    text = (gate.REPO / SERVICES).read_text()
     match = re.search(r"  - name: bento-pdf\n(?:    .*\n|\s*#.*\n)+", text)
     assert match, "the inventory has no bento-pdf entry"
     entry = match.group(0)
@@ -118,13 +119,13 @@ def test_an_inventory_edit_counts_both_roles_it_moves(
     tmp_path, head_tree, head_snapshot
 ):
     edit = _bento_entry_edit("hostname", '"bento-pdf"', '"pdf"')
-    head = edited(tmp_path, head_tree, {str(gate.HOST_VARS): edit})
+    head = edited(tmp_path, head_tree, {SERVICES: edit})
     assert gate.counted(head_snapshot, head) == {"bento-pdf", "authelia"}
 
 
 def test_an_auth_tier_edit_counts_authelia_alone(tmp_path, head_tree, head_snapshot):
     edit = _bento_entry_edit("auth_tier", "one_factor", "two_factor")
-    head = edited(tmp_path, head_tree, {str(gate.HOST_VARS): edit})
+    head = edited(tmp_path, head_tree, {SERVICES: edit})
     assert gate.counted(head_snapshot, head) == {"authelia"}
 
 
