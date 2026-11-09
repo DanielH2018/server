@@ -23,9 +23,9 @@ from bridge.types import PushCheck
 from checks import (
     b2,
     cloudflare_ips,
-    gitops,
     healthchecks,
     host_edge,
+    host_packages,
     host_thermal,
     notify,
     r2,
@@ -42,12 +42,8 @@ CHECKS: tuple[PushCheck, ...] = (
     PushCheck(name="arr_queue", fn=service.check_arr_queue),
     PushCheck(name="bazarr", fn=service.check_bazarr, gate="startup_grace"),
     PushCheck(name="prowlarr_indexers", fn=service.check_prowlarr_indexers, gate="startup_grace"),
-    PushCheck(name="gitops_alive", fn=gitops.check_gitops_alive),
-    PushCheck(name="gitops_status", fn=gitops.check_gitops_status),
-    # A row of its own, not an arm of gitops_status: that check reads the deployer's state
-    # directory outside the Prometheus gate, and an arm reading Prometheus there would page on
-    # every Prometheus outage. Under EXPORTER_DEPENDENT["node"] in check.py as well.
-    PushCheck(name="host_packages", fn=gitops.check_host_packages, gate="prometheus"),
+    # Under EXPORTER_DEPENDENT["node"] in check.py as well.
+    PushCheck(name="host_packages", fn=host_packages.check_host_packages, gate="prometheus"),
     # Reads the weekly drill's stamp off a hostPath, fail-closed, every cycle; the staleness window
     # is ETCD_DRILL_MAX_AGE_S.
     PushCheck(name="etcd_restore_drill", fn=service.check_etcd_restore_drill, runbook="k3s-etcd-restore"),

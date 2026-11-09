@@ -35,12 +35,8 @@ class ServiceConfig:
     PROWLARR_API_KEY: str = field(repr=False)
     PROWLARR_INDEXER_MIN_DOWN_MIN: float
     PROWLARR_INDEXER_IGNORE: str
-    GITOPS_STATE_DIR: str
-    GITOPS_MAX_AGE_S: float
     ETCD_DRILL_STATE_DIR: str
     ETCD_DRILL_MAX_AGE_S: float
-    GITOPS_BEHIND_MAX_S: float
-    GITOPS_CONTENTION_MAX_S: float
     BUILDER_MAX_LAG_S: float
     BUILDER_PI_CANARY_MAX_LAG_S: float
     BUILDER_MAX_FETCH_AGE_S: float
@@ -146,11 +142,6 @@ def service_config(
         # onHealthIssue is the backstop if every indexer, ignored or not, fails at once.
         # Empty = ignore nothing.
         PROWLARR_INDEXER_IGNORE=_env("PROWLARR_INDEXER_IGNORE"),
-        # Since the Docker uninstall (2026-08-14) this reads daniel-box's own deployer state —
-        # the pod is pinned to that node and hostPath-mounts /var/lib/gitops-deploy. One
-        # deployer remains in the fleet (the Pi runs has_gitops: false), so one watcher.
-        GITOPS_STATE_DIR=_env("GITOPS_STATE_DIR"),
-        GITOPS_MAX_AGE_S=_num("GITOPS_MAX_AGE_MIN") * 60,
         ETCD_DRILL_STATE_DIR=_env("ETCD_DRILL_STATE_DIR", "/etcd-drill-state"),
         # DECIDED: 8 days, DERIVED from the drill's cadence rather than picked round. The cron
         # is k3s_etcd_restore_drill_cron = "20 10 * * 1" — weekly, Monday 10:20 — so anything
@@ -161,21 +152,6 @@ def service_config(
         # with the cron; the two are pinned to each other by
         # test_etcd_drill_grace_is_derived_from_the_cron.
         ETCD_DRILL_MAX_AGE_S=_num("ETCD_DRILL_MAX_AGE_DAYS", "8") * 86400,
-        # How long the host may sit behind origin before GitOps Status pages. Generous on
-        # purpose: the deployer ticks every 30 min, and the dirty-tree path (operator mid-edit)
-        # is behind by design for as long as the edit lasts. 6 h pages a genuinely-stuck host
-        # well inside a day while never firing on a normal push or a long editing session.
-        GITOPS_BEHIND_MAX_S=_num("GITOPS_BEHIND_MAX_MIN") * 60,
-        # How long consecutive ticks may defer on one busy service lock before GitOps Status
-        # pages (issue #1847). Derived from the longest deploy the deployer itself is allowed
-        # — `gitops_deploy_broad_timeout_s`, 1800 s, the same ceiling `SERVICE_LOCK_WAIT_S`
-        # gives one wait: a holder still on the lock 30 min after the first tick gave up has
-        # outlived every legitimate deploy. The behind arm above would page the same fault,
-        # but only after six hours sized for a dirty tree.
-        # The rendered value is `gitops_markers.CONTENTION_PAGE_SECONDS` in minutes, the figure
-        # the SessionStart banner names a streak at, so the banner and this page cannot
-        # disagree about a lock; ansible/tests/deploy/test_gitops_markers_copies.py pins it.
-        GITOPS_CONTENTION_MAX_S=_num("GITOPS_CONTENTION_MAX_MIN") * 60,
         # The host-package builder's two page bounds, in seconds, rendered from the role defaults
         # `monitor_bridge_builder_max_lag_s` and `monitor_bridge_builder_max_fetch_age_s`. The
         # lag bound is how long master may sit unbuilt: it exceeds the ~103 s master CI run many

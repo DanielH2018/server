@@ -487,15 +487,11 @@ tests:
         alertname: B2FreeTierHeadroomLow
         exp_alerts: []
 
-  # THE UNGATED FAMILY (A6-6). The five rows have no gate, so every gauge is 0 from the first
-  # sample and all five rules fire at once, with no `for:` and no `requires` label.
+  # THE UNGATED FAMILY (A6-6). The three rows have no gate, so every gauge is 0 from the first
+  # sample and all three rules fire at once, with no `for:` and no `requires` label.
   - interval: 1m
     input_series:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="arr_queue"}
-        values: "0x5"
-      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="gitops_alive"}
-        values: "0x5"
-      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="gitops_status"}
         values: "0x5"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="etcd_restore_drill"}
         values: "0x5"
@@ -518,37 +514,6 @@ tests:
                 which is the shape of the 2026-07-01 fake-episode .exe. An arr API that stays
                 unreachable past ARR_FETCH_CONSECUTIVE cycles pages the same way. The monitor-bridge
                 log in the homelab namespace names the release and the app.
-      - eval_time: 1m
-        alertname: GitOpsDeployerNotTicking
-        exp_alerts:
-          - exp_labels:
-              job: monitor-bridge
-              instance: monitor-bridge.homelab.svc:9181
-              check: gitops_alive
-              severity: warning
-              service: gitops-deploy
-            exp_annotations:
-              summary: The pull-based deployer on daniel-box has stopped ticking.
-              description: >-
-                The deployer's last_run marker is older than GITOPS_MAX_AGE_MIN, missing or
-                unparseable. Run `systemctl status gitops-deploy.timer` on daniel-box and read the
-                SessionStart banner's parked state.
-      - eval_time: 1m
-        alertname: GitOpsDeployerParked
-        exp_alerts:
-          - exp_labels:
-              job: monitor-bridge
-              instance: monitor-bridge.homelab.svc:9181
-              check: gitops_status
-              severity: warning
-              service: gitops-deploy
-            exp_annotations:
-              summary: The deployer is parked or owes an apply.
-              description: >-
-                One of these holds: a held SHA after a failed health gate, a diverged tree, a busy
-                service lock, a tree behind origin for 6h, a setup role only a hand can apply, or an
-                image bump a broad tick deferred for lack of budget. The monitor-bridge log names
-                which. gitops_state.py clears a marker once the cause is fixed.
       - eval_time: 1m
         alertname: EtcdRestoreDrillFailing
         exp_alerts:
@@ -585,40 +550,31 @@ tests:
   - interval: 1m
     input_series:
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="arr_queue"}
-        values: "1x5"
-      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="gitops_alive"}
         values: "1x2 0x3"
-      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="gitops_status"}
-        values: "1x5"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="etcd_restore_drill"}
         values: "1x5"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="ha_heartbeat"}
         values: "1x5"
     alert_rule_test:
       - eval_time: 2m
-        alertname: GitOpsDeployerNotTicking
+        alertname: ArrQueueNeedsReview
         exp_alerts: []
       - eval_time: 3m
-        alertname: GitOpsDeployerNotTicking
+        alertname: ArrQueueNeedsReview
         exp_alerts:
           - exp_labels:
               job: monitor-bridge
               instance: monitor-bridge.homelab.svc:9181
-              check: gitops_alive
+              check: arr_queue
               severity: warning
-              service: gitops-deploy
+              service: arr
             exp_annotations:
-              summary: The pull-based deployer on daniel-box has stopped ticking.
+              summary: A Sonarr or Radarr queue item needs review, or an arr API stayed unreachable.
               description: >-
-                The deployer's last_run marker is older than GITOPS_MAX_AGE_MIN, missing or
-                unparseable. Run `systemctl status gitops-deploy.timer` on daniel-box and read the
-                SessionStart banner's parked state.
-      - eval_time: 5m
-        alertname: ArrQueueNeedsReview
-        exp_alerts: []
-      - eval_time: 5m
-        alertname: GitOpsDeployerParked
-        exp_alerts: []
+                A queue item is in warning, importBlocked, or importPending with a status message,
+                which is the shape of the 2026-07-01 fake-episode .exe. An arr API that stays
+                unreachable past ARR_FETCH_CONSECUTIVE cycles pages the same way. The monitor-bridge
+                log in the homelab namespace names the release and the app.
       - eval_time: 5m
         alertname: EtcdRestoreDrillFailing
         exp_alerts: []
@@ -633,12 +589,6 @@ tests:
     alert_rule_test:
       - eval_time: 5m
         alertname: ArrQueueNeedsReview
-        exp_alerts: []
-      - eval_time: 5m
-        alertname: GitOpsDeployerNotTicking
-        exp_alerts: []
-      - eval_time: 5m
-        alertname: GitOpsDeployerParked
         exp_alerts: []
       - eval_time: 5m
         alertname: EtcdRestoreDrillFailing

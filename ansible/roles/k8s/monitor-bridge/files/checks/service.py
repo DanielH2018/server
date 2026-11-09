@@ -1,9 +1,7 @@
 """Service checks for monitor-bridge.
 
 Covers n8n, the *arrs, Bazarr, Prowlarr, the etcd restore drill, and the Home Assistant
-heartbeat with its ip_ban arm. The GitOps pair is `checks/gitops.py`: it grew past this
-module's 600-line cap with the busy-lock arm (issue #1847), the same split idiom as
-`checks/host_edge.py`.
+heartbeat with its ip_ban arm.
 
 Slice 7 of the check.py split. Reads config as `cfg.X`, queries through its `src` argument
 (`bridge.sources.Sources`, which a test replaces with a fake) and reads its streak counters as

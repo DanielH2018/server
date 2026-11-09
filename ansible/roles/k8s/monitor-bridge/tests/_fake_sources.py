@@ -3,7 +3,7 @@
 A test states the answer each query gets instead of patching `bridge.net`:
 
     src = FakeSources(prom_vector=lambda q: [({"origin": "daniel-box"}, 50.0)])
-    ok, msg = checks.gitops.check_host_packages(cfg, src)
+    ok, msg = checks.host_packages.check_host_packages(cfg, src)
 
 Each keyword is one `Sources` method, given as a callable taking that method's arguments
 WITHOUT `cfg` (the live object binds it). A method the test did not answer raises

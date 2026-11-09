@@ -169,11 +169,11 @@ def test_the_registry_is_built_from_the_table_when_checks_is_none(capsys):
     body runs and the log names it.
     """
     wired = _silence([])
-    argv = ["--once", "--check", "gitops_alive"]
+    argv = ["--once", "--check", "etcd_restore_drill"]
     assert cli.main(argv, env=wired["env"], checks=None, sources=wired["sources"]) == 0
     out = capsys.readouterr().out
     assert re.search(r"checks=1/\d+\)", out), out
-    assert re.search(r"^(OK  |DOWN) gitops_alive - ", out, re.M), out
+    assert re.search(r"^(OK  |DOWN) etcd_restore_drill - ", out, re.M), out
 
 
 def test_check_flag_is_repeatable_and_filters_like_checks_only(cfg):

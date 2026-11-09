@@ -49,15 +49,15 @@ def test_touch_heartbeat_never_raises(cfg):
     bridge.common.touch_heartbeat(cfg.HEARTBEAT_FILE)
 
 
-# A representative CHECKS_ONLY subset: only the host-state-file checks, every gate off. No
+# A representative CHECKS_ONLY subset: the host-state-file check alone, every gate off. No
 # deployment carries a filter — these tests keep the MECHANISM honest for whenever a split is
 # next expressed.
-SUBSET_ONLY = frozenset({"gitops_alive", "gitops_status"})
+SUBSET_ONLY = frozenset({"etcd_restore_drill"})
 
 
 def test_check_enabled_only_and_skip_semantics():
     assert check.check_enabled("disk", frozenset(), frozenset())
-    assert check.check_enabled("gitops_alive", SUBSET_ONLY, frozenset())
+    assert check.check_enabled("etcd_restore_drill", SUBSET_ONLY, frozenset())
     assert not check.check_enabled("disk", SUBSET_ONLY, frozenset())
     assert not check.check_enabled("disk", frozenset(), frozenset({"disk"}))
     # skip wins even against an explicit only-listing
@@ -124,7 +124,7 @@ def test_a_cycle_logs_down_verdicts_and_one_summary_not_each_up(cfg, capsys):
 
 
 def test_a_narrowed_run_still_logs_each_up_verdict(cfg, capsys):
-    entry = next(e for e in registry.build_checks() if e.name == "gitops_alive")
+    entry = next(e for e in registry.build_checks() if e.name == "etcd_restore_drill")
     out = _quiet_cycle(
         cfg,
         [replace(entry, fn=mk([], entry.name))],
@@ -168,7 +168,7 @@ def test_the_registry_runs_the_gate_rows_first_and_hands_each_row_its_gate():
     assert by_name["b2_storage"].gate == "b2_reachable"
     assert by_name["discord"].gate == "wan_reachable"
     assert by_name["n8n"].gate == "startup_grace"
-    assert by_name["gitops_alive"].gate is None
+    assert by_name["etcd_restore_drill"].gate is None
     assert all(by_name[g].gate is None for g in gates)
 
 

@@ -23,8 +23,6 @@ from lib.repo_paths import K8S_ROLES
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "bridge-exporter.yaml"
 FAMILY = [
     "arr_queue",
-    "gitops_alive",
-    "gitops_status",
     "etcd_restore_drill",
     "ha_heartbeat",
 ]

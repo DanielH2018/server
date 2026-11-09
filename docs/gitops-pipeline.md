@@ -556,8 +556,9 @@ for its whole run. Since [ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-t
 rare. A tick can still queue behind an operator deploying one of the same services, on that
 service's own lock.
 
-Contention is not silent starvation: the lock path never writes `last_run`, so contention
-outlasting the maximum age pages through the GitOps-Alive monitor.
+The lock path never writes `last_run`. No check pages on a stale `last_run` since H7.49b
+removed monitor-bridge's GitOps-Alive check, so contention starves the deployer silently until
+H7.52 retires its timer.
 
 ## The deployer's record
 
@@ -617,7 +618,7 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
     Unfinished CI is the normal state for the first tick after a push, so only *sustained*
     behind-ness is a problem.
   - **An unreachable or malformed API reads as `pending`, never `pass`.** The tick still
-    completes and writes `last_run`, so a GitHub outage does NOT trip GitOps-Alive the way
+    completes and writes `last_run`, so a GitHub outage does not age `last_run` the way
     `RetryableFetchError` would.
   - Both outcomes leave the host parked on `local`, which `behind_marker` records, so a
     persistently red master pages through the **6 h behind-origin watchdog** below. That reuse is
@@ -639,8 +640,8 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   `docs/archive/staging-cluster.md` record the removed staging arm.
 - Read-only against the repo (no push), and no apply arm rolls back.
 - Refuses to *deploy* from a dirty working tree (operator mid-edit), but the tick still completes
-  and writes `last_run` (`next_action(..., dirty=True) -> "dirty"`), so the skip does not trip the
-  GitOps-Alive stale-file threshold. `should_alert_dirty` throttles the page to twice per
+  and writes `last_run` (`next_action(..., dirty=True) -> "dirty"`), so the skip does not age
+  `last_run`. `should_alert_dirty` throttles the page to twice per
   America/Chicago day (the first tick at or after 08:00 CT and at or after 20:00 CT), with the
   slot key `YYYY-MM-DD:am|pm` in `/var/lib/gitops-deploy/dirty_alerted_date`.
 - **Test-suite paths are skipped before every plane below** (`deploy_logic._is_test_only_path`):
@@ -1051,9 +1052,9 @@ smoke run wait its full 180 s and deploy nothing.
 **The failure is silent.** `-E 75` plus `SuccessExitStatus=75` in `gitops-deploy.service.j2` make
 systemd report the unit `Result=success`, so the handler's `ansible.builtin.systemd: state:
 started` returns rc 0 and the play recaps green. Nothing deploys, `last_run` does not move, the
-deployer never starts so no Discord message goes out, and no `OnFailure` fires. The first alert
-is GitOps-Alive, once `last_run` ages past `GITOPS_MAX_AGE_S` (grep that name in
-`ansible/roles/k8s/monitor-bridge/files/check.py`). The one immediate signal is the unit's
+deployer never starts so no Discord message goes out, and no `OnFailure` fires. No alert
+follows: the GitOps-Alive check that paged a stale `last_run` left monitor-bridge in H7.49b, and
+`GitOpsTickStale` is a shadow rule. The one immediate signal is the unit's
 `ExecStopPost` journal marker, `tick skipped (lock contention)`.
 
 Before `SuccessExitStatus=75`, the same contention failed the play: `Run gitops-deploy once` timed

@@ -21,8 +21,8 @@ test-patching rules.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-**Host:** daniel-box, pinned by `nodeSelector` because the gitops checks read the deployer's
-state directory over a hostPath. Every source is reached by in-cluster Service name, so no VIP,
+**Host:** daniel-box, pinned by `nodeSelector` because the `etcd_restore_drill` check reads the
+drill's stamp directory over a hostPath. Every source is reached by in-cluster Service name, so no VIP,
 Traefik or gate sits in a probe's path.
 
 **Flux applies it, not Ansible** (#5594, a Wave D PR with prowlarr). Its `containers_list`

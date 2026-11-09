@@ -10,7 +10,7 @@ in test_check_exporters.py.
 
 import pytest
 
-import checks.gitops
+import checks.host_packages
 from _fake_sources import FakeSources
 from lib.repo_paths import REPO
 from lib.systemd_timer import longest_gap_s, timeout_start_s
@@ -28,7 +28,7 @@ def _run(cfg, fetch_age_s, unbuilt):
     """Run the check with a fetch `fetch_age_s` old (None = absent) and these unbuilt series."""
     fetch = None if fetch_age_s is None else NOW - fetch_age_s
     src = FakeSources(prom_scalar=lambda q: fetch, prom_vector=lambda q: unbuilt)
-    return checks.gitops.check_host_packages(cfg, src, now=NOW)
+    return checks.host_packages.check_host_packages(cfg, src, now=NOW)
 
 
 UNITS = REPO / "hosts/packages/homelab-updater/units"
@@ -160,7 +160,7 @@ def test_it_reads_the_builder_series_with_no_daniel_server_pin(cfg):
     src = FakeSources(
         prom_scalar=lambda q: NOW - 60, prom_vector=lambda q: [_unbuilt(0)]
     )
-    checks.gitops.check_host_packages(cfg, src, now=NOW)
+    checks.host_packages.check_host_packages(cfg, src, now=NOW)
     queries = src.queries("prom_scalar") + src.queries("prom_vector")
     assert any("homelab_builder_fetch_timestamp_seconds" in q for q in queries)
     assert any("homelab_builder_unbuilt_since_timestamp_seconds" in q for q in queries)
@@ -181,7 +181,7 @@ def _run_with_drift(cfg, fetch_age_s, unbuilt, drift):
         prom_scalar=lambda q: fetch,
         prom_vector=lambda q: next(v for k, v in rows.items() if k in q),
     )
-    return checks.gitops.check_host_packages(cfg, src, now=NOW), src
+    return checks.host_packages.check_host_packages(cfg, src, now=NOW), src
 
 
 def test_a_non_zero_drift_count_is_named_in_the_message_without_going_down(cfg):
