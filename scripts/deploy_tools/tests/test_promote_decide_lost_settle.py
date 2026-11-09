@@ -105,8 +105,11 @@ def test_a_lost_settle_whose_last_good_bundle_is_unreadable_is_an_error(
     world.transport.runs = [{"id": 9, "head_sha": world.commits[-1]}]
     decision = promote.decide(_reads(world, Clock()), supersede_on=True)
     assert decision.verdict == "error"
-    assert f"Reading what {c1} changes against last-good" in decision.reason
+    assert f"reading what {c1} changes against last-good" in decision.reason
     assert "last-good's bundle" in decision.reason
+    assert "do not reset prod" in decision.reason
+    assert "reset_to_last_good" not in decision.reason
+    assert f"'{c1} unverified'" not in decision.reason
     assert (decision.lost_settle, decision.lost_settle_digest) == ("", "")
 
 

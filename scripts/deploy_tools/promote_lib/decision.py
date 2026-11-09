@@ -204,8 +204,11 @@ def _lost_settle(reads: Reads, settled: verify.Settled) -> Decision:
     except READ_ERRORS as err:
         return Decision(
             "error",
-            reason=f"{reason}. Reading what {commit} changes against last-good, for "
-            f"reconcile's hold, failed: {err}",
+            reason=f"the run that moved prod to {commit} ({digest}) ended without a "
+            f"settle, and reading what {commit} changes against last-good, for reconcile's "
+            f"hold, failed: {err}. The next run reads it again. Until one succeeds the hold's "
+            f"form is unknown, so do not reset prod (operator-only) before checking whether "
+            f"{commit} changes a snapshot role or a forward-only tag",
         )
     no_reset = forward_only.no_reset_names(
         forward_only.changed_tags(prod_digests, base or {}), flagged
