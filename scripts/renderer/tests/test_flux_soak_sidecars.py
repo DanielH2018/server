@@ -127,3 +127,29 @@ def test_a_plain_init_containers_retries_never_count_beside_a_sidecars_restart(
     ]
     assert any(f"/{SIDECAR}" in line for line in failures)
     assert not any(f"/{PLAIN}" in line for line in failures)
+
+
+def _split_restart_families(world: World) -> None:
+    """Serve each restart family only its own containers, as kube-state-metrics does."""
+    answer = world.query
+
+    def query(promql, at):
+        if "restarts_total" not in promql:
+            return answer(promql, at)
+        p = world.pods["authelia"][0]
+        family = "initContainers" if "init_container" in promql else "containers"
+        names = {c["name"] for c in p["spec"][family]}
+        return [s for s in answer(promql, at) if s["metric"]["container"] in names]
+
+    world.query = query
+
+
+def test_a_sidecar_restart_reads_its_init_container_series_not_a_scrape_gap(
+    world, tmp_path, capsys
+):
+    _split_restart_families(world)
+    restart_init(world, SIDECAR, T0 + 100)
+    assert run(world, tmp_path) == (1, "failed-services: authelia\n")
+    err = capsys.readouterr().err
+    assert f"authelia/authelia-1/{SIDECAR} restarted after its first Ready" in err
+    assert "scrape gap" not in err
