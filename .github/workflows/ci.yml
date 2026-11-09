@@ -1800,8 +1800,10 @@ jobs:
   #
   # It is a job of its own, beside the legs rather than after their cases, so it adds nothing to
   # the 26.04 leg, the longest of the run (#7810). It sits outside the `prek` gate, with a
-  # job-level `continue-on-error`, so a GitHub release outage cannot fail the PR; a red run is a
-  # broken download path or an outage. `test_every_ci_job_is_gated.py` lists it in
+  # job-level `continue-on-error`, so a GitHub release outage cannot fail the PR. The image and
+  # case steps carry their own `continue-on-error` too: a job-level one still leaves a failed
+  # job's check-run red, which every reader of a PR's check rollup counts as a failure. A failed
+  # step shows as an annotation instead. `test_every_ci_job_is_gated.py` lists the job in
   # NON_GATING_JOBS. The id does not start with `host_packages`, for the reason above.
   #
   # The budget matches the legs', because a Dockerfile PR builds the image here too.
@@ -1855,6 +1857,7 @@ jobs:
         if: >-
           github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
           || needs.host_packages_build.outputs.cases == 'true'
+        continue-on-error: true
         env:
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
           GHCR_USER: ${{ github.actor }}
@@ -1871,6 +1874,7 @@ jobs:
         if: >-
           github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
           || needs.host_packages_build.outputs.cases == 'true'
+        continue-on-error: true
         env:
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
           TOOLS_CACHE_HIT: ${{ steps.tools-cache.outputs.cache-hit }}

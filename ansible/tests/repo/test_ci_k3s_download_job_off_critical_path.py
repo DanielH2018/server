@@ -109,3 +109,19 @@ def test_the_k3s_download_job_skips_or_budgets_for_a_built_image():
     assert checks_digests or sized_for_build, (
         f"{job_id} runs the case on a built image without a timeout sized for the build"
     )
+
+
+def test_the_k3s_download_jobs_case_and_image_steps_continue_on_error():
+    """A job-level `continue-on-error` leaves a failed job's check-run red in the PR's rollup."""
+    job_id, job = _download_job()
+    steps = job.get("steps") or ()
+    image_or_case = [
+        s
+        for s in steps
+        if _runs_download_case(s) or IMAGE_SCRIPT in str(s.get("run", ""))
+    ]
+    assert len(image_or_case) == 2, f"{job_id}: {[s.get('name') for s in steps]}"
+    red = [
+        s.get("name") for s in image_or_case if s.get("continue-on-error") is not True
+    ]
+    assert not red, f"{job_id} steps that turn its check-run red: {red}"
