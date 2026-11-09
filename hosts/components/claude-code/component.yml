@@ -81,7 +81,7 @@ defaults:
   # agent's browser behaves as the operator's does. Chromium is the revision this package's own
   # playwright pins, installed with that playwright's CLI.
   # renovate: datasource=npm depName=@playwright/mcp
-  claude_code_agent_playwright_mcp_version: "0.0.83"
+  claude_code_agent_playwright_mcp_version: "0.0.84"
 depends:
   - acl
   # claude-agent-browser reads and writes the agent's MCP registration as JSON.
