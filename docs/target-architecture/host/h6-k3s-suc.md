@@ -576,11 +576,13 @@ the node checks what the Job installed. H6.3e adds that check.
   promotion and keeps `last-good` where it was. `-verify` exists from D5.1a1, which is not
   one of this slice's edges (*Open questions* 14).
     - **Amendment ([#7796](https://github.com/DanielH2018/server/issues/7796)).** The Jobs do
-      not run the packaged `k3s_binary_gate.py` by hostPath. D5's Job census admits only a
-      script from a mounted ConfigMap that connects through `flux_job_connect`, and the
-      packaged script reaches the API through `k3s_gates.py`'s own client. The Jobs run
+      not run a packaged script by hostPath. D5's Job census admits only a script from a
+      mounted ConfigMap that connects through `flux_job_connect`, and a script beside
+      `k3s_gates.py` reaches the API through that file's own client. The Jobs run
       `ansible/roles/k8s/system-upgrade/files/system_upgrade_verify.py` instead, which makes
-      the same comparison and reads the same pending rule.
+      the comparison and reads the pending rule above. H6.3e's `hosts/lib/` copy of the
+      mode, which no host component shipped, was deleted in the same PR, so one
+      implementation remains.
 
 ### Flags move from the unit to a package drop-in
 

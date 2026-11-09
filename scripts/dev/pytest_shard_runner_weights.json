@@ -725,7 +725,6 @@
  "hosts/lib/tests/test_host_lib_discord_spool.py": 0.03,
  "hosts/lib/tests/test_hosts_tree_is_tracked.py": 0.01,
  "hosts/lib/tests/test_infra_map_component.py": 0.2,
- "hosts/lib/tests/test_k3s_binary_gate.py": 0.01,
  "hosts/lib/tests/test_k3s_gates_api.py": 4.74,
  "hosts/lib/tests/test_k3s_gates_checks.py": 0.01,
  "hosts/lib/tests/test_k3s_gates_component.py": 2.63,

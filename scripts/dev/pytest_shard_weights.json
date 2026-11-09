@@ -847,7 +847,6 @@
  "hosts/lib/tests/test_host_lib_log.py": 0.0,
  "hosts/lib/tests/test_hosts_tree_is_tracked.py": 0.0,
  "hosts/lib/tests/test_infra_map_component.py": 0.09,
- "hosts/lib/tests/test_k3s_binary_gate.py": 0.0,
  "hosts/lib/tests/test_k3s_gates_api.py": 5.5,
  "hosts/lib/tests/test_k3s_gates_checks.py": 0.0,
  "hosts/lib/tests/test_k3s_gates_component.py": 0.28,

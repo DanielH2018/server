@@ -11,8 +11,8 @@ version whose binary hashes to another sum fails, naming the node and both sums.
 error fails.
 
 The node's k3s binary arrives read-only by hostPath at `K3S_BINARY`. The script is
-this role's own, not the host package's `k3s_binary_gate.py`: the Job census admits only a
-script from a mounted ConfigMap that connects through `flux_job_connect`.
+this role's own, not one the host package ships: the Job census admits only a script from a
+mounted ConfigMap that connects through `flux_job_connect`.
 
 Inputs come from the Job's environment: `NODE_NAME`, `K3S_VERSION`, `K3S_SHA256` and
 `K3S_BINARY`. Exit 0 when the binary matches or the node is pending, 1 otherwise.
