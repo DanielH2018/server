@@ -190,7 +190,7 @@ write_check_textfile pi-recovery-health "$([ "$STATUS" = up ] && echo 1 || echo 
 #
 # The textfile keeps only the CURRENT verdict, so a DOWN that clears is gone. The server's health
 # crons survive that by logging their own verdict unconditionally (longhorn-backup-health,
-# setup-drift-check), and `probe_lib/alerts.py` reconstructs episodes from those lines. This
+# loki-read-route-health), and `probe_lib/alerts.py` reconstructs episodes from those lines. This
 # cron recorded nothing for a successful DOWN until it wrote this file, which is why the real
 # 2026-08-29 autoheal outage read as "no DOWN alerts in the last 7d" while the monitor was
 # live-DOWN.

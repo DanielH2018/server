@@ -42,8 +42,8 @@
 # - The login, privilege, startup and code-loading files in PERSIST, owned or not: sudoers, sshd,
 #   PAM, cron, the user and group databases, the loader and module config, shell startup files,
 #   apt hooks, sources and keys, udev rules, systemd units and drop-ins, rc.local, init scripts,
-#   MOTD scripts, /usr/local/sbin and every authorized_keys. The units the roles themselves
-#   install are listed in ROLE_WRITTEN and are judged only when a package owns them.
+#   MOTD scripts, /usr/local/sbin and every authorized_keys. The units the k3s installer and
+#   snapd write are listed in ROLE_WRITTEN and are judged only when a package owns them.
 # - An added or changed /usr/local/bin entry named like a command a package installs, because
 #   root's PATH reaches /usr/local/bin first. The roles' own scripts there have no such twin.
 # - Any of the above, or any package-owned /etc path, whose owner, group or permissions changed,
@@ -100,10 +100,10 @@ PERSIST='^/(etc/(sudoers$|sudoers\.d/|ssh/|pam\.d/|pam\.conf$|security/|ld\.so\.
 SYSTEM='^/(usr|bin|sbin|lib|lib32|lib64|libx32|boot)(/|$)'
 # Unpackaged files under PERSIST that this repo's own tooling writes, so a deploy does not page.
 # Each is judged only while no package owns it. A symlink to one (a `systemctl enable` link) is
-# explained too. The names come from what the setup roles installed, the k3s installer's units,
-# and snapd's mounts. ansible/tests/setup/test_aide_check_role_written.py holds the installer
-# names to this list.
-ROLE_WRITTEN='^/etc/systemd/system/(coredns-host\.service|worktree-holders\.socket|worktree-holders@\.service|kuma-check-(github-interaction-limit|github-ruleset-drift|loki-read-route)(-boot\.service|\.service|\.timer)|k3s(-agent)?\.service(\.env)?|k3s(-agent)?\.service\.d/10-log-to-file\.conf|snap-[a-z0-9-]+-[0-9]+\.mount)$'
+# explained too. The names are the k3s installer's units and snapd's mounts; the host packages
+# install their own units under /usr/lib/systemd/system, which a package owns.
+# ansible/tests/setup/test_aide_check_role_written.py holds the installer names to this list.
+ROLE_WRITTEN='^/etc/systemd/system/(k3s(-agent)?\.service(\.env)?|snap-[a-z0-9-]+-[0-9]+\.mount)$'
 # DECIDED: /usr/local/bin pages on a name a package also installs, not on every unpackaged entry
 # the way /usr/local/sbin does. Root's PATH reaches /usr/local/bin before /usr/bin, so a twin of a
 # packaged command replaces it for root. A list of the legitimate names would have to cover

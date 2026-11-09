@@ -1657,7 +1657,8 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
   of the tick's markers.
 - **Removed in H7.19b:** setup narrowing except `setup_gates.py`, with all seven
   `narrow_lib` modules D6 hands over; the rest of `land.sh`'s setup arm and its Pi arms,
-  `land_reach.py`, the rest of `reach.py` and `land_lib/classify.py`'s setup arm; the
+  `land_reach.py` with `setup_lib/deployed_copies.py` (H7.63 stopped writing the stamp
+  fragments it reads), the rest of `reach.py` and `land_lib/classify.py`'s setup arm; the
   deployer's service, code, config and polkit rule as legacy entries; `scripts/deploy.sh`
   with `deploy_cli.py` and `deploy_lib/`, `gitops_state.py`,
   `scripts/lib/deployer_park.py`, the deployer readers in `probe_lib`, `runbook_gates_lib`,
@@ -3158,7 +3159,8 @@ the `manual_plane` clearing, and *Rollback*'s
           outlives land.sh's setup and Pi arms.
         - Delete setup narrowing except `setup_gates.py`, which the censuses read until
           H7.20a, with all seven `narrow_lib` modules. Delete the rest of `land.sh`'s
-          setup arm and its Pi arms, `land_reach.py`, the rest of `reach.py` and
+          setup arm and its Pi arms, `land_reach.py` with `setup_lib/deployed_copies.py`
+          and `test_land_deployed_copies.py`, the rest of `reach.py` and
           `classify.py`'s setup arm, which D6 hands over. Delete `deploy.sh` and its
           library, `gitops_state.py`, `deployer_park.py`, monitor-bridge's copies of the
           state modules, `gen_gitops_markers.py`, `gen_doc_fragments.py`'s gitops
