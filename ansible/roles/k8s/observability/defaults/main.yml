@@ -14,7 +14,7 @@ observability_k8s_prometheus_image: prom/prometheus:v3.15.0@sha256:efd719c99d83b
 # scripts/validate/alert_tools.sh reads this tag, as it reads the Prometheus one above, to
 # provision amtool for the validate-alert-rules hook, so the Alertmanager this role runs and the
 # amtool CI checks its config with move in one Renovate bump.
-observability_k8s_alertmanager_image: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
+observability_k8s_alertmanager_image: prom/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b
 # Grafana 12 removed Angular, so every `graph` panel must be converted to `timeseries` and
 # deployed before a major bump, not alongside it.
 #

@@ -86,6 +86,13 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
     - `REGISTRY_PROXY_REMOTEURL` names the `ghcr-resume` container on the pod's loopback,
       `registry_k8s_ghcr_resume_port`. It runs `files/ghcr_resume_proxy.py` from a ConfigMap
       named for its content, so a script edit rolls the mirror.
+    - `ghcr-resume` is a native sidecar: an initContainer with `restartPolicy: Always` and a
+      startupProbe that dials its port. distribution's `NewApp` dials the remote once at start
+      and panics on a refused connection. As a peer container, `ghcr-resume` lost that race,
+      so the mirror restarted on every rollout and failed `probe.py health registry` (#7792).
+      The startupProbe holds the mirror's start until the port answers.
+      `ansible/tests/k8s/test_registry_ghcr_mirror.py::test_the_resume_sidecar_listens_before_the_mirror_starts`
+      holds it.
     - The sidecar relays every request to ghcr.io, and rewrites a 401 challenge's
       `https://ghcr.io/token` realm to its own `http://127.0.0.1:<port>/token`, which it
       relays back to ghcr.io. distribution's `realmAllowed` drops a bearer realm on another

@@ -110,8 +110,8 @@ def plan(work: Path, green: Path) -> list[Planned]:
     # DECIDED: every online case seeds k3s, so no case exercises install.sh's own binary
     # download or its check of that binary. One unseeded case fails the run whenever a GitHub
     # release outage outlasts `retry`'s window (#7625, #7729), and install.sh still writes the
-    # unit that unit_problems reads. The `k3s-download` case below covers that download in a
-    # step that cannot fail the PR (#7754).
+    # unit that unit_problems reads. The `k3s-download` case below covers that download, in
+    # the `continue-on-error` step of ci.yml's `host_packages` job (#7754).
     cases = [
         Planned(
             f"bootstrap {host} with --local-build",
