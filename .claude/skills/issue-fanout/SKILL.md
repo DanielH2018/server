@@ -31,15 +31,17 @@ whose claim is stale is offered, marked `[stale claim by ...]`; `claim` reaps th
 on the way past, so a refusal from `claim` means the claim is live and another session is
 really working it.
 
-A deferred issue is named under a `deferred: #<n> until <date>` line (on stderr with
-`--json`, so the array stays the free set) and is not in the batch. Do not dispatch an agent
+`next` counts the issues it withholds for a date or a blocker on one line,
+`N waiting (deferred/blocked); --waiting to list`, on stderr with `--json` so the array stays
+the free set. `next --waiting` lists them, one line each, as described below. A deferred issue
+is named under a `deferred: #<n> until <date>` line and is not in the batch. Do not dispatch an agent
 at it, and do not clear the date to get at it: the date is the issue's own precondition — a
 metric window, a cron that has not fired — and #1288 cost six dispatches reaching that
 conclusion before `next` could say it (#1739). When an agent finds an issue is date-gated,
 `findings.py defer <n> --until <date>` records it, and `next` offers the issue again on that
 date with nothing to clear.
 
-A blocked issue is named under a `blocked: #<n> by #<m>` line in the same place, and the same
+A blocked issue is named under a `blocked: #<n> by #<m>` line in the same listing, and the same
 rule holds. When an agent finds an issue waits on other work rather than a date, it runs
 `findings.py block <n> --on <m>`, naming the issue that work closes. `next` offers the issue
 again the moment `#<m>` closes. Never guess a date for work that waits on another issue: the
@@ -126,7 +128,8 @@ launched. `launch` then exits 7, because the other batches started; it exits 3 o
 claim was refused and nothing launched. Name every dropped issue out loud. A batch whose launch fails releases the claims it took.
 
 Done when: `launch` printed `claims held under <branch>`, and every `dropped` line is named
-in the report.
+in the report. That line also carries the run id and each batch's host, as
+`run <run-id>: <batch> -> <host>, …`.
 
 ## 3. Spawn
 
@@ -274,9 +277,15 @@ nothing.
 To recover a run-id lost to compaction or a resumed session, run `fanout.py place runs
 --orchestrator <branch>`. It lists every run manifest on the host with its batches, hosts,
 branches, issues and whether each was cleaned; `--json` prints the manifests themselves.
+By default it opens on a count (`2 standing, 9 cleaned`) and lists only the runs that still
+have a standing batch, each with its standing batches. `--all` lists every run and every
+batch, cleaned ones included.
 
-For a batch's detail, run `uv run python scripts/dev/fanout.py place status <run-id>`. It prints
-one line per batch, `<batch> on <host>: <state> …`, where state is `running`, `done <PR URL>`, `landed
+For a batch's detail, run `uv run python scripts/dev/fanout.py place status <run-id>`. It opens on
+a count line (`3 running, 2 done, 1 needs-input`), then prints one line per batch that is not
+`landed` or `cleaned`, `<batch> on <host>: <state> …`. A `done` batch prints as `<batch> on
+<host>: done <PR URL>` without the agent's final text. `--all` prints a line for every batch,
+`landed` and `cleaned` ones included, with the final text. State is `running`, `done <PR URL>`, `landed
 <PR URL>`, `needs-input`, `no-pr`, `no-verdict`, `no-report`, or `failed`
 (`permission_denials=N` is
 appended when the agent hit classifier denials). `done` requires a PR URL in the agent's final
@@ -534,9 +543,10 @@ none has been reported failed on a resume-point exit.
 A table of issue → worktree → PR → verdict, one row per issue the fan-out touched.
 
 **Release what you don't finish.** To see what this fan-out still holds, run
-`claims --worktree` with the orchestrator's branch. It lists the claims that branch holds and
-the claims of every batch branch its `launch` runs started, and counts the rest rather than
-listing them:
+`claims --worktree` with the orchestrator's branch. It lists every claim, live or stale, that
+branch holds and the claims of every batch branch its `launch` runs started, and counts the rest
+rather than listing them. Without `--worktree`, `claims` counts the live claims and lists only
+the stale ones; `--all` lists every claim:
 
 ```bash
 uv run python scripts/dev/findings.py claims --worktree <orchestrator-branch>

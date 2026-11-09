@@ -1075,12 +1075,16 @@ digest, `reconcile` acts as follows:
   `prod`, because a reset would roll back migrated state. `reset` writes
   `<commit> unverified`, and the operator then dispatches `reset_to_last_good` and clears the
   hold once the reset lands.
-- A missing status, or one for another digest, writes `<commit> unverified`, unless a hold
-  already stands. Its form is unknown, so check the commit for a snapshot role or a
-  forward-only pin before any reset (#7876).
+- A missing status, or one for another digest, takes the form from `decide`, unless a hold
+  already stands. On the lost-settle path, `decide` reads `prod`'s and `last-good`'s
+  bundles and outputs the snapshot roles and forward-only tags `prod` changes as `stateful`
+  and `no_reset`. A snapshot role writes `<commit> stateful=unverified`, and a forward-only
+  tag writes `<commit>` alone; both tag the digest `held`. With neither, it writes
+  `<commit> unverified` (#7876).
 
 A failed read of `prod`, the hold or the statuses writes nothing and fails the job, and the
-next run names the state again. `decide`'s reason keeps the two operator-only commands for
+next run names the state again. A failed read of either bundle ends `decide` as `error`, so
+`reconcile` does not run and writes no hold that would invite a reset. `decide`'s reason keeps the two operator-only commands for
 a `reconcile` that keeps failing.
 
 **Clearing a hold** is the operator's decision: set `DEPLOY_HOLD` back to `none` (*Publishing

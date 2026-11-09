@@ -22,6 +22,8 @@ from renderer.renderer_lib.host_inputs import HOST_INPUTS
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from deployer_lib import deploy_cross_role
+from gitops_ledger import OWED_MANUAL_PLANE, owed_line_key
+from gitops_markers import MARKERS
 
 
 def _classified[**P, R](
@@ -184,12 +186,27 @@ def adopt_cross_role_tables(ln: Landing) -> None:
         )
 
 
+def owed_manual_planes(ln: Landing) -> frozenset[str] | None:
+    """The subjects of the owed ledger's `manual_plane` lines, or None when it is unreadable.
+
+    A torn line counts, as `gitops_hold._held_subjects` counts one: it still names a line
+    that `clear-owed` can clear.
+    """
+    text = ln.state(MARKERS["owed"])
+    if text is None:
+        return None
+    keys = (owed_line_key(line) for line in text.splitlines())
+    return frozenset(k[1].strip() for k in keys if k and k[0] == OWED_MANUAL_PLANE)
+
+
 def classify(ln: Landing) -> None:
     """Tags and the plane a hand must apply."""
     c = ln.classifier
     adopt_cross_role_tables(ln)
     view = ln.view("files,changedFiles")
-    paths = [f["path"] for f in view.get("files", [])]
+    files = view.get("files", [])
+    paths = [f["path"] for f in files]
+    deleted = frozenset(f["path"] for f in files if f.get("changeType") == "DELETED")
     recorded = pr_range(ln)
     quiet = c.quiet_paths(paths, recorded)
     # `--tags` named the services, so the plane is left unread: the operator's list wins over
@@ -198,10 +215,18 @@ def classify(ln: Landing) -> None:
     # services -- and the broad half a `--tags` landing must not skip is caught earlier, by
     # `ci.preflight`'s blockers read over the incoming range.
     declared = None if ln.resolved_tags else _declared_at_merge(ln)
+    owed = None if ln.resolved_tags else owed_manual_planes(ln)
     plane = (
         ""
         if ln.resolved_tags
-        else _classified(ln, "plane classification", c.plane_note, paths, quiet=quiet)
+        else _classified(
+            ln,
+            "plane classification",
+            c.plane_note,
+            paths,
+            quiet=frozenset(quiet) | deleted,
+            owed=owed,
+        )
     )
     ln.classification = Classification(
         pr_paths=tuple(paths),
@@ -209,6 +234,8 @@ def classify(ln: Landing) -> None:
         quiet=frozenset(quiet),
         declared=None if declared is None else frozenset(declared),
         plane=plane,
+        deleted=deleted,
+        owed=owed,
     )
     if ln.resolved_tags:
         return
@@ -256,8 +283,9 @@ def narrow_plane(ln: Landing) -> None:
         if narrow:
             ln.narrowed_plane = ln.classifier.plane_note(
                 list(cl.pr_paths),
-                quiet=cl.quiet,
+                quiet=cl.plane_quiet,
                 narrow_tags=narrow,
+                owed=cl.owed,
             )
     except Exception as exc:
         say(f"narrowing not read ({type(exc).__name__}) — keeping the role tag")

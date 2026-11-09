@@ -472,3 +472,11 @@ def test_a_range_covering_the_file_list_is_read(monkeypatch):
         land_tags.deploy_tags, "comment_only_paths", lambda paths, old, new: {"a.yml"}
     )
     assert land_tags.quiet_paths(["a.yml", "b.yml"], "old..new") == {"a.yml"}
+
+
+def test_a_check_table_change_lands_with_its_own_role_alone():
+    tags, source = land_tags.derive(
+        ["ansible/roles/k8s/monitor-bridge/files/check_table.py"], changed_files=1
+    )
+    assert source == "pr"
+    assert tags == ["monitor-bridge"]

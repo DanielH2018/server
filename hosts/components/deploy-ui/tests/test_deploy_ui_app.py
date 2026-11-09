@@ -8,7 +8,7 @@ import pytest
 
 import deploy_ui
 from deploy_ui_lib import deploy_ui_reads as reads
-from deployer_lib.deploy_locks import TREE_LOCK
+from lib.tree_lock import TREE_LOCK
 
 TREE_LOCK_NAME = pathlib.PurePath(TREE_LOCK).name
 
@@ -451,8 +451,4 @@ def test_lock_names_agree_with_deploy_locks_is_clean(monkeypatch):
 def test_the_service_lock_glob_does_not_match_the_tree_lock_is_flagged():
     """The reject half: a glob loose enough to take the tree lock for a service lock would
     show the tick as a deploy of a service called `git-tree`."""
-    from deployer_lib import deploy_locks
-
-    assert not pathlib.PurePath(deploy_locks.TREE_LOCK).match(
-        deploy_ui.SERVICE_LOCK_GLOB
-    )
+    assert not pathlib.PurePath(TREE_LOCK).match(deploy_ui.SERVICE_LOCK_GLOB)

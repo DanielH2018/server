@@ -72,6 +72,7 @@ from deploy_tools.land_lib.host_schedule import (  # noqa: F401
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
 from diagnostics.probe_lib.builder import fetch_deadline_s
+from lib.progress import OnChange
 from deploy_tools.land_lib.tools import gate_snapshot
 from lib import yaml_fast
 from lib.git import git as run_git
@@ -536,6 +537,7 @@ def wait_for_hosts(
     pending = list(targets)
     deadlines: dict[str, float] = {}
     first = True
+    progress = OnChange(say)
     while True:
         states = _poll(pending, reads)
         if states is not None:
@@ -572,7 +574,7 @@ def wait_for_hosts(
         late = [t for t in pending if now > deadlines[t.host]]
         if late:
             _defer(ln, head, _late(late, states, deadlines), merge, green_at, reads)
-        say(f"waiting for hosts to apply: {', '.join(t.host for t in pending)}")
+        progress(f"waiting for hosts to apply: {', '.join(t.host for t in pending)}")
         reads.sleep(POLL_S)
 
 

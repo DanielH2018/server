@@ -24,8 +24,8 @@ def derive_from_diff(ln: Landing) -> None:
     verification matters most.
 
     A range `changed` refuses as broad derives no tag here. Its k8s half is the promotion's,
-    and land-wait's changed set names the tags this landing gates. `changed` prints what its
-    Pi and setup halves owe on stderr, beside the verdict.
+    and land-wait's changed set names the tags this landing gates. The refusal's stderr names
+    what its Pi and setup halves owe; `run_deploy_tags` shows stderr only on a non-zero exit.
     """
     say(f"deriving tags from the diff since {ln.opts.since}")
     r = ln.tools.deploy_tags(ln.opts.primary, ["changed", ln.opts.since])

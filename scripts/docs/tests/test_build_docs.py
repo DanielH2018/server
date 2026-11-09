@@ -200,6 +200,31 @@ def test_a_failed_build_leaves_the_previous_site_in_place(tmp_path, monkeypatch)
     assert (final / "index.html").read_text() == "previous"
 
 
+MKDOCS_OUTPUT = (
+    "INFO    -  Cleaning site directory\n"
+    + "INFO    -  Building page\n" * 50
+    + "WARNING -  Doc file 'a.md' contains a link 'b.md', but the target is not found\n"
+    "ERROR   -  Config value 'nav': a page is missing\n"
+    "Aborted with 2 warnings in strict mode!\n"
+)
+
+
+def test_a_failed_build_prints_the_deciding_lines_and_the_path_of_the_full_log(
+    tmp_path, capsys
+):
+    log = tmp_path / "mkdocs.log"
+    build_docs.report_failed_build(MKDOCS_OUTPUT, 1, log)
+    err = capsys.readouterr().err
+    assert "WARNING -  Doc file 'a.md'" in err and "Aborted with 2 warnings" in err
+    assert "Building page" not in err
+    assert f"The full log is {log}" in err
+    assert log.read_text() == MKDOCS_OUTPUT
+
+
+def test_deciding_lines_falls_back_to_the_last_lines_when_nothing_matches():
+    assert build_docs.deciding_lines("one\ntwo\nthree\n") == "one\ntwo\nthree"
+
+
 def test_the_served_directory_keeps_its_inode(tmp_path, monkeypatch):
     """site_dir is a hostPath mount, and a bind mount follows the INODE, not the path.
 

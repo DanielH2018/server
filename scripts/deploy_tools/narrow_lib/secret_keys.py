@@ -44,6 +44,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from typing import Callable, NamedTuple
 
 from lib.git import git
+from lib.k8s_lookups import k8s_lookup_map
 from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 from secrets_mgmt.consumers import _CENSUS_SKIP_FILES
@@ -52,7 +53,6 @@ _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deployer_lib.deploy_changes import _is_test_only_path, is_doc
 from deployer_lib import deploy_cross_role
-from deployer_lib.deploy_cross_role import k8s_lookup_map
 from deploy_tools.narrow_lib.foreign_keys import keys_reaching
 from deploy_tools.narrow_lib.setup_index import RoleIndex
 

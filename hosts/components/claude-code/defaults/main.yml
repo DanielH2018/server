@@ -278,8 +278,9 @@ claude_code_memory_sync_target_dir: "{{ claude_code_operator_memory_dir }}"
 claude_code_memory_sync_interval: 15min
 
 # ── The agent user ──────────────────────────────────────────────────────────────────────
-# A dedicated Unix user for the operator's Claude sessions, built by the same shared task file
-# as renovate-agent's (roles/setup/common/tasks/agent_user.yml). A session running as
+# A dedicated Unix user for the operator's Claude sessions. Each host's package.yml declares it
+# to the users arm, as renovate-agent's component.yml declares that agent's user, and
+# claude-agent-setup builds its home. A session running as
 # {{ sys_user }} reads everything that user can: the age key, which decrypts the become
 # password, the operator's gh token, ssh keys, and the deployer's primary checkout. This user
 # reaches none of them. claude-rc.service runs as {{ sys_user }} unless a host's host_vars set

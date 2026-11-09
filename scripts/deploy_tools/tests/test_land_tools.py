@@ -57,7 +57,7 @@ def test_deploy_tags_is_the_relative_path_in_the_primary_checkout(monkeypatch):
     """Its question IS the primary checkout: `blockers` reads HEAD..origin/master there."""
     seen = _capture(monkeypatch)
     tools.run_deploy_tags(Path("/primary"), ["blockers", "origin/master"])
-    assert seen["argv"][3] == "scripts/deploy_tools/deploy_tags.py"
+    assert seen["argv"][-3] == "scripts/deploy_tools/deploy_tags.py"
     assert seen["cwd"] == Path("/primary")
 
 

@@ -10,7 +10,6 @@ Run: uv run pytest .claude/hooks
 
 import functools
 import importlib.util
-import io
 import json
 import os
 import shutil
@@ -157,7 +156,10 @@ def test_a_deployer_only_banner_names_probe_landing(monkeypatch, capsys):
         parked=["  ✗ the GitOps deployer has not fast-forwarded for 40 min ..."],
     )
     assert run_main() == 0
-    triage = capsys.readouterr().out.splitlines()[-1]
+    context = json.loads(capsys.readouterr().out)["hookSpecificOutput"][
+        "additionalContext"
+    ]
+    triage = context.splitlines()[-1]
     assert "`uv run python scripts/diagnostics/probe.py landing`" in triage
 
 
@@ -266,31 +268,6 @@ def test_the_worktree_read_is_bounded_well_inside_the_hook_budget():
     ]
     assert budgets, "settings.json registers no session-health SessionStart hook"
     assert _mod.WORKTREE_TIMEOUT_S <= min(budgets) / 2
-
-
-class _FlushRecorder(io.StringIO):
-    """A stdout that snapshots everything written so far each time it is flushed."""
-
-    def __init__(self):
-        super().__init__()
-        self.flushed = []
-
-    def flush(self):
-        self.flushed.append(self.getvalue())
-        super().flush()
-
-
-def test_main_flushes_the_banner_before_the_worktree_read(monkeypatch):
-    out = _FlushRecorder()
-    monkeypatch.setattr(sys, "stdout", out)
-    run_main = _run_main(
-        monkeypatch,
-        '{"source":"startup"}',
-        targets=["  ✗ target loki [loki:3100] down"],
-        worktrees=["  old-thing — worktree-old-thing merged"],
-    )
-    assert run_main() == 0
-    assert any("loki" in s and "old-thing" not in s for s in out.flushed)
 
 
 # `other_live_sessions` imports lib.worktrees off a hand-built sys.path. That path must point

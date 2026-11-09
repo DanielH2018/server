@@ -19,7 +19,7 @@ from lib.exit_codes import (
     DEPLOY_BROAD,
 )
 from deploy_tools.land_lib.landing import BRANCH, Landing
-from deploy_tools.land_lib.outcome import Verdict, disarmed, say
+from deploy_tools.land_lib.outcome import Verdict, disarmed
 
 
 def blockers(ln: Landing) -> subprocess.CompletedProcess[str]:
@@ -48,8 +48,7 @@ def preflight(ln: Landing) -> None:
     """Step 2: can the tick cross what is incoming? Before waiting on anything."""
     res = blockers(ln)
     if res.returncode == 0:
-        say("nothing in the way")
-        return
+        return  # `blockers` printed its own status line
     if res.returncode == DEPLOY_BROAD:
         ln.finish(
             Verdict.BLOCKED,

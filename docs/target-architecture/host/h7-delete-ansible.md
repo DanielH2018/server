@@ -1002,7 +1002,7 @@ excluded. Each lands in one of four groups.
   above. The in-flight panel and the land and cancel controls stay.
 - **H7.19b re-homes or switches them, because they survive:**
     - `land_lib/tools.py` imports `deploy_locks.TREE_LOCK`. `TREE_LOCK` moves to
-      `scripts/lib/tree_lock.py`, and `test_tree_lock_single_definition.py` holds that
+      `scripts/lib/tree_lock.py`, and `scripts/lib/tests/test_tree_lock.py` holds that
       constant equal to `server_git_tree_lock` from then on.
     - `scripts/secrets_mgmt/consumers.py:_census_corpus` calls
       `deploy_cross_role.k8s_lookup_map`. That function imports only `ast`, `re` and `Path`.
@@ -1657,7 +1657,8 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
   of the tick's markers.
 - **Removed in H7.19b:** setup narrowing except `setup_gates.py`, with all seven
   `narrow_lib` modules D6 hands over; the rest of `land.sh`'s setup arm and its Pi arms,
-  `land_reach.py`, the rest of `reach.py` and `land_lib/classify.py`'s setup arm; the
+  `land_reach.py` with `setup_lib/deployed_copies.py` (H7.63 stopped writing the stamp
+  fragments it reads), the rest of `reach.py` and `land_lib/classify.py`'s setup arm; the
   deployer's service, code, config and polkit rule as legacy entries; `scripts/deploy.sh`
   with `deploy_cli.py` and `deploy_lib/`, `gitops_state.py`,
   `scripts/lib/deployer_park.py`, the deployer readers in `probe_lib`, `runbook_gates_lib`,
@@ -2336,6 +2337,18 @@ the `manual_plane` clearing, and *Rollback*'s
     carries the deployer-import census and the legacy entries, and names
     `/var/lib/gitops-deploy/` as the operator's cleanup. Exit observation 5 holds once its
     version is live on daniel-box.
+    **Split in two on 2026-11-09, the re-home first.** The first PR moves `TREE_LOCK` to
+    `scripts/lib/tree_lock.py` and `k8s_lookup_map` to `scripts/lib/k8s_lookups.py`.
+    `deploy_locks.py` keeps its own `TREE_LOCK` until H7.20a, and
+    `scripts/lib/tests/test_tree_lock.py` holds the two equal. Those equality checks left
+    `test_tree_lock_single_definition.py`, whose macro checks read templates and stay in
+    `ansible/tests/deploy/`. The `role_paths.py` grep moves to the deleting PR, because
+    `land_tags.py` imports `land_shared` and only the setup arm's deletion shows whether that
+    import survives. The
+    deleting PR and the strict census wait on
+    [#7888](https://github.com/DanielH2018/server/issues/7888): `k3s/tasks/` still holds
+    `server.yml` and `coredns.yml` (H7.44's code half), `storage_smoke.yml` (H7.45) and the
+    guarded `static-address.yml` (H7.34, H7.35), and the census lists each of them.
 30. **H7.54** stays alone. Its parity proof covers 361 modules.
     **Landed as [#7856](https://github.com/DanielH2018/server/pull/7856).**
     The test env moved to `ansible/tests/_jinja_env.py` and registers
@@ -3158,7 +3171,8 @@ the `manual_plane` clearing, and *Rollback*'s
           outlives land.sh's setup and Pi arms.
         - Delete setup narrowing except `setup_gates.py`, which the censuses read until
           H7.20a, with all seven `narrow_lib` modules. Delete the rest of `land.sh`'s
-          setup arm and its Pi arms, `land_reach.py`, the rest of `reach.py` and
+          setup arm and its Pi arms, `land_reach.py` with `setup_lib/deployed_copies.py`
+          and `test_land_deployed_copies.py`, the rest of `reach.py` and
           `classify.py`'s setup arm, which D6 hands over. Delete `deploy.sh` and its
           library, `gitops_state.py`, `deployer_park.py`, monitor-bridge's copies of the
           state modules, `gen_gitops_markers.py`, `gen_doc_fragments.py`'s gitops
@@ -3722,7 +3736,7 @@ progress.
   success.
 - From H7.19b until H7.20a, `deploy_locks.py` keeps its own `TREE_LOCK`, although no
   running code imports it after H7.19a. Until H7.20a deletes it,
-  `test_tree_lock_single_definition.py` holds both constants equal to
+  `scripts/lib/tests/test_tree_lock.py` holds both constants equal to
   `server_git_tree_lock`, so the two copies cannot drift apart.
 
 ## Risks

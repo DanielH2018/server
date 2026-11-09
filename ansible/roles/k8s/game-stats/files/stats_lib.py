@@ -2,12 +2,11 @@
 """stats_lib — shared Loki-tail -> Prometheus-exporter skeleton for the game-stats roles.
 
 Shipped as a sibling copy beside valheim_stats.py and stats.py (terraria-stats), the same
-mechanism `host_lib.py` uses from `roles/setup/common`: a directly-invoked script gets only
-its own directory on `sys.path`, so a shared module has to be copied in rather than imported
-across the tree (see `.claude/rules/python-layout.md`). This one ships into a ConfigMap and
+mechanism `hosts/lib/host_lib.py` uses: a directly-invoked script gets only its own directory
+on `sys.path`, so a shared module has to be copied in rather than imported across the tree (see `.claude/rules/python-layout.md`). This one ships into a ConfigMap and
 runs inside a python:3.14-alpine pod rather than on a host, so each game's rendered ConfigMap
 (`roles/k8s/game-stats/templates/configmap-*.yaml.j2`) carries a copy beside the entry
-script, rather than `install_host_lib.yml` staging one on a node.
+script, rather than a host package shipping one beside a host script.
 
 Both stats roles tail a game's console out of Loki, parse join/leave-shaped lines, fold them
 into all-time per-player stats kept in SQLite, and serve Prometheus metrics. They were built

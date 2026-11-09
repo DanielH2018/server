@@ -26,14 +26,15 @@ from verdicts.notify import discord_webhook_ok
 def _discord_webhooks(cfg: Config) -> list[tuple[str, str]]:
     """(label, url) pairs for each configured Discord webhook to verify (skips empties).
 
-    Kuma's is the alert-chain delivery hop for every monitor; CrowdSec's is the independent
+    The one labelled Kuma is Alertmanager's `discord` receiver, the delivery hop for every
+    alert; CrowdSec's is the independent
     security-ban delivery hop with no other backstop; GitOps/Renovate's carries the gitops-deploy
     rollback alert AND the renovate_notify digests (whose "alive" marker greens regardless of
     delivery); Arr's carries the *arr apps' own onHealthIssue alerts (direct POST from their
     in-app Discord Connect, config only in the app DBs); Healthchecks' was the self-hosted healthchecks
     app's check-down/up webhook. That app retired in #2806; whether the healthchecks.io account's
     own integrations post to the same webhook is recorded nowhere, so it stays verified.
-    None has a Kuma backstop, so all five are verified together.
+    No other check reads any of them, so all five are verified together.
     """
     return [
         (label, url)
@@ -56,7 +57,7 @@ def _redact(text: str, secrets: list[str]) -> str:
     fetching one can quote it back verbatim: a URL configured with no scheme makes
     `urllib.request.Request` raise `ValueError: unknown url type: '<the whole URL>'`, and
     check_discord's generic branch used to format that straight into the msg, which check.py
-    then logs and net.push sends to Kuma (and on to Discord).
+    then logs.
 
     Both forms of every configured URL are redacted — as configured, and with the scheme
     stripped — because urllib quotes the scheme-less remainder in some of its own errors. Every
@@ -129,8 +130,7 @@ def check_discord(
 ) -> tuple[bool, str]:
     """GET-verify EVERY configured Discord notification webhook still delivers, plus the email backstop.
 
-    Verifies the Kuma alert webhook, the CrowdSec ban-alert webhook, AND the GitOps/Renovate
-    webhook (the latter two have no Kuma backstop). `down` if ANY is invalid, naming which. Each
+    Verifies each webhook `_discord_webhooks` lists, Alertmanager's own among them. `down` if ANY is invalid, naming which. Each
     empty URL is skipped; all empty -> disabled (stays up), like
     check_n8n. Also probes the alert-email 2nd channel (email_backstop) — the independent delivery
     path this same monitor relies on when its Discord webhook is dead — so a silently revoked SMTP

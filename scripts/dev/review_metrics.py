@@ -253,7 +253,7 @@ def main() -> None:
         raise SystemExit(1 if problems else 0)
     table = build_table(load_outcomes())
     if args.json:
-        print(json.dumps(table, indent=2))
+        print(json.dumps(table))
     else:
         print(format_table(table))
 

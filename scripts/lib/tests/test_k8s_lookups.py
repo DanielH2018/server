@@ -1,12 +1,11 @@
-"""`deploy_cross_role.k8s_lookup_map`: the k8s roles that `lookup()` another role's file.
+"""`k8s_lookups.k8s_lookup_map`: the k8s roles that `lookup()` another role's file.
 
 authelia and traefik embed crowdsec's allowlists. The secret census reads this map.
 
-Run: uv run pytest ansible/tests/deploy/test_k8s_lookup_readers.py
+Run: uv run pytest scripts/lib/tests/test_k8s_lookups.py
 """
 
-from deploy_tools.land_lib import land_tags
-from deployer_lib.deploy_cross_role import k8s_lookup_map
+from lib.k8s_lookups import k8s_lookup_map
 from lib.repo_paths import REPO
 
 CHECK_TABLE = "ansible/roles/k8s/monitor-bridge/files/check_table.py"
@@ -43,9 +42,3 @@ def test_a_lookup_with_keyword_arguments_is_a_reader(tmp_path):
         " rstrip=False) }}\n"
     )
     assert k8s_lookup_map(tmp_path) == {"roles/k8s/flux/defaults/main.yml": {"reader"}}
-
-
-def test_a_check_table_change_lands_with_its_own_role_alone():
-    tags, source = land_tags.derive([CHECK_TABLE], changed_files=1)
-    assert source == "pr"
-    assert tags == ["monitor-bridge"]
