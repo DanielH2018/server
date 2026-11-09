@@ -1915,7 +1915,7 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.47 Closing the readers | H7.18a, H7.18b, H7.18d | yes | H7.36, H7.40, H5 |
 | H7.48 Absent arms become legacy entries; `k8s_host_files` empties | H7.18c | no: its list of record is H7.23's report taken after every row has moved | H7.25, H7.35, H7.36, H7.40, H7.64, H2.2c, H2.3d, H2.3f, H2.4c, H2.5b to H2.5d, H2.8b, D5 |
 | H7.49a land.sh stops running the tick | H7.19a's third PR | yes | H7.41, D6 |
-| H7.49b monitor-bridge's gitops checks go | H7.19a's first PR | yes; it merges only when H7.52 is ready to merge next, because it leaves the deployer unwatched until H7.52's merge | H7.49a, H7.51 live, and every other edge of H7.52 |
+| H7.49b monitor-bridge's gitops checks go | H7.19a's first PR | yes, written as [#7806](https://github.com/DanielH2018/server/pull/7806); it merges only when H7.52 is ready to merge next, because it leaves the deployer unwatched until H7.52's merge | H7.49a, H7.51 live, and every other edge of H7.52 |
 | H7.50 deploy_ui re-homes with its in-flight panel | H7.19a's second PR | yes | H7.37, H7.41, D6 |
 | H7.51 `homelab-checkout-sync` beside the deployer | H7.19a's fourth PR | yes | H7.41, H7.47, D6, the H6 PR that lands the window test |
 | H7.52 The deployer's timer retires | H7.19a's fifth PR | no: it deletes H6's seven deployer-coupled items, so it starts once they merge | H7.49a, H7.49b live, H7.51 live, H7.24a, H7.24b, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H7.60, H7.62, H6 |
