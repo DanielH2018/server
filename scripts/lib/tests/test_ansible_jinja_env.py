@@ -32,7 +32,7 @@ EXPECTED_FILTERS = {
 def test_every_registered_filter_is_the_implementation_on_the_roster(
     name: str, dotted: str
 ):
-    """A guard and the renderer read one set, which `test_renderer_filters.py` holds to Ansible's."""
+    """A guard and the renderer read one set, which `test_renderer_filters.py` holds to Ansible's results."""
     env = aje.make_ansible_env([SHARED_TPL])
     registered = env.filters[name]
     assert f"{registered.__module__}.{registered.__name__}" == dotted
@@ -94,38 +94,39 @@ def test_render_template_stubs_an_undefined_variable(tmp_path):
     assert aje.render_template(tpl, {}) == "value=STUB\n"
 
 
-# The inputs `to_bool`'s tables name, the inputs `convert_bool.boolean` accepts and `to_bool`
-# does not, and the fallback and unhashable shapes outside both.
-_BOOL_INPUTS = [
-    True,
-    False,
-    1,
-    0,
-    "true",
-    "false",
-    "TRUE",
-    "Off",
-    "yes",
-    "no",
-    "on",
-    "off",
-    "1",
-    "0",
-    "",
-    "maybe",
-    "t",
-    "y",
-    "f",
-    "n",
-    2,
-    -1,
-    " True ",
-    1.0,
-    2.0,
-    0.0,
-    None,
-    [],
-    {},
+# `to_bool`'s result for the inputs its tables name, the inputs `convert_bool.boolean`
+# accepts and `to_bool` does not, and the fallback and unhashable shapes outside both, as
+# ansible-core 2.22 returned them before H7 removed it.
+_TO_BOOL = [
+    (True, True),
+    (False, False),
+    (1, True),
+    (0, False),
+    ("true", True),
+    ("false", False),
+    ("TRUE", True),
+    ("Off", False),
+    ("yes", True),
+    ("no", False),
+    ("on", True),
+    ("off", False),
+    ("1", True),
+    ("0", False),
+    ("", False),
+    ("maybe", False),
+    ("t", False),
+    ("y", False),
+    ("f", False),
+    ("n", False),
+    (2, False),
+    (-1, False),
+    (" True ", False),
+    (1.0, True),
+    (2.0, False),
+    (0.0, False),
+    (None, False),
+    ([], False),
+    ({}, False),
 ]
 
 
@@ -161,23 +162,10 @@ def test_ansible_bool_filter_mirrors_ansible_semantics(value, expected: bool):
     assert aje.ansible_bool(value) is expected
 
 
-def test_ansible_bool_tables_are_to_bool_tables():
-    """The pin that fails when ansible-core moves its tables, until H7 removes it."""
-    from ansible.plugins.filter import core
-
-    assert aje.BOOLEANS_TRUE == core._valid_bool_true
-    assert aje.BOOLEANS_FALSE == core._valid_bool_false
-
-
-@pytest.mark.parametrize("value", _BOOL_INPUTS, ids=repr)
-def test_ansible_bool_agrees_with_ansible_core_to_bool(value):
-    """The real filter is the oracle — a hand-written expected table restates the shim.
-
-    Fails on the day ansible-core 2.23 removes the `== 1` fallback, which is the signal to
-    drop the shim's copy of it."""
-    from ansible.plugins.filter.core import to_bool
-
-    assert aje.ansible_bool(value) is to_bool(value)
+@pytest.mark.parametrize(("value", "expected"), _TO_BOOL, ids=repr)
+def test_ansible_bool_returns_what_ansible_core_to_bool_returned(value, expected: bool):
+    """Includes the `== 1` fallback, which ansible-core 2.23 drops from its own filter."""
+    assert aje.ansible_bool(value) is expected
 
 
 def test_the_light_tier_loads_no_ansible_core():

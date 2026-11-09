@@ -1,10 +1,11 @@
-"""R4's exit criterion 4: the renderer and the validator run with ansible-core unimportable.
+"""R4's exit criterion 4 and H7.46's: every render mode runs with ansible-core unimportable.
 
 Each check starts a subprocess that sets `sys.modules['ansible'] = None`, so `import ansible`
 raises wherever the code reaches for it, a deferred import included. The determinism modules
-render every tag the same way (`_render_audit_child.py`). Here are the validator, a host
-package, a filter's refusal, and the red half: a shim that makes `renderer_lib.jinja_filters`, which
-every render imports, import `ansible` first.
+render every tag the same way (`_render_audit_child.py`). Here are the validator, host mode for
+each host, package mode for each package under `hosts/packages/`, a filter's refusal, and the
+red half of each mode: a shim that makes `renderer_lib.jinja_filters`, which every render
+imports, import `ansible` first.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_ansible_free.py
 """
@@ -12,6 +13,8 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_ansible_free.py
 import json
 import sys
 from pathlib import Path
+
+import pytest
 
 from lib.proc_testing import run
 from lib.repo_paths import REPO, SCRIPTS
@@ -38,8 +41,21 @@ sys.exit(k8s_manifests.main())
 """
 RENDER_HOST = """
 from renderer import homelab_render
-sys.exit(homelab_render.main(["host", "--host", "daniel-pi", "--out", sys.argv[1]]))
+sys.exit(homelab_render.main(["host", "--host", sys.argv[2], "--out", sys.argv[1]]))
 """
+RENDER_PACKAGE = """
+from renderer import homelab_render
+sys.exit(homelab_render.main(["package", "--name", sys.argv[2], "--out", sys.argv[1]]))
+"""
+HOSTS = ("daniel-box", "daniel-pi", "daniel-server")
+PACKAGES = sorted(
+    path.parent.name for path in (REPO / "hosts" / "packages").glob("*/package.yml")
+)
+MODES = [
+    *((RENDER_HOST, host) for host in HOSTS),
+    *((RENDER_PACKAGE, package) for package in PACKAGES),
+]
+MODE_IDS = [*(f"host-{host}" for host in HOSTS), *(f"package-{p}" for p in PACKAGES)]
 # An entry with no tier: `tier_priority_class` refuses it, and `render_tag` reports
 # the refusal as the renderer's own error rather than a traceback.
 REFUSE = """
@@ -97,11 +113,25 @@ def test_the_validator_with_ansible_core_unimportable_is_clean():
     assert done.returncode == 0, done.stderr
 
 
-def test_a_host_package_render_with_ansible_core_unimportable_is_clean(tmp_path):
+def test_every_package_under_hosts_packages_is_rendered():
+    assert frozenset({"homelab-tools", "homelab-updater"}) <= set(PACKAGES)
+
+
+@pytest.mark.parametrize(("code", "name"), MODES, ids=MODE_IDS)
+def test_a_host_or_package_render_with_ansible_core_unimportable_is_clean(
+    tmp_path, code, name
+):
     out = tmp_path / "out"
-    done = _python(RENDER_HOST, str(out))
+    done = _python(code, str(out), name)
     assert done.returncode == 0, done.stderr
     assert any(out.iterdir())
+
+
+@pytest.mark.parametrize(("code", "name"), MODES, ids=MODE_IDS)
+def test_a_host_or_package_render_that_imports_ansible_is_flagged(tmp_path, code, name):
+    done = _python(FILTERS_IMPORT_ANSIBLE + code, str(tmp_path / "out"), name)
+    assert done.returncode != 0
+    assert "import of ansible halted" in done.stderr
 
 
 def test_a_filter_refusal_with_ansible_core_unimportable_is_a_render_error():
