@@ -18,7 +18,7 @@ from pathlib import Path
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from deploy_tools.promote_lib import forward_only, reboot_window, stateful
 from deploy_tools.promote_lib import verify_promotion as verify
-from deploy_tools.promote_lib.prune import ReadError
+from deploy_tools.promote_lib.prune import READ_ERRORS, ReadError
 from deploy_tools.promote_lib.reads import Reads
 
 
@@ -41,7 +41,8 @@ class Decision:
             failed verification writes DEPLOY_HOLD as T's SHA alone and leaves `prod` on T.
         stateful: the snapshot roles T changes against `last-good`. When any is named, a
             failed verification writes DEPLOY_HOLD as `<T> stateful=<names>` and leaves
-            `prod` on T, whatever `no_reset` says.
+            `prod` on T, whatever `no_reset` says. On a lost settle, `no_reset` and
+            `stateful` name what `prod` changes against `last-good`, for `reconcile`.
         stateful_record: what the hold's post prints (`stateful.record`).
         hold: what `decide` writes to DEPLOY_HOLD itself: T's SHA on a `held` from the
             forward-only gate or the backstop, `<T> suspended-changed=<tags>` on one from the
@@ -175,6 +176,53 @@ def _promotion(
         recorded=recorded,
         supersedes=supersedes,
         hold_read=hold_read,
+    )
+
+
+def _lost_settle(reads: Reads, settled: verify.Settled) -> Decision:
+    """The `current` decision for a lost settle, naming the hold form `settle` would write.
+
+    `prod`'s `no_reset` and `stateful` against `last-good` are taken as `_promotion` takes
+    T's, so `reconcile` writes `settle`'s hold when the lost run's verdict status is missing
+    or names another digest (#7876). A read that fails makes the run `error`, so `reconcile`
+    never writes a hold that would invite a reset over a migration.
+    """
+    commit, digest = settled.lost_settle or ("", "")
+    verdict, reason = settled.stop or ("current", "")
+    last_good = settled.last_good
+    try:
+        prod_bundle = _pull(reads, digest, "prod's bundle")
+        base_bundle = (
+            _pull(reads, last_good, "last-good's bundle") if last_good else None
+        )
+        flagged = reads.forward_only(commit)
+        if last_good and (lower := reads.last_good_commit()):
+            flagged |= reads.forward_only(lower)
+        prod_digests = verify.bundle_digests(prod_bundle)
+        base = verify.bundle_digests(base_bundle) if base_bundle is not None else None
+        record = stateful.record(prod_bundle, prod_digests, base, digest)
+    except READ_ERRORS as err:
+        return Decision(
+            "error",
+            reason=f"the run that moved prod to {commit} ({digest}) ended without a "
+            f"settle, and reading what {commit} changes against last-good, for reconcile's "
+            f"hold, failed: {err}. The next run reads it again. Until one succeeds the hold's "
+            f"form is unknown, so do not reset prod (operator-only) before checking whether "
+            f"{commit} changes a snapshot role or a forward-only tag",
+        )
+    no_reset = forward_only.no_reset_names(
+        forward_only.changed_tags(prod_digests, base or {}), flagged
+    )
+    if record["stateful"] or no_reset:
+        hold = f"{commit} stateful=unverified" if record["stateful"] else commit
+        reason = verify.lost_settle(digest, last_good or "", commit, hold)
+    return Decision(
+        verdict,
+        reason=reason,
+        no_reset=tuple(sorted(no_reset)),
+        stateful=tuple(record["stateful"]),
+        lost_settle=commit,
+        lost_settle_digest=digest,
     )
 
 

@@ -354,9 +354,10 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
       the `no-reset` form writes `<commit>` alone, and each tags the digest `held` and
       leaves `prod`. The `reset` form writes `<commit> unverified`, and the operator then
       dispatches `reset_to_last_good`.
-    - A missing status, or one for another digest, writes `<commit> unverified`. Its form
-      is unknown, so the operator checks the commit for a snapshot role or a forward-only
-      pin before any reset (#7876).
+    - A missing status, or one for another digest, takes the form from `decide`. On this
+      path `decide` outputs the snapshot roles and forward-only tags `prod` changes against
+      `last-good`, as `stateful` and `no_reset`. Either one non-empty writes that hold and
+      tags the digest `held`; both empty writes `<commit> unverified` (#7876).
 
   `reconcile` resets nothing and dispatches nothing. A failed read writes nothing, and the
   next run's `decide` names the state again.

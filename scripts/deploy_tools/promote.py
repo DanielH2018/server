@@ -72,7 +72,8 @@ verdict's reason on stderr. `$GITHUB_OUTPUT` gets `verdict`, `target`, `digest`;
 when `tag` tags `prior_digest` `last-good` first; `clears_hold`; `no_reset` and `stateful`,
 under which `settle` holds without a reset; `suspended_hold`; and `lost_settle` and
 `lost_settle_digest`, `prod`'s commit and digest when the run that moved it ended without its
-`settle`, on which the `reconcile` job runs.
+`settle`, on which the `reconcile` job runs. On that path `no_reset` and `stateful` name what
+`prod` changes against `last-good`, the hold form `reconcile` falls back to.
 
 THE OTHER SUBCOMMANDS, each stated in its module's docstring:
   prune        deletes old artifact versions, daily from prune-artifacts.yml (`prune.py`).
@@ -130,6 +131,7 @@ from deploy_tools.promote_lib import forward_only, reset, stateful, supersede
 from deploy_tools.promote_lib import verify_promotion as verify, wait, wait_reads
 from deploy_tools.promote_lib.decision import (
     Decision as Decision,
+    _lost_settle,
     _promotion,
     _pull,
     hand_off as hand_off,
@@ -199,13 +201,9 @@ def decide(
             prod_commit=reads.prod,
         )
         if settled.stop is not None:
-            lost_commit, lost_digest = settled.lost_settle or ("", "")
-            return Decision(
-                settled.stop[0],
-                reason=settled.stop[1],
-                lost_settle=lost_commit,
-                lost_settle_digest=lost_digest,
-            )
+            if settled.lost_settle is not None:
+                return _lost_settle(reads, settled)
+            return Decision(settled.stop[0], reason=settled.stop[1])
         held, prod_digest, last_good = settled.held, settled.prod, settled.last_good
         hold_read, flight = settled.hold, settled.in_flight
         required = frozenset(reads.contexts())

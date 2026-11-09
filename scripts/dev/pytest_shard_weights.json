@@ -1028,6 +1028,7 @@
  "scripts/deploy_tools/tests/test_promote_prune.py": 0.08,
  "scripts/deploy_tools/tests/test_promote_reboot_window.py": 0.36,
  "scripts/deploy_tools/tests/test_promote_reconcile.py": 0.3,
+ "scripts/deploy_tools/tests/test_promote_reconcile_lost_form.py": 0.26,
  "scripts/deploy_tools/tests/test_promote_reset.py": 0.29,
  "scripts/deploy_tools/tests/test_promote_settle.py": 0.77,
  "scripts/deploy_tools/tests/test_promote_settle_owner.py": 0.29,
