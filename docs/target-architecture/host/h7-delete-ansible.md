@@ -1684,6 +1684,18 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
     - the Ansible-only inventory key `ansible_user`, and `ansible_host` after H7.18d;
     - `ansible-core` from `pyproject.toml` and `uv.lock`;
     - the `ansible-lint` prek hook and `scripts/tests/test_ansible_lint_hook.py`;
+    - in H7.20b, `ansible/tests/leakguard.py`'s `ANSIBLE_LOCAL_TEMP` sweep, which exists only
+      because importing ansible-core creates `ansible-local-<pid>*` (#5904). That is the
+      docstring section *Ansible's local temp directory points at a temp directory*,
+      `ANSIBLE_LOCAL_TEMP_DIR`, `_ANSIBLE_LOCAL`, `sweep_dead_ansible_local`,
+      `use_ansible_local_temp` and its call at import. In
+      `ansible/tests/repo/test_leakguard.py` it is `_IMPORTS_ANSIBLE_THEN_DIES`,
+      `_run_script` and the two tests that use them, whose subprocess fails with
+      `ModuleNotFoundError` once ansible-core is gone. The sweep leaves in the same PR as
+      `test_ansible_lint_hook.py`, which reads `leakguard.ANSIBLE_LOCAL_TEMP_DIR`. The same
+      PR drops `test_leakguard.py` from `IN_A_STRING` in
+      `ansible/tests/repo/test_ansible_core_census.py`, and the `ANSIBLE_LOCAL_TEMP` entry
+      in the child env of `scripts/renderer/tests/test_renderer_host_inputs.py`;
     - in H7.20d, the Pi's empty `containers_list` key and `_example.yml`'s copy of it.
 - **Converted to scripts in H7.16:** `prune_backups.yml` and `seed_volume_backup.yml` become
   `scripts/backup/` commands with dry-run defaults. `k3s-storage-smoke.yml` becomes a
@@ -2308,7 +2320,8 @@ the `manual_plane` clearing, and *Rollback*'s
     `gitops-deploy` unit file. It carries the two-part proof, exit observation 1's listings
     and exit observation 7's census at its head.
 32. **H7.56.** Both steps follow H7.55 and remove the last Ansible inputs: ansible-core with its
-    config and hook, and the Pi's empty key. Neither moves a rendered byte. It carries exit
+    config, its hook and leakguard's temp-dir sweep, and the Pi's empty key. *Removed in
+    H7.20* names the sweep's parts. Neither moves a rendered byte. It carries exit
     observation 1's two counts, the Pi service-list proof and the two render pairs.
 33. **H7.57** stays alone, so the deletions land while the operator reviews it. Approving the
     ADR is **operator-only** (exit observation 6), and so is deciding whether ADR-0001,
@@ -3165,8 +3178,8 @@ the `manual_plane` clearing, and *Rollback*'s
       `scripts/docs/tests/test_gen_doc_fragments.py` and
       `scripts/renderer/tests/_dialect_tree.py`;
     - **H7.20b** ansible-core, the collections, `ansible.cfg`, `.ansible-lint`, the prek
-      hook and the setup entries left in `pyproject.toml`. The deletion census's allowlist
-      is empty by then;
+      hook, leakguard's `ANSIBLE_LOCAL_TEMP` sweep with its tests, and the setup entries
+      left in `pyproject.toml`. The deletion census's allowlist is empty by then;
     - **H7.20c** the ADR, `ansible/README.md`, the archived bring-up sections, and the
       setup half of `ansible/tests/repo/test_role_claude_md.py`;
     - **H7.20d** the Pi's `containers_list` key, after H7.20a. The key must outlive every
