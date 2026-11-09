@@ -32,8 +32,8 @@ PROOF_CONDITION = (
     " || (!cancelled() && needs.prove.outputs.proven != 'true'))"
     f" && {DRAFT_ARM}"
 )
-# The two jobs that read the build's artifacts also skip when it did not succeed (#7439).
-BUILD_CONSUMERS = ("host_packages", "host_tools_arm64")
+# The jobs that read the build's artifacts also skip when it did not succeed (#7439).
+BUILD_CONSUMERS = ("host_packages", "host_packages_bootstrap", "host_tools_arm64")
 BUILD_ARM = "needs.host_packages_build.result == 'success'"
 DEPENDENTS = (
     "hooks",
@@ -45,6 +45,7 @@ DEPENDENTS = (
     "sops_manifest_type_proof",
     "host_packages_build",
     "host_packages",
+    "host_packages_bootstrap",
     "host_tools_arm64",
 )
 # The env names the gate's script reads, one per dependency, in the order of DEPENDENTS.
@@ -58,6 +59,7 @@ GATE_ENV = (
     "SOPS_TYPE_PROOF",
     "HOST_PACKAGES_BUILD",
     "HOST_PACKAGES",
+    "HOST_PACKAGES_BOOTSTRAP",
     "HOST_TOOLS_ARM64",
 )
 
@@ -105,7 +107,7 @@ def test_the_prove_job_runs_on_a_push_only_and_reads_the_tested_tree_script():
 def test_every_repeated_job_waits_for_the_proof_and_skips_on_it():
     jobs = _jobs()
     for job in DEPENDENTS:
-        # `host_tools_arm64` and `host_packages` also wait for `host_packages_build`, whose
+        # `host_tools_arm64` and the `host_packages` jobs also wait for `host_packages_build`, whose
         # build they read (H3.11, #6151).
         needs = (
             [jobs[job]["needs"]]
