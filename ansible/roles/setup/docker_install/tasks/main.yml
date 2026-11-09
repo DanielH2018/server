@@ -1,13 +1,11 @@
 ---
-# The Pi's Docker engine, daemon config, Go-runtime drop-ins, containerd block and networks are
-# package-owned since H7.26: homelab-daniel-pi's pi-docker component ships them, and
-# homelab-compose.service creates the external networks. docs/target-architecture/host/
-# h7-delete-ansible.md, H7.26. What stays is the teardown half, which reaps a retired Docker
-# install on the hosts with has_docker: false until H7.48 turns its absent arms into legacy
-# entries.
-#
-# A static import, not include_tasks: a dynamic include is itself a task that `--tags` judges
-# first, so `--tags docker-teardown` would skip it and reach nothing inside.
-- name: Remove Docker leftovers from a host that has retired Docker
-  ansible.builtin.import_tasks: teardown.yml
-  when: not has_docker
+# The Pi's Docker engine is package-owned since H7.26 (hosts/components/pi-docker). H7.48 moved the
+# teardown half's crons and drop-ins into the cluster nodes' packages as legacy entries.
+# docs/target-architecture/host/h7-delete-ansible.md.
+
+# DECIDED: this role is emptied, never deleted, until H7.20a. A play that names a missing role
+# fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the
+# deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. setup_gates.role_end_guard
+# reads this task.
+- name: End the role, whose work the host packages own
+  ansible.builtin.meta: end_role

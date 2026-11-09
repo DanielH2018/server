@@ -62,7 +62,6 @@ ADDED_BY_5481 = {
 # `test_cluster_vars_tree.py` failed four branches too and stays out (prek.toml says why).
 ADDED_2026_10_25 = {
     "evals/tests/test_eval_cases.py": "CLAUDE.md",
-    "ansible/tests/setup/test_k8s_host_files_pairs.py": "ansible/roles/k8s/registry/defaults/main.yml",
     "ansible/tests/deploy/test_landing_annotations.py": "scripts/deploy_tools/land_lib/ledger.py",
     "ansible/tests/deploy/test_gitops_deploy_imports.py": "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_handlers.py",
     "scripts/validate/tests/test_validate_alert_rules.py": "ansible/roles/k8s/observability/files/rules/ingress-probes.yaml",

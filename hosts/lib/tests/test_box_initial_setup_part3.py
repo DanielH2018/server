@@ -3,7 +3,9 @@
 `test_pi_initial_setup_part3.py` holds the `host-hardening` component's content against the bytes
 the role wrote. These tests hold what is specific to the last host: daniel-box ships the same
 bytes, takes no i915 option, retires what the role's absent arms removed, and no task is left in
-`initial_setup` that writes a baseline path or upgrades a host's packages.
+`initial_setup` that writes a baseline path or upgrades a host's packages. H7.48's tests hold
+every host's package to the crons `crons.yml`'s absent arms removed, and each cluster node's to
+`docker_install`'s teardown.
 
 Run: uv run pytest hosts/lib/tests/test_box_initial_setup_part3.py
 """
@@ -12,6 +14,8 @@ import json
 
 import pytest
 from lib import yaml_fast
+from lib.estate import REPO_INVENTORY
+from lib.render_context import render_context
 from lib.repo_paths import ANSIBLE, REPO
 from test_pi_initial_setup_part3 import BLACKLIST, BLACKLIST_WRITTEN, WRITTEN
 
@@ -85,6 +89,51 @@ def test_the_has_igpu_gate_keeps_the_i915_option_off_daniel_box(package):
 def test_the_cert_expiry_credentials_retire_here(package):
     legacy = json.loads(package.files["/usr/lib/homelab/manifest.json"][0])["legacy"]
     assert {"path": "/etc/homelab/cert-expiry-webhook.env"} in legacy
+
+
+def _legacy(host: str) -> list[dict]:
+    package = host_mode.render_host(host)
+    return json.loads(package.files["/usr/lib/homelab/manifest.json"][0])["legacy"]
+
+
+def _sys_user(host: str) -> str:
+    return render_context(None, host, inventory=REPO_INVENTORY)["sys_user"]
+
+
+@pytest.mark.parametrize("host", ["daniel-box", "daniel-pi", "daniel-server"])
+def test_every_host_retires_the_crons_whose_absent_arms_left_crons_yml(host):
+    user = _sys_user(host)
+    legacy = _legacy(host)
+    for name in (
+        "TLS cert-expiry watch",
+        "Daily secret rotation audit",
+        "Weekly secret rotation (auto tier)",
+    ):
+        assert {"cron": name, "user": user} in legacy, name
+
+
+def test_crons_yml_keeps_only_the_ansible_log_cron_arm():
+    names = {
+        task["ansible.builtin.cron"]["name"]
+        for task in _role_tasks()
+        if "ansible.builtin.cron" in task
+    }
+    assert names == {"Clear ansible log file"}
+
+
+@pytest.mark.parametrize("host", ["daniel-box", "daniel-server"])
+def test_each_cluster_node_retires_the_docker_teardown_in_removal_order(host):
+    user = _sys_user(host)
+    teardown = [
+        {"cron": "Redeploy ical-proxy", "user": user},
+        {"cron": "Clean stale tdarr transcode cache", "user": user},
+        # Reconcile removes a directory only once it is empty.
+        {"path": "/etc/systemd/system/docker.service.d/20-go-runtime.conf"},
+        {"path": "/etc/systemd/system/docker.service.d"},
+        {"path": "/etc/systemd/system/containerd.service.d/20-go-runtime.conf"},
+        {"path": "/etc/systemd/system/containerd.service.d"},
+    ]
+    assert [entry for entry in _legacy(host) if entry in teardown] == teardown
 
 
 def test_the_role_keeps_no_baseline_task_on_any_host():

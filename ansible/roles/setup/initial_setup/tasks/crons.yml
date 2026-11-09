@@ -1,7 +1,8 @@
 ---
-# Host crons: the absent arms of retired crons and the setup-drift check. The checkout timers
+# Host crons: the ansible.log cron's absent arm and the setup-drift check. The checkout timers
 # (secret rotation, docs refresh, infra map, eval sweep, git repair) and the Loki witness are
-# host-package components.
+# host-package components, and each host package's legacy list retires the other retired crons
+# (H7.48).
 
 - name: Deploy the shared host-check library
   # DECIDED: `always`, not `crons` — this is a dependency of tasks in OTHER roles under other
@@ -30,23 +31,6 @@
     mode: "0644"
   become: true
 
-# The way out for a host that once ran the secret-rotation crons. Since H7.36 the secret-rotation
-# component of homelab-daniel-box ships both timers, and has_gitops is true on daniel-box alone.
-# A non-gitops host that still carried an Ansible-era cron would read a stale tree and report the
-# same check, so these run everywhere the flag is false. Reconcile retires daniel-box's
-# own legacy entries.
-- name: Remove the secret-rotation crons from any non-gitops host
-  tags: [crons, secret-rotation]
-  when: not has_gitops
-  ansible.builtin.cron:
-    name: "{{ item }}"
-    state: absent
-    user: "{{ sys_user }}"
-  loop:
-    - "Daily secret rotation audit"
-    - "Weekly secret rotation (auto tier)"
-  become: true
-
 - name: Remove the weekly ansible.log truncation cron
   # H7.36 deletes the job, and the census allowlists the item `Clear ansible log file` as
   # deleted. The task stays as an absent arm until H7.20a, because daniel-server and daniel-pi
@@ -58,20 +42,6 @@
     state: absent
   become: true
   tags: [crons, ansible-log]
-
-- name: Remove the TLS cert-expiry watch cron
-  tags: [crons, cert-expiry]
-  # Reaps the retired TLS cert-expiry watcher. Traefik serves ONE certificate -- a wildcard
-  # whose SANs cover `*.<domain>`, `*.local.<domain>` and the apex -- and observability's
-  # edge.yaml pages on that leaf's `traefik_tls_certs_not_after`. `probe.py cert <host>` keeps
-  # the per-host served-chain view for an operator. It runs on every host rather than behind
-  # the `ops_cron_host` gate, because asking cron to remove an absent entry is free and a host
-  # that was once the ops cron host still has the entry.
-  ansible.builtin.cron:
-    name: "TLS cert-expiry watch"
-    state: absent
-    user: "{{ sys_user }}"
-  become: true
 
 # homelab-check-lib.sh is sourced by the host checks M6 moves off Kuma, with a `|| exit 1` guard.
 # `tags: [always]`, matching the copy task it records.

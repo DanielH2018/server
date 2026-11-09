@@ -34,12 +34,13 @@ import pytest
 from lib import yaml_fast
 from lib.proc_testing import DEFAULT_TIMEOUT
 from renderer.renderer_lib import host as host_mode
+from validate import host_package_cases
+from validate.validate_lib import case_groups, engine_case
 from validate.validate_lib import host_fixtures as fx
 from validate.validate_lib.host_container import CaseFailed
 
 MODULE = "validate.validate_lib.engine_case"
 SOURCE = "scripts/validate/validate_lib/engine_case.py"
-CASES = "scripts/validate/host_package_cases.py"
 CI_WORKFLOW = ".github/workflows/ci.yml"
 PINS = "/usr/lib/homelab/docker-engine.pins"
 ENGINE = "docker-ce"
@@ -196,28 +197,9 @@ def test_an_engine_off_a_or_a_pending_series_not_reading_one_fails(installed, pr
 # Where the job runs the case, and what triggers it.
 
 
-def _main_runs_the_engine_case(source: str) -> bool:
-    """Whether `main` in the cases' source calls `engine_case.run(...)`."""
-    for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.FunctionDef) and node.name == "main":
-            return any(
-                isinstance(call, ast.Call)
-                and isinstance(call.func, ast.Attribute)
-                and call.func.attr == "run"
-                and isinstance(call.func.value, ast.Name)
-                and call.func.value.id == "engine_case"
-                for call in ast.walk(node)
-            )
-    return False
-
-
 def test_the_host_packages_job_runs_the_engine_case():
-    source = (fx.REPO / CASES).read_text()
-    assert _main_runs_the_engine_case(source)
-    # Red proof: the conffile case's run, which main calls already, does not count.
-    assert not _main_runs_the_engine_case(
-        source.replace("engine_case.run", "conffile_case.run")
-    )
+    runs = [run for _, run in case_groups.groups(host_package_cases.Cases)]
+    assert engine_case.run in runs
 
 
 def test_case_inputs_names_the_engine_case():

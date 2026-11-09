@@ -1679,10 +1679,25 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
       `.gitignore`, and `ansible/requirements.yml`;
     - `ansible/roles/setup/` and `ansible/roles/containers/`;
     - R4's runbook roles' `tasks/`, after H7.16b replaces them;
-    - the Ansible-only inventory keys `ansible_connection` and `ansible_user`, and
-      `ansible_host` after H7.18d;
+    - in H7.20a, the `ansible_connection=` keys in `hosts.ini` and their only reader,
+      `scripts/lib/ansible_inventory.py:Host.connection`;
+    - in H7.20a, the Ansible-only inventory keys: `ansible_user` on the Pi's `hosts.ini`
+      line and `ansible_host` in `host_vars/daniel-pi.yml`, with the two renderer tests that
+      assert them;
     - `ansible-core` from `pyproject.toml` and `uv.lock`;
     - the `ansible-lint` prek hook and `scripts/tests/test_ansible_lint_hook.py`;
+    - in H7.20b, `ansible/tests/leakguard.py`'s `ANSIBLE_LOCAL_TEMP` sweep, which exists only
+      because importing ansible-core creates `ansible-local-<pid>*` (#5904). That is the
+      docstring section *Ansible's local temp directory points at a temp directory*,
+      `ANSIBLE_LOCAL_TEMP_DIR`, `_ANSIBLE_LOCAL`, `sweep_dead_ansible_local`,
+      `use_ansible_local_temp` and its call at import. In
+      `ansible/tests/repo/test_leakguard.py` it is `_IMPORTS_ANSIBLE_THEN_DIES`,
+      `_run_script` and the two tests that use them, whose subprocess fails with
+      `ModuleNotFoundError` once ansible-core is gone. The sweep leaves in the same PR as
+      `test_ansible_lint_hook.py`, which reads `leakguard.ANSIBLE_LOCAL_TEMP_DIR`. The same
+      PR drops `test_leakguard.py` from `IN_A_STRING` in
+      `ansible/tests/repo/test_ansible_core_census.py`, and the `ANSIBLE_LOCAL_TEMP` entry
+      in the child env of `scripts/renderer/tests/test_renderer_host_inputs.py`;
     - in H7.20d, the Pi's empty `containers_list` key and `_example.yml`'s copy of it.
 - **Converted to scripts in H7.16:** `prune_backups.yml` and `seed_volume_backup.yml` become
   `scripts/backup/` commands with dry-run defaults. `k3s-storage-smoke.yml` becomes a
@@ -1757,7 +1772,11 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
                                                                   H7.2e)
   ansible/filter_plugins/claude_agents.py                      (deleted, or its ansible
                                                                   import removed, H7.17)
-  ansible/inventory/hosts.ini                                  (host names only)
+  ansible/inventory/hosts.ini                                  (host names only;
+                                                                  - ansible_connection,
+                                                                  - ansible_user, H7.20a)
+  scripts/lib/ansible_inventory.py                             (- Host.connection, H7.20a)
+  ansible/inventory/host_vars/daniel-pi.yml                    (- ansible_host, H7.20a)
   ansible/inventory/host_vars/{daniel-pi,_example}.yml         (- containers_list, H7.20d;
                                                                   compose_services stays)
   ansible/roles/k8s/{artifacts,monitor-bridge,observability}/templates/
@@ -2304,7 +2323,8 @@ the `manual_plane` clearing, and *Rollback*'s
     `gitops-deploy` unit file. It carries the two-part proof, exit observation 1's listings
     and exit observation 7's census at its head.
 32. **H7.56.** Both steps follow H7.55 and remove the last Ansible inputs: ansible-core with its
-    config and hook, and the Pi's empty key. Neither moves a rendered byte. It carries exit
+    config, its hook and leakguard's temp-dir sweep, and the Pi's empty key. *Removed in
+    H7.20* names the sweep's parts. Neither moves a rendered byte. It carries exit
     observation 1's two counts, the Pi service-list proof and the two render pairs.
 33. **H7.57** stays alone, so the deletions land while the operator reviews it. Approving the
     ADR is **operator-only** (exit observation 6), and so is deciding whether ADR-0001,
@@ -3138,10 +3158,49 @@ the `manual_plane` clearing, and *Rollback*'s
       `homelab-render package` for every package, at the PR's base and head. A render
       diff cannot see an import break, so the second is a full `uv run pytest
       --collect-only` at the head with no import error, and the deployer-import census
-      green with its allowlist empty;
+      green with its allowlist empty.
+      The same PR deletes `Host.connection` from `scripts/lib/ansible_inventory.py`, with
+      `test_connection_defaults_to_ssh_as_ansible_does` in
+      `scripts/lib/tests/test_ansible_inventory.py`. H7.19b deletes the property's caller in
+      `land_reach.py`, and this PR deletes the other one, in the deployer role's
+      `tests/test_gitops_markers.py`. The PR also deletes the `ansible_connection=` keys
+      from `ansible/inventory/hosts.ini`, with the header comment that explains them, the
+      sentence in the root `README.md` that cites them, and the `has_repo_checkout`
+      comment in `group_vars/all.yml` that names them. The playbooks and
+      `pre_tasks/load_secrets.yml`, which read the keys, go in the same PR. Two readers in
+      `scripts/` follow the keys:
+      `scripts/validate/validate_lib/fixture_host_case.py` writes its host line without
+      `ansible_connection=ssh`, as `hosts.ini` then does, and so does the assertion in
+      `scripts/validate/tests/test_fixture_host_case.py` that checks the line;
+      `test_the_page_names_each_hosts_package_and_no_inventory_connection_key` in
+      `scripts/docs/tests/test_gen_reference_hosts.py` drops its `ansible_connection`
+      assertion and the keys in its fixture inventory, because no inventory then holds a key
+      the page could leak. After it, `git grep -n ansible_connection -- scripts` matches only
+      the fixture inventories, and the assertions over them, in
+      `scripts/lib/tests/test_ansible_inventory.py`,
+      `scripts/docs/tests/test_gen_doc_fragments.py` and
+      `scripts/renderer/tests/_dialect_tree.py`.
+      The PR also deletes the Ansible-only inventory keys `ansible_user=ubuntu`, on the Pi's
+      `hosts.ini` line, and `ansible_host: "{{ server_ip }}"`, in
+      `ansible/inventory/host_vars/daniel-pi.yml`. They wait for this PR, not for H7.18d:
+      H7.18d stops pi-peer-backup reading them, but every play run with
+      `-e target=daniel-pi`, including a rollback re-apply of restored tasks, reaches the Pi
+      through them until the playbooks go. The `hosts.ini` comment above the Pi's line and
+      the `daniel-pi.yml` comment above `ansible_host` go with them. Two renderer tests assert
+      the keys and go too:
+      `scripts/renderer/tests/test_renderer_context.py::test_hostvars_of_the_pi_take_ansible_user_from_hosts_ini`
+      and `::test_hostvars_of_the_pi_resolve_ansible_host_to_its_own_server_ip`. No coverage
+      leaves with them: `scripts/renderer/tests/test_renderer_dialect.py::test_the_variable_layers_render_the_literal`
+      still resolves another host's templated inline variable against that host, over the
+      fixture in `_dialect_tree.py`. Four passages use the Pi's `ansible_host` as their
+      worked example and are rewritten to name a fixture host instead:
+      `docs/homelab-render.md`'s `hostvars` bullet, the `hostvars` bullet in
+      `scripts/renderer/renderer_lib/context.py`'s module docstring, the `_HOSTVARS_KEYS`
+      docstring in `scripts/lib/render_context.py`, and the `Host.settings` docstring in
+      `scripts/lib/ansible_inventory.py`;
     - **H7.20b** ansible-core, the collections, `ansible.cfg`, `.ansible-lint`, the prek
-      hook and the setup entries left in `pyproject.toml`. The deletion census's allowlist
-      is empty by then;
+      hook, leakguard's `ANSIBLE_LOCAL_TEMP` sweep with its tests, and the setup entries
+      left in `pyproject.toml`. The deletion census's allowlist is empty by then;
     - **H7.20c** the ADR, `ansible/README.md`, the archived bring-up sections, and the
       setup half of `ansible/tests/repo/test_role_claude_md.py`;
     - **H7.20d** the Pi's `containers_list` key, after H7.20a. The key must outlive every
@@ -3179,6 +3238,8 @@ git ls-files ansible/roles/setup ansible/roles/containers ansible/pre_tasks \
   ansible/requirements.yml
 git ls-files 'ansible/roles/*/*/tasks/*'
 git grep -n '^containers_list:' -- ansible/inventory
+git grep -n ansible_connection -- ansible/inventory scripts/lib/ansible_inventory.py
+git grep -n -w -e ansible_user -e ansible_host -- ansible/inventory
 uv tree | grep -c ansible-core
 grep -c ansible-lint prek.toml
 

@@ -32,7 +32,12 @@ import sys
 from pathlib import Path
 
 from validate.validate_lib.host_container import CaseFailed, Container, expect
-from validate.validate_lib.host_fixtures import build, publish, render_fixture
+from validate.validate_lib.host_fixtures import (
+    build,
+    publish,
+    render_fixture,
+    run_logged,
+)
 
 OWNER = "fixture-conffile-owner"
 CONFFILE = f"/etc/{OWNER}.conf"
@@ -75,7 +80,7 @@ def owner_debs(out: Path) -> list[Path]:
         for path in [root, *root.rglob("*")]:
             path.chmod(0o755 if path.is_dir() else 0o644)
         deb = out / f"{OWNER}_{version}_all.deb"
-        subprocess.run(
+        run_logged(
             ["dpkg-deb", "--root-owner-group", "--build", str(root), str(deb)],
             check=True,
             stdout=subprocess.DEVNULL,

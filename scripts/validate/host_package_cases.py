@@ -62,6 +62,10 @@ a file and a payload the real package does not ship, so it installs a fixture ho
 `hosts/lib/tests/container/fixture/`'s specs, rendered by the real renderer with the real
 reconcile component and maintainer scripts.
 
+The case groups, the three `Cases` methods and each case module's `run`, run concurrently on
+`--jobs` threads, each in its own scratch directory under `--work`, and each group's output is
+written as one block when it ends (`validate_lib/case_groups.py`, #7784).
+
 Usage:
     uv run python scripts/validate/host_package_cases.py --image homelab-host-test:24.04 \\
         --python 3.12 --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \\
@@ -87,6 +91,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from lib.cli_help import ArgumentParser
+from validate.validate_lib.case_groups import groups, run_groups
 from validate.validate_lib.host_container import (
     LAST_SUCCESS,
     PORT,
@@ -99,9 +104,7 @@ from validate.validate_lib.host_container import (
     release_fetched,
     success_timestamp,
 )
-from validate.validate_lib import bootstrap_age_case, bootstrap_case
-from validate.validate_lib import bootstrap_repo_case, disarm_case, engine_case
-from validate.validate_lib import conffile_case, repos_case, secrets_case, shadow_case
+from validate.validate_lib import bootstrap_case, secrets_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
     DROPIN_CHANGED,
@@ -537,29 +540,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="run only the bootstrap case that downloads k3s from its release",
     )
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=4,
+        help="how many case groups run at once (default 4, a hosted runner's vCPUs)",
+    )
+    args = parser.parse_args(argv)
     try:
-        cases = Cases(parser.parse_args(argv))
+        cases = Cases(args)
     except CaseFailed as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)
         return 1
     if cases.k3s_download:
-        bootstrap_case.run(cases)
-        return _verdict(cases)
-    for run in (cases.upgrade_path, cases.cold_install, cases.by_hand):
-        run()
-    disarm_case.run(cases)
-    secrets_case.run(cases)
-    conffile_case.run(cases)
-    engine_case.run(cases)
-    shadow_case.run(cases)
-    repos_case.run(cases)
-    bootstrap_case.run(cases)
-    bootstrap_repo_case.run(cases)
-    bootstrap_age_case.run(cases)
-    return _verdict(cases)
-
-
-def _verdict(cases: Cases) -> int:
+        run_groups(cases, [("bootstrap_case", bootstrap_case.run)], 1)
+    else:
+        run_groups(cases, groups(Cases), args.jobs)
     if cases.failed:
         print(
             f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", file=sys.stderr

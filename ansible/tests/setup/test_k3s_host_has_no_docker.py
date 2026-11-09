@@ -56,12 +56,12 @@ def _load(path: Path):
     return yaml_fast.safe_load(path.read_text())
 
 
-def test_docker_install_is_gated_on_has_docker():
-    """No Ansible task installs Docker, and the teardown stays gated on `not has_docker`.
+def test_docker_install_is_an_end_role_stub():
+    """No Ansible task touches Docker on any host.
 
-    Since H7.26 the Pi's package installs the engine, so the role keeps only its teardown half.
-    A `when: has_docker` on the initial_setup.yml role entry would skip the role on every host
-    that needs the teardown, so the role is included unconditionally and gates inside.
+    The Pi's package installs the engine (H7.26), and the cluster nodes' packages retire the
+    teardown's crons and drop-ins as legacy entries (H7.48). The role stays an unconditional
+    `end_role` stub until H7.20a deletes it with its initial_setup.yml entry.
     """
     plays = _load(ANSIBLE / "initial_setup.yml")
     roles = [r for play in plays for r in play.get("roles", [])]
@@ -71,28 +71,20 @@ def test_docker_install_is_gated_on_has_docker():
     assert docker_entries, "docker_install is no longer wired into initial_setup.yml"
     for entry in docker_entries:
         assert "when" not in entry, (
-            "docker_install must be included unconditionally — the role dispatches on "
-            "has_docker internally. Re-gating it here silently disables the teardown."
+            "docker_install must be included unconditionally, so its end_role stub runs on "
+            "every host and setup_gates.role_end_guard counts the role empty everywhere."
         )
 
     tasks = _load(ANSIBLE / "roles/setup/docker_install/tasks/main.yml")
-    # Static imports (so the granular tags reach their tasks); the gate is the
-    # same `when:` either way, and this guard is about the gate.
-    gates = {
-        t.get("ansible.builtin.import_tasks", t.get("ansible.builtin.include_tasks")): (
-            t.get("when")
-        )
-        for t in tasks
-        if "ansible.builtin.import_tasks" in t or "ansible.builtin.include_tasks" in t
-    }
-    assert set(gates) == {"teardown.yml"}, (
-        f"docker_install imports {sorted(gates)}; only the Pi's package installs Docker, so a "
-        "second import would reinstall it from Ansible on a host the gate lets through."
+    assert tasks == [
+        {
+            "name": "End the role, whose work the host packages own",
+            "ansible.builtin.meta": "end_role",
+        }
+    ], (
+        "docker_install runs tasks again; only the host packages may install or reap Docker"
     )
-    assert gates.get("teardown.yml") == "not has_docker", (
-        "teardown.yml must run `when: not has_docker` — it is the only declarative "
-        "reaper for units and crons left by a retired Docker plane."
-    )
+    assert not (ANSIBLE / "roles/setup/docker_install/tasks/teardown.yml").exists()
 
 
 def test_has_docker_defaults_false_fleet_wide():

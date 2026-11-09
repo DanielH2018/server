@@ -8,9 +8,9 @@ Run: uv run pytest scripts/validate/tests/test_repos_case.py
 """
 
 import hashlib
-from pathlib import Path
 
 from validate import host_package_cases
+from validate.validate_lib import case_groups, repos_case
 from validate.validate_lib.host_fixtures import HOST_PKG
 from validate.validate_lib.repos_case import takeover_problems
 
@@ -59,4 +59,5 @@ def test_a_verify_line_about_a_shipped_path_or_a_conffile_is_flagged():
 
 
 def test_the_host_packages_job_runs_the_case():
-    assert "repos_case.run(cases)" in Path(host_package_cases.__file__).read_text()
+    runs = [run for _, run in case_groups.groups(host_package_cases.Cases)]
+    assert repos_case.run in runs

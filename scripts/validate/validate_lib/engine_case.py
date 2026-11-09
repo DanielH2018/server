@@ -53,6 +53,7 @@ from renderer.renderer_lib import host as host_mode
 from validate.validate_lib import secrets_case
 from validate.validate_lib.host_container import PROM, CaseFailed, Container, expect
 from validate.validate_lib.host_fixtures import HOST, build, deb_version, publish
+from validate.validate_lib.host_fixtures import run_logged
 
 ENGINE = "docker-ce"
 PINS = "/usr/lib/homelab/docker-engine.pins"
@@ -95,7 +96,7 @@ def _deb(out: Path, name: str, version: str) -> Path:
     for path in [root, *root.rglob("*")]:
         path.chmod(0o755 if path.is_dir() else 0o644)
     deb = out / f"{name}_{version.split(':', 1)[-1]}_all.deb"
-    subprocess.run(
+    run_logged(
         ["dpkg-deb", "--root-owner-group", "--build", str(root), str(deb)],
         check=True,
         stdout=subprocess.DEVNULL,

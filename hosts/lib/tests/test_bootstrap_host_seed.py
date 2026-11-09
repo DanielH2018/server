@@ -5,7 +5,7 @@ Run: uv run pytest hosts/lib/tests/test_bootstrap_host_seed.py
 
 from pathlib import Path
 
-from _bootstrap_host import NFPM_ARCHIVE, UV_ARCHIVE, FakeHost, sha256
+from _bootstrap_host import K3S_BINARY, NFPM_ARCHIVE, UV_ARCHIVE, FakeHost, sha256
 
 
 def _online_box_with_a_seed(tmp_path) -> tuple[FakeHost, Path, Path]:
@@ -63,6 +63,62 @@ def test_a_tools_seed_entry_that_differs_from_its_pin_is_refused(tmp_path):
     assert result.returncode == 1
     assert f"{NFPM_ARCHIVE} does not match its pinned sha256" in result.stderr
     assert NFPM_ARCHIVE not in requests.read_text().splitlines()
+
+
+def test_a_tools_seed_that_holds_k3s_places_it_and_the_installer_skips_its_download(
+    tmp_path,
+):
+    host, seed, _ = _online_box_with_a_seed(tmp_path)
+    for name in ("k3s", "sha256sum-amd64.txt"):
+        (seed / name).write_bytes((host.kit / name).read_bytes())
+
+    result = host.run(
+        "daniel-box",
+        "--local-build",
+        str(host.clone(tmp_path)),
+        "--tools-seed",
+        str(seed),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "skipdownload=true" in (host.root / "installer.args").read_text().split()
+    assert (host.root / "usr/local/bin/k3s").read_text() == K3S_BINARY
+
+
+def test_a_tools_seed_without_k3s_leaves_the_download_to_the_installer(tmp_path):
+    host, seed, _ = _online_box_with_a_seed(tmp_path)
+
+    result = host.run(
+        "daniel-box",
+        "--local-build",
+        str(host.clone(tmp_path)),
+        "--tools-seed",
+        str(seed),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "skipdownload=" in (host.root / "installer.args").read_text().split()
+    assert not (host.root / "usr/local/bin/k3s").exists()
+
+
+def test_a_tools_seed_k3s_that_differs_from_its_checksum_list_is_refused(tmp_path):
+    host, seed, _ = _online_box_with_a_seed(tmp_path)
+    (seed / "k3s").write_text("not the listed k3s")
+    (seed / "sha256sum-amd64.txt").write_bytes(
+        (host.kit / "sha256sum-amd64.txt").read_bytes()
+    )
+
+    result = host.run(
+        "daniel-box",
+        "--local-build",
+        str(host.clone(tmp_path)),
+        "--tools-seed",
+        str(seed),
+    )
+
+    assert result.returncode == 1
+    assert "k3s does not match sha256sum-amd64.txt" in result.stderr
+    assert not (host.root / "installer.runs").exists()
 
 
 def test_a_tools_seed_that_is_not_a_directory_is_refused_before_any_step(tmp_path):

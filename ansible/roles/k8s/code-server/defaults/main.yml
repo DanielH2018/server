@@ -125,9 +125,9 @@ code_server_k8s_extensions:
   # Platform-specific; `?targetPlatform=linux-x64` selects the Linux build. Kept at the same
   # version as the `@anthropic-ai/claude-code` CLI the Dockerfile installs.
   - name: Anthropic.claude-code
-    version: 2.1.310
-    url: https://marketplace.visualstudio.com/_apis/public/gallery/publishers/Anthropic/vsextensions/claude-code/2.1.310/vspackage?targetPlatform=linux-x64
-    sha256: 9d39530c48a067b9299ffc5ef779e57731d37a6cbcf5885e8c4b3514f9156ae7
+    version: 2.1.316
+    url: https://marketplace.visualstudio.com/_apis/public/gallery/publishers/Anthropic/vsextensions/claude-code/2.1.316/vspackage?targetPlatform=linux-x64
+    sha256: bd5d429660c4f5a38d21926e5c30615312d3f3efe2a5e78f65b576cf22181bc2
 
 # Node.js, installed from the official linux-x64 tarball rather than NodeSource's `setup_22.x`
 # script piped to bash, which resolves whatever NodeSource serves on build day. The
@@ -136,9 +136,9 @@ code_server_k8s_extensions:
 # finish on its PR (`asset_pins.py --refresh node`). The URL sits beside the digest so
 # `scripts/validate/asset_pins.py` pairs the two and fetches it.
 # renovate: datasource=node-version depName=node
-code_server_k8s_node_version: "24.22.1"
+code_server_k8s_node_version: "24.22.2"
 code_server_k8s_node_url: "https://nodejs.org/dist/v{{ code_server_k8s_node_version }}/node-v{{ code_server_k8s_node_version }}-linux-x64.tar.xz"
-code_server_k8s_node_sha256: 6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6
+code_server_k8s_node_sha256: 48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a21feb9697aaf75
 
 # Rust, installed from the official standalone installers rather than rustup (the Dockerfile's
 # step 3 says why). Two tarballs render from the one version: the toolchain, and rust-src, which

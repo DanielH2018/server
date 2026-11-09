@@ -24,7 +24,7 @@
 #
 # The source directory is the wg-easy config directory under the Pi user's checkout. The CronJob's
 # PI_SRC reads roles/k8s/pi-peer-backup's copy, and the wrapper refuses any other path, so
-# ansible/tests/setup/test_k8s_host_files_pairs.py holds the two equal.
+# ansible/tests/services/test_pi_peer_backup_forced_command.py holds the two equal.
 files:
   - {src: pi-peer-backup-shell.sh, dst: /usr/local/bin/pi-peer-backup-shell, mode: "0755"}
 lines:
