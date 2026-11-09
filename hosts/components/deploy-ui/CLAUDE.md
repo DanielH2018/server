@@ -98,7 +98,9 @@ flight, and on each row of *Recently finished landings*. The viewer parses the l
 run of identical lines (a wait's poll line) folds into one with a count.
 
 The viewer carries a tab for each landing in flight, and `[` and `]` cycle through them, so
-switching logs never means scrolling back to the in-flight table. *Recently finished landings*
+switching logs never means scrolling back to the in-flight table. Clicking a step box that has
+started opens its stage and scrolls the log to it, and stops follow mode so a live landing's
+next poll does not scroll it away. *Recently finished landings*
 shows the newest five, with a toggle to show all of them and one to hide the section. The page
 keeps both choices in the browser's `localStorage`, per viewer, and defaults to five shown when
 storage is blocked.

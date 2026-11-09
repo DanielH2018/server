@@ -17,8 +17,9 @@ a{color:var(--blue)}
 .vhead{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.vhead .grow{flex:1}
 .steps{display:flex;gap:4px;margin:10px 0;flex-wrap:wrap}
 .step{flex:1;min-width:84px;padding:4px 8px;background:var(--surface0);font-size:12px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.step.done,.step.now{cursor:pointer}.step.done:hover,.step.now:hover{background:var(--surface1)}
 .step b{display:block}.step.done b{color:var(--green)}.step.now{outline:1px solid var(--yellow)}.step.now b{color:var(--yellow)}.step.todo{color:var(--mute)}
-#logbody{max-height:420px;overflow:auto;background:var(--mantle);border:1px solid var(--surface1);padding:4px 10px}
+#logbody{position:relative;max-height:420px;overflow:auto;background:var(--mantle);border:1px solid var(--surface1);padding:4px 10px}
 .stage{border-bottom:1px solid var(--surface1);padding:4px 0}.stage summary{cursor:pointer;color:var(--sub)}
 .stage .lines{font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;padding:2px 0 2px 16px}
 .more{cursor:pointer;color:var(--blue);font-family:system-ui}
@@ -112,6 +113,11 @@ async function pollLog(){if(!view.name)return;const name=view.name;
   renderLog();renderTabs();}
 function fold(line,key){if(line.length<=FOLD||view.unfold[key])return esc(line);
   return esc(line.slice(0,FOLD))+`… <span class="more" onclick="view.unfold['${key}']=1;renderLog()">show all ${line.length} characters</span>`;}
+// A step box opens its stage and scrolls the log to it. Follow mode stops, or the next poll of
+// a live landing would scroll the log back to the bottom.
+function showStage(i){view.raw=false;view.follow=false;view.open[i]=true;renderLog();
+  const el=document.querySelector(`#logbody details[data-i="${i}"]`),body=document.getElementById('logbody');
+  if(el)body.scrollTop=el.offsetTop;}
 function stepName(s,of){return s.step==='arm'?'arm':s.step===''?'start':`${s.step}/${of}`;}
 function renderLog(){const d=view.data,body=document.getElementById('logbody');
   const head=document.getElementById('vhead'),steps=document.getElementById('vsteps'),verd=document.getElementById('vverdict'),bar=document.getElementById('vbar');
@@ -122,7 +128,7 @@ function renderLog(){const d=view.data,body=document.getElementById('logbody');
   // Every step header seen, then the numbered steps not reached yet.
   const seen=d.stages.filter(s=>s.step!=='');const cur=seen.length-1;
   const todo=[];for(let n=seen.filter(s=>s.step!=='arm').length;d.of&&n<=d.of;n++)todo.push(`<div class="step todo"><b>${n}/${d.of}</b>&nbsp;</div>`);
-  steps.innerHTML=seen.map((s,i)=>`<div class="step ${i===cur&&!d.verdict?'now':'done'}" title="${esc(s.label)}"><b>${stepName(s,d.of)}</b>${esc(s.label)}</div>`).join('')+(d.verdict?'':todo.join(''));
+  steps.innerHTML=seen.map((s,i)=>`<div class="step ${i===cur&&!d.verdict?'now':'done'}" title="${esc(s.label)} (show this step's log)" role="button" tabindex="0" onclick="showStage(${d.stages.indexOf(s)})" onkeydown="if(event.key==='Enter')showStage(${d.stages.indexOf(s)})"><b>${stepName(s,d.of)}</b>${esc(s.label)}</div>`).join('')+(d.verdict?'':todo.join(''));
   const atBottom=body.scrollTop+body.clientHeight>=body.scrollHeight-24,keep=body.scrollTop;
   if(view.raw){body.innerHTML=`<pre>${esc(d.raw)}</pre>`;}
   else{const last=d.stages.length-1;
