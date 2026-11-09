@@ -12,12 +12,13 @@ from lib.exit_codes import PROBE_UNREADABLE
 
 TAG = "littlelink"
 APPLIED = 1_000_000.0
+NO_ALERTS = json.dumps({"status": "success", "data": {"result": []}})
 
 
 class ThrottlingEdge:
     """A Prometheus with no firing alerts behind an edge that answers 429 `throttled` times."""
 
-    def __init__(self, throttled, budget_s=health_alerts.RETRY_BUDGET_S):
+    def __init__(self, throttled, budget_s=30):
         self.throttled = throttled
         self.requests = 0
         self.slept = []
@@ -27,7 +28,7 @@ class ThrottlingEdge:
         self.requests += 1
         if self.requests <= self.throttled:
             return 429, "Too Many Requests\n"
-        return 200, json.dumps({"status": "success", "data": {"result": []}})
+        return 200, NO_ALERTS
 
     def query(self, promql):
         return health_alerts.prom_query(
@@ -38,15 +39,16 @@ class ThrottlingEdge:
             budget=self.budget,
         )
 
-    def tools(self):
-        return health_alerts.PromTools(
+    def gate(self):
+        tools = health_alerts.PromTools(
             query=self.query, sleep=lambda s: None, clock=lambda: APPLIED + 30
         )
+        return health_alerts.gate(TAG, APPLIED, APPLIED, False, tools)
 
 
 def test_a_429_twice_then_200_is_graded():
     edge = ThrottlingEdge(throttled=2)
-    code, _ = health_alerts.gate(TAG, APPLIED, APPLIED, False, edge.tools())
+    code, _ = edge.gate()
     assert code == 0
     assert edge.slept == [2, 4]
 
@@ -54,10 +56,9 @@ def test_a_429_twice_then_200_is_graded():
 def test_a_429_that_outlasts_the_retries_defers_with_the_edge_s_words(capsys):
     edge = ThrottlingEdge(throttled=10**6)
     with pytest.raises(core.Unreadable) as exc:
-        health_alerts.gate(TAG, APPLIED, APPLIED, False, edge.tools())
+        edge.gate()
     assert exc.value.code == PROBE_UNREADABLE
     assert capsys.readouterr().err.strip().splitlines()[-1] == "Too Many Requests"
-    assert sum(edge.slept) == health_alerts.RETRY_BUDGET_S
 
 
 def test_a_spent_retry_budget_sends_one_request():
@@ -65,3 +66,11 @@ def test_a_spent_retry_budget_sends_one_request():
     with pytest.raises(core.Unreadable):
         edge.query("up")
     assert (edge.requests, edge.slept) == (1, [])
+
+
+def test_the_retries_sleep_no_longer_than_the_budget():
+    edge = ThrottlingEdge(throttled=10**6, budget_s=30)
+    for _ in range(3):
+        with pytest.raises(core.Unreadable):
+            edge.query("up")
+    assert sum(edge.slept) == 30
