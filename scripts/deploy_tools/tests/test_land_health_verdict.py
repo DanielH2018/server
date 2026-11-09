@@ -100,6 +100,9 @@ def test_the_gate_renders_origin_master_when_it_contains_the_deployed_commit(lan
 
 
 def test_the_gate_keeps_the_deployed_commit_when_origin_master_lacks_it(landing):
+    """CLEAN half, a regression guard that passes before #7816 too: it goes red only if the
+    advance drops its ancestor check, and a tip without the commit then grades a tree lacking
+    the change."""
     ln, calls = _deployed(landing, Fakes(tip=TIP, is_ancestor_of={TIP: 1}))
     ln.deployed_at = MERGE_SHA
     with pytest.raises(Outcome):
