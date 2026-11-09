@@ -165,8 +165,8 @@ def run_owed(
             repo,
             "the primary checkout",
             "wait for homelab-checkout-sync.timer, which fast-forwards it to the newest "
-            "green master commit every 10 minutes, or ask the operator to start "
-            "homelab-checkout-sync.service",
+            "green master commit every 10 minutes (it waits while master's tip CI is "
+            "pending or red), or ask the operator to start homelab-checkout-sync.service",
         )
     ]
     if _Path(invoking_repo).resolve() != _Path(repo).resolve():

@@ -272,8 +272,7 @@ uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s
 owns the ledger, the narrowed `--applied` form of the clear, and the page. The primary
 checkout needs no hand `git pull --ff-only`: `homelab-checkout-sync.timer` fast-forwards it to
 the newest green master commit every 10 minutes, and the retired deployer's `local..origin`
-range no longer exists to cancel ([the archived deployer page](archive/gitops-deployer.md),
-"The tree is dirty").
+range no longer exists to cancel.
 
 ## Rollback
 
