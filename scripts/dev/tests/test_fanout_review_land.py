@@ -83,6 +83,26 @@ def test_a_needs_manual_apply_verdict_resumes_the_implementer_with_the_log(tmp_p
     assert "MANUAL APPLY PENDING" in prompt
 
 
+def test_the_re_land_a_resumed_implementer_gets_runs_land_sh_from_the_fresh_checkout(
+    tmp_path,
+):
+    """A re-land from the batch worktree's stale copy is refused by land.sh (#7875)."""
+    pipeline, run = _pipeline(tmp_path, _clean_review())
+    run.verdict = "VERDICT: unhealthy (rollout stuck)"
+    pipeline.run_all()
+    _, prompt, phase = run.claude[-1]
+    assert phase == "apply"
+    checkout_land_sh = str(_checkout(tmp_path) / "scripts/deploy_tools/land.sh")
+    assert f"{checkout_land_sh} --pr 4000 --detach" in prompt
+    assert "./scripts/deploy_tools/land.sh" not in prompt
+    assert run.lands[0][0] == checkout_land_sh
+    added = ["worktree", "add", "--detach", str(_checkout(tmp_path)), "origin/master"]
+    assert added in run.git
+    # The resumed implementer is done with the checkout, so it is removed after the resume.
+    removed = ["worktree", "remove", "--force", str(_checkout(tmp_path))]
+    assert removed in run.git[run.git.index(added) :]
+
+
 def test_a_wait_that_runs_out_is_resumed_without_starting_a_second_landing(tmp_path):
     pipeline, run = _pipeline(tmp_path, _clean_review())
     run.waits = [75, 75, 0]

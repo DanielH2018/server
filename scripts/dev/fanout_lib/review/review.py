@@ -130,7 +130,7 @@ from fanout_lib.review.git_state import GitState, changed, snapshot
 from fanout_lib.review.hunk_check import HunkCheck, red_detection
 from fanout_lib.review.processes import otel_attributes, reaping, run_process
 from fanout_lib.review.review_ci import awaits_ci, ci_gate, ready_gate
-from fanout_lib.review.review_land import RESUME_VERDICTS, land, out_of_time
+from fanout_lib.review.review_land import RESUME_VERDICTS, land, out_of_time, release
 from fanout_lib.review.review_land import report as landing_report
 from fanout_lib.review.review_record import (
     Phase,
@@ -685,15 +685,14 @@ class Pipeline:
                 self.target.base,
             )
             self.record.verdict = landing.line or f"none (exit {landing.rc})"
-            if landing.verdict in RESUME_VERDICTS and self.session:
-                prompt = apply_prompt(
-                    self.record.pr,
-                    landing.line,
-                    landing.tail,
-                    str(self.worktree / ".fanout"),
-                )
-                return self._claude("apply", self._resume(), prompt).report
-            return landing_report(self.record.pr, landing)
+            try:
+                if landing.verdict in RESUME_VERDICTS and self.session:
+                    log_dir = str(self.worktree / ".fanout")
+                    prompt = apply_prompt(self.record.pr, landing, log_dir)
+                    return self._claude("apply", self._resume(), prompt).report
+                return landing_report(self.record.pr, landing)
+            finally:
+                release(self.run, self.worktree, landing)
         return self._file_leftovers() or last.report
 
     def _file_leftovers(self) -> dict | None:
