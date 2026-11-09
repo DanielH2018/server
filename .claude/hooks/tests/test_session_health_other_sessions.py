@@ -72,10 +72,52 @@ def test_other_live_sessions_shows_a_trees_label_beside_its_name(tmp_path):
     def run(cmd, *_a, **_k):
         return _result(porcelain if cmd[:2] == ["git", "worktree"] else "")
 
-    lines = _mod.other_live_sessions("/repo", run=run, git_dirty=lambda *a, **k: False)
+    lines = _mod.other_live_sessions(
+        "/repo", run=run, git_dirty=lambda *a, **k: False, show_all=True
+    )
     assert lines == [
         "  • worktree-agent-a1 [#1345 Fix the cert watcher] — no commits yet"
     ]
+
+
+def test_only_a_session_sharing_a_path_gets_its_own_line():
+    porcelain = "worktree /repo\nHEAD aaa\nbranch refs/heads/master\n\n" + "".join(
+        f"worktree /repo/.claude/worktrees/{name}\nHEAD bbb\nbranch refs/heads/{name}\n"
+        "locked some-other-session\n\n"
+        for name in ("near", "far", "empty")
+    )
+    diffs = {
+        "/repo": "shared.py\nmine.py\n",
+        "/repo/.claude/worktrees/near": "shared.py\ntheirs.py\n",
+        "/repo/.claude/worktrees/far": "elsewhere.py\n",
+        "/repo/.claude/worktrees/empty": "",
+    }
+
+    def run(cmd, *_a, **_k):
+        if cmd[:2] == ["git", "worktree"]:
+            return _result(porcelain)
+        if "status" in cmd:
+            return _result("?? scratch.py\n")
+        return _result(diffs[cmd[2]])
+
+    lines = _mod.other_live_sessions("/repo", run=run, git_dirty=lambda *a, **k: False)
+    assert lines == [
+        "  • near — shared.py",
+        "  2 other live sessions, no overlap with this branch — "
+        f"`{_mod.SESSIONS_COMMAND}` lists them",
+    ]
+
+
+def test_a_session_sharing_only_this_trees_dirty_path_gets_its_own_line():
+    def run(cmd, *_a, **_k):
+        if cmd[:2] == ["git", "worktree"]:
+            return _result(_OTHER_WORKTREE_PORCELAIN)
+        if "status" in cmd:
+            return _result(" M file.py\n")
+        return _result("" if cmd[2] == "/repo" else "file.py\n")
+
+    lines = _mod.other_live_sessions("/repo", run=run, git_dirty=lambda *a, **k: False)
+    assert lines == ["  • feature — file.py"]
 
 
 def _toplevel(path):

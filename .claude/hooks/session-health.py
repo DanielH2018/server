@@ -7,7 +7,8 @@
 
 Usage: Claude Code runs this hook on the SessionStart event. It takes no stdin payload. It
 prints a health banner to stdout, or nothing when everything is green, and it always exits 0. `-h`
-or `--help` prints this text and exits 0.
+or `--help` prints this text and exits 0. `--sessions` prints every other live session in this
+repo with the paths it changed, which the banner lists only where they overlap this branch.
 
 When a Claude Code session opens in this repo, this prints anything already broken so
 work doesn't start blind:
@@ -394,14 +395,44 @@ def master_moved_problems(git=None):
 SESSION_SCAN_DEADLINE_S = 6
 
 
+SESSIONS_COMMAND = "uv run python .claude/hooks/session-health.py --sessions"
+
+
+def own_paths(cwd, run):
+    """The paths this session's branch changed against origin/master, plus its dirty paths."""
+    committed = run(
+        ["git", "-C", cwd, "diff", "--name-only", "origin/master...HEAD"], 5
+    ).stdout
+    status = run(
+        [
+            "git",
+            "-C",
+            cwd,
+            "--no-optional-locks",
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+        ],
+        5,
+    ).stdout
+    dirty = {line[3:].split(" -> ")[-1] for line in status.splitlines() if line[3:]}
+    return {p for p in committed.splitlines() if p} | dirty
+
+
 def other_live_sessions(
-    cwd, *, run=None, git_dirty=None, deadline=SESSION_SCAN_DEADLINE_S
+    cwd, *, run=None, git_dirty=None, deadline=SESSION_SCAN_DEADLINE_S, show_all=False
 ):
     """Lines describing the other Claude sessions working this repo right now.
 
     Derived from git and /proc rather than from anything a session declares, so it cannot
     go stale when a session forgets to announce itself or dies without cleaning up. Knowing
     another session is already in a role is what stops two of them editing it at once.
+
+    Only a session whose branch diff shares a path with this session's branch diff or dirty
+    set gets its own line, naming the shared paths. The rest fold into one count line that
+    names `SESSIONS_COMMAND`, because a full list on a busy day pushed the banner past the
+    size at which Claude Code shows only a preview (#7898). `show_all` lists every session
+    with its own changed paths instead, which is what `SESSIONS_COMMAND` prints.
 
     `run` and `git_dirty` default to `_run` and `lib.git.git_dirty`; a test passes fakes.
     `deadline` bounds the per-worktree reads together; a test passes a short one.
@@ -436,6 +467,10 @@ def other_live_sessions(
         except subprocess.CalledProcessError:
             dirty = False
         paths = sorted({p for p in changed.splitlines() if p})
+        if not show_all:
+            paths = sorted(set(paths) & mine)
+            if not paths:
+                return []
         shown = ", ".join(paths[:4]) or "no commits yet"
         if len(paths) > 4:
             shown += f", +{len(paths) - 4} more"
@@ -455,6 +490,10 @@ def other_live_sessions(
         and tree.locked
         and session_is_alive(tree.lock_reason)
     ]
+    try:
+        mine = set() if show_all else own_paths(cwd, run)
+    except Exception:
+        mine = set()
     # One thread per live worktree, each with its own diff and dirty read: run in turn, a
     # handful of sessions on a loaded box passed the banner's deadline and lost the whole
     # list. A tree that does not finish costs its own line, never its siblings' (#6153).
@@ -465,7 +504,14 @@ def other_live_sessions(
         ],
         deadline,
     )
-    return [line for lines in sections for line in lines]
+    lines = [line for lines in sections for line in lines]
+    quiet = sum(1 for tree_lines in sections if not tree_lines)
+    if quiet and not show_all:
+        lines.append(
+            f"  {quiet} other live session{'s' if quiet != 1 else ''}, no overlap with "
+            f"this branch — `{SESSIONS_COMMAND}` lists them"
+        )
+    return lines
 
 
 def unlabelled_worktree_lines(cwd, *, run=None):
@@ -512,24 +558,51 @@ def stale_worktree_lines(run=None):
 PROBE = "uv run python scripts/diagnostics/probe.py"
 
 
-def format_banner(problems, landing=False):
-    """Render the problem list as the session banner (empty string => print nothing).
+def format_banner(targets=(), parked=(), master_moved=()):
+    """Render the problem sections as the banner's lines ([] => print nothing).
+
+    The deployer's lines come before the branch line, because "this branch is behind
+    origin/master" is the SYMPTOM of a parked deployer, so the cause reads first.
 
     The triage line names whole commands joined by `or`, so a line copied into a shell is
-    one runnable command rather than a pipe. `landing` adds `probe.py landing`, the command
-    that reads the deployer and primary-checkout state; `main` sets it when the
-    parked-deployer section produced a line, because `targets` and `health` cannot see that
-    state.
+    one runnable command rather than a pipe. It names only the commands that can see a
+    problem the banner printed: `landing` for a deployer line, `targets` and `health` for a
+    down scrape target. A banner holding only the branch line gets no triage line, because
+    neither command says anything about it.
     """
+    problems = [*targets, *parked, *master_moved]
     if not problems:
-        return ""
-    out = ["WARN: homelab health check found issues:"]
-    out.extend(problems)
-    commands = [f"{PROBE} targets", f"{PROBE} health <svc>"]
-    if landing:
-        commands.insert(0, f"{PROBE} landing")
-    out.append("  → triage: " + " or ".join(f"`{c}`" for c in commands))
-    return "\n".join(out)
+        return []
+    commands = []
+    if parked:
+        commands.append(f"{PROBE} landing")
+    if targets:
+        commands += [f"{PROBE} targets", f"{PROBE} health <svc>"]
+    out = ["WARN: homelab health check found issues:", *problems]
+    if commands:
+        out.append("  → triage: " + " or ".join(f"`{c}`" for c in commands))
+    return out
+
+
+# Claude Code persists a longer SessionStart output to a file and shows the session only a
+# 2 KB preview of it, so a line past this budget is a line the session never reads.
+BANNER_BUDGET_BYTES = 2000
+
+
+def fit_to_budget(lines, budget=BANNER_BUDGET_BYTES):
+    """The leading `lines` that fit in `budget` bytes, then one line counting the rest."""
+    if sum(len(line.encode()) + 1 for line in lines) <= budget:
+        return lines
+    tail = f"  … {{}} more line(s) cut at the banner's {budget}-byte budget"
+    room = budget - len(tail.format(len(lines)).encode()) - 1
+    kept = []
+    for line in lines:
+        size = len(line.encode()) + 1
+        if size > room:
+            break
+        kept.append(line)
+        room -= size
+    return [*kept, tail.format(len(lines) - len(kept))]
 
 
 def main(
@@ -546,10 +619,11 @@ def main(
 ):
     """Print the SessionStart health banner for a genuine session open, then exit 0.
 
-    Prints nothing for a mid-session compaction. Combines container, Prometheus-target and
-    stale-branch problems into one banner, then separately prints other live sessions in
-    this repo, worktrees ready to remove, and fan-out worktrees running on another host —
-    all three regardless of health status.
+    Prints nothing for a mid-session compaction. Combines Prometheus-target, deployer and
+    stale-branch problems into one banner, then prints the unlabelled-worktree prompt,
+    worktrees ready to remove, other live sessions in this repo and fan-out worktrees running
+    on another host, the last four regardless of health status. The whole output is cut to
+    `BANNER_BUDGET_BYTES`, so what asks for an action comes before what only informs.
 
     Every keyword argument is one of this module's own probes, and its default is that
     probe. A test passes a fake instead of monkeypatching the module attribute: the
@@ -595,30 +669,22 @@ def main(
         ],
         deadline,
     )
-    # master_moved last deliberately: "this branch is behind origin/master" is the SYMPTOM of a
-    # parked deployer, so the cause reads first.
-    problems = targets + parked + master_moved
-
-    banner = format_banner(problems, landing=bool(parked))
-    if banner:
-        print(banner)
-    elif os.environ.get("SESSION_HEALTH_VERBOSE"):
-        print("Homelab health: all scrape targets up.")
-
-    # Printed independently of health: another session's open work is information this
-    # session needs even when everything is green.
+    lines = format_banner(targets, parked, master_moved)
+    if not lines and os.environ.get("SESSION_HEALTH_VERBOSE"):
+        lines = ["Homelab health: all scrape targets up."]
+    # Lines asking for an action first, information last, so the budget cuts information.
+    lines += unlabelled + worktrees
     if sessions:
-        print("Other Claude sessions in this repo:")
-        for line in sessions:
-            print(line)
-    for line in unlabelled:
+        lines += ["Other Claude sessions in this repo:", *sessions]
+    lines += fanout
+    for line in fit_to_budget(lines):
         print(line)
+    return 0
 
-    # What keeps the banner inside the hook's budget is `deadline`, not this flush: every
-    # probe has finished or been given up on by now. The flush only puts the banner on the
-    # pipe ahead of the worktree lines.
-    sys.stdout.flush()
-    for line in worktrees + fanout:
+
+def print_all_sessions():
+    """Print every other live session with its changed paths, for `--sessions`."""
+    for line in other_live_sessions(os.getcwd(), show_all=True):
         print(line)
     return 0
 
@@ -628,6 +694,6 @@ if __name__ == "__main__":
         print(__doc__.strip())
         sys.exit(0)
     try:
-        sys.exit(main())
+        sys.exit(print_all_sessions() if "--sessions" in sys.argv[1:] else main())
     except Exception:
         sys.exit(0)
