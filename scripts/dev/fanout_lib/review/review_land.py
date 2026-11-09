@@ -11,10 +11,13 @@ THE COMMANDS run under `bash -l`, because the model ran them from its Bash tool,
 the login profile, and the unit does not. The `claude` agent user's profile sets
 `LAND_HANDOFF_UNIT`, without which its `land.sh` tries to merge as a user that cannot.
 
-DECIDED: the worktree's own `land.sh` runs, the copy the model ran before. The implementer
-already runs arbitrary commands as this user, so the primary checkout's copy would add no
-boundary, and for the agent user the landing itself runs in `homelab-claude-land@<n>.service`
-from the operator's checkout either way.
+DECIDED: `land.sh` runs from a fresh detached worktree at the target's base (#7871), not the
+batch worktree. The batch worktree is branched at launch, and `land.sh` refuses to run once
+master has changed its own landing code since (#7831), so any such change between launch and
+landing ended the batch `needs input`. The staleness check stays as it is. The implementer
+already runs arbitrary commands as this user, so the base's copy adds no boundary, and for
+the agent user the landing itself runs in `homelab-claude-land@<n>.service` from the
+operator's checkout either way.
 """
 
 import re
@@ -76,31 +79,72 @@ def _newest_log(log_dir: Path, pr: str) -> Path | None:
     return logs[-1] if logs else None
 
 
+def _git(run: Runner, worktree: Path, *args: str) -> subprocess.CompletedProcess:
+    return run(["git", "-C", str(worktree), *args], None)
+
+
+def _release(run: Runner, worktree: Path, path: Path) -> None:
+    _git(run, worktree, "worktree", "remove", "--force", str(path))
+    _git(run, worktree, "worktree", "prune")
+
+
+def _fresh_checkout(
+    run: Runner, worktree: Path, base: str, pr: str
+) -> tuple[Path, str]:
+    """A detached worktree at `base` for this PR's landing, and why it could not be made.
+
+    It lives in the batch worktree's `.fanout` directory, which git ignores. It shares the
+    batch worktree's refs, so the fetch here is the one `land.sh` compares against.
+    """
+    path = worktree / ".fanout" / f"land-checkout-{pr}"
+    _release(run, worktree, path)
+    for args in (
+        ("fetch", "--quiet", "origin", base.split("/", 1)[1]),
+        ("worktree", "add", "--detach", str(path), base),
+    ):
+        done = _git(run, worktree, *args)
+        if done.returncode != 0:
+            return path, _tail(done.stdout + done.stderr)
+    return path, ""
+
+
 def land(
-    run: Runner, worktree: Path, pr_url: str, time_left: Callable[[], float]
+    run: Runner,
+    worktree: Path,
+    pr_url: str,
+    time_left: Callable[[], float],
+    base: str,
 ) -> Landing:
-    """Start the PR's landing, wait for it, and read its verdict from its log.
+    """Start the PR's landing from a fresh checkout of `base`, wait, and read its verdict.
 
     `land.sh` runs exactly once. A wait that exits 75 is re-run on its own while
     `time_left()` allows, and a landing still running past that is returned with `wait` set.
+    The checkout is removed once the landing has ended, and kept while it still runs.
     """
     pr = pr_url.rstrip("/").rsplit("/", 1)[-1]
     log_dir = worktree / ".fanout"
+    checkout, why = _fresh_checkout(run, worktree, base, pr)
+    if why:
+        _release(run, worktree, checkout)
+        return Landing(1, tail=f"could not make a checkout at {base}:\n{why}")
     started = run(
         login(
             [
-                str(worktree / LAND_SH), "--pr", pr, "--arm-merge", "--await-merge",
+                str(checkout / LAND_SH), "--pr", pr, "--arm-merge", "--await-merge",
                 "--detach", "--log-dir", str(log_dir),
             ]
         ),
         None,
     )  # fmt: skip
     if started.returncode != 0:
+        _release(run, worktree, checkout)
         return Landing(started.returncode, tail=_tail(started.stdout + started.stderr))
     wait = ["cc-wait", "land", pr, "--log-dir", str(log_dir)]
     waited = run(login(wait), None)
     while waited.returncode == STILL_WAITING and time_left() > WAIT_MARGIN_S:
         waited = run(login(wait), None)
+    if waited.returncode != STILL_WAITING:
+        _release(run, worktree, checkout)
     log = _newest_log(log_dir, pr)
     text = log.read_text(errors="replace") if log else ""
     matches = list(VERDICT_LINE.finditer(text))
@@ -112,6 +156,15 @@ def land(
         tail=_tail(text or waited.stdout + waited.stderr),
         wait=" ".join(wait) if waited.returncode == STILL_WAITING else "",
     )
+
+
+def out_of_time(pr: str) -> dict:
+    """The batch's final report when the review phases left too little run time to land."""
+    text = (
+        "needs input: the review phases left too little of the unit's run "
+        f"time to land safely; land {pr} by hand."
+    )
+    return {"type": "result", "is_error": False, "result": f"{text}\n{pr}"}
 
 
 def report(pr: str, landing: Landing) -> dict:

@@ -99,7 +99,11 @@ def test_an_actionable_finding_runs_a_fix_a_delta_review_and_the_landing_in_orde
     )
     # The pipeline lands the PR itself (#3960), under a login shell for the agent user's
     # LAND_HANDOFF_UNIT.
-    land_sh = [str(tmp_path / "scripts/deploy_tools/land.sh"), "--pr", "4000"]
+    land_sh = [
+        str(tmp_path / ".fanout/land-checkout-4000/scripts/deploy_tools/land.sh"),
+        "--pr",
+        "4000",
+    ]
     assert run.lands[0][:3] == land_sh and "--detach" in run.lands[0]
     assert run.lands[1][:3] == ["cc-wait", "land", "4000"]
     assert "1 findings, 1 actionable" in run.comments[0]

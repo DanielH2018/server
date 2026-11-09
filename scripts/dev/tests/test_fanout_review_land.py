@@ -7,6 +7,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_review_land.py
 """
 
 import json
+import subprocess
 
 from _review_fakes import PR, _pipeline, _report
 
@@ -131,3 +132,56 @@ def test_a_deferred_landing_is_finished_though_cc_wait_exits_4(tmp_path):
     run.verdict = "VERDICT: deferred (the next tick applies it)"
     run.waits = [4]
     assert pipeline.run_all()["result"] == f"{run.verdict}\n{PR}"
+
+
+def _checkout(tmp_path):
+    return tmp_path / ".fanout" / "land-checkout-4000"
+
+
+def test_land_sh_runs_from_a_fresh_checkout_of_the_base_not_the_batch_worktree(
+    tmp_path,
+):
+    """The batch worktree is branched at launch, so its landing code goes stale (#7871)."""
+    pipeline, run = _pipeline(tmp_path, _clean_review())
+    pipeline.run_all()
+    (argv, *_) = run.lands
+    assert argv[0] == str(_checkout(tmp_path) / "scripts/deploy_tools/land.sh")
+    assert ["fetch", "--quiet", "origin", "master"] in run.git
+    added = ["worktree", "add", "--detach", str(_checkout(tmp_path)), "origin/master"]
+    assert added in run.git
+    # The landing ended, so nothing reads the checkout and it is removed.
+    removed = ["worktree", "remove", "--force", str(_checkout(tmp_path))]
+    assert run.git.index(removed, run.git.index(added)) > run.git.index(added)
+
+
+def test_a_landing_still_running_keeps_its_checkout(tmp_path):
+    now = [0.0]
+    pipeline, run = _pipeline(tmp_path, _clean_review(), clock=lambda: now[0])
+    run.waits = [75]
+
+    def first_wait_outlasts_the_unit(argv, stdin):
+        if "cc-wait" in argv and "gh-ci" not in argv:
+            now[0] = float(10**6)
+        return run(argv, stdin)
+
+    pipeline.run = first_wait_outlasts_the_unit
+    pipeline.run_all()
+    removed = ["worktree", "remove", "--force", str(_checkout(tmp_path))]
+    added = ["worktree", "add", "--detach", str(_checkout(tmp_path)), "origin/master"]
+    assert removed not in run.git[run.git.index(added) :]
+
+
+def test_a_checkout_that_cannot_be_made_is_needs_input_and_starts_no_landing(tmp_path):
+    pipeline, run = _pipeline(tmp_path, _clean_review())
+    inner = pipeline.run
+
+    def add_fails(argv, stdin):
+        if argv[-5:-2] == ["worktree", "add", "--detach"]:
+            return subprocess.CompletedProcess(argv, 128, "", "fatal: no space left")
+        return inner(argv, stdin)
+
+    pipeline.run = add_fails
+    final = pipeline.run_all()
+    assert run.lands == []
+    assert final["result"].startswith("needs input: land.sh printed no VERDICT")
+    assert "fatal: no space left" in final["result"]
