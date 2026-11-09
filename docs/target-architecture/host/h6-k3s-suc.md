@@ -564,12 +564,12 @@ the node checks what the Job installed. H6.3e adds that check.
   finishes it, as it finishes the installer sha256 (H6.6). A CI check in
   `scripts/validate/`, beside the no-downgrade check, refuses a change to `k3s_version`
   that leaves the sum unchanged.
-- **The mode.** `k3s_gates.py` gains a `binary` mode. It first reads the node's
-  `kubeletVersion` through the API, as agent mode does, and executes no host binary. A
-  version other than `k3s_version` reads pending, not a mismatch, because a hold can leave
-  a node on the old version while the pin moved. At the pinned version, it compares the
-  binary's sha256 with the pin and fails on a mismatch, naming the node.
-- **The gate.** One Job per node in `system_upgrade_nodes` makes the mode's comparison in the
+- **The comparison.** `ansible/roles/k8s/system-upgrade/files/system_upgrade_verify.py`
+  makes it. It first reads the node's `kubeletVersion` through the API and executes no
+  host binary. A version other than `k3s_version` reads pending, not a mismatch, because a
+  hold can leave a node on the old version while the pin moved. At the pinned version, it
+  compares the binary's sha256 with the pin and fails on a mismatch, naming the node.
+- **The gate.** One Job per node in `system_upgrade_nodes` runs the comparison in the
   `system-upgrade-verify` Kustomization (C3), C7's second verify-successor shape. Each Job
   mounts the node's binary read-only by hostPath, runs the `flux_job_image` digest, and reads
   the API as `k3s-plan`. A mismatch turns `flux/system-upgrade-verify` red, which holds
@@ -578,11 +578,10 @@ the node checks what the Job installed. H6.3e adds that check.
     - **Amendment ([#7796](https://github.com/DanielH2018/server/issues/7796)).** The Jobs do
       not run a packaged script by hostPath. D5's Job census admits only a script from a
       mounted ConfigMap that connects through `flux_job_connect`, and a script beside
-      `k3s_gates.py` reaches the API through that file's own client. The Jobs run
-      `ansible/roles/k8s/system-upgrade/files/system_upgrade_verify.py` instead, which makes
-      the comparison and reads the pending rule above. H6.3e's `hosts/lib/` copy of the
-      mode, which no host component shipped, was deleted in the same PR, so one
-      implementation remains.
+      `k3s_gates.py` reaches the API through that file's own client. So the role's
+      ConfigMap delivers the script, and `k3s_gates.py` has no `binary` mode. H6.3e's
+      `hosts/lib/k3s_binary_gate.py`, which no host component shipped, was deleted in the
+      same PR, so one implementation remains.
 
 ### Flags move from the unit to a package drop-in
 
@@ -1262,8 +1261,9 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       without `k3s-restart`. The windowed restart stays with *Open questions* 7 and H6.5a.
 10. **H6.3e The binary-sum check (about 150 lines).**
     - Add `k3s_binary_sha256_amd64` to the role's defaults, the co-change check in
-      `scripts/validate/`, and the `binary` mode of `k3s_gates.py` with its tests
-      (*The installed binary matches the release*).
+      `scripts/validate/`, and the comparison with its tests (*The installed binary
+      matches the release*). The verify Jobs' PR ([#7796](https://github.com/DanielH2018/server/issues/7796)) carries the comparison as the
+      role's `files/system_upgrade_verify.py`, not as a mode of `k3s_gates.py`.
     - If D5.1a1's `-verify` support exists, add the verify Jobs here. Otherwise a
       follow-up PR adds them once D5.1a1 lands (*Open questions* 14). Until then H6.6's
       verification compares both nodes' sums with the pin by hand.
@@ -1494,7 +1494,7 @@ The results:
 - *Images by digest (H6.1b).* A fixture role with one tag-only image fails the render test
   and names the image.
 - *Default-deny ingress (H6.1b).* A fixture render without the policy fails its test.
-- *Binary sum (H6.3e).* The `binary` mode's tests use fixture binaries and node fixtures. A
+- *Binary sum (H6.3e).* The comparison's tests use fixture binaries and node fixtures. A
   node at the pinned version whose binary has a different sum fails and names the node. A
   node at another version reads pending and does not fail. The co-change check refuses a fixture diff that raises
   `k3s_version` and leaves the sum.
@@ -1911,7 +1911,9 @@ The results:
       that every minor bump takes;
     - the k3s role `CLAUDE.md` loses the server upgrade path.
 - **H6.3d:** the agent half of `docs/k3s-upgrade.md`.
-- **H6.3e:** the `binary` mode's tests in `hosts/lib/tests/`, the co-change check's tests in
+- **H6.3e:** the comparison's tests in
+  `ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_verify.py`, the co-change
+  check's tests in
   `scripts/validate/tests/`, and the role `CLAUDE.md`'s note on the sum pin.
 - **H6.4a:**
     - `ansible/tests/setup/test_k3s_unit_logging.py` retargets the component's logging
@@ -1962,8 +1964,8 @@ The results:
     - daniel-box's SOPS file and its creation rule;
     - a no-downgrade check, a window-derivation test and a pin-routing test;
     - one NetworkPolicy and two render tests, for default-deny ingress and image digests;
-    - one sum pin, a co-change check, a `binary` gate mode, and one verify Job per selected
-      node;
+    - one sum pin, a co-change check, and one verify Job per selected node with its
+      comparison script;
     - a rehearsal mode in the etcd drill's orchestrator, run before H6.1c and before each
       minor bump;
     - one SOPS variable, `k3s_readonly_token`;
