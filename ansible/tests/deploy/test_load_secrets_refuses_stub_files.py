@@ -258,9 +258,8 @@ def test_the_docker_play_allows_a_stub_file_only_on_a_host_with_no_docker_entry(
     None
 ):
     """Evaluated against the real inventory, whose hosts all pass, and a host with a Docker entry."""
-    from ansible.parsing.dataloader import DataLoader
-    from ansible.template import Templar, trust_as_template
-    from toposort import filter_by_platform
+    from lib.render_guard import SHARED_TPL
+    from renderer.renderer_lib.environment import evaluate, strict_env
 
     docker_play = _deploy_allowed_expressions()[0]
     assert isinstance(docker_play, str)
@@ -274,13 +273,11 @@ def test_the_docker_play_allows_a_stub_file_only_on_a_host_with_no_docker_entry(
         for host in ("daniel-box", "daniel-pi")
     }
     lists["a host with a docker entry"] = [{"name": "wg-easy"}]
+    env = strict_env(SHARED_TPL)
     for host, containers_list in lists.items():
-        templar = Templar(
-            loader=DataLoader(),
-            variables={"containers_list": containers_list},
+        verdicts[host] = evaluate(
+            env, docker_play, {"containers_list": containers_list}
         )
-        templar.environment.filters["filter_by_platform"] = filter_by_platform
-        verdicts[host] = templar.template(trust_as_template(docker_play))
     assert verdicts == {
         "daniel-box": True,
         "daniel-pi": True,

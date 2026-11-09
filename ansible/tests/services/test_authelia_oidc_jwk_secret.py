@@ -5,21 +5,21 @@ PR 7 moved it out of authelia-config. Three things have to agree for the portal 
 
 - authelia passes explicit file lists, and a passed list wins whole, so a template the
   `manifests_secret_files` expression does not name is never rendered. The Deployment would
-  then mount a Secret no deploy wrote. The lists are evaluated through Ansible's templar,
-  because `lib.k8s_roles.resolved_manifest_files` counts every basename in a conditional
-  branch and would pass with the lever's arm broken.
+  then mount a Secret no deploy wrote. The lists are evaluated through the renderer's
+  environment, because `lib.k8s_roles.resolved_manifest_files` counts every basename in a
+  conditional branch and would pass with the lever's arm broken.
 - The Deployment's volume, mount and `X_AUTHELIA_CONFIG_FILTERS` follow the same lever.
 - With the filter on, Authelia runs Go templating over the whole configuration.yml, so a real
   value holding `{{` would stop it starting. `cluster_vars.py write` refuses such a value, and
   `scripts/secrets_mgmt/tests/test_cluster_vars_write.py` holds that refusal.
 """
 
-import pytest
-from ansible.parsing.dataloader import DataLoader
-from ansible.template import Templar, trust_as_template
+from typing import cast
 
+import pytest
 from _helpers import ROLES, load_defaults, load_tasks
 from _k8s_render import render_role_template
+from renderer.renderer_lib.environment import evaluate, renderer_env
 
 ROLE_DIR = ROLES / "k8s" / "authelia"
 TASKS = ROLE_DIR / "tasks" / "main.yml"
@@ -42,9 +42,9 @@ def _lists(lever: bool) -> tuple[list[str], list[str]]:
             "authelia_k8s_redis_sessions",
         )
     } | {LEVER: lever}
-    templar = Templar(loader=DataLoader(), variables=variables)
+    env = renderer_env(ROLE_DIR / "templates")
     files, secret = (
-        list(templar.template(trust_as_template(defaults[key])))
+        list(cast(list[str], evaluate(env, defaults[key], variables)))
         for key in ("manifests_files", "manifests_secret_files")
     )
     return files, secret
