@@ -25,7 +25,7 @@ import re
 
 from _helpers import ANSIBLE
 from _helpers import load_yaml
-from _helpers import render_expr
+from _jinja_env import render_expr
 from lib.ansible_jinja_env import make_ansible_env
 
 

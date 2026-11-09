@@ -9,7 +9,8 @@ no-op behind a green apply.
 from pathlib import Path
 
 from _role_census import role_task_files
-from _helpers import command_of, load_tasks, render_expr, task_named
+from _helpers import command_of, load_tasks, task_named
+from _jinja_env import render_expr
 from deployer_lib.deploy_changes import setup_tags_for
 
 from lib import yaml_fast

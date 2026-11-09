@@ -32,7 +32,7 @@ ROWS = (
             "A bare `jinja2.Environment()` has none of Ansible's whitespace flags or filters, "
             "so a `{% for %}` leaves a blank line per iteration and `| bool` fails or means "
             "Python's `bool()`. Use `lib.ansible_jinja_env.make_ansible_env` (pass "
-            "`undefined_cls=` for a strict render) or `_helpers.jinja_env` for a "
+            "`undefined_cls=` for a strict render) or `_jinja_env.jinja_env` for a "
             "structure-valued expression. `liquid.Environment` is another language."
         ),
         files=pytest_only_modules,
@@ -67,7 +67,7 @@ ROWS = (
             }
         ),
         allow={
-            "ansible/tests/_helpers.py": (
+            "ansible/tests/_jinja_env.py": (
                 "the sanctioned expression helper itself: `jinja_env` is the "
                 "NativeEnvironment every other test borrows"
             ),

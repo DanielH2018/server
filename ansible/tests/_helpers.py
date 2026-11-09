@@ -32,11 +32,6 @@ from lib.repo_paths import (
     REPO,
     ROLES,
 )
-from ansible.plugins.filter.core import FilterModule
-from ansible.plugins.filter.mathstuff import FilterModule as _MathFilters
-from ansible.plugins.test.core import TestModule as _AnsibleTests
-from jinja2 import FileSystemLoader
-from jinja2.nativetypes import NativeEnvironment
 
 SETUP_ROLES = ROLES / "setup"
 CONTAINER_ROLES = ROLES / "containers"
@@ -286,35 +281,6 @@ def task_named(tasks, fragment: str) -> dict:
         f"{fragment!r} matched {len(matches)} tasks, expected exactly 1"
     )
     return matches[0]
-
-
-def jinja_env() -> NativeEnvironment:
-    """A NativeEnvironment carrying Ansible's own filters and tests.
-
-    `NativeEnvironment` returns real Python objects where a plain Jinja2 environment would hand
-    back a string repr — needed by any expression under test that produces a structure rather
-    than text. The filters and tests come from Ansible's own plugin modules so an expression
-    renders against the same code Ansible runs, not a reimplementation of it.
-    """
-    # The loader is what lets a template under test `{% import %}` a shared macro from
-    # ansible/templates/. Without one, Jinja raises `TypeError: no loader for this environment
-    # specified` at render time — an error naming the environment rather than the macro, which
-    # reads as a broken helper rather than a template that reaches outside itself.
-    env = NativeEnvironment(loader=FileSystemLoader(str(ANSIBLE / "templates")))
-    env.filters.update(FilterModule().filters())
-    # `difference`, `union`, `intersect` and the rest of the set filters live in mathstuff, NOT
-    # core — an expression using one renders as `TemplateAssertionError: No filter named
-    # 'difference'` without this, which reads as a broken test rather than a missing plugin
-    # module. Found while writing the observability dashboard-prune guard, whose three prunes are
-    # all `difference()`.
-    env.filters.update(_MathFilters().filters())
-    env.tests.update(_AnsibleTests().tests())
-    return env
-
-
-def render_expr(expression: str, **context):
-    """Render a Jinja expression through `jinja_env()`."""
-    return jinja_env().from_string(expression).render(**context)
 
 
 _DOC_EXCLUDED_DIRS = (REPO / "docs" / "archive",)

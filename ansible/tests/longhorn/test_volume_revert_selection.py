@@ -7,8 +7,7 @@ injected here enter at the seam `test_volume_revert.py`'s `test_the_listing_json
 proves against the live API server.
 """
 
-from _helpers import render_expr as _render
-from _volume_revert import _CLAIM, _named
+from _volume_revert import _CLAIM, _named, _render
 
 
 def _selection(
@@ -17,8 +16,7 @@ def _selection(
     """Render the role's own selection expression over a synthetic listing.
 
     The expression is read out of the live role by task name rather than copied here, so an
-    edit to the role is what these tests see. `split`, `match` and `regex_escape` come from
-    Ansible's own plugins, so they render against the code Ansible runs.
+    edit to the role is what these tests see.
     """
     task = _named(_CLAIM, "Choose the newest matching snapshot")
     expression = task["ansible.builtin.set_fact"]["volume_revert_candidates"]

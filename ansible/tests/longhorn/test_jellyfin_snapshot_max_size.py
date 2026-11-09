@@ -20,7 +20,8 @@ import re
 
 import pytest
 
-from _helpers import ANSIBLE, load_defaults, render_expr
+from _helpers import ANSIBLE, load_defaults
+from _jinja_env import render_expr
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs

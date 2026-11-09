@@ -1922,7 +1922,7 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.51 `homelab-checkout-sync` beside the deployer | H7.19a's fourth PR | yes | H7.41, H7.47, D6, the H6 PR that lands the window test |
 | H7.52 The deployer's timer retires | H7.19a's fifth PR | written as [#7828](https://github.com/DanielH2018/server/pull/7828), to merge right after #7806; it deletes H6's seven deployer-coupled items, so it started once they merged | H7.49a, H7.49b live, H7.51 live, H7.24a, H7.24b, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H7.60, H7.62, H6 |
 | H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.24a to H7.41, H7.24b, H7.44, H7.45, H7.48, H7.50, H7.58 to H7.64 |
-| H7.54 The test env leaves ansible-core | H7.19d | no: its parity proof runs over the suite as H7.48 and H7.52 leave it | H7.46, H7.48, H7.52 |
+| H7.54 The test env leaves ansible-core | H7.19d | landed as [#7856](https://github.com/DanielH2018/server/pull/7856) (item 30) | H7.46, H7.48, H7.52 |
 | H7.55 Delete the playbooks and the role directories | H7.20a | no: it deletes what H7.53 leaves | H7.53 live on daniel-box, H7.43 (done: its rebuild half was waived), H7.44, H7.45 |
 | H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | no: its two census greps run at its base | H7.54, H7.55, H5 |
 | H7.57 The ADR | H7.20c | yes | H7.55 |
@@ -2337,9 +2337,24 @@ the `manual_plane` clearing, and *Rollback*'s
     `/var/lib/gitops-deploy/` as the operator's cleanup. Exit observation 5 holds once its
     version is live on daniel-box.
 30. **H7.54** stays alone. Its parity proof covers 361 modules.
+    **Landed as [#7856](https://github.com/DanielH2018/server/pull/7856).**
+    The test env moved to `ansible/tests/_jinja_env.py` and registers
+    `lib.ansible_jinja_env`'s set, the renderer's filters and the repo's filter plugins.
+    It sits outside `_helpers.py` so the prek hooks that import `_helpers.py` need not run on
+    every filter plugin. `_helpers.py` left the deletion census's allowlist. The
+    census's named member moved to `test_pi_escalation_timeout.py`. Part two of the parity
+    proof is H7.46's filter census, unchanged. No module retired. The volume-revert role's
+    selection and input check use `regex_escape`, `regex_search`, `split` and `match`, which
+    no rendered template uses, so `ansible/tests/longhorn/_volume_revert.py` registers local
+    stand-ins until H7.55 deletes those tasks. ansible-core stays in the `dev` group until
+    H7.56, because three allowlisted files still import it and the playbooks still run.
 31. **H7.55** stays alone. It merges only after daniel-box shows H7.53's version and lists no
     `gitops-deploy` unit file. It carries the two-part proof, exit observation 1's listings
     and exit observation 7's census at its head.
+    Deleting `test_pi_escalation_timeout.py` removes the deletion census's named member, so
+    H7.55 repoints or drops the two named-member asserts in
+    `ansible/tests/repo/test_ansible_core_census.py`. It also deletes the volume-revert role's
+    tasks, and with them the stand-ins in `ansible/tests/longhorn/_volume_revert.py`.
 32. **H7.56.** Both steps follow H7.55 and remove the last Ansible inputs: ansible-core with its
     config, its hook and leakguard's temp-dir sweep, and the Pi's empty key. *Removed in
     H7.20* names the sweep's parts. Neither moves a rendered byte. It carries exit
@@ -3523,9 +3538,10 @@ progress.
 - *The deletion census.* Two rows, each with a named member:
     - in `ansible/tests/repo/test_ansible_core_census.py`, landed by H7.17: a subprocess
       collects the whole suite with `sys.modules['ansible'] = None`, and any import error
-      outside the allowlist fails it. The named member is `ansible/tests/_helpers.py`,
-      which the collection must import, and a fixture module holding `import
-      ansible.errors` is flagged. The allowlist is empty before H7.20b merges;
+      outside the allowlist fails it. Since H7.54 the named member is
+      `ansible/tests/setup/test_pi_escalation_timeout.py`, which the collection must import,
+      and a fixture module holding `import ansible.errors` is flagged. The allowlist is
+      empty before H7.20b merges;
     - in `ansible/tests/repo/test_census_rows_text.py`, no tracked file names
       `ansible-playbook`, except under `docs/archive/`, `docs/adr/`,
       `docs/target-architecture/`, the generated `docs/reference/` and the census's own
@@ -4013,8 +4029,8 @@ progress.
    reimplements the filters, and R4's exit check 4 proves the cluster render runs with
    ansible-core unimportable. Resolved for host and package modes by H7.46 (old H7.17),
    whose subprocess test renders each host and each package with ansible-core unimportable.
-   The test env in `ansible/tests/_helpers.py` stays H7.54's, and H7.46's filter census
-   lists what that env must register.
+   H7.54 rebuilt the test env, in `ansible/tests/_jinja_env.py`, on the renderer's set, and
+   H7.46's filter census lists what that env must register.
 5. **ADR numbering.** D6, G2 and H7 each add an ADR. Resolution: each takes the next free
    number at merge time, and none reserves one.
 6. **`deploy_ui`.** The design leaves open whether it retires with the deployer. Resolution:
