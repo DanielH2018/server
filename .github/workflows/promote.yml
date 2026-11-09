@@ -33,7 +33,8 @@ name: promote
 #            which waits on T's commit statuses for T's changed set and prints `good` or
 #            `failed`, or `superseded` once a later run has moved `prod` past T.
 #   verdict-status  statuses: write. Checks out nothing. Posts `verify`'s verdict on T as the
-#            commit status `homelab/promote-verdict`, described `<verdict> <digest>`: success
+#            commit status `homelab/promote-verdict`, described `<verdict> <digest> <form>`,
+#            where the form names the hold `settle` writes for T: success
 #            for good, failure otherwise, nothing for superseded. `settle` does not need it.
 #   settle   packages: write, actions: write. Checks out nothing. A good verdict moves
 #            `last-good` to T. When T changes a snapshot role (D5.2b1), anything else writes
@@ -50,7 +51,9 @@ name: promote
 #   reconcile  packages: write, statuses: read. Checks out nothing. Runs only when `decide`
 #            names a run that ended without its `settle` (`lost_settle`, #7863). While `prod`
 #            still names that run's digest, a good `homelab/promote-verdict` for it moves
-#            `last-good`, and anything else writes DEPLOY_HOLD as `<commit> unverified`.
+#            `last-good`. Anything else writes the hold `settle` would have written, and tags
+#            the digest `held` when that hold leaves `prod`. With no usable status it writes
+#            `<commit> unverified`.
 #   reset-check  contents: read, packages: read, actions: read. Runs only for a
 #            `reset_to_last_good` dispatch, which skips every job above. Runs
 #            `promote.py reset-check`, which refuses without a hold or while a verification is in
@@ -975,13 +978,18 @@ jobs:
     permissions:
       statuses: write
     steps:
-      # `good` posts success and anything else failure, each described as `<verdict> <digest>`,
-      # so `reconcile` refuses a status that an earlier promotion of the same commit left. A
-      # `superseded` verdict posts nothing: a later run owns `prod`.
+      # `good` posts success and anything else failure, each described as
+      # `<verdict> <digest> <form>`. The digest lets `reconcile` refuse a status that an earlier
+      # promotion of the same commit left. The form is the hold `settle` writes for anything
+      # but good: `stateful` when T changes a snapshot role, `no-reset` when it changes a
+      # forward-only tag, `reset` otherwise. A `superseded` verdict posts nothing: a later run
+      # owns `prod`.
       - name: Post the verdict status
         env:
           TARGET: ${{ needs.promote.outputs.target }}
           DIGEST: ${{ needs.promote.outputs.digest }}
+          STATEFUL: ${{ needs.promote.outputs.stateful }}
+          NO_RESET: ${{ needs.promote.outputs.no_reset }}
           VERDICT: ${{ needs.verify.outputs.verdict }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_TOKEN: ${{ github.token }}
@@ -998,10 +1006,14 @@ jobs:
             failed) state=failure ;;
             *) state=failure VERDICT=none ;;
           esac
+          if [ -n "$STATEFUL" ]; then form=stateful
+          elif [ -n "$NO_RESET" ]; then form=no-reset
+          else form=reset
+          fi
           retry gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$TARGET" \
             -f state="$state" -f context=homelab/promote-verdict \
-            -f description="$VERDICT $DIGEST" -f target_url="$RUN_URL" > /dev/null
-          echo "posted homelab/promote-verdict=$state ($VERDICT $DIGEST) on $TARGET"
+            -f description="$VERDICT $DIGEST $form" -f target_url="$RUN_URL" > /dev/null
+          echo "posted homelab/promote-verdict=$state ($VERDICT $DIGEST $form) on $TARGET"
 
   settle:
     needs: [promote, tag, verify]
@@ -1333,10 +1345,10 @@ jobs:
   # in `lost_settle` once no other run past its decide has been in progress for LOST_SETTLE_S.
   # This job reads the `homelab/promote-verdict` status the lost run's `verdict-status` posted
   # on that commit, and finishes what `settle` would have: a good verdict for `prod`'s digest
-  # moves `last-good`, and anything else, a missing status included, writes the unverified
-  # hold. It resets nothing and dispatches nothing: the operator dispatches
-  # `reset_to_last_good` after the hold, and the next merge or the scheduled run promotes after
-  # the move. No concurrency group, because a newer pending job in `promote` would evict it.
+  # moves `last-good`, and anything else writes the hold the status's form names. A missing
+  # status, or one for another digest, writes the unverified hold. It resets nothing and
+  # dispatches nothing: the operator decides on `reset_to_last_good` after a hold, and the next
+  # merge or the scheduled run promotes after the move. No concurrency group, because a newer pending job in `promote` would evict it.
   reconcile:
     needs: promote
     if: >-
@@ -1438,8 +1450,9 @@ jobs:
             --jq '.[] | select(.context == "homelab/promote-verdict") | "\(.state) \(.description)"')" \
             || { echo "::error::the statuses on $COMMIT could not be read, so this job writes nothing"; exit 1; }
           verdict="${verdict%%$'\n'*}"
+          read -r state word digest form _ <<< "$verdict"
 
-          if [ "$verdict" = "success good $DIGEST" ]; then
+          if [ "$state $word $digest" = "success good $DIGEST" ]; then
             require_prod
             if ! { ghcr_login && flux tag artifact "oci://$repo@$DIGEST" --tag last-good; }; then
               echo "::error::moving last-good to $DIGEST failed"
@@ -1455,12 +1468,30 @@ jobs:
             echo "::warning::$COMMIT's verdict reads '${verdict:-absent}', and DEPLOY_HOLD already reads '$hold', so this job writes no hold"
             exit 0
           fi
+          # `settle`'s hold for the form the lost run recorded. A status for another digest, or
+          # none, leaves the form unknown and holds as `unverified`.
+          [ "$digest" = "$DIGEST" ] || form=
+          case "$form" in
+            stateful) new_hold="$COMMIT stateful=unverified" ;;
+            no-reset) new_hold="$COMMIT" ;;
+            *) new_hold="$COMMIT unverified" ;;
+          esac
           require_prod
-          if ! retry gh variable set DEPLOY_HOLD --body "$COMMIT unverified" -R "$GITHUB_REPOSITORY"; then
-            echo "::error::writing DEPLOY_HOLD='$COMMIT unverified' failed"
+          if ! retry gh variable set DEPLOY_HOLD --body "$new_hold" -R "$GITHUB_REPOSITORY"; then
+            echo "::error::writing DEPLOY_HOLD='$new_hold' failed"
             exit 1
           fi
-          echo "::warning::DEPLOY_HOLD set to '$COMMIT unverified': $COMMIT's verdict reads '${verdict:-absent}', not good for $DIGEST. To reset prod (operator-only), dispatch promote.yml with reset_to_last_good=true, unless $COMMIT changes a snapshot role or a forward-only pin, which a reset would roll back over migrated state (#7876)"
+          case "$form" in
+            stateful|no-reset)
+              # `held` marks prod's run as settled, as `settle` tags it after its own hold.
+              if ! { ghcr_login && flux tag artifact "oci://$repo@$DIGEST" --tag held; }; then
+                echo "::error::tagging $DIGEST held failed, so the next run after a clear waits as in flight"
+                exit 1
+              fi
+              echo "::warning::DEPLOY_HOLD set to '$new_hold': $COMMIT's verdict reads '$verdict', and $COMMIT changes a snapshot role or a forward-only tag, so prod stays on it. Do not reset it" ;;
+            *)
+              echo "::warning::DEPLOY_HOLD set to '$new_hold': $COMMIT's verdict reads '${verdict:-absent}', not good for $DIGEST. To reset prod (operator-only), dispatch promote.yml with reset_to_last_good=true, unless $COMMIT changes a snapshot role or a forward-only pin; with no status this job cannot tell (#7876)" ;;
+          esac
 
   # The `reset_to_last_good` dispatch (D5.2b2): move `prod` back to `last-good` and do nothing
   # else, for the revert runbook's Branch 1 and the broken-sync-object runbook. It follows C2's

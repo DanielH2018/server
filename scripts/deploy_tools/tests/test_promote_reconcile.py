@@ -108,7 +108,7 @@ def _reconcile(tmp_path, jobs, **env: str):
 def test_a_good_status_for_prods_digest_moves_last_good_is_clean(tmp_path, jobs):
     """The #7863 tags: `prod` names the lost run's digest, which `last-good` does not."""
     result, calls = _reconcile(
-        tmp_path, jobs, FAKE_STATUSES=_statuses(("success", f"good {DIGEST}"))
+        tmp_path, jobs, FAKE_STATUSES=_statuses(("success", f"good {DIGEST} reset"))
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert calls == [MOVE]
@@ -117,13 +117,23 @@ def test_a_good_status_for_prods_digest_moves_last_good_is_clean(tmp_path, jobs)
 @pytest.mark.parametrize(
     "statuses",
     [
-        _statuses(("failure", f"failed {DIGEST}")),
-        _statuses(("failure", f"none {DIGEST}")),
+        _statuses(("failure", f"failed {DIGEST} reset")),
+        _statuses(("failure", f"none {DIGEST} reset")),
         _statuses(),
-        _statuses(("success", f"good {LATER}")),
-        _statuses(("failure", f"failed {DIGEST}"), ("success", f"good {DIGEST}")),
+        _statuses(("success", f"good {LATER} reset")),
+        _statuses(("failure", f"failed {LATER} stateful")),
+        _statuses(
+            ("failure", f"failed {DIGEST} reset"), ("success", f"good {DIGEST} reset")
+        ),
     ],
-    ids=["failed", "no-verdict", "missing", "another-digest", "newest-is-failure"],
+    ids=[
+        "failed",
+        "no-verdict",
+        "missing",
+        "another-digest",
+        "another-digests-form",
+        "newest-is-failure",
+    ],
 )
 def test_anything_but_a_good_status_for_prods_digest_writes_the_hold_is_flagged(
     tmp_path, jobs, statuses
@@ -131,6 +141,24 @@ def test_anything_but_a_good_status_for_prods_digest_writes_the_hold_is_flagged(
     result, calls = _reconcile(tmp_path, jobs, FAKE_STATUSES=statuses)
     assert result.returncode == 0, result.stdout + result.stderr
     assert calls == [HOLD], "last-good stays where it is"
+
+
+@pytest.mark.parametrize(
+    ("form", "hold"),
+    [("stateful", f"{COMMIT} stateful=unverified"), ("no-reset", COMMIT)],
+    ids=["snapshot-role", "forward-only"],
+)
+def test_a_run_settle_would_not_reset_holds_in_settles_form_and_tags_held(
+    tmp_path, jobs, form, hold
+):
+    result, calls = _reconcile(
+        tmp_path, jobs, FAKE_STATUSES=_statuses(("failure", f"failed {DIGEST} {form}"))
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert calls == [
+        f"gh variable set DEPLOY_HOLD --body {hold} -R DanielH2018/server",
+        f"flux tag artifact {REPO_URL}@{DIGEST} --tag held",
+    ]
 
 
 def test_a_standing_hold_is_left_in_place(tmp_path, jobs):
@@ -146,7 +174,7 @@ def test_a_prod_a_later_run_moved_writes_nothing(tmp_path, jobs, verdict):
         tmp_path,
         jobs,
         FAKE_PROD_DIGEST=LATER,
-        FAKE_STATUSES=_statuses((state, f"{verdict} {DIGEST}")),
+        FAKE_STATUSES=_statuses((state, f"{verdict} {DIGEST} reset")),
     )
     assert (result.returncode, calls) == (0, [])
     assert "a later run moved it" in result.stdout
@@ -168,10 +196,10 @@ def test_an_unread_prod_writes_nothing_and_fails(tmp_path, jobs):
 # -- verdict-status --------------------------------------------------------------------------
 
 
-def _post(tmp_path, jobs, verdict: str):
+def _post(tmp_path, jobs, verdict: str, stateful: str = "", no_reset: str = ""):
     script = _step(jobs["verdict-status"], "Post the verdict status")["run"]
     env = {"TARGET": COMMIT, "DIGEST": DIGEST, "VERDICT": verdict, "RUN_URL": "u"}
-    return _run(tmp_path, script, **env)
+    return _run(tmp_path, script, STATEFUL=stateful, NO_RESET=no_reset, **env)
 
 
 @pytest.mark.parametrize(
@@ -190,8 +218,25 @@ def test_each_verdict_posts_its_status_on_t_with_the_digest(
     assert result.returncode == 0, result.stdout + result.stderr
     assert calls == [
         f"gh api -X POST repos/DanielH2018/server/statuses/{COMMIT} -f state={state} "
-        f"-f context={CONTEXT} -f description={described} {DIGEST} -f target_url=u"
+        f"-f context={CONTEXT} -f description={described} {DIGEST} reset -f target_url=u"
     ]
+
+
+@pytest.mark.parametrize(
+    ("stateful", "no_reset", "form"),
+    [
+        ("sonarr", "", "stateful"),
+        ("sonarr", "longhorn", "stateful"),
+        ("", "longhorn", "no-reset"),
+    ],
+    ids=["snapshot-role", "both", "forward-only"],
+)
+def test_the_status_names_the_hold_form_settle_would_write(
+    tmp_path, jobs, stateful, no_reset, form
+):
+    result, calls = _post(tmp_path, jobs, "failed", stateful, no_reset)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"-f description=failed {DIGEST} {form} " in calls[0]
 
 
 def test_a_superseded_verdict_posts_nothing(tmp_path, jobs):

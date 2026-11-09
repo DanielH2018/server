@@ -1068,11 +1068,16 @@ digest, `reconcile` acts as follows:
 
 - A `success` status described `good <digest>` moves `last-good` to the digest. The next
   merge, or the scheduled run, promotes after it: `reconcile` dispatches nothing.
-- Anything else writes DEPLOY_HOLD as `<commit> unverified`, unless a hold already stands.
-  That covers a `failure` status, a status for another digest, and a missing status. The
-  operator then dispatches `reset_to_last_good`, and clears the hold once the reset lands.
-  Do not reset a commit that changes a snapshot role or a forward-only pin: `settle` would
-  have held it without a reset, and `reconcile` does not yet tell the two apart (#7876).
+- A `failure` status for the digest writes the hold `settle` would have written, unless a
+  hold already stands. The status's last word is that form. `stateful`, for a commit that
+  changes a snapshot role, writes `<commit> stateful=unverified`. `no-reset`, for one that
+  changes a forward-only tag, writes `<commit>` alone. Both tag the digest `held` and leave
+  `prod`, because a reset would roll back migrated state. `reset` writes
+  `<commit> unverified`, and the operator then dispatches `reset_to_last_good` and clears the
+  hold once the reset lands.
+- A missing status, or one for another digest, writes `<commit> unverified`, unless a hold
+  already stands. Its form is unknown, so check the commit for a snapshot role or a
+  forward-only pin before any reset (#7876).
 
 A failed read of `prod`, the hold or the statuses writes nothing and fails the job, and the
 next run names the state again. `decide`'s reason keeps the two operator-only commands for
