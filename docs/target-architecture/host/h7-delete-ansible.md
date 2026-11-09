@@ -2253,8 +2253,10 @@ the `manual_plane` clearing, and *Rollback*'s
     **Landed as [#7756](https://github.com/DanielH2018/server/pull/7756).** Both censuses
     live in `ansible/tests/repo/test_ansible_core_census.py`, not in the census-row files,
     because the collection takes about 40 seconds and prek runs those files at every commit.
-    The allowlist holds `_helpers.py` (H7.54), `flags.py` (H7.53) and
-    `test_pi_escalation_timeout.py` (H7.55). The filter census's named member is
+    The allowlist holds `_helpers.py` (H7.54), `flags.py` and `test_deploy_flags.py`
+    (H7.53), and `test_pi_escalation_timeout.py` (H7.55). Collection runs no test body, so a
+    grep half also reads every tracked `*.py` for an import, an `import_module` or a
+    `find_spec` naming `ansible`. The filter census's named member is
     `regex_replace`, because no tracked template uses `b64encode`. The oracle tests now hold
     the values ansible-core 2.22 returned, or evaluate through the renderer's environment.
 23. **H7.47.** Each step points a reader of the setup tree at the packages: the docs

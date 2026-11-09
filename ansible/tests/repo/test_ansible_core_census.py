@@ -1,9 +1,14 @@
 """H7's two censuses for removing ansible-core (`docs/target-architecture/host/h7-delete-ansible.md`).
 
-- The deletion census. A subprocess collects every `testpaths` entry while
-  `_collect_without_ansible.py` refuses each `import ansible`. An import from a file outside
-  `ALLOW` fails it. Each `ALLOW` entry names the H7 step that removes its import, and the list
-  must be empty before H7.56, which removes ansible-core, merges.
+- The deletion census, in two halves. A subprocess collects every `testpaths` entry while
+  `_collect_without_ansible.py` refuses each `import ansible`, which catches an import a
+  helper module makes on a test's behalf. Collection runs no test body, and the refusal sees
+  only `__import__`, so a grep half also reads every tracked `*.py` for an import statement,
+  an `import_module` or a `find_spec` naming `ansible`. A file outside `ALLOW` that either
+  half finds fails it. Each `ALLOW` entry names the H7 step that removes its import, and the
+  list must be empty before H7.56, which removes ansible-core, merges. An import held in a
+  string a test runs in a subprocess reads as an import to the grep, so `IN_A_STRING` names
+  each such file.
 - The filter census. Every filter and test name a tracked `*.j2` uses is registered in the
   renderer's strict environment: Jinja's built-ins, `renderer_lib/jinja_filters.py` and the
   repo's filter plugins. H7.54 rebuilds `_helpers.py`'s env on that set.
@@ -19,6 +24,7 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
 from jinja2 import nodes
 
 from _helpers import REPO
@@ -32,8 +38,18 @@ ALLOW = {
     "ansible/tests/_helpers.py": "H7.54 rebuilds the test env on the renderer's filters",
     "scripts/deploy_tools/deploy_lib/flags.py": "H7.53 deletes the deployer's PlaybookCLI read",
     "ansible/tests/setup/test_pi_escalation_timeout.py": "H7.55 deletes it with the playbooks",
+    "scripts/deploy_tools/tests/test_deploy_flags.py": "H7.53, with flags.py, its subject",
 }
-IMPORT_LINE = re.compile(r"^\s*(from|import) ansible\b", re.MULTILINE)
+IN_A_STRING = {
+    "ansible/tests/repo/test_leakguard.py": "ansible-core's temp dir, retired by #7755",
+    "scripts/renderer/tests/test_renderer_ansible_free.py": "the shim of its red half",
+    "ansible/tests/repo/test_ansible_core_census.py": "this census's own red fixtures",
+}
+IMPORT_LINE = re.compile(
+    r"^\s*(from|import) ansible\b"
+    r"""|(import_module|find_spec)\(\s*["']ansible\b""",
+    re.MULTILINE,
+)
 TIMEOUT = 600
 
 
@@ -58,10 +74,44 @@ def test_the_suite_collects_with_ansible_core_refused_outside_the_allowlist(tmp_
     assert not offenders, f"these files import ansible-core: {offenders}"
 
 
+def importers_by_text(paths: list[str]) -> list[str]:
+    """Each file in `paths` whose text names `ansible` in an import."""
+    return [rel for rel in paths if IMPORT_LINE.search((REPO / rel).read_text())]
+
+
+def test_no_tracked_python_names_ansible_core_in_an_import_outside_the_allowlist():
+    found = importers_by_text(tracked("*.py"))
+    assert "ansible/tests/_helpers.py" in found, "the grep no longer finds _helpers.py"
+    offenders = sorted(set(found) - set(ALLOW) - set(IN_A_STRING))
+    assert not offenders, f"these files import ansible-core: {offenders}"
+
+
 def test_every_allowlisted_file_still_imports_ansible_core():
     """An entry whose import is gone is deleted, so the list empties as H7 lands."""
-    stale = [rel for rel in ALLOW if not IMPORT_LINE.search((REPO / rel).read_text())]
+    listed = [*ALLOW, *IN_A_STRING]
+    stale = sorted(set(listed) - set(importers_by_text(listed)))
     assert not stale, f"these no longer import ansible; drop them from ALLOW: {stale}"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "def f():\n    from ansible.template import Templar\n",
+        "mod = importlib.import_module('ansible.constants')\n",
+        'spec = importlib.util.find_spec("ansible.cli.playbook")\n',
+    ],
+    ids=["deferred-import", "import-module", "find-spec"],
+)
+def test_an_import_the_collection_cannot_see_is_flagged(tmp_path, text):
+    path = tmp_path / "mod.py"
+    path.write_text(text)
+    assert importers_by_text([str(path)]) == [str(path)]
+
+
+def test_a_module_that_names_ansible_in_no_import_is_clean(tmp_path):
+    path = tmp_path / "mod.py"
+    path.write_text('ANSIBLE = REPO / "ansible"\nimport ansible_lint_rules\n')
+    assert importers_by_text([str(path)]) == []
 
 
 def test_a_module_that_imports_ansible_core_is_flagged(tmp_path):
