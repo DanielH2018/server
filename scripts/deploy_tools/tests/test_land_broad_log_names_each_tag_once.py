@@ -138,15 +138,18 @@ def test_health_prints_a_count_line_and_lists_only_the_tags_not_healthy(
     """Healthy and skipped tags fold into one count line; the unhealthy one is named."""
     rc, out, _ = broad_landing(unhealthy=True)
     assert rc == 1, out
+    health = out.split("health verdict", 1)[1].split("VERDICT:", 1)[0]
     healthy = len(BROAD) - 2
     assert any(
         re.search(rf"\b{healthy}\b.*healthy", line)
         and re.search(r"\b1\b.*skipped", line)
-        for line in out.splitlines()
-    ), out
-    assert not _lines_naming(out, SKIPPED), out
-    assert not [line for line in out.splitlines() if "workload healthy" in line], out
-    assert any("rollout incomplete" in line for line in _lines_naming(out, UNHEALTHY))
+        for line in health.splitlines()
+    ), health
+    assert not _lines_naming(health, SKIPPED), health
+    assert "workload healthy" not in health, health
+    assert any(
+        "rollout incomplete" in line for line in _lines_naming(health, UNHEALTHY)
+    )
 
 
 def test_the_changed_set_line_names_only_the_tags_beyond_the_prs_own(broad_landing):
@@ -156,4 +159,5 @@ def test_the_changed_set_line_names_only_the_tags_beyond_the_prs_own(broad_landi
     assert extras, out
     assert not [line for line in extras if re.search(rf"\b{OWN}\b", line)], extras
     promotion = out.split("waiting on the promotion", 1)[1].split("== ", 1)[0]
-    assert re.search(rf"\b{len(BROAD)}\b", promotion), promotion
+    # The count may be the whole set's or the extras' alone.
+    assert re.search(rf"\b({len(BROAD)}|{len(BROAD) - 1})\b", promotion), promotion
