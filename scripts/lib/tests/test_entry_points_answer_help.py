@@ -41,6 +41,7 @@ import importlib
 import inspect
 import io
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -80,6 +81,10 @@ MUST_FIND = frozenset(
 # docstring.
 HELP_TIMEOUT_S = 60
 
+# A module-level `if __name__` line, which every source `_has_main_guard` accepts carries.
+# Parsing only those files keeps collection cheap on a loaded CI runner.
+_GUARD_LINE = re.compile(r"^if[\s(]+__name__\b", re.M)
+
 
 def _entry_points():
     """`{name: path}` for every catalogued, runnable entry point under `scripts/`.
@@ -89,11 +94,12 @@ def _entry_points():
     runnable. `test_the_census_agrees_with_the_classifier` holds the answer equal to
     `classify`'s, which costs seconds and so runs at test time (#7730).
     """
-    return {
-        name: path
-        for name, path in by_name(SCRIPTS).items()
-        if path.suffix == ".sh" or _has_main_guard(file_text(path))
-    }
+    entry_points = {}
+    for name, path in by_name(SCRIPTS).items():
+        text = "" if path.suffix == ".sh" else file_text(path)
+        if path.suffix == ".sh" or (_GUARD_LINE.search(text) and _has_main_guard(text)):
+            entry_points[name] = path
+    return entry_points
 
 
 def _classified_entry_points():
