@@ -393,7 +393,7 @@ def remote_clean_command(
     script fails loudly (`python: can't open file`, exit 2, reported as `failed`) rather than
     keeping the tree silently. It runs from the primary checkout's cwd (`cd {REPO}`) so a
     relative path elsewhere in the command still resolves there, and under the same pinned,
-    project-free interpreter as `HEALTH_CMD` (`--no-project --no-python-downloads --python
+    project-free interpreter as `fanout_lib.health.HEALTH_CMD` (`--no-project --no-python-downloads --python
     3.15.2`) — every import in `clean-one`'s own chain is stdlib, so a stale primary whose
     lock file fails to sync with the worktree's `uv.lock` can't take the clean down with it.
 
