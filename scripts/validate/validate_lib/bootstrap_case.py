@@ -70,13 +70,9 @@ from lib.repo_paths import REPO
 from validate.host_packages import fetch_tools, tool_fetch_module
 from validate.validate_lib.fixture_host_case import FIXTURE_HOST
 from validate.validate_lib.host_container import CaseFailed, Container, expect
-from validate.validate_lib.scratch_clones import (
-    ANCHOR_ACCEPTS,
-    HOMELAB_ONLY,
-    fixture_clone,
-    red_clone,
-    scratch_clone,
-)
+from validate.validate_lib.host_fixtures import run_logged
+from validate.validate_lib.scratch_clones import ANCHOR_ACCEPTS, HOMELAB_ONLY, red_clone
+from validate.validate_lib.scratch_clones import fixture_clone, scratch_clone
 
 SCRIPT = REPO / "hosts" / "bootstrap-host.sh"
 UNCHECKED = "is unchecked; the operator who chose it is its trust root"
@@ -266,7 +262,7 @@ def stock_kit(cases, clone: Path, kit: Path) -> Path:
     # The clone's own render, so the cache holds exactly the pins the script's render reads.
     tools = cases.work / "bootstrap-render"
     shutil.rmtree(tools, ignore_errors=True)
-    subprocess.run(
+    run_logged(
         [sys.executable, "scripts/validate/host_packages.py", "render"]
         + ["--tree", ".", "--out", str(tools)],
         cwd=clone,
@@ -284,7 +280,7 @@ def stock_kit(cases, clone: Path, kit: Path) -> Path:
     return kit
 
 
-def stock_uv_cache(cases, clone: Path, kit: Path, uv: str, run=subprocess.run) -> None:
+def stock_uv_cache(cases, clone: Path, kit: Path, uv: str, run=run_logged) -> None:
     """Fill the kit's uv cache and interpreter with what the script's `uv run --offline` reads.
 
     The sync skips the lint group, as the script's own `uv run` does, so no lint tool's GitHub

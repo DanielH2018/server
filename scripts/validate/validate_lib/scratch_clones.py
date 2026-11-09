@@ -13,13 +13,13 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import re
 import shutil
-import subprocess
 from pathlib import Path
 
 from lib.git import git, git_process
 from lib.repo_paths import REPO
 from validate.validate_lib.fixture_host_case import FIXTURE_HOST, apply_walkthrough
 from validate.validate_lib.host_container import expect
+from validate.validate_lib.host_fixtures import run_logged
 
 ANCHOR = "hosts/lib/bootstrap_anchor.py"
 ANCHOR_ACCEPTS = "bootstrap-host: the case's stub anchor accepts"
@@ -51,7 +51,7 @@ def scratch_clone(out: Path) -> Path:
     archive = git_process("archive", "HEAD", cwd=REPO)
     assert archive.stdin and archive.stdout
     archive.stdin.close()
-    subprocess.run(["tar", "-x", "-C", str(out)], stdin=archive.stdout, check=True)
+    run_logged(["tar", "-x", "-C", str(out)], stdin=archive.stdout, check=True)
     archive.stdout.close()
     expect(archive.wait() == 0, f"git archive of {REPO} exited {archive.returncode}")
     (out / ANCHOR).write_text(ANCHOR_STUB)
