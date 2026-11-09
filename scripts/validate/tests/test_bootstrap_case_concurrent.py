@@ -8,6 +8,7 @@ the most items that were running at one moment.
 Run: uv run pytest scripts/validate/tests/test_bootstrap_case_concurrent.py
 """
 
+import os
 import re
 import subprocess
 import threading
@@ -26,15 +27,20 @@ PREFIX = "homelab-host-test-bootstrap-"
 
 
 class Overlap:
-    """Which items' script runs overlapped another's, and the most that ran at one moment."""
+    """Which items' script runs overlapped another's, and the most that ran at one moment.
 
-    def __init__(self, total: int) -> None:
+    No run finishes before `quorum` runs have started, or WAIT has passed.
+    """
+
+    def __init__(self, total: int, quorum: int = 0) -> None:
         self.cond = threading.Condition()
         self.total = total
+        self.quorum = quorum
         self.running: set[str] = set()
         self.accompanied: set[str] = set()
         self.done = 0
         self.peak = 0
+        self.started: list[str] = []
 
     def enter(self, label: str) -> bool:
         """Run `label`; True when another item ran beside it, or every other item had finished."""
@@ -42,10 +48,14 @@ class Overlap:
             if self.running:
                 self.accompanied |= self.running | {label}
             self.running.add(label)
+            self.started.append(label)
             self.peak = max(self.peak, len(self.running))
             self.cond.notify_all()
             company = self.cond.wait_for(
-                lambda: label in self.accompanied or self.done == self.total - 1,
+                lambda: (
+                    (label in self.accompanied and len(self.started) >= self.quorum)
+                    or self.done == self.total - 1
+                ),
                 timeout=WAIT,
             )
             self.running.discard(label)
@@ -138,16 +148,17 @@ def _run(
     misbehaving: str | None = None,
     slow: str | None = None,
     prepare_seconds: float = 0.0,
+    quorum: int = 0,
 ):
     """Run every bootstrap case on fake containers; returns the cases and the overlap.
 
     `slow` names an item whose script run takes SLOW seconds, and `prepare_seconds` is how
-    long stocking the kit takes.
+    long stocking the kit takes. `quorum` is the Overlap's.
     """
     green = _green(tmp_path)
     gating = case.selected(case.plan(tmp_path, green), k3s_download=False)
     planned = {p.label: p for p in gating}
-    overlap = Overlap(len(planned))
+    overlap = Overlap(len(planned), quorum)
 
     def made(out: Path) -> Path:
         out.mkdir(parents=True, exist_ok=True)
@@ -229,6 +240,13 @@ def test_an_item_s_duration_is_its_own_run_not_the_wait_for_earlier_items(
     }
     assert len(seconds[first]) == 1 and seconds[first][0] >= SLOW - 0.5, err
     assert len(seconds[last]) == 1 and seconds[last][0] < SLOW - 0.5, err
+
+
+def test_the_offline_builds_start_before_the_host_items(monkeypatch, tmp_path):
+    monkeypatch.setattr(os, "cpu_count", lambda: 3)
+    _, _, overlap = _run(monkeypatch, tmp_path, quorum=3)
+
+    assert set(overlap.started[:3]) == {"offline", "red-depends", "fixture-host"}
 
 
 def test_the_prepare_prints_how_long_it_took(monkeypatch, tmp_path, capsys):
