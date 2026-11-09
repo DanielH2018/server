@@ -636,7 +636,7 @@
  "ansible/tests/setup/test_aide_check_names_its_config.py": 0.0,
  "ansible/tests/setup/test_aide_check_role_written.py": 0.1,
  "ansible/tests/setup/test_apt_keyring_permissions.py": 0.03,
- "ansible/tests/setup/test_artifacts_sync_alerts_once_per_outage.py": 1.04,
+ "ansible/tests/setup/test_artifacts_sync_alerts_once_per_outage.py": 3.34,
  "ansible/tests/setup/test_b4_rule_literals.py": 0.21,
  "ansible/tests/setup/test_check_timer.py": 0.39,
  "ansible/tests/setup/test_claude_agent_ssh_login.py": 3.13,

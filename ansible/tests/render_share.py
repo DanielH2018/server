@@ -47,7 +47,7 @@ first, which varied by shard and by run, while the serial `pytest_shard.py --rec
 charged every module alone. The shard weight gate then failed CI on every module that did
 not pay: a recorded 11.58s against a measured 0.03s (#5734). Under xdist each worker waits on
 the one build before its first test, so a shard that holds a consumer pays about one render
-of wall time that no weight models.
+of wall time. No module's weight carries it; `pytest_shard.py --summary` charges it per shard.
 
 Run: uv run pytest ansible/tests/repo/test_render_share.py
 """
