@@ -228,6 +228,12 @@ def test_a_report_longer_than_a_pipe_buffer_logs_no_broken_pipe(tmp_path):
     assert "Broken pipe" not in (tmp_path / "stderr").read_text()
 
 
+def test_the_timer_runs_a_slot_it_missed():
+    """daniel-pi's timer was stopped over the 2026-11-09 03:00 slot and never ran it (#7920)."""
+    for host in HOSTS:
+        assert re.search(r"^Persistent=true$", shipped_text(host, TIMER), re.M), host
+
+
 def test_the_push_deadline_covers_one_week_and_not_two():
     """The producer is homelab-aide-check.timer (integrity-scans component), weekly on Monday."""
     for host in HOSTS:

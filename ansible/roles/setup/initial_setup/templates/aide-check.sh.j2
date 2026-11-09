@@ -36,7 +36,9 @@
 #   writes that kind of file (a kernel package for the initrd, a GRUB or kernel package for
 #   grub.cfg, the package that owns the source for a .pyc). The top-level usr-merge links
 #   (/bin and the rest) are judged on their target alone. A package-owned symlink must still
-#   resolve to a package file.
+#   resolve to a package file, with two exceptions: a `homelab-*` package's /etc link (outside
+#   PERSIST) into /run/homelab-secrets/, and a link into a system tree whose target is missing, such as the
+#   kernel headers' rust link to a package that is not installed, in a window its owner ran.
 # - /etc: a package-owned path whose content differs from the package's copy, or that is gone.
 #   Ansible writes unpackaged /etc files on every merge, so those are logged, not paged.
 # - The login, privilege, startup and code-loading files in PERSIST, owned or not: sudoers, sshd,
@@ -47,9 +49,12 @@
 # - An added or changed /usr/local/bin entry named like a command a package installs, because
 #   root's PATH reaches /usr/local/bin first. The roles' own scripts there have no such twin.
 # - Any of the above, or any package-owned /etc path, whose owner, group or permissions changed,
-#   since a package digest cannot see that.
+#   since a package digest cannot see that. Outside PERSIST, an install or upgrade of a package
+#   that owns it in the window explains it, but a homelab package's only under /etc, because
+#   those upgrade several times a day. Its content is then judged as for any other change.
 # A symlink is explained when it resolves to a package-owned path (alternatives, systemd enable
-# links, /boot/vmlinuz), to a unit in ROLE_WRITTEN, or to /dev/null (a mask). Homes, /var, /opt
+# links, /boot/vmlinuz), to a unit in ROLE_WRITTEN, or to /dev/null (a mask), or is one of the
+# two exceptions above. Homes, /var, /opt
 # and the rest of /usr/local are logged and never page: the 2026-10-20 daniel-box report held 184
 # differences in six hours, and every one was in them.
 set -uo pipefail
@@ -126,6 +131,10 @@ PKGS_KERNEL='^(linux-(image|modules|generic|raspi|firmware|base)|initramfs-tools
 # grub.cfg and GRUB's modules: update-grub runs from GRUB's and the kernel packages' scripts.
 DERIVED_GRUB='^/boot/grub/'
 PKGS_GRUB='^(grub|os-prober|shim|linux-(image|modules|generic|raspi)|initramfs-tools)'
+# The EFI loaders: grub-install, from the grub-efi and shim packages' scripts. 98_aide_local
+# skips their inode, which vfat renumbers at every mount.
+DERIVED_EFI='^/boot/efi/EFI/'
+PKGS_EFI='^(grub-efi|shim)'
 # DECIDED: /boot/grub/grubenv is exempt from the dpkg.log requirement. GRUB rewrites it at every
 # boot, and the weekly reboot made it differ every week with no package run: on daniel-box its
 # mtime was 2026-11-01 07:38, the weekly reboot, and the dpkg log held no GRUB or kernel entry then.
@@ -140,7 +149,7 @@ DERIVED_PYCACHE='/__pycache__/'
 PKGS_PYTHON='^(python[3](\.[0-9]+)?(-minimal)?|libpython[3](\.[0-9]+)?(-minimal|-stdlib)?)$'
 # Caches that any package's trigger rewrites: explained by any package run since the baseline.
 DERIVED_CACHES='/dropin\.cache$|^/(usr/)?lib/udev/hwdb\.bin$|^/(usr/)?lib/locale/locale-archive$|^/(usr/)?lib/[^/]+/gio/modules/giomodule\.cache$|^/(usr/)?lib/[^/]+/gdk-pixbuf-2\.0/[^/]+/loaders\.cache$|^/(usr/)?lib/[^/]+/gtk-[23]\.0/[^/]+/immodules\.cache$|^/usr/share/glib-2\.0/schemas/gschemas\.compiled$|^/usr/share/mime/|^/usr/share/icons/[^/]+/icon-theme\.cache$|^/usr/share/info/dir(\.old)?$|^/usr/share/plymouth/themes/(text\.plymouth|ubuntu-text/ubuntu-text\.plymouth)$'
-DERIVED="(${USRMERGE}|${DERIVED_KERNEL}|${DERIVED_GRUB}|${DERIVED_FIRMWARE}|${DERIVED_PYCACHE}|${DERIVED_CACHES})"
+DERIVED="(${USRMERGE}|${DERIVED_KERNEL}|${DERIVED_GRUB}|${DERIVED_EFI}|${DERIVED_FIRMWARE}|${DERIVED_PYCACHE}|${DERIVED_CACHES})"
 # dpkg.log timestamps are local time. The window opens this long before aide.db was written,
 # because the previous scan wrote it at its end and a package run during that scan is in neither
 # its baseline nor the window otherwise. The deadline's own slack is the same 6h.
@@ -195,9 +204,9 @@ if [[ "$MODE" == accept ]]; then
 fi
 
 # Prints "path<TAB>-<TAB>package" for every path a package lists, "path<TAB>digest" for every
-# digest dpkg records, "from<TAB>DIVERT<TAB>to" for each diversion, and "EVENT<TAB>EVENT<TAB>package"
-# for each package dpkg.log shows installed, upgraded, configured, triggered, removed or purged
-# since the window opened. A third-party md5sums file such as gh's writes each path as ./usr/...
+# digest dpkg records, "from<TAB>DIVERT<TAB>to" for each diversion, and
+# "EVENT<TAB>EVENT<TAB>package<TAB>action" for each package dpkg.log shows installed, upgraded,
+# configured, triggered, removed or purged since the window opened. A third-party md5sums file such as gh's writes each path as ./usr/...
 # dpkg.log rotates monthly and the previous month's file stays uncompressed, so both are read.
 # An unreadable log yields no event, which leaves every regenerated file unexplained.
 dpkg_index() {
@@ -214,7 +223,7 @@ dpkg_index() {
   cat "$DPKG_LOG.1" "$DPKG_LOG" 2>/dev/null \
     | awk -v from="$WINDOW_FROM" '
       ($1 " " $2) >= from && $3 ~ /^(install|upgrade|configure|trigproc|remove|purge)$/ {
-        p = $4; sub(/:.*/, "", p); print "EVENT\tEVENT\t" p }'
+        p = $4; sub(/:.*/, "", p); print "EVENT\tEVENT\t" p "\t" $3 }'
 }
 
 # Prints "kind<TAB>type<TAB>pug<TAB>scope<TAB>path" for each report entry in a paged tree.
@@ -240,27 +249,40 @@ paged_entries() {
 # Prints "path (reason)" for each paged entry no package explains. Reads the files as they are
 # now: AIDE has just hashed them, and a change in between is next week's report.
 unexplained_entries() {
-  local kind type pug scope path digest target
+  local kind type pug scope path digest target dangling
   paged_entries | while IFS=$'\t' read -r kind type pug scope path; do
-    digest=- target=-
+    digest=- target=- dangling=-
     if [[ "$kind" != removed ]]; then
       if [[ -L "$FS_ROOT$path" ]]; then
         # -m, not -f: a link into a directory that is missing still has a target to judge, and
         # "-" would read as "not a link". A link that cannot be resolved at all is "?".
         target=$(readlink -m -- "$FS_ROOT$path") && target=${target#"$FS_ROOT"} || target="?"
+        [[ "$target" == "?" || -e "$FS_ROOT$target" ]] || dangling=dangling
       elif [[ -f "$FS_ROOT$path" ]]; then
         digest=$(md5sum <"$FS_ROOT$path" | awk '{ print $1 }') || digest=-
       fi
     fi
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$kind" "$type" "$pug" "$scope" "$path" "$digest" "$target"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$kind" "$type" "$pug" "$scope" "$path" "$digest" "$target" "$dangling"
   done | ROLE_WRITTEN="$ROLE_WRITTEN" USRMERGE="$USRMERGE" BOOT_LINKS="$BOOT_LINKS" \
     BOOT_LINK_TARGET="$BOOT_LINK_TARGET" BOOT_ENV="$BOOT_ENV" DERIVED_KERNEL="$DERIVED_KERNEL" \
-    DERIVED_GRUB="$DERIVED_GRUB" DERIVED_FIRMWARE="$DERIVED_FIRMWARE" \
+    DERIVED_GRUB="$DERIVED_GRUB" DERIVED_EFI="$DERIVED_EFI" DERIVED_FIRMWARE="$DERIVED_FIRMWARE" \
     DERIVED_PYCACHE="$DERIVED_PYCACHE" PKGS_KERNEL="$PKGS_KERNEL" PKGS_GRUB="$PKGS_GRUB" \
-    PKGS_FIRMWARE="$PKGS_FIRMWARE" PKGS_PYTHON="$PKGS_PYTHON" awk -F '\t' '
+    PKGS_EFI="$PKGS_EFI" PKGS_FIRMWARE="$PKGS_FIRMWARE" PKGS_PYTHON="$PKGS_PYTHON" \
+    SYSTEM="$SYSTEM" awk -F '\t' '
     # dpkg records merged-/usr paths under either name, so compare both without the /usr.
     function norm(p) { return p ~ /^\/usr\/(bin|sbin|lib|lib32|lib64|libx32)\// ? substr(p, 5) : p }
     function touched_any(re,    k) { for (k in touched) if (k ~ re) return 1; return 0 }
+    # Whether a package that lists p is in the set ran.
+    function owner_ran(p, ran,    owners, n, k) {
+      n = split(owner[p], owners, " ")
+      for (k = 1; k <= n; k++) if (owners[k] in ran) return 1
+      return 0
+    }
+    function owner_matches(p, re,    owners, n, k) {
+      n = split(owner[p], owners, " ")
+      for (k = 1; k <= n; k++) if (owners[k] ~ re) return 1
+      return 0
+    }
     # A .pyc is explained by a run of the package that owns its source, or of Python itself.
     function pyc_explained(path,    dir, base, owners, n, k) {
       dir = path; sub(/\/__pycache__\/[^\/]*$/, "", dir)
@@ -282,15 +304,21 @@ unexplained_entries() {
       if (path ~ ENVIRON["DERIVED_PYCACHE"]) ok = pyc_explained(path)
       else if (path ~ ENVIRON["DERIVED_KERNEL"]) ok = touched_any(ENVIRON["PKGS_KERNEL"])
       else if (path ~ ENVIRON["DERIVED_GRUB"]) ok = touched_any(ENVIRON["PKGS_GRUB"])
+      else if (path ~ ENVIRON["DERIVED_EFI"]) ok = touched_any(ENVIRON["PKGS_EFI"])
       else if (path ~ ENVIRON["DERIVED_FIRMWARE"]) ok = touched_any(ENVIRON["PKGS_FIRMWARE"])
       else ok = (ntouched > 0)
       return ok ? "" : "regenerated by package triggers, but dpkg.log holds no package change since the baseline that explains it"
     }
     FILENAME == ARGV[1] {
-      if ($1 == "EVENT") { if (!($3 in touched)) ntouched++; touched[$3] = 1; next }
+      if ($1 == "EVENT") {
+        if (!($3 in touched)) ntouched++
+        touched[$3] = 1
+        if ($4 ~ /^(install|upgrade)$/) upgraded[$3] = 1
+        next
+      }
       p = norm($1); owned[p] = 1
       if ($2 == "DIVERT") { q = norm($3); owned[q] = 1; divto[q] = p }
-      else if ($2 == "-") { if (p ~ /\.py$/) pyowner[p] = pyowner[p] " " $3 }
+      else if ($2 == "-") { owner[p] = owner[p] " " $3; if (p ~ /\.py$/) pyowner[p] = pyowner[p] " " $3 }
       else digs[p] = digs[p] " " $2
       next
     }
@@ -304,6 +332,11 @@ unexplained_entries() {
       # A unit the roles write is a fair target only for a link under /etc/systemd/system, where
       # `systemctl enable` makes it.
       link_ok = $7 != "-" && ($7 == "/dev/null" || (norm($7) in owned) || (path ~ /^\/etc\/systemd\/system\// && $7 ~ ENVIRON["ROLE_WRITTEN"]))
+      # The host package links each secret file into the tmpfs its secrets unit fills.
+      if (scope == "etc" && $7 ~ /^\/run\/homelab-secrets\// && owner_matches(p, "^homelab-")) link_ok = 1
+      # A distro link into a package that is not installed. Only a system-tree target, because a
+      # file created there later pages on its own as unowned.
+      if ($8 == "dangling" && $7 ~ ENVIRON["SYSTEM"] && $7 !~ /^\/usr\/local(\/|$)/ && owner_ran(p, touched)) link_ok = 1
       base = path; sub(/^.*\//, "", base)
       # /usr/local/bin pages only for a name a package also installs; its other entries are logged.
       if (scope == "shadow") {
@@ -318,7 +351,9 @@ unexplained_entries() {
       else if (!(p in owned) && path ~ ENVIRON["ROLE_WRITTEN"]) { }
       else if (scope == "derived" && !(p in owned)) why = derived_why(kind, type, path, $7)
       # An unpackaged /etc file pages on nothing, its mode included.
-      else if ($3 == "pug" && (scope != "etc" || (p in owned))) why = "owner, group or permissions changed"
+      # An owner installed or upgraded in the window explains the mode; the content is still judged.
+      # Never in PERSIST, and a homelab package only under /etc: it upgrades several times a day.
+      else if ($3 == "pug" && !(scope != "persist" && owner_ran(p, upgraded) && (scope == "etc" || !owner_matches(p, "^homelab-"))) && (scope != "etc" || (p in owned))) why = "owner, group or permissions changed"
       else if (type == "d") next
       else if (kind == "removed") { if (p in owned) why = "removed, but a package still owns it" }
       else if (d != "") { if (index(d " ", " " $6 " ") == 0) why = "differs from its package copy" }
