@@ -17,7 +17,7 @@ import time
 import sys
 from pathlib import Path
 
-from validate.validate_lib.host_fixtures import HOST, HOST_PKG, UPDATER
+from validate.validate_lib.host_fixtures import HOST, HOST_PKG, UPDATER, run_logged
 
 PORT = 8791
 SERVER_LOG = "/var/log/test-repo.log"
@@ -107,7 +107,7 @@ class Container:
             CaseFailed: systemd never finished, or python3 is not the leg's minor.
         """
         subprocess.run(["docker", "rm", "-f", self.name], capture_output=True)
-        subprocess.run(
+        run_logged(
             ["docker", "run", "-d", "--name", self.name, "--privileged"]
             + ["--cgroupns=host", "--hostname", self.hostname]
             + (["--network", self.network] if self.network else [])

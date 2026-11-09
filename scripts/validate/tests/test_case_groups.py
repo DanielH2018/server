@@ -1,9 +1,11 @@
 """`case_groups.isolate`: two concurrent groups share no scratch file, no debs label and no failure."""
 
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 from validate.validate_lib import case_groups
+from validate.validate_lib.host_fixtures import run_logged
 
 
 def _prepared(tmp_path: Path) -> SimpleNamespace:
@@ -72,3 +74,18 @@ def test_a_group_that_raises_is_recorded_and_its_output_is_one_block(tmp_path, c
         "traceback_in_block": True,
         "clean_outside_block": True,
     }
+
+
+def test_a_childs_stderr_through_run_logged_lands_in_its_groups_block(tmp_path, capfd):
+    cases = _prepared(tmp_path)
+    child = [sys.executable, "-c", "import sys; sys.stderr.write('child line\\n')"]
+
+    def building(group) -> None:
+        print("building starts", file=case_groups.sys.stderr)
+        run_logged(child, check=True)
+
+    case_groups.run_groups(cases, [("building", building)], jobs=1)
+
+    err = capfd.readouterr().err
+    block = err[err.index("building starts") : err.index("[DONE] building")]
+    assert "child line" in block
