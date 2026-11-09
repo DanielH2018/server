@@ -17,9 +17,11 @@ from pathlib import Path
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib.brief import APPLY_OWED, fence_for
+from fanout_lib.review.review_land import LAND_SH
 
 if TYPE_CHECKING:
     from fanout_lib.review.review_ci import Failure
+    from fanout_lib.review.review_land import Landing
     from fanout_lib.review.review_record import Record
 
 FINDINGS_SCHEMA = {
@@ -200,16 +202,21 @@ def is_held(finding: dict) -> bool:
     return finding.get("category") == "security"
 
 
-def apply_prompt(pr: str, line: str, tail: str, log_dir: str) -> str:
+def apply_prompt(pr: str, landing: "Landing", log_dir: str) -> str:
     """The prompt that resumes the implementer after a landing whose verdict needs a decision.
 
     The pipeline ran `land.sh` itself (`review_land`), so this session never saw the landing.
     It gets the verdict, the end of the landing's log, and the brief's apply-owed section,
-    which a review batch's brief does not carry.
+    which a review batch's brief does not carry. A re-land runs the `land.sh` in the fresh
+    checkout of the base that `review_land` made: the batch worktree's copy may predate
+    master's landing code, and `land.sh` refuses that.
     """
+    assert landing.checkout, "a resume verdict keeps the landing's checkout"
+    line, tail = landing.line, landing.tail
+    land_sh = landing.checkout / LAND_SH
     number = pr.rstrip("/").rsplit("/", 1)[-1]
     rerun = (
-        f'./scripts/deploy_tools/land.sh --pr {number} --detach --log-dir "{log_dir}" '
+        f'{land_sh} --pr {number} --detach --log-dir "{log_dir}" '
         f'&& cc-wait land {number} --log-dir "{log_dir}"'
     )
     fence = fence_for(tail)

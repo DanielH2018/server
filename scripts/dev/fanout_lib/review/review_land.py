@@ -56,6 +56,9 @@ class Landing:
         line: the whole VERDICT line, "" when the log holds none.
         tail: the last lines of the landing's log, or of land.sh's output when it refused.
         wait: the command that resumes the wait, for a landing still running at the deadline.
+        checkout: the fresh checkout `land.sh` ran from, set only for a verdict in
+            `RESUME_VERDICTS`, whose resumed implementer re-lands from it. The caller
+            removes it with `release` once that session ends.
     """
 
     rc: int
@@ -63,6 +66,7 @@ class Landing:
     line: str = ""
     tail: str = ""
     wait: str = ""
+    checkout: Path | None = None
 
 
 def login(argv: list[str]) -> list[str]:
@@ -119,7 +123,8 @@ def land(
 
     `land.sh` runs exactly once. A wait that exits 75 is re-run on its own while
     `time_left()` allows, and a landing still running past that is returned with `wait` set.
-    The checkout is removed once the landing has ended, and kept while it still runs.
+    The checkout is removed once the landing has ended. It is kept while the landing still
+    runs, and after a verdict in `RESUME_VERDICTS`, for the resumed implementer's re-land.
     """
     pr = pr_url.rstrip("/").rsplit("/", 1)[-1]
     log_dir = worktree / ".fanout"
@@ -143,19 +148,28 @@ def land(
     waited = run(login(wait), None)
     while waited.returncode == STILL_WAITING and time_left() > WAIT_MARGIN_S:
         waited = run(login(wait), None)
-    if waited.returncode != STILL_WAITING:
-        _release(run, worktree, checkout)
     log = _newest_log(log_dir, pr)
     text = log.read_text(errors="replace") if log else ""
     matches = list(VERDICT_LINE.finditer(text))
     found = matches[-1] if matches else None
+    verdict = found.group(1) if found else ""
+    resume = verdict in RESUME_VERDICTS
+    if waited.returncode != STILL_WAITING and not resume:
+        _release(run, worktree, checkout)
     return Landing(
         waited.returncode,
-        verdict=found.group(1) if found else "",
+        verdict=verdict,
         line=found.group(0) if found else "",
         tail=_tail(text or waited.stdout + waited.stderr),
         wait=" ".join(wait) if waited.returncode == STILL_WAITING else "",
+        checkout=checkout if resume else None,
     )
+
+
+def release(run: Runner, worktree: Path, landing: Landing) -> None:
+    """Remove the checkout a landing kept for its resumed implementer's re-land."""
+    if landing.checkout:
+        _release(run, worktree, landing.checkout)
 
 
 def out_of_time(pr: str) -> dict:
