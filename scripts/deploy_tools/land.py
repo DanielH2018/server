@@ -138,7 +138,7 @@ from lib.exit_codes import LAND_BAD_ARGS
 from lib.git import git
 from deploy_tools.land_lib import detach, handoff, pin_gate, pipeline
 from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.ledger import annotation_line
+from deploy_tools.land_lib.ledger import annotation_line, result_line
 from deploy_tools.land_lib.options import HANDOFF_ENV, Options, parse_args
 from deploy_tools.land_lib.outcome import Outcome, write_verdict_file
 from deploy_tools.land_lib.tools import Classifier, Tools
@@ -306,6 +306,7 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
     try:
         outcome = pipeline.run(ln)
         rc = outcome.rc
+        print(result_line(ln.ledger, outcome))
         outcome.emit()
         line = outcome.file_line()
     except Exception as exc:
@@ -315,6 +316,7 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
         # refusal.
         reason = " ".join(f"{type(exc).__name__}: {exc}".split())
         crashed = Outcome(1, f"PR #{opts.pr} — the landing raised {reason}")
+        print(result_line(ln.ledger, crashed))
         crashed.emit()
         line = crashed.file_line()
         raise

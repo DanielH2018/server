@@ -140,8 +140,13 @@ def read(log: Path, now: float | None = None) -> dict:
 
 def _is_plain_deferral(log: Path, verdict: str) -> bool:
     """Whether a landing's 75 is `deferred` with no give-up note beside it."""
-    token = _VERDICT_TOKEN.match(verdict)
-    if not token or token.group(1) != Verdict.DEFERRED:
+    result = detach.result_in(log)
+    if result is not None:
+        token = result.get("verdict")
+    else:
+        match = _VERDICT_TOKEN.match(verdict)
+        token = match.group(1) if match else None
+    if token != Verdict.DEFERRED:
         return False
     text = log.read_text(errors="replace")
     return not any(
