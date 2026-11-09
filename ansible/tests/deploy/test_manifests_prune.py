@@ -16,7 +16,7 @@ from _k8s_render import render_role_template, rendered_texts
 from lib import yaml_fast
 from lib.k8s_roles import (
     MANIFESTS_PRUNE_DEFAULT,
-    tag_owners,
+    k8s_tags,
 )
 from role_label import ROLE_LABEL, homelab_role_label
 
@@ -29,7 +29,7 @@ _UNARMED_ROLES = frozenset({"authelia", "nut"})
 def _armed_roles() -> dict[str, dict]:
     """Each armed role and its render defaults; a role omitting the flag takes the default."""
     armed = {}
-    for tag in tag_owners():
+    for tag in k8s_tags():
         defaults = render_defaults(ROLES / "k8s" / tag)
         if defaults.get("manifests_prune", MANIFESTS_PRUNE_DEFAULT) is True:
             armed[tag] = defaults
@@ -42,7 +42,7 @@ _ARMED_ROLES = frozenset(_armed_roles())
 def test_every_caller_arms_the_prune_but_the_decided_exclusions() -> None:
     """registry, the first armed role, and observability, armed in its own namespace, are the
     named members: a census that stopped finding the tags would pass on an empty set."""
-    callers = set(tag_owners())
+    callers = k8s_tags()
     assert {"registry", "observability"} <= _ARMED_ROLES
     assert callers - _ARMED_ROLES == _UNARMED_ROLES, (
         f"unarmed callers {sorted(callers - _ARMED_ROLES)} differ from the decided exclusions "

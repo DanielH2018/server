@@ -19,7 +19,7 @@ that renders a document with no `kind` — and `is_manifest_template` in
 ## Removing a key from a Secret template
 
 Removing a key from a `secret.yaml.j2` removes it live only when Flux owns the key. For a role
-whose `containers_list` entry carries `owner: flux`, Flux's server-side apply removes a key it
+with a `platform: k8s` entry, Flux's server-side apply removes a key it
 no longer applies, and it takes over the `kubectl-client-side-apply` and `kubectl-patch` field
 managers. A key that any other field manager holds stays live, so patch it out and verify.
 `docs/target-architecture/deploy/d3-secrets.md` has the evidence, at step D3.5.

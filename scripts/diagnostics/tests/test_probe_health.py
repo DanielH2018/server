@@ -279,6 +279,48 @@ def test_k8s_health_checks_every_container_in_the_pod():
     assert "sidecar" in text
 
 
+def _with_init_container(doc, name, restart_policy, count, finished):
+    """`doc` with one init container added to its pod's spec and status."""
+    (pod,) = doc["items"]
+    spec = {
+        "name": name,
+        **({"restartPolicy": restart_policy} if restart_policy else {}),
+    }
+    pod["spec"] = {"initContainers": [spec]}
+    pod["status"]["initContainerStatuses"] = [
+        {
+            "name": name,
+            "restartCount": count,
+            "lastState": {"terminated": {"finishedAt": finished}},
+        }
+    ]
+    return doc
+
+
+def test_k8s_health_counts_a_native_sidecars_restart():
+    """A native sidecar reports under initContainerStatuses, and its restart fails the gate."""
+    doc = _with_init_container(
+        pods(("ghcr-mirror", 0, None)),
+        "ghcr-resume",
+        "Always",
+        2,
+        "2026-08-16T11:59:30Z",
+    )
+    text, code = health_rollout.format_k8s_health(_deploy(), doc, "registry", NOW)
+    assert code == 1
+    assert "restarts=2" in text and "svc-abc/ghcr-resume restarted 30s ago" in text
+
+
+def test_k8s_health_ignores_a_plain_init_containers_retries():
+    """A plain init container's restarts are retries before the pod started, not a crash."""
+    doc = _with_init_container(
+        pods(("app", 0, None)), "wait-for-db", None, 2, "2026-08-16T11:59:30Z"
+    )
+    text, code = health_rollout.format_k8s_health(_deploy(), doc, "n8n", NOW)
+    assert code == 0, text
+    assert "restarts=0" in text
+
+
 def _daemonset(generation=1, observed=1, desired=2, updated=2, ready=2, available=2):
     return {
         "kind": "DaemonSet",

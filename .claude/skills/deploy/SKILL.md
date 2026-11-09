@@ -6,8 +6,8 @@ allowed-tools: Bash, Glob
 
 Apply a change through the path that owns it.
 
-**`scripts/deploy.sh` deploys no workload.** Every `containers_list` entry is `platform: k8s`
-with `owner: flux`, and daniel-pi's and daniel-server's lists are empty. *What `deploy.sh` still
+**`scripts/deploy.sh` deploys no workload.** Every `cluster/services.yml` entry is `platform: k8s`,
+which Flux applies, and daniel-pi's and daniel-server's lists are empty. *What `deploy.sh` still
 does* below has the rest.
 
 **First, determine what the change touches:**

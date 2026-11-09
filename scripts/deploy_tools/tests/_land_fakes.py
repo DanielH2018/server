@@ -156,12 +156,9 @@ class Fakes:
             {"id": 1, "status": "completed", "conclusion": "skipped"}
         ]
     )
-    # `tools.owners_at`: each tag that sets `owner` at a ref, by ref. A ref absent here has
-    # none. An exception is raised in place of a map.
-    owners: dict[str, dict[str, str] | Exception] = field(default_factory=dict)
     # `tools.k8s_tags_at`: every tag of a k8s entry at a ref, by ref. A ref absent here keeps
-    # an entry for every tag `owners` names at any ref, so a test retires a tag only by saying
-    # so. An exception is raised in place of a set.
+    # an entry for every tag the landing derived, so a test retires a tag only by saying so.
+    # An exception is raised in place of a set.
     k8s_tags: dict[str, set[str] | Exception] = field(default_factory=dict)
     # The host wait's answers (`_land_host_fakes.py`): the HostTargets for the merge commit, and
     # the (verdict, rc, detail) `wait_for_hosts` ends with, None being every target settling.
@@ -336,19 +333,11 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         calls.append(("own_narrowing", (pr_range,), {}))
         return f.own_narrowing
 
-    def owners_at(primary, ref):
-        calls.append(("owners_at", (ref,), {"cwd": primary}))
-        answer = f.owners.get(ref, {})
-        if isinstance(answer, Exception):
-            raise answer
-        return answer
-
     def k8s_tags_at(primary, ref):
         calls.append(("k8s_tags_at", (ref,), {"cwd": primary}))
         if ref not in f.k8s_tags:
             # Every `containers_list` entry is k8s, so whatever the landing derived is one.
-            owned = {t for m in f.owners.values() if isinstance(m, dict) for t in m}
-            return owned | set(f.derived[0]) | {"sonarr", "radarr"}
+            return set(f.derived[0]) | {"sonarr", "radarr"}
         answer = f.k8s_tags[ref]
         if isinstance(answer, Exception):
             raise answer
@@ -396,7 +385,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         snapshot=snapshot,
         declared_at=lambda ref, primary: f.declared_at,
         read_state=lambda root, name: f.state.get(name, ""),
-        flux=FluxReads(owners_at, land_wait, pins, k8s_tags_at),
+        flux=FluxReads(land_wait, pins, k8s_tags_at),
         own_narrowing=own_narrowing,
         **host_fakes(f, calls),
         hostname=lambda: f.hostname,

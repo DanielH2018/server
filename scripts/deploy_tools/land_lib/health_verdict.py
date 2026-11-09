@@ -27,9 +27,8 @@ def _gated_tree(ln: Landing) -> str:
     """The commit the gate renders from, or "" for the primary checkout as it stands.
 
     `deployed_at` once the promotion step has run. Otherwise the merge commit, when a
-    promotion applied any gated tag: `probe.py health` reads `owner` from the tree it runs in
-    (`lib.k8s_roles.tag_owners`), and only a tree carrying the flip knows Flux applies the
-    tag. From a tree before the flip, the probe looks a CRD-only tag up by name (#5744).
+    promotion applied any gated tag: `probe.py health` reads which tags Flux applies from the
+    tree it runs in, and only a tree carrying the flip knows Flux applies the tag. From a tree before the flip, the probe looks a CRD-only tag up by name (#5744).
     """
     if ln.deployed_at:
         return ln.deployed_at

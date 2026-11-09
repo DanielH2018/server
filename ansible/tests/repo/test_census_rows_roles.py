@@ -14,10 +14,7 @@ import pytest
 from _helpers import walk_tasks
 from _drill_keys_row import DRILL_KEYS
 from _flux_born_keys_row import FLUX_BORN_KEYS
-from _flux_ownership_row import (
-    K8S_ENTRIES_ARE_FLUX_OWNED,
-    K8S_ROLES_ARE_REACHABLE,
-)
+from _flux_ownership_row import K8S_ROLES_ARE_REACHABLE
 from _host_script_row import HOST_SCRIPT_WRITES
 from _k3s_write_verbs_row import K3S_WRITE_VERBS
 from _out_of_render_row import OUT_OF_RENDER
@@ -410,7 +407,6 @@ ROWS = (
     HOST_SCRIPT_WRITES,
     OUT_OF_RENDER,
     K3S_WRITE_VERBS,
-    K8S_ENTRIES_ARE_FLUX_OWNED,
     K8S_ROLES_ARE_REACHABLE,
     FLUX_BORN_KEYS,
     DRILL_KEYS,

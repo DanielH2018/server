@@ -14,7 +14,7 @@ anything, a placeholder render also runs the five secret rules of
 `renderer_lib/secret_checks.py`.
 
 A placeholder render with `--role` also writes the publish bundle beside `DIR/cluster/`, for
-the tags it names that carry `owner: flux` (target slice D2): `DIR/flux/<tag>.yaml`,
+the k8s tags it names (target slice D2): `DIR/flux/<tag>.yaml`,
 `DIR/flux/kustomization.yaml` and `DIR/digests.json`, plus each `SHARED_KINDS` member's
 `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/`. A render that names no such tag writes no
 bundle. `cluster --shared-only` writes the shared kinds, a root listing them and
@@ -174,7 +174,7 @@ def cluster(
         roles: The tags to render, or None for every render target.
         secret_stubs: The stub file of a stub-mode render, or None for placeholder mode.
         render: The placeholder render; a test replaces it with one over fixture sets.
-        flux_owned: Returns the tags marked `owner: flux`; a test passes fixture tags.
+        flux_owned: Returns every k8s tag; a test passes fixture tags.
         kinds: The shared kinds, whose names no deploy tag may take; a test passes others.
         cluster_file: The cluster file the `cluster-vars` kind copies; a test passes a
             fixture.

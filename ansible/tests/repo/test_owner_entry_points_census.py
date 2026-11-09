@@ -6,8 +6,7 @@ says how it skips one. Each skip has its own `_is_clean` / `_is_flagged` pair be
 Those pairs pass vacuously when the entry point is renamed or stops calling the reader, because
 they import the reader, not the entry point (failure class 4). This census names each entry
 point as a member it must find, as `file:symbol`, and follows the calls from it down to one of
-the two ownership readers that `ansible/tests/deploy/test_owner_readers_agree.py` holds
-equal.
+`READERS`. Every k8s entry is Flux's (H1.9), so each reader answers from the entry's platform.
 
 The census runs both ways against the plan: a table row no member names fails, and so does a
 member whose row the plan no longer has.
@@ -26,9 +25,9 @@ from _helpers import REPO
 # `table_rows` returns the header row's first cell with the others.
 HEADER = "Entry point"
 
-# The readers of the `owner` flag: `tag_owners` reads the service list, and `entry_owners`, which
-# it calls, reads entries a caller has already loaded. Every chain that reads the tree ends at one.
-READERS = frozenset({"tag_owners", "entry_owners"})
+# The readers of which tags Flux applies: `k8s_tags` reads the service list, and `entry_owner`
+# reads one entry a caller has already loaded. Every chain that reads the tree ends at one.
+READERS = frozenset({"k8s_tags", "entry_owner"})
 
 
 @dataclass(frozen=True)
@@ -93,9 +92,15 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
             "wait_on_promotion",
             "_flux_owned",
         ),
-        Link("scripts/deploy_tools/land_lib/promotion.py", "_flux_owned", "owners_at"),
-        Link("scripts/deploy_tools/land_lib/land_flux.py", "owners_at", "flux_owned"),
-        Link(OWNERS, "flux_owned", "tag_owners"),
+        Link(
+            "scripts/deploy_tools/land_lib/promotion.py", "_flux_owned", "k8s_tags_at"
+        ),
+        Link(
+            "scripts/deploy_tools/land_lib/land_flux.py",
+            "k8s_tags_at",
+            "declared_k8s_tags",
+        ),
+        Link(OWNERS, "declared_k8s_tags", "k8s_tags"),
     ),
     "`probe.py health T`": (
         Link(
@@ -108,19 +113,14 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
         ),
     ),
     "`gen_role_glance.py`, `service_catalog.py`": (
-        Link("scripts/docs/gen_role_glance.py", "stale_k8s_docs", "entry_owners"),
-        Link("scripts/docs/service_catalog.py", "build_rows", "entry_owners"),
+        Link("scripts/docs/service_catalog.py", "build_rows", "autodeploy_eligibility"),
+        Link("scripts/docs/gen_role_glance.py", "stale_k8s_docs", "entry_owner"),
     ),
 }
 
 # The rows whose chain ends somewhere other than a tree reader, each with the reason.
 NOT_A_TREE_READER = {
-    "`deploy.sh --tags T`": (
-        "it refuses by `platform: k8s`, and the `every-k8s-entry-is-flux-owned` census row "
-        "holds `owner` on each such entry"
-    ),
     "`deploy.sh --changed`": "it leaves out a tag by the platform of its entry",
-    "`deploy.sh --list-services`": "it marks a tag by the platform of its entry",
     "GitOps deployer": "it routes every k8s role path to `cs.flux` with no ownership read",
     "`probe.py health T`": "it reads T's Kustomization for every tag, with no ownership read",
 }
@@ -232,10 +232,10 @@ def test_a_renamed_entry_point_is_flagged():
 
 def test_an_entry_point_that_stops_reading_ownership_is_flagged():
     rel = "scripts/docs/gen_role_glance.py"
-    text = (REPO / rel).read_text().replace("owners = entry_owners(", "owners = dict(")
+    text = (REPO / rel).read_text().replace("owner=entry_owner(entry)", "owner=None")
     assert census_problems(_plan(), source=_source_with(rel, text)) == [
         f"`gen_role_glance.py`, `service_catalog.py`: {rel}:stale_k8s_docs no longer "
-        "calls `entry_owners`"
+        "calls `entry_owner`"
     ]
 
 

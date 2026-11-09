@@ -40,7 +40,6 @@ def _suspended_landing(
     """Run the promotion wait and the health step; the outcome, and everything printed."""
     ln, _ = landing(
         Fakes(
-            owners={MERGE_SHA: {"bento-pdf": "flux"}},
             land_wait=[SUSPENDED],
         )
     )

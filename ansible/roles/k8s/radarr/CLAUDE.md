@@ -6,8 +6,8 @@ when both paths share one mount.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=radarr`
-  with exit 5
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
+  `--tags=radarr` with exit 5
 - **Images:** `lscr.io/linuxserver/radarr` (`radarr_k8s_image`), `ghcr.io/onedr0p/exportarr`
   (`radarr_k8s_exportarr_image`)
 - **Route:** `radarr.<domain>` · `radarr.local.<domain>`, Authelia one_factor
@@ -24,7 +24,7 @@ when both paths share one mount.
   absolute root-folder paths. Also mounts `media-data` (`radarr_k8s_media_claim`), shared RWX.
 - **`radarr-striptracks`** Docker mod strips unwanted audio/subtitle tracks on import.
 - **Flux applies it, not Ansible** (D5.20, a Wave D PR with sonarr and mosquitto). Its
-  `containers_list` entry carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. Its image-bump PRs therefore draw no `land-wait` and no `probe.py
   health` run. authelia, media-volume and traefik stay Ansible-owned, so the Kustomization records
   them in

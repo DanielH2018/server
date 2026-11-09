@@ -51,9 +51,7 @@ __all__ = [
     "role_callers",
     "resolved_manifest_files",
     "role_dirs",
-    "OWNER_VALUES",
     "RENDER_KEYS",
-    "tag_owners",
 ]
 
 
@@ -289,52 +287,11 @@ def k8s_entries(services: Path = K8S_SERVICES) -> dict[str, dict]:
     }
 
 
-# The values a containers_list entry's `owner` takes. `flux`: Flux applies the tag, and every
-# Ansible path skips it; an entry without `owner` is Ansible-owned. The plan is
-# docs/target-architecture/deploy/d2-first-leaf.md, *The ownership flag and its three readers*.
-OWNER_VALUES = frozenset({"flux"})
-
-
-def tag_owners(services: Path = K8S_SERVICES) -> dict[str, str]:
-    """Each deploy tag of a k8s entry in `services` that sets `owner`, to that value.
-
-    Only `platform: k8s` entries are read, because Flux applies k8s tags alone; an `owner` on a
-    Docker entry is not this reader's to judge. An entry without the key is Ansible-owned and
-    maps no tag. An entry that declares `tags`
-    maps each of them, since each selects it. Any value outside `OWNER_VALUES` raises
-    ValueError, a bare `owner:` included: a misspelt owner read as Ansible-owned would hand
-    the tag to both Ansible and Flux.
-    """
-    return entry_owners(k8s_entries(services), source=services)
-
-
-def entry_owners(entries: dict[str, dict], source: object = "") -> dict[str, str]:
-    """`tag_owners` over k8s entries already read, keyed by name; `source` names them in errors.
-
-    Raises:
-        ValueError: an entry's `owner` is outside `OWNER_VALUES`.
-    """
-    from lib.render_guard import entry_tags
-
-    owners: dict[str, str] = {}
-    for name, entry in entries.items():
-        if "owner" not in entry:
-            continue
-        owner = entry["owner"]
-        if not isinstance(owner, str) or owner not in OWNER_VALUES:
-            raise ValueError(
-                f"containers_list entry {name} in {source} has owner {owner!r}, "
-                f"not one of {sorted(OWNER_VALUES)}"
-            )
-        owners.update(dict.fromkeys(entry_tags(entry), owner))
-    return owners
-
-
 def k8s_tags(services: Path = K8S_SERVICES) -> set[str]:
-    """Every deploy tag of a k8s entry in `services`, whether or not it sets `owner`.
+    """Every deploy tag of a k8s entry in `services`, each one Flux applies and Ansible may not.
 
-    The tags rather than the entry names, because `tag_owners` maps tags: an entry that declares
-    `tags` is selected by each of them, and its name need not be one.
+    The tags rather than the entry names: an entry that declares `tags` is selected by each of
+    them, and its name need not be one.
     """
     from lib.render_guard import entry_tags
 

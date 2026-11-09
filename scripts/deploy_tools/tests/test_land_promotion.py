@@ -32,7 +32,6 @@ def _fakes(**kwargs: object) -> Fakes:
     """bento-pdf is flux-owned at the merge commit, and the PR reaches it alone."""
     fakes = Fakes(
         derived=(["bento-pdf"], "pr"),
-        owners={MERGE_SHA: {"bento-pdf": "flux"}},
         land_wait=[SETTLED_BENTO],
     )
     return replace(fakes, **kwargs)
@@ -230,7 +229,6 @@ def test_a_settled_wait_that_names_a_suspended_tag_gates_the_rest(land_run):
     )
     fakes = _fakes(
         derived=(["bento-pdf", "texbrain"], "pr"),
-        owners={MERGE_SHA: {"bento-pdf": "flux", "texbrain": "flux"}},
         land_wait=[settled],
     )
     rc, out, _, calls, _ = land_run([], fakes)
@@ -242,7 +240,7 @@ def test_an_unreadable_ownership_map_after_the_wait_gates_every_changed_name(lan
     """Asked too much, a gate fails loudly; asked too little, it passes over a broken tag."""
     fakes = _fakes(
         derived=([], "pr"),
-        owners={MERGE_SHA: ValueError("owner 'flx' is not one of ...")},
+        k8s_tags={MERGE_SHA: ValueError("services.yml is not a mapping")},
     )
     rc, out, _, calls, _ = land_run([], fakes)
     assert rc == 0 and "gating every changed name" in out

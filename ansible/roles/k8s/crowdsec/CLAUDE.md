@@ -9,7 +9,7 @@ dashboard and the dashboard findings.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
   `--tags=crowdsec` with exit 5
 - **Images:** `python` (`crowdsec_k8s_jobs_image`), `alpine/k8s`
   (`crowdsec_k8s_jobs_kubectl_image`), `crowdsecurity/crowdsec` (`crowdsec_k8s_image`)
@@ -18,7 +18,7 @@ dashboard and the dashboard findings.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5, crowdsec's own window). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged
+  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged
   change reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Traefik's entry declares `depends_on: [crowdsec]`**, so the LAPI is up before the bouncer
   that needs its credential.

@@ -1,8 +1,8 @@
 """The process boundaries a landing crosses for a tag Flux applies.
 
 `Tools.flux` holds one `FluxReads`, so a test replaces one of its fields as it replaces any
-other boundary. `promotion.split_k8s` and the gate read which tags an entry's `owner` takes
-from Ansible (`owners_at`) and which tags have a k8s entry (`k8s_tags_at`).
+other boundary. `promotion.split_k8s` and the gate read which tags have a k8s entry, each one
+Flux applies (`k8s_tags_at`).
 `promotion.wait_on_promotion` runs
 `promote.py land-wait` in process (`run_land_wait`). The plan is
 docs/target-architecture/deploy/d2-first-leaf.md, *How `land.sh` waits*. `pins` holds the reads
@@ -24,25 +24,12 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 # `promote_lib/wait.py` imports `forge` and `changed_set` bare, from scripts/deploy_tools.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
-from deploy_tools.deploy_lib.owners import declared_k8s_tags, flux_owned
+from deploy_tools.deploy_lib.owners import declared_k8s_tags
 from deploy_tools.land_lib.pin_reads import PinReads
 
 import forge
 from deploy_tools.promote_lib.wait import WaitResult, land_wait
 from deploy_tools.promote_lib.wait_reads import live_wait_reads
-
-
-def owners_at(primary: Path, ref: str) -> dict[str, str]:
-    """Each tag no Ansible path may deploy at commit `ref`, mapped to its `owner`.
-
-    `deploy_lib.owners.flux_owned` is the one reader, so a landing and `deploy.sh` agree on
-    which tags Flux applies.
-
-    Raises:
-        ValueError: an entry's `owner` is outside `lib.k8s_roles.OWNER_VALUES`.
-        subprocess.CalledProcessError: `ref` does not hold the k8s host's host_vars file.
-    """
-    return flux_owned(primary, ref)
 
 
 def k8s_tags_at(primary: Path, ref: str) -> set[str]:
@@ -71,7 +58,6 @@ class FluxReads:
     """The boundaries above, one field each, so a test replaces one.
 
     Attributes:
-        owners_at: `owners_at`.
         land_wait: `run_land_wait`, taking the merge commit, the tags the landing names
             on its own, the primary checkout, the cap in seconds, or None for none, and the
             most the reboot window may add to the cap.
@@ -79,7 +65,6 @@ class FluxReads:
         k8s_tags_at: `k8s_tags_at`.
     """
 
-    owners_at: Callable[[Path, str], dict[str, str]] = owners_at
     land_wait: Callable[[str, list[str], Path, float | None, int], WaitResult] = (
         run_land_wait
     )

@@ -93,6 +93,11 @@ def head_snapshot(head_tree) -> gate.Snapshot:
     return gate.snapshot(head_tree, ROLES)
 
 
+def test_a_snapshot_maps_every_k8s_entry_to_flux(head_snapshot):
+    """No entry carries an `owner` key, so the plane is read from the platform alone (H1.9)."""
+    assert set(ROLES) <= head_snapshot.flux_owned()
+
+
 def edited(dest: Path, head: Path, edits: dict[str, tuple[str, str]]) -> gate.Snapshot:
     """A copy of `head` at `dest` with each `path: (old, new)` replacement made once, rendered.
 

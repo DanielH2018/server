@@ -6,7 +6,7 @@ directory, so the library mount is an `emptyDir`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
   `--tags=navidrome` with exit 5
 - **Image:** `ghcr.io/navidrome/navidrome` (`navidrome_k8s_image`)
 - **Route:** `navidrome.<domain>` · `navidrome.local.<domain>`, Authelia one_factor
@@ -21,8 +21,8 @@ directory, so the library mount is an `emptyDir`.
   cache, sized as headroom rather than a measurement.
 - **Parked at `navidrome_k8s_replicas: 0`.** `k8s_autodeploy: false` stops Renovate
   automerging the image bump, because a bump would never reach a pod.
-- **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry carries
-  `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged
+- **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is
+  `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. Both dependencies,
   authelia and traefik, stay
