@@ -192,7 +192,6 @@ def test_the_light_tier_loads_no_ansible_core():
 @pytest.mark.parametrize(
     ("name", "args"),
     [
-        ("py_table", ("ROWS = 1\n", "ROWS")),
         (
             "ingress_probe_targets",
             ([{"name": "svc", "hostname": "svc", "probe": "yes"}],),

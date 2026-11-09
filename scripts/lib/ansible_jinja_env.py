@@ -120,8 +120,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     ports and hostnames through ``entry_fields``' filters. homepage's tiles build their links and
     ClusterIP widget URLs through ``homepage_href`` and ``homepage_widget_url``, which raise on
     an entry that lacks the route or the ``homepage_widget`` key.
-    ``py_table`` reads monitor-bridge's check table out of its Python source. The k3s
-    RecurringJob template names each weekly shard through ``weekly_backup_group``, which
+    The k3s RecurringJob template names each weekly shard through ``weekly_backup_group``, which
     raises on a shard outside 0-6, and the restore drill
     names the label prefix, the opt-out group and the B2 target through ``longhorn_backup_name``.
     longhorn-reconcile's ConfigMap computes the three tier lists with ``tier_backup_claims``,
@@ -166,7 +165,6 @@ def register_ansible_filters(env: Environment) -> Environment:
     import homepage_tiles
     import ingress_probes
     import longhorn_groups
-    import py_table
     import role_label
     import scrape_jobs
     import service_tier
@@ -204,7 +202,6 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["scrape_jobs"] = scrape_filters["scrape_jobs"]
     env.filters["metrics_port"] = scrape_filters["metrics_port"]
     env.filters["entry_port"] = scrape_filters["entry_port"]
-    env.filters["py_table"] = py_table.FilterModule().filters()["py_table"]
     env.filters["grafana_deploy_annotated"] = (
         grafana_dashboards.FilterModule().filters()["grafana_deploy_annotated"]
     )
