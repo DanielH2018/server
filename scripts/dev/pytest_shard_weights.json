@@ -1325,6 +1325,7 @@
  "scripts/lib/tests/test_script_imports.py": 0.93,
  "scripts/lib/tests/test_socket_testing.py": 0.08,
  "scripts/lib/tests/test_stdlib_only.py": 5.79,
+ "scripts/lib/tests/test_tree_lock.py": 0.0,
  "scripts/lib/tests/test_worktree_label.py": 0.0,
  "scripts/lib/tests/test_worktree_privileged_holders.py": 0.0,
  "scripts/lib/tests/test_worktrees.py": 0.65,
