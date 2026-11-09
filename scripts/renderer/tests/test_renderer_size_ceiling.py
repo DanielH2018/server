@@ -17,7 +17,8 @@ from lib.repo_paths import REPO
 # 13656 once #7624 shrank the restart-target code by a line.
 # 13654 once H1.9 moved the k3s service list to cluster/services.yml.
 # 13676 once #7804 made the soak Job count native-sidecar restarts.
-LINE_CEILING = 13676
+# 13680 once #7845 gave the k8s play context the two names its inventory values read.
+LINE_CEILING = 13680
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 
