@@ -580,7 +580,8 @@ else
 
     UV_CACHE_DIR=$work/uv-cache
     export UV_CACHE_DIR
-    uv_run="$work/bin/uv run --frozen --python $python_version"
+    # The lint group is prek-only, and actionlint-py's build downloads from a GitHub release.
+    uv_run="$work/bin/uv run --frozen --no-group lint --python $python_version"
     if [ -n "$kit" ]; then
         [ -d "$kit/uv-cache" ] && cp -R "$kit/uv-cache/." "$work/uv-cache/"
         [ -d "$kit/tools-cache" ] && cp -R "$kit/tools-cache/." "$work/tools-cache/"

@@ -534,3 +534,15 @@ def test_a_failed_first_aideinit_keeps_its_marker_so_the_rerun_resumes(tmp_path)
     assert marker_after_failure
     assert resumed.returncode == 0, resumed.stderr
     assert host.commands().count(SCANS[1]) == 2
+
+
+def test_every_uv_run_of_the_local_build_skips_the_lint_group(tmp_path):
+    host = FakeHost(tmp_path, hostname="daniel-box")
+    host.stock_kit()
+
+    result = host.run("daniel-box", "--local-build", str(host.clone(tmp_path)))
+
+    assert result.returncode == 0, result.stderr
+    calls = (host.root / "uv.calls").read_text().splitlines()
+    assert len(calls) >= 3
+    assert [c for c in calls if "run --frozen --no-group lint " not in c] == []

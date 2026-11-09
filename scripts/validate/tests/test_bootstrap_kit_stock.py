@@ -110,3 +110,23 @@ def test_a_kit_download_differing_from_its_pin_is_flagged(tmp_path):
             lambda request, timeout=None: _Body(b"other"),
         )
     assert not dest.exists()
+
+
+def test_the_kit_s_uv_sync_skips_the_lint_group(tmp_path):
+    clone = tmp_path / "clone"
+    (clone / "ansible/inventory/group_vars").mkdir(parents=True)
+    (clone / "ansible/inventory/group_vars/all.yml").write_text(
+        'host_python_version: "3.15.2"\n'
+    )
+    calls = []
+
+    case.stock_uv_cache(
+        SimpleNamespace(work=tmp_path / "work"),
+        clone,
+        tmp_path / "kit",
+        "uv",
+        run=lambda argv, **_: calls.append(argv),
+    )
+
+    sync = next(argv for argv in calls if argv[1] == "sync")
+    assert sync[sync.index("--no-group") + 1] == "lint"
