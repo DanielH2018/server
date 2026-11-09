@@ -8,6 +8,7 @@ Run: uv run pytest ansible/tests/deploy/test_manifests_prune.py
 """
 
 import pytest
+import yaml
 from _helpers import (
     ROLES,
 )
@@ -18,7 +19,7 @@ from lib.k8s_roles import (
     MANIFESTS_PRUNE_DEFAULT,
     k8s_tags,
 )
-from role_label import ROLE_LABEL, homelab_role_label
+from role_label import ROLE_LABEL, _Loader, homelab_role_label
 
 
 # The roles that opt out of the prune, each by operator decision recorded as a DECIDED marker
@@ -99,6 +100,14 @@ def test_an_ordinary_string_and_the_keys_stay_plain() -> None:
     assert _env_value_line("plain-text") == "  v: plain-text"
     text = homelab_role_label("kind: Service\nmetadata:\n  name: w\n", "widget")
     assert "kind: Service" in text.splitlines()
+
+
+def test_the_filter_parses_with_libyaml() -> None:
+    """PyYAML's own parser was a quarter of every full k8s render, which each CI leg pays (#7710).
+
+    The plain-scalar cases above run through this parser, whose plain style is "" not None.
+    """
+    assert issubclass(_Loader, yaml.CSafeLoader)
 
 
 def _without_role_label(doc: dict) -> dict:

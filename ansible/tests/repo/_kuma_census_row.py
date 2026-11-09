@@ -134,7 +134,6 @@ _PROSE_HOLDERS = {
             "hosts/components/fake-remux/templates/fake-remux-health.sh.j2",
             "hosts/components/github-checks/templates/github-interaction-limit.sh.j2",
             "hosts/components/github-checks/templates/github-ruleset-drift.sh.j2",
-            "ansible/roles/setup/initial_setup/tasks/crons.yml",
             "ansible/roles/setup/initial_setup/templates/aide-check.sh.j2",
             "ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2",
             "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2",

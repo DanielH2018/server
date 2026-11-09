@@ -8,31 +8,55 @@ table{width:100%;border-collapse:collapse}td,th{padding:6px 8px;border-bottom:1p
 th{color:var(--sub);font-size:12px;text-transform:uppercase}
 code{font-family:ui-monospace,monospace;background:var(--surface0);padding:1px 4px;border-radius:3px}
 button{background:var(--blue);color:var(--crust);border:0;padding:4px 10px;border-radius:3px;font-weight:600;cursor:pointer}
-button.danger{background:var(--red)}button.warn{background:var(--yellow)}
+button.danger{background:var(--red)}button.warn{background:var(--yellow)}button.plain{background:var(--surface0);color:var(--text)}
 .unavail{color:var(--red)}.clear{color:var(--green)}.mute{color:var(--mute)}
-pre{background:var(--mantle);border:1px solid var(--surface1);padding:10px;max-height:320px;overflow:auto;white-space:pre-wrap}
+pre{background:var(--mantle);border:1px solid var(--surface1);padding:10px;overflow:auto;white-space:pre-wrap;margin:0}
 #msg{min-height:1.4em;color:var(--yellow)}
 a{color:var(--blue)}
+#viewer[hidden]{display:none}
+.vhead{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.vhead .grow{flex:1}
+.steps{display:flex;gap:4px;margin:10px 0;flex-wrap:wrap}
+.step{flex:1;min-width:84px;padding:4px 8px;background:var(--surface0);font-size:12px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.step b{display:block}.step.done b{color:var(--green)}.step.now{outline:1px solid var(--yellow)}.step.now b{color:var(--yellow)}.step.todo{color:var(--mute)}
+#logbody{max-height:420px;overflow:auto;background:var(--mantle);border:1px solid var(--surface1);padding:4px 10px}
+.stage{border-bottom:1px solid var(--surface1);padding:4px 0}.stage summary{cursor:pointer;color:var(--sub)}
+.stage .lines{font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;padding:2px 0 2px 16px}
+.more{cursor:pointer;color:var(--blue);font-family:system-ui}
+.verdict{margin-top:8px;padding:8px 10px;border:1px solid var(--surface1)}
+.tone-ok{border-color:var(--green)}.tone-ok b{color:var(--green)}
+.tone-warn{border-color:var(--yellow)}.tone-warn b{color:var(--yellow)}
+.tone-bad{border-color:var(--red)}.tone-bad b{color:var(--red)}
+.tone-none b{color:var(--sub)}
+.chip{font-size:12px;font-weight:700}.chip.tone-ok{color:var(--green)}.chip.tone-warn{color:var(--yellow)}.chip.tone-bad{color:var(--red)}.chip.tone-none{color:var(--sub)}
+.bar{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:8px;font-size:13px}
 </style></head><body><main>
 <h1>Deploy queue</h1><div id="msg"></div>
 <h2>Locks, landings and deploys in flight</h2><div id="inflight"></div>
+<section id="viewer" hidden><h2>Landing log</h2><div id="vhead" class="vhead"></div><div id="vsteps" class="steps"></div>
+<div id="logbody"></div><div id="vverdict"></div><div id="vbar" class="bar"></div></section>
+<h2>Recently finished landings</h2><div id="landings"></div>
 <h2>Deployer state</h2><div id="state"></div>
 <h2>Open pull requests</h2><div id="prs"></div>
-<h2>Log</h2><pre id="log" class="mute">no action yet</pre>
 <script>
 const H={'X-Deploy-UI':'1','Content-Type':'application/json'};
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const PR_URL='https://github.com/DanielH2018/server/pull/';
+const REPO='https://github.com/DanielH2018/server';
+const PR_URL=REPO+'/pull/';
 const prLink=n=>`<a href="${PR_URL}${encodeURIComponent(n)}" target="_blank" rel="noopener">#${esc(n)}</a>`;
-let logPath=null;
+const ago=t=>{const s=Math.max(0,Date.now()/1000-t);return s<90?`${Math.round(s)}s ago`:s<5400?`${Math.round(s/60)}m ago`:`${Math.round(s/3600)}h ago`;};
+let running=new Set();
 async function post(path,payload){const r=await fetch(path,{method:'POST',headers:H,body:JSON.stringify(payload)});const t=await r.text();
-  document.getElementById('msg').textContent=r.status+' '+t;if(r.status===202){logPath=JSON.parse(t).log;}refresh();}
+  document.getElementById('msg').textContent=r.status+' '+t;if(r.status===202){openLog(JSON.parse(t).log);}refresh();}
 async function panel(id,path,render){const el=document.getElementById(id);try{const r=await fetch(path);const b=await r.json();
   el.innerHTML=b.unavailable?`<span class="unavail">unavailable: ${esc(b.unavailable)}</span>`:render(b);}catch(e){el.innerHTML=`<span class="unavail">unavailable: ${esc(e)}</span>`;}}
-function inflight(b){const held=b.runs.filter(r=>r.locks.length);
+const base=p=>p.split('/').pop();
+function inflight(b){const held=b.runs.filter(r=>r.locks.length);running=new Set(b.runs.filter(r=>r.log).map(r=>base(r.log)));
   let s=`<p>Locks: ${!b.locks_watched.length?'<span class="unavail">no lock files found</span>':held.length?held.map(r=>`<code>${esc(r.locks.join(' '))}</code> pid ${r.pid}, ${r.elapsed_s}s`).join('; '):`<span class="clear">free</span> <span class="mute">(${b.locks_watched.length} watched)</span>`}</p>`;
   if(!b.runs.length)return s+'<p class="mute">nothing in flight</p>';
-  return s+'<table><tr><th>kind</th><th>PR / tag</th><th>pid</th><th>elapsed</th><th>locks</th><th>command</th><th></th></tr>'+b.runs.map(r=>`<tr><td>${esc(r.kind)}</td><td>${r.pr?prLink(r.pr)+(r.title?`<br><span class="mute">${esc(r.title)}</span>`:''):esc(r.tag)}</td><td>${r.pid}</td><td>${r.elapsed_s}s</td><td>${esc(r.locks.join(' '))}${r.waiting_on.length?`<span class="mute">waiting on ${esc(r.waiting_on.join(' '))}</span>`:''}</td><td><code>${esc(r.args)}</code><br><span class="mute">${esc(r.log)}</span></td><td>${r.kind==='land'?`<button class="danger" onclick="post('/api/cancel',{pid:${r.pid}})">cancel</button>`:''}</td></tr>`).join('')+'</table>';}
+  return s+'<table><tr><th>kind</th><th>PR / tag</th><th>pid</th><th>elapsed</th><th>locks</th><th>command</th><th></th></tr>'+b.runs.map(r=>`<tr><td>${esc(r.kind)}</td><td>${r.pr?prLink(r.pr)+(r.title?`<br><span class="mute">${esc(r.title)}</span>`:''):esc(r.tag)}</td><td>${r.pid}</td><td>${r.elapsed_s}s</td><td>${esc(r.locks.join(' '))}${r.waiting_on.length?`<span class="mute">waiting on ${esc(r.waiting_on.join(' '))}</span>`:''}</td><td><code>${esc(r.args)}</code><br><span class="mute">${esc(r.log)}</span></td><td>${r.kind==='land'&&r.log?`<button onclick="openLog('${esc(base(r.log))}')">log</button> `:''}${r.kind==='land'?`<button class="danger" onclick="post('/api/cancel',{pid:${r.pid}})">cancel</button>`:''}</td></tr>`).join('')+'</table>';}
+function landings(b){const done=b.landings.filter(l=>!running.has(l.name));
+  if(!done.length)return '<p class="mute">no landing ended in the last day</p>';
+  return '<table><tr><th>PR</th><th>ended</th><th>verdict</th><th></th></tr>'+done.map(l=>`<tr><td>${l.pr?prLink(l.pr):'<span class="mute">no PR</span>'}${l.title?`<br><span class="mute">${esc(l.title)}</span>`:''}</td><td>${ago(l.mtime)}</td><td>${l.verdict?`<span class="chip tone-${esc(l.verdict.tone)}">${esc(l.verdict.verdict)}</span>`:'<span class="mute">ended without a verdict</span>'}</td><td><button onclick="openLog('${esc(l.name)}')">log</button></td></tr>`).join('')+'</table>';}
 // A Clear drops every hold_plane entry at once, and each entry is a plane nobody has applied.
 // The prompt names them, because after the Clear nothing records them at all.
 let holdWarn='Type the held SHA to clear it';
@@ -45,7 +69,54 @@ function state(b){const row=(k,v,extra='')=>`<tr><td>${k}</td><td>${v?`<code>${e
   return '<table>'+row('hold_sha',b.hold_sha,hold)+`<tr><td>hold_plane</td><td>${planeCell}</td><td></td></tr>`+row('last_run',b.last_run)+row('behind_since',b.behind_since)+'</table>';}
 function prs(b){if(!b.prs.length)return '<p class="mute">no open PRs</p>';
   return '<table><tr><th>#</th><th>title</th><th>CI</th><th></th></tr>'+b.prs.map(p=>`<tr><td>${prLink(p.number)}</td><td>${esc(p.title)}${p.draft?' <span class="mute">draft</span>':''}<br><span class="mute">${esc(p.branch)}</span></td><td>${p.ci}</td><td><button onclick="{const s=prompt('--since SHA (master before the merge)');if(s)post('/api/land',{pr:'${p.number}',since:s})}">land</button></td></tr>`).join('')+'</table>';}
-async function tail(){if(!logPath)return;const r=await fetch('/api/log?path='+encodeURIComponent(logPath));document.getElementById('log').textContent=await r.text();}
-function refresh(){panel('inflight','/api/inflight',inflight);panel('state','/api/state',state);panel('prs','/api/prs',prs);tail();}
-refresh();setInterval(refresh,10000);
+
+// The landing viewer keeps its own state and its own 2-second poll, so the 10-second panel
+// refresh never redraws it, and it keeps showing a landing after its in-flight row is gone.
+const FOLD=240;
+let view={name:null,size:'',data:null,raw:false,follow:true,open:{},unfold:{},err:''};
+function openLog(name){view={name,size:'',data:null,raw:false,follow:true,open:{},unfold:{},err:''};
+  history.replaceState(null,'','#log/'+encodeURIComponent(name));document.getElementById('viewer').hidden=false;pollLog();
+  document.getElementById('viewer').scrollIntoView({behavior:'smooth'});}
+function closeLog(){view.name=null;history.replaceState(null,'',location.pathname);document.getElementById('viewer').hidden=true;}
+async function pollLog(){if(!view.name)return;const name=view.name;
+  try{const r=await fetch(`/api/log?name=${encodeURIComponent(name)}&size=${view.size}`);const b=await r.json();
+    if(name!==view.name)return;
+    if(b.unavailable){view.err=b.unavailable;}else if(!b.unchanged){view.err='';view.data=b;view.size=b.size;}
+  }catch(e){view.err=String(e);}
+  renderLog();}
+function fold(line,key){if(line.length<=FOLD||view.unfold[key])return esc(line);
+  return esc(line.slice(0,FOLD))+`… <span class="more" onclick="view.unfold['${key}']=1;renderLog()">show all ${line.length} characters</span>`;}
+function stepName(s,of){return s.step==='arm'?'arm':s.step===''?'start':`${s.step}/${of}`;}
+function renderLog(){const d=view.data,body=document.getElementById('logbody');
+  const head=document.getElementById('vhead'),steps=document.getElementById('vsteps'),verd=document.getElementById('vverdict'),bar=document.getElementById('vbar');
+  const err=view.err?`<span class="unavail">unavailable: ${esc(view.err)}</span>`:'';
+  if(!d){head.innerHTML=`<span class="grow">${err||'<span class="mute">loading…</span>'}</span><button class="plain" onclick="closeLog()">close</button>`;steps.innerHTML=body.innerHTML=verd.innerHTML=bar.innerHTML='';return;}
+  const live=running.has(d.name)&&!d.verdict;
+  head.innerHTML=`<span class="grow">${d.pr?prLink(d.pr):'<span class="mute">no PR</span>'} ${d.title?esc(d.title):''} <span class="mute">${live?'in flight':'ended'} · ${esc(d.name)}</span> ${err}</span><button class="plain" onclick="closeLog()">close</button>`;
+  // Every step header seen, then the numbered steps not reached yet.
+  const seen=d.stages.filter(s=>s.step!=='');const cur=seen.length-1;
+  const todo=[];for(let n=seen.filter(s=>s.step!=='arm').length;d.of&&n<=d.of;n++)todo.push(`<div class="step todo"><b>${n}/${d.of}</b>&nbsp;</div>`);
+  steps.innerHTML=seen.map((s,i)=>`<div class="step ${i===cur&&!d.verdict?'now':'done'}" title="${esc(s.label)}"><b>${stepName(s,d.of)}</b>${esc(s.label)}</div>`).join('')+(d.verdict?'':todo.join(''));
+  const atBottom=body.scrollTop+body.clientHeight>=body.scrollHeight-24,keep=body.scrollTop;
+  if(view.raw){body.innerHTML=`<pre>${esc(d.raw)}</pre>`;}
+  else{const last=d.stages.length-1;
+    body.innerHTML=d.stages.map((s,i)=>{const open=i in view.open?view.open[i]:i===last;
+      const tail=(s.lines.filter(l=>l[0].trim()).slice(-1)[0]||[''])[0];
+      return `<details class="stage" data-i="${i}" ${open?'open':''} ontoggle="view.open[${i}]=this.open"><summary><b>${stepName(s,d.of)}</b> ${esc(s.label)}${tail&&!open?` <span class="mute">· ${esc(tail.slice(0,120))}</span>`:''}</summary><div class="lines">${s.lines.map(([t,n],j)=>fold(t,i+':'+j)+(n>1?` <span class="mute">×${n}</span>`:'')).join('\n')}</div></details>`;}).join('');}
+  if(view.follow&&atBottom||view.follow&&!view.data_seen){body.scrollTop=body.scrollHeight;}else{body.scrollTop=keep;}
+  view.data_seen=true;
+  const v=d.verdict;verd.innerHTML=v?`<div class="verdict tone-${esc(v.tone)}"><b>${esc(v.verdict)}</b>${v.detail?' · '+esc(v.detail):''}${v.hint?`<br><span class="mute">Next: ${esc(v.hint)}</span>`:''}</div>`:'';
+  const sha=(d.raw.match(/merge commit ([0-9a-f]{40})/)||[])[1];
+  const grafana=location.hostname.startsWith('deploy.')?`<a href="https://${location.hostname.replace(/^deploy\./,'grafana.')}/d/landings" target="_blank" rel="noopener">Landings board</a>`:'';
+  bar.innerHTML=[d.truncated?'<span class="unavail">log cut at 1 MB</span>':'',
+    sha?`<a href="${REPO}/commit/${sha}" target="_blank" rel="noopener">merge commit ${sha.slice(0,9)}</a>`:'',grafana,
+    `<button class="plain" onclick="view.raw=!view.raw;renderLog()">${view.raw?'stages':'raw'}</button>`,
+    `<button class="plain" onclick="navigator.clipboard.writeText(view.data.raw)">copy</button>`,
+    live?(view.follow?'<button class="plain" onclick="view.follow=false;renderLog()">following</button>':'<button onclick="view.follow=true;const b=document.getElementById(\'logbody\');b.scrollTop=b.scrollHeight;renderLog()">jump to live</button>'):''].filter(Boolean).join(' ');}
+document.getElementById('logbody').addEventListener('scroll',e=>{const b=e.target;const bottom=b.scrollTop+b.clientHeight>=b.scrollHeight-24;
+  if(view.follow!==bottom&&view.data){view.follow=bottom;}});
+function refresh(){panel('inflight','/api/inflight',inflight).then(()=>panel('landings','/api/landings',landings));panel('state','/api/state',state);panel('prs','/api/prs',prs);}
+function fromHash(){const m=location.hash.match(/^#log\/(.+)$/);if(m&&decodeURIComponent(m[1])!==view.name)openLog(decodeURIComponent(m[1]));}
+window.addEventListener('hashchange',fromHash);fromHash();
+refresh();setInterval(refresh,10000);setInterval(pollLog,2000);
 </script></main></body></html>

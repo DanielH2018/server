@@ -73,7 +73,7 @@ _TEXTS: list[tuple[str, str, str]] = []
 def rendered_docs():
     """The rendered manifests, rendering the tree at most once per process.
 
-    A full render costs ~8s, so each call site paying it separately would add tens of
+    A full render costs ~6s, so each call site paying it separately would add tens of
     seconds to the suite. The render is a pure function of the
     repo tree, which no test writes to, so one result serves the whole session.
     `ansible/tests/conftest.py` builds it through `prebuild()` when collection finishes, so

@@ -72,13 +72,16 @@ class _GoPlain(str):
     """A plain scalar PyYAML read as a string and go-yaml reads as a number or a bool."""
 
 
-class _Loader(yaml.SafeLoader):
+# libyaml's parser, where PyYAML's wheel ships it: the pure-Python one was a quarter of a full
+# k8s render (#7710).
+class _Loader(getattr(yaml, "CSafeLoader", yaml.SafeLoader)):
     """SafeLoader that marks a plain scalar go-yaml would not read as a string."""
 
 
 def _construct_str(loader: yaml.SafeLoader, node: yaml.ScalarNode) -> str:
     value = loader.construct_scalar(node)
-    if node.style is None and _GO_YAML_NON_STRING.fullmatch(value):
+    # A plain scalar's style is None from PyYAML's parser and "" from libyaml's.
+    if not node.style and _GO_YAML_NON_STRING.fullmatch(value):
         return _GoPlain(value)
     return value
 
@@ -86,6 +89,8 @@ def _construct_str(loader: yaml.SafeLoader, node: yaml.ScalarNode) -> str:
 _Loader.add_constructor("tag:yaml.org,2002:str", _construct_str)
 
 
+# DECIDED: PyYAML's emitter, not libyaml's. CSafeDumper quotes 24 of the repo's manifests
+# differently, which would change every checksum annotation over them.
 class _Dumper(yaml.SafeDumper):
     """SafeDumper that writes a multi-line string as a `|` block, as a template would."""
 
