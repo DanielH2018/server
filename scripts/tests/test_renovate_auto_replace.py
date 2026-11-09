@@ -171,9 +171,7 @@ def test_a_pin_digest_automerges_unless_the_role_is_denied_auto_deploy():
         for r in rules
     ), "no automerge rule matches updateType pinDigest"
     denylist = [
-        r
-        for r in rules
-        if str(r.get("groupName", "")).startswith("k8s image {{depName}} (manual")
+        r for r in rules if str(r.get("groupName", "")).startswith("k8s images (manual")
     ]
     assert len(denylist) == 1, denylist
     assert "matchUpdateTypes" not in denylist[0], denylist[0]["matchUpdateTypes"]

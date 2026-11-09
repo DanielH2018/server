@@ -7,6 +7,7 @@
   Named for its content, as the verify Jobs' ConfigMap is, so a script edit renames it, which
   changes the pod template and rolls the mirror onto the new script.
 #}
+{% set resume_dial = ['python3', '-c', "import socket; socket.create_connection(('127.0.0.1', " ~ registry_k8s_ghcr_resume_port ~ "), 2).close()"] %}
 {% set resume_configmap = 'ghcr-resume-' + (resume_data | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
 ---
 apiVersion: v1
@@ -66,6 +67,48 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_registry_node }}
 {{ pod_shell(containers_list | tier_priority_class('registry'), run_as_user=1000, run_as_group=1000, fs_group=1000) }}
+      initContainers:
+        # The mirror's upstream, on the pod's loopback only: nothing outside the pod reaches it,
+        # so no Service port or NetworkPolicy rule names it.
+        # A native sidecar, whose startupProbe holds the mirror's start until this port answers:
+        # distribution's NewApp dials REGISTRY_PROXY_REMOTEURL once and panics if it is refused,
+        # so as a peer container the race restarted the mirror on every rollout (#7792).
+        - name: ghcr-resume
+          image: {{ registry_k8s_ghcr_resume_image }}
+          imagePullPolicy: IfNotPresent
+          restartPolicy: Always
+          command: ["python3", "/opt/ghcr-resume/{{ resume_script }}"]
+{{ hardened_security_context(read_only=true, non_root=true) }}
+          env:
+            - name: LISTEN_HOST
+              value: 127.0.0.1
+            - name: LISTEN_PORT
+              value: "{{ registry_k8s_ghcr_resume_port }}"
+            - name: UPSTREAM
+              value: https://ghcr.io
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          volumeMounts:
+            - name: ghcr-resume
+              mountPath: /opt/ghcr-resume
+              readOnly: true
+          # An exec probe, because an httpGet or tcpSocket probe dials the pod IP and this binds
+          # 127.0.0.1. It dials the port only, so ghcr.io being unreachable leaves it ready.
+          startupProbe:
+            exec:
+              command: {{ resume_dial | to_json }}
+            periodSeconds: 1
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: {{ resume_dial | to_json }}
+            periodSeconds: 30
+            timeoutSeconds: 5
+          # Four concurrent unthrottled 223 MB fetches through it on daniel-box on 2026-10-29
+          # peaked at 36 MB RSS and spent 2.9 CPU-seconds per GB, about 170 MB/s at this CPU
+          # limit. The memory limit leaves room for the exec probe's second python process.
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='40Mi') }}
       containers:
         - name: ghcr-mirror
           image: {{ registry_k8s_image }}
@@ -140,42 +183,6 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 30
 {{ container_resources(cpu_limit='500m', mem_limit='256Mi', cpu_request='20m', mem_request='32Mi') }}
-        # The mirror's upstream, on the pod's loopback only: nothing outside the pod reaches it,
-        # so no Service port or NetworkPolicy rule names it. Until it answers, a cold pull fails
-        # at the mirror and containerd falls back to ghcr.io.
-        - name: ghcr-resume
-          image: {{ registry_k8s_ghcr_resume_image }}
-          imagePullPolicy: IfNotPresent
-          command: ["python3", "/opt/ghcr-resume/{{ resume_script }}"]
-{{ hardened_security_context(read_only=true, non_root=true) }}
-          env:
-            - name: LISTEN_HOST
-              value: 127.0.0.1
-            - name: LISTEN_PORT
-              value: "{{ registry_k8s_ghcr_resume_port }}"
-            - name: UPSTREAM
-              value: https://ghcr.io
-            - name: PYTHONUNBUFFERED
-              value: "1"
-          volumeMounts:
-            - name: ghcr-resume
-              mountPath: /opt/ghcr-resume
-              readOnly: true
-          # An exec probe, because an httpGet or tcpSocket probe dials the pod IP and this binds
-          # 127.0.0.1. It dials the port only, so ghcr.io being unreachable leaves it ready.
-          readinessProbe:
-            exec:
-              command:
-                - python3
-                - -c
-                - "import socket; socket.create_connection(('127.0.0.1', {{ registry_k8s_ghcr_resume_port }}), 2).close()"
-            initialDelaySeconds: 2
-            periodSeconds: 30
-            timeoutSeconds: 5
-          # Four concurrent unthrottled 223 MB fetches through it on daniel-box on 2026-10-29
-          # peaked at 36 MB RSS and spent 2.9 CPU-seconds per GB, about 170 MB/s at this CPU
-          # limit. The memory limit leaves room for the exec probe's second python process.
-{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='40Mi') }}
       volumes:
         - name: ghcr-mirror-data
           persistentVolumeClaim:

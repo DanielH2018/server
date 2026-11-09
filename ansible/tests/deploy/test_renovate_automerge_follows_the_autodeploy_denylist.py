@@ -50,16 +50,13 @@ from _role_census import role_dirs
 
 _RENOVATE = REPO / "renovate.json"
 
-# The rule is found by the fixed prefix of its groupName: `{{depName}}` keeps Renovate's
-# per-service grouping (one PR per image, one bump's revert), and the parenthetical
-# is the `manual —` tell the renovate-prs skill triages by.
-MANUAL_GROUP_PREFIX = "k8s image {{depName}} (manual — k8s_autodeploy: false"
+# The rule is found by the fixed prefix of its groupName; the parenthetical is the
+# `manual —` tell the renovate-prs skill triages by.
+MANUAL_GROUP_PREFIX = "k8s images (manual — k8s_autodeploy: false"
 
 # The base-image rule's head differs from the denylist rule's so `find_rule` keeps its
 # exactly-one contract on each; the parenthetical carries the same marker.
-DOCKERFILE_MANUAL_GROUP_PREFIX = (
-    "k8s base image {{depName}} (manual — k8s_autodeploy: false"
-)
+DOCKERFILE_MANUAL_GROUP_PREFIX = "k8s base images (manual — k8s_autodeploy: false"
 DOCKERFILE_GLOB = "templates/Dockerfile*.j2"
 
 # The denied roles the Dockerfile census must find, so a moved or renamed template fails as a

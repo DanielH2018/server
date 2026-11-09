@@ -57,6 +57,26 @@ def _rollout_counts(workload):
     )
 
 
+def _long_running_statuses(pod):
+    """The statuses of a pod's regular containers and its native sidecars.
+
+    A native sidecar (an initContainer with `restartPolicy: Always`) reports under
+    `initContainerStatuses`. A plain init container is left out: its restarts are retries
+    before the pod started, such as a wait-for-<dependency> gate.
+    """
+    sidecars = {
+        c.get("name")
+        for c in (pod.get("spec") or {}).get("initContainers") or []
+        if c.get("restartPolicy") == "Always"
+    }
+    status = pod.get("status") or {}
+    return (status.get("containerStatuses") or []) + [
+        cs
+        for cs in status.get("initContainerStatuses") or []
+        if cs.get("name") in sidecars
+    ]
+
+
 def format_k8s_health(deploy, pods, service, now):
     """Summarize a workload's rollout + its pods' restarts. Returns (text, exit_code).
 
@@ -105,7 +125,7 @@ def format_k8s_health(deploy, pods, service, now):
     restarts, recent = 0, []
     for pod in (pods or {}).get("items") or []:
         pod_name = (pod.get("metadata") or {}).get("name", "?")
-        for cs in (pod.get("status") or {}).get("containerStatuses") or []:
+        for cs in _long_running_statuses(pod):
             count = cs.get("restartCount", 0)
             restarts += count
             if not count:

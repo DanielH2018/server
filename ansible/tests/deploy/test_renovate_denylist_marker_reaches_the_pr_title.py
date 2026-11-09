@@ -47,6 +47,7 @@ KNOWN_MARKER_RULE_PREFIXES = frozenset(
     {
         MANUAL_GROUP_PREFIX,
         DOCKERFILE_MANUAL_GROUP_PREFIX,
+        "k8s image {{depName}} (manual",
         "meilisearch (manual",
         "crowdsec bouncer plugin (manual",
         "karakeep time-tagger pip deps (manual",
