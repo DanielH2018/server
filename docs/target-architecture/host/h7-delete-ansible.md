@@ -1931,7 +1931,7 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.60 daniel-box: `initial_setup`, part 3 | new | yes, with H7.58 | H7.59 live, H7.32, H6.2 |
 | H7.61 daniel-server: dev tooling and the worktree holder scan; `/usr/bin/uv` on both cluster hosts | new | yes | H7.38, H7.39, H7.41a |
 | H7.62 daniel-box: dev tooling, the worktree holder scan, `chezmoi_setup` and `github_cli` | new | yes, with H7.61 | H7.61 live, H7.40, H6.2 |
-| H7.63 The last setup tasks: the setup-drift check, the collections install and `common/tasks/` | new | no: it deletes what H7.52's timer retirement and every importer of `common/tasks/` leave | H7.35, H7.37, H7.48, H7.50, H7.52 live, H7.60, H7.62 |
+| H7.63 The last setup tasks: the setup-drift check, the collections install and `common/tasks/` | new | landed as [#7864](https://github.com/DanielH2018/server/pull/7864) (item 36) | H7.35, H7.37, H7.48, H7.50, H7.52 live, H7.60, H7.62 |
 | H7.64 daniel-box: the mirror registries' garbage collection | new | yes | H6.2 |
 
 ### The task files each row owns
