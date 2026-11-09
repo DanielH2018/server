@@ -18,7 +18,10 @@ Two halves, each judged against a reference time:
     so does a route Prometheus has not loaded a probe target for yet (`unprobed_route`).
 
 A would-fail result is re-read once after `REREAD_WAIT_S`, because a probe alert that fired
-during a slow rollout can still read firing at the first read.
+during a slow rollout can still read firing at the first read. Every wait ends inside
+`PROCESS_DEADLINE`, so a plumbing check's settle wait shortens the probe polls rather than
+pushing the process past `detach_notify.PROBE_TIMEOUT_S`. A re-read that cannot fit raises
+`core.Unreadable`, because the would-fail read it was meant to confirm stays unconfirmed.
 
 Every read goes through Prometheus' query-only IngressRoute, which admits `/api/v1/query`
 alone. A read that fails raises `core.Unreadable` (exit 75), never a pass. One read goes to
@@ -80,17 +83,22 @@ FLUX_LOOKBACK = "7d"
 RATE_LIMITED = 429
 RETRY_DELAYS_S = (2, 4, 8, 16)
 # `detach_notify.PROBE_TIMEOUT_S`, restated: probe_lib may not import deploy_tools. Its expiry
-# grades a tag unhealthy rather than unread, so a 429 retry may sleep only while every wait
-# that can still follow one (the rest of a probe poll, the re-read, a second poll) fits after it.
+# grades a tag unhealthy rather than unread, so every wait in a probe process ends before it.
 PROBE_TIMEOUT_S = 300
-RETRY_CUTOFF_S = PROBE_TIMEOUT_S - (PROBE_WAIT_S + REREAD_WAIT_S + PROBE_WAIT_S) - 15
+# Room after the last wait for the reads that follow it and the process exit.
+READ_MARGIN_S = 15
+# A 429 retry may sleep only while every wait that can still follow one (the rest of a probe
+# poll, the re-read, a second poll) fits after it.
+RETRY_CUTOFF_S = (
+    PROBE_TIMEOUT_S - (PROBE_WAIT_S + REREAD_WAIT_S + PROBE_WAIT_S) - READ_MARGIN_S
+)
 
 
 class RetryWindow:
-    """The span from a probe process's start in which a 429 retry may still sleep.
+    """The span from a probe process's start in which a sleep may still end.
 
     Attributes:
-        cutoff_s: the seconds after `start` by which a retry's sleep must end.
+        cutoff_s: the seconds after `start` by which a sleep must end.
         clock: a monotonic clock in seconds.
         start: the clock reading the span opens at.
     """
@@ -104,8 +112,13 @@ class RetryWindow:
         """True when a sleep of `delay` seconds from now ends inside the window."""
         return self.clock() - self.start + delay <= self.cutoff_s
 
+    def remaining(self):
+        """The seconds left before the window closes, never below 0."""
+        return max(0.0, self.cutoff_s - (self.clock() - self.start))
+
 
 PROCESS_WINDOW = RetryWindow(RETRY_CUTOFF_S)
+PROCESS_DEADLINE = RetryWindow(PROBE_TIMEOUT_S - READ_MARGIN_S)
 
 
 def _get_json(url, resolve, get, sleep, window):
@@ -166,15 +179,27 @@ class PromTools:
 
     `silences` reads Alertmanager's alerts for a tag. None skips that read, so a test that
     builds its own tools never reaches the network; `DEFAULT_PROM` sets the real one.
+    `deadline` is the window every wait of `gate` must end inside. None bounds nothing;
+    `DEFAULT_PROM` sets `PROCESS_DEADLINE`.
     """
 
     query: Callable[[str], list] = prom_query
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.time
     silences: Callable[[str], list] | None = None
+    deadline: RetryWindow | None = None
 
 
-DEFAULT_PROM = PromTools(silences=alertmanager_api.service_alerts)
+DEFAULT_PROM = PromTools(
+    silences=alertmanager_api.service_alerts, deadline=PROCESS_DEADLINE
+)
+
+
+def _bounded(wait_s, tools):
+    """`wait_s`, cut to what is left of `tools.deadline`."""
+    if tools.deadline is None:
+        return wait_s
+    return min(wait_s, tools.deadline.remaining())
 
 
 def _labels(series, drop=("__name__",)):
@@ -309,13 +334,13 @@ def judge_probes(tag, reference, tools):
     1 or a mid-rollout 0, so it decides nothing.
     """
     selector = f'probe_success{{service="{tag}"}}'
-    deadline = tools.clock() + PROBE_WAIT_S
+    deadline = tools.clock() + _bounded(PROBE_WAIT_S, tools)
     while True:
         values = {_key(s): s for s in tools.query(selector)}
         if not values:
             if tools.clock() >= deadline:
                 return unprobed_route(tag, tools.query)
-            tools.sleep(POLL_S)
+            tools.sleep(min(POLL_S, deadline - tools.clock()))
             continue
         stamps = {
             _key(s): float(s["value"][1]) for s in tools.query(f"timestamp({selector})")
@@ -329,7 +354,7 @@ def judge_probes(tag, reference, tools):
                 f"{_when(reference)} within {PROBE_WAIT_S}s"
                 for k in stale
             ], []
-        tools.sleep(POLL_S)
+        tools.sleep(min(POLL_S, deadline - tools.clock()))
     failing, notes = [], []
     for k, s in values.items():
         line = (
@@ -352,7 +377,8 @@ def gate(tag, reference, probe_reference, has_route, tools=DEFAULT_PROM):
             gated alert's silence or inhibition without changing the exit code.
 
     Raises:
-        core.Unreadable: a Prometheus read failed.
+        core.Unreadable: a Prometheus read failed, or the re-read of a would-fail result
+            would not end inside `tools.deadline`.
     """
 
     def judge():
@@ -368,6 +394,12 @@ def gate(tag, reference, probe_reference, has_route, tools=DEFAULT_PROM):
 
     failing, notes = judge()
     if failing:
+        if _bounded(REREAD_WAIT_S, tools) < REREAD_WAIT_S:
+            raise core.Unreadable(
+                f"{tag}: no time left for the {REREAD_WAIT_S}s re-read inside the "
+                f"{PROBE_TIMEOUT_S}s probe timeout, so this read stays unconfirmed:"
+                f"{failing[0]}"
+            )
         tools.sleep(REREAD_WAIT_S)
         failing, notes = judge()
     if tools.silences is not None:
