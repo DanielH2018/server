@@ -12,6 +12,7 @@ import json
 import pytest
 
 from deploy_tools.land_lib.tools import Classifier
+from deploy_tools.promote_lib.wait import WaitResult
 from _land_fakes import Fakes
 
 # Files H7.63 deleted from `common`, a setup role no playbook applies.
@@ -47,7 +48,7 @@ def _fakes(removed: list[str], modified: list[str], owed: str = "", tags=()) -> 
         {"path": p, "changeType": "MODIFIED", "additions": 1, "deletions": 1}
         for p in modified
     ]
-    return Fakes(
+    fakes = Fakes(
         gh_views={
             "files,changedFiles": {"files": view_files, "changedFiles": len(paths)}
         },
@@ -56,6 +57,13 @@ def _fakes(removed: list[str], modified: list[str], owed: str = "", tags=()) -> 
         derived=(list(tags), "pr"),
         state={"owed.jsonl": owed},
     )
+    if tags:
+        # The gate reads the tags land-wait's changed set names (`WaitResult.tags`), not the
+        # tags the paths derived, so the promotion must name each service it applied.
+        fakes.land_wait = [
+            WaitResult(verdict="settled", detail="1 applied", tags=tuple(tags))
+        ]
+    return fakes
 
 
 @pytest.fixture
