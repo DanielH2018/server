@@ -197,6 +197,7 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
     ]
     assert ours == [
         {"path": "/etc/apt/sources.list.d/github-cli.list"},
+        {"path": "/etc/systemd/system/sockets.target.wants/homelab-rootq.socket"},
         {"path": "/usr/local/bin/sops"},
         {"path": "/usr/local/bin/vale"},
         {"path": "/usr/local/bin/uv"},
