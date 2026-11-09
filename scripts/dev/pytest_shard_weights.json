@@ -302,6 +302,7 @@
  "ansible/tests/k8s/test_k8s_manifests_metallb.py": 0.0,
  "ansible/tests/k8s/test_k8s_manifests_rbac.py": 0.06,
  "ansible/tests/k8s/test_k8s_manifests_routes.py": 2.79,
+ "ansible/tests/k8s/test_k8s_render_context_whole_dict_pass.py": 5.17,
  "ansible/tests/k8s/test_loki_read_route_admits_probe_py.py": 0.03,
  "ansible/tests/k8s/test_metallb_vendored_manifest.py": 0.02,
  "ansible/tests/k8s/test_namespace_resource_defaults.py": 0.03,
