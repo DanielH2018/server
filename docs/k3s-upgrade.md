@@ -269,10 +269,10 @@ uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s
 ```
 
 [A role only a hand can apply is recorded, not parked](archive/gitops-deployer.md#a-role-only-a-hand-can-apply-is-recorded-not-parked)
-owns the ledger, the narrowed `--applied` form of the clear, and the page. Do not run
-`git pull --ff-only` on the primary checkout to release the deployer. The deployer has no park
-to clear here, and a hand fast-forward empties the `local..origin` range, which cancels the deploys
-those commits were due ([the archived deployer page](archive/gitops-deployer.md), "The tree is dirty").
+owns the ledger, the narrowed `--applied` form of the clear, and the page. The primary
+checkout needs no hand `git pull --ff-only`: `homelab-checkout-sync.timer` fast-forwards it to
+the newest green master commit every 10 minutes, and the retired deployer's `local..origin`
+range no longer exists to cancel.
 
 ## Rollback
 
