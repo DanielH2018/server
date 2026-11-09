@@ -349,7 +349,8 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
     - A `success` described `good <digest>` moves `last-good` to the digest.
     - Anything else, a missing status included, writes `DEPLOY_HOLD` as
       `<commit> unverified`, unless a hold already stands. The operator then dispatches
-      `reset_to_last_good`.
+      `reset_to_last_good`. A commit that changes a snapshot role or a forward-only pin
+      gets the same hold, though `settle` would have held it without a reset (#7876).
 
   `reconcile` resets nothing and dispatches nothing. A failed read writes nothing, and the
   next run's `decide` names the state again.

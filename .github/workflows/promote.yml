@@ -1460,7 +1460,7 @@ jobs:
             echo "::error::writing DEPLOY_HOLD='$COMMIT unverified' failed"
             exit 1
           fi
-          echo "::warning::DEPLOY_HOLD set to '$COMMIT unverified': $COMMIT's verdict reads '${verdict:-absent}', not good for $DIGEST. To reset prod (operator-only), dispatch promote.yml with reset_to_last_good=true"
+          echo "::warning::DEPLOY_HOLD set to '$COMMIT unverified': $COMMIT's verdict reads '${verdict:-absent}', not good for $DIGEST. To reset prod (operator-only), dispatch promote.yml with reset_to_last_good=true, unless $COMMIT changes a snapshot role or a forward-only pin, which a reset would roll back over migrated state (#7876)"
 
   # The `reset_to_last_good` dispatch (D5.2b2): move `prod` back to `last-good` and do nothing
   # else, for the revert runbook's Branch 1 and the broken-sync-object runbook. It follows C2's

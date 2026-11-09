@@ -100,6 +100,13 @@ COSIGN_RELEASE = "v3.1.4"
 HEAD_SHA = "workflow_run.head_sha"
 # `tag` moves `prod` only when `decide` said so.
 VERDICT_GATE = "needs.promote.outputs.verdict == 'promote'"
+# decide's outputs that a later job's steps read, by the job.
+HANDOFFS = {
+    "target": "tag",
+    "digest": "tag",
+    "lost_settle": "reconcile",
+    "lost_settle_digest": "reconcile",
+}
 
 
 def _load(path) -> dict:
@@ -214,14 +221,14 @@ def _handoff_problems(jobs: dict) -> list[str]:
     decide = _step_index(promote, "decide")
     if decide is None:
         return ["promote: has no step with id `decide`"]
-    for key in ("target", "digest"):
+    for key, reader in HANDOFFS.items():
         if (
             promote.get("outputs", {}).get(key)
             != f"${{{{ steps.decide.outputs.{key} }}}}"
         ):
             found.append(f"promote: output {key} does not come from the decide step")
-        if f"needs.promote.outputs.{key}" not in str(tag.get("steps")):
-            found.append(f"tag: does not take {key} from promote's outputs")
+        if f"needs.promote.outputs.{key}" not in str(jobs.get(reader, {}).get("steps")):
+            found.append(f"{reader}: does not take {key} from promote's outputs")
     later = [
         jobs.get(name, {})
         for name in ("tag", "verify", "verdict-status", "settle", "post", "reconcile")
@@ -350,6 +357,10 @@ def _drop_needs(wf):
     del wf["jobs"]["tag"]["needs"]
 
 
+def _reconcile_without_the_lost_settle(wf):
+    del wf["jobs"]["promote"]["outputs"]["lost_settle"]
+
+
 def _tag_reads_head_sha(wf):
     step = next(s for s in wf["jobs"]["tag"]["steps"] if s.get("name") == "Move prod")
     step["env"]["TARGET"] = "${{ github.event.workflow_run.head_sha }}"
@@ -425,6 +436,10 @@ RED = {
     "an extra permission": (_extra_permission, "publish: permissions are"),
     "tag without needs": (_drop_needs, "tag: needs None"),
     "tag reads head_sha": (_tag_reads_head_sha, "a step after decide reads"),
+    "lost_settle not handed on": (
+        _reconcile_without_the_lost_settle,
+        "promote: output lost_settle does not come from the decide step",
+    ),
     "promote checks out head_sha": (
         _promote_checks_out_head_sha,
         "promote: checks out",
