@@ -36,9 +36,25 @@ def k8s_tags_at(primary: Path, ref: str) -> set[str]:
     """Every tag of a k8s `containers_list` entry at commit `ref`.
 
     Raises:
-        subprocess.CalledProcessError: `ref` does not hold the k8s host's host_vars file.
+        subprocess.CalledProcessError: `ref` holds no k8s service list.
+        ValueError: the list at `ref` names no k8s service (`nonempty_read`).
     """
-    return declared_k8s_tags(primary, ref)
+    return nonempty_read(declared_k8s_tags(primary, ref), ref)
+
+
+def nonempty_read(tags: set[str], ref: str) -> set[str]:
+    """`tags`, or ValueError when it is empty.
+
+    AN EMPTY READ IS DAMAGE, NEVER EVIDENCE. The cluster always declares some k8s service, so
+    `set()` means this checkout's reader does not know the layout at `ref`, as a reader from
+    before `cluster/services.yml` existed answered for every commit after it (#7807). Read as
+    evidence, it fails every derived tag as matching no k8s entry.
+    """
+    if not tags:
+        raise ValueError(
+            f"no k8s service read at {ref[:12]}; is this checkout older than that commit?"
+        )
+    return tags
 
 
 def run_land_wait(

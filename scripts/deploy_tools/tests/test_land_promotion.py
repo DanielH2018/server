@@ -11,7 +11,7 @@ import pytest
 from dataclasses import replace
 
 from _land_fakes import MERGE_SHA, Fakes
-from deploy_tools.land_lib import land_tags, promotion
+from deploy_tools.land_lib import land_flux, land_tags, promotion
 from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE
 from deploy_tools.land_lib.host_wait import HostTarget
 from deploy_tools.promote_lib.wait import WaitResult
@@ -291,3 +291,13 @@ def test_a_tag_a_k8s_entry_declares_is_clean(land_run):
     assert rc == 0 and "VERDICT: settled" in out
     assert "cause=tag-miss" not in logline
     assert "land_wait" in _names(calls)
+
+
+def test_an_empty_k8s_service_read_is_flagged():
+    """A reader older than the merge commit's layout reads no service at all (#7807)."""
+    with pytest.raises(ValueError, match="older than that commit"):
+        land_flux.nonempty_read(set(), MERGE_SHA)
+
+
+def test_a_non_empty_k8s_service_read_is_clean():
+    assert land_flux.nonempty_read({"registry"}, MERGE_SHA) == {"registry"}
