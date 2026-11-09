@@ -48,8 +48,8 @@ _ROLE_NAME = re.compile(r"^k8s/([^/\s]+)$")
 # owner's bytes render into the reader's manifests. sonarr's and radarr's
 # `templates/verify/notification.yaml.j2` read arr-notification's script and defaults this way,
 # and since their includes went (#5561) that lookup is the only edge arr-notification has.
-# The same shape as the deployer's `deploy_cross_role._K8S_LOOKUP_RE`, which answers the
-# per-file question for a changed path; `scripts/lib` imports nothing from `deployer_lib`.
+# The same shape as `k8s_lookups.K8S_LOOKUP_RE`, which captures the whole file path rather
+# than the owning role.
 _ROLE_LOOKUP = re.compile(
     r"lookup\(\s*'(?:ansible\.builtin\.)?(?:file|template)'\s*,\s*playbook_dir\s*[+~]\s*"
     r"'/roles/k8s/([^/']+)/[^']+'\s*(?:,[^)]*)?\)"
