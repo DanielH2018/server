@@ -24,8 +24,10 @@ is a target, so a failure waits rather than skips.
 | a target is still unsettled past its deadline | `deferred`, exit 75 |
 | a target it would defer on has no package published at or after the merge, and the builder's reason is not `ok`, `canary` or `no-green` | `unbuilt`, exit 75 |
 
-A target's deadline is the second updater fire after the merge plus 10 minutes, read from the
-first parent's rendered schedule. The first fire can precede the builder's publish. A first
+A target's deadline is the second updater fire after the wait's first query plus 10 minutes,
+read from the first parent's rendered schedule. That query follows master CI going green at
+the merge, the earliest moment the builder can start on it. The first fire can still precede
+the builder's publish. A first
 parent that arms daniel-pi's `homelab-updater-poll.timer` adds the poll's fires to the schedule,
 because the poll starts the updater once the publish lands.
 `host_published.py` decides the `unbuilt` row, which replaces each `deferred` row it covers.
@@ -34,7 +36,7 @@ Typical usage example (`pipeline.py`'s, after master CI is green on the merge co
 
     targets = host_targets(ln.opts.primary, merge_sha)
     if targets:
-        wait_for_hosts(ln, targets, merge_sha, merged_at)
+        wait_for_hosts(ln, targets, merge_sha)
 """
 
 import json
@@ -508,18 +510,18 @@ def wait_for_hosts(
     ln: Landing,
     targets: list[HostTarget],
     merge: str,
-    merged_at: float,
     reads: HostReads = REAL_READS,
 ) -> None:
     """Return once every target has settled on `merge`; otherwise end the landing.
 
-    It queries once before anything else, so a target that already settled never waits.
+    It queries once before anything else, so a target that already settled never waits. The
+    deadline counts updater fires after that first query. The caller runs this only once
+    master CI is green at `merge`.
 
     Args:
         ln: The landing, which `finish` ends.
         targets: What `host_targets` returned.
         merge: The merge commit's full SHA.
-        merged_at: When the PR merged, as a Unix time. The deadline counts fires after it.
         reads: The boundaries.
 
     Raises:
@@ -564,7 +566,7 @@ def wait_for_hosts(
         if first:
             first = False
             green_at = now
-            unwaitable = _unwaitable(pending, merged_at, now, deadlines)
+            unwaitable = _unwaitable(pending, green_at, deadlines)
             if unwaitable:
                 _defer(ln, head, unwaitable, merge, green_at, reads)
         late = [t for t in pending if now > deadlines[t.host]]
@@ -629,8 +631,7 @@ def _defer(
 
 def _unwaitable(
     pending: list[HostTarget],
-    merged_at: float,
-    now: float,
+    green_at: float,
     deadlines: dict[str, float],
 ) -> dict[str, str]:
     """Why each target no wait can see settle cannot be waited for; fills `deadlines`.
@@ -638,6 +639,12 @@ def _unwaitable(
     DECIDED: a target whose schedule is unknown, because its render failed or its timer is
     one this cannot read, waits the full 45 minutes rather than being refused, so a failure
     waits rather than skips (H3.9a item 2).
+
+    DECIDED: the deadline counts fires after `green_at`, never after the merge. No host can
+    apply a merge before master CI is green at it, and host-package CI runs about 34 minutes,
+    longer than a merge-anchored deadline. Anchored on the merge, 24 of 51 host deferrals in
+    the 14 days to 2026-11-09 had passed their deadline before CI went green, and every host
+    in the 45 never re-run applied the merge later, at a median of 15 minutes.
     """
     reasons = {}
     for target in pending:
@@ -648,10 +655,10 @@ def _unwaitable(
                 f"{target.host}: `{START_UPDATER}`"
             )
             continue
-        due = deadline(target, merged_at)
-        deadlines[target.host] = merged_at + MAX_WAIT_S if due is None else due
-        if due is not None and due - now > MAX_WAIT_S:
-            fire = next_fire(target, now)
+        due = deadline(target, green_at)
+        deadlines[target.host] = green_at + MAX_WAIT_S if due is None else due
+        if due is not None and due - green_at > MAX_WAIT_S:
+            fire = next_fire(target, green_at)
             when = utc(fire) if fire is not None else "an unknown time"
             reasons[target.host] = (
                 f"{target.host}'s next updater fire is at {when}, and its deadline "

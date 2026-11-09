@@ -50,7 +50,6 @@ def resolve(ln: Landing) -> None:
     if not sha:
         ln.die(f"PR #{ln.opts.pr} has no merge commit — is it merged?", 1)
     ln.merge_sha = sha
-    ln.ledger.merged_at = ln.tools.wall_clock()
     ln.ledger.merge_sha = sha
     say(f"merge commit {sha}")
     ln.fetch_branch()
