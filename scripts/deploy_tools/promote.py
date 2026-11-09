@@ -193,6 +193,8 @@ def decide(
             reads.clock,
             revert_rule,
             supersedable=supersede.supersedable(reads) if supersede_on else None,
+            other_runs=reads.other_runs,
+            prod_commit=reads.prod,
         )
         if settled.stop is not None:
             return Decision(settled.stop[0], reason=settled.stop[1])

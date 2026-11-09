@@ -6,6 +6,7 @@ fact came from. `live_reads` builds the one the CLI runs, over `forge.py` and th
 here and for `land.sh`'s pin gate. `promote.py` re-exports every public name.
 """
 
+import os
 import re
 import time
 from collections.abc import Callable, Mapping
@@ -31,6 +32,7 @@ from deploy_tools.promote_lib.ci_contexts import CI_CONTEXTS_SOURCE, read_ci_con
 from deploy_tools.promote_lib.prune import ReadError
 
 HOLD_VARIABLE = forge.HOLD_VARIABLE
+WORKFLOW = "promote.yml"
 MASTER_REF = "origin/master"
 
 # `flux push artifact --revision master@sha1:<sha>` writes this annotation on the manifest.
@@ -69,6 +71,8 @@ class Reads:
             `(state, updated_at)`, or None.
         statuses: the newest status per context on a commit, as `{context: state}`, for the
             record of `prod`'s `flux/<name>` statuses that `verify` excuses from (H1.1i).
+        other_runs: the in-progress runs of `promote.yml` other than this one, the run
+            `GITHUB_RUN_ID` names, as the Actions API lists them.
         reboot: the weekly reboot's schedule, from which T's no-promotion window derives.
         now: the wall-clock time, for the gate status's age bound and the reboot window.
         sleep: waits the given seconds, before a retried read and between polls of a
@@ -94,6 +98,7 @@ class Reads:
     pulls: Callable[[str], list[dict]]
     gate_status: Callable[[str], tuple[str, datetime] | None]
     statuses: Callable[[str], dict[str, str]]
+    other_runs: Callable[[], list[dict]]
     reboot: Callable[[], reboot_window.Schedule]
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
     sleep: Callable[[float], None] = time.sleep
@@ -189,5 +194,10 @@ def live_reads(
         pulls=f.github.commit_pulls,
         gate_status=lambda sha: f.github.status(sha, forward_only.GATE_STATUS_CONTEXT),
         statuses=f.github.statuses,
+        other_runs=lambda: [
+            run
+            for run in f.github.runs(WORKFLOW, "in_progress")
+            if str(run.get("id")) != os.environ.get("GITHUB_RUN_ID", "")
+        ],
         reboot=lambda: reboot_window.read_schedule(repo),
     )

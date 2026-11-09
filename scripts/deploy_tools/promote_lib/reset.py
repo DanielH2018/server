@@ -52,10 +52,9 @@ from lib.exit_codes import FAILED, OK
 import forge
 from artifact_retention import LAST_GOOD_TAG, PROD_TAG
 from deploy_tools.promote_lib.prune import READ_ERRORS
-from deploy_tools.promote_lib.reads import prod_commit
+from deploy_tools.promote_lib.reads import WORKFLOW, prod_commit
 
 HOLD_VARIABLE = forge.HOLD_VARIABLE
-WORKFLOW = "promote.yml"
 _SHA = re.compile(r"[0-9a-f]{40}")
 
 

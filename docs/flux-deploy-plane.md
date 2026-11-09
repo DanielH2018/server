@@ -190,7 +190,9 @@ gate (D2 Open question 12).
 - **`PromotionStalled`, warning.** A green master commit that `prod` lacks went green more
   than 2 hours ago, and no hold stands. Either `promote` is not running, or its runs end
   without moving `prod`, such as a run that never settles and leaves every later run
-  reporting `current`. Read the workflow's recent runs. A hold silences this alert, because
+  reporting `current`. Read the workflow's recent runs. A run that ended without its
+  `settle` job leaves the reason in the next run's Decide step, with both operator commands
+  (*Verification* below). A hold silences this alert, because
   `DeployHoldActive` already pages that state. The reboot window silences it too, because
   `promote` defers inside it on purpose and the scheduled run at its end promotes. The alert
   stays quiet for 30 minutes after the window ends, which covers a late start of that run.
@@ -1049,6 +1051,15 @@ the two checks, a second run could move `prod` past a T that `verify` still wait
 would never post T's statuses, and the timeout would write a false hold. A run that never
 settles leaves `prod` and `last-good` apart, and every later run reports `current`. Slice
 D2.6d's `PromotionStalled` alert pages that stall.
+
+`decide` names one cause of that stall: a run that ended without its `settle` job, as when
+GitHub never created the job (#7863). Once no other `promote` run has been in progress for
+`LOST_SETTLE_S` (10 minutes), `decide` stops waiting and ends `current`. Its reason names
+`prod`'s commit and digest and gives the two operator-only ways out. If that run's `verify`
+job logged `verdict=good`, `flux tag artifact` moves `last-good` to `prod`'s digest. Otherwise
+the operator writes DEPLOY_HOLD as `<commit> unverified` and dispatches `reset_to_last_good`.
+`decide` never moves `last-good` itself. Its job holds no write to the registry, and GitHub's
+API does not expose `verify`'s verdict to a later run.
 
 **Clearing a hold** is the operator's decision: set `DEPLOY_HOLD` back to `none` (*Publishing
 and promotion*), then dispatch `promote` with `-f sha=<master tip>`. An agent may run the clear
