@@ -1002,7 +1002,7 @@ excluded. Each lands in one of four groups.
   above. The in-flight panel and the land and cancel controls stay.
 - **H7.19b re-homes or switches them, because they survive:**
     - `land_lib/tools.py` imports `deploy_locks.TREE_LOCK`. `TREE_LOCK` moves to
-      `scripts/lib/tree_lock.py`, and `test_tree_lock_single_definition.py` holds that
+      `scripts/lib/tree_lock.py`, and `scripts/lib/tests/test_tree_lock.py` holds that
       constant equal to `server_git_tree_lock` from then on.
     - `scripts/secrets_mgmt/consumers.py:_census_corpus` calls
       `deploy_cross_role.k8s_lookup_map`. That function imports only `ast`, `re` and `Path`.
@@ -2339,8 +2339,11 @@ the `manual_plane` clearing, and *Rollback*'s
     **Split in two on 2026-11-09, the re-home first.** The first PR moves `TREE_LOCK` to
     `scripts/lib/tree_lock.py` and `k8s_lookup_map` to `scripts/lib/k8s_lookups.py`.
     `deploy_locks.py` keeps its own `TREE_LOCK` until H7.20a, and
-    `test_tree_lock_single_definition.py` holds the two equal. The `role_paths.py` grep moves to the deleting PR, because `land_tags.py` imports
-    `land_shared` and only the setup arm's deletion shows whether that import survives. The
+    `scripts/lib/tests/test_tree_lock.py` holds the two equal. Those equality checks left
+    `test_tree_lock_single_definition.py`, whose macro checks read templates and stay in
+    `ansible/tests/deploy/`. The `role_paths.py` grep moves to the deleting PR, because
+    `land_tags.py` imports `land_shared` and only the setup arm's deletion shows whether that
+    import survives. The
     deleting PR and the strict census wait on
     [#7888](https://github.com/DanielH2018/server/issues/7888): `k3s/tasks/` still holds
     `server.yml` and `coredns.yml` (H7.44's code half), `storage_smoke.yml` (H7.45) and the
@@ -3731,7 +3734,7 @@ progress.
   success.
 - From H7.19b until H7.20a, `deploy_locks.py` keeps its own `TREE_LOCK`, although no
   running code imports it after H7.19a. Until H7.20a deletes it,
-  `test_tree_lock_single_definition.py` holds both constants equal to
+  `scripts/lib/tests/test_tree_lock.py` holds both constants equal to
   `server_git_tree_lock`, so the two copies cannot drift apart.
 
 ## Risks
