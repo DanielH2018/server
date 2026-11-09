@@ -943,6 +943,12 @@ The fan-out section names a batch only within a day of its launch. Older batches
 worktree `fanout.py place clean` never removed fold into one count per host, so a run nobody
 cleaned stops listing its batches in every session.
 
+The hook prints SessionStart's JSON form, which splits its output by reader.
+`hookSpecificOutput.additionalContext` carries what the agent acts on: the health banner, the
+other live sessions and the unlabelled-worktree prompt. `systemMessage` carries the operator's
+housekeeping, which the model never sees: the removable worktrees and the fan-out section.
+A failed `hooklib` import is reported in the fan-out section, so it reaches the operator only.
+
 ### `fanout-stop` (Stop)
 
 It keeps a headless fan-out batch working until the batch names a PR or a blocker. It acts only
