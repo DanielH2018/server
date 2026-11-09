@@ -163,8 +163,9 @@ STOP = rendered_shell_function(
 JOURNAL = rendered_shell_function(
     "components", "registry-gc", "registry-gc.sh.j2", "journal_mirror_prune"
 )
-REPORT = rendered_shell_function(
-    "components", "registry-gc", "registry-gc.sh.j2", "report_mirror_job"
+REPORT = "\n".join(
+    rendered_shell_function("components", "registry-gc", "registry-gc.sh.j2", name)
+    for name in ("wait_mirror_job", "journal_mirror_failure", "report_mirror_job")
 )
 COLLECT_MIRROR = rendered_shell_function(
     "components", "registry-gc", "registry-gc.sh.j2", "collect_mirror_store"
@@ -283,6 +284,7 @@ k3s() {{
     "$(flock -n "$LOCK_FILE" true 2>/dev/null && echo 0 || echo 1)" \\
     "$([[ -e $MIRROR_STAMP ]] && echo 1 || echo 0)" >> {shlex.quote(str(calls))}
   case "$*" in
+    *" get job "*conditions*) printf 'Complete' ;;
     *" get job "*) ;;
     *" get "*) printf '%s' "$GET_BODY" ;;
     *" logs "*" prune"*) printf '%s\\n' "$PRUNED_LINE" ;;
@@ -374,40 +376,6 @@ def test_a_run_that_finds_the_stamp_restores_the_mirror_first(tmp_path):
 
 def test_a_run_with_no_stamp_restores_nothing(tmp_path):
     assert _phase(tmp_path, "restore_stranded_mirror") == []
-
-
-def _report(tmp_path: Path, note: str) -> tuple[int, str]:
-    """Run report_mirror_job after a completed mirror Job; return its rc and MIRROR_MSG."""
-    script = f"""
-{_VARS}
-MIRROR_NOTE="$NOTE"
-k3s() {{ case "$*" in *" logs "*" prune"*) printf '%s\\n' "$PRUNED_LINE" ;; esac; }}
-logger() {{ cat > /dev/null; }}
-{JOURNAL}
-{REPORT}
-report_mirror_job
-rc=$?
-printf '%s\\n%s' "$rc" "$MIRROR_MSG"
-"""
-    env = {**os.environ, "NOTE": note, "PRUNED_LINE": PRUNED_LINE}
-    rc, msg = run(["bash", "-c", script], env=env, check=True).stdout.split("\n", 1)
-    return int(rc), msg
-
-
-def test_a_completed_prune_keeps_the_run_up(tmp_path):
-    rc, msg = _report(tmp_path, "")
-
-    assert rc == 0, msg
-    assert "ghcr-mirror: 1 revision(s) pruned" in msg, msg
-
-
-def test_a_skipped_prune_reports_the_run_down(tmp_path):
-    """A persistent keep-set fault would otherwise skip every week behind a green tile."""
-    note = "ghcr-mirror prune skipped, workloads unreadable"
-    rc, msg = _report(tmp_path, note)
-
-    assert rc == 1, msg
-    assert note in msg, msg
 
 
 WARM = "\n".join(

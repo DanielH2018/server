@@ -30,6 +30,8 @@ FUNCTIONS = "\n".join(
         "stop_deploy",
         "start_deploy",
         "journal_mirror_prune",
+        "wait_mirror_job",
+        "journal_mirror_failure",
         "report_mirror_job",
         "restore_mirror_store",
         "scale_up_and_report",
@@ -125,6 +127,7 @@ k3s() {{
     "$([[ -e $STATE_DIR/ghcr-mirror-down ]] && echo g)" \\
     "$([[ -e $STATE_DIR/dockerhub-mirror-down ]] && echo d)" >> {shlex.quote(str(calls))}
   case "$*" in
+    *" get job "*conditions*) printf 'Complete' ;;
     *" get job "*) ;;
     *" get "*) printf '%s' "$GET_BODY" ;;
     *" logs "*" prune"*) printf 'pruned library/old@%s tags=none\\n' "$DIGEST" ;;
