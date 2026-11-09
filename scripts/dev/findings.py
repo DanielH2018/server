@@ -108,7 +108,9 @@ moment the last one closes, so use it rather than a guessed date when the issue 
 PR that closes one. A set of changes with no issue gets one filed first. `next` names a blocked issue under a
 `blocked:` line, as it names a deferred one. A block and a date can both apply, as for work that waits on an
 issue and then on a retention period, and `next` offers the issue only once both have passed.
-`block <n> --clear` removes every blocker now, or only those `--on` names.
+`block <n> --clear` removes every blocker now, or only those `--on` names. When a body says the finding waits on
+`#<m>` or a slice code ("once R4 retires", "after H7.53"), `open` and `defer` print a stderr hint naming the issue
+and the `block` command; a slice resolves to the issue titled `<code>:`, and a closed one is called out instead.
 
 RESERVING AN ISSUE FOR THE OPERATOR. `manual <n>` (or `open --manual`) adds the `manual`
 label: `next` withholds the issue, `claim` refuses it, and `list` still marks it `[manual]`.
@@ -155,6 +157,7 @@ from dev.findings_lib.gh_calls import (
     _load_issue,
     fingerprint_match,
     load_issues,
+    blocker_hints,
     open_pr_refs,
     run,
 )
@@ -162,6 +165,7 @@ from dev.findings_lib.issue_model import (
     NO_REOPEN,
     cited_paths,
     current_claim,
+    recorded_blockers,
     is_deferred_row,
     now_iso,
     fingerprint,
@@ -254,6 +258,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
             if blockers:
                 print(f"gh issue edit <new> --add-blocked-by {','.join(blockers)}")
             print(f"(dry-run) would create; fingerprint {fp}")
+            _print_blocker_hints(body, "<new>", blockers, tools)
             return 0
         url = _create_with_optional_project(plans[0], tools)
         number = url.rsplit("/", 1)[-1]
@@ -263,6 +268,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
             # `gh issue create` has no blocked-by flag, so the relationship is a second write.
             run(plan_block({"number": number}, on=blockers, clear=False), False, tools)
         print(f"#{number} created  {url}")
+        _print_blocker_hints(body, number, blockers, tools)
         return 0
     # "created" is the only outcome plan_open returns for a missing issue, so every branch
     # below has one to name. Checked here rather than in each branch: the two of them read
@@ -361,7 +367,24 @@ def cmd_defer(args: argparse.Namespace, tools: FindingsTools) -> int:
         "deferral cleared" if args.clear else f"deferred until {args.until.isoformat()}"
     )
     print(f"#{args.number} {what}")
+    if not args.clear:
+        _print_blocker_hints(
+            str(issue.get("body") or ""), args.number, recorded_blockers(issue), tools
+        )
     return 0
+
+
+def _print_blocker_hints(
+    body: str, own: int | str, blocked_by: list[str], tools: FindingsTools
+) -> None:
+    """Prints `blocker_hints` to stderr; a failed lookup costs the hint, never the write."""
+    try:
+        lines = blocker_hints(body, own, blocked_by, tools)
+    except (subprocess.SubprocessError, OSError, ValueError, KeyError) as exc:
+        sys.stderr.write(f"hint: could not look up what the body waits on: {exc}\n")
+        return
+    for line in lines:
+        sys.stderr.write(line + "\n")
 
 
 def cmd_block(args: argparse.Namespace, tools: FindingsTools) -> int:

@@ -54,6 +54,10 @@ class Decision:
             (D7.5); `tag` then tags T `superseding` before it moves `prod`. Else empty.
         hold_read: the DEPLOY_HOLD value `decide` read: `none`, or the `failed=` hold the
             revert rule passed. `tag` moves `prod` only while DEPLOY_HOLD still reads it.
+        lost_settle: `prod`'s commit when the run that moved it ended without its `settle`
+            (#7863), for the `reconcile` job. Else empty.
+        lost_settle_digest: `prod`'s digest in that case, which `reconcile` requires `prod`
+            to still name. Else empty.
     """
 
     verdict: str
@@ -73,6 +77,8 @@ class Decision:
     recorded: dict[str, str] = field(default_factory=dict)
     supersedes: str = ""
     hold_read: str = "none"
+    lost_settle: str = ""
+    lost_settle_digest: str = ""
 
 
 def _promotion(

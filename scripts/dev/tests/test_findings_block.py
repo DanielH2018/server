@@ -5,14 +5,16 @@ Run: uv run pytest scripts/dev/tests/test_findings_block.py
 """
 
 import json
+import subprocess
 from datetime import date
 
 import pytest
-from _findings_fakes import Fakes, facts, make_issue
+from _findings_fakes import Fakes, board_answer, facts, make_issue
 
 from dev import findings
 from lib.exit_codes import FINDINGS_BAD_ARGS
-from dev.findings_lib.issue_model import open_blockers, pickable, waiting
+from dev.findings_lib.gh_calls import blocker_hints
+from dev.findings_lib.issue_model import open_blockers, pickable, waited_on, waiting
 from dev.findings_lib.plans import ClaimRefused, plan_block, plan_claim
 
 TODAY = date(2026, 11, 9)
@@ -167,3 +169,75 @@ def test_list_marks_an_open_blocker_and_not_a_closed_one(capsys, make_tools):
     lines = capsys.readouterr().out.splitlines()
     assert "[blocked by #9]" in next(line for line in lines if "waits" in line)
     assert "blocked" not in next(line for line in lines if line.endswith("free"))
+
+
+# --- the hint that points a waiting finding at `block` ----------------------------------------
+
+
+def test_a_wait_on_an_issue_and_a_slice_is_found():
+    body = "Once R4 retires the last push token (#7178), neither rule has a subject."
+    assert waited_on(body) == ([7178], ["R4"])
+
+
+def test_an_issue_cited_as_history_is_not_a_wait():
+    assert waited_on("H7.24b (#6634, PR #6637) retired `sops_setup`.") == ([], [])
+
+
+def test_hints_name_the_block_command_for_an_open_blocker_and_flag_a_closed_one(
+    make_tools,
+):
+    fakes = Fakes(
+        view={7178: {"number": 7178, "state": "OPEN"}},
+        issues=[
+            {"number": 7900, "title": "H7.5: not this one", "state": "OPEN"},
+            {"number": 7852, "title": "H7.63: the slice", "state": "CLOSED"},
+        ],
+    )
+    tools, _ = make_tools(fakes)
+    lines = blocker_hints("Waits on #7178. Blocked after H7.63 lands.", 7195, [], tools)
+    assert lines[0].startswith("hint: the body waits on #7178, which is open")
+    assert "`findings.py block 7195 --on 7178`" in lines[0]
+    assert lines[1].startswith(
+        "hint: the body waits on H7.63 (#7852), which is already"
+    )
+
+
+def test_a_recorded_blocker_gets_no_hint(make_tools):
+    tools, calls = make_tools(Fakes())
+    assert blocker_hints("Waits on #7178.", 7195, ["7178"], tools) == []
+    assert calls.gh_json == []
+
+
+def test_defer_cli_hints_at_block_when_the_body_names_a_wait(capsys, make_tools):
+    issue = make_issue(7195)
+    issue["body"] = "Retire it once #7178 closes."
+    fakes = Fakes(
+        view={7195: issue, 7178: {"number": 7178, "state": "OPEN"}},
+        board={7195: board_answer(current="2026-11-20")},
+    )
+    tools, _ = make_tools(fakes)
+    assert findings.main(["defer", "7195", "--until", "2026-11-20"], tools) == 0
+    assert "findings.py block 7195 --on 7178" in capsys.readouterr().err
+
+
+def _open_argv(tmp_path, body):
+    path = tmp_path / "body.md"
+    path.write_text(body)
+    argv = ["open", "--title", "T", "--body-file", str(path), "--severity", "low"]
+    return argv + ["--kind", "gap"]
+
+
+def test_open_hints_at_block_for_the_new_issue(tmp_path, capsys, make_tools):
+    tools, _ = make_tools(Fakes(view={7178: {"number": 7178, "state": "OPEN"}}))
+    argv = _open_argv(tmp_path, "Retire it once #7178 closes.")
+    assert findings.main(argv, tools) == 0
+    assert "--on 7178" in capsys.readouterr().err
+
+
+def test_a_failed_hint_lookup_still_files_the_finding(tmp_path, capsys, make_tools):
+    failure = subprocess.CalledProcessError(1, ["gh"], stderr="rate limited")
+    tools, calls = make_tools(Fakes(json_errors={"issue view": failure}))
+    argv = _open_argv(tmp_path, "Retire it once #7178 closes.")
+    assert findings.main(argv, tools) == 0
+    assert any(c[:2] == ["issue", "create"] for c in calls.gh)
+    assert "hint: could not look up" in capsys.readouterr().err

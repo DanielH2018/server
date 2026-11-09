@@ -200,7 +200,7 @@ class GitHub:
     def run_jobs(self, run_id: object) -> list[dict]:
         """The jobs of one workflow run, the newest attempt's, 100 to a page.
 
-        A promote run has nine jobs, so one page holds them all.
+        A promote run has twelve jobs, so one page holds them all.
 
         Raises:
             ForgeError: any status but 200, a body without a `jobs` list, or no answer.

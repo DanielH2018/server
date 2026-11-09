@@ -66,8 +66,8 @@ def check_scrutiny(cfg: Config, src: Sources) -> tuple[bool, str]:
     health_ok, health_msg = scrutiny_health(summary, cfg.SCRUTINY_TEMP_MAX)
     if not health_ok:
         return False, health_msg
-    # Folded into this monitor rather than given its own: a new Kuma monitor needs a new push
-    # token in SOPS, and wear answers the same question device_status does — is the drive still
+    # Folded into this check rather than given its own, because wear answers the same
+    # question device_status does — is the drive still
     # fit to hold the data on it — just months earlier. Fetched only once freshness passes, so a
     # dead collector costs no per-device calls.
     if not cfg.SCRUTINY_WEAR_MAX:

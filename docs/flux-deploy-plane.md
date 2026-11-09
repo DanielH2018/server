@@ -191,8 +191,8 @@ gate (D2 Open question 12).
   than 2 hours ago, and no hold stands. Either `promote` is not running, or its runs end
   without moving `prod`, such as a run that never settles and leaves every later run
   reporting `current`. Read the workflow's recent runs. A run that ended without its
-  `settle` job leaves the reason in the next run's Decide step, with both operator commands
-  (*Verification* below). A hold silences this alert, because
+  `settle` job is named in the next run's Decide step, and that run's `reconcile` job
+  moves `last-good` or writes the hold (*Verification* below). A hold silences this alert, because
   `DeployHoldActive` already pages that state. The reboot window silences it too, because
   `promote` defers inside it on purpose and the scheduled run at its end promotes. The alert
   stays quiet for 30 minutes after the window ends, which covers a late start of that run.
@@ -1056,12 +1056,32 @@ D2.6d's `PromotionStalled` alert pages that stall.
 GitHub never created the job (#7863). Once no other `promote` run whose `promote` job has
 completed has been in progress for `LOST_SETTLE_S` (10 minutes), `decide` stops waiting and
 ends `current`. A later run whose `promote` job waits behind this one on the concurrency group
-does not count: it has moved nothing. Its reason names
-`prod`'s commit and digest and gives the two operator-only ways out. If that run's `verify`
-job logged `verdict=good`, `flux tag artifact` moves `last-good` to `prod`'s digest. Otherwise
-the operator writes DEPLOY_HOLD as `<commit> unverified` and dispatches `reset_to_last_good`.
-`decide` never moves `last-good` itself. Its job holds no write to the registry, and GitHub's
-API does not expose `verify`'s verdict to a later run.
+does not count: it has moved nothing. `decide` outputs `prod`'s commit and digest as
+`lost_settle` and `lost_settle_digest`, and the same run's `reconcile` job acts on them
+(#7865). `decide` never moves `last-good` itself, because its job holds no write to the
+registry.
+
+`reconcile` reads the `homelab/promote-verdict` commit status that the lost run's
+`verdict-status` job posted on `prod`'s commit. `verdict-status` runs beside `settle`, not
+before it, so a run that lost its `settle` still posts it. While `prod` still names the
+digest, `reconcile` acts as follows:
+
+- A `success` status described `good <digest>` moves `last-good` to the digest. The next
+  merge, or the scheduled run, promotes after it: `reconcile` dispatches nothing.
+- A `failure` status for the digest writes the hold `settle` would have written, unless a
+  hold already stands. The status's last word is that form. `stateful`, for a commit that
+  changes a snapshot role, writes `<commit> stateful=unverified`. `no-reset`, for one that
+  changes a forward-only tag, writes `<commit>` alone. Both tag the digest `held` and leave
+  `prod`, because a reset would roll back migrated state. `reset` writes
+  `<commit> unverified`, and the operator then dispatches `reset_to_last_good` and clears the
+  hold once the reset lands.
+- A missing status, or one for another digest, writes `<commit> unverified`, unless a hold
+  already stands. Its form is unknown, so check the commit for a snapshot role or a
+  forward-only pin before any reset (#7876).
+
+A failed read of `prod`, the hold or the statuses writes nothing and fails the job, and the
+next run names the state again. `decide`'s reason keeps the two operator-only commands for
+a `reconcile` that keeps failing.
 
 **Clearing a hold** is the operator's decision: set `DEPLOY_HOLD` back to `none` (*Publishing
 and promotion*), then dispatch `promote` with `-f sha=<master tip>`. An agent may run the clear

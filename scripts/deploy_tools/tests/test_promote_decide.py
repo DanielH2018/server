@@ -35,6 +35,8 @@ NOTHING_MOVES = {
     "suspended_hold": "",
     "supersedes": "",
     "hold_read": "none",
+    "lost_settle": "",
+    "lost_settle_digest": "",
 }
 
 

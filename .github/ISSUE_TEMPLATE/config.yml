@@ -1,0 +1,6 @@
+# A web-form issue lacks the fingerprint and labels `findings.py open` writes, so the form is off.
+blank_issues_enabled: false
+contact_links:
+  - name: File a finding with findings.py
+    url: https://github.com/DanielH2018/server/blob/master/docs/issue-claiming-and-fanout.md
+    about: Run `uv run python scripts/dev/findings.py open --help` from a checkout. It adds the labels, the fingerprint and, with --blocked-by or --not-before, what the finding waits on.

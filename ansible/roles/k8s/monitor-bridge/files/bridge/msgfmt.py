@@ -1,8 +1,7 @@
-"""One grammar for a Kuma push message that names several things: group by reason, list names once.
+"""One grammar for a check message that names several things: group by reason, list names once.
 
-Kuma renders a heartbeat's `msg` as raw plain text — no markdown, no wrapping, one table cell
-(`src/pages/Details.vue`) — and hands the same string to every notification as the Discord
-"What failed" field. So the text reads well exactly when the producer writes it well. The
+A check's message is plain text, with no markdown and no wrapping, and the run loop's log line
+is where an operator reads it. So the text reads well exactly when the producer writes it well. The
 shape this module refuses is the one Release Staleness pushed on 2026-09-17 (#2013): 57
 services each carrying the SAME reason, the reason repeated 57 times, ~7,500 chars that
 Discord rejected outright. The loop there ran per name; this one runs per reason.
@@ -11,8 +10,8 @@ The grammar, one line:
 
     <count> <unit>s <state> — <n> reasons. <reason> (<k>: a, b, c, +N). <reason> (…). Details: <cmd>
 
-The headline stands alone in the first 60 chars, because Kuma's cell and the Discord field
-both truncate from the right. Groups are ordered largest first. Over `limit`, the names
+The headline stands alone in the first 60 chars, so a view that truncates the line from the
+right still shows the verdict. Groups are ordered largest first. Over `limit`, the names
 shown per group shrink from five to one — every reason and every count survives that — and
 only when one name per reason still does not fit is the line cut from the right with a
 `…(+N chars)` marker, which does lose trailing reasons.

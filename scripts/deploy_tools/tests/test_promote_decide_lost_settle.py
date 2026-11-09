@@ -51,6 +51,7 @@ def test_a_verification_that_never_settles_stalls_as_current(world):
     decision = promote.decide(_reads(world, clock), supersede_on=False)
     assert decision.verdict == "current"
     assert "never settled" in decision.reason
+    assert (decision.lost_settle, decision.lost_settle_digest) == ("", "")
     assert clock.now >= vp.IN_FLIGHT_WAIT_S
 
 
@@ -88,6 +89,7 @@ def test_a_run_that_ended_without_its_settle_is_named_with_the_operator_command(
         "--tag last-good" in decision.reason
     )
     assert f"--body '{c1} unverified'" in decision.reason
+    assert (decision.lost_settle, decision.lost_settle_digest) == (c1, digest_of(c1))
     assert clock.now == vp.LOST_SETTLE_S
     assert world.transport.tags["last-good"] == digest_of(c0)
 

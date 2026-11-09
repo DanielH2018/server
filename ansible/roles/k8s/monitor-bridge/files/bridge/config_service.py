@@ -200,10 +200,10 @@ def service_config(
         #
         # That is the only signal available: HA does not log its ongoing 403s to a banned peer,
         # and this pod cannot read HA's PVC. The DURABLE artifact is the Discord notification
-        # Kuma fires on the down transition (push monitors run max_retries=0, so the push flips
-        # state and notifies immediately) — not the monitor's colour, which is transient by
+        # Alertmanager sends when HomeAssistantAutomationsStalled fires (the rule has no `for:`,
+        # so it fires on the first down cycle) — not the check's verdict, which is transient by
         # construction. When one fires, check /config/ip_bans.yaml by hand; do not wait for the
-        # monitor to go green.
+        # check to recover.
         HA_BAN_WINDOW=_env("HA_BAN_WINDOW", "1h"),
         # `container=`, NOT `app=`. Promtail's k8s stream carries
         # container/pod/job/machine/namespace/service_name/stream — there is no `app` label, so

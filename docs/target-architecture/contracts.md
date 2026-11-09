@@ -210,9 +210,13 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
     - The `promote` and `verify` jobs run `promote.py` read-only and print a verdict (D1,
       D2). `verify` holds `contents: read` and `statuses: read`, for T's commit statuses.
     - Only jobs that check out no repository code hold `packages: write`. Those are
-      `publish`, which pushes and signs; `tag`, which moves `prod`; and `settle`, which
-      moves `last-good` or writes the hold and resets `prod`. Each runs only pinned
-      binaries, either `flux` and `cosign` or `flux` and `gh`.
+      `publish`, which pushes and signs; `tag`, which moves `prod`; `settle`, which moves
+      `last-good` or writes the hold and resets `prod`; and `reconcile`, which does the
+      same for a run that lost its `settle`, short of the reset (*A lost settle* below).
+      Each runs only pinned binaries, either `flux` and `cosign` or `flux` and `gh`.
+    - Only `verdict-status` holds `statuses: write`. It checks out nothing and posts
+      `verify`'s verdict on T as the commit status `homelab/promote-verdict`.
+    - The operator ruled the `reconcile` and `verdict-status` grants on 2026-11-09 (#7865).
     - Only `publish` holds `id-token: write`.
 
   Code that runs during a render or a decision therefore cannot sign or move a tag (D1,
@@ -332,7 +336,30 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
   `scripts/deploy_tools/promote_lib/verify_promotion.py` carries the decision as the marker
   `DECIDED: a verification in flight is guarded by two checks`. Any other job that moves
   `prod` or `last-good`, such as D5's `reset_to_last_good` dispatch, must hold both checks
-  true or state why it may break them. *The reset input* holds both.
+  true or state why it may break them. *The reset input* holds both, and so does
+  `reconcile`, which never moves `prod`.
+- **A lost settle** (#7863, #7865). A run can end without its `settle`, as when GitHub
+  never creates the job, and leave `prod` apart from `last-good`. The `verdict-status` job
+  does not gate `settle`. It posts `homelab/promote-verdict` on T: `success` for a good
+  verdict and `failure` for anything else, each described as
+  `<verdict> <T's digest> <form>`. The form names the hold `settle` writes for T on anything
+  but good: `stateful` when T changes a snapshot role, `no-reset` when it changes a
+  forward-only tag, and `reset` otherwise. It posts nothing for `superseded`. Once no other `promote` run past its `decide` has been
+  in progress for 10 minutes, `decide` ends `current` and names `prod`'s commit and digest.
+  The same run's `reconcile` job then reads that commit's newest `homelab/promote-verdict`.
+  While `prod` still names the digest, it acts as follows:
+    - A `success` described `good <digest>` moves `last-good` to the digest.
+    - Anything else for the digest writes the hold `settle` would have written, unless a
+      hold already stands. The `stateful` form writes `<commit> stateful=unverified` and
+      the `no-reset` form writes `<commit>` alone, and each tags the digest `held` and
+      leaves `prod`. The `reset` form writes `<commit> unverified`, and the operator then
+      dispatches `reset_to_last_good`.
+    - A missing status, or one for another digest, writes `<commit> unverified`. Its form
+      is unknown, so the operator checks the commit for a snapshot role or a forward-only
+      pin before any reset (#7876).
+
+  `reconcile` resets nothing and dispatches nothing. A failed read writes nothing, and the
+  next run's `decide` names the state again.
 - **A superseding promotion** (D7). With `promote.SUPERSEDE` on, `decide` may promote T over
   P, `prod`'s commit, while P's verification is in flight, instead of waiting.
   `promote_lib/supersede.py` holds the conditions: `DEPLOY_HOLD` reads `none`, `prod` is
