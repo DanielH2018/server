@@ -337,7 +337,9 @@ M2 to M6 build on these rules and do not restate them.
    consume. A threshold that mirrors an inventory value is a literal in the rule. A pytest pins
    it to its source, in the role's test directory or `ansible/tests/services/`.
 2. **Every alert ships with a test that makes it fire.** Tests are promtool unit-test files,
-   `ansible/roles/k8s/observability/tests/rules/<group>.test.yaml`. Each alert has at least one
+   `ansible/roles/k8s/observability/tests/rules/<group>.test.yaml`. A case whose deadline runs
+   to days goes in `<group>.<part>.test.yaml` with a 1h `evaluation_interval`, because the
+   interval is file-wide; the conventions count both files' cases together. Each alert has at least one
    case with non-empty `exp_alerts`, and that case asserts the `service` and `severity`
    labels. Each family has one zero-series case: input series absent, and the family's
    `absent()` or census alert fires (defect class D4 in [design.md](../design.md)).

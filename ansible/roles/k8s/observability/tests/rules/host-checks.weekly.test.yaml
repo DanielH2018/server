@@ -1,0 +1,53 @@
+# promtool unit tests for files/rules/host-checks.yaml whose deadlines run to days. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`.
+#
+# promtool evaluates every rule in `rule_files` at each `evaluation_interval` step up to a
+# group's last eval time, and the interval is file-wide. A 175h case at host-checks.test.yaml's
+# 1m step is 10,500 steps and costs about 55s; here it is 175 steps and costs about 1s. Every
+# eval time and every input series here therefore steps by whole hours.
+# `alert_conventions.rule_test_stem` counts these cases toward host-checks with the main file's.
+rule_files:
+  - ../../files/rules/host-checks.yaml
+evaluation_interval: 1h
+tests:
+  # The absent arm of the host-maintenance NotReporting rules fires only for a series that
+  # existed in the last 28 days. daniel-box wrote its apt-autoremove file for the first two
+  # hours and then lost it: the arm stays quiet at 170h (the last sample is under 612000s old)
+  # and fires at 175h. No other check or host ever wrote a file, so none of their rules fire,
+  # which is the state from the Flux apply until each cron's first run.
+  - interval: 1h
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x180'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x180'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x180'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="apt-autoremove", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x2'
+    alert_rule_test:
+      - eval_time: 170h
+        alertname: AptAutoremoveNotReporting
+        exp_alerts: []
+      - eval_time: 175h
+        alertname: DpkgPurgeNotReporting
+        exp_alerts: []
+      - eval_time: 175h
+        alertname: FirmwareUpdateNotReporting
+        exp_alerts: []
+      - eval_time: 175h
+        alertname: AptAutoremoveNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: apt-autoremove
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: daniel-box's weekly apt autoremove has stopped reporting.
+              description: >-
+                No apt-autoremove verdict newer than 612000s reached Prometheus from
+                daniel-box's textfile collector, so nothing confirms the weekly apt autoremove
+                still runs. Read the `Weekly apt autoremove` cron in root's crontab and
+                `journalctl -t apt-autoremove`, then
+                /var/lib/node-exporter-textfile/apt-autoremove.prom on the host.

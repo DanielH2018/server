@@ -27,7 +27,8 @@ Prometheus. `rule_problems` holds the role's rule files to the conventions in
   forever;
 - no rule, rule test or Alertmanager template source holds `${`. The rendered
   `alertmanager.yml` is outside this, because it carries placeholders by design;
-- a test case fires every alert and asserts its `service` and `severity`;
+- a test case fires every alert and asserts its `service` and `severity`. The cases of
+  `<stem>.test.yaml` and of any `<stem>.<part>.test.yaml` count together (`rule_test_stem`);
 - each test file whose rule file holds an alert has a case with no input series that fires an
   alert other than the Watchdog. A family whose series vanish otherwise evaluates to nothing
   and stays quiet, and the Watchdog fires on any input, so it proves nothing about the family.
@@ -453,7 +454,7 @@ def rule_test_problems(
     Args:
         stem: The rule file's name without `.yaml`.
         alerts: The alert names that rule file holds.
-        tests: The parsed `<stem>.test.yaml`, or None when it is missing.
+        tests: The cases of every test file for `stem`, under `tests`, or None when it has none.
         from_job: The alerts that take `service` from their scrape job. Every `exp_alerts`
             entry for one of them must list `service`, not just one firing case.
     """
@@ -513,6 +514,16 @@ def rule_test_problems(
     return problems
 
 
+def rule_test_stem(path: Path) -> str:
+    """The stem of the rule file a test file covers.
+
+    `host-checks.test.yaml` and `host-checks.weekly.test.yaml` both cover `host-checks`. A
+    second test file exists because `evaluation_interval` is file-wide: a case with a deadline
+    of days steps once an hour in its own file rather than 10,000 times at one minute.
+    """
+    return path.name.removesuffix(RULE_TEST_SUFFIX).split(".", 1)[0]
+
+
 def rule_problems(
     groups: list[str],
     keys: set[str],
@@ -552,7 +563,7 @@ def rule_problems(
     problems += watchdog_problems(docs)
     tests = {}
     for path in test_paths:
-        stem = path.name.removesuffix(RULE_TEST_SUFFIX)
+        stem = rule_test_stem(path)
         if stem not in {p.stem for p in rule_paths}:
             problems.append(
                 f"tests/rules/{path.name}: no files/rules/{stem}.yaml to test"
@@ -561,7 +572,8 @@ def rule_problems(
         if err:
             problems.append(err)
         else:
-            tests[stem] = doc
+            cases = (doc.get("tests") if isinstance(doc, dict) else None) or []
+            tests.setdefault(stem, {"tests": []})["tests"] += cases
     jobs = service_jobs(prometheus_yml)
     for stem, doc in docs.items():
         problems += rule_file_problems(stem, doc, jobs)
