@@ -204,7 +204,7 @@ def format_role_health(role, checked, now):
     1 and never `PROBE_NOT_APPLICABLE`, the code the notifier reads as a skip.
 
     Only the first line reaches the Discord verdict (the notifier reads `splitlines()[0]`), so
-    it carries the whole result and the per-workload detail follows it.
+    it carries the whole result. A line per failed workload follows it; a healthy one gets none.
     """
     missing, unhealthy, lines = [], [], []
     for namespace, kind, name, workload, pods in checked:
@@ -216,8 +216,8 @@ def format_role_health(role, checked, now):
             )
             continue
         text, code = format_k8s_health(workload, pods, f"{namespace}/{name}", now)
-        lines.append(f"  {text}")
         if code:
+            lines.append(f"  {text}")
             unhealthy.append(f"{namespace}/{name}")
 
     failed = missing + unhealthy

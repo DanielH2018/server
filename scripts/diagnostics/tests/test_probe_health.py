@@ -436,9 +436,22 @@ def test_role_health_all_present_is_clean():
         ],
         NOW,
     )
-    assert code == 0
-    assert "all 2 workloads healthy" in text
-    assert "observability/grafana" in text
+    assert (code, text) == (0, "observability: all 2 workloads healthy")
+
+
+def test_role_health_prints_a_row_only_for_the_failed_workload():
+    """A healthy workload is in the count, not a row of its own (#7896)."""
+    text, code = health.format_role_health(
+        "observability",
+        [
+            _target("observability", "Deployment", "grafana", _deploy(), pods()),
+            _target("observability", "Deployment", "loki", None, None),
+        ],
+        NOW,
+    )
+    assert code == 1
+    assert "observability/loki: MISSING" in text
+    assert "observability/grafana" not in text
 
 
 def test_role_health_absent_workload_is_flagged():

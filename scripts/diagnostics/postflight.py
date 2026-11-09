@@ -366,7 +366,9 @@ def build_parser():
 
 
 def main(argv=None):
-    """Run every §9 check, print a report line for each, and exit non-zero on any FAIL.
+    """Run every §9 check, print a line for each FAIL or SKIP, and exit non-zero on any FAIL.
+
+    An OK check prints no line of its own; the closing line counts it.
 
     A check that raises is caught and reported as FAIL rather than aborting the run, so
     one broken check never hides the checks after it.
@@ -375,7 +377,7 @@ def main(argv=None):
     decrypt, which is the whole point of the parser.
     """
     build_parser().parse_args(argv)
-    failures = 0
+    failures = passed = 0
     width = max(len(name) for _, name, _ in CHECKS)
     for item, name, check in CHECKS:
         try:
@@ -385,7 +387,10 @@ def main(argv=None):
         except Exception as exc:  # a check must never mask the checks after it
             status, detail = FAIL, f"{type(exc).__name__}: {exc}"
         failures += status == FAIL
-        print(f"[{status:4}] §{item}  {name:<{width}}  {detail}")
+        passed += status == OK
+        if status != OK:
+            print(f"[{status:4}] §{item}  {name:<{width}}  {detail}")
+    print(f"{passed} of {len(CHECKS)} §9 checks OK.")
 
     if failures:
         print(
