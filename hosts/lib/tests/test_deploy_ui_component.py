@@ -61,6 +61,19 @@ def test_the_daemon_runs_from_the_package_as_the_operator_on_the_hosts_address(
     assert "deploy-ui.service" in manifest["enable_links"]
 
 
+def test_a_changed_python_file_restarts_the_daemon_is_clean(package, manifest):
+    # fact: hosts/components/deploy-ui/CLAUDE.md#Deploy
+    code = [
+        dst
+        for dst in package.files
+        if dst.startswith(DEFAULTS["deploy_ui_dir"] + "/") and dst.endswith(".py")
+    ]
+    assert f"{DEFAULTS['deploy_ui_dir']}/deploy_ui.py" in code
+    assert {p: manifest["activations"].get(p) for p in code} == dict.fromkeys(
+        code, "try-restart:deploy-ui.service"
+    )
+
+
 def test_the_port_admits_the_pod_cidr_and_both_nodes_and_never_the_lan(
     manifest, context
 ):
