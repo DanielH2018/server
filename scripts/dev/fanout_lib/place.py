@@ -102,7 +102,7 @@ from lib.exit_codes import (
     FANOUT_PLACE_PARTLY_LAUNCHED,
 )
 from lib.git import git
-from fanout_lib.health import health_lines
+from fanout_lib.session_banner import health_lines
 from fanout_lib.placement import HostReading, NoHeadroom, place
 from fanout_lib.target import SERVER, for_launch, registered_repos, resolve
 from fanout_lib.transport import (

@@ -5,7 +5,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_health.py
 
 import json
 
-from fanout_lib.health import HEALTH_CMD, health_lines
+from fanout_lib.session_banner import HEALTH_CMD, health_lines
 from _fanout_fakes import fake_tools, ok
 
 

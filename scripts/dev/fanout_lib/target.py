@@ -21,7 +21,7 @@ from lib.repo_paths import PRIMARY_CHECKOUT
 from lib.worktree_owner import own_prefix
 
 SERVER = "DanielH2018/server"
-# The interpreter a unit runs repo Python with; `fanout_lib.health.HEALTH_CMD` pins the same one.
+# The interpreter a unit runs repo Python with; `fanout_lib.session_banner.HEALTH_CMD` pins the same one.
 HEADLESS_PYTHON = "3.15.2"
 # The agent user cannot read /home/ubuntu, and its login profile
 # (hosts/components/claude-code/templates/agent-user-profile.j2) points RUN_HOOK_PROJECT_DIR at its
