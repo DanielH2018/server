@@ -408,8 +408,8 @@ pass_filenames = false
 # The whole `scripts/secrets_mgmt/` tree, not `secret_rotation.py` alone: `load_registry`,
 # `sops_names` and every other process boundary the gate depends on moved into
 # `rotation_tools.py`, and a per-file list here is a list that goes stale on the next split.
-# The rest is the import closure of `audit --check`: `consumers` reaches `deploy_cross_role`.
-files = "^(scripts/lib/narrow_git\\.py|ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secrets_mgmt/.*\\.py|ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role\\.py|scripts/lib/(cli_help|exit_codes|git|repo_paths|yaml_fast)\\.py)$"
+# The rest is the import closure of `audit --check`: `consumers` reaches `k8s_lookups`.
+files = "^(scripts/lib/narrow_git\\.py|ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secrets_mgmt/.*\\.py|scripts/lib/(cli_help|exit_codes|git|k8s_lookups|repo_paths|yaml_fast)\\.py)$"
 
 # The cluster's SOPS files (target slice D3): the cluster file
 # ansible/vars/cluster-vars.sops.env, the manifests under ansible/vars/cluster-manifests/ and

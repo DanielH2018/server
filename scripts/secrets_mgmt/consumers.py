@@ -20,11 +20,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from secrets_mgmt.rotation_tools import REPO
 from lib import yaml_fast
-from lib.repo_paths import GITOPS_DEPLOY_FILES
-
-_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-
-from deployer_lib.deploy_cross_role import k8s_lookup_map
+from lib.k8s_lookups import k8s_lookup_map
 
 
 # Planes a role can live on, and what redeploying it actually costs the operator. The

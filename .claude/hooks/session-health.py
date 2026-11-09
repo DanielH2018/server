@@ -6,8 +6,8 @@
 """SessionStart health banner: surfaces what's already broken before work starts.
 
 Usage: Claude Code runs this hook on the SessionStart event. It takes no stdin payload. It
-prints a health banner to stdout, or nothing when everything is green, and it always exits 0. `-h`
-or `--help` prints this text and exits 0.
+prints one SessionStart JSON object to stdout, or nothing when everything is green, and it always
+exits 0. `-h` or `--help` prints this text and exits 0.
 
 When a Claude Code session opens in this repo, this prints anything already broken so
 work doesn't start blind:
@@ -35,7 +35,10 @@ Design contract (mirrors the other hooks here):
     filtered out rather than reported — otherwise this would trade a false all-clear
     for the same two names on every session open forever.
 
-Stdout is injected as session context by Claude Code (same mechanism the remember plugin uses).
+The JSON splits the output by reader. `hookSpecificOutput.additionalContext` carries what the
+agent acts on: the health banner, other live sessions and the unlabelled-worktree prompt.
+`systemMessage` carries the operator's housekeeping, which the model never sees: worktrees ready
+to remove and fan-out batches running on another host.
 """
 
 # DECIDED: return [] on any error, so a broken health read never blocks a session start;
@@ -48,6 +51,7 @@ Stdout is injected as session context by Claude Code (same mechanism the remembe
 # interpreter for every registration, and that start is the whole cost of a compaction here.
 
 import functools
+import json
 import os
 import subprocess
 import sys
@@ -547,9 +551,9 @@ def main(
     """Print the SessionStart health banner for a genuine session open, then exit 0.
 
     Prints nothing for a mid-session compaction. Combines container, Prometheus-target and
-    stale-branch problems into one banner, then separately prints other live sessions in
-    this repo, worktrees ready to remove, and fan-out worktrees running on another host —
-    all three regardless of health status.
+    stale-branch problems into one banner, and adds other live sessions in this repo to the
+    agent's context. Worktrees ready to remove and fan-out worktrees running on another host
+    go to the operator's `systemMessage`. Each section prints regardless of health status.
 
     Every keyword argument is one of this module's own probes, and its default is that
     probe. A test passes a fake instead of monkeypatching the module attribute: the
@@ -599,27 +603,37 @@ def main(
     # parked deployer, so the cause reads first.
     problems = targets + parked + master_moved
 
+    # What the agent acts on: health, other sessions, and the unlabelled-worktree prompt.
+    context = []
     banner = format_banner(problems, landing=bool(parked))
     if banner:
-        print(banner)
+        context.append(banner)
     elif os.environ.get("SESSION_HEALTH_VERBOSE"):
-        print("Homelab health: all scrape targets up.")
+        context.append("Homelab health: all scrape targets up.")
 
     # Printed independently of health: another session's open work is information this
     # session needs even when everything is green.
     if sessions:
-        print("Other Claude sessions in this repo:")
-        for line in sessions:
-            print(line)
-    for line in unlabelled:
-        print(line)
+        context.append("Other Claude sessions in this repo:")
+        context.extend(sessions)
+    context.extend(unlabelled)
 
-    # What keeps the banner inside the hook's budget is `deadline`, not this flush: every
-    # probe has finished or been given up on by now. The flush only puts the banner on the
-    # pipe ahead of the worktree lines.
+    # Operator housekeeping goes to `systemMessage`, which the model never reads (#7900).
+    print_hook_output(context, worktrees + fanout)
+    return 0
+
+
+def print_hook_output(context, operator):
+    """Print SessionStart's JSON form, or nothing when both line lists are empty."""
+    if not context and not operator:
+        return
+    out = {"hookSpecificOutput": {"hookEventName": "SessionStart"}}
+    if context:
+        out["hookSpecificOutput"]["additionalContext"] = "\n".join(context)
+    if operator:
+        out["systemMessage"] = "\n".join(operator)
+    print(json.dumps(out, ensure_ascii=False))
     sys.stdout.flush()
-    for line in worktrees + fanout:
-        print(line)
     return 0
 
 

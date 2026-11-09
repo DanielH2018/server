@@ -57,7 +57,7 @@ The rules below shaped those memberships.
   `is_gate`, `critical` and `runbook`: A6-8 deleted `token`, `kuma_id`, `display`, `description`
   and `status_group` with the tiles they fed. `tests/test_bridge_size_cap.py` holds the bridge's
   `files/` under 8,000 lines.
-- **A table change deploys monitor-bridge alone.** `deploy_cross_role.k8s_lookup_map` finds
+- **A table change deploys monitor-bridge alone.** `scripts/lib/k8s_lookups.py:k8s_lookup_map` finds
   every k8s role that `lookup()`s another role's file, and uptime-kuma stopped being one for the
   table when its bridge tiles went.
 - **Fold an arm into an existing check** when it answers that check's existing question

@@ -625,6 +625,16 @@ role it applied on daniel-box whose change reaches another host (#6510). No chec
 `hold_sha`. A failed apply shows in the deployer's Discord post, in the SessionStart banner and
 as `deploy-failed` from every later `land.sh` run.
 
+**A path the PR only deletes owes no hand.** `classify` reads each file's `changeType` from
+`gh pr view`. It leaves a `DELETED` path out of the plane note, because no playbook applies a
+deleted file. The service tags still read it. A PR that deletes only a setup role's files
+therefore ends `settled` or `nothing-to-deploy` (#7885).
+
+**The clear command names only a role the `owed` ledger holds.** `land.sh` reads `owed.jsonl` in
+step 1. It prints `clear-owed manual_plane <role>` only for a role with a `manual_plane` line.
+A role the ledger lacks still gets its apply command, with no clear after it. An unreadable ledger
+names every role's clear.
+
 **Read every remediation line, not the first one.** One PR can reach two of these at once, for
 example a plane a hand applies and a host package, and the verdict then prints one line per
 half.

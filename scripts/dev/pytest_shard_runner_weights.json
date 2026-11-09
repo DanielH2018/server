@@ -201,7 +201,7 @@
  "ansible/tests/deploy/test_k8s_autodeploy_guard.py": 0.75,
  "ansible/tests/deploy/test_k8s_autodeploy_rollout_gates.py": 0.15,
  "ansible/tests/deploy/test_k8s_dry_run.py": 0.11,
- "ansible/tests/deploy/test_k8s_lookup_readers.py": 0.03,
+ "scripts/lib/tests/test_k8s_lookups.py": 0.03,
  "ansible/tests/deploy/test_k8s_toposort.py": 1.11,
  "ansible/tests/deploy/test_load_secrets_refuses_stub_files.py": 7.57,
  "ansible/tests/deploy/test_local_connection_target.py": 0.01,

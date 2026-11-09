@@ -37,8 +37,8 @@ ansible/tests/services/test_bridge_patch_boundary.py for the qualified-access ru
 
 Ship path: this file is monitor-bridge's canonical copy. autofix-bridge stages a copy of it onto
 the node from here (`{{ playbook_dir }}/roles/k8s/monitor-bridge/files/bridge/common.py`), the
-same cross-role pattern `host_lib.py` uses from `roles/setup/common` — never fork a second edited
-copy under autofix-bridge/files/.
+same sibling-copy pattern as `hosts/lib/host_lib.py`, which each host package ships beside its
+consumer scripts — never fork a second edited copy under autofix-bridge/files/.
 """
 
 import os

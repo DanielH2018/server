@@ -102,25 +102,17 @@ from lib.exit_codes import (
     FANOUT_PLACE_PARTLY_LAUNCHED,
 )
 from lib.git import git
+from fanout_lib.session_banner import health_lines
 from fanout_lib.placement import HostReading, NoHeadroom, place
 from fanout_lib.target import SERVER, for_launch, registered_repos, resolve
 from fanout_lib.transport import (
     HOSTS,
-    REPO,
     Tools,
     this_host,
     error_text,
     read_host,
     registered_keys,
     verified_hosts,
-)
-
-# The SessionStart hook reads `payload["source"]` from stdin, so it needs a JSON payload
-# rather than `</dev/null`; --no-python-downloads/--python match the version run-hook.sh
-# pins for session-health so this reading is taken by the same interpreter a real session would use.
-HEALTH_CMD = (
-    f'cd {REPO} && printf \'{{"source":"startup"}}\' | '
-    "uv run --no-project --no-python-downloads --python 3.15.2 .claude/hooks/session-health.py"
 )
 
 
@@ -305,7 +297,7 @@ def cmd_launch(args, tools: Tools) -> int:
     health = [
         ln
         for host in sorted({host for _, host in placed})
-        for ln in _health_lines(tools, host)
+        for ln in health_lines(tools, host)
     ]
     # After every gate, like the claims: a refused launch writes nothing to the register.
     claims_mod.reap_register(tools, target)
@@ -367,22 +359,6 @@ def cmd_launch(args, tools: Tools) -> int:
         print(f"claims held under `{holder}`")
     # Not 3, which says nothing was placed: these batches are running (#4452).
     return FANOUT_PLACE_PARTLY_LAUNCHED if refused else FANOUT_PLACE_OK
-
-
-def _health_lines(tools: Tools, host: str) -> list[str]:
-    # A failed or timed-out read must not read as "clean" in the launched brief: it's the
-    # signal the SessionStart banner exists to surface.
-    try:
-        proc = tools.run(host, HEALTH_CMD, 40.0, None)
-    except subprocess.TimeoutExpired:
-        return [
-            f"[{host}] session-health read failed (timed out) — banner state unknown"
-        ]
-    if proc.returncode != 0:
-        return [
-            f"[{host}] session-health read failed (exit {proc.returncode}) — banner state unknown"
-        ]
-    return [f"[{host}] {ln}" for ln in proc.stdout.splitlines() if ln.strip()]
 
 
 def _one_line(text: str, limit: int = 300) -> str:

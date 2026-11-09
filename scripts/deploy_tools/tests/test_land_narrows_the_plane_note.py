@@ -138,12 +138,16 @@ _MIXED_PR = {
 }
 
 
+_K3S_OWED = '{"class": "manual_plane", "subject": "k3s", "origin": "abc123", "at": 1.0}'
+
+
 def _fast_landing(land_run, own):
-    """A service tag AND a k3s template, so the tick is never awaited."""
+    """A service tag AND a k3s template, with `k3s` owed in the ledger."""
     f = Fakes(
         gh_views={"files,changedFiles": _MIXED_PR},
         derived=(["obs"], "pr"),
         own_narrowing=own,
+        state={"owed.jsonl": _K3S_OWED},
     )
     classifier = dataclasses.replace(
         build_classifier(f), plane_note=land_tags.plane_note

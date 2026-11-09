@@ -332,6 +332,7 @@ class PlaneNote(Protocol):
         *,
         quiet: Iterable[str] = (),
         narrow_tags: dict[str, frozenset[str]] | None = None,
+        owed: frozenset[str] | None = None,
     ) -> str: ...
 
 
