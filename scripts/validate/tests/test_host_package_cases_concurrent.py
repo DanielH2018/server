@@ -1,6 +1,6 @@
 """The container cases' runner: it runs the case groups concurrently and still fails the leg.
 
-Each test drives `host_package_cases.main()` with the twelve case groups replaced by stubs that
+Each test drives `host_package_cases.main()` with the twelve case groups, `bootstrap_case` among them, replaced by stubs that
 sleep instead of booting a container, so no Docker is needed. The runner must look the groups
 up when `main()` runs, the three `Cases` methods on the instance and each `validate_lib` case
 module's `run` on that module, and must run them in this process (threads, not
@@ -40,7 +40,8 @@ MODULES = {
     "bootstrap_repo_case": bootstrap_repo_case,
     "bootstrap_age_case": bootstrap_age_case,
 }
-GROUPS = frozenset(METHODS) | frozenset(MODULES)
+# `bootstrap_case` runs only under `--bootstrap` or `--k3s-download` (#7819).
+GROUPS = (frozenset(METHODS) | frozenset(MODULES)) - {"bootstrap_case"}
 SLEEP = 0.3
 
 
@@ -142,6 +143,15 @@ def test_each_groups_output_stays_together_in_the_log(tmp_path, monkeypatch, cap
         "interleaved": sorted({name for name in blocks if blocks.count(name) > 1}),
         "concurrent": runs.max_overlap() >= 2,
     } == {"status": 0, "lines": 3 * len(GROUPS), "interleaved": [], "concurrent": True}
+
+
+def test_the_bootstrap_flag_runs_only_the_bootstrap_group(tmp_path, monkeypatch):
+    runs, status = _run_main(tmp_path, monkeypatch, flags=("--bootstrap",))
+
+    assert {"status": status, "ran": set(runs.spans)} == {
+        "status": 0,
+        "ran": {"bootstrap_case"},
+    }
 
 
 def test_the_k3s_download_flag_runs_only_the_bootstrap_group(tmp_path, monkeypatch):

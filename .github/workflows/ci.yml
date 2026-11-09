@@ -1441,7 +1441,7 @@ jobs:
           if [ "$cases" = false ]; then
             job=$(uv run python scripts/validate/host_packages.py job-changed "$base" \
               --workflow .github/workflows/ci.yml --job host_packages_build --job host_packages \
-              --job k3s_download)
+              --job host_packages_bootstrap --job k3s_download)
             if [ "$job" = true ]; then
               echo "::notice::This PR changes the host package jobs' steps, so the cases run."
               cases=true
@@ -1685,8 +1685,8 @@ jobs:
     needs: [prove, host_packages_build]
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' }}
     runs-on: ubuntu-26.04
-    # Each leg boots a container per case, and four of the bootstrap cases render and build the
-    # host packages from a clone (H7.15a). The image step pulls the pinned image, but a PR that
+    # Each leg boots a container per case. The bootstrap cases run in `host_packages_bootstrap`.
+    # The image step pulls the pinned image, but a PR that
     # changes the Dockerfile builds it from snapshot.ubuntu.com, so the budget stays sized to
     # the build. Measured 2026-11-04 with the mirror at 28-129 kB/s: 2min of steps before the
     # build, a 33min 45s image build and 20min 33s of cases, so about 56min at worst (#7128).
@@ -1801,6 +1801,106 @@ jobs:
           uv run python scripts/validate/host_package_cases.py --image "homelab-host-test:$RELEASE" \
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
             --work "$RUNNER_TEMP/cases" "${seed[@]}"
+
+  # The bootstrap cases (`validate_lib/bootstrap_case.py`), one leg per release, beside the
+  # `host_packages` legs rather than inside them (#7819). In those legs they were the longest group,
+  # 338-477 s across seven master runs on 2026-11-09, against 214-271 s for the next-longest. The
+  # serial prepare took 18-42 s of that. The items took the rest: three CPU-bound offline builds
+  # ran 227-303 s each, sharing the leg's 4 vCPUs with every other group.
+  #
+  # The steps and their `if:`s are the legs', and the job gates like them. The id starts with
+  # `host_packages`, so the prefix filter in docs/target-architecture/host/h3-pi-pilot.md selects
+  # these legs too. The budget matches the legs', because a Dockerfile PR builds the image here too.
+  host_packages_bootstrap:
+    needs: [prove, host_packages_build]
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read  # the pinned test image, while its GHCR package is private
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {release: "24.04", python: "3.12"}
+          - {release: "26.04", python: "3.14"}
+    env:
+      UV_NO_GROUP: lint
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false  # nothing here pushes or fetches
+
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+
+      - name: Download the hand-off from the build job
+        if: >-
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: host-packages-build
+          path: ${{ runner.temp }}/handoff
+
+      - name: Unpack the render, the debs and nfpm
+        if: >-
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
+        run: |
+          set -euo pipefail
+          tar -xf "$RUNNER_TEMP/handoff/host-packages-build.tar" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/nfpm" --version
+
+      - name: Restore the build job's homelab-tools cache
+        id: tools-cache
+        if: needs.host_packages_build.outputs.tools-key != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: ${{ needs.host_packages_build.outputs.tools-key }}
+
+      - name: Build the test image for this release
+        if: >-
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
+        env:
+          RELEASE: ${{ matrix.release }}
+          UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "$UPGRADE" != true ]; then
+            echo "::notice::The merge base is HEAD, so no case can upgrade; no image is built."
+            exit 0
+          fi
+          hosts/lib/tests/container/build-image.sh "$RELEASE"
+
+      - name: Run the bootstrap cases in systemd containers
+        if: >-
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
+        env:
+          RELEASE: ${{ matrix.release }}
+          PYTHON: ${{ matrix.python }}
+          UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
+          TOOLS_CACHE_HIT: ${{ steps.tools-cache.outputs.cache-hit }}
+        run: |
+          if [ "$UPGRADE" != true ]; then
+            echo "::notice::The merge base is HEAD, so no image was built; the bootstrap cases do not run."
+            exit 0
+          fi
+          seed=()
+          if [ "$TOOLS_CACHE_HIT" = true ]; then
+            seed=(--tools-cache "$RUNNER_TEMP/tools-cache")
+          else
+            echo "::notice::The build job's tools cache did not restore; the cases download each pin."
+          fi
+          uv run python scripts/validate/host_package_cases.py --image "homelab-host-test:$RELEASE" \
+            --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
+            --work "$RUNNER_TEMP/cases-bootstrap" "${seed[@]}" --bootstrap
 
   # The bootstrap case whose seed never holds k3s, so install.sh's own download and sha256 check
   # of the release binary run whatever the legs seed (#7751 seeds k3s there; #7754). One release
@@ -1971,7 +2071,7 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
-    needs: [prove, hooks, pr_gates, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_tools_arm64]
+    needs: [prove, hooks, pr_gates, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_packages_bootstrap, host_tools_arm64]
     # On a draft the gate skips with its dependents. A red gate there would pin the head red
     # for every reader that takes the worst check run per name (`deploy_git.ci_verdict`), even
     # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
@@ -2009,12 +2109,14 @@ jobs:
           SOPS_TYPE_PROOF: ${{ needs.sops_manifest_type_proof.result }}
           HOST_PACKAGES_BUILD: ${{ needs.host_packages_build.result }}
           HOST_PACKAGES: ${{ needs.host_packages.result }}
+          HOST_PACKAGES_BOOTSTRAP: ${{ needs.host_packages_bootstrap.result }}
           HOST_TOOLS_ARM64: ${{ needs.host_tools_arm64.result }}
         run: |
           echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pr-gates=$PR_GATES pytest=$PYTEST" \
             "ansible-lint=$ANSIBLE_LINT" \
             "deck-mod=$DECK_MOD flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
             "host-packages-build=$HOST_PACKAGES_BUILD host-packages=$HOST_PACKAGES" \
+            "host-packages-bootstrap=$HOST_PACKAGES_BOOTSTRAP" \
             "host-tools-arm64=$HOST_TOOLS_ARM64"
           # `prove` runs on a push only, so it is `skipped` on every other event. A `cancelled`
           # or `failure` `prove` broke on the runner, so whatever it said is unproven and every
@@ -2025,7 +2127,7 @@ jobs:
           ok() { [ "$1" = success ] || { [ "$proven" = true ] && [ "$1" = skipped ]; }; }
           ok "$HOOKS" && ok "$PR_GATES" && ok "$PYTEST" && ok "$ANSIBLE_LINT" && ok "$DECK_MOD" \
             && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES_BUILD" \
-            && ok "$HOST_PACKAGES" \
+            && ok "$HOST_PACKAGES" && ok "$HOST_PACKAGES_BOOTSTRAP" \
             && ok "$HOST_TOOLS_ARM64"
 
       # Records what this green run tested, for the push run's `prove` job (#5489). On a pull

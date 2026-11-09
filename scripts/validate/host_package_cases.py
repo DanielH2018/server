@@ -46,6 +46,11 @@ script without `--local-build` on daniel-pi, against the test repository with a 
 the script that pins its throwaway key (#6245; `validate_lib/bootstrap_repo_case.py`). A last
 case runs step 3 with real apt on an image holding no age (`validate_lib/bootstrap_age_case.py`).
 
+The bootstrap cases (`validate_lib/bootstrap_case.py`) run only under `--bootstrap`, which runs
+them and nothing else. CI runs them in a job of their own, `bootstrap_cases`, beside the legs that
+run every other group: on one runner their offline builds and the other groups slowed each other,
+and they ran 338-477 s against 214-271 s for the next-longest group (#7819).
+
 `--k3s-download` runs one case and nothing else: daniel-box's `--local-build` with no k3s seeded,
 so install.sh downloads and checks the release binary. CI runs it in a job that cannot fail the
 PR (#7754, #7810).
@@ -70,6 +75,7 @@ Usage:
     uv run python scripts/validate/host_package_cases.py --image homelab-host-test:24.04 \\
         --python 3.12 --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \\
         --work "$RUNNER_TEMP/cases" --tools-cache "$RUNNER_TEMP/tools-cache"
+    uv run python scripts/validate/host_package_cases.py ... --bootstrap
 
 Exit codes: 0 every case passed; 1 a case failed, each `[FAIL]` line on stderr naming it and why,
 or a container never booted; 64 a usage error.
@@ -541,6 +547,11 @@ def main(argv: list[str] | None = None) -> int:
         help="run only the bootstrap case that downloads k3s from its release",
     )
     parser.add_argument(
+        "--bootstrap",
+        action="store_true",
+        help="run only the bootstrap cases, which no other run includes",
+    )
+    parser.add_argument(
         "--jobs",
         type=int,
         default=4,
@@ -552,7 +563,7 @@ def main(argv: list[str] | None = None) -> int:
     except CaseFailed as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)
         return 1
-    if cases.k3s_download:
+    if cases.k3s_download or args.bootstrap:
         run_groups(cases, [("bootstrap_case", bootstrap_case.run)], 1)
     else:
         run_groups(cases, groups(Cases), args.jobs)

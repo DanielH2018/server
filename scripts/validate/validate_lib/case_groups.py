@@ -1,6 +1,6 @@
 """Run the host package cases' groups concurrently, each in its own scratch directory (#7784).
 
-`host_package_cases.main()` hands `run_groups` the twelve case groups: the three `Cases` methods
+`host_package_cases.main()` hands `run_groups` the eleven case groups: the three `Cases` methods
 and each case module's `run`. Every group boots its own containers, and their names differ, but
 the serial runner had every container mount the one `<work>/repo` and `<work>/debs`, and every
 group republishes that repository. So `isolate` gives each group a shallow copy of `Cases` whose
@@ -29,7 +29,7 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from io import StringIO
 
-from validate.validate_lib import bootstrap_age_case, bootstrap_case
+from validate.validate_lib import bootstrap_age_case
 from validate.validate_lib import bootstrap_repo_case, disarm_case, engine_case
 from validate.validate_lib import conffile_case, repos_case, secrets_case, shadow_case
 
@@ -74,13 +74,15 @@ class StderrByThread:
 
 
 def groups(cases_class) -> list[tuple[str, Callable]]:
-    """Every case group, longest first by the 24.04 leg of CI run 42575480365.
+    """Every case group but bootstrap_case, longest first by CI run 42575480365's 24.04 leg.
+
+    `bootstrap_case` is left out: it runs alone under `host_package_cases.py --bootstrap`, in a
+    CI job of its own (#7819).
 
     Each is looked up when this runs, so a stub set on a module or on `cases_class` is the one
     the group list holds.
     """
     return [
-        ("bootstrap_case", bootstrap_case.run),
         ("upgrade_path", cases_class.upgrade_path),
         ("bootstrap_age_case", bootstrap_age_case.run),
         ("engine_case", engine_case.run),
