@@ -60,6 +60,11 @@ forked child is reparented to 1 and is its own root, still matching `deploy_cli.
 than nothing. `deploy.sh --list-services` is a read, so it is excluded by name. fuser lists only processes whose `/proc/<pid>/fd` this user can
 read; every deployer here runs as `{{ sys_user }}`, the daemon's own user.
 
+A landing row carries its PR's title. A landing merges its PR mid-run, which drops it from
+`gh pr list`, so `_pr_title` reads the title with `gh pr view <n>` and caches it for the
+daemon's life. A failed lookup leaves the title blank and is retried on the next poll; it
+never makes the lock panel unavailable. The page links each PR number to its GitHub page.
+
 Only a `land` row is cancellable. SIGTERM to a deploy mid-play leaves whatever applied
 before it live (`deploy.sh` exit 20), which is not a cancel.
 
