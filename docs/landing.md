@@ -598,8 +598,9 @@ prints a note naming the re-run, and as `deferred`, exit 4, for any other.
 apply nor a failure of it, and it names no other host the role reaches. Read the host: the
 changed state itself, or `probe.py gitops-state`, which prints `last_run`, `hold_sha` and
 `owed.jsonl`. The deployer records a `manual_plane` line for a role it cannot apply, and for a
-role it applied on daniel-box whose change reaches another host (#6510). A `hold_sha` pages
-**GitOps Deploy — Status**, so a failed apply does not go unseen.
+role it applied on daniel-box whose change reaches another host (#6510). No check pages on a
+`hold_sha`. A failed apply shows in the deployer's Discord post, in the SessionStart banner and
+as `deploy-failed` from every later `land.sh` run.
 
 **Read every remediation line, not the first one.** One PR can reach two of these at once, for
 example a plane a hand applies and a host package, and the verdict then prints one line per

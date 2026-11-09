@@ -142,11 +142,12 @@ def manual_plane_alert(origin: str, remediation: str, marker: str) -> str:
 
     `broad_deferred_alert`'s text plus the two facts that differ from a park: the range IS
     merged, so nobody else's landing is waiting on this, and the role is recorded in a file
-    that pages on its own age — so an unread page is no longer the only signal.
+    that the SessionStart banner reads. No check pages on that file, so this post is the only
+    push signal.
     """
     return broad_deferred_alert(origin, remediation) + (
-        f" The range is merged; the role is recorded in `{marker}` and pages "
-        "**GitOps Deploy — Status** once the oldest entry is six hours old."
+        f" The range is merged; the role is recorded in `{marker}`, which the "
+        "SessionStart banner names until the line is cleared. Nothing else pages on it."
     )
 
 

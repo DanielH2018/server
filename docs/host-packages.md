@@ -300,8 +300,8 @@ forward-only, so a failed apply leaves the tree merged and writes two records:
 - one `hold_plane` line in `/var/lib/gitops-deploy/owed.jsonl` for each playbook and tag set
   that failed.
 
-While the hold stands, `land.sh` reports `deploy-failed` for every session's landing, and
-**GitOps Deploy — Status** pages. Each apply that can fail this way merges in an attended
+While the hold stands, `land.sh` reports `deploy-failed` for every session's landing. No check
+pages on the hold. Each apply that can fail this way merges in an attended
 window for that reason.
 
 To clear the hold:

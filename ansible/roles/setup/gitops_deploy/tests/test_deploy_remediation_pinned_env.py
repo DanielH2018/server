@@ -83,6 +83,8 @@ def test_the_manual_plane_discord_alert_runs_through_the_pinned_env():
     )
     assert f"`{PINNED} ansible/k3s-bringup.yml --tags k3s`" in msg
     assert _bare(msg) == []
+    # No monitor-bridge check reads owed.jsonl, so the post must not promise a page.
+    assert "GitOps Deploy" not in msg
 
 
 def test_every_broad_remediation_form_runs_through_the_pinned_env():

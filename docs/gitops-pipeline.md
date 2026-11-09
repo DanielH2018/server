@@ -296,18 +296,16 @@ pulls the primary checkout.
 The tick fast-forwards instead, and writes the role to the `owed` ledger
 (`/var/lib/gitops-deploy/owed.jsonl`) as one `manual_plane` line per role, carrying its
 origin SHA, playbook, first-seen stamp and narrow tags. A role already listed is not re-added,
-so its first-seen stamp is the age everything else reads. Five consequences:
+so its first-seen stamp is the age everything else reads. Four consequences:
 
 - the journal says `manual_plane: pending <roles> — apply by hand: <commands>` on **every**
   tick, not only the one that recorded it. The recording tick says
   `manual_plane: recorded <roles>` instead, naming only the roles it added, so no tick prints
   both lines;
 - Discord pages once per SHA, with the same commands and the ledger's path;
-- **GitOps Deploy — Status** goes down once the oldest pending line is older than
-  `GITOPS_BEHIND_MAX_S` (6 h), naming the roles and the clear command;
 - the **SessionStart banner** names one line per pending role — the role, its playbook, how
   long it has waited and the clear command — from the moment the tick records it. Not
-  age-gated, unlike the monitor: the monitor pages, where the banner is a passive notice, and
+  age-gated: the banner is a passive notice, and
   the session reading it is usually not the session that landed the change;
 - the receipt records that role under `manual`, not `applied` — a plane in the same range
   that DID apply still records its own, so a mixed push still proves the half it applied.
@@ -709,8 +707,8 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   tree while `last_run` keeps ticking (Alive green) and `is_diverged` stays false (origin is a
   strict descendant, so Status is green too). Each tick therefore records
   `"<origin_sha> <first_seen_ts>"` to `/var/lib/gitops-deploy/behind_since` when it ends behind
-  origin, and clears it on convergence. monitor-bridge's **GitOps Deploy — Status** pages once the
-  age exceeds `GITOPS_BEHIND_MAX_MIN` (6 h). The marker is written AFTER `main()` so it reflects
+  origin, and clears it on convergence. The SessionStart banner reads it; no check pages on it
+  since H7.49b. The marker is written AFTER `main()` so it reflects
   the state the tick finished in. The watchdog is age-gated because being behind is normal in the
   small: a push is behind for one tick, and the dirty path is behind for a whole edit session.
   - **The stamp measures TIME WITHOUT A FAST-FORWARD, not time behind the tip.** Any tick that
@@ -818,7 +816,7 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   advanced), the deployer can't fast-forward and every tick noops while origin's new commits — a
   Renovate/security bump — never deploy. Both other GitOps signals stay green (`last_run` keeps
   ticking, no hold), so each tick writes the diverged SHA to `/var/lib/gitops-deploy/diverged_sha`
-  (cleared once resolved) and `monitor-bridge`'s **GitOps Deploy — Status** monitor pages on it.
+  (cleared once resolved). No check pages on it since H7.49b.
   A merely unpushed local commit (`local_ahead`) is NOT flagged — that's the plain no-op above.
 - Each `has_gitops` host runs its own independent instance of this deployer, with its own git
   clone, state dir and lock. Only daniel-box has one.
