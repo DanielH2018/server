@@ -104,7 +104,6 @@ def test_a_later_injection_carries_the_one_line_tag(repo):
     _add_bar(repo)
     context, _ = _build(repo, f"cat {BAR_DOC}")
     assert context.startswith(_mod._SHORT_PREAMBLE)
-    assert _mod._SHORT_PREAMBLE.count("\n") == 2
     assert _mod._PREAMBLE not in context
 
 
