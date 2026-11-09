@@ -157,6 +157,7 @@ def test_page_switches_logs_and_folds_the_finished_list_is_clean(app):
     _, html = app.get("/")
     assert 'id="vtabs"' in html and "function renderTabs()" in html
     assert "const FIN_SHOWN=5" in html and 'id="finToggle"' in html
+    assert 'onclick="showStage(${d.stages.indexOf(s)})"' in html
 
 
 def test_page_has_no_stale_release_panel_is_flagged(app):
