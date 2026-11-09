@@ -79,6 +79,16 @@ def test_a_deferral_whose_health_gate_could_not_read_still_gave_up(tmp_path):
     assert land_probe.read(log)["state"] == "gave-up"
 
 
+def test_a_deferral_whose_gate_tree_was_stale_still_gave_up(tmp_path):
+    """#7816: master moved while the gate ran, and only a re-run of land.sh grades the deploy."""
+    log = landing(
+        tmp_path,
+        f"{outcome.STALE_GATE_NOTE}\nVERDICT: deferred (PR #939 — gate tree stale)\n",
+        rc=75,
+    )
+    assert land_probe.read(log)["state"] == "gave-up"
+
+
 def test_a_refusal_without_a_verdict_reports_its_land_line(tmp_path):
     """A landing-policy `die()` writes no VERDICT line; its reason is the last `land:` line."""
     log = landing(

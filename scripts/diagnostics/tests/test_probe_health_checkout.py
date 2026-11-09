@@ -30,6 +30,7 @@ def test_a_role_only_on_origin_is_unreadable_not_a_failure(tmp_path, capsys):
     captured = capsys.readouterr()
     assert code == PROBE_UNREADABLE
     assert "exists on origin/master but not in this checkout" in captured.err
+    assert health_checkout.STALE_CHECKOUT in captured.err
     assert "no Deployment or DaemonSet" not in captured.out + captured.err
     assert not [m for m in detach_notify.NOT_APPLICABLE_MARKERS if m in captured.err]
 
@@ -108,6 +109,8 @@ def test_a_role_origin_master_changed_after_this_checkout_is_stale(
     )
     assert reason is not None
     assert "origin/master" in reason
+    # The land gate words its deferral from this marker (#7816).
+    assert reason.startswith(health_checkout.STALE_CHECKOUT)
 
     # At the merged SHA, or past it with the checkout's own commit, the checkout can judge.
     git(repo, "checkout", "-q", "--detach", b)

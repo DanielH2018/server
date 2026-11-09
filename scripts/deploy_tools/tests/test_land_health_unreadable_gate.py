@@ -16,14 +16,16 @@ import pytest
 
 from _land_fakes import MERGE_SHA
 from deploy_tools.deploy_lib import detach_notify
+from deploy_tools.land_lib import outcome
 from deploy_tools.land_lib import health_verdict
 from deploy_tools.land_lib.landing import Classification
 from deploy_tools.land_lib.outcome import Outcome
+from diagnostics.probe_lib import health_checkout
 from lib.exit_codes import PROBE_UNREADABLE
 
 
-def _unreadable_landing(landing):
-    """A landing of homelab-mcp whose every probe.py health run exits 75."""
+def _unreadable_landing(landing, stderr="no available server\n"):
+    """A landing of homelab-mcp whose every probe.py health run exits 75, saying `stderr`."""
     ln, _ = landing()
     ln.merge_sha, ln.flux_tags = MERGE_SHA, ["homelab-mcp"]
     ln.classification = Classification(plane="")
@@ -32,7 +34,7 @@ def _unreadable_landing(landing):
         return SimpleNamespace(
             returncode=PROBE_UNREADABLE,
             stdout="PROBE-VERDICT: unreadable (probe.py health, exit 75)\n",
-            stderr="no available server\n",
+            stderr=stderr,
         )
 
     tools = detach_notify.NotifyTools(
@@ -61,3 +63,30 @@ def test_a_gate_that_stays_unreadable_does_not_settle_either(landing):
         health_verdict.health(ln)
     assert exc.value.verdict not in ("unhealthy", "settled")
     assert exc.value.rc != 0
+
+
+def test_a_store_that_does_not_answer_defers_with_the_store_wording(landing, capsys):
+    ln = _unreadable_landing(landing)
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    assert (exc.value.rc, exc.value.verdict) == (75, "deferred")
+    assert "could not read its store" in exc.value.detail
+    assert outcome.STALE_GATE_NOTE not in capsys.readouterr().out
+
+
+def test_a_stale_gate_tree_defers_without_blaming_the_store(landing, capsys):
+    """#7816: a re-run from a tree master has moved past refuses again, so the Prometheus
+    advice sent the operator into a loop."""
+    stale = (
+        f"homelab-mcp: {health_checkout.STALE_CHECKOUT}: origin/master changed the k8s role "
+        "'homelab-mcp' at 4f2204fdb1, after this checkout's HEAD\n"
+    )
+    ln = _unreadable_landing(landing, stderr=stale)
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    out = capsys.readouterr().out
+    assert (exc.value.rc, exc.value.verdict) == (75, "deferred")
+    assert "older than origin/master" in exc.value.detail
+    assert "could not read its store" not in exc.value.detail + out
+    assert outcome.STALE_GATE_NOTE in out
+    assert outcome.UNREADABLE_GATE_NOTE not in out
