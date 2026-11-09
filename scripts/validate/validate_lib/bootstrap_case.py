@@ -30,7 +30,8 @@ systemd loads that unit:
     renders, builds and simulates the install of that host's package on a container of its name.
 
 `run` prepares the clones, the kit and the seed once, then runs the cases concurrently, at
-most one per CPU (#7785). Each case boots its own container and mounts its clone and seed
+most one per CPU (#7785). It submits the offline builds first, because they are the longest
+items and the host items fill in behind them (#7866). Each case boots its own container and mounts its clone and seed
 read-only. The script copies out of a kit, and uv runs the kit's `uv-python` interpreter in
 place, taking at most a file lock there. The verdicts print in plan order, each followed by
 `[DONE] <label> in Ns`, the seconds that item's own run took; the prepare prints its seconds
@@ -76,7 +77,7 @@ import sys
 import tarfile
 import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 
 from validate.host_packages import fetch_tools, tool_fetch_module
@@ -92,6 +93,7 @@ from validate.validate_lib.bootstrap_plan import (
     red_kit as red_kit,
     script_value,
     selected,
+    submission_order,
 )
 from validate.validate_lib.host_container import CaseFailed, Container, expect
 from validate.validate_lib.host_fixtures import run_logged
@@ -535,12 +537,14 @@ def run(cases) -> None:
         file=sys.stderr,
     )
     bodies = [body_for(cases, item, clones) for item in planned]
-    # Printed from this thread, in plan order: case_groups buffers stderr per group thread.
-    # The offline items are CPU-bound builds, and other case groups share the runner's CPUs.
     workers = min(len(bodies), max(2, os.cpu_count() or 2))
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        verdicts = pool.map(_verdict, bodies)
-        for item, (failure, seconds) in zip(planned, verdicts, strict=True):
+        futures: dict[int, Future] = {
+            i: pool.submit(_verdict, bodies[i]) for i in submission_order(planned)
+        }
+        # Printed from this thread, in plan order: case_groups buffers stderr per group thread.
+        for i, item in enumerate(planned):
+            failure, seconds = futures[i].result()
             if failure is None:
                 print(f"[PASS] {item.label}: {item.name}", file=sys.stderr)
             else:

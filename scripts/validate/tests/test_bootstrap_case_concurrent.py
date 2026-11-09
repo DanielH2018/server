@@ -8,6 +8,7 @@ the most items that were running at one moment.
 Run: uv run pytest scripts/validate/tests/test_bootstrap_case_concurrent.py
 """
 
+import os
 import re
 import subprocess
 import threading
@@ -35,6 +36,7 @@ class Overlap:
         self.accompanied: set[str] = set()
         self.done = 0
         self.peak = 0
+        self.started: list[str] = []
 
     def enter(self, label: str) -> bool:
         """Run `label`; True when another item ran beside it, or every other item had finished."""
@@ -42,6 +44,7 @@ class Overlap:
             if self.running:
                 self.accompanied |= self.running | {label}
             self.running.add(label)
+            self.started.append(label)
             self.peak = max(self.peak, len(self.running))
             self.cond.notify_all()
             company = self.cond.wait_for(
@@ -229,6 +232,13 @@ def test_an_item_s_duration_is_its_own_run_not_the_wait_for_earlier_items(
     }
     assert len(seconds[first]) == 1 and seconds[first][0] >= SLOW - 0.5, err
     assert len(seconds[last]) == 1 and seconds[last][0] < SLOW - 0.5, err
+
+
+def test_the_offline_builds_start_before_the_host_items(monkeypatch, tmp_path):
+    monkeypatch.setattr(os, "cpu_count", lambda: 3)
+    _, _, overlap = _run(monkeypatch, tmp_path)
+
+    assert set(overlap.started[:3]) == {"offline", "red-depends", "fixture-host"}
 
 
 def test_the_prepare_prints_how_long_it_took(monkeypatch, tmp_path, capsys):

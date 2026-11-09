@@ -103,6 +103,16 @@ class Planned(NamedTuple):
     absent: str | None = None
     gates: bool = True
 
+    @property
+    def builds_offline(self) -> bool:
+        """True when the run builds the packages from the kit, which takes minutes of CPU.
+
+        A kit red refuses before the build, so it finishes in seconds.
+        """
+        return self.kit is not None and (
+            self.refusal is None or self.apt_says is not None
+        )
+
 
 def plan(work: Path, green: Path) -> list[Planned]:
     """Every bootstrap case, in order, writing each red kit beside the green one."""
@@ -195,6 +205,15 @@ def plan(work: Path, green: Path) -> list[Planned]:
         )
     )
     return cases
+
+
+def submission_order(planned: list[Planned]) -> list[int]:
+    """The plan positions of `planned`, the offline builds first and otherwise in plan order.
+
+    The builds are the longest items, so starting them in the first wave keeps the short host
+    items from delaying them (#7866).
+    """
+    return sorted(range(len(planned)), key=lambda i: not planned[i].builds_offline)
 
 
 def selected(planned: list[Planned], k3s_download: bool) -> list[Planned]:
