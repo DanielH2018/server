@@ -1002,6 +1002,7 @@
  "scripts/deploy_tools/tests/test_land_reach_vars_files.py": 1.19,
  "scripts/deploy_tools/tests/test_land_role_tests_reach_no_cluster.py": 0.29,
  "scripts/deploy_tools/tests/test_land_shim.py": 1.21,
+ "scripts/deploy_tools/tests/test_land_shim_skips_lint_group.py": 2.71,
  "scripts/deploy_tools/tests/test_land_stale_base.py": 0.09,
  "scripts/deploy_tools/tests/test_land_suspended_gate_reason.py": 0.0,
  "scripts/deploy_tools/tests/test_land_tags.py": 0.56,
