@@ -44,7 +44,8 @@ if [ "$(wc -l < "$HOMELAB_ROOT/installer.runs")" -le "${FAIL_RUNS:-0}" ]; then
     exit 1
 fi
 echo "$INSTALL_K3S_EXEC $INSTALL_K3S_VERSION skipenable=$INSTALL_K3S_SKIP_ENABLE \
-skipstart=$INSTALL_K3S_SKIP_START url=${K3S_URL:-unset} token=${K3S_TOKEN:+set}" \
+skipstart=$INSTALL_K3S_SKIP_START skipdownload=$INSTALL_K3S_SKIP_DOWNLOAD \
+url=${K3S_URL:-unset} token=${K3S_TOKEN:+set}" \
 > "$HOMELAB_ROOT/installer.args"
 mkdir -p "$HOMELAB_ROOT/etc/systemd/system"
 mode=$INSTALL_K3S_EXEC

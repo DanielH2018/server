@@ -7,8 +7,7 @@ declarative reaps what Docker left behind, so `has_docker: false` in host_vars d
 intention that no code converges to.
 
 So gitops_deploy dispatches internally on their flags, each with an install half
-and a teardown half. docker_install kept only its teardown half when H7.26 moved the install
-into the Pi's package. This asserts the shape stays that way: a tasks/main.yml that includes one
+and a teardown half. This asserts the shape stays that way: a tasks/main.yml that includes one
 file `when: <flag>` must also include one `when: not <flag>`. Roles gated in a playbook
 rather than internally are not matched -- the pattern here is specifically the dispatcher.
 

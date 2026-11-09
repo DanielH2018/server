@@ -101,9 +101,7 @@ def test_census_finds_the_roles_known_to_install_crons():
 
 
 def test_docker_install_is_out_of_the_subject_not_exempt():
-    """Its only cron task is the teardown's `state: absent` removal arm; a role that installs
-    nothing owes no contract and must not need an EXEMPT entry to pass.
-    """
+    """An emptied role installs no cron, so it owes no contract and needs no EXEMPT entry."""
     assert not _installs_a_cron_or_timer(SETUP_ROLES / "docker_install")
     assert "docker_install" not in EXEMPT
 

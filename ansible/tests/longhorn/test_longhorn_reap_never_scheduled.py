@@ -147,13 +147,13 @@ def test_both_reapers_exist_in_scripts_backup() -> None:
 def test_census_finds_the_scheduled_heartbeat() -> None:
     """Non-vacuity: the scanner must see a real schedule before its silence means anything.
 
-    No task installs a cron since H7.34, but initial_setup's cron task that removes the TLS
-    watch is still a `cron:` task, and the kuma-check timers reach the census through their
+    No task installs a cron since H7.34, but initial_setup's cron task that removes the
+    ansible.log truncation is still a `cron:` task, and the kuma-check timers reach the census through their
     `check_timer_exec` var; both surfaces have to be read for a silent scan to mean "nothing
     schedules a reaper".
     """
     texts = scheduled_texts(SETUP)
-    assert any("TLS cert-expiry watch" in t for t in texts.values()), (
+    assert any("Clear ansible log file" in t for t in texts.values()), (
         "the cron census no longer sees a cron task — the scanner is reading nothing"
     )
     assert any("check_timer_exec" in t for t in texts.values()), (

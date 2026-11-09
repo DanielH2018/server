@@ -244,6 +244,21 @@ def test_a_probe_with_no_sample_newer_than_the_rollout_after_the_wait_is_flagged
     assert any("reported no sample after" in line for line in lines)
 
 
+def test_a_re_read_that_fits_the_deadline_polls_only_what_is_left_of_it():
+    fake = FakeProm(probe(1, APPLIED - 1))
+    start = fake.now
+    tools = health_alerts.PromTools(
+        query=fake.query,
+        sleep=fake.sleep,
+        clock=lambda: fake.now,
+        deadline=health_alerts.RetryWindow(200, clock=lambda: fake.now, start=start),
+    )
+    code, lines = health_alerts.gate(TAG, APPLIED, APPLIED, True, tools)
+    assert code == 1
+    assert any("reported no sample after" in line for line in lines)
+    assert fake.now - start == 200
+
+
 def test_a_mid_rollout_0_followed_by_a_1_is_clean():
     first_scrape = APPLIED + 50
     fake = FakeProm(

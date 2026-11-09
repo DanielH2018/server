@@ -147,7 +147,7 @@ def test_runtime_vars_reads_the_setup_tree():
     """
     names = v.runtime_vars()
     assert "k3s_node_ip" in names  # register
-    assert len(names) >= 48
+    assert len(names) >= 46
 
 
 def test_an_ansible_magic_var_is_allowed_and_an_unknown_name_is_not():

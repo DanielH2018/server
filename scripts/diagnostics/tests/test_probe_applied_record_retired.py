@@ -2,7 +2,8 @@
 
 #6913 added a per-role record of each STUB render's SHA-256 under `RECORD_DIR`. #6926 deleted
 the only task that wrote one, so the reader in `applied.py` has no writer, and the record
-`k8s_host_files` wrote stays on daniel-box with a stale hash.
+`k8s_host_files` wrote stays on daniel-box with a stale hash until daniel-box's package
+retires it.
 """
 
 import hashlib
@@ -15,7 +16,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from diagnostics.probe_lib import applied, applied_tasks
+from diagnostics.probe_lib import applied
 from lib import yaml_fast
 from lib.exit_codes import PROBE_FAILED
 from lib.proc_testing import run
@@ -86,14 +87,13 @@ def test_the_apply_record_has_a_writer_or_no_reader():
     assert not readers or writers, f"{readers} read {RECORD_DIR}, and no role writes it"
 
 
-def test_k8s_host_files_removes_the_orphan_apply_record_on_daniel_box():
-    role = applied.SETUP / "k8s_host_files"
-    wants, _ = applied_tasks.expected(
-        role, "daniel-box", applied.context(role, "daniel-box")
-    )
-    orphans = {RECORD_DIR, f"{RECORD_DIR}/k8s_host_files"}
-    removed = [w.path for w in wants if not w.present and w.path in orphans]
-    assert removed, f"no absent arm in k8s_host_files removes {sorted(orphans)}"
+def test_daniel_box_package_retires_the_orphan_apply_record():
+    package = yaml_fast.safe_load((REPO / "hosts/daniel-box/package.yml").read_text())
+    retired = [entry.get("path") for entry in package["legacy"]]
+    orphans = [f"{RECORD_DIR}/k8s_host_files", RECORD_DIR]
+    assert all(o in retired for o in orphans), f"no legacy entry removes {orphans}"
+    # Reconcile removes only an empty directory, so the file's entry comes first.
+    assert retired.index(orphans[0]) < retired.index(orphans[1])
 
 
 STUB_TASK = """\

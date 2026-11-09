@@ -11,8 +11,8 @@ strictly worse than the mutable tag, and it reads green throughout. So every
 test below is a pair: one input that must move the tag, and the identical input that must not.
 
 `derived.content_tag` is the rule under test. Each tag is checked against the role's expression,
-evaluated through Ansible's own templar against real files on disk, because a stubbed `lookup`
-would not prove the real lookups resolve at all.
+evaluated through the renderer's environment against real files on disk, because a stubbed
+`lookup` would not prove the real lookups resolve at all.
 
 Run: uv run pytest ansible/tests/deploy/test_image_builder_content_tag.py
 """
@@ -25,8 +25,8 @@ import pytest
 from _helpers import ANSIBLE
 from _image_builder_tag import (
     CONTEXT_DATA_EXPRESSION,
-    templar_content_tag,
-    templar_value,
+    expression_content_tag,
+    expression_value,
 )
 from _k8s_render import render_role_template
 from renderer.renderer_lib.derived import content_tag
@@ -45,7 +45,7 @@ TAG_RE = re.compile(r"^sha-[0-9a-f]{12}$")
 
 
 def _tag(dockerfile, context=None, context_files=None, role=ROLE, name="demo") -> str:
-    """`derived.content_tag` over the real context, checked against Ansible's evaluation of it.
+    """`derived.content_tag` over the real context, checked against the role's expression.
 
     Point `role` at a copy of the role to vary the templates themselves.
     """
@@ -58,9 +58,9 @@ def _tag(dockerfile, context=None, context_files=None, role=ROLE, name="demo") -
             str(k): v for k, v in (context_files or {}).items()
         },
     }
-    data = cast(dict, templar_value(CONTEXT_DATA_EXPRESSION, variables, role))
+    data = cast(dict, expression_value(CONTEXT_DATA_EXPRESSION, variables, role))
     tag = content_tag(data)
-    assert tag == templar_content_tag(variables, role)
+    assert tag == expression_content_tag(variables, role)
     return tag
 
 

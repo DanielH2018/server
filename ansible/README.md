@@ -210,10 +210,9 @@ uv run ansible-playbook ansible/k3s-bringup.yml     # cluster foundation (k3s, L
 ./scripts/deploy.sh                                 # deploy all workloads (both plays dependency-ordered; deploy.yml toposorts the k8s play)
 ```
 
-> `docker_install` runs on every host, unconditionally, and keeps only its teardown half:
-> `has_docker: false` runs `teardown.yml` (reaps stale Compose systemd units and crons; a no-op on
-> a host that never had Docker). `group_vars/all.yml` defaults `has_docker: false` and `daniel-pi`
-> alone overrides it true. The Pi's Docker engine ships in its host package
+> `docker_install` is an `end_role` stub on every host. The cluster nodes' host packages retire
+> its old teardown half's crons and drop-ins as legacy entries (H7.48). `group_vars/all.yml`
+> defaults `has_docker: false` and `daniel-pi` alone overrides it true. The Pi's Docker engine ships in its host package
 > (`hosts/components/pi-docker/`, H7.26), so no Ansible run installs Docker anywhere.
 > Both cluster nodes also declare the `false` at host level, where the reason for each is
 > recorded. `ansible/tests/setup/test_k3s_host_has_no_docker.py` guards against reintroducing the

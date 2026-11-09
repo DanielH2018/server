@@ -26,7 +26,7 @@ longhorn_drill_namespace: homelab
 # so ansible/tests/longhorn/_restore_drill.py runs the script inside this digest as well. The same
 # digest as janitorr's and crowdsec's kubectl images. The probe pod keeps
 # `k3s_longhorn_restore_drill_image` below.
-longhorn_restore_drill_runner_image: alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b747fa9e40f64d433a97f72ff42f9755ff7dd1f62846e4
+longhorn_restore_drill_runner_image: alpine/k8s:1.37.2@sha256:dcb7185e112a453aa72f426754849a97357727ef8f40168fb208c8cf59952042
 
 # The Job's deadline: the restore timeout (`k3s_longhorn_restore_drill_timeout_s`, 2700) plus the
 # probe pod's 300-second bound plus a 600-second margin for the candidate query, the restore's

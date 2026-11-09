@@ -638,15 +638,20 @@ jobs:
       # times say the run wall dropped by more than the extra setup costs; the `--durations`
       # report on every leg is what to read that off.
       #
-      # Six is feasible at all only because the heaviest single module is 17.8s: a shard can
-      # never finish faster than its largest member, so the floor rises as the matrix grows.
+      # A shard can never finish faster than its largest `--dist loadscope` group, a module or
+      # a class within one, so the floor rises as the matrix grows. On master runs 42541064791
+      # and 42542483114 (2026-11-09) the heaviest module measured 90-114s on one worker, against
+      # 111-197s of `--durations` per worker; #7710 split it into class groups of about 30s.
+      # The next is test_validate_k8s_manifests.py at about 87s, most of it one module-scoped
+      # fixture. Each leg's `phase timing` section prints every worker's finish time, which
+      # shows when one group sets the leg's wall.
       matrix:
         shard: [1, 2, 3, 4, 5, 6]
     # The dotfiles commit the suite imports claude_guard and claude_worktree from. A pin,
     # not `main`: tracking the branch would turn this job red on an unrelated dotfiles commit.
     # The `git-refs` custom manager in renovate.json proposes each bump as its own PR.
     env:
-      DOTFILES_SHA: 0b4a786816e6b52755f18c6fdf768954126cd2f3
+      DOTFILES_SHA: 2eea73bf47f17f9436456ea9c87c0c25c7e38b86
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
     steps:
@@ -692,7 +697,7 @@ jobs:
             echo "sops $SOPS_VERSION: cached"
           else
             mkdir -p "$RUNNER_TEMP/pinned/sops"
-            curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$sops" \
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$sops" \
               "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
           fi
           echo "$SOPS_SHA256  $sops" | sha256sum -c --strict || {
@@ -913,6 +918,11 @@ jobs:
       UV_NO_GROUP: lint
       # Its scripts import only [project] dependencies (test_promote_runtime_imports.py).
       UV_NO_DEV: "1"
+      # The flux CLI this job's flux steps fetch, equal to flux_version in roles/k8s/flux and to
+      # the amd64 flux pin in hosts/packages/homelab-tools/package.yml. Env, so the cache key reads it.
+      # renovate: datasource=github-release-attachments depName=fluxcd/flux2
+      FLUX_VERSION: v2.9.6
+      FLUX_SHA256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -921,14 +931,32 @@ jobs:
       # The renderer imports no Galaxy collection, so no Galaxy cache.
       - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
 
-      # Equal to flux_version in ansible/roles/k8s/flux/defaults/main.yml, as every flux
-      # step in .github/workflows/promote.yml is, so the CLI that checks the round trip is the CLI
-      # that publishes and the controllers' release. The `# renovate:` comment puts this input
-      # in the one flux PR with them, and scripts/tests/test_renovate_flux_cli.py fails a drift.
-      - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
+      # The same FLUX_* pin as promote.yml's, so the CLI that checks the round trip is the CLI
+      # that publishes and the controllers' release. scripts/tests/test_renovate_flux_cli.py
+      # fails a drift.
+      # The flux CLI comes from an actions/cache keyed on the FLUX_* pin, and the release only on a
+      # miss, with nfpm's 12x30s retry window (#7778). The sha256 check runs on a hit too.
+      - name: Cache the flux CLI release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          # renovate: datasource=github-releases depName=fluxcd/flux2
-          version: v2.9.6
+          path: ${{ runner.temp }}/pinned/flux
+          key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
+
+      - name: Fetch the pinned flux CLI and check its sha256
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/pinned/flux/flux.tar.gz"
+          if [[ -f "$archive" ]]; then
+            echo "flux $FLUX_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/flux"
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$archive" \
+              "https://github.com/fluxcd/flux2/releases/download/$FLUX_VERSION/flux_${FLUX_VERSION#v}_linux_amd64.tar.gz"
+          fi
+          echo "$FLUX_SHA256  $archive" | sha256sum -c --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" flux
+          sudo install -m 0755 "$RUNNER_TEMP/flux" /usr/local/bin/flux
+          flux version --client
 
       - name: Probe the pinned flux CLI's substitution on fixtures
         run: |
@@ -1009,6 +1037,11 @@ jobs:
       # renovate: datasource=github-release-attachments depName=kubernetes-sigs/kind
       KIND_VERSION: v0.33.0
       KIND_SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
+      # The flux CLI this job's flux steps fetch, equal to flux_version in roles/k8s/flux and to
+      # the amd64 flux pin in hosts/packages/homelab-tools/package.yml. Env, so the cache key reads it.
+      # renovate: datasource=github-release-attachments depName=fluxcd/flux2
+      FLUX_VERSION: v2.9.6
+      FLUX_SHA256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -1043,12 +1076,30 @@ jobs:
       - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
 
-      # Equal to flux_version, as the flux_roundtrip job's step is. It pushes the fixture artifact.
-      - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
+      # The flux_roundtrip job's pin and fetch. The CLI pushes the fixture artifact.
+      - name: Cache the flux CLI release
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          # renovate: datasource=github-releases depName=fluxcd/flux2
-          version: v2.9.6
+          path: ${{ runner.temp }}/pinned/flux
+          key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
+
+      - name: Fetch the pinned flux CLI and check its sha256
+        if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/pinned/flux/flux.tar.gz"
+          if [[ -f "$archive" ]]; then
+            echo "flux $FLUX_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/flux"
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$archive" \
+              "https://github.com/fluxcd/flux2/releases/download/$FLUX_VERSION/flux_${FLUX_VERSION#v}_linux_amd64.tar.gz"
+          fi
+          echo "$FLUX_SHA256  $archive" | sha256sum -c --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" flux
+          sudo install -m 0755 "$RUNNER_TEMP/flux" /usr/local/bin/flux
+          flux version --client
 
       # sops comes from the hosts' pin itself, read out of homelab-tools' package.yml, so this job
       # holds no copy that could drift. age comes from apt, as the hosts install it.
@@ -1090,7 +1141,7 @@ jobs:
             echo "sops $SOPS_VERSION: cached"
           else
             mkdir -p "$RUNNER_TEMP/pinned/sops"
-            curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$sops" \
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$sops" \
               "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
           fi
           echo "$SOPS_SHA256  $sops" | sha256sum -c --strict
@@ -1099,7 +1150,7 @@ jobs:
             echo "kind $KIND_VERSION: cached"
           else
             mkdir -p "$RUNNER_TEMP/pinned/kind"
-            curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$kind" \
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$kind" \
               "https://github.com/kubernetes-sigs/kind/releases/download/$KIND_VERSION/kind-linux-amd64"
           fi
           echo "$KIND_SHA256  $kind" | sha256sum -c --strict
@@ -1342,6 +1393,7 @@ jobs:
             scripts/validate/validate_lib/bootstrap_age_case.py
             scripts/validate/validate_lib/bootstrap_case.py
             scripts/validate/validate_lib/bootstrap_repo_case.py
+            scripts/validate/validate_lib/case_groups.py
             scripts/validate/validate_lib/conffile_case.py
             scripts/validate/validate_lib/engine_case.py
             scripts/validate/validate_lib/fixture_host_case.py

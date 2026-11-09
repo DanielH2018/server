@@ -14,7 +14,6 @@ whole tree.
 Run: uv run pytest scripts/lib/tests/test_k8s_yaml.py
 """
 
-from _image_builder_tag import templar_value
 from lib.ansible_jinja_env import make_ansible_env
 from lib.k8s_yaml import (
     find_claim_name_refs,
@@ -184,7 +183,6 @@ def test_a_template_lookup_keeps_trailing_newlines_as_ansible_does(tmp_path):
     tpl.write_text("x\n\n")
     expression = f"{{{{ lookup('template', '{tpl}') }}}}"
     assert _guard_lookup(expression) == "x\n\n"
-    assert _guard_lookup(expression) == templar_value(expression, {}, tmp_path)
 
 
 def test_a_file_lookup_strips_all_trailing_whitespace_as_ansible_does(tmp_path):
@@ -192,4 +190,3 @@ def test_a_file_lookup_strips_all_trailing_whitespace_as_ansible_does(tmp_path):
     src.write_text("x \t\n\n")
     expression = f"{{{{ lookup('file', '{src}') }}}}"
     assert _guard_lookup(expression) == "x"
-    assert _guard_lookup(expression) == templar_value(expression, {}, tmp_path)

@@ -52,7 +52,6 @@ GUARDS = (
     "ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py",
     "ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py",
     "evals/tests/test_eval_cases.py",
-    "ansible/tests/setup/test_k8s_host_files_pairs.py",
     "ansible/tests/deploy/test_landing_annotations.py",
     "ansible/tests/deploy/test_gitops_deploy_imports.py",
     "scripts/validate/tests/test_validate_alert_rules.py::test_the_tree_rules_meet_every_convention_is_clean",

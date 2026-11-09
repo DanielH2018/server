@@ -10,8 +10,8 @@ the host packages and prints what is left. Run it for the list of record:
 
 Report mode prints the count per host and one line per item left. Strict mode fails while any
 setup role still has an item that applies to a host (H7.19c turns it on). The report is also
-the list of record for the rows `k8s_host_files` holds when H7 starts, and H7.18c takes it
-again after every row has moved.
+the list of record for the rows `k8s_host_files` held when H7 started, and H7.48 took it
+again after every row had moved.
 
 An item resolves to a package path or a legacy entry its host's packages carry, a unit or a
 `Depends` entry for the modules that name one, or an entry of `ALLOWLIST`, which names each

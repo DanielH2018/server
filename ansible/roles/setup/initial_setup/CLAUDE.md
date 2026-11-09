@@ -1,7 +1,8 @@
 # initial_setup — host baseline + security hardening
 
-The host-bring-up role: `ansible-core` and `ansible-lint`, the pinned collections, the absent arms
-of retired crons, and the setup-drift check. The host packages own the whole baseline on every
+The host-bring-up role: `ansible-core` and `ansible-lint`, the pinned collections, the
+`ansible.log` cron's absent arm, and the setup-drift check. Each host package's `legacy:` list
+retires the other retired crons (H7.48). The host packages own the whole baseline on every
 host (sshd, fail2ban, unattended upgrades, sysctls, the journald cap and the rsyslog filter, the
 sudo cache, auditd, the kernel modules, the banners, the base packages, the maintenance jobs, the
 integrity scans and the firewall), with step 4 of `hosts/bootstrap-host.sh` for the swap, the

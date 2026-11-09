@@ -336,25 +336,29 @@ def test_a_dockerfile_only_pr_builds_the_debs_and_image_the_cases_read(
         )
 
 
-def test_the_real_render_reports_no_change_for_a_case_input(
-    clone: Path, tmp_path: Path
-) -> None:
-    """The stub's premise, and the only real render: a case input is not a render input."""
-    _pr_merge_ref(clone, DOCKERFILE)
-    _verdicts, context = _simulate(clone, tmp_path, _legs()[0], stub_render=False)
-    outputs = context["steps"][RENDER_ID]["outputs"]
-    assert outputs.get("changed") == "false", (
-        f"a PR touching only {DOCKERFILE} changes a render ({outputs}); the other tests stub "
-        f"the render as unchanged, so they no longer model that PR"
-    )
-    assert outputs.get("cases") == "true", outputs
+class TestTheRealRender:
+    # Each class is its own `--dist loadscope` group, so the ~30s tests here and in the
+    # two classes below run on separate workers instead of queueing on one (#7710).
+    def test_the_real_render_reports_no_change_for_a_case_input(
+        self, clone: Path, tmp_path: Path
+    ) -> None:
+        """The stub's premise, and the only real render: a case input is not a render input."""
+        _pr_merge_ref(clone, DOCKERFILE)
+        _verdicts, context = _simulate(clone, tmp_path, _legs()[0], stub_render=False)
+        outputs = context["steps"][RENDER_ID]["outputs"]
+        assert outputs.get("changed") == "false", (
+            f"a PR touching only {DOCKERFILE} changes a render ({outputs}); the other tests stub "
+            f"the render as unchanged, so they no longer model that PR"
+        )
+        assert outputs.get("cases") == "true", outputs
 
 
-@pytest.mark.parametrize("path", _case_inputs())
-def test_a_pr_touching_only_a_case_input_runs_the_cases(
-    clone: Path, tmp_path: Path, path: str
-) -> None:
-    _assert_cases_run(clone, tmp_path, path)
+class TestEachCaseInput:
+    @pytest.mark.parametrize("path", _case_inputs())
+    def test_a_pr_touching_only_a_case_input_runs_the_cases(
+        self, clone: Path, tmp_path: Path, path: str
+    ) -> None:
+        _assert_cases_run(clone, tmp_path, path)
 
 
 CASES_INVOCATION = '--work "$RUNNER_TEMP/cases"'
@@ -486,38 +490,41 @@ RENDERER = "scripts/renderer/renderer_lib/host.py"
 RENDERER_ANCHOR = "        package.files[dst] = (content, mode)\n"
 
 
-def test_a_renderer_change_seen_only_in_the_fixture_runs_the_cases(
-    clone: Path, tmp_path: Path
-) -> None:
-    """#5066's Verify-by: the renderer changes only how it renders a systemd drop-in.
+class TestARendererChange:
+    def test_a_renderer_change_seen_only_in_the_fixture_runs_the_cases(
+        self, clone: Path, tmp_path: Path
+    ) -> None:
+        """#5066's Verify-by: the renderer changes only how it renders a systemd drop-in.
 
-    No real package ships a drop-in, so the stubbed `changed=false` is what the real diff
-    reports; only the fixture's render differs. The comment-only edit after it is the control:
-    the trigger is the fixture's render, not every edit to the renderer's files.
-    """
-    git(clone, "checkout", "-q", "--detach", "master")
-    git(clone, "checkout", "-q", "-B", "pr-renderer-dropin")
-    target = clone / RENDERER
-    text = target.read_text()
-    assert text.count(RENDERER_ANCHOR) == 1, f"{RENDERER} lost {RENDERER_ANCHOR!r}"
-    edited = (
-        "        if PurePosixPath(dst).name == DROPIN:\n"
-        '            content += b"# rendered differently by the #5066 test\\n"\n'
-    )
-    target.write_text(text.replace(RENDERER_ANCHOR, edited + RENDERER_ANCHOR))
-    git(clone, "commit", "-q", "-am", "render a drop-in differently")
-    git(clone, "checkout", "-q", "--detach", "master")
-    git(clone, "merge", "-q", "--no-ff", "--no-edit", "pr-renderer-dropin")
-    for number, leg in enumerate(_legs()):
-        verdicts, context = _simulate(clone, tmp_path / f"leg-{number}", leg)
-        assert verdicts[CASES_STEP], (
-            f"a PR changing only how {RENDERER} renders a drop-in skips the cases on leg "
-            f"{leg} (render outputs {context['steps']['render']['outputs']})"
+        No real package ships a drop-in, so the stubbed `changed=false` is what the real diff
+        reports; only the fixture's render differs. The comment-only edit after it is the control:
+        the trigger is the fixture's render, not every edit to the renderer's files.
+        """
+        git(clone, "checkout", "-q", "--detach", "master")
+        git(clone, "checkout", "-q", "-B", "pr-renderer-dropin")
+        target = clone / RENDERER
+        text = target.read_text()
+        assert text.count(RENDERER_ANCHOR) == 1, f"{RENDERER} lost {RENDERER_ANCHOR!r}"
+        edited = (
+            "        if PurePosixPath(dst).name == DROPIN:\n"
+            '            content += b"# rendered differently by the #5066 test\\n"\n'
         )
-        assert context["cases_env"].get("UPGRADE") == "true", context["cases_env"]
+        target.write_text(text.replace(RENDERER_ANCHOR, edited + RENDERER_ANCHOR))
+        git(clone, "commit", "-q", "-am", "render a drop-in differently")
+        git(clone, "checkout", "-q", "--detach", "master")
+        git(clone, "merge", "-q", "--no-ff", "--no-edit", "pr-renderer-dropin")
+        for number, leg in enumerate(_legs()):
+            verdicts, context = _simulate(clone, tmp_path / f"leg-{number}", leg)
+            assert verdicts[CASES_STEP], (
+                f"a PR changing only how {RENDERER} renders a drop-in skips the cases on leg "
+                f"{leg} (render outputs {context['steps']['render']['outputs']})"
+            )
+            assert context["cases_env"].get("UPGRADE") == "true", context["cases_env"]
 
-    for leg, verdicts, _context in _runs_per_leg(clone, tmp_path / "control", RENDERER):
-        assert not verdicts[CASES_STEP], (
-            f"a comment-only edit to {RENDERER} runs the cases on leg {leg}; the trigger has "
-            f"to be the fixture's render, not the renderer's files"
-        )
+        for leg, verdicts, _context in _runs_per_leg(
+            clone, tmp_path / "control", RENDERER
+        ):
+            assert not verdicts[CASES_STEP], (
+                f"a comment-only edit to {RENDERER} runs the cases on leg {leg}; the trigger has "
+                f"to be the fixture's render, not the renderer's files"
+            )

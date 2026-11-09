@@ -18,7 +18,6 @@ it carries that tag too (#5628).
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup_task_file_kinds.py
 """
 
-import importlib
 import json
 
 import pytest
@@ -152,25 +151,12 @@ def test_the_yaml_main_wins_over_a_json_one(tree):
 
 
 def test_the_loaded_extensions_match_ansibles_own_default():
-    """The predicate's list is Ansible's, read off the installed `ansible-core`.
+    """The predicate's list is Ansible's, as ansible-core 2.22's constants held it.
 
     `Role._load_role_yaml` hard-codes its own copy of `YAML_FILENAME_EXTENSIONS` and appends
-    `''` for an unnamed `main`, and `_main_task_file` walks that order. Comparing against the
-    constant means an ansible-core release that adds an extension fails this rather than
-    silently skipping a task file the tree has started to carry.
-
-    Reached through `import_module` rather than `from ansible import constants`: the
-    script-coverage scanner matches a by-name import against first-party module stems, and
-    `infra_map`'s facade-only member of that name would collect an import credit it has not
-    got (`test_a_facade_only_member_gets_no_by_name_import_credit`).
+    `''` for an unnamed `main`, and `_main_task_file` walks that order.
     """
-    ansible_constants = importlib.import_module("ansible.constants")
-
-    assert narrow_setup_index._LOADED_EXTENSIONS == (
-        # ansible.constants setattr()s its config-derived names at import, so ty cannot see this one.
-        *ansible_constants.YAML_FILENAME_EXTENSIONS,  # ty: ignore[unresolved-attribute]
-        "",
-    )
+    assert narrow_setup_index._LOADED_EXTENSIONS == (".yml", ".yaml", ".json", "")
 
 
 @pytest.mark.parametrize(

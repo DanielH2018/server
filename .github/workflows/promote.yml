@@ -104,6 +104,18 @@ env:
   # promotion. UV_NO_DEV drops only `dev`. test_promote_workflow.py fails a workflow without them.
   UV_NO_DEV: "1"
   UV_NO_GROUP: lint
+  # The flux CLI this workflow's flux steps fetch, equal to flux_version in roles/k8s/flux and to
+  # the amd64 flux pin in hosts/packages/homelab-tools/package.yml. Env, so the cache key reads it.
+  # renovate: datasource=github-release-attachments depName=fluxcd/flux2
+  FLUX_VERSION: v2.9.6
+  FLUX_SHA256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
+  # The cosign release the publish and promote jobs sign and verify with, the sha256 of
+  # `cosign-linux-amd64`. Each job restores it from an actions/cache keyed on both, and fetches
+  # the release only on a miss (#7781). prune-artifacts.yml and flux-deletion-drill.yml carry
+  # copies, and scripts/tests/test_renovate_cosign_release.py holds the three equal.
+  # renovate: datasource=github-release-attachments depName=sigstore/cosign
+  COSIGN_VERSION: v3.1.4
+  COSIGN_SHA256: 424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa
   RETRY_FUNCTIONS: |
     retry() {
       local try out status
@@ -367,21 +379,54 @@ jobs:
           name: bundle
           path: out
 
-      # Equal to flux_version in ansible/roles/k8s/flux/defaults/main.yml, so the CLI and the
-      # controllers move together. The workflow test fails a drift. The `# renovate:` comment
-      # is what renovate.json's custom manager reads, and it puts this input, the action's pin
-      # and flux_version in one PR. The `flux_roundtrip` job in ci.yml installs the same action
-      # at the same pin and version, so the CLI that proves target slice R2's round trip is the
-      # CLI that publishes. The same manager reads its input, so one bump moves all three steps,
-      # and scripts/tests/test_renovate_flux_cli.py fails a drift in either workflow.
-      - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
+      # FLUX_VERSION equals flux_version in ansible/roles/k8s/flux/defaults/main.yml, so the CLI
+      # and the controllers move together; the workflow test fails a drift. The `flux_roundtrip`
+      # job in ci.yml fetches the same pin, so the CLI that proves target slice R2's round trip
+      # is the CLI that publishes, and scripts/tests/test_renovate_flux_cli.py fails a drift.
+      # The flux CLI comes from an actions/cache keyed on the FLUX_* pin, and the release only on a
+      # miss, with nfpm's 12x30s retry window (#7778). The sha256 check runs on a hit too.
+      - name: Cache the flux CLI release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          # renovate: datasource=github-releases depName=fluxcd/flux2
-          version: v2.9.6
+          path: ${{ runner.temp }}/pinned/flux
+          key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
 
-      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      - name: Fetch the pinned flux CLI and check its sha256
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/pinned/flux/flux.tar.gz"
+          if [[ -f "$archive" ]]; then
+            echo "flux $FLUX_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/flux"
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$archive" \
+              "https://github.com/fluxcd/flux2/releases/download/$FLUX_VERSION/flux_${FLUX_VERSION#v}_linux_amd64.tar.gz"
+          fi
+          echo "$FLUX_SHA256  $archive" | sha256sum -c --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" flux
+          sudo install -m 0755 "$RUNNER_TEMP/flux" /usr/local/bin/flux
+          flux version --client
+
+      - name: Cache the cosign release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          cosign-release: v3.1.4
+          path: ${{ runner.temp }}/pinned/cosign
+          key: cosign-${{ runner.os }}-${{ env.COSIGN_VERSION }}-${{ env.COSIGN_SHA256 }}
+
+      - name: Fetch the pinned cosign and check its sha256
+        run: |
+          set -euo pipefail
+          cosign="$RUNNER_TEMP/pinned/cosign/cosign"
+          if [[ -f "$cosign" ]]; then
+            echo "cosign $COSIGN_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/cosign"
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$cosign" \
+              "https://github.com/sigstore/cosign/releases/download/$COSIGN_VERSION/cosign-linux-amd64"
+          fi
+          echo "$COSIGN_SHA256  $cosign" | sha256sum -c --strict
+          sudo install -m 0755 "$cosign" /usr/local/bin/cosign
+          cosign version
 
       # `--reproducible` fixes the created timestamp, so pushing one commit twice yields one
       # digest. The revision is the form promote.py's REVISION_ANNOTATION parser reads.
@@ -597,9 +642,26 @@ jobs:
 
       - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
 
-      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      - name: Cache the cosign release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          cosign-release: v3.1.4
+          path: ${{ runner.temp }}/pinned/cosign
+          key: cosign-${{ runner.os }}-${{ env.COSIGN_VERSION }}-${{ env.COSIGN_SHA256 }}
+
+      - name: Fetch the pinned cosign and check its sha256
+        run: |
+          set -euo pipefail
+          cosign="$RUNNER_TEMP/pinned/cosign/cosign"
+          if [[ -f "$cosign" ]]; then
+            echo "cosign $COSIGN_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/cosign"
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$cosign" \
+              "https://github.com/sigstore/cosign/releases/download/$COSIGN_VERSION/cosign-linux-amd64"
+          fi
+          echo "$COSIGN_SHA256  $cosign" | sha256sum -c --strict
+          sudo install -m 0755 "$cosign" /usr/local/bin/cosign
+          cosign version
 
       # `cosign verify` inside `decide` passes no credentials of its own and reads the docker
       # config, and the package is private until the operator makes it public.
@@ -678,10 +740,27 @@ jobs:
       moved: ${{ steps.move.outputs.moved }}
       moved_at: ${{ steps.move.outputs.moved_at }}
     steps:
-      - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
+      - name: Cache the flux CLI release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          # renovate: datasource=github-releases depName=fluxcd/flux2
-          version: v2.9.6
+          path: ${{ runner.temp }}/pinned/flux
+          key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
+
+      - name: Fetch the pinned flux CLI and check its sha256
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/pinned/flux/flux.tar.gz"
+          if [[ -f "$archive" ]]; then
+            echo "flux $FLUX_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/flux"
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$archive" \
+              "https://github.com/fluxcd/flux2/releases/download/$FLUX_VERSION/flux_${FLUX_VERSION#v}_linux_amd64.tar.gz"
+          fi
+          echo "$FLUX_SHA256  $archive" | sha256sum -c --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" flux
+          sudo install -m 0755 "$RUNNER_TEMP/flux" /usr/local/bin/flux
+          flux version --client
 
       # The commit and digest come from `decide`, never from the trigger: the commit `prod`
       # moves to is the newest published one, which need not be the one whose CI ran.
@@ -884,10 +963,27 @@ jobs:
       # Set once the stateful hold is written, and read by `post`.
       stateful_hold: ${{ steps.apply.outputs.stateful_hold }}
     steps:
-      - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
+      - name: Cache the flux CLI release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          # renovate: datasource=github-releases depName=fluxcd/flux2
-          version: v2.9.6
+          path: ${{ runner.temp }}/pinned/flux
+          key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
+
+      - name: Fetch the pinned flux CLI and check its sha256
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/pinned/flux/flux.tar.gz"
+          if [[ -f "$archive" ]]; then
+            echo "flux $FLUX_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/flux"
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$archive" \
+              "https://github.com/fluxcd/flux2/releases/download/$FLUX_VERSION/flux_${FLUX_VERSION#v}_linux_amd64.tar.gz"
+          fi
+          echo "$FLUX_SHA256  $archive" | sha256sum -c --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" flux
+          sudo install -m 0755 "$RUNNER_TEMP/flux" /usr/local/bin/flux
+          flux version --client
 
       # Contract C2: good moves `last-good` to T. Anything else writes the hold FIRST, so a
       # failed reset still stops the next promotion, then resets `prod` to the digest `decide`
@@ -1238,10 +1334,27 @@ jobs:
     permissions:
       packages: write
     steps:
-      - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
+      - name: Cache the flux CLI release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          # renovate: datasource=github-releases depName=fluxcd/flux2
-          version: v2.9.6
+          path: ${{ runner.temp }}/pinned/flux
+          key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
+
+      - name: Fetch the pinned flux CLI and check its sha256
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/pinned/flux/flux.tar.gz"
+          if [[ -f "$archive" ]]; then
+            echo "flux $FLUX_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/flux"
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$archive" \
+              "https://github.com/fluxcd/flux2/releases/download/$FLUX_VERSION/flux_${FLUX_VERSION#v}_linux_amd64.tar.gz"
+          fi
+          echo "$FLUX_SHA256  $archive" | sha256sum -c --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" flux
+          sudo install -m 0755 "$RUNNER_TEMP/flux" /usr/local/bin/flux
+          flux version --client
 
       # The same compare-and-move as `tag`'s: `prod` moves only while it still names the digest
       # `reset-check` read. A live `prod` already on `last-good`, as after `settle`'s own reset
