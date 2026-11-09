@@ -776,6 +776,11 @@
         "traefik"
       ],
       "groupName": "k8s image {{depName}} (manual — k8s_autodeploy: false, so a person merges it through land.sh)",
+      "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "groupSingleUpdates": true,
       "automerge": false
     },
