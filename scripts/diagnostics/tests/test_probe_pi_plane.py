@@ -6,7 +6,14 @@ equivalent.
 """
 
 import json
+import os
+import sys
 
+# `probe.py` sits in `scripts/diagnostics`, which `pythonpath` leaves out, so this test module
+# puts its own parent directory on `sys.path`.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import probe
 from diagnostics.probe_lib import core, pi_plane
 
 
@@ -203,7 +210,6 @@ def test_run_targets_prints_the_count(capsys):
 
 def test_plain_targets_names_a_verdict_and_json_names_none():
     """Plain `targets` judges; `--json` is the raw document the SessionStart hook parses."""
-    import probe
     from diagnostics.probe_lib.cli_parser import _build_parser
 
     parse = _build_parser().parse_args
