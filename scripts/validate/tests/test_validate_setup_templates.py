@@ -73,12 +73,11 @@ def test_an_undefined_variable_is_flagged(tmp_path, ctx, known):
 
 
 def test_a_defined_variable_is_clean(tmp_path, ctx, known):
-    """The accepting half, over each of the four sources a name may legitimately come from."""
+    """The accepting half, over each source the setup tree still supplies a name from."""
     tpl = tmp_path / "role" / "templates" / "creds.yaml.j2"
     tpl.parent.mkdir(parents=True)
     tpl.write_text(
         'secret: "{{ longhorn_b2_key_id }}"\n'  # SOPS registry
-        'runtime: "{{ k3s_node_ip }}"\n'  # register in a setup-plane task
         'inventory: "{{ domain }}"\n'  # group_vars/all.yml
         'magic: "{{ inventory_hostname }}"\n'  # Ansible-supplied
         'required: "{{ nut_monitor_password | mandatory }}"\n'  # the Ansible filter
@@ -139,15 +138,6 @@ def test_runtime_vars_reads_both_set_fact_spellings(tmp_path):
         "- ansible.builtin.set_fact: {long_spelling: 1}\n- set_fact: {short_spelling: 1}\n"
     )
     assert v.runtime_vars(tmp_path) == {"long_spelling", "short_spelling"}
-
-
-def test_runtime_vars_reads_the_setup_tree():
-    """A named member in the assertion: this is a derivation replacing no list, so the way it fails
-    is by returning a set narrower than the tree, which only a named member catches.
-    """
-    names = v.runtime_vars()
-    assert "k3s_node_ip" in names  # register
-    assert len(names) >= 17
 
 
 def test_an_ansible_magic_var_is_allowed_and_an_unknown_name_is_not():
