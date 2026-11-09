@@ -1348,6 +1348,7 @@ jobs:
             scripts/validate/validate_lib/bootstrap_case.py
             scripts/validate/validate_lib/bootstrap_repo_case.py
             scripts/validate/validate_lib/conffile_case.py
+            scripts/validate/validate_lib/disarm_case.py
             scripts/validate/validate_lib/engine_case.py
             scripts/validate/validate_lib/fixture_host_case.py
             scripts/validate/validate_lib/host_fixtures.py
