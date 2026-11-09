@@ -324,3 +324,26 @@ def test_flaky_section_tallies_only_runs_green_on_a_rerun(tmp_path):
     assert "test_flaky" in section, section
     assert "test_broken" not in section, section
     assert "test_broken" in head, f"the full tally lost the still-red run:\n{out}"
+
+
+def test_each_red_attempt_names_its_failed_steps(tmp_path):
+    other = _run(
+        47000000001,
+        _attempt(_pytest_job(97000000001, "test_named")),
+        created="2026-11-05T15:00:00Z",
+        event="pull_request",
+    )
+    out = _survey(tmp_path, _rerun_green_on_master(), other).stdout
+    section = out.partition("\nred attempts\n")[2]
+    blocks = re.split(r"\n(?=run \d+)", section.strip())
+    by_run = {block.split()[1]: block for block in blocks}
+    updater = by_run["42041106424"]
+    assert (
+        "host_packages (24.04, 3.12) / Run the updater cases in systemd containers"
+        in updater
+    ), f"run 42041106424 does not name its failed step:\n{section}"
+    assert "test_named" not in updater, f"another run's row leaked in:\n{section}"
+    assert (
+        "pytest / Run the suite / ansible/tests/repo/test_named.py"
+        in (by_run["47000000001"])
+    ), section

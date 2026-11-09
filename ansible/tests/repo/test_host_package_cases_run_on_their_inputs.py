@@ -442,16 +442,30 @@ def test_the_arm64_job_and_the_cases_legs_wait_for_the_build_alone() -> None:
         )
 
 
-def test_the_hand_off_carries_the_cache_the_build_fetched_to_the_cases() -> None:
-    """#7437: a pin the build fetched is not requested again by a cases leg."""
+def test_the_cases_legs_restore_the_cache_the_build_fetched() -> None:
+    """#7437: a pin the build fetched is not requested again by a cases leg.
+
+    #7706: the legs restore it from actions/cache under the build's own key, not from the tar.
+    """
     jobs = yaml_fast.safe_load(CI_WORKFLOW.read_text())["jobs"]
     build = "\n".join(str(step.get("run", "")) for step in jobs[BUILD_JOB]["steps"])
-    cases = "\n".join(str(step.get("run", "")) for step in jobs[JOB]["steps"])
     assert '--cache "$RUNNER_TEMP/tools-cache"' in build
-    assert re.search(
-        r'host-packages-build\.tar" -C "\$RUNNER_TEMP" .*\btools-cache\b', build
+    (tar,) = re.findall(r'host-packages-build\.tar" -C "\$RUNNER_TEMP" (.*)', build)
+    assert "tools-cache" not in tar
+    assert (
+        jobs[BUILD_JOB]["outputs"]["tools-key"] == "${{ steps.tools-key.outputs.key }}"
     )
-    assert '--tools-cache "$RUNNER_TEMP/tools-cache"' in cases
+    (restore,) = [s for s in jobs[JOB]["steps"] if s.get("id") == "tools-cache"]
+    assert restore["uses"].startswith("actions/cache/restore@")
+    assert restore["with"] == {
+        "path": "${{ runner.temp }}/tools-cache",
+        "key": f"${{{{ needs.{BUILD_JOB}.outputs.tools-key }}}}",
+    }
+    (cases,) = [s for s in jobs[JOB]["steps"] if s.get("name") == CASES_STEP]
+    assert (
+        cases["env"]["TOOLS_CACHE_HIT"] == "${{ steps.tools-cache.outputs.cache-hit }}"
+    )
+    assert 'seed=(--tools-cache "$RUNNER_TEMP/tools-cache")' in cases["run"]
 
 
 @pytest.mark.parametrize("subcommand", ["job-changed", "fixture-changed"])

@@ -476,7 +476,8 @@ jobs:
         # --skip validate-k8s-manifests: the `pytest` job runs the same `main()` over the real
         # tree and asserts it exits 0 (scripts/validate/tests/test_validate_k8s_manifests.py,
         # `real_tree`), so the hook here was a second render of every k8s role (#6150).
-        run: prek run --all-files --skip ansible-lint --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-owners --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-host-files --skip static-ratchet-tests-landing --skip static-ratchet-tests-deployer --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
+        # --verbose: prek prints each hook's duration only with it, and this log is where a slow hook shows.
+        run: prek run --all-files --verbose --skip ansible-lint --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-owners --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-host-files --skip static-ratchet-tests-landing --skip static-ratchet-tests-deployer --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
 
   # The two PR-only refusals, the render-diff gates and the cluster pin checks, in a job of
   # their own (#6149). They ran serially inside `hooks`, ahead of its sweep, and on PR run
@@ -1234,7 +1235,7 @@ jobs:
   # render. When no rendered tree differs, its build and lint steps skip and it ends green.
   # Otherwise it builds both renders with the pinned nfpm, lints them, and hands the build on:
   # the arm64 homelab-tools .deb to `host_tools_arm64`, and the render, the debs, nfpm and the
-  # verified homelab-tools downloads to `host_packages`. Each `host_packages` matrix leg builds the test image for its Ubuntu release
+  # actions/cache key of the verified homelab-tools downloads to `host_packages`. Each `host_packages` matrix leg builds the test image for its Ubuntu release
   # and runs the updater cases in it (steps 4 and 5).
   #
   # The build is a job of its own so that `host_tools_arm64` waits for the build alone (#6151).
@@ -1265,6 +1266,7 @@ jobs:
       changed: ${{ steps.render.outputs.changed }}
       cases: ${{ steps.render.outputs.cases }}
       upgrade: ${{ steps.render.outputs.upgrade }}
+      tools-key: ${{ steps.tools-key.outputs.key }}
     env:
       # The custom manager in renovate.json reads this annotation and moves the version and the
       # digest in one PR. The digest is the sha256 of nfpm_<version>_Linux_x86_64.tar.gz, which
@@ -1496,6 +1498,10 @@ jobs:
 
       # The version is H3's *Package rules* shape, `0.<first-parent count>+g<12 hex>`, taken
       # from each side's own commit, as the builder takes it from the commit it builds.
+      #
+      # The base and head builds run concurrently, each in a background subshell with its own
+      # debs, TMPDIR and log, and the step prints both logs before it fails on either. The base
+      # debs are not only diff input: the upgrade cases install them.
       - name: Build both renders with the pinned nfpm
         if: >-
           github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
@@ -1504,18 +1510,37 @@ jobs:
           BASE_SHA: ${{ steps.render.outputs.base }}
         run: |
           set -euo pipefail
-          for side in base head; do
-            sha=$BASE_SHA
-            [ "$side" = head ] && sha=$(git rev-parse HEAD)
+          # Called bare under `&`, never from `||` or `if`, which would switch off errexit and
+          # let a failing spec that is not the last one read as success.
+          build_side() {
+            local side=$1 sha=$2
             HOMELAB_VERSION="0.$(git rev-list --count --first-parent "$sha")+g$(git rev-parse "$sha" | cut -c1-12)"
             export HOMELAB_VERSION
-            mkdir -p "$RUNNER_TEMP/debs/$side"
+            export TMPDIR="$RUNNER_TEMP/nfpm-tmp/$side"
+            mkdir -p "$RUNNER_TEMP/debs/$side" "$TMPDIR"
             find "$RUNNER_TEMP/render/$side" -name nfpm.yaml -print0 | sort -z |
               while IFS= read -r -d '' spec; do
                 (cd "$(dirname "$spec")" &&
                   nfpm package --config nfpm.yaml --packager deb --target "$RUNNER_TEMP/debs/$side/")
               done
+          }
+          mkdir -p "$RUNNER_TEMP/build-logs"
+          build_side base "$BASE_SHA" > "$RUNNER_TEMP/build-logs/base.log" 2>&1 &
+          base_pid=$!
+          build_side head "$(git rev-parse HEAD)" > "$RUNNER_TEMP/build-logs/head.log" 2>&1 &
+          head_pid=$!
+          base_rc=0
+          wait "$base_pid" || base_rc=$?
+          head_rc=0
+          wait "$head_pid" || head_rc=$?
+          for side in base head; do
+            echo "::group::$side build"
+            cat "$RUNNER_TEMP/build-logs/$side.log"
+            echo "::endgroup::"
           done
+          [ "$base_rc" = 0 ] || echo "::error::the base build exited $base_rc"
+          [ "$head_rc" = 0 ] || echo "::error::the head build exited $head_rc"
+          if [ "$base_rc" != 0 ] || [ "$head_rc" != 0 ]; then exit 1; fi
           find "$RUNNER_TEMP/debs" -name '*.deb' -print0 | sort -z |
             while IFS= read -r -d '' deb; do
               echo "== $deb"
@@ -1564,14 +1589,14 @@ jobs:
           grep -qF "postinst:2: 'rm -rf /etc/foo'" "$RUNNER_TEMP/red.log"
 
       # The `host_packages` legs read the render and the debs, and build their fixture packages
-      # with the same nfpm. The bootstrap cases seed from the tools cache, so each pin is
-      # downloaded once per run, here. One tarball carries all four, because an artifact's zip
-      # does not keep a file's mode and the render ships executable maintainer scripts.
-      - name: Hand the render, the debs, nfpm and the tools cache to the cases legs
+      # with the same nfpm. One tarball carries all three, because an artifact's zip does not
+      # keep a file's mode and the render ships executable maintainer scripts. The tools cache
+      # stays out of it: the legs restore it from actions/cache under the `tools-key` output.
+      - name: Hand the render, the debs and nfpm to the cases legs
         if: >-
           github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
           || steps.render.outputs.cases == 'true'
-        run: tar -cf "$RUNNER_TEMP/host-packages-build.tar" -C "$RUNNER_TEMP" render debs bin/nfpm tools-cache
+        run: tar -cf "$RUNNER_TEMP/host-packages-build.tar" -C "$RUNNER_TEMP" render debs bin/nfpm
 
       - name: Upload the hand-off for the cases legs
         if: >-
@@ -1583,6 +1608,8 @@ jobs:
           path: ${{ runner.temp }}/host-packages-build.tar
           if-no-files-found: error
           retention-days: 1
+          # The debs and the tool binaries inside are compressed already.
+          compression-level: 0
 
   # Steps 4 and 5 of the host packages, one leg per release. The header above
   # `host_packages_build` says what each job does. Every step but the checkout and the setup
@@ -1635,7 +1662,7 @@ jobs:
 
       # The tarball unpacks to the paths the build job wrote, so the cases read `$RUNNER_TEMP/render`
       # and `$RUNNER_TEMP/debs` as they did when both halves were one job.
-      - name: Unpack the render, the debs, nfpm and the tools cache
+      - name: Unpack the render, the debs and nfpm
         if: >-
           github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
           || needs.host_packages_build.outputs.cases == 'true'
@@ -1644,6 +1671,17 @@ jobs:
           tar -xf "$RUNNER_TEMP/handoff/host-packages-build.tar" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/bin/nfpm" --version
+
+      # The bootstrap cases seed from the pins the build job fetched and saved under this key, so
+      # a pin is downloaded once per run. Restore-only: a leg never saves what its cases fetched
+      # under the build's key. A miss, such as a lost save race, makes the cases download instead.
+      - name: Restore the build job's homelab-tools cache
+        id: tools-cache
+        if: needs.host_packages_build.outputs.tools-key != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: ${{ needs.host_packages_build.outputs.tools-key }}
 
       # Step 4. The Dockerfile pins the release by digest and the packages by snapshot.
       # build-image.sh pulls the image hosts/lib/tests/container/image.pins names by digest,
@@ -1684,14 +1722,21 @@ jobs:
           RELEASE: ${{ matrix.release }}
           PYTHON: ${{ matrix.python }}
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
+          TOOLS_CACHE_HIT: ${{ steps.tools-cache.outputs.cache-hit }}
         run: |
           if [ "$UPGRADE" != true ]; then
             echo "::notice::The merge base is HEAD, so no case can upgrade; no case runs."
             exit 0
           fi
+          seed=()
+          if [ "$TOOLS_CACHE_HIT" = true ]; then
+            seed=(--tools-cache "$RUNNER_TEMP/tools-cache")
+          else
+            echo "::notice::The build job's tools cache did not restore; the cases download each pin."
+          fi
           uv run python scripts/validate/host_package_cases.py --image "homelab-host-test:$RELEASE" \
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
-            --work "$RUNNER_TEMP/cases" --tools-cache "$RUNNER_TEMP/tools-cache"
+            --work "$RUNNER_TEMP/cases" "${seed[@]}"
 
   # Target slice H3.11, the `arm64` half of homelab-tools (docs/target-architecture/host/
   # h3-pi-pilot.md, *`homelab-tools`* and *Open questions* 9). The `host_packages_build` job builds

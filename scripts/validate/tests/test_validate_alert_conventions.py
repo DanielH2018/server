@@ -115,6 +115,43 @@ def test_an_alert_with_no_test_is_flagged(tmp_path):
     ]
 
 
+def test_an_alert_fired_only_in_a_second_test_file_is_clean(tmp_path):
+    def is_reload(check):
+        return check["alertname"] == "PrometheusRuleReloadFailed"
+
+    moved = []
+
+    def move_reload_cases(tests):
+        for case in tests["tests"]:
+            if any(is_reload(c) for c in case["alert_rule_test"]):
+                moved.append(
+                    {
+                        **case,
+                        "alert_rule_test": [
+                            c for c in case["alert_rule_test"] if is_reload(c)
+                        ],
+                    }
+                )
+            case["alert_rule_test"] = [
+                c for c in case["alert_rule_test"] if not is_reload(c)
+            ]
+
+    rules_dir, tests_dir = _rule_tree(tmp_path, edit_tests=move_reload_cases)
+    assert moved
+    (tests_dir / "alerting-meta.slow.test.yaml").write_text(
+        yaml.safe_dump({"tests": moved})
+    )
+    assert _rule_problems(rules_dir, tests_dir) == []
+
+
+def test_a_second_test_file_with_no_rule_file_is_flagged(tmp_path):
+    rules_dir, tests_dir = _rule_tree(tmp_path)
+    (tests_dir / "flux.slow.test.yaml").write_text("tests: []\n")
+    assert _rule_problems(rules_dir, tests_dir) == [
+        "tests/rules/flux.slow.test.yaml: no files/rules/flux.yaml to test"
+    ]
+
+
 def test_a_firing_case_that_asserts_no_severity_is_flagged(tmp_path):
     def drop_severity(tests):
         for case in tests["tests"]:

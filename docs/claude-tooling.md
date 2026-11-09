@@ -631,6 +631,12 @@ whose every target sets it, one `Watchdog` at most,
 no `${`, a test case firing every alert, and a zero-series case per rule file.
 `scripts/validate/alert_conventions.py` lists each rule in its docstring.
 
+The hook runs the tool calls in parallel, one per CPU. It splits each rule-test file into
+parts by test group, because `promtool` runs a file's groups one after another
+(`scripts/validate/validate_lib/rule_test_parts.py`). A failing part is reported under its
+source file with the 1-based numbers of the groups it held. To rerun them by hand, run the
+source file whole.
+
 The hook also checks the `loki-homelab` ruler's LogQL rules in
 `ansible/roles/k8s/loki-homelab/files/rules/`. It runs `lokitool rules lint --dry-run` on each
 file, which parses every expression. It fails when the files, `loki_homelab_rule_groups` and
