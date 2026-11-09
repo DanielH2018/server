@@ -131,6 +131,7 @@ def rendered(stubs) -> list[dict]:
 
 
 def test_the_render_passes_every_job_census_row(rendered):
+    assert len(_jobs(rendered)) >= 2
     assert problems({f"{TAG}-verify": rendered}) == []
 
 
@@ -163,6 +164,7 @@ def test_each_selected_node_gets_one_job_pinned_to_it(rendered):
 
 
 def test_the_job_mounts_only_the_k3s_binary_from_the_host_read_only(rendered):
+    assert _jobs(rendered)
     for job in _jobs(rendered):
         pod = job["spec"]["template"]["spec"]
         host = [v for v in pod["volumes"] if "hostPath" in v]
@@ -211,6 +213,7 @@ def test_a_sum_bump_renames_every_job(stubs, tmp_path):
 
 def test_the_job_runs_the_flux_job_image(rendered):
     flux = yaml_fast.safe_load((K8S_ROLES / "flux/defaults/main.yml").read_text())
+    assert _jobs(rendered)
     for job in _jobs(rendered):
         pod = job["spec"]["template"]["spec"]
         (container,) = pod["containers"]
