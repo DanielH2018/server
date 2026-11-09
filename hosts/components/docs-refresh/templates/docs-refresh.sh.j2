@@ -497,6 +497,8 @@ if [ "$RUNNER_RC" -ne 0 ]; then
     "$RUNNER_MSG" | tr '\n' ' ' | tail -c 300)"
   DEGRADED_MSG="refreshing runner shard weights failed (exit ${RUNNER_RC})"
   GENERATORS_OK=0
+else
+  printf '%s\n' "$RUNNER_MSG"
 fi
 
 # The two generated trees, plus the shard-weights tables the steps above write. Nothing else: a
