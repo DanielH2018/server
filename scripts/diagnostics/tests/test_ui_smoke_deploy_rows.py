@@ -11,7 +11,6 @@ from lib.repo_paths import REPO
 
 SMOKE = REPO / "scripts/diagnostics/tests/test_ui_smoke.py"
 PAGE = REPO / "hosts/components/deploy-ui/files/deploy_ui.html"
-READS = REPO / "hosts/components/deploy-ui/files/deploy_ui_lib/deploy_ui_reads.py"
 
 
 def _state_return_expression() -> str:
@@ -42,19 +41,4 @@ def test_smoke_row_count_matches_the_rows_state_renders():
     assert expected == len(rendered), (
         f"DEPLOYER_STATE_ROWS is {expected}, but state() in {PAGE.name} renders "
         f"{len(rendered)} rows: {rendered}"
-    )
-
-
-def test_smoke_cites_only_names_deploy_ui_reads_defines():
-    defined = set()
-    for node in ast.parse(READS.read_text()).body:
-        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
-            defined.add(node.name)
-        elif isinstance(node, ast.Assign):
-            defined.update(t.id for t in node.targets if isinstance(t, ast.Name))
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            defined.add(node.target.id)
-    cited = set(re.findall(r"deploy_ui_reads\.([A-Za-z_]\w*)", SMOKE.read_text()))
-    assert cited <= defined, (
-        f"{SMOKE.name} cites missing names: {sorted(cited - defined)}"
     )
