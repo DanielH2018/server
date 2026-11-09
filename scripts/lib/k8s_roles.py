@@ -26,10 +26,9 @@ import jinja2
 import yaml
 
 from lib import yaml_fast
-from lib.ansible_inventory import K8S_HOST_VARS
 from lib.jinja_comments import strip_jinja_comments
 from lib.k8s_role_callers import role_callers
-from lib.repo_paths import K8S_ROLES, SHARED_TPL
+from lib.repo_paths import K8S_ROLES, K8S_SERVICES, SHARED_TPL
 
 __all__ = [
     "CALLER_RENDERED_ROLES",
@@ -278,18 +277,16 @@ def non_manifest_documents(docs) -> list:
     ]
 
 
-def k8s_entries(host_vars: Path = K8S_HOST_VARS) -> dict[str, dict]:
-    """containers_list entries for the k8s platform in `host_vars`, keyed by service name.
+def k8s_entries(services: Path = K8S_SERVICES) -> dict[str, dict]:
+    """The `platform: k8s` entries of the service list `services`, keyed by service name."""
+    from lib.ansible_inventory import containers_entries_in
+    from lib.render_guard import load_yaml
 
-    The filter is `Estate.k8s_entries`, which the docs generators call; this takes the one
-    host file a caller names instead of an `Inventory`.
-    """
-    from lib.estate import Estate, Inventory
-
-    inventory = Inventory(
-        host_vars=host_vars.parent, plane_hosts={"k8s": host_vars.stem}
-    )
-    return Estate(inventory).k8s_entries()
+    return {
+        e["name"]: e
+        for e in containers_entries_in(load_yaml(services))
+        if e.get("platform") == "k8s"
+    }
 
 
 # The values a containers_list entry's `owner` takes. `flux`: Flux applies the tag, and every
@@ -298,8 +295,8 @@ def k8s_entries(host_vars: Path = K8S_HOST_VARS) -> dict[str, dict]:
 OWNER_VALUES = frozenset({"flux"})
 
 
-def tag_owners(host_vars: Path = K8S_HOST_VARS) -> dict[str, str]:
-    """Each deploy tag of a k8s entry in `host_vars` that sets `owner`, to that value.
+def tag_owners(services: Path = K8S_SERVICES) -> dict[str, str]:
+    """Each deploy tag of a k8s entry in `services` that sets `owner`, to that value.
 
     Only `platform: k8s` entries are read, because Flux applies k8s tags alone; an `owner` on a
     Docker entry is not this reader's to judge. An entry without the key is Ansible-owned and
@@ -308,24 +305,33 @@ def tag_owners(host_vars: Path = K8S_HOST_VARS) -> dict[str, str]:
     ValueError, a bare `owner:` included: a misspelt owner read as Ansible-owned would hand
     the tag to both Ansible and Flux.
     """
+    return entry_owners(k8s_entries(services), source=services)
+
+
+def entry_owners(entries: dict[str, dict], source: object = "") -> dict[str, str]:
+    """`tag_owners` over k8s entries already read, keyed by name; `source` names them in errors.
+
+    Raises:
+        ValueError: an entry's `owner` is outside `OWNER_VALUES`.
+    """
     from lib.render_guard import entry_tags
 
     owners: dict[str, str] = {}
-    for name, entry in k8s_entries(host_vars).items():
+    for name, entry in entries.items():
         if "owner" not in entry:
             continue
         owner = entry["owner"]
         if not isinstance(owner, str) or owner not in OWNER_VALUES:
             raise ValueError(
-                f"containers_list entry {name} in {host_vars} has owner {owner!r}, "
+                f"containers_list entry {name} in {source} has owner {owner!r}, "
                 f"not one of {sorted(OWNER_VALUES)}"
             )
         owners.update(dict.fromkeys(entry_tags(entry), owner))
     return owners
 
 
-def k8s_tags(host_vars: Path = K8S_HOST_VARS) -> set[str]:
-    """Every deploy tag of a k8s entry in `host_vars`, whether or not it sets `owner`.
+def k8s_tags(services: Path = K8S_SERVICES) -> set[str]:
+    """Every deploy tag of a k8s entry in `services`, whether or not it sets `owner`.
 
     The tags rather than the entry names, because `tag_owners` maps tags: an entry that declares
     `tags` is selected by each of them, and its name need not be one.
@@ -333,7 +339,7 @@ def k8s_tags(host_vars: Path = K8S_HOST_VARS) -> set[str]:
     from lib.render_guard import entry_tags
 
     return {
-        tag for entry in k8s_entries(host_vars).values() for tag in entry_tags(entry)
+        tag for entry in k8s_entries(services).values() for tag in entry_tags(entry)
     }
 
 

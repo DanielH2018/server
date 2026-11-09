@@ -31,22 +31,29 @@ from lib.repo_paths import REPO
 
 
 @contextmanager
-def _k8s_host_vars(repo_root: Path, at: str) -> Generator[Path]:
-    """Yield the k8s host's host_vars file in `repo_root`'s tree, or a copy of it at commit `at`.
+def _k8s_services(repo_root: Path, at: str) -> Generator[Path]:
+    """Yield the k8s service list in `repo_root`'s tree, or a copy of it at commit `at`.
+
+    A commit from before the list moved holds it in the k8s host's host_vars file, under
+    the same `containers_list` key, so that file is read at such a commit.
 
     Raises:
-        subprocess.CalledProcessError: `at` does not hold the file.
+        subprocess.CalledProcessError: `at` holds neither file.
     """
-    from lib.ansible_inventory import K8S_HOST_VARS
+    from lib.ansible_inventory import K8S_HOST, host_vars_file
+    from lib.repo_paths import K8S_SERVICES
 
-    rel = K8S_HOST_VARS.relative_to(REPO)
+    rel = K8S_SERVICES.relative_to(REPO)
     if not at:
         yield repo_root / rel
         return
-    text = git("show", f"{at}:{rel.as_posix()}", cwd=repo_root).stdout
+    shown = git("show", f"{at}:{rel.as_posix()}", cwd=repo_root, check=False)
+    if shown.returncode != 0:
+        old = host_vars_file(K8S_HOST).relative_to(REPO).as_posix()
+        shown = git("show", f"{at}:{old}", cwd=repo_root)
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / rel.name
-        path.write_text(text)
+        path.write_text(shown.stdout)
         yield path
 
 
@@ -60,11 +67,11 @@ def flux_owned(repo_root: Path = REPO, at: str = "") -> dict[str, str]:
 
     Raises:
         ValueError: an entry's `owner` is outside `lib.k8s_roles.OWNER_VALUES`.
-        subprocess.CalledProcessError: `at` does not hold the k8s host's host_vars file.
+        subprocess.CalledProcessError: `at` holds no k8s service list.
     """
     from lib.k8s_roles import tag_owners
 
-    with _k8s_host_vars(repo_root, at) as path:
+    with _k8s_services(repo_root, at) as path:
         return tag_owners(path)
 
 
@@ -72,11 +79,11 @@ def declared_k8s_tags(repo_root: Path = REPO, at: str = "") -> set[str]:
     """Every tag of a k8s `containers_list` entry, read from the file `flux_owned` reads.
 
     Raises:
-        subprocess.CalledProcessError: `at` does not hold the k8s host's host_vars file.
+        subprocess.CalledProcessError: `at` holds no k8s service list.
     """
     from lib.k8s_roles import k8s_tags
 
-    with _k8s_host_vars(repo_root, at) as path:
+    with _k8s_services(repo_root, at) as path:
         return k8s_tags(path)
 
 
@@ -147,7 +154,7 @@ def refuse_k8s_tags(plan) -> None:
     bypasses a typo check and nothing else. `--check` and `--dry-run` ask it too: the play
     skips such an entry, so neither mode would show anything for it.
 
-    An unreadable host_vars file refuses with 1. Reading it as declaring no k8s tag would
+    An unreadable service list refuses with 1. Reading it as declaring no k8s tag would
     hand the tag to both writers.
 
     Raises:

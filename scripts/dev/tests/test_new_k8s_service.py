@@ -22,12 +22,13 @@ from lib.k8s_roles import (
     declared_manifest_files,
     resolved_manifest_files,
 )
-from lib.render_guard import StubUndefined
+from lib.ansible_inventory import K8S_HOST
+from lib.render_guard import StubUndefined, host_layer
+from lib.repo_paths import HOST_VARS
 from validate.k8s_manifests import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,
-    K8S_HOST_VARS,
     load_yaml,
     make_lookup,
     register_ansible_filters,
@@ -68,7 +69,7 @@ def _render(tmp_path, text: str, name: str, port: int, defaults=None) -> list[di
     base = {
         **BASE_CONTEXT,
         **load_yaml(ALL_VARS),
-        **load_yaml(K8S_HOST_VARS),
+        **host_layer(HOST_VARS, K8S_HOST),
         "playbook_dir": str(ANSIBLE),
     }
     ctx = resolve_vars(base, base)

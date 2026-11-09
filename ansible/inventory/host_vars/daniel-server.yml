@@ -15,10 +15,6 @@ ssh_config_path: /etc/ssh/sshd_config
 has_igpu: true
 # Dissolves docker-proxy-codeserver and the `codeserver` net from the docker-proxy compose.
 has_code_server: false
-# Empty, and no Docker: this host runs the k3s agent, the nut pod's hardware, and the
-# nut_host shutdown chain — nothing else.
-containers_list: []
-
 # No engine, so no deployer to run. The gitops watchdog lives on — the cluster bridge
 # watches daniel-box's deployer instead.
 has_docker: false

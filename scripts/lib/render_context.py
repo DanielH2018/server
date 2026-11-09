@@ -44,6 +44,7 @@ from lib.render_guard import (
     BASE_CONTEXT,
     StubUndefined,
     host_files,
+    host_layer,
     load_yaml,
 )
 
@@ -161,7 +162,7 @@ def render_context(
 
 
 def _host_layer(inventory: Inventory, host: str | None) -> dict:
-    return load_yaml(inventory.host_vars / f"{host}.yml") if host else {}
+    return host_layer(inventory.host_vars, host) if host else {}
 
 
 # The host_vars `hostvars` carries for each host, each only while its value holds no Jinja.
@@ -187,7 +188,7 @@ def _hostvars(inventory: Inventory) -> dict[str, dict]:
     """
     found = {}
     for path in host_files(inventory.host_vars):
-        layer = load_yaml(path)
+        layer = host_layer(path.parent, path.stem)
         literal = {
             key: layer[key]
             for key in _HOSTVARS_KEYS

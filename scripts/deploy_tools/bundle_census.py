@@ -61,9 +61,8 @@ import yaml
 
 from lib import yaml_fast
 from lib.exit_codes import FAILED, OK
-from lib.ansible_inventory import K8S_HOST_VARS
 from lib.k8s_roles import snapshot_claims, tag_owners
-from lib.repo_paths import K8S_ROLES
+from lib.repo_paths import K8S_ROLES, K8S_SERVICES
 import bundle_gates
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
@@ -90,11 +89,9 @@ from renderer.renderer_lib.ordering import (
 from renderer.renderer_lib.task_inputs import include_vars
 
 
-def published_tags(host_vars: Path = K8S_HOST_VARS) -> list[str]:
-    """The sorted deploy tags the bundle publishes: those the inventory marks `owner: flux`."""
-    return sorted(
-        tag for tag, owner in tag_owners(host_vars).items() if owner == "flux"
-    )
+def published_tags(services: Path = K8S_SERVICES) -> list[str]:
+    """The sorted deploy tags the bundle publishes: those the service list marks `owner: flux`."""
+    return sorted(tag for tag, owner in tag_owners(services).items() if owner == "flux")
 
 
 def deferring_tags(
@@ -497,16 +494,16 @@ def add_parsers(commands) -> None:
     )
     for sub in (checker, lister):
         sub.add_argument(
-            "--host-vars",
+            "--services",
             type=Path,
-            default=K8S_HOST_VARS,
-            help="the inventory file whose owner: flux entries the bundle publishes",
+            default=K8S_SERVICES,
+            help="the service list whose owner: flux entries the bundle publishes",
         )
 
 
 def run(args: argparse.Namespace) -> int:
     """Run `check-bundle` or `published-tags`, and return the exit code."""
-    published = published_tags(args.host_vars)
+    published = published_tags(args.services)
     if args.command == "published-tags":
         for tag in published:
             print(tag)

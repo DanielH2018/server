@@ -74,7 +74,7 @@ from docs.catalog_lib.catalog_model import K3S_DEFAULTS, K8S_ROLES, ServiceRow
 from docs.catalog_lib.catalog_render import render_html, render_markdown
 from lib.cli_help import ArgumentParser
 from lib.estate import Estate, Inventory
-from lib.k8s_roles import tag_owners
+from lib.k8s_roles import entry_owners
 from lib.repo_paths import ALL_VARS, HOST_VARS
 
 # containers_list and the host_vars walk both come from lib.estate, the loader every docs
@@ -113,7 +113,8 @@ def build_rows(
     rows: list[ServiceRow] = []
     for host in estate.host_vars_hosts():
         host_data = estate.own_vars(host)
-        owners = tag_owners(host_vars / f"{host}.yml")
+        k8s = {e["name"]: e for e in estate.entries(host) if e.get("platform") == "k8s"}
+        owners = entry_owners(k8s, source=host)
         for entry in estate.entries(host):
             name = entry["name"]
             platform = entry.get("platform", "docker")

@@ -46,7 +46,7 @@ import random
 from pathlib import Path
 
 import pytest
-from lib import yaml_fast
+from lib.render_guard import containers_entries
 
 from _helpers import ANSIBLE, HOST_VARS
 from _k8s_render import rendered_docs
@@ -59,12 +59,7 @@ from toposort import (
 
 
 def _k8s_entries(path: Path) -> list[dict]:
-    loaded = yaml_fast.safe_load(path.read_text()) or {}
-    return [
-        c
-        for c in (loaded.get("containers_list") or [])
-        if c.get("platform") == "k8s" and c.get("name")
-    ]
+    return [c for c in containers_entries(path) if c.get("platform") == "k8s"]
 
 
 def _host_files() -> list[Path]:
