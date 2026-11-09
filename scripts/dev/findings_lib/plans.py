@@ -28,6 +28,7 @@ from dev.findings_lib.issue_model import (
     _REOBSERVED,
     claim_comment,
     current_claim,
+    fold_marker,
     label_names,
     not_before,
     not_before_label,
@@ -178,6 +179,29 @@ def plan_touch(issue: dict, source: str) -> list[list[str]]:
     if seen >= 2 and "escalated" not in label_names(issue):
         plans.append(["issue", "edit", n, "--add-label", "escalated"])
     return plans
+
+
+def plan_comment(issue: dict, body: str) -> list[list[str]]:
+    """Plans the gh argv that posts ``body`` on ``issue`` as a plain comment.
+
+    It adds no label and counts as no re-observation. A closed issue takes one too, since a
+    correction to its record is still worth keeping.
+
+    Raises:
+        ClaimRefused: the issue is outside the register, the body is blank, or the body
+            carries a marker the register folds back into state (`fold_marker`).
+    """
+    if "claude" not in label_names(issue):
+        raise ClaimRefused("not in the register — no `claude` label")
+    if not body.strip():
+        raise ClaimRefused("the body is empty")
+    marker = fold_marker(body)
+    if marker is not None:
+        raise ClaimRefused(
+            f"the body carries {marker}, which the register would read as state; "
+            "use the verb that owns it"
+        )
+    return [["issue", "comment", str(issue["number"]), "--body", body]]
 
 
 class ClaimRefused(Exception):

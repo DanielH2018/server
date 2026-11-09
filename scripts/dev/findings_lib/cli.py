@@ -149,6 +149,16 @@ def _parser(description: str) -> argparse.ArgumentParser:
     t.add_argument("number", type=int)
     t.add_argument("--source", default="session")
 
+    cm = sub.add_parser(
+        "comment",
+        help="post a plain comment: no label, no re-observation; a correction to an "
+        "issue's body, say",
+    )
+    _add_dry_run(cm, suppress=True)
+    _add_repo(cm)
+    cm.add_argument("number", type=int)
+    cm.add_argument("--body-file", required=True, type=Path)
+
     cl = sub.add_parser(
         "claim",
         help="claim issues for a worktree",
