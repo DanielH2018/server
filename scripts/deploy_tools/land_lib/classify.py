@@ -70,7 +70,9 @@ def refuse_stale_code_before_merge(ln: Landing) -> None:
     """Die before `await_merge` merges the PR when land.py's checkout lags origin/master.
 
     `refuse_stale_code` runs after the merge, so on its own a stale checkout's merge wait
-    would merge the PR first (#7830). The base is all of master, the PR not yet on it.
+    would merge the PR first (#7830). The base is all of master, the PR not yet on it. The
+    fetch runs in the primary, and land.py's checkout reads it because it is a worktree of the
+    primary and shares its refs.
     """
     ln.fetch_branch()
     base = f"origin/{BRANCH}"

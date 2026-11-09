@@ -243,3 +243,20 @@ def test_imported_paths_follows_a_function_level_import_and_skips_the_venv(tmp_p
         "scripts/lib/lazy.py",
         "scripts/lib/sibling.py",
     ]
+
+
+def test_a_comparison_git_could_not_make_refuses_before_it_merges(land_run):
+    fakes = Fakes(
+        gh_views={
+            "state,title,body,reviewDecision": {
+                "state": "OPEN",
+                "title": "Document the lander",
+                "body": "",
+            },
+        },
+        stale_code=None,
+    )
+    rc, out, err, calls, _ = land_run(["--arm-merge", "--await-merge"], fakes)
+    assert rc == 1 and "VERDICT: refused" in out
+    assert "git could not compare" in err and "Nothing is merged" in err
+    assert not [c for c in calls if c[0] == "gh" and any("merge" in a for a in c[1])]

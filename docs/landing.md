@@ -27,10 +27,13 @@ includes this PR and derive nothing.
 **A landing refuses when its own checkout is older than master's landing code.** `land.sh`
 runs `land.py` from the checkout it lives in, so a worktree branched before a master change to
 a reader runs that older reader against the merge commit. On 2026-11-09 such a reader read the
-#7767 merge commit as declaring no k8s tags (#7820). After resolving the merge commit, step 1
-compares every module the landing has loaded from its checkout with the merge commit's first
-parent. It ends `refused` when master changed one the checkout lacks, and names the checkout to
-re-run from: the primary when it carries that parent, else a detached worktree at the merge.
+#7767 merge commit as declaring no k8s tags (#7820). The comparison covers every module the
+landing has loaded from its checkout, and every module those import, function bodies included.
+With `--arm-merge --await-merge`, the landing first compares them with `origin/master` before
+it merges anything (#7830), and ends `refused` with nothing merged. After resolving the merge
+commit, step 1 compares them with the merge commit's first parent. It ends `refused` when master
+changed one the checkout lacks, and names the checkout to re-run from: the primary when it
+carries that parent, else a detached worktree at the merge.
 `land_lib/classify.py:refuse_stale_code` has the rule.
 
 **Without `--detach`, redirect stdout and stderr to a file yourself.** A backgrounded Bash call
