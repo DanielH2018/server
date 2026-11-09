@@ -368,12 +368,7 @@ def _sidecars(pod: Mapping) -> set[str]:
 
 
 def _long_running_statuses(pod: Mapping) -> list[Mapping]:
-    """The statuses of a pod's regular containers and its native sidecars.
-
-    A native sidecar (an initContainer with `restartPolicy: Always`) reports under
-    `initContainerStatuses`. A plain init container is left out: its restarts are retries
-    before the pod started.
-    """
+    """A pod's container statuses plus its native sidecars'; plain init containers retry."""
     status = pod.get("status") or {}
     sidecars = _sidecars(pod)
     return (status.get("containerStatuses") or []) + [
