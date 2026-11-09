@@ -1083,6 +1083,7 @@
  "scripts/dev/tests/test_fanout_green_gate_test_code.py": 13.38,
  "scripts/dev/tests/test_fanout_headless_imports.py": 0.11,
  "scripts/dev/tests/test_fanout_headroom_probe.py": 0.12,
+ "scripts/dev/tests/test_fanout_health.py": 0.0,
  "scripts/dev/tests/test_fanout_hunk_check.py": 3.98,
  "scripts/dev/tests/test_fanout_issue_fetch.py": 0.0,
  "scripts/dev/tests/test_fanout_launch.py": 0.0,
