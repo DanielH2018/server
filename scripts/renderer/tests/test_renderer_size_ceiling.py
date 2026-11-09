@@ -16,7 +16,8 @@ from lib.repo_paths import REPO
 # 13657 once #7485 gave the -snapshot and -prepull Kustomizations the default deletion policy.
 # 13656 once #7624 shrank the restart-target code by a line.
 # 13654 once H1.9 moved the k3s service list to cluster/services.yml.
-LINE_CEILING = 13654
+# 13676 once #7804 made the soak Job count native-sidecar restarts.
+LINE_CEILING = 13676
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 
