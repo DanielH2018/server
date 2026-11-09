@@ -87,10 +87,11 @@ TWO_FACTOR_SERVICES = [
     ("deploy", "Deploy queue", "/"),
 ]
 
-# Exactly five: `state()` in `deploy_ui.html` renders one `<tr>` per marker in
-# `deploy_ui_reads.MARKERS`, and a failed read renders a `<span class="unavail">` with no
-# table at all — which is what makes an exact count a rejecting assertion.
-DEPLOYER_STATE_ROWS = 5
+# Exactly four: `state()` in `deploy_ui.html` renders `hold_sha`, `hold_plane`, `last_run` and
+# `behind_since`, and a failed read renders a `<span class="unavail">` with no table at all —
+# which is what makes an exact count a rejecting assertion. `test_ui_smoke_deploy_rows.py`
+# holds this count to the page source in CI.
+DEPLOYER_STATE_ROWS = 4
 
 # The panels fill from async `/api/*` fetches after load, so the first read lands on an empty
 # div. Same shape and the same reasoning as `settled_title`: absorb the fetch, not a failure.
