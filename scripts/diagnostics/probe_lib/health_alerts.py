@@ -75,18 +75,86 @@ REREAD_WAIT_S = 60
 FLUX_LOOKBACK = "7d"
 
 
-def prom_query(promql, endpoint=None, fetch=None):
-    """The `result` list of one instant query.
+# The query door's Traefik `rate-limit` is 300/min per client, and every gate on a host shares
+# one client address, so concurrent landings drain it together (#7721).
+RATE_LIMITED = 429
+RETRY_DELAYS_S = (2, 4, 8, 16)
+# `detach_notify.PROBE_TIMEOUT_S`, restated: probe_lib may not import deploy_tools. Its expiry
+# grades a tag unhealthy rather than unread, so a 429 retry may sleep only while every wait
+# that can still follow one (the rest of a probe poll, the re-read, a second poll) fits after it.
+PROBE_TIMEOUT_S = 300
+RETRY_CUTOFF_S = PROBE_TIMEOUT_S - (PROBE_WAIT_S + REREAD_WAIT_S + PROBE_WAIT_S) - 15
 
-    `endpoint` and `fetch` default to `core.prom_endpoint` and `core.fetch_parsed`, read at
-    call time; a test passes its own.
+
+class RetryWindow:
+    """The span from a probe process's start in which a 429 retry may still sleep.
+
+    Attributes:
+        cutoff_s: the seconds after `start` by which a retry's sleep must end.
+        clock: a monotonic clock in seconds.
+        start: the clock reading the span opens at.
+    """
+
+    def __init__(self, cutoff_s, clock=time.monotonic, start=None):
+        self.cutoff_s = cutoff_s
+        self.clock = clock
+        self.start = clock() if start is None else start
+
+    def allows(self, delay):
+        """True when a sleep of `delay` seconds from now ends inside the window."""
+        return self.clock() - self.start + delay <= self.cutoff_s
+
+
+PROCESS_WINDOW = RetryWindow(RETRY_CUTOFF_S)
+
+
+def _get_json(url, resolve, get, sleep, window):
+    """The parsed body of a GET on `url`, re-sent after a 429 while `window` allows.
 
     Raises:
-        core.Unreadable: curl failed, or Prometheus did not answer `success`.
+        core.Unreadable: curl failed.
+        core.NonJsonResponse: the body is not JSON, a 429 that outlasted the retries included.
+    """
+    for delay in (*RETRY_DELAYS_S, None):
+        status, body = get(url, resolve=resolve)
+        if status != RATE_LIMITED or delay is None or not window.allows(delay):
+            break
+        sleep(delay)
+    if status == 0:
+        raise core.Unreadable(f"curl {url} failed: {body}")
+    return core.parse_json(url, body)
+
+
+def prom_query(promql, endpoint=None, fetch=None, get=None, sleep=None, window=None):
+    """The `result` list of one instant query.
+
+    Args:
+        promql: the instant query.
+        endpoint: returns `(base_url, resolve_pin)`; defaults to `core.prom_endpoint`.
+        fetch: returns the parsed body of `(url, resolve=)`. When given, it replaces the
+            status-aware read and its 429 retry.
+        get: returns `(http_status, body)` for `(url, resolve=)`, status 0 for a failed curl;
+            defaults to `core.get_status`.
+        sleep: the backoff sleep; defaults to `time.sleep`.
+        window: the `RetryWindow` a backoff sleep must end inside; defaults to
+            `PROCESS_WINDOW`.
+
+    Raises:
+        core.Unreadable: curl failed, the edge kept answering 429, or Prometheus did not
+            answer `success`.
     """
     base, pin = (endpoint or core.prom_endpoint)()
     url = prom_query_url(base, promql)
-    data = (fetch or core.fetch_parsed)(url, resolve=pin)
+    if fetch is not None:
+        data = fetch(url, resolve=pin)
+    else:
+        data = _get_json(
+            url,
+            pin,
+            get or core.get_status,
+            sleep or time.sleep,
+            window or PROCESS_WINDOW,
+        )
     if not isinstance(data, dict) or data.get("status") != "success":
         raise core.Unreadable(f"Prometheus refused {promql}: {str(data)[:300]}")
     return (data.get("data") or {}).get("result") or []
