@@ -13,10 +13,8 @@ def host_fakes(f, calls: list) -> dict:
         calls.append(("host_targets", (merge,), {}))
         return list(f.host_targets)
 
-    def wait_for_hosts(ln, targets, merge, merged_at):
-        calls.append(
-            ("wait_for_hosts", ([t.host for t in targets], merge, merged_at), {})
-        )
+    def wait_for_hosts(ln, targets, merge):
+        calls.append(("wait_for_hosts", ([t.host for t in targets], merge), {}))
         if f.host_wait_outcome is not None:
             verdict, rc, detail = f.host_wait_outcome
             ln.finish(verdict, rc, detail)
