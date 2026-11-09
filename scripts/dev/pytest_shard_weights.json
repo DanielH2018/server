@@ -401,6 +401,7 @@
  "ansible/tests/repo/test_ci_dispatch_sweeps_everything.py": 0.0,
  "ansible/tests/repo/test_ci_empty_pr_merge_fails.py": 0.19,
  "ansible/tests/repo/test_ci_jobs_verdict_matches_gate.py": 0.19,
+ "ansible/tests/repo/test_ci_k3s_download_job_off_critical_path.py": 0.03,
  "ansible/tests/repo/test_ci_lint_group.py": 0.01,
  "ansible/tests/repo/test_ci_master_runs_are_not_evictable.py": 0.0,
  "ansible/tests/repo/test_ci_pytest_job_fetch_depth.py": 0.0,
