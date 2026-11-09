@@ -128,7 +128,9 @@ def test_a_primary_checkout_behind_origin_master_runs_nothing(
         == 1
     )
     assert runner.ran == []
-    assert f"the primary checkout {primary}" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert f"the primary checkout {primary}" in err
+    assert "homelab-checkout-sync.timer" in err and "pull --ff-only" not in err
     assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
 
 

@@ -160,7 +160,15 @@ def run_owed(
     if repo is None:
         repo = str(primary_checkout_of(_Path(invoking_repo)))
     # The primary checkout runs the commands; the invoking tree's code chose them (#6957).
-    trees = [(repo, "the primary checkout", f"run git -C {repo} pull --ff-only")]
+    trees = [
+        (
+            repo,
+            "the primary checkout",
+            "wait for homelab-checkout-sync.timer, which fast-forwards it to the newest "
+            "green master commit every 10 minutes, or ask the operator to start "
+            "homelab-checkout-sync.service",
+        )
+    ]
     if _Path(invoking_repo).resolve() != _Path(repo).resolve():
         trees.append(
             (
