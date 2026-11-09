@@ -338,6 +338,7 @@ def _build_parser():
     _dry_run(vp, "print the kubectl calls without making them")
     fx = sub.add_parser("flux", **_verdict_help(*FLUX_HELP))
     fx.add_argument("tags", nargs="*", help=FLUX_TAGS_HELP)
+    _flag(fx, "--all", "list every Kustomization, not only the unsettled ones")
     _dry_run(fx, "print the kubectl call without making it")
     sub.add_parser(
         "shed-set",
