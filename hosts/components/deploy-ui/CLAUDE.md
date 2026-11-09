@@ -97,6 +97,12 @@ flight, and on each row of *Recently finished landings*. The viewer parses the l
 `files/deploy_ui_lib/deploy_ui_reads.py` does the parsing, so the page only renders it, and a
 run of identical lines (a wait's poll line) folds into one with a count.
 
+The viewer carries a tab for each landing in flight, and `[` and `]` cycle through them, so
+switching logs never means scrolling back to the in-flight table. *Recently finished landings*
+shows the newest five, with a toggle to show all of them and one to hide the section. The page
+keeps both choices in the browser's `localStorage`, per viewer, and defaults to five shown when
+storage is blocked.
+
 The page names a log by file name, never by path, and the daemon reads only a name in its own
 index (`App._landing_index`). The index holds two kinds of file, written in the last 24 hours,
 named like a landing log, and regular files rather than symlinks:
@@ -120,7 +126,8 @@ The daemon writes one logfmt line per request to its unit journal (#2864):
 Traefik forwards, and `-` for a caller that reached the port around Authelia. The query
 string is dropped, so a log path never reaches the journal.
 
-The page polls four panels every 10 seconds, so an open tab writes about 24 lines a minute.
+The page polls four panels every 10 seconds, so an open tab writes about 24 lines a minute,
+and 18 while the finished list is hidden, because the page skips its fetch.
 An open landing viewer polls `/api/log` every 2 seconds and adds 30 more. Those polls show a tab was open, not that anyone used it. Count page
 loads and writes instead:
 
