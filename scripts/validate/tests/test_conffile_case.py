@@ -33,12 +33,13 @@ from types import ModuleType
 
 import pytest
 from lib.proc_testing import DEFAULT_TIMEOUT
+from validate import host_package_cases
+from validate.validate_lib import case_groups, conffile_case
 from validate.validate_lib import host_fixtures as fx
 from validate.validate_lib.host_container import CaseFailed
 
 MODULE = "validate.validate_lib.conffile_case"
 SOURCE = "scripts/validate/validate_lib/conffile_case.py"
-CASES = "scripts/validate/host_package_cases.py"
 # The functions the fix adds to the module, each reached through getattr.
 OWNER_DEBS = "owner_debs"
 OUTCOME = "outcome"
@@ -206,28 +207,9 @@ def test_an_installed_version_that_is_neither_fails_the_case(after):
 # Where and how the job runs the cases.
 
 
-def _main_runs_the_conffile_case(source: str) -> bool:
-    """Whether `main` in the cases' source calls `conffile_case.run(...)`."""
-    for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.FunctionDef) and node.name == "main":
-            return any(
-                isinstance(call, ast.Call)
-                and isinstance(call.func, ast.Attribute)
-                and call.func.attr == "run"
-                and isinstance(call.func.value, ast.Name)
-                and call.func.value.id == "conffile_case"
-                for call in ast.walk(node)
-            )
-    return False
-
-
 def test_the_host_packages_job_runs_the_conffile_case():
-    source = (fx.REPO / CASES).read_text()
-    assert _main_runs_the_conffile_case(source)
-    # Red proof: the secrets case's run, which main calls already, does not count.
-    assert not _main_runs_the_conffile_case(
-        source.replace("conffile_case.run", "secrets_case.run")
-    )
+    runs = [run for _, run in case_groups.groups(host_package_cases.Cases)]
+    assert conffile_case.run in runs
 
 
 def _docstrings(node: ast.AST) -> set[int]:

@@ -26,6 +26,7 @@ import hashlib
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from datetime import datetime, timedelta
 from email.utils import formatdate
@@ -166,10 +167,31 @@ def pi_disarmed_variant(out: Path, sops_dir: Path | None = None) -> Path:
     return out / package.directory
 
 
+def run_logged(
+    command: list[str], check: bool = False, **kwargs
+) -> subprocess.CompletedProcess:
+    """`subprocess.run` with the child's stderr captured, then written to `sys.stderr`.
+
+    A case group's `sys.stderr` holds its output until the group ends (`case_groups.py`), so a
+    child writing to file descriptor 2 itself would land inside another group's block.
+
+    Raises:
+        subprocess.CalledProcessError: `check` is set and the command exited non-zero.
+    """
+    result = subprocess.run(
+        command, stderr=subprocess.PIPE, text=True, errors="replace", **kwargs
+    )
+    if result.stderr:
+        sys.stderr.write(result.stderr)
+    if check:
+        result.check_returncode()
+    return result
+
+
 def build(directory: Path, version: str, out: Path) -> Path:
     """Build the rendered package in `directory` at `version` with nfpm; return the deb."""
     out.mkdir(parents=True)
-    subprocess.run(
+    run_logged(
         ["nfpm", "package", "--config", "nfpm.yaml", "--packager", "deb"]
         + ["--target", f"{out}/"],
         cwd=directory,
@@ -192,9 +214,7 @@ def deb_version(deb: Path) -> str:
 
 def newer(left: str, right: str) -> bool:
     """Whether Debian version `left` sorts after `right`."""
-    result = subprocess.run(
-        ["dpkg", "--compare-versions", left, "gt", right], check=False
-    )
+    result = run_logged(["dpkg", "--compare-versions", left, "gt", right])
     return result.returncode == 0
 
 

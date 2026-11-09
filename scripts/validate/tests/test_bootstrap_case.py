@@ -10,13 +10,13 @@ Run: uv run pytest scripts/validate/tests/test_bootstrap_case.py
 import shutil
 import subprocess
 import time
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from lib.git import git
 from validate import host_package_cases
 from validate.validate_lib import bootstrap_age_case as age_case
+from validate.validate_lib import case_groups
 from validate.validate_lib import bootstrap_case as case
 from validate.validate_lib import bootstrap_repo_case as repo_case
 from validate.validate_lib import fixture_host_case as fixture_case
@@ -343,19 +343,17 @@ def test_a_run_that_found_age_already_installed_is_flagged(monkeypatch, tmp_path
         _age_run(monkeypatch, tmp_path, stdout)
 
 
-def test_the_host_packages_job_runs_the_age_case():
-    assert (
-        "bootstrap_age_case.run(cases)" in Path(host_package_cases.__file__).read_text()
-    )
-
-
-def test_the_host_packages_job_runs_the_bootstrap_cases():
-    assert "bootstrap_case.run(cases)" in Path(host_package_cases.__file__).read_text()
-
-
-def test_the_host_packages_job_runs_the_repository_case():
-    text = Path(host_package_cases.__file__).read_text()
-    assert "bootstrap_repo_case.run(cases)" in text
+def test_the_host_packages_job_runs_the_three_bootstrap_groups():
+    runs = [run for _, run in case_groups.groups(host_package_cases.Cases)]
+    assert {
+        "bootstrap_age_case": age_case.run in runs,
+        "bootstrap_case": case.run in runs,
+        "bootstrap_repo_case": repo_case.run in runs,
+    } == {
+        "bootstrap_age_case": True,
+        "bootstrap_case": True,
+        "bootstrap_repo_case": True,
+    }
 
 
 def test_the_rewrite_points_the_script_at_the_test_repository_and_key():
