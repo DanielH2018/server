@@ -1,7 +1,8 @@
 """One cluster-node bootstrap case leaves k3s unseeded and requires install.sh's download (#7754).
 
 The log lines are the ones the pinned install.sh prints: `info()` echoes `[INFO] ` and its
-arguments, `download_binary` names the release binary's URL, and `verify_binary` follows.
+arguments, `download_binary` names the release binary's URL, and `verify_binary` follows. With
+INSTALL_K3S_SKIP_DOWNLOAD set, `download_and_verify` prints its skip line instead.
 
 Run: uv run pytest scripts/validate/tests/test_bootstrap_k3s_download_case.py
 """
@@ -18,7 +19,11 @@ DOWNLOADED = (
     f"[INFO]  Downloading binary {RELEASE}/k3s\n"
     "[INFO]  Verifying binary download\n"
 )
-SKIPPED = f"{case.ANCHOR_ACCEPTS}\n[INFO]  Installing k3s to /usr/local/bin/k3s\n"
+SKIPPED = (
+    f"{case.ANCHOR_ACCEPTS}\n"
+    "[INFO]  Skipping k3s download and verify\n"
+    "[INFO]  Skipping installation of SELinux RPM\n"
+)
 
 
 def _verdict(item: case.Planned, stdout: str) -> list[str]:
