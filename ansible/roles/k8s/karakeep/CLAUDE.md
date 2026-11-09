@@ -6,7 +6,7 @@ loop to auto-tag bookmarks.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
   `--tags=karakeep` with exit 5
 - **Images:** `ghcr.io/karakeep-app/karakeep` (`karakeep_k8s_image`),
   `ghcr.io/karakeep-app/karakeep-chrome` (`karakeep_k8s_chrome_image`), `getmeili/meilisearch`
@@ -16,8 +16,8 @@ loop to auto-tag bookmarks.
   (weekly -> B2 (default target))
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (#5652, Wave C). Its `containers_list` entry carries
-  `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged change
+- **Flux applies it, not Ansible** (#5652, Wave C). Its `containers_list` entry is
+  `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy: false`
   still stops Renovate's
   automerge of a pin bump.

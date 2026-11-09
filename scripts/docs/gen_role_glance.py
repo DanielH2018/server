@@ -25,14 +25,14 @@ roles:
 
 - a k8s service role (`roles/k8s/<name>/`, every `platform: k8s` entry of the cluster host's
   `containers_list`): the deploy tag (`entry_tags`, the same precedence `deploy.yml` uses),
-  the image REPOSITORIES and the vars that pin them (for an `owner: flux` entry, a built
-  image's GHCR repository, the one Flux's render pulls), the route and its auth tier (the same
+  the image REPOSITORIES and the vars that pin them (for a built image, its GHCR
+  repository, the one Flux's render pulls), the route and its auth tier (the same
   derivation `docs/reference/services.md` prints, so the two cannot disagree), every PVC
   claim by name with its Longhorn backup tier beside it (the catalogue's `backup_tier`
   column, per claim — `catalog_backup.claim_tiers` is the one derivation both print, so a
   tier here is read from the claim's StorageClass and the k3s role's `k3s_longhorn_*_volumes`
-  lists, never typed, and a claim named by a shell variable has none). For an entry that carries `owner` (`lib.k8s_roles.tag_owners`), an
-  **Applied by** line replaces the deploy tag: it names Flux and `promote`,
+  lists, never typed, and a claim named by a shell variable has none). For every k8s entry
+  (`catalog_backup.entry_owner`), an **Applied by** line replaces the deploy tag: it names Flux and `promote`,
   and says `deploy.sh` refuses `--tags=<tag>` with exit 5;
 - a setup role (`roles/setup/<name>/`, every directory but the include-only `common`): the
   playbook and tag that apply it, with the `when:` that restricts it to a host, read from the
@@ -113,7 +113,6 @@ from docs.catalog_lib.glance_facts import (
 )
 from lib.cli_help import ArgumentParser
 from lib.estate import Estate, role_defaults
-from lib.k8s_roles import entry_owners
 from lib.render_guard import ALL_VARS, entry_tags
 from lib.repo_paths import ANSIBLE, REPO
 from renderer.renderer_lib.task_inputs import image_builder_sites
@@ -406,8 +405,6 @@ def stale_k8s_docs(
     claim_classes = claim_index(k8s_roles)
     entries = estate.k8s_entries()
     tiers = load_longhorn_tier_lists(k3s_defaults, group_vars, list(entries.values()))
-    inventory = estate.inventory
-    owners = entry_owners(entries, source=inventory.host_vars)
     built = built_image_names(k8s_roles)
     stale: list[str] = []
     for entry in entries.values():
@@ -423,7 +420,7 @@ def stale_k8s_docs(
                 k3s_defaults=k3s_defaults,
                 claim_classes=claim_classes,
                 tiers=tiers,
-                owner=entry_owner(entry, owners),
+                owner=entry_owner(entry),
                 built=built,
             )
         )

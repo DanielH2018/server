@@ -76,7 +76,7 @@ def gated_tags(ln: Landing) -> list[str]:
     return [t for t in ln.flux_tags if t not in ln.suspended_tags]
 
 
-# What `FluxReads.owners_at` raises when the ownership map cannot be read.
+# What `FluxReads.k8s_tags_at` raises when the service list cannot be read.
 OWNER_READ_ERRORS = (ValueError, subprocess.SubprocessError, OSError)
 
 
@@ -117,22 +117,22 @@ def split_k8s(ln: Landing) -> None:
 
 
 def _flux_owned(ln: Landing, tags) -> list[str]:
-    """The `owner: flux` tags at the merge commit among `tags`, which the gate may ask about.
+    """The k8s tags at the merge commit among `tags`, which the gate may ask about.
 
     A widened changed set names every Kustomization the cluster lists, so this keeps a name
-    that is no deploy tag away from `probe.py health`. An unreadable ownership map keeps
+    that is no deploy tag away from `probe.py health`. An unreadable service list keeps
     every name and says so: a gate asked too much fails loudly, one asked too little passes.
     """
     if not tags:
         return []
     try:
-        owners = ln.tools.flux.owners_at(ln.opts.primary, ln.merge_sha)
+        declared = ln.tools.flux.k8s_tags_at(ln.opts.primary, ln.merge_sha)
     except OWNER_READ_ERRORS as exc:
         say(
             f"could not read which tags Flux applies at {ln.merge_sha[:12]} ({exc}); gating every changed name"
         )
         return list(tags)
-    return [tag for tag in tags if owners.get(tag) == "flux"]
+    return [tag for tag in tags if tag in declared]
 
 
 # What a landing keeps back from `LAND_DEADLINE` after the promotion wait: the health gate and

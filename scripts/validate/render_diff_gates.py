@@ -95,7 +95,6 @@ CLEAN, REFUSED, UNJUDGED = 0, 1, 2
 HOST_VARS = Path("ansible/inventory/host_vars/daniel-box.yml")
 GROUP_VARS = Path("ansible/inventory/group_vars/all.yml")
 K8S_ROLES = "ansible/roles/k8s/"
-ANSIBLE_PLANE = "ansible"
 FLUX_PLANE = "flux"
 
 
@@ -110,7 +109,7 @@ class Snapshot:
     Attributes:
         renders: Each tag mapped to a digest of its `cluster/<tag>/` and
             `cluster/<tag>-deferred/` output. A tag the render left out is absent.
-        owners: Each k8s entry mapped to its plane: its `owner` value, or `ansible`.
+        owners: Each k8s entry mapped to its plane. `snapshot` maps every one to `flux`.
         deps: Each k8s entry mapped to its `build_k8s_dep_map` edges.
         deferred: Each `<tag>-deferred` directory mapped to its files, for the namespace
             edges `kustomization_edges` derives.
@@ -348,7 +347,7 @@ def snapshot(
     objects, unpruned = _objects(dirs)
     return Snapshot(
         renders=renders,
-        owners={e["name"]: str(e.get("owner") or ANSIBLE_PLANE) for e in k8s},
+        owners=dict.fromkeys(names, FLUX_PLANE),
         deps=build_k8s_dep_map(k8s, str(tree / "ansible")),
         deferred={n: f for n, f in dirs.items() if n.endswith(DEFERRED_SUFFIX)},
         namespace_roles={

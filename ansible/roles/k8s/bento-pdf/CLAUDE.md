@@ -5,7 +5,7 @@ conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
   `--tags=bento-pdf` with exit 5
 - **Image:** `ghcr.io/alam00000/bentopdf` (`bento_pdf_k8s_image`)
 - **Route:** `bento-pdf.<domain>` · `bento-pdf.local.<domain>`, Authelia one_factor
@@ -16,7 +16,7 @@ conventions.
   manager still tracks it for digest-bump PRs.
 - **Port:** 8080. Stateless RollingUpdate Deployment with a readinessProbe.
 - **Flux applies it, not Ansible** (D2.7, the first Flux leaf). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
   Its digest-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
 - **Hostname is single-label** (`bento-pdf`, not `bento-pdf.k8s`) deliberately: the

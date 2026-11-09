@@ -118,9 +118,9 @@ the sources it reads.
 ## 2. The inventory entry — ordering is automatic, position is not
 
 The scaffolder appends the entry to `containers_list` in
-`cluster/services.yml` with `platform: k8s` and `owner: flux`, at the end
-of the list but ahead of netpol-baseline. **The entry is born owned by Flux** (D5.5 of
-`docs/target-architecture/deploy/d5-bulk-move.md`), because Flux applies every k8s entry. netpol-baseline is ordered after every other entry, because it
+`cluster/services.yml` with `platform: k8s`, at the end
+of the list but ahead of netpol-baseline. **The entry is born owned by Flux**, because Flux
+applies every k8s entry, and no `owner` key marks it. netpol-baseline is ordered after every other entry, because it
 is in `K8S_APPLIES_LAST`, and `test_derived_order_matches_todays_hand_ordered_list` holds the
 list to the sorted order. Otherwise, where in the list doesn't matter: the renderer toposorts
 on `build_k8s_dep_map` / `toposort_containers` (`ansible/filter_plugins/toposort.py`), and
@@ -152,7 +152,7 @@ Secret template*, before you remove a key from a `secret.yaml.j2`.
 
 ## 4. Deploy
 
-**Flux applies the new role, not `deploy.sh`.** The entry carries `owner: flux`, so
+**Flux applies the new role, not `deploy.sh`.** Flux applies every k8s entry, so
 `./scripts/deploy.sh --tags "<name>"` exits 5 (`DEPLOY_FLUX_OWNED`), `--dry-run` included.
 To check the role before the merge, render every published tag the way `promote` does, then
 check the bundle. `check-bundle` examines each tag `published-tags` lists, so a render of the

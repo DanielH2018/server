@@ -111,7 +111,7 @@ holds no vendored file, so the fleet guards never read them. H1's *Vendored upst
 (`docs/target-architecture/host/h1-cluster-config-to-flux.md`) says why that is accepted.
 
 A placeholder render with `--role` also writes the publish bundle, `DIR/flux/` and
-`DIR/digests.json`, for the tags it names that carry `owner: flux`, plus each shared kind's
+`DIR/digests.json`, for the k8s tags it names, plus each shared kind's
 `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/`. `docs/flux-deploy-plane.md`'s *The bundle*
 describes them. A stub render, a render without `--role` and a render that names no
 flux-owned tag write none of them. A published tag whose role lists `render_sops_manifests`

@@ -128,7 +128,7 @@ The `VERDICT:` line is the last line of the log. `land.sh --help` lists the clos
 
 **A k8s tag never reaches `deploy.sh`.** `land.sh`
 waits until a promotion covers the merge commit (`promote.py land-wait`) and then gates the
-`owner: flux` tags. A `deploy-failed` with cause `promote-held` means `DEPLOY_HOLD` holds
+k8s tags. A `deploy-failed` with cause `promote-held` means `DEPLOY_HOLD` holds
 promotion, and clearing it is **operator-only**: stop and name the hold. Cause
 `soak-failed` means the soak Job failed on the promoted revision, which `verify` holds next:
 report the services the printed `kubectl` command names, and stop. A

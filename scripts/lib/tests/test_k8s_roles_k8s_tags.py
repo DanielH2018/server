@@ -1,59 +1,37 @@
-"""`tag_owners` maps each tag whose containers_list entry sets `owner` to that value.
+"""`k8s_tags` names every tag of every k8s entry in the service list, each one Flux applies.
 
-The script reader of D2's ownership flag (docs/target-architecture/deploy/d2-first-leaf.md).
+Every k8s entry is Flux's, so no key on the entry marks it
+(docs/target-architecture/host/h1-cluster-config-to-flux.md, H1.9).
 """
 
-import pytest
+from lib.k8s_roles import k8s_tags
 
-from lib.k8s_roles import k8s_tags, tag_owners
-
-HOST_VARS = """\
+SERVICES = """\
 containers_list:
   - name: bento-pdf
     platform: k8s
-    owner: flux
   - name: n8n
     platform: k8s
-    owner: flux
     tags: [n8n, n8n-images]
   - name: sonarr
     platform: k8s
 """
 
 
-def test_an_owner_maps_every_tag_of_its_entry(tmp_path):
-    host_vars = tmp_path / "daniel-box.yml"
-    host_vars.write_text(HOST_VARS)
-    assert tag_owners(host_vars) == {
-        "bento-pdf": "flux",
-        "n8n": "flux",
-        "n8n-images": "flux",
-    }
-
-
 def test_k8s_tags_names_every_tag_of_every_k8s_entry(tmp_path):
-    host_vars = tmp_path / "daniel-box.yml"
-    host_vars.write_text(HOST_VARS + "  - name: wg-easy\n    platform: docker\n")
-    assert k8s_tags(host_vars) == {"bento-pdf", "n8n", "n8n-images", "sonarr"}
+    services = tmp_path / "services.yml"
+    services.write_text(SERVICES + "  - name: wg-easy\n    platform: docker\n")
+    assert k8s_tags(services) == {"bento-pdf", "n8n", "n8n-images", "sonarr"}
 
 
-@pytest.mark.parametrize("value", ["released", "ansible", "Flux", "", "~", "[flux]"])
-def test_any_other_owner_value_raises(tmp_path, value: str):
-    host_vars = tmp_path / "daniel-box.yml"
-    host_vars.write_text(HOST_VARS.replace("owner: flux", f"owner: {value}", 1))
-    with pytest.raises(ValueError, match="bento-pdf"):
-        tag_owners(host_vars)
-
-
-def test_the_entries_d2_to_d5_moved_are_live_and_owned_by_flux():
+def test_the_entries_d2_to_d5_moved_are_live_k8s_tags():
     """D2.7 through D5.20, n8n's flip (#5546), nut's (D5.17), #5594 and #5652 moved these forty-two.
 
     D5.19 moved artifacts, autofix-bridge, cloudflare-ddns, docs and game-stats, #5594 moved
     monitor-bridge and prowlarr, #5652 moved karakeep, media-volume and pi-peer-backup, Wave A's last PR moved
     blackbox-exporter, D5.10 moved zigbee2mqtt, D5.11 moved home-assistant, and D5.12 moved wg-easy.
 
-    A floor, not an equality: from D5.5 on the scaffolder writes `owner: flux` on every new
-    entry, so the live set grows with each new service.
+    A floor, not an equality: the live set grows with each new service.
     """
     assert {
         "artifacts",
@@ -98,4 +76,4 @@ def test_the_entries_d2_to_d5_moved_are_live_and_owned_by_flux():
         "valheim",
         "zigbee2mqtt",
         "wg-easy",
-    } <= tag_owners().keys()
+    } <= k8s_tags()

@@ -13,13 +13,13 @@ from functools import cache
 from pathlib import Path
 
 from _autodeploy import _LITERAL_NAME, _live_tasks, _strip_comments, _task_command_text
-from lib.k8s_roles import tag_owners
+from lib.k8s_roles import k8s_tags
 from renderer.renderer_lib.ordering import cronjob_gates
 
 
 @cache
 def _owners() -> dict[str, str]:
-    return tag_owners()
+    return dict.fromkeys(k8s_tags(), "flux")
 
 
 def flux_gated_names(role: Path, owners: dict[str, str] | None = None) -> set[str]:
@@ -33,7 +33,7 @@ def flux_gated_names(role: Path, owners: dict[str, str] | None = None) -> set[st
 
     Args:
         role: The role directory.
-        owners: Each tag's `owner`, the live inventory's when None.
+        owners: Each tag's owner, `flux` for every live k8s tag when None.
     """
     if (owners if owners is not None else _owners()).get(role.name) != "flux":
         return set()
