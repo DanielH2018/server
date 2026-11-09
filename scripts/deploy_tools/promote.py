@@ -70,7 +70,9 @@ OUTPUT. One line on stdout, `trigger=<sha> verdict=<verdict> target=<sha or empt
 verdict's reason on stderr. `$GITHUB_OUTPUT` gets `verdict`, `target`, `digest`; `prior` and
 `prior_digest`, which `tag` re-reads before it moves anything; `reset_digest`; `seed`, `true`
 when `tag` tags `prior_digest` `last-good` first; `clears_hold`; `no_reset` and `stateful`,
-under which `settle` holds without a reset; and `suspended_hold`.
+under which `settle` holds without a reset; `suspended_hold`; and `lost_settle` and
+`lost_settle_digest`, `prod`'s commit and digest when the run that moved it ended without its
+`settle`, on which the `reconcile` job runs.
 
 THE OTHER SUBCOMMANDS, each stated in its module's docstring:
   prune        deletes old artifact versions, daily from prune-artifacts.yml (`prune.py`).
@@ -197,7 +199,13 @@ def decide(
             prod_commit=reads.prod,
         )
         if settled.stop is not None:
-            return Decision(settled.stop[0], reason=settled.stop[1])
+            lost_commit, lost_digest = settled.lost_settle or ("", "")
+            return Decision(
+                settled.stop[0],
+                reason=settled.stop[1],
+                lost_settle=lost_commit,
+                lost_settle_digest=lost_digest,
+            )
         held, prod_digest, last_good = settled.held, settled.prod, settled.last_good
         hold_read, flight = settled.hold, settled.in_flight
         required = frozenset(reads.contexts())
@@ -390,6 +398,8 @@ def report(trigger: str, decision: Decision, github_output: str | None) -> int:
                 f"stateful={','.join(decision.stateful)}\n"
                 f"supersedes={decision.supersedes}\n"
                 f"hold_read={decision.hold_read}\n"
+                f"lost_settle={decision.lost_settle}\n"
+                f"lost_settle_digest={decision.lost_settle_digest}\n"
                 f"suspended_hold={decision.hold if stateful.SUSPENDED in decision.hold else ''}\n"
             )
     return FAILED if decision.verdict == "error" else OK
