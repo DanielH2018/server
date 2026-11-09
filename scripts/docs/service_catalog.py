@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate a single HTML page answering "what runs in this homelab".
 
-THE PROBLEM. ~60 services are declared across two inventory files
-(ansible/inventory/host_vars/{daniel-box,daniel-pi}.yml), and today the only way to
+THE PROBLEM. ~60 services are declared across two files
+(cluster/services.yml and ansible/inventory/host_vars/daniel-pi.yml), and the only way to
 answer "what runs here, on which host, behind which auth, backed up how" is to read
 through 62 Ansible roles by hand. Every fact already lives in the repo — nothing
 assembles them into one place, so the answer drifts out of date the moment someone

@@ -142,7 +142,7 @@ Service name a role's own template happens to use.
 `roles/k8s/observability/templates/telemetry-health.sh.j2` resolves `prometheus`'s ClusterIP at runtime
 (`kubectl get svc prometheus -o jsonpath='{.spec.clusterIP}'`, then curls it). An earlier draft of
 this section claimed the cron installing it "runs from a host cron on both nodes." **That is false,
-verified:** `observability` appears in `containers_list` only in `host_vars/daniel-box.yml`;
+verified:** `observability` appears in `containers_list` only in `cluster/services.yml`;
 `daniel-server.yml` has no entry, and the cron task in `roles/k8s/observability/tasks/main.yml` has no
 `delegate_to`. The cron installs and fires from daniel-box alone.
 

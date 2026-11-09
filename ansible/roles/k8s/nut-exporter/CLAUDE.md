@@ -47,7 +47,7 @@ on the assumption that a scrape must authenticate.
 **The UPS reading is on `/ups_metrics`, not `/metrics`.** `/metrics` is the exporter's own Go and
 process registry and carries no UPS variable at all, so a scrape job pointed there succeeds and
 returns nothing useful. The `nut` scrape job renders from the `metrics` item on this role's
-`containers_list` entry in `ansible/inventory/host_vars/daniel-box.yml`. That item sets `path`
+`containers_list` entry in `cluster/services.yml`. That item sets `path`
 accordingly and passes `ups=` in `params`. The exporter fails a scrape outright if it discovers
 several UPS devices and has not been told which, so naming it means a second UPS cannot
 silently blank the job. The same item holds the `:9199` port, which the Deployment and Service

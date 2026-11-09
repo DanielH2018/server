@@ -38,7 +38,7 @@ highest-signal findings.
   directly, publishing a UI port bound to `{{ server_ip }}` (the Pi's LAN IP, never
   `0.0.0.0`) with no Traefik labels, since the Pi has no Traefik in front of it.
 - **The service set + per-service shape** (port/use_authelia/networks) live in
-  `ansible/inventory/host_vars/daniel-box.yml` `containers_list` for the cluster and in
+  `cluster/services.yml` `containers_list` for the cluster and in
   `host_vars/daniel-pi.yml` `compose_services` for the Pi.
 - **Pinning:** **Watchtower is retired** — nothing auto-updates any more. Every image is
   pin-and-Renovate-managed, and residual `watchtower.enable=false` labels are dead metadata
