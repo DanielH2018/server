@@ -90,6 +90,16 @@ FLAGGED = {
         {"relink": {"/usr/bin/tool-link": SECRET_TARGET}},
         NOT_THE_LINK,
     ),
+    "a host package script turned into a link into the secrets tmpfs": (
+        f"{LINK_CHANGED}: /usr/lib/homelab/check",
+        {"relink": {"/usr/lib/homelab/check": SECRET_TARGET}},
+        NOT_THE_LINK,
+    ),
+    "a host package apt hook turned into a link into the secrets tmpfs": (
+        f"{LINK_CHANGED}: /etc/apt/apt.conf.d/91homelab-hook",
+        {"relink": {"/etc/apt/apt.conf.d/91homelab-hook": SECRET_TARGET}},
+        NOT_THE_LINK,
+    ),
     "the host package's link pointed outside its secrets tmpfs": (
         f"{LINK_CHANGED}: {SECRET_LINK}",
         {"relink": {SECRET_LINK: "/run/other/config.env"}},

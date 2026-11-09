@@ -36,8 +36,8 @@
 #   writes that kind of file (a kernel package for the initrd, a GRUB or kernel package for
 #   grub.cfg, the package that owns the source for a .pyc). The top-level usr-merge links
 #   (/bin and the rest) are judged on their target alone. A package-owned symlink must still
-#   resolve to a package file, with two exceptions: a `homelab-*` package's link into
-#   /run/homelab-secrets/, and a link into a system tree whose target is missing, such as the
+#   resolve to a package file, with two exceptions: a `homelab-*` package's /etc link (outside
+#   PERSIST) into /run/homelab-secrets/, and a link into a system tree whose target is missing, such as the
 #   kernel headers' rust link to a package that is not installed, in a window its owner ran.
 # - /etc: a package-owned path whose content differs from the package's copy, or that is gone.
 #   Ansible writes unpackaged /etc files on every merge, so those are logged, not paged.
@@ -333,7 +333,7 @@ unexplained_entries() {
       # `systemctl enable` makes it.
       link_ok = $7 != "-" && ($7 == "/dev/null" || (norm($7) in owned) || (path ~ /^\/etc\/systemd\/system\// && $7 ~ ENVIRON["ROLE_WRITTEN"]))
       # The host package links each secret file into the tmpfs its secrets unit fills.
-      if ($7 ~ /^\/run\/homelab-secrets\// && owner_matches(p, "^homelab-")) link_ok = 1
+      if (scope == "etc" && $7 ~ /^\/run\/homelab-secrets\// && owner_matches(p, "^homelab-")) link_ok = 1
       # A distro link into a package that is not installed. Only a system-tree target, because a
       # file created there later pages on its own as unowned.
       if ($8 == "dangling" && $7 ~ ENVIRON["SYSTEM"] && $7 !~ /^\/usr\/local(\/|$)/ && owner_ran(p, touched)) link_ok = 1
