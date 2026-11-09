@@ -131,9 +131,9 @@ POLL_S = 30
 # `prod` only while it still names the digest `decide` read, which closes the gap between one
 # run's `decide` and an earlier run's `tag` (promote.yml, the `Move prod` step). A run that
 # never settles stalls promotion as `current`, which D2.6d's `PromotionStalled` alert pages.
-# When no other promote run is in progress for LOST_SETTLE_S, the run finished without a
-# `settle` (#7863): the wait ends `current` at once, naming the operator's two ways out
-# (`lost_settle`). `decide` never moves `last-good` itself: its job holds no write to the
+# When no other promote run past its decide is in progress for LOST_SETTLE_S, the run that
+# moved `prod` finished without a `settle` (#7863): the wait ends `current` at once, naming
+# the operator's two ways out (`lost_settle`). `decide` never moves `last-good` itself: its job holds no write to the
 # registry, and it cannot read `verify`'s verdict. The long form is docs/flux-deploy-plane.md,
 # *Verification*.
 #
@@ -617,7 +617,8 @@ def wait_settled(
         revert_rule: whether a `failed=` hold may be passed.
         supersedable: whether T may take over the run that `prod`'s digest names (D7). When
             it answers True under a `none` hold, the wait ends at once with `in_flight`.
-        other_runs: the other promote runs in progress. Once it has answered none for
+        other_runs: the other promote runs in progress past their `promote` job, so not a
+            later run queued behind this one. Once it has answered none for
             LOST_SETTLE_S, the wait ends `current` with `lost_settle`'s reason.
         prod_commit: the commit `prod` names, which that reason quotes.
 
@@ -702,8 +703,8 @@ def lost_settle(prod: str, last_good: str, commit: str | None) -> str:
     commit = commit or "<prod's commit>"
     repo = forge.REPOSITORY
     return (
-        f"prod {prod} is still not last-good {last_good}, and no other promote run has been "
-        f"in progress for {LOST_SETTLE_S}s: the run that moved prod to {commit} ended "
+        f"prod {prod} is still not last-good {last_good}, and no other promote run past its "
+        f"decide has been in progress for {LOST_SETTLE_S}s: the run that moved prod to {commit} ended "
         "without a settle that moved last-good or wrote a hold. If that run's verify job "
         "logged verdict=good, move "
         "last-good (operator-only): flux tag artifact "
