@@ -21,6 +21,7 @@ from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
 from lib.render_context import render_context
 from lib.repo_paths import REPO
+from reconcile_lib import lines
 from renderer.renderer_lib import host as host_mode
 
 COMPONENTS = REPO / "hosts" / "components"
@@ -138,6 +139,30 @@ def test_each_edit_replaces_the_line_ansible_left_and_names_its_activation(
     assert len(matching) == 1, f"{path}: {len(matching)} edits match {stock!r}"
     assert re.search(matching[0]["regexp"], matching[0]["line"])
     assert package.activations[path] == action
+
+
+UPDATE_NOTIFIER = "/etc/apt/apt.conf.d/99update-notifier"
+# Ubuntu 24.04's stock conffile, md5 8c8636b1123964162e9a1127f237ba7b, as daniel-pi holds it.
+STOCK_UPDATE_NOTIFIER = (
+    'DPkg::Post-Invoke {"if [ -d /var/lib/update-notifier ]; then touch'
+    " /var/lib/update-notifier/dpkg-run-stamp; fi;"
+    ' /usr/lib/update-notifier/update-motd-updates-available 2>/dev/null || true";};\n'
+    'APT::Update::Post-Invoke-Success {"/usr/lib/update-notifier/update-motd-updates-available'
+    ' 2>/dev/null || true";};\n'
+)
+
+
+def test_no_apt_hook_runs_apt_check_and_a_second_run_changes_nothing(package):
+    edits = [e for e in package.lines if e["path"] == UPDATE_NOTIFIER]
+    once = STOCK_UPDATE_NOTIFIER
+    for edit in edits:
+        once = lines.with_line(once, edit)
+    assert "update-motd-updates-available" not in once
+    assert once.count("\n") == STOCK_UPDATE_NOTIFIER.count("\n")
+    twice = once
+    for edit in edits:
+        twice = lines.with_line(twice, edit)
+    assert twice == once
 
 
 def test_the_size_anchor_leaves_log_disk_size_alone(package):

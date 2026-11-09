@@ -17,6 +17,8 @@ from lib.proc_testing import fake_bin, path_with
 
 GUEST_SCRIPT = HYPERVISOR / "files" / "bootstrap-drill-guest-run.sh"
 SHA = "c0ffee" * 6 + "abcd"
+GUEST_IP = "192.168.140.11"
+MARKER = "var/lib/rancher/k3s/server/manifests/coredns.yaml.skip"
 
 # Holds the step open until the test creates $T/go, then exits 3.
 BOOTSTRAP_HOST = """\
@@ -29,7 +31,7 @@ GUEST_STUBS = {
     "id": "#!/bin/bash\necho 0\n",
     "systemctl": """\
 #!/bin/bash
-echo "systemctl $*" >>"$T/calls"
+echo "systemctl $*$([[ "$1" == enable ]] && marker)" >>"$T/calls"
 [[ "$1" == list-unit-files ]] && printf '%s enabled enabled\\n' $UNITS
 exit 0
 """,
@@ -40,7 +42,22 @@ echo "ufw $*" >>"$T/calls"
 exit 0
 """,
     "dpkg-query": '#!/bin/bash\n[[ "${@: -1}" == "$MISSING" ]] || printf "install ok installed"\n',
-    "k3s": '#!/bin/bash\nprintf "%s" "$READY"\n',
+    "k3s": """\
+#!/bin/bash
+case "$*" in
+  *wait*) echo "k3s $*$(marker)" >>"$T/calls" ;;
+  *InternalIP*) printf "%s" "$NODE_IP" ;;
+  *"get node daniel-box"*) printf "%s" "$READY" ;;
+  *"get deployment coredns"*) printf "%s" "$COREDNS" ;;
+  *"get pods"*) printf "%s\\n" pod/coredns-1 $PODS ;;
+  "secrets-encrypt status")
+    printf 'Encryption Status: %s\\nCurrent Rotation Stage: start\\n' "$ENCRYPTION" ;;
+esac
+""",
+    # Where the CoreDNS marker sat when systemctl or k3s ran: shipped, or moved aside.
+    "marker": '#!/bin/bash\n[[ -e "$T/root/MARKER" ]] && echo " marker=shipped" || echo " marker=aside"\n'.replace(
+        "MARKER", MARKER
+    ),
     "hostnamectl": '#!/bin/bash\necho "hostnamectl $*" >>"$T/calls"\n',
     "cloud-init": '#!/bin/bash\necho "cloud-init $*" >>"$T/calls"\n',
     "apt-get": '#!/bin/bash\necho "apt-get $*" >>"$T/calls"\n',
@@ -64,7 +81,16 @@ def guest(tmp_path, *args, **env):
     stubs = tmp_path / "bin"
     if not stubs.is_dir():
         fake_bin(stubs, **GUEST_STUBS)
-    defaults = {"UNITS": "k3s.service", "UFW": "active", "MISSING": "", "READY": "True"}
+    defaults = {
+        "UNITS": "k3s.service",
+        "UFW": "active",
+        "MISSING": "",
+        "READY": "True",
+        "COREDNS": "True",
+        "NODE_IP": GUEST_IP,
+        "PODS": "",
+        "ENCRYPTION": "Enabled",
+    }
     return subprocess.run(
         ["bash", str(GUEST_SCRIPT), *args],
         capture_output=True,
@@ -117,10 +143,29 @@ def test_deviate_refuses_a_mask_line_that_is_not_a_unit_name(tmp_path):
     assert not (tmp_path / "root/etc/passwd.service").exists()
 
 
-def test_check_passes_when_every_part_of_the_host_half_holds(tmp_path):
-    done = guest(tmp_path, "check")
+def server_root(tmp_path):
+    """Give the guest's root what a started server leaves: the etcd directory and the marker."""
+    root = tmp_path / "root"
+    (root / "var/lib/rancher/k3s/server/db/etcd").mkdir(parents=True)
+    (root / MARKER).parent.mkdir(parents=True)
+    (root / MARKER).touch()
+    return root
+
+
+def test_check_passes_and_names_each_read(tmp_path):
+    server_root(tmp_path)
+    done = guest(tmp_path, "check", GUEST_IP)
     assert done.returncode == 0, done.stdout
-    assert "node daniel-box Ready: True" in done.stdout
+    for line in (
+        "node daniel-box Ready: True",
+        "deployment coredns Available: True",
+        f"node daniel-box InternalIP: {GUEST_IP}, want {GUEST_IP}",
+        "datastore: etcd",
+        "bundled addon pods: none",
+        "secrets-encrypt: Encryption Status: Enabled;Current Rotation Stage: start",
+        "coredns marker: in place",
+    ):
+        assert line in done.stdout.splitlines(), done.stdout
 
 
 @pytest.mark.parametrize(
@@ -133,13 +178,73 @@ def test_check_passes_when_every_part_of_the_host_half_holds(tmp_path):
         ),
         ({"READY": "False"}, "node daniel-box Ready: False"),
         ({"UFW": "inactive"}, "ufw: Status: inactive"),
+        ({"COREDNS": ""}, "deployment coredns Available: no answer"),
+        (
+            {"NODE_IP": "10.0.2.15"},
+            f"node daniel-box InternalIP: 10.0.2.15, want {GUEST_IP}",
+        ),
+        (
+            {"PODS": "pod/traefik-1 pod/svclb-traefik-2"},
+            "bundled addon pods: pod/traefik-1 pod/svclb-traefik-2",
+        ),
+        (
+            {"ENCRYPTION": "Disabled"},
+            "secrets-encrypt: Encryption Status: Disabled;Current Rotation Stage: start",
+        ),
     ],
-    ids=["package-missing", "second-k3s-unit", "node-not-ready", "ufw-inactive"],
+    ids=[
+        "package-missing",
+        "second-k3s-unit",
+        "node-not-ready",
+        "ufw-inactive",
+        "coredns-not-available",
+        "second-nic-address",
+        "bundled-traefik",
+        "encryption-disabled",
+    ],
 )
 def test_check_fails_and_names_the_part_that_does_not_hold(tmp_path, env, line):
-    done = guest(tmp_path, "check", **env)
+    server_root(tmp_path)
+    done = guest(tmp_path, "check", GUEST_IP, **env)
     assert done.returncode == 1
-    assert line in done.stdout
+    assert line in done.stdout.splitlines(), done.stdout
+
+
+@pytest.mark.parametrize(
+    ("gone", "line"),
+    [
+        ("var/lib/rancher/k3s/server/db/etcd", "datastore: no etcd directory"),
+        (MARKER, "coredns marker: missing"),
+    ],
+    ids=["sqlite", "marker-missing"],
+)
+def test_check_fails_on_a_missing_server_file(tmp_path, gone, line):
+    path = server_root(tmp_path) / gone
+    path.rmdir() if path.is_dir() else path.unlink()
+    done = guest(tmp_path, "check", GUEST_IP)
+    assert done.returncode == 1
+    assert line in done.stdout.splitlines(), done.stdout
+
+
+def test_start_moves_the_marker_aside_until_k3s_has_created_coredns(tmp_path):
+    marker = server_root(tmp_path) / MARKER
+    done = guest(tmp_path, "start")
+    assert done.returncode == 0, done.stderr
+    assert (tmp_path / "calls").read_text().splitlines() == [
+        "systemctl enable --now k3s.service marker=aside",
+        "k3s kubectl -n kube-system wait --for=create deployment/coredns"
+        " --timeout=300s marker=aside",
+    ]
+    assert marker.exists()
+    assert not (tmp_path / "stage" / "coredns.yaml.skip").exists()
+
+
+def test_start_refuses_a_package_that_shipped_no_marker(tmp_path):
+    (tmp_path / "root").mkdir()
+    done = guest(tmp_path, "start")
+    assert done.returncode == 1
+    assert "shipped no" in done.stderr
+    assert not (tmp_path / "calls").exists()
 
 
 def test_prepare_names_the_guest_daniel_box_and_clones_at_the_sha(tmp_path):
