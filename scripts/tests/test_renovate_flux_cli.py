@@ -21,6 +21,7 @@ from lib import yaml_fast
 
 from _renovate import (
     _CONFIG_MANAGERS,
+    _PACKAGE_RULES,
     _REPO,
     _file_pattern_to_regex,
     _resolve_setting,
@@ -77,11 +78,11 @@ def _dep(dep: str) -> tuple[str, str, str, str, str | None]:
     tests what the manager emits rather than a constant that matched the flux rule before the
     manager existed.
     """
-    if dep in FLUX_PINS:
+    if dep == "the workflow pin":
         manager = _manager()
         return (
             manager.get("depNameTemplate", ""),
-            dep,
+            WORKFLOW,
             manager.get("datasourceTemplate", ""),
             "custom.regex",
             None,
@@ -132,7 +133,19 @@ def test_a_flux_pin_without_its_annotation_is_flagged(workflow: str) -> None:
     assert _matches(stripped) == []
 
 
-@pytest.mark.parametrize("dep", sorted([*DEPS, *FLUX_PINS]))
+def test_the_workflow_pin_moves_its_digest_in_the_flux_group() -> None:
+    """Only the attachments datasource reads a new release's digest for FLUX_SHA256."""
+    (rule,) = [
+        r
+        for r in _PACKAGE_RULES
+        if str(r.get("groupName", "")).startswith("flux (manual")
+    ]
+    datasource = _manager()["datasourceTemplate"]
+    assert datasource == "github-release-attachments"
+    assert datasource in rule["matchDatasources"]
+
+
+@pytest.mark.parametrize("dep", sorted([*DEPS, "the workflow pin"]))
 @pytest.mark.parametrize("update_type", UPDATE_TYPES)
 def test_every_flux_dep_lands_in_the_manual_flux_group(
     dep: str, update_type: str

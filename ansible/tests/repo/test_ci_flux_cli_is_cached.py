@@ -14,6 +14,7 @@ Run: uv run pytest ansible/tests/repo/test_ci_flux_cli_is_cached.py
 """
 
 import json
+import sys
 import re
 
 import pytest
@@ -206,3 +207,76 @@ def test_each_flux_job_checks_the_pinned_sha256(workflow, job):
     assert str(pin.get("version")) in context, f"{workflow} {job}: no flux version pin"
     checks = [s for _, s in _installs(steps) if "sha256sum -c" in str(s.get("run", ""))]
     assert checks, f"{workflow} {job}: no flux step runs sha256sum -c against the pin"
+
+
+def _broken(monkeypatch, mutate) -> None:
+    """Point `_job` at a copy of ci.yml's flux_roundtrip job with `mutate` applied to its steps."""
+    loaded, steps = _job("ci.yml", "flux_roundtrip")
+    mutate(steps)
+    real = _job
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "_job",
+        lambda w, j: (
+            (loaded, steps) if (w, j) == ("ci.yml", "flux_roundtrip") else real(w, j)
+        ),
+    )
+
+
+def _edit_fetch(steps: list[dict], old: str, new: str) -> None:
+    _, step = _installs(steps)[0]
+    assert old in step["run"], old
+    step["run"] = step["run"].replace(old, new)
+
+
+def test_a_flux_job_without_its_cache_step_is_flagged(monkeypatch):
+    _broken(
+        monkeypatch,
+        lambda steps: steps.__setitem__(
+            slice(None),
+            [s for s in steps if not str(s.get("uses", "")).startswith(CACHE)],
+        ),
+    )
+    with pytest.raises(AssertionError, match="no earlier pin-keyed actions/cache"):
+        test_each_flux_job_restores_the_cli_from_a_cache_keyed_on_the_pin(
+            "ci.yml", "flux_roundtrip"
+        )
+
+
+def test_a_flux_cache_with_a_constant_key_is_flagged(monkeypatch):
+    def constant_key(steps):
+        for s in steps:
+            if str(s.get("uses", "")).startswith(CACHE) and "flux" in str(s["with"]):
+                s["with"]["key"] = "flux-cli"
+
+    _broken(monkeypatch, constant_key)
+    with pytest.raises(AssertionError, match="no earlier pin-keyed actions/cache"):
+        test_each_flux_job_restores_the_cli_from_a_cache_keyed_on_the_pin(
+            "ci.yml", "flux_roundtrip"
+        )
+
+
+def test_a_flux_curl_outside_the_cache_check_is_flagged(monkeypatch):
+    _broken(
+        monkeypatch,
+        lambda steps: _edit_fetch(
+            steps, 'if [[ -f "$archive" ]]; then', 'if [[ -n "$FLUX_VERSION" ]]; then'
+        ),
+    )
+    with pytest.raises(AssertionError):
+        test_each_flux_job_fetches_only_on_a_cache_miss("ci.yml", "flux_roundtrip")
+
+
+def test_a_flux_curl_with_a_short_retry_window_is_flagged(monkeypatch):
+    _broken(monkeypatch, lambda steps: _edit_fetch(steps, "--retry 12", "--retry 3"))
+    with pytest.raises(AssertionError, match="must retry all errors"):
+        test_each_flux_fetch_outlasts_a_release_outage("ci.yml", "flux_roundtrip")
+
+
+def test_a_flux_fetch_without_its_digest_check_is_flagged(monkeypatch):
+    _broken(
+        monkeypatch,
+        lambda steps: _edit_fetch(steps, "| sha256sum -c --strict", "> /dev/null"),
+    )
+    with pytest.raises(AssertionError, match="no flux step runs sha256sum -c"):
+        test_each_flux_job_checks_the_pinned_sha256("ci.yml", "flux_roundtrip")
