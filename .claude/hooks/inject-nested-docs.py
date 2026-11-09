@@ -23,7 +23,8 @@ doc is returned as PreToolUse `additionalContext` ONCE per session, and once mor
 subagent (its payload's `agent_id`), whose context starts empty. Every injection is logged
 to `instructions.log` with reason `bash_path_match`, so the same log that measured the gap
 grades the fix. Each row ends in `bytes=<n>`, the UTF-8 size of the block injected for its
-doc, and the row of a doc delivered as a head carries `form=head` before that. The root
+doc, and the row of a doc delivered as a head or an outline carries `form=head` or
+`form=outline` before that. The root
 `CLAUDE.md` is never injected: it loads at session start.
 
 ONLY DOCS THIS HOOK CHOSE ARE EVER READ. A path lifted from the command selects a directory;
@@ -42,6 +43,13 @@ command writes (`block-protected-bash.written_paths`), or for every named path u
 interpreter. Rules are mostly injected on reads, but 23% of rule-scoped writes go through
 Bash, so they are not dropped from Bash outright. The measurements are in
 `docs/claude-tooling.md`.
+
+EACH SESSION HAS A BYTE BUDGET. Role `CLAUDE.md` files and `facts.md` are inlined, whole or as
+a head, until their blocks would take the session past `SESSION_BUDGET_BYTES`. A doc after
+that arrives as its outline: the headings and a read pointer, logged `form=outline`. The rules
+in `ALWAYS_WHOLE` never count against the budget and are always inlined in full, because a
+read-only grep is where the secrets rule matters (#7899). The full preamble goes with a
+session's first injection, and every later one carries `_SHORT_PREAMBLE`.
 
 THE HEAD, NOT THE HEADINGS. The over-budget form was the heading outline alone until #2650.
 Headings alone bought almost nothing over no injection: sessions read the full doc after only
@@ -63,6 +71,7 @@ import re
 import sys
 import time
 from pathlib import PurePosixPath
+from typing import NamedTuple
 
 from _hook_common import (
     append_instructions_row,
@@ -89,15 +98,26 @@ _PREAMBLE = (
     "loads them for Read/Edit/Write but not for Bash, so this hook supplies each once per "
     "session or subagent (an editing rule on the first write).\n\n"
 )
+_SHORT_PREAMBLE = (
+    "[inject-nested-docs] More project instructions for paths this command names.\n\n"
+)
+
+# What a session's role docs and facts.md may inline before the rest arrive as outlines.
+# The 2026-11-09 audit measured a median of 16.6 KB injected per session, 56 KB at worst.
+SESSION_BUDGET_BYTES = 8000
 
 # How many headings the trailer names. The whole outline of the busiest role docs fits.
 TRAILER_MAX_HEADINGS = 40
 
 REASON = "bash_path_match"
 
-# The rules a READ needs: `secrets.md` warns before a content grep prints a credential, and
-# `facts.md` governs the citations a CLAUDE.md read leans on. Every other rule waits for a write.
-READ_RULES = frozenset({"secrets.md", "facts.md"})
+# The rules a READ needs: `secrets.md` warns before a content grep prints a credential,
+# `generated-docs.md` before a generated page is edited by hand, and `facts.md` governs the
+# citations a CLAUDE.md read leans on. Every other rule waits for a write.
+READ_RULES = frozenset({"secrets.md", "facts.md", "generated-docs.md"})
+
+# Inlined in full on every first match, outside the session budget.
+ALWAYS_WHOLE = frozenset({"secrets.md", "generated-docs.md"})
 
 # An inline interpreter (`python3 - <<'EOF'`) writes through code the command text cannot show,
 # so every path such a command names counts as written.
@@ -203,10 +223,20 @@ def written_targets(command, cwd):
     return set(named_paths(" ".join(written_paths(command)), cwd))
 
 
+def _rule_name(doc):
+    """The file name of a `.claude/rules` doc, or None for a `CLAUDE.md`."""
+    head, name = os.path.split(doc)
+    return name if head == os.path.join(".claude", "rules") else None
+
+
 def _is_edit_rule(doc):
     """True for a `.claude/rules` file that governs editing rather than reading."""
-    head, name = os.path.split(doc)
-    return head == os.path.join(".claude", "rules") and name not in READ_RULES
+    name = _rule_name(doc)
+    return name is not None and name not in READ_RULES
+
+
+def _is_always_whole(doc):
+    return _rule_name(doc) in ALWAYS_WHOLE
 
 
 # ── which docs the harness would have loaded for them ────────────────────────────────
@@ -259,24 +289,46 @@ def _state_path(session_id):
     return session_state_path("nested-docs", session_id)
 
 
+class SessionState(NamedTuple):
+    """What this hook has already given one session or subagent.
+
+    Attributes:
+        docs: the docs injected, or loaded by the harness, so never injected again.
+        spent: UTF-8 bytes of the blocks charged to `SESSION_BUDGET_BYTES`.
+        preambled: whether the full `_PREAMBLE` has been sent.
+    """
+
+    docs: set
+    spent: int = 0
+    preambled: bool = False
+
+
 def injected_this_session(session_id, now=None):
-    """The docs already injected for this session; a file older than the TTL is ignored."""
+    """This session's `SessionState`; a file older than the TTL reads as a fresh session.
+
+    The first line is `<stamp> <spent> <preambled>`. A file holding only the stamp predates
+    the budget, and reads as nothing spent.
+    """
     now = time.time() if now is None else now
     try:
         with open(_state_path(session_id), encoding="utf-8") as fh:
-            stamp, *paths = fh.read().splitlines()
+            first, *paths = fh.read().splitlines()
+        stamp, *rest = first.split()
         if now - float(stamp) < _STATE_TTL_S:
-            return set(paths)
+            spent = int(rest[0]) if rest else 0
+            preambled = rest[1:] == ["1"] if rest else bool(paths)
+            return SessionState(set(paths), spent, preambled)
     except OSError, ValueError:
         pass
-    return set()
+    return SessionState(set())
 
 
-def remember(session_id, docs, now=None):
+def remember(session_id, state, now=None):
     now = time.time() if now is None else now
+    first = f"{now} {state.spent} {int(state.preambled)}"
     try:
         with open(_state_path(session_id), "w", encoding="utf-8") as fh:
-            fh.write("\n".join([str(now), *sorted(docs)]))
+            fh.write("\n".join([first, *sorted(state.docs)]))
     except OSError:
         # An unwritable temp dir must not break the session; the cost is a repeat injection.
         pass
@@ -369,12 +421,30 @@ def _notice(doc, text, header):
     )
 
 
-def _is_head(block):
-    """True for a `_head_block` block, whose second line is the notice.
+_OUTLINE_NOTICE_MARK = "so this is its outline."
 
-    Only that line counts: a doc delivered whole may quote the notice in its body.
+
+def _form(block):
+    """`head`, `outline` or None for a whole doc, read from the block's notice line.
+
+    Only the second line counts: a doc delivered whole may quote a notice in its body.
     """
-    return _HEAD_NOTICE_MARK in block.split("\n", 2)[1]
+    notice = block.split("\n", 2)[1]
+    if _HEAD_NOTICE_MARK in notice:
+        return "head"
+    if _OUTLINE_NOTICE_MARK in notice:
+        return "outline"
+    return None
+
+
+def _outline_block(doc, text, header):
+    """A doc the session budget cannot pay for, as its headings and a read pointer."""
+    notice = (
+        f"This session has spent the {SESSION_BUDGET_BYTES:,} bytes this hook inlines, "
+        f"{_OUTLINE_NOTICE_MARK} Read `{doc}` before you change anything it covers."
+    )
+    headings = _outline(text.splitlines())[:TRAILER_MAX_HEADINGS]
+    return f"{header}\n{notice}\n" + "".join(f"  {h}\n" for h in headings)
 
 
 def _head_overhead(doc, text, header, trailer):
@@ -481,10 +551,15 @@ def build_context(command, cwd, session_id, log_path=None, agent_id=None):
     short `.claude/rules` file matched by the same command. The whole docs cannot starve
     the head in turn, because they only get the budget left after the first head's
     `head_floor`. A whole doc that does not fit under that reserve is deferred instead.
-    `python-layout.md` is 6,960 chars, so it always defers beside a head.
+    `python-layout.md` is 6,960 chars, so it always defers beside a head. An `ALWAYS_WHOLE`
+    rule goes before the other whole docs.
+
+    A block outside `ALWAYS_WHOLE` that would take the session past `SESSION_BUDGET_BYTES` is
+    replaced by the doc's `_outline_block`, which is recorded and never re-sent.
     """
     key = context_key(session_id, agent_id)
-    already = injected_this_session(key)
+    state = injected_this_session(key)
+    already, spent = state.docs, state.spent
     written = written_targets(command, cwd)
     candidates = []
     for root, rel in named_paths(command, cwd):
@@ -509,7 +584,10 @@ def build_context(command, cwd, session_id, log_path=None, agent_id=None):
     blocks, chosen = [], []
     remaining = INLINE_MAX_CHARS - len(_PREAMBLE)
     remaining_lines = INLINE_MAX_LINES - _PREAMBLE.count("\n")
-    for root, doc, rel, floor in sorted(candidates, key=lambda c: c[3] is not None):
+    order = sorted(
+        candidates, key=lambda c: (c[3] is not None, not _is_always_whole(c[1]))
+    )
+    for root, doc, rel, floor in order:
         whole = floor is None
         try:
             block = render(
@@ -519,6 +597,14 @@ def build_context(command, cwd, session_id, log_path=None, agent_id=None):
                 remaining - reserve if whole else remaining,
                 remaining_lines - reserve_lines if whole else remaining_lines,
             )
+            if block is not None and not _is_always_whole(doc):
+                size = len(block.encode("utf-8"))
+                if spent + size <= SESSION_BUDGET_BYTES:
+                    spent += size
+                else:
+                    block = _outline_block(doc, _read(root, doc), _header(doc, rel))
+                    if len(block) > remaining or block.count("\n") > remaining_lines:
+                        continue
         except OSError:
             continue
         if block is None:
@@ -530,10 +616,11 @@ def build_context(command, cwd, session_id, log_path=None, agent_id=None):
         chosen.append((doc, rel, block))
     if not chosen:
         if already:
-            remember(key, already)
+            remember(key, state._replace(docs=already))
         return "", []
-    remember(key, already | {d for d, _, _ in chosen})
-    return _PREAMBLE + "\n".join(blocks), chosen
+    remember(key, SessionState(already | {d for d, _, _ in chosen}, spent, True))
+    preamble = _SHORT_PREAMBLE if state.preambled else _PREAMBLE
+    return preamble + "\n".join(blocks), chosen
 
 
 def context(payload):
@@ -558,7 +645,7 @@ def context(payload):
     for doc, trigger, block in chosen:
         # The block, not the file: `fact_status.py report` totals what entered context (#4653).
         size = f" bytes={len(block.encode('utf-8'))}"
-        form = " form=head" if _is_head(block) else ""
+        form = f" form={_form(block)}" if _form(block) else ""
         append_instructions_row(
             REASON,
             "Project",
