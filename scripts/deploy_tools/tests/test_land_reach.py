@@ -187,7 +187,7 @@ def test_remaining_setup_hosts_note_survives_a_hand_applied_plane_beside_it():
     assert "initial_setup" in note
     # The pairing itself, not two independent facts: the k3s half really is a plane a hand
     # applies, which is what makes it the arm that ends the landing first.
-    assert "k3s" in land_tags.plane_note(files)
+    assert "k3s" in land_tags.plane_note(files, owed=land_tags.forecast_owed(files))
 
 
 def test_remaining_setup_hosts_note_stays_empty_for_pr_723():

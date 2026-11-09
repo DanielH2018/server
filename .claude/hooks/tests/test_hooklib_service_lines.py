@@ -55,6 +55,20 @@ def _targets(payload, scaled_to_zero=lambda run, job, ns: False):
     )
 
 
+def test_target_problems_asks_for_the_raw_json():
+    """Plain `probe.py targets` prints a formatted view, which json.loads cannot read (#7896)."""
+    argvs = []
+
+    def run(argv, _timeout):
+        argvs.append(argv)
+        return _result(_TARGETS_ONE_DOWN)
+
+    service_lines.target_problems(
+        run, "/repo", namespace="homelab", scaled_to_zero=lambda *a: False
+    )
+    assert argvs[0][-2:] == ["targets", "--json"]
+
+
 def test_target_problems_flags_down():
     bad = _targets(_TARGETS_ONE_DOWN)
     assert len(bad) == 1

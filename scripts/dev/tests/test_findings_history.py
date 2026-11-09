@@ -161,11 +161,26 @@ def test_show_prints_the_body_and_the_whole_thread_naming_outsiders(capsys):
         ],
     )
     tools, _ = build_tools(Fakes(view=issue))
-    assert main(["show", "5"], tools) == 0
+    assert main(["show", "5", "--full"], tools) == 0
     out = capsys.readouterr().out
     assert "accepted" in out and "details" in out
     assert "The long form is here." in out
     assert "drive-by-account (not the operator)" in out
+
+
+def test_show_cuts_each_comment_to_its_first_line_unless_asked_for_the_thread(capsys):
+    issue = _closed(
+        5,
+        reason="NOT_PLANNED",
+        labels=("accepted",),
+        comments=["Accepted: true.\nThe long form is here."],
+    )
+    tools, _ = build_tools(Fakes(view=issue))
+    assert main(["show", "5"], tools) == 0
+    out = capsys.readouterr().out
+    assert "details" in out
+    assert "Accepted: true. [" in out and "--full]" in out
+    assert "The long form is here." not in out
 
 
 def test_show_refuses_an_issue_outside_the_register(capsys):

@@ -91,8 +91,8 @@ def require_a_vendored_workload(role_dir, workload_targets):
     A vendored role exists to run an upstream workload, such as MetalLB's speaker or
     Longhorn's manager, so resolving none means the parse or the kind filter missed it. The
     pass a workload-free role gets would then gate nothing on the roles whose loss stops the
-    cluster. The message carries none of `detach_notify.NOT_APPLICABLE_MARKERS`, so the deploy
-    notifier reports a failure rather than a skip.
+    cluster. `run_health` reports it as exit 1, so the deploy notifier reports a failure rather
+    than a skip.
 
     A role whose vendored files declare only CustomResourceDefinitions, such as
     `traefik-crds`, runs no workload by design, so it passes with nothing to check.

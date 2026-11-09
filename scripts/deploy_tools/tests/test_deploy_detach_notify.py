@@ -9,6 +9,8 @@ import types
 from deployer_lib import deploy_alerts  # the deployer's half, on `pythonpath`
 from deploy_tools.deploy_lib import detach_notify as notify_mod
 from gitops_markers import STATE_DIR
+from lib.exit_codes import PROBE_FAILED
+from lib.exit_codes import PROBE_NOT_APPLICABLE as SKIP
 
 
 def _result(returncode, stdout="", stderr=""):
@@ -56,7 +58,7 @@ def test_check_one_falls_back_to_docker():
         if "--docker" in argv:
             return _result(0, "unlisted-svc: running, health=healthy, restarts=0")
         return _result(
-            1, "unlisted-svc: no Deployment or DaemonSet in this namespace (...)"
+            SKIP, "unlisted-svc: no Deployment or DaemonSet in this namespace (...)"
         )
 
     state, detail = notify_mod.check_one(
@@ -72,9 +74,11 @@ def test_check_one_skipped_when_neither_platform_recognizes_it():
     def run(argv, **kwargs):
         if "--docker" in argv:
             return _result(
-                1, "config: not found, and not a declared service on any host (...)"
+                SKIP, "config: not found, and not a declared service on any host (...)"
             )
-        return _result(1, "config: no Deployment or DaemonSet in this namespace (...)")
+        return _result(
+            SKIP, "config: no Deployment or DaemonSet in this namespace (...)"
+        )
 
     state, _detail = notify_mod.check_one(
         "config", tools=notify_mod.NotifyTools(run=run)
@@ -85,16 +89,17 @@ def test_check_one_skipped_when_neither_platform_recognizes_it():
 def test_check_one_skips_a_role_that_declares_no_workload():
     """netpol-baseline and media-volume render NetworkPolicies and PVCs, never a workload.
 
-    probe.py exits 0 for it (#3596), but the marker keeps it `skipped`: nothing was checked.
+    probe.py exits PROBE_NOT_APPLICABLE for it, so it is `skipped`: nothing was checked.
     """
 
     def run(argv, **kwargs):
         if "--docker" in argv:
             return _result(
-                1, "netpol-baseline: not found, and not a declared service on any host"
+                SKIP,
+                "netpol-baseline: not found, and not a declared service on any host",
             )
         return _result(
-            0,
+            SKIP,
             "netpol-baseline: the role declares no rollout-checkable workload "
             "(no Deployment, DaemonSet or StatefulSet in its manifests) — nothing to gate",
         )
@@ -302,7 +307,7 @@ def test_gate_settled_when_all_tags_healthy():
         ["jellyfin", "sonarr"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
     )
     assert ok is True
-    assert len(lines) == 2
+    assert lines == ["health: 2 healthy"]
 
 
 def test_gate_unsettled_when_one_tag_is_unhealthy():
@@ -322,9 +327,9 @@ def test_gate_skipped_tag_does_not_fail_the_verdict():
     def run(argv, **kwargs):
         if "--docker" in argv:
             return _result(
-                1, "config: not found, and not a declared service on any host"
+                SKIP, "config: not found, and not a declared service on any host"
             )
-        return _result(1, "config: no Deployment or DaemonSet in this namespace")
+        return _result(SKIP, "config: no Deployment or DaemonSet in this namespace")
 
     ok, lines, *_ = notify_mod.gate(
         ["config"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
@@ -495,53 +500,48 @@ def test_no_post_still_reports_an_unhealthy_verdict(monkeypatch, tmp_path):
 
 
 #
-# The two modules below are joined by substring matching across a subprocess boundary, so
-# nothing but these tests connects probe.py's wording to the verdict it decides. The cases
-# above use hand-written strings; these take the REAL messages from health and assert
-# each lands on the side of NOT_APPLICABLE_MARKERS it is meant to. A reword that put a failed
-# deploy back on the skip path would leave every test above green.
+# probe.py and the notifier are joined by an exit code across a subprocess boundary. These take
+# the REAL codes from health, and assert each absence lands on the side of PROBE_NOT_APPLICABLE
+# it is meant to: a failed deploy that exited the skip code would leave every test above green.
 #
 from datetime import datetime, timezone  # noqa: E402
 
-from diagnostics.probe_lib import health, health_docker, health_rollout  # noqa: E402 — resolved by pyproject's pythonpath, alongside notify_mod
+from diagnostics.probe_lib import health, health_docker  # noqa: E402 — resolved by pyproject's pythonpath, alongside notify_mod
 
 _NOW = datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc)
 
 
-def _matches_a_marker(message):
-    return any(marker in message for marker in notify_mod.NOT_APPLICABLE_MARKERS)
-
-
-def test_probes_absent_workload_messages_carry_no_skip_marker():
+def test_probes_absent_workload_exits_fail_not_skip():
     """The safety-critical assertion in this file.
 
-    Both messages mean "the thing that should exist is gone", which must fail the verdict rather
-    than skip it.
+    Both mean "the thing that should exist is gone", which must fail the verdict rather than
+    skip it.
     """
-    docker_missing, _ = health_docker.format_health([], "wg-easy", declared=True)
-    k8s_missing, _ = health.format_role_health(
+    _, docker_code = health_docker.format_health([], "wg-easy", declared=True)
+    _, k8s_code = health.format_role_health(
         "observability",
         [("observability", "Deployment", "grafana", None, None)],
         _NOW,
     )
-    for message in (docker_missing, k8s_missing.splitlines()[0]):
-        assert not _matches_a_marker(message), message
+    assert (docker_code, k8s_code) == (PROBE_FAILED, PROBE_FAILED)
 
 
-def test_probes_not_applicable_messages_do_carry_a_skip_marker():
+def test_probes_undeclared_name_exits_skip():
     """The other half: a tag that names nothing must still skip.
 
     Otherwise every block tag in a --tags list turns an otherwise good deploy red.
     """
-    undeclared, _ = health_docker.format_health([], "config", declared=False)
-    no_workload, _ = health_rollout.format_k8s_health(None, None, "config", _NOW)
-    for message in (undeclared, no_workload):
-        assert _matches_a_marker(message), message
+    _, code = health_docker.format_health([], "config", declared=False)
+    assert code == SKIP
 
 
-def test_the_role_declares_nothing_message_carries_a_skip_marker():
-    """run_health builds this one inline rather than through a formatter, so it is asserted
-    against the source text — the marker and the message must not drift apart."""
-    source = notify_mod.Path(health.__file__).read_text()
-    assert "the role declares no rollout-checkable workload" in source
-    assert _matches_a_marker("x: the role declares no rollout-checkable workload (...)")
+def test_check_one_grades_on_the_exit_code_not_the_wording():
+    """A failed probe whose text reads like a skip is still unhealthy (#7895)."""
+
+    def run(argv, **kwargs):
+        return _result(1, "sonarr: no Deployment or DaemonSet in this namespace")
+
+    state, _ = notify_mod.check_one(
+        "sonarr", tools=notify_mod.NotifyTools(run=run), platforms={"k8s"}
+    )
+    assert state == "unhealthy"

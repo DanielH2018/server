@@ -46,6 +46,14 @@ def test_the_annotation_is_written_on_a_verdict(land_run):
     )
 
 
+def test_the_result_line_sits_just_above_the_verdict(land_run):
+    """A reader takes the verdict and cause from one machine line, not the prose (#7895)."""
+    _, out, _, _, _ = land_run([], Fakes(await_ci=[(75, "no verdict")]))
+    result, verdict = out.rstrip().splitlines()[-2:]
+    assert result.startswith("LAND-RESULT: verdict=ci-timeout cause=- exit=75 pr=999 ")
+    assert verdict.startswith("VERDICT: ci-timeout")
+
+
 def test_an_unexpected_exception_annotates_as_aborted_and_propagates(monkeypatch):
     """Built by hand rather than through `land_run`, because the raising gh_json must be
     injected into `tools`; the primary override is repeated here for the same reason the
@@ -312,9 +320,9 @@ def test_a_missing_primary_checkout_is_named_before_any_phase_runs(land_run):
     """
     from pathlib import Path
 
-    rc, _, err, calls, logline = land_run([], primary=Path("/nonexistent"))
+    rc, out, _, calls, logline = land_run([], primary=Path("/nonexistent"))
     assert rc == 1
-    assert "cannot cd to /nonexistent" in err
+    assert "cannot cd to /nonexistent" in out
     assert "gh" not in _names(calls)
     assert "verdict=refused cause= exit=1" in logline
 

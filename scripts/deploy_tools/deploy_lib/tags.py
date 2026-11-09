@@ -28,6 +28,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags.py
 
 import argparse
 import difflib
+import json
 import subprocess
 import sys
 from collections.abc import Callable
@@ -288,6 +289,9 @@ _BLOCKERS_STATUS = f"{_TAGS_PROG} blockers"
 def _cmd_blockers(args: argparse.Namespace) -> int:
     """Exit 3 if a `_BROAD_MANUAL_PREFIXES` path sits between HEAD and `ref`.
 
+    A blocked range also prints one JSON object on stdout, `{"needing_hand": [paths],
+    "run": "<command>"}`; stderr carries the prose. Every other outcome leaves stdout empty.
+
     The deployer never fast-forwards past one — the bring-up playbooks run by hand by
     construction — so a deploy after that tick is guaranteed to hit deploy.sh's staleness
     refusal (exit 4). This is checkable in milliseconds and BEFORE any CI wait.
@@ -336,11 +340,16 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     )
     for path in loud.manual:
         print(f"  {path}", file=sys.stderr)
+    run = broad_remediation(
+        cs.broad_deploy, cs.broad_setup, cs.setup_roles, playbooks=cs.manual_playbooks
+    )
     print(
         "  Applying it means applying whoever wrote it — if it is another session's, say so "
-        f"and stop. Otherwise: {broad_remediation(cs.broad_deploy, cs.broad_setup, cs.setup_roles, playbooks=cs.manual_playbooks)}",
+        f"and stop. Otherwise: {run}",
         file=sys.stderr,
     )
+    # land.sh reads this document and puts the paths and the command in its VERDICT detail.
+    print(json.dumps({"needing_hand": sorted(loud.manual), "run": run}))
     return DEPLOY_BROAD
 
 

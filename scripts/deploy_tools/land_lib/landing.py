@@ -46,10 +46,12 @@ class Classification:
             every reader then falls back to its own tree.
         plane: what a hand must apply, as step 1 renders it with whole-role tags; "" for
             nothing. `Landing.plane` is the note to print.
-        deleted: the paths the PR only deletes. No playbook applies a deleted file, so the
-            plane note leaves them out; the tags still read them.
-        owed: the role tags the deployer's owed ledger holds as `manual_plane`; None when the
-            ledger was not read, and the note then names every role's clear command.
+        deleted: the deleted paths that owe nothing: those outside a setup role, and those in a
+            setup role whose whole task set the PR deletes. No playbook applies a deleted
+            file, so the plane note leaves them out; the tags still read them.
+        owed: the role tags the deployer's owed ledger holds as `manual_plane`. The plane
+            note names a setup role only when this holds it. Empty when `--tags` skipped the
+            read.
     """
 
     pr_paths: tuple[str, ...] = ()
@@ -58,7 +60,7 @@ class Classification:
     declared: frozenset[str] | None = None
     plane: str = ""
     deleted: frozenset[str] = frozenset()
-    owed: frozenset[str] | None = None
+    owed: frozenset[str] = frozenset()
 
     @property
     def plane_quiet(self) -> frozenset[str]:
@@ -94,6 +96,9 @@ class Landing:
             str
         ] = []  # the k8s tags a promotion applies and step 6 gates
         self.suspended_tags: list[str] = []  # suspended at M; the gate skips them
+        self.named_k8s_tags: list[
+            str
+        ] = []  # the k8s tags the PR's paths or --tags named
         # The merge commit, set once step 4 starts: the primary checkout may not carry it
         # yet. The health verdict reads it to gate from a tree holding this PR.
         self.deployed_at = ""
@@ -131,7 +136,7 @@ class Landing:
         self.warnings.append(line)
 
     def die(self, msg: str, rc: int, verdict: str | None = None) -> NoReturn:
-        """Stop with `land: <msg>` on stderr, and a VERDICT line on stdout.
+        """Stop with a VERDICT line naming `msg` on stdout, or `land: <msg>` on stderr without one.
 
         `rc` has no default: one of 2 collided with three other meanings of 2 (#4451), so
         every caller names a code land.sh documents. An exit-1 stop with no `verdict` prints
@@ -139,9 +144,11 @@ class Landing:
         """
         raise Outcome(rc, f"PR #{self.opts.pr} — {msg}", verdict, error=msg)
 
-    def finish(self, verdict: str, rc: int, detail: str) -> NoReturn:
-        """Stop with a VERDICT line and nothing on stderr."""
-        raise Outcome(rc, detail, verdict)
+    def finish(
+        self, verdict: str, rc: int, detail: str, recorded: str = ""
+    ) -> NoReturn:
+        """Stop with a VERDICT line and nothing on stderr; `recorded` is `Outcome`'s."""
+        raise Outcome(rc, detail, verdict, recorded=recorded)
 
     # -- shared reads -------------------------------------------------------------------
 

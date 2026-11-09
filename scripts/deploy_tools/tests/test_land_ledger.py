@@ -9,8 +9,8 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_ledger.py
 
 import pytest
 
-from deploy_tools.land_lib.ledger import Ledger, annotation_line
-from deploy_tools.land_lib.outcome import CAUSES, Cause
+from deploy_tools.land_lib.ledger import Ledger, annotation_line, result_line
+from deploy_tools.land_lib.outcome import CAUSES, Cause, Outcome
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
 
@@ -108,3 +108,13 @@ def test_an_unknown_cause_is_coerced_at_construction_too():
 def test_the_empty_cause_stays_legal():
     """An empty cause is the no-cause value beside every verdict but deploy-failed."""
     assert Ledger(pr="1", t_start=0.0).cause == ""
+
+
+def test_the_result_line_counts_tags_and_fills_unreached_fields():
+    line = result_line(_filled(), Outcome(1, "x", verdict="deploy-failed"))
+    assert line == (
+        "LAND-RESULT: verdict=deploy-failed cause=tag-miss exit=1 pr=1031 "
+        "sha=01234567 tags=2"
+    )
+    bare = result_line(Ledger(pr="7", t_start=0.0), Outcome(64, "x"))
+    assert bare == "LAND-RESULT: verdict=- cause=- exit=64 pr=7 sha=- tags=0"

@@ -81,6 +81,7 @@ LOG_DIR_ENV = "CLAUDE_JOB_DIR"
 FALLBACK_LOG_DIR = Path("/tmp/homelab-landings")
 
 _VERDICT_LINE = re.compile(r"^VERDICT:.*$", re.MULTILINE)
+_RESULT_LINE = re.compile(r"^LAND-RESULT: (.*)$", re.MULTILINE)
 # `Landing.die` without a verdict (bad arguments, 64) writes only this stderr message.
 _ERROR_LINE = re.compile(r"^land: ", re.MULTILINE)
 # A line that cannot belong to a `land:` message: the next phase header or a verdict.
@@ -115,6 +116,21 @@ def verdict_in(log: Path) -> str | None:
     except OSError:
         return None
     return match.group(0) if match else None
+
+
+def result_in(log: Path) -> dict[str, str] | None:
+    """The fields of the landing's `LAND-RESULT:` line in `log`, or None when it has none.
+
+    A log written before land.sh printed the line has none, so a reader falls back to the
+    `VERDICT:` line.
+    """
+    try:
+        match = _RESULT_LINE.search(log.read_text(errors="replace"))
+    except OSError:
+        return None
+    if not match:
+        return None
+    return dict(pair.split("=", 1) for pair in match.group(1).split() if "=" in pair)
 
 
 def error_in(log: Path) -> str | None:

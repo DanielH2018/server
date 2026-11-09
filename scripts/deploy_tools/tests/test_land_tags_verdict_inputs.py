@@ -170,7 +170,7 @@ def test_a_secrets_rotation_sends_every_k8s_reader_through_cluster_vars(files):
     The note named a `secret-readers:` journal line or a `deploy.yml` receipt before, and
     the tick writes neither now.
     """
-    note = land_tags.plane_note(files)
+    note = land_tags.plane_note(files, owed=land_tags.forecast_owed(files))
     assert "cluster_vars.py write" in note
     assert "secret-readers:" not in note
     assert "this landing waits on that apply" not in note

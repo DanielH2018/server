@@ -95,7 +95,7 @@ def test_reap_releases_the_claim_once_its_batch_has_finished_is_stale(capsys):
 
 def test_claims_names_the_running_batch_as_the_reason(capsys):
     tools, _ = _tools(RUNNING)
-    assert main(["claims"], tools) == 0
+    assert main(["claims", "--all"], tools) == 0
     out = capsys.readouterr().out
     assert "live " in out and RUNNING[1132].reason in out
 
@@ -132,7 +132,7 @@ def test_claims_names_a_holder_the_batch_did_not_claim_under(capsys):
     tools, _ = build_tools(
         Fakes(issues=[issue], worktree_facts=DEAD_ORCH_FACTS, batch_holds=RUNNING)
     )
-    assert main(["claims"], tools) == 0
+    assert main(["claims", "--all"], tools) == 0
     out = capsys.readouterr().out
     assert "live " in out
     assert f"claimed it as `{ORCH}`" in out

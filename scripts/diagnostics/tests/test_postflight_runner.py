@@ -66,6 +66,21 @@ def test_check_raising_does_not_abort_the_run(monkeypatch):
     assert postflight.main([]) == 1
 
 
+def test_an_ok_check_prints_only_in_the_count(monkeypatch, capsys):
+    """A row per passing check buried the failures (#7896)."""
+    only_checks(
+        monkeypatch,
+        [
+            ("9.1", "x", lambda: (postflight.FAIL, "broken")),
+            ("9.2", "y", lambda: (postflight.OK, "fine")),
+        ],
+    )
+    assert postflight.main([]) == 1
+    out = capsys.readouterr().out
+    assert "broken" in out and "fine" not in out
+    assert "1 of 2 §9 checks OK." in out
+
+
 # ── `--help` must not run the sweep ──────────────────────────────────────────
 # The rejecting half of the pair: before the parser existed, `--help` ran every check —
 # several SOPS decrypts and ~15 authenticated requests to production — and exited 0, which

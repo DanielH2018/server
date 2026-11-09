@@ -100,8 +100,8 @@ def stale_checkout_reason(role, roles_dir=K8S_ROLES, on_origin=role_on_origin):
     None when the role directory exists here and `origin/master` has not changed it since this
     checkout's HEAD, or when `origin/master` has no such role either: a Pi tag such as
     `glances` must still reach the guess-the-name path and `--docker`.
-    The text carries none of `detach_notify.NOT_APPLICABLE_MARKERS`, so the deploy notifier
-    reports the tag as unread rather than as skipped.
+    The caller exits `PROBE_UNREADABLE`, so the deploy notifier reports the tag as unread
+    rather than as skipped.
     """
     if (_Path(roles_dir) / role).is_dir():
         newer = role_changed_on_origin(role, roles_dir)

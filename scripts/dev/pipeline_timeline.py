@@ -623,7 +623,6 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(rows))
     else:
         print("\n".join([summarize(rows), *stop_lines(stops)]))
-    print(f"appended {len(rows)} rows to {snapshot}", file=_sys.stderr)
     return 0
 
 

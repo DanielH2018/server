@@ -25,8 +25,7 @@ The resolution check therefore waits until `COREFILE_SETTLE_S` after the last wr
 `Corefile` key before it digs, at most two minutes and only right after a change.
 
 A NotFound on any object read here is a FAILED check, not a skip: each object is plumbing the
-cluster cannot run without, and none of these messages carries a `NOT_APPLICABLE_MARKERS`
-substring. Any other failed kubectl read raises `core.Unreadable` through `read`.
+cluster cannot run without, so it exits 1 and never `PROBE_NOT_APPLICABLE`. Any other failed kubectl read raises `core.Unreadable` through `read`.
 
 Transport, measured on daniel-box on 2026-10-22: each kubectl read took 0.07-0.10s and each
 dig through `kube-dns` 0.01-0.02s, over three runs. Outside the settle wait the checks add

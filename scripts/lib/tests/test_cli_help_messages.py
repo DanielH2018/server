@@ -4,7 +4,8 @@ import argparse
 
 import pytest
 
-from lib.cli_help import error, warn
+from lib.cli_help import ArgumentParser, error, warn
+from lib.exit_codes import USAGE_ERROR
 
 SCRIPT = "/repo/scripts/secrets_mgmt/secret_rotation.py"
 
@@ -40,3 +41,23 @@ def test_prog_names_the_wrapper_the_operator_typed(monkeypatch, capsys):
     assert capsys.readouterr().err == (
         "deploy.sh: error: lock busy\ndeploy.sh: warning: tree is behind\n"
     )
+
+
+def test_a_usage_error_prints_the_parsers_example_after_the_message(capsys):
+    parser = ArgumentParser(prog="tool", example="tool run --target box")
+    parser.add_argument("--target", required=True)
+    with pytest.raises(SystemExit) as exit_:
+        parser.parse_args([])
+    assert exit_.value.code == USAGE_ERROR
+    assert capsys.readouterr().err.endswith(
+        "tool: error: the following arguments are required: --target\n"
+        "example: tool run --target box\n"
+    )
+
+
+def test_a_parser_without_an_example_prints_none(capsys):
+    parser = ArgumentParser(prog="tool")
+    parser.add_argument("--target", required=True)
+    with pytest.raises(SystemExit):
+        parser.parse_args([])
+    assert "example:" not in capsys.readouterr().err

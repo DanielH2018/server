@@ -28,7 +28,9 @@ def _verdict(landing, files: list[str]) -> tuple[Outcome, list[str]]:
     """The verdict for a PR with this file list, and every deployer-state key it read."""
     ln, _ = landing(None)
     ln.merge_sha = MERGE_SHA
-    ln.classification = Classification(plane=land_tags.plane_note(files))
+    ln.classification = Classification(
+        plane=land_tags.plane_note(files, owed=land_tags.forecast_owed(files))
+    )
     read: list[str] = []
     original = ln.tools.read_state
 
@@ -65,7 +67,10 @@ def test_an_unroutable_setup_role_is_told_to_clear_the_deployers_marker():
     A role applied by hand with its `manual_plane` line left behind pages **GitOps Deploy —
     Status** six hours later over work that is already live.
     """
-    note = land_tags.plane_note(["ansible/roles/setup/k3s/defaults/main.yml"])
+    note = land_tags.plane_note(
+        ["ansible/roles/setup/k3s/defaults/main.yml"],
+        owed=land_tags.forecast_owed(["ansible/roles/setup/k3s/defaults/main.yml"]),
+    )
     assert "ansible/k3s-bringup.yml --tags k3s" in note
     assert "clear-owed manual_plane" in note
 
@@ -80,7 +85,8 @@ def test_a_bringup_playbook_is_not_told_to_clear_a_marker():
     pass this assertion whatever the condition said.
     """
     note = land_tags.plane_note(
-        ["ansible/k3s-bringup.yml", "ansible/roles/setup/k3s/defaults/main.yml"]
+        ["ansible/k3s-bringup.yml", "ansible/roles/setup/k3s/defaults/main.yml"],
+        owed=frozenset({"k3s"}),
     )
     assert "ansible/k3s-bringup.yml --tags k3s" in note, (
         "the hand command is still printed"
