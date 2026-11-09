@@ -187,7 +187,7 @@ def test_an_empty_node_list_renders_no_job(stubs, tmp_path):
             r"^system_upgrade_nodes: .*$", "system_upgrade_nodes: []", text, flags=re.M
         ),
     )
-    assert _jobs(docs) == []
+    assert [doc["kind"] for doc in docs] == ["ConfigMap"]
     assert problems({f"{TAG}-verify": docs}) == []
 
 
