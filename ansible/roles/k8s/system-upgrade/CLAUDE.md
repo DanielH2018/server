@@ -74,6 +74,16 @@ else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
   comes from the `k3s-gates` component (`hosts/components/k3s-gates/component.yml`). A Plan
   that selects a node without it fails `prepare`, the closed direction, as H6.3d's first merge
   did on daniel-server (#6403).
+- **`system-upgrade-verify` compares each node's binary with the pin** (H6.3e). The renderer
+  emits one Job per node in `system_upgrade_nodes` from `templates/verify/job.yaml.j2`, and
+  Flux runs them once `flux/system-upgrade` reads Ready. Each Job reads its Node as `k3s-plan`
+  and hashes `/usr/local/bin/k3s`, mounted read-only by hostPath, against
+  `k3s_binary_sha256_amd64`. A node at the pin whose sum differs fails the Job, which turns
+  `flux/system-upgrade-verify` red and holds promotion. A node on another version reads
+  pending and passes. The script is `files/system_upgrade_verify.py`, delivered by ConfigMap,
+  because the Job census refuses a script from the host.
+  `ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_verify.py` holds the census, the
+  per-node pinning and the mismatch red case.
 
 ## Autonomous-role contract
 
