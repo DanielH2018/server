@@ -21,8 +21,14 @@ BAR_TEXT = (
     "# Bar\n\n## Bar rules\n\nthe bar body rule\n\n## Bar deploy\n\n"
     + "more bar text on this line\n" * 70
 )
-SECRETS_RULE = '---\npaths:\n  - "ansible/vars/**"\n---\n\n# Secrets body\n'
-GENERATED_RULE = '---\npaths:\n  - "docs/**"\n---\n\n# Generated docs body\n'
+# Each rule's filler outgrows what `_spend_the_budget` leaves, so only the exemption inlines it.
+_RULE_FILLER = "a rule line that the budget alone would outline\n" * 40
+SECRETS_RULE = (
+    '---\npaths:\n  - "ansible/vars/**"\n---\n\n# Secrets body\n' + _RULE_FILLER
+)
+GENERATED_RULE = (
+    '---\npaths:\n  - "docs/**"\n---\n\n# Generated docs body\n' + _RULE_FILLER
+)
 
 
 def _spend_the_budget(repo, session="sess-a", agent_id=None):
@@ -72,7 +78,7 @@ def test_the_secrets_rule_is_whole_on_a_grep_after_the_budget_is_spent(repo):
     _spend_the_budget(repo)
     context, chosen = _build(repo, "grep -c sops ansible/vars/secrets.yml")
     assert [d for d, _ in chosen] == [".claude/rules/secrets.md"]
-    assert "# Secrets body" in context
+    assert _RULE_FILLER in context
 
 
 def test_the_generated_docs_rule_is_whole_on_a_read_after_the_budget_is_spent(repo):
@@ -82,7 +88,7 @@ def test_the_generated_docs_rule_is_whole_on_a_read_after_the_budget_is_spent(re
     _spend_the_budget(repo)
     context, chosen = _build(repo, "grep -n Page docs/page.md")
     assert [d for d, _ in chosen] == [".claude/rules/generated-docs.md"]
-    assert "# Generated docs body" in context
+    assert _RULE_FILLER in context
 
 
 def test_a_subagent_has_its_own_budget(repo):

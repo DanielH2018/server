@@ -869,7 +869,9 @@ read-only grep is where the secrets rule matters. Only a session's first injecti
 full preamble; later ones carry a one-line tag. The payload arithmetic still charges the full
 preamble, so the `--report` budgets do not depend on it. A replay of the 851 `bash_path_match`
 rows logged to 2026-11-09 projects the mean per session from 16.0 KB to 8.0 KB and the worst
-from 121 KB to 19.7 KB, before the `generated-docs.md` reads the change adds.
+from 121 KB to 19.7 KB. That excludes the `generated-docs.md` reads the change adds: 3.6 KB
+once in each session that reads under `docs/**`, `scripts/docs/**` or a role `CLAUDE.md`, at
+least 51 of the 279 sessions, or about 0.7 KB on the mean.
 
 An editing rule arrives with a write, not a read (#2811). Every rule outside `READ_RULES`
 (`secrets.md`, `generated-docs.md` and `facts.md`, which a read needs) is injected only for a path the command
