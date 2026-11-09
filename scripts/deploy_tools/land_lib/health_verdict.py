@@ -22,6 +22,11 @@ from deploy_tools.land_lib.outcome import (
     say,
 )
 
+# How long the gate is asked again while its store is unreadable, and how often. Kept inside
+# `promotion.DEADLINE_RESERVE_S` with room for the gate's own run.
+UNREADABLE_RETRY_S = 300
+UNREADABLE_POLL_S = 30
+
 
 def _primary_carries(ln: Landing, sha: str) -> bool:
     """Does the primary checkout contain `sha`?"""
@@ -124,11 +129,32 @@ def applied_wording(ln: Landing) -> str:
     return "services deployed and hosts applied" if services else "hosts applied"
 
 
+def _gate_until_readable(ln: Landing) -> GateResult:
+    """The gate's answer, asked again while its store reads unreadable, up to the bound.
+
+    DECIDED: an unreadable store is retried before the landing defers. The PRs that hit it
+    roll the store the gate reads (observability, monitor-bridge, loki-homelab): 29 landings
+    in the 14 days to 2026-11-09 deferred on it, and 22 were never re-run, so their deploys
+    went ungraded. The `deferred` outcome of #5543 still ends a store unreadable past the bound.
+    A stale tree is not retried: asking again reads the same tree and refuses again (#7816).
+    """
+    give_up_at = ln.tools.clock() + UNREADABLE_RETRY_S
+    result = gate_from_the_deployed_tree(ln)
+    while result.unreadable and not result.stale and ln.tools.clock() < give_up_at:
+        say(
+            "the health gate could not read its store; asking again in "
+            f"{UNREADABLE_POLL_S}s"
+        )
+        ln.tools.sleep(UNREADABLE_POLL_S)
+        result = gate_from_the_deployed_tree(ln)
+    return result
+
+
 def health(ln: Landing) -> NoReturn:
     """Gate every deployed tag, then settle, or name what is still open."""
     pr, sha, tags = ln.opts.pr, ln.merge_sha, ",".join(promotion.gated_tags(ln))
     done = applied_wording(ln)
-    result = gate_from_the_deployed_tree(ln)
+    result = _gate_until_readable(ln)
     for line in result.lines:
         say(line)
     if ln.plane:

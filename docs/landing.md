@@ -574,12 +574,14 @@ hook never sees the gate above.
 A gate that could not read is not a failed gate. `probe.py health` exits 75
 (`PROBE_UNREADABLE`) when it cannot reach the store it reads, such as Traefik answering `no
 available server` while Prometheus rolls. The workload was not graded, healthy or not. When no
-other tag reads unhealthy, the landing ends `deferred`, exit 75, and prints
-`outcome.UNREADABLE_GATE_NOTE`. No tick gates health, so `cc-wait land` reports this
-deferral as `gave-up`: re-run `land.sh` to grade the deploy. PR #5533's landing read
-`unhealthy` this way on 2026-10-18 while its pod was `1/1 Running` (#5543). `land.sh` does not
-retry the gate itself. The store's roll takes about 30s, and a re-run of `land.sh` is the
-resume point that already exists.
+other tag reads unhealthy, `land.sh` asks the gate again every 30 seconds for up to 5
+minutes (`health_verdict.UNREADABLE_RETRY_S`). The PRs that hit this roll the store
+themselves, and the store's roll takes about 30s. Only a store still unreadable after that
+ends the landing `deferred`, exit 75, with `outcome.UNREADABLE_GATE_NOTE`. No tick gates
+health, so `cc-wait land` reports this deferral as `gave-up`: re-run `land.sh` to grade the
+deploy. PR #5533's landing read `unhealthy` this way on 2026-10-18 while its pod was `1/1
+Running` (#5543). Before the retry, 29 landings in the 14 days to 2026-11-09 deferred on an
+unreadable store, and 22 of them were never re-run.
 
 The gate's worktree sits at `origin/master` whenever that contains the deployed commit, not at
 the merge commit. `probe.py health` refuses a role whose files `origin/master` changed after
@@ -673,7 +675,10 @@ It ends `deferred` in three cases:
   re-run the same `land.sh` command. daniel-box, daniel-server and the Pi ship the link, so
   this case reaches only the merge that first adds a link (#6218 added daniel-box's).
 - The host's deadline is more than 45 minutes away. The deadline is the second updater fire
-  after the merge plus 10 minutes, read from the first parent's rendered drop-in.
+  after the wait's first query plus 10 minutes, read from the first parent's rendered
+  drop-in. That query follows master CI going green at the merge, because no host can apply
+  the merge before the builder publishes it. Counted from the merge instead, the deadline
+  had passed before CI went green on 24 of 51 host deferrals in the 14 days to 2026-11-09.
 - The host is still unsettled past its deadline. The line gives the host's last success
   timestamp.
 

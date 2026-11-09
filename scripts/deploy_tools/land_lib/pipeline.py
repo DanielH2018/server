@@ -19,7 +19,7 @@ and frozen; `plane` is a read-only property over it and `narrowed_plane`:
 |---|---|---|
 | `merge.arm_merge` | `opts.subject`, `opts.require_author` | -- |
 | `merge.await_merge` | `opts.merge_timeout`, `opts.merge_poll`, `opts.pace_master_runs`, the head's pins (the pin gate) | -- |
-| `classify.resolve` | `opts.pr` | `merge_sha`, `ledger.merged_at`, `ledger.t_merged`, `ledger.merge_sha` |
+| `classify.resolve` | `opts.pr` | `merge_sha`, `ledger.t_merged`, `ledger.merge_sha` |
 | `closing_refs.close_stranded` | `opts.pr` | `warnings` |
 | `classify.classify` | `merge_sha`, `opts.since`, `opts.primary`, what each host the note would name holds (`deployed_copies`) | `classification` (frozen: the plane note and its inputs), `resolved_tags`, `needs_diff` |
 | `classify.reaches_host_inputs` (in step 1) | `classification`, `needs_diff` | `host_candidate` |
@@ -29,7 +29,7 @@ and frozen; `plane` is a read-only property over it and `narrowed_plane`:
 | `host_wait.host_targets` (in step 3, only when `host_candidate`) | `host_candidate`, `merge_sha`, `opts.primary` | `host_targets`, and `host_candidate` cleared when none differ |
 | `classify.narrow_plane` (in step 3, after the CI wait) | `classification`, `opts.primary` | `narrowed_plane` |
 | `deploy.deploy_phase` | `resolved_tags`, `needs_diff`, `host_targets`, `classification`, `opts.since`, `merge_sha` | `resolved_tags`, `flux_tags`, `suspended_tags`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.t_deploy` |
-| `host_wait.wait_for_hosts` (step 6) | `host_targets`, `merge_sha`, `ledger.merged_at`, `opts.pr`, `opts.primary` | -- |
+| `host_wait.wait_for_hosts` (step 6) | `host_targets`, `merge_sha`, `opts.pr`, `opts.primary` | -- |
 | `health_verdict.health` | `resolved_tags`, `host_targets`, `flux_tags`, `suspended_tags`, `deployed_at`, `plane`, `classification` | `ledger.cause` |
 
 Every phase may end the landing by raising an `Outcome`, and the last one always does.
@@ -89,7 +89,7 @@ def _step_hosts(ln: Landing) -> None:
         say("no host package changed; nothing to wait for")
         return
     wait = ln.tools.wait_for_hosts or host_wait.wait_for_hosts
-    wait(ln, ln.host_targets, ln.merge_sha, ln.ledger.merged_at)
+    wait(ln, ln.host_targets, ln.merge_sha)
 
 
 # The numbered steps, in order. The label is formatted with `pr=`; the number and the

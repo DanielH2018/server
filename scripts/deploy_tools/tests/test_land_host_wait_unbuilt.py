@@ -87,11 +87,11 @@ def _clock(*times: float):
     return clock
 
 
-def _wait(target: HostTarget, fetch, clock, merged_at: float) -> Outcome | None:
+def _wait(target: HostTarget, fetch, clock) -> Outcome | None:
     ln, _ = make_landing()
     reads = HostReads(fetch=fetch, git=_git, clock=clock, sleep=lambda s: None)
     try:
-        host_wait.wait_for_hosts(ln, [target], MERGE, merged_at, reads=reads)
+        host_wait.wait_for_hosts(ln, [target], MERGE, reads=reads)
     except Outcome as outcome:
         return outcome
     return None
@@ -99,9 +99,7 @@ def _wait(target: HostTarget, fetch, clock, merged_at: float) -> Outcome | None:
 
 def _ends_with(published: list[dict], reason: str = "build") -> Outcome | None:
     """The 12:00 merge on the Pi's daily schedule, whose next fire is past the 45-minute cap."""
-    return _wait(
-        _pi(PI_DROPIN), _fetch(published, reason), _clock(_at(12, 0)), _at(12, 0)
-    )
+    return _wait(_pi(PI_DROPIN), _fetch(published, reason), _clock(_at(12, 0)))
 
 
 def test_a_publish_predating_the_merge_is_not_deferred_and_one_containing_it_is():
@@ -142,7 +140,6 @@ def test_a_host_past_its_deadline_with_nothing_published_is_not_deferred():
         _pi(QUARTER_HOUR_DROPIN),
         _fetch([_published("homelab-daniel-pi", BEFORE)]),
         _clock(_at(12, 0), _at(12, 30), _at(12, 32)),
-        _at(12, 0),
     )
     assert outcome is not None
     assert outcome.verdict != Verdict.DEFERRED
@@ -170,7 +167,7 @@ def test_a_failed_read_of_the_published_versions_stays_deferred():
             raise OSError("connection reset")
         return answer(url, timeout)
 
-    outcome = _wait(_pi(PI_DROPIN), fetch, _clock(_at(12, 0)), _at(12, 0))
+    outcome = _wait(_pi(PI_DROPIN), fetch, _clock(_at(12, 0)))
     assert outcome is not None
     assert outcome.verdict == Verdict.DEFERRED
 
@@ -204,7 +201,7 @@ def _wait_counting_sleeps(fetch, clock) -> tuple[Outcome | None, int]:
     ln, _ = make_landing()
     reads = HostReads(fetch=fetch, git=_git, clock=clock, sleep=sleeps.append)
     try:
-        host_wait.wait_for_hosts(ln, [_pi(PI_DROPIN)], MERGE, _at(12, 0), reads=reads)
+        host_wait.wait_for_hosts(ln, [_pi(PI_DROPIN)], MERGE, reads=reads)
     except Outcome as outcome:
         return outcome, len(sleeps)
     return None, len(sleeps)

@@ -42,18 +42,34 @@ def test_unhealthy_when_the_gate_fails(landing):
 
 
 def _gates(ln, *results):
-    """Answer the landing's successive gates with `results`, which may be unreadable."""
-    answers = iter(results)
-    ln.tools = replace(ln.tools, gate=lambda tags, cwd=None: next(answers))
+    """Answer the landing's successive gates with `results`, repeating the last; return sleeps.
+
+    The clock moves only when the landing sleeps, so the retry bound is reached by sleeping.
+    """
+    answers = list(results)
+    now, sleeps = [0.0], []
+
+    def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    ln.tools = replace(
+        ln.tools,
+        gate=lambda tags, cwd=None: answers.pop(0) if len(answers) > 1 else answers[0],
+        clock=lambda: now[0],
+        sleep=sleep,
+    )
+    return sleeps
 
 
 NOT_GRADED = ["sonarr: not graded -- probe.py health could not read its store"]
+UNREADABLE = GateResult(False, NOT_GRADED, unreadable=True)
 
 
-def test_an_unreadable_gate_defers(landing, capsys):
+def test_a_gate_unreadable_past_the_retry_bound_defers(landing, capsys):
     """#5543: no reading is no failure."""
     ln, _ = _deployed(landing, Fakes())
-    _gates(ln, GateResult(False, NOT_GRADED, unreadable=True))
+    sleeps = _gates(ln, UNREADABLE)
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)
     assert (exc.value.rc, exc.value.verdict) == (75, "deferred")
@@ -61,6 +77,17 @@ def test_an_unreadable_gate_defers(landing, capsys):
     out = capsys.readouterr().out
     assert outcome.UNREADABLE_GATE_NOTE in out
     assert outcome.STALE_GATE_NOTE not in out
+    assert sum(sleeps) == health_verdict.UNREADABLE_RETRY_S
+
+
+def test_a_store_that_answers_within_the_retry_bound_settles(landing):
+    """The store rolls with the deploy it gates, so the next ask grades the landing."""
+    ln, _ = _deployed(landing, Fakes())
+    sleeps = _gates(ln, UNREADABLE, GateResult(True, ["sonarr: healthy"]))
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    assert (exc.value.rc, exc.value.verdict) == (0, "settled")
+    assert sleeps == [health_verdict.UNREADABLE_POLL_S]
 
 
 def test_needs_manual_apply_when_a_plane_remains(landing, capsys):
