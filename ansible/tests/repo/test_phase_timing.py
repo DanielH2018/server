@@ -14,9 +14,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-import phase_timing
+from _helpers import REPO
 
-TESTS = Path(phase_timing.__file__).parent
+
+TESTS = REPO / "ansible" / "tests"
 
 _CONFTEST = """
 import time
