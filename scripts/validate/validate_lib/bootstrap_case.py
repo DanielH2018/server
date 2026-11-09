@@ -10,7 +10,7 @@ systemd loads that unit:
     it the pins the kit's tools-cache holds, and it fetches uv's packages and, on a cluster node,
     k3s from the network, then builds the three packages from a scratch clone of the checkout.
   * `--local-build` on daniel-box with no k3s in its seed, so install.sh downloads the release
-    binary and checks its sha256 (#7754). It runs only under `--k3s-download`, in a CI step that
+    binary and checks its sha256 whatever the cases above seed (#7754). It runs only under `--k3s-download`, in a CI step that
     cannot fail the PR, so a GitHub release outage cannot fail the run.
   * `--local-build --offline <kit>` on daniel-box, in a container with no network at all, which
     is stricter than the spec's unresolvable GitHub and GHCR hostnames. The kit is stocked on the

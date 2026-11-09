@@ -1739,9 +1739,10 @@ jobs:
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
             --work "$RUNNER_TEMP/cases" "${seed[@]}"
 
-      # The one case that seeds no k3s, so install.sh's own download and sha256 check of the
-      # release binary run (#7754). `continue-on-error` keeps a GitHub release outage from failing
-      # the PR; a red step here is a broken download path or an outage.
+      # A case whose seed never holds k3s, so install.sh's own download and sha256 check of the
+      # release binary run whatever the step above seeds (#7751 seeds k3s there; #7754).
+      # `continue-on-error` keeps a GitHub release outage from failing the PR; a red step here
+      # is a broken download path or an outage.
       # One leg is enough: the download does not depend on the release under test. A job that
       # built its image has spent most of `timeout-minutes`, and a job timeout does gate, so a
       # built image (no RepoDigests, unlike a pulled one) skips the case.
