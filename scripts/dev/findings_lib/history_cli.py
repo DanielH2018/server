@@ -164,7 +164,7 @@ def cmd_history(args: argparse.Namespace, tools: FindingsTools) -> int:
         hits = [h for h in hits if cites(h, path)]
     rows = [history_row(h, tools.repo or PR_REPO) for h in hits]
     if args.json:
-        print(json.dumps(rows, indent=2))
+        print(json.dumps(rows))
         return 0
     for row in rows:
         _print_row(row)

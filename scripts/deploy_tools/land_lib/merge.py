@@ -75,6 +75,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonObject, as_list, as_object, as_object_list
+from lib.progress import OnChange
 from lib import removes_object
 from deploy_tools import await_ci
 from deploy_tools.land_lib import gh_read, pace, pin_gate, policy
@@ -578,7 +579,7 @@ def await_merge(ln: Landing) -> None:
     o, t = ln.opts, ln.tools
     waited = 0
     conflicting = 0
-    last_refusal = ""
+    refused = OnChange(say)
     # await_ci's last answer when it was `pending`, for the merge-timeout message; else empty.
     ci_pending = ""
     # The pacing hold the last green poll printed (`pace.py`), for the merge-timeout message.
@@ -694,12 +695,9 @@ def await_merge(ln: Landing) -> None:
                     refusal = _merge_directly(ln, head)
                     if not refusal:
                         continue
-                    if refusal != last_refusal:
-                        say(
-                            f"GitHub refused the direct merge at {head[:8]}; waiting: "
-                            f"{refusal}"
-                        )
-                        last_refusal = refusal
+                    refused(
+                        f"GitHub refused the direct merge at {head[:8]}; waiting: {refusal}"
+                    )
         if not hold and waited + held >= wait_ends_at:
             # A run cancelled on the head never supplies a verdict on its own (#5931). A run
             # skipped as a draft names its own remedy in await_ci's line, because a re-run of

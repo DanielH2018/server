@@ -70,6 +70,7 @@ ALLOWED_LIB = frozenset(
         "lib.cli_help",
         "lib.exit_codes",
         "lib.git",
+        "lib.progress",
         "lib.removes_object",
         "lib.repo_paths",
         "lib.yaml_fast",

@@ -569,7 +569,7 @@ def run_ha(ns):
     if m is None:
         print(f"automation '{ns.query}' not found (by entity_id, id, or alias-slug)")
         return 1
-    print(json.dumps(m, indent=2) if ns.json else format_ha_automation(m))
+    print(json.dumps(m) if ns.json else format_ha_automation(m))
     return 0
 
 

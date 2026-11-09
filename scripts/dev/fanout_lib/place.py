@@ -395,7 +395,7 @@ def cmd_status(args, tools: Tools) -> int:
     run = manifest_mod.load(args.run_id, root=args.manifest_root)
     rows, worst = status_mod.collect(run, tools, _one_line)
     if args.json:
-        print(json.dumps(rows, indent=2))
+        print(json.dumps(rows))
     else:
         for row in rows:
             print(row["line"])
@@ -410,7 +410,7 @@ def cmd_runs(args, tools: Tools) -> int:
         if not args.orchestrator or r.orchestrator_branch == args.orchestrator
     ]
     if args.json:
-        print(json.dumps([dataclasses.asdict(r) for r in runs], indent=2))
+        print(json.dumps([dataclasses.asdict(r) for r in runs]))
         return 0
     for r in runs:
         print(f"{r.run_id}  orchestrator {r.orchestrator_branch}")

@@ -503,7 +503,7 @@ def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
     rows = sorted(issue_rows(load_issues("open", tools)), key=sort_key)
     today = today_utc()
     if args.json:
-        print(json.dumps(rows, indent=2))
+        print(json.dumps(rows))
         return 0
     for r in rows:
         flags = "".join(
@@ -570,7 +570,7 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     # claims (`issue-fanout`), and a waiting row inside it would be claimed.
     held_back = [waiting_line(r, today) for r in waiting(issues, today=today)]
     if args.json:
-        print(json.dumps(rows, indent=2))
+        print(json.dumps(rows))
         for line in held_back:
             sys.stderr.write(line + "\n")
         return 0
