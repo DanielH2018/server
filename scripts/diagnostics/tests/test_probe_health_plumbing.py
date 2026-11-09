@@ -342,3 +342,59 @@ def test_a_tag_with_no_check_reads_nothing():
     read = _Reader({})
     assert health_plumbing.with_checks("jellyfin", "ok", read) == ("ok", 0)
     assert read.calls == []
+
+
+class _Clock:
+    """A clock that advances only when something sleeps or a dig takes its time."""
+
+    def __init__(self):
+        self.now = _NOW
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+
+def _stale_probe(clock):
+    """A Prometheus query whose one probe never reports a sample newer than the rollout."""
+    metric = {"service": "coredns", "instance": "https://dns.example"}
+
+    def query(promql):
+        if promql.startswith("timestamp(probe_success"):
+            return [{"metric": metric, "value": [clock(), str(_NOW - 600)]}]
+        if promql.startswith("probe_success"):
+            return [{"metric": metric, "value": [clock(), "1"]}]
+        return []
+
+    return query
+
+
+def test_a_plumbing_tags_worst_case_waits_end_inside_the_probe_timeout():
+    """A fresh Corefile, digs that answer on their last try, then a probe that stays stale."""
+    clock = _Clock()
+    tries = {}
+
+    def resolve(server, name):
+        clock.sleep(health_plumbing.DIG_TIMEOUT_S)
+        tries[name] = tries.get(name, 0) + 1
+        return _RESOLVING[name] if tries[name] == health_plumbing.DIG_ATTEMPTS else []
+
+    failures, _ = health_plumbing.coredns(
+        _Reader(_coredns_objects(managed=[_written(0)])),
+        resolve,
+        _box,
+        clock,
+        clock.sleep,
+    )
+    assert failures == []
+    deadline = health_alerts.RetryWindow(
+        health_alerts.PROCESS_DEADLINE.cutoff_s, clock=clock, start=_NOW
+    )
+    tools = health_alerts.PromTools(
+        query=_stale_probe(clock), sleep=clock.sleep, clock=clock, deadline=deadline
+    )
+    with pytest.raises(core.Unreadable, match="re-read"):
+        health_alerts.gate("coredns", _NOW, _NOW, True, tools)
+    assert clock.now - _NOW < detach_notify.PROBE_TIMEOUT_S

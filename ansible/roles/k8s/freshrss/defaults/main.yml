@@ -1,7 +1,7 @@
 ---
 # @sha256-pinned as well as tagged, so the k8s-defaults Renovate manager tracks digest bumps;
 # a bare repo@sha256 would freeze the image with zero update signal instead.
-freshrss_k8s_image: lscr.io/linuxserver/freshrss:latest@sha256:8b18490112cafc5f6e113ceeb4fe2228fb267a9700aa57ee8392da636c596a88
+freshrss_k8s_image: lscr.io/linuxserver/freshrss:latest@sha256:33bc296f96a82e40b05b174a550c6f77587029286f3343911106341a1a275f94
 freshrss_k8s_cache_image: nginx:alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
