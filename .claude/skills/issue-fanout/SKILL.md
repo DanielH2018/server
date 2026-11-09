@@ -181,7 +181,7 @@ severity medium or worse at confidence 0.8 or more that survives the fix round h
 the batch ends `needs input:`, naming the finding, and nothing lands it. Otherwise, on
 both hosts, the pipeline waits for the PR's CI with `cc-wait gh-ci --pr` after the fix round
 (`scripts/dev/fanout_lib/review/review_ci.py`, #4737 for daniel-server, #5498 for daniel-box).
-On daniel-box it then runs `land.sh` itself. It resumes the agent only for an `unhealthy`,
+On daniel-box it then runs `land.sh` itself, from a fresh detached checkout of `origin/master` rather than the batch worktree, whose landing code a master change since launch would make stale. It resumes the agent only for an `unhealthy`,
 `deploy-failed`, `needs-manual-apply` or `blocked` verdict, with the verdict and the end of the
 landing's log. Any other verdict ends the batch. On daniel-server, `homelab-claude-fanout-server-lander.timer` on daniel-box lands the PR within about
 ten minutes when the review record and the PR both pass `scripts/dev/fanout_lib/autoland.py:problems`:

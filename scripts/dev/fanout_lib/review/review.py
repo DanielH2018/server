@@ -130,7 +130,7 @@ from fanout_lib.review.git_state import GitState, changed, snapshot
 from fanout_lib.review.hunk_check import HunkCheck, red_detection
 from fanout_lib.review.processes import otel_attributes, reaping, run_process
 from fanout_lib.review.review_ci import awaits_ci, ci_gate, ready_gate
-from fanout_lib.review.review_land import RESUME_VERDICTS, land
+from fanout_lib.review.review_land import RESUME_VERDICTS, land, out_of_time
 from fanout_lib.review.review_land import report as landing_report
 from fanout_lib.review.review_record import (
     Phase,
@@ -668,24 +668,21 @@ class Pipeline:
             )
         return final
 
+    def time_left(self) -> float:
+        return self.deadline - self.clock()
+
     def _finish(self, last: Phase) -> dict:
         if lands(self.host, self.target.repo):
-            if self.deadline - self.clock() < LAND_MARGIN_S:
-                return {
-                    "type": "result",
-                    "is_error": False,
-                    "result": (
-                        "needs input: the review phases left too little of the unit's run "
-                        f"time to land safely; land {self.record.pr} by hand.\n{self.record.pr}"
-                    ),
-                }
+            if self.time_left() < LAND_MARGIN_S:
+                return out_of_time(self.record.pr)
             # Filed before the merge, so the PR body names each leftover's issue.
             self._file_leftovers()
             landing = land(
                 self.run,
                 self.worktree,
                 self.record.pr,
-                lambda: self.deadline - self.clock(),
+                self.time_left,
+                self.target.base,
             )
             self.record.verdict = landing.line or f"none (exit {landing.rc})"
             if landing.verdict in RESUME_VERDICTS and self.session:
