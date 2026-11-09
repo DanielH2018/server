@@ -152,6 +152,7 @@ def plane_note(
     files,
     quiet=(),
     narrow_tags: dict[str, frozenset[str]] | None = None,
+    owed: frozenset[str] | None = None,
 ) -> str:
     """What this PR still needs a HUMAN to apply, or "" if nothing.
 
@@ -178,6 +179,10 @@ def plane_note(
     `narrow_tags` is role tag -> the tags that role's change needs. A role mapped to an
     empty set needs none over this range (`own_narrow_tags`), so the note leaves it out,
     clear command included: `deploy_defer.record` writes no `manual_plane` line for it.
+
+    `owed` is the role tags the owed ledger holds as `manual_plane`. The clear command names
+    only those, so the note never sends an operator after a line the host lacks. None, the
+    ledger unread, names every role.
     """
     files = list(files)
     quiet = set(quiet)
@@ -211,17 +216,19 @@ def plane_note(
             )
         )
     if unroutable and not loud.manual:
-        # The tick MERGED this PR and recorded the role in `manual_plane`, so applying it by
-        # hand is only half the job: a role left in the marker stays on the SessionStart banner
-        # over work that is already live.
+        # A role the ledger holds in `manual_plane` stays on the SessionStart banner after the
+        # hand apply until it is cleared. Only a held role gets the clear: since H7.52 retired
+        # the tick, the ledger may hold none of them (#7885).
         #
         # `not manual` because `deploy_defer.parks_the_tick` gives `cs.broad_manual` priority:
         # a range carrying BOTH a bring-up playbook and an unapplyable role parks outright and
         # writes no marker, so printing the clear command there sends an operator after a file
         # that does not exist.
         # `--applied` where the apply above was narrowed; see `manual_plane_clear_for`.
-        cmd = manual_plane_clear_for(unroutable, narrow_tags or {})
-        notes.append(f"Then clear the deployer's marker: `{cmd}`.")
+        held = {r for r in unroutable if owed is None or setup_role_tag(r) in owed}
+        if held:
+            cmd = manual_plane_clear_for(held, narrow_tags or {})
+            notes.append(f"Then clear the deployer's marker: `{cmd}`.")
     if cs.secrets:
         # DECIDED: fire on ANY change to secrets.yml, and never try to name which keys moved.
         # Naming them means decrypting both revisions, and no plaintext may reach a terminal, a

@@ -46,6 +46,10 @@ class Classification:
             every reader then falls back to its own tree.
         plane: what a hand must apply, as step 1 renders it with whole-role tags; "" for
             nothing. `Landing.plane` is the note to print.
+        deleted: the paths the PR only deletes. No playbook applies a deleted file, so the
+            plane note leaves them out; the tags still read them.
+        owed: the role tags the deployer's owed ledger holds as `manual_plane`; None when the
+            ledger was not read, and the note then names every role's clear command.
     """
 
     pr_paths: tuple[str, ...] = ()
@@ -53,6 +57,13 @@ class Classification:
     quiet: frozenset[str] = frozenset()
     declared: frozenset[str] | None = None
     plane: str = ""
+    deleted: frozenset[str] = frozenset()
+    owed: frozenset[str] | None = None
+
+    @property
+    def plane_quiet(self) -> frozenset[str]:
+        """The paths the plane note owes nothing for: `quiet` plus the deletions."""
+        return self.quiet | self.deleted
 
     def declared_set(self) -> set[str] | None:
         """`declared` as the mutable set the classifiers take, or None when the read failed."""

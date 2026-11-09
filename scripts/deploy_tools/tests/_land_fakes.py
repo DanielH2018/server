@@ -199,7 +199,7 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
     ordering record as a boundary call.
     """
     return Classifier(
-        plane_note=lambda paths, quiet=(), narrow_tags=None: f.plane,
+        plane_note=lambda paths, quiet=(), narrow_tags=None, owed=None: f.plane,
         derive=lambda files, changed_files, declared=None, quiet=(): Derivation(
             list(f.derived[0]), DeriveSource(f.derived[1])
         ),
