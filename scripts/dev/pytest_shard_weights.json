@@ -19,6 +19,7 @@
  ".claude/hooks/tests/test_hooklib_instruction_rows.py": 0.02,
  ".claude/hooks/tests/test_hooklib_service_lines.py": 0.0,
  ".claude/hooks/tests/test_inject_nested_docs.py": 0.05,
+ ".claude/hooks/tests/test_inject_nested_docs_budget.py": 0.0,
  ".claude/hooks/tests/test_inject_nested_docs_head.py": 0.0,
  ".claude/hooks/tests/test_inject_nested_docs_report.py": 0.49,
  ".claude/hooks/tests/test_log_instructions.py": 0.02,
