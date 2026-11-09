@@ -222,8 +222,7 @@ files = "^(ansible/roles/k8s/observability/files/dashboards/.*\\.json|ansible/ro
 # git common dir, shared by every worktree of the clone. CI's `alert_rules.py --prove-red` step
 # is the tools' red proof.
 #
-# The hook is the CI sweep's costliest by tenfold. On ubuntu-26.04 runners on 2026-11-09 it took
-# 118-154s and the sweep 178-229s, against a 340s sweep before #7720 split the rule tests (#7728).
+# CI cost on ubuntu-26.04 runners, 2026-11-09: 118-154s, the sweep's costliest hook by ~10x (#7728).
 #
 # The `files` regex names every input the hook reads, because a PR run skips a hook no
 # changed file matches: the role's rule, rule-test and Alertmanager sources and the templates
