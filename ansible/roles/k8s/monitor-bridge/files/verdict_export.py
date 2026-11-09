@@ -1,4 +1,4 @@
-"""The check exporter: per-row verdict gauges for Prometheus, served beside the Kuma push.
+"""The check exporter: per-row verdict gauges for Prometheus.
 
 Each 300s cycle `check.run_once` and `gates._gate` record one verdict per enabled row of
 `check_table.CHECKS`. `CheckExposition` serves them to observability's `monitor-bridge` scrape
@@ -13,8 +13,7 @@ job as three gauges per row, labelled `check="<row>"`, and one gauge for the who
 
 The value is the end state's verdict, taken before suppression and before `startup_grace`
 (docs/target-architecture/monitoring/m6-retire-kuma.md, *The bridge as an exporter*). A row whose
-gate reads down exports 0 with a fresh timestamp and its body is not called. The push keeps
-today's values beside it until the push path is deleted.
+gate reads down exports 0 with a fresh timestamp and its body is not called.
 
 It reuses `deploy_pipeline.Exposition`'s listener, on its own port so each scrape job sees only
 its own family.

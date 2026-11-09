@@ -17,8 +17,8 @@ scrape job, whose rule group pages on it:
   where `promote.py decide` defers every promotion, so PromotionStalled stays quiet there. It
   reads no remote state, only the `WEEKLY_REBOOT_*` schedule.
 
-This is the one family the bridge serves rather than pushes to Kuma. It reads no Prometheus,
-so no reachability gate applies to it, and it runs after every check has pushed.
+This family serves gauges of its own beside the check verdicts. It reads no Prometheus,
+so no reachability gate applies to it, and it runs after every check has run.
 
 Per cycle it sends three GETs to api.github.com (the variables, master's green CI runs, one
 compare) and two to ghcr.io (an anonymous pull token, the `prod` manifest). It sends no other
@@ -377,7 +377,7 @@ class Exposition:
 def refresh(cfg: Config, src: Sources, exposition: Exposition, now: float) -> None:
     """Collect one cycle's gauges, publish them, and log one line. Never raises.
 
-    The loop calls this after every check has pushed, so a slow GitHub delays no Kuma push.
+    The loop calls this after every check has run, so a slow GitHub delays no check verdict.
     """
     try:
         gauges, problems = collect(cfg, src, now)

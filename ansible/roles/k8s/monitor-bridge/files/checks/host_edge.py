@@ -50,8 +50,7 @@ def check_speedtest(cfg: Config, src: Sources) -> tuple[bool, str]:
     # samples by result id before it could count anything. (3) The scrape itself depends on a
     # manual UI toggle that roles/k8s/speedtest/CLAUDE.md records as impossible to set from
     # config at the pinned build, on a longhorn-nobackup PVC — a human step this alert path should not
-    # acquire. The scrape stays what it was added for in #996: history in Grafana, which a Kuma
-    # tile cannot keep.
+    # acquire. The scrape stays what it was added for in #996: history in Grafana.
     try:
         # sort=-created_at, because the default order is ASCENDING and would hand back the
         # OLDEST row in the 30-day window — a stale-forever reading that looks like a verdict.
