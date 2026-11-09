@@ -398,6 +398,8 @@ def main(argv: list[str] | None = None, tools: NotifyTools | None = None) -> int
     content = "\n".join(
         [
             f"deploy --detach {headline} ({who} exit {ns.status})",
+            # The gate's count line names no tag, so the post names what it gated.
+            *([f"tags: {', '.join(tags)}"] if tags else []),
             *lines,
             f"log: {ns.log}",
         ]

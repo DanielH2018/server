@@ -14,7 +14,6 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.deploy_lib.detach_notify import GateResult
 from deploy_tools.land_lib import promotion
-from lib.summary import NAMED_UP_TO
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import (
     STALE_GATE_NOTE,
@@ -151,12 +150,18 @@ def _gate_until_readable(ln: Landing) -> GateResult:
     return result
 
 
+# The most tags a VERDICT line lists; a broader landing's line counts them, and
+# `--verdict-file` keeps the list.
+VERDICT_TAGS_LISTED_UP_TO = 10
+
+
 def health(ln: Landing) -> NoReturn:
     """Gate every deployed tag, then settle, or name what is still open."""
     pr, sha, gated = ln.opts.pr, ln.merge_sha, promotion.gated_tags(ln)
     listed = ",".join(gated)
-    # A broad landing's VERDICT line counts its tags; the verdict file keeps the list.
-    shown = f"{len(gated)} (broad)" if len(gated) > NAMED_UP_TO else listed
+    shown = (
+        f"{len(gated)} (broad)" if len(gated) > VERDICT_TAGS_LISTED_UP_TO else listed
+    )
     done = applied_wording(ln)
 
     def end(verdict: str, rc: int, tail: str = "") -> NoReturn:
