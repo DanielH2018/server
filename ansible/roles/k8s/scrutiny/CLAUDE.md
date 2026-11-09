@@ -24,7 +24,7 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
 - **`scrutiny-influxdb-data`** (2Gi) is deliberately not backed up. It holds only the SMART
   time series, which the daily collector runs rebuild; the reason sits beside the
   `no_backup_claims` key of this role's `containers_list` entry in
-  `ansible/inventory/host_vars/daniel-box.yml`, which `k3s_longhorn_nobackup_volumes` derives
+  `cluster/services.yml`, which `k3s_longhorn_nobackup_volumes` derives
   from.
   **`scrutiny-web-config`** (1Gi) is the SQLite config DB: device metadata and notification
   settings. Both claims are `k8s_claims` entries in `defaults/main.yml`.
