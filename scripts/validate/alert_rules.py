@@ -613,7 +613,7 @@ def check_tree(
     loki_rules_dir: Path = LOKI_RULES_DIR,
     render_cases: Path = RENDER_CASES,
     render_alloy: Callable[[], str] | None = None,
-    jobs: int = len(os.sched_getaffinity(0)),
+    jobs: int = os.process_cpu_count() or 1,
 ) -> list[str]:
     """Render the role, apply the floors and the rule conventions, and run every tool check.
 
