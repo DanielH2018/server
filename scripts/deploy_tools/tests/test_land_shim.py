@@ -11,6 +11,7 @@ import subprocess
 from pathlib import Path
 
 _SH = Path(__file__).resolve().parent.parent / "land.sh"
+_KEPT_UV_VARS = frozenset({"UV_NO_GROUP", "UV_NO_DEV"})
 
 
 def _env_without_the_active_venv() -> dict[str, str]:
@@ -20,11 +21,14 @@ def _env_without_the_active_venv() -> dict[str, str]:
     then reuses that environment instead of resolving a project from its working directory.
     A session invoking land.sh from a scratch directory has no such variable, so a test that
     inherits one cannot see the failure this file exists to catch.
+
+    The group selection survives: under CI's `UV_NO_GROUP=lint` the nested sync would
+    otherwise build `actionlint-py`, whose sdist fetches a GitHub release (#7788).
     """
     return {
         k: v
         for k, v in os.environ.items()
-        if k != "VIRTUAL_ENV" and not k.startswith("UV_")
+        if k != "VIRTUAL_ENV" and (not k.startswith("UV_") or k in _KEPT_UV_VARS)
     }
 
 
