@@ -1,7 +1,8 @@
 # H6 — system-upgrade-controller for k3s
 
-Status: DONE. All three exit observations held on 2026-11-09 (*Exit reads after H6.6
-and H6.7*). Merged: H6.1a, H6.1b ([#6111](https://github.com/DanielH2018/server/pull/6111)), H6.1b2 ([#6113](https://github.com/DanielH2018/server/pull/6113)), H6.1c ([#6120](https://github.com/DanielH2018/server/pull/6120), run on production on 2026-10-25), H6.2 ([#6121](https://github.com/DanielH2018/server/pull/6121)), H6.3a ([#6104](https://github.com/DanielH2018/server/pull/6104)), H6.3b ([#6142](https://github.com/DanielH2018/server/pull/6142)) and H6.3c ([#6235](https://github.com/DanielH2018/server/pull/6235)).
+Status: DONE. All three exit observations and *Verification*'s after-H6.6 checks held on
+2026-11-09. The Lease's `acquireTime` from the upgrade could not be recovered (*Exit reads
+after H6.6 and H6.7*). Merged: H6.1a, H6.1b ([#6111](https://github.com/DanielH2018/server/pull/6111)), H6.1b2 ([#6113](https://github.com/DanielH2018/server/pull/6113)), H6.1c ([#6120](https://github.com/DanielH2018/server/pull/6120), run on production on 2026-10-25), H6.2 ([#6121](https://github.com/DanielH2018/server/pull/6121)), H6.3a ([#6104](https://github.com/DanielH2018/server/pull/6104)), H6.3b ([#6142](https://github.com/DanielH2018/server/pull/6142)) and H6.3c ([#6235](https://github.com/DanielH2018/server/pull/6235)).
 Also merged: H6.3e and H6.4a ([#6198](https://github.com/DanielH2018/server/pull/6198)). Also merged: H6.4b ([#6502](https://github.com/DanielH2018/server/pull/6502), with the comment follow-up [#6631](https://github.com/DanielH2018/server/pull/6631)). Also merged: H6.5a ([#7035](https://github.com/DanielH2018/server/pull/7035)) and H6.5b
 ([#7059](https://github.com/DanielH2018/server/pull/7059)). Also merged: H6.6
 ([#7582](https://github.com/DanielH2018/server/pull/7582), v1.37.1+k3s1 to v1.37.2+k3s1 on
@@ -1456,6 +1457,22 @@ The results:
   exist. `flux/system-upgrade` reads `Ready=True`, and prod and `last-good` are the same
   digest, at `4e3d580d`, which descends from the bump. `probe.py landing` reads `DEPLOY_HOLD`
   `none` and `manual planes: 0`. `probe.py health system-upgrade` reads `ok`.
+- **The workload checks.** No pre-upgrade capture was recorded. Prometheus history stands
+  in for it, read at 15:20 and 16:40 UTC on 2026-11-07, before and after the upgrade.
+    - Longhorn's `longhorn_volume_robustness` read 40 `healthy` and 4 `unknown` at both
+      instants and on 2026-11-09. No volume read `degraded` or `faulted` in the
+      hour of the upgrade.
+    - The firing alert set was `DocsRefreshFailed` and `Watchdog` at both instants. In
+      between, `FluxNotReady` fired for `system-upgrade` and `netpol-baseline` from 15:48:52
+      to 15:49:52. It fired for `netpol-baseline-deferred` and `netpol-baseline-verify`
+      until 15:50:52 and for `soak` until 16:12:52. `DeployHoldActive` fired from 15:54:43
+      to 16:03:43, while the operator's `DEPLOY_HOLD` held promotion. Each had cleared by
+      16:40.
+    - On 2026-11-09, `up == 0` matched no series. The seven warnings that
+      `probe.py monitors` listed became active from 22:40 UTC on 2026-11-08 onward. None
+      concerns k3s.
+    - From daniel-server, the node that does not announce `pihole-dns`, a `dig` at the
+      VIP returned `NOERROR` with one answer for a local name and for a public name.
 - **Exit 3.** Package `0.6776` was the first to carry H6.7. It installed on daniel-box at
   02:16:49 UTC on 2026-11-05. The 11:32 window that day logged the one `restarting` line,
   for config hash `277b55a81c35`, and no restart line follows it. The drop-in
