@@ -15,6 +15,11 @@ with `rule_files` made absolute, because promtool resolves them against the test
 directory and a part is written somewhere else.
 """
 
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
 import re
 from pathlib import Path
 
