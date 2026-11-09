@@ -36,7 +36,7 @@ WINDOW = re.compile(r"absent_over_time\([^)]*\[(\d+)s\]\)")
 _PHASE_WAITS = {
     "pod-exit wait": r"wait --for=delete pod [^\n]*--timeout=(\d+)s",
     "Job-delete wait": r"delete job [^\n]*\\\n[^\n]*--timeout=(\d+)s",
-    "Job deadline": r"wait --for=condition=complete [^\n]*\\\n[^\n]*--timeout=(\d+)s",
+    "Job deadline": r"deadline=\$\(\(SECONDS \+ (\d+)\)\)",
     "rollout wait": r"rollout status [^\n]*--timeout=(\d+)s",
 }
 
