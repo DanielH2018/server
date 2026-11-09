@@ -1,25 +1,13 @@
 ---
-# The host-side rows D5 moves out of the k8s roles, one task file per source role, each named
-# after that role and imported here by its conversion PR
-# (docs/target-architecture/deploy/d5-bulk-move.md, *Host-side rows*). A static import, so the
-# play's `k8s_host_files` tag reaches every task in the file.
-- name: Janitorr's retired health reader absent arms
-  ansible.builtin.import_tasks: janitorr.yml
+# The k8s roles' host writes are package-owned: daniel-box's package lists the absent arms this
+# role held as legacy entries (H7.48), and the components named in
+# docs/target-architecture/host/h7-delete-ansible.md ship the rest.
 
-- name: Configarr's retired host health reader
-  ansible.builtin.import_tasks: configarr.yml
-
-- name: Crowdsec's edge probe timer on daniel-pi and its retired host cron absent arms
-  ansible.builtin.import_tasks: crowdsec.yml
-
-- name: Observability's retired dashboard staging trees
-  ansible.builtin.import_tasks: observability.yml
-
-- name: Qbittorrent's retired prefs drift check
-  ansible.builtin.import_tasks: qbittorrent.yml
-
-- name: Registry's retired push-store GC manifest
-  ansible.builtin.import_tasks: registry.yml
-
-- name: Traefik's Cloudflare IP drift absent arms
-  ansible.builtin.import_tasks: traefik.yml
+# DECIDED: this role is emptied, never deleted, until H7.20a. A play that names a missing role
+# fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the
+# deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role
+# keeps the playbook line, and the tick applies the role on daniel-box as a no-op.
+# setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count
+# the role as empty on every host.
+- name: End the role, whose work the host packages own
+  ansible.builtin.meta: end_role

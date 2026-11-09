@@ -66,8 +66,8 @@ DIG_NO_REPLY = 9
 # (up to ~60s) plus the `reload` plugin's 30s interval and 15s jitter. A Corefile-only change
 # rolls no pod, so the rollout verdict passes at once; a dig inside this window can still be
 # answered by the PREVIOUS Corefile, and read green for a forward the new one broke.
-# Budget: this wait plus the alert plane's 90s and 60s waits is ~271s, inside the 300s
-# `detach_notify.PROBE_TIMEOUT_S`; failing digs skip the alert plane.
+# The alert plane's waits clamp to `health_alerts.PROCESS_DEADLINE`, so this wait shortens them
+# rather than outlasting `detach_notify.PROBE_TIMEOUT_S`; failing digs skip the alert plane.
 COREFILE_SETTLE_S = 120
 # After the settle wait, a name that gets no answer is asked again this often, 5s apart, as the
 # deleted host task did, so one dropped packet is not a red verdict.

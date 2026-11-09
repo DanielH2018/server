@@ -2,8 +2,8 @@
 
 One placeholder render of every builder role, plus littlelink as a flux-owned tag so a bundle
 is written too, backs most checks. It marks ical-proxy flux-owned as well: no live flux-owned
-tag consumes a built image yet, so ical-proxy is the fixture role for D5.4b's GHCR refs. Each tag in `tags.json` is recomputed by ansible-core's
-`Templar` over the files as written, with image-builder's own template and expression, so a
+tag consumes a built image yet, so ical-proxy is the fixture role for D5.4b's GHCR refs. Each tag in `tags.json` is recomputed
+over the files as written, with image-builder's own template and expression, so a
 file written from anything but the hashed `data` fails here. Each check has a red half.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_images.py
@@ -15,7 +15,7 @@ import shutil
 
 import pytest
 
-from _image_builder_tag import templar_content_tag
+from _image_builder_tag import expression_content_tag
 from dataclasses import replace
 
 from lib.exit_codes import RENDER_BAD_ARGS, RENDER_FAILED, RENDER_OK, RENDER_REFUSED
@@ -94,7 +94,7 @@ def _nut_on_ghcr(out) -> str:
 
 
 def _oracle_tag(context, name: str) -> str:
-    """The content tag ansible-core computes over the context directory `context` as written.
+    """The content tag image-builder's expression computes over the context directory `context` as written.
 
     The Dockerfile goes through image-builder's template lookup again and every other file
     through its file lookup, so the written Dockerfile must carry no Jinja for the round trip
@@ -112,7 +112,7 @@ def _oracle_tag(context, name: str) -> str:
             str(p): p.name for p in context.iterdir() if p != dockerfile
         },
     }
-    return templar_content_tag(variables)
+    return expression_content_tag(variables)
 
 
 def test_the_render_writes_all_ten_contexts_and_tags_json(out):

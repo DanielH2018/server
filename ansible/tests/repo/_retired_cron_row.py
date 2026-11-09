@@ -1,221 +1,89 @@
-"""The retired-cron census row of target slice H2.1: no H2 host cron or fragment loses its writer.
+"""The retired-crons census row: every host cron or fragment H2 retired keeps a legacy entry.
 
-Only an absent arm removes a host cron or a setup-deployed fragment, and it runs from the role
-that installed the thing. A PR that deletes the install task outright leaves the cron running
-with no writer, and one that drops a `stamp_deployed.yml` import with no arm for its fragment
-leaves `/var/lib/homelab/setup-deployed-manifest.d/<name>` behind, which turns setup drift DOWN.
-The plan is `docs/target-architecture/host/h2-shrink-host-plane.md`, *Retirement by absent arm,
-not a list*. The row sits in its own module because `test_census_rows_roles.py`, which imports
-it into `ROWS`, is at the cap for a test module.
-
-`H2_CRONS` and `H2_FRAGMENTS` hold every cron and fragment H2 retires or re-homes, from H2.1 on,
-so a family PR that deletes a task without its arm fails here whether or not it edits this
-file. Each name must keep a task in one of its roles: the live install, or the absent arm.
-`RETIRED` holds the names already retired, for which only the absent arm passes. Each family PR
-moves its names into `RETIRED` in the same commit as their arms, and H7, which deletes the
-arms, deletes the entries. An arm may sit in the role's own task files or, once D5's conversion
-PR has moved it, in `roles/setup/k8s_host_files/tasks/<role>.yml`.
+H2 retired eight daniel-box host crons and two setup-deployed fragments, and their absent arms
+lived in `roles/setup/k8s_host_files` until H7.48 emptied it. Daniel-box's host package carries
+them as `legacy:` entries since, and `homelab-reconcile` removes each from a host that still
+holds it. A package that drops an entry leaves the thing on a host restored from an old backup
+with nothing to remove it, and a stale fragment turns setup drift DOWN. The plan is
+`docs/target-architecture/host/h7-delete-ansible.md`, H7.48. The row sits in its own module
+because `test_census_rows_roles.py`, which imports it into `ROWS`, is at the cap for a test
+module.
 """
 
-from _helpers import walk_tasks
+import json
+
 from _row_table import Census, Subject, tracked
 from lib import yaml_fast
 
 FRAGMENT_DIR = "/var/lib/homelab/setup-deployed-manifest.d/"
-_HOST_FILES = "ansible/roles/setup/k8s_host_files/tasks/"
+PACKAGE = "hosts/daniel-box/package.yml"
 
-# Cron task name -> the roles that may hold its task, as `<plane>/<role>`. H2.7 re-homed the
-# two Claude crons into `setup/claude_code`, and H7.40 moved them into package timers, whose
-# `legacy:` entries in hosts/components/claude-code/component.yml remove the cron files. They
-# are not here: no Ansible task is left to hold an arm.
-# Registry's GC cron is D5's to retire, so it is not here.
-H2_CRONS = {
-    "Cloudflare IP drift": ("k8s/traefik",),
-    "CrowdSec home allowlist": ("k8s/crowdsec",),
-    "CrowdSec remote allowlist": ("k8s/crowdsec",),
-    "CrowdSec bouncer prune": ("k8s/crowdsec",),
-    "CrowdSec AppSec verify": ("k8s/crowdsec",),
-    "configarr sync health": ("k8s/configarr",),
-    "janitorr error health": ("k8s/janitorr",),
-    "qbittorrent prefs drift check": ("k8s/qbittorrent",),
+# Cron task name -> the `cron_file` its absent arm removed.
+RETIRED_CRONS = {
+    "Cloudflare IP drift": "cloudflare-ip-drift",
+    "CrowdSec home allowlist": "crowdsec-home-allowlist",
+    "CrowdSec remote allowlist": "crowdsec-remote-allowlist",
+    "CrowdSec bouncer prune": "crowdsec-bouncer-prune",
+    "CrowdSec AppSec verify": "crowdsec-appsec-verify",
+    "configarr sync health": "configarr-health",
+    "janitorr error health": "janitorr-health",
+    "qbittorrent prefs drift check": "qbittorrent-prefs-check",
 }
-# `stamp_deployed_name` -> the roles that may hold its import or its absent arm.
-H2_FRAGMENTS = {
-    "configarr": ("k8s/configarr",),
-    "janitorr": ("k8s/janitorr",),
-}
-# The names already retired: only a `state: absent` task passes for these.
-RETIRED = frozenset(
-    {
-        "Cloudflare IP drift",
-        "CrowdSec AppSec verify",
-        "CrowdSec bouncer prune",
-        "CrowdSec home allowlist",
-        "CrowdSec remote allowlist",
-        "configarr sync health",
-        "configarr",
-        "janitorr error health",
-        "janitorr",
-        "k3s-longhorn-reap",
-        "qbittorrent prefs drift check",
+# The `stamp_deployed_name` of each retired fragment.
+RETIRED_FRAGMENTS = ("configarr", "janitorr")
+
+
+def _wanted() -> dict[str, dict[str, str]]:
+    """The legacy entry each retired name needs, keyed by a label for the report."""
+    wanted = {
+        f"cron {name!r}": {"cron_file": cron_file}
+        for name, cron_file in RETIRED_CRONS.items()
     }
-)
+    wanted |= {
+        f"fragment {name!r}": {"path": FRAGMENT_DIR + name}
+        for name in RETIRED_FRAGMENTS
+    }
+    return wanted
 
 
-class RetiredName(Subject):
-    """One cron or fragment name, with `{task file: text}` of every file that may hold its task."""
-
-    def __init__(
-        self,
-        kind: str,
-        name: str,
-        roles: tuple[str, ...],
-        tasks: dict[str, str] | None = None,
-    ):
-        super().__init__(f"ansible/roles/{roles[0]}#{kind}:{name}", text="")
-        self.kind, self.name, self.roles = kind, name, roles
-        self._tasks = tasks
-
-    @property
-    def tasks(self) -> dict[str, str]:
-        if self._tasks is None:
-            specs = [f"ansible/roles/{role}/tasks/*.yml" for role in self.roles]
-            specs += [f"{_HOST_FILES}{role.split('/')[1]}.yml" for role in self.roles]
-            self._tasks = {rel: Subject(rel).text for rel in tracked(*specs)}
-        return self._tasks
-
-
-def _names() -> list[RetiredName]:
-    return [RetiredName("cron", name, roles) for name, roles in H2_CRONS.items()] + [
-        RetiredName("fragment", name, roles) for name, roles in H2_FRAGMENTS.items()
+def missing_entries(subject: Subject) -> list[str]:
+    """Each retired name whose legacy entry the package does not list."""
+    legacy = (yaml_fast.safe_load(subject.text) or {}).get("legacy") or []
+    return [
+        f"retired {label} has no legacy entry {entry}"
+        for label, entry in _wanted().items()
+        if entry not in legacy
     ]
 
 
-def _states(subject: RetiredName) -> set[str]:
-    """`present` and/or `absent`: what the tasks naming `subject` do with it."""
-    found = set()
-    for text in subject.tasks.values():
-        for task in walk_tasks(yaml_fast.safe_load(text) or []):
-            for key, args in task.items():
-                module = key.rsplit(".", 1)[-1]
-                if subject.kind == "cron" and module == "cron":
-                    if isinstance(args, dict) and args.get("name") == subject.name:
-                        found.add(args.get("state", "present"))
-                elif subject.kind == "fragment" and module == "file":
-                    loop = task.get("loop") or task.get("with_items") or []
-                    path = (args or {}).get("path") if isinstance(args, dict) else None
-                    paths = loop if path == "{{ item }}" else [path]
-                    if (
-                        FRAGMENT_DIR + subject.name in paths
-                        and args.get("state") == "absent"
-                    ):
-                        found.add("absent")
-                elif subject.kind == "fragment" and module == "import_tasks":
-                    stamp = (task.get("vars") or {}).get("stamp_deployed_name")
-                    if (
-                        str(args).endswith("stamp_deployed.yml")
-                        and stamp == subject.name
-                    ):
-                        found.add("present")
-    return found
+def _package(legacy: list[dict[str, str]]) -> Subject:
+    return Subject(PACKAGE, text=json.dumps({"legacy": legacy}))
 
 
-def missing_arms(subject: Subject) -> list[str]:
-    """Why `subject`'s cron or fragment has lost its writer, or [] when it has one."""
-    if not isinstance(subject, RetiredName):
-        return []
-    states = _states(subject)
-    if subject.name in RETIRED and "absent" not in states:
-        return [f"retired {subject.kind} {subject.name!r} has no `state: absent` task"]
-    if not states:
-        install = "cron task" if subject.kind == "cron" else "stamp_deployed.yml import"
-        return [
-            f"{subject.kind} {subject.name!r} has neither its {install} nor an absent arm "
-            f"in {', '.join(subject.roles)}"
-        ]
-    return []
-
-
-def _subject(kind: str, name: str, role: str, body: str) -> RetiredName:
-    return RetiredName(
-        kind, name, (role,), {f"ansible/roles/{role}/tasks/main.yml": body}
-    )
-
-
-def _cron(name: str, state: str = "") -> str:
-    return (
-        f"- name: Schedule it\n  ansible.builtin.cron:\n    name: {name!r}\n"
-        f"    cron_file: x\n{state}"
-    )
-
-
-_JANITORR_IMPORT = (
-    "- name: Record the deployed janitorr health reader code\n"
-    '  ansible.builtin.import_tasks: "{{ role_path }}/../../setup/common/tasks/'
-    'stamp_deployed.yml"\n  vars:\n    stamp_deployed_name: janitorr\n'
-)
-_REAP_ARM = (
-    "- name: Retire the host-installed Longhorn reapers\n  ansible.builtin.file:\n"
-    '    path: "{{ item }}"\n    state: absent\n  loop:\n'
-    f"    - /opt/longhorn-reap\n    - {FRAGMENT_DIR}k3s-longhorn-reap\n"
-)
-_UNRELATED = "- name: Unrelated\n  ansible.builtin.debug:\n    msg: x\n"
-_HOME = "CrowdSec home allowlist"
+_ALL = list(_wanted().values())
 
 RETIRED_CRON_ARMS = Census(
-    name="h2-host-crons-keep-a-writer",
+    name="retired-host-crons-keep-a-legacy-entry",
     reason=(
-        "A host cron or setup-deployed fragment is removed only by a `state: absent` task in "
-        "the role that installed it, which runs in that role's own deploy or hand apply. "
-        "Delete the install task without an arm and the cron keeps running with no writer; "
-        "drop a `stamp_deployed.yml` import without one and the stale fragment turns setup "
-        "drift DOWN. Turn the task into an absent arm, move the name into RETIRED, and keep "
-        "the arm until H7 deletes it with the entry."
+        "A host cron or setup-deployed fragment H2 retired is removed only by its legacy entry "
+        "in daniel-box's package, which homelab-reconcile retires on every run. Drop the entry "
+        "and a host that still holds the cron keeps running it with no writer, and a stale "
+        "fragment turns setup drift DOWN. Keep the entry until H7 retires the census."
     ),
-    files=_names,
-    offence=missing_arms,
-    # A name whose roles hold no tracked task file was never read, so it is not a member.
-    count=lambda s: 1 if isinstance(s, RetiredName) and s.tasks else 0,
+    files=lambda: tracked(PACKAGE),
+    offence=missing_entries,
     red=(
-        # A PR that deletes crowdsec's home allowlist cron without leaving an absent arm.
-        _subject("cron", _HOME, "k8s/crowdsec", _UNRELATED),
-        # A retired cron whose arm went back to installing it.
-        _subject("cron", _HOME, "k8s/crowdsec", _cron(_HOME)),
-        _subject(
-            "cron",
-            "Cloudflare IP drift",
-            "k8s/traefik",
-            _cron("Cloudflare IP drift", "    state: present\n"),
-        ),
-        # janitorr's import dropped with no arm for its fragment.
-        _subject("fragment", "janitorr", "k8s/janitorr", _UNRELATED),
-        # janitorr's fragment, retired at H2.5c, stamped again in place of its arm.
-        _subject("fragment", "janitorr", "k8s/janitorr", _JANITORR_IMPORT),
-        # The reaper retirement's arm with the fragment's path gone from its loop.
-        _subject(
-            "fragment",
-            "k3s-longhorn-reap",
-            "setup/k3s",
-            _REAP_ARM.replace(f"    - {FRAGMENT_DIR}k3s-longhorn-reap\n", ""),
+        # A package that lost the Cloudflare IP drift cron's entry.
+        _package([e for e in _ALL if e != {"cron_file": "cloudflare-ip-drift"}]),
+        # janitorr's fragment entry dropped.
+        _package([e for e in _ALL if e != {"path": FRAGMENT_DIR + "janitorr"}]),
+        # The cron named by its task name rather than its cron file: reconcile would look for
+        # an `#Ansible:` marker in the user's crontab and leave /etc/cron.d alone.
+        _package(
+            [e for e in _ALL if e != {"cron_file": "configarr-health"}]
+            + [{"cron": "configarr sync health", "user": "ubuntu"}]
         ),
     ),
-    green=(
-        # A cron not yet retired may still install itself.
-        _subject("cron", "Example cron", "k8s/crowdsec", _cron("Example cron")),
-        _subject("cron", _HOME, "k8s/crowdsec", _cron(_HOME, "    state: absent\n")),
-        _subject(
-            "fragment",
-            "janitorr",
-            "k8s/janitorr",
-            "- name: Remove the fragment\n  ansible.builtin.file:\n"
-            f"    path: {FRAGMENT_DIR}janitorr\n    state: absent\n",
-        ),
-        _subject("fragment", "k3s-longhorn-reap", "setup/k3s", _REAP_ARM),
-    ),
-    min_matches=len(H2_CRONS) + len(H2_FRAGMENTS),
-    must_find=frozenset(
-        {
-            "ansible/roles/k8s/traefik#cron:Cloudflare IP drift",
-        }
-    ),
+    green=(_package(_ALL + [{"path": "/usr/local/bin/x.sh"}]),),
+    must_find=frozenset({PACKAGE}),
 )

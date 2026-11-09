@@ -1,7 +1,6 @@
-"""`task_inputs` reads a role's defaults, and each content tag equals the one Ansible computes.
+"""`task_inputs` reads a role's defaults, and each content tag equals image-builder's expression.
 
-Each content tag is held equal to ansible-core's `Templar` evaluating image-builder's expression
-with the same variables, through the helper `ansible/tests/deploy/test_image_builder_content_tag.py`
+Each content tag is held equal to image-builder's expression evaluated with the same variables, through the helper `ansible/tests/deploy/test_image_builder_content_tag.py`
 uses. A check on the real tree renders it with a fresh stub file.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_task_inputs.py
@@ -12,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from _image_builder_tag import templar_content_tag
+from _image_builder_tag import expression_content_tag
 from lib.k8s_roles import role_dirs
 from lib.repo_paths import K8S_ROLES
 from renderer import shadow_diff
@@ -52,7 +51,7 @@ def test_the_content_tag_equals_the_one_templar_computes(role, index, stubs):
     variables = task_inputs.site_variables(site, _ctx(role, stubs))
     tag = derived.content_tag(task_inputs.context_data(variables))
     assert TAG_RE.match(tag), tag
-    assert tag == templar_content_tag(variables)
+    assert tag == expression_content_tag(variables)
 
 
 def test_dropping_a_context_file_changes_the_tag(stubs):

@@ -27,8 +27,8 @@ steps, and this page describes each piece once its PR has merged.
   (*Derived values*), and `scripts/renderer/renderer_lib/targets.py:render_targets` lists the
   tags a host renders.
 - `scripts/renderer/renderer_lib/jinja_filters.py` holds the Ansible-dialect filters, so the renderer
-  imports no ansible-core. `scripts/renderer/tests/test_renderer_filters.py` compares each with
-  ansible-core's while it is installed.
+  imports no ansible-core. `scripts/renderer/tests/test_renderer_filters.py` holds each to the
+  value ansible-core 2.22 returned for the same call.
 - `scripts/renderer/shadow_diff.py digest` hashes a render (*Hash a render tree*).
   `scripts/renderer/renderer_lib/shadow.py` holds its library.
 - Four determinism modules in `scripts/renderer/tests/` render every tag twice under an audit
@@ -298,9 +298,10 @@ its content tag:
 A role default that reads the map, such as `nut_k8s_image`, resolves in a second pass of the
 context with the map as an override, the precedence `set_fact` has over every file layer.
 
-Tests hold each content tag equal to the value ansible-core's `Templar` computes from
-image-builder's expression with the same variables, which `ansible/tests/_image_builder_tag.py`
-holds as a literal.
+Tests hold each content tag equal to image-builder's expression evaluated with the same
+variables, which `ansible/tests/_image_builder_tag.py` holds as a literal.
+`scripts/deploy_tools/tests/test_ci_images.py` also holds one tag as the literal ansible-core
+2.22 computed.
 
 `lookup('template')` keeps the render's trailing newlines. The content tag hashes those bytes,
 so a lookup that stripped them would move every content tag.

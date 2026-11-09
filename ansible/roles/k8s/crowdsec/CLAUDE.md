@@ -84,8 +84,8 @@ renamed route fails there rather than exempting nothing.
 cron's UTC schedule: the remote allowlist every 5 minutes, the AppSec verify every 15, the
 bouncer prune at minute 17, and the home allowlist every 5 minutes from minute 1. All four were
 daniel-box root crons that ran `cscli` through `kubectl exec`, until H2.4b for the first three
-and H2.4c for the home allowlist. Their absent arms are in
-`ansible/roles/setup/k8s_host_files/tasks/crowdsec.yml`. The operator chose
+and H2.4c for the home allowlist. Their crons and scripts are
+`legacy:` entries in `hosts/daniel-box/package.yml` since H7.48. The operator chose
 the sidecar over a `pods/exec` grant on 2026-10-18 (#5655).
 
 - **cscli in the sidecar is a copy of the engine's own**, made by the `jobs-cscli` initContainer

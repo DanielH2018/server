@@ -222,6 +222,8 @@ files = "^(ansible/roles/k8s/observability/files/dashboards/.*\\.json|ansible/ro
 # git common dir, shared by every worktree of the clone. CI's `alert_rules.py --prove-red` step
 # is the tools' red proof.
 #
+# CI cost on ubuntu-26.04 runners, 2026-11-09: 118-154s, the sweep's costliest hook by ~10x (#7728).
+#
 # The `files` regex names every input the hook reads, because a PR run skips a hook no
 # changed file matches: the role's rule, rule-test and Alertmanager sources and the templates
 # that render them; loki-homelab's rule files, their ConfigMap template and its defaults, which
@@ -749,7 +751,7 @@ pass_filenames = false
 files = "^(renovate\\.json|ansible/inventory/.*|ansible/roles/[^/]+/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|ansible/filter_plugins/[^/]+\\.py|ansible/tests/(_[^/]+|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/dev/k8s_autodeploy_counts\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Six more rules that failed PR CI between 2026-10-18 and 2026-10-25: the eval cases'
-# CLAUDE.md quotes, the k8s_host_files pairs, the Landings board, the deployer's import
+# CLAUDE.md quotes, the k8s_host_files pairs (deleted with the role's rows in H7.48), the Landings board, the deployer's import
 # boundary, the alert conventions and the unit-template census. Each failed 2 to 4 branches
 # that changed an input the hook below names, and none ran before CI. Two of them run one node
 # rather than the module: the alert module's promtool cases took 4.8-5.2s and the unit module's
@@ -775,16 +777,6 @@ language = "system"
 pass_filenames = false
 files = "^(evals/(cases|tests)/.*|CLAUDE\\.md|ansible/inventory/host_vars/daniel-pi\\.yml|ansible/roles/.*|scripts/lib/repo_paths\\.py|pyproject\\.toml|uv\\.lock)$"
 
-# Each key k8s_host_files copies from a k8s role's defaults or group_vars/all.yml.
-[[repos.hooks]]
-id = "static-ratchet-tests-host-files"
-name = "k8s_host_files copies equal their k8s sources"
-entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/setup/test_k8s_host_files_pairs.py"
-language = "system"
-pass_filenames = false
-files = "^(ansible/roles/k8s/[^/]+/defaults/main\\.yml|ansible/roles/setup/k8s_host_files/(defaults|tasks)/.*|ansible/inventory/group_vars/all\\.yml|ansible/tests/(_[^/]+|setup/test_k8s_host_files_pairs)\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
-
-# The Landings board against the labels and causes the landing ledger writes.
 [[repos.hooks]]
 id = "static-ratchet-tests-landing"
 name = "Landings board groups by labels the landing ledger writes"
