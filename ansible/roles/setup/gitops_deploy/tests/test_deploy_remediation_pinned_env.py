@@ -33,14 +33,13 @@ def _bare(text: str) -> list[str]:
 
 
 def test_no_surface_composes_a_bare_playbook_command():
-    """The Verify-by of #4413, over the tracked deployer_lib and monitor-bridge's page."""
+    """The Verify-by of #4413, over the tracked deployer_lib."""
     listed = subprocess.run(
         [
             "git",
             "ls-files",
             "--",
             "ansible/roles/setup/gitops_deploy/files/deployer_lib/*.py",
-            "ansible/roles/k8s/monitor-bridge/files/checks/gitops.py",
         ],
         cwd=REPO,
         capture_output=True,
@@ -48,7 +47,6 @@ def test_no_surface_composes_a_bare_playbook_command():
         check=True,
         timeout=30,
     ).stdout.split()
-    assert "ansible/roles/k8s/monitor-bridge/files/checks/gitops.py" in listed
     assert (
         "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py"
         in listed
@@ -85,6 +83,8 @@ def test_the_manual_plane_discord_alert_runs_through_the_pinned_env():
     )
     assert f"`{PINNED} ansible/k3s-bringup.yml --tags k3s`" in msg
     assert _bare(msg) == []
+    # No monitor-bridge check reads owed.jsonl, so the post must not promise a page.
+    assert "GitOps Deploy" not in msg
 
 
 def test_every_broad_remediation_form_runs_through_the_pinned_env():

@@ -212,8 +212,8 @@ def plane_note(
         )
     if unroutable and not loud.manual:
         # The tick MERGED this PR and recorded the role in `manual_plane`, so applying it by
-        # hand is only half the job: a role left in the marker pages GitOps Deploy — Status
-        # six hours later over work that is already live.
+        # hand is only half the job: a role left in the marker stays on the SessionStart banner
+        # over work that is already live.
         #
         # `not manual` because `deploy_defer.parks_the_tick` gives `cs.broad_manual` priority:
         # a range carrying BOTH a bring-up playbook and an unapplyable role parks outright and

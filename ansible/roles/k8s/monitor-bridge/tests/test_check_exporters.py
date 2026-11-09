@@ -13,7 +13,7 @@ from dataclasses import replace
 import pytest
 
 import check
-import checks.gitops
+import checks.host_packages
 import registry
 from _fake_sources import FakeExport, FakeSources, mk
 from bridge.types import Check
@@ -272,7 +272,11 @@ def test_the_real_host_packages_body_under_the_suppression(cfg, capsys, node_up,
     check.run_once(
         cfg,
         sources,
-        [Check("host_packages", checks.gitops.check_host_packages, "prometheus")],
+        [
+            Check(
+                "host_packages", checks.host_packages.check_host_packages, "prometheus"
+            )
+        ],
         export=export,
     )
     out = capsys.readouterr().out
