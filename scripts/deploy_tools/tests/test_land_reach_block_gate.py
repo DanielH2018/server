@@ -15,7 +15,8 @@ role-level answer is the block gate's answer.
 
 No live setup role has the block shape since the deploy UI left for daniel-box's package
 (H7.50), so the accept halves run over a synthetic tree. The reject half is a synthetic role
-with one ungated leaf beside the gated one, plus the live `initial_setup` role.
+with one ungated leaf beside the gated one, plus `initial_setup` as it stood before H7.63
+emptied it (`_pre_h763_tree.py`).
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_block_gate.py
 """
@@ -25,29 +26,30 @@ import yaml
 
 from deploy_tools.land_lib import land_reach
 
-from lib.repo_paths import REPO as REPO_ROOT
-
-# An ungated `copy` under a role initial_setup.yml applies everywhere. If this ever
-# narrows, the narrowing lost its evidence.
+# An ungated `copy` under a role initial_setup.yml applied everywhere before H7.63. If this
+# ever narrows, the narrowing lost its evidence.
 _UNGATED = "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
 
 
-def test_the_paths_under_test_still_exist():
+def test_the_paths_under_test_still_exist(pre_h763_tree):
     """Non-vacuity: every case below reads green over a renamed file or role."""
     named = (_UNGATED,)
-    missing = [p for p in named if not (REPO_ROOT / p).exists()]
+    root = pre_h763_tree["roles_dir"].parents[2]
+    missing = [p for p in named if not (root / p).exists()]
     assert not missing, f"paths moved, so these cases check nothing: {missing}"
 
 
-def test_an_ungated_shipping_task_still_reaches_every_host():
+def test_an_ungated_shipping_task_still_reaches_every_host(pre_h763_tree):
     """The reject half, so a later narrowing of `_gates_in` cannot go quiet: no block, no
     when, no playbook gate -- all three hosts. The role-level read must agree: the live
-    `initial_setup` role has ungated leaves, and a role-level answer that narrowed it would
+    `initial_setup` role had ungated leaves, and a role-level answer that narrowed it would
     silently skip hosts that need an apply for every file it ships."""
-    assert land_reach.setup_role_hosts("initial_setup") == frozenset(land_reach._HOSTS)
-    assert land_reach.setup_file_hosts("initial_setup", _UNGATED) == frozenset(
+    assert land_reach.setup_role_hosts("initial_setup", **pre_h763_tree) == frozenset(
         land_reach._HOSTS
     )
+    assert land_reach.setup_file_hosts(
+        "initial_setup", _UNGATED, **pre_h763_tree
+    ) == frozenset(land_reach._HOSTS)
 
 
 @pytest.fixture

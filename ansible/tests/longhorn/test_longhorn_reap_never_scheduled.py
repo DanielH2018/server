@@ -5,14 +5,14 @@
 recovery points, and which ones are safe to delete depends on live state — when the
 weekly tier has produced nothing, the strays are the only recovery a volume has. The k3s role's
 autonomous-role contract therefore lists them under **Never a cron**, and this guard fails a
-`cron:` task or a kuma-check timer naming the script.
+`cron:` task or a systemd unit template naming the script.
 
 The census is STRUCTURAL, not textual. The names appear on purpose in `defaults/main.yml`
 comments, in the scripts' own docstrings and in the role docs, so "the name appears nowhere under
-`roles/setup/`" would fail on prose. What is forbidden is a SCHEDULE: a `cron:` task's fields, a
-`check_timer.yml` import's vars, and a systemd `.service.j2`/`.timer.j2` template.
+`roles/setup/`" would fail on prose. What is forbidden is a SCHEDULE: a `cron:` task's fields and a
+systemd `.service.j2`/`.timer.j2` template.
 
-A fourth surface arrives with target slice H2, which moves host crons into CronJobs: a rendered
+A third surface arrives with target slice H2, which moves host crons into CronJobs: a rendered
 k8s CronJob whose command, or a ConfigMap it mounts, names the reaper (the CronJob arm below).
 
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py
@@ -36,14 +36,6 @@ BACKUP_SCRIPTS = REPO / "scripts" / "backup"
 # Both reapers are subcommands of one entry point since #4345, so its name covers either.
 REAPERS = frozenset({"longhorn_reap.py"})
 CRON_MODULES = frozenset({"cron", "ansible.builtin.cron"})
-INCLUDE_MODULES = frozenset(
-    {
-        "import_tasks",
-        "include_tasks",
-        "ansible.builtin.import_tasks",
-        "ansible.builtin.include_tasks",
-    }
-)
 UNIT_SUFFIXES = (".service.j2", ".timer.j2")
 
 
@@ -88,8 +80,7 @@ def unit_texts(setup_root: Path) -> dict[str, str]:
 def scheduled_texts(setup_root: Path) -> dict[str, str]:
     """Every scheduling surface under `setup_root`, keyed by where it was read.
 
-    Three shapes schedule a command here: a `cron:` task (its fields are the schedule), an
-    `import_tasks` of `check_timer.yml` (its `vars` carry `check_timer_exec`), and a
+    Two shapes schedule a command here: a `cron:` task (its fields are the schedule) and a
     systemd unit template (`ExecStart=`), which `unit_texts` reads off the render.
     """
     found: dict[str, str] = {}
@@ -99,10 +90,6 @@ def scheduled_texts(setup_root: Path) -> dict[str, str]:
             for module in CRON_MODULES:
                 if module in task:
                     found[key] = json.dumps(task[module])
-            for module in INCLUDE_MODULES:
-                target = task.get(module)
-                if isinstance(target, str) and target.endswith("check_timer.yml"):
-                    found[key] = json.dumps(task.get("vars") or {})
     found.update(unit_texts(setup_root))
     return found
 
@@ -147,25 +134,17 @@ def test_both_reapers_exist_in_scripts_backup() -> None:
 def test_census_finds_the_scheduled_heartbeat() -> None:
     """Non-vacuity: the scanner must see a real schedule before its silence means anything.
 
-    No task installs a cron since H7.34, but initial_setup's cron task that removes the
-    ansible.log truncation is still a `cron:` task, and the kuma-check timers reach the census through their
-    `check_timer_exec` var; both surfaces have to be read for a silent scan to mean "nothing
-    schedules a reaper".
+    No setup task installs a cron since H7.34, and none removes one since H7.63, so the unit
+    templates are the one live surface; a silent scan must still have read them.
     """
     texts = scheduled_texts(SETUP)
-    assert any("Clear ansible log file" in t for t in texts.values()), (
-        "the cron census no longer sees a cron task — the scanner is reading nothing"
-    )
-    assert any("check_timer_exec" in t for t in texts.values()), (
-        "the census no longer sees a check_timer.yml import's vars"
-    )
     assert any(k.endswith(".timer.j2") for k in texts), (
         "the census no longer reads systemd timer templates"
     )
 
 
 def test_no_setup_role_schedules_a_reaper() -> None:
-    """The contract itself: no cron, timer import or unit template names either reaper."""
+    """The contract itself: no cron or unit template names either reaper."""
     assert scheduled_reapers(SETUP) == [], (
         "a reaper is scheduled; they are operator-invoked only (Never a cron, "
         "hosts/components/k3s-host-checks/component.yml)"
@@ -194,23 +173,8 @@ def test_a_scratch_cron_naming_a_reaper_is_flagged(tmp_path: Path) -> None:
     ]
 
 
-def test_a_scratch_timer_import_naming_a_reaper_is_flagged(tmp_path: Path) -> None:
-    """Red proof for the second surface: a kuma-check timer whose exec is the reaper."""
-    tasks = tmp_path / "scratch" / "tasks"
-    tasks.mkdir(parents=True)
-    (tasks / "main.yml").write_text(
-        "- name: Reap stranded snapshots on a timer\n"
-        '  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/check_timer.yml"\n'
-        "  vars:\n"
-        "    check_timer_exec: /srv/server/scripts/backup/longhorn_reap.py snapshots\n"
-    )
-    assert scheduled_reapers(tmp_path) == [
-        ("scratch/tasks/main.yml#0", "longhorn_reap.py")
-    ]
-
-
 def test_a_scratch_unit_template_naming_a_reaper_is_flagged(tmp_path: Path) -> None:
-    """Red proof for the third surface: a systemd service whose ExecStart is the reaper."""
+    """Red proof for the second surface: a systemd service whose ExecStart is the reaper."""
     templates = tmp_path / "scratch" / "templates"
     templates.mkdir(parents=True)
     (templates / "reap.service.j2").write_text(

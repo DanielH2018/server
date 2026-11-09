@@ -304,9 +304,8 @@ def test_every_jinja_import_in_the_real_setup_roles_resolves():
     """A census: an import the walk cannot find hides its tasks, so none may exist today.
 
     Only a path that does not resolve counts here. A gate or loop that reads a run-time value
-    is UNCHECKED too. `gitops_deploy` reaching `common/tasks/alert_unit.yml` through
-    `{{ role_path }}` is the member `test_the_real_gitops_deploy_role_walks_its_shared_alert_import`
-    pins.
+    is UNCHECKED too. No setup role imports through `{{ role_path }}` since H7.63, so
+    `test_a_shared_import_through_role_path_is_walked_with_its_vars` holds the walk on a fixture.
     """
     walked, lost = [], []
     for role in sorted(p for p in applied.SETUP.iterdir() if (p / "tasks" / "main.yml").is_file()):  # fmt: skip
@@ -400,16 +399,6 @@ def test_a_remote_src_copy_is_compared_by_metadata_not_the_local_file(tmp_path):
     binary = next(w for w in wants if w.path == "/opt/x/x")
     assert binary.sha256 is None and "remote_src" in binary.why_no_content
     assert binary.mode == "0755"
-
-
-def test_the_real_initial_setup_role_walks_its_shared_check_timer_import():
-    """initial_setup reaches common/tasks/check_timer.yml through `{{ role_path }}`."""
-    role = applied.SETUP / "initial_setup"
-    wants, skips = applied_tasks.expected(
-        role, "daniel-box", applied.context(role, "daniel-box")
-    )
-    named = {w.path for w in wants} | {s.task for s in skips}
-    assert "/etc/systemd/system/kuma-check-setup-drift.timer" in named, sorted(named)
 
 
 def test_an_include_loop_walks_the_file_once_per_item_under_its_loop_var(tmp_path):

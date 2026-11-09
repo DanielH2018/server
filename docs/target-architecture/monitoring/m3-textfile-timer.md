@@ -51,7 +51,7 @@ cluster outage.
   `/usr/local/bin/disk-health.sh`. The script ships as the `k3s-disk-health` release group
   (`k3s_render_stamp_groups`), under the tag `disk-health`. It is none of the eight
   `check_timer.yml` callers that `KNOWN_CHECKS` names in
-  `ansible/tests/setup/test_check_timer.py`. The textfile write is the same either way.
+  `test_check_timer.py`. The textfile write is the same either way.
 - **The script** (`ansible/roles/setup/k3s/templates/disk-health.sh.j2`):
     - It sources `/usr/local/lib/kuma-push-lib.sh` by absolute path and exits 1 without it.
     - It reads `DANIEL_BOX_DISK_PUSH_TOKEN` from `/etc/rancher/k3s/kuma-push.env`. An empty

@@ -130,10 +130,6 @@ TEMPLATE_SOURCE_READERS = {
         "calls write_check_textfile or imports the macro that does. A render needs each "
         "role's host context and a guess at loop items, and the call is the same text either way"
     ),
-    "deploy/test_setup_render_manifest.py": (
-        "hashes the template's raw BYTES — a trailing newline and a truncated-read "
-        "comparison, neither of which survives a render"
-    ),
     "deploy/test_tree_lock_single_definition.py": (
         "whether a host cron CALLS git-tree-lock.j2's macro or writes the `exec 9>` idiom out "
         "by hand; both render the same two lines, so only the source tells them apart. The "
@@ -246,7 +242,6 @@ KNOWN_MEMBERS = frozenset(
         "deploy/_autodeploy_claims.py",
         "deploy/test_gitops_manual_trigger.py",
         "deploy/test_k8s_autodeploy_rollout_gates.py",
-        "deploy/test_setup_render_manifest.py",
         "k8s/_manifest_guards.py",
         "k8s/test_arr_deployments_share_one_macro.py",
         "k8s/test_configmap_keys_not_absorbed.py",

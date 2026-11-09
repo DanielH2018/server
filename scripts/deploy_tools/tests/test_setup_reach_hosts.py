@@ -13,6 +13,7 @@ from deploy_tools.land_lib import land_reach
 from deploy_tools.land_lib.key_readers import KeyReader
 from deployer_lib.deploy_setup_roles import ROUTING_TIMEOUT_S
 from diagnostics.probe_lib import core
+from _pre_h763_tree import PRE_H763
 
 # Adds a guest rehearsal mode to the etcd drill, under `roles/setup/hypervisor/` alone.
 _HYPERVISOR = "ee529af466"
@@ -20,7 +21,8 @@ _HYPERVISOR = "ee529af466"
 _PYTHON_PIN = "9c8edb67a5"
 # PR #7295's merge, which changed only the Loki witness script daniel-server runs.
 _WITNESS = "ef6fed8627"
-# Installs `host_python_version` with no host gate, so a moved key reaches every host.
+# Installed `host_python_version` with no host gate, so a moved key reached every host. H7.63
+# deleted the file, so the key-reader cases read the tree before it.
 _PIN_READER = "ansible/roles/setup/initial_setup/tasks/host-basics.yml"
 
 
@@ -74,16 +76,19 @@ def test_two_host_reads_fit_inside_the_deployers_kill_timeout():
 
 def test_a_host_vars_key_reaches_its_own_host_alone():
     reader = KeyReader(_PIN_READER, frozenset(), "daniel-server")
-    assert land_reach.remaining_setup_hosts([], "daniel-box", key_readers=[reader]) == {
-        "initial_setup": frozenset({"daniel-server"})
-    }
+    assert land_reach.remaining_setup_hosts(
+        [], "daniel-box", key_readers=[reader], ref=PRE_H763
+    ) == {"initial_setup": frozenset({"daniel-server"})}
 
 
 def test_a_tick_host_vars_key_owes_no_other_host():
     """The rejecting half: the tick's own run is the only apply a `daniel-box` key needs."""
     reader = KeyReader(_PIN_READER, frozenset(), "daniel-box")
     assert (
-        land_reach.remaining_setup_hosts([], "daniel-box", key_readers=[reader]) == {}
+        land_reach.remaining_setup_hosts(
+            [], "daniel-box", key_readers=[reader], ref=PRE_H763
+        )
+        == {}
     )
 
 
@@ -91,5 +96,8 @@ def test_a_shipper_reading_none_of_the_keys_is_left_out():
     """`unread` drops a role as `route_key_readers` does, so the tick and this agree."""
     reader = KeyReader(_PIN_READER, frozenset({"initial_setup"}))
     assert (
-        land_reach.remaining_setup_hosts([], "daniel-box", key_readers=[reader]) == {}
+        land_reach.remaining_setup_hosts(
+            [], "daniel-box", key_readers=[reader], ref=PRE_H763
+        )
+        == {}
     )

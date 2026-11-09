@@ -17,7 +17,7 @@ SCRIPT = ("setup", "initial_setup", "aide-check.sh.j2")
 
 # The real library, so the scan writes its textfile under TEXTFILE_DIR rather than the host's
 # own directory, which node_exporter scrapes.
-REAL_CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
+REAL_CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
 REAL_AIDE = "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide"
 REAL_CAP = "REPORT_MAX_LINES=2000"

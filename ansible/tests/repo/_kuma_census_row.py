@@ -69,7 +69,6 @@ _SHIPPED_COMMENT = (
     "A comment in a file the role renders or ships names Kuma as history: rewording it changes "
     "the bytes that deploy, so it goes with the role's next change (#7194)."
 )
-_UNIT_FAMILY = "Names the `kuma-check` unit family without the prefix: ADR 0026 keeps the units (#7194)."
 
 _PROSE_HOLDERS = {
     "hosts/components/k3s-host-checks/component.yml": (
@@ -136,19 +135,11 @@ _PROSE_HOLDERS = {
             "hosts/components/github-checks/templates/github-ruleset-drift.sh.j2",
             "ansible/roles/setup/initial_setup/templates/aide-check.sh.j2",
             "ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2",
-            "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2",
             "hosts/components/registry-gc/templates/registry-gc.sh.j2",
             "ansible/roles/setup/nut_host/templates/ups-secondary-health.sh.j2",
             "hosts/components/renovate-agent/files/renovate_agent.py",
         ),
         _SHIPPED_COMMENT,
-    ),
-    **dict.fromkeys(
-        (
-            "ansible/roles/setup/common/tasks/check_timer.yml",
-            "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py",
-        ),
-        _UNIT_FAMILY,
     ),
 }
 

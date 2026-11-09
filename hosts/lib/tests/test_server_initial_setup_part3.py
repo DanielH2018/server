@@ -10,11 +10,9 @@ Run: uv run pytest hosts/lib/tests/test_server_initial_setup_part3.py
 import json
 
 import pytest
-from lib.repo_paths import ANSIBLE
 
 from renderer.renderer_lib import host as host_mode
 
-ROLE = ANSIBLE / "roles" / "setup" / "initial_setup"
 HOST = "daniel-server"
 I915 = "/etc/modprobe.d/i915.conf"
 WITNESS = "/usr/lib/homelab/loki-read-route-health"
@@ -42,11 +40,6 @@ def test_a_rebuilt_daniel_servers_witness_names_a_uv_its_package_ships(package):
 
 def test_the_old_uv_copy_retires_here(package):
     assert {"path": "/usr/local/bin/uv"} in _legacy(package)
-
-
-def test_the_role_no_longer_renders_a_witness():
-    tasks = (ROLE / "tasks" / "crons.yml").read_text()
-    assert "loki-read-route-health" not in tasks
 
 
 def test_the_witness_user_can_write_a_rebuilt_hosts_textfile_directory(package):

@@ -48,7 +48,7 @@ def test_the_scrub_drops_every_git_variable(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_an_override_survives_the_scrub(monkeypatch: pytest.MonkeyPatch):
-    """`test_setup_drift_check.py` needs `GIT_TEST_ASSUME_DIFFERENT_OWNER` back afterwards."""
+    """A test that needs `GIT_TEST_ASSUME_DIFFERENT_OWNER` gets it back after the scrub."""
     monkeypatch.setenv("GIT_DIR", "/nowhere/.git")
     env = scrubbed_env(GIT_TEST_ASSUME_DIFFERENT_OWNER="1")
     assert env["GIT_TEST_ASSUME_DIFFERENT_OWNER"] == "1"

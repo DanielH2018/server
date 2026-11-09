@@ -55,8 +55,8 @@ done
    nut_host_watchdog_packaged, so every host the role applies to renders the Ansible-era
    branch. The branch differs in one line: the upsmon.conf path. #}
 # shellcheck source=/dev/null
-source /usr/local/lib/homelab-check-lib.sh || {
-  logger -t ups-secondary-health "homelab-check-lib.sh missing — run initial_setup on this host"
+source /usr/lib/homelab/homelab-check-lib.sh || {
+  logger -t ups-secondary-health "homelab-check-lib.sh missing — the check-lib component ships it"
   exit 1
 }
 

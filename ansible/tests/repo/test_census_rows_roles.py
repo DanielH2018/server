@@ -159,13 +159,13 @@ ROWS = (
             Subject("b.yml", "# src: test_commented.py is not a ship\n"),
             Subject("c.yml", "{# test_render.py pins this block #}\n"),
         ),
-        # 33 ship lines across 15 files when the row returned (2026-11-09).
-        min_matches=33,
-        # The ConfigMap-inlined script and the looped host copy.
+        # 32 ship lines across 14 files when H7.63 deleted the looped host copy (2026-11-09).
+        min_matches=32,
+        # Two ConfigMap-inlined scripts.
         must_find=frozenset(
             {
                 "ansible/roles/k8s/configarr/templates/health-configmap.yaml.j2",
-                "ansible/roles/setup/common/tasks/install_host_lib.yml",
+                "ansible/roles/k8s/dri-device-plugin/templates/admission-reaper-cronjob.yaml.j2",
             }
         ),
     ),
@@ -196,8 +196,8 @@ ROWS = (
             Subject("b.yml", "example_config_files:\n  - settings.yaml\n"),
         ),
         # 501 files under those directories before H7.52 deleted gitops_deploy's four task files
-        # and its handlers.
-        min_matches=493,
+        # and its handlers, 493 before H7.63 deleted initial_setup's and common's.
+        min_matches=484,
         # The `*_files` lists the bare-entry alternative exists for, and the deployer's own role.
         must_find=frozenset(
             {
@@ -247,9 +247,10 @@ ROWS = (
         # three of deploy_ui's, 48 once H7.60 deleted five of initial_setup's, 47 once
         # common/tasks/release_bin.yml went, 40 once H7.48 emptied k8s_host_files, 39 once
         # H7.48 deleted docker_install's teardown.yml, 34 once H7.52 deleted four of
-        # gitops_deploy's and common's alert_unit.yml.
-        min_matches=34,
-        must_find=frozenset({"ansible/roles/setup/initial_setup/tasks/crons.yml"}),
+        # gitops_deploy's and common's alert_unit.yml, 28 once H7.63 deleted common's four and
+        # two of initial_setup's.
+        min_matches=28,
+        must_find=frozenset({"ansible/roles/setup/k3s/tasks/server.yml"}),
     ),
     Census(
         name="bespoke-netpol-says-why-it-is-not-a-callers-fence",

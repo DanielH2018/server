@@ -254,12 +254,12 @@ hourly host cron therefore stayed red until that cron's next slot after the faul
 #1781 read the deadlines as the cause. They are not. Recovery time is set on the producer, in two
 shapes:
 
-- **A host check is a `kuma-check-<name>` systemd timer** (`roles/setup/common`'s
-  `check_timer.yml`; `KNOWN_CHECKS` in `ansible/tests/setup/test_check_timer.py` names all
-  eight). The contract is the exit code: the script exits 1 after it pushes `down` and 0 after `up`,
+- **A host check is a `kuma-check-<name>` systemd timer**, from `roles/setup/common`'s
+  `check_timer.yml` until H7.63 deleted its last caller; the host packages ship the same shape
+  as plain units. The contract is the exit code: the script exits 1 after it pushes `down` and 0 after `up`,
   and the oneshot service's `Restart=on-failure` reruns it every `RestartSec` (15 min for the hourly
   checks, 30 min for the daily ones) until it exits 0. A script that pushes `down` and exits 0 is a
-  bug that test's `EXIT_CONTRACT` half catches. On the host,
+  bug. On the host,
   `systemctl status kuma-check-<name>` reads `auto-restart` while the tile is red, and
   `journalctl -u kuma-check-<name>` holds every rerun. The timers are `Persistent=true`, so a slot
   missed inside an outage runs at boot. A reboot ends the restart loop of a check that was red, so

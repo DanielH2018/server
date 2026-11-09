@@ -336,10 +336,10 @@ def brief(prune: bool = False, reap: bool = True) -> int:
     # ends in `repair_object_store` — a `git gc` whose duration is unbounded against a hook
     # budgeted at 5s in `.claude/hooks/session-health.py`. Running it at every session start
     # would put N sessions' removals in a race for a saving one weekly run already gets. The
-    # cron in `ansible/roles/setup/initial_setup/tasks/crons.yml` is the arm that removes, for
+    # weekly timer of the `worktree-sweep` host component is the arm that removes, for
     # #1435's reason: a worktree-isolated session's git commands are refused against the
     # primary checkout, so the sessions that SEE the mess are the ones structurally unable to
-    # clear it. Full reasoning in this docstring and at that cron.
+    # clear it. Full reasoning in this docstring and in that component.
     """
     repo = primary_checkout()
     if repo is None:

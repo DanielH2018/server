@@ -41,11 +41,6 @@ PRODUCERS = {
         "secret-rotation-audit",
         ["daniel-box"],
     ),
-    "SetupDrift": (
-        ("setup", "initial_setup", "setup-drift-check.sh.j2"),
-        "setup-drift-check",
-        ["daniel-box", "daniel-server"],
-    ),
     "LokiReadRoute": (
         ("components", "loki-route-witness", "loki-read-route-health.sh.j2"),
         "loki-read-route-health",
@@ -114,10 +109,10 @@ def shipped_deadlines() -> dict[str, int]:
 
 def test_literal_problems_is_clean_on_the_shipped_rules():
     deadlines = shipped_deadlines()
-    # Non-vacuity: the pin found all six producers, and the rules cover eight host/check pairs.
+    # Non-vacuity: the pin found all five producers, and the rules cover six host/check pairs.
     assert set(deadlines) == set(PRODUCERS) | set(PYTHON_PRODUCERS)
     rules = not_reporting_rules(RULES.read_text())
-    assert len(rules) == 8
+    assert len(rules) == 6
     assert literal_problems(rules, deadlines) == []
 
 

@@ -132,9 +132,9 @@ def test_the_3219_clauses_do_not_fire_on_a_non_template_census():
 def test_a_hand_rolled_render_is_not_flagged():
     """A read whose result goes into Jinja is a render, not an assertion on template text.
 
-    `setup/test_check_timer.py` renders its two units this way, because it needs a
-    different override per test. The same read is a source read when its result is asserted on
-    instead, which is the last entry of `FLAGGED_SPELLINGS`.
+    A test that needs a different override per test renders this way. The same read is a
+    source read when its result is asserted on instead, which is the last entry of
+    `FLAGGED_SPELLINGS`.
     """
     assert (
         template_source_reads(

@@ -44,11 +44,7 @@ from renderer.renderer_lib import host as host_mode
 
 # The items the migration deletes rather than moves, each with the reason. A name here is an
 # item's `name`, whatever its role or host, so a name that still runs on another host stays out.
-ALLOWLIST = {
-    "Clear ansible log file": (
-        "deleted: the log it clears belongs to ansible-playbook, which H7.20a removes"
-    ),
-}
+ALLOWLIST: dict[str, str] = {}
 
 _PATH_WRITERS = frozenset({"template", "copy", "file", "get_url", "unarchive"})
 _UNIT_MODULES = frozenset({"systemd", "systemd_service", "service"})

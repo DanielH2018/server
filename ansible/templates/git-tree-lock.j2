@@ -19,8 +19,7 @@ verdict. `job` names the script in the message, and `consequence` says what a sk
 Import it `with context`, or `server_git_tree_lock` renders empty and the lock is split in two.
 
 Named `.j2`, not `.sh.j2`: it is not a script, and validate/shell_templates.py lints every
-`*.sh.j2` as one. List this file in each caller's stamp_render_templates in tasks/crons.yml, or
-an edit here changes the rendered scripts while the drift check reads them clean.
+`*.sh.j2` as one.
 #}
 {% set git_tree_lock_wait_s = 2400 %}
 {% macro take_git_tree_lock(job, consequence='skipped') -%}

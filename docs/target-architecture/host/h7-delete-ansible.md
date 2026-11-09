@@ -226,7 +226,7 @@ The exit criterion is seven observations:
       (`tasks/code.yml`, "Install the shared host_lib helper beside the deployer"), `k3s`
       twice in `health-crons.yml`, `renovate_agent`, `renovate_notify`, `configarr` and
       `janitorr`. Each caller's stamp pair names the same `src`, and
-      `ansible/tests/setup/test_host_lib_sibling_copies.py` hardcodes
+      `test_host_lib_sibling_copies.py` hardcodes
       `HOST_LIB_SRC = "ansible/roles/setup/common/files/host_lib.py"`.
       `deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` keys its routing on the same two
       paths.
@@ -919,7 +919,7 @@ At `70591c307` the first three greps find three groups of modules:
     - `install_host_lib.yml`'s `src`, and every other `src:` that names the old path: the
       stamp pairs of the six callers that declare one, and `configarr`'s and `janitorr`'s
       lines unless H2.6 has removed those imports;
-    - `HOST_LIB_SRC` in `ansible/tests/setup/test_host_lib_sibling_copies.py`;
+    - `HOST_LIB_SRC` in `test_host_lib_sibling_copies.py`;
     - the two keys in `deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, so a later
       change under `hosts/lib/` still re-applies the Ansible consumers. A test shows that a
       change to `hosts/lib/host_lib.py` routes to them, and its red fixture keeps the old
@@ -1931,7 +1931,7 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.60 daniel-box: `initial_setup`, part 3 | new | yes, with H7.58 | H7.59 live, H7.32, H6.2 |
 | H7.61 daniel-server: dev tooling and the worktree holder scan; `/usr/bin/uv` on both cluster hosts | new | yes | H7.38, H7.39, H7.41a |
 | H7.62 daniel-box: dev tooling, the worktree holder scan, `chezmoi_setup` and `github_cli` | new | yes, with H7.61 | H7.61 live, H7.40, H6.2 |
-| H7.63 The last setup tasks: the setup-drift check, the collections install and `common/tasks/` | new | no: it deletes what H7.52's timer retirement and every importer of `common/tasks/` leave | H7.35, H7.37, H7.48, H7.50, H7.52 live, H7.60, H7.62 |
+| H7.63 The last setup tasks: the setup-drift check, the collections install and `common/tasks/` | new | landed as [#7864](https://github.com/DanielH2018/server/pull/7864) (item 36) | H7.35, H7.37, H7.48, H7.50, H7.52 live, H7.60, H7.62 |
 | H7.64 daniel-box: the mirror registries' garbage collection | new | yes | H6.2 |
 
 ### The task files each row owns
@@ -2560,6 +2560,21 @@ the `manual_plane` clearing, and *Rollback*'s
       uninstall` for the two tools (**operator-only**).
     - **`common/tasks/`** empties, because H7.35, H7.37, H7.50, H7.52 and this PR remove every
       importer. H7.53's census reads that directory on every host, so these files must go first.
+    - **Amended at H7.63:** five facts the row did not state.
+        - `initial_setup/tasks/main.yml` stays as the `end_role` stub, as every emptied role's
+          does, because `initial_setup.yml` names the role until H7.20a. The table's entry for it
+          means its tasks, not the file.
+        - `common/templates/check-timer*.j2` go with `check_timer.yml`, their only renderer.
+          `templates/resolv.conf.j2` stays, because two components render it.
+        - Two packaged scripts still sourced the `/usr/local/lib` copy of the host-check
+          library: `ups-secondary-health` and the claude-code `timer-textfile.j2` macro. Both
+          read `/usr/lib/homelab/homelab-check-lib.sh` in the same package version that lists
+          the old path as legacy.
+        - daniel-pi's package lists the two libraries and their stamp fragments too. Their copy
+          tasks carried `tags: [always]` and no host gate, so `setup_census.py --host daniel-pi`
+          listed them.
+        - The `Clear ansible log file` arm becomes `{cron: …, user: root}` in all three host
+          packages rather than a deletion, and the census `ALLOWLIST` empties.
 
 37. **H7.64 moves the mirror registries' garbage collection.** A new `registry-gc` component in
     `homelab-daniel-box` takes the block from `k8s_host_files/tasks/registry.yml`. Nothing else
@@ -3828,7 +3843,7 @@ progress.
   in `scripts/deploy_tools/tests/`, whose empty-list fixture empties `ci_required_contexts`,
   the builder's tests for its context list and walk bound, the deployer's own
   `tests/test_deploy_git_ci.py`,
-  `ansible/tests/setup/test_host_lib_sibling_copies.py`'s `HOST_LIB_SRC`,
+  `test_host_lib_sibling_copies.py`'s `HOST_LIB_SRC`,
   `test_gitops_deploy_ship_list.py` for the new `ci_verdict.py` entry,
   and `ansible/roles/setup/common/CLAUDE.md`'s table rows for the two modules and its
   routing paragraph.

@@ -614,10 +614,10 @@ def role_tags(
             # `readers_of` refuses one that none of them names.
             #
             # DECIDED: a shipped file this role renders only through another role's task file
-            # refuses here; it is not resolved through that task file's readers (#3322). The
-            # check-timer templates reach gitops_deploy and k3s only through
-            # `common/tasks/check_timer.yml`, so a change to them falls back to the
-            # whole-role tag. That costs a longer apply and never misses one. Those templates
+            # refuses here; it is not resolved through that task file's readers (#3322). Until
+            # H7.63 the check-timer templates reached their roles only through a shared
+            # `common` task file, so a change to them fell back to the whole-role tag. That
+            # costs a longer apply and never misses one. Those templates
             # changed twice in the repo's history, and each routing layer added from
             # 2026-10-01 on found the next indirection, so one more layer was not worth its
             # code. Reopen it if the trigger recurs or the fallback grows costlier than a

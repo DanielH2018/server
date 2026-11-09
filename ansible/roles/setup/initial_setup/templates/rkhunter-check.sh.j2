@@ -30,7 +30,7 @@ done
 
 # shellcheck source=/dev/null
 source {{ initial_setup_host_lib_dir }}/homelab-check-lib.sh || {
-  logger -t rkhunter-check "homelab-check-lib.sh missing — run initial_setup or install the host package"
+  logger -t rkhunter-check "homelab-check-lib.sh missing — install the host package"
   exit 1
 }
 

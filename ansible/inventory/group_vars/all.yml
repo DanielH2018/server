@@ -262,17 +262,6 @@ k3s_server_hosts:
 k3s_agent_hosts:
   - daniel-server
 
-# Hosts that render setup-plane templates, each armed with setup-drift-check, the reader that
-# reports a stale render. It is the only such reader on either host.
-#
-# An allowlist for the same reason as k3s_server_hosts above: forgetting a host leaves it
-# unwatched. daniel-pi is deliberately absent — it stamps no setup templates, so a reader there
-# would report only that it is unarmed.
-# ENFORCED by ansible/tests/deploy/test_setup_drift_check.py.
-setup_drift_check_hosts:
-  - daniel-box
-  - daniel-server
-
 # The label values loki-homelab's streams carry, one entry per stream role (#3740). Both Alloy
 # configs stamp their streams from this map: roles/k8s/loki-homelab for the cluster nodes and
 # hosts/components/pi-compose/services/alloy for daniel-pi. monitor-bridge's LogQL selectors in config/env.yaml.j2
@@ -330,27 +319,6 @@ wan_probe_urls:
 # a restart the last pod reached Ready 5m18s after boot, so a witness firing inside this window
 # would report the route down while Traefik was still starting.
 loki_route_witness_boot_grace_s: 600
-
-# Hosts that get the uv-managed tools `initial_setup --tags tooling` installs: ansible-core and
-# ansible-lint.
-#
-# The predicate is "somebody commits from this host", not "this host holds a checkout".
-# daniel-pi is deliberately absent: it holds a checkout, but it is driven remotely over ssh and
-# nobody commits from it. The Pi runs the distro's Python 3.12, and provisioning a pinned Python on
-# a 512 MB Zero 2 W is not wanted.
-#
-# An allowlist for the same reason as k3s_server_hosts above — a host nobody thought about is
-# refused rather than provisioned. ENFORCED by ansible/tests/setup/test_dev_tooling_hosts.py.
-dev_tooling_hosts:
-  - daniel-box
-  - daniel-server
-
-# Past this, the checkout the drift arms compare against is reported as its own fault. A host
-# without gitops-deploy does not refresh its tree — daniel-server was measured 39 commits behind
-# origin — and a stale tree makes the render arm compare a stale render against
-# the stale template it came from, which agree. So the arm reads green exactly when the host is
-# furthest behind, which is the laundering this threshold exists to prevent.
-setup_drift_tree_max_days: 14
 
 # Pod Security Admission labels, applied to homelab and observability.
 #

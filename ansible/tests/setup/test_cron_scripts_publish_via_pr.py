@@ -284,16 +284,15 @@ def test_a_substring_expansion_of_an_unset_name_is_still_a_read():
 
 def test_the_cron_env_allowlist_is_still_exported():
     """An entry whose provenance is gone silently widens the guard for everything else."""
-    crons = (TEMPLATES.parent / "tasks/crons.yml").read_text()
     templates = "".join(read(path) for path in _READ_CENSUS_MUST_FIND)
     units = "".join(p.read_text() for p in sorted(COMPONENTS.glob("*/units/*")))
     stale = [
         name
         for name in _CRON_ENV
-        if f"{name}=" not in crons + units and f"export {name}=" not in templates
+        if f"{name}=" not in units and f"export {name}=" not in templates
     ]
     assert not stale, (
-        "these _CRON_ENV entries are no longer set by any cron job line in crons.yml or "
+        "these _CRON_ENV entries are no longer set by any unit or "
         "exported by a template, so the guard is excusing reads nothing supplies: "
         + ", ".join(stale)
     )

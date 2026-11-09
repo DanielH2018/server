@@ -143,33 +143,9 @@ def template_loader(path: Path) -> tuple[Path, str]:
     return path.parent, path.name
 
 
-# Values a CALLER passes to a shared template, keyed by template basename. `roles/setup/common`
-# is never run as a role, so it has no defaults to layer in, and its unit pair takes every
-# directive value from the importing role's `vars:` (`tasks/check_timer.yml`). A bare
-# STUB in `OnCalendar=` is a parse failure, so the pair renders with one caller's shape here.
-CALLER_CONTEXT: dict[str, dict] = {
-    "check-timer.service.j2": {
-        "check_timer_name": "example",
-        "check_timer_description": "Example check",
-        "check_timer_exec": "/usr/local/bin/example.sh",
-        "check_timer_user": "root",
-        "check_timer_restart_sec": "15min",
-    },
-    "check-timer.timer.j2": {
-        "check_timer_name": "example",
-        "check_timer_description": "Example check",
-        "check_timer_on_calendar": "*-*-* *:23:00",
-    },
-}
-
-
 def unit_context(template: Path) -> dict:
-    """The context `template` renders with: `lib.render_context`, plus any `CALLER_CONTEXT`.
-
-    A shared template with no owning defaults takes its caller-passed values from
-    `CALLER_CONTEXT` instead.
-    """
-    return render_context(template, overrides=CALLER_CONTEXT.get(template.name, {}))
+    """The context `template` renders with, from `lib.render_context`."""
+    return render_context(template)
 
 
 def systemd_verify(unit_path: Path, systemd_analyze_bin: str) -> str | None:

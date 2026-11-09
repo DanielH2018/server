@@ -1,10 +1,12 @@
 ---
-# Base host provisioning, applied to every host by initial_setup.yml.
-#
-# These are import_tasks, not include_tasks: imports are static, so every task keeps its own
-# tags and --tags selection works as usual.
+# The host baseline is package-owned: each host package and step 4 of hosts/bootstrap-host.sh
+# carry it (H7.58 to H7.62), and the legacy lists retire the setup-drift check and the last cron
+# arm (H7.63). docs/target-architecture/host/h7-delete-ansible.md.
 
-- name: Install the Ansible tooling and collections
-  ansible.builtin.import_tasks: host-basics.yml
-- name: Install the host crons
-  ansible.builtin.import_tasks: crons.yml
+# DECIDED: this role is emptied, never deleted, until H7.20a. A play that names a missing role
+# fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the
+# deployer's _BROAD_MANUAL_PREFIXES. An unconditional end_role keeps the playbook line.
+# setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count
+# the role as empty on every host.
+- name: End the role, whose work the host packages own
+  ansible.builtin.meta: end_role

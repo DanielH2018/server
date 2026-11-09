@@ -237,3 +237,19 @@ legacy:
   - {path: /var/lib/node-exporter-textfile/gitops_tick.prom}
   - {path: /var/lib/homelab/setup-render-manifest.d/gitops-deploy}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/gitops-deploy}
+  # H7.63: the setup-drift check initial_setup installed, the Ansible-era copy of the host-check
+  # library (check-lib ships /usr/lib/homelab/homelab-check-lib.sh), their stamp fragments, and
+  # the ansible.log cron's absent arm. The timer goes first. The two manifest directories stay:
+  # reconcile removes a directory only when it is empty, and other fragments may remain.
+  - {unit: kuma-check-setup-drift.timer}
+  - {unit: kuma-check-setup-drift.service}
+  - {unit: kuma-check-setup-drift-boot.service}
+  - {path: /usr/local/bin/setup-drift-check.sh}
+  - {path: /var/lib/node-exporter-textfile/setup-drift-check.prom}
+  - {path: /var/lib/kuma-check/setup-drift.down}
+  - {path: /usr/local/lib/setup-drift-lib.sh}
+  - {path: /usr/local/lib/homelab-check-lib.sh}
+  - {path: /var/lib/homelab/setup-render-manifest.d/setup-drift-check}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/setup-drift-lib}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/homelab-check-lib}
+  - {cron: "Clear ansible log file", user: root}

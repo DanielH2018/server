@@ -60,7 +60,6 @@ ROWS = (
                 "ansible/tests/k8s/_manifest_guards.py",
                 "ansible/tests/longhorn/_restore_drill.py",
                 "ansible/tests/longhorn/test_longhorn_reap_guard.py",
-                "ansible/tests/setup/test_check_timer.py",
                 "ansible/tests/staging/test_staging_network.py",
                 "scripts/deploy_tools/tests/test_deploy_exit_codes.py",
                 "scripts/docs/tests/test_mkdocs_repo_links.py",
@@ -342,10 +341,6 @@ ROWS = (
         ),
         min_matches=MODULE_FLOOR,
         allow={
-            "ansible/tests/deploy/test_setup_render_manifest.py": (
-                "hashes the template's raw BYTES — a trailing newline and a truncated-read "
-                "comparison, neither of which survives a render"
-            ),
             "scripts/validate/tests/test_shell_template_cron_rules.py": (
                 "hands a cron rule its own second argument — the rule under test takes the "
                 "template TEXT, and `shell_templates.py` reads it off disk the same way in "

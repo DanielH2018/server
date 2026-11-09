@@ -129,6 +129,15 @@ legacy:
   - {path: /var/lib/homelab/setup-render-manifest.d/gitops-deploy-github-checks}
   - {path: /usr/local/bin/github-ruleset-drift.sh}
   - {path: /usr/local/bin/github-interaction-limit.sh}
+  # H7.63: what initial_setup's untagged copies left on this host, which never ran the setup-drift
+  # check: the Ansible-era copy of the host-check library (pi-heartbeats ships
+  # /usr/lib/homelab/homelab-check-lib.sh), the drift library and their stamp fragments, and the
+  # ansible.log cron's absent arm.
+  - {path: /usr/local/lib/setup-drift-lib.sh}
+  - {path: /usr/local/lib/homelab-check-lib.sh}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/setup-drift-lib}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/homelab-check-lib}
+  - {cron: "Clear ansible log file", user: root}
 # H7.30: the Pi's own LAN rules, beside ssh-firewall's two SSH rules. Each spec is what `ufw show
 # added` prints for the Ansible task that added it, and each legacy entry names that rule by its
 # exact spec and comment. A legacy rule that shares a declared spec is the one the arm adopts: it

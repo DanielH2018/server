@@ -308,7 +308,10 @@ TIMER_TEXTFILES = {
 
 
 # Retired whatever the toggles say: the GitOps deployer's tick textfile (H7.52).
-ALWAYS_RETIRED = {f"{TEXTFILES}/gitops_tick.prom"}
+ALWAYS_RETIRED = {
+    f"{TEXTFILES}/gitops_tick.prom",
+    f"{TEXTFILES}/setup-drift-check.prom",
+}
 
 
 def retired_textfiles(package) -> set[str]:

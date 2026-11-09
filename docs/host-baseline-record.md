@@ -13,13 +13,8 @@ task file for what a block does. What follows is what a task file does not say o
 The role's `CLAUDE.md` lists the tag names; these are the ones whose scope is not obvious from
 the name:
 
-- `tooling` — `ansible-core` and `ansible-lint` as uv tools.
-- `crons` — every cron-removal arm and kuma-check timer in `crons.yml`. Each `crons` task also
-  answers to a subject tag, so `--tags crons` is never the only way to reach it:
-  `secret-rotation` (the removal of the old audit and rotation crons), `ansible-log`,
-  `cert-expiry` (the retired TLS watch's removal) and `setup_drift`.
-  `ansible/tests/setup/test_initial_setup_tasks_have_a_subject_tag.py` refuses a task whose only
-  tag is `crons`.
+None remains: H7.63 deleted the role's last tasks, the uv tools, the collections install,
+the `ansible.log` cron arm and the setup-drift check.
 
 The host packages own every other subject the role once tagged: the swap, apt and base packages,
 the sudo cache, the SSH directory, auditd, the kernel modules, the banners, core dumps, the
@@ -28,21 +23,16 @@ component and step 4 of `hosts/bootstrap-host.sh`, and deleted the tasks.
 
 ## Tooling, pins and the root HOME trap
 
-- **Every `tooling` task but the home-directory read is gated on `dev_tooling_hosts`** (daniel-box
-  and daniel-server). daniel-pi holds a checkout but nobody commits from it (#1726). Membership is
-  enforced by `ansible/tests/setup/test_dev_tooling_hosts.py`.
 - **The packages and the dotfiles repo own the dev tooling (H7.61, H7.62).** `/usr/bin/uv` and
   `/usr/bin/vale` are one-line execs of the `homelab-tools` binaries, the `worktree-holders`
   component ships the root-run holder scan, and the dotfiles repo installs the per-user uv, prek and
-  Python. The role keeps only `ansible-core` and `ansible-lint` until H7.63, which `/usr/bin/uv`
-  installs. Each cluster host's package lists `/usr/local/bin/uv` as a legacy entry, so the
-  install removes the copy that `initial_setup` wrote.
-- **The two tools this role installs are pinned, and each equals a twin** (#2148).
-  `ansible-core` and `ansible-lint` equal `pyproject.toml` and `prek.toml`
-  (`ansible/tests/repo/test_host_tool_pins_match_their_twins.py`), and the install is version-gated
-  rather than `creates:`-gated, so a bump replaces the tool. Vale's copies are in `homelab-tools`
-  and CI (`ansible/tests/repo/test_vale_matches_the_ci_pin.py`). The dotfiles repo's `tools.toml`
-  pins uv, prek and Python, and this repo holds no twin of uv or prek.
+  Python. H7.63 deleted the role's last two tools, the `ansible-core` and `ansible-lint` uv
+  installs; the copies already on the hosts stay until H7.56. Each cluster host's package lists
+  `/usr/local/bin/uv` as a legacy entry, so the install removes the copy that `initial_setup`
+  wrote.
+- **Vale's copies are in `homelab-tools` and CI** (`ansible/tests/repo/test_vale_matches_the_ci_pin.py`).
+  The dotfiles repo's `tools.toml` pins uv, prek and Python, and this repo holds no twin of uv or
+  prek.
 - **`host_python_version` names an interpreter only the dotfiles repo installs.** Units run `uv` with
   `--no-python-downloads`, so a bump merged first leaves every unit naming the pin without a Python.
   To bump it, land the dotfiles' `python` pin, run `chezmoi apply` on daniel-box and daniel-server,
@@ -187,66 +177,26 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   jail. Pi-only tasks are individually `when:`-guarded rather than block-scoped, so a server run
   simply skips them.
 
-## Setup-plane drift reader (`setup_drift` tag)
+## Setup-plane drift reader (retired in H7.63)
 
-`setup-drift-check.sh` answers two questions daily on the hosts named in
-`setup_drift_check_hosts` (`group_vars/all.yml`): is the `copy:`-deployed code here identical to
-its repo source, and has any `template:`-rendered setup script's SOURCE changed since this host
-rendered it?
+`setup-drift-check.sh` ran daily on daniel-box and daniel-server from
+`kuma-check-setup-drift.timer`. It compared each `copy:`-deployed setup file with its repo
+source, each rendered setup template's source checksum with the one stamped at render time, and
+the checkout's age with a 14-day limit. H7.52 retired the deployer's timer, so nothing renders
+setup templates any more, and H7.63 deleted the check, its library, its stamp fragments and its
+`SetupDrift` rules. Each host package's `legacy:` list removes the timer, the script and its
+files.
 
-It runs from `kuma-check-setup-drift.timer` since 2026-09-19. It imports the `common` role's
-`check_timer.yml`, exits 1 after a down verdict, and reruns every 30 min under
-`Restart=on-failure` until it exits 0. The import's `check_timer_state` follows the host gate, so
-a host dropped from the list loses the timer and the cron it replaced. A `--tags setup_drift`
-apply on that host also removes three files: the `.prom` file, the script and the render fragment.
-A `.prom` file left behind would keep exporting its last run, and `HostCheckOverdue` would fire
-about 25 hours later and never clear.
+Two lessons from it still apply to any host check:
 
-The daily secret-rotation
-audit used the same form until H7.36 moved it to `homelab-secret-rotation-audit.timer` in the
-`secret-rotation` component of `homelab-daniel-box`, which keeps the exit-code contract as plain
-units. Its `secret_rotation.py audit --verdict` returns 1 when the audit reads `down`.
-
-**Why it runs on every host that renders setup templates.** The role's only other reader,
-`manifest-prune-check.sh`, ran on `k3s_server_hosts` alone, while daniel-server renders the entire
-UPS shutdown chain. Confirmed live 2026-08-29: daniel-server had no
-`/var/lib/homelab/setup-render-manifest.d` at all, and its `/etc/nut/upsmon.conf` was dated Aug 17
-against a template changed on 2026-08-28 (review M-10).
-
-**daniel-box's setup-plane drift detector is this reader.** D6.17 disarmed manifest-prune-check,
-which read the same stamp directories through the same library. `SetupDriftFailed` and
-`SetupDriftNotReporting` carry one arm per `origin`, so one host's fresh sample cannot mask the
-other's silence.
-
-- **The two arms are not reimplemented** — both readers source `files/setup-drift-lib.sh`,
-  copied to `/usr/local/lib` like `homelab-check-lib.sh`. Two copies of a drift check are free to
-  drift from each other, which is the fault a drift check reports.
-- **It does NOT carry the orphan arm.** That needs `/etc/rancher/k3s/manifests` and the control
-  plane's staged set; an agent node has neither, and an arm that structurally cannot fire reads
-  as coverage.
-- **A third arm reports the checkout's age**, because the render arm compares a render against
-  the tree on THIS host and a host without `gitops_deploy` does not refresh that tree —
-  daniel-server was measured 39 commits behind origin on 2026-08-17. A stale checkout makes the
-  stamp and the template agree, so the arm would read green exactly when the host is furthest
-  behind. Past `setup_drift_tree_max_days` (14) the age is its own DOWN; an unreadable checkout
-  is a DOWN too, never a pass.
-- Writes `setup-drift-check.prom`, which `SetupDriftFailed` and `SetupDriftNotReporting`
-  read. It pushed the "Setup Plane Drift (agent hosts)" Kuma tile until M6 batch B2's
-  Cutover-2, which also retired the `/etc/homelab/kuma-push.env` token file with an `absent`
-  task. B2's token PR retired the key a week later.
-
-### Verify a cron arm as the user cron runs it
-
-The age arm reads the tree with `git -c safe.directory="$REPO_DIR"`, and the exception is
-load-bearing. The cron runs as root against a checkout owned by `sys_user`, which is exactly
-git's dubious-ownership case, so a bare `git log` exits non-zero and the arm reports "cannot
-read the checkout" on every run. It did: the tile was DOWN from the arm's first cron run
-(2026-08-30 07:50) until the fix. The 2026-08-29 hand-run that verified the arm ran as `ubuntu`
-and passed, which is the whole shape of the miss. `ansible/tests/deploy/test_setup_drift_check.py`
-now forces the refusal with `GIT_TEST_ASSUME_DIFFERENT_OWNER=1`, and carries a control asserting
-a bare read still fails under it, so the accept half cannot pass because the simulation went
-inert. That file EXECUTES the library against a fixture rather than grepping it, and
-`ansible/tests/deploy/test_setup_render_manifest.py` holds both consumers to sourcing it.
+- **Verify a cron arm as the user the cron runs as.** The age arm read the tree as root against
+  a checkout owned by `sys_user`, which is git's dubious-ownership case, so a bare `git log`
+  failed on every run until the arm passed `-c safe.directory`. The hand-run that verified it
+  ran as `ubuntu` and passed. `GIT_TEST_ASSUME_DIFFERENT_OWNER=1` reproduces the refusal in a
+  test.
+- **A stale checkout makes a render-versus-template comparison agree.** daniel-server was
+  measured 39 commits behind origin on 2026-08-17, so the render arm read green exactly when the
+  host was furthest behind, which is why the age was its own DOWN.
 
 ## Loki read-route witness (`loki_route_witness` tag)
 

@@ -4010,7 +4010,7 @@ includes valheim's initContainer.
 - The render-records disarm PR: `ansible/roles/setup/render_records/CLAUDE.md`'s *Mode* line,
   the uptime-kuma tile with its group rule, and every test that names either. `grep -rln
   'render-records' ansible/tests ansible/roles/k8s/uptime-kuma/tests` finds them, for example
-  `ansible/tests/setup/test_check_timer.py`, whose `KNOWN_CHECKS` names the check. The
+  `test_check_timer.py`, whose `KNOWN_CHECKS` names the check. The
   role's own tests in `ansible/roles/setup/render_records/tests/` gain the absent default.
 - traefik's flip: `traefik-crds`'s `CLAUDE.md` says the tag renders `prune: false` and why,
   and the CRD census lands with `traefik-crds` as its named member.

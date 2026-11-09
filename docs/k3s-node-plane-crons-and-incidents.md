@@ -146,8 +146,7 @@ a textfile metric, such as `disk-health.prom`, that the `host-checks` rules page
 Alertmanager. The B2 accounting pair
 appends to the local ledger, which is bookkeeping, not state.
 
-`setup-drift-check.sh` reads the host-plane stamps on daniel-box, and its `SetupDrift` rules in
-`files/rules/initial-setup-checks.yaml` page for it. Flux's `prune: true` removes an object the
+Flux's `prune: true` removes an object the
 bundle stops declaring.
 
 ## k3s's own output is in `/var/log/k3s.log`, not the journal

@@ -1,23 +1,23 @@
 """The owed-host note reads a stamped file's record on a host before naming it (#7398).
 
-The note and the task walk are the real ones, over this checkout's roles. Only the host read is
-fake. Each test of the note also pins `daniel-server` in the note it expects to stay, so an empty
-note cannot pass one that expects the host to stay owed. The tests that build a `demo` role check
-which render shapes the walk counts, on shapes this checkout's roles do not hold. Most check-timer
-tests ask `holds` directly, over this checkout's roles. The rest ask `_remaining_hosts` over the
-checkout rather than `ref`'s archived tree, with a test before the apply that pins the hosts owed.
+The note and the task walk are the real ones, over the roles as they stood before H7.63, which
+deleted the last stamp tasks with `initial_setup`'s tasks (`_pre_h763_tree.py`). Only the host
+read is fake. Each test of the note also pins `daniel-server` in the note it expects to stay, so
+an empty note cannot pass one that expects the host to stay owed. The tests that build a `demo`
+role check which render shapes the walk counts, on shapes those roles did not hold. The
+check-timer tests ask `holds` directly, over that tree's roles.
 """
 
 import hashlib
 
 import pytest
-import setup_routing
 
-from deploy_tools.land_lib import land_reach
+from _pre_h763_tree import PRE_H763
 from deploy_tools.land_lib.land_reach import remaining_setup_hosts_note
 from deploy_tools.setup_lib.deployed_copies import DeployedCopies
 from diagnostics.probe_lib import core
-from lib.repo_paths import ALL_VARS, HOST_VARS, REPO
+from lib.proc_testing import run
+from lib.repo_paths import REPO
 
 COPY = "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh"
 COPY_LIVE = "/usr/local/lib/setup-drift-lib.sh"
@@ -25,9 +25,7 @@ CHECK_LIB = "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
 # The second path PR #7295 changed. No setup role ships it, so it owes nothing either way.
 COMPONENT_COPY = "hosts/components/loki-route-witness/loki_route_health.py"
 CRONS = "ansible/roles/setup/initial_setup/tasks/crons.yml"
-COPY_SHA = hashlib.sha256((REPO / COPY).read_bytes()).hexdigest()
 TEMPLATE = "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2"
-TEMPLATE_SHA = hashlib.sha256((REPO / TEMPLATE).read_bytes()).hexdigest()
 DRIFT_FRAGMENT = "/var/lib/homelab/setup-render-manifest.d/setup-drift-check"
 CHECK_TIMER_TEMPLATES = (
     "ansible/roles/setup/common/templates/check-timer.service.j2",
@@ -37,7 +35,13 @@ CHECK_TIMER_TEMPLATES = (
 
 
 def _sha(path):
-    return hashlib.sha256((REPO / path).read_bytes()).hexdigest()
+    """`path`'s SHA-256 at `PRE_H763`, the tree every case reads."""
+    shown = run(["git", "show", f"{PRE_H763}:{path}"], cwd=REPO, check=True)
+    return hashlib.sha256(shown.stdout.encode()).hexdigest()
+
+
+COPY_SHA = _sha(COPY)
+TEMPLATE_SHA = _sha(TEMPLATE)
 
 
 def _reader(row, reads=None):
@@ -55,7 +59,7 @@ def _fragment_reader(row):
 
 def _note(files, read_host):
     return remaining_setup_hosts_note(
-        files, "daniel-box", ref="HEAD", repo=REPO, read_host=read_host
+        files, "daniel-box", ref=PRE_H763, repo=REPO, read_host=read_host
     )
 
 
@@ -121,25 +125,30 @@ def test_a_missing_render_fragment_keeps_the_host_owed():
     assert "daniel-server" in _note([TEMPLATE], _fragment_reader({"status": "absent"}))
 
 
-def _holds_check_timer(template, drift_text, host="daniel-server"):
+def _holds_check_timer(tree, template, drift_text, host="daniel-server"):
     """Does `initial_setup` read as held on a host with this setup-drift render fragment?
 
-    `holds` over the working tree's roles, because `_note` reads the `ansible/` tree at `ref`. A
-    text of None is a fragment the host does not have.
+    `holds` over `tree`'s roles, as `_note` reads them at `ref`. A text of None is a fragment
+    the host does not have.
     """
     row = {"status": "ok", "text": drift_text} if drift_text else {"status": "absent"}
     return DeployedCopies(
         [template],
-        REPO / "ansible/roles/setup",
-        ref="HEAD",
+        tree["roles_dir"],
+        ref=PRE_H763,
         repo=REPO,
         read_host=lambda plan, host: {"stat": {}, "files": {DRIFT_FRAGMENT: row}},
+        all_vars=tree["all_vars"],
+        host_vars_dir=tree["host_vars_dir"],
+        playbooks_dir=tree["playbook"].parent,
     ).holds("initial_setup", template, host)
 
 
 @pytest.mark.parametrize("template", CHECK_TIMER_TEMPLATES)
-def test_a_check_timer_template_the_drift_fragment_shows_is_held(template):
-    assert _holds_check_timer(template, f"{template} {_sha(template)}\n")
+def test_a_check_timer_template_the_drift_fragment_shows_is_held(
+    pre_h763_tree, template
+):
+    assert _holds_check_timer(pre_h763_tree, template, f"{template} {_sha(template)}\n")
 
 
 @pytest.mark.parametrize(
@@ -149,54 +158,15 @@ def test_a_check_timer_template_the_drift_fragment_shows_is_held(template):
         pytest.param("", id="the-drift-fragment-predates-the-listing"),
     ],
 )
-def test_a_check_timer_template_the_drift_fragment_does_not_show_stays_owed(drift_line):
+def test_a_check_timer_template_the_drift_fragment_does_not_show_stays_owed(
+    pre_h763_tree, drift_line
+):
     template = CHECK_TIMER_TEMPLATES[0]
     lines = {
         "other": f"{template} {'0' * 64}\n",
         "": f"{TEMPLATE} {TEMPLATE_SHA}\n",
     }
-    assert not _holds_check_timer(template, lines[drift_line])
-
-
-def _owed_from_daniel_server(template, files):
-    """What a landing from daniel-server owes, over this checkout's roles rather than `ref`'s."""
-    copies = DeployedCopies(
-        [template],
-        REPO / "ansible/roles/setup",
-        ref="HEAD",
-        repo=REPO,
-        read_host=lambda plan, host: {"stat": {}, "files": files},
-    )
-    with setup_routing.routed_by(REPO):
-        return land_reach._remaining_hosts(
-            [template],
-            "daniel-server",
-            (),
-            land_reach._INITIAL_SETUP_YML,
-            ALL_VARS,
-            HOST_VARS,
-            land_reach._SETUP_ROLES_DIR,
-            "",
-            REPO,
-            copies,
-        )
-
-
-@pytest.mark.parametrize("template", CHECK_TIMER_TEMPLATES)
-def test_a_landing_from_daniel_server_names_no_host_after_an_apply_on_daniel_box(
-    template,
-):
-    row = {"status": "ok", "text": f"{template} {_sha(template)}\n"}
-    files = dict.fromkeys((DRIFT_FRAGMENT,), row)
-    assert _owed_from_daniel_server(template, files) == ({}, {})
-
-
-@pytest.mark.parametrize("template", CHECK_TIMER_TEMPLATES)
-def test_a_landing_from_daniel_server_names_daniel_box_before_an_apply_there(template):
-    assert _owed_from_daniel_server(template, {}) == (
-        {"initial_setup": {"daniel-box"}},
-        {},
-    )
+    assert not _holds_check_timer(pre_h763_tree, template, lines[drift_line])
 
 
 ON_BOX_ONLY = "inventory_hostname == 'daniel-box'"
@@ -242,7 +212,7 @@ def _demo_role_holds(tmp_path, tasks, entry="[]\n", plays=""):
     return DeployedCopies(
         [TEMPLATE],
         tmp_path,
-        ref="HEAD",
+        ref=PRE_H763,
         repo=REPO,
         read_host=lambda plan, host: {"stat": {}, "files": {fragment: row}},
         playbooks_dir=tmp_path / "plays",

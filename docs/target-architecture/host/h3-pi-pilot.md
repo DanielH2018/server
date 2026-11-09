@@ -288,8 +288,8 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   exists.
 - **The setup-role task walkers live in the test helpers.**
   `ansible/tests/_role_census.py:task_files_by_role` lists every plane's task files, setup
-  included. `ansible/tests/setup/test_cron_output_goes_to_the_journal.py` pairs it with
-  `_helpers.walk_tasks` to read cron tasks. `_role_tasks.py`, since deleted, reads only
+  included. The cron-output test that paired it with `_helpers.walk_tasks` to read cron tasks
+  retired in H7.63, with the last cron task. `_role_tasks.py`, since deleted, reads only
   `ansible/roles/k8s` (`_K8S_ROLES`).
 - **Port 8791 is free.** `git grep -n 8791` matches nothing. `deploy_ui_port` is 8790.
 - **A host address has one definition site.** `ansible/tests/repo/test_lan_facts_have_one_source.py`
@@ -2444,7 +2444,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - the `KNOWN_ALERTS` entries in `test_alert_unit.py`, the builder's (H3.5a) and the
       signer's (H3.5b);
     - `homelab_builder` in `EXPECTED_CONSUMERS` of
-      `ansible/tests/setup/test_host_lib_sibling_copies.py`, which compares with `==` (H3.5a);
+      `test_host_lib_sibling_copies.py`, which compares with `==` (H3.5a);
     - `homelab_builder` in `_ALERT_UNIT` and `_HOST_LIB` of
       `deploy_cross_role.py:SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, which
       `ansible/tests/setup/test_setup_cross_role_files.py` holds equal to the tree, and the

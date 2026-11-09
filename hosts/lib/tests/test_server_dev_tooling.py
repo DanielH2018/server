@@ -13,12 +13,8 @@ import json
 
 import pytest
 
-from deploy_tools.setup_lib.setup_gates import packaged_guard_hosts
-from lib import yaml_fast
-from lib.repo_paths import ANSIBLE
 from renderer.renderer_lib import host as host_mode
 
-ROLE = ANSIBLE / "roles" / "setup" / "initial_setup"
 HOST = "daniel-server"
 
 
@@ -55,19 +51,3 @@ def test_vale_reaches_daniel_server_and_retires_the_old_copy(server):
 
 def test_the_stray_root_prek_is_retired_on_daniel_server(server):
     assert "/usr/local/bin/prek" in _legacy_paths(server)
-
-
-def _task(name: str) -> dict:
-    tasks = yaml_fast.safe_load((ROLE / "tasks" / "host-basics.yml").read_text())
-    return next(t for t in tasks if t.get("name") == name)
-
-
-def test_the_ansible_tools_keep_running_on_daniel_server():
-    # ansible-core and ansible-lint stay until H7.63, and only prek leaves.
-    install = _task("Install Python CLI tooling as uv tools")
-    assert [item.partition("==")[0] for item in install["loop"]] == [
-        "ansible-core",
-        "ansible-lint",
-    ]
-    assert packaged_guard_hosts([install["when"]], (HOST,), ROLE) == frozenset()
-    assert install["ansible.builtin.command"].startswith("/usr/bin/uv tool install ")

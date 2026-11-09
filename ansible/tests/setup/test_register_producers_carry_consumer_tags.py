@@ -2,10 +2,10 @@
 
 WHY THIS IS A CHECK AND NOT PROSE. `register:` writes a host variable that outlives the task
 that produced it, so a producer and a consumer under different tags come apart the moment a run
-is scoped. `ansible/roles/setup/initial_setup/CLAUDE.md`'s fact-dependency rule has said so
-since the granular tags were added — a task whose `register:` feeds other blocks carries ALL
-its consumers' tags. It held because the only thing passing a narrow `--tags` value was a human
-who had read that file.
+is scoped. initial_setup's CLAUDE.md carried the fact-dependency rule from the day its granular
+tags were added until H7.63 emptied the role: a task whose `register:` feeds other blocks
+carries ALL its consumers' tags. It held because the only thing passing a narrow `--tags` value
+was a human who had read that file.
 
 The deployer now derives those tags and applies them unattended
 (`scripts/deploy_tools/narrow_setup.py`, reached from `deploy_narrow.plan`). A violation is no
@@ -262,7 +262,7 @@ def _roles() -> list[Path]:
 # The setup roles this check must find a producer in. A frozenset rather than a count, so a
 # role that stops registering anything — or is renamed — fails by name instead of shrinking
 # the census to nothing and passing.
-ROLES_WITH_A_PRODUCER = frozenset({"initial_setup", "k3s"})
+ROLES_WITH_A_PRODUCER = frozenset({"k3s"})
 
 
 def test_the_census_covers_every_setup_role_that_registers_anything():
@@ -278,7 +278,6 @@ def test_the_census_covers_every_setup_role_that_registers_anything():
 @pytest.mark.parametrize("role", _roles(), ids=lambda p: p.name)
 def test_every_register_producer_carries_its_consumers_tags(role: Path):
     """The real tree. Parametrized per role so a failure names the role, not the tree."""
-    # fact: ansible/roles/setup/initial_setup/CLAUDE.md#Granular tags (run one block without the whole role)
     found = offenders(role_tasks(role))
     assert not found, (
         f"{role.name}: a tag-scoped run selects the consumer and not the producer, so it "

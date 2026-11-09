@@ -14,16 +14,14 @@ catches a copy task's `src:`, a `stamp_deployed_pairs` entry and an `import_task
 task file needs its importers re-applied for the same reason a shipped file does: the import
 is static, so the imported tasks run under each importer's own tags and nowhere else.
 
-`common` is an owner like any other (#3312). Its `host_lib.py` and task files reach a host
-only through the roles that copy or import them, so a change re-applies those roles, and
-`setup_roles_for` drops `common` itself from the result because no playbook applies it on its
-own. The scan sees a `host_lib.py` consumer through its `stamp_deployed_pairs` entry, which
-`test_host_lib_sibling_copies.py` requires beside every `install_host_lib.yml` import.
+`common` is an owner like any other (#3312): a file of its reaches a host only through the
+roles that copy or import it, and `setup_roles_for` drops `common` itself from the result
+because no playbook applies it on its own. H7.63 deleted its last task files, so no live role
+ships another role's file and the table holds only rows for roles that run on no host.
 
-A `templates/` file a shared task file renders inherits that task file's importers (#3319): the
-kuma-check pair reaches a host only through `check_timer.yml`, which names it under its own
-role, so the direct scan alone finds no consumer. `SETUP_FILES_ROUTED_TO_OWNER` is the one
-exclusion, and it is empty since H7.35.
+A `templates/` file a shared task file renders inherits that task file's importers (#3319),
+because the direct scan alone finds no consumer for it. `SETUP_FILES_ROUTED_TO_OWNER` is the
+one exclusion, and it is empty since H7.35.
 
 A setup template that only a host component renders, through `role:`, and that no setup task
 names is in `SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES`. The package applies it, so the
@@ -57,13 +55,10 @@ from deployer_lib.deploy_cross_role import (
 _REFERENCE = re.compile(
     r"(?:roles/setup/|\{\{ role_path \}\}/\.\./)([a-z0-9_]+)/(files|tasks|templates)/([\w./-]*\w)"
 )
-# Named members, so a scan that stops matching fails by name rather than agreeing with an
-# empty table.
-KNOWN_EDGES = {
-    "ansible/roles/setup/common/tasks/stamp_deployed.yml": {"initial_setup"},
-    # Reached only through check_timer.yml, so this is the transitive edge.
-    "ansible/roles/setup/common/templates/check-timer.timer.j2": {"initial_setup"},
-}
+# No live setup role ships another's file since H7.63 deleted `common/tasks/`, so the table and
+# the tree agree on nothing. The scan's non-vacuity is a live role whose tasks it must read, and
+# the synthetic cases below prove each edge shape is found.
+LIVE_ROLE = "k3s"
 # A module the setup roles ship that sits outside the setup tree since H7.2e: the shared
 # `hosts/lib/` modules and the `scripts/lib/longhorn_lib/` package. No role owns them, so every
 # role naming one is a shipper. The lookbehind keeps `old_hosts/lib/x.py`-shaped words out.
@@ -222,10 +217,11 @@ def test_the_deployers_table_equals_the_trees_cross_role_files():
     assert {path: roles for path, roles in _tree_edges().items() if roles} == shipped
 
 
-def test_the_scan_finds_the_known_edges():
-    found = _tree_edges()
-    for path, roles in KNOWN_EDGES.items():
-        assert found.get(path) == roles, path
+def test_the_scan_reads_a_live_roles_tasks():
+    assert not runs_on_no_host(SETUP_ROLES / LIVE_ROLE)
+    assert _setup_task_texts().get(LIVE_ROLE), (
+        f"the scan read no task text for {LIVE_ROLE}"
+    )
 
 
 def test_the_owner_routed_template_names_the_roles_that_render_it():
@@ -237,9 +233,10 @@ def test_the_owner_routed_template_names_the_roles_that_render_it():
         assert direct.get(path) == roles, path
 
 
-def test_the_emptied_gitops_deploy_role_runs_on_no_host():
+def test_the_emptied_roles_run_on_no_host():
     assert runs_on_no_host(SETUP_ROLES / "gitops_deploy")
-    assert not runs_on_no_host(SETUP_ROLES / "initial_setup")
+    assert runs_on_no_host(SETUP_ROLES / "initial_setup")
+    assert not runs_on_no_host(SETUP_ROLES / LIVE_ROLE)
 
 
 def test_a_row_naming_an_emptied_role_is_dropped_and_a_live_one_is_kept():

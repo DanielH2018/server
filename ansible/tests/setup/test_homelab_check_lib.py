@@ -1,22 +1,20 @@
-"""homelab-check-lib.sh: the shared host-check library M6's batch B0 installs on every host.
+"""homelab-check-lib.sh: the shared host-check library M6's batch B0 put on every host.
 
 The plan is docs/target-architecture/monitoring/m6-retire-kuma.md, *B0, B5, B7 and B8*. The
 library carries `write_check_textfile` (M3's atomic write) and the three helpers moved from
-kuma-push-lib.sh. Consumers render under other roles' tags, so two things have to hold or a
-tag-scoped run leaves a host without the file: the copy task and its stamp are `tags: [always]`,
-and every consumer sources the library with a failing guard instead of skipping silently.
+kuma-push-lib.sh. The check-lib and pi-heartbeats components ship it, and every consumer sources
+it with a failing guard instead of skipping silently.
 """
 
 import re
 
 import pytest
-from _helpers import ANSIBLE, load_tasks, task_named
+from _helpers import ANSIBLE
 from _shell_render import render_shell_script
 from lib.proc_testing import run
 
 LIB = ANSIBLE / "roles/setup/initial_setup/files/homelab-check-lib.sh"
-CRONS = ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml"
-LIB_PATH = "/usr/local/lib/homelab-check-lib.sh"
+LIB_PATH = "/usr/lib/homelab/homelab-check-lib.sh"
 SOURCE_LINE = re.compile(
     r"^\s*(?:source|\.)\s+" + re.escape(LIB_PATH) + r"(?P<rest>.*)$"
 )
@@ -196,15 +194,6 @@ def test_boot_grace_active_fails_open_on_a_host_past_the_grace(tmp_path):
     # A grace of 0 can never exceed uptime, so the guard must let the check run.
     result = _bash(tmp_path, "logger() { :; }\nboot_grace_active 0 t")
     assert result.returncode == 1
-
-
-def test_the_library_copy_task_and_its_stamp_are_tagged_always():
-    tasks = load_tasks(CRONS)
-    copy = task_named(tasks, "Deploy the shared host-check library")
-    stamp = task_named(tasks, "Record the deployed shared host-check library")
-    assert copy["tags"] == ["always"]
-    assert stamp["tags"] == ["always"]
-    assert copy["ansible.builtin.copy"]["dest"] == LIB_PATH
 
 
 def _unguarded_sources(text):

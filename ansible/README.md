@@ -138,8 +138,8 @@ collections and an age key first, and no playbook provides any of the three.
 
 - `sops` comes from the host package. `hosts/bootstrap-host.sh` installs it, and the package's
   `sops` component puts `/usr/bin/sops` on `PATH` and depends on `age`.
-- The collections, `community.sops` among them, install by hand once. After that,
-  `initial_setup.yml --tags collections` keeps them at the pin:
+- The collections, `community.sops` among them, install by hand. Run the same command again
+  after a `requirements.yml` bump:
 
   ```bash
   uv run ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
