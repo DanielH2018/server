@@ -27,7 +27,7 @@ from deploy_tools.land_lib.land_flux import FluxReads
 from deploy_tools.land_lib.pin_reads import PinReads
 from validate.cluster_pins import Pin
 from deploy_tools.land_lib.tools import Classifier, CiVerdict, Tools
-from deploy_tools.land_lib.land_tags import Derivation, DeriveSource
+from deploy_tools.land_lib.land_tags import Derivation, DeriveSource, manual_planes_in
 
 MERGE_SHA = "0123456789abcdef0123456789abcdef01234567"
 # The commit `last-good` names unless a test says otherwise.
@@ -105,6 +105,8 @@ class Fakes:
     # Mapping, not dict: a dict is invariant in its values, so the many `dict[str, str]`
     # callers would no longer type-check.
     state: Mapping[str, str | None] = field(default_factory=dict)
+    # The error `read_owed` raises in place of reading the `owed.jsonl` marker.
+    owed_error: Exception | None = None
     # What `tools.own_narrowing` answers on the fast path: role tag -> this PR's derivation.
     own_narrowing: dict[str, frozenset[str]] = field(default_factory=dict)
     # `git show <ref>:<path>` text by ref. An absent ref answers as a missing file.
@@ -200,7 +202,7 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
     ordering record as a boundary call.
     """
     return Classifier(
-        plane_note=lambda paths, quiet=(), narrow_tags=None, owed=None: f.plane,
+        plane_note=lambda paths, quiet=(), narrow_tags=None, *, owed: f.plane,
         derive=lambda files, changed_files, declared=None, quiet=(): Derivation(
             list(f.derived[0]), DeriveSource(f.derived[1])
         ),
@@ -365,6 +367,11 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
 
         return read
 
+    def read_owed(_deployer_state):
+        if f.owed_error is not None:
+            raise f.owed_error
+        return manual_planes_in(f.state.get("owed.jsonl") or "")
+
     pins = PinReads(
         pins_at=pins_at,
         hold=answer("hold", f.deploy_hold),
@@ -389,6 +396,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         snapshot=snapshot,
         declared_at=lambda ref, primary: f.declared_at,
         read_state=lambda root, name: f.state.get(name, ""),
+        read_owed=read_owed,
         flux=FluxReads(land_wait, pins, k8s_tags_at),
         own_narrowing=own_narrowing,
         stale_code=lambda base: f.stale_code,

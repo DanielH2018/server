@@ -206,6 +206,17 @@ STALE_GATE_NOTE = (
 )
 
 
+# What a `deferred` from step 1 means when the owed ledger could not be read and the PR touches a
+# setup role the tick does not apply (#7906). The ledger is the one record of what a hand owes,
+# so the landing guesses neither way. `land_probe` reports it as `gave-up`, a resume point, as
+# it does for UNREADABLE_GATE_NOTE.
+UNREADABLE_LEDGER_NOTE = (
+    "  The owed ledger could not be read, so what a hand owes for this PR's setup roles is "
+    "unknown. This is NOT the ordinary deferral: no updater will answer it.\n"
+    "  Re-run land.sh once the ledger reads."
+)
+
+
 def disarmed(where: str, consequence: str) -> str:
     """The message for await_ci's CI_DISARMED, shared by ci.py's step 3 and merge.py's direct merge.
 

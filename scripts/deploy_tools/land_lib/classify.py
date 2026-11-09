@@ -12,7 +12,13 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import BRANCH, Classification, Landing
 from deploy_tools.land_lib.own_checkout import OWN_CHECKOUT
-from deploy_tools.land_lib.outcome import Outcome, Verdict, say
+from deploy_tools.land_lib.outcome import (
+    UNREADABLE_LEDGER_NOTE,
+    Outcome,
+    Verdict,
+    say,
+)
+from deploy_tools.land_lib import land_tags
 from deploy_tools.land_lib.land_tags import DeriveSource
 from deploy_tools.land_lib.promotion import moves_the_bundle
 from lib.exit_codes import LAND_BAD_ARGS
@@ -22,8 +28,6 @@ from renderer.renderer_lib.host_inputs import HOST_INPUTS
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from deployer_lib import deploy_cross_role
-from gitops_ledger import OWED_MANUAL_PLANE, owed_line_key
-from gitops_markers import MARKERS
 
 
 def _classified[**P, R](
@@ -186,17 +190,56 @@ def adopt_cross_role_tables(ln: Landing) -> None:
         )
 
 
-def owed_manual_planes(ln: Landing) -> frozenset[str] | None:
-    """The subjects of the owed ledger's `manual_plane` lines, or None when it is unreadable.
+def _tasks_remain(ln: Landing, role: str) -> bool:
+    """Whether setup role `role` still has a task file at the merge commit.
 
-    A torn line counts, as `gitops_hold._held_subjects` counts one: it still names a line
-    that `clear-owed` can clear.
+    A tree that cannot be read counts as remaining: the role then stays loud, which is the
+    direction a wrong answer must fall.
     """
-    text = ln.state(MARKERS["owed"])
-    if text is None:
-        return None
-    keys = (owed_line_key(line) for line in text.splitlines())
-    return frozenset(k[1].strip() for k in keys if k and k[0] == OWED_MANUAL_PLANE)
+    prefix = f"ansible/roles/setup/{role}/tasks/"
+    listed = ln.git("ls-tree", "-r", "-z", "--full-tree", ln.merge_sha, "--", prefix)
+    if listed.returncode != 0:
+        return True
+    return any(
+        record.partition("\t")[2].startswith(prefix)
+        for record in listed.stdout.split("\0")
+    )
+
+
+def deletions_owing_nothing(ln: Landing, files) -> frozenset[str]:
+    """The paths the PR deletes that no apply is owed for.
+
+    No playbook applies a deleted file. A deleted path in a setup role still counts when the
+    role keeps a task file, because the PR may edit another of its files and the deletion
+    then changes what the role does (#7906). So a deleted path owes nothing only outside a
+    setup role, or in a role whose whole task set the PR deletes.
+    """
+    kept: dict[str, bool] = {}
+    out = set()
+    for f in files:
+        path = f["path"]
+        if f.get("changeType") != "DELETED":
+            continue
+        roles = land_tags.setup_roles_of(path)
+        for role in roles:
+            if role not in kept:
+                kept[role] = _tasks_remain(ln, role)
+        if not any(kept[role] for role in roles):
+            out.add(path)
+    return frozenset(out)
+
+
+def owed_manual_planes(
+    ln: Landing, paths: list[str], quiet: frozenset[str]
+) -> frozenset[str]:
+    """The role tags the owed ledger holds as `manual_plane`; an unreadable ledger defers."""
+    try:
+        return land_tags.owed_for(
+            paths, quiet, ln.opts.deployer_state, ln.tools.read_owed
+        )
+    except land_tags.LedgerUnreadable as exc:
+        print(UNREADABLE_LEDGER_NOTE)
+        ln.finish(Verdict.DEFERRED, 75, f"PR #{ln.opts.pr}: {exc}")
 
 
 def classify(ln: Landing) -> None:
@@ -206,7 +249,7 @@ def classify(ln: Landing) -> None:
     view = ln.view("files,changedFiles")
     files = view.get("files", [])
     paths = [f["path"] for f in files]
-    deleted = frozenset(f["path"] for f in files if f.get("changeType") == "DELETED")
+    deleted = frozenset() if ln.resolved_tags else deletions_owing_nothing(ln, files)
     recorded = pr_range(ln)
     quiet = c.quiet_paths(paths, recorded)
     # `--tags` named the services, so the plane is left unread: the operator's list wins over
@@ -215,7 +258,11 @@ def classify(ln: Landing) -> None:
     # services -- and the broad half a `--tags` landing must not skip is caught earlier, by
     # `ci.preflight`'s blockers read over the incoming range.
     declared = None if ln.resolved_tags else _declared_at_merge(ln)
-    owed = None if ln.resolved_tags else owed_manual_planes(ln)
+    owed = (
+        frozenset()
+        if ln.resolved_tags
+        else owed_manual_planes(ln, paths, frozenset(quiet) | deleted)
+    )
     plane = (
         ""
         if ln.resolved_tags

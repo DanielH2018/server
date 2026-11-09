@@ -113,6 +113,7 @@ from docs.catalog_lib.glance_facts import (
 )
 from lib.cli_help import ArgumentParser
 from lib.estate import Estate, role_defaults
+from lib.k8s_roles import role_dirs
 from lib.render_guard import ALL_VARS, entry_tags
 from lib.repo_paths import ANSIBLE, REPO
 from renderer.renderer_lib.task_inputs import image_builder_sites
@@ -183,8 +184,7 @@ def built_image_names(k8s_roles: Path = K8S_ROLES) -> frozenset[str]:
     """Every image a role in `k8s_roles` builds, by its `image_builder_name`."""
     return frozenset(
         str(site.vars["image_builder_name"])
-        for role in k8s_roles.iterdir()
-        if role.is_dir()
+        for role in role_dirs(k8s_roles)
         for site in image_builder_sites(role)
         if "image_builder_name" in site.vars
     )

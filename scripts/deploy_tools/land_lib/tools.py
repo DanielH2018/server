@@ -332,7 +332,7 @@ class PlaneNote(Protocol):
         *,
         quiet: Iterable[str] = (),
         narrow_tags: dict[str, frozenset[str]] | None = None,
-        owed: frozenset[str] | None = None,
+        owed: frozenset[str],
     ) -> str: ...
 
 
@@ -371,6 +371,7 @@ class Tools:
     )
     declared_at: Callable[[str, Path], set[str] | None] = declared_tags_at
     read_state: Callable[[Path, str], str | None] = read_state
+    read_owed: Callable[[Path], frozenset[str]] = land_tags.read_owed
     flux: land_flux.FluxReads = field(default_factory=land_flux.FluxReads)
     # The PR's own narrowing. It runs git over the PR's range, so it is a boundary;
     # `classify.narrow_plane` calls it.

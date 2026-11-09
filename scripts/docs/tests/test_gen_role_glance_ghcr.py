@@ -53,3 +53,13 @@ def test_a_flux_owned_role_swaps_only_its_built_image_for_ghcr(tmp_path):
     assert "`ghcr.io/community-valheim-tools/valheim-server`" in line, line
     assert f"`{images.GHCR}/valheim`" in line, line
     assert "<k8s_registry_pull_host>" not in line, line
+
+
+def test_built_image_names_skips_a_retired_roles_pycache_shell(tmp_path):
+    # A deleted role leaves `<role>/tests/__pycache__/` on disk, which git never removes (#7917).
+    shutil.copytree(g.K8S_ROLES / "valheim", tmp_path / "valheim")
+    debris = tmp_path / "retired" / "tests" / "__pycache__"
+    debris.mkdir(parents=True)
+    (debris / "test_retired.cpython-312.pyc").write_bytes(b"")
+
+    assert "valheim" in g.built_image_names(tmp_path)
