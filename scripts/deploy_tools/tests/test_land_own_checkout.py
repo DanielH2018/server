@@ -3,6 +3,8 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_own_checkout.py
 """
 
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -72,6 +74,40 @@ def test_loaded_paths_keeps_only_modules_under_the_checkout(tmp_path):
     builtin = SimpleNamespace()
     got = own_checkout.loaded_paths(tmp_path, [inside, outside, builtin])
     assert got == ["scripts/a.py"]
+
+
+# The readers #7820's stale checkout misread, or that read the layout beside them.
+_INCIDENT_READERS = frozenset(
+    {
+        "scripts/lib/render_guard.py",
+        "scripts/deploy_tools/deploy_lib/owners.py",
+        "scripts/lib/k8s_roles.py",
+        "scripts/lib/ansible_inventory.py",
+    }
+)
+
+_LOADED_AFTER_IMPORT = """
+import sys
+sys.path[:0] = ["scripts", "scripts/deploy_tools"]
+import land
+from deploy_tools.land_lib import own_checkout
+print("\\n".join(own_checkout.loaded_paths(own_checkout.OWN_CHECKOUT, list(sys.modules.values()))))
+"""
+
+
+def test_importing_land_loads_the_incident_readers():
+    """A fresh interpreter: this worker's own imports would fill the census for it."""
+    root = own_checkout.OWN_CHECKOUT
+    run = subprocess.run(
+        [sys.executable, "-c", _LOADED_AFTER_IMPORT],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=120,
+    )
+    missing = _INCIDENT_READERS - set(run.stdout.split())
+    assert not missing, f"no longer loaded when land.py starts: {sorted(missing)}"
 
 
 def test_a_current_checkout_lets_the_landing_continue():

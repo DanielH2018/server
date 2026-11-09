@@ -60,7 +60,10 @@ def refuse_stale_code(ln: Landing) -> None:
     """Die when land.py's checkout lacks a master change to the code this landing runs.
 
     The base is the merge commit's first parent: master as it stood before this PR. The PR's
-    own changes are left out, because a checkout made before the merge cannot carry them.
+    own changes are left out because the landers that ship PRs run from checkouts made before
+    the merge: autoland's (`fanout_lib/autoland.py:prepare_checkout`) and the lander unit's,
+    the primary. Against the merge itself, every PR editing landing code would refuse there.
+    The cost: such a PR that also moves a layout is not caught landing from an older checkout.
     DECIDED: refuse rather than re-exec from a fresh checkout, so `land.sh` keeps running the
     release it ships with (#7820). A rebase merge of a PR that edits landing code puts its
     earlier commits in the base and refuses too; land.sh squash-merges.
