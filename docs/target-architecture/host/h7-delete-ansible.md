@@ -1918,7 +1918,7 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.49b monitor-bridge's gitops checks go | H7.19a's first PR | yes; it merges only when H7.52 is ready to merge next, because it leaves the deployer unwatched until H7.52's merge | H7.49a, H7.51 live, and every other edge of H7.52 |
 | H7.50 deploy_ui re-homes with its in-flight panel | H7.19a's second PR | yes | H7.37, H7.41, D6 |
 | H7.51 `homelab-checkout-sync` beside the deployer | H7.19a's fourth PR | yes | H7.41, H7.47, D6, the H6 PR that lands the window test |
-| H7.52 The deployer's timer retires | H7.19a's fifth PR | no: it deletes H6's seven deployer-coupled items, so it starts once they merge | H7.49a, H7.49b live, H7.51 live, H7.24a, H7.24b, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H7.60, H7.62, H6 |
+| H7.52 The deployer's timer retires | H7.19a's fifth PR | written as [#7828](https://github.com/DanielH2018/server/pull/7828), to merge right after #7806; it deletes H6's seven deployer-coupled items, so it started once they merged | H7.49a, H7.49b live, H7.51 live, H7.24a, H7.24b, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H7.60, H7.62, H6 |
 | H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.24a to H7.41, H7.24b, H7.44, H7.45, H7.48, H7.50, H7.58 to H7.64 |
 | H7.54 The test env leaves ansible-core | H7.19d | no: its parity proof runs over the suite as H7.48 and H7.52 leave it | H7.46, H7.48, H7.52 |
 | H7.55 Delete the playbooks and the role directories | H7.20a | no: it deletes what H7.53 leaves | H7.53 live on daniel-box, H7.43, H7.44, H7.45 |
