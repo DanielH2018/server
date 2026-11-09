@@ -16,7 +16,7 @@ registry_k8s_ghcr_mirror_claim: registry-ghcr-mirror
 registry_k8s_ghcr_mirror_keep_revisions: 3
 registry_k8s_dockerhub_mirror_claim: registry-dockerhub-mirror
 registry_k8s_dockerhub_mirror_keep_revisions: 3
-registry_k8s_image: registry:3.1.2@sha256:d4032d4cc323c1731c707931ecada07a53076eac38e3b61ae57533f170f2c6c3
+registry_k8s_image: registry:3.1.2@sha256:38907510915c3f1604c7e83d6ab602ab3020d092f73bdaed8696773693ff768c
 registry_k8s_netpol_probe_image: alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 
 # How long registry-gc.sh's warm phase may read manifests and blobs through the mirror after the
