@@ -588,8 +588,8 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   module it covers. Every prefix and regex matches on path alone, so a test file would otherwise
   read as whatever plane it sat under (PR #707: three test files set `broad_manual`). A test-only
   push produces an empty `ChangeSet` and takes the `handle_merge_only` ff-merge, like a
-  docs-only push. No role's tasks or templates ship any `.py` file, so no role ships a test
-  file to a host.
+  docs-only push. The `no-role-ships-a-pytest-file` row of
+  `ansible/tests/repo/test_census_rows_roles.py` enforces that no role ships a test file to a host.
 - **Broad changes split three ways** (`deploy_changes._BROAD_*_PREFIXES`); *Broad changes* above
   has the table and the tag routing. **A deploy-plane path adds no plan.** `deploy_narrow.plan`
   names the setup roles this host runs, narrowed to their own block tags, `handle_broad` applies

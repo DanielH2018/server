@@ -247,8 +247,9 @@ def setup_file_hosts(
         # deployer's k8s branch already reads *.md as docs.
         return frozenset()
     if _is_test_only_path(path):
-        # A role's own pytest guards ship nowhere either: no role's tasks or templates
-        # ship any `.py` file, so no host runs the old copy. The deployer's own predicate, as `land_tags` calls it.
+        # A role's own pytest guards ship nowhere either: no role ships a test file (the
+        # `no-role-ships-a-pytest-file` row of `ansible/tests/repo/test_census_rows_roles.py`),
+        # so no host runs the old copy. The deployer's own predicate, as `land_tags` calls it.
         # Without it a `tests/` path falls through to the ROLE-level reach, and the union
         # over a PR's files widens a box-only `files/` change back out to every host.
         return frozenset()

@@ -40,10 +40,26 @@ def _code(subject: Subject) -> list[tuple[int, str]]:
     ]
 
 
-# ── No role ships a markdown file ──────────────────────────────────────
+# ── No role ships a pytest file or a markdown file ──────────────────────────────────────
 
-# `src:`/`dest:` in a copy or template task, the `lookup('file', ...)` a k8s ConfigMap inlines a
-# script with, and a bare YAML list entry: `home-assistant`'s four
+# A ship names its file on a `src:`, `dest:` or `loop:` line, or inside a `lookup('file', ...)`
+# whose path may be built with `playbook_dir + '/roles/.../x.py'`. Jinja `{# #}` comments name
+# test files freely, so a `.py` on any other line is not a ship.
+_PY_SHIP_LINE = re.compile(r"""\b(?:src|dest|loop)\s*:|lookup\(\s*['"]file['"]""")
+_PY_BASENAME = re.compile(r"(?<![\w.-])([\w-][\w.-]*\.py)\b")
+
+
+def _shipped_py(subject: Subject) -> list[tuple[int, str]]:
+    """(line, basename) for every `.py` file `subject` names on a line that ships a file."""
+    return [
+        (n, name)
+        for n, code in _code(subject)
+        if _PY_SHIP_LINE.search(code)
+        for name in _PY_BASENAME.findall(code)
+    ]
+
+
+# The same two shapes for a `.md`, plus a bare YAML list entry: `home-assistant`'s four
 # `*_files` lists in `defaults/main.yml` name what its ConfigMap ships that way.
 #
 # WHAT THIS SCAN DOES NOT SEE: a ship that names no basename. `with_fileglob`/`fileglob` over a
@@ -114,6 +130,45 @@ _POD_RESOURCES_LITERAL = re.compile(
 _POD_RESOURCES_CALL = "{{ container_resources("
 
 ROWS = (
+    Census(
+        name="no-role-ships-a-pytest-file",
+        reason=(
+            "`deploy_changes._is_test_only_path` and `reach.is_role_test_path` drop test-suite "
+            "paths before mapping a change to a host or a tag, so a change to a role's own "
+            "`tests/` or to a `test_*.py`/`conftest.py` deploys nothing. That is safe only while "
+            "a file they drop is also one no host or ConfigMap receives. Rename the shipped "
+            "file, or narrow those predicates."
+        ),
+        files=lambda: _role_files("tasks", "templates", "handlers"),
+        offence=lambda s: [
+            f"line {n} ships {name}"
+            for n, name in _shipped_py(s)
+            if name == "conftest.py" or name.startswith("test_")
+        ],
+        count=lambda s: len(_shipped_py(s)),
+        red=(
+            Subject("a.yml", "- ansible.builtin.copy:\n    src: test_deploy.py\n"),
+            Subject(
+                "b.yml",
+                "data: {{ lookup('file', playbook_dir + '/roles/x/files/conftest.py') }}\n",
+            ),
+            Subject("c.yml", "  loop: [host_lib.py, test_host_lib.py]\n"),
+        ),
+        green=(
+            Subject("a.yml", "- ansible.builtin.copy:\n    src: deploy_logic.py\n"),
+            Subject("b.yml", "# src: test_commented.py is not a ship\n"),
+            Subject("c.yml", "{# test_render.py pins this block #}\n"),
+        ),
+        # 33 ship lines across 15 files when the row returned (2026-11-09).
+        min_matches=33,
+        # The ConfigMap-inlined script and the looped host copy.
+        must_find=frozenset(
+            {
+                "ansible/roles/k8s/configarr/templates/health-configmap.yaml.j2",
+                "ansible/roles/setup/common/tasks/install_host_lib.yml",
+            }
+        ),
+    ),
     Census(
         name="no-role-ships-a-markdown-file",
         reason=(
