@@ -1392,9 +1392,11 @@ jobs:
             scripts/validate/validate_lib/host_container.py
             scripts/validate/validate_lib/bootstrap_age_case.py
             scripts/validate/validate_lib/bootstrap_case.py
+            scripts/validate/validate_lib/bootstrap_plan.py
             scripts/validate/validate_lib/bootstrap_repo_case.py
             scripts/validate/validate_lib/case_groups.py
             scripts/validate/validate_lib/conffile_case.py
+            scripts/validate/validate_lib/disarm_case.py
             scripts/validate/validate_lib/engine_case.py
             scripts/validate/validate_lib/fixture_host_case.py
             scripts/validate/validate_lib/host_fixtures.py
@@ -1784,6 +1786,43 @@ jobs:
           uv run python scripts/validate/host_package_cases.py --image "homelab-host-test:$RELEASE" \
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
             --work "$RUNNER_TEMP/cases" "${seed[@]}"
+
+      # A case whose seed never holds k3s, so install.sh's own download and sha256 check of the
+      # release binary run whatever the step above seeds (#7751 seeds k3s there; #7754).
+      # `continue-on-error` keeps a GitHub release outage from failing the PR; a red step here
+      # is a broken download path or an outage.
+      # One leg is enough: the download does not depend on the release under test. A job that
+      # built its image has spent most of `timeout-minutes`, and a job timeout does gate, so a
+      # built image (no RepoDigests, unlike a pulled one) skips the case.
+      - name: Run the bootstrap case that downloads k3s from its release (does not gate)
+        if: >-
+          !cancelled() && matrix.release == '26.04' && (github.event_name == 'workflow_dispatch'
+          || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true')
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          RELEASE: ${{ matrix.release }}
+          PYTHON: ${{ matrix.python }}
+          UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
+          TOOLS_CACHE_HIT: ${{ steps.tools-cache.outputs.cache-hit }}
+        run: |
+          if [ "$UPGRADE" != true ]; then
+            echo "::notice::The merge base is HEAD, so no image was built; the k3s download case does not run."
+            exit 0
+          fi
+          digests=$(docker image inspect --format '{{join .RepoDigests " "}}' "homelab-host-test:$RELEASE")
+          if [ -z "$digests" ]; then
+            echo "::notice::This job built the test image, so the k3s download case does not run inside the job's timeout."
+            exit 0
+          fi
+          seed=()
+          if [ "$TOOLS_CACHE_HIT" = true ]; then
+            seed=(--tools-cache "$RUNNER_TEMP/tools-cache")
+          fi
+          uv run python scripts/validate/host_package_cases.py --image "homelab-host-test:$RELEASE" \
+            --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
+            --work "$RUNNER_TEMP/cases-k3s-download" "${seed[@]}" --k3s-download
 
   # Target slice H3.11, the `arm64` half of homelab-tools (docs/target-architecture/host/
   # h3-pi-pilot.md, *`homelab-tools`* and *Open questions* 9). The `host_packages_build` job builds

@@ -123,7 +123,8 @@ def _run(monkeypatch, tmp_path: Path, misbehaving: str | None = None):
     green = tmp_path / "bootstrap-kit" / "green"
     green.mkdir(parents=True)
     (green / "k3s").write_text("k3s")
-    planned = {p.label: p for p in case.plan(tmp_path, green)}
+    gating = case.selected(case.plan(tmp_path, green), k3s_download=False)
+    planned = {p.label: p for p in gating}
     overlap = Overlap(len(planned))
 
     def made(out: Path) -> Path:
@@ -140,7 +141,12 @@ def _run(monkeypatch, tmp_path: Path, misbehaving: str | None = None):
     monkeypatch.setattr(FakeContainer, "misbehaving", misbehaving)
     monkeypatch.setattr(case, "Container", FakeContainer)
     cases = SimpleNamespace(
-        image="img", work=tmp_path, python="3.12", failed=[], tools_cache=None
+        image="img",
+        work=tmp_path,
+        python="3.12",
+        failed=[],
+        tools_cache=None,
+        k3s_download=False,
     )
     case.run(cases)
     return cases, planned, overlap

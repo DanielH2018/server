@@ -1,6 +1,6 @@
 """Run the host package cases' groups concurrently, each in its own scratch directory (#7784).
 
-`host_package_cases.main()` hands `run_groups` the twelve case groups: the four `Cases` methods
+`host_package_cases.main()` hands `run_groups` the twelve case groups: the three `Cases` methods
 and each case module's `run`. Every group boots its own containers, and their names differ, but
 the serial runner had every container mount the one `<work>/repo` and `<work>/debs`, and every
 group republishes that repository. So `isolate` gives each group a shallow copy of `Cases` whose
@@ -30,7 +30,7 @@ from concurrent.futures import ThreadPoolExecutor
 from io import StringIO
 
 from validate.validate_lib import bootstrap_age_case, bootstrap_case
-from validate.validate_lib import bootstrap_repo_case, engine_case
+from validate.validate_lib import bootstrap_repo_case, disarm_case, engine_case
 from validate.validate_lib import conffile_case, repos_case, secrets_case, shadow_case
 
 
@@ -85,7 +85,7 @@ def groups(cases_class) -> list[tuple[str, Callable]]:
         ("bootstrap_age_case", bootstrap_age_case.run),
         ("engine_case", engine_case.run),
         ("by_hand", cases_class.by_hand),
-        ("disarm", cases_class.disarm),
+        ("disarm", disarm_case.run),
         ("conffile_case", conffile_case.run),
         ("secrets_case", secrets_case.run),
         ("bootstrap_repo_case", bootstrap_repo_case.run),

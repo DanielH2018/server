@@ -2,7 +2,7 @@
 
 Each test drives `host_package_cases.main()` with the twelve case groups replaced by stubs that
 sleep instead of booting a container, so no Docker is needed. The runner must look the groups
-up when `main()` runs, the four `Cases` methods on the instance and each `validate_lib` case
+up when `main()` runs, the three `Cases` methods on the instance and each `validate_lib` case
 module's `run` on that module, and must run them in this process (threads, not
 `multiprocessing`), so that a stub set here is the one it calls (#7784).
 
@@ -21,14 +21,16 @@ from validate.validate_lib import (
     bootstrap_case,
     bootstrap_repo_case,
     conffile_case,
+    disarm_case,
     engine_case,
     repos_case,
     secrets_case,
     shadow_case,
 )
 
-METHODS = ("upgrade_path", "cold_install", "by_hand", "disarm")
+METHODS = ("upgrade_path", "cold_install", "by_hand")
 MODULES = {
+    "disarm": disarm_case,
     "secrets_case": secrets_case,
     "conffile_case": conffile_case,
     "engine_case": engine_case,
@@ -84,6 +86,7 @@ def _run_main(
     monkeypatch: pytest.MonkeyPatch,
     fail: str | None = None,
     raise_in: str | None = None,
+    flags: tuple[str, ...] = (),
 ) -> tuple[Runs, int | BaseException]:
     runs = Runs()
     monkeypatch.setattr(cases.Cases, "_prepare", lambda self, render, debs: None)
@@ -94,7 +97,7 @@ def _run_main(
         monkeypatch.setattr(module, "run", _stub(runs, name, fail, raise_in))
     argv = ["--image", "homelab-host-test:24.04", "--python", "3.12"]
     argv += ["--render", str(tmp_path / "render"), "--debs", str(tmp_path / "debs")]
-    argv += ["--work", str(tmp_path / "work")]
+    argv += ["--work", str(tmp_path / "work"), *flags]
     try:
         status: int | BaseException = cases.main(argv)
     except Exception as exc:
@@ -139,3 +142,12 @@ def test_each_groups_output_stays_together_in_the_log(tmp_path, monkeypatch, cap
         "interleaved": sorted({name for name in blocks if blocks.count(name) > 1}),
         "concurrent": runs.max_overlap() >= 2,
     } == {"status": 0, "lines": 3 * len(GROUPS), "interleaved": [], "concurrent": True}
+
+
+def test_the_k3s_download_flag_runs_only_the_bootstrap_group(tmp_path, monkeypatch):
+    runs, status = _run_main(tmp_path, monkeypatch, flags=("--k3s-download",))
+
+    assert {"status": status, "ran": set(runs.spans)} == {
+        "status": 0,
+        "ran": {"bootstrap_case"},
+    }

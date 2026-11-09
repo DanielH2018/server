@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 from lib.git import git
+from lib.repo_paths import REPO
 from validate import host_package_cases
 from validate.validate_lib import bootstrap_age_case as age_case
 from validate.validate_lib import case_groups
@@ -60,7 +61,7 @@ def test_the_plan_runs_every_host_online_then_offline_with_three_reds(tmp_path):
     green.mkdir(parents=True)
     (green / "k3s").write_text("k3s")
 
-    planned = case.plan(tmp_path, green)
+    planned = case.selected(case.plan(tmp_path, green), k3s_download=False)
 
     online = [p.host for p in planned if p.kit is None]
     assert {"daniel-box", "daniel-server", "daniel-pi"} <= set(online)
@@ -86,7 +87,7 @@ def test_the_plan_runs_every_host_online_then_offline_with_three_reds(tmp_path):
     assert (depends.clone, depends.refusal) == ("red-depends", case.INSTALL_REFUSED)
     assert depends.apt_says == "Depends: homelab-daniel-server"
     fixture = offline[4][0]
-    assert (fixture.clone, fixture.host) == ("fixture-host", case.FIXTURE_HOST)
+    assert (fixture.clone, fixture.host) == ("fixture-host", fixture_case.FIXTURE_HOST)
     assert fixture.marker == case.UNCHECKED
     assert {p.clone for p in planned[:-2]} == {"green"}
 
@@ -147,7 +148,7 @@ def test_the_fixture_clone_is_one_commit_past_the_green_one_and_builds_a_new_hos
         fixture_case.SCRIPT,
     ):
         (green / relative).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(case.REPO / relative, green / relative)
+        shutil.copyfile(REPO / relative, green / relative)
     clones.case_git("init", "-q", cwd=green)
     clones.case_git("add", "-A", "-f", cwd=green)
     clones.case_git("commit", "-q", "-m", "base", cwd=green)
@@ -155,11 +156,11 @@ def test_the_fixture_clone_is_one_commit_past_the_green_one_and_builds_a_new_hos
     out = clones.fixture_clone(green, tmp_path / "fixture")
 
     assert git("rev-list", "--count", "HEAD", cwd=out).stdout.strip() == "2"
-    assert (out / "hosts" / case.FIXTURE_HOST / "package.yml").is_file()
+    assert (out / "hosts" / fixture_case.FIXTURE_HOST / "package.yml").is_file()
 
 
 def test_a_depends_entry_added_to_daniel_box_s_spec_is_clean():
-    spec = (case.REPO / clones.BOX_SPEC).read_text()
+    spec = (REPO / clones.BOX_SPEC).read_text()
     changed = clones.add_depends(spec, "homelab-only")
     assert "depends:\n  - homelab-tools\n  - libyaml-dev\n  - homelab-only\n" in changed
     assert changed.replace("  - homelab-only\n", "", 1) == spec
