@@ -652,7 +652,7 @@ on daniel-box gets a line too when its change reaches another host (#6510): the 
 key names the hosts the "also reaches" note names, and the banner and monitor-bridge print the
 apply for each. Apply it there, then `clear-owed manual_plane <role>`. The clear, `--applied` and
 the six-hour page are in
-[A role only a hand can apply is recorded, not parked](gitops-pipeline.md#a-role-only-a-hand-can-apply-is-recorded-not-parked).
+[A role only a hand can apply is recorded, not parked](archive/gitops-deployer.md#a-role-only-a-hand-can-apply-is-recorded-not-parked).
 
 ## Waiting for a host to apply its package
 

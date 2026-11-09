@@ -153,6 +153,13 @@ def test_inflight_title_lookup_failure_leaves_panel_up_is_flagged(app):
     assert sum(1 for c in app.run.calls if c[:3] == ["gh", "pr", "view"]) == 2
 
 
+def test_page_switches_logs_and_folds_the_finished_list_is_clean(app):
+    _, html = app.get("/")
+    assert 'id="vtabs"' in html and "function renderTabs()" in html
+    assert "const FIN_SHOWN=5" in html and 'id="finToggle"' in html
+    assert 'onclick="showStage(${d.stages.indexOf(s)})"' in html
+
+
 def test_page_has_no_stale_release_panel_is_flagged(app):
     _, html = app.get("/")
     assert "/api/stale" not in html and 'id="stale"' not in html

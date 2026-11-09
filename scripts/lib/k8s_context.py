@@ -27,6 +27,7 @@ from lib.render_guard import (
 )
 
 __all__ = [
+    "failed_key",
     "resolve_vars",
 ]
 
@@ -84,6 +85,36 @@ def _lazy_plugin_test(name: str):
 _PURE_TEMPLATE = re.compile(r"^\{\{\s*(?P<expr>[^{}]+?)\s*\}\}$")
 
 
+@functools.cache
+def _expansion_env(undefined_cls):
+    """The environment `resolve_vars` expands values in, built once per undefined class."""
+    env = make_env([SHARED_TPL], undefined_cls=undefined_cls)
+    env.keep_trailing_newline = False
+    # `bool` is an Ansible filter, not a Jinja builtin, so a group_var that uses it renders
+    # here as "No filter named 'bool'" — a render failure pointing at a variable that is
+    # perfectly valid under Ansible. `ansible_bool` is the filter `register_ansible_filters`
+    # gives every render guard, and importing it costs this module nothing.
+    env.filters["bool"] = ansible_bool
+    for name in _DEFAULTS_PLUGIN_FILTERS:
+        env.filters[name] = _lazy_plugin_filter(name)
+    for name in _DEFAULTS_PLUGIN_TESTS:
+        env.tests[name] = _lazy_plugin_test(name)
+    return env
+
+
+# A render resolves the same inventory strings once per role and pass, so each compiles once.
+@functools.cache
+def _compiled_template(undefined_cls, source: str):
+    return _expansion_env(undefined_cls).from_string(source)
+
+
+@functools.cache
+def _compiled_expression(undefined_cls, expr: str):
+    return _expansion_env(undefined_cls).compile_expression(
+        expr, undefined_to_none=False
+    )
+
+
 def resolve_vars(
     values: dict, context: dict, passes: int = 5, undefined_cls=StubUndefined
 ) -> dict:
@@ -107,18 +138,10 @@ def resolve_vars(
     A value rendered as text ends in as many newlines as ansible-core gives it: Jinja drops the
     source's last one, and ``pad_to_source_newlines`` adds back only those the render lacks. So
     ``"p {{ x }}\\n"`` with ``x`` ending in a newline resolves to one newline, not two (#4853).
+
+    An exception raised while expanding a value carries a note naming that variable, which
+    ``failed_key`` reads back.
     """
-    env = make_env([SHARED_TPL], undefined_cls=undefined_cls)
-    env.keep_trailing_newline = False
-    # `bool` is an Ansible filter, not a Jinja builtin, so a group_var that uses it renders
-    # here as "No filter named 'bool'" — a render failure pointing at a variable that is
-    # perfectly valid under Ansible. `ansible_bool` is the filter `register_ansible_filters`
-    # gives every render guard, and importing it costs this module nothing.
-    env.filters["bool"] = ansible_bool
-    for name in _DEFAULTS_PLUGIN_FILTERS:
-        env.filters[name] = _lazy_plugin_filter(name)
-    for name in _DEFAULTS_PLUGIN_TESTS:
-        env.tests[name] = _lazy_plugin_test(name)
 
     def expand(node, ctx):
         """Recursively render every `{{ ... }}` string in `node`, not just a top-level one.
@@ -149,9 +172,7 @@ def resolve_vars(
             if pure:
                 # `compile_expression` would turn an undefined result into None, which a
                 # strict caller must see raise instead.
-                value = env.compile_expression(
-                    pure.group("expr"), undefined_to_none=False
-                )(**ctx)
+                value = _compiled_expression(undefined_cls, pure.group("expr"))(**ctx)
                 if isinstance(value, StrictUndefined):
                     value._fail_with_undefined_error()
                 if isinstance(value, Undefined):
@@ -159,7 +180,9 @@ def resolve_vars(
                 if isinstance(value, str):
                     return pad_to_source_newlines(node, value)
                 return value
-            return pad_to_source_newlines(node, env.from_string(node).render(ctx))
+            return pad_to_source_newlines(
+                node, _compiled_template(undefined_cls, node).render(ctx)
+            )
         if isinstance(node, list):
             return [expand(n, ctx) for n in node]
         if isinstance(node, dict):
@@ -172,5 +195,20 @@ def resolve_vars(
         if not pending:
             break
         for key, value in pending.items():
-            resolved[key] = expand(value, {**context, **resolved})
+            try:
+                resolved[key] = expand(value, {**context, **resolved})
+            except Exception as exc:
+                exc.add_note(f"{_FAILED_KEY_NOTE}{key}")
+                raise
     return resolved
+
+
+_FAILED_KEY_NOTE = "resolve_vars failed on: "
+
+
+def failed_key(exc: BaseException) -> str | None:
+    """The variable whose value `resolve_vars` was expanding when it raised `exc`, if any."""
+    for note in getattr(exc, "__notes__", ()):
+        if note.startswith(_FAILED_KEY_NOTE):
+            return note.removeprefix(_FAILED_KEY_NOTE)
+    return None

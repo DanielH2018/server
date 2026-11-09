@@ -152,9 +152,9 @@ def _fake_host(root):
     # A role-installed unit, and the link `systemctl enable` makes to it and to a package's.
     system = fs / "etc/systemd/system"
     (system / "multi-user.target.wants").mkdir(parents=True)
-    (system / "gitops-deploy.service").write_text("[Service]\n")
-    (system / "multi-user.target.wants" / "gitops-deploy.service").symlink_to(
-        "../gitops-deploy.service"
+    (system / "coredns-host.service").write_text("[Service]\n")
+    (system / "multi-user.target.wants" / "coredns-host.service").symlink_to(
+        "../coredns-host.service"
     )
     (system / "multi-user.target.wants" / "tool.service").symlink_to(
         "../../../../usr/lib/systemd/system/tool.service"

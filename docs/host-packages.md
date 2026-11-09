@@ -334,7 +334,7 @@ To clear the hold:
     ```
 
     The command refuses unless the SHA is the one held. It removes `hold_sha` and every
-    `hold_plane` line together. [The GitOps pipeline](gitops-pipeline.md)'s *Which apply
+    `hold_plane` line together. [The archived deployer page](archive/gitops-deployer.md)'s *Which apply
     clears a hold* states the coverage rule.
 
 Never `rm` `hold_sha`. That leaves its `hold_plane` lines in the ledger with nothing that
@@ -1094,11 +1094,44 @@ then daniel-pi, then daniel-box. Each step is **operator-only**, apart from the 
       --ca-file /var/lib/rancher/k3s/agent/server-ca.crt
     ```
 
-1. Open a root shell with `sudo -i`, keep it open, and upgrade the host from it. Do not reboot
-   yet.
+1. Open a root shell with `sudo -i` and keep it open. Every step up to the reboot runs from it.
+1. Copy aside the apt sources the host's packages own. `do-release-upgrade` writes
+   `Enabled: no` into every source whose URI is not an Ubuntu mirror. That covers
+   `homelab.sources`, which `homelab-updater` reads as its only source list. It also covers daniel-pi's `docker.sources`
+   and `azlux.sources`, and `github-cli.sources` on the cluster nodes. Unowned files in the
+   directory are left out, and `do-release-upgrade` disables those for good.
+
+    ```bash
+    install -d -m 0700 /root/pre-release-upgrade
+    dpkg -S '/etc/apt/sources.list.d/*' | awk '{print $NF}' \
+      | xargs cp -a -t /root/pre-release-upgrade/
+    ls /root/pre-release-upgrade
+    ```
+
+1. Stop `do-release-upgrade` from removing the homelab packages. Once their source is
+   disabled, it counts every `homelab-*` package as obsolete, and on daniel-pi `docker-ce`
+   and `containerd.io` as well. It reads `/etc/update-manager/release-upgrades.d/*.cfg` over its own
+   config, so this drop-in skips the removal:
+
+    ```bash
+    printf '[Distro]\nRemoveObsoletes=False\n' \
+      > /etc/update-manager/release-upgrades.d/90-homelab.cfg
+    ```
+
+1. Upgrade the host. Do not reboot yet. `do-release-upgrade` runs inside a GNU screen window,
+   so a dropped SSH session reattaches with `screen -r`. Keep a console on standby anyway. If it
+   shows *Foreign Packages Installed*, answer `y`, because its default aborts the upgrade.
 
     ```bash
     do-release-upgrade
+    ```
+
+1. Put the sources back and remove the drop-in, so the updater sees its repository again and
+   the verify step's `dpkg --verify` passes.
+
+    ```bash
+    cp -a /root/pre-release-upgrade/. /etc/apt/sources.list.d/
+    rm /etc/update-manager/release-upgrades.d/90-homelab.cfg
     ```
 
 1. Check that the upgraded sudo still reads the host-hardening drop-in, from the held root shell.
@@ -1159,6 +1192,22 @@ then daniel-pi, then daniel-box. Each step is **operator-only**, apart from the 
     ```bash
     sudo k3s kubectl label node <node> homelab/k3s-upgrade-paused-
     ```
+
+1. On daniel-pi, check the boot partition, then move Docker's source to the new release.
+   `piboot-try` replaces `flash-kernel` from 26.04 on. It moves the boot assets into
+   `/boot/firmware/current/` and puts `os_prefix` lines at the top of `config.txt`, keeping
+   pi-tuning's lines. The first command lists the assets, and the second prints `2`.
+
+    ```bash
+    ls /boot/firmware/current
+    grep -c -e '^gpu_mem=16' -e '^dtparam=watchdog=on' /boot/firmware/config.txt
+    ```
+
+    The Pi keeps the old release's Docker builds until a PR changes the suite in
+    `hosts/components/apt-docker/docker.sources` and the release and codename in
+    `hosts/components/pi-docker/component.yml`. Merge that PR only now: merged earlier, it
+    puts the new release's builds on the old one. `homelab-docker-engine` then installs the
+    same versions built for the new release and restarts dockerd.
 
 A host that fails the verify step stays stopped, with its updater timer masked. A host that fails
 the Prometheus read holds, so mask its timer again. Either host keeps its pause label. Its rollback

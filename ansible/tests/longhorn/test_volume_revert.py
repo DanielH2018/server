@@ -46,7 +46,6 @@ from pathlib import Path
 
 import pytest
 from _helpers import load_tasks as _tasks
-from _helpers import render_expr as _render
 from _kubectl_seam import kubectl_has_a_cluster_configured
 from _kubectl_seam import no_cluster_to_ask as _no_cluster_to_ask
 from _volume_revert import (
@@ -56,6 +55,7 @@ from _volume_revert import (
     _VALIDATOR,
     _index,
     _named,
+    _render,
     _task_names,
 )
 from _volume_ops import assert_the_role_declares_an_autodeploy_stance

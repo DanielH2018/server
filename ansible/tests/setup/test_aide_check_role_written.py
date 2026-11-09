@@ -48,6 +48,9 @@ def test_a_unit_no_role_installs_is_not_listed() -> None:
     for path in (
         "/etc/systemd/system/unlisted.service",
         "/etc/systemd/system/gitops-deploy.service.d/override.conf",
+        "/etc/systemd/system/gitops-deploy.service",
+        "/etc/systemd/system/gitops-deploy-alert.service",
+        "/etc/systemd/system/gitops-deploy.timer",
         "/etc/apt/sources.list.d/extra.list",
         "/usr/local/sbin/helper",
         "/etc/systemd/system/kuma-check-live-drift.timer",

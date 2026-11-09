@@ -25,7 +25,13 @@ CONTRACT_HEADING = "## Autonomous-role contract"
 
 # Roles whose cron/timer changes no state: it reads, then pushes a heartbeat or a notification.
 # Each reason is the thing to re-check before keeping the role here.
-EXEMPT: dict[str, str] = {}
+EXEMPT: dict[str, str] = {
+    "gitops_deploy": (
+        "`templates/gitops-deploy.timer.j2` stays until H7.53 deletes the deployer, but the "
+        "role's tasks are one `meta: end_role`, so no host gets the timer; the retired "
+        "contract is in docs/archive/gitops-deploy-role.md"
+    ),
+}
 
 
 def _installs_a_cron_or_timer(role_dir: Path) -> bool:

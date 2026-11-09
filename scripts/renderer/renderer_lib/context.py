@@ -32,7 +32,7 @@ from lib.estate import REPO_INVENTORY, Inventory
 from lib.k8s_context import resolve_vars
 from lib.render_context import render_context
 from lib.render_guard import StrictChainableUndefined, load_yaml
-from lib.repo_paths import ANSIBLE, FILTER_PLUGINS
+from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, REPO
 
 # Ansible loads a filter plugin by file path; a script reaches it through this insert.
 if str(FILTER_PLUGINS) not in _sys.path:
@@ -75,16 +75,20 @@ def play_context(
 
     # No BASE_CONTEXT: its stubs would fill in a name no file holds. Under the strict class a
     # variable whose value names an undefined one is left undefined rather than resolved to
-    # STUB or None, so a template that reads it stops the render. Not `strict=True`: three
-    # group_vars name variables only setup roles or Ansible itself define
-    # (`ansible_check_mode` among them), and Ansible fails only a task that reads one.
+    # STUB or None, so a template that reads it stops the render. Not `strict=True`: a built-image
+    # pin reads `k8s_built_image_tags`, a play fact, and Ansible fails only a task that reads one.
+    # `base`: names no layer holds that `k8s_no_mutate` and `claude_code_watch_uids` read (#7845).
+    claude = load_yaml(REPO / "hosts/components/claude-code/defaults/main.yml")
+    uid = claude["claude_code_login_uid"]
+    base = {"ansible_check_mode": False, "claude_code_login_uid": uid}
+
     def resolve(overrides: dict) -> dict:
         return render_context(
             role_dir,
             host,
             overrides,
             inventory=inventory,
-            base={},
+            base=base,
             undefined_cls=StrictChainableUndefined,
         )
 

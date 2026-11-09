@@ -38,7 +38,7 @@ from lib.estate import (
     inventory_layers,
     role_defaults,
 )
-from lib.k8s_context import resolve_vars
+from lib.k8s_context import failed_key, resolve_vars
 from lib.render_guard import (
     ANSIBLE,
     BASE_CONTEXT,
@@ -212,33 +212,28 @@ def _holds_jinja(value) -> bool:
 def _resolve(raw: dict, undefined_cls=StubUndefined) -> tuple[dict, dict[str, str]]:
     """`raw` expanded against itself, and each key dropped because its expansion raised.
 
-    Whole-dict first, which is the common case and one pass. A setup default needs the
-    per-key fallback when it names a filter `resolve_vars`' light-tier environment does not
-    register (its `DECIDED:` marker says why it stays light). The three Longhorn tier lists,
-    `basename` and `dirname` are heavy-tier filters, and `resolve_vars` registers those lazily.
+    Whole-dict, one `resolve_vars` call when nothing raises. When a key raises, it is dropped
+    from both the values and their context, and the rest resolve whole again. Under a strict
+    class a value reading a dropped key then raises and is dropped too; under `StubUndefined`
+    it reads the key as `STUB`. A setup default raises when it
+    names a filter `resolve_vars`' light-tier environment does not register (its `DECIDED:`
+    marker says why it stays light). The three Longhorn tier lists, `basename` and `dirname`
+    are heavy-tier filters, and `resolve_vars` registers those lazily.
 
     A dropped key renders as `STUB` through `StubUndefined` rather than as literal braces,
     which is what a guard asserting on a render needs: braces in the output are the defect
     the render exists to remove, so they must never arrive from the context.
     """
-    try:
-        return resolve_vars(raw, raw, undefined_cls=undefined_cls), {}
-    except Exception:
-        resolved: dict = {}
+    remaining = dict(raw)
     dropped: dict[str, str] = {}
-    # Twice over the dict, because a key resolved on its own sees only the keys already done:
-    # a value referencing one later in `raw` would otherwise expand against a missing name
-    # and come back carrying `STUB`. The second round re-resolves every surviving key with the
-    # first round's results in context, so declaration order stops mattering.
-    for _ in range(2):
-        for key, value in raw.items():
-            if key in dropped:
-                continue
-            try:
-                resolved |= resolve_vars(
-                    {key: value}, {**raw, **resolved}, undefined_cls=undefined_cls
-                )
-            except Exception as exc:
-                dropped[key] = str(exc)
-                resolved.pop(key, None)
-    return resolved, dropped
+    while True:
+        try:
+            return resolve_vars(
+                remaining, remaining, undefined_cls=undefined_cls
+            ), dropped
+        except Exception as exc:
+            key = failed_key(exc)
+            if key is None or key not in remaining:
+                raise
+            dropped[key] = str(exc)
+            del remaining[key]

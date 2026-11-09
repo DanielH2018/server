@@ -247,7 +247,7 @@
   # non-pod maintenance attachment is untested, because nothing in this repo exercises a real
   # Longhorn revert. Accepted: treat a stuck maintenance-mode attach as blocking that service's
   # next deploy until cleared by hand, not as something the pipeline routes around. Long form:
-  # docs/gitops-pipeline.md, *The deployer's record*.
+  # docs/archive/gitops-deployer.md, *The deployer's record*.
   #
   # No `attachmentID`. Read from longhorn-manager v1.12.1: `manager.Attach` stores the
   # attachment ticket under whatever `attachmentID` the caller sends, and `manager.Detach` does
