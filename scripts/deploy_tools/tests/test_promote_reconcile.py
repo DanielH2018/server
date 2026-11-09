@@ -3,7 +3,7 @@
 A run that ended without its `settle` (#7863) leaves `prod` apart from `last-good`.
 `verdict-status` posts `verify`'s verdict on T as the commit status `homelab/promote-verdict`,
 and a later run's `reconcile` reads it: a good status for `prod`'s digest moves `last-good`,
-anything else writes the unverified hold. Both jobs check out nothing, so each test runs a
+anything else writes `settle`'s hold. Both jobs check out nothing, so each test runs a
 step's own `run:` under bash, with the `flux` fake and GHCR `curl` fake of
 `test_promote_settle.py` and a `gh` fake that runs each `--jq` filter over FAKE_STATUSES.
 
