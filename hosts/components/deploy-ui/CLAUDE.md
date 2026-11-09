@@ -89,6 +89,30 @@ Log names carry a `mkstemp` suffix as well as the second-granular timestamp. Two
 one second used to name the same file, and the second open truncated a log the first process
 still held.
 
+## Landing logs
+
+The page shows any landing's log, not only one it started: a "log" button on each `land` row in
+flight, and on each row of *Recently finished landings*. The viewer parses the log into its
+`== arm` and `== <n>/<of>` stages and its `VERDICT:` line. `parse_landing` in
+`files/deploy_ui_lib/deploy_ui_reads.py` does the parsing, so the page only renders it, and a
+run of identical lines (a wait's poll line) folds into one with a count.
+
+The page names a log by file name, never by path, and the daemon reads only a name in its own
+index (`App._landing_index`). The index holds two kinds of file, written in the last 24 hours,
+named like a landing log, and regular files rather than symlinks:
+
+- every log in the daemon's own log dir and in `/tmp/homelab-landings-<user>`, where
+  `land.sh --detach` writes when no session dir is set (`land_lib/detach.py`);
+- the stdout of each `land` row the in-flight panel listed. A session's landing logs under its
+  own `$CLAUDE_JOB_DIR/tmp` or `--log-dir`, which no fixed list of directories covers. A
+  foreground landing's stdout is a terminal, which fails the regular-file check.
+
+A landing run as the `claude` user logs under that user's directories, which the daemon
+cannot read, so it does not appear. `VERDICT_HINTS` gives each verdict a tone and a next step,
+and a test pins its keys to `scripts/deploy_tools/land_lib/outcome.py:VERDICTS`, because the
+daemon cannot import land_lib
+(`hosts/components/deploy-ui/tests/test_deploy_ui_landings.py::test_every_land_verdict_has_a_hint_is_clean`).
+
 ## Usage count
 
 The daemon writes one logfmt line per request to its unit journal (#2864):
@@ -96,8 +120,8 @@ The daemon writes one logfmt line per request to its unit journal (#2864):
 Traefik forwards, and `-` for a caller that reached the port around Authelia. The query
 string is dropped, so a log path never reaches the journal.
 
-The page polls three panels every 10 seconds, plus the log tail once a landing has started,
-so an open tab writes about 18 to 24 lines a minute. Those polls show a tab was open, not that anyone used it. Count page
+The page polls four panels every 10 seconds, so an open tab writes about 24 lines a minute.
+An open landing viewer polls `/api/log` every 2 seconds and adds 30 more. Those polls show a tab was open, not that anyone used it. Count page
 loads and writes instead:
 
 ```bash

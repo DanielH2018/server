@@ -3,7 +3,6 @@
 import json
 import pathlib
 import subprocess
-import urllib.parse
 
 import pytest
 
@@ -133,7 +132,7 @@ def test_page_offers_land_and_no_deploy_control_is_clean(app):
 
 def test_page_links_pr_numbers_to_github_is_clean(app):
     _, html = app.get("/")
-    assert "https://github.com/DanielH2018/server/pull/" in html
+    assert "const REPO='https://github.com/DanielH2018/server'" in html
     assert "r.pr?prLink(r.pr)" in html and "<td>${prLink(p.number)}</td>" in html
 
 
@@ -369,33 +368,6 @@ def test_cancel_unlisted_pid_is_flagged(app):
 def test_cancel_non_numeric_pid_is_flagged(app):
     status, _ = app.post("/api/cancel", HDRS, json.dumps({"pid": "72c1a41"}))
     assert status == 400
-
-
-def test_log_tail_serves_path_under_log_dir_is_clean(app, tmp_path):
-    log_dir = tmp_path / "logs"
-    log_dir.mkdir(exist_ok=True)
-    f = log_dir / "l.log"
-    f.write_text("hello log")
-    status, text = app.get("/api/log?path=" + urllib.parse.quote(str(f)))
-    assert status == 200 and text == "hello log"
-
-
-def test_log_tail_refuses_path_outside_log_dir_is_flagged(app, tmp_path):
-    outside = tmp_path / "outside.log"
-    outside.write_text("secret")
-    status, text = app.get("/api/log?path=" + urllib.parse.quote(str(outside)))
-    assert status == 200 and text == "refused: not a deploy-ui log"
-
-
-def test_log_tail_refuses_symlink_escaping_log_dir_is_flagged(app, tmp_path):
-    log_dir = tmp_path / "logs"
-    log_dir.mkdir(exist_ok=True)
-    outside = tmp_path / "secret.log"
-    outside.write_text("secret")
-    link = log_dir / "l.log"
-    link.symlink_to(outside)
-    status, text = app.get("/api/log?path=" + urllib.parse.quote(str(link)))
-    assert status == 200 and text == "refused: not a deploy-ui log"
 
 
 def test_land_non_hex_since_is_flagged(app):

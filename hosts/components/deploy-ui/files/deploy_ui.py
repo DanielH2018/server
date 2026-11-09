@@ -18,11 +18,14 @@ Configuration comes from the environment, which deploy-ui.service sets:
   DEPLOY_UI_REPO       primary checkout (default /home/ubuntu/server)
   DEPLOY_UI_STATE      gitops-deploy state dir (default gitops_markers.STATE_DIR)
   DEPLOY_UI_LOGS       log dir (default ~/.local/state/deploy-ui)
+  DEPLOY_UI_CLI_LOGS   where `land.sh --detach` logs (default /tmp/homelab-landings-<user>)
   DEPLOY_UI_LOCKS      dir holding the server-deploy-*.lock files (default /var/lock)
   DEPLOY_UI_BIND       listen address (default 127.0.0.1)
   DEPLOY_UI_PORT       listen port (default 8790)
 """
 
+import functools
+import getpass
 import json
 import os
 import re
@@ -62,6 +65,9 @@ class Config:
     lock_dir: Path = Path("/var/lock")
     proc_locks: Path = Path("/proc/locks")
     pr_cache_s: int = 60
+    # Where `land.sh --detach` writes when no session dir is set (`land_lib/detach.py`).
+    cli_log_dir: Path = Path(f"/tmp/homelab-landings-{getpass.getuser()}")
+    landing_window_s: int = 24 * 3600
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -80,6 +86,9 @@ class Config:
             # nobody locks.
             tree_lock=Path(os.environ["DEPLOY_UI_TREE_LOCK"]),
             lock_dir=Path(e("DEPLOY_UI_LOCKS", "/var/lock")),
+            cli_log_dir=Path(
+                e("DEPLOY_UI_CLI_LOGS", f"/tmp/homelab-landings-{getpass.getuser()}")
+            ),
         )
 
 
@@ -96,6 +105,9 @@ class App:
         self._prs_lock = threading.Lock()
         self._prs_cache: tuple[float, list] | None = None
         self._pr_titles: dict[str, str] = {}
+        # Landing logs seen on an in-flight row or spawned here, by name; see `_landing_index`.
+        self._seen_lock = threading.Lock()
+        self._seen: dict[str, Path] = {}
 
     # ---- subprocess edge ----
     def _out(
@@ -170,6 +182,9 @@ class App:
             }
             for r in reads.runs(reads.parse_ps(ps), opened, locks)
         ]
+        for r in runs:
+            if r["kind"] == "land" and r["log"]:
+                self._remember(Path(r["log"]))
         return {"runs": runs, "locks_watched": [os.path.basename(p) for p in paths]}
 
     def _pr_title(self, pr: str) -> str:
@@ -215,31 +230,77 @@ class App:
             self._prs_cache = (time.monotonic(), rows)
             return {"prs": rows, "cached": False}
 
-    def log_tail(self, path: str) -> str:
-        """Tail the last 20 KB of one log in `log_dir`, named by the 202 that created it.
+    def _remember(self, log: Path) -> None:
+        """Index a landing's log, wherever it lives, if it is a regular landing log file."""
+        if reads.landing_log(log, self.cfg.landing_window_s, time.time()):
+            with self._seen_lock:
+                self._seen[log.name] = log
 
-        Only the basename of the caller's path is used, so nothing the page sends can name
-        a file outside `log_dir`. The parent it did send is still compared, lexically, so a
-        path from somewhere else is refused rather than silently redirected into `log_dir`.
+    def _landing_index(self) -> dict[str, Path]:
+        """The landing logs the viewer may read: the two log dirs, plus every log seen.
+
+        The page names a log by file name, never by path, so it reads only a file this index
+        listed. A remembered log drops out once it leaves the window.
         """
-        name = Path(path).name
-        if not name or Path(path).parent != self.cfg.log_dir:
-            return "refused: not a deploy-ui log"
+        with self._seen_lock:
+            index = reads.landing_index(
+                [self.cfg.log_dir, self.cfg.cli_log_dir],
+                list(self._seen.values()),
+                self.cfg.landing_window_s,
+                time.time(),
+            )
+            self._seen = {n: p for n, p in self._seen.items() if n in index}
+        return index
+
+    def landings(self) -> dict:
+        """Every landing log of the window, newest first, with its PR and verdict.
+
+        The title comes from the cache `inflight` fills, never from a `gh` call per row.
+        """
+        rows = []
+        for name, path in self._landing_index().items():
+            try:
+                mtime = path.stat().st_mtime
+                parsed = reads.parse_landing(reads.read_log(path)[0])
+            except OSError:
+                continue
+            rows.append(
+                {
+                    "name": name,
+                    "pr": parsed["pr"],
+                    "title": self._pr_titles.get(parsed["pr"], ""),
+                    "mtime": int(mtime),
+                    "verdict": parsed["verdict"],
+                }
+            )
+        rows.sort(key=lambda r: r["mtime"], reverse=True)
+        return {"landings": rows[:30]}
+
+    def log(self, name: str, seen_size: str = "") -> dict:
+        """One landing log parsed into stages, or `unchanged` while its size is `seen_size`.
+
+        Raises:
+            Unavailable: `name` is not in the landing index, or the file cannot be read.
+        """
+        path = self._landing_index().get(name)
+        if path is None:
+            raise Unavailable(f"no landing log named {name!r} in the last day")
         try:
-            resolved = (self.cfg.log_dir / name).resolve()
+            size = path.stat().st_size
+            if seen_size == str(size):
+                return {"name": name, "size": size, "unchanged": True}
+            text, truncated = reads.read_log(path)
         except OSError as exc:
-            return f"unavailable: {exc}"
-        if self.cfg.log_dir.resolve() not in resolved.parents:
-            return "refused: not a deploy-ui log"
-        try:
-            with resolved.open("rb") as f:
-                f.seek(0, os.SEEK_END)
-                size = f.tell()
-                f.seek(max(0, size - 20000))
-                data = f.read()
-        except OSError as exc:
-            return f"unavailable: {exc}"
-        return data.decode("utf-8", errors="replace")
+            raise Unavailable(f"{name}: {exc}") from exc
+        parsed = reads.parse_landing(text)
+        return {
+            **parsed,
+            "name": name,
+            "size": size,
+            "truncated": truncated,
+            "title": self._pr_titles.get(parsed["pr"], ""),
+            "raw": text,
+        }
 
     # ---- writes ----
     def land(self, body: dict) -> tuple[int, str]:
@@ -268,7 +329,8 @@ class App:
             "land",
         )
         writes.audit(f"action=land pr={pr} since={since} log={log}")
-        return 202, json.dumps({"log": str(log)})
+        self._remember(log)
+        return 202, json.dumps({"log": log.name})
 
     def cancel(self, body: dict) -> tuple[int, str]:
         try:
@@ -306,6 +368,7 @@ class App:
         "/api/inflight": "inflight",
         "/api/state": "state",
         "/api/prs": "prs",
+        "/api/landings": "landings",
     }
     WRITES: ClassVar[dict[str, str]] = {
         "/api/land": "land",
@@ -318,13 +381,14 @@ class App:
         if url.path == "/":
             return 200, PAGE.read_text()
         if url.path == "/api/log":
-            q = urllib.parse.parse_qs(url.query).get("path", [""])[0]
-            return 200, self.log_tail(q)
-        name = self.READS.get(url.path)
-        if not name:
+            q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
+            read = functools.partial(self.log, q.get("name", ""), q.get("size", ""))
+        elif url.path in self.READS:
+            read = getattr(self, self.READS[url.path])
+        else:
             return 404, "no such route"
         try:
-            return 200, json.dumps(getattr(self, name)())
+            return 200, json.dumps(read())
         except Unavailable as exc:
             return 200, json.dumps({"unavailable": str(exc)})
         except Exception as exc:
@@ -399,13 +463,7 @@ def serve(config: Config) -> None:
         def do_GET(self) -> None:
             status, text = app.get(self.path)
             ctype = (
-                "text/html; charset=utf-8"
-                if self.path == "/"
-                else (
-                    "text/plain; charset=utf-8"
-                    if self.path.startswith("/api/log")
-                    else "application/json"
-                )
+                "text/html; charset=utf-8" if self.path == "/" else "application/json"
             )
             self._send(status, text, ctype)
 

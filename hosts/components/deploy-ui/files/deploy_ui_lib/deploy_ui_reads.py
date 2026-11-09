@@ -10,6 +10,7 @@ by `deploy_ui.App`; this module turns their text into rows.
 import json
 import os
 import re
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -293,3 +294,162 @@ def parse_prs(raw: str) -> list[dict]:
         }
         for p in json.loads(raw)
     ]
+
+
+# A landing's log: `land<pr>-<YYYYmmdd-HHMMSS>.log` from `land.sh --detach`, or
+# `land-<YYYYmmddTHHMMSSZ>-<rand>.log` from the daemon's own `spawn_logged`.
+LANDING_LOG = re.compile(r"land\d*-\d{8}[-T]\d{6}Z?(-\w+)?\.log")
+# The most of one log the viewer reads: the first stage headers matter more than the tail.
+MAX_LOG_BYTES = 1_000_000
+_STAGE = re.compile(r"^== (?:(\d+)/(\d+)|arm)\s+(.*)$")
+_VERDICT_LINE = re.compile(r"^VERDICT: (\S+)(?: \((.*)\))?\s*$")
+_PR_IN_LOG = re.compile(r"PR #(\d+)")
+
+# Every verdict `land_lib/outcome.py:Verdict` prints, with a tone for the banner and what to
+# do next. The daemon cannot import land_lib; a test pins these keys to `VERDICTS`.
+VERDICT_HINTS: dict[str, tuple[str, str]] = {
+    "settled": (
+        "ok",
+        "Deployed and settled. Exercise the change itself: the gate sees the workload, "
+        "not your change.",
+    ),
+    "nothing-to-deploy": (
+        "none",
+        "Nothing deployed. A PR that reaches only a setup role is applied by the "
+        "deployer's timer, which this landing does not watch.",
+    ),
+    "unhealthy": (
+        "bad",
+        "Deployed, but a changed workload failed its health gate. The lines above name it.",
+    ),
+    "deploy-failed": (
+        "bad",
+        "The deploy failed. Cause promote-held is the operator's DEPLOY_HOLD to clear. "
+        "Every other cause re-runs safely, except a playbook task that failed after applying.",
+    ),
+    "blocked": (
+        "warn",
+        "Not this PR's failure: something else in the incoming range needs an operator. "
+        "Nothing was deployed.",
+    ),
+    "needs-manual-apply": (
+        "warn",
+        "Landed but not live. Read every remediation line above, not only the first.",
+    ),
+    "deferred": (
+        "warn",
+        "The landing stopped waiting. A host's updater applies its package on its own "
+        "timer; for anything else, re-run land.sh to grade the deploy.",
+    ),
+    "merge-conflict": ("bad", "The PR conflicts with master. Rebase, push and re-run."),
+    "pr-ci-red": ("bad", "The PR's own CI is red. Fix it, push and re-run."),
+    "merge-timeout": (
+        "warn",
+        "The merge budget ran out. Nothing deployed; re-run the same command.",
+    ),
+    "ci-red": (
+        "bad",
+        "Master CI is red on the merge commit. Nothing deployed; re-run once it is green.",
+    ),
+    "ci-timeout": (
+        "warn",
+        "Master CI did not finish in time. Nothing deployed; re-run the same command.",
+    ),
+    "ci-unproven": (
+        "bad",
+        "GitHub never ran CI for the merge commit, so a re-run alone never converges. "
+        "The detail names the way out.",
+    ),
+    "refused": (
+        "bad",
+        "The landing stopped before deploying anything. The detail says why; fix that and "
+        "re-run.",
+    ),
+    "handoff-timeout": (
+        "warn",
+        "The lander unit may still be running. Re-run the same command; it waits on the "
+        "unit again.",
+    ),
+    "unbuilt": (
+        "bad",
+        "No package of a host at or after the merge, and the builder reports why. Fix the "
+        "builder (probe.py builder), then re-run.",
+    ),
+}
+
+
+def landing_log(path: Path, window_s: float, now: float) -> bool:
+    """True when `path` is a regular file named like a landing log, written in the window.
+
+    lstat, not stat: a symlink is refused rather than followed, wherever it points.
+    """
+    if not LANDING_LOG.fullmatch(path.name):
+        return False
+    try:
+        st = path.lstat()
+    except OSError:
+        return False
+    return stat.S_ISREG(st.st_mode) and now - st.st_mtime <= window_s
+
+
+def landing_index(
+    dirs: list[Path], seen: list[Path], window_s: float, now: float
+) -> dict[str, Path]:
+    """Every landing log in `dirs` or `seen` written in the window, by file name.
+
+    `seen` holds the logs of landings the in-flight panel listed, which can live anywhere a
+    session pointed `--log-dir` or `$CLAUDE_JOB_DIR`. Only a name in this index is ever read.
+    """
+    found: list[Path] = list(seen)
+    for d in dirs:
+        try:
+            found.extend(d.iterdir())
+        except OSError:
+            continue
+    return {p.name: p for p in found if landing_log(p, window_s, now)}
+
+
+def read_log(path: Path) -> tuple[str, bool]:
+    """The log's text, up to `MAX_LOG_BYTES`, and whether it was cut there."""
+    with path.open("rb") as f:
+        data = f.read(MAX_LOG_BYTES + 1)
+    return data[:MAX_LOG_BYTES].decode("utf-8", errors="replace"), len(
+        data
+    ) > MAX_LOG_BYTES
+
+
+def parse_landing(text: str) -> dict:
+    """A landing log as its PR, stages and verdict.
+
+    A stage starts at each `== arm` or `== <n>/<of>` header. A `== ` line without a number
+    (a handoff, a relay note) is a detail of the stage it sits in. Lines before the first
+    header form a stage with an empty step. Each detail is `[text, count]`: a wait prints the
+    same line once a poll, and a run of identical lines folds into one with its count.
+    """
+    stages: list[dict] = []
+    verdict, pr, of = None, "", 0
+    for line in text.splitlines():
+        if not pr and (m := _PR_IN_LOG.search(line)):
+            pr = m.group(1)
+        if v := _VERDICT_LINE.match(line):
+            tone, hint = VERDICT_HINTS.get(v.group(1), ("warn", ""))
+            verdict = {
+                "verdict": v.group(1),
+                "detail": v.group(2) or "",
+                "tone": tone,
+                "hint": hint,
+            }
+            continue
+        if s := _STAGE.match(line):
+            of = max(of, int(s.group(2) or 0))
+            step = s.group(1) if s.group(1) is not None else "arm"
+            stages.append({"step": step, "label": s.group(3), "lines": []})
+            continue
+        if not stages:
+            stages.append({"step": "", "label": "", "lines": []})
+        lines, text = stages[-1]["lines"], line.removeprefix("  ")
+        if lines and lines[-1][0] == text:
+            lines[-1][1] += 1
+        else:
+            lines.append([text, 1])
+    return {"pr": pr, "of": of, "stages": stages, "verdict": verdict}
