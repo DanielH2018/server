@@ -53,7 +53,7 @@ __all__ = [
 ]
 
 
-# `test_ansible_bool_tables_are_to_bool_tables` holds these to ansible-core's while it is installed.
+# ansible-core 2.22's `to_bool` tables.
 BOOLEANS_TRUE = frozenset({"yes", "true", "1", "on"})
 BOOLEANS_FALSE = frozenset({"no", "false", "0", "off"})
 

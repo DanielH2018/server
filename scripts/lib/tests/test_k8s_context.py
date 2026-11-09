@@ -139,51 +139,42 @@ def test_resolve_vars_under_a_strict_class_raises_on_an_undefined_name_is_flagge
 # the value is evaluated as an expression and never reaches `keep_trailing_newline`.
 
 
-def _ansible_core_resolves(source: str, variables: dict) -> str:
-    """`source`, held in the var `y`, as ansible-core's `Templar` resolves `{{ y }}`."""
-    from ansible.parsing.dataloader import DataLoader
-    from ansible.template import Templar, trust_as_template
-
-    templar = Templar(
-        loader=DataLoader(), variables={**variables, "y": trust_as_template(source)}
-    )
-    return templar.template(trust_as_template("{{ y }}"))
-
-
+# Each expected value is what ansible-core 2.22's `Templar` returned for `{{ y }}` with the
+# source held in `y`, taken before H7 removed it.
 @pytest.mark.parametrize(
-    "source",
+    ("source", "expected"),
     [
-        pytest.param("p {{ x }}\n", id="one-newline"),
+        pytest.param("p {{ x }}\n", "p a\n", id="one-newline"),
         # A fix that rstrips the render and appends one newline passes the case above and
         # fails this one; padding up to the source's count passes both.
-        pytest.param("p {{ x }}\n\n", id="two-newlines"),
+        pytest.param("p {{ x }}\n\n", "p a\n\n", id="two-newlines"),
     ],
 )
 def test_resolve_vars_ends_a_value_whose_render_ends_in_a_newline_as_ansible_core_does(
-    source,
+    source, expected
 ):
-    variables = {"x": "a\n"}
-    expected = _ansible_core_resolves(source, variables)
-    assert resolve_vars({"y": source}, variables)["y"] == expected
+    assert resolve_vars({"y": source}, {"x": "a\n"})["y"] == expected
 
 
 @pytest.mark.parametrize(
-    ("source", "x"),
+    ("source", "x", "expected"),
     [
         # Jinja drops the one trailing newline before parsing, so this is still a single
         # expression, and Ansible pads its string result back to the source's newline.
-        pytest.param("{{ x }}\n", "a", id="one-newline-after-a-bare-expression"),
-        pytest.param("{{ x }}\n\n", "a\n", id="two-newlines-after-a-bare-expression"),
+        pytest.param("{{ x }}\n", "a", "a\n", id="one-newline-after-a-bare-expression"),
+        pytest.param(
+            "{{ x }}\n\n", "a\n", "a\n\n", id="two-newlines-after-a-bare-expression"
+        ),
         # Text around the expression makes the value text rather than the expression's type.
-        pytest.param(" {{ x }} ", "a", id="spaces-around-a-bare-expression"),
-        pytest.param("\n{{ x }}", "a", id="newline-before-a-bare-expression"),
-        pytest.param("{{ x }}\n", [1, 2], id="list-keeps-its-type"),
+        pytest.param(" {{ x }} ", "a", " a ", id="spaces-around-a-bare-expression"),
+        pytest.param("\n{{ x }}", "a", "\na", id="newline-before-a-bare-expression"),
+        pytest.param("{{ x }}\n", [1, 2], [1, 2], id="list-keeps-its-type"),
     ],
 )
-def test_resolve_vars_resolves_a_whole_value_expression_as_ansible_core_does(source, x):
-    variables = {"x": x}
-    expected = _ansible_core_resolves(source, variables)
-    resolved = resolve_vars({"y": source}, variables)["y"]
+def test_resolve_vars_resolves_a_whole_value_expression_as_ansible_core_does(
+    source, x, expected
+):
+    resolved = resolve_vars({"y": source}, {"x": x})["y"]
     assert (resolved, type(resolved)) == (expected, type(expected))
 
 

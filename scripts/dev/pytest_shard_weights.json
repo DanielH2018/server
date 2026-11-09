@@ -388,6 +388,7 @@
  "ansible/tests/longhorn/test_volume_revert_sequence.py": 0.0,
  "ansible/tests/longhorn/test_weekly_and_nobackup_tiers_are_derived.py": 0.01,
  "ansible/tests/repo/test_adr_links.py": 0.57,
+ "ansible/tests/repo/test_ansible_core_census.py": 33.4,
  "ansible/tests/repo/test_ansible_lint_scope.py": 0.01,
  "ansible/tests/repo/test_census_rows_layout.py": 0.04,
  "ansible/tests/repo/test_census_rows_python.py": 3.5,
