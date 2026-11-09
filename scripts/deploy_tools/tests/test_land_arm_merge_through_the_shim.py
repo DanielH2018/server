@@ -140,4 +140,9 @@ def test_git_runs_in_land_primary_rather_than_the_live_checkout(tmp_path):
     assert git_calls, (
         "the git stub recorded nothing, so this proves nothing about where it ran"
     )
-    assert {cwd for cwd, _ in git_calls} == {str(tmp_path)}
+    # `own_checkout` compares the shim's own checkout with master, so its two reads run there.
+    own_reads = ("log --format= --name-only", "diff --name-only HEAD")
+    landing = {cwd for cwd, argv in git_calls if not argv.startswith(own_reads)}
+    assert landing == {str(tmp_path)}
+    own = {cwd for cwd, argv in git_calls if argv.startswith(own_reads)}
+    assert own == {str(_LAND_SH.parents[2])}

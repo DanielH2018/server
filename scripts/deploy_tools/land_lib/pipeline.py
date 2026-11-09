@@ -20,6 +20,7 @@ and frozen; `plane` is a read-only property over it and `narrowed_plane`:
 | `merge.arm_merge` | `opts.subject`, `opts.require_author` | -- |
 | `merge.await_merge` | `opts.merge_timeout`, `opts.merge_poll`, `opts.pace_master_runs`, the head's pins (the pin gate) | -- |
 | `classify.resolve` | `opts.pr` | `merge_sha`, `ledger.t_merged`, `ledger.merge_sha` |
+| `classify.refuse_stale_code` | `merge_sha`, `opts.since`, `opts.primary`, `tools.stale_code` | -- |
 | `closing_refs.close_stranded` | `opts.pr` | `warnings` |
 | `classify.classify` | `merge_sha`, `opts.since`, `opts.primary`, what each host the note would name holds (`deployed_copies`) | `classification` (frozen: the plane note and its inputs), `resolved_tags`, `needs_diff` |
 | `classify.reaches_host_inputs` (in step 1) | `classification`, `needs_diff` | `host_candidate` |
@@ -57,6 +58,7 @@ from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 def _step_resolve(ln: Landing) -> None:
     """Step 1 and 1½: the merge commit, any issue GitHub left open, then what this PR reaches."""
     classify.resolve(ln)
+    classify.refuse_stale_code(ln)
     closing_refs.close_stranded(ln)
     classify.classify(ln)
     ln.host_candidate = classify.reaches_host_inputs(ln)

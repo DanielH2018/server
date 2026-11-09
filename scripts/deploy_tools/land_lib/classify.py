@@ -11,6 +11,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import Classification, Landing
+from deploy_tools.land_lib.own_checkout import OWN_CHECKOUT
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 from deploy_tools.land_lib.land_tags import DeriveSource
 from deploy_tools.land_lib.promotion import moves_the_bundle
@@ -53,6 +54,40 @@ def resolve(ln: Landing) -> None:
     ln.ledger.merge_sha = sha
     say(f"merge commit {sha}")
     ln.fetch_branch()
+
+
+def refuse_stale_code(ln: Landing) -> None:
+    """Die when land.py's checkout lacks a master change to the code this landing runs.
+
+    The base is the merge commit's first parent: master as it stood before this PR. The PR's
+    own changes are left out, because a checkout made before the merge cannot carry them.
+    DECIDED: refuse rather than re-exec from a fresh checkout, so `land.sh` keeps running the
+    release it ships with (#7820). A rebase merge of a PR that edits landing code puts its
+    earlier commits in the base and refuses too; land.sh squash-merges.
+    """
+    base = f"{ln.merge_sha}^1"
+    stale = ln.tools.stale_code(base)
+    if stale == []:
+        return
+    rerun = f"land.sh --pr {ln.opts.pr} --since {ln.opts.since or base}"
+    if ln.git("merge-base", "--is-ancestor", base, "HEAD").returncode == 0:
+        where = f"re-run it from {ln.opts.primary}: `{ln.opts.primary}/scripts/deploy_tools/{rerun}`"
+    else:
+        snap = f"/tmp/land-{ln.opts.pr}"
+        where = (
+            f"re-run it from a checkout at the merge: `git -C {ln.opts.primary} worktree add "
+            f"--detach {snap} {ln.merge_sha}`, then `{snap}/scripts/deploy_tools/{rerun}`"
+        )
+    what = (
+        f"its landing code is older than master's: {', '.join(stale)}"
+        if stale
+        else f"git could not compare its landing code with {base}"
+    )
+    ln.die(
+        f"this landing runs from {OWN_CHECKOUT}, and {what}. PR #{ln.opts.pr} is merged, "
+        f"and this landing graded nothing; {where}",
+        1,
+    )
 
 
 def pr_range(ln: Landing) -> str:
