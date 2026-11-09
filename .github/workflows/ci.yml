@@ -1742,7 +1742,9 @@ jobs:
       # The one case that seeds no k3s, so install.sh's own download and sha256 check of the
       # release binary run (#7754). `continue-on-error` keeps a GitHub release outage from failing
       # the PR; a red step here is a broken download path or an outage.
-      # One leg is enough: the download does not depend on the release under test.
+      # One leg is enough: the download does not depend on the release under test. A job that
+      # built its image has spent most of `timeout-minutes`, and a job timeout does gate, so a
+      # built image (no RepoDigests, unlike a pulled one) skips the case.
       - name: Run the bootstrap case that downloads k3s from its release (does not gate)
         if: >-
           !cancelled() && matrix.release == '26.04' && (github.event_name == 'workflow_dispatch'
@@ -1758,6 +1760,11 @@ jobs:
         run: |
           if [ "$UPGRADE" != true ]; then
             echo "::notice::The merge base is HEAD, so no image was built; the k3s download case does not run."
+            exit 0
+          fi
+          digests=$(docker image inspect --format '{{join .RepoDigests " "}}' "homelab-host-test:$RELEASE")
+          if [ -z "$digests" ]; then
+            echo "::notice::This job built the test image, so the k3s download case does not run inside the job's timeout."
             exit 0
           fi
           seed=()
