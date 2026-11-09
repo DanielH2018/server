@@ -286,7 +286,7 @@ fires by deadman if nobody clears the tree. Until 2026-09-18 that path returned 
 monitor stayed green through five daily skips (#2014). A deployer state the agent cannot read
 exits `EXIT_STATE_UNREADABLE` for the same reason (#3703). The two other skips still exit 0: the
 quiet no-open-PRs skip is the healthy steady state, and the GitOps-hold skip is alarmed by the
-deployer's own `GitOps Status` check, which this one need not duplicate.
+deployer's own Discord post, which this one need not duplicate.
 `test_agent_logic.py::TestSkipExitCodes` pins the blocked and the quiet case.
 
 **A crash records its own reason** (`report_crash`, called from the `__main__` guard). Silence

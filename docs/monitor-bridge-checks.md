@@ -330,7 +330,7 @@ checks each gate suppresses.
   had no gate until a single WAN outage on 2026-09-18 turned 11 tiles red inside 90 minutes,
   including four host crons and `b2_reachable`, `r2_usage`, `discord`, the since-deleted Kuma
   Notification Delivery tile, `cloudflare-ip-drift`, the since-deleted Swallowed Push Verdicts
-  tile and `gitops_alive`. It gates the `wan_reachable` rows:
+  tile and `gitops_alive` (since removed). It gates the `wan_reachable` rows:
   `r2_usage`, `cloudflare_ips_drift`, `healthchecks_drift`, `discord`.
   **DOWN only when NEITHER endpoint answers.** One provider's outage is that provider's problem,
   and suppressing on it would turn Cloudflare's own tiles green during a Cloudflare outage. The

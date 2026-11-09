@@ -572,9 +572,11 @@ carries the rule; this page carries the reasoning. The full incident accounts ar
 A failed setup-plane apply writes the SHA to `/var/lib/gitops-deploy/hold_sha`, so the next tick
 does not re-apply it, and alerts the dedicated Discord webhook. The tree stays fast-forwarded
 (*Both apply arms are forward-only*). Reverting the offending PR advances `origin` past the held
-SHA, which stops the `skip_hold` short-circuit. The marker and the red **GitOps Deploy — Status**
-monitor (which pages on a non-empty `hold_sha` with no origin comparison) stay until an apply
-covers the held plane or an operator clears the hold; *Which apply clears a hold* has the rule.
+SHA, which stops the `skip_hold` short-circuit. The marker stays until an apply covers the held
+plane or an operator clears the hold; *Which apply clears a hold* has the rule. Since H7.49b no
+monitor pages on a non-empty `hold_sha`. The failure shows in the dedicated Discord post, in the
+SessionStart banner, as `deploy-failed` from every later `land.sh` run, and in
+`probe.py landing` and `probe.py gitops-state`.
 To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state.py clear-hold
 <sha>` on daniel-box.
 
@@ -971,14 +973,13 @@ cannot parse never lets `hold_sha` clear over it.
 
 **Clearing unconditionally erases the fault.** Every consumer gates on `hold_sha` alone: `land.sh` reports
 `deploy-failed` off `hold_sha`, and `renovate_agent.decide` refuses to run while one is set. A
-hold that cleared on any successful apply turned **GitOps Deploy — Status** green over a plane
-nothing had applied (issue #878).
+hold that cleared on any successful apply hid a plane nothing had applied from every one of those
+readers, and from the since-removed **GitOps Deploy — Status** monitor (issue #878).
 
 **The way out is manual, and both surfaces name it.** A hand `ansible-playbook` run is not the
 deployer, so it clears nothing. Once every held plane is applied, clear the hold with the deploy
-UI's Clear or `gitops_state.py clear-hold <sha>`. The Discord alert and the monitor's message
-both name the two, with the full held SHA in the command, and the monitor counts the planes still
-owed. An `rm` of `hold_sha` is not the way out: it leaves the class's lines in `owed.jsonl`, and
+UI's Clear or `gitops_state.py clear-hold <sha>`. The Discord alert names the two, with the full
+held SHA in the command, and `probe.py gitops-state` counts the planes still owed. An `rm` of `hold_sha` is not the way out: it leaves the class's lines in `owed.jsonl`, and
 the next failure's hold then waits on planes nobody owes.
 
 **The Clear button in the deploy UI drops every entry at once.** `deploy_ui_writes.clear_hold`
