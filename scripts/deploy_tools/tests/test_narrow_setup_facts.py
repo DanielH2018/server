@@ -175,8 +175,8 @@ def test_the_k3s_role_derives_exactly_the_facts_this_census_names():
     assert set(found) == K3S_FACTS, sorted(found)
 
 
-# The setup roles whose index refuses before any fact is reached: `common` is include-only and
-# has no `tasks/main`, and no playbook lists it under `roles:`.
+# The setup roles whose index refuses before any fact is reached: `common` has no `tasks/` since
+# H7.63, and no playbook lists it under `roles:`.
 ROLES_WITHOUT_AN_ENTRY_POINT = frozenset({"common"})
 
 
@@ -233,7 +233,9 @@ def test_the_fact_edge_widens_no_real_setup_role_today():
 def test_every_setup_role_this_census_skips_really_has_no_entry_point():
     """Non-vacuity for the skip list: a role that grows a `tasks/main` rejoins the census."""
     for role in sorted(ROLES_WITHOUT_AN_ENTRY_POINT):
-        with pytest.raises(narrow_setup.CannotNarrow, match="holds no main file"):
+        with pytest.raises(
+            narrow_setup.CannotNarrow, match=r"holds no (main|task) file"
+        ):
             narrow_setup_index.RoleIndex(role, "HEAD", str(REPO))
 
 

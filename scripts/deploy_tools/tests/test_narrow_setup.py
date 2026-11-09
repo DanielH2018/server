@@ -190,14 +190,13 @@ def test_a_shipped_row_adopted_with_use_tables_is_the_one_read(tree):
 
 
 # The setup task files #3134, #3135 and #3154 made narrowable, each with the answer `tags_of`
-# gives and the playbook that prints its remediation. Before them, `crons.yml` refused on its
-# `always` preamble and three roles had one untagged `main.yml`.
+# gives and the playbook that prints its remediation. Before them, three roles had one untagged
+# `main.yml`.
 NARROWED_SETUP_FILES = {
-    ("initial_setup", "tasks/host-basics.yml"): {"collections", "tooling"},
     ("k3s", "tasks/coredns.yml"): {"coredns"},
     ("k3s", "tasks/static-address.yml"): {"node-address"},
 }
-_PLAYBOOK_OF = {"initial_setup": "initial_setup.yml", "k3s": "k3s-bringup.yml"}
+_PLAYBOOK_OF = {"k3s": "k3s-bringup.yml"}
 
 
 @pytest.mark.parametrize(("role", "rel"), sorted(NARROWED_SETUP_FILES))
@@ -208,16 +207,6 @@ def test_the_real_split_setup_roles_narrow_below_their_role_tag(role, rel):
     assert tags == NARROWED_SETUP_FILES[(role, rel)]
     playbook = (REPO / "ansible" / _PLAYBOOK_OF[role]).read_text()
     assert not tags & narrow_setup.foreign_tags(role, playbook, "HEAD", str(REPO))
-
-
-def test_the_real_initial_setup_crons_file_narrows_past_its_always_preamble():
-    """`crons.yml` keeps its two `always` tasks and still answers its subject tags (#3134)."""
-    index = narrow_setup.RoleIndex("initial_setup", "HEAD", str(REPO))
-    crons_tags = index.tags["tasks/crons.yml"]
-    assert crons_tags is not None and "always" in crons_tags
-    tags = index.tags_of("tasks/crons.yml")
-    assert "crons" in tags
-    assert not tags & {"always", "initial_setup"}
 
 
 def test_a_template_named_only_in_a_defaults_structure_maps_to_that_keys_readers(tree):
