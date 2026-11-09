@@ -29,12 +29,16 @@ a{color:var(--blue)}
 .tone-none b{color:var(--sub)}
 .chip{font-size:12px;font-weight:700}.chip.tone-ok{color:var(--green)}.chip.tone-warn{color:var(--yellow)}.chip.tone-bad{color:var(--red)}.chip.tone-none{color:var(--sub)}
 .bar{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:8px;font-size:13px}
+button.link{background:none;color:var(--blue);font-size:12px;font-weight:500;padding:0 6px}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0 8px}
+.tab{background:var(--surface0);color:var(--text);font-weight:500;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tab.on{background:var(--blue);color:var(--crust)}
 </style></head><body><main>
 <h1>Deploy queue</h1><div id="msg"></div>
 <h2>Locks, landings and deploys in flight</h2><div id="inflight"></div>
-<section id="viewer" hidden><h2>Landing log</h2><div id="vhead" class="vhead"></div><div id="vsteps" class="steps"></div>
+<section id="viewer" hidden><h2>Landing log <span class="mute" style="font-size:12px;font-weight:400">[ and ] switch</span></h2><div id="vtabs" class="tabs"></div><div id="vhead" class="vhead"></div><div id="vsteps" class="steps"></div>
 <div id="logbody"></div><div id="vverdict"></div><div id="vbar" class="bar"></div></section>
-<h2>Recently finished landings</h2><div id="landings"></div>
+<h2>Recently finished landings <button id="finToggle" class="link" onclick="setFin({hidden:!fin.hidden})"></button></h2><div id="landings"></div>
 <h2>Deployer state</h2><div id="state"></div>
 <h2>Open pull requests</h2><div id="prs"></div>
 <script>
@@ -50,13 +54,26 @@ async function post(path,payload){const r=await fetch(path,{method:'POST',header
 async function panel(id,path,render){const el=document.getElementById(id);try{const r=await fetch(path);const b=await r.json();
   el.innerHTML=b.unavailable?`<span class="unavail">unavailable: ${esc(b.unavailable)}</span>`:render(b);}catch(e){el.innerHTML=`<span class="unavail">unavailable: ${esc(e)}</span>`;}}
 const base=p=>p.split('/').pop();
+let landRuns=[];
 function inflight(b){const held=b.runs.filter(r=>r.locks.length);running=new Set(b.runs.filter(r=>r.log).map(r=>base(r.log)));
+  landRuns=b.runs.filter(r=>r.kind==='land'&&r.log).map(r=>({name:base(r.log),pr:r.pr,title:r.title}));renderTabs();
   let s=`<p>Locks: ${!b.locks_watched.length?'<span class="unavail">no lock files found</span>':held.length?held.map(r=>`<code>${esc(r.locks.join(' '))}</code> pid ${r.pid}, ${r.elapsed_s}s`).join('; '):`<span class="clear">free</span> <span class="mute">(${b.locks_watched.length} watched)</span>`}</p>`;
   if(!b.runs.length)return s+'<p class="mute">nothing in flight</p>';
   return s+'<table><tr><th>kind</th><th>PR / tag</th><th>pid</th><th>elapsed</th><th>locks</th><th>command</th><th></th></tr>'+b.runs.map(r=>`<tr><td>${esc(r.kind)}</td><td>${r.pr?prLink(r.pr)+(r.title?`<br><span class="mute">${esc(r.title)}</span>`:''):esc(r.tag)}</td><td>${r.pid}</td><td>${r.elapsed_s}s</td><td>${esc(r.locks.join(' '))}${r.waiting_on.length?`<span class="mute">waiting on ${esc(r.waiting_on.join(' '))}</span>`:''}</td><td><code>${esc(r.args)}</code><br><span class="mute">${esc(r.log)}</span></td><td>${r.kind==='land'&&r.log?`<button onclick="openLog('${esc(base(r.log))}')">log</button> `:''}${r.kind==='land'?`<button class="danger" onclick="post('/api/cancel',{pid:${r.pid}})">cancel</button>`:''}</td></tr>`).join('')+'</table>';}
-function landings(b){const done=b.landings.filter(l=>!running.has(l.name));
+// Whether the finished list is hidden or expanded is a per-browser preference. Storage can be
+// blocked, so every read and write is guarded and the defaults stand in.
+const FIN_SHOWN=5,FIN_KEY='deploy-ui:finished';
+let fin={hidden:false,all:false},lastLandings=null;
+try{Object.assign(fin,JSON.parse(localStorage.getItem(FIN_KEY)||'{}'));}catch(e){}
+function setFin(change){Object.assign(fin,change);try{localStorage.setItem(FIN_KEY,JSON.stringify(fin));}catch(e){}renderFin();}
+function renderFin(){const el=document.getElementById('landings');el.hidden=fin.hidden;
+  document.getElementById('finToggle').textContent=fin.hidden?'show':'hide';
+  if(fin.hidden)return;if(lastLandings)el.innerHTML=landings(lastLandings);else panel('landings','/api/landings',landings);}
+function landings(b){lastLandings=b;const done=b.landings.filter(l=>!running.has(l.name));
   if(!done.length)return '<p class="mute">no landing ended in the last day</p>';
-  return '<table><tr><th>PR</th><th>ended</th><th>verdict</th><th></th></tr>'+done.map(l=>`<tr><td>${l.pr?prLink(l.pr):'<span class="mute">no PR</span>'}${l.title?`<br><span class="mute">${esc(l.title)}</span>`:''}</td><td>${ago(l.mtime)}</td><td>${l.verdict?`<span class="chip tone-${esc(l.verdict.tone)}">${esc(l.verdict.verdict)}</span>`:'<span class="mute">ended without a verdict</span>'}</td><td><button onclick="openLog('${esc(l.name)}')">log</button></td></tr>`).join('')+'</table>';}
+  const shown=fin.all?done:done.slice(0,FIN_SHOWN);
+  const more=done.length>FIN_SHOWN?`<tr><td colspan="4"><button class="link" onclick="setFin({all:${!fin.all}})">${fin.all?'show the latest '+FIN_SHOWN:'show all '+done.length}</button></td></tr>`:'';
+  return '<table><tr><th>PR</th><th>ended</th><th>verdict</th><th></th></tr>'+shown.map(l=>`<tr><td>${l.pr?prLink(l.pr):'<span class="mute">no PR</span>'}${l.title?`<br><span class="mute">${esc(l.title)}</span>`:''}</td><td>${ago(l.mtime)}</td><td>${l.verdict?`<span class="chip tone-${esc(l.verdict.tone)}">${esc(l.verdict.verdict)}</span>`:'<span class="mute">ended without a verdict</span>'}</td><td><button onclick="openLog('${esc(l.name)}')">log</button></td></tr>`).join('')+more+'</table>';}
 // A Clear drops every hold_plane entry at once, and each entry is a plane nobody has applied.
 // The prompt names them, because after the Clear nothing records them at all.
 let holdWarn='Type the held SHA to clear it';
@@ -74,16 +91,25 @@ function prs(b){if(!b.prs.length)return '<p class="mute">no open PRs</p>';
 // refresh never redraws it, and it keeps showing a landing after its in-flight row is gone.
 const FOLD=240;
 let view={name:null,size:'',data:null,raw:false,follow:true,open:{},unfold:{},err:''};
-function openLog(name){view={name,size:'',data:null,raw:false,follow:true,open:{},unfold:{},err:''};
-  history.replaceState(null,'','#log/'+encodeURIComponent(name));document.getElementById('viewer').hidden=false;pollLog();
-  document.getElementById('viewer').scrollIntoView({behavior:'smooth'});}
+function openLog(name,scroll=true){view={name,size:'',data:null,raw:false,follow:true,open:{},unfold:{},err:''};
+  history.replaceState(null,'','#log/'+encodeURIComponent(name));document.getElementById('viewer').hidden=false;renderTabs();pollLog();
+  if(scroll)document.getElementById('viewer').scrollIntoView({behavior:'smooth'});}
 function closeLog(){view.name=null;history.replaceState(null,'',location.pathname);document.getElementById('viewer').hidden=true;}
+// One tab per landing in flight, plus the open log when it is not one of them, so switching
+// between landings never means scrolling back up to the in-flight table.
+function tabList(){const t=[...landRuns];
+  if(view.name&&!t.some(r=>r.name===view.name))t.push({name:view.name,pr:view.data?.pr||'',title:view.data?.title||'',ended:true});return t;}
+function renderTabs(){const el=document.getElementById('vtabs');const t=tabList();
+  el.innerHTML=t.length<2?'':t.map(r=>`<button class="tab${r.name===view.name?' on':''}" title="${esc(r.title)}" onclick="openLog('${esc(r.name)}',false)">${r.pr?'#'+esc(r.pr):esc(r.name)}${r.title?' '+esc(r.title):''}${r.ended?' <span class="mute">(ended)</span>':''}</button>`).join('');}
+document.addEventListener('keydown',e=>{if(!view.name||e.ctrlKey||e.metaKey||e.altKey||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))return;
+  if(e.key!=='['&&e.key!==']')return;const t=tabList();if(t.length<2)return;
+  const i=t.findIndex(r=>r.name===view.name);openLog(t[(i+(e.key===']'?1:t.length-1))%t.length].name,false);});
 async function pollLog(){if(!view.name)return;const name=view.name;
   try{const r=await fetch(`/api/log?name=${encodeURIComponent(name)}&size=${view.size}`);const b=await r.json();
     if(name!==view.name)return;
     if(b.unavailable){view.err=b.unavailable;}else if(!b.unchanged){view.err='';view.data=b;view.size=b.size;}
   }catch(e){view.err=String(e);}
-  renderLog();}
+  renderLog();renderTabs();}
 function fold(line,key){if(line.length<=FOLD||view.unfold[key])return esc(line);
   return esc(line.slice(0,FOLD))+`… <span class="more" onclick="view.unfold['${key}']=1;renderLog()">show all ${line.length} characters</span>`;}
 function stepName(s,of){return s.step==='arm'?'arm':s.step===''?'start':`${s.step}/${of}`;}
@@ -115,7 +141,8 @@ function renderLog(){const d=view.data,body=document.getElementById('logbody');
     live?(view.follow?'<button class="plain" onclick="view.follow=false;renderLog()">following</button>':'<button onclick="view.follow=true;const b=document.getElementById(\'logbody\');b.scrollTop=b.scrollHeight;renderLog()">jump to live</button>'):''].filter(Boolean).join(' ');}
 document.getElementById('logbody').addEventListener('scroll',e=>{const b=e.target;const bottom=b.scrollTop+b.clientHeight>=b.scrollHeight-24;
   if(view.follow!==bottom&&view.data){view.follow=bottom;}});
-function refresh(){panel('inflight','/api/inflight',inflight).then(()=>panel('landings','/api/landings',landings));panel('state','/api/state',state);panel('prs','/api/prs',prs);}
+function refresh(){panel('inflight','/api/inflight',inflight).then(()=>{if(!fin.hidden)panel('landings','/api/landings',landings);});panel('state','/api/state',state);panel('prs','/api/prs',prs);}
+document.getElementById('finToggle').textContent=fin.hidden?'show':'hide';document.getElementById('landings').hidden=fin.hidden;
 function fromHash(){const m=location.hash.match(/^#log\/(.+)$/);if(m&&decodeURIComponent(m[1])!==view.name)openLog(decodeURIComponent(m[1]));}
 window.addEventListener('hashchange',fromHash);fromHash();
 refresh();setInterval(refresh,10000);setInterval(pollLog,2000);
