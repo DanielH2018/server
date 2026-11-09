@@ -1,0 +1,13 @@
+# Shipped by the host package's integrity-scans component. Started without blocking by the
+# DPkg::Post-Invoke hook in /etc/apt/apt.conf.d/91homelab-rkhunter-propupd after every dpkg run.
+[Unit]
+Description=Refresh rkhunter's file-properties baseline after a package change
+
+[Service]
+Type=oneshot
+SyslogLevel=notice
+SyslogIdentifier=rkhunter-propupd
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
+Nice=19
+IOSchedulingClass=idle
+ExecStart=/usr/lib/homelab/rkhunter-propupd
