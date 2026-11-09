@@ -38,6 +38,8 @@ Each row also carries what a change cost to get right, and what CI cost to judge
   the queue once at a median 6m12s against the 20-job cap, more than the run itself.
 - `reverted_by` is the merged PR that reverted this one (`reverts` has the two forms).
 - `review_findings` and `fix_rounds` come from the batch's review record.
+- `ci_rerun`, `ci_rerun_outcome` and `ci_rerun_jobs` say whether the CI gate re-ran the
+  PR's failed jobs, how the re-run ended and which jobs stayed red (`fanout_lib/ci_reruns.py`).
 
 After the PR rows, the summary lists every batch in the window that ended `needs-input` or
 `failed`, read from the review records whether or not it opened a PR, with the `blocker` line
@@ -47,6 +49,9 @@ The summary prints the first-time-green rate, the share reverted with each pair 
 and the CI queue and wall medians. The pairs are listed because a planned drill's revert
 counts too, so a person judges which were failures. A fix that lands as a new PR without
 reverting is not counted; nothing reliable links it to the PR it fixes.
+
+It also prints the CI re-run count, how many re-runs passed and the jobs that failed their
+re-run, which tracks the flake rate. A flake that passed leaves no job name in the record.
 
 `pr_to_land` is the idle gap a person or a hold accounts for, and `held_by` names the
 autolander's reason when it gave one. Only daniel-server batches pass the autolander, so a
@@ -85,6 +90,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from fanout_lib import operator_waits
+from fanout_lib.ci_reruns import NO_RERUN, rerun_fields, rerun_line
 from fanout_lib.review.api import RECORD_NAME, SAVED_FORMAT
 from fanout_lib.stops import load_stops, stop_lines
 from lib.cli_help import ArgumentParser, answer_help
@@ -214,6 +220,7 @@ def load_reviews(directory: Path) -> dict[int, dict]:
             "phases_min": {k: round(v / 60, 1) for k, v in phases.items()},
             "review_findings": len(findings) if isinstance(findings, list) else None,
             "fix_rounds": sum(1 for k in ("fix", "ci-fix") if k in phases),
+            **rerun_fields(record),
         }
     return out
 
@@ -370,6 +377,7 @@ def join(
                 "reverted_by": reverted.get(n),
                 "review_findings": review.get("review_findings"),
                 "fix_rounds": review.get("fix_rounds"),
+                **{k: review.get(k, v) for k, v in NO_RERUN.items()},
                 "waited_h": waited_hours(stamped.get(n, []), merged_at),
             }
         )
@@ -444,6 +452,7 @@ def summarize(rows: list[dict]) -> str:
             f"{gap:15} {len(values):3} {statistics.median(values):10.2f} {p90:7.2f}"
         )
     lines.extend(rates(rows))
+    lines.append(rerun_line(rows))
     waited: dict[str, list[float]] = {}
     for r in rows:
         for reason, hours in (r.get("waited_h") or {}).items():

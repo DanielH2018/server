@@ -15,6 +15,7 @@ from pipeline_timeline import (
     pull_reviews,
     rates,
     reverts,
+    summarize,
     waited_hours,
 )
 
@@ -83,6 +84,9 @@ def test_review_start_is_the_save_time_minus_the_phases(tmp_path):
             "phases_min": {"implement": 10.0, "review": 2.0},
             "review_findings": 2,
             "fix_rounds": 0,
+            "ci_rerun": False,
+            "ci_rerun_outcome": "",
+            "ci_rerun_jobs": [],
         }
     }
 
@@ -232,6 +236,49 @@ def test_the_summary_prints_the_change_failure_and_first_time_green_rates():
     assert lines[0] == "first-time green: 2 of 3 judged (67%)"
     assert lines[1] == "reverted: 1 of 4 (25.0%), #5378 by #5390"
     assert lines[2] == "CI queue min (slowest job, final head): median 4.0, p90 6.0"
+
+
+def _rerun_summary(tmp_path, records):
+    """Write one review record per (pr, extra fields), then summarize the joined rows."""
+    prs = []
+    for pr, extra in records.items():
+        record = {"pr": f"https://github.com/DanielH2018/server/pull/{pr}", **extra}
+        (tmp_path / f"{pr - 100}-20261018T173246Z.json").write_text(json.dumps(record))
+        prs.append({"number": pr, "title": "t", "createdAt": None, "mergedAt": None})
+    rows = join(prs, [], {}, {}, load_reviews(tmp_path))
+    return rows, summarize(rows)
+
+
+def test_the_summary_counts_re_runs_that_passed_and_names_the_jobs_that_failed(
+    tmp_path,
+):
+    rerun = "after one resume and a re-run of the failed jobs"
+    rows, text = _rerun_summary(
+        tmp_path,
+        {
+            200: {"ci_rerun": True, "ci_gate": f"passed {rerun}"},
+            201: {"ci_rerun": True, "ci_gate": f"failed {rerun}: pytest, lint"},
+            202: {"ci_rerun": False, "ci_gate": "passed"},
+            203: {"ci_gate": "passed"},
+        },
+    )
+    flake, real, plain, old = rows
+    assert (flake["ci_rerun"], flake["ci_rerun_outcome"], flake["ci_rerun_jobs"]) == (
+        True, "passed", [],
+    )  # fmt: skip
+    assert (real["ci_rerun_outcome"], real["ci_rerun_jobs"]) == (
+        "failed",
+        ["pytest", "lint"],
+    )
+    assert (plain["ci_rerun"], old["ci_rerun"]) == (False, False)
+    assert "CI re-runs: 2 of 4 PRs, 1 passed, failed jobs: lint, pytest" in text
+
+
+def test_the_summary_prints_no_failed_jobs_when_a_re_run_cleared_them(tmp_path):
+    _, text = _rerun_summary(
+        tmp_path, {200: {"ci_rerun": True, "ci_gate": "passed after one resume"}}
+    )
+    assert "CI re-runs: 1 of 1 PRs, 1 passed, failed jobs: -" in text
 
 
 def test_waited_hours_sums_each_reason_and_ends_an_open_wait_at_the_merge():
