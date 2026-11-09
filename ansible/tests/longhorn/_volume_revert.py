@@ -9,9 +9,9 @@ import re
 from pathlib import Path
 
 from _helpers import REPO as _REPO
-from _helpers import jinja_env
 from _helpers import load_tasks as _tasks
 from _helpers import task_named
+from _jinja_env import jinja_env
 
 
 _ROLE = _REPO / "ansible/roles/k8s/volume-revert"

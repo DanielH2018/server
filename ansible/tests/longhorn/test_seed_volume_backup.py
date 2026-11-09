@@ -30,7 +30,8 @@ from datetime import datetime, timezone
 
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
-from _helpers import ANSIBLE, jinja_env
+from _helpers import ANSIBLE
+from _jinja_env import jinja_env
 
 PLAYBOOK = ANSIBLE / "seed_volume_backup.yml"
 TEXT = PLAYBOOK.read_text()

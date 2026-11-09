@@ -2338,8 +2338,10 @@ the `manual_plane` clearing, and *Rollback*'s
     version is live on daniel-box.
 30. **H7.54** stays alone. Its parity proof covers 361 modules.
     **Landed as [#PRNUM](https://github.com/DanielH2018/server/pull/PRNUM).**
-    `_helpers.jinja_env` registers `lib.ansible_jinja_env`'s set, the renderer's filters and
-    the repo's filter plugins, and `_helpers.py` left the deletion census's allowlist. The
+    The test env moved to `ansible/tests/_jinja_env.py` and registers
+    `lib.ansible_jinja_env`'s set, the renderer's filters and the repo's filter plugins.
+    It sits outside `_helpers.py` so the prek hooks that import `_helpers.py` need not run on
+    every filter plugin. `_helpers.py` left the deletion census's allowlist. The
     census's named member moved to `test_pi_escalation_timeout.py`. Part two of the parity
     proof is H7.46's filter census, unchanged. No module retired. The volume-revert role's
     selection and input check use `regex_escape`, `regex_search`, `split` and `match`, which
@@ -4022,7 +4024,7 @@ progress.
    reimplements the filters, and R4's exit check 4 proves the cluster render runs with
    ansible-core unimportable. Resolved for host and package modes by H7.46 (old H7.17),
    whose subprocess test renders each host and each package with ansible-core unimportable.
-   H7.54 rebuilt the test env in `ansible/tests/_helpers.py` on the renderer's set, and
+   H7.54 rebuilt the test env, in `ansible/tests/_jinja_env.py`, on the renderer's set, and
    H7.46's filter census lists what that env must register.
 5. **ADR numbering.** D6, G2 and H7 each add an ADR. Resolution: each takes the next free
    number at merge time, and none reserves one.

@@ -22,7 +22,8 @@ real rendered manifests behind a non-vacuity assertion:
 """
 
 import pytest
-from _helpers import REPO, render_expr
+from _helpers import REPO
+from _jinja_env import render_expr
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 from renderer.renderer_lib.restart import pod_references, pod_template

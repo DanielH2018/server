@@ -19,9 +19,7 @@ from typing import Iterator
 from lib import yaml_fast
 from lib.proc_testing import fake_bin, path_with, run
 
-from lib.ansible_jinja_env import register_ansible_filters
 from lib.k8s_roles import ROLLOUT_TIMEOUT_DEFAULT
-from renderer.renderer_lib import jinja_filters
 
 # `lib.repo_paths` owns the anchors. The `X as X` names are re-exports for the guards that
 # import them from here; redefining one in a guard is what #3912 removed.
@@ -34,8 +32,6 @@ from lib.repo_paths import (
     REPO,
     ROLES,
 )
-from jinja2 import FileSystemLoader
-from jinja2.nativetypes import NativeEnvironment
 
 SETUP_ROLES = ROLES / "setup"
 CONTAINER_ROLES = ROLES / "containers"
@@ -285,29 +281,6 @@ def task_named(tasks, fragment: str) -> dict:
         f"{fragment!r} matched {len(matches)} tasks, expected exactly 1"
     )
     return matches[0]
-
-
-def jinja_env() -> NativeEnvironment:
-    """A NativeEnvironment carrying the renderer's filters and tests.
-
-    `NativeEnvironment` returns real Python objects where a plain Jinja2 environment would hand
-    back a string repr — needed by any expression under test that produces a structure rather
-    than text. The filters and tests are `lib.ansible_jinja_env`'s set, the one the renderer
-    registers, so an expression renders against the code a render runs.
-    """
-    # The loader is what lets a template under test `{% import %}` a shared macro from
-    # ansible/templates/. Without one, Jinja raises `TypeError: no loader for this environment
-    # specified` at render time — an error naming the environment rather than the macro, which
-    # reads as a broken helper rather than a template that reaches outside itself.
-    env = NativeEnvironment(loader=FileSystemLoader(str(ANSIBLE / "templates")))
-    register_ansible_filters(env)
-    env.filters["to_json"] = jinja_filters.to_json
-    return env
-
-
-def render_expr(expression: str, **context):
-    """Render a Jinja expression through `jinja_env()`."""
-    return jinja_env().from_string(expression).render(**context)
 
 
 _DOC_EXCLUDED_DIRS = (REPO / "docs" / "archive",)

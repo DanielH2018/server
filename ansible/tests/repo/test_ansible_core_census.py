@@ -11,7 +11,7 @@
   each such file.
 - The filter census. Every filter and test name a tracked `*.j2` uses is registered in the
   renderer's strict environment: Jinja's built-ins, `renderer_lib/jinja_filters.py` and the
-  repo's filter plugins. `_helpers.jinja_env` renders on that set.
+  repo's filter plugins. `_jinja_env.jinja_env` renders on that set.
 
 The deletion census runs a 40-second collection, so it is not a row of
 `test_census_rows_python.py`, which prek runs at every commit.

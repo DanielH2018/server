@@ -15,7 +15,8 @@ from pathlib import Path
 import yaml
 from jinja2 import nodes
 
-from _helpers import ANSIBLE, jinja_env, walk_tasks
+from _helpers import ANSIBLE, walk_tasks
+from _jinja_env import jinja_env
 from _role_census import role_task_files
 from lib import yaml_fast
 from lib.repo_paths import ALL_VARS, K8S_ROLES
