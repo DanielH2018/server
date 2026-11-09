@@ -1,8 +1,0 @@
----
-# Crons written by Compose roles that no longer exist, so those roles cannot reap them.
-# ansible.builtin.cron matches on the exact `#Ansible: <name>` marker, so these are the
-# literal `name:` values from the roles that created them.
-# Add an entry here when a Compose role that owned a cron is retired.
-docker_install_stale_crons:
-  - Redeploy ical-proxy
-  - Clean stale tdarr transcode cache

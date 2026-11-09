@@ -48,11 +48,10 @@ def _cron_jobs() -> dict[str, str]:
 
 # No task installs a cron since H7.34 moved the full etcd drill, the last one, into a package
 # timer (1 after H7.35 and H7.37, 11 before them). The checks below still guard a cron a task
-# adds. So the census cannot pass over a glob that stops matching, it names cron tasks that
-# remove a job: the reader must still find those.
+# adds. So the census cannot pass over a glob that stops matching, it names a cron task that
+# removes a job: the reader must still find those.
 KNOWN_CRON_TASKS = frozenset(
     {
-        "TLS cert-expiry watch",  # setup/initial_setup/tasks/crons.yml
         "Clear ansible log file",  # setup/initial_setup/tasks/crons.yml
     }
 )

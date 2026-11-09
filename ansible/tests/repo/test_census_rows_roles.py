@@ -226,8 +226,9 @@ ROWS = (
         ),
         # 56 once H7.34 deleted four of hypervisor's task files (60 before), 53 once H7.50 deleted
         # three of deploy_ui's, 48 once H7.60 deleted five of initial_setup's, 47 once
-        # common/tasks/release_bin.yml went, 40 once H7.48 emptied k8s_host_files.
-        min_matches=40,
+        # common/tasks/release_bin.yml went, 40 once H7.48 emptied k8s_host_files, 39 once
+        # H7.48 deleted docker_install's teardown.yml.
+        min_matches=39,
         must_find=frozenset({"ansible/roles/setup/initial_setup/tasks/crons.yml"}),
     ),
     Census(
