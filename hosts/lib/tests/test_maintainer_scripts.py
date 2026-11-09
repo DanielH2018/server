@@ -16,16 +16,33 @@ import functools
 
 import pytest
 
+from lib import yaml_fast
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 from validate.host_packages import lint_script as lint
 
-# Package names only: a render at import time costs every xdist worker ~9s of collection,
-# which no `--durations` phase or shard weight sees (#7710).
-SHIPPED = sorted(
-    [spec.parent.name for spec in (REPO / "hosts" / "packages").glob("*/package.yml")]
-    + [f"homelab-{spec.parent.name}" for spec in (REPO / "hosts").glob("*/package.yml")]
-)
+
+def _declared() -> dict[str, list[str]]:
+    """Each package's `maintainer_scripts`, read from its spec rather than rendered.
+
+    A render at import time costs every xdist worker ~9s of collection, which no
+    `--durations` phase or shard weight sees (#7710).
+    """
+    specs = {
+        spec.parent.name: spec
+        for spec in (REPO / "hosts" / "packages").glob("*/package.yml")
+    }
+    for spec in (REPO / "hosts").glob("*/package.yml"):
+        specs[f"homelab-{spec.parent.name}"] = spec
+    return {
+        name: list(
+            yaml_fast.safe_load(spec.read_text()).get("maintainer_scripts") or []
+        )
+        for name, spec in sorted(specs.items())
+    }
+
+
+SHIPPED = _declared()
 
 
 @functools.cache
@@ -36,15 +53,23 @@ def _rendered(package: str) -> host_mode.Package:
 
 
 def test_the_shipped_scripts_include_the_updaters():
-    assert {"homelab-updater", "homelab-daniel-box"} <= set(SHIPPED), SHIPPED
+    assert {"postinst", "prerm"} <= set(SHIPPED["homelab-updater"])
     assert {"postinst", "prerm"} <= set(_rendered("homelab-updater").scripts)
 
 
-@pytest.mark.parametrize("package", SHIPPED)
-def test_every_shipped_maintainer_script_is_clean(package):
-    scripts = _rendered(package).scripts
-    findings = {name: lint(name, text.decode()) for name, text in scripts.items()}
-    assert {name: f for name, f in findings.items() if f} == {}
+def test_each_package_renders_exactly_the_scripts_its_spec_declares():
+    """The parametrize below reads the specs, so a render that adds a script would go unlinted."""
+    rendered = {name: sorted(_rendered(name).scripts) for name in SHIPPED}
+    assert rendered == {name: sorted(scripts) for name, scripts in SHIPPED.items()}
+
+
+@pytest.mark.parametrize(
+    ("package", "script"),
+    [(name, script) for name, scripts in SHIPPED.items() for script in scripts],
+)
+def test_every_shipped_maintainer_script_is_clean(package, script):
+    text = _rendered(package).scripts[script].decode()
+    assert lint(script, text) == []
 
 
 def test_the_updaters_prerm_stops_its_own_units_on_remove_only():
