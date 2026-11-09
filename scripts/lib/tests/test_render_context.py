@@ -128,6 +128,27 @@ def test_a_value_that_will_not_expand_is_dropped(tree, capsys):
     assert "bad left undefined" in capsys.readouterr().err
 
 
+def test_a_value_that_will_not_expand_costs_the_rest_one_more_pass():
+    # `tick` runs once per pass over the dict, so its count is the number of passes.
+    passes = []
+    raw = {
+        "seen": "{{ tick() }}",
+        "url": "{{ host }}:{{ port }}",
+        "bad": "{{ nowhere }}",
+        "host": "box",
+        "port": 80,
+        "tick": lambda: passes.append(1) or "t",
+    }
+    resolved, dropped = rc._resolve(raw, StrictChainableUndefined)
+    assert (resolved["url"], set(dropped), len(passes)) == ("box:80", {"bad"}, 2)
+
+
+def test_a_value_reading_a_dropped_key_is_dropped_under_a_strict_class():
+    raw = {"alias": "{{ bad }}/x", "bad": "{{ nowhere }}", "kept": "k"}
+    resolved, dropped = rc._resolve(raw, StrictChainableUndefined)
+    assert (resolved, set(dropped)) == ({"kept": "k"}, {"alias", "bad"})
+
+
 def test_a_strict_context_raises_naming_the_value_that_will_not_expand(tree):
     template, inv = tree({"bad": "{{ playbook_dir | no_such_filter }}"})
     with pytest.raises(rc.UnresolvedVarsError) as exc:
