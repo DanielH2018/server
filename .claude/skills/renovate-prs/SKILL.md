@@ -64,9 +64,9 @@ on developer.mend.io and is not readable from a session.
 waits for its soak: do not land it, and do not tick its rebase box (§5) while
 `renovate/stability-days` reads pending.
 
-**Recovery for a PR forced open mid-soak: close it unmerged.** A grouped
-`k8s image {{depName}} (manual — …)` PR is recreated if closed unmerged, so Renovate raises it
-again once the update passes its soak.
+**Recovery for a PR forced open mid-soak: close it unmerged.** A grouped `k8s images (manual —
+…)` or `k8s image {{depName}} (manual — …)` PR is recreated if closed unmerged, so Renovate
+raises it again once the update passes its soak.
 
 ## 1. Triage
 
@@ -147,6 +147,15 @@ For each PR read the file list and the diff — `gh pr diff <n> --name-only`, th
 | `.github/workflows/*`, title `CI runner image` | CI runner image | the PR run proves almost nothing about it — sweep the branch first, §3 *A runner-image bump* |
 | `.github/workflows/promote.yml`, `prune-artifacts.yml` and `flux-deletion-drill.yml`, title or branch `cosign (manual — …)` | the `COSIGN_VERSION`/`COSIGN_SHA256` pin of the cosign binary that signs the promoted artifact | not CI-only: Flux's source-controller verifies the signatures this release writes, and the PR run signs nothing. Leave it open for a person, as *When to stop and say so* describes; a bump the controller cannot verify stops every promotion (#4767) |
 | anything else | read the rule | see below |
+
+**A denied role's image bumps arrive as one batched PR.** `k8s images (manual — …)` holds
+every denied role's image bumps from one Monday window, and `k8s base images (manual — …)`
+holds their Dockerfile base images. Land each through one `land.sh` run, which gates every
+tag the PR changes. If one image in the batch fails its gate, revert the merge. Renovate
+raises the batch again in the next Monday window, so hold the failing image out of it first
+with a `matchPackageNames` rule carrying `enabled: false`. The edge and DNS images (traefik, authelia, crowdsec, Pi-hole,
+unbound) stay one PR each as `k8s image <image> (manual — …)`, because a failure there takes
+down every route or LAN DNS.
 
 **Read the title and the branch together**, with `gh pr list --author app/renovate --json
 number,title,headRefName`. The parenthetical is the fastest tell, but Renovate keeps the group
