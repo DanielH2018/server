@@ -10,6 +10,11 @@ The gate is reachable two ways, so both count as gated:
 - A job whose display name is in `gitops_deploy_expected_ruleset_contexts` is required by the
   ruleset directly, as `renovate config validator` is.
 
+A job in `NON_GATING_JOBS` is exempt on purpose, because its verdict must not block a merge.
+The exemption holds only while the job carries job-level `continue-on-error: true` and stays out
+of the gate's `needs`: `hosts/lib/ci_verdict.py` reads every check-run there, so an exempt job
+inside `needs` would still gate.
+
 BEING IN `needs` IS NOT ENOUGH. The gate's step compares each dependency's `needs.<id>.result`
 against `success` by name. A `needs` entry the step does not read is WAITED for and never
 CHECKED: the step exits 0 on the names it does read, the required context passes, and the merge
@@ -48,8 +53,17 @@ KNOWN_JOBS = frozenset(
         "host_packages_build",
         "host_packages",
         "host_tools_arm64",
+        "k3s_download",
         GATE_JOB,
         "renovate-config",
+    }
+)
+
+# Jobs whose failure must not block a merge, each with the reason.
+NON_GATING_JOBS = frozenset(
+    {
+        # install.sh's download of the k3s release; a GitHub outage must not fail a PR (#7754).
+        "k3s_download",
     }
 )
 
@@ -84,8 +98,12 @@ def gate_evaluated_jobs(workflow_text: str) -> set[str]:
     return set(_RESULT_EXPR.findall(json.dumps(gate.get("steps") or [])))
 
 
-def ungated_jobs(workflow_text: str, required_contexts: set[str]) -> set[str]:
-    """Job ids that neither the gate job checks nor a required context names."""
+def ungated_jobs(
+    workflow_text: str,
+    required_contexts: set[str],
+    exempt: frozenset[str] = frozenset(),
+) -> set[str]:
+    """Job ids that neither the gate job checks nor a required context names nor `exempt` lists."""
     jobs = yaml_fast.safe_load(workflow_text)["jobs"]
     needs = jobs.get(GATE_JOB, {}).get("needs") or []
     if isinstance(needs, str):
@@ -95,8 +113,27 @@ def ungated_jobs(workflow_text: str, required_contexts: set[str]) -> set[str]:
         job_id
         for job_id, spec in jobs.items()
         if job_id not in through_gate
+        and job_id not in exempt
         and (spec.get("name") or job_id) not in required_contexts
     }
+
+
+def exemption_problems(workflow_text: str, exempt: frozenset[str]) -> list[str]:
+    """Why each exempt job is not a non-gating job: missing, gated anyway, or able to fail the run."""
+    jobs = yaml_fast.safe_load(workflow_text)["jobs"]
+    needs = jobs.get(GATE_JOB, {}).get("needs") or []
+    if isinstance(needs, str):
+        needs = [needs]
+    problems = []
+    for job_id in sorted(exempt):
+        if job_id not in jobs:
+            problems.append(f"{job_id}: no such job")
+            continue
+        if job_id in needs:
+            problems.append(f"{job_id}: in {GATE_JOB}'s needs, so it gates")
+        if jobs[job_id].get("continue-on-error") is not True:
+            problems.append(f"{job_id}: no job-level `continue-on-error: true`")
+    return problems
 
 
 def _ruleset_contexts() -> set[str]:
@@ -113,12 +150,18 @@ def _ruleset_contexts() -> set[str]:
 
 
 def test_every_ci_job_is_gated_by_a_required_context():
-    ungated = ungated_jobs(CI_WORKFLOW.read_text(), _ruleset_contexts())
+    ungated = ungated_jobs(
+        CI_WORKFLOW.read_text(), _ruleset_contexts(), NON_GATING_JOBS
+    )
     assert not ungated, (
         f"ci.yml jobs that block no merge: {sorted(ungated)}. Add each to the `prek` job's "
         "`needs` AND to the result comparison in its step, or make it a required context in "
         "the ruleset and record it in gitops_deploy_expected_ruleset_contexts."
     )
+
+
+def test_every_non_gating_job_is_outside_the_gate_and_continues_on_error():
+    assert exemption_problems(CI_WORKFLOW.read_text(), NON_GATING_JOBS) == []
 
 
 def test_the_workflow_parse_finds_the_jobs_it_must_find():
@@ -200,3 +243,37 @@ def test_a_needs_entry_the_gate_never_reads_is_flagged():
     """The second reject half, and the reason `needs` membership alone is not the test: this
     workflow waits for `smoke` and merges green when it fails."""
     assert ungated_jobs(_UNCHECKED_NEED, _ruleset_contexts()) == {"smoke"}
+
+
+_NON_GATING = (
+    _GATED
+    + """  smoke:
+    name: smoke tests
+    continue-on-error: true
+    steps: []
+"""
+)
+
+
+def test_an_exempt_job_outside_the_gate_is_clean():
+    assert ungated_jobs(_NON_GATING, _ruleset_contexts(), frozenset({"smoke"})) == set()
+    assert exemption_problems(_NON_GATING, frozenset({"smoke"})) == []
+
+
+def test_an_exempt_job_that_can_fail_the_run_is_flagged():
+    assert exemption_problems(_ADVISORY, frozenset({"smoke"})) == [
+        "smoke: no job-level `continue-on-error: true`"
+    ]
+
+
+def test_an_exempt_job_in_the_gates_needs_is_flagged():
+    gated = _NON_GATING.replace(
+        "needs: [hooks, pytest]", "needs: [hooks, pytest, smoke]"
+    )
+    assert exemption_problems(gated, frozenset({"smoke"})) == [
+        "smoke: in prek's needs, so it gates"
+    ]
+
+
+def test_an_exemption_naming_no_job_is_flagged():
+    assert exemption_problems(_GATED, frozenset({"smoke"})) == ["smoke: no such job"]
