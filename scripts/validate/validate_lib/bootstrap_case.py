@@ -280,7 +280,16 @@ def stock_kit(cases, clone: Path, kit: Path) -> Path:
     with tarfile.open(kit / uv_name) as archive:
         member = next(m for m in archive.getmembers() if m.name.endswith("/uv"))
         archive.extract(member, cases.work / "bootstrap-uv", filter="data")
-    uv = str(cases.work / "bootstrap-uv" / member.name)
+    stock_uv_cache(cases, clone, kit, str(cases.work / "bootstrap-uv" / member.name))
+    return kit
+
+
+def stock_uv_cache(cases, clone: Path, kit: Path, uv: str, run=subprocess.run) -> None:
+    """Fill the kit's uv cache and interpreter with what the script's `uv run --offline` reads.
+
+    The sync skips the lint group, as the script's own `uv run` does, so no lint tool's GitHub
+    release download sits in the bootstrap cases.
+    """
     found = re.search(
         r'^host_python_version: "(.*)"$',
         (clone / "ansible/inventory/group_vars/all.yml").read_text(),
@@ -300,14 +309,22 @@ def stock_kit(cases, clone: Path, kit: Path) -> Path:
         "UV_PYTHON_BIN_DIR": str(cases.work / "bootstrap-uv-bin"),
         "UV_PROJECT_ENVIRONMENT": str(cases.work / "bootstrap-venv"),
     }
-    subprocess.run([uv, "python", "install", python], env=env, check=True)
-    subprocess.run(
-        [uv, "sync", "--frozen", "--python", python, "--no-python-downloads"],
+    run([uv, "python", "install", python], env=env, check=True)
+    run(
+        [
+            uv,
+            "sync",
+            "--frozen",
+            "--no-group",
+            "lint",
+            "--python",
+            python,
+            "--no-python-downloads",
+        ],
         cwd=clone,
         env=env,
         check=True,
     )
-    return kit
 
 
 def stock_seed(kit: Path, seed: Path) -> Path:
