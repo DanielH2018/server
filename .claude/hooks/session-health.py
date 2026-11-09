@@ -398,8 +398,8 @@ SESSION_SCAN_DEADLINE_S = 6
 SESSIONS_COMMAND = "uv run python .claude/hooks/session-health.py --sessions"
 
 
-def own_paths(cwd, run):
-    """The paths this session's branch changed against origin/master, plus its dirty paths."""
+def changed_paths(cwd, run):
+    """The paths a worktree's branch changed against origin/master, plus its dirty paths."""
     committed = run(
         ["git", "-C", cwd, "diff", "--name-only", "origin/master...HEAD"], 5
     ).stdout
@@ -428,8 +428,8 @@ def other_live_sessions(
     go stale when a session forgets to announce itself or dies without cleaning up. Knowing
     another session is already in a role is what stops two of them editing it at once.
 
-    Only a session whose branch diff shares a path with this session's branch diff or dirty
-    set gets its own line, naming the shared paths. The rest fold into one count line that
+    Only a session whose branch diff or dirty set shares a path with this session's gets its
+    own line, naming the shared paths. The rest fold into one count line that
     names `SESSIONS_COMMAND`, because a full list on a busy day pushed the banner past the
     size at which Claude Code shows only a preview (#7898). `show_all` lists every session
     with its own changed paths instead, which is what `SESSIONS_COMMAND` prints.
@@ -454,9 +454,7 @@ def other_live_sessions(
         return [f"  ⚠ other-session detection is broken: {exc}"]
 
     def describe(tree):
-        changed = run(
-            ["git", "-C", tree.path, "diff", "--name-only", "origin/master...HEAD"], 5
-        ).stdout
+        paths = sorted(changed_paths(tree.path, run))
         # Untracked counted: an unlanded scratch file in another live session's worktree is
         # exactly the "+ uncommitted" this banner exists to surface. check=False here (not
         # git_dirty's own check=True default) because a tree that vanished mid-scan must read
@@ -466,7 +464,6 @@ def other_live_sessions(
             dirty = git_dirty(tree.path, include_untracked=True)
         except subprocess.CalledProcessError:
             dirty = False
-        paths = sorted({p for p in changed.splitlines() if p})
         if not show_all:
             paths = sorted(set(paths) & mine)
             if not paths:
@@ -491,7 +488,7 @@ def other_live_sessions(
         and session_is_alive(tree.lock_reason)
     ]
     try:
-        mine = set() if show_all else own_paths(cwd, run)
+        mine = set() if show_all else changed_paths(cwd, run)
     except Exception:
         mine = set()
     # One thread per live worktree, each with its own diff and dirty read: run in turn, a

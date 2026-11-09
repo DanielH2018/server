@@ -926,8 +926,9 @@ More sections print whether or not anything is unhealthy, in this order: the pro
 generated worktree name, merged worktrees ready to remove, the other live Claude sessions in
 this repo, and fan-out worktrees running on another host. The hook derives the live-session
 list from `git worktree list` and `/proc`, not from anything a session declares. A session
-gets its own line only when its branch diff shares a path with this session's branch diff or
-dirty set, and the line names the shared paths. The rest fold into one count line.
+gets its own line only when its changed paths share one with this session's. The changed
+paths are a tree's branch diff against `origin/master` plus its uncommitted and untracked files.
+The line names the shared paths. The rest fold into one count line.
 `uv run python .claude/hooks/session-health.py --sessions` lists every live session with its
 changed paths.
 
