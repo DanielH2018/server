@@ -151,8 +151,9 @@ _TEST_FILE_GLOBS = ("test_*.py", "*_test.py")
 _PER_FILE_SECONDS = 0.028
 
 # The wall seconds each render prebuild holds a CI leg before its first test, read off the
-# `phase timing` sections of master run 42681237857 (#7732): legs holding no render_share
-# consumer prebuilt in 5-11s, legs holding one about 6s longer. `--summary` adds them per
+# `phase timing` sections of master run 42681237857 (#7732). The leg holding no render_share
+# consumer took 11s for the k8s render alone. Legs that rendered k8s at a module's import took
+# 5-7s for the fleet render alone, and the rest about 17s for both. `--summary` adds them per
 # shard and `assign` does not: the fleet render is the only part a shard's membership changes,
 # and at 24 of about 660 runner seconds per shard it is below what the packing can resolve.
 K8S_RENDER_WALL_SECONDS = 11.0
