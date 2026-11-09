@@ -147,5 +147,5 @@ def main(argv=None) -> int:
     p.add_argument("--json", action="store_true", help="print the groups as JSON")
     args = p.parse_args(argv)
     groups = summarize(load(args.dir or [STATE_DIR], args.since))
-    print(json.dumps(groups, indent=2) if args.json else render(groups))
+    print(json.dumps(groups) if args.json else render(groups))
     return 0

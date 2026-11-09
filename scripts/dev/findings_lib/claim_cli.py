@@ -291,7 +291,7 @@ def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
         else ""
     )
     if args.json:
-        print(json.dumps([vars(s) for s in states], indent=2))
+        print(json.dumps([vars(s) for s in states]))
         if note:
             sys.stderr.write(note + "\n")
         return 0

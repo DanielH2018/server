@@ -56,7 +56,7 @@ def cmd_report(args: argparse.Namespace) -> int:
     repo = Path(args.repo)
     log = Path(args.log) if args.log else default_log(repo)
     report = build(repo, repo_citations(repo), args.days, log)
-    print(json.dumps(report, indent=2) if args.json else render(report, args.top))
+    print(json.dumps(report) if args.json else render(report, args.top))
     return 0
 
 

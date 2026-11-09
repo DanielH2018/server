@@ -149,13 +149,11 @@ def _fake_host(root):
     pycache = fs / "usr/lib/python3/dist-packages/toolpkg/__pycache__"
     pycache.mkdir()
     (pycache / "mod.cpython-312.pyc").write_bytes(b"pyc")
-    # A role-installed unit, and the link `systemctl enable` makes to it and to a package's.
+    # The k3s installer's unit, and the link `systemctl enable` makes to it and to a package's.
     system = fs / "etc/systemd/system"
     (system / "multi-user.target.wants").mkdir(parents=True)
-    (system / "coredns-host.service").write_text("[Service]\n")
-    (system / "multi-user.target.wants" / "coredns-host.service").symlink_to(
-        "../coredns-host.service"
-    )
+    (system / "k3s.service").write_text("[Service]\n")
+    (system / "multi-user.target.wants" / "k3s.service").symlink_to("../k3s.service")
     (system / "multi-user.target.wants" / "tool.service").symlink_to(
         "../../../../usr/lib/systemd/system/tool.service"
     )

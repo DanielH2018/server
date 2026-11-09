@@ -132,10 +132,11 @@ POLL_S = 30
 # run's `decide` and an earlier run's `tag` (promote.yml, the `Move prod` step). A run that
 # never settles stalls promotion as `current`, which D2.6d's `PromotionStalled` alert pages.
 # When no other promote run past its decide is in progress for LOST_SETTLE_S, the run that
-# moved `prod` finished without a `settle` (#7863): the wait ends `current` at once, naming
-# the operator's two ways out (`lost_settle`). `decide` never moves `last-good` itself: its job holds no write to the
-# registry, and it cannot read `verify`'s verdict. The long form is docs/flux-deploy-plane.md,
-# *Verification*.
+# moved `prod` finished without a `settle` (#7863): the wait ends `current` at once and names
+# `prod`'s commit and digest (`Settled.lost_settle`). `decide` never moves `last-good` itself:
+# its job holds no write to the registry. promote.yml's `reconcile` job, which runs no
+# repository code, reads that run's `homelab/promote-verdict` status and moves `last-good` or
+# writes the hold (#7865). The long form is docs/flux-deploy-plane.md, *Verification*.
 #
 # Longer than the `verify` job's timeout-minutes plus `settle`'s, with ten minutes for runner
 # queueing, so the wait outlasts any run still verifying
@@ -149,6 +150,10 @@ IN_FLIGHT_POLL_S = 30
 # as a run that finished without its `settle`. Twice `settle`'s timeout-minutes, so a run
 # listing that lags a live run cannot end a wait on a verification still in flight.
 LOST_SETTLE_S = 10 * 60
+
+# The commit status promote.yml's `verdict-status` job posts on T, which `reconcile` reads
+# when a run ended without its `settle`.
+VERDICT_STATUS_CONTEXT = "homelab/promote-verdict"
 
 # A wait that runs the full IN_FLIGHT_WAIT_S reads DEPLOY_HOLD about 700 times and the
 # registry's tags two or three times as often, so one 5xx among them ended a wait that would
@@ -550,6 +555,9 @@ class Settled:
         last_good: `last-good`'s digest, or None when the tag is absent.
         hold: the DEPLOY_HOLD value read, which `tag` compares before it moves `prod`.
         in_flight: `prod`'s run is still verifying, and `supersedable` let T take it over.
+        lost_settle: `(commit, digest)` of `prod` when the run that moved it ended without its
+            `settle`, for promote.yml's `reconcile` job. None otherwise, and None when
+            `prod`'s commit could not be read.
     """
 
     stop: tuple[str, str] | None = None
@@ -558,6 +566,7 @@ class Settled:
     last_good: str | None = None
     hold: str = "none"
     in_flight: bool = False
+    lost_settle: tuple[str, str] | None = None
 
 
 def _read[T](read: Callable[[], T], what: str, sleep: Callable[[float], None]) -> T:
@@ -657,7 +666,10 @@ def wait_settled(
                 idle_since = clock()
             elif clock() - idle_since >= LOST_SETTLE_S:
                 commit = _read(prod_commit, PROD_TAG, sleep) if prod_commit else None
-                return Settled(("current", lost_settle(prod, last_good, commit)))
+                return Settled(
+                    ("current", lost_settle(prod, last_good, commit)),
+                    lost_settle=(commit, prod) if commit else None,
+                )
         waited = int(clock() - started)
         if waited >= IN_FLIGHT_WAIT_S:
             return Settled(
@@ -698,14 +710,18 @@ def lost_settle(prod: str, last_good: str, commit: str | None) -> str:
     """The reason for a `prod` that differs from `last-good` with no promote run in progress.
 
     The run that moved `prod` ended without a `settle` that moved `last-good` or wrote a hold,
-    as when GitHub never created the job (#7863). Both ways out are operator-only.
+    as when GitHub never created the job (#7863). This run's `reconcile` job acts on the
+    `homelab/promote-verdict` status, and the operator's two ways out cover a `reconcile`
+    that fails.
     """
     commit = commit or "<prod's commit>"
     repo = forge.REPOSITORY
     return (
         f"prod {prod} is still not last-good {last_good}, and no other promote run past its "
         f"decide has been in progress for {LOST_SETTLE_S}s: the run that moved prod to {commit} ended "
-        "without a settle that moved last-good or wrote a hold. If that run's verify job "
+        "without a settle that moved last-good or wrote a hold. This run's reconcile job "
+        f"reads {VERDICT_STATUS_CONTEXT} on {commit}: good moves last-good, anything else "
+        "writes the unverified hold. If reconcile fails and that run's verify job "
         "logged verdict=good, move "
         "last-good (operator-only): flux tag artifact "
         f"oci://{forge.REGISTRY}/{forge.ARTIFACT}@{prod} --tag last-good. Otherwise hold "

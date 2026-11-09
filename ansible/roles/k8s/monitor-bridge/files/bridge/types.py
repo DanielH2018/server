@@ -40,7 +40,7 @@ class VerdictRecorder(Protocol):
 
 
 class CheckResult(NamedTuple):
-    """What a check or a gate decided: `ok` and the message pushed to Kuma.
+    """What a check or a gate decided: `ok` and the message the run loop logs.
 
     A NamedTuple rather than a dataclass so every existing `ok, msg = fn()` unpacking — in
     the run loop, in the checks modules and across the test suite — keeps working unchanged.

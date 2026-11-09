@@ -72,8 +72,8 @@ else
   STATUS=down
 fi
 
-# Unconditional, for the same reason as setup-drift-check.sh: this line is the durable record of
-# the verdict's message, and Loki keeps it. NOTICE rather
+# Unconditional: the textfile keeps only the current verdict, so this line is the durable record
+# of the verdict's message, and Loki keeps it. NOTICE rather
 # than INFO — journald caps MaxLevelStore=notice here.
 logger -p daemon.notice -t loki-read-route-health "status=${STATUS} ${MSG}"
 

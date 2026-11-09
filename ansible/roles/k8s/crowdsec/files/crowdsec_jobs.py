@@ -16,8 +16,7 @@ Four jobs run, each on its old host cron's UTC schedule:
                                                     one minute after the crowdsec-home-ips CronJob
 
 Each job but the prune exports its verdict as gauges on `/metrics`, on the port in
-`JOBS_METRICS_PORT` (`jobs_metrics.py`), which the `pod-producers` rules read. M6 batch B6b's
-Cutover-2 removed the push to Uptime Kuma that used to run beside the export.
+`JOBS_METRICS_PORT` (`jobs_metrics.py`), which the `pod-producers` rules read.
 
 Each run is a child `python3` process, so a job that crashes or hangs cannot stop this one. A
 run that outlives its timeout is killed and reported as down. A job still running when its next

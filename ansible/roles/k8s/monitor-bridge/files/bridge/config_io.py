@@ -235,10 +235,10 @@ def io_config(
         HEALTHCHECKS_API_KEY=_env_file("HEALTHCHECKS_API_KEY"),
         HEALTHCHECKS_EXPECTED=_expected_checks(_env("HEALTHCHECKS_EXPECTED")),
         HEALTHCHECKS_PROBE_INTERVAL_S=_num("HEALTHCHECKS_PROBE_INTERVAL_S"),
-        # Discord delivery: Kuma fires every alert by POSTing to its Discord webhook
-        # (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every monitor
-        # green-in-UI while Discord goes silent — the one link in the alert chain no other
-        # monitor (not even the off-box UptimeRobot host dead-man) verifies. We GET-verify the
+        # Discord delivery: Alertmanager's `discord` receiver POSTs every alert to this webhook
+        # (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every alert
+        # firing while Discord goes silent — the one link in the alert chain no other
+        # check (not even the off-box UptimeRobot host dead-man) verifies. We GET-verify the
         # webhook is still valid: Discord answers a webhook GET with its JSON metadata + HTTP 200
         # while it exists and 404s once it's gone — a GET, not a POST, so this never puts a test
         # message in the channel. Empty URL = disabled (stays up), like N8N_API_KEY. The streak
@@ -246,41 +246,38 @@ def io_config(
         # reaches the public internet.
         DISCORD_WEBHOOK_URL=_env("DISCORD_WEBHOOK_URL"),
         # The CrowdSec ban-alert webhook is a SECOND, independent Discord delivery hop: CrowdSec
-        # POSTs directly to it (not via Kuma), so a rotated/revoked CrowdSec webhook silently
-        # drops security-ban notifications with NO Kuma backstop. Verify it alongside the Kuma
-        # webhook. Empty = not checked.
+        # POSTs directly to it (not via Alertmanager), so a rotated/revoked CrowdSec webhook
+        # silently drops security-ban notifications and nothing else pages. Verify it alongside
+        # the Alertmanager webhook. Empty = not checked.
         DISCORD_CROWDSEC_WEBHOOK_URL=_env("DISCORD_CROWDSEC_WEBHOOK_URL"),
         # The GitOps/Renovate webhook is a THIRD independent hop: it delivers both the
         # gitops-deploy rollback alert AND every renovate_notify manual-action digest, neither
-        # via Kuma. renovate_notify pushes its "alive" Kuma beat on every clean run regardless of
-        # whether the Discord POST succeeded, so a rotated/revoked webhook here leaves the
-        # Renovate Notifier — Alive monitor GREEN while every digest silently drops. Verify it
-        # too. Empty = not checked.
+        # via Alertmanager, so a rotated/revoked webhook here drops every digest silently.
+        # Verify it too. Empty = not checked.
         DISCORD_GITOPS_WEBHOOK_URL=_env("DISCORD_GITOPS_WEBHOOK_URL"),
         # The *arr health/event webhook is a FOURTH independent hop: Sonarr/Radarr/Prowlarr POST
         # their own onHealthIssue alerts (indexer down, download-client errors, app DB errors —
         # signals the Arr Queue check does NOT cover) directly to it via their in-app Discord
-        # "Connect", not via Kuma. A rotated/revoked webhook silently drops those while every
-        # container-up monitor stays green. Empty = not checked. (The URL lives only in the *arr
+        # "Connect", not via Alertmanager. A rotated/revoked webhook silently drops those while
+        # every container-up check stays green. Empty = not checked. (The URL lives only in the *arr
         # app DBs + SOPS — this GET-verify is its one watchdog.)
         DISCORD_ARR_WEBHOOK_URL=_env("DISCORD_ARR_WEBHOOK_URL"),
         # The healthchecks.io app's own Discord webhook is a FIFTH independent hop: healthchecks
         # POSTs its own check-down/up alerts to it via a "webhook" notification channel (config
-        # lives only in hc.sqlite, not templated), NOT via Kuma. A rotated/revoked URL silently
-        # drops those. It's a redundant secondary path (healthchecks' primary alert route is SMTP
-        # email, and it self-logs send failures in hc.sqlite), but it's still an un-Kuma'd
+        # lives only in hc.sqlite, not templated), NOT via Alertmanager. A rotated/revoked URL
+        # silently drops those. It's a redundant secondary path (healthchecks' primary alert route is SMTP
+        # email, and it self-logs send failures in hc.sqlite), but it's still an independent
         # delivery hop worth verifying. Empty = skipped.
         DISCORD_HEALTHCHECKS_WEBHOOK_URL=_env("DISCORD_HEALTHCHECKS_WEBHOOK_URL"),
         DISCORD_CONSECUTIVE=_int("DISCORD_CONSECUTIVE"),
-        # Alert-email backstop deliverability (folded into check_discord). The uptime-kuma
-        # `email` notification (Gmail SMTP) is the independent 2nd channel attached ONLY to the
-        # Discord Delivery monitor — the escape hatch when the Kuma Discord webhook is dead (the
-        # alert-delivery SPOF). But it had no liveness check of its own, so a silently revoked
+        # Alert-email backstop deliverability (folded into check_discord). Alertmanager's
+        # `email` receiver (Gmail SMTP) is the independent 2nd channel for critical alerts — the
+        # escape hatch when the Discord webhook is dead (the alert-delivery SPOF). Nothing else
+        # checks it, so a silently revoked
         # Gmail app-password could leave that backstop dead undetected and BOTH channels down at
         # once. We fold a throttled SMTP login probe into check_discord: connect + AUTH to
-        # SMTP_HOST:SMTP_PORT with the same creds Kuma uses, so a revoked password / broken SMTP
-        # flips the Discord Delivery monitor down (which still pages via the working Discord
-        # channel). Throttled to EMAIL_PROBE_INTERVAL_S — Gmail flags frequent AUTHs, so a
+        # SMTP_HOST:SMTP_PORT with the same creds Alertmanager uses, so a revoked password / broken
+        # SMTP flips check_discord down (which still pages via the working Discord channel). Throttled to EMAIL_PROBE_INTERVAL_S — Gmail flags frequent AUTHs, so a
         # success is cached and only a failure re-probes every cycle. Empty SMTP_PASSWORD =
         # disabled (stays up), like the empty-webhook skips.
         SMTP_HOST=_env("SMTP_HOST", "smtp.gmail.com"),

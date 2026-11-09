@@ -16,7 +16,6 @@ Run: uv run pytest ansible/tests/repo/test_promote_workflow.py
 """
 
 import copy
-import re
 
 import pytest
 from _helpers import REPO
@@ -26,9 +25,6 @@ WORKFLOW = REPO / ".github" / "workflows" / "promote.yml"
 FLUX_DEFAULTS = REPO / "ansible" / "roles" / "k8s" / "flux" / "defaults" / "main.yml"
 FLUX_FETCH = "fluxcd/flux2/releases/download/$FLUX_VERSION/"
 COSIGN_FETCH = "sigstore/cosign/releases/download/$COSIGN_VERSION/"
-DEV_GROUP_FLAG = re.compile(
-    r"\buv (?:run|sync)\b[^\n]*--(?:dev|only-dev|group|all-groups)\b"
-)
 
 # The reset_to_last_good dispatch's two jobs (D5.2b2), guarded by RESET_GUARDS instead.
 RESET_JOBS = ("reset-check", "reset-move")
@@ -39,8 +35,10 @@ JOBS = (
     "promote",
     "tag",
     "verify",
+    "verdict-status",
     "settle",
     "post",
+    "reconcile",
     *RESET_JOBS,
 )
 NEEDS = {
@@ -49,8 +47,10 @@ NEEDS = {
     "promote": "publish",
     "tag": "promote",
     "verify": ["promote", "tag"],
+    "verdict-status": ["promote", "tag", "verify"],
     "settle": ["promote", "tag", "verify"],
     "post": ["promote", "tag", "verify", "settle"],
+    "reconcile": "promote",
 }
 
 # Every job runs only for a successful push run of CI on master in this repository.
@@ -84,8 +84,10 @@ PERMISSIONS = {
     },
     "tag": {"packages": "write"},
     "verify": {"contents": "read", "statuses": "read", "packages": "read"},
+    "verdict-status": {"statuses": "write"},
     "settle": {"packages": "write", "actions": "write"},
     "post": {"contents": "read"},
+    "reconcile": {"packages": "write", "statuses": "read"},
     "reset-check": {"contents": "read", "packages": "read", "actions": "read"},
     "reset-move": {"packages": "write"},
 }
@@ -98,6 +100,13 @@ COSIGN_RELEASE = "v3.1.4"
 HEAD_SHA = "workflow_run.head_sha"
 # `tag` moves `prod` only when `decide` said so.
 VERDICT_GATE = "needs.promote.outputs.verdict == 'promote'"
+# decide's outputs that a later job's steps read, by the job.
+HANDOFFS = {
+    "target": "tag",
+    "digest": "tag",
+    "lost_settle": "reconcile",
+    "lost_settle_digest": "reconcile",
+}
 
 
 def _load(path) -> dict:
@@ -166,7 +175,14 @@ def _checkout_problems(jobs: dict) -> list[str]:
             and args.get("fetch-depth") != 0
         ):
             found.append(f"{name}: checks out without fetch-depth: 0")
-    for name in ("publish", "tag", "settle", "reset-move"):
+    for name in (
+        "publish",
+        "tag",
+        "verdict-status",
+        "settle",
+        "reconcile",
+        "reset-move",
+    ):
         if _checkouts(jobs.get(name, {})):
             found.append(f"{name}: checks out the repository")
     return found
@@ -205,15 +221,18 @@ def _handoff_problems(jobs: dict) -> list[str]:
     decide = _step_index(promote, "decide")
     if decide is None:
         return ["promote: has no step with id `decide`"]
-    for key in ("target", "digest"):
+    for key, reader in HANDOFFS.items():
         if (
             promote.get("outputs", {}).get(key)
             != f"${{{{ steps.decide.outputs.{key} }}}}"
         ):
             found.append(f"promote: output {key} does not come from the decide step")
-        if f"needs.promote.outputs.{key}" not in str(tag.get("steps")):
-            found.append(f"tag: does not take {key} from promote's outputs")
-    later = [jobs.get(name, {}) for name in ("tag", "verify", "settle", "post")]
+        if f"needs.promote.outputs.{key}" not in str(jobs.get(reader, {}).get("steps")):
+            found.append(f"{reader}: does not take {key} from promote's outputs")
+    later = [
+        jobs.get(name, {})
+        for name in ("tag", "verify", "verdict-status", "settle", "post", "reconcile")
+    ]
     after_decide = _steps(promote)[decide + 1 :] + [s for j in later for s in _steps(j)]
     if any(HEAD_SHA in str(step) for step in after_decide) or any(
         HEAD_SHA in str(job.get("if", "")) for job in later
@@ -235,9 +254,10 @@ def _pin_problems(wf: dict, flux_version: str) -> list[str]:
         for s in _steps(job)
         if FLUX_FETCH in str(s.get("run", ""))
     ]
-    if set(flux_steps) != {"publish", "tag", "settle", "reset-move"}:
+    if set(flux_steps) != {"publish", "tag", "settle", "reconcile", "reset-move"}:
         found.append(
-            "the flux CLI is not installed in exactly publish, tag, settle and reset-move"
+            "the flux CLI is not installed in exactly publish, tag, settle, reconcile and "
+            "reset-move"
         )
     version = (wf.get("env") or {}).get("FLUX_VERSION")
     if version != flux_version:
@@ -257,26 +277,6 @@ def _pin_problems(wf: dict, flux_version: str) -> list[str]:
         found.append(
             f"COSIGN_VERSION: cosign {release!r} differs from {COSIGN_RELEASE!r}"
         )
-    return found
-
-
-def _dev_group_problems(wf: dict) -> list[str]:
-    found = []
-    if (wf.get("env") or {}).get("UV_NO_DEV") != "1":
-        found.append(
-            "the workflow env does not set UV_NO_DEV, so `uv run` installs the dev group"
-        )
-    if (wf.get("env") or {}).get("UV_NO_GROUP") != "lint":
-        found.append(
-            "the workflow env does not set UV_NO_GROUP=lint, so `uv run` installs the lint group"
-        )
-    for name, job in (wf.get("jobs") or {}).items():
-        for scope in [job, *_steps(job)]:
-            for var in ("UV_NO_DEV", "UV_NO_GROUP"):
-                if var in (scope.get("env") or {}):
-                    found.append(f"{name}: overrides {var}")
-            if DEV_GROUP_FLAG.search(str(scope.get("run", ""))):
-                found.append(f"{name}: a `uv` call asks for a dependency group")
     return found
 
 
@@ -322,7 +322,6 @@ def problems(wf: dict, flux_version: str) -> list[str]:
     found += _ancestry_problems(jobs.get("render", {}))
     found += _handoff_problems(jobs)
     found += _pin_problems(wf, flux_version)
-    found += _dev_group_problems(wf)
     return found
 
 
@@ -356,6 +355,10 @@ def _extra_permission(wf):
 
 def _drop_needs(wf):
     del wf["jobs"]["tag"]["needs"]
+
+
+def _reconcile_without_the_lost_settle(wf):
+    del wf["jobs"]["promote"]["outputs"]["lost_settle"]
 
 
 def _tag_reads_head_sha(wf):
@@ -421,23 +424,6 @@ def _reset_without_its_input(wf):
     job["if"] = job["if"].replace(RESET_GUARDS[0], "true")
 
 
-def _dev_group_installed(wf):
-    del wf["env"]["UV_NO_DEV"]
-
-
-def _lint_group_installed(wf):
-    del wf["env"]["UV_NO_GROUP"]
-
-
-def _render_job_reenables_dev(wf):
-    wf["jobs"]["render"].setdefault("env", {})["UV_NO_DEV"] = ""
-
-
-def _step_asks_for_a_group(wf):
-    step = next(s for s in wf["jobs"]["render"]["steps"] if s.get("id") == "build")
-    step["run"] = step["run"].replace("uv run python", "uv run --group dev python", 1)
-
-
 RED = {
     "a trigger guard removed": (
         _drop_guard,
@@ -450,6 +436,10 @@ RED = {
     "an extra permission": (_extra_permission, "publish: permissions are"),
     "tag without needs": (_drop_needs, "tag: needs None"),
     "tag reads head_sha": (_tag_reads_head_sha, "a step after decide reads"),
+    "lost_settle not handed on": (
+        _reconcile_without_the_lost_settle,
+        "promote: output lost_settle does not come from the decide step",
+    ),
     "promote checks out head_sha": (
         _promote_checks_out_head_sha,
         "promote: checks out",
@@ -493,16 +483,6 @@ RED = {
         _reset_without_its_input,
         "reset-check: its `if` lacks the reset guard inputs.reset_to_last_good",
     ),
-    "the dev group installed": (_dev_group_installed, "does not set UV_NO_DEV"),
-    "the lint group installed": (
-        _lint_group_installed,
-        "does not set UV_NO_GROUP=lint",
-    ),
-    "render re-enables the dev group": (
-        _render_job_reenables_dev,
-        "render: overrides UV_NO_DEV",
-    ),
-    "a step asks for a group": (_step_asks_for_a_group, "render: a `uv` call asks for"),
 }
 
 

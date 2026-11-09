@@ -36,7 +36,7 @@ HOMELAB_TOOLS = "hosts/packages/homelab-tools/package.yml"
 # Named rather than derived: a workflow that lost its pin fails here instead of shrinking the
 # census and passing. Each value counts the jobs whose fetch reads the file's one pin.
 FLUX_PINS = {
-    WORKFLOW: 4,
+    WORKFLOW: 5,
     ".github/workflows/ci.yml": 2,
     ".github/workflows/bootstrap-drill.yml": 1,
     ".github/workflows/flux-deletion-drill.yml": 1,
