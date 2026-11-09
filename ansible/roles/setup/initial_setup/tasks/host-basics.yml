@@ -41,7 +41,7 @@
   # Renovate rewrites each pin here in the same PR as its twin (renovate.json groups them).
   ansible.builtin.command: "/usr/bin/uv tool install --python 3.15 {{ item }}"
   loop:
-    - ansible-core==2.22.0rc2
+    - ansible-core==2.22.0
     - ansible-lint==26.10.1
   become: false
   when:
