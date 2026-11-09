@@ -250,6 +250,26 @@ NOT_PLANNED_PREFIX = {"refuted": "Refuted", "accepted": "Accepted"}
 _SETTLED_PREFIXES = tuple(f"{p}: " for p in NOT_PLANNED_PREFIX.values())
 
 
+def fold_marker(body: str) -> str | None:
+    """Names the register marker ``body`` carries, or None for a comment the fold ignores.
+
+    The register reads issue state back out of comments: a `Re-observed` prefix counts a
+    sighting, a `Refuted: `/`Accepted: ` prefix records a close reason, and a `Claim:` or
+    `Released:` trailer line moves a claim. A free-text comment carrying one would change
+    that state without the verb that owns it.
+    """
+    text = body.strip()
+    if text.startswith(_REOBSERVED):
+        return f"a `{_REOBSERVED}` re-observation"
+    if text.startswith(_SETTLED_PREFIXES):
+        return f"a `{text.split(':', 1)[0]}:` close reason"
+    if _CLAIM_RE.search(text):
+        return "a `Claim:` trailer line"
+    if _RELEASE_RE.search(text):
+        return "a `Released:` trailer line"
+    return None
+
+
 def settled_reason(issue: dict) -> str | None:
     """The `--reason` the operator's last `--accepted`/`--refuted` close recorded, first line."""
     for c in reversed(issue.get("comments", [])):

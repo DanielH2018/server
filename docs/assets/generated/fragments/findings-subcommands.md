@@ -5,6 +5,7 @@
 | `defer` | withhold an issue from `next` and `claim` until a date, or clear that |
 | `manual` | reserve an issue for the operator, releasing any claim on it, or clear that |
 | `touch` | record a re-observation; the third adds escalated |
+| `comment` | post a plain comment: no label, no re-observation; a correction to an issue's body, say |
 | `claim` | claim issues for a worktree |
 | `release` | release this worktree's claim |
 | `claims` | every open claim, live or stale |

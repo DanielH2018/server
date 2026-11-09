@@ -29,6 +29,7 @@ Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
         [--verify-by 'Run probe.py health <svc>; it should exit 0.'] \\
         [--not-before 2026-09-12] [--manual] [--repo DanielH2018/dotfiles] [--dry-run]
     uv run python scripts/dev/findings.py touch 688 [--source review-2026-09-02]
+    uv run python scripts/dev/findings.py comment 688 --body-file note.md
     uv run python scripts/dev/findings.py defer 688 --until 2026-09-12
     uv run python scripts/dev/findings.py defer 688 --clear
     uv run python scripts/dev/findings.py manual 688 [--clear]
@@ -166,6 +167,7 @@ from dev.findings_lib.issue_model import (
 from dev.findings_lib.plans import (
     ClaimRefused,
     plan_close,
+    plan_comment,
     plan_defer,
     plan_ensure_label,
     plan_manual,
@@ -296,6 +298,27 @@ def cmd_touch(args: argparse.Namespace, tools: FindingsTools) -> int:
     run(plans, args.dry_run, tools)
     escalated = any(p[:2] == ["issue", "edit"] for p in plans)
     print(f"#{args.number} touched{' and escalated' if escalated else ''}")
+    return 0
+
+
+def cmd_comment(args: argparse.Namespace, tools: FindingsTools) -> int:
+    """Handles the ``comment`` subcommand: posts a plain comment on a finding.
+
+    Returns:
+        FINDINGS_BAD_ARGS if the body file is missing, 3 if `plan_comment` refuses the
+        issue or body, 0 otherwise.
+    """
+    if not args.body_file.is_file():
+        sys.stderr.write(f"comment: body file not found: {args.body_file}\n")
+        return FINDINGS_BAD_ARGS
+    issue = _load_issue(args.number, tools)
+    try:
+        plans = plan_comment(issue, args.body_file.read_text())
+    except ClaimRefused as exc:
+        print(f"#{args.number} refused: {exc.reason}", file=sys.stderr)
+        return 3
+    run(plans, args.dry_run, tools)
+    print(f"#{args.number} commented")
     return 0
 
 
@@ -583,6 +606,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
         "board-dates": cmd_board_dates,
         "open": cmd_open,
         "touch": cmd_touch,
+        "comment": cmd_comment,
         "defer": cmd_defer,
         "manual": cmd_manual,
         "claim": cmd_claim,
