@@ -94,6 +94,8 @@ def test_a_hung_worktree_costs_its_own_session_line_only():
         elif "/repo/.claude/worktrees/slow" in cmd:
             never.wait()
             out = ""
+        elif "status" in cmd:
+            out = ""
         else:
             out = "file.py\n"
         return types.SimpleNamespace(stdout=out, stderr="", returncode=0)

@@ -207,9 +207,10 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
     trailing `&` or a `<(…)`. Make one call per item, or run a script file that holds the loop.
   - **A here-document:** `cat > f <<'EOF'` or `python3 - <<'EOF'`. Write file content with
     the Write tool.
-- **The SessionStart banner lists the other live sessions** and the paths each has changed
-  vs `origin/master`. Check it before editing a file several sessions are near (`CLAUDE.md`,
-  `group_vars/`, a shared role).
+- **The SessionStart banner names the other live sessions whose changed paths overlap
+  yours**, and counts the rest. Before editing a file several sessions are near (`CLAUDE.md`,
+  `group_vars/`, a shared role), run `uv run python .claude/hooks/session-health.py
+  --sessions`, which lists every live session and its changed paths.
 - **Never pass `discard_changes` to `ExitWorktree`** when it refuses a merged worktree. That is
   how unlanded work is lost. Retiring a worktree is the `worktree-cleanup` skill.
 

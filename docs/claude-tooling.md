@@ -935,13 +935,23 @@ inspect either, because the isolation guard refuses a git command targeting the 
 checkout, and `deploy.sh` exit 4 names the session's own tree. The banner is the only place
 that cause reaches the session that pays for it.
 
-The banner ends with a triage line of whole `probe.py` commands joined by `or`: `targets` and
-`health <svc>` always, and `landing` first whenever a deployer line is present.
+The banner ends with a triage line of whole `probe.py` commands joined by `or`. It names
+`landing` when a deployer line is present, and `targets` and `health <svc>` when a scrape
+target is down. A banner holding only the branch line gets no triage line.
 
-Three more sections print whether or not anything is unhealthy: the other live Claude sessions
-in this repo, merged worktrees ready to remove, and fan-out worktrees running on another host.
-The hook derives the live-session list from `git worktree list` and `/proc`, not from anything a
-session declares.
+More sections print whether or not anything is unhealthy, in this order: the prompt to label a
+generated worktree name, merged worktrees ready to remove, the other live Claude sessions in
+this repo, and fan-out worktrees running on another host. The hook derives the live-session
+list from `git worktree list` and `/proc`, not from anything a session declares. A session
+gets its own line only when its changed paths share one with this session's. The changed
+paths are a tree's branch diff against `origin/master` plus its uncommitted and untracked files.
+The line names the shared paths. The rest fold into one count line.
+`uv run python .claude/hooks/session-health.py --sessions` lists every live session with its
+changed paths.
+
+The hook cuts its whole output to `BANNER_BUDGET_BYTES` (2000) and counts the lines it cut.
+Claude Code shows only a 2 KB preview of a longer SessionStart output, and the order above puts
+the lines that ask for an action ahead of the lines that only inform.
 The fan-out section names a batch only within a day of its launch. Older batches whose
 worktree `fanout.py place clean` never removed fold into one count per host, so a run nobody
 cleaned stops listing its batches in every session.

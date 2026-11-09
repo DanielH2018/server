@@ -36,14 +36,22 @@ def _result(stdout, returncode=0):
 
 
 def test_banner_empty_when_no_problems():
-    assert _mod.format_banner([]) == ""
+    assert _mod.format_banner() == []
 
 
 def test_banner_lists_problems_and_triage():
-    out = _mod.format_banner(["  ✗ jellyfin — unhealthy (x)"])
-    assert out.startswith("WARN: homelab health check found issues:")
-    assert "jellyfin" in out
-    assert "triage" in out  # always points the reader at the probe commands
+    out = _mod.format_banner(targets=["  ✗ target jellyfin [x] down"])
+    assert out[0] == "WARN: homelab health check found issues:"
+    assert "jellyfin" in out[1]
+    assert "triage" in out[-1]
+
+
+def test_a_branch_only_banner_prints_no_triage_line():
+    out = _mod.format_banner(master_moved=["  ⚠ this branch is 3 commits behind"])
+    assert out == [
+        "WARN: homelab health check found issues:",
+        "  ⚠ this branch is 3 commits behind",
+    ]
 
 
 # The scrape-target section moved to hooklib/service_lines.py — its tests are in the sibling
@@ -164,7 +172,7 @@ def test_a_deployer_only_banner_names_probe_landing(monkeypatch, capsys):
 
 
 def test_a_target_only_banner_omits_landing_and_joins_commands_with_or():
-    triage = _mod.format_banner(["  ✗ target x [y] down"]).splitlines()[-1]
+    triage = _mod.format_banner(targets=["  ✗ target x [y] down"])[-1]
     assert "landing" not in triage
     assert "|" not in triage
     assert (
@@ -252,8 +260,8 @@ def test_stale_worktree_lines_swallows_a_timeout():
 # settings.json kills the hook at its `timeout`, and a kill discards whatever Python still
 # buffers — the whole banner, parked-deployer warning included. The worktree read is
 # the slow step (it reaches GitHub), so its own cap sits inside that budget. Since #6153 every
-# probe runs before anything prints, under `TOTAL_DEADLINE_S`, and the flush only orders the
-# banner ahead of the worktree lines (test_session_health_deadline.py pins the deadline).
+# probe runs before anything prints, under `TOTAL_DEADLINE_S` (test_session_health_deadline.py
+# pins the deadline).
 
 
 def test_the_worktree_read_is_bounded_well_inside_the_hook_budget():
@@ -268,6 +276,46 @@ def test_the_worktree_read_is_bounded_well_inside_the_hook_budget():
     ]
     assert budgets, "settings.json registers no session-health SessionStart hook"
     assert _mod.WORKTREE_TIMEOUT_S <= min(budgets) / 2
+
+
+def _hook_output(capsys):
+    out = json.loads(capsys.readouterr().out)
+    return out["hookSpecificOutput"]["additionalContext"], out.get("systemMessage", "")
+
+
+def test_main_prints_the_health_lines_before_the_session_list(monkeypatch, capsys):
+    run_main = _run_main(
+        monkeypatch,
+        '{"source":"startup"}',
+        targets=["  ✗ target loki [loki:3100] down"],
+        sessions=["  • other-branch — roles/k8s/x"],
+        worktrees=["WARN: 1 merged worktree(s) can be removed:"],
+    )
+    assert run_main() == 0
+    context, operator = _hook_output(capsys)
+    assert context.index("loki") < context.index("other-branch")
+    assert "merged worktree" in operator
+
+
+def test_main_cuts_the_agent_context_to_its_budget_and_keeps_the_health_lines(
+    monkeypatch, capsys
+):
+    sessions = [
+        f"  • worktree-fanout-{n} — {'ansible/roles/k8s/x/' * 4}" for n in range(60)
+    ]
+    run_main = _run_main(
+        monkeypatch,
+        '{"source":"startup"}',
+        targets=["  ✗ target loki [loki:3100] down"],
+        sessions=sessions,
+        worktrees=["WARN: 1 merged worktree(s) can be removed:"],
+    )
+    assert run_main() == 0
+    context, operator = _hook_output(capsys)
+    assert len(context.encode()) <= _mod.BANNER_BUDGET_BYTES
+    assert "loki" in context
+    assert context.splitlines()[-1].endswith("cut at the banner's 2000-byte budget")
+    assert "merged worktree" in operator
 
 
 # `other_live_sessions` imports lib.worktrees off a hand-built sys.path. That path must point

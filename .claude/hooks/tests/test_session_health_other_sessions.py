@@ -34,9 +34,9 @@ _OTHER_WORKTREE_PORCELAIN = (
 
 def _fake_run_for_other_sessions(diff_stdout):
     def fake(cmd, *_args, **_kwargs):
-        return _result(
-            _OTHER_WORKTREE_PORCELAIN if cmd[:2] == ["git", "worktree"] else diff_stdout
-        )
+        if cmd[:2] == ["git", "worktree"]:
+            return _result(_OTHER_WORKTREE_PORCELAIN)
+        return _result("" if "status" in cmd else diff_stdout)
 
     return fake
 
@@ -72,9 +72,64 @@ def test_other_live_sessions_shows_a_trees_label_beside_its_name(tmp_path):
     def run(cmd, *_a, **_k):
         return _result(porcelain if cmd[:2] == ["git", "worktree"] else "")
 
-    lines = _mod.other_live_sessions("/repo", run=run, git_dirty=lambda *a, **k: False)
+    lines = _mod.other_live_sessions(
+        "/repo", run=run, git_dirty=lambda *a, **k: False, show_all=True
+    )
     assert lines == [
         "  • worktree-agent-a1 [#1345 Fix the cert watcher] — no commits yet"
+    ]
+
+
+def test_only_a_session_sharing_a_path_gets_its_own_line():
+    porcelain = "worktree /repo\nHEAD aaa\nbranch refs/heads/master\n\n" + "".join(
+        f"worktree /repo/.claude/worktrees/{name}\nHEAD bbb\nbranch refs/heads/{name}\n"
+        "locked some-other-session\n\n"
+        for name in ("near", "far", "empty")
+    )
+    diffs = {
+        "/repo": "shared.py\nmine.py\n",
+        "/repo/.claude/worktrees/near": "shared.py\ntheirs.py\n",
+        "/repo/.claude/worktrees/far": "elsewhere.py\n",
+        "/repo/.claude/worktrees/empty": "",
+    }
+
+    def run(cmd, *_a, **_k):
+        if cmd[:2] == ["git", "worktree"]:
+            return _result(porcelain)
+        if "status" in cmd:
+            return _result("?? scratch.py\n" if cmd[2] == "/repo" else "")
+        return _result(diffs[cmd[2]])
+
+    lines = _mod.other_live_sessions("/repo", run=run, git_dirty=lambda *a, **k: False)
+    assert lines == [
+        "  • near — shared.py",
+        "  2 other live sessions, no overlap with this branch — "
+        f"`{_mod.SESSIONS_COMMAND}` lists them",
+    ]
+
+
+def test_uncommitted_edits_on_both_sides_count_as_overlap():
+    porcelain = "worktree /repo\nHEAD aaa\nbranch refs/heads/master\n\n" + "".join(
+        f"worktree /repo/.claude/worktrees/{name}\nHEAD bbb\nbranch refs/heads/{name}\n"
+        "locked some-other-session\n\n"
+        for name in ("near", "far")
+    )
+    statuses = {
+        "/repo": " M CLAUDE.md\n",
+        "/repo/.claude/worktrees/near": " M CLAUDE.md\n",
+        "/repo/.claude/worktrees/far": "?? other.md\n",
+    }
+
+    def run(cmd, *_a, **_k):
+        if cmd[:2] == ["git", "worktree"]:
+            return _result(porcelain)
+        return _result(statuses[cmd[2]] if "status" in cmd else "")
+
+    lines = _mod.other_live_sessions("/repo", run=run, git_dirty=lambda *a, **k: True)
+    assert lines == [
+        "  • near — CLAUDE.md (+ uncommitted)",
+        "  1 other live session, no overlap with this branch — "
+        f"`{_mod.SESSIONS_COMMAND}` lists them",
     ]
 
 
