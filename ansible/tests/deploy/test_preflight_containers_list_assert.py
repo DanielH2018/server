@@ -2,7 +2,7 @@
 
 The k3s services live in `cluster/services.yml`, so daniel-box and daniel-server declare no
 `containers_list` and must pass. A Docker host still needs the key, because `deploy.yml` loops
-over it. Each expression is evaluated with Ansible's own Templar against the real host_vars.
+over it. Each expression is evaluated with the renderer's Jinja environment against the real host_vars.
 
 Run: uv run pytest ansible/tests/deploy/test_preflight_containers_list_assert.py
 """
@@ -23,15 +23,15 @@ def _task() -> dict:
 
 def _fails(host_vars: dict) -> bool:
     """Whether the task runs on a host with `host_vars` and its assert is false there."""
-    from ansible.parsing.dataloader import DataLoader
-    from ansible.template import Templar, trust_as_template
+    from lib.render_guard import SHARED_TPL
+    from renderer.renderer_lib.environment import evaluate, strict_env
 
     task = _task()
     variables = {**yaml_fast.safe_load(ALL_VARS.read_text()), **host_vars}
-    templar = Templar(loader=DataLoader(), variables=variables)
+    env = strict_env(SHARED_TPL)
 
     def true(expr: str) -> bool:
-        return templar.template(trust_as_template("{{ " + expr + " }}")) is True
+        return evaluate(env, "{{ " + expr + " }}", variables) is True
 
     return true(task["when"]) and not true(task["ansible.builtin.assert"]["that"])
 
