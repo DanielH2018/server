@@ -100,3 +100,11 @@ def test_a_real_owed_line_still_needs_a_hand_beside_a_deleted_role(land):
     assert rc == 1
     assert "clear-owed manual_plane k3s" in out
     assert "clear-owed manual_plane common" not in out
+
+
+def test_a_changed_role_the_ledger_lacks_still_needs_a_hand(land):
+    """The paths decide the verdict; the empty ledger drops only the clear command."""
+    verdict, rc, out = land(_fakes([], [_K3S]))
+    assert verdict == "needs-manual-apply", out
+    assert rc == 1
+    assert "k3s-bringup.yml" in out

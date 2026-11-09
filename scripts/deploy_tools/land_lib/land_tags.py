@@ -200,6 +200,9 @@ def plane_note(
     # applying exactly those roles. land.sh reads the deployer's own state for
     # that case instead.
     loud = reach.reach(files, quiet)
+    # DECIDED: the paths decide what is owed, and `owed` gates only the clear command. No
+    # writer appends `manual_plane` lines since H7.52, so a ledger-decided plane would never
+    # report a changed k3s role.
     unroutable = {
         r
         for r in loud.changes.setup_roles
