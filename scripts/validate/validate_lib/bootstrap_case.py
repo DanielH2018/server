@@ -25,10 +25,10 @@ systemd loads that unit:
     `docs/host-packages.md`, *Adding a host* (`fixture_host_case.py`). The offline build then
     renders, builds and simulates the install of that host's package on a container of its name.
 
-`run` prepares the clones, the kit and the seed once, then runs every case at the same time
-(#7785). Each case boots its own container and mounts its clone and seed read-only. The script
-copies out of a kit, and uv runs the kit's `uv-python` interpreter in place, taking at most a
-file lock there. The verdicts print in plan order. A container's own
+`run` prepares the clones, the kit and the seed once, then runs the cases concurrently, at
+most one per CPU (#7785). Each case boots its own container and mounts its clone and seed
+read-only. The script copies out of a kit, and uv runs the kit's `uv-python` interpreter in
+place, taking at most a file lock there. The verdicts print in plan order. A container's own
 diagnostics print as they happen, outside the group's block.
 
 The cases read `systemctl show` after the run: the installer leaves the node's k3s unit disabled
@@ -442,7 +442,6 @@ def _verdict(body) -> Exception | None:
         body()
     except (CaseFailed, OSError, subprocess.SubprocessError) as exc:
         return exc
-    return None
 
 
 def output_problems(
@@ -665,7 +664,9 @@ def run(cases) -> None:
         return
     bodies = [body_for(cases, item, clones) for item in planned]
     # Printed from this thread, in plan order: case_groups buffers stderr per group thread.
-    with ThreadPoolExecutor(max_workers=len(bodies)) as pool:
+    # The offline items are CPU-bound builds, and other case groups share the runner's CPUs.
+    workers = min(len(bodies), max(2, os.cpu_count() or 2))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
         for item, failure in zip(planned, pool.map(_verdict, bodies), strict=True):
             if failure is None:
                 print(f"[PASS] {item.label}: {item.name}", file=sys.stderr)
