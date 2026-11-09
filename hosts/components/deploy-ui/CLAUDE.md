@@ -114,7 +114,12 @@ The line is unit-tested.
 ## Deploy
 
 The host package applies it: a merge that changes this component reaches daniel-box when the
-builder publishes the next `homelab-daniel-box`, and reconcile restarts the daemon when its files
-changed. To verify, run `curl -s http://<daniel-box server_ip>:8790/api/state` from the box.
+builder publishes the next `homelab-daniel-box`. dpkg only installs the files, so every Python
+file entry in `component.yml` carries `activate: "try-restart:deploy-ui.service"`, and reconcile
+restarts the daemon when one of them changed. A new Python file needs the same action, or the
+daemon keeps running the old code (ENFORCED:
+`hosts/lib/tests/test_deploy_ui_component.py::test_a_changed_python_file_restarts_the_daemon_is_clean`).
+The HTML needs no action, because the daemon reads it on each request. To verify, run
+`curl -s http://<daniel-box server_ip>:8790/api/state` from the box.
 
 Tests: `uv run pytest hosts/components/deploy-ui/tests hosts/lib/tests/test_deploy_ui_component.py`.
