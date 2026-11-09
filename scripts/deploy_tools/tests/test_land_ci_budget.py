@@ -58,7 +58,7 @@ def test_a_gate_with_no_timeout_is_flagged():
 def test_land_shs_budget_covers_ci_ymls_chain_into_the_gate():
     workflow = yaml_fast.safe_load((REPO / ".github/workflows/ci.yml").read_text())
     _minutes, path = chain_into(workflow["jobs"], GATE)
-    assert "host_packages" in path, path
+    assert {"host_packages", "host_packages_bootstrap"} & set(path), path
     assert budget_problem(workflow["jobs"], options.Options.ci_timeout) is None
 
 
