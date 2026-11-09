@@ -243,9 +243,51 @@ def open_blockers(issue: dict) -> list[str]:
     return [f"{repo}#{n}" for repo, n in sorted(found)]
 
 
+def recorded_blockers(issue: dict) -> list[str]:
+    """The number of every issue recorded as blocking ``issue``, open or closed."""
+    return [
+        str(node["number"])
+        for node in (issue.get("blockedBy") or {}).get("nodes") or []
+    ]
+
+
 def is_blocked(issue: dict) -> bool:
     """Whether an open blocker withholds ``issue`` from `next` and `claim`."""
     return bool(open_blockers(issue))
+
+
+_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+|\n")
+_WAIT_WORD_RE = re.compile(
+    r"(?i)\b(?:once|after|until|waits? (?:on|for)|blocked (?:by|on)|depends on)\b"
+)
+_ISSUE_REF_RE = re.compile(r"(?<![\w/])#(\d+)\b")
+# A target-architecture slice code as the plans spell one: `R4`, `M6`, `H7.53`, `H2.8c`.
+_SLICE_RE = re.compile(r"\b([A-Z]\d+(?:\.\d+[a-z]?\d*)?)\b")
+
+
+def waited_on(body: str) -> tuple[list[int], list[str]]:
+    """The issue numbers and slice codes ``body`` says the finding waits on, first seen first.
+
+    A reference counts only when it follows a wait word ("once", "after", "waits on") in the
+    same sentence, so a body that merely cites `#n` as history yields nothing. The trailer
+    is cut first. This is the evidence `open` and `defer` hint from: a finding that waits on
+    other work wants `block`, not a guessed date.
+    """
+    text = _TRAILER_RE.sub("", (body or "").replace("\r\n", "\n"))
+    numbers: list[int] = []
+    codes: list[str] = []
+    for sentence in _SENTENCE_RE.split(text):
+        wait = _WAIT_WORD_RE.search(sentence)
+        if not wait:
+            continue
+        tail = sentence[wait.start() :]
+        for n in (int(m) for m in _ISSUE_REF_RE.findall(tail)):
+            if n not in numbers:
+                numbers.append(n)
+        for code in _SLICE_RE.findall(tail):
+            if code not in codes:
+                codes.append(code)
+    return numbers, codes
 
 
 def today_utc() -> date:
