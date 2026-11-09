@@ -524,8 +524,8 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 
 ## C4. Ownership handoff (the two-writer rule)
 
-- **Ownership flag.** A `containers_list` entry gains `owner: flux` in the same PR that adds
-  its Kustomization.
+- **Ownership flag.** Until H1.9, a `containers_list` entry gained `owner: flux` in the same PR
+  that added its Kustomization. From H1.9 on, `platform: k8s` alone marks an entry Flux's.
 - **Values of `owner`.** `owner` takes `flux`. The operator ruled on 2026-11-06 that a
   flux-owned service stays flux-owned or retires (`docs/flux-deploy-plane.md`, *Retiring a
   flux-owned service*), so no PR sets another value or removes `owner` from a live entry. Every
