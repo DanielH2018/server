@@ -163,6 +163,20 @@
     },
     {
       "customType": "regex",
+      "description": "The cosign release that promote.yml's `publish` and `promote` jobs sign and verify with, that prune-artifacts.yml verifies with, and that flux-deletion-drill.yml signs its fixtures with (#7781). Each file pins it in env as `COSIGN_VERSION` and `COSIGN_SHA256`, the sha256 of `cosign-linux-amd64`, and each job restores the binary from an actions/cache keyed on both, fetching the release only on a miss and checking the digest every run. The jobs used `sigstore/cosign-installer` until a release-host outage of 504s failed the drill, because the action downloads cosign uncached. This manager follows the flux CLI manager's shape: ONE matchString spans the `# renovate:` annotation, the `COSIGN_VERSION` line and the `COSIGN_SHA256` line, so currentValue and currentDigest come from one match, and the github-release-attachments datasource computes the new digest from the release's `cosign_checksums.txt`. The `sigstore/cosign` packageRule puts all three pins in one manual PR. ENFORCED by scripts/tests/test_renovate_cosign_release.py.",
+      "managerFilePatterns": [
+        "/(^|/)\\.github/workflows/promote\\.yml$/",
+        "/(^|/)\\.github/workflows/prune-artifacts\\.yml$/",
+        "/(^|/)\\.github/workflows/flux-deletion-drill\\.yml$/"
+      ],
+      "matchStrings": [
+        "#[ \\t]*renovate:[ \\t]*datasource=github-release-attachments[ \\t]+depName=sigstore/cosign[ \\t]*\\n[ \\t]+COSIGN_VERSION:[ \\t]*(?<currentValue>v\\d+\\.\\d+\\.\\d+)[ \\t]*\\n[ \\t]+COSIGN_SHA256:[ \\t]*(?<currentDigest>[a-f0-9]{64})"
+      ],
+      "depNameTemplate": "sigstore/cosign",
+      "datasourceTemplate": "github-release-attachments"
+    },
+    {
+      "customType": "regex",
       "description": "The nfpm binary CI's `host_packages` job builds the host packages with (target slice H3, PR H3.3a). It is pinned by version and by the sha256 of `nfpm_<version>_Linux_x86_64.tar.gz`, and this manager moves both in one PR. The github-release-attachments datasource computes the new digest: it finds the release asset holding the pinned digest, the release's checksums.txt, and reads the same asset's line from the new release. ONE matchString spans the `# renovate:` annotation, the `NFPM_VERSION` line and the `NFPM_SHA256` line of the job's env, so currentValue and currentDigest come from one match. The job fetches nfpm and checks the digest on every run, ahead of its render diff, so a bump PR that changes no render still fetches the new version and checks the new digest. The `.github/workflows/**` packageRule gives it its own `{{depName}}` group. The builder on daniel-box builds with the nfpm in `hosts/packages/homelab-tools/package.yml`, whose own manager moves that pin, and `hosts/lib/tests/test_builder_component.py` holds the two equal.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/"
@@ -1333,12 +1347,17 @@
       "groupName": "gitleaks (prek.toml and the promote workflow)"
     },
     {
-      "description": "The cosign binary that promote.yml and prune-artifacts.yml install (`cosign-release:` on each sigstore/cosign-installer step, #4767). No custom manager reads it, and none may: Renovate's built-in github-actions manager already extracts the input as `sigstore/cosign` on github-releases (lib/modules/manager/github-actions/known-actions/github-releases.ts), one dep per step, and a second manager would double-report it. The installer ACTION's digest is a separate dep, `sigstore/cosign-installer`, which this rule's exact package name does not reach. Three settings. `pinDigests: false`, because the top-level `pinDigests: true` reaches this dep too and asks to pin the release's commit, which the input cannot hold: the dep has no autoReplaceStringTemplate, the rewrite changes nothing, and `Pin dependency sigstore/cosign to 11926fa` sat on the Dependency Dashboard as `update failure`. No automerge, because the cosign version decides the signature format the cluster verifies (cosign v3 bundles, read by Flux's source-controller), so a bump the controller cannot verify stops every promotion. A `manual —` group with the weekly push keys, so the renovate-prs skill stops on a work order it cannot verify; `groupSingleUpdates` keeps the group name in a one-dependency PR's title. All three steps carry the same depName, so one PR moves both files, and ansible/tests/repo/test_promote_workflow.py fails a bump that moved only one. ENFORCED by scripts/tests/test_renovate_cosign_release.py.",
+      "description": "The cosign release that promote.yml, prune-artifacts.yml and flux-deletion-drill.yml fetch, from the `COSIGN_VERSION`/`COSIGN_SHA256` pin in each file that the `sigstore/cosign` custom manager reads (#7781). The rule matches that manager's dep by exact package name and datasource, in those three files only, so no role owns the pin. No automerge, because the cosign version decides the signature format the cluster verifies (cosign v3 bundles, read by Flux's source-controller), so a bump the controller cannot verify stops every promotion. `pinDigests: false` keeps the top-level `pinDigests: true` off the dep, whose digest the manager already carries. A `manual —` group with the weekly push keys, so the renovate-prs skill stops on a work order it cannot verify; `groupSingleUpdates` keeps the group name in a one-dependency PR's title. All three pins carry the same depName, so one PR moves every file, and scripts/tests/test_renovate_cosign_release.py fails a pin that drifts from promote.yml's. ENFORCED by scripts/tests/test_renovate_cosign_release.py.",
       "matchManagers": [
-        "github-actions"
+        "custom.regex"
       ],
       "matchDatasources": [
-        "github-releases"
+        "github-release-attachments"
+      ],
+      "matchFileNames": [
+        ".github/workflows/promote.yml",
+        ".github/workflows/prune-artifacts.yml",
+        ".github/workflows/flux-deletion-drill.yml"
       ],
       "matchPackageNames": [
         "sigstore/cosign"
