@@ -54,9 +54,9 @@ EXPLAINED = {
         f"{CHANGED_MODE}: /usr/local/bin/aide-check.sh"
     ),
     "a command removed from /usr/local/bin": f"{REMOVED}: /usr/local/bin/tool",
-    "a unit a role installed": f"{CHANGED_CONTENT}: /etc/systemd/system/gitops-deploy.service",
+    "a unit a role installed": f"{CHANGED_CONTENT}: /etc/systemd/system/coredns-host.service",
     "the enable link of a unit a role installed": (
-        f"{LINK_ADDED}: /etc/systemd/system/multi-user.target.wants/gitops-deploy.service"
+        f"{LINK_ADDED}: /etc/systemd/system/multi-user.target.wants/coredns-host.service"
     ),
     "the enable link of a packaged unit": (
         f"{LINK_ADDED}: /etc/systemd/system/multi-user.target.wants/tool.service"
@@ -217,14 +217,14 @@ FLAGGED = {
         f"{LINK_ADDED}: /etc/profile.d/extra.sh",
         {
             "relink": {
-                "/etc/profile.d/extra.sh": "/etc/systemd/system/gitops-deploy.service"
+                "/etc/profile.d/extra.sh": "/etc/systemd/system/coredns-host.service"
             }
         },
         UNPACKAGED_STARTUP,
     ),
     "a package symlink pointed at a unit the roles write": (
         f"{LINK_CHANGED}: /usr/bin/tool-link",
-        {"relink": {"/usr/bin/tool-link": "/etc/systemd/system/gitops-deploy.service"}},
+        {"relink": {"/usr/bin/tool-link": "/etc/systemd/system/coredns-host.service"}},
         "a package owns it, but it is not the link the package installed",
     ),
     "a boot link pointed outside /boot in a kernel week": (
@@ -283,7 +283,7 @@ FLAGGED = {
         UNPACKAGED_STARTUP,
     ),
     "a drop-in for a unit a role installs": (
-        f"{ADDED}: /etc/systemd/system/gitops-deploy.service.d/override.conf",
+        f"{ADDED}: /etc/systemd/system/coredns-host.service.d/override.conf",
         {},
         UNPACKAGED_STARTUP,
     ),
