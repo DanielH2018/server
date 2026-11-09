@@ -105,10 +105,10 @@ defaults:
   #   kubelet-arg        the two unsafe sysctls wg-easy needs; setup/k3s's defaults say why.
   #                      image-gc-high-threshold=85 is the kubelet's default value, so it
   #                      changes no behaviour: H6.7 added it to prove the windowed restart.
-  #   secrets-encryption the apiserver encrypts Secrets on write. setup/k3s keeps
-  #                      `k3s_secrets_encryption` for server.yml's status and rotate-keys tasks
-  #                      until H7, and a test holds the two equal. setup/k3s's defaults explain
-  #                      why arming the flag is only half the job.
+  #   secrets-encryption the apiserver encrypts Secrets on write, so k3s's snapshots carry no
+  #                      plaintext Secret to R2. Secrets written before the flag stay plaintext
+  #                      until `k3s secrets-encrypt rotate-keys` rewrites them: docs/host-packages.md,
+  #                      *Rebuilding daniel-box*, has that check.
   #   etcd-expose-metrics  gated on the single switch in group_vars/all.yml, which the
   #                      Prometheus etcd scrape job also reads.
   #   kube-apiserver-arg the audit flags above, then the authentication config. That file

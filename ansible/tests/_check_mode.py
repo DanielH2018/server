@@ -146,8 +146,8 @@ def walk_with_inherited(
     `walk_tasks` yields the wrapper and its children side by side, which loses the
     relationship between them — and both of these are things a block imposes on children
     that do not carry them. Ansible applies both to `rescue:` and `always:` too, so all three
-    nest the same way here. `setup/k3s/tasks/storage_smoke.yml` is why the `when:` half
-    exists: one guard on its block covers the create, the wait, the assert and both cleanups.
+    nest the same way here. One guard on a block covers every task inside it, its cleanups
+    in `always:` included.
 
     The two are carried differently, because Ansible combines them differently. `when:`
     clauses AND together, so every enclosing condition stays live and the caller gets a list.

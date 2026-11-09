@@ -222,14 +222,12 @@ def test_a_dry_run_prints_the_commands_and_changes_nothing(owe, capsys):
             "not one the routing records",
         ),
         (_owed("common", "none"), "common", "no recorded command applies it"),
-        (_owed("k3s", "ansible/k3s-bringup.yml"), "k3s", "arms more than the change"),
     ],
     ids=[
         "shell-in-host",
         "unknown-host",
         "foreign-playbook",
         "by-hand",
-        "maximal-apply",
     ],
 )
 def test_a_line_it_cannot_trust_or_that_needs_the_operator_runs_nothing(

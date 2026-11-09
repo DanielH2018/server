@@ -52,6 +52,7 @@ SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES: frozenset[str] = frozenset(
         f"{_INITIAL_SETUP}/fail2ban_homelab.conf.j2",
         f"{_INITIAL_SETUP}/rkhunter-check.sh.j2",
         f"{_INITIAL_SETUP}/rkhunter.conf.local.j2",
+        "ansible/roles/setup/k3s/templates/netplan-static-address.yaml.j2",
         f"{_NUT_HOST}/host-upsmon.conf.j2",
         f"{_NUT_HOST}/ups-secondary-health.sh.j2",
     }

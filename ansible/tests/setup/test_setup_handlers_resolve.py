@@ -1,8 +1,7 @@
 """Every `notify:` in a setup playbook's roles reaches a handler one of those roles defines.
 
-The playbooks are initial_setup.yml and k3s-bringup.yml. At the moment only the k3s role,
-which k3s-bringup.yml applies, defines handlers; the censuses over initial_setup.yml hold
-that play to the same rule if a role gains one.
+The playbooks are initial_setup.yml and k3s-bringup.yml. No setup role defines a handler since
+H7.44 emptied the k3s role, so these hold both plays to the rule if a role gains one.
 
 The handlers moved out of the playbook into each role's `handlers/main.yml` (#3288). A notify
 naming no handler fails only on the run where its task changes something, which no syntax check
@@ -112,12 +111,6 @@ def test_a_handler_with_no_notifier_is_flagged() -> None:
     assert unnotified(owners, {"Reload y": {"y"}}) == ["Restart x"]
 
 
-def test_the_census_finds_a_roles_notify_of_its_own_handler() -> None:
-    """Non-vacuity: the k3s role's notify of its own restart handler is in the census."""
-    notifies = notified(play_roles(BRINGUP))
-    assert "k3s" in notifies["Restart k3s"]
-
-
 def test_a_notify_with_no_handler_is_flagged() -> None:
     assert unresolved({"Restart nothing": {"x"}}, defined(play_roles(BRINGUP))) == [
         "Restart nothing"
@@ -127,13 +120,6 @@ def test_a_notify_with_no_handler_is_flagged() -> None:
 def test_no_two_roles_in_the_play_define_one_handler_name() -> None:
     assert duplicated(handler_owners(play_roles())) == {}
     assert duplicated(handler_owners(play_roles(BRINGUP))) == {}
-
-
-def test_the_census_finds_the_k3s_roles_handler() -> None:
-    owners = handler_owners(play_roles(BRINGUP))
-    assert owners.get("Restart k3s") == ["k3s"], (
-        "the census no longer finds the k3s role's own restart handler"
-    )
 
 
 def test_a_handler_name_two_roles_define_is_flagged() -> None:

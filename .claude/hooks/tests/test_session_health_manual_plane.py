@@ -173,23 +173,11 @@ def test_a_role_with_no_narrowing_still_names_the_role_tag():
 # ── the banner warns about a command that arms the control plane ─────────────────
 
 
-def test_a_whole_role_apply_carries_the_control_plane_warning():
-    """`--tags k3s` arms the installer restart and the key re-encryption.
-
-    The journal line, the Discord alert and `land.sh` all carry this through
-    `deploy_remediation`. The banner built its own command and carried nothing, so a session
-    reading it took the widest, most destructive form of the apply with no notice.
-    """
+def test_the_emptied_k3s_roles_whole_role_apply_carries_no_warning():
+    """`--tags k3s` runs only the `end_role` stub since H7.44, so it arms nothing to warn of."""
     (line,) = _problems(manual=_K3S)
     assert "--tags k3s`" in line
-    assert "rotate-keys" in line, "the warning names the irreversible half"
-
-
-def test_a_narrowed_apply_reaching_the_gated_tasks_keeps_the_warning():
-    """`k3s_server` selects every task in `tasks/server.yml`, restart and re-encryption both."""
-    (line,) = _problems(manual=_k3s(["k3s_server"]))
-    assert "--tags k3s_server" in line
-    assert "rotate-keys" in line
+    assert "rotate-keys" not in line
 
 
 def test_a_narrowed_apply_reaching_nothing_gated_carries_no_warning():

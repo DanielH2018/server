@@ -56,7 +56,6 @@ _KNOWN = frozenset(
         "deploy.yml",
         "initial_setup.yml",
         "k3s-bringup.yml",
-        "k3s-storage-smoke.yml",
         "preflight.yml",
         "prune_backups.yml",
         "seed_volume_backup.yml",

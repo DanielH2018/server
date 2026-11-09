@@ -306,11 +306,9 @@ def test_each_scan_finds_the_member_that_proves_it_reads_something(box_package):
     assert RECURRING_MEMBER in recurring
 
 
-def test_an_emptied_role_is_left_out_of_the_role_scan():
-    names = {r.name for r in applied_setup_roles()}
-    assert "k3s" in names
-    assert "initial_setup" not in names
-    assert "gitops_deploy" not in names
+def test_every_emptied_role_is_left_out_of_the_role_scan():
+    # k3s was the last setup role with tasks (H7.44), so the scan has no member left.
+    assert {r.name for r in applied_setup_roles()} == set()
 
 
 def test_every_exemption_names_a_schedule_that_exists(box_package):

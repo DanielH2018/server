@@ -10,7 +10,6 @@ import subprocess
 
 import pytest
 
-from deploy_tools.setup_lib.setup_census import items_left
 from lib import yaml_fast
 from lib.repo_paths import ANSIBLE, REPO
 from renderer.renderer_lib import host as host_mode
@@ -88,27 +87,6 @@ def test_the_role_applies_as_a_no_op(role):
             "ansible.builtin.meta": "end_role",
         }
     ]
-
-
-def test_the_census_holds_no_item_of_the_moved_subjects():
-    items = items_left((HOST,))[HOST]
-    left = [
-        str(item)
-        for item in items
-        if item.role in {"chezmoi_setup", "github_cli"}
-        or any(
-            word in str(item)
-            for word in (
-                "Install Git hooks",
-                "Install prek",
-                "Vale",
-                "/usr/local/libexec",
-                "worktree-holders.json",
-            )
-        )
-    ]
-    assert items, "the census found nothing on daniel-box"
-    assert left == []
 
 
 def test_the_uv_pin_left_with_the_tasks_that_read_it():

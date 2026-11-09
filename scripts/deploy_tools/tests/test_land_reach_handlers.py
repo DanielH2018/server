@@ -21,24 +21,6 @@ import yaml
 
 from deploy_tools.land_lib import land_reach
 
-from lib.repo_paths import REPO as REPO_ROOT
-
-# Every setup role that defines handlers, so a rename or a new role cannot leave the live
-# cases below checking nothing.
-_ROLES_WITH_HANDLERS = frozenset({"k3s"})
-
-
-def test_every_role_with_handlers_is_still_named_here():
-    """Non-vacuity: the synthetic cases below pin the derivation, and this keeps a live role
-    with handlers in the tree so the derivation has a real subject."""
-    found = {
-        path.parents[1].name
-        for path in (REPO_ROOT / "ansible" / "roles" / "setup").glob(
-            "*/handlers/main.yml"
-        )
-    }
-    assert found >= _ROLES_WITH_HANDLERS, f"handlers moved or went away: {found}"
-
 
 @pytest.fixture
 def _widget_role(tmp_path):

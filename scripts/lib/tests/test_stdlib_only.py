@@ -27,7 +27,7 @@ from pathlib import Path
 import pytest
 
 from lib import repo_paths, role_installs
-from lib.repo_paths import K3S_ROLE, REPO, SCRIPTS
+from lib.repo_paths import REPO, SCRIPTS
 
 FANOUT_REVIEW_UNIT = SCRIPTS / "dev" / "fanout_lib" / "review_unit.py"
 SESSION_HEALTH = REPO / ".claude" / "hooks" / "session-health.py"
@@ -389,9 +389,8 @@ def test_a_role_command_no_copy_installs_is_flagged():
         )
 
 
-def test_an_emptied_roles_template_yields_no_entry_and_a_live_role_still_does():
+def test_an_emptied_roles_template_yields_no_entry():
     assert role_installs.runs_on_no_host(GITOPS_UNIT.parents[1])
-    assert not role_installs.runs_on_no_host(K3S_ROLE)
     # The emptied role's unit still runs a script no copy task installs; only the skip keeps
     # it out of the entries.
     with pytest.raises(ValueError, match="no copy task"):

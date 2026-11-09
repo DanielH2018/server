@@ -28,8 +28,8 @@ else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
   list matches no node.
 - **The k3s pin lives in `defaults/main.yml`.** `k3s_version`, `k3s_install_script_url` and
   `k3s_install_script_sha256` moved here from `setup/k3s`, so a pin change routes to this
-  Flux-owned tag and the deployer writes no `manual_plane` line. `setup/k3s` reads the file
-  with `include_vars` for the fresh-host install. `SYSTEM_UPGRADE_DEFAULTS` in
+  Flux-owned tag and the deployer writes no `manual_plane` line. `hosts/bootstrap-host.sh`
+  installs that version on a fresh host. `SYSTEM_UPGRADE_DEFAULTS` in
   `scripts/lib/repo_paths.py` names it for the Python readers.
 - **The controller and the CRD are vendored** under `files/upstream/`, byte for byte, pinned by
   `system_upgrade_controller_version` and the `system_upgrade_vendored_manifests` items in
