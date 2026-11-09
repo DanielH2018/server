@@ -985,6 +985,7 @@
  "scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py": 0.03,
  "scripts/deploy_tools/tests/test_land_options.py": 0.0,
  "scripts/deploy_tools/tests/test_land_outcome.py": 0.0,
+ "scripts/deploy_tools/tests/test_land_own_checkout.py": 0.31,
  "scripts/deploy_tools/tests/test_land_pace.py": 0.0,
  "scripts/deploy_tools/tests/test_land_pin_gate.py": 0.18,
  "scripts/deploy_tools/tests/test_land_pipeline.py": 0.1,
