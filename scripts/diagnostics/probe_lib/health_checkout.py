@@ -27,6 +27,10 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from lib.git import git
 from lib.repo_paths import K8S_ROLES, REPO
 
+# Opens every `stale_checkout_reason`; `detach_notify.gate` reads it to word the deferral apart
+# from a store that did not answer, because a re-run from the same tree refuses again (#7816).
+STALE_CHECKOUT = "stale checkout"
+
 
 def role_on_origin(role, roles_dir=K8S_ROLES, repo=REPO):
     """True when `origin/master` carries `roles_dir/role` as a directory, in `repo`'s history.
@@ -104,13 +108,13 @@ def stale_checkout_reason(role, roles_dir=K8S_ROLES, on_origin=role_on_origin):
         if newer is None:
             return None
         return (
-            f"origin/master changed the k8s role {role!r} at {newer}, after this checkout's "
+            f"{STALE_CHECKOUT}: origin/master changed the k8s role {role!r} at {newer}, after this checkout's "
             f"HEAD ({_Path(roles_dir)}), so this checkout holds an old definition of it — no "
             "verdict was formed; re-run probe.py from a checkout at or after that commit"
         )
     if not on_origin(role):
         return None
     return (
-        f"the k8s role {role!r} exists on origin/master but not in this checkout ({REPO}), "
+        f"{STALE_CHECKOUT}: the k8s role {role!r} exists on origin/master but not in this checkout ({REPO}), "
         "which predates it — no workload was read; re-run probe.py from an up-to-date checkout"
     )

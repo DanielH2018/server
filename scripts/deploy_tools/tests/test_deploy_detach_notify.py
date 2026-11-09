@@ -159,7 +159,7 @@ def test_gate_fails_on_a_resolved_workload_that_is_absent():
             "observability: 1 of 6 workloads FAILED the gate — Deployment homelab/grafana",
         )
 
-    ok, lines, _ = notify_mod.gate(
+    ok, lines, *_ = notify_mod.gate(
         ["observability"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
     )
     assert ok is False
@@ -286,7 +286,7 @@ def test_gate_fails_fast_on_ansible_failure_without_health_checking():
         called["n"] += 1
         return _result(0, "jellyfin: ok")
 
-    ok, lines, _ = notify_mod.gate(
+    ok, lines, *_ = notify_mod.gate(
         ["jellyfin"], ansible_ok=False, tools=notify_mod.NotifyTools(run=run)
     )
     assert ok is False
@@ -298,7 +298,7 @@ def test_gate_settled_when_all_tags_healthy():
     def run(argv, **kwargs):
         return _result(0, f"{argv[5]}: 1/1 ready, restarts=0")
 
-    ok, lines, _ = notify_mod.gate(
+    ok, lines, *_ = notify_mod.gate(
         ["jellyfin", "sonarr"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
     )
     assert ok is True
@@ -312,7 +312,7 @@ def test_gate_unsettled_when_one_tag_is_unhealthy():
             return _result(1, "sonarr: 0/1 ready — rollout incomplete")
         return _result(0, f"{tag}: 1/1 ready, restarts=0")
 
-    ok, _lines, _ = notify_mod.gate(
+    ok, _lines, *_ = notify_mod.gate(
         ["jellyfin", "sonarr"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
     )
     assert ok is False
@@ -326,7 +326,7 @@ def test_gate_skipped_tag_does_not_fail_the_verdict():
             )
         return _result(1, "config: no Deployment or DaemonSet in this namespace")
 
-    ok, lines, _ = notify_mod.gate(
+    ok, lines, *_ = notify_mod.gate(
         ["config"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
     )
     assert ok is True
@@ -335,7 +335,7 @@ def test_gate_skipped_tag_does_not_fail_the_verdict():
 
 def test_gate_settles_an_empty_tag_list_with_no_reason():
     """land.sh passes an empty list after a suspended wait, where no flag was missing (#7380)."""
-    assert notify_mod.gate([], ansible_ok=True) == (True, [], False)
+    assert notify_mod.gate([], ansible_ok=True) == (True, [], False, False)
 
 
 def test_detach_with_no_tags_names_the_missing_flag(capsys):

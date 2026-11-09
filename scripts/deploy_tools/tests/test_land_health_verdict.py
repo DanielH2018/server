@@ -58,7 +58,9 @@ def test_an_unreadable_gate_defers(landing, capsys):
         health_verdict.health(ln)
     assert (exc.value.rc, exc.value.verdict) == (75, "deferred")
     assert "could not read its store" in exc.value.detail
-    assert outcome.UNREADABLE_GATE_NOTE in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert outcome.UNREADABLE_GATE_NOTE in out
+    assert outcome.STALE_GATE_NOTE not in out
 
 
 def test_needs_manual_apply_when_a_plane_remains(landing, capsys):
@@ -82,6 +84,27 @@ def test_the_gate_renders_the_tree_that_was_deployed(landing):
         health_verdict.health(ln)
     assert next(c for c in calls if c[0] == "snapshot")[1][1] == MERGE_SHA
     assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": Path("/snap")}
+
+
+TIP = "e" * 40
+
+
+def test_the_gate_renders_origin_master_when_it_contains_the_deployed_commit(landing):
+    """#7816: the probe refuses a role master changed after its tree's HEAD, so a gate pinned
+    to the merge commit deferred on every re-run once a later commit touched a landed role."""
+    ln, calls = _deployed(landing, Fakes(tip=TIP))
+    ln.deployed_at = MERGE_SHA
+    with pytest.raises(Outcome):
+        health_verdict.health(ln)
+    assert next(c for c in calls if c[0] == "snapshot")[1][1] == TIP
+
+
+def test_the_gate_keeps_the_deployed_commit_when_origin_master_lacks_it(landing):
+    ln, calls = _deployed(landing, Fakes(tip=TIP, is_ancestor_of={TIP: 1}))
+    ln.deployed_at = MERGE_SHA
+    with pytest.raises(Outcome):
+        health_verdict.health(ln)
+    assert next(c for c in calls if c[0] == "snapshot")[1][1] == MERGE_SHA
 
 
 def test_a_landing_with_no_promoted_tag_gates_the_primary(landing):

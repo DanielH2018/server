@@ -581,6 +581,15 @@ deferral as `gave-up`: re-run `land.sh` to grade the deploy. PR #5533's landing 
 retry the gate itself. The store's roll takes about 30s, and a re-run of `land.sh` is the
 resume point that already exists.
 
+The gate's worktree sits at `origin/master` whenever that contains the deployed commit, not at
+the merge commit. `probe.py health` refuses a role whose files `origin/master` changed after
+its tree's HEAD, so a gate pinned to the merge commit deferred on every re-run once a later
+commit touched a landed role (#7816). The tip can carry a role change `promote` has not applied
+yet. The gate then grades the live workload against that newer definition, which the probe
+would otherwise refuse to grade at all. When master moves while the gate runs, the probe still
+refuses, and the landing ends `deferred` with `outcome.STALE_GATE_NOTE` rather than the store
+wording. `cc-wait land` reports that deferral as `gave-up` too: re-run `land.sh`.
+
 **Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the 180s
 restart window. It cannot see whether *your change* took effect: an Authelia 302 fires in the
 middleware before the backend is reached, and 19 dead Grafana panels sat behind a 1/1 pod.
@@ -589,8 +598,8 @@ middleware before the backend is reached, and 19 dead Grafana panels sat behind 
 
 `deferred` (`LAND_GAVE_UP`, exit 75) means the landing gave up waiting and a re-run of
 `land.sh` completes it: no promotion covered the merge commit in time (cause `promote-timeout`),
-a host's package is not yet applied, or the health gate could not read its store (see *The
-health gate*). `cc-wait land` ends the wait as `gave-up`, exit 3, for each of those that
+a host's package is not yet applied, or the health gate could not read its store or found
+its tree older than `origin/master` (see *The health gate*). `cc-wait land` ends the wait as `gave-up`, exit 3, for each of those that
 prints a note naming the re-run, and as `deferred`, exit 4, for any other.
 
 `nothing-to-deploy` also covers a PR that reaches only a setup role the deployer applies.

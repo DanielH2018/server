@@ -14,8 +14,13 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.deploy_lib.detach_notify import GateResult
 from deploy_tools.land_lib import promotion
-from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.outcome import UNREADABLE_GATE_NOTE, Verdict, say
+from deploy_tools.land_lib.landing import BRANCH, Landing
+from deploy_tools.land_lib.outcome import (
+    STALE_GATE_NOTE,
+    UNREADABLE_GATE_NOTE,
+    Verdict,
+    say,
+)
 
 
 def _primary_carries(ln: Landing, sha: str) -> bool:
@@ -38,6 +43,29 @@ def _gated_tree(ln: Landing) -> str:
     return ""
 
 
+def _advanced_to_origin(ln: Landing, at: str) -> str:
+    """`origin/master`'s tip when it contains `at`, else `at` itself.
+
+    `probe.py health` refuses a role whose files `origin/master` changed after its tree's HEAD
+    (`health_checkout.stale_checkout_reason`), so a gate pinned to the merge commit refuses
+    every role a later master commit touched, on every re-run (#7816). The snapshot shares the
+    primary's refs, so a tree at the very tip this reads leaves the probe nothing newer to find.
+    No fetch runs between the two reads for that reason.
+
+    DECIDED: the tip may hold a role change `promote` has not applied yet, and the gate then
+    grades the live workload against that newer definition. The probe refuses every older
+    tree outright, so the trade is a verdict against master's definition or none at all.
+    """
+    tip = ln.git("rev-parse", f"origin/{BRANCH}")
+    sha = tip.stdout.strip() if tip.returncode == 0 else ""
+    if not sha or sha == at:
+        return at
+    if ln.git("merge-base", "--is-ancestor", at, sha).returncode != 0:
+        return at
+    say(f"gating from origin/{BRANCH} at {sha[:12]}, which contains {at[:12]}")
+    return sha
+
+
 def gate_from_the_deployed_tree(ln: Landing) -> GateResult:
     """Ask the health gate, rendering the role's manifests from the tree that landed.
 
@@ -47,7 +75,8 @@ def gate_from_the_deployed_tree(ln: Landing) -> GateResult:
     gating from there enumerates nothing for a role that commit ADDS and the whole gate reads
     `skipped`. A landing whose promotion applied a tag gates from its merge commit for the same
     reason (`_gated_tree`). With neither, the gate runs in the primary, never in land.sh's own
-    checkout, which may predate the merge.
+    checkout, which may predate the merge. The snapshot is taken at `origin/master` when that
+    contains the commit (`_advanced_to_origin`).
 
     A snapshot that could not be taken FAILS THE GATE, unless the primary already contains the
     commit. Falling back to the primary unconditionally is what the first cut did, and it
@@ -60,7 +89,9 @@ def gate_from_the_deployed_tree(ln: Landing) -> GateResult:
     if not at:
         # land.sh's own checkout may predate the merge and see none of a role it adds.
         return ln.tools.gate(promotion.gated_tags(ln), cwd=ln.opts.primary)
-    with ln.tools.snapshot(ln.opts.primary, at) as snap:
+    # The fallback below still asks for `at`: a primary carrying what landed can answer, and
+    # the probe itself refuses a role that primary holds an older definition of.
+    with ln.tools.snapshot(ln.opts.primary, _advanced_to_origin(ln, at)) as snap:
         if snap is not None:
             return ln.tools.gate(promotion.gated_tags(ln), cwd=snap)
         if _primary_carries(ln, at):
@@ -102,6 +133,14 @@ def health(ln: Landing) -> NoReturn:
         say(line)
     if ln.plane:
         print(f"  STILL UNAPPLIED, and no deploy tag covers it: {ln.plane}")
+    if result.stale:
+        print(STALE_GATE_NOTE)
+        ln.finish(
+            Verdict.DEFERRED,
+            75,
+            f"PR #{pr}, {sha}, tags: {tags} — deployed, but the health gate's tree was "
+            "older than origin/master",
+        )
     if result.unreadable:
         print(UNREADABLE_GATE_NOTE)
         ln.finish(
