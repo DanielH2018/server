@@ -82,7 +82,17 @@ def target_problems(run, repo, namespace=None, scaled_to_zero=is_scaled_to_zero)
             is intentionally idle without a live cluster.
     """
     try:
-        res = run(["uv", "run", "python", "scripts/diagnostics/probe.py", "targets"], 6)
+        res = run(
+            [
+                "uv",
+                "run",
+                "python",
+                "scripts/diagnostics/probe.py",
+                "targets",
+                "--json",
+            ],
+            6,
+        )
         active = json.loads(res.stdout)["data"]["activeTargets"]
     except Exception:
         return []

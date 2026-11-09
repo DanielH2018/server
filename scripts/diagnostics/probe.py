@@ -153,7 +153,7 @@ def verdict_path(ns):
     if "verdict" not in REGISTRY.get(ns.cmd).flags:
         return None
     if ns.cmd == "targets":
-        return "targets --pi" if ns.pi else None
+        return "targets --pi" if ns.pi else "targets"
     if ns.cmd == "ha":
         return f"ha {ns.ha_cmd}" if ns.ha_cmd in VERDICT_HA_SUBCOMMANDS else None
     return ns.cmd
@@ -213,8 +213,8 @@ def _dispatch(ns, argv, plan):
     `health` and the handler-table subcommands answer directly from an API or from
     `docker inspect`/kubectl. `metric`/`loki-query` without `--json`/`--dry-run` use the
     formatted view; every other subcommand falls through to the streaming `curl` pipeline
-    built by `plan()`. `targets --pi` is checked ahead of that fallback, because plain
-    `targets` still streams.
+    built by `plan()`. `targets` is checked ahead of that fallback, because `targets --json`
+    still streams.
 
     `plan` is injectable so a test can see which invocations reach the streaming path without
     SOPS or the network.
@@ -244,7 +244,7 @@ def _dispatch(ns, argv, plan):
             return 0
         run_health = REGISTRY.get("health").func
         return run_health(ns.container, docker=ns.docker, cluster=ns.cluster)
-    if ns.cmd == "targets" and ns.pi:
+    if ns.cmd == "targets" and (ns.pi or not (ns.json or ns.dry_run)):
         return REGISTRY.get("targets").func(ns)
     # Subcommands that answer from an API rather than streaming a shell pipeline. Each one is
     # `run_X(ns) -> int`, so the table is the whole dispatch: adding one is a row in

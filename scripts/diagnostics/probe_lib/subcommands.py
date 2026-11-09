@@ -47,7 +47,7 @@ from diagnostics.probe_lib.longhorn import (
 )
 from diagnostics.probe_lib.metrics import run_query
 from diagnostics.probe_lib.monitors import run_monitors
-from diagnostics.probe_lib.pi_plane import run_pi_containers, run_pi_targets
+from diagnostics.probe_lib.pi_plane import run_pi_containers, run_targets
 from diagnostics.probe_lib.push_rules import run_push_rules
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
 from diagnostics.probe_lib.shed_set import run_shed_set
@@ -62,9 +62,10 @@ SUBCOMMANDS = [
     ("metric", "Prometheus instant query", "metrics", run_query),
     (
         "targets",
-        "Prometheus scrape-target health (--pi scopes to daniel-pi)",
+        "Prometheus scrape-target health: down targets and the up count (--pi scopes to "
+        "daniel-pi, --json prints the raw API response)",
         "pi_plane",
-        run_pi_targets,
+        run_targets,
     ),
     (
         "monitors",
@@ -211,14 +212,14 @@ SUBCOMMANDS = [
 
 # The subcommands with a callable that `main()` routes by hand instead of through `handlers`,
 # because the callable answers only some invocations: `health` takes the container rather than
-# the namespace and prints its own `--dry-run`; `targets` calls `run_pi_targets` only with `--pi`;
-# `metric`/`loki-query` call `run_query` only without `--json`/`--dry-run`. Every other
+# the namespace and prints its own `--dry-run`; `targets` without `--pi` and `metric`/
+# `loki-query` call their callable only without `--json`/`--dry-run`. Every other
 # invocation of them streams through `plan()`.
 ROUTED_IN_MAIN = frozenset({"health", "targets", "metric", "loki-query"})
 
 # The subcommands that judge something, flagged "verdict": `main()` ends their output with one
-# `PROBE-VERDICT:` line derived from the exit code (#4454). `targets` judges only with `--pi`,
-# and `ha` only through `VERDICT_HA_SUBCOMMANDS`; `probe.verdict_path` applies both.
+# `PROBE-VERDICT:` line derived from the exit code (#4454). `ha` judges only through
+# `VERDICT_HA_SUBCOMMANDS`, which `probe.verdict_path` applies.
 VERDICT_SUBCOMMANDS = frozenset(
     {
         "targets",

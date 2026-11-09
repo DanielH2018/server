@@ -1,14 +1,12 @@
-"""`probe.py targets --pi` and `probe.py pi containers` — first-command triage for daniel-pi.
+"""`probe.py targets [--pi]` and `probe.py pi containers` — scrape targets and daniel-pi triage.
 
-`targets`, `alerts` and `health --docker` already give the cluster a first-read of what's
-wrong. daniel-pi runs no kubelet, so none of them see it unscoped: `targets` streams raw
-Prometheus JSON with no Pi filter, and `alerts` lists every firing alert. This module is what
-`--pi` and the `pi containers` subview dispatch to.
+Plain `targets` prints each down target and the up count; `targets --json` streams the raw
+Prometheus JSON through `plan()` instead. daniel-pi runs no kubelet, so `--pi` scopes the view
+to the jobs observability's prometheus.yaml.j2 declares on it.
 
 `alerts --pi` filters in probe_lib/alerts.py, beside the series it reads, and takes its job
 set from `declared_pi_job_names` here. This module carries the two things that have no other
-home: Prometheus target scoping (no formatted view exists for `targets` at all today) and the
-Pi's own Docker container inspect.
+home: Prometheus target formatting and the Pi's own Docker container inspect.
 """
 
 import json
@@ -110,6 +108,36 @@ def format_pi_targets(declared, active_targets):
     head = f"{up}/{len(declared)} {PI_HOST} targets up"
     text = "\n".join([head, *lines])
     return text, 1 if missing or down else 0
+
+
+def format_targets(active):
+    """(text, exit code) for every scrape target: one line per down target, then the count."""
+    down = [t for t in active if t.get("health") != "up"]
+    lines = []
+    for t in down:
+        labels = t.get("labels") or {}
+        err = " ".join((t.get("lastError") or "no error given").split())[:120]
+        lines.append(
+            f"  ✗ {labels.get('job', '?')} [{labels.get('instance', '?')}] {err}"
+        )
+    lines.append(f"{len(active) - len(down)}/{len(active)} targets up")
+    return "\n".join(lines), 1 if down else 0
+
+
+def run_targets(ns, fetch_json=None):
+    """`probe.py targets` (exit 0 = every target is up); `--pi` scopes it to daniel-pi.
+
+    `fetch_json` replaces `core.fetch_json`, for a test.
+    """
+    if ns.pi:
+        return run_pi_targets(ns)
+    base, pin = prom_endpoint()
+    data, err = (fetch_json or core.fetch_json)(prom_targets_url(base), resolve=pin)
+    if err:
+        return err
+    text, code = format_targets((data.get("data") or {}).get("activeTargets") or [])
+    print(text)
+    return code
 
 
 def run_pi_targets(ns):

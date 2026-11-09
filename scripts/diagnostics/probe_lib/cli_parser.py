@@ -137,7 +137,15 @@ def _build_parser():
     m = sub.add_parser("metric", help="Prometheus instant query")
     m.add_argument("promql")
     _flag(m, "--json", "print raw JSON instead of the formatted view")
-    tg = sub.add_parser("targets", help="Prometheus scrape-target health")
+    tg = sub.add_parser(
+        "targets",
+        **_verdict_help(
+            "Prometheus scrape-target health: each down target, then the up count",
+            "every target is up",
+            "a target is down",
+        ),
+    )
+    _flag(tg, "--json", "print the raw /api/v1/targets JSON instead, with no verdict")
     tg.add_argument(
         "--pi",
         action="store_true",
