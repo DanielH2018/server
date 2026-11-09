@@ -25,7 +25,7 @@ packages from a repository signed with a throwaway key with `python3 -m http.ser
     homelab-updater.timer, and the timer, which has an enable link (H3.9b), stays active;
   * install the real Pi package by hand on a fresh container, then upgrade to one rendered with
     optimize_pi_recovery_restart_enabled false, and homelab-pi-recovery.timer, which was
-    active, is stopped with no reboot (H3.8b's recovery disarm).
+    active, is stopped with no reboot (H3.8b's recovery disarm; `validate_lib/disarm_case.py`).
 
 A last case installs a fixture package that carries `secrets-unit` with a ciphertext encrypted to
 a throwaway age key, and runs `homelab-secrets` (H4.1c; `validate_lib/secrets_case.py`). Another
@@ -46,6 +46,10 @@ script without `--local-build` on daniel-pi, against the test repository with a 
 the script that pins its throwaway key (#6245; `validate_lib/bootstrap_repo_case.py`). A last
 case runs step 3 with real apt on an image holding no age (`validate_lib/bootstrap_age_case.py`).
 
+`--k3s-download` runs one case and nothing else: daniel-box's `--local-build` with no k3s seeded,
+so install.sh downloads and checks the release binary. CI runs it in a step that cannot fail the
+PR (#7754).
+
 Every case that reaches step 3 asserts that the server log holds its `GET` of
 `dists/homelab/InRelease` or `dists/homelab/Release`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
 repository and none named after daniel-box's address.
@@ -57,6 +61,10 @@ real one ships `secrets-unit` and only the Pi's own key decrypts the operator's 
 a file and a payload the real package does not ship, so it installs a fixture homelab-daniel-pi:
 `hosts/lib/tests/container/fixture/`'s specs, rendered by the real renderer with the real
 reconcile component and maintainer scripts.
+
+The case groups, the three `Cases` methods and each case module's `run`, run concurrently on
+`--jobs` threads, each in its own scratch directory under `--work`, and each group's output is
+written as one block when it ends (`validate_lib/case_groups.py`, #7784).
 
 Usage:
     uv run python scripts/validate/host_package_cases.py --image homelab-host-test:24.04 \\
@@ -83,6 +91,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from lib.cli_help import ArgumentParser
+from validate.validate_lib.case_groups import groups, run_groups
 from validate.validate_lib.host_container import (
     LAST_SUCCESS,
     PORT,
@@ -95,16 +104,13 @@ from validate.validate_lib.host_container import (
     release_fetched,
     success_timestamp,
 )
-from validate.validate_lib import bootstrap_age_case, bootstrap_case
-from validate.validate_lib import bootstrap_repo_case, engine_case
-from validate.validate_lib import conffile_case, repos_case, secrets_case, shadow_case
+from validate.validate_lib import bootstrap_case, secrets_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
     DROPIN_CHANGED,
     HOST_PKG,
     KEYRING,
     PAYLOAD,
-    RECOVERY_TIMER,
     TEST_KEYRING,
     UNIT_CHANGE,
     UNIT_DIR,
@@ -135,6 +141,7 @@ class Cases:
         self.python = args.python
         self.work = args.work.resolve()
         self.tools_cache = args.tools_cache.resolve() if args.tools_cache else None
+        self.k3s_download = args.k3s_download
         self.box = box_address(args.render / "head")
         self.failed: list[str] = []
         self.debs: dict[str, Path] = {}
@@ -505,40 +512,6 @@ class Cases:
         finally:
             c.remove()
 
-    def disarm(self) -> None:
-        """Install the real Pi package by hand, then upgrade to one whose recovery timer is disarmed.
-
-        The disarmed build drops the timer's enable link. Reconcile step 1 stops a timer whose
-        link the new manifest dropped, so the timer stops on that install, with no reboot.
-        """
-        c = self.boot("disarm")
-        if c is None:
-            return
-
-        def body() -> None:
-            secrets_case.seal_pi(self, c)
-            debs = " ".join(
-                f"/srv/debs/{self.debs[label].name}"
-                for label in ("updater-head", "pi-head", *self.tools)
-            )
-            c.ok(f"DEBIAN_FRONTEND=noninteractive apt-get install -y {debs}")
-            c.ok("systemctl start homelab-reconcile.service")
-            self.expect_reconciled(c, "updater-head", "pi-head")
-            state = c.active(RECOVERY_TIMER)
-            expect(state == "active", f"{RECOVERY_TIMER} is {state} while armed")
-            self.serving("updater-head", "pi-head", "pi-disarmed", *self.tools)
-            status = c.run_updater()
-            expect(status == 0, f"the updater exited {status}")
-            self.expect_installed(c, "updater-head", "pi-disarmed")
-            self.expect_reconciled(c, "updater-head", "pi-disarmed")
-            state = c.active(RECOVERY_TIMER)
-            expect(state == "inactive", f"{RECOVERY_TIMER} is {state} once disarmed")
-
-        try:
-            self.case(c, "disarm the recovery timer by dropping its enable link", body)
-        finally:
-            c.remove()
-
 
 def main(argv: list[str] | None = None) -> int:
     parser = ArgumentParser(description=__doc__.split("\n\n")[0])
@@ -562,21 +535,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--tools-cache", type=Path, help="the build job's verified pin downloads"
     )
+    parser.add_argument(
+        "--k3s-download",
+        action="store_true",
+        help="run only the bootstrap case that downloads k3s from its release",
+    )
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=4,
+        help="how many case groups run at once (default 4, a hosted runner's vCPUs)",
+    )
+    args = parser.parse_args(argv)
     try:
-        cases = Cases(parser.parse_args(argv))
+        cases = Cases(args)
     except CaseFailed as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)
         return 1
-    for run in (cases.upgrade_path, cases.cold_install, cases.by_hand, cases.disarm):
-        run()
-    secrets_case.run(cases)
-    conffile_case.run(cases)
-    engine_case.run(cases)
-    shadow_case.run(cases)
-    repos_case.run(cases)
-    bootstrap_case.run(cases)
-    bootstrap_repo_case.run(cases)
-    bootstrap_age_case.run(cases)
+    if cases.k3s_download:
+        run_groups(cases, [("bootstrap_case", bootstrap_case.run)], 1)
+    else:
+        run_groups(cases, groups(Cases), args.jobs)
     if cases.failed:
         print(
             f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", file=sys.stderr

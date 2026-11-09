@@ -265,10 +265,13 @@ def test_a_role_no_playbook_lists_is_a_usage_error(tmp_path):
     assert exc.value.code == 64
 
 
-def test_a_daniel_box_only_role_runs_on_daniel_box_alone():
-    """initial_setup.yml gates it on `inventory_hostname == 'daniel-box'`."""
-    role = applied.SETUP / "k8s_host_files"
-    assert applied_hosts.task_files("k8s_host_files", role) == {"daniel-box": ["main"]}
+def test_a_daniel_box_only_role_runs_on_daniel_box_alone(tmp_path):
+    """A play entry gated on `inventory_hostname == 'daniel-box'` admits that host alone."""
+    gate = "{role: x, when: inventory_hostname == 'daniel-box'}"
+    (tmp_path / "initial_setup.yml").write_text(f"- hosts: all\n  roles: [{gate}]\n")
+    assert applied_hosts.task_files("x", _role(tmp_path), ansible=tmp_path) == {
+        "daniel-box": ["main"]
+    }
 
 
 def test_a_shared_import_through_role_path_is_walked_with_its_vars(tmp_path):

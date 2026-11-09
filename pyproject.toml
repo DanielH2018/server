@@ -26,7 +26,7 @@ pyyaml = { PYYAML_FORCE_LIBYAML = "1" }
 [dependency-groups]
 dev = [                              # `dev` is uv's default group for `uv run`/`uv sync`
   "pytest>=8",
-  "ansible-core==2.22.0rc2",           # test_toposort imports ansible.errors; also runs deploys via `uv run ansible-playbook`.
+  "ansible-core==2.22.0",           # test_toposort imports ansible.errors; also runs deploys via `uv run ansible-playbook`.
   # Pinned exactly, not `>=`: the hosts install the same literal as a uv tool
   # (initial_setup/tasks/host-basics.yml) and a lockstep test holds the two
   # equal, so this is the one place the deploy-side ansible version is chosen.
@@ -110,6 +110,9 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 # instead of one per module (6 modules, 10-16s each). The cache lives only as long as the run;
 # its module docstring has the design.
 #
+# -p phase_timing prints, on a run given `--durations`, what `--durations` cannot see: each
+# worker's collection, prebuild and finish times, and the slowest module collections (#7710).
+#
 # No `-q` here, deliberately. `-q` is what a reader adds on the command line to shorten a scoped
 # run, and pytest COUNTS the flag: with `-q` already in addopts, a hand-typed `-q` becomes `-qq`,
 # which suppresses the summary line entirely. Measured on `scripts/lib/tests`: with
@@ -118,7 +121,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 # run that collected nothing read exactly like one that passed. Reviewers had to override
 # addopts to get a count back. The default verbosity
 # costs ~2 header lines per xdist worker and prints the count every time.
-addopts = "-n auto --dist loadscope -m 'not ui and not image' --strict-markers --strict-config -p leakguard -p xdist_width -p render_share"
+addopts = "-n auto --dist loadscope -m 'not ui and not image' --strict-markers --strict-config -p leakguard -p xdist_width -p render_share -p phase_timing"
 # Every warning is a failure. Measured before enabling: the only classes that
 # fired were ResourceWarnings, each a real leak — HTTPError test doubles built on a tempfile
 # nothing closed, an sqlite connection the Valheim store never closed, and the deployer's

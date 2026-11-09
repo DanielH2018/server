@@ -14,6 +14,7 @@ on:
       - scripts/lib/**
       - ansible/roles/k8s/**
       - ansible/inventory/group_vars/**
+      - cluster/services.yml
       - uv.lock
       - pyproject.toml
 

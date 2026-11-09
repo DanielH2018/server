@@ -105,7 +105,7 @@ exits 5 for a k8s tag.
   `authelia`, which creates the middleware other routes reference. Both are derived from the
   role's own templates/entry, not hand-listed; an edge no template carries (crowdsec before
   traefik, for the LAPI machine credential) is declared as `depends_on:` on the entry instead.
-  List order in `host_vars/daniel-box.yml` is only the sort's tiebreak.
+  List order in `cluster/services.yml` is only the sort's tiebreak.
 
 - **`deploy.yml`** — runs a Docker play that deploys nothing, because no host lists a Docker
   entry: `scripts/validate/compose_templates.py:undeployed_docker_entries` refuses one. The Pi's
@@ -175,7 +175,7 @@ prek run --all-files
 
 Almost every new service is a **k8s** workload: add a role under `ansible/roles/k8s/<name>/`
 rendering its manifests (Deployment/Service/IngressRoute/PVC), then an entry in
-`host_vars/daniel-box.yml` `containers_list` with `platform: k8s`. Position in the list
+`cluster/services.yml` `containers_list` with `platform: k8s`. Position in the list
 doesn't matter — the renderer toposorts on derived Traefik-CRD and authelia edges, plus any
 `depends_on:` the entry declares — so add it wherever reads best. Deploy tags derive from
 the name.

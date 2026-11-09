@@ -7,7 +7,7 @@ Usage::
         --image ghcr.io/miniflux/miniflux:2.2.16 --port 8080 --authelia one_factor
 
 The role is a `containers_list` entry plus a Deployment template (#4298). The entry is
-appended to `ansible/inventory/host_vars/daniel-box.yml`, and `templates/deployment.yaml.j2`
+appended to `cluster/services.yml`, and `templates/deployment.yaml.j2`
 is the one manifest the role ships. The role has no `tasks/`: the renderer derives the file
 lists from `templates/` and the entry (#3662), and the workload to restart from the role's name.
 Two small files sit beside the template:
@@ -51,8 +51,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import ArgumentParser
 
-from lib.ansible_inventory import K8S_HOST_VARS as BOX_VARS
-from lib.repo_paths import FILTER_PLUGINS, K8S_ROLES, REPO
+from lib.repo_paths import FILTER_PLUGINS, K8S_ROLES, K8S_SERVICES, REPO
 
 # Ansible loads a filter plugin by file path; a script reaches it through this insert.
 if str(FILTER_PLUGINS) not in sys.path:
@@ -193,7 +192,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 
 def entry_lines(name, port, hostname, auth_tier, route) -> str:
-    """The `containers_list` entry, as the block this script appends to daniel-box.yml.
+    """The `containers_list` entry, as the block this script appends to cluster/services.yml.
 
     Position in the list does not set the deploy order: `ansible/filter_plugins/toposort.py`
     derives the ordering edges from the templates and the entry, and gives each
@@ -216,12 +215,12 @@ def entry_lines(name, port, hostname, auth_tier, route) -> str:
     return "\n".join(lines) + "\n"
 
 
-def append_entry(box_vars: Path, entry: str) -> None:
+def append_entry(services: Path, entry: str) -> None:
     """Append the entry to `containers_list`, ahead of the first `K8S_APPLIES_LAST` role.
 
-    After the LIST's last item, not the file's last line: `containers_list` is followed by
-    other top-level keys in daniel-box.yml, and an entry written at the end of the file lands
-    outside the list, where it parses as a malformed top-level mapping. Appended within the
+    After the LIST's last item, not the file's last line: a top-level key after
+    `containers_list` would otherwise hold an entry written at the end of the file, where it
+    parses as a malformed top-level mapping. Appended within the
     list rather than inserted alphabetically because the list's order does not set the deploy
     order — `ansible/filter_plugins/toposort.py` derives that from the entries and templates.
 
@@ -234,13 +233,13 @@ def append_entry(box_vars: Path, entry: str) -> None:
         ValueError: if the file declares no `containers_list`, which means the anchor this
             walk needs is gone rather than that the entry belongs at the end.
     """
-    lines = box_vars.read_text().splitlines(keepends=True)
+    lines = services.read_text().splitlines(keepends=True)
     try:
         start = next(
             i for i, line in enumerate(lines) if line.rstrip() == "containers_list:"
         )
     except StopIteration:
-        raise ValueError(f"{box_vars} declares no containers_list") from None
+        raise ValueError(f"{services} declares no containers_list") from None
 
     # The list ends at the first non-blank line indented no deeper than the key itself: the
     # next top-level key, or the comment block above it.
@@ -262,7 +261,7 @@ def append_entry(box_vars: Path, entry: str) -> None:
         while end > start + 1 and lines[end - 1].startswith("  #"):
             end -= 1
 
-    box_vars.write_text("".join(lines[:end]) + entry + "".join(lines[end:]))
+    services.write_text("".join(lines[:end]) + entry + "".join(lines[end:]))
 
 
 def write_role(args, roles_dir: Path | None = None) -> list[Path]:
@@ -420,10 +419,10 @@ def main(argv=None) -> int:
     for path in write_role(args):
         print(f"wrote {path.relative_to(REPO)}")
     append_entry(
-        BOX_VARS,
+        K8S_SERVICES,
         entry_lines(args.name, args.port, args.hostname, args.authelia, args.route),
     )
-    print(f"appended the containers_list entry to {BOX_VARS.relative_to(REPO)}")
+    print(f"appended the containers_list entry to {K8S_SERVICES.relative_to(REPO)}")
 
     if not args.skip_glance:
         subprocess.run(

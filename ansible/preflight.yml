@@ -1,8 +1,8 @@
 ---
 # Fail fast on the handful of new-host mistakes that otherwise surface deep inside a long
 # run: a missing host_var, a wrong ssh_config_path, a sudo password that doesn't match the
-# SOPS become_password, or a repo cloned to the wrong path. Every one of those currently
-# fails partway through initial_setup.yml (or, for containers_list, in deploy.yml's first
+# SOPS become_password, or a repo cloned to the wrong path. Each of those fails partway
+# through initial_setup.yml (or, for a Docker host's containers_list, in deploy.yml's first
 # pre_task) with an error that doesn't name the real cause.
 #
 # Read-only: asserts and stats only, no changes. Run it between README §5 and §8.
@@ -31,12 +31,21 @@
         that:
           - server_ip is defined
           - ssh_config_path is defined
-          - containers_list is defined
         fail_msg: >-
-          Missing required host_vars for {{ inventory_hostname }}. server_ip, ssh_config_path
-          and containers_list have no defaults. Copy inventory/host_vars/_example.yml to
+          Missing required host_vars for {{ inventory_hostname }}. server_ip and
+          ssh_config_path have no defaults. Copy inventory/host_vars/_example.yml to
           inventory/host_vars/{{ inventory_hostname }}.yml — see ansible/README.md §4.
-        success_msg: "server_ip, ssh_config_path and containers_list are set"
+        success_msg: "server_ip and ssh_config_path are set"
+
+    # A host without Docker lists no service: the k3s services are cluster/services.yml's.
+    - name: A Docker host declares containers_list
+      ansible.builtin.assert:
+        that: containers_list is defined
+        fail_msg: >-
+          {{ inventory_hostname }} has has_docker true and no containers_list, which has no
+          default. Copy it from inventory/host_vars/_example.yml — see ansible/README.md §4.
+        success_msg: "containers_list is set"
+      when: has_docker | bool
 
     - name: Stat the configured sshd config file
       ansible.builtin.stat:
@@ -90,9 +99,12 @@
     - name: Warn when a fresh host still has GitOps auto-deploy enabled
       ansible.builtin.debug:
         msg: >-
-          has_gitops is true and containers_list is empty. initial_setup.yml will run a full
-          deploy.yml at the end and fail the play if it fails. Set has_gitops: false until
-          this host's first manual deploy succeeds (README §4).
+          has_gitops is true and cluster/services.yml lists no service. initial_setup.yml
+          will run a full deploy.yml at the end and fail the play if it fails. Set
+          has_gitops: false until this host's first manual deploy succeeds (README §4).
       when:
         - has_gitops | default(true)
-        - containers_list | length == 0
+        - preflight_services.containers_list | default([]) | length == 0
+      vars:
+        preflight_services: >-
+          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../cluster/services.yml') | from_yaml }}

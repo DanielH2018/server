@@ -190,6 +190,21 @@ def test_a_docker_containers_list_entry_is_flagged():
     assert vct.undeployed_docker_entries(entries) == ["stray"]
 
 
+def test_a_docker_entry_in_the_k3s_service_list_is_flagged(tmp_path, capsys):
+    """daniel-box's list lives in cluster/services.yml, so main() reads it through host_layer."""
+    host_vars = tmp_path / "ansible" / "inventory" / "host_vars"
+    host_vars.mkdir(parents=True)
+    (host_vars / "daniel-box.yml").write_text("has_docker: false\n")
+    (tmp_path / "cluster").mkdir()
+    (tmp_path / "cluster" / "services.yml").write_text(
+        "containers_list:\n  - name: stray\n  - name: svc\n    platform: k8s\n"
+    )
+    assert vct.main(host_vars_dir=host_vars) == 1
+    assert (
+        "daniel-box: stray: a Docker containers_list entry" in capsys.readouterr().err
+    )
+
+
 # Every service should drop ALL capabilities (defense in depth), adding back only what it
 # proves it needs. New services kept silently drifting out of this (n8n-runners/nut/unbound
 # post-dated the hardening sprints), so enforce it; documented exceptions go in CAP_DROP_EXEMPT.

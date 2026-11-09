@@ -183,3 +183,44 @@ legacy:
   # H7.60: the absent arms of initial_setup's crons.yml that reached this host.
   - {path: /etc/sudoers.d/20-worktree-holders}
   - {path: /etc/homelab/cert-expiry-webhook.env}
+  # H7.48: the absent arms k8s_host_files held for the k8s roles' retired host halves. The cron
+  # files are H2's retired health readers and drift checks, whose CronJobs or monitor-bridge
+  # checks replaced them. ansible/tests/repo/_retired_cron_row.py holds the crons and fragments
+  # to this list. Reconcile removes a directory only when it is empty, so the readers' code
+  # directories under /opt, /var/lib/crowdsec-home-allowlist and observability's dashboard
+  # staging trees under /etc/rancher/k3s are not listed: nothing names their files, and an
+  # entry for a non-empty one would fail every run. With the cron gone, nothing reads them.
+  - {cron_file: configarr-health}
+  - {path: /usr/local/bin/configarr-health.sh}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/configarr}
+  - {cron_file: janitorr-health}
+  - {path: /usr/local/bin/janitorr-health.sh}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/janitorr}
+  - {cron_file: crowdsec-remote-allowlist}
+  - {cron_file: crowdsec-bouncer-prune}
+  - {cron_file: crowdsec-appsec-verify}
+  - {cron_file: crowdsec-home-allowlist}
+  - {path: /usr/local/bin/crowdsec-update-remote-allowlist.sh}
+  - {path: /usr/local/bin/crowdsec-prune-bouncers.sh}
+  - {path: /usr/local/bin/crowdsec-appsec-verify.sh}
+  - {path: /usr/local/bin/crowdsec-update-home-allowlist.sh}
+  - {cron_file: qbittorrent-prefs-check}
+  - {path: /usr/local/bin/qbittorrent-prefs-check.sh}
+  - {cron_file: cloudflare-ip-drift}
+  - {path: /usr/local/bin/cloudflare-ip-drift.sh}
+  # The push store's retired GC Job manifest, and the apply-time SHA-256 record directory nothing
+  # writes or reads (#6987). k8s_host_files' record was the only one ever written in it.
+  - {path: /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml}
+  - {path: /var/lib/homelab/setup-applied-sha256.d/k8s_host_files}
+  - {path: /var/lib/homelab/setup-applied-sha256.d}
+  # H7.48: the TLS cert-expiry watch, crons.yml's last cron absent arm here. The secret-rotation
+  # component lists the two secret-rotation crons.
+  - {cron: "TLS cert-expiry watch", user: "{{ sys_user }}"}
+  # H7.48: docker_install's teardown half, which this host ran since its Docker retired. Each
+  # drop-in comes before its directory, because reconcile removes a directory only once it is empty.
+  - {cron: "Redeploy ical-proxy", user: "{{ sys_user }}"}
+  - {cron: "Clean stale tdarr transcode cache", user: "{{ sys_user }}"}
+  - {path: /etc/systemd/system/docker.service.d/20-go-runtime.conf}
+  - {path: /etc/systemd/system/docker.service.d}
+  - {path: /etc/systemd/system/containerd.service.d/20-go-runtime.conf}
+  - {path: /etc/systemd/system/containerd.service.d}

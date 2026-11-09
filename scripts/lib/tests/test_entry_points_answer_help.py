@@ -41,6 +41,7 @@ import importlib
 import inspect
 import io
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -80,18 +81,40 @@ MUST_FIND = frozenset(
 # docstring.
 HELP_TIMEOUT_S = 60
 
+# A module-level `if __name__` line, which every source `_has_main_guard` accepts carries.
+# Parsing only those files keeps collection cheap on a loaded CI runner.
+_GUARD_LINE = re.compile(r"^if[\s(]+__name__\b", re.M)
+
 
 def _entry_points():
-    """`{name: path}` for every catalogued, runnable entry point under `scripts/`."""
+    """`{name: path}` for every catalogued, runnable entry point under `scripts/`.
+
+    The parametrize needs these names at collection, so this reads no import graph: a Python
+    module is runnable when it has its own `__main__` guard, and every shell script is
+    runnable. `test_the_census_agrees_with_the_classifier` holds the answer equal to
+    `classify`'s, which costs seconds and so runs at test time (#7730).
+    """
+    entry_points = {}
+    for name, path in by_name(SCRIPTS).items():
+        text = "" if path.suffix == ".sh" else file_text(path)
+        if path.suffix == ".sh" or (_GUARD_LINE.search(text) and _has_main_guard(text)):
+            entry_points[name] = path
+    return entry_points
+
+
+def _classified_entry_points():
+    """The census as `classify` derives it: everything it does not call a library.
+
+    A library with its own `__main__` guard counts too (#4405). `_has_main_guard` is the
+    classifier's own test for "this module can be run", so the census and `classify` cannot
+    disagree about what a guard is. `classify` also returns a few test fixtures that
+    `by_name` does not catalogue; they are libraries with no path here.
+    """
     paths = by_name(SCRIPTS)
     return {
         name: paths[name]
         for name, (kind, _why) in classify().items()
         if kind != "library"
-        # `_has_main_guard` is the classifier's own test for "this module can be run", so the
-        # census and `classify` cannot disagree about what a guard is. `classify` also returns
-        # a few test fixtures that `by_name` does not catalogue. They are libraries with no
-        # path here, so the lookup checks membership first.
         or (name in paths and _has_main_guard(file_text(paths[name])))
     }
 
@@ -152,6 +175,16 @@ def test_the_census_still_finds_the_entry_points_it_is_measured_against():
     missing = MUST_FIND - set(ENTRY_POINTS)
     assert not missing, f"the entry-point census lost {sorted(missing)}"
     assert len(ENTRY_POINTS) >= 70, len(ENTRY_POINTS)
+
+
+def test_the_census_agrees_with_the_classifier():
+    """The cheap collection-time census names exactly the entry points `classify` derives."""
+    classified = _classified_entry_points()
+    assert set(ENTRY_POINTS) == set(classified), (
+        f"collected but classified a library: {sorted(set(ENTRY_POINTS) - set(classified))}; "
+        f"classified an entry point but not collected: "
+        f"{sorted(set(classified) - set(ENTRY_POINTS))}"
+    )
 
 
 @pytest.mark.parametrize("name", sorted(ENTRY_POINTS), ids=str)

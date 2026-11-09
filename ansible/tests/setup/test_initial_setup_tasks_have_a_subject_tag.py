@@ -74,8 +74,8 @@ def test_every_initial_setup_task_has_a_subject_tag() -> None:
     # A walk that silently matched nothing would pass. This task carries a subject tag in
     # crons.yml, so finding it with that tag proves the walk reached crons.yml and read the tags
     # this check is about.
-    assert "secret-rotation" in seen.get(
-        "Remove the secret-rotation crons from any non-gitops host", set()
+    assert "ansible-log" in seen.get(
+        "Remove the weekly ansible.log truncation cron", set()
     )
 
     assert not offenders, (

@@ -23,8 +23,8 @@ agent), and `daniel-pi` (the one remaining Docker host). The
 
 ## What generates what
 
-The reference pages read `containers_list` in `ansible/inventory/host_vars/`, the per-role
-IngressRoute macro calls, the Longhorn backup-tier volume lists, and each role's
+The reference pages read `containers_list` in `cluster/services.yml` and the Pi's host_vars,
+the per-role IngressRoute macro calls, the Longhorn backup-tier volume lists, and each role's
 `k8s_autodeploy` declaration. A fact none of those sources carries prints its reason instead of
 a value.
 

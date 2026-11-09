@@ -7,8 +7,13 @@ host, so apt resolves the packages' real `Depends`, the real k3s installer write
 systemd loads that unit:
 
   * `--local-build` on a container named after each host the script knows. `--tools-seed` gives
-    it the pins the kit's tools-cache holds, and it fetches uv's packages and, on a cluster node,
-    k3s from the network, then builds the three packages from a scratch clone of the checkout.
+    it the pins the kit's tools-cache holds and the kit's stand-in k3s with its checksum list, so
+    no case downloads the k3s release. It fetches uv's packages from the network, then builds
+    the three packages from a scratch clone of the checkout.
+  * `--local-build` on daniel-box with no k3s in its seed, so install.sh downloads the release
+    binary and checks its sha256 whatever the cases above seed (#7754). It runs only under
+    `--k3s-download`, in a CI step that cannot fail the PR, so a GitHub release outage cannot
+    fail the run.
   * `--local-build --offline <kit>` on daniel-box, in a container with no network at all, which
     is stricter than the spec's unresolvable GitHub and GHCR hostnames. The kit is stocked on the
     runner from the script's own pins. Its output says the clone is unchecked.
@@ -23,6 +28,12 @@ systemd loads that unit:
   * The fixture host (H7.15d): a third scratch clone takes a new host by the file list of
     `docs/host-packages.md`, *Adding a host* (`fixture_host_case.py`). The offline build then
     renders, builds and simulates the install of that host's package on a container of its name.
+
+`run` prepares the clones, the kit and the seed once, then runs the cases concurrently, at
+most one per CPU (#7785). Each case boots its own container and mounts its clone and seed
+read-only. The script copies out of a kit, and uv runs the kit's `uv-python` interpreter in
+place, taking at most a file lock there. The verdicts print in plan order. A container's own
+diagnostics print as they happen, outside the group's block.
 
 The cases read `systemctl show` after the run: the installer leaves the node's k3s unit disabled
 and stopped, because the operator starts it by hand (`docs/host-packages.md`). The install is a
@@ -62,23 +73,29 @@ import subprocess
 import sys
 import tarfile
 import time
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import NamedTuple
 
-from lib.repo_paths import REPO
 from validate.host_packages import fetch_tools, tool_fetch_module
-from validate.validate_lib.fixture_host_case import FIXTURE_HOST
-from validate.validate_lib.host_container import CaseFailed, Container, expect
-from validate.validate_lib.scratch_clones import (
-    ANCHOR_ACCEPTS,
-    HOMELAB_ONLY,
-    fixture_clone,
-    red_clone,
-    scratch_clone,
+from validate.validate_lib.bootstrap_plan import (
+    INSTALL_REFUSED as INSTALL_REFUSED,
+    K3S_VERIFIED as K3S_VERIFIED,
+    SCRIPT,
+    SEED_DIR,
+    UNCHECKED as UNCHECKED,
+    Planned,
+    kit_pins,
+    plan,
+    red_kit as red_kit,
+    script_value,
+    selected,
 )
+from validate.validate_lib.host_container import CaseFailed, Container, expect
+from validate.validate_lib.host_fixtures import run_logged
+from validate.validate_lib.scratch_clones import ANCHOR_ACCEPTS, red_clone
+from validate.validate_lib.scratch_clones import fixture_clone, scratch_clone
 
-SCRIPT = REPO / "hosts" / "bootstrap-host.sh"
-UNCHECKED = "is unchecked; the operator who chose it is its trust root"
 APT_CALLS = "/var/log/bootstrap-case-apt.calls"
 APT_SHIM = f"""#!/bin/sh
 # bootstrap_case.py's apt-get, ahead of the real one on PATH: it records each call and simulates
@@ -97,35 +114,6 @@ TOOLS_SEED = "/srv/tools-seed"
 # A join address and token for the agent, which the installer writes and nothing contacts.
 AGENT_ENV = "K3S_URL=https://192.0.2.10:6443 K3S_TOKEN=bootstrap-case-token"
 UNITS = {"daniel-box": "k3s.service", "daniel-server": "k3s-agent.service"}
-INSTALL_REFUSED = "apt-get install of the local build failed"
-
-
-def script_value(script: str, name: str) -> str:
-    """The value of a top-level `NAME=value` line of the script, unquoted."""
-    match = re.search(rf"^{name}=(.*)$", script, re.MULTILINE)
-    if not match:
-        raise CaseFailed(f"bootstrap-host.sh sets no {name}")
-    return match[1].strip('"')
-
-
-def kit_pins(script: str) -> dict[str, tuple[str, str]]:
-    """Each amd64 kit file the script checks against a pin, by file name: (url, sha256)."""
-    pins = {
-        "install.sh": (
-            script_value(script, "K3S_INSTALL_URL"),
-            script_value(script, "K3S_INSTALL_SHA256"),
-        )
-    }
-    for tool in ("nfpm", "uv"):
-        block = re.search(rf"^  {tool}:\n    amd64:\n((?:      .*\n)+)", script, re.M)
-        if not block:
-            raise CaseFailed(f"bootstrap-host.sh's PINS holds no amd64 {tool}")
-        fields = dict(re.findall(r"^      (\w+): (\S+)$", block[1], re.MULTILINE))
-        version = fields["version"]
-        url = fields["url"].replace("{version}", version)
-        url = url.replace("{bare}", version.removeprefix("v"))
-        pins[url.rsplit("/", 1)[1]] = (url, fields["sha256"])
-    return pins
 
 
 def split_log2ram(host: str, calls: str) -> tuple[str, list[str]]:
@@ -182,22 +170,6 @@ def apt_problems(host: str, calls: str, stdout: str) -> list[str]:
         if not re.search(rf"^Inst {re.escape(package)} ", stdout, re.MULTILINE)
     ]
     return problems + log2ram_problems
-
-
-def red_kit(green: Path, out: Path, name: str, data: bytes | None) -> Path:
-    """The green kit with `name` replaced by `data`, or left out when `data` is None.
-
-    Every other entry is a symlink into the green kit, which the containers mount at its own
-    path, so a red kit costs no copy of uv's cache.
-    """
-    shutil.rmtree(out, ignore_errors=True)
-    out.mkdir(parents=True)
-    for entry in green.iterdir():
-        if entry.name != name:
-            (out / entry.name).symlink_to(entry)
-    if data is not None:
-        (out / name).write_bytes(data)
-    return out
 
 
 def _download(
@@ -264,7 +236,7 @@ def stock_kit(cases, clone: Path, kit: Path) -> Path:
     # The clone's own render, so the cache holds exactly the pins the script's render reads.
     tools = cases.work / "bootstrap-render"
     shutil.rmtree(tools, ignore_errors=True)
-    subprocess.run(
+    run_logged(
         [sys.executable, "scripts/validate/host_packages.py", "render"]
         + ["--tree", ".", "--out", str(tools)],
         cwd=clone,
@@ -278,7 +250,16 @@ def stock_kit(cases, clone: Path, kit: Path) -> Path:
     with tarfile.open(kit / uv_name) as archive:
         member = next(m for m in archive.getmembers() if m.name.endswith("/uv"))
         archive.extract(member, cases.work / "bootstrap-uv", filter="data")
-    uv = str(cases.work / "bootstrap-uv" / member.name)
+    stock_uv_cache(cases, clone, kit, str(cases.work / "bootstrap-uv" / member.name))
+    return kit
+
+
+def stock_uv_cache(cases, clone: Path, kit: Path, uv: str, run=run_logged) -> None:
+    """Fill the kit's uv cache and interpreter with what the script's `uv run --offline` reads.
+
+    The sync skips the lint group, as the script's own `uv run` does, so no lint tool's GitHub
+    release download sits in the bootstrap cases.
+    """
     found = re.search(
         r'^host_python_version: "(.*)"$',
         (clone / "ansible/inventory/group_vars/all.yml").read_text(),
@@ -298,14 +279,35 @@ def stock_kit(cases, clone: Path, kit: Path) -> Path:
         "UV_PYTHON_BIN_DIR": str(cases.work / "bootstrap-uv-bin"),
         "UV_PROJECT_ENVIRONMENT": str(cases.work / "bootstrap-venv"),
     }
-    subprocess.run([uv, "python", "install", python], env=env, check=True)
-    subprocess.run(
-        [uv, "sync", "--frozen", "--python", python, "--no-python-downloads"],
+    run([uv, "python", "install", python], env=env, check=True)
+    run(
+        [
+            uv,
+            "sync",
+            "--frozen",
+            "--no-group",
+            "lint",
+            "--python",
+            python,
+            "--no-python-downloads",
+        ],
         cwd=clone,
         env=env,
         check=True,
     )
-    return kit
+
+
+def stock_seed(kit: Path, seed: Path) -> Path:
+    """The `--tools-seed` directory: the kit's tools cache, and its k3s with its checksum list.
+
+    With the k3s pair seeded, a cluster node's online run places the stand-in rather than
+    downloading the release binary, so a GitHub release outage cannot fail the case.
+    """
+    shutil.rmtree(seed, ignore_errors=True)
+    shutil.copytree(kit / "tools-cache", seed)
+    for name in ("k3s", "sha256sum-amd64.txt"):
+        shutil.copy2(kit / name, seed / name)
+    return seed
 
 
 class Bootstrap:
@@ -400,14 +402,12 @@ class Bootstrap:
         return problems
 
 
-def _report(cases, name: str, label: str, body) -> None:
+def _verdict(body) -> Exception | None:
+    """Run `body`, and return the failure it raised, or None when it passed."""
     try:
         body()
     except (CaseFailed, OSError, subprocess.SubprocessError) as exc:
-        cases.failed.append(name)
-        print(f"[FAIL] {label}: {name}: {exc}", file=sys.stderr)
-    else:
-        print(f"[PASS] {label}: {name}", file=sys.stderr)
+        return exc
 
 
 def output_problems(
@@ -483,113 +483,23 @@ def _expect_refused(run: Bootstrap, reason: str, apt_says: str | None) -> None:
         run.container.remove()
 
 
-class Planned(NamedTuple):
-    """One bootstrap case: the host and kit it runs with, and the verdict it expects.
-
-    Attributes:
-        name: The case's name, as the job log prints it.
-        label: The container's label.
-        host: The host the script runs for.
-        kit: The offline kit, or None for an online run.
-        marker: A line a green run must print; None for a red one.
-        refusal: The refusal a red run must print; None for a green one.
-        clone: Which scratch clone the run builds: "green", "red-depends" for `red_clone`'s, or
-            "fixture-host" for `fixture_clone`'s.
-        apt_says: What apt must print when a red run's refusal is apt's; None when the
-            refusal comes before any install.
-        seed: The directory `--tools-seed` reads, or None for an offline run, which has the kit.
-    """
-
-    name: str
-    label: str
-    host: str
-    kit: Path | None
-    marker: str | None
-    refusal: str | None
-    clone: str = "green"
-    apt_says: str | None = None
-    seed: Path | None = None
-
-
-def plan(work: Path, green: Path) -> list[Planned]:
-    """Every bootstrap case, in order, writing each red kit beside the green one."""
-    script = SCRIPT.read_text()
-    cases = [
-        Planned(
-            f"bootstrap {host} with --local-build",
-            host,
-            host,
-            None,
-            ANCHOR_ACCEPTS,
-            None,
-            seed=green / "tools-cache",
-        )
-        for host in script_value(script, "HOSTS").split()
-    ]
-    cases.append(
-        Planned(
-            "bootstrap daniel-box offline from the kit",
-            "offline",
-            "daniel-box",
-            green,
-            UNCHECKED,
-            None,
-        )
-    )
-    nfpm = next(name for name in kit_pins(script) if name.startswith("nfpm"))
-    reds = (
-        ("k3s", None, "the offline kit has no k3s"),
-        (nfpm, b"not the pinned nfpm", f"{nfpm} does not match its pinned sha256"),
-    )
-    for name, data, reason in reds:
-        kit = red_kit(green, work / "bootstrap-kit" / f"red-{name}", name, data)
-        label = f"red-{name.split('_')[0]}"
-        # The name says which fixture failed: a dropped file and a changed one are different reds.
-        defect = "is missing" if data is None else "does not match its pin"
-        cases.append(
-            Planned(
-                f"refuse a kit whose {name} {defect}",
-                label,
-                "daniel-box",
-                kit,
-                None,
-                reason,
-            )
-        )
-    # Offline, so the red needs no network and differs from the green offline case in its
-    # clone alone.
-    cases.append(
-        Planned(
-            f"refuse a local build whose homelab-daniel-box Depends on {HOMELAB_ONLY}",
-            "red-depends",
-            "daniel-box",
-            green,
-            None,
-            INSTALL_REFUSED,
-            "red-depends",
-            f"Depends: {HOMELAB_ONLY}",
-        )
-    )
-    # Offline, like the other cases that differ from the green build in their clone alone.
-    cases.append(
-        Planned(
-            f"bootstrap {FIXTURE_HOST}, made from the Adding a host walkthrough",
-            "fixture-host",
-            FIXTURE_HOST,
-            green,
-            UNCHECKED,
-            None,
-            "fixture-host",
-        )
-    )
-    return cases
-
-
 def bootstrap_for(cases, item: Planned, clones: dict[str, Path]) -> Bootstrap:
     """The run `item` plans."""
     return Bootstrap(
         cases, item.host, clones[item.clone], item.kit, item.label, item.seed
     )
+
+
+def body_for(cases, item: Planned, clones: dict[str, Path]) -> Callable[[], None]:
+    """The run `item` plans, as a call that raises CaseFailed when its verdict fails."""
+    bootstrap = bootstrap_for(cases, item, clones)
+    if item.refusal is not None:
+        return functools.partial(
+            _expect_refused, bootstrap, item.refusal, item.apt_says
+        )
+    # Offline the script makes neither GitHub read, so the anchor stub must not run.
+    absent = item.absent or (ANCHOR_ACCEPTS if item.kit is not None else None)
+    return functools.partial(_expect_green, bootstrap, item.marker or "", absent)
 
 
 def run(cases) -> None:
@@ -606,21 +516,20 @@ def run(cases) -> None:
             ),
         }
         stock_kit(cases, clone, green)
-        planned = plan(cases.work, green)
+        stock_seed(green, cases.work / SEED_DIR)
+        planned = selected(plan(cases.work, green), cases.k3s_download)
     except (CaseFailed, OSError, subprocess.SubprocessError, StopIteration) as exc:
         cases.failed.append("prepare the bootstrap cases")
         print(f"[FAIL] prepare the bootstrap cases: {exc}", file=sys.stderr)
         return
-    for item in planned:
-        bootstrap = bootstrap_for(cases, item, clones)
-        if item.refusal is not None:
-            body = functools.partial(
-                _expect_refused, bootstrap, item.refusal, item.apt_says
-            )
-        else:
-            # Offline the script makes neither GitHub read, so the anchor stub must not run.
-            absent = ANCHOR_ACCEPTS if item.kit is not None else None
-            body = functools.partial(
-                _expect_green, bootstrap, item.marker or "", absent
-            )
-        _report(cases, item.name, item.label, body)
+    bodies = [body_for(cases, item, clones) for item in planned]
+    # Printed from this thread, in plan order: case_groups buffers stderr per group thread.
+    # The offline items are CPU-bound builds, and other case groups share the runner's CPUs.
+    workers = min(len(bodies), max(2, os.cpu_count() or 2))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for item, failure in zip(planned, pool.map(_verdict, bodies), strict=True):
+            if failure is None:
+                print(f"[PASS] {item.label}: {item.name}", file=sys.stderr)
+            else:
+                cases.failed.append(item.name)
+                print(f"[FAIL] {item.label}: {item.name}: {failure}", file=sys.stderr)

@@ -1,15 +1,15 @@
-# docker_install — the Pi's package owns Docker; the teardown half stays
+# docker_install — an emptied role; the host packages own Docker and its teardown
 
-The role keeps only its teardown half, which reaps a retired Docker install on the hosts with
-`has_docker: false`. H7.26 moved the install half into `homelab-daniel-pi`. The role stays until
-H7.20a, because `ansible/initial_setup.yml` names it and an edit to that playbook parks the
-deployer. Repo-root `CLAUDE.md` has the conventions.
+`tasks/main.yml` is an `end_role` stub, like `claude_code`'s. H7.26 moved the install half into
+`homelab-daniel-pi`, and H7.48 moved the teardown half into the cluster nodes' legacy lists. The
+role stays until H7.20a, because `ansible/initial_setup.yml` names it and an edit to that
+playbook parks the deployer. Repo-root `CLAUDE.md` has the conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
-- **Applied by:** `initial_setup.yml --tags "docker_install"`
-- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
-  `templates/*.timer.j2`)
+- **Applied by:** `initial_setup.yml --tags "docker_install"`; ends on hosts where `True`
+  (leading `meta: end_role`)
+- **Crons / timers:** none (the role ends on every host before its first task)
 <!-- /generated_from -->
 
 ## Where the work went
@@ -37,12 +37,15 @@ incident, the pin derivations and the Go runtime measurements.
 - No setup task holds the engine: H7.60 deleted `initial_setup`'s hold with the dist-upgrade it
   guarded. `homelab-docker-engine.service` holds the packages when it installs them.
 
-## Teardown (`tasks/teardown.yml`, `has_docker: false`)
-Reaps what an imperative Docker uninstall leaves behind: any `docker-compose-*.service` unit
-and the crons in `docker_install_stale_crons`, all `state: absent`, so it is a no-op on a host
-that never had Docker. It unholds the engine packages before it purges them, because apt with
-`-y` refuses to change a held package. **Not covered, deliberately:** `/var/lib/docker` and the
-rendered `containers/` tree, because those hold data.
+## Teardown, as legacy entries (H7.48)
+`hosts/daniel-box/package.yml` and `hosts/daniel-server/package.yml` list what the teardown
+half reaped and reconcile can still retire: the two crons of retired Compose services
+(`Redeploy ical-proxy`, `Clean stale tdarr transcode cache`) and the Go-runtime drop-ins with
+their `*.service.d` directories. The glob over `docker-compose-*.service`, the unhold and the
+apt purge have no legacy kind. They went because both nodes measured clean on 2026-11-09: no
+dockerd binary, no `docker-compose-*.service`, and `dpkg -l 'docker*' containerd.io` found
+no package. A node that gains Docker again is rebuilt, not torn down. **Never touched:**
+`/var/lib/docker` and the rendered `containers/` tree, because those hold data.
 
 ## Rollback
 A revert of H7.26 restores the install half, and the operator then re-applies the role from a

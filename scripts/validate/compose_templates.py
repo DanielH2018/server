@@ -44,7 +44,7 @@ from lib.repo_paths import REPO
 from lib.render_guard import (
     HOST_VARS,
     dump_numbered,
-    load_yaml,
+    host_layer,
     render_or_error,
 )
 
@@ -332,12 +332,14 @@ def _check_rendered(
     return None
 
 
-def main(argv: Sequence[str] = ()) -> int:
+def main(argv: Sequence[str] = (), host_vars_dir: Path = HOST_VARS) -> int:
     """Render every host's `compose_services` entries and report render/parse failures.
 
     Args:
         argv: The command-line arguments. `-v` or `--verbose` also lists each clean
             template as an `[ok]` line; by default only failures and the summary print.
+        host_vars_dir: The inventory's `host_vars` directory; `cluster/services.yml` beside
+            the inventory supplies the k8s host's `containers_list`.
 
     Returns:
         0 if every template rendered and parsed as YAML, 1 if any failed or no host_vars
@@ -345,15 +347,15 @@ def main(argv: Sequence[str] = ()) -> int:
     """
     answer_help(__doc__, list(argv))
     ok = ok_printer(argv)
-    host_files = sorted(HOST_VARS.glob("*.yml"))
+    host_files = sorted(host_vars_dir.glob("*.yml"))
     if not host_files:
-        print(f"No host_vars found under {HOST_VARS}", file=sys.stderr)
+        print(f"No host_vars found under {host_vars_dir}", file=sys.stderr)
         return 1
 
     failures = 0
     checked = 0
     for host_file in host_files:
-        host_vars = load_yaml(host_file)
+        host_vars = host_layer(host_file.parent, host_file.stem)
         containers = containers_entries_in(host_vars)
 
         for name in undeployed_docker_entries(containers):

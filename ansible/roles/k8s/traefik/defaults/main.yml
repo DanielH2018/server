@@ -4,7 +4,7 @@
 # change underneath a re-pull. The tag alone is exact but mutable — the digest is what makes the
 # pull reproducible. Renovate updates `tag@sha256:`
 # pairs in place, as it does for wg_easy_k8s_image.
-traefik_k8s_image: traefik:v3.7.13@sha256:24841fe2de7304c149343d877d2923b4c8800a38ba015dea9174c23b20e344a0
+traefik_k8s_image: traefik:v3.7.16@sha256:1336e85aaed293bd63d005086e0dd013b04078b26aaeb1c18b26a2f928af7e65
 
 # The CRDs are a role of their own, `traefik-crds`, whose defaults pin its in-tree copy of
 # upstream's definitions (#5666). That copy's version must share this image's minor:

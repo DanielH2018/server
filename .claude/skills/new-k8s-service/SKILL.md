@@ -118,7 +118,7 @@ the sources it reads.
 ## 2. The inventory entry — ordering is automatic, position is not
 
 The scaffolder appends the entry to `containers_list` in
-`ansible/inventory/host_vars/daniel-box.yml` with `platform: k8s` and `owner: flux`, at the end
+`cluster/services.yml` with `platform: k8s` and `owner: flux`, at the end
 of the list but ahead of netpol-baseline. **The entry is born owned by Flux** (D5.5 of
 `docs/target-architecture/deploy/d5-bulk-move.md`), because Flux applies every k8s entry. netpol-baseline is ordered after every other entry, because it
 is in `K8S_APPLIES_LAST`, and `test_derived_order_matches_todays_hand_ordered_list` holds the

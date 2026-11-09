@@ -72,6 +72,7 @@ from lib.ansible_inventory import K8S_HOST
 from renderer.renderer_lib.targets import render_targets
 from lib.git import git, git_env, git_stdout
 from lib.k8s_roles import role_dirs
+from lib.render_guard import containers_entries
 from lib.repo_paths import FILTER_PLUGINS, GITOPS_DEPLOY_FILES, REPO
 from renderer.renderer_lib.bundle import DIGESTS, SHARED_KINDS
 from renderer.renderer_lib.cluster import NAMESPACE_ROLE_VARS
@@ -294,8 +295,7 @@ def snapshot(
     Raises:
         RenderFailed: The render exited non-zero.
     """
-    entries = yaml_fast.safe_load((tree / HOST_VARS).read_text())
-    k8s = filter_by_platform(entries.get("containers_list") or [], "k8s")
+    k8s = filter_by_platform(containers_entries(tree / HOST_VARS), "k8s")
     names = {e["name"] for e in k8s}
     roles = list(roles) or targets(K8S_HOST, tree / HOST_VARS.parent, tree / K8S_ROLES)
     with tempfile.TemporaryDirectory(prefix="cross-plane-") as out:
@@ -381,9 +381,13 @@ def extract(sha: str, dest: Path, paths: Iterable[str] = (), repo: Path = REPO) 
             tar.extractall(dest, filter="data")
 
 
+# The top-level trees a render reads. `extract` skips one a commit does not hold.
+RENDER_TREES = ("ansible", "scripts", "hosts", "cluster")
+
+
 def render_side(sha: str, dest: Path, repo: Path = REPO) -> Snapshot:
     """`sha`'s tree unpacked under `dest` and rendered with its own renderer."""
-    extract(sha, dest, ("ansible", "scripts", "hosts"), repo=repo)
+    extract(sha, dest, RENDER_TREES, repo=repo)
     return snapshot(dest)
 
 

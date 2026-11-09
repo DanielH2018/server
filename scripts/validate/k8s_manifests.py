@@ -49,7 +49,6 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from validate.validate_lib.ok_lines import ok_printer
 from lib.cli_help import answer_help
-from lib.ansible_inventory import K8S_HOST_VARS
 from lib.k8s_context import resolve_vars
 from lib.render_context import render_context
 from validate.validate_lib.k8s_net_rules import (
@@ -59,6 +58,7 @@ from validate.validate_lib.k8s_net_rules import (
     service_port_translations,
     workload_container_ports,
 )
+from lib.repo_paths import K8S_SERVICES
 from lib.k8s_roles import (
     CALLER_RENDERED_ROLES,
     K8S_ROLES,
@@ -110,7 +110,6 @@ __all__ = [
     "BASE_CONTEXT",
     "CALLER_RENDERED_ROLES",
     "HTTPS_ENTRYPOINT",
-    "K8S_HOST_VARS",
     "K8S_ROLES",
     "K8S_SCHEMA_VERSION",
     "NO_MANIFEST_ROLES",
@@ -258,7 +257,7 @@ def main(argv: Sequence[str] = (), render: Callable | None = None) -> int:
         # quietly pass, so treat the mismatch as the failure it is.
         if role not in entries:
             print(
-                f"  [FAIL] {role}: no platform: k8s entry in {K8S_HOST_VARS.name}",
+                f"  [FAIL] {role}: no platform: k8s entry in {K8S_SERVICES.name}",
                 file=sys.stderr,
             )
             failures += 1

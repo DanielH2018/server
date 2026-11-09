@@ -35,6 +35,6 @@
 # which the same Job proves refuses it.
 #
 # The caller list is `netpol_from:` on this role's containers_list entry
-# (inventory/host_vars/daniel-box.yml), each caller's reason beside it. The entry's
+# (cluster/services.yml), each caller's reason beside it. The entry's
 # `netpol_role_owned: true` keeps netpol-baseline from rendering a second copy.
 {{ networkpolicy(container_item.name, container_item.port, container_item | netpol_callers) }}

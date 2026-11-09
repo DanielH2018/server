@@ -18,6 +18,7 @@ from typing import Any
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.ansible_inventory import PI_HOST, containers_entries_in, pi_entries_in
+from lib.render_guard import host_layer
 
 from infra_map.constants import (
     _CONTAINER_NAME,
@@ -143,12 +144,7 @@ def load_inventory(
     global_vars = (
         yaml_fast.safe_load((inventory / "group_vars" / "all.yml").read_text()) or {}
     )
-    host_vars: dict[str, dict] = {}
-    for host in HOSTS:
-        path = inventory / "host_vars" / f"{host}.yml"
-        host_vars[host] = (
-            (yaml_fast.safe_load(path.read_text()) or {}) if path.exists() else {}
-        )
+    host_vars = {host: host_layer(inventory / "host_vars", host) for host in HOSTS}
     return global_vars, host_vars
 
 

@@ -1,10 +1,8 @@
 """The promote workflow's `images` job computes image-builder's content tag and pushes each once.
 
 The tag half compares `ci_images.content_tag` and `derived.content_tag`, the renderer's copy of
-the rule, with image-builder's own expression, evaluated
-by ansible-core's `Templar` (`_image_builder_tag`, the oracle of
-`ansible/tests/deploy/test_image_builder_content_tag.py`), and then with every context a real
-render writes. The push half drives `ci_images.push` with a fake registry and a fake build.
+the rule, with image-builder's own expression (`_image_builder_tag`), with the tag ansible-core
+2.22 computed for one fixture, and then with every context a real render writes. The push half drives `ci_images.push` with a fake registry and a fake build.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_ci_images.py
 """
@@ -15,7 +13,7 @@ from typing import cast
 
 import pytest
 
-from _image_builder_tag import IMAGE_BUILDER, templar_content_tag, templar_value
+from _image_builder_tag import IMAGE_BUILDER, expression_content_tag, expression_value
 from deploy_tools import ci_images
 from deploy_tools.ci_images import Answer, Refused
 from lib.exit_codes import RENDER_OK
@@ -73,7 +71,7 @@ def test_the_tag_matches_image_builders_expression(tmp_path):
     }
     data = cast(
         dict[str, str],
-        templar_value(
+        expression_value(
             "{{ (lookup('template', 'context-configmap.yaml.j2') | from_yaml)['data'] }}",
             variables,
             IMAGE_BUILDER,
@@ -82,7 +80,9 @@ def test_the_tag_matches_image_builders_expression(tmp_path):
     assert list(data) != sorted(data), (
         "the fixture no longer exercises dictsort's case folding"
     )
-    tag = templar_content_tag(variables)
+    tag = expression_content_tag(variables)
+    # ansible-core 2.22's `Templar` computed this tag from the same files.
+    assert tag == "sha-c41652a23fdc"
     assert ci_images.content_tag(data) == tag
     assert derived.content_tag(data) == tag
 

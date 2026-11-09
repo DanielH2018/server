@@ -25,7 +25,7 @@
     # ansible/tests/deploy/test_platform_filter_real_inventory.py pins that.
     - name: Restrict this play to Docker-platform containers
       ansible.builtin.set_fact:
-        containers_list: "{{ containers_list | filter_by_platform('docker') }}"
+        containers_list: "{{ containers_list | default([]) | filter_by_platform('docker') }}"
       tags: always
 
   tasks:

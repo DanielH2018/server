@@ -169,7 +169,7 @@ def _main(world, tmp_path, *flags):
     write_bundle(bundle(_cluster("flux")), out)
     host_vars = tmp_path / "daniel-box.yml"
     host_vars.write_text("containers_list: []\n")
-    argv = ["check-bundle", str(out), "--host-vars", str(host_vars), *flags]
+    argv = ["check-bundle", str(out), "--services", str(host_vars), *flags]
     return promote.main(argv, f=world.clients())
 
 

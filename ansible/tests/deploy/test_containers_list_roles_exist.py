@@ -12,7 +12,8 @@ Run: uv run pytest ansible/tests/deploy/test_containers_list_roles_exist.py
 """
 
 import pytest
-from _helpers import ANSIBLE, HOST_VARS, load_yaml
+from _helpers import ANSIBLE, HOST_VARS
+from lib.render_guard import containers_entries
 
 
 K8S_ROLES = ANSIBLE / "roles" / "k8s"
@@ -22,9 +23,8 @@ def _entries():
     for path in sorted(
         p for p in HOST_VARS.glob("*.yml") if not p.name.startswith("_")
     ):
-        for entry in (load_yaml(path) or {}).get("containers_list") or []:
-            if entry.get("name"):
-                yield pytest.param(entry, id=f"{path.stem}:{entry['name']}")
+        for entry in containers_entries(path):
+            yield pytest.param(entry, id=f"{path.stem}:{entry['name']}")
 
 
 ENTRIES = list(_entries())

@@ -3,7 +3,7 @@
 
 Two layers are merged into one page:
 
-* **Declared state** — ``containers_list`` from ``ansible/inventory/host_vars/``,
+* **Declared state** — ``containers_list`` from ``cluster/services.yml`` and ``ansible/inventory/host_vars/``,
   the source of truth for what is *supposed* to run where. This is what changes
   when you edit the repo.
 * **Live state** — ``kubectl`` against the k3s cluster and ``docker ps`` on

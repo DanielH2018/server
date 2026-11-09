@@ -22,6 +22,16 @@ from lib.git_testing import git
 HOST_FILE_DIR = "ansible/inventory/host_vars"
 HOST_FILE = f"{HOST_FILE_DIR}/daniel-box.yml"
 
+
+def _services(repo):
+    """The fixture repo's service list, holding the list `make_snapshot_repo` gave daniel-box."""
+    host, services = repo / HOST_FILE, repo / "cluster" / "services.yml"
+    services.parent.mkdir()
+    services.write_text(host.read_text())
+    host.write_text("")
+    return services
+
+
 _INCLUDE_HELPER = (
     "- name: Run the helper\n  ansible.builtin.include_role:\n    name: k8s/helper\n"
 )
@@ -30,9 +40,9 @@ _INCLUDE_HELPER = (
 def _repo(tmp_path, owner="flux", helper_callers=()):
     """A repo declaring `bento` with `owner`, and the given roles including `k8s/helper`."""
     repo = make_snapshot_repo(tmp_path / "repo")
-    host = repo / HOST_FILE
-    host.write_text(
-        host.read_text() + f"  - {{ name: bento, platform: k8s, owner: {owner} }}\n"
+    services = _services(repo)
+    services.write_text(
+        services.read_text() + f"  - {{ name: bento, platform: k8s, owner: {owner} }}\n"
     )
     for caller in helper_callers:
         tasks = repo / "ansible" / "roles" / "k8s" / caller / "tasks"
@@ -63,8 +73,8 @@ def test_a_typed_k8s_tag_is_flagged(tmp_path, monkeypatch, capsys):
 def test_a_typed_k8s_tag_with_no_owner_is_flagged(tmp_path, monkeypatch):
     """The refusal keys on the platform, so it does not lean on the `owner` flag."""
     repo = make_snapshot_repo(tmp_path / "repo")
-    host = repo / HOST_FILE
-    host.write_text(host.read_text() + "  - { name: bento, platform: k8s }\n")
+    services = _services(repo)
+    services.write_text(services.read_text() + "  - { name: bento, platform: k8s }\n")
     code, calls = run_front_half(monkeypatch, repo, ["--tags", "bento"])
     assert code == DEPLOY_FLUX_OWNED
     assert _deployed(calls) == []
@@ -105,15 +115,34 @@ def test_at_reads_the_k8s_entries_at_the_commit_it_deploys_is_flagged(
     assert code == DEPLOY_FLUX_OWNED
 
 
+def test_at_reads_the_service_list_of_a_commit_after_the_move_is_flagged(
+    tmp_path, monkeypatch
+):
+    """The `--at` commit holds the k8s entry in `cluster/services.yml`; the checkout predates it."""
+    repo = make_snapshot_repo(tmp_path / "repo")
+    services = _services(repo)
+    services.write_text(services.read_text() + "  - { name: bento, platform: k8s }\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "move the list", "--no-gpg-sign")
+    sha = git(repo, "rev-parse", "HEAD").stdout.strip()
+    git(repo, "reset", "-q", "--hard", "HEAD~1")
+    host = repo / HOST_FILE
+    host.write_text(host.read_text() + "  - { name: bento, platform: docker }\n")
+
+    assert run_front_half(monkeypatch, repo, ["--tags", "bento"])[0] is None
+    code, _ = run_front_half(monkeypatch, repo, ["--at", sha, "--tags", "bento"])
+    assert code == DEPLOY_FLUX_OWNED
+
+
 # -- deploy.sh --tags T -e target=<host> ---------------------------------------------------
 
 
 def _two_host_repo(tmp_path):
     """daniel-box applies `wg-easy` through Flux; daniel-pi lists a Docker `wg-easy` (#5815)."""
     repo = make_snapshot_repo(tmp_path / "repo")
-    box = repo / HOST_FILE
-    box.write_text(
-        box.read_text() + "  - { name: wg-easy, platform: k8s, owner: flux }\n"
+    services = _services(repo)
+    services.write_text(
+        services.read_text() + "  - { name: wg-easy, platform: k8s, owner: flux }\n"
     )
     (repo / "ansible/inventory/host_vars/daniel-pi.yml").write_text(
         "containers_list:\n  - { name: wg-easy, platform: docker }\n"

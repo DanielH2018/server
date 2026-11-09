@@ -7,21 +7,17 @@ for each, and holds that the job runs them.
 Run: uv run pytest scripts/validate/tests/test_bootstrap_case.py
 """
 
-import email.message
-import hashlib
-import io
 import shutil
 import subprocess
 import time
-import urllib.error
-from pathlib import Path
 from types import SimpleNamespace
-from typing import ClassVar
 
 import pytest
 from lib.git import git
+from lib.repo_paths import REPO
 from validate import host_package_cases
 from validate.validate_lib import bootstrap_age_case as age_case
+from validate.validate_lib import case_groups
 from validate.validate_lib import bootstrap_case as case
 from validate.validate_lib import bootstrap_repo_case as repo_case
 from validate.validate_lib import fixture_host_case as fixture_case
@@ -65,13 +61,13 @@ def test_the_plan_runs_every_host_online_then_offline_with_three_reds(tmp_path):
     green.mkdir(parents=True)
     (green / "k3s").write_text("k3s")
 
-    planned = case.plan(tmp_path, green)
+    planned = case.selected(case.plan(tmp_path, green), k3s_download=False)
 
     online = [p.host for p in planned if p.kit is None]
     assert {"daniel-box", "daniel-server", "daniel-pi"} <= set(online)
     assert online == case.script_value(SCRIPT, "HOSTS").split()
     assert all(p.marker == case.ANCHOR_ACCEPTS for p in planned if p.kit is None)
-    assert all(p.seed == green / "tools-cache" for p in planned if p.kit is None)
+    assert all(p.seed == tmp_path / case.SEED_DIR for p in planned if p.kit is None)
     assert all(p.seed is None for p in planned if p.kit is not None)
     offline = [(p, p.kit) for p in planned if p.kit is not None]
     assert [(kit.name, p.refusal is None) for p, kit in offline] == [
@@ -91,7 +87,7 @@ def test_the_plan_runs_every_host_online_then_offline_with_three_reds(tmp_path):
     assert (depends.clone, depends.refusal) == ("red-depends", case.INSTALL_REFUSED)
     assert depends.apt_says == "Depends: homelab-daniel-server"
     fixture = offline[4][0]
-    assert (fixture.clone, fixture.host) == ("fixture-host", case.FIXTURE_HOST)
+    assert (fixture.clone, fixture.host) == ("fixture-host", fixture_case.FIXTURE_HOST)
     assert fixture.marker == case.UNCHECKED
     assert {p.clone for p in planned[:-2]} == {"green"}
 
@@ -152,7 +148,7 @@ def test_the_fixture_clone_is_one_commit_past_the_green_one_and_builds_a_new_hos
         fixture_case.SCRIPT,
     ):
         (green / relative).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(case.REPO / relative, green / relative)
+        shutil.copyfile(REPO / relative, green / relative)
     clones.case_git("init", "-q", cwd=green)
     clones.case_git("add", "-A", "-f", cwd=green)
     clones.case_git("commit", "-q", "-m", "base", cwd=green)
@@ -160,11 +156,11 @@ def test_the_fixture_clone_is_one_commit_past_the_green_one_and_builds_a_new_hos
     out = clones.fixture_clone(green, tmp_path / "fixture")
 
     assert git("rev-list", "--count", "HEAD", cwd=out).stdout.strip() == "2"
-    assert (out / "hosts" / case.FIXTURE_HOST / "package.yml").is_file()
+    assert (out / "hosts" / fixture_case.FIXTURE_HOST / "package.yml").is_file()
 
 
 def test_a_depends_entry_added_to_daniel_box_s_spec_is_clean():
-    spec = (case.REPO / clones.BOX_SPEC).read_text()
+    spec = (REPO / clones.BOX_SPEC).read_text()
     changed = clones.add_depends(spec, "homelab-only")
     assert "depends:\n  - homelab-tools\n  - libyaml-dev\n  - homelab-only\n" in changed
     assert changed.replace("  - homelab-only\n", "", 1) == spec
@@ -348,19 +344,17 @@ def test_a_run_that_found_age_already_installed_is_flagged(monkeypatch, tmp_path
         _age_run(monkeypatch, tmp_path, stdout)
 
 
-def test_the_host_packages_job_runs_the_age_case():
-    assert (
-        "bootstrap_age_case.run(cases)" in Path(host_package_cases.__file__).read_text()
-    )
-
-
-def test_the_host_packages_job_runs_the_bootstrap_cases():
-    assert "bootstrap_case.run(cases)" in Path(host_package_cases.__file__).read_text()
-
-
-def test_the_host_packages_job_runs_the_repository_case():
-    text = Path(host_package_cases.__file__).read_text()
-    assert "bootstrap_repo_case.run(cases)" in text
+def test_the_host_packages_job_runs_the_three_bootstrap_groups():
+    runs = [run for _, run in case_groups.groups(host_package_cases.Cases)]
+    assert {
+        "bootstrap_age_case": age_case.run in runs,
+        "bootstrap_case": case.run in runs,
+        "bootstrap_repo_case": repo_case.run in runs,
+    } == {
+        "bootstrap_age_case": True,
+        "bootstrap_case": True,
+        "bootstrap_repo_case": True,
+    }
 
 
 def test_the_rewrite_points_the_script_at_the_test_repository_and_key():
@@ -441,77 +435,3 @@ def test_a_repository_install_that_missed_the_homelab_update_or_a_package_is_fla
     other_host = repo_case.apt_problems("daniel-box", REPO_CALLS, REPO_SIMULATION)
     assert other_host[0].startswith("apt-get ran installs")
     assert "apt's simulation installs no homelab-daniel-box" in other_host
-
-
-class _Body(io.BytesIO):
-    headers: ClassVar[dict[str, str]] = {}
-
-
-def test_a_kit_download_retries_a_504_and_lands_at_its_name(tmp_path):
-    body = b"binary"
-    outcomes = [
-        urllib.error.HTTPError("u", 504, "Gateway", email.message.Message(), None),
-        _Body(body),
-    ]
-
-    def opener(request, timeout=None):
-        outcome = outcomes.pop(0)
-        if isinstance(outcome, Exception):
-            raise outcome
-        return outcome
-
-    dest = tmp_path / "nfpm.tar.gz"
-    case._download(
-        "https://example.invalid/nfpm.tar.gz",
-        hashlib.sha256(body).hexdigest(),
-        dest,
-        tmp_path / "cache",
-        opener,
-        sleep=lambda _: None,
-    )
-    assert dest.read_bytes() == body
-
-
-def test_a_kit_seeded_from_the_job_s_cache_reads_a_pin_with_no_request(tmp_path):
-    body = b"binary"
-    digest = hashlib.sha256(body).hexdigest()
-    seed = tmp_path / "seed"
-    seed.mkdir()
-    (seed / digest).write_bytes(body)
-    kit = tmp_path / "kit"
-    kit.mkdir()
-    cases = SimpleNamespace(tools_cache=seed, work=tmp_path / "work")
-
-    def refuse_a_request(request, timeout=None):
-        raise AssertionError(f"requested {request.full_url}")
-
-    dest = kit / "nfpm.tar.gz"
-    case._download(
-        "https://example.invalid/nfpm.tar.gz",
-        digest,
-        dest,
-        case.seed_kit(cases, kit),
-        refuse_a_request,
-    )
-    assert dest.read_bytes() == body
-    assert (kit / "tools-cache" / digest).read_bytes() == body
-
-
-def test_a_kit_with_no_job_cache_downloads_into_its_own_directory(tmp_path):
-    cases = SimpleNamespace(tools_cache=None, work=tmp_path / "work")
-
-    assert case.seed_kit(cases, tmp_path) == tmp_path / "work/bootstrap-kit-downloads"
-    assert not (tmp_path / "tools-cache").exists()
-
-
-def test_a_kit_download_differing_from_its_pin_is_flagged(tmp_path):
-    dest = tmp_path / "nfpm.tar.gz"
-    with pytest.raises(CaseFailed, match="the pin names"):
-        case._download(
-            "https://example.invalid/nfpm.tar.gz",
-            hashlib.sha256(b"binary").hexdigest(),
-            dest,
-            tmp_path / "cache",
-            lambda request, timeout=None: _Body(b"other"),
-        )
-    assert not dest.exists()

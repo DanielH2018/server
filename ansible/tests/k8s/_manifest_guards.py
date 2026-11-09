@@ -10,6 +10,7 @@ from pathlib import Path
 from lib import yaml_fast
 from lib.ansible_jinja_env import template_env
 from lib.render_context import render_context
+from lib.render_guard import host_layer
 from jinja2 import Undefined
 
 from lib.k8s_roles import manifest_template
@@ -22,7 +23,7 @@ K8S = ANSIBLE / "roles" / "k8s"
 
 ALL_VARS_VALUES = yaml_fast.safe_load(ALL_VARS.read_text())
 
-BOX_VARS = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())
+BOX_VARS = host_layer(HOST_VARS, "daniel-box")
 
 SERVER_VARS = yaml_fast.safe_load((HOST_VARS / "daniel-server.yml").read_text())
 

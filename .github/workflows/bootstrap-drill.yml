@@ -54,6 +54,11 @@ jobs:
       LEG: ${{ matrix.leg }}
       # `--field-manager` of every hand apply in steps 3, 5, 6 and 9: the root's own manager.
       APPLY: kubectl apply --server-side --field-manager=kustomize-controller
+      # The flux CLI this job's flux steps fetch, equal to flux_version in roles/k8s/flux and to
+      # the amd64 flux pin in hosts/packages/homelab-tools/package.yml. Env, so the cache key reads it.
+      # renovate: datasource=github-release-attachments depName=fluxcd/flux2
+      FLUX_VERSION: v2.9.6
+      FLUX_SHA256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -61,15 +66,34 @@ jobs:
 
       - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
 
-      # The same CLI version as ci.yml's flux_roundtrip job. It pushes the fixture artifact.
-      - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
+      # The same FLUX_* pin and fetch as ci.yml's flux_roundtrip job. It pushes the fixture artifact.
+      - name: Cache the flux CLI release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          # renovate: datasource=github-releases depName=fluxcd/flux2
-          version: v2.9.6
+          path: ${{ runner.temp }}/pinned/flux
+          key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
+
+      - name: Fetch the pinned flux CLI and check its sha256
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/pinned/flux/flux.tar.gz"
+          if [[ -f "$archive" ]]; then
+            echo "flux $FLUX_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/flux"
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$archive" \
+              "https://github.com/fluxcd/flux2/releases/download/$FLUX_VERSION/flux_${FLUX_VERSION#v}_linux_amd64.tar.gz"
+          fi
+          echo "$FLUX_SHA256  $archive" | sha256sum -c --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" flux
+          sudo install -m 0755 "$RUNNER_TEMP/flux" /usr/local/bin/flux
+          flux version --client
 
       # sops, kind and the node image come from the pins ci.yml's sops_manifest_type_proof job
-      # reads, so this file holds no copy that could drift. age comes from apt.
-      - name: Install sops, age and kind
+      # reads, so this file holds no copy that could drift. age comes from apt. sops and kind
+      # come from ci.yml's cache entries, and the release only on a miss (#7781).
+      - name: Read the sops and kind pins
+        id: pins
         run: |
           set -euo pipefail
           tools=hosts/packages/homelab-tools/package.yml
@@ -78,14 +102,54 @@ jobs:
           kind_version=$(awk '/KIND_VERSION:/ {print $2; exit}' .github/workflows/ci.yml)
           kind_sha256=$(awk '/KIND_SHA256:/ {print $2; exit}' .github/workflows/ci.yml)
           [ -n "$sops_version" ] && [ -n "$sops_sha256" ] && [ -n "$kind_version" ] && [ -n "$kind_sha256" ]
+          {
+            echo "sops_version=$sops_version"
+            echo "sops_sha256=$sops_sha256"
+            echo "kind_version=$kind_version"
+            echo "kind_sha256=$kind_sha256"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Cache the sops release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/pinned/sops
+          key: sops-${{ runner.os }}-${{ steps.pins.outputs.sops_version }}-${{ steps.pins.outputs.sops_sha256 }}
+
+      - name: Cache the kind release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/pinned/kind
+          key: kind-${{ runner.os }}-${{ steps.pins.outputs.kind_version }}-${{ steps.pins.outputs.kind_sha256 }}
+
+      - name: Install sops, age and kind
+        env:
+          SOPS_VERSION: ${{ steps.pins.outputs.sops_version }}
+          SOPS_SHA256: ${{ steps.pins.outputs.sops_sha256 }}
+          KIND_VERSION: ${{ steps.pins.outputs.kind_version }}
+          KIND_SHA256: ${{ steps.pins.outputs.kind_sha256 }}
+        run: |
+          set -euo pipefail
+          sops="$RUNNER_TEMP/pinned/sops/sops"
+          if [[ -f "$sops" ]]; then
+            echo "sops $SOPS_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/sops"
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$sops" \
+              "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
+          fi
+          echo "$SOPS_SHA256  $sops" | sha256sum -c --strict
+          kind="$RUNNER_TEMP/pinned/kind/kind"
+          if [[ -f "$kind" ]]; then
+            echo "kind $KIND_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/kind"
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$kind" \
+              "https://github.com/kubernetes-sigs/kind/releases/download/$KIND_VERSION/kind-linux-amd64"
+          fi
+          echo "$KIND_SHA256  $kind" | sha256sum -c --strict
           mkdir -p "$RUNNER_TEMP/bin"
-          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$RUNNER_TEMP/bin/sops" \
-            "https://github.com/getsops/sops/releases/download/$sops_version/sops-$sops_version.linux.amd64"
-          echo "$sops_sha256  $RUNNER_TEMP/bin/sops" | sha256sum -c --strict
-          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$RUNNER_TEMP/bin/kind" \
-            "https://github.com/kubernetes-sigs/kind/releases/download/$kind_version/kind-linux-amd64"
-          echo "$kind_sha256  $RUNNER_TEMP/bin/kind" | sha256sum -c --strict
-          chmod +x "$RUNNER_TEMP/bin/sops" "$RUNNER_TEMP/bin/kind"
+          install -m 0755 "$sops" "$RUNNER_TEMP/bin/sops"
+          install -m 0755 "$kind" "$RUNNER_TEMP/bin/kind"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           sudo apt-get install -y --no-install-recommends age \
             || { sudo apt-get update -q && sudo apt-get install -y --no-install-recommends age; }

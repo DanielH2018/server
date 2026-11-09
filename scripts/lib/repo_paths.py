@@ -77,6 +77,8 @@ INVENTORY = ANSIBLE / "inventory"
 HOSTS_INI = INVENTORY / "hosts.ini"
 ALL_VARS = INVENTORY / "group_vars" / "all.yml"
 HOST_VARS = INVENTORY / "host_vars"
+# The k3s service list, read as the k8s host's `containers_list` (render_guard.host_layer).
+K8S_SERVICES = REPO / "cluster" / "services.yml"
 # The k3s role's defaults hold what its install tasks and daniel-server's join read. The Longhorn
 # backup schedule and arm flags are `LONGHORN_BACKUP_ROLE`'s.
 K3S_ROLE = ROLES / "setup" / "k3s"

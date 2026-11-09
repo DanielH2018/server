@@ -37,7 +37,7 @@ from typing import Literal
 
 from lib.ansible_inventory import K8S_HOST, PI_HOST, Host, containers_entries_in
 from lib.ansible_inventory import inventory_hosts
-from lib.render_guard import host_files, load_yaml
+from lib.render_guard import host_files, host_layer, load_yaml
 from lib.repo_paths import ALL_VARS, HOST_VARS, HOSTS_INI
 
 __all__ = [
@@ -128,7 +128,7 @@ class Estate:
     def own_vars(self, host: str) -> dict:
         """What `host`'s host_vars file declares, or ``{}`` for a host without one."""
         if host not in self._own:
-            self._own[host] = load_yaml(self.inventory.host_vars / f"{host}.yml")
+            self._own[host] = host_layer(self.inventory.host_vars, host)
         return self._own[host]
 
     def vars(self, host: str, defaults: dict | None = None) -> dict:

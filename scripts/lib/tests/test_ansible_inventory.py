@@ -22,7 +22,7 @@ from lib.ansible_inventory import (
 )
 from lib import yaml_fast
 from lib.proc_testing import run
-from lib.repo_paths import HOST_VARS, HOSTS_INI, SCRIPTS
+from lib.repo_paths import ALL_VARS, HOST_VARS, HOSTS_INI, SCRIPTS
 
 INI = textwrap.dedent("""\
     # a leading comment
@@ -143,8 +143,10 @@ def hosts_declaring_k8s(
     )
 
 
-def test_k8s_host_names_the_one_host_declaring_k8s_entries():
-    assert hosts_declaring_k8s() == (K8S_HOST,)
+def test_k8s_host_is_the_primary_node_and_no_host_vars_declares_a_k8s_entry():
+    group = yaml_fast.safe_load(ALL_VARS.read_text())
+    assert group["k8s_primary_node"] == K8S_HOST
+    assert hosts_declaring_k8s() == ()
 
 
 def test_a_second_host_declaring_k8s_entries_breaks_the_pin(tmp_path):

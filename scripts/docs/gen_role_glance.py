@@ -111,10 +111,9 @@ from docs.catalog_lib.glance_facts import (
     setup_glance_lines,
     setup_role_dirs,
 )
-from lib.ansible_inventory import K8S_HOST
 from lib.cli_help import ArgumentParser
 from lib.estate import Estate, role_defaults
-from lib.k8s_roles import tag_owners
+from lib.k8s_roles import entry_owners
 from lib.render_guard import ALL_VARS, entry_tags
 from lib.repo_paths import ANSIBLE, REPO
 from renderer.renderer_lib.task_inputs import image_builder_sites
@@ -408,9 +407,7 @@ def stale_k8s_docs(
     entries = estate.k8s_entries()
     tiers = load_longhorn_tier_lists(k3s_defaults, group_vars, list(entries.values()))
     inventory = estate.inventory
-    owners = tag_owners(
-        inventory.host_vars / f"{inventory.plane_hosts.get('k8s', K8S_HOST)}.yml"
-    )
+    owners = entry_owners(entries, source=inventory.host_vars)
     built = built_image_names(k8s_roles)
     stale: list[str] = []
     for entry in entries.values():
