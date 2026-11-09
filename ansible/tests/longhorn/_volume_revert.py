@@ -37,7 +37,7 @@ def _regex_search(value, pattern: str) -> str | None:
 
 
 def _render(expression: str, **context):
-    """Render one of the role's expressions, as Ansible evaluates it.
+    """Render one of the role's expressions, with stand-ins that mirror ansible-core 2.22's forms.
 
     The renderer's filter set lacks `regex_escape`, `regex_search`, `split` and the `match` test,
     because no rendered template uses them; only this role's tasks do, and H7.55 deletes those.

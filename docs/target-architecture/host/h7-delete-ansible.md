@@ -2351,6 +2351,10 @@ the `manual_plane` clearing, and *Rollback*'s
 31. **H7.55** stays alone. It merges only after daniel-box shows H7.53's version and lists no
     `gitops-deploy` unit file. It carries the two-part proof, exit observation 1's listings
     and exit observation 7's census at its head.
+    Deleting `test_pi_escalation_timeout.py` removes the deletion census's named member, so
+    H7.55 repoints or drops the two named-member asserts in
+    `ansible/tests/repo/test_ansible_core_census.py`. It also deletes the volume-revert role's
+    tasks, and with them the stand-ins in `ansible/tests/longhorn/_volume_revert.py`.
 32. **H7.56.** Both steps follow H7.55 and remove the last Ansible inputs: ansible-core with its
     config, its hook and leakguard's temp-dir sweep, and the Pi's empty key. *Removed in
     H7.20* names the sweep's parts. Neither moves a rendered byte. It carries exit
@@ -3534,9 +3538,10 @@ progress.
 - *The deletion census.* Two rows, each with a named member:
     - in `ansible/tests/repo/test_ansible_core_census.py`, landed by H7.17: a subprocess
       collects the whole suite with `sys.modules['ansible'] = None`, and any import error
-      outside the allowlist fails it. The named member is `ansible/tests/_helpers.py`,
-      which the collection must import, and a fixture module holding `import
-      ansible.errors` is flagged. The allowlist is empty before H7.20b merges;
+      outside the allowlist fails it. Since H7.54 the named member is
+      `ansible/tests/setup/test_pi_escalation_timeout.py`, which the collection must import,
+      and a fixture module holding `import ansible.errors` is flagged. The allowlist is
+      empty before H7.20b merges;
     - in `ansible/tests/repo/test_census_rows_text.py`, no tracked file names
       `ansible-playbook`, except under `docs/archive/`, `docs/adr/`,
       `docs/target-architecture/`, the generated `docs/reference/` and the census's own
