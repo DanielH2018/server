@@ -148,3 +148,12 @@ def test_a_missing_status_for_a_forward_only_change_holds_on_the_commit_and_tags
         _hold(bump),
         f"flux tag artifact {REPO_URL}@{digest_of(bump)} --tag held",
     ]
+
+
+def test_a_lost_settle_that_changes_a_snapshot_role_tells_the_operator_not_to_reset(
+    tmp_path, monkeypatch, capsys
+):
+    _, c1 = _snapshot_world(tmp_path, monkeypatch)
+    err = capsys.readouterr().err
+    assert f"the hold is '{c1} stateful=unverified'" in err
+    assert "Do not reset prod" in err

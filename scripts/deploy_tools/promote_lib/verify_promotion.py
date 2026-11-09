@@ -668,6 +668,7 @@ def wait_settled(
                 commit = _read(prod_commit, PROD_TAG, sleep) if prod_commit else None
                 return Settled(
                     ("current", lost_settle(prod, last_good, commit)),
+                    last_good=last_good,
                     lost_settle=(commit, prod) if commit else None,
                 )
         waited = int(clock() - started)
@@ -721,7 +722,7 @@ def lost_settle(prod: str, last_good: str, commit: str | None) -> str:
         f"decide has been in progress for {LOST_SETTLE_S}s: the run that moved prod to {commit} ended "
         "without a settle that moved last-good or wrote a hold. This run's reconcile job "
         f"reads {VERDICT_STATUS_CONTEXT} on {commit}: good moves last-good, anything else "
-        "writes the unverified hold. If reconcile fails and that run's verify job "
+        "writes settle's hold. If reconcile fails and that run's verify job "
         "logged verdict=good, move "
         "last-good (operator-only): flux tag artifact "
         f"oci://{forge.REGISTRY}/{forge.ARTIFACT}@{prod} --tag last-good. Otherwise hold "

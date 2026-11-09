@@ -1346,7 +1346,9 @@ jobs:
   # This job reads the `homelab/promote-verdict` status the lost run's `verdict-status` posted
   # on that commit, and finishes what `settle` would have: a good verdict for `prod`'s digest
   # moves `last-good`, and anything else writes the hold the status's form names. A missing
-  # status, or one for another digest, writes the unverified hold. It resets nothing and
+  # status, or one for another digest, takes the form from what `decide` read `prod` changes
+  # against `last-good` (its `stateful` and `no_reset`), and else writes the unverified hold.
+  # It resets nothing and
   # dispatches nothing: the operator decides on `reset_to_last_good` after a hold, and the next
   # merge or the scheduled run promotes after the move. No concurrency group, because a newer pending job in `promote` would evict it.
   reconcile:
@@ -1402,6 +1404,9 @@ jobs:
         env:
           COMMIT: ${{ needs.promote.outputs.lost_settle }}
           DIGEST: ${{ needs.promote.outputs.lost_settle_digest }}
+          # What decide read prod changes against last-good, for a status that names no form.
+          STATEFUL: ${{ needs.promote.outputs.stateful }}
+          NO_RESET: ${{ needs.promote.outputs.no_reset }}
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
@@ -1469,8 +1474,15 @@ jobs:
             exit 0
           fi
           # `settle`'s hold for the form the lost run recorded. A status for another digest, or
-          # none, leaves the form unknown and holds as `unverified`.
-          [ "$digest" = "$DIGEST" ] || form=
+          # none, takes the form from decide's STATEFUL and NO_RESET, and else holds `unverified`.
+          if [ "$digest" != "$DIGEST" ]; then
+            form=
+            if [ -n "${STATEFUL:-}" ]; then
+              form=stateful
+            elif [ -n "${NO_RESET:-}" ]; then
+              form=no-reset
+            fi
+          fi
           case "$form" in
             stateful) new_hold="$COMMIT stateful=unverified" ;;
             no-reset) new_hold="$COMMIT" ;;
@@ -1490,7 +1502,7 @@ jobs:
               fi
               echo "::warning::DEPLOY_HOLD set to '$new_hold': $COMMIT's verdict reads '$verdict', and $COMMIT changes a snapshot role or a forward-only tag, so prod stays on it. Do not reset it" ;;
             *)
-              echo "::warning::DEPLOY_HOLD set to '$new_hold': $COMMIT's verdict reads '${verdict:-absent}', not good for $DIGEST. To reset prod (operator-only), dispatch promote.yml with reset_to_last_good=true, unless $COMMIT changes a snapshot role or a forward-only pin; with no status this job cannot tell (#7876)" ;;
+              echo "::warning::DEPLOY_HOLD set to '$new_hold': $COMMIT's verdict reads '${verdict:-absent}', not good for $DIGEST. To reset prod (operator-only), dispatch promote.yml with reset_to_last_good=true" ;;
           esac
 
   # The `reset_to_last_good` dispatch (D5.2b2): move `prod` back to `last-good` and do nothing

@@ -69,6 +69,7 @@ def _lost_settle(world):
     c0, c1, _, tip = world.commits
     world.set_prod(c1)
     world.set_last_good(c0)
+    world.store(digest_of(c0))
     world.transport.tags["superseding"] = digest_of(c1)
     world.publish(tip)
     return c0, c1
@@ -92,6 +93,21 @@ def test_a_run_that_ended_without_its_settle_is_named_with_the_operator_command(
     assert (decision.lost_settle, decision.lost_settle_digest) == (c1, digest_of(c1))
     assert clock.now == vp.LOST_SETTLE_S
     assert world.transport.tags["last-good"] == digest_of(c0)
+
+
+def test_a_lost_settle_whose_last_good_bundle_is_unreadable_is_an_error(
+    world, monkeypatch
+):
+    """Without the hold form, `reconcile` must not run and write the plain `unverified`."""
+    c0, c1 = _lost_settle(world)
+    del world.transport.manifests[digest_of(c0)]
+    monkeypatch.setenv("GITHUB_RUN_ID", "9")
+    world.transport.runs = [{"id": 9, "head_sha": world.commits[-1]}]
+    decision = promote.decide(_reads(world, Clock()), supersede_on=True)
+    assert decision.verdict == "error"
+    assert f"Reading what {c1} changes against last-good" in decision.reason
+    assert "last-good's bundle" in decision.reason
+    assert (decision.lost_settle, decision.lost_settle_digest) == ("", "")
 
 
 def test_a_run_still_in_progress_restarts_the_lost_settle_count(world):
