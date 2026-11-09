@@ -22,6 +22,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+import functools
 from pathlib import Path
 
 import jinja2
@@ -32,13 +33,32 @@ from lib.estate import REPO_INVENTORY, Inventory
 from lib.k8s_context import resolve_vars
 from lib.render_context import render_context
 from lib.render_guard import StrictChainableUndefined, load_yaml
-from lib.repo_paths import ANSIBLE, FILTER_PLUGINS
+from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, REPO
 
 # Ansible loads a filter plugin by file path; a script reaches it through this insert.
 if str(FILTER_PLUGINS) not in _sys.path:
     _sys.path.insert(0, str(FILTER_PLUGINS))
 
 from toposort import build_k8s_dep_map, filter_by_platform, toposort_containers
+
+
+CLAUDE_CODE_DEFAULTS = (
+    REPO / "hosts" / "components" / "claude-code" / "defaults" / "main.yml"
+)
+
+
+@functools.cache
+def outside_names() -> dict:
+    """Names an inventory value reads that no inventory file holds, as a render takes them.
+
+    `group_vars`' `k8s_no_mutate` reads `ansible_check_mode`, which a render is not, and
+    daniel-box's `claude_code_watch_uids` reads the claude-code component's
+    `claude_code_login_uid`. No k8s template reads either key, but without these names both
+    fail under the strict class, and one failing key sends `render_context`'s whole-dict
+    resolve into its per-key fallback for every context (#7845).
+    """
+    uid = load_yaml(CLAUDE_CODE_DEFAULTS)["claude_code_login_uid"]
+    return {"ansible_check_mode": False, "claude_code_login_uid": uid}
 
 
 def load_stubs(path: Path) -> dict:
@@ -75,16 +95,15 @@ def play_context(
 
     # No BASE_CONTEXT: its stubs would fill in a name no file holds. Under the strict class a
     # variable whose value names an undefined one is left undefined rather than resolved to
-    # STUB or None, so a template that reads it stops the render. Not `strict=True`: three
-    # group_vars name variables only setup roles or Ansible itself define
-    # (`ansible_check_mode` among them), and Ansible fails only a task that reads one.
+    # STUB or None, so a template that reads it stops the render. Not `strict=True`: a built-image
+    # pin reads `k8s_built_image_tags`, a play fact, and Ansible fails only a task that reads one.
     def resolve(overrides: dict) -> dict:
         return render_context(
             role_dir,
             host,
             overrides,
             inventory=inventory,
-            base={},
+            base=outside_names(),
             undefined_cls=StrictChainableUndefined,
         )
 
