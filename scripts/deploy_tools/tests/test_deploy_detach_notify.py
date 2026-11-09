@@ -302,7 +302,7 @@ def test_gate_settled_when_all_tags_healthy():
         ["jellyfin", "sonarr"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
     )
     assert ok is True
-    assert len(lines) == 2
+    assert lines == ["health: 2 healthy"]
 
 
 def test_gate_unsettled_when_one_tag_is_unhealthy():

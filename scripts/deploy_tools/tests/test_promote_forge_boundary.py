@@ -73,6 +73,7 @@ ALLOWED_LIB = frozenset(
         "lib.progress",
         "lib.removes_object",
         "lib.repo_paths",
+        "lib.summary",
         "lib.yaml_fast",
     }
 )

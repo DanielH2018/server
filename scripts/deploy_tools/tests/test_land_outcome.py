@@ -19,10 +19,10 @@ def test_an_unknown_verdict_is_refused():
         outcome.Outcome(1, "x", "not-a-verdict")
 
 
-def test_emit_prints_the_error_to_stderr_and_the_verdict_to_stdout(capsys):
+def test_emit_prints_the_error_only_in_the_verdict_line(capsys):
     outcome.Outcome(1, "PR #7 — CI is red", "ci-red", error="CI is red").emit()
     cap = capsys.readouterr()
-    assert cap.err == "land: CI is red\n"
+    assert cap.err == ""
     assert cap.out == "VERDICT: ci-red (PR #7 — CI is red)\n"
 
 

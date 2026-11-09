@@ -312,9 +312,9 @@ def test_a_missing_primary_checkout_is_named_before_any_phase_runs(land_run):
     """
     from pathlib import Path
 
-    rc, _, err, calls, logline = land_run([], primary=Path("/nonexistent"))
+    rc, out, _, calls, logline = land_run([], primary=Path("/nonexistent"))
     assert rc == 1
-    assert "cannot cd to /nonexistent" in err
+    assert "cannot cd to /nonexistent" in out
     assert "gh" not in _names(calls)
     assert "verdict=refused cause= exit=1" in logline
 

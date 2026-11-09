@@ -38,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.cli_help import ArgumentParser
 
 from lib.repo_paths import HOST_VARS, REPO
+from lib.summary import grouped
 
 # `tag_platforms` is the reader of containers_list that says which probe can see a tag's workload.
 from deploy_tools.deploy_lib import tags as deploy_tags
@@ -105,8 +106,14 @@ class CheckResult(NamedTuple):
     detail: str
 
 
+# How the gate's count line names each `check_one` state.
+COUNTED_AS = {"ok": "healthy", "unreadable": "not graded"}
+
+
 class GateResult(NamedTuple):
-    """The notification's headline verdict, and the per-tag lines behind it.
+    """The notification's headline verdict, a count line, and a line per tag not healthy.
+
+    A healthy or skipped tag is only counted, so a broad landing's log stays short (#7894).
 
     `unreadable` is True when the gate is unsettled only because a probe could not read its
     store (`PROBE_UNREADABLE`): no tag was found unhealthy, and at least one was not graded at
@@ -259,14 +266,12 @@ def gate(
     """
     if not ansible_ok:
         return GateResult(False, ["ansible-playbook exited non-zero -- see the log."])
-    lines = []
+    lines, counted = [], []
     unhealthy = unreadable = stale = False
     for tag in tags:
         state, detail = check_one(tag, tools=tools, cwd=cwd)
-        if state == "skipped":
-            lines.append(
-                f"{tag}: not a health-checkable workload (skipped) -- {detail}"
-            )
+        counted.append((tag, COUNTED_AS.get(state, state)))
+        if state in ("ok", "skipped"):
             continue
         if state == "unreadable" and STALE_CHECKOUT in detail:
             lines.append(
@@ -283,6 +288,8 @@ def gate(
         lines.append(detail or f"{tag}: {state}")
         if state == "unhealthy":
             unhealthy = True
+    if counted:
+        lines.insert(0, f"health: {grouped(counted, named_up_to=0)}")
     return GateResult(
         not (unhealthy or unreadable),
         lines,
@@ -391,6 +398,8 @@ def main(argv: list[str] | None = None, tools: NotifyTools | None = None) -> int
     content = "\n".join(
         [
             f"deploy --detach {headline} ({who} exit {ns.status})",
+            # The gate's count line names no tag, so the post names what it gated.
+            *([f"tags: {', '.join(tags)}"] if tags else []),
             *lines,
             f"log: {ns.log}",
         ]
