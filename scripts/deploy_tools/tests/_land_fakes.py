@@ -98,6 +98,8 @@ class Fakes:
     # The same query against HEAD: whether the primary checkout already carries the merge
     # commit, which `health_verdict` asks when a gate snapshot could not be taken.
     merge_applied_rc: int = 1
+    # `tools.stale_code`: the landing's own modules that lag master; None is git failing.
+    stale_code: list[str] | None = field(default_factory=list)
     # A marker's value; None is a read that failed, which `Landing.state` passes on as None.
     # Mapping, not dict: a dict is invariant in its values, so the many `dict[str, str]`
     # callers would no longer type-check.
@@ -387,6 +389,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         read_state=lambda root, name: f.state.get(name, ""),
         flux=FluxReads(land_wait, pins, k8s_tags_at),
         own_narrowing=own_narrowing,
+        stale_code=lambda base: f.stale_code,
         **host_fakes(f, calls),
         hostname=lambda: f.hostname,
         logger=lambda line: calls.append(("logger", (line,), {})),
