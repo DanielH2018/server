@@ -250,6 +250,7 @@
  "ansible/tests/deploy/test_playbooks_gather_through_the_preamble.py": 0.0,
  "ansible/tests/deploy/test_plays_disable_bytecode_writes.py": 0.02,
  "ansible/tests/deploy/test_plays_load_secrets_through_the_preamble.py": 0.0,
+ "ansible/tests/deploy/test_preflight_containers_list_assert.py": 0.02,
  "ansible/tests/deploy/test_py_table_filter.py": 0.0,
  "ansible/tests/deploy/test_registering_consumers.py": 0.0,
  "ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py": 0.67,
