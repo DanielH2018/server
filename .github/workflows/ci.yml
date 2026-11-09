@@ -637,8 +637,13 @@ jobs:
       # times say the run wall dropped by more than the extra setup costs; the `--durations`
       # report on every leg is what to read that off.
       #
-      # Six is feasible at all only because the heaviest single module is 17.8s: a shard can
-      # never finish faster than its largest member, so the floor rises as the matrix grows.
+      # A shard can never finish faster than its largest `--dist loadscope` group, a module or
+      # a class within one, so the floor rises as the matrix grows. On master runs 42541064791
+      # and 42542483114 (2026-11-09) the heaviest module measured 90-114s on one worker, against
+      # 111-197s of `--durations` per worker; #7710 split it into class groups of about 30s.
+      # The next is test_validate_k8s_manifests.py at about 87s, most of it one module-scoped
+      # fixture. Each leg's `phase timing` section prints every worker's finish time, which
+      # shows when one group sets the leg's wall.
       matrix:
         shard: [1, 2, 3, 4, 5, 6]
     # The dotfiles commit the suite imports claude_guard and claude_worktree from. A pin,

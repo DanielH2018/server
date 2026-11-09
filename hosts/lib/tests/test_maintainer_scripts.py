@@ -12,44 +12,43 @@ renders.
 Run: uv run pytest hosts/lib/tests/test_maintainer_scripts.py
 """
 
+import functools
+
 import pytest
 
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 from validate.host_packages import lint_script as lint
 
-
-def _shipped() -> dict[str, host_mode.Package]:
-    """Every shared package under `hosts/packages/`, and every host package, rendered."""
-    packages = {
-        spec.parent.name: host_mode.render_package(spec.parent.name)
-        for spec in sorted((REPO / "hosts" / "packages").glob("*/package.yml"))
-    }
-    for spec in sorted((REPO / "hosts").glob("*/package.yml")):
-        packages[f"homelab-{spec.parent.name}"] = host_mode.render_host(
-            spec.parent.name
-        )
-    return packages
+# Package names only: a render at import time costs every xdist worker ~9s of collection,
+# which no `--durations` phase or shard weight sees (#7710).
+SHIPPED = sorted(
+    [spec.parent.name for spec in (REPO / "hosts" / "packages").glob("*/package.yml")]
+    + [f"homelab-{spec.parent.name}" for spec in (REPO / "hosts").glob("*/package.yml")]
+)
 
 
-SHIPPED = _shipped()
+@functools.cache
+def _rendered(package: str) -> host_mode.Package:
+    if (REPO / "hosts" / "packages" / package / "package.yml").is_file():
+        return host_mode.render_package(package)
+    return host_mode.render_host(package.removeprefix("homelab-"))
 
 
 def test_the_shipped_scripts_include_the_updaters():
-    assert {"postinst", "prerm"} <= set(SHIPPED["homelab-updater"].scripts)
+    assert {"homelab-updater", "homelab-daniel-box"} <= set(SHIPPED), SHIPPED
+    assert {"postinst", "prerm"} <= set(_rendered("homelab-updater").scripts)
 
 
-@pytest.mark.parametrize(
-    ("package", "script"),
-    [(name, script) for name, pkg in SHIPPED.items() for script in pkg.scripts],
-)
-def test_every_shipped_maintainer_script_is_clean(package, script):
-    text = SHIPPED[package].scripts[script].decode()
-    assert lint(script, text) == []
+@pytest.mark.parametrize("package", SHIPPED)
+def test_every_shipped_maintainer_script_is_clean(package):
+    scripts = _rendered(package).scripts
+    findings = {name: lint(name, text.decode()) for name, text in scripts.items()}
+    assert {name: f for name, f in findings.items() if f} == {}
 
 
 def test_the_updaters_prerm_stops_its_own_units_on_remove_only():
-    prerm = SHIPPED["homelab-updater"].scripts["prerm"].decode()
+    prerm = _rendered("homelab-updater").scripts["prerm"].decode()
     assert prerm.splitlines()[-5:] == [
         'if [ "$1" = remove ]; then',
         "    systemctl stop homelab-updater.service || true",
