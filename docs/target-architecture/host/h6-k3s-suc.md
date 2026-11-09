@@ -1,10 +1,16 @@
 # H6 — system-upgrade-controller for k3s
 
-Status: IN PROGRESS. Merged: H6.1a, H6.1b ([#6111](https://github.com/DanielH2018/server/pull/6111)), H6.1b2 ([#6113](https://github.com/DanielH2018/server/pull/6113)), H6.1c ([#6120](https://github.com/DanielH2018/server/pull/6120), run on production on 2026-10-25), H6.2 ([#6121](https://github.com/DanielH2018/server/pull/6121)), H6.3a ([#6104](https://github.com/DanielH2018/server/pull/6104)), H6.3b ([#6142](https://github.com/DanielH2018/server/pull/6142)) and H6.3c ([#6235](https://github.com/DanielH2018/server/pull/6235)).
+Status: DONE. All three exit observations held on 2026-11-09 (*Exit reads after H6.6
+and H6.7*). Merged: H6.1a, H6.1b ([#6111](https://github.com/DanielH2018/server/pull/6111)), H6.1b2 ([#6113](https://github.com/DanielH2018/server/pull/6113)), H6.1c ([#6120](https://github.com/DanielH2018/server/pull/6120), run on production on 2026-10-25), H6.2 ([#6121](https://github.com/DanielH2018/server/pull/6121)), H6.3a ([#6104](https://github.com/DanielH2018/server/pull/6104)), H6.3b ([#6142](https://github.com/DanielH2018/server/pull/6142)) and H6.3c ([#6235](https://github.com/DanielH2018/server/pull/6235)).
 Also merged: H6.3e and H6.4a ([#6198](https://github.com/DanielH2018/server/pull/6198)). Also merged: H6.4b ([#6502](https://github.com/DanielH2018/server/pull/6502), with the comment follow-up [#6631](https://github.com/DanielH2018/server/pull/6631)). Also merged: H6.5a ([#7035](https://github.com/DanielH2018/server/pull/7035)) and H6.5b
-([#7059](https://github.com/DanielH2018/server/pull/7059)). No merged PR is recorded for H6.6.
-Also merged: H6.7, the commit that appends `image-gc-high-threshold=85`. Its Exit 3 read runs
-after the first window that follows the package install.
+([#7059](https://github.com/DanielH2018/server/pull/7059)). Also merged: H6.6
+([#7582](https://github.com/DanielH2018/server/pull/7582), v1.37.1+k3s1 to v1.37.2+k3s1 on
+2026-11-07). The operator wrote it by hand in place of that Monday's Renovate PR, with the
+manual pin finish the Renovate rule requires, and SUC applied it to both nodes.
+Also merged: H6.7 ([#7156](https://github.com/DanielH2018/server/pull/7156)), the commit that
+appends `image-gc-high-threshold=85`.
+The verify Jobs that H6.3e deferred to D5.1a1 are not an exit criterion, and
+[#7796](https://github.com/DanielH2018/server/issues/7796) tracks them.
 Also merged: H6.3d ([#6403](https://github.com/DanielH2018/server/pull/6403), paused by
 [#6412](https://github.com/DanielH2018/server/pull/6412) and re-selected on 2026-10-29 after
 [#6420](https://github.com/DanielH2018/server/pull/6420) shipped `k3s_gates.py` to
@@ -1416,6 +1422,46 @@ The expected results are:
 
 `journalctl -u k3s | grep 'Started k3s.service'` is not used. systemd logs that line at info,
 which journald does not store on these hosts, so it reads zero on every run.
+
+### Exit reads after H6.6 and H6.7
+
+These reads ran on 2026-11-09, two days after H6.6 merged at 15:29 UTC on 2026-11-07.
+Two of the Exit 2 sources had gone by then, so the record reads substitutes:
+
+- The upgrade Jobs had expired. Prometheus's kube-state-metrics series and the `prepare`
+  container's log in Loki stand in for them.
+- Both hosts rebooted at 13:07 UTC on 2026-11-08, which moved both
+  `ExecMainStartTimestamp` values again and reset the Lease. The audit log in Loki
+  (`{job="k8s-audit"}`) stands in for the unit timestamps. Each node's requests switch user
+  agent from `k3s/v1.37.1+k3s1` to `k3s/v1.37.2+k3s1` across its restart.
+
+The results:
+
+- **Exit 1 and the node half of Exit 2.** Both Plans report `latestHash` `eea97501…95aa`
+  and `latestVersion` `v1.37.2-k3s1`. daniel-box's `plan.upgrade.cattle.io/k3s-server` label
+  and daniel-server's `plan.upgrade.cattle.io/k3s-agent` label both equal that hash, and both
+  nodes report `v1.37.2+k3s1`.
+- **Server first.** daniel-box restarted between 15:33:19 and 15:33:35, the last
+  v1.37.1 request and the first v1.37.2 request it sent. The server Job completed at
+  15:49:02. The agent's `prepare` logged its last refusal at 15:48:48 (`the server restarted
+  895s ago, under 900s`) and `PASS: every check passed` at 15:49:18. Its `upgrade` container
+  started at 15:49:20. daniel-server restarted between 15:49:20 and 15:49:31, about 16
+  minutes after daniel-box.
+- **The Lease.** Its `acquireTime` on 2026-11-07 is unrecoverable. The audit policy
+  (`audit-policy.yaml.j2`) drops Lease requests at `level: None`, and the reboot reset the
+  Lease. The `prepare` gate's 900-second rule
+  stands in for the 15-minute spacing.
+- **The binary and Flux.** On both nodes `sha256sum /usr/local/bin/k3s` equals
+  `k3s_binary_sha256_amd64`. The comparison is by hand, because the verify Jobs do not
+  exist. `flux/system-upgrade` reads `Ready=True`, and prod and `last-good` are the same
+  digest, at `4e3d580d`, which descends from the bump. `probe.py landing` reads `DEPLOY_HOLD`
+  `none` and `manual planes: 0`. `probe.py health system-upgrade` reads `ok`.
+- **Exit 3.** Package `0.6776` was the first to carry H6.7. It installed on daniel-box at
+  02:16:49 UTC on 2026-11-05. The 11:32 window that day logged the one `restarting` line,
+  for config hash `277b55a81c35`, and no restart line follows it. The drop-in
+  `50-homelab.yaml` lists `image-gc-high-threshold=85`. Before that window, `d102b3a77a`
+  also changed the `k3s-server` component and `4185d3c569` changed daniel-box's
+  `package.yml`, so the one restart may have applied them as well.
 
 **Red proofs for the checks this slice adds.**
 
