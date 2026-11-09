@@ -13,8 +13,10 @@ import render_guard
 from render_guard import (
     HOST_VARS,
     HOST_VARS_IN_TREE,
+    SERVICES_IN_TREE,
     REPO,
     host_files,
+    host_layer,
     load_yaml,
     service_records_at_or_none,
     service_tags_at_or_none,
@@ -115,6 +117,40 @@ def test_unreadable_service_records_are_none_rather_than_an_empty_list(tmp_path)
     """REJECTING half: `[]` would route every tag to no host, which is a local deploy."""
     _tags_repo(tmp_path, _WITHOUT)
     assert service_records_at_or_none("deadbeefdeadbeefdeadbeef", tmp_path) is None
+
+
+def test_records_at_a_ref_read_the_service_list_and_the_host_vars_before_it(tmp_path):
+    """A landing reads its merge commit and `deploy.sh --at` an older one: both layouts count."""
+    (before,) = _tags_repo(tmp_path, _WITHOUT)
+    after = commit(
+        tmp_path,
+        "move",
+        **{f"{HOST_VARS_IN_TREE}/daniel-box.yml": "x: 1\n", SERVICES_IN_TREE: _WITH},
+    )
+    assert service_records_at_or_none(after, tmp_path) == [
+        ("daniel-box", "k8s", "sonarr"),
+        ("daniel-box", "k8s", "newsvc"),
+    ]
+    assert service_records_at_or_none(before, tmp_path) == [
+        ("daniel-box", "k8s", "sonarr")
+    ]
+
+
+def test_the_k8s_host_layer_holds_the_service_list_is_clean():
+    assert "containers_list" not in load_yaml(HOST_VARS / "daniel-box.yml")
+    names = {e["name"] for e in host_layer(HOST_VARS, "daniel-box")["containers_list"]}
+    assert {"sonarr", "traefik", "longhorn"} <= names
+    assert "containers_list" not in host_layer(HOST_VARS, "daniel-server")
+
+
+def test_a_list_in_both_files_is_flagged(tmp_path):
+    host_vars = tmp_path / HOST_VARS_IN_TREE
+    host_vars.mkdir(parents=True)
+    (host_vars / "daniel-box.yml").write_text(_WITHOUT)
+    (tmp_path / SERVICES_IN_TREE).parent.mkdir()
+    (tmp_path / SERVICES_IN_TREE).write_text(_WITH)
+    with pytest.raises(ValueError, match="both declare containers_list"):
+        host_layer(host_vars, "daniel-box")
 
 
 def test_load_yaml_returns_a_mapping(tmp_path):

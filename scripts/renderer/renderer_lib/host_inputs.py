@@ -13,6 +13,7 @@ render opens and fails on one under no member.
 HOST_INPUTS = (
     "hosts/",
     "ansible/inventory/",
+    "cluster/services.yml",  # the k8s host's `containers_list` (`render_guard.host_layer`)
     "ansible/filter_plugins/",
     "scripts/lib/",
     "scripts/renderer/",

@@ -8,6 +8,7 @@ plane's rows, are pinned by
 
 from lib import yaml_fast
 from _helpers import ALL_VARS, HOST_VARS, K8S_ROLES
+from lib.render_guard import host_layer
 
 ROLE = K8S_ROLES / "netpol-baseline"
 DEFAULTS = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
@@ -87,9 +88,7 @@ def test_every_portless_row_names_an_entry_with_a_port_is_clean() -> None:
     No such row exists on the real table, so the check also has to find the rows it skips and
     flag a dialling row added to the real table.
     """
-    entries = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())[
-        "containers_list"
-    ]
+    entries = host_layer(HOST_VARS, "daniel-box")["containers_list"]
     assert {"grafana", "tempo", "speedtest"} <= {
         r["service"] for r in TARGETS if "port" not in r
     }

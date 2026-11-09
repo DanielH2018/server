@@ -60,14 +60,8 @@ from lib.k8s_roles import (
 )
 from lib.k8s_context import resolve_vars
 from lib.render_guard import SHARED_TPL, StrictChainableUndefined, containers_entries
-from lib.repo_paths import (
-    ANSIBLE,
-    FILTER_PLUGINS,
-    HOST_VARS,
-    JOB_FILES,
-    K8S_ROLES,
-    K8S_SERVICES,
-)
+from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, HOST_VARS, JOB_FILES, K8S_ROLES
+from lib.repo_paths import K8S_SERVICES
 from renderer.renderer_lib.bundle import (
     KUSTOMIZATION,
     SHARED_KINDS,

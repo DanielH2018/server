@@ -18,6 +18,7 @@ from lib import yaml_fast
 from jinja2 import ChainableUndefined
 from lib.ansible_jinja_env import template_env
 from _helpers import ANSIBLE, HOST_VARS
+from lib.render_guard import containers_entries
 from lib.repo_paths import ALL_VARS
 
 
@@ -28,8 +29,7 @@ DOMAIN = "example.com"
 
 
 def _containers(host: str) -> list[dict]:
-    data = yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()) or {}
-    return data.get("containers_list") or []
+    return containers_entries(HOST_VARS / f"{host}.yml")
 
 
 def _gate_config() -> dict:

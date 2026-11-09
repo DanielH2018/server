@@ -18,6 +18,7 @@ import pytest
 from lib import yaml_fast
 
 from _helpers import HOST_VARS
+from lib.render_guard import containers_entries
 from _k8s_render import host_context, rendered_docs
 from authelia_access import AUTH_TIERS, authelia_service_rules
 
@@ -164,8 +165,11 @@ def _policy(rules, host, source, groups=()):
 
 
 def _sso_entries():
-    box = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())
-    return [c for c in box["containers_list"] if c.get("use_authelia")]
+    return [
+        c
+        for c in containers_entries(HOST_VARS / "daniel-box.yml")
+        if c.get("use_authelia")
+    ]
 
 
 def test_every_sso_entry_resolves_to_its_declared_tier():

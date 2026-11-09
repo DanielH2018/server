@@ -381,9 +381,13 @@ def extract(sha: str, dest: Path, paths: Iterable[str] = (), repo: Path = REPO) 
             tar.extractall(dest, filter="data")
 
 
+# The top-level trees a render reads. `extract` skips one a commit does not hold.
+RENDER_TREES = ("ansible", "scripts", "hosts", "cluster")
+
+
 def render_side(sha: str, dest: Path, repo: Path = REPO) -> Snapshot:
     """`sha`'s tree unpacked under `dest` and rendered with its own renderer."""
-    extract(sha, dest, ("ansible", "scripts", "hosts"), repo=repo)
+    extract(sha, dest, RENDER_TREES, repo=repo)
     return snapshot(dest)
 
 
