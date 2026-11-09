@@ -88,6 +88,8 @@ PACKAGE_LINKS = {
 # The host package's link to a secret in the tmpfs its secrets unit fills.
 SECRET_LINK = "/etc/svc/config.env"
 SECRET_TARGET = "/run/homelab-secrets/etc/svc/config.env"
+# The host package's apt hook and a script root runs, which dpkg lists with no digest here.
+HOMELAB_FILES = ("/etc/apt/apt.conf.d/91homelab-hook", "/usr/lib/homelab/check")
 
 
 def _dpkg_name(path: str) -> str:
@@ -121,7 +123,9 @@ def _fake_host(root):
         (fs / link.lstrip("/")).symlink_to(target)
     (fs / SECRET_LINK.lstrip("/")).parent.mkdir(parents=True)
     (fs / SECRET_LINK.lstrip("/")).symlink_to(SECRET_TARGET)
-    (dpkg / "info" / "homelab-host.list").write_text(f"{SECRET_LINK}\n")
+    (dpkg / "info" / "homelab-host.list").write_text(
+        "".join(f"{p}\n" for p in (SECRET_LINK, *HOMELAB_FILES))
+    )
     (dpkg / "info" / "tool.list").write_text(
         "".join(f"{_dpkg_name(p)}\n" for p in [*PACKAGE, *PACKAGE_LINKS])
     )

@@ -49,10 +49,12 @@
 # - An added or changed /usr/local/bin entry named like a command a package installs, because
 #   root's PATH reaches /usr/local/bin first. The roles' own scripts there have no such twin.
 # - Any of the above, or any package-owned /etc path, whose owner, group or permissions changed,
-#   since a package digest cannot see that, unless a package that owns it was installed or
-#   upgraded in the window. Its content is then judged as for any other change.
+#   since a package digest cannot see that. Outside PERSIST, an install or upgrade of a package
+#   that owns it in the window explains it, but a homelab package's only under /etc, because
+#   those upgrade several times a day. Its content is then judged as for any other change.
 # A symlink is explained when it resolves to a package-owned path (alternatives, systemd enable
-# links, /boot/vmlinuz), to a unit in ROLE_WRITTEN, or to /dev/null (a mask). Homes, /var, /opt
+# links, /boot/vmlinuz), to a unit in ROLE_WRITTEN, or to /dev/null (a mask), or is one of the
+# two exceptions above. Homes, /var, /opt
 # and the rest of /usr/local are logged and never page: the 2026-10-20 daniel-box report held 184
 # differences in six hours, and every one was in them.
 set -uo pipefail
@@ -350,7 +352,8 @@ unexplained_entries() {
       else if (scope == "derived" && !(p in owned)) why = derived_why(kind, type, path, $7)
       # An unpackaged /etc file pages on nothing, its mode included.
       # An owner installed or upgraded in the window explains the mode; the content is still judged.
-      else if ($3 == "pug" && !owner_ran(p, upgraded) && (scope != "etc" || (p in owned))) why = "owner, group or permissions changed"
+      # Never in PERSIST, and a homelab package only under /etc: it upgrades several times a day.
+      else if ($3 == "pug" && !(scope != "persist" && owner_ran(p, upgraded) && (scope == "etc" || !owner_matches(p, "^homelab-"))) && (scope != "etc" || (p in owned))) why = "owner, group or permissions changed"
       else if (type == "d") next
       else if (kind == "removed") { if (p in owned) why = "removed, but a package still owns it" }
       else if (d != "") { if (index(d " ", " " $6 " ") == 0) why = "differs from its package copy" }

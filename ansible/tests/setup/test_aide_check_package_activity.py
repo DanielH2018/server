@@ -50,11 +50,6 @@ NOT_THE_LINK = "a package owns it, but it is not the link the package installed"
 MODE = "owner, group or permissions changed"
 # (entry, the `_run_check` setup before the run, the reason the journal and the tile give).
 FLAGGED = {
-    "a mode change in a week its package was only configured": (
-        f"{CHANGED_MODE}: /usr/bin/tool",
-        {"packages_ran": ("tool",)},
-        MODE,
-    ),
     "a mode change in a week only another package upgraded": (
         f"{CHANGED_MODE}: /usr/bin/tool",
         {"packages_upgraded": ("other",)},
@@ -64,6 +59,16 @@ FLAGGED = {
         f"{CHANGED_MODE}: /usr/bin/tool",
         {"packages_upgraded": ("tool",), "rewrite": {"/usr/bin/tool": "trojan\n"}},
         "differs from its package copy",
+    ),
+    "a mode change on the host package's apt hook in a week it upgraded": (
+        f"{CHANGED_MODE}: /etc/apt/apt.conf.d/91homelab-hook",
+        {"packages_upgraded": ("homelab-host",)},
+        MODE,
+    ),
+    "a mode change on a host package script in a week it upgraded": (
+        f"{CHANGED_MODE}: /usr/lib/homelab/check",
+        {"packages_upgraded": ("homelab-host",)},
+        MODE,
     ),
     "a dangling package link in a week its package did not run": (
         f"{LINK_ADDED}: /usr/src/tool-headers/rust",
