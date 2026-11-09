@@ -90,9 +90,12 @@ def test_a_copy_carries_the_provenance_banner_and_the_source_does_not():
 def test_each_package_consumer_ships_the_state_modules_it_imports(component):
     """deploy-ui reads all three for its panels and its hold clear, and renovate-agent's hold
     skip names the planes (#3392). A module the package does not ship kills the unit at import."""
-    spec = (REPO / f"hosts/components/{component}/component.yml").read_text()
+    spec = yaml_fast.safe_load(
+        (REPO / f"hosts/components/{component}/component.yml").read_text()
+    )
+    shipped = {(f.get("shared"), f.get("dst")) for f in spec["files"]}
     for name in ("gitops_markers.py", "gitops_ledger.py", "gitops_hold.py"):
-        assert f"{{shared: {name}, dst: /usr/lib/homelab/{component}/{name}}}" in spec
+        assert (name, f"/usr/lib/homelab/{component}/{name}") in shipped
 
 
 def test_the_monitor_bridge_module_list_carries_the_copy():
