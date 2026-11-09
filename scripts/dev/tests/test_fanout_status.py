@@ -379,7 +379,9 @@ def test_cli_status_reads_a_tidied_up_batch_as_landed_when_its_pr_merged(
         answers={"daniel-box": ok(FINISHED_AND_TIDIED)},
         merged_prs={B.branch: "https://github.com/o/r/pull/1699"},
     )
-    code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
+    code = main(
+        ["status", run.run_id, "--all", "--manifest-root", str(tmp_path)], tools
+    )
     assert code == 0
     assert "b on daniel-box: landed https://github.com/o/r/pull/1699" in (
         capsys.readouterr().out
@@ -422,11 +424,13 @@ def test_cli_status_prints_the_final_text_on_one_line_when_a_batch_is_done(
         answers={"daniel-box": ok(DONE_WITH_MULTILINE_RESULT)},
         branch_prs={B.branch: ["https://github.com/o/r/pull/9"]},
     )
-    code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
+    code = main(
+        ["status", run.run_id, "--all", "--manifest-root", str(tmp_path)], tools
+    )
     assert code == 0
     out = capsys.readouterr().out.splitlines()
-    assert len(out) == 1
-    assert out[0].endswith("Opened https://github.com/o/r/pull/9. Then filed #2.")
+    assert len(out) == 2
+    assert out[1].endswith("Opened https://github.com/o/r/pull/9. Then filed #2.")
 
 
 def test_cli_status_exits_5_and_names_the_terminal_reason_on_a_failed_batch(
@@ -457,7 +461,9 @@ def test_cli_status_reports_a_cleaned_batch_without_reading_the_host(tmp_path, c
     run = Manifest("20260101T000005Z", "o", [cleaned])
     save(run, root=tmp_path)
     tools, calls = fake_tools()
-    code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
+    code = main(
+        ["status", run.run_id, "--all", "--manifest-root", str(tmp_path)], tools
+    )
     assert code == 0
     assert not calls.calls
     assert (

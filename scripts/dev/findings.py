@@ -36,18 +36,18 @@ Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
     uv run python scripts/dev/findings.py claim 688 701 --worktree worktree-foo \\
         [--session id] [--force]
     uv run python scripts/dev/findings.py release 688 --worktree worktree-foo [--reason "..."]
-    uv run python scripts/dev/findings.py claims [--worktree <branch>] [--json]
+    uv run python scripts/dev/findings.py claims [--worktree <branch>] [--all] [--json]
     uv run python scripts/dev/findings.py reap [--dry-run]
     uv run python scripts/dev/findings.py close 688 --fixed [--pr 700]
     uv run python scripts/dev/findings.py close 688 --refuted --reason "..."
     uv run python scripts/dev/findings.py close 688 --accepted --reason "..."
-    uv run python scripts/dev/findings.py list [--json]
+    uv run python scripts/dev/findings.py list [--severity S] [--domain D] [--limit N] [--json]
     uv run python scripts/dev/findings.py history <terms> [--file path] [--limit N] [--json]
-    uv run python scripts/dev/findings.py show 688 [--json]
+    uv run python scripts/dev/findings.py show 688 [--full] [--json]
     uv run python scripts/dev/findings.py export --out register.json
     uv run python scripts/dev/findings.py verify --all
     uv run python scripts/dev/findings.py verify 688 701
-    uv run python scripts/dev/findings.py next [--limit N] [--json]
+    uv run python scripts/dev/findings.py next [--limit N] [--waiting] [--json]
 
 WORKING ANOTHER REPO'S REGISTER. Every subcommand takes `--repo OWNER/NAME` and then works
 that repo's own `claude` register, with the same labels, trailer, fingerprint dedup and claim
@@ -146,6 +146,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # ModuleNotFoundError under the docs-refresh cron while pytest stayed green.
 from dev.findings_lib.claim import claim_states
 from lib.exit_codes import FINDINGS_BAD_ARGS
+from lib.progress import count_line
 from dev.findings_lib.claim_cli import cmd_claim, cmd_claims, cmd_reap, cmd_release
 from dev.findings_lib.cli import _parser
 from dev.findings_lib.board import cmd_board_dates, sync_board_date
@@ -520,15 +521,25 @@ def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
     findings are `history`'s search (findings_lib/history_cli.py).
 
     Args:
-        args: parsed CLI namespace carrying ``json``.
+        args: parsed CLI namespace carrying ``json``, ``severity``, ``domain`` and ``limit``.
         tools: the process boundaries the issue read goes through.
     """
     rows = sorted(issue_rows(load_issues("open", tools)), key=sort_key)
+    rows = [
+        r
+        for r in rows
+        if args.severity in (None, r["severity"]) and args.domain in (None, r["domain"])
+    ]
+    shown = rows if args.limit is None else rows[: args.limit]
+    cut = f"{len(rows) - len(shown)} more; raise --limit or drop it"
     today = today_utc()
     if args.json:
-        print(json.dumps(rows))
+        print(json.dumps(shown))
+        if len(shown) < len(rows):
+            sys.stderr.write(cut + "\n")
         return 0
-    for r in rows:
+    print(f"{len(rows)} open: {count_line(r['severity'] or '-' for r in rows)}")
+    for r in shown:
         flags = "".join(
             f" [{f}]"
             for f, on in (
@@ -549,7 +560,17 @@ def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
             f"#{r['number']:<5} {r['severity'] or '-':<6} {r['kind'] or '-':<11} "
             f"{r['domain'] or '-':<21} since {r['first_seen']} x{r['reobservations']}{flags}  {r['title']}"
         )
+    if len(shown) < len(rows):
+        print(cut)
     return 0
+
+
+def waiting_summary(rows: list[dict]) -> list[str]:
+    """The one line `next` prints in place of ``rows``' `waiting_line`s, none for no rows."""
+    if not rows:
+        return []
+    kinds = count_line("blocked" if r["blocked_by"] else "deferred" for r in rows)
+    return [f"{len(rows)} waiting ({kinds}); --waiting to list"]
 
 
 def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
@@ -562,7 +583,7 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     conservative read instead of refusing to answer at all.
 
     Args:
-        args: parsed CLI namespace carrying ``limit`` and ``json``.
+        args: parsed CLI namespace carrying ``limit``, ``json`` and ``waiting``.
         tools: the process boundaries every gh call goes through.
     """
     trees, dirty, merged, ok = tools.worktree_facts()
@@ -591,7 +612,12 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     # Named, not hidden: withheld silently, a waiting issue reads as a closed one. Under
     # `--json` the note goes to stderr, because the array IS the free set an orchestrator
     # claims (`issue-fanout`), and a waiting row inside it would be claimed.
-    held_back = [waiting_line(r, today) for r in waiting(issues, today=today)]
+    held_rows = waiting(issues, today=today)
+    held_back = (
+        [waiting_line(r, today) for r in held_rows]
+        if args.waiting
+        else waiting_summary(held_rows)
+    )
     if args.json:
         print(json.dumps(rows))
         for line in held_back:

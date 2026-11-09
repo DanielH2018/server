@@ -29,6 +29,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 # DECIDED: imported as `dev.findings_lib.<leaf>`, never as bare siblings — see the marker in findings.py.
 from lib.exit_codes import FINDINGS_BAD_ARGS
+from lib.progress import count_line
 from dev.findings_lib.claim import (
     PEER_UNREADABLE,
     another_claim_blocks,
@@ -255,14 +256,15 @@ def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
 
 
 def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
-    """Prints every open claim: issue, worktree, live or stale, and why.
+    """Prints the stale claims and a count of the live ones; `--all` lists every claim.
 
     `--worktree` narrows the rows to one orchestrator's own: the claims its branch holds, and
     those held by the batch branches its `fanout.py place launch` runs started. A batch in
     this repo is claimed under the orchestrator's branch, so the branch alone covers it; a
     batch in another register is claimed under its own branch, which only the run manifest
     ties back to the orchestrator. The rows it drops are counted, never hidden silently:
-    an empty filtered view must not read as "nothing is claimed anywhere".
+    an empty filtered view must not read as "nothing is claimed anywhere". A `--worktree`
+    view lists every claim it holds, live ones too: that is the set its caller gives back.
     """
     trees, dirty, merged, ok = tools.worktree_facts()
     if not ok:
@@ -295,7 +297,11 @@ def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
         if note:
             sys.stderr.write(note + "\n")
         return 0
+    if states:
+        print(count_line("live" if s.live else "stale" for s in states))
     for s in states:
+        if s.live and not (args.all or args.worktree):
+            continue
         age = f"{s.age_days}d" if s.age_days is not None else "?"
         print(
             f"#{s.number:<5} {'live ' if s.live else 'STALE'} {age:>4} "

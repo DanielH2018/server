@@ -173,15 +173,30 @@ def cmd_history(args: argparse.Namespace, tools: FindingsTools) -> int:
     return 0
 
 
+COMMENT_PREVIEW_CHARS = 200
+
+
+def _comment_text(comment: dict, full: bool) -> str:
+    """A comment whole under `--full`, else its first line cut to `COMMENT_PREVIEW_CHARS`."""
+    body = (comment.get("body") or "").strip()
+    if full:
+        return body
+    first = body.splitlines()[0][:COMMENT_PREVIEW_CHARS] if body else ""
+    cut = len(body) - len(first)
+    return f"{first} [{cut} more chars; --full]" if cut else first
+
+
 def cmd_show(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``show`` subcommand: one finding's body, outcome, closing PR and thread.
 
-    The thread is printed whole, so a refute or accept reason longer than the one line
-    `history` shows is all there. Each comment names its author, because this repo is
-    public and a comment from outside it is not the operator's word.
+    The body prints whole and each comment as its first line, because claim and
+    re-observation comments crowd out the thread. ``--full`` prints every comment whole, so
+    a refute or accept reason longer than the one line `history` shows is all there. Each
+    comment names its author, because this repo is public and a comment from outside it
+    is not the operator's word.
 
     Args:
-        args: parsed CLI namespace carrying ``number`` and ``json``.
+        args: parsed CLI namespace carrying ``number``, ``json``, ``brief`` and ``full``.
         tools: the process boundaries the issue read goes through.
 
     Returns:
@@ -231,5 +246,5 @@ def cmd_show(args: argparse.Namespace, tools: FindingsTools) -> int:
         if not is_operator_comment(c):
             who = f"{who} (not the operator)"
         day = (c.get("createdAt") or "")[:10]
-        print(f"\n--- {day} {who}\n{(c.get('body') or '').strip()}")
+        print(f"\n--- {day} {who}\n{_comment_text(c, args.full)}")
     return 0

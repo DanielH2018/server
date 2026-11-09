@@ -113,14 +113,18 @@ lint, a CLAUDE.md rule), and re-presenting it as new is how it stays unowned. Ve
 live before reporting: the register is only as fresh as the last ledger.
 
 **Run `uv run python scripts/dev/findings.py list` before you read the register.** The open
-findings live as GitHub Issues labelled `claude`; that command prints them severity-first with
-the first-seen date and the re-observation count. A finding a reviewer surfaces that matches an
+findings live as GitHub Issues labelled `claude`; that command opens on a count by severity,
+then prints them severity-first with the first-seen date and the re-observation count. For a
+domain's reviewer, run `findings.py list --domain <domain>`, or add `--severity <level>` and
+`--limit <n>`: a cut-off list ends with how many findings it left out. `list --json` prints the
+same rows, filtered the same way, on one line. A finding a reviewer surfaces that matches an
 open issue is a **recurrence**: record it with `findings.py touch <n> --source review-<date>`
 (the third sighting adds `escalated`), never as a new row or a new issue. The list is only as
 fresh as the last close, so still confirm each item at a cited `file:line` before reporting it.
 To check whether a finding was settled before, run `findings.py history <terms>` or
 `findings.py history --file <path>`. It searches closed findings too and prints how each one
-closed; `findings.py show <n>` prints one finding's whole thread.
+closed; `findings.py show <n>` prints one finding's body and the first line of each comment, and
+`show <n> --full` prints every comment whole.
 
 **When the standing list and a dated ledger disagree, the ledger wins** and the standing list is
 stale — say so in the report so the next distillation fixes it.

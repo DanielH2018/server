@@ -79,6 +79,7 @@ from fanout_lib import launch as launch_mod
 from fanout_lib import manifest as manifest_mod
 from fanout_lib import signing as signing_mod
 from fanout_lib import status as status_mod
+from fanout_lib.status_view import one_line, runs_lines, status_lines
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
 from findings_lib.tracked_paths import tracked_files
 from fanout_lib.review.api import review_flags
@@ -347,39 +348,31 @@ def cmd_launch(args, tools: Tools) -> int:
             launched = ", ".join(b.batch for b in run.batches)
             error(f"launched before this failure: {launched} (run {run.run_id})")
             return FANOUT_PLACE_FAILED
-        print(f"{batch} -> {host} ({launch_mod.unit_name(batch, target)})")
         claims_mod.post_worked_by(tools, numbers, launched.branch, target)
     if not run.batches:
         error("launched nothing: every issue's claim was refused")
         return FANOUT_PLACE_NOTHING_PLACED
-    path = manifest_mod.save(run, root=args.manifest_root)
-    print(f"run {run.run_id} recorded at {path}")
-    if target.is_server:
-        # `findings.py release` names the holder, so print it where the orchestrator reads.
-        print(f"claims held under `{holder}`")
+    manifest_mod.save(run, root=args.manifest_root)
+    pairs = ", ".join(f"{b.batch} -> {b.host}" for b in run.batches)
+    # `findings.py release` names the holder, so print it where the orchestrator reads.
+    held = f"; claims held under `{holder}`" if target.is_server else ""
+    print(f"run {run.run_id}: {pairs}{held}")
     # Not 3, which says nothing was placed: these batches are running (#4452).
     return FANOUT_PLACE_PARTLY_LAUNCHED if refused else FANOUT_PLACE_OK
 
 
-def _one_line(text: str, limit: int = 300) -> str:
-    # Collapse the whitespace before truncating: a cut that lands mid-line would put a
-    # newline inside a status line that is meant to be one line per batch.
-    return " ".join(text.split())[:limit]
-
-
 def cmd_status(args, tools: Tools) -> int:
     run = manifest_mod.load(args.run_id, root=args.manifest_root)
-    rows, worst = status_mod.collect(run, tools, _one_line)
+    rows, worst = status_mod.collect(run, tools, one_line)
     if args.json:
         print(json.dumps(rows))
     else:
-        for row in rows:
-            print(row["line"])
+        print("\n".join(status_lines(rows, args.all)))
     return worst
 
 
 def cmd_runs(args, tools: Tools) -> int:
-    """List every run manifest on this host, so a lost run-id is recoverable (#3923)."""
+    """List the run manifests on this host, so a lost run-id is recoverable (#3923)."""
     runs = [
         r
         for r in manifest_mod.all_runs(args.manifest_root)
@@ -388,15 +381,11 @@ def cmd_runs(args, tools: Tools) -> int:
     if args.json:
         print(json.dumps([dataclasses.asdict(r) for r in runs]))
         return 0
-    for r in runs:
-        print(f"{r.run_id}  orchestrator {r.orchestrator_branch}")
-        for b in r.batches:
-            state = f"cleaned {b.removed_at}" if b.removed_at else "standing"
-            issues = ",".join(f"#{n}" for n in b.issues)
-            print(f"  {b.batch} on {b.host}: {b.branch} {issues} {state}")
     if not runs:
         whose = f" for {args.orchestrator}" if args.orchestrator else ""
         print(f"no fan-out runs{whose} under {args.manifest_root}")
+        return 0
+    print("\n".join(runs_lines(runs, args.all)))
     return 0
 
 
@@ -601,11 +590,22 @@ def main(argv=None, tools: Tools | None = None) -> int:
     runs_parser = sub.add_parser("runs")
     runs_parser.add_argument("--json", action="store_true")
     runs_parser.add_argument("--orchestrator", metavar="BRANCH")
+    runs_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="every run and batch, cleaned ones included; the default lists standing batches",
+    )
     _add_manifest_root(runs_parser)
     runs_parser.set_defaults(fn=cmd_runs)
     run_parsers["stop"].add_argument("batch", nargs="?")
     run_parsers["status"].add_argument(
         "--json", action="store_true", help="one object per batch, for fanout.py probe"
+    )
+    run_parsers["status"].add_argument(
+        "--all",
+        action="store_true",
+        help="one full line per batch; the default counts landed and cleaned batches and "
+        "shortens a done batch to its PR URL",
     )
     run_parsers["abandon"].add_argument("batch")
     # No `help=` here, matching every other subparser above: argparse only lists a
