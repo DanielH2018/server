@@ -251,47 +251,14 @@ def manual_plane_clear_for(
 #
 # Keyed by ROLE NAME, which is what every caller passes — `setup_role_tag` maps that to the
 # `--tags` value, and the two differ for `chezmoi_setup`.
-# The narrower tags the k3s warning offers instead. A tuple rather than prose, so
-# `test_every_narrower_tag_the_warning_names_exists_in_the_role` can check it against the
-# role's own `tasks/` — a tag that matches nothing makes Ansible exit 0 having applied
-# nothing, which is the silent-success failure `setup_tags_for` also guards against.
-_K3S_NARROWER_TAGS = (
-    "k3s_server",
-    "coredns",
-)
-
-# The gates that decide whether `--tags k3s` actually takes the control plane down. Each is a
-# variable or a status string `roles/setup/k3s/tasks/server.yml` reads, pinned by
-# `test_every_gate_the_warning_names_is_read_by_the_role` so the warning cannot outlive the
-# task it describes.
-# The installer's gate is the binary read since H6.4b moved the server's flags into
-# daniel-box's host package: it runs only on a host with no k3s binary.
-_K3S_CONTROL_PLANE_GATES = ("k3s_installed_version", "reencrypt_finished")
-
-_K3S_GATED_TASKS = (
-    "two gated control-plane tasks: the "
-    f"k3s installer, which starts k3s only when `{_K3S_CONTROL_PLANE_GATES[0]}` finds no "
-    "binary; and `k3s secrets-encrypt rotate-keys`, which re-encrypts every Secret in etcd "
-    "unless the cluster already reached "
-    f"`{_K3S_CONTROL_PLANE_GATES[1]}`"
-)
-
-_MAXIMAL_ROLE_TAGS: dict[str, str] = {
-    "k3s": (
-        "that tag is the WHOLE role. It reapplies the server install and CoreDNS's marker, "
-        f"and arms {_K3S_GATED_TASKS}. Narrower tags, "
-        "one per task file: "
-        + ", ".join(f"`{t}`" for t in _K3S_NARROWER_TAGS)
-        + "; `--list-tasks` shows what one selects"
-    ),
-}
+# Empty since H7.44 emptied the k3s role, the one setup role whose whole-role tag armed gated
+# control-plane tasks.
+_MAXIMAL_ROLE_TAGS: dict[str, str] = {}
 
 # The narrower tags that still reach a role's gated tasks live in `gitops_markers`, imported
 # above: the SessionStart banner needs the same set and cannot reach this module (#2345). What
 # stays here is the long prose, which only the surfaces with room for it print.
-_MAXIMAL_ROLE_GATED_WARNING: dict[str, str] = {
-    "k3s": f"that tag list reaches tasks/server.yml, which arms {_K3S_GATED_TASKS}",
-}
+_MAXIMAL_ROLE_GATED_WARNING: dict[str, str] = {}
 
 
 def maximal_tag_warning(role: str) -> str:

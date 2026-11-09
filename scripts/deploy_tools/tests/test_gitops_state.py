@@ -396,20 +396,18 @@ def test_a_non_empty_applied_still_clears_its_tags(tmp_path, run):
     assert pending(tmp_path) == {"k3s": frozenset({"coredns"})}
 
 
-def test_the_kept_message_warns_about_the_whole_role_apply_it_prescribes(
+def test_the_kept_message_warns_of_nothing_for_the_emptied_k3s_role(
     tmp_path, run, capsys
 ):
-    """It sends the operator to `--tags k3s`, which arms the gated tasks.
-
-    Every other surface printing that command carries `maximal_apply_warning`; this one
-    printed it bare.
-    """
+    """`--tags k3s` runs only the `end_role` stub since H7.44, so it arms nothing to warn of."""
     (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
     assert (
         run(tmp_path, "clear-owed", "manual_plane", "k3s", "--applied", "kubeconfig")
         == 1
     )
-    assert "rotate-keys" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "Apply the whole role" in err
+    assert "WARNING" not in err
 
 
 def test_the_kept_message_for_a_role_with_no_gated_tasks_carries_no_warning(

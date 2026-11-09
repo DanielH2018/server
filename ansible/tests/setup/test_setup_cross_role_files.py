@@ -42,6 +42,9 @@ Run: uv run pytest ansible/tests/setup/test_setup_cross_role_files.py
 import fnmatch
 import re
 
+import pytest
+import yaml
+
 from _helpers import ROLES, SETUP_ROLES, load_yaml
 from _role_census import role_dirs, role_task_files
 from lib.role_installs import runs_on_no_host
@@ -229,6 +232,27 @@ def test_every_setup_role_runs_on_no_host():
     roles = [r for r in role_dirs(SETUP_ROLES) if (r / "tasks" / "main.yml").is_file()]
     assert {"gitops_deploy", "initial_setup", "k3s"} <= {r.name for r in roles}
     assert [r.name for r in roles if not runs_on_no_host(r)] == []
+
+
+@pytest.mark.parametrize(
+    "first",
+    [
+        {
+            "name": "Write it",
+            "ansible.builtin.copy": {"dest": "/etc/x", "content": "x"},
+        },
+        {
+            "ansible.builtin.meta": "end_role",
+            "when": "inventory_hostname == 'daniel-pi'",
+        },
+    ],
+    ids=["a-task", "a-guarded-end"],
+)
+def test_a_role_that_runs_somewhere_is_not_read_as_emptied(tmp_path, first):
+    """The rejecting half: only an unguarded leading `end_role` ends a role everywhere."""
+    (tmp_path / "tasks").mkdir()
+    (tmp_path / "tasks" / "main.yml").write_text(yaml.safe_dump([first]))
+    assert not runs_on_no_host(tmp_path)
 
 
 def test_a_row_naming_an_emptied_role_is_dropped_and_a_live_one_is_kept():

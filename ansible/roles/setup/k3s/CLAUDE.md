@@ -40,4 +40,4 @@ and read those keys and the netplan template.
 A revert of H7.44 restores the role's tasks. The operator then re-applies the role on
 daniel-box: `cd /home/ubuntu/server && uv run ansible-playbook ansible/k3s-bringup.yml --tags k3s`
 (operator-only). That run reaches the installer only on a host with no k3s binary, and
-`rotate-keys` only when the rotation stage is not `reencrypt_finished`.
+`rotate-keys` only on a cluster whose Secrets have not finished re-encrypting.

@@ -35,7 +35,7 @@ def test_a_narrowed_role_prints_its_own_tags_and_drops_the_warning():
         assert "WARNING" not in cmd
 
 
-def test_a_role_the_derivation_refused_keeps_the_role_tag_and_the_warning():
+def test_a_role_the_derivation_refused_keeps_the_role_tag():
     """The rejecting half: an empty tag set is a refusal, not an empty `--tags` value.
 
     `--tags` with nothing after it runs the WHOLE playbook, so a refusal that leaked through
@@ -44,7 +44,6 @@ def test_a_role_the_derivation_refused_keeps_the_role_tag_and_the_warning():
     for narrow in ({}, {"k3s": frozenset()}):
         cmd = manual_plane_remediation({"k3s"}, narrow)
         assert "ansible/k3s-bringup.yml --tags k3s" in cmd
-        assert "WARNING" in cmd
 
 
 def test_several_narrow_tags_are_one_comma_joined_tags_value():
@@ -56,23 +55,6 @@ def test_several_narrow_tags_are_one_comma_joined_tags_value():
 # ── a narrowed tag that still reaches the gated tasks keeps the warning ──
 
 
-def test_a_narrowed_tag_reaching_the_gated_tasks_keeps_the_warning():
-    """`--tags k3s_server` arms the restart and the re-encryption as surely as `--tags k3s`.
-
-    Every task in `tasks/server.yml` carries `k3s_server`, so a range touching that file
-    narrows to it. Dropping the warning there would print the dangerous command bare.
-    """
-    for narrow in (
-        {"k3s": frozenset({"k3s_server"})},
-        {"k3s": frozenset({"k3s_server", "kubeconfig"})},
-    ):
-        cmd = manual_plane_remediation({"k3s"}, narrow)
-        assert "--tags " in cmd and "k3s_server" in cmd.split("WARNING")[0]
-        assert "WARNING" in cmd
-        assert "rotate-keys" in cmd, "the warning still names the re-encryption"
-        assert "WHOLE role" not in cmd, "the narrowed command is not the whole role"
-
-
 def test_the_banners_warning_roles_are_the_remediations_warning_roles():
     """`gitops_markers` holds the banner's one-line warnings, this module the long prose.
 
@@ -81,7 +63,6 @@ def test_the_banners_warning_roles_are_the_remediations_warning_roles():
     surface.
     """
     short = set(gitops_markers.MAXIMAL_ROLE_WARNING)
-    assert "k3s" in short, "the census is empty, so it compares nothing"
     assert short == set(deploy_remediation._MAXIMAL_ROLE_TAGS)
     assert set(deploy_remediation.MAXIMAL_ROLE_GATED_TAGS) == set(
         deploy_remediation._MAXIMAL_ROLE_GATED_WARNING

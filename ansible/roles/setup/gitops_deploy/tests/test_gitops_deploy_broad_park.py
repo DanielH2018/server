@@ -166,9 +166,6 @@ def test_a_refused_narrowing_records_nothing_and_keeps_the_role_tag(
     out = capsys.readouterr().out
     assert state.manual_plane_tags_pending() == {"k3s": frozenset()}
     assert "ansible/k3s-bringup.yml --tags k3s" in out
-    assert "WARNING" in out, (
-        "and the warning about what that tag does comes back with it"
-    )
 
 
 def test_a_role_the_range_needs_nothing_from_is_not_recorded(

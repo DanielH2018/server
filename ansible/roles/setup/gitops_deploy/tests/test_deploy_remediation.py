@@ -277,27 +277,17 @@ def test_the_budget_predicate_tracks_the_units_real_timeout():
 # change that needs only `--tags kubeconfig` must not be answered with it.
 
 
-def test_the_k3s_role_tag_carries_what_running_it_does():
-    """The command is the role tag, carrying a warning.
-
-    No assertion on the warning's prose: asserting a sentence copied out of the module that
-    defines it proves only that the file equals itself. What the warning CLAIMS is held up by
-    the two oracles below, against the role's own
-    task files.
-    """
-    cmd = broad_remediation(False, True, {"k3s"})
-    assert "ansible/k3s-bringup.yml --tags k3s" in cmd
-    assert "WARNING" in cmd
+def test_the_emptied_k3s_role_tag_carries_no_warning():
+    """`--tags k3s` runs only the `end_role` stub since H7.44, so no surface warns of it."""
+    for cmd in (
+        broad_remediation(False, True, {"k3s"}),
+        manual_plane_remediation({"k3s"}),
+    ):
+        assert "ansible/k3s-bringup.yml --tags k3s" in cmd
+        assert "WARNING" not in cmd
 
 
 def test_a_role_whose_tag_is_not_maximal_carries_no_warning():
     """The rejecting half: the warning must not ride every setup command."""
     assert "WARNING" not in broad_remediation(False, True, {"chezmoi_setup"})
     assert maximal_tag_warning("chezmoi_setup") == ""
-
-
-def test_the_manual_plane_remediation_carries_the_warning_too():
-    """The journal line, the Discord alert and land.sh all quote one composer."""
-    cmd = manual_plane_remediation({"k3s"})
-    assert "WARNING" in cmd
-    assert "--tags kubeconfig" not in cmd.split("WARNING")[0]

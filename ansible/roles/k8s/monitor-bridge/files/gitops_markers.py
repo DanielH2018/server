@@ -232,28 +232,17 @@ def owed_clear_cmd(cls: str, subject: str, tags=()) -> str:
 
 
 # The setup roles whose whole-role tag is a blunt instrument, and the narrowed tags that still
-# reach the tasks that make it one. Every task in `roles/setup/k3s/tasks/server.yml` carries
-# `k3s_server`, so a narrowing that lands on that tag arms the installer restart and the key
-# re-encryption as surely as the whole-role tag does.
+# reach the tasks that make it one. Empty since H7.44 emptied the k3s role, the last role whose
+# tasks restarted the control plane.
 #
 # The DATA lives here because three surfaces need it and two of them cannot reach the
 # deployer's tree: `deploy_remediation` composes the long prose for the journal, the Discord
 # alert and `land.sh`, while `scripts/lib/deployer_park.py` renders the SessionStart banner
-# with only `scripts/` on `sys.path` (#2345). `test_the_gated_tags_are_every_tag_the_gated_
-# tasks_carry` derives the set from the role itself.
-MAXIMAL_ROLE_GATED_TAGS: dict[str, frozenset[str]] = {
-    "k3s": frozenset({"k3s_server"}),
-}
+# with only `scripts/` on `sys.path` (#2345).
+MAXIMAL_ROLE_GATED_TAGS: dict[str, frozenset[str]] = {}
 
 # The one-line version of what such an apply arms, for a surface with no room for the prose.
-# It names `rotate-keys` because that is the irreversible half: the restart costs a few
-# seconds of API server, the re-encryption rewrites every Secret in etcd.
-MAXIMAL_ROLE_WARNING: dict[str, str] = {
-    "k3s": (
-        "that command restarts the k3s control plane and arms `k3s secrets-encrypt "
-        "rotate-keys`, which re-encrypts every Secret in etcd"
-    ),
-}
+MAXIMAL_ROLE_WARNING: dict[str, str] = {}
 
 
 def maximal_apply_warning(role: str, tags) -> str:
