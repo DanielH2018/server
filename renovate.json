@@ -148,16 +148,18 @@
     },
     {
       "customType": "regex",
-      "description": "The flux CLI release each `fluxcd/flux2/action` step installs, through its `version:` input: the three in the promote workflow (#4822) and the two in the CI workflow: the `flux_roundtrip` job's, which proves target slice R2's round trip on the same CLI, and the `sops_manifest_type_proof` job's, which pushes D3.3d's fixture artifact. Renovate's built-in github-actions manager extracts the action itself as `fluxcd/flux2` on github-tags, for its commit-SHA pin, but its known-actions table has no entry for this action, so nothing read the input: a local `renovate --platform=local --dry-run=lookup` (44.155.1) extracted no dep from it. ansible/tests/repo/test_promote_workflow.py holds the input equal to `flux_version` in roles/k8s/flux, so a `flux_version` bump stayed red until someone edited both steps by hand. The matchString reads a `# renovate: datasource=github-releases depName=fluxcd/flux2` comment on the line above each `version:` input, and its span stops there. It must not reach the action line: that line's `# v2.9.6` comment belongs to the github-actions dep, whose update lands in the same branch, and Renovate rewrites every copy of currentValue inside a matched span, so two updates would rewrite one span. depName and datasource equal the `# renovate:` annotation on `flux_version`, so the `fluxcd/flux2` packageRule puts all five steps and the defaults pin in one PR. ENFORCED by scripts/tests/test_renovate_flux_cli.py.",
+      "description": "The flux CLI release each flux CI job fetches (#7778): the four promote workflow jobs that push and tag the artifact, ci.yml's `flux_roundtrip` and `sops_manifest_type_proof` jobs, and the two drill workflows. Each file pins the CLI in env as `FLUX_VERSION` and `FLUX_SHA256`, the sha256 of `flux_<version>_linux_amd64.tar.gz`, and each job restores the tarball from an actions/cache keyed on both, fetching the release only on a miss and checking the digest every run. The jobs used `fluxcd/flux2/action` until a release-host outage of five 504s turned master red, because the action downloads the CLI uncached. This manager follows the nfpm manager's shape: ONE matchString spans the `# renovate:` annotation, the `FLUX_VERSION` line and the `FLUX_SHA256` line, so currentValue and currentDigest come from one match, and the github-release-attachments datasource computes the new digest from the release's checksums file. depName equals the `# renovate:` annotation on `flux_version`, so the `fluxcd/flux2` packageRule puts every pin and the defaults pin in one PR. ansible/tests/repo/test_promote_workflow.py and scripts/tests/test_renovate_flux_cli.py fail a pin that drifts from `flux_version`. ENFORCED by scripts/tests/test_renovate_flux_cli.py.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/promote\\.yml$/",
-        "/(^|/)\\.github/workflows/ci\\.yml$/"
+        "/(^|/)\\.github/workflows/ci\\.yml$/",
+        "/(^|/)\\.github/workflows/bootstrap-drill\\.yml$/",
+        "/(^|/)\\.github/workflows/flux-deletion-drill\\.yml$/"
       ],
       "matchStrings": [
-        "#[ \\t]*renovate:[ \\t]*datasource=github-releases[ \\t]+depName=fluxcd/flux2[ \\t]*\\n[ \\t]+version:[ \\t]*(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+        "#[ \\t]*renovate:[ \\t]*datasource=github-release-attachments[ \\t]+depName=fluxcd/flux2[ \\t]*\\n[ \\t]+FLUX_VERSION:[ \\t]*(?<currentValue>v\\d+\\.\\d+\\.\\d+)[ \\t]*\\n[ \\t]+FLUX_SHA256:[ \\t]*(?<currentDigest>[a-f0-9]{64})"
       ],
       "depNameTemplate": "fluxcd/flux2",
-      "datasourceTemplate": "github-releases"
+      "datasourceTemplate": "github-release-attachments"
     },
     {
       "customType": "regex",
@@ -894,11 +896,10 @@
       "automerge": false
     },
     {
-      "description": "Flux, the deploy controller (roles/k8s/flux). `flux_version` is a github-releases pin in the role's defaults, and a bump is not finished by rewriting it: files/gotk-components.yaml must be regenerated at the new release with the pipeline its first line names, which Renovate's hosted app cannot run. The `manual — k8s_autodeploy: false` rule above is scoped to container images, so it never sees this pin, and the non-major automerge rule names no datasource and would merge it. Own group, no automerge, so the bump opens as a manual PR, and the `k8s_autodeploy: false` marker in its title keeps the unattended renovate_agent off it (issue #1963). ansible/tests/k8s/test_flux_role.py fails a bump that skipped the regeneration, because the vendored header still names the old release. The flux CLI and the controllers move together, so a release that drops Kubernetes support for the cluster's version is the operator's call, not a soak's. The rule reaches three deps that share the name `fluxcd/flux2` (#4822). On github-releases, the `# renovate:` annotation on `flux_version` and the custom manager that reads the `version:` input of each `fluxcd/flux2/action` step in .github/workflows/promote.yml. On github-tags, the built-in github-actions manager's dep for that action's commit-SHA pin, which without this datasource opened as its own PR and moved the action apart from the CLI it installs. ansible/tests/repo/test_promote_workflow.py fails a bump that left a `version:` input behind `flux_version`. On github-release-attachments, the two `flux` blocks of hosts/packages/homelab-tools/package.yml, the CLI the takeover check runs on daniel-box (#6699). ENFORCED by scripts/tests/test_renovate_flux_cli.py.",
+      "description": "Flux, the deploy controller (roles/k8s/flux). `flux_version` is a github-releases pin in the role's defaults, and a bump is not finished by rewriting it: files/gotk-components.yaml must be regenerated at the new release with the pipeline its first line names, which Renovate's hosted app cannot run. The `manual — k8s_autodeploy: false` rule above is scoped to container images, so it never sees this pin, and the non-major automerge rule names no datasource and would merge it. Own group, no automerge, so the bump opens as a manual PR, and the `k8s_autodeploy: false` marker in its title keeps the unattended renovate_agent off it (issue #1963). ansible/tests/k8s/test_flux_role.py fails a bump that skipped the regeneration, because the vendored header still names the old release. The flux CLI and the controllers move together, so a release that drops Kubernetes support for the cluster's version is the operator's call, not a soak's. The rule reaches the deps that share the name `fluxcd/flux2` (#4822). On github-releases, the `# renovate:` annotation on `flux_version`. On github-release-attachments, the two `flux` blocks of hosts/packages/homelab-tools/package.yml, the CLI the takeover check runs on daniel-box (#6699), and the `FLUX_VERSION`/`FLUX_SHA256` pin of each CI workflow that fetches the CLI (#7778). ansible/tests/repo/test_promote_workflow.py fails a bump that left a workflow pin behind `flux_version`. ENFORCED by scripts/tests/test_renovate_flux_cli.py.",
       "matchDatasources": [
         "github-release-attachments",
-        "github-releases",
-        "github-tags"
+        "github-releases"
       ],
       "matchPackageNames": [
         "fluxcd/flux2"
