@@ -40,7 +40,9 @@
 # checks each file against the pin the download path checks, and makes neither GitHub read.
 # Ubuntu's archive stays a requirement, for age in step 3 and for the packages' Depends in step 5.
 # --tools-seed <dir> reads each pinned file <dir>/<sha256> holds instead of downloading it, and
-# downloads the rest. Each file is still checked against its pin. CI's bootstrap cases pass it.
+# downloads the rest. Each file is still checked against its pin. A seed that holds the k3s binary
+# stands in for install.sh's download, checked against the seed's own sha256sum-<arch>.txt as the
+# kit's is. CI's bootstrap cases pass it.
 #
 # daniel-server joins the cluster as an agent, so the operator passes K3S_URL and K3S_TOKEN in
 # the environment (sudo --preserve-env). The script never prints or traces the token.
@@ -385,6 +387,19 @@ fetch() {
     [ "$(sha_of "$3")" = "$2" ] || die "$name does not match its pinned sha256 $2"
 }
 
+# place_k3s <dir> <label>: install <dir>/$k3s_file once it matches <dir>'s copy of the release's
+# checksum list. install.sh fetches the binary from GitHub unless one is placed first.
+# <label> names <dir> in each refusal.
+place_k3s() {
+    k3s_sums=sha256sum-$arch.txt
+    [ -f "$1/$k3s_file" ] || die "$2 has no $k3s_file"
+    [ -f "$1/$k3s_sums" ] || die "$2 has no $k3s_sums"
+    want=$(awk -v f="$k3s_file" '$2 == f { print $1 }' "$1/$k3s_sums")
+    [ -n "$want" ] || die "$k3s_sums lists no $k3s_file"
+    [ "$(sha_of "$1/$k3s_file")" = "$want" ] || die "$k3s_file does not match $k3s_sums"
+    install -D -m 0755 "$1/$k3s_file" "$ROOT$K3S_BIN"
+}
+
 # Builds the repo venv with the flags every later `uv run` uses. uv can download the interpreter
 # from the release host fetch reads, so this runs under retry on an online build.
 build_repo_venv() {
@@ -512,18 +527,13 @@ if [ -n "$k3s_mode" ]; then
         CLEAN="$CLEAN $k3s_tmp"
         fetch "$K3S_INSTALL_URL" "$K3S_INSTALL_SHA256" "$k3s_tmp/install.sh"
         skip_download=""
+        k3s_file=k3s
+        [ "$arch" = arm64 ] && k3s_file=k3s-arm64
         if [ -n "$kit" ]; then
-            # install.sh fetches the binary from GitHub, so the kit's copy is placed first and
-            # checked against the release's own checksum list.
-            kit_bin=k3s
-            [ "$arch" = arm64 ] && kit_bin=k3s-arm64
-            kit_sums=sha256sum-$arch.txt
-            [ -f "$kit/$kit_bin" ] || die "the offline kit has no $kit_bin"
-            [ -f "$kit/$kit_sums" ] || die "the offline kit has no $kit_sums"
-            want=$(awk -v f="$kit_bin" '$2 == f { print $1 }' "$kit/$kit_sums")
-            [ -n "$want" ] || die "$kit_sums lists no $kit_bin"
-            [ "$(sha_of "$kit/$kit_bin")" = "$want" ] || die "$kit_bin does not match $kit_sums"
-            install -D -m 0755 "$kit/$kit_bin" "$ROOT$K3S_BIN"
+            place_k3s "$kit" "the offline kit"
+            skip_download=true
+        elif [ -n "$tools_seed" ] && [ -f "$tools_seed/$k3s_file" ]; then
+            place_k3s "$tools_seed" "the tools seed"
             skip_download=true
         fi
         # install.sh's binary download makes one request, and a failed one writes nothing to the

@@ -7,8 +7,9 @@ host, so apt resolves the packages' real `Depends`, the real k3s installer write
 systemd loads that unit:
 
   * `--local-build` on a container named after each host the script knows. `--tools-seed` gives
-    it the pins the kit's tools-cache holds, and it fetches uv's packages and, on a cluster node,
-    k3s from the network, then builds the three packages from a scratch clone of the checkout.
+    it the pins the kit's tools-cache holds and the kit's stand-in k3s with its checksum list, so
+    no case downloads the k3s release. It fetches uv's packages from the network, then builds
+    the three packages from a scratch clone of the checkout.
   * `--local-build --offline <kit>` on daniel-box, in a container with no network at all, which
     is stricter than the spec's unresolvable GitHub and GHCR hostnames. The kit is stocked on the
     runner from the script's own pins. Its output says the clone is unchecked.
@@ -94,6 +95,7 @@ SWAPON_SHIM = "/usr/local/sbin/swapon"
 DIG_SHIM = "/usr/local/sbin/dig"
 COPY = "/root/bootstrap"
 TOOLS_SEED = "/srv/tools-seed"
+SEED_DIR = "bootstrap-seed"
 # A join address and token for the agent, which the installer writes and nothing contacts.
 AGENT_ENV = "K3S_URL=https://192.0.2.10:6443 K3S_TOKEN=bootstrap-case-token"
 UNITS = {"daniel-box": "k3s.service", "daniel-server": "k3s-agent.service"}
@@ -306,6 +308,19 @@ def stock_kit(cases, clone: Path, kit: Path) -> Path:
         check=True,
     )
     return kit
+
+
+def stock_seed(kit: Path, seed: Path) -> Path:
+    """The `--tools-seed` directory: the kit's tools cache, and its k3s with its checksum list.
+
+    With the k3s pair seeded, a cluster node's online run places the stand-in rather than
+    downloading the release binary, so a GitHub release outage cannot fail the case.
+    """
+    shutil.rmtree(seed, ignore_errors=True)
+    shutil.copytree(kit / "tools-cache", seed)
+    for name in ("k3s", "sha256sum-amd64.txt"):
+        shutil.copy2(kit / name, seed / name)
+    return seed
 
 
 class Bootstrap:
@@ -522,7 +537,7 @@ def plan(work: Path, green: Path) -> list[Planned]:
             None,
             ANCHOR_ACCEPTS,
             None,
-            seed=green / "tools-cache",
+            seed=work / SEED_DIR,
         )
         for host in script_value(script, "HOSTS").split()
     ]
@@ -606,6 +621,7 @@ def run(cases) -> None:
             ),
         }
         stock_kit(cases, clone, green)
+        stock_seed(green, cases.work / SEED_DIR)
         planned = plan(cases.work, green)
     except (CaseFailed, OSError, subprocess.SubprocessError, StopIteration) as exc:
         cases.failed.append("prepare the bootstrap cases")
