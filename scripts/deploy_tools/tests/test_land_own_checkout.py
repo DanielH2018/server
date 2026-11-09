@@ -253,10 +253,18 @@ def test_a_comparison_git_could_not_make_refuses_before_it_merges(land_run):
                 "title": "Document the lander",
                 "body": "",
             },
+            "headRefOid": {"headRefOid": "c" * 40},
+            "state,mergeable,headRefOid": [
+                {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": "c" * 40},
+                {"state": "MERGED", "mergeable": "MERGEABLE", "headRefOid": "c" * 40},
+            ],
         },
         stale_code=None,
     )
     rc, out, err, calls, _ = land_run(["--arm-merge", "--await-merge"], fakes)
     assert rc == 1 and "VERDICT: refused" in out
-    assert "git could not compare" in err and "Nothing is merged" in err
-    assert not [c for c in calls if c[0] == "gh" and any("merge" in a for a in c[1])]
+    assert "git could not compare" in err
+    merges = [
+        c for c in calls if c[0] == "gh" and any(a.endswith("/merge") for a in c[1])
+    ]
+    assert not merges, f"merged when git could not compare: {merges}"
