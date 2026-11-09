@@ -199,3 +199,35 @@ def test_resolve_vars_reads_a_default_through_the_search_test():
     assert resolve_vars(raw, raw, undefined_cls=StrictChainableUndefined)["v4"] == [
         "104.16.0.0/13"
     ]
+
+
+# --- resolve_vars: one compile per distinct string ---
+#
+# A render resolves every inventory value once per role and pass, through a per-key fallback,
+# so the same strings reach `resolve_vars` thousands of times. Compiling each one afresh was
+# about a third of a full k8s render (#7710).
+
+
+def test_resolve_vars_compiles_a_repeated_value_once(monkeypatch):
+    compiled = []
+    real = jinja2.Environment.compile
+
+    def counting(self, source, *args, **kwargs):
+        compiled.append(source)
+        return real(self, source, *args, **kwargs)
+
+    monkeypatch.setattr(jinja2.Environment, "compile", counting)
+    values = {"text": "{{ a }}-compile-once", "whole": "{{ a ~ '-compile-once' }}"}
+    for _ in range(3):
+        assert resolve_vars(values, {"a": "x"}) == {
+            "text": "x-compile-once",
+            "whole": "x-compile-once",
+        }
+    assert len(compiled) == 2, compiled
+
+
+def test_resolve_vars_keeps_each_undefined_class_for_a_string_both_have_compiled():
+    value = {"v": "{{ missing_for_both_classes }}-tail"}
+    assert resolve_vars(value, {}) == {"v": "STUB-tail"}
+    with pytest.raises(jinja2.UndefinedError):
+        resolve_vars(value, {}, undefined_cls=StrictChainableUndefined)
