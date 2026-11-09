@@ -2,9 +2,8 @@
 """A `handlers/` change reaches the hosts that run the tasks notifying it.
 
 A `handlers/main.yml` must not fall through to the role-level reach, which for a dispatcher is
-the union of both halves: `docker_install/handlers/main.yml` has one handler, notified from
-`teardown.yml`, the `not has_docker` half, which daniel-pi never runs, so the file does not
-reach daniel-pi.
+the union of both halves: a handler notified only from a half one host never runs does not
+reach that host. The `_widget_role` fixture below holds that narrowing.
 
 `_handler_notifier_chains` reads a handlers file's reach from the tasks that `notify:` the
 handlers it defines, and narrows only when EVERY handler has a notifying task -- the reject
@@ -29,7 +28,6 @@ from lib.repo_paths import REPO as REPO_ROOT
 # cases below checking nothing.
 _ROLES_WITH_HANDLERS = frozenset(
     {
-        "docker_install",
         "gitops_deploy",
         "k3s",
     }
@@ -45,15 +43,6 @@ def test_every_role_with_handlers_is_still_named_here():
         )
     }
     assert found >= _ROLES_WITH_HANDLERS, f"handlers moved or went away: {found}"
-
-
-def test_the_docker_teardown_handler_skips_the_only_docker_host():
-    """The accept half against the live tree. `Reload systemd after docker teardown` is
-    notified from `tasks/teardown.yml` alone, which `tasks/main.yml` imports under `when:
-    not has_docker` -- true on daniel-box and daniel-server, false on daniel-pi."""
-    assert land_reach.setup_file_hosts(
-        "docker_install", "ansible/roles/setup/docker_install/handlers/main.yml"
-    ) == frozenset({"daniel-box", "daniel-server"})
 
 
 def test_the_deployer_handlers_still_reach_every_host():

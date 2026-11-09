@@ -213,3 +213,14 @@ legacy:
   - {path: /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml}
   - {path: /var/lib/homelab/setup-applied-sha256.d/k8s_host_files}
   - {path: /var/lib/homelab/setup-applied-sha256.d}
+  # H7.48: the TLS cert-expiry watch, crons.yml's last cron absent arm here. The secret-rotation
+  # component lists the two secret-rotation crons.
+  - {cron: "TLS cert-expiry watch", user: "{{ sys_user }}"}
+  # H7.48: docker_install's teardown half, which this host ran since its Docker retired. Each
+  # drop-in comes before its directory, because reconcile removes a directory only once it is empty.
+  - {cron: "Redeploy ical-proxy", user: "{{ sys_user }}"}
+  - {cron: "Clean stale tdarr transcode cache", user: "{{ sys_user }}"}
+  - {path: /etc/systemd/system/docker.service.d/20-go-runtime.conf}
+  - {path: /etc/systemd/system/docker.service.d}
+  - {path: /etc/systemd/system/containerd.service.d/20-go-runtime.conf}
+  - {path: /etc/systemd/system/containerd.service.d}

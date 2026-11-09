@@ -96,6 +96,11 @@ legacy:
   - {path: /usr/local/bin/secret-rotation-audit.sh}
   - {path: /usr/local/bin/secret-rotate.sh}
   - {path: /etc/homelab/cert-expiry-webhook.env}
+  # H7.48: the cron absent arms of crons.yml. This host has no gitops, so the secret-rotation
+  # component never lists its two crons here.
+  - {cron: "Daily secret rotation audit", user: "{{ sys_user }}"}
+  - {cron: "Weekly secret rotation (auto tier)", user: "{{ sys_user }}"}
+  - {cron: "TLS cert-expiry watch", user: "{{ sys_user }}"}
 # H7.30: the Pi's own LAN rules, beside ssh-firewall's two SSH rules. Each spec is what `ufw show
 # added` prints for the Ansible task that added it, and each legacy entry names that rule by its
 # exact spec and comment. A legacy rule that shares a declared spec is the one the arm adopts: it

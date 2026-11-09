@@ -100,3 +100,16 @@ legacy:
   - {path: /usr/local/bin/secret-rotation-audit.sh}
   - {path: /usr/local/bin/secret-rotate.sh}
   - {path: /etc/homelab/cert-expiry-webhook.env}
+  # H7.48: the cron absent arms of crons.yml. This host has no gitops, so the secret-rotation
+  # component never lists its two crons here.
+  - {cron: "Daily secret rotation audit", user: "{{ sys_user }}"}
+  - {cron: "Weekly secret rotation (auto tier)", user: "{{ sys_user }}"}
+  - {cron: "TLS cert-expiry watch", user: "{{ sys_user }}"}
+  # H7.48: docker_install's teardown half, which this host ran since its Docker retired. Each
+  # drop-in comes before its directory, because reconcile removes a directory only once it is empty.
+  - {cron: "Redeploy ical-proxy", user: "{{ sys_user }}"}
+  - {cron: "Clean stale tdarr transcode cache", user: "{{ sys_user }}"}
+  - {path: /etc/systemd/system/docker.service.d/20-go-runtime.conf}
+  - {path: /etc/systemd/system/docker.service.d}
+  - {path: /etc/systemd/system/containerd.service.d/20-go-runtime.conf}
+  - {path: /etc/systemd/system/containerd.service.d}
