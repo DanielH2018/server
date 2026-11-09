@@ -232,13 +232,15 @@ newest Job, which is that gate or a later firing. When no Job has landed since t
 check falls back to the CronJob's own daily/weekly schedule: the
 previous run must have succeeded and not be more than twice its interval old. Any other
 schedule shape fails closed rather than guess an interval. A role with neither a workload nor a CronJob (media-volume, netpol-baseline) still
-reports "declares no rollout-checkable workload," which the deploy notifier skips.
+reports "declares no rollout-checkable workload" and exits 3 (`PROBE-VERDICT: skip`), which
+the deploy notifier skips.
 
 ### `landing [--json]`
 
 `landing` answers CLAUDE.md's *When to wait* list from a running session. It prints three
 things: what would stop a landing now, the `land.sh` and `deploy.sh` runs in flight, and the
-worktrees with the issues each has claimed. Exit 1 means something blocks. `--json` prints one
+worktrees with the issues each has claimed. The text view lists the worktrees only while
+something blocks, and otherwise prints their count. Exit 1 means something blocks. `--json` prints one
 document, which the [deck mod](#the-deck-mod-claudepluginsdeck) reads every minute.
 
 A blocker is one of three states: a non-empty `hold_sha`, a red master CI run, or an owed
