@@ -106,7 +106,7 @@ def ci_state(run: dict | None) -> str:
     """Reduce the newest master `ci.yml` run to `green`, `red`, `pending` or `no-verdict`.
 
     `None` (no run listed) is `pending`, because an empty list is never green
-    (`docs/gitops-pipeline.md`). Only a completed run with a real failing conclusion is `red`.
+    (`docs/archive/gitops-deployer.md`). Only a completed run with a real failing conclusion is `red`.
     """
     if not run or run.get("status") != "completed":
         return "pending"

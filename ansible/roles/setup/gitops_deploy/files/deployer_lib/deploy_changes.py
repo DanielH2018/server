@@ -309,10 +309,8 @@ def _is_test_only_path(path: str) -> bool:
     a `test_*.py` or `conftest.py` wherever it sits, covers the one deliberate exception,
     `scripts/conftest.py`, and a test a session adds beside code before that guard catches it.
 
-    The invariant this rests on: nothing under `ansible/` copies a test file to a host.
-    the `no-role-ships-a-test-file` row of `ansible/tests/repo/test_census_rows_roles.py` is
-    the tree-wide guard, so a role that
-    starts shipping one fails there rather than silently widening this predicate into a hole.
+    The invariant this rests on: nothing under `ansible/` copies a test file to a host. No
+    role's tasks or templates ship any `.py` file, so none ships a test.
     """
     if path.startswith("ansible/tests/"):
         return True

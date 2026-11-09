@@ -9,7 +9,7 @@ cannot import yaml, so the tick runs that script as a subprocess over origin's t
 installs nothing derives from its own checkout on first use.
 
 THE BUG THIS EXISTS TO KILL: `--tags` matching no task makes Ansible exit 0, so a guessed
-playbook or tag records an apply of nothing (PR #702; `docs/gitops-pipeline.md`, *Broad
+playbook or tag records an apply of nothing (PR #702; `docs/archive/gitops-deployer.md`, *Broad
 changes*). So a role the routing does not place is never guessed at, and
 `tick_applies_setup_role` is False for it. What the tick does next depends on why (#4326):
 - The subprocess failed or timed out (`routing_failed`). That is transient, so a range

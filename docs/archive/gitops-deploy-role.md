@@ -1,0 +1,115 @@
+# gitops_deploy — the archived role page
+
+This was `ansible/roles/setup/gitops_deploy/CLAUDE.md` until #7824 moved it here,
+leaving a stub. It describes the deployer as it ran until H7.52. A relative path such as
+`files/` or `tests/` is under `ansible/roles/setup/gitops_deploy/`.
+
+The role's tasks are one unconditional `meta: end_role`, under a `# DECIDED` marker in
+`ansible/roles/setup/gitops_deploy/tasks/main.yml`. H7.52 emptied it and retired
+`gitops-deploy.timer`: the `legacy:` lists of `hosts/daniel-box/package.yml`,
+`hosts/daniel-server/package.yml` and `hosts/daniel-pi/package.yml` remove the units, the polkit
+rule and the tick's textfile. `hosts/components/checkout-sync/` fast-forwards daniel-box's primary
+checkout instead. The role stays until H7.20a, because `ansible/initial_setup.yml` names it and
+an edit to that playbook parks the deployer.
+
+The deployer's code under `files/`, its unit templates and its tests stay until H7.53 re-homes
+and deletes them. The rest of this page describes that code as it ran until H7.52: every 10
+minutes the unit fetched `origin/master`, mapped each changed path to a service or a plane,
+`--ff-only` merged, and applied the setup roles it could.
+
+Config is `/etc/gitops-deploy/config.env` (0600), from the SOPS var
+`gitops_deploy_discord_webhook`; liveness is `/var/lib/gitops-deploy/last_run`. No check pages
+on it or on `hold_sha`: monitor-bridge's two gitops checks left in H7.49b, so the deployer runs
+unwatched until H7.52 retires its timer. This file carries the rules; `docs/archive/gitops-deployer.md`'s *The
+deployer's record* carries the incident behind each, the budget arithmetic, the module layout
+and the trade-offs.
+
+## The code refuses on a host that is not the deployer
+
+`deploy_phases.refuse_unless_deployer` refuses ahead of every state write, and **fails OPEN on any
+shape but a top-level `false`** — a wrong refusal on daniel-box parks every landing in the fleet.
+
+**`ansible/inventory/group_vars/all.yml:has_gitops` defaults to `false`** (#2810), and a
+non-deployer still writes it: the record page says why.
+
+## Autonomous-role contract (it deploys to production with no human in the loop)
+
+Every 10 minutes this role may fast-forward the primary checkout and apply the setup roles the
+range changes, as `initial_setup.yml`. It applies no k8s role and runs no `deploy.yml` since
+D6.12: `promote` publishes the bundle and Flux applies it.
+
+- **Scope / exclusions:** every setup-plane change it can apply itself. **Never** a k8s role,
+  an image-pin bump, a deploy-plane path, the bring-up playbooks, a `tasks/`- or docs-only
+  change, a red or unfinished CI verdict, or a held SHA.
+- **Mode (explicit + reversible):** retired in H7.52. Re-arming it means reverting H7.52, then
+  the operator's `initial_setup.yml --tags gitops_deploy` re-apply on daniel-box
+  (**operator-only**).
+- **Authoritative sources:** `origin/master` as fetched this tick, GitHub's check-runs API, never a
+  cached verdict, never the working tree.
+- **Abort valves:** the CI gate; `hold_sha` and `hold_plane`; `BROAD_DEPLOY_TIMEOUT_S`, which
+  bounds one tick's apply.
+- **Required evidence:** `last_run` every tick, a Discord post per apply, hold and deferral,
+  and a `hold_sha` that the SessionStart banner and `land.sh` read.
+- **Next-run review:** before widening scope, read the last week's Discord log for the holds that
+  fired; the record page lists what an earlier widening cost.
+  `increase(gitops_tick_runs_total[7d])` counts the same week by outcome, lock skips and
+  parks included. `files/gitops_tick_metrics.py` writes it each tick, and the unit's second
+  `ExecStopPost=` writes it for a tick `flock` skipped. The "Containers and system monitoring"
+  board plots the duration and the outcomes.
+
+**The two GitHub checks left this role in H7.37.** `hosts/components/github-checks/` ships the
+ruleset-drift and interaction-limit timers in `homelab-daniel-box`, and its `defaults/main.yml`
+holds the rulesets' declarations. The `legacy:` lists of daniel-server's and daniel-pi's packages
+remove the Ansible-era timers from those two hosts.
+
+## Safety
+
+Each arm is a rule and the function that holds it; the record page has its incident.
+
+- **The tick applies the host plane only (D6.12).** A k8s role change, an image-pin bump and a
+  deploy-plane path fast-forward here and apply nothing: `promote` and Flux apply them, and
+  `land.sh` waits on that promotion. `hold_sha` therefore covers the host plane only.
+- **CI gate — the tip must be green before anything is merged or deployed** (`REQUIRE_CI`,
+  `hosts/lib/ci_verdict.py:ci_verdict`); this is the ONLY gate. `ci_verdict._CI_NO_VERDICT_CONCLUSIONS` are
+  **no verdict, not failure** (`docs/landing.md` owns that rule), and `CI_CONTEXTS` must match
+  `ci.yml`'s `name:` exactly. `docs/archive/gitops-deployer.md`'s *The safety arms, in full* has the
+  ancestor-walk fallback and the rulesets that guard the merge itself.
+- **Broad changes split two ways** (`deploy_changes._BROAD_*_PREFIXES`): a setup-plane change
+  (`roles/setup/<name>/`, `requirements.yml`) applies as `initial_setup.yml`. A deploy-plane
+  change (`ansible/templates/*`, `inventory/`, `deploy.yml`) applies nothing on the tick and
+  owes nothing: the renderer reads it and `promote` applies it.
+  `docs/archive/gitops-deployer.md`'s *Broad changes* has the setup narrowing.
+- **The ff-merge runs BEFORE the apply**, since applying first renders the pre-merge tree, and
+  **every broad arm is FORWARD-ONLY**: a failure writes `hold_sha` and a `hold_plane` entry and
+  leaves the tree merged, because a reset would claim the old commit over half-new state.
+- **`_BROAD_MANUAL_PREFIXES` parks with no ff-merge.** A setup role parks only while
+  `scripts/deploy_tools/setup_routing.py` fails or times out; any other the tick cannot apply
+  merges into `manual_plane` (#4326, narrowing `deploy_defer`'s `DECIDED:` marker).
+- **No k8s role takes anything from this tick, so `flux_suspend: true` in its defaults is how
+  you stop one**: it suspends every Kustomization of the tag (`docs/flux-deploy-plane.md`,
+  *Stopping one service*). `k8s_autodeploy` is not this role's: it only says whether Renovate
+  may automerge an image bump.
+- **An encrypted-vars-only push merges and alerts once per SHA.** It applies only the setup
+  roles reading a key it changed, which `deploy_defer.route_key_readers` routes (#5436). The
+  same router sends a moved inventory key to the setup roles that template it (#6962). A k8s
+  role reading one takes the new value through `homelab-cluster-vars`, which `promote`
+  applies.
+- **Every k8s role path goes to `cs.flux`**, with no read of the role's `owner`. Flux applies
+  it, so the tick merges and logs it and never applies, defers, alerts on or owes it.
+  `docs/archive/gitops-deployer.md`'s *A tag Flux applies is merged and skipped* has the rule.
+
+## Which apply clears a hold
+
+**`hold_sha` covers the host plane only, and clears once every plane `hold_plane` lists is
+applied**, each entry dropped by an apply covering it (`clear_broad_hold`). No tick writes a
+k8s hold since D6.12, so one left from before it clears only by the operator's clear. `files/gitops_hold.py`'s `Hold`
+owns that rule for every writer, the deploy UI's Clear included (#3658). `docs/archive/gitops-deployer.md`'s
+*Which apply clears a hold* has the coverage rule for each shape — including a narrowed setup
+apply's `<role>:<block>` form (#3138) — the operator's clear (`gitops_state.py clear-hold`), and
+why a hand `rm` of `hold_sha` is not one.
+
+## Traps
+
+Four live in `docs/archive/gitops-deployer.md`: the failed-run error string, the tree-lock self-deadlock,
+the config source that changes an alert's remediation, and the timeout budget. Read them
+before editing an alert or raising a cap.

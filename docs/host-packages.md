@@ -334,7 +334,7 @@ To clear the hold:
     ```
 
     The command refuses unless the SHA is the one held. It removes `hold_sha` and every
-    `hold_plane` line together. [The GitOps pipeline](gitops-pipeline.md)'s *Which apply
+    `hold_plane` line together. [The archived deployer page](archive/gitops-deployer.md)'s *Which apply
     clears a hold* states the coverage rule.
 
 Never `rm` `hold_sha`. That leaves its `hold_plane` lines in the ledger with nothing that

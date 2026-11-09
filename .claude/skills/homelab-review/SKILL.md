@@ -146,7 +146,7 @@ must include:
   tree and its `CLAUDE.md`. A `# DECIDED:` marker records a trade-off that was analysed and settled,
   with the reasoning at that line. Re-deriving one costs the operator real time — two reviewers
   re-derived the `restore_sha` prefix trade-off in a single run on 2026-08-22, against an analysis
-  written out in `gitops_deploy/CLAUDE.md` specifically to stop it. A marker is still a prior, not a
+  written out in the `gitops_deploy` role page (`docs/archive/gitops-deploy-role.md`) specifically to stop it. A marker is still a prior, not a
   verdict: contradict it only with new evidence at a cited `file:line`, and say which marker you are
   contradicting;
 - the **output format** below.

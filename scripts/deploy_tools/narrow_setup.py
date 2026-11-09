@@ -147,8 +147,7 @@ class NothingToApply(CannotNarrow):
 
 
 # Paths inside a role that reach no host, so they add no tag requirement: prose Ansible never
-# renders, and a role-local `tests/` directory (the no-role-ships-a-test-file invariant is
-# the `no-role-ships-a-test-file` row of `ansible/tests/repo/test_census_rows_roles.py`). They
+# renders, and a role-local `tests/` directory (no role's tasks or templates ship a `.py`). They
 # are SKIPPED rather than
 # refused, because a role `CLAUDE.md` rides along in most real ranges and refusing on one
 # would leave the narrowing almost never firing — measured against the k3s role's history,

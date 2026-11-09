@@ -247,10 +247,8 @@ def setup_file_hosts(
         # deployer's k8s branch already reads *.md as docs.
         return frozenset()
     if _is_test_only_path(path):
-        # A role's own pytest guards ship nowhere either: nothing stages a test file
-        # (the `no-role-ships-a-test-file` row of
-        # `ansible/tests/repo/test_census_rows_roles.py` holds that tree-wide), so
-        # no host runs the old copy. The deployer's own predicate, as `land_tags` calls it.
+        # A role's own pytest guards ship nowhere either: no role's tasks or templates
+        # ship any `.py` file, so no host runs the old copy. The deployer's own predicate, as `land_tags` calls it.
         # Without it a `tests/` path falls through to the ROLE-level reach, and the union
         # over a PR's files widens a box-only `files/` change back out to every host.
         return frozenset()
@@ -295,14 +293,12 @@ def setup_shipped_file_hosts(
 
     `deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` names the roles that import or copy
     a file from `common/` or `gitops_deploy/files/`. Such a role has no changed path under its
-    own directory, so `setup_file_hosts` gave it the ROLE-level reach: `gitops_deploy`'s
-    teardown half put daniel-server and daniel-pi in the note for a change to
-    `common/templates/unit-failure-alert.service.j2`, which `gitops_deploy` renders only on
-    daniel-box (#3976).
+    own directory, so `setup_file_hosts` gave it the ROLE-level reach, which named hosts where
+    the role never renders the file (#3976).
 
     The evidence is the role's tasks that name the file, or that import a task file of the
-    owner naming or rendering it: the alert template reaches a host only through
-    `alert_unit.yml`. For a template, an import counts only on the hosts where the owner's
+    owner naming or rendering it: `common/templates/check-timer.service.j2` reaches a host only
+    through `check_timer.yml`. For a template, an import counts only on the hosts where the owner's
     render runs under the import's `vars:` (`task_gates_shipping_owner_file`). No such task keeps
     the role-level reach.
     """

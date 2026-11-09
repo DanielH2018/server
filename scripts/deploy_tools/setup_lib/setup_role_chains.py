@@ -438,9 +438,9 @@ def var_consumer_chains(role_dir: Path, vars_file: Path) -> list[tuple] | None:
 def _notified_names(task: dict) -> set[str]:
     """Every handler name `task` notifies, by its own `notify:` or through a `vars:` value.
 
-    `notify:` is a string or a list of strings. The `vars:` arm covers the one indirect
-    shape in this tree: `gitops_deploy/tasks/install.yml` imports the shared
-    `common/tasks/check_timer.yml` with `host_lib_notify: [Run gitops-deploy once]`,
+    `notify:` is a string or a list of strings. The `vars:` arm covers an indirect shape
+    no task file in this tree uses: a task that imports a shared `common/tasks/` file
+    with a handler list such as `host_lib_notify: [<handler>]`,
     so the importing task -- which `_gates_in` offers as a leaf, because a cross-role
     import is not followed -- is where that notify's gate lives. Counting it is the wider
     answer, and wider is the safe direction here.
