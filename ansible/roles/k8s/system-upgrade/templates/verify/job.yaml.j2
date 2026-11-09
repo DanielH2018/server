@@ -1,0 +1,127 @@
+{#
+  system-upgrade's verify Jobs, one per node in `system_upgrade_nodes`, and the ConfigMap that
+  carries their script (H6, *The installed binary matches the release*).
+
+  The renderer emits this directory into `system-upgrade-verify`, which depends on
+  `system-upgrade` and so runs once the Plans read Current at the pin. A Job that fails turns
+  `flux/system-upgrade-verify` red, which holds promotion. The renderer passes `flux_job_image`
+  and `flux_job_connect`, the helper's text, to every `templates/verify/` file (`render_tag`).
+
+  The script comes from this role's ConfigMap, not the host's `/usr/lib/homelab/`: the Job
+  census admits only `python3 <mount>/<key>.py` from a mounted ConfigMap whose scripts connect
+  through `flux_job_connect`. Only the node's k3s binary arrives by hostPath, read-only.
+
+  Both names end in a digest, as the Job census requires (D5, *Rules for every Job Flux
+  applies*). Each spec carries its node, `k3s_version` and `k3s_binary_sha256_amd64`, so a pin
+  bump renames every Job and Flux runs them again.
+
+  The caller census (D5, *A fence admits every Job that dials through it*). The pod is
+  `app: system-upgrade-verify` in `system-upgrade`. It dials the API server only, which no
+  NetworkPolicy fences, and it dials no pod and execs into nothing. It reads its Node as
+  `k3s-plan` (`rbac.yaml.j2`), whose ClusterRole grants `get` on nodes.
+#}
+{% set script_name = 'system_upgrade_verify.py' %}
+{% set script_dir = '/verify' %}
+{% set binary_path = '/host/usr/local/bin/k3s' %}
+{% set data = {
+  script_name: lookup('file', playbook_dir + '/roles/k8s/system-upgrade/files/' + script_name, rstrip=False),
+  'flux_job_connect.py': flux_job_connect,
+} %}
+{% set configmap_name = 'system-upgrade-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ configmap_name }}
+  namespace: system-upgrade
+data:
+{% for key, text in data | dictsort %}
+  {{ key }}: {{ text | to_json }}
+{% endfor %}
+{% for node in system_upgrade_nodes or [] %}
+{% set spec_text %}
+# A flaky check fails rather than passing on a retry.
+backoffLimit: 0
+# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes.
+# One API read with the helper's 60s of connect retries, then one hash of the binary.
+activeDeadlineSeconds: 180
+template:
+  metadata:
+    labels:
+      app: system-upgrade-verify
+  spec:
+    serviceAccountName: k3s-plan
+    # The Job reads its Node through the API, so its pod mounts the account's token.
+    automountServiceAccountToken: true
+    restartPolicy: Never
+    enableServiceLinks: false
+    nodeSelector:
+      kubernetes.io/hostname: {{ node }}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+    containers:
+      - name: verify
+        image: {{ flux_job_image }}
+        imagePullPolicy: IfNotPresent
+        command:
+          - python3
+          - {{ script_dir }}/{{ script_name }}
+        env:
+          - name: NODE_NAME
+            value: {{ node }}
+          - name: K3S_VERSION
+            value: "{{ k3s_version }}"
+          - name: K3S_SHA256
+            value: "{{ k3s_binary_sha256_amd64 }}"
+          - name: K3S_BINARY
+            value: {{ binary_path }}
+          # The API server's certificate is signed by the cluster CA the token mount carries.
+          - name: SSL_CERT_FILE
+            value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          - name: PYTHONDONTWRITEBYTECODE
+            value: "1"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        volumeMounts:
+          - name: script
+            mountPath: {{ script_dir }}
+            readOnly: true
+          # k3s installs the binary 0755, so uid 65534 can read it.
+          - name: k3s-binary
+            mountPath: {{ binary_path }}
+            readOnly: true
+    volumes:
+      - name: script
+        configMap:
+          name: {{ configmap_name }}
+      - name: k3s-binary
+        hostPath:
+          path: /usr/local/bin/k3s
+          type: File
+{% endset %}
+{% set spec = spec_text | from_yaml %}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: system-upgrade-verify-{{ node }}-{{ (spec | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] }}
+  namespace: system-upgrade
+  annotations:
+    homelab/job-kind: verify
+spec:
+{{ spec_text | indent(2, true) }}
+{% endfor %}

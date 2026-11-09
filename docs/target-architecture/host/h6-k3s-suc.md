@@ -10,8 +10,9 @@ Also merged: H6.3e and H6.4a ([#6198](https://github.com/DanielH2018/server/pull
 manual pin finish the Renovate rule requires, and SUC applied it to both nodes.
 Also merged: H6.7 ([#7156](https://github.com/DanielH2018/server/pull/7156)), the commit that
 appends `image-gc-high-threshold=85`.
-The verify Jobs that H6.3e deferred to D5.1a1 are not an exit criterion, and
-[#7796](https://github.com/DanielH2018/server/issues/7796) tracks them.
+The verify Jobs that H6.3e deferred to D5.1a1 are not an exit criterion. The work for
+[#7796](https://github.com/DanielH2018/server/issues/7796) added them after H6 closed, with a
+script of the role's own (*The installed binary matches the release*).
 Also merged: H6.3d ([#6403](https://github.com/DanielH2018/server/pull/6403), paused by
 [#6412](https://github.com/DanielH2018/server/pull/6412) and re-selected on 2026-10-29 after
 [#6420](https://github.com/DanielH2018/server/pull/6420) shipped `k3s_gates.py` to
@@ -568,12 +569,18 @@ the node checks what the Job installed. H6.3e adds that check.
   version other than `k3s_version` reads pending, not a mismatch, because a hold can leave
   a node on the old version while the pin moved. At the pinned version, it compares the
   binary's sha256 with the pin and fails on a mismatch, naming the node.
-- **The gate.** One Job per node in `system_upgrade_nodes` runs the mode in the
+- **The gate.** One Job per node in `system_upgrade_nodes` makes the mode's comparison in the
   `system-upgrade-verify` Kustomization (C3), C7's second verify-successor shape. Each Job
-  mounts the node's binary and the packaged script read-only by hostPath, in the
-  digest-pinned gate image, and reads the API as `k3s-plan`. A mismatch turns `flux/system-upgrade-verify` red, which holds
+  mounts the node's binary read-only by hostPath, runs the `flux_job_image` digest, and reads
+  the API as `k3s-plan`. A mismatch turns `flux/system-upgrade-verify` red, which holds
   promotion and keeps `last-good` where it was. `-verify` exists from D5.1a1, which is not
   one of this slice's edges (*Open questions* 14).
+    - **Amendment ([#7796](https://github.com/DanielH2018/server/issues/7796)).** The Jobs do
+      not run the packaged `k3s_binary_gate.py` by hostPath. D5's Job census admits only a
+      script from a mounted ConfigMap that connects through `flux_job_connect`, and the
+      packaged script reaches the API through `k3s_gates.py`'s own client. The Jobs run
+      `ansible/roles/k8s/system-upgrade/files/system_upgrade_verify.py` instead, which makes
+      the same comparison and reads the same pending rule.
 
 ### Flags move from the unit to a package drop-in
 

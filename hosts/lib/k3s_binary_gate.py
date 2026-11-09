@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """The `binary` gate of H6.3e: a node's k3s binary against the release's sha256.
 
-A `system-upgrade-verify` Job runs it with the node's `/` mounted at `--host-root`. It reads
+It runs with the node's `/` mounted at `--host-root`. The `system-upgrade-verify` Jobs do not
+run it: the Job census refuses its API client, so they run the system-upgrade role's
+`files/system_upgrade_verify.py`, which makes the same comparison. It reads
 the node's `kubeletVersion` through the API as `k3s_gates.py` does and executes no host binary.
 A node on another version than `--expect-version` reads pending, with a note and exit 0,
 because a hold can leave a node on the old version while the pin moved. A node at the pinned
