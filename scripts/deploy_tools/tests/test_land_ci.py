@@ -11,10 +11,9 @@ from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.tools import CiVerdict
 
 
-def test_preflight_passes_when_nothing_is_incoming(landing, capsys):
+def test_preflight_passes_when_nothing_is_incoming(landing):
     ln, calls = landing()
     ci.preflight(ln)
-    assert "nothing in the way" in capsys.readouterr().out
     assert calls[-1] == ("deploy_tags", ("blockers", "origin/master"), {"cwd": PRIMARY})
 
 

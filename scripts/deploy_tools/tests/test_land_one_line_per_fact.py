@@ -141,3 +141,22 @@ def test_deploy_tags_runs_uv_quietly_and_shows_its_stderr_only_on_failure(
     cap = capfd.readouterr()
     shown = "Bytecode compiled" in cap.out + cap.err
     assert shown == bool(rc)
+
+
+def test_deploy_tags_shows_its_own_advisory_on_success(tmp_path, capfd, monkeypatch):
+    """Only uv's chatter is hidden: `changed` prints a rotation advisory on exit 0."""
+    advisory = "deploy_tags.py: warning: --changed: a rotated key derives no tag"
+    uv = tmp_path / "bin" / "uv"
+    uv.parent.mkdir()
+    uv.write_text(
+        "#!/bin/sh\n"
+        'echo "Bytecode compiled 2316 files in 86ms" >&2\n'
+        f'echo "{advisory}" >&2\n'
+    )
+    uv.chmod(uv.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setenv("PATH", path_with(uv.parent))
+    res = land_tools.run_deploy_tags(tmp_path, ["changed", "origin/master"])
+    assert res.returncode == 0
+    err = capfd.readouterr().err
+    assert advisory in err
+    assert "Bytecode compiled" not in err

@@ -20,6 +20,7 @@ import pytest
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes, build_classifier, build_tools
 from _land_wait_fakes import M, P, Sim, at, digests
 from deploy_tools.deploy_lib import detach_notify
+from deploy_tools.land_lib import promotion as land_promotion
 from deploy_tools.promote_lib import wait as promote_wait
 
 # Enough tags that any "broad" threshold a fix picks is crossed; the PR's paths name the first.
@@ -161,3 +162,21 @@ def test_the_changed_set_line_names_only_the_tags_beyond_the_prs_own(broad_landi
     promotion = out.split("waiting on the promotion", 1)[1].split("== ", 1)[0]
     # The count may be the whole set's or the extras' alone.
     assert re.search(rf"\b({len(BROAD)}|{len(BROAD) - 1})\b", promotion), promotion
+
+
+def test_a_broad_set_the_prs_paths_named_none_of_prints_only_its_count():
+    """A range `changed` refused as broad names no tag, the land7672 shape."""
+    line = land_promotion.changed_set_line(BROAD, [], widened=False)
+    assert re.search(rf"\b{len(BROAD)}\b", line), line
+    assert not [tag for tag in BROAD if re.search(rf"\b{tag}\b", line)], line
+
+
+def test_a_widened_set_prints_only_its_count_whatever_the_pr_named():
+    line = land_promotion.changed_set_line(BROAD, [OWN], widened=True)
+    assert re.search(rf"\b{len(BROAD)}\b", line), line
+    assert not [tag for tag in BROAD if re.search(rf"\b{tag}\b", line)], line
+
+
+def test_a_small_set_the_prs_paths_named_none_of_is_listed():
+    line = land_promotion.changed_set_line(BROAD[:3], [], widened=False)
+    assert all(re.search(rf"\b{tag}\b", line) for tag in BROAD[:3]), line

@@ -18,6 +18,7 @@ beside `Tools`, so a test takes the real ones and fake boundaries.
 
 import contextlib
 import os
+import re
 import shutil
 import signal
 import socket
@@ -64,10 +65,16 @@ GATE_TMP_ROOT = "/tmp"
 GATE_TMP_ROOT_ENV = "LAND_GATE_TMPDIR"
 
 
+# What `uv run` itself writes to stderr, which `-q` and an unset `VIRTUAL_ENV` mostly silence.
+_UV_CHATTER = re.compile(r"^(Bytecode compiled \d+ files|warning: .*VIRTUAL_ENV=)")
+
+
 def run_deploy_tags(primary: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
-    """Run deploy_tags.py in the primary checkout; stdout captured, stderr shown on failure.
+    """Run deploy_tags.py in the primary checkout; stdout captured, its own stderr shown.
 
     The caller's `VIRTUAL_ENV` names another checkout's venv, so uv would only warn about it.
+    uv's stderr shows only on a non-zero exit; deploy_tags' advisories, such as the
+    `secrets.yml` consumers warning, show on any exit.
     """
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     res = subprocess.run(
@@ -78,8 +85,13 @@ def run_deploy_tags(primary: Path, args: list[str]) -> subprocess.CompletedProce
         text=True,
         check=False,
     )
-    if res.returncode and res.stderr:
-        print(res.stderr, end="", file=_sys.stderr)
+    shown = [
+        line
+        for line in res.stderr.splitlines()
+        if res.returncode or not _UV_CHATTER.match(line)
+    ]
+    if shown:
+        print("\n".join(shown), file=_sys.stderr)
     return res
 
 
