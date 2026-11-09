@@ -1,8 +1,8 @@
-"""ci.yml's `host_packages_build` build step and the hand-off it uploads (#7706, #7707).
+"""ci.yml's `host_packages_build` build step and the hand-off it uploads (#7706, #7707, #7834).
 
 The build step's shell runs here against a scratch render and a stub `nfpm`, so each test reads
-what a real run would do: both sides build concurrently, and a failing spec on either side fails
-the step with both sides' logs printed.
+what a real run would do: every package of both sides packs at once, and a failing spec on
+either side fails the step with every log printed.
 
 Run: uv run pytest ansible/tests/repo/test_host_package_build_step.py
 """
@@ -31,8 +31,13 @@ def _step(name: str) -> dict:
     return step
 
 
-def _build(tmp_path: Path, broken: str | None) -> tuple[int, str]:
-    """Run the build step with a stub nfpm that fails on `broken`'s first spec."""
+def _build(
+    tmp_path: Path, broken: str | None, before_build: str = ""
+) -> tuple[int, str]:
+    """Run the build step with a stub nfpm that fails on `broken`'s first spec.
+
+    `before_build` is shell the stub runs ahead of everything else.
+    """
     repo = tmp_path / "repo"
     repo.mkdir()
     git(repo, "init", "-q")
@@ -52,7 +57,7 @@ def _build(tmp_path: Path, broken: str | None) -> tuple[int, str]:
     )
     stubs = fake_bin(
         tmp_path / "bin",
-        nfpm=f'case "$PWD" in {fail} esac\necho "built $PWD version $HOMELAB_VERSION tmp $TMPDIR"\n',
+        nfpm=f'{before_build}\ncase "$PWD" in {fail} esac\necho "built $PWD version $HOMELAB_VERSION tmp $TMPDIR"\n',
     )
     result = run(
         ["bash", "-c", _step(BUILD_STEP)["run"]],
@@ -80,12 +85,30 @@ def test_a_failing_build_on_either_side_fails_the_step(
 ) -> None:
     rc, log = _build(tmp_path, broken=broken)
     assert rc != 0, log
-    assert f"::error::the {broken} build exited" in log
+    assert f"::error::the {broken} build of {FIRST_SPEC} exited 3" in log
     other = "head" if broken == "base" else "base"
-    assert f"::error::the {other} build exited" not in log
-    # The other side ran to the end and its log was printed.
+    assert f"::error::the {other} build" not in log
+    assert f"::error::the {broken} build of b-second" not in log
+    # Every other pack ran to the end and its log was printed.
+    assert f"render/{broken}/b-second " in log
     assert f"render/{other}/b-second " in log
     assert "nfpm: broken spec" in log
+
+
+def test_every_pack_runs_at_once(tmp_path: Path) -> None:
+    """Each stub pack waits until all four have started, so a serial pack never finishes."""
+    arrived = tmp_path / "arrived"
+    arrived.mkdir()
+    barrier = (
+        f'touch "{arrived}/$$"\n'
+        "for _ in $(seq 100); do\n"
+        f'  [ "$(ls "{arrived}" | wc -l)" -ge 4 ] && break\n'
+        "  sleep 0.05\n"
+        "done\n"
+        f'[ "$(ls "{arrived}" | wc -l)" -ge 4 ] || {{ echo "nfpm: packed alone" >&2; exit 9; }}'
+    )
+    rc, log = _build(tmp_path, broken=None, before_build=barrier)
+    assert rc == 0, log
 
 
 HANDOFF_STEP = "Hand the render, the debs and nfpm to the cases legs"
