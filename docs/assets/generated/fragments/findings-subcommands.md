@@ -9,7 +9,7 @@
 | `comment` | post a plain comment: no label, no re-observation; a correction to an issue's body, say |
 | `claim` | claim issues for a worktree |
 | `release` | release this worktree's claim |
-| `claims` | every open claim, live or stale |
+| `claims` | the stale claims and a count of the live ones |
 | `reap` | release every stale claim |
 | `close` | close as fixed, refuted or accepted |
 | `list` | the open findings, for the review skill; marks manual, deferred and claimed issues rather than hiding any. Past findings are `history` |

@@ -29,10 +29,19 @@ def row(batch: str, state: str, line: str = "") -> dict:
     }
 
 
-def test_a_running_batch_keeps_the_wait_open_and_names_the_finished_ones():
-    rows = [row("a", "running"), row("b", "done")]
+def test_a_running_batch_keeps_the_wait_open_and_counts_the_finished_ones():
+    rows = [row("a", "running"), row("b", "done"), row("c", "landed")]
     reading = wait_probe.read(["r1"], status(r1=(0, rows)))
-    assert reading == {"state": "running", "detail": "1 running; finished: b done"}
+    assert reading == {"state": "running", "detail": "1 running; 2 finished"}
+
+
+def test_a_finished_batch_needing_a_hand_is_named_while_others_run():
+    rows = [row("a", "running"), row("b", "needs-input"), row("c", "landed")]
+    reading = wait_probe.read(["r1"], status(r1=(1, rows)))
+    assert reading == {
+        "state": "running",
+        "detail": "1 running; 2 finished (b needs-input)",
+    }
 
 
 def test_every_batch_done_is_finished_and_counts_them():

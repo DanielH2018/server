@@ -15,9 +15,9 @@ ONE DEFINITION OF A BATCH'S STATE. This runs `fanout_lib.place.main(["status", <
 that decides a batch's state and its exit tier (the issue-fanout skill documents both). It
 read the text lines with a regex until #3926, so a change to their wording broke it silently.
 
-THE STATE. `running` while any batch runs or could not be read, with the finished batches as
-its detail. A Monitor running `cc-wait fanout` therefore prints one line each time a batch
-finishes, and nothing in between. Once no batch runs, the worst exit tier `status` returned
+THE STATE. `running` while any batch runs or could not be read, with a count of the finished
+batches as its detail, and the name of each one that needs a hand. A Monitor running `cc-wait
+fanout` therefore prints one line each time a batch finishes, and nothing in between. Once no batch runs, the worst exit tier `status` returned
 decides:
 
     finished         0   every batch landed, is done, or was cleaned
@@ -114,11 +114,16 @@ def read(run_ids: list[str], status: StatusReader = read_status) -> dict:
         # which cc-wait retries and then gives up on with exit 2.
         raise Unreadable(f"no batch row in `status` output for {', '.join(run_ids)}")
     if running:
-        done = ", ".join(f"{batch} {state}" for batch, state, _ in finished) or "none"
-        return {
-            "state": "running",
-            "detail": f"{len(running)} running; finished: {done}",
-        }
+        # Counts, not names: cc-wait prints a line whenever the detail changes, so a finish
+        # still prints one, and an earlier finish is not re-listed on every poll (#7897). A
+        # batch that needs a hand keeps its name, because the orchestrator acts on it.
+        stuck = [
+            f"{batch} {state}" for batch, state, _ in finished if state not in _SUCCESS
+        ]
+        detail = f"{len(running)} running; {len(finished)} finished"
+        if stuck:
+            detail += f" ({', '.join(stuck)})"
+        return {"state": "running", "detail": detail}
     attention = [line for _batch, state, line in finished if state not in _SUCCESS]
     # By name, not by `>=`: `status` exits 75 for a timed-out read, a larger number than 5.
     # An unread batch counts as running and returns above, so 75 does not reach this line.

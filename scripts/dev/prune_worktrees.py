@@ -243,6 +243,30 @@ def survey(repo: str) -> list[tuple[str, Worktree, str]]:
     return out
 
 
+def survey_report(
+    surveyed: list[tuple[str, Worktree, str]], show_all: bool
+) -> tuple[list[str], list[Worktree], int]:
+    """The long report's worktree lines, the removable trees and the vanished count.
+
+    A kept worktree is counted, not listed, because it asks nothing of the reader (#7897).
+    `show_all` lists it as well.
+    """
+    lines, removable, vanished, kept = [], [], 0, 0
+    for verdict, tree, reason in surveyed:
+        if verdict in (REMOVABLE, VANISHED) or show_all:
+            lines.append(
+                f"[{verdict:9}] {with_label(tree.path, tree.path)}\n            {reason}"
+            )
+        else:
+            kept += 1
+        if verdict == REMOVABLE:
+            removable.append(tree)
+        vanished += verdict == VANISHED
+    if kept:
+        lines.append(f"{kept} worktree(s) kept; --all lists them")
+    return lines, removable, vanished
+
+
 def reap_claims(repo: str) -> list[str]:
     """Run the checkout's own `findings.py reap` and return the lines to print.
 
@@ -440,6 +464,11 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--all",
+        action="store_true",
+        help="in the long report, list the kept worktrees too, two lines each",
+    )
+    parser.add_argument(
         "--no-reap",
         action="store_true",
         help=(
@@ -503,13 +532,9 @@ def main(argv: list[str] | None = None) -> int:
             f"[{STALE:9}] {branch}\n            no worktree, content already on origin/master"
         )
 
-    removable = []
-    vanished = 0
-    for verdict, tree, reason in survey(repo):
-        print(f"[{verdict:9}] {with_label(tree.path, tree.path)}\n            {reason}")
-        if verdict == REMOVABLE:
-            removable.append(tree)
-        vanished += verdict == VANISHED
+    report, removable, vanished = survey_report(survey(repo), args.all)
+    for line in report:
+        print(line)
 
     # A vanished registration alone is still work: prune_all's repair_object_store runs the
     # `git worktree prune` that drops it, which VANISHED's reason promises `--prune` does.

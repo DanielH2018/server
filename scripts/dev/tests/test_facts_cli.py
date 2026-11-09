@@ -55,10 +55,15 @@ def test_lint_with_unresolvable_ref_is_usage_error(tmp_path, capsys):
     assert "cannot resolve 'origin/master'" in capsys.readouterr().err
 
 
-def test_lint_warning_only_exits_zero(tmp_path):
+def test_lint_warning_only_exits_zero_without_the_fix_pointer(tmp_path, capsys):
     repo = _repo(tmp_path)
-    (repo / "CLAUDE.md").write_text("## Gate\n`t/m.py:LIMIT` bounds 13 entries.\n")
+    (repo / "t" / "test_m.py").write_text("def test_a():\n    pass\n")
+    git(repo, "add", "-A")
+    (repo / "CLAUDE.md").write_text("## Gate\n`t/test_m.py::test_a` pins it.\n")
     assert main(["lint", "--repo", str(repo)]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("warn ") and "one-way-test" in out
+    assert "fix:" not in out
 
 
 def test_lint_flags_a_value_only_a_built_in_renovate_manager_bumps(tmp_path, capsys):

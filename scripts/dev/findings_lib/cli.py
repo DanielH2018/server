@@ -25,6 +25,11 @@ from lib.cli_help import ArgumentParser
 HISTORY_LIMIT = 30
 
 
+def _example(args: str) -> str:
+    """A complete `findings.py` invocation for a usage error to print."""
+    return f"uv run python scripts/dev/findings.py {args}"
+
+
 def _add_dry_run(parser: argparse.ArgumentParser, *, suppress: bool) -> None:
     """Add ``--dry-run`` to ``parser``.
 
@@ -72,7 +77,12 @@ def _parser(description: str) -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     o = sub.add_parser(
-        "open", help="file a finding, or touch/reopen the existing issue"
+        "open",
+        help="file a finding, or touch/reopen the existing issue",
+        example=_example(
+            "open --title 'Short title' --body-file /tmp/body.md --severity medium "
+            "--kind gap --domain ci"
+        ),
     )
     _add_dry_run(o, suppress=True)
     _add_repo(o)
@@ -123,6 +133,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
     df = sub.add_parser(
         "defer",
         help="withhold an issue from `next` and `claim` until a date, or clear that",
+        example=_example("defer 1234 --until 2026-12-01"),
     )
     _add_dry_run(df, suppress=True)
     _add_repo(df)
@@ -141,6 +152,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
     bk = sub.add_parser(
         "block",
         help="withhold an issue from `next` and `claim` until other issues close, or clear that",
+        example=_example("block 1234 --on 1200"),
     )
     _add_dry_run(bk, suppress=True)
     _add_repo(bk)
@@ -161,6 +173,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
     mn = sub.add_parser(
         "manual",
         help="reserve an issue for the operator, releasing any claim on it, or clear that",
+        example=_example("manual 1234"),
     )
     _add_dry_run(mn, suppress=True)
     _add_repo(mn)
@@ -170,7 +183,9 @@ def _parser(description: str) -> argparse.ArgumentParser:
     )
 
     t = sub.add_parser(
-        "touch", help="record a re-observation; the third adds escalated"
+        "touch",
+        help="record a re-observation; the third adds escalated",
+        example=_example("touch 1234 --source review-2026-11-09"),
     )
     _add_dry_run(t, suppress=True)
     _add_repo(t)
@@ -181,6 +196,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
         "comment",
         help="post a plain comment: no label, no re-observation; a correction to an "
         "issue's body, say",
+        example=_example("comment 1234 --body-file /tmp/comment.md"),
     )
     _add_dry_run(cm, suppress=True)
     _add_repo(cm)
@@ -190,6 +206,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
     cl = sub.add_parser(
         "claim",
         help="claim issues for a worktree",
+        example=_example("claim 1234 1235 --worktree worktree-my-branch"),
         epilog="`claim` itself reaps a claim that `next` marks stale, so a refusal here means "
         "the claim is LIVE: find the other session before you take the issue. `claims` shows "
         "who holds what, and `reap` releases the claims whose worktree is gone.",
@@ -206,7 +223,11 @@ def _parser(description: str) -> argparse.ArgumentParser:
         "claim read stale the moment it lands",
     )
 
-    rl = sub.add_parser("release", help="release this worktree's claim")
+    rl = sub.add_parser(
+        "release",
+        help="release this worktree's claim",
+        example=_example("release 1234 --worktree worktree-my-branch"),
+    )
     _add_dry_run(rl, suppress=True)
     _add_repo(rl)
     rl.add_argument("numbers", nargs="*", type=int)
@@ -218,10 +239,17 @@ def _parser(description: str) -> argparse.ArgumentParser:
     rl.add_argument("--worktree", required=True)
     rl.add_argument("--reason", help="why, for the release comment")
 
-    cs = sub.add_parser("claims", help="every open claim, live or stale")
+    cs = sub.add_parser(
+        "claims",
+        help="the stale claims and a count of the live ones",
+        example=_example("claims --worktree worktree-my-branch"),
+    )
     _add_dry_run(cs, suppress=True)
     _add_repo(cs)
-    cs.add_argument("--json", action="store_true")
+    cs.add_argument("--json", action="store_true", help="every claim, live or stale")
+    cs.add_argument(
+        "--all", action="store_true", help="list the live claims too, one row each"
+    )
     cs.add_argument(
         "--worktree",
         help="only the claims this branch holds, plus those held by the batch branches "
@@ -235,6 +263,9 @@ def _parser(description: str) -> argparse.ArgumentParser:
     c = sub.add_parser(
         "close",
         help="close as fixed, refuted or accepted",
+        example=_example(
+            "close 1234 --refuted --reason 'the cited line does not exist'"
+        ),
         epilog="An issue normally closes as fixed from the fixing PR's `Closes #<n>`. `open` "
         "refuses to reopen a refuted or accepted issue, so the do-not-re-flag list does not "
         "carry either.",
@@ -263,10 +294,19 @@ def _parser(description: str) -> argparse.ArgumentParser:
         "list",
         help="the open findings, for the review skill; marks manual, deferred and claimed "
         "issues rather than hiding any. Past findings are `history`",
+        example=_example("list --severity high --limit 20"),
     )
     _add_dry_run(ls, suppress=True)
     _add_repo(ls)
     ls.add_argument("--json", action="store_true")
+    ls.add_argument("--severity", choices=SEVERITIES, help="only this severity")
+    ls.add_argument("--domain", choices=DOMAINS, help="only this domain")
+    ls.add_argument(
+        "--limit",
+        type=int,
+        help="print at most N findings, most severe first; a cut-off prints how many "
+        "more there are. Every finding by default",
+    )
 
     hs = sub.add_parser(
         "history",
@@ -291,12 +331,19 @@ def _parser(description: str) -> argparse.ArgumentParser:
     hs.add_argument("--json", action="store_true")
 
     sh = sub.add_parser(
-        "show", help="one finding's body, outcome, closing PR and comment thread"
+        "show",
+        help="one finding's body, outcome, closing PR and comment thread",
+        example=_example("show 1234 --full"),
     )
     _add_dry_run(sh, suppress=True)
     _add_repo(sh)
     sh.add_argument("number", type=int)
     sh.add_argument("--json", action="store_true")
+    sh.add_argument(
+        "--full",
+        action="store_true",
+        help="print every comment whole; the default cuts each to its first line",
+    )
     sh.add_argument(
         "--brief",
         action="store_true",
@@ -306,6 +353,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
     ex = sub.add_parser(
         "export",
         help="write every finding in every state to one JSON file, for the break-glass kit",
+        example=_example("export --out /tmp/findings.json"),
     )
     _add_dry_run(ex, suppress=True)
     _add_repo(ex)
@@ -345,5 +393,10 @@ def _parser(description: str) -> argparse.ArgumentParser:
         help="show at most N issues; every pickable issue by default",
     )
     nx.add_argument("--json", action="store_true")
+    nx.add_argument(
+        "--waiting",
+        action="store_true",
+        help="list the deferred and blocked issues one line each, in place of their count",
+    )
 
     return p
