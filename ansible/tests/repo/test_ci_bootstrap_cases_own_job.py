@@ -35,7 +35,7 @@ def _releases(job: dict) -> list[str]:
     return sorted(leg["release"] for leg in job["strategy"]["matrix"]["include"])
 
 
-def test_one_job_other_than_the_legs_runs_the_bootstrap_cases():
+def test_only_host_packages_bootstrap_runs_the_bootstrap_cases():
     assert _bootstrap_jobs() == ["host_packages_bootstrap"]
 
 
