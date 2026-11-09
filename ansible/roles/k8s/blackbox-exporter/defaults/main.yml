@@ -2,7 +2,7 @@
 # Renovate's k8s-defaults manager tracks this pin. Keep the tag alongside a digest
 # (`repo:tag@sha256:...`) if you pin by digest — a bare `repo@sha256:...` freezes the image
 # with no update signal at all.
-blackbox_exporter_k8s_image: prom/blackbox-exporter:v0.29.0@sha256:9613f2884689b6fad9f1939f6a3b0388c93a022cfaededb19545b329b5c83dea
+blackbox_exporter_k8s_image: prom/blackbox-exporter:v0.29.1@sha256:ea1c7aa3ef3f307cd03e85f34abb604478ccb90b567fc690da0cd9776da76b13
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # `lib.k8s_roles.k8s_autodeploy_denylist` raises on a role that declares neither. The reason is what makes the stance reviewable, so replace the text below
