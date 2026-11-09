@@ -43,7 +43,7 @@
   become: true
   tags: [crons, ansible-log]
 
-# homelab-check-lib.sh is sourced by the host checks M6 moves off Kuma, with a `|| exit 1` guard.
+# The host checks that write a check textfile source homelab-check-lib.sh with a `|| exit 1` guard.
 # `tags: [always]`, matching the copy task it records.
 - name: Record the deployed shared host-check library
   tags: [always]
