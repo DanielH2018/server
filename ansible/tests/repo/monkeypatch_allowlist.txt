@@ -55,6 +55,7 @@ scripts/infra_map/tests/test_gen_infra_map.py 1
 scripts/infra_map/tests/test_infra_map_live.py 1
 scripts/lib/tests/test_gh.py 4
 scripts/lib/tests/test_worktrees.py 4
+scripts/validate/tests/test_host_package_cases_concurrent.py 3
 scripts/validate/tests/test_validate_k8s_manifests.py 1
 scripts/validate/tests/test_validate_shell_templates.py 2
 scripts/validate/tests/test_validate_unit_templates.py 5
