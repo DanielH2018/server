@@ -117,10 +117,10 @@ the docs page has why.
   rather than the sidecar's startup window. It carries no ownerReference to the CronJob, so
   `concurrencyPolicy: Forbid` no longer keeps the 06:37 firing off it; the check only reads, so
   an overlap is harmless.
-- **It was a daniel-box host cron until H2.5d.** The absent arms for the cron,
-  `/usr/local/bin/qbittorrent-prefs-check.sh` and `/opt/qbittorrent-prefs-check` sit in
-  `ansible/roles/setup/k8s_host_files/tasks/qbittorrent.yml`, which the setup plane applies
-  through `initial_setup.yml`. D5's conversion PR moved them there from the role's tasks.
+- **It was a daniel-box host cron until H2.5d.** The cron,
+  `/usr/local/bin/qbittorrent-prefs-check.sh` and `/opt/qbittorrent-prefs-check` are
+  `legacy:` entries in `hosts/daniel-box/package.yml` since H7.48, and `homelab-reconcile`
+  removes each from a host that still holds it.
 
 ### The login trap
 qBittorrent 5.2.3 answers a successful `POST /api/v2/auth/login` with **HTTP 204 and an empty

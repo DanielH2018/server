@@ -245,7 +245,7 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
 The repo uses [prek](https://prek.j178.dev). `prek.toml` holds the config and each hook's history.
 Run `prek run --all-files` to check before committing. **That does not run the suite.** No
 hook runs it, neither at commit nor at push. The one exception is `static-ratchet-tests` and
-its `static-ratchet-tests-*` siblings: at commit time it runs twenty-eight static ratchet, lint
+its `static-ratchet-tests-*` siblings: at commit time it runs twenty-seven static ratchet, lint
 and census test files. CI's `pytest` job runs the suite whole on every PR. To see a red test
 before CI does, run `uv run pytest` yourself. A fan-out batch names test paths instead, and
 `.claude/hooks/block-batch-full-suite.py` refuses its whole-suite run. To catch the repo-wide
