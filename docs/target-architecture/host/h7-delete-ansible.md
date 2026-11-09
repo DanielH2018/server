@@ -74,7 +74,9 @@ The exit criterion is seven observations:
       daniel-box. `bootstrap-host.sh daniel-box --local-build <clone>` builds and installs
       `homelab-tools`, `homelab-updater` and `homelab-daniel-box` with no
       homelab repo reachable. Exactly one k3s unit exists, `k3s.service`, and
-      `k3s kubectl get node daniel-box` reads Ready. `k3s --version` reports the script's
+      `k3s kubectl get node daniel-box` reads Ready. The guest runs the new-cluster CoreDNS
+      marker steps, Deployment `coredns` reads Available, and the four server reads in
+      `docs/host-packages.md` answer. `k3s --version` reports the script's
       embedded `k3s_version`, which the *Bootstrap pins* test holds equal to H6's
       `system-upgrade` key. The guest holds no production
       credential: k3s generates a guest-only server token, and the guest's age key is no

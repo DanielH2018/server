@@ -3,10 +3,11 @@
 
 `gh run list` reports only a run's latest attempt, so a run that went red and passed on re-run
 reads as green. This tool lists the runs in windows under the search cap, asks each re-run run
-for its earlier attempts, and reads the log of each failed step. It prints two sections: a tally
-by failing job, step and test module, with distinct branches and last-seen date, and one line
-per red attempt. A red attempt is a `failure`, `timed_out` or `startup_failure`; a `cancelled`
-attempt gave no verdict, so it does not count.
+for its earlier attempts, and reads the log of each failed step. It prints three sections: a
+tally by failing job, step and test module, with distinct branches and last-seen date; the same
+tally over the flaky attempts alone, the red ones whose run went green on a later attempt of the
+same commit; and one line per red attempt. A red attempt is a `failure`, `timed_out` or
+`startup_failure`; a `cancelled` attempt gave no verdict, so it does not count.
 
 `gh run view --log-failed` usually labels every line `UNKNOWN STEP` and returns the whole failed
 job. The tool then keeps the lines stamped inside the failed step's start and end seconds from
@@ -200,15 +201,11 @@ def read_attempt(attempt: dict[str, Any]) -> tuple[list[tuple[str, str, str]], b
     return rows, log is not None
 
 
-def render(
-    since: date,
-    until: date,
-    scanned: int,
-    attempts: list[dict[str, Any]],
-    read: list[tuple[list[tuple[str, str, str]], bool]],
-    latest: dict[int, dict[str, Any]],
+def _tally(
+    attempts: Iterable[dict[str, Any]],
+    read: Iterable[tuple[list[tuple[str, str, str]], bool]],
 ) -> list[str]:
-    """Render the report: a header, the tally rows, then one line per red attempt."""
+    """Return one line per (job, step, module) row: its count, branches and last-seen date."""
     counts: Counter[tuple[str, str, str]] = Counter()
     branches: dict[tuple[str, str, str], set[str]] = defaultdict(set)
     last_seen: dict[tuple[str, str, str], str] = {}
@@ -218,7 +215,29 @@ def render(
             counts[row] += 1
             branches[row].add(attempt["head_branch"])
             last_seen[row] = max(last_seen.get(row, ""), day)
+    return [
+        f"{count:>5}  {len(branches[row]):>8}  {last_seen[row]}  {' / '.join(row)}"
+        for row, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
 
+
+def _passed_on_rerun(attempt: dict[str, Any], final: dict[str, Any]) -> bool:
+    """Whether a later attempt of the same run, so the same commit, ended green."""
+    return (
+        final["run_attempt"] > attempt["run_attempt"]
+        and final["conclusion"] == "success"
+    )
+
+
+def render(
+    since: date,
+    until: date,
+    scanned: int,
+    attempts: list[dict[str, Any]],
+    read: list[tuple[list[tuple[str, str, str]], bool]],
+    latest: dict[int, dict[str, Any]],
+) -> list[str]:
+    """Render the report: a header, the tally, the flake tally, then one line per red attempt."""
     runs = {attempt["id"] for attempt in attempts}
     unread = sum(not readable for _, readable in read)
     out = [
@@ -226,11 +245,15 @@ def render(
     ]
     if unread:
         out.append(f"{unread} red attempts had no readable log, so they show no module")
-    out += ["", "count  branches  last seen   job / step / module"]
-    for row, count in sorted(counts.items(), key=lambda item: (-item[1], item[0])):
-        out.append(
-            f"{count:>5}  {len(branches[row]):>8}  {last_seen[row]}  {' / '.join(row)}"
-        )
+    header = "count  branches  last seen   job / step / module"
+    out += ["", header, *_tally(attempts, read)]
+    flaky = [
+        (attempt, entry)
+        for attempt, entry in zip(attempts, read, strict=True)
+        if _passed_on_rerun(attempt, latest[attempt["id"]])
+    ]
+    out += ["", "flaky: red, then green on a re-run of the same commit", header]
+    out += _tally([a for a, _ in flaky], [entry for _, entry in flaky])
     out += ["", "red attempts"]
     for attempt in sorted(attempts, key=lambda a: (a["run_started_at"], a["id"])):
         final = latest[attempt["id"]]

@@ -11,8 +11,9 @@
 #   until4                      bootstrap-host.sh daniel-box --until 4 --local-build <clone>
 #   deviate GUEST_IP SSH_FROM   the three guest-local deviations; the masks come from $STAGE/masks
 #   bootstrap                   bootstrap-host.sh daniel-box --local-build <clone>
-#   start                       systemctl enable --now k3s.service
-#   check                       exit 0 when the host-half check passes, printing what it read
+#   start                       move the CoreDNS marker aside, start k3s, restore the marker once
+#                               k3s has created Deployment coredns
+#   check GUEST_IP              exit 0 when the host-half check passes, printing what it read
 #   state                       print the units, ufw and the k3s log for the evidence directory
 # Root only. It holds no production credential: the orchestrator stages none into this guest.
 set -uo pipefail
@@ -22,6 +23,7 @@ ROOT="${BOOTSTRAP_DRILL_ROOT:-}"                           # so does BOOTSTRAP_D
 CLONE="$STAGE/clone"
 RUNDIR="$STAGE/run"
 REPO_URL=https://github.com/DanielH2018/server.git
+MARKER=/var/lib/rancher/k3s/server/manifests/coredns.yaml.skip
 
 die() { echo "bootstrap-drill-guest-run: $*" >&2; exit 1; }
 
@@ -91,8 +93,18 @@ cmd_deviate() {
   ufw allow from "$2" to any port 22 proto tcp || die "ufw allow from $2 failed"
 }
 
+# The guest is a new cluster, so it runs the marker steps of docs/host-packages.md's rebuild.
+cmd_start() {
+  [[ -e "$ROOT$MARKER" ]] || die "the package shipped no $MARKER"
+  mv "$ROOT$MARKER" "$STAGE/coredns.yaml.skip" || die "cannot move $MARKER aside"
+  systemctl enable --now k3s.service || die "k3s.service did not start"
+  k3s kubectl -n kube-system wait --for=create deployment/coredns --timeout=300s \
+    || die "k3s created no Deployment coredns"
+  mv "$STAGE/coredns.yaml.skip" "$ROOT$MARKER" || die "cannot put $MARKER back"
+}
+
 cmd_check() {
-  local ok=1 pkg status units ready fw
+  local ip="$1" ok=1 pkg status units ready fw coredns addr pods bundled encryption
   for pkg in homelab-tools homelab-updater homelab-daniel-box; do
     status="$(dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null)"
     echo "$pkg: ${status:-not installed}"
@@ -105,6 +117,39 @@ cmd_check() {
     -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)"
   echo "node daniel-box Ready: ${ready:-no answer}"
   [[ "$ready" == True ]] || ok=0
+  coredns="$(k3s kubectl -n kube-system get deployment coredns \
+    -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null)"
+  echo "deployment coredns Available: ${coredns:-no answer}"
+  [[ "$coredns" == True ]] || ok=0
+  addr="$(k3s kubectl get node daniel-box \
+    -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)"
+  echo "node daniel-box InternalIP: ${addr:-no answer}, want $ip"
+  [[ "$addr" == "$ip" ]] || ok=0
+  if [[ -d "$ROOT/var/lib/rancher/k3s/server/db/etcd" ]]; then
+    echo "datastore: etcd"
+  else
+    echo "datastore: no etcd directory"
+    ok=0
+  fi
+  if pods="$(k3s kubectl -n kube-system get pods -o name 2>/dev/null)"; then
+    bundled="$(grep -E 'traefik|svclb|local-path-provisioner' <<<"$pods" | paste -sd' ')"
+    echo "bundled addon pods: ${bundled:-none}"
+    [[ -z "$bundled" ]] || ok=0
+  else
+    echo "bundled addon pods: no answer"
+    ok=0
+  fi
+  # A start can refuse with secret-encrypt error ID 21789; the orchestrator re-runs the check.
+  encryption="$(k3s secrets-encrypt status 2>/dev/null \
+    | grep -E '^(Encryption Status|Current Rotation Stage):' | paste -sd';')"
+  echo "secrets-encrypt: ${encryption:-no answer}"
+  [[ "$encryption" == "Encryption Status: Enabled"* ]] || ok=0
+  if [[ -e "$ROOT$MARKER" ]]; then
+    echo "coredns marker: in place"
+  else
+    echo "coredns marker: missing"
+    ok=0
+  fi
   fw="$(ufw status | head -n 1)"
   echo "ufw: $fw"
   [[ "$fw" == "Status: active" ]] || ok=0
@@ -125,15 +170,15 @@ sub="${1:-}"
 [[ -n "$sub" ]] && shift
 case "$sub" in
   detached)
-    case "${1:-}" in prepare | until4 | bootstrap) cmd_detached "$@" ;; *) die "usage: detached prepare|until4|bootstrap [ARGS]" ;; esac ;;
+    case "${1:-}" in prepare | until4 | bootstrap | start) cmd_detached "$@" ;; *) die "usage: detached prepare|until4|bootstrap|start [ARGS]" ;; esac ;;
   rc) [[ $# -eq 1 ]] || die "usage: rc STEP"; cat "$STAGE/$1.rc" 2>/dev/null; true ;;
   out) [[ $# -eq 1 ]] || die "usage: out STEP"; cat "$STAGE/$1.out" ;;
   prepare) [[ $# -eq 1 ]] || die "usage: prepare SHA"; cmd_prepare "$@" ;;
   until4) bootstrap --until 4 ;;
   deviate) [[ $# -eq 2 ]] || die "usage: deviate GUEST_IP SSH_FROM"; cmd_deviate "$@" ;;
   bootstrap) bootstrap ;;
-  start) systemctl enable --now k3s.service ;;
-  check) cmd_check ;;
+  start) cmd_start ;;
+  check) [[ $# -eq 1 ]] || die "usage: check GUEST_IP"; cmd_check "$@" ;;
   state) cmd_state ;;
   *) die "unknown subcommand '$sub'" ;;
 esac

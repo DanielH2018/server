@@ -112,3 +112,11 @@ lines:
   # so the action is a restart.
   - {path: /etc/audit/auditd.conf, line: "max_log_file = 4", regexp: '^max_log_file\s*=', activate: "try-restart:auditd.service"}
   - {path: /etc/audit/auditd.conf, line: "num_logs = 3", regexp: '^num_logs\s*=', activate: "try-restart:auditd.service"}
+  # update-notifier's two apt hooks run apt-check, which loads the whole apt cache into memory on
+  # this 456 MB host inside every apt transaction (#7681). ubuntu-server depends on
+  # update-notifier-common, so the package stays and its conffile loses both hooks. The Pi's file
+  # matched the stock md5 8c8636b1 on 2026-11-08. The motd's update count goes stale as a result,
+  # and after 7 days the login motd says the list is more than a week old. apt rereads its config
+  # on every run, so no activation is needed.
+  - {path: /etc/apt/apt.conf.d/99update-notifier, line: "// DPkg::Post-Invoke hook removed by homelab-daniel-pi: it ran apt-check", regexp: '^\s*(//\s*)?DPkg::Post-Invoke\b'}
+  - {path: /etc/apt/apt.conf.d/99update-notifier, line: "// APT::Update::Post-Invoke-Success hook removed by homelab-daniel-pi: it ran apt-check", regexp: '^\s*(//\s*)?APT::Update::Post-Invoke-Success\b'}

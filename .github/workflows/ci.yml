@@ -645,7 +645,7 @@ jobs:
     # not `main`: tracking the branch would turn this job red on an unrelated dotfiles commit.
     # The `git-refs` custom manager in renovate.json proposes each bump as its own PR.
     env:
-      DOTFILES_SHA: 070fc7d1853da8daa3c4ce4d0933bad01a977090
+      DOTFILES_SHA: 0b4a786816e6b52755f18c6fdf768954126cd2f3
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
     steps:
