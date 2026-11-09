@@ -205,9 +205,7 @@ def test_a_run_that_ended_without_its_settle_is_named_with_the_operator_command(
     clock = Clock()
     decision = promote.decide(_reads(world, clock), supersede_on=True)
     assert decision.verdict == "current"
-    assert f"the run that moved prod to {c1} ended without its settle job" in (
-        decision.reason
-    )
+    assert f"the run that moved prod to {c1} ended without a settle" in decision.reason
     assert (
         f"flux tag artifact oci://ghcr.io/danielh2018/homelab-manifests@{digest_of(c1)} "
         "--tag last-good" in decision.reason
@@ -227,8 +225,27 @@ def test_a_run_still_in_progress_restarts_the_lost_settle_count(world):
 
     clock = Clock(finish)
     decision = promote.decide(_reads(world, clock), supersede_on=True)
-    assert "ended without its settle job" in decision.reason
+    assert "ended without a settle" in decision.reason
     assert clock.now == 300 + vp.LOST_SETTLE_S
+
+
+@pytest.mark.parametrize("status", [502, 403])
+def test_a_failed_listing_of_the_promote_runs_keeps_the_wait_going(world, status):
+    c0, c1, _, tip = world.commits
+    world.set_prod(c1)
+    world.set_last_good(c0)
+    world.publish(tip)
+    world.transport.api_forced[
+        "/repos/DanielH2018/server/actions/workflows/promote.yml/runs"
+    ] = status
+
+    def settle(now: float) -> None:
+        if now >= vp.LOST_SETTLE_S + 90:  # c1's run settles good after the window
+            world.set_last_good(c1)
+
+    clock = Clock(settle)
+    decision = promote.decide(_reads(world, clock), supersede_on=False)
+    assert (decision.verdict, decision.target) == ("promote", tip)
 
 
 def test_a_hold_written_during_the_wait_ends_it_as_held(world):

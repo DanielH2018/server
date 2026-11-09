@@ -650,7 +650,7 @@ def wait_settled(
         ):
             return Settled(None, held, prod, last_good, value, in_flight=True)
         if other_runs is not None:
-            if _read(other_runs, "the in-progress promote runs", sleep):
+            if _other_runs_live(other_runs, sleep):
                 idle_since = None
             elif idle_since is None:
                 idle_since = clock()
@@ -674,6 +674,25 @@ def wait_settled(
         sleep(IN_FLIGHT_POLL_S)
 
 
+def _other_runs_live(
+    other_runs: Callable[[], list[dict]], sleep: Callable[[float], None]
+) -> bool:
+    """Whether another promote run is in progress, reading True when the listing fails.
+
+    The listing only names a stall, so a failed read keeps the wait going rather than ending
+    a wait that would have promoted.
+    """
+    try:
+        return bool(_read(other_runs, "the in-progress promote runs", sleep))
+    except forge.ForgeError as err:
+        print(
+            f"promote.py: listing the in-progress promote runs failed ({err}); "
+            "waiting as though one is in progress",
+            file=sys.stderr,
+        )
+        return True
+
+
 def lost_settle(prod: str, last_good: str, commit: str | None) -> str:
     """The reason for a `prod` that differs from `last-good` with no promote run in progress.
 
@@ -685,10 +704,11 @@ def lost_settle(prod: str, last_good: str, commit: str | None) -> str:
     return (
         f"prod {prod} is still not last-good {last_good}, and no other promote run has been "
         f"in progress for {LOST_SETTLE_S}s: the run that moved prod to {commit} ended "
-        "without its settle job. If that run's verify job logged verdict=good, move "
+        "without a settle that moved last-good or wrote a hold. If that run's verify job "
+        "logged verdict=good, move "
         "last-good (operator-only): flux tag artifact "
         f"oci://{forge.REGISTRY}/{forge.ARTIFACT}@{prod} --tag last-good. Otherwise hold "
         f"and reset (operator-only): gh variable set {forge.HOLD_VARIABLE} --body "
         f"'{commit} unverified' -R {repo}, then gh workflow run promote.yml -R {repo} "
-        "--ref master -f reset_to_last_good=true"
+        "--ref master -f reset_to_last_good=true, then clear the hold once the reset lands"
     )
