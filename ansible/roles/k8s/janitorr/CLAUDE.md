@@ -5,7 +5,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
   `--tags=janitorr` with exit 5
 - **Images:** `ghcr.io/schaka/janitorr` (`janitorr_k8s_image`), `python`
   (`janitorr_k8s_health_image`), `alpine/k8s` (`janitorr_k8s_health_kubectl_image`)

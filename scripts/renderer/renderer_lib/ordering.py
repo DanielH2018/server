@@ -138,7 +138,7 @@ class Ordering:
             full k8s `containers_list`.
         applies_last: The `K8S_APPLIES_LAST` tags.
         namespace_roles: Each namespace a role creates mapped to that role.
-        flux_owned: The tags the inventory marks `owner: flux`, or None for the published
+        flux_owned: The k8s tags the bundle publishes, or None for the published
             tags. An edge to any other name is dropped and annotated.
         suspended: The tags whose role sets `flux_suspend: true`, read over every flux-owned
             role so a `--role` subset drops the same edges. An edge to any of their

@@ -9,7 +9,7 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
   `--tags=registry` with exit 5
 - **Images:** `registry` (`registry_k8s_image`), `python` (`registry_k8s_ghcr_resume_image`),
   `gcr.io/go-containerregistry/crane` (`registry_k8s_crane_image`), `alpine`

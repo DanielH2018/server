@@ -5,7 +5,7 @@ repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
   `--tags=speedtest` with exit 5
 - **Image:** `lscr.io/linuxserver/speedtest-tracker` (`speedtest_k8s_image`)
 - **Route:** `speedtest.<domain>` · `speedtest.local.<domain>`, Authelia one_factor
@@ -16,7 +16,7 @@ repo-root `CLAUDE.md` for shared conventions.
   `database.sqlite`, but its Laravel `APP_KEY` lives in SOPS so a rebuilt instance still
   works — losing the volume loses history, not function.
 - **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. Both dependencies,
   authelia and traefik, stay

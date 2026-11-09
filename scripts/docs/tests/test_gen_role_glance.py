@@ -416,8 +416,9 @@ def test_a_hand_edited_setup_block_is_flagged(tmp_path):
 
 
 def _littlelink_block(tmp_path):
-    """The block `stale_k8s_docs` writes for a copy of littlelink and its live entry."""
+    """The block `stale_k8s_docs` writes for a copy of littlelink, its entry without `owner`."""
     entry = dict(g.Estate().k8s_entries()["littlelink"])
+    entry.pop("owner", None)
     dst = _copy_role("littlelink", tmp_path / "roles")
     (tmp_path / "daniel-box.yml").write_text(
         yaml.safe_dump({"containers_list": [entry]})

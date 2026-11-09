@@ -9,7 +9,7 @@ file still documents how it behaves.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
   `--tags=artifacts` with exit 5
 - **Image:** `python` (`artifacts_k8s_image`)
 - **Route:** `artifacts.<domain>` · `artifacts.local.<domain>`, Authelia one_factor
@@ -17,7 +17,7 @@ file still documents how it behaves.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Deployment is `RollingUpdate`
   with one replica, so a roll keeps one pod serving. The host directories it mounts are the

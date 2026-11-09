@@ -5,7 +5,7 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
   `--tags=ical-proxy` with exit 5
 - **Image:** `ghcr.io/danielh2018/ical-proxy` (`ical_proxy_k8s_image`)
 - **Route:** `ical-proxy.local.<domain>` (LAN only), no Authelia
@@ -20,7 +20,7 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
 - **Host:** daniel-box (k8s), since 2026-08-10 — slice-7 Phase C
 - **The route guards by ClientIP** so only Homepage reads the unauthenticated private feeds
 - **Flux applies it, not Ansible** (D5.14, the first Wave C PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. traefik
   stays Ansible-owned, so the
   Kustomization records it in its `homelab/ansible-owned-deps` annotation, not in `dependsOn`.

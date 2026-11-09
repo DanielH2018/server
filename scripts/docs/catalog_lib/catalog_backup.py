@@ -488,7 +488,7 @@ def owner_stance(tags: str = "") -> str:
             on one line, and the `=` form gives the glance's wrap no space to break at.
     """
     tag = f"`--tags={tags}`" if tags else "its tag"
-    return f"Flux, through `promote` (`owner: flux`); `deploy.sh` refuses {tag} with exit 5"
+    return f"Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses {tag} with exit 5"
 
 
 def entry_owner(entry: dict[str, Any]) -> str | None:

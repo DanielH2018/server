@@ -52,5 +52,5 @@ every caller, where it would drift. See repo-root `CLAUDE.md` for shared convent
 ## Editing
 - Job shape: `templates/build-job.yaml.j2`. The renderer reads
   `templates/context-configmap.yaml.j2` for each content tag.
-- Not deployed standalone, and no caller reaches it: every caller is `owner: flux`. promote's
+- Not deployed standalone, and no caller reaches it: every caller is a k8s entry. promote's
   `images` job builds their images, and `deploy.sh` refuses their tags with exit 5.

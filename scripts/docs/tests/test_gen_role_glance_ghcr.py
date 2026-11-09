@@ -16,9 +16,13 @@ from renderer.renderer_lib import images
 
 
 def _image_line(tmp_path: Path, name: str) -> str:
-    """The unwrapped Image(s) line `stale_k8s_docs` writes for a copy of the live role `name`."""
+    """The unwrapped Image(s) line `stale_k8s_docs` writes for a copy of the live role `name`.
+
+    The copy's entry carries no `owner`, so `platform: k8s` alone must select the GHCR repository.
+    """
     assert name in images.builder_roles(), f"{name} builds no image"
     entry = dict(g.Estate().k8s_entries()[name])
+    entry.pop("owner", None)
     roles = tmp_path / "roles"
     # The whole role, so its `k8s/image-builder` include and build context come along.
     shutil.copytree(g.K8S_ROLES / name, roles / name)
