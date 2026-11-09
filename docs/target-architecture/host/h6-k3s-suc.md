@@ -580,8 +580,8 @@ the node checks what the Job installed. H6.3e adds that check.
       mounted ConfigMap that connects through `flux_job_connect`, and a script beside
       `k3s_gates.py` reaches the API through that file's own client. So the role's
       ConfigMap delivers the script, and `k3s_gates.py` has no `binary` mode. H6.3e's
-      `hosts/lib/k3s_binary_gate.py`, which no host component shipped, was deleted in the
-      same PR, so one implementation remains.
+      `hosts/lib/` copy of the comparison, which no host component shipped, was deleted
+      in the same PR, so one implementation remains.
 
 ### Flags move from the unit to a package drop-in
 
@@ -1262,8 +1262,9 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
 10. **H6.3e The binary-sum check (about 150 lines).**
     - Add `k3s_binary_sha256_amd64` to the role's defaults, the co-change check in
       `scripts/validate/`, and the comparison with its tests (*The installed binary
-      matches the release*). The verify Jobs' PR ([#7796](https://github.com/DanielH2018/server/issues/7796)) carries the comparison as the
-      role's `files/system_upgrade_verify.py`, not as a mode of `k3s_gates.py`.
+      matches the release*). The verify Jobs' PR
+      ([#7796](https://github.com/DanielH2018/server/issues/7796)) carries the comparison
+      as the role's `files/system_upgrade_verify.py`, not as a mode of `k3s_gates.py`.
     - If D5.1a1's `-verify` support exists, add the verify Jobs here. Otherwise a
       follow-up PR adds them once D5.1a1 lands (*Open questions* 14). Until then H6.6's
       verification compares both nodes' sums with the pin by hand.
