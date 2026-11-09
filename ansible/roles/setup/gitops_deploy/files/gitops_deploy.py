@@ -40,7 +40,7 @@ gitops-deploy.service runs it from gitops-deploy.timer (every 10 minutes) as
 `flock -w 180 <tree lock> uv run --no-project gitops_deploy.py`. A by-hand tick is the
 `gitops-tick` skill. It reads GITOPS_DEPLOY_CONFIG (default /etc/gitops-deploy/config.env)
 and keeps its markers in the state directory `deploy_state.STATE_DIR` names.
-docs/gitops-pipeline.md has the exit codes.
+docs/archive/gitops-deployer.md has the exit codes.
 """
 
 import dataclasses

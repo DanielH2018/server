@@ -31,6 +31,11 @@ EXEMPT: dict[str, str] = {
         "renders for an importing role; it has no schedule or check of its own, and the role "
         "that imports it owns the check the timer reruns and carries the contract for it"
     ),
+    "gitops_deploy": (
+        "`templates/gitops-deploy.timer.j2` stays until H7.53 deletes the deployer, but the "
+        "role's tasks are one `meta: end_role`, so no host gets the timer; the retired "
+        "contract is in docs/archive/gitops-deploy-role.md"
+    ),
 }
 
 

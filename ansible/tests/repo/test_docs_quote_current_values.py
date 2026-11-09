@@ -53,22 +53,11 @@ import pytest
 from _helpers import REPO, load_yaml
 from lib.repo_paths import K3S_DEFAULTS
 
-GITOPS_DEFAULTS = REPO / "ansible/roles/setup/gitops_deploy/defaults/main.yml"
 PROBE_HEALTH = REPO / "scripts/diagnostics/probe_lib/health_rollout.py"
 
 
 def _k3s_default(name: str) -> Callable[[], str]:
     return lambda: str(load_yaml(K3S_DEFAULTS)[name])
-
-
-def _gitops_tick_minutes() -> str:
-    # systemd span, `10min`. The doc quotes the number of minutes.
-    value = str(load_yaml(GITOPS_DEFAULTS)["gitops_deploy_tick_interval"])
-    match = re.fullmatch(r"(\d+)min", value)
-    assert match, (
-        f"gitops_deploy_tick_interval is {value!r}, not a whole number of minutes"
-    )
-    return match.group(1)
 
 
 def _python_constant(path: Path, name: str) -> Callable[[], str]:
@@ -96,12 +85,6 @@ class Row:
 
 
 ROWS: list[Row] = [
-    Row(
-        "docs/gitops-pipeline.md",
-        r"every (\d+) minutes \(`gitops_deploy_tick_interval`",
-        "gitops_deploy_tick_interval",
-        _gitops_tick_minutes,
-    ),
     Row(
         "docs/deploying.md",
         r"a (\d+)-second restart window",

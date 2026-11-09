@@ -225,7 +225,7 @@ def test_a_synthetic_role_that_imports_host_lib_without_the_include_is_flagged(
     """The red proof, built in tmp_path rather than in the tree.
 
     A real role directory would be picked up by ansible-lint and by
-    the no-role-ships-a-test-file census row, so the proof has to live outside ROLES. That is why
+    the role census rows, so the proof has to live outside ROLES. That is why
     `consumers()` and `includes_of()` take their root as an argument.
     """
     role = tmp_path / "setup" / "synthetic"
@@ -265,7 +265,7 @@ def test_a_consumer_that_stamps_its_scripts_but_not_host_lib_is_flagged(tmp_path
     """The rejecting half, on a synthetic role: stamping SOMETHING is not stamping host_lib.
 
     Built in tmp_path for the same reason as the census's red proof — a real role directory
-    would be picked up by ansible-lint and by the no-role-ships-a-test-file census row.
+    would be picked up by ansible-lint and by the role census rows.
     """
     role = tmp_path / "setup" / "halfstamped" / "tasks"
     role.mkdir(parents=True)

@@ -77,7 +77,7 @@ def is_role_test_path(path: str) -> bool:
     the landing and the tick drop the same paths before they map one to a tag. It is
     only asked of a path `role_for` has already named a role for, where it answers for the
     role's own `tests/` and for a `test_*.py` or `conftest.py` anywhere in the role. Nothing
-    stages those: the `no-role-ships-a-test-file` row of
+    stages those: the `no-role-ships-a-pytest-file` row of
     `ansible/tests/repo/test_census_rows_roles.py` holds that tree-wide.
 
     `tasks/` is NOT dropped, for two reasons. A helper's tasks apply live state to each
