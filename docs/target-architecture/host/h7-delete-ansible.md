@@ -3151,8 +3151,19 @@ the `manual_plane` clearing, and *Rollback*'s
       from `ansible/inventory/hosts.ini`, with the header comment that explains them, the
       sentence in the root `README.md` that cites them, and the `has_repo_checkout`
       comment in `group_vars/all.yml` that names them. The playbooks and
-      `pre_tasks/load_secrets.yml`, which read the keys, go in the same PR. After it,
-      `git grep -n ansible_connection -- scripts` prints only fixture inventories;
+      `pre_tasks/load_secrets.yml`, which read the keys, go in the same PR. Two readers in
+      `scripts/` follow the keys:
+      `scripts/validate/validate_lib/fixture_host_case.py` writes its host line without
+      `ansible_connection=ssh`, as `hosts.ini` then does, and so does the assertion in
+      `scripts/validate/tests/test_fixture_host_case.py` that checks the line;
+      `test_the_page_names_each_hosts_package_and_no_inventory_connection_key` in
+      `scripts/docs/tests/test_gen_reference_hosts.py` drops its `ansible_connection`
+      assertion and the keys in its fixture inventory, because no inventory then holds a key
+      the page could leak. After it, `git grep -n ansible_connection -- scripts` matches only
+      the fixture inventories, and the assertions over them, in
+      `scripts/lib/tests/test_ansible_inventory.py`,
+      `scripts/docs/tests/test_gen_doc_fragments.py` and
+      `scripts/renderer/tests/_dialect_tree.py`;
     - **H7.20b** ansible-core, the collections, `ansible.cfg`, `.ansible-lint`, the prek
       hook and the setup entries left in `pyproject.toml`. The deletion census's allowlist
       is empty by then;
