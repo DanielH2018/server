@@ -16,6 +16,7 @@ Run: uv run pytest ansible/tests/repo/test_ci_sops_kind_cosign_are_cached.py
 
 import json
 import re
+import sys
 
 import pytest
 from _helpers import REPO
@@ -236,3 +237,107 @@ def test_each_job_checks_the_pinned_sha256(tool, workflow, job):
     assert _cosign_pins(workflow, job), f"{workflow} {job}: no {tool} sha256 pin"
     checks = [s for s in installs if "sha256sum -c" in str(s.get("run", ""))]
     assert checks, f"{workflow} {job}: no {tool} step runs sha256sum -c against the pin"
+
+
+def _broken(monkeypatch, workflow: str, job: str, mutate) -> None:
+    """Point `_job` at a copy of one job with `mutate` applied to its steps."""
+    loaded, steps = _job(workflow, job)
+    mutate(steps)
+    real = _job
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "_job",
+        lambda w, j: (loaded, steps) if (w, j) == (workflow, job) else real(w, j),
+    )
+
+
+def _edit_fetch(tool: str, steps: list[dict], old: str, new: str) -> None:
+    _, step = _installs(tool, steps)[0]
+    assert old in step["run"], old
+    step["run"] = step["run"].replace(old, new)
+
+
+def test_a_job_without_its_cache_step_is_flagged(monkeypatch):
+    _broken(
+        monkeypatch,
+        "bootstrap-drill.yml",
+        "drill",
+        lambda steps: steps.__setitem__(
+            slice(None),
+            [s for s in steps if "pinned/sops" not in str(s.get("with", ""))],
+        ),
+    )
+    with pytest.raises(AssertionError, match="no earlier pin-keyed actions/cache"):
+        test_each_job_restores_the_tool_from_a_cache_keyed_on_the_pin(
+            "sops", "bootstrap-drill.yml", "drill"
+        )
+
+
+def test_a_cache_with_a_constant_key_is_flagged(monkeypatch):
+    def constant_key(steps):
+        for s in steps:
+            if "pinned/cosign" in str(s.get("with", "")):
+                s["with"]["key"] = "cosign-linux"
+
+    _broken(monkeypatch, "promote.yml", "publish", constant_key)
+    with pytest.raises(AssertionError, match="no earlier pin-keyed actions/cache"):
+        test_each_job_restores_the_tool_from_a_cache_keyed_on_the_pin(
+            "cosign", "promote.yml", "publish"
+        )
+
+
+def test_a_curl_outside_the_cache_check_is_flagged(monkeypatch):
+    _broken(
+        monkeypatch,
+        "flux-deletion-drill.yml",
+        "drill",
+        lambda steps: _edit_fetch(
+            "kind",
+            steps,
+            'if [[ -f "$kind" ]]; then',
+            'if [[ -n "$KIND_VERSION" ]]; then',
+        ),
+    )
+    with pytest.raises(AssertionError, match="outside the cache-miss branch"):
+        test_each_job_fetches_the_tool_only_on_a_cache_miss(
+            "kind", "flux-deletion-drill.yml", "drill"
+        )
+
+
+def test_a_curl_with_a_short_retry_window_is_flagged(monkeypatch):
+    _broken(
+        monkeypatch,
+        "ci.yml",
+        "pytest",
+        lambda steps: _edit_fetch("sops", steps, "--retry 12", "--retry 5"),
+    )
+    with pytest.raises(AssertionError, match="must retry all errors"):
+        test_each_fetch_outlasts_a_release_outage("sops", "ci.yml", "pytest")
+
+
+def test_a_cosign_fetch_without_its_digest_check_is_flagged(monkeypatch):
+    _broken(
+        monkeypatch,
+        "prune-artifacts.yml",
+        "prune",
+        lambda steps: _edit_fetch(
+            "cosign", steps, "| sha256sum -c --strict", "> /dev/null"
+        ),
+    )
+    with pytest.raises(AssertionError, match="no cosign step runs sha256sum -c"):
+        test_each_job_checks_the_pinned_sha256("cosign", "prune-artifacts.yml", "prune")
+
+
+def test_a_workflow_using_the_cosign_action_is_flagged(monkeypatch):
+    path = REPO / ".github/workflows/promote.yml"
+    text = path.read_text(encoding="utf-8")
+    real = type(path).read_text
+
+    def with_action(self, *args, **kwargs):
+        if self == path:
+            return text + f"\n# uses: {COSIGN_ACTION}0000\n"
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(path), "read_text", with_action)
+    with pytest.raises(AssertionError, match="cosign-installer downloads cosign"):
+        test_no_workflow_installs_cosign_through_the_action()

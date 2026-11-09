@@ -123,6 +123,7 @@ def _prune_with_a_wider_permission(wf):
 
 
 def _prune_with_a_drifted_cosign_release(wf):
+    assert wf["env"]["COSIGN_VERSION"] != "v3.1.3"
     wf["env"]["COSIGN_VERSION"] = "v3.1.3"
 
 
