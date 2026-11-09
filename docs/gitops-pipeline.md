@@ -721,8 +721,8 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
     behind the tip on nearly every tick, so a per-SHA stamp would age past six hours while the
     deployer works normally. `entrypoint()` re-resolves the REAL `origin/<branch>` after `main()`
     returns, so `behind_since` names the tip and a tail that never goes green still pages at 6 h.
-    Readers state the meaning in their own prose: `scripts/lib/deployer_park.py` (shared by
-    `deploy.sh` exit 4 and the SessionStart banner) and `monitor-bridge/files/checks/gitops.py`.
+    Readers state the meaning in their own prose: `scripts/lib/deployer_park.py`, shared by
+    `deploy.sh` exit 4 and the SessionStart banner.
   - **A wedge cannot game the re-stamp.** Every path that stops the deployer converging (a park,
     a hold at the tip, a dirty tree, a diverged tree, a tail with no green ancestor or a
     contention reset) leaves HEAD where the tick found it, so `fast_forwarded` is false. A
@@ -732,14 +732,9 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
     pins the combination.
   - **The `manual_plane` ledger class is the watchdog's second arm.** A recorded role
     fast-forwards, so `behind_since` clears and every marker the watchdog reads goes quiet while
-    the role stays unapplied. `checks.gitops.gitops_status` therefore reads `manual_plane` too and
-    pages once the OLDEST pending line is older than the same `GITOPS_BEHIND_MAX_S` (6 h), naming
-    the roles and the clear command. It is reported LAST of the four arms: the other three name a
-    deployer that has stopped, where a pending role blocks nobody. The pod reads it off the same
-    `:ro` state mount as `behind_since` and parses it with `gitops_ledger.manual_plane_entries`,
-    its own generated copy, because it cannot import this tree. The SessionStart banner reads the
-    class too, through `lib.deployer_park`, and names a pending role from the moment it is
-    recorded.
+    the role stays unapplied. The SessionStart banner reads `manual_plane` through
+    `lib.deployer_park` and names a pending role from the moment it is recorded. No check pages
+    on it: monitor-bridge's GitOps Status check left in H7.49b, before H7.52 retires the timer.
 - **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
   rotation pushed from another machine) are fast-forwarded, and the tick applies only the
   readers the two bullets below derive. The new value reaches any other consumer only on its
@@ -976,8 +971,7 @@ repeat of a held entry keeps its first line. An apply drops only the entries it 
 `hold_sha` clears once none is left. A torn line still counts as held, so a plane the readers
 cannot parse never lets `hold_sha` clear over it.
 
-**Clearing unconditionally erases the fault.** Every consumer gates on `hold_sha` alone:
-`checks.gitops.gitops_status` reads `hold_plane` only to choose a sentence, `land.sh` reports
+**Clearing unconditionally erases the fault.** Every consumer gates on `hold_sha` alone: `land.sh` reports
 `deploy-failed` off `hold_sha`, and `renovate_agent.decide` refuses to run while one is set. A
 hold that cleared on any successful apply turned **GitOps Deploy — Status** green over a plane
 nothing had applied (issue #878).

@@ -111,8 +111,6 @@
  "ansible/roles/k8s/monitor-bridge/tests/test_check_cloudflare_ips.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_etcd_drill.py": 0.04,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_exporters.py": 0.04,
- "ansible/roles/k8s/monitor-bridge/tests/test_check_gitops.py": 0.0,
- "ansible/roles/k8s/monitor-bridge/tests/test_check_gitops_owed.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_ha.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_healthchecks.py": 0.0,
  "ansible/roles/k8s/monitor-bridge/tests/test_check_host_packages.py": 0.04,
