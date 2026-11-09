@@ -655,12 +655,12 @@ rehearse_bootstrap() {
   bd deviate "$GUEST_IP" "$STAGING_GATEWAY" >"$LOG_DIR/deviate.out" 2>&1 \
     || { bd_evidence; fail "the guest-local deviations failed; see $LOG_DIR/deviate.out"; }
   bd_run bootstrap
-  bd start >"$LOG_DIR/start.out" 2>&1 || { bd_evidence; fail "k3s.service did not start"; }
+  bd_run start
 
   local verdict="" ok=0 deadline=$((SECONDS + BD_READY_DEADLINE))
   while :; do
     guest_running || { verdict="the guest exited during the check"; break; }
-    verdict="$(BD_STEP_TIMEOUT=60 bd check 2>&1)" && { ok=1; break; }
+    verdict="$(BD_STEP_TIMEOUT=60 bd check "$GUEST_IP" 2>&1)" && { ok=1; break; }
     (( SECONDS < deadline )) || break
     sleep "$RH_POLL"
   done

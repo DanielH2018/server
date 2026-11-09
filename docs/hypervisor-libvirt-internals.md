@@ -196,9 +196,10 @@ the pass check. This section holds what the code does.
   guest keeps. `homelab-updater` is rendered because daniel-box's package enables its timer.
 - **What runs.** After the fence check it ships `files/bootstrap-drill-guest-run.sh` and the mask
   list, and nothing else. The guest renames itself `daniel-box`, clones GitHub at the checkout's
-  `HEAD`, and runs `bootstrap-host.sh` to step 4. Then come the deviations, the full run and
-  `systemctl enable --now k3s.service`. The three long steps run detached, and the orchestrator
-  polls each one's exit file over fresh ssh sessions for `hypervisor_bootstrap_drill_step_deadline`.
+  `HEAD`, and runs `bootstrap-host.sh` to step 4. Then come the deviations, the full run and the
+  start, which moves the CoreDNS marker aside until k3s has created Deployment `coredns`. The four
+  long steps run detached, and the orchestrator polls each one's exit file over fresh ssh sessions
+  for `hypervisor_bootstrap_drill_step_deadline`.
 - **What it leaves alone.** It stages no cluster token and no R2 credential. It writes no stamp and
   no textfile verdict, and it ignores `hypervisor_etcd_drill_armed`, as the SUC rehearsal does.
 - **Not proven.** The guest has 2 GiB and two virtual CPUs, the drill guest's size. It skips the token and

@@ -926,8 +926,7 @@ To rebuild without GitHub or GHCR, take every fetch from the break-glass kit:
 ### The guest drill
 
 The guest drill proves daniel-box's procedure above on production hardware. It waits for the k3s
-upgrade. It runs neither the CoreDNS marker steps nor the server checks
-([#7699](https://github.com/DanielH2018/server/issues/7699)). *The proofs* in [H7](target-architecture/host/h7-delete-ansible.md) holds its fence, its
+upgrade. *The proofs* in [H7](target-architecture/host/h7-delete-ansible.md) holds its fence, its
 identity and its three guest-local deviations.
 
 To run it, use a checkout on daniel-server whose `HEAD` is a green first-parent commit of master,
@@ -955,10 +954,18 @@ the guest clones GitHub at that checkout's `HEAD`. The run's directory under
        `coredns-host.service` stays unmasked, because step 6 refuses to stop systemd-resolved
        until it answers on 127.0.0.1;
     1. `bootstrap-host.sh daniel-box --local-build <clone>`;
-    1. `systemctl enable --now k3s.service`.
+    1. the new-cluster start: the guest moves the CoreDNS marker aside, runs
+       `systemctl enable --now k3s.service`, waits for k3s to create Deployment `coredns`, then puts
+       the marker back. The guest masks `homelab-k3s-kubeconfig.service`, so the drill skips its
+       start.
 - **What passes.** The guest has `homelab-tools`, `homelab-updater` and `homelab-daniel-box`
-  installed, `k3s.service` is the only k3s unit, `k3s kubectl get node daniel-box` reads Ready,
-  and `ufw` is active. The orchestrator polls that check over fresh ssh sessions.
+  installed, and `k3s.service` is the only k3s unit. `k3s kubectl get node daniel-box` reads
+  Ready, and Deployment `coredns` reads Available. The four server reads above answer as
+  expected, except that the InternalIP must be the guest's own address, which its `node-ip`
+  deviation pins. The CoreDNS marker is back in place, and `ufw` is active.
+  `bootstrap-verdict.txt` holds one line per read. The orchestrator polls that check over fresh
+  ssh sessions. The rotation stage is printed but not judged, because a new cluster stays at
+  `start` until `rotate-keys` runs.
 - **Blast radius.** The drill creates one transient domain and its disk on daniel-server, and it
   takes CPU and memory from the agent node for one run. It uses the existing `staging` network and
   its fence. Every service keeps serving, because the guest reaches no LAN address. The rollback

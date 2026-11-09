@@ -209,6 +209,7 @@ def test_a_passing_drill_runs_every_step_after_the_fence_and_touches_no_drill_ev
         < events.index(f"step prepare {SHA}")
     )
     assert "step deviate 192.168.140.11 192.168.140.1" in events
+    assert "step check 192.168.140.11" in events
     assert "Ready: True" in r.evidence("bootstrap-verdict.txt")
     logged = [e for e in events if e.startswith("logger ")]
     assert any("-t etcd-drill-bootstrap-drill status=up" in e for e in logged), logged
