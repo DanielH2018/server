@@ -80,6 +80,9 @@ files:
 # the hand-installed github-cli.list names the same repository, so reconcile retires it.
 legacy:
   - {path: /etc/apt/sources.list.d/github-cli.list}
+  # #7919: the Ansible-era enable link, left dangling when its unit file went. The package's own
+  # link is in /usr/lib/systemd/system/sockets.target.wants.
+  - {path: /etc/systemd/system/sockets.target.wants/homelab-rootq.socket}
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
   # H7.61 and H7.59: the copies initial_setup installed, which sit ahead of /usr/bin/vale and

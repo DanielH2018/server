@@ -169,6 +169,9 @@ legacy:
   # The hypervisor role's teardown half kept this host free of the network source directory until
   # H7.34 emptied the role. Nothing recreates it, so the entry stays a no-op on a clean host.
   - {path: /etc/libvirt/declared-networks}
+  # #7919: the Ansible-era enable link, left dangling when its unit file went. The package's own
+  # link is in /usr/lib/systemd/system/sockets.target.wants.
+  - {path: /etc/systemd/system/sockets.target.wants/homelab-rootq.socket}
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
   # H7.32: the maintenance wrapper the crons ran, and the firmware cron, which host-maintenance's

@@ -249,6 +249,12 @@ def test_the_scan_logs_its_verdict_and_still_runs_without_a_credential(tmp_path)
     assert verdict is not None and verdict[0] == "up", verdict
 
 
+def test_the_timer_runs_a_slot_it_missed():
+    """A weekly slot missed while the timer is stopped would otherwise wait a week (#7920)."""
+    for host in HOSTS:
+        assert re.search(r"^Persistent=true$", shipped_text(host, TIMER), re.M), host
+
+
 def test_the_push_deadline_covers_one_week_and_not_two():
     """The producer is homelab-rkhunter-check.timer (integrity-scans component), weekly on Wednesday."""
     for host in HOSTS:
