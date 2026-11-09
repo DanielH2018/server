@@ -559,7 +559,6 @@
  "ansible/tests/setup/test_coredns_metrics_port_agrees.py": 0.01,
  "ansible/tests/setup/test_cron_scripts_publish_via_pr.py": 0.1,
  "ansible/tests/setup/test_delegated_writes_attribute_to_target.py": 0.19,
- "ansible/tests/setup/test_dev_tooling_hosts.py": 0.01,
  "ansible/tests/setup/test_disk_health_deadline.py": 0.15,
  "ansible/tests/setup/test_disk_health_textfile.py": 0.23,
  "ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.py": 2.07,

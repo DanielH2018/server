@@ -658,7 +658,6 @@
  "ansible/tests/setup/test_cron_scripts_publish_via_pr.py": 0.08,
  "ansible/tests/setup/test_crons_gate_their_commit_on_the_suite.py": 0.0,
  "ansible/tests/setup/test_delegated_writes_attribute_to_target.py": 0.07,
- "ansible/tests/setup/test_dev_tooling_hosts.py": 0.03,
  "ansible/tests/setup/test_disk_health_deadline.py": 0.06,
  "ansible/tests/setup/test_disk_health_textfile.py": 0.44,
  "ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.py": 0.0,

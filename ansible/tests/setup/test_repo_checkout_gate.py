@@ -28,8 +28,9 @@ from _role_census import task_files
 GATE = "has_repo_checkout"
 
 # Host allowlists whose every member holds a checkout, so membership gates as strongly as GATE.
-# By name, and only where another test pins the membership — see `_gated`.
-PINNED_ALLOWLISTS = frozenset({"dev_tooling_hosts"})
+# By name, and only where another test pins the membership — see `_gated`. None since H7.63
+# deleted the tasks `dev_tooling_hosts` gated.
+PINNED_ALLOWLISTS: frozenset[str] = frozenset()
 
 # A path that only resolves where this repo is checked out.
 NEEDLES = ("}}/server", "playbook_dir", "~/server")
@@ -42,7 +43,7 @@ CONTROLLER_SIDE = frozenset({"src", "content", "fail_msg", "msg", "that"})
 # with the member that went missing, and an assertion over an empty census passes vacuously.
 KNOWN_HITS = frozenset(
     {
-        "Install pinned Ansible collections from requirements.yml",
+        "Read the k3s pin from the system-upgrade role",
     }
 )
 
@@ -126,9 +127,8 @@ def _gated(when: object) -> bool:
     """Whether this `when` keeps the task off a host with no checkout.
 
     A host pin counts too: `inventory_hostname == 'daniel-box'` says strictly more than the gate,
-    since daniel-box holds a checkout by construction. So does membership of one NAMED host
-    allowlist: `dev_tooling_hosts` is daniel-box and daniel-server, both of which
-    hold a checkout, and test_dev_tooling_hosts.py asserts that exact membership. A list is
+    since daniel-box holds a checkout by construction. So does membership of a NAMED host
+    allowlist in `PINNED_ALLOWLISTS`, whose membership another test pins. A list is
     accepted here by name rather than by shape, because `inventory_hostname in <anything>` says
     nothing on its own — an allowlist nobody has pinned could hold a checkout-less host.
     """
@@ -209,12 +209,6 @@ def test_an_ungated_task_is_rejected():
 def test_the_gate_is_accepted_in_both_when_forms():
     assert _gated(GATE)
     assert _gated([GATE, "not something_else"])
-
-
-def test_a_pinned_host_allowlist_counts_as_a_gate():
-    """Both members of `dev_tooling_hosts` hold a checkout, so a task gated on the list cannot
-    reach a host that has none."""
-    assert _gated("inventory_hostname in dev_tooling_hosts")
 
 
 def test_an_unpinned_host_allowlist_does_not():

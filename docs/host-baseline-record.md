@@ -23,9 +23,6 @@ component and step 4 of `hosts/bootstrap-host.sh`, and deleted the tasks.
 
 ## Tooling, pins and the root HOME trap
 
-- **Every `tooling` task but the home-directory read is gated on `dev_tooling_hosts`** (daniel-box
-  and daniel-server). daniel-pi holds a checkout but nobody commits from it (#1726). Membership is
-  enforced by `ansible/tests/setup/test_dev_tooling_hosts.py`.
 - **The packages and the dotfiles repo own the dev tooling (H7.61, H7.62).** `/usr/bin/uv` and
   `/usr/bin/vale` are one-line execs of the `homelab-tools` binaries, the `worktree-holders`
   component ships the root-run holder scan, and the dotfiles repo installs the per-user uv, prek and
