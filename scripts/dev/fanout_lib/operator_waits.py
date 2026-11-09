@@ -56,7 +56,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from findings_lib.issue_model import is_deferred
+from findings_lib.issue_model import is_blocked, is_deferred
 
 TEXTFILE = Path("/var/lib/node-exporter-textfile/fanout_operator_waits.prom")
 OWED = Path("/var/lib/gitops-deploy/owed.jsonl")
@@ -225,16 +225,16 @@ def render(starts: Mapping[str, list[float]], now: float) -> str:
     return "\n".join(lines) + "\n"
 
 
-ISSUE_STATES = ("free", "claimed", "deferred", "manual")
+ISSUE_STATES = ("free", "claimed", "deferred", "blocked", "manual")
 
 
 def issue_states(issues: Iterable[Mapping], today: str) -> dict[str, int]:
-    """How many open `claude` issues sit in each state, read from their labels alone (#5672).
+    """How many open `claude` issues sit in each state, read from labels and blockers (#5672).
 
-    `manual` wins, then a `not-before:<date>` label later than `today` (`deferred`), then
-    `claimed`; the rest are `free`. This is an approximation of `findings.py next`, which
-    needs ssh to each batch's host to judge a claim and a PR read to withhold an issue an
-    open PR closes. A stale claim counts as `claimed` here, so the count can read low, and an
+    `manual` wins, then a `not-before:<date>` label later than `today` (`deferred`), then an
+    open "blocked by" issue (`blocked`), then `claimed`; the rest are `free`. This is an
+    approximation of `findings.py next`, which needs ssh to each batch's host to judge a
+    claim and a PR read to withhold an issue an open PR closes. A stale claim counts as `claimed` here, so the count can read low, and an
     issue an open PR closes counts as `free`, so it can read high. On 2026-10-18 it read 54
     against `next`'s 56; the idle rule asks only whether the count is above 0.
     """
@@ -249,6 +249,8 @@ def issue_states(issues: Iterable[Mapping], today: str) -> dict[str, int]:
             out["manual"] += 1
         elif is_deferred(dict(issue), date.fromisoformat(today)):
             out["deferred"] += 1
+        elif is_blocked(dict(issue)):
+            out["blocked"] += 1
         elif "claimed" in names:
             out["claimed"] += 1
         else:
@@ -263,7 +265,7 @@ def render_queue(states: Mapping[str, int], capacity: Mapping[str, int]) -> str:
     `claude-cgroup-metrics.sh`, already has one series per running batch on each host.
     """
     lines = [
-        "# HELP findings_issues Open claude-labelled issues by state, from their labels.",
+        "# HELP findings_issues Open claude-labelled issues by state, from their labels and blockers.",
         "# TYPE findings_issues gauge",
         *(f'findings_issues{{state="{s}"}} {states.get(s, 0)}' for s in ISSUE_STATES),
         "# HELP fanout_batch_capacity The live fan-out batches a host admits.",

@@ -70,6 +70,18 @@ interactions. Two views fill that gap, and both read from the label:
 - **The "Deferred, by date" table on the generated backlog page.** `scripts/docs/reference/backlog.py`
   renders every open finding carrying a date, soonest first, marked *withheld* or *date passed*.
 
+A date is the wrong tool for work that waits on another issue. A guessed date either expires
+before that work lands or holds the issue back after it has. On 2026-11-09, #7195 waited on
+#7178, which had closed on 2026-11-06, while #7195's date kept it hidden until 2026-11-20. `findings.py block <n> --on <m>`
+records GitHub's native "blocked by" relationship instead. `next` and `claim` read it from the
+`blockedBy` field of the same `gh issue list` call that returns the labels, and withhold the
+issue while any blocker is open. An issue frees itself when its last blocker closes, so nobody
+clears the relationship. The issue page and the Project board show a "Blocked" badge from it,
+and the backlog page lists it in its blocked section. Work that waits on a set of
+changes with no issue needs one filed first, because only an issue can block. A block and a
+date can apply together, as for work that waits on an issue and then on a retention period;
+`next` offers the issue once both have passed.
+
 ## The claim record
 
 A claim is a **comment**, following the machine-readable trailer convention

@@ -88,7 +88,7 @@ same failure, and `claim` leaves a stale claim standing rather than reaping on a
 the good claims in the same batch.
 
 PICKING UP WORK. `next` prints EVERY issue a session may claim, best severity first,
-withholding `manual` issues, issues deferred to a later date, issues a LIVE claim already
+withholding `manual` issues, issues deferred to a later date, issues an open issue blocks, issues a LIVE claim already
 holds, and issues an open PR already says it closes. An issue whose claim is stale IS
 offered, marked with who holds it — `claim` reaps that claim on the way past, and `reap`
 clears every one of them at once. `--limit N` bounds the list; there is no default bound,
@@ -102,6 +102,14 @@ withheld issue reads as a closed one to whoever looks at the backlog. `defer <n>
 Both also copy the date into the "Not before" field on the Server Issue Tracking Project, which the board sorts and
 filters on; a board failure only warns. `board-dates` makes every open issue's board date match its label.
 
+BLOCKING AN ISSUE ON OTHER WORK. `block <n> --on <m>` (or `open --blocked-by <m>`) records GitHub's native
+"blocked by" relationship. `next` and `claim` withhold the issue while any blocker is open, and it frees itself the
+moment the last one closes, so use it rather than a guessed date when the issue waits on another issue or on the
+PR that closes one. A set of changes with no issue gets one filed first. `next` names a blocked issue under a
+`blocked:` line, as it names a deferred one. A block and a date can both apply, as for work that waits on an
+issue and then on a retention period, and `next` offers the issue only once both have passed.
+`block <n> --clear` removes every blocker now, or only those `--on` names.
+
 RESERVING AN ISSUE FOR THE OPERATOR. `manual <n>` (or `open --manual`) adds the `manual`
 label: `next` withholds the issue, `claim` refuses it, and `list` still marks it `[manual]`.
 Unlike a date, it never expires; `manual <n> --clear` removes it. Marking an issue manual also
@@ -112,7 +120,7 @@ never dropped silently.
 Exit codes: 0 done; 1 gh failed, or `reap` refused a git read failure rather than call it
 "nothing is claimed"; 64 bad arguments, which includes a `--worktree` name the claim trailer
 could not carry; 3 nothing was written because the issue refuses it — closed, `manual`,
-deferred to a later date, outside the register, held by another worktree, not claimed, or
+deferred to a later date, blocked by an open issue, outside the register, held by another worktree, not claimed, or
 lost a race to another claim — or because `claim`'s own `--worktree` would read stale at
 birth, or because `manual` found the label already in the state it was asked for.
 """
@@ -154,7 +162,7 @@ from dev.findings_lib.issue_model import (
     NO_REOPEN,
     cited_paths,
     current_claim,
-    deferred,
+    is_deferred_row,
     now_iso,
     fingerprint,
     issue_rows,
@@ -163,9 +171,12 @@ from dev.findings_lib.issue_model import (
     pickable,
     sort_key,
     today_utc,
+    waiting,
+    waiting_line,
 )
 from dev.findings_lib.plans import (
     ClaimRefused,
+    plan_block,
     plan_close,
     plan_comment,
     plan_defer,
@@ -206,6 +217,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         sys.stderr.write(f"open: body file not found: {args.body_file}\n")
         return FINDINGS_BAD_ARGS
     body = args.body_file.read_text()
+    blockers = _split_refs(args.blocked_by)
     fp = fingerprint(args.title, args.file)
     labels = ["claude", f"severity/{args.severity}", f"kind/{args.kind}"]
     if args.domain:
@@ -239,12 +251,17 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
     if outcome == "created":
         if args.dry_run:
             run(plans, True, tools)
+            if blockers:
+                print(f"gh issue edit <new> --add-blocked-by {','.join(blockers)}")
             print(f"(dry-run) would create; fingerprint {fp}")
             return 0
         url = _create_with_optional_project(plans[0], tools)
         number = url.rsplit("/", 1)[-1]
         if args.not_before:
             sync_board_date(int(number), args.not_before, tools, dry_run=False)
+        if blockers:
+            # `gh issue create` has no blocked-by flag, so the relationship is a second write.
+            run(plan_block({"number": number}, on=blockers, clear=False), False, tools)
         print(f"#{number} created  {url}")
         return 0
     # "created" is the only outcome plan_open returns for a missing issue, so every branch
@@ -267,6 +284,8 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         plans += plan_release_held(
             existing, when=now_iso(), reason="reopened after a re-observation"
         )
+    if blockers:
+        plans += plan_block({**existing, "state": "OPEN"}, on=blockers, clear=False)
     if args.manual and "manual" not in label_names(existing):
         # A matched issue would otherwise drop the flag silently. A reopened one is open by
         # the time these run, and its claim was released just above.
@@ -343,6 +362,34 @@ def cmd_defer(args: argparse.Namespace, tools: FindingsTools) -> int:
     )
     print(f"#{args.number} {what}")
     return 0
+
+
+def cmd_block(args: argparse.Namespace, tools: FindingsTools) -> int:
+    """Handles the ``block`` subcommand: marks an issue blocked by others, or removes that.
+
+    Returns:
+        FINDINGS_BAD_ARGS if neither ``--on`` nor ``--clear`` was given; 3 if the issue is
+        closed, names itself, or ``--clear`` finds no blocker; 0 otherwise.
+    """
+    on = _split_refs(args.on)
+    if not on and not args.clear:
+        sys.stderr.write("block: need --on <issue>, or --clear\n")
+        return FINDINGS_BAD_ARGS
+    issue = _load_issue(args.number, tools)
+    try:
+        plans = plan_block(issue, on=on, clear=args.clear)
+    except ClaimRefused as exc:
+        print(f"#{args.number} refused: {exc.reason}", file=sys.stderr)
+        return 3
+    run(plans, args.dry_run, tools)
+    what = "unblocked from" if args.clear else "blocked by"
+    print(f"#{args.number} {what} {plans[0][-1].replace(',', ', ')}")
+    return 0
+
+
+def _split_refs(values: list[str] | None) -> list[str]:
+    """``--on 1,2 --on 3`` as ``["1", "2", "3"]``; gh takes either spelling."""
+    return [v.strip() for value in values or [] for v in value.split(",") if v.strip()]
 
 
 def _release_for_manual(issue: dict) -> list[list[str]]:
@@ -443,10 +490,6 @@ def cmd_sync_labels(args: argparse.Namespace, tools: FindingsTools) -> int:
     return 0
 
 
-def _still_deferred(row: dict, today) -> bool:
-    return bool(row["not_before"]) and today.isoformat() < row["not_before"]
-
-
 def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``list`` subcommand: prints open findings as a table or JSON.
 
@@ -473,7 +516,8 @@ def cmd_list(args: argparse.Namespace, tools: FindingsTools) -> int:
                 ("verify-by", r["verify_by"]),
                 ("manual", r["manual"]),
                 # Shown only while it still withholds: past its date the label is inert.
-                (f"deferred until {r['not_before']}", _still_deferred(r, today)),
+                (f"deferred until {r['not_before']}", is_deferred_row(r, today)),
+                (f"blocked by {', '.join(r['blocked_by'])}", bool(r["blocked_by"])),
                 (f"claimed:{r['claimed']}", bool(r["claimed"])),
             )
             if on
@@ -521,13 +565,10 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
         # The holder the text render names as `[stale claim by ...]`, null when unclaimed:
         # an orchestrator reading `--json` told a free issue from one `claim` reaps (#3927).
         r["stale_claim_by"] = stale.get(r["number"])
-    # Named, not hidden: withheld silently, a deferred issue reads as a closed one. Under
+    # Named, not hidden: withheld silently, a waiting issue reads as a closed one. Under
     # `--json` the note goes to stderr, because the array IS the free set an orchestrator
-    # claims (`issue-fanout`), and a deferred row inside it would be claimed.
-    held_back = [
-        f"deferred: #{r['number']} until {r['not_before']}  {r['title']}"
-        for r in deferred(issues, today=today)
-    ]
+    # claims (`issue-fanout`), and a waiting row inside it would be claimed.
+    held_back = [waiting_line(r, today) for r in waiting(issues, today=today)]
     if args.json:
         print(json.dumps(rows, indent=2))
         for line in held_back:
@@ -608,6 +649,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
         "touch": cmd_touch,
         "comment": cmd_comment,
         "defer": cmd_defer,
+        "block": cmd_block,
         "manual": cmd_manual,
         "claim": cmd_claim,
         "release": cmd_release,

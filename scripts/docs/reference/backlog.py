@@ -49,7 +49,7 @@ SOURCE = "scripts/docs/reference/backlog.py"
 
 
 def render_markdown(rows: list[dict], today: date | None = None) -> str:
-    """Renders the backlog page: the open table, the deferred dates, the settled register.
+    """Renders the backlog page: the open table, the deferred and blocked rows, the settled register.
 
     Args:
         rows: findings of any state in `issue_rows` shape, as returned by
@@ -77,6 +77,7 @@ def render_markdown(rows: list[dict], today: date | None = None) -> str:
         parts.extend(_open_table(open_rows))
     parts.append("")
     parts.extend(_deferred_section(open_rows, today or today_utc()))
+    parts.extend(_blocked_section(open_rows))
     parts.extend(_settled_section(settled))
     return "\n".join(parts).rstrip("\n") + "\n"
 
@@ -105,6 +106,29 @@ def _open_table(rows: list[dict]) -> list[str]:
             f"{r['domain'] or '-'} | {title} | {r['first_seen']} | {r['reobservations']} | "
             f"{claimed} | {verify_by} |"
         )
+    return parts
+
+
+def _blocked_section(rows: list[dict]) -> list[str]:
+    """Every open finding an open issue still blocks, by number."""
+    parts = [
+        "## Blocked on other issues\n",
+        'Open findings with an open "blocked by" issue. `findings.py next` withholds each '
+        "one until its last blocker closes, with nothing to clear. Add a blocker with "
+        "`findings.py block <n> --on <issue>`.\n",
+    ]
+    blocked = [r for r in rows if r.get("blocked_by")]
+    if not blocked:
+        parts.append("No blocked findings.\n")
+        return parts
+    parts.append("| # | Blocked by | Finding |")
+    parts.append("|---|---|---|")
+    for r in sorted(blocked, key=lambda r: r["number"]):
+        parts.append(
+            f"| [#{r['number']}]({r['url']}) | {', '.join(r['blocked_by'])} | "
+            f"{md_cell(r['title'])} |"
+        )
+    parts.append("")
     return parts
 
 

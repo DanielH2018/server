@@ -10,7 +10,7 @@ from dev.findings import main
 from dev.findings_lib.solo_only import solo_only_reasons, fanout_tooling_paths
 from dev.findings_lib.issue_model import (
     claim_comment,
-    deferred,
+    waiting,
     not_before,
     pickable,
     pr_refs,
@@ -55,7 +55,7 @@ def test_a_manual_issue_is_not_pickable():
 def test_an_issue_deferred_to_tomorrow_is_not_pickable():
     issue = _issue(1, labels=["not-before:2026-09-12"])
     assert pickable([issue], live_claims=set(), pr_refs=set(), today=TODAY) == []
-    assert [r["number"] for r in deferred([issue], today=TODAY)] == [1]
+    assert [r["number"] for r in waiting([issue], today=TODAY)] == [1]
 
 
 def test_an_issue_deferred_to_today_is_pickable():
@@ -63,7 +63,7 @@ def test_an_issue_deferred_to_today_is_pickable():
     issue = _issue(1, labels=["not-before:2026-09-11"])
     rows = pickable([issue], live_claims=set(), pr_refs=set(), today=TODAY)
     assert [r["number"] for r in rows] == [1]
-    assert deferred([issue], today=TODAY) == []
+    assert waiting([issue], today=TODAY) == []
 
 
 def test_an_issue_deferred_to_yesterday_is_pickable():
@@ -87,7 +87,7 @@ def test_several_not_before_labels_take_the_latest_date():
 
 def test_a_manual_issue_is_not_listed_as_deferred_either():
     issue = _issue(1, labels=["manual", "not-before:2026-09-20"])
-    assert deferred([issue], today=TODAY) == []
+    assert waiting([issue], today=TODAY) == []
 
 
 def test_a_live_claimed_issue_is_not_pickable():

@@ -90,7 +90,9 @@ NOT_BEFORE_FIELD = "Not before"
 # renaming them would have turned that move into a rewrite. The underscore still carries what
 # it did before — internal to the findings modules, not an API another script may import.
 # Conventions for a new module: docs/python-code-organization.md.
-_LIST_FIELDS = "number,title,state,labels,body,createdAt,closedAt,url,comments"
+_LIST_FIELDS = (
+    "number,title,state,labels,body,createdAt,closedAt,url,comments,blockedBy"
+)
 # `\s*$` rather than `$`: a body fetched from the API can carry CRLF line endings, and
 # `re.M`'s `$` matches before the `\n` but not before the `\r`.
 _FP_RE = re.compile(r"^Fingerprint: `([0-9a-f]{12})`\s*$", re.M)
@@ -221,6 +223,29 @@ def is_deferred(issue: dict, today: date) -> bool:
     """Whether ``issue`` is withheld on ``today``. `not-before: D` means workable ON D."""
     day = not_before(issue)
     return day is not None and today < day
+
+
+def open_blockers(issue: dict) -> list[str]:
+    """The still-open issues ``issue`` is blocked by, as `#n` or `owner/repo#n`, sorted.
+
+    Read from GitHub's native "blocked by" relationship (`gh issue ... --json blockedBy`),
+    which `block` and `open --blocked-by` write. A closed blocker no longer withholds
+    anything, so the issue becomes workable the moment its last blocker closes, with
+    nothing to clear. A blocker in another repository is spelled with its slug.
+    """
+    found = []
+    for node in (issue.get("blockedBy") or {}).get("nodes") or []:
+        if node.get("state") != "OPEN":
+            continue
+        m = _ISSUE_URL_RE.match(node.get("url") or "")
+        repo = "" if m is None or m.group(1).lower() == PR_REPO.lower() else m.group(1)
+        found.append((repo, int(node["number"])))
+    return [f"{repo}#{n}" for repo, n in sorted(found)]
+
+
+def is_blocked(issue: dict) -> bool:
+    """Whether an open blocker withholds ``issue`` from `next` and `claim`."""
+    return bool(open_blockers(issue))
 
 
 def today_utc() -> date:
@@ -488,6 +513,7 @@ def current_claim(issue: dict) -> str | None:
 # -- an agent filing a cross-repo companion PR tends to qualify both for symmetry -- and
 # GitHub honours that form the same as the bare one.
 PR_REPO = "DanielH2018/server"
+_ISSUE_URL_RE = re.compile(r"https?://github\.com/([\w.-]+/[\w.-]+)/issues/\d+")
 
 # GitHub closes an issue on any of these, not just `Closes`. Matching `closes` alone would
 # let `next` offer an issue whose fix is already open as a PR, which is the exact duplicated
@@ -562,6 +588,7 @@ def issue_rows(issues: list[dict]) -> list[dict]:
                 "manual": "manual" in names,
                 "review_leftover": "review-leftover" in names,
                 "not_before": day.isoformat() if day else None,
+                "blocked_by": open_blockers(issue),
                 "claimed": current_claim(issue),
                 "first_seen": (issue.get("createdAt") or "")[:10],
                 "reobservations": reobservations(issue),
@@ -589,29 +616,47 @@ def pickable(
         r
         for r in issue_rows(issues)
         if not r["manual"]
-        and not _deferred_row(r, today)
+        and not is_waiting_row(r, today)
         and r["number"] not in live_claims
         and r["number"] not in pr_refs
     ]
     return sorted(rows, key=lambda r: (r["review_leftover"], sort_key(r)))
 
 
-def deferred(issues: list[dict], *, today: date) -> list[dict]:
-    """The rows `pickable` withholds for a not-before date alone, best first.
+def waiting(issues: list[dict], *, today: date) -> list[dict]:
+    """The rows `pickable` withholds for a not-before date or an open blocker, best first.
 
     `next` prints these beside the free set: a silently withheld issue reads as a closed one
     to the operator looking at the backlog, which is the failure `manual` has.
     """
     rows = [
-        r for r in issue_rows(issues) if not r["manual"] and _deferred_row(r, today)
+        r for r in issue_rows(issues) if not r["manual"] and is_waiting_row(r, today)
     ]
     return sorted(rows, key=sort_key)
 
 
-def _deferred_row(row: dict, today: date) -> bool:
+def is_deferred_row(row: dict, today: date) -> bool:
+    """Whether ``row``'s not-before date still withholds it on ``today``."""
     return row["not_before"] is not None and today < date.fromisoformat(
         row["not_before"]
     )
+
+
+def is_waiting_row(row: dict, today: date) -> bool:
+    """Whether a date or an open blocker withholds ``row``; either one alone suffices."""
+    return bool(row["blocked_by"]) or is_deferred_row(row, today)
+
+
+def waiting_line(row: dict, today: date) -> str:
+    """The line `next` prints for a waiting ``row``: what withholds it, then its title."""
+    n = row["number"]
+    if row["blocked_by"]:
+        line = f"blocked: #{n} by {', '.join(row['blocked_by'])}"
+        if is_deferred_row(row, today):
+            line += f" and until {row['not_before']}"
+    else:
+        line = f"deferred: #{n} until {row['not_before']}"
+    return f"{line}  {row['title']}"
 
 
 def sort_key(row: dict) -> tuple:
