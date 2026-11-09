@@ -431,24 +431,27 @@ def content_length(headers) -> int | None:
     return n if n >= 0 else None
 
 
-def request_line(method: str, path: str, status: int, user: str) -> str:
+def request_line(
+    method: str, path: str, status: int, user: str, event: str = "request"
+) -> str:
     """One logfmt line for one request, as journald keeps it for the usage count (#2864).
 
     Every request gets one, the 10-second panel polls included, so the line carries the
     path: `path=/` is a page load and a POST is a write, and those two are what show a
     person used the page. A poll only shows a tab was open. The query string is dropped,
     and `user` is Authelia's `Remote-User`, `-` for a caller that came around it.
+    `event` is the line's first word; the usage count matches only `request`.
     """
     # `user` is narrowed before logfmt sees it: logfmt quotes a newline but does not escape
     # it, so a hostile `Remote-User` would still split the journal line and forge a second one.
     who = re.sub(r"[^\w.@-]", "_", user) or "-"
     url = urllib.parse.urlsplit(path).path or "-"
     fields = {"method": method, "path": url, "status": int(status), "user": who}
-    return f"request {logfmt(fields)}"
+    return f"{event} {logfmt(fields)}"
 
 
-def serve(config: Config) -> None:
-    app = App(config)
+def make_handler(app: App) -> type[BaseHTTPRequestHandler]:
+    """The request handler class that serves `app`'s page and API."""
 
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status: int, text: str, ctype: str) -> None:
@@ -457,8 +460,14 @@ def serve(config: Config) -> None:
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(data)
+            try:
+                self.end_headers()
+                self.wfile.write(data)
+            except BrokenPipeError, ConnectionResetError:
+                # A client that closed mid-response is not a server error; uncaught, it
+                # logs a traceback that HostLogErrors counts.
+                self.close_connection = True
+                self._log(status, "client-disconnected")
 
         def do_GET(self) -> None:
             status, text = app.get(self.path)
@@ -486,6 +495,9 @@ def serve(config: Config) -> None:
             )
 
         def log_request(self, code="-", size="-") -> None:
+            self._log(code if isinstance(code, int) else 0, "request")
+
+        def _log(self, status: int, event: str) -> None:
             # A request line that failed to parse leaves `command`, `path` and `headers`
             # unset, and send_error still logs it, so each is read with a default.
             headers = getattr(self, "headers", None)
@@ -493,14 +505,21 @@ def serve(config: Config) -> None:
                 request_line(
                     getattr(self, "command", None) or "-",
                     getattr(self, "path", ""),
-                    code if isinstance(code, int) else 0,
+                    status,
                     headers.get("Remote-User", "") if headers else "",
+                    event=event,
                 ),
                 file=sys.stderr,
                 flush=True,
             )
 
-    ThreadingHTTPServer((config.bind, config.port), Handler).serve_forever()
+    return Handler
+
+
+def serve(config: Config) -> None:
+    ThreadingHTTPServer(
+        (config.bind, config.port), make_handler(App(config))
+    ).serve_forever()
 
 
 if __name__ == "__main__":
