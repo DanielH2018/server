@@ -80,7 +80,7 @@ def changed(box: Box) -> Box:
 
 def test_a_changed_hash_with_passing_gates_restarts_once_and_records_it(box):
     changed(box)
-    assert box.run("--deploy-lock") == 0
+    assert box.run() == 0
     assert box.restarts() == 1
     assert box.state("applied.sha256") == box.hash()
     assert box.state("attempt.sha256") is None
@@ -93,7 +93,7 @@ def test_a_changed_hash_with_a_refusing_gate_writes_pending_and_restarts_nothing
     box.routes[k3s_gates.JOBS_PATH] = listing(
         job("apply-k3s-server-abc", condition=None)
     )
-    assert box.run("--deploy-lock") == 0
+    assert box.run() == 0
     assert box.restarts() == 0
     assert box.metrics()["pending"] == 1
     assert box.state("applied.sha256") == "0" * 64
@@ -104,14 +104,14 @@ def test_a_plan_that_is_applying_refuses(box):
     box.routes[f"{k3s_gates.PLANS_PATH}/k3s-server"] = plan(
         "k3s-server", applying=["daniel-box"]
     )
-    box.run("--deploy-lock")
+    box.run()
     assert box.restarts() == 0 and box.metrics()["pending"] == 1
 
 
 def test_a_missing_plan_refuses(box):
     changed(box)
     del box.routes[f"{k3s_gates.PLANS_PATH}/k3s-agent"]
-    box.run("--deploy-lock")
+    box.run()
     assert box.restarts() == 0 and box.metrics()["pending"] == 1
 
 
@@ -126,7 +126,7 @@ def test_a_promotion_in_flight_refuses(box):
         },
     )
     box.routes[k3s_gates.KUSTOMIZATIONS_PATH] = listing(lagging)
-    box.run("--deploy-lock")
+    box.run()
     assert box.restarts() == 0 and box.metrics()["pending"] == 1
 
 
@@ -147,41 +147,6 @@ def test_an_agent_host_run_passes_a_lease_acquired_twenty_minutes_ago(box):
 def test_the_guard_runs_only_when_asked(box):
     changed(box)
     box.routes[k3s_gates.LEASE_PATH] = lease(acquired_s=300)
-    assert box.run() == 0
-    assert box.restarts() == 1
-
-
-# ── the deployer's lock and hold, until H7.19a ──────────────────────────────────────────────
-
-
-def test_a_held_deploy_lock_refuses(box):
-    import fcntl
-    import os
-
-    changed(box)
-    fd = os.open(box.root / "run/lock/server-deploy-all.lock", os.O_RDONLY)
-    fcntl.flock(fd, fcntl.LOCK_EX)
-    try:
-        box.run("--deploy-lock")
-    finally:
-        os.close(fd)
-    assert box.restarts() == 0 and box.metrics()["pending"] == 1
-
-
-def test_an_absent_lock_file_refuses_and_a_deployer_hold_refuses(box):
-    changed(box)
-    (box.root / "run/lock/server-deploy-all.lock").unlink()
-    box.run("--deploy-lock")
-    assert box.restarts() == 0
-    (box.root / "run/lock/server-deploy-all.lock").touch()
-    (box.root / "var/lib/gitops-deploy/hold_sha").write_text("abc123\n")
-    box.run("--deploy-lock")
-    assert box.restarts() == 0
-
-
-def test_a_run_without_the_lock_flag_ignores_the_deployer(box):
-    changed(box)
-    (box.root / "run/lock/server-deploy-all.lock").unlink()
     assert box.run() == 0
     assert box.restarts() == 1
 
@@ -293,45 +258,11 @@ def test_the_metrics_temp_file_does_not_end_in_prom(box):
 def test_a_refusing_run_writes_all_three_series(box):
     changed(box)
     box.routes[k3s_gates.JOBS_PATH] = listing()
-    box.run("--deploy-lock")
+    box.run()
     assert set(box.metrics()) == {"pending", "failed", "last_success_timestamp_seconds"}
 
 
 # ── the script's own rules ──────────────────────────────────────────────────────────────────
-
-
-def lock_opener_violations(source: str) -> list[str]:
-    """Any use of a creating or writing open flag, and any `os.open` without O_RDONLY."""
-    found = []
-    for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Attribute) and node.attr in {
-            "O_CREAT",
-            "O_WRONLY",
-            "O_RDWR",
-        }:
-            found.append(node.attr)
-        if isinstance(node, ast.Call) and ast.unparse(node.func) == "os.open":
-            if "O_RDONLY" not in ast.unparse(node):
-                found.append("os.open without O_RDONLY")
-    return found
-
-
-def test_the_restart_script_never_creates_or_writes_the_lock():
-    source = SCRIPT.read_text()
-    assert "os.open(" in source, "the opener this test polices is gone"
-    assert lock_opener_violations(source) == []
-
-
-@pytest.mark.parametrize(
-    "mutation",
-    ["os.open(lock, os.O_RDONLY | os.O_CREAT, 0o644)", "os.open(lock, os.O_WRONLY)"],
-)
-def test_a_restart_script_that_creates_the_lock_is_flagged(mutation):
-    source = SCRIPT.read_text().replace(
-        "fd = os.open(lock, os.O_RDONLY)", f"fd = {mutation}", 1
-    )
-    assert mutation in source
-    assert lock_opener_violations(source)
 
 
 def test_the_script_parses_with_the_python_312_grammar():

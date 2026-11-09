@@ -1,7 +1,6 @@
 # The failure page every packaged unit can name with `OnFailure=homelab-alert@%n.service`
 # (H7.41b, docs/target-architecture/host/h7-delete-ansible.md, item 14). It replaces the
-# per-service alert units that `roles/setup/common/tasks/alert_unit.yml` renders. Only the two
-# builder units use it. Another role's alert unit can move onto it later.
+# per-service alert units the setup roles rendered. Only the two builder units use it. Another role's alert unit can move onto it later.
 #
 # The unit loads one credential, `gitops_deploy_discord_webhook`, from /run/credstore, where
 # `homelab-secrets.service` writes it. A host that lists this component lists `secrets-unit` too.

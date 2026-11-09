@@ -205,8 +205,6 @@ def test_memory_swap_max_bounds_the_cgroups_swap(unit: str) -> None:
 
 
 def test_alert_unit_is_the_onfailure_target(unit: str) -> None:
-    # The alert unit itself renders from common's shared template; test_alert_unit.py holds
-    # every OnFailure= target to an import of it.
     assert "OnFailure=claude-rc-alert.service" in unit, (
         "claude-rc.service must page on failure via OnFailure=claude-rc-alert.service"
     )

@@ -6,7 +6,7 @@ never restarts a `windowed` unit, so this oneshot, started by its timer inside t
 is the process that applies a k3s configuration change. SUC's upgrade container is the other.
 
     homelab-k3s-restart --unit k3s.service --host daniel-box --server https://127.0.0.1:6443 \\
-        --ca-file CA [--deploy-lock] [--guard-server-restart]
+        --ca-file CA [--guard-server-restart]
     homelab-k3s-restart --stop-post --host daniel-box      (the unit's ExecStopPost=)
 
 Each run, in order:
@@ -19,12 +19,10 @@ Each run, in order:
    then exits 0 when the hash equals `applied.sha256`, keeping `failed 1` while a
    `failed.sha256` stands;
 4. exits 0 with `failed 1` when the hash equals `failed.sha256`: one attempt per hash;
-5. with `--deploy-lock`, holds the deployer's `all` lock and checks its hold (daniel-box, until
-   H7.19a retires the deployer);
-6. runs `k3s_gates.py` host mode, which reads the API with the read-only token;
-7. restarts the unit with `--no-block`, and polls until it is `active` under a new MainPID and
+5. runs `k3s_gates.py` host mode, which reads the API with the read-only token;
+6. restarts the unit with `--no-block`, and polls until it is `active` under a new MainPID and
    the node posts a `Ready=True` heartbeat later than the restart;
-8. records `applied.sha256`, or renames `attempt.sha256` to `failed.sha256` after 300 seconds.
+7. records `applied.sha256`, or renames `attempt.sha256` to `failed.sha256` after 300 seconds.
 
 Every run writes `homelab_k3s_restart.prom`, a temporary file renamed into place, with
 `pending`, `failed` and `last_success_timestamp_seconds`. Exit 0: nothing owed, or refused by a
@@ -32,7 +30,6 @@ gate (`pending 1`). Exit 1: the restart failed, or the hash could not be compute
 """
 
 import argparse
-import fcntl
 import hashlib
 import json
 import os
@@ -158,36 +155,7 @@ def record_success() -> None:
     write_atomic(state("last_success"), f"{int(clock())}\n")
 
 
-# ── step 5: the deploy lock ──────────────────────────────────────────────────────────────────
-
-
-def take_deploy_lock() -> int:
-    """Hold the deployer's `all` lock without waiting; the descriptor lives until the process exits.
-
-    Raises ValueError, with the reason, when a deploy holds the lock, the file is absent, or the
-    deployer's `hold_sha` is set. The open is `O_RDONLY`, never `O_CREAT` (k3s_gates.py has why).
-    """
-    refusals = k3s_gates.check_deployer_hold(str(ROOT))
-    if refusals:
-        raise ValueError(refusals[0])
-    try:
-        lock = k3s_gates.resolve_under(str(ROOT), k3s_gates.ALL_LOCK)
-        fd = os.open(lock, os.O_RDONLY)
-    except FileNotFoundError:
-        raise ValueError(
-            f"{k3s_gates.ALL_LOCK} is absent: the tmpfiles entry creates it"
-        ) from None
-    except OSError as exc:
-        raise ValueError(f"cannot open {k3s_gates.ALL_LOCK}: {exc}") from exc
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError as exc:
-        os.close(fd)
-        raise ValueError(f"a deploy holds the all lock ({exc.strerror})") from exc
-    return fd
-
-
-# ── step 6 and 7: the gates and the restart ──────────────────────────────────────────────────
+# ── step 5 and 6: the gates and the restart ──────────────────────────────────────────────────
 
 
 def systemctl(*args: str) -> subprocess.CompletedProcess:
@@ -280,10 +248,7 @@ def run(args: argparse.Namespace) -> int:
         )
         write_metrics(host, 1, 1)
         return 0
-    _lock = None  # the descriptor stays open to the end of the run
     try:
-        if args.deploy_lock:
-            _lock = take_deploy_lock()
         notes: list[str] = []
         api = cluster_client_factory(
             args.server,
@@ -365,7 +330,6 @@ def build_parser() -> argparse.ArgumentParser:
             "k3s_readonly_token",
         ),
     )
-    parser.add_argument("--deploy-lock", action="store_true")
     parser.add_argument("--guard-server-restart", action="store_true")
     parser.add_argument("--stop-post", action="store_true")
     return parser

@@ -120,7 +120,6 @@ def test_the_importers_take_their_values_from_here():
         ("LAND_BAD_ARGS", "USAGE_ERROR"),
         ("DEPLOY_LOCK_BUSY", "TEMP_FAIL"),
         ("LAND_GAVE_UP", "TEMP_FAIL"),
-        ("TICK_STILL_RUNNING", "TEMP_FAIL"),
         ("CI_PENDING", "TEMP_FAIL"),
         ("FANOUT_PLACE_BAD_ARGS", "USAGE_ERROR"),
         ("FANOUT_PLACE_UNREAD", "TEMP_FAIL"),
@@ -160,7 +159,6 @@ def _declared_values(prefix):
     [
         ("scripts/deploy.sh", "DEPLOY_"),
         ("scripts/deploy_tools/land.sh", "LAND_"),
-        ("scripts/deploy_tools/gitops_tick.sh", "TICK_"),
         ("scripts/deploy_tools/await_ci.py", "CI_"),
         ("scripts/deploy_tools/narrow_setup.py", "NARROW_SETUP_"),
         ("scripts/diagnostics/probe.py", "PROBE_"),

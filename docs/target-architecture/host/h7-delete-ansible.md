@@ -231,8 +231,8 @@ The exit criterion is seven observations:
       `deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` keys its routing on the same two
       paths.
     - The deployer runs from `/opt/gitops-deploy/`, which only the copy `loop:` in
-      `gitops_deploy/tasks/code.yml` fills. `ansible/tests/deploy/test_gitops_deploy_ship_list.py`
-      says a module "forgotten in the copy loop passes CI and kills the deployer at import on
+      `gitops_deploy/tasks/code.yml` fills. `test_gitops_deploy_ship_list.py`, which H7.52
+      deleted with that file, said a module "forgotten in the copy loop passes CI and kills the deployer at import on
       its next tick".
     - `initial_setup/files/kuma-push-lib.sh` and `setup-drift-lib.sh` have 15 references
       outside the setup tree: 14 in tests and test helpers under `ansible/tests/` and
@@ -1920,7 +1920,7 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.49b monitor-bridge's gitops checks go | H7.19a's first PR | yes, written as [#7806](https://github.com/DanielH2018/server/pull/7806); it merges only when H7.52 is ready to merge next, because it leaves the deployer unwatched until H7.52's merge | H7.49a, H7.51 live, and every other edge of H7.52 |
 | H7.50 deploy_ui re-homes with its in-flight panel | H7.19a's second PR | yes | H7.37, H7.41, D6 |
 | H7.51 `homelab-checkout-sync` beside the deployer | H7.19a's fourth PR | yes | H7.41, H7.47, D6, the H6 PR that lands the window test |
-| H7.52 The deployer's timer retires | H7.19a's fifth PR | no: it deletes H6's seven deployer-coupled items, so it starts once they merge | H7.49a, H7.49b live, H7.51 live, H7.24a, H7.24b, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H7.60, H7.62, H6 |
+| H7.52 The deployer's timer retires | H7.19a's fifth PR | written as [#7828](https://github.com/DanielH2018/server/pull/7828), to merge right after #7806; it deletes H6's seven deployer-coupled items, so it started once they merged | H7.49a, H7.49b live, H7.51 live, H7.24a, H7.24b, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H7.60, H7.62, H6 |
 | H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.24a to H7.41, H7.24b, H7.44, H7.45, H7.48, H7.50, H7.58 to H7.64 |
 | H7.54 The test env leaves ansible-core | H7.19d | no: its parity proof runs over the suite as H7.48 and H7.52 leave it | H7.46, H7.48, H7.52 |
 | H7.55 Delete the playbooks and the role directories | H7.20a | no: it deletes what H7.53 leaves | H7.53 live on daniel-box, H7.43 (done: its rebuild half was waived), H7.44, H7.45 |
@@ -1954,7 +1954,7 @@ items inside each file. Every path sits under `ansible/roles/setup/`.
 | H7.55, which deletes these `end_role` stubs with their roles | `claude_code/tasks/main.yml`, `config_files/tasks/main.yml`, `homelab_builder/tasks/main.yml`, `nut_host/tasks/main.yml`, `optimize_pi/tasks/main.yml`, `sops_setup/tasks/main.yml` |
 | H7.58 to H7.60 | `initial_setup/tasks/access.yml`, `initial_setup/tasks/accounting.yml`, `initial_setup/tasks/audit-and-kernel.yml`, `initial_setup/tasks/integrity.yml`; `initial_setup/tasks/system-tuning.yml` without its git hooks; the swap, apt and package tasks of `initial_setup/tasks/host-basics.yml`; the witness, the file absent arms and the `ansible.log` tasks of `initial_setup/tasks/crons.yml` |
 | H7.61 and H7.62 | `chezmoi_setup/tasks/main.yml` and `github_cli/tasks/main.yml` (H7.62); the tooling tasks of `initial_setup/tasks/host-basics.yml`, the git hooks of `initial_setup/tasks/system-tuning.yml` and the worktree holder tasks of `initial_setup/tasks/crons.yml` |
-| H7.63 | `common/tasks/agent_user.yml`, `common/tasks/alert_unit.yml`, `common/tasks/check_timer.yml`, `common/tasks/install_host_lib.yml` (`common/tasks/release_bin.yml` went earlier, in #7652), `common/tasks/stamp_deployed.yml`, `common/tasks/stamp_render.yml`, `initial_setup/tasks/main.yml`; what `initial_setup/tasks/crons.yml` and `initial_setup/tasks/host-basics.yml` still hold |
+| H7.63 | `common/tasks/agent_user.yml`, `common/tasks/check_timer.yml`, `common/tasks/install_host_lib.yml` (`common/tasks/release_bin.yml` went earlier, in #7652, and `common/tasks/alert_unit.yml` with H7.52, which removed its last importer), `common/tasks/stamp_deployed.yml`, `common/tasks/stamp_render.yml`, `initial_setup/tasks/main.yml`; what `initial_setup/tasks/crons.yml` and `initial_setup/tasks/host-basics.yml` still hold |
 | H7.64 | the `Manage the registry garbage collection` block of `k8s_host_files/tasks/registry.yml` |
 
 ### What each re-sliced PR carries
@@ -2326,6 +2326,11 @@ the `manual_plane` clearing, and *Rollback*'s
     wrapper cases of `test_gitops_manual_trigger.py` and the `TICK_*` exit codes. The operator
     removes the `Bash(./scripts/deploy_tools/gitops_tick.sh:*)` allow entry from the Claude
     settings file in the same PR (#7536).
+    It also deletes the two shadow rules in `gitops-checks.yaml` that read the deployer's
+    `gitops_tick.prom`, with their promtool cases and their literal pins in
+    `test_gitops_check_rule_literals.py`, because the retired timer stops that file (#7802).
+    The group's two GitHub-check rules stay, since `hosts/components/github-checks/` still
+    writes their textfiles.
 29. **H7.53.** H7.19b deletes the deployer's code once its timer is gone, and H7.19c then fails
     the census on any setup task left. H7.19b may still split in two, the re-home first. It
     carries the deployer-import census and the legacy entries, and names
@@ -2919,7 +2924,7 @@ the `manual_plane` clearing, and *Rollback*'s
         - This reverses #3694's choice of per-service alert units over one `alert@.service`.
           The reasons in `alert_unit.yml`'s header (four renamed units, and a shared env
           file with no owner) do not apply once a package owns the credential. The PR moves
-          the two builder entries out of `ansible/tests/setup/test_alert_unit.py`'s
+          the two builder entries out of `test_alert_unit.py`'s
           `KNOWN_ALERTS` and into the component's own test.
     - **The `users:` arm declares the live ids.** Measured with `id` on daniel-box on
       2026-10-24: `homelab-builder` uid 995 gid 983, and `homelab-signer` uid 994 gid 982.
@@ -3808,7 +3813,7 @@ progress.
   the builder's tests for its context list and walk bound, the deployer's own
   `tests/test_deploy_git_ci.py`,
   `ansible/tests/setup/test_host_lib_sibling_copies.py`'s `HOST_LIB_SRC`,
-  `ansible/tests/deploy/test_gitops_deploy_ship_list.py` for the new `ci_verdict.py` entry,
+  `test_gitops_deploy_ship_list.py` for the new `ci_verdict.py` entry,
   and `ansible/roles/setup/common/CLAUDE.md`'s table rows for the two modules and its
   routing paragraph.
 - **H7.4:**

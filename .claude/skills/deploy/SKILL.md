@@ -86,8 +86,8 @@ gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>
 ## Applying a setup role
 
 The GitOps deployer applies a setup role on its own 10-minute timer after the merge. `land.sh`
-neither starts nor watches that tick, and the `gitops-tick` skill triggers one by hand. A role
-the deployer cannot apply becomes a `manual_plane` line in `owed.jsonl`.
+neither starts nor watches that tick. A role the deployer cannot apply becomes a
+`manual_plane` line in `owed.jsonl`.
 
 A playbook goes through `uv run`, because bare `ansible-playbook` (the uv-tool shim) lacks the
 module deps and fails. A setup play aimed at the Pi takes `-e target=daniel-pi`, because the

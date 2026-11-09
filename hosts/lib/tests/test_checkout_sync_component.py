@@ -9,10 +9,12 @@ Run: uv run pytest hosts/lib/tests/test_checkout_sync_component.py
 """
 
 import pytest
+import yaml
 from _checkout_package import render_daniel_box
 
 from lib.estate import REPO_INVENTORY
 from lib.render_context import render_context
+from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 UNITS = "/usr/lib/systemd/system"
@@ -72,3 +74,29 @@ def test_the_script_ships_beside_the_modules_it_imports(package):
         "host_lib.py",
     ):
         assert f"{LIB}/{name}" in package.files, name
+
+
+# The deployer's units every host's package retires (H7.52). checkout-sync replaces the timer's
+# fast-forward, so a host still running it would fast-forward the checkout from a stale copy.
+DEPLOYER_UNITS = (
+    {"unit": "gitops-deploy.timer"},
+    {"unit": "gitops-deploy.service"},
+    {"unit": "gitops-deploy-alert.service"},
+)
+HOSTS = ("daniel-box", "daniel-server", "daniel-pi")
+
+
+def deployer_units_not_retired(legacy: list[dict]) -> list[dict]:
+    """The deployer units a host package's `legacy:` list does not retire."""
+    return [unit for unit in DEPLOYER_UNITS if unit not in legacy]
+
+
+@pytest.mark.parametrize("host", HOSTS)
+def test_every_host_package_retires_the_deployers_units_is_clean(host):
+    package = yaml.safe_load((REPO / "hosts" / host / "package.yml").read_text())
+    assert deployer_units_not_retired(package["legacy"]) == []
+
+
+def test_a_package_that_keeps_the_deployers_timer_is_flagged():
+    legacy = [unit for unit in DEPLOYER_UNITS if unit["unit"] != "gitops-deploy.timer"]
+    assert deployer_units_not_retired(legacy) == [{"unit": "gitops-deploy.timer"}]

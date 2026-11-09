@@ -15,9 +15,8 @@
 #   homelab-k3s-restart.timer` pauses it, and `unmask` then `start` resumes it (H6, *Pause and
 #   resume*). `sudo systemctl start homelab-k3s-restart.service` runs it now, behind the same gates.
 # - Abort valves: `k3s_gates.py host` (storage, nodes, CoreDNS, no SUC run, no Flux promotion in
-#   flight, and on an agent host the server-restart guard), the deployer's `all` lock and hold
-#   while the deployer exists, `TimeoutStartSec=7min`, and one attempt per hash, a killed attempt
-#   included.
+#   flight, and on an agent host the server-restart guard), `TimeoutStartSec=7min`, and one
+#   attempt per hash, a killed attempt included.
 # - Authoritative sources: the manifest, the API read with the read-only ServiceAccount's token
 #   (never an event, which would read an absent restart as clean), and the node's own heartbeat.
 # - Required evidence: notice lines in the journal, and homelab_k3s_restart.prom with `pending`,
@@ -43,8 +42,6 @@ defaults:
   # The k3s server CA. The directory is root-only, so H6.3b's pre-merge step lists it with
   # `sudo ls -l` on each node and corrects this value to what it shows.
   k3s_restart_ca_file: /var/lib/rancher/k3s/agent/server-ca.crt
-  # Hold the deployer's `all` lock and check its hold. True on the deploy host until H7.19a.
-  k3s_restart_deploy_lock: true
   # An agent host's restart also runs the server-restart guard. Its package sets this true.
   k3s_restart_guard_server_restart: false
 files:

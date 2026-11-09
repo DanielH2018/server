@@ -2528,7 +2528,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "GitOps ticks per hour on daniel-box, by how each ended (gitops_tick_runs_total). GitOpsTickOutcomeRepeating (rules/gitops-checks.yaml, in shadow) fires on four ci-failed or skipped-lock ticks in an hour.",
+      "description": "GitOps ticks per hour on daniel-box, by how each ended (gitops_tick_runs_total).",
       "fieldConfig": {
         "defaults": {
           "color": {

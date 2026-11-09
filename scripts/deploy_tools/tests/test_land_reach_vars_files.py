@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """A `defaults/`/`vars/` change reaches the hosts that run the tasks consuming its vars.
 
-`gitops_deploy` runs `teardown.yml` alone on daniel-server and daniel-pi, where `has_gitops` is
-false, so an `initial_setup.yml --tags gitops_deploy` run there re-runs an idempotent teardown
-and applies none of a change to the role's `defaults/main.yml`. No task names a defaults file,
-so `setup_file_hosts` would fall through to the role-level reach, which for this dispatcher is
-the union of both halves -- every host. Every `gitops_deploy/files/*.py` path reads as
-daniel-box alone.
+A dispatcher role runs one half of its tasks on each host: the `include_tasks` gate decides
+which. No task names a defaults file, so `setup_file_hosts` would fall through to the role-level
+reach, which for a dispatcher is the union of both halves -- every host. No live setup role
+dispatches this way since H7.52 emptied `gitops_deploy`, so the cases run over a synthetic role.
 
 `_var_consumer_chains` reads a vars file's reach from the tasks that consume the vars it
 defines, and narrows only when EVERY var has a consumer -- the reject half below, because a
@@ -23,48 +21,6 @@ from deploy_tools.land_lib import land_reach
 
 from _narrow_fixtures import _refs
 from _setup_role_fixtures import ROLE, build
-
-from lib.repo_paths import REPO as REPO_ROOT
-
-# The `gitops_deploy` paths of a real PR (`gh pr view <n> --json files`). The
-# `defaults/main.yml` entry is the one that widened the note. D6.12 deleted the PR's
-# `deploy_k8s.py`, so `deploy_phases.py`, a module beside it, stands in for it.
-_PR_2553_PATHS = [
-    "ansible/roles/setup/gitops_deploy/CLAUDE.md",
-    "ansible/roles/setup/gitops_deploy/defaults/main.yml",
-    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py",
-    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_phases.py",
-    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py",
-    "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
-    "ansible/roles/setup/gitops_deploy/tests/test_deploy_config.py",
-]
-
-
-def test_the_paths_under_test_still_exist():
-    """Non-vacuity: every case below reads green over a renamed file or role."""
-    missing = [p for p in _PR_2553_PATHS if not (REPO_ROOT / p).exists()]
-    assert not missing, f"paths moved, so these cases check nothing: {missing}"
-
-
-def test_the_deployer_defaults_reach_the_gitops_host_only():
-    """The accept half against the live tree. Every var `gitops_deploy/defaults/main.yml`
-    defines is read by `install.yml` or by a template it ships, and `tasks/main.yml` includes
-    that file under `when: has_gitops`."""
-    assert land_reach.setup_file_hosts(
-        "gitops_deploy", "ansible/roles/setup/gitops_deploy/defaults/main.yml"
-    ) == frozenset({"daniel-box"})
-
-
-def test_pr_2553_owes_no_host_beyond_the_tick():
-    """The verdict is `settled`, not `needs-manual-apply`."""
-    assert land_reach.remaining_setup_hosts_note(_PR_2553_PATHS, "daniel-box") == ""
-
-
-def test_pr_2553_from_another_host_still_names_the_gitops_host():
-    """Per file, not a blanket silence: the same files DO reach daniel-box."""
-    note = land_reach.remaining_setup_hosts_note(_PR_2553_PATHS, "daniel-server")
-    assert "daniel-box" in note
-    assert "daniel-pi" not in note
 
 
 @pytest.fixture

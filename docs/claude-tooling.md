@@ -288,7 +288,6 @@ trim.
 `contention_since`, and the `owed` ledger's `manual_plane` lines. Each set marker carries what discharges it and the command that clears it after. The
 hold's command is `gitops_state.py clear-hold <sha>` with the held SHA filled in.
 `hold_plane` lines with no `hold_sha` print as orphaned, with `clear-hold --orphaned`.
-`gitops_tick.sh` prints this same view after every tick.
 
 It reads `/var/lib/gitops-deploy` directly, so it answers only on daniel-box as the deploy
 user. Elsewhere it says there is no state directory. A marker that exists and cannot be read is
@@ -971,9 +970,8 @@ A headless `claude -p` batch runs without isolation and draws none of these refu
 The places auto mode and this repo have to talk (`PostToolUseFailure` and, for a `git push`,
 `PostToolUse`, both Bash).
 
-It grants no retry on a classifier **denial**. A `PermissionDenied` branch used to retry
-`gitops_tick.sh`, which the classifier denied about 1 run in 7 on identical text in 2026-08. It
-was removed on 2026-11-07, after a week with no retry ledger in any session.
+It grants no retry on a classifier **denial**. The one retry branch was removed on 2026-11-07,
+after a week with no retry ledger in any session.
 
 On a **failure**, it names a `deploy.sh` exit a refusal rather than a playbook failure, and
 points at the wrapper's own last two lines for what it was. `deploy_lib/run.py:report` prints the name, the meaning and the remedy from

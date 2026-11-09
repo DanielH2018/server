@@ -328,8 +328,7 @@ erases it.
   `sys.path` leak into a test failure.
 - `scripts/deploy_tools/land_lib/outcome.py`: exit code and verdict constructed
   together and validated in `__init__`, so "printed without its verdict" is unrepresentable.
-- `ansible/tests/services/test_monitor_bridge_modules.py` and
-  `ansible/tests/deploy/test_gitops_deploy_ship_list.py`: ship lists guarded in both
+- `ansible/tests/services/test_monitor_bridge_modules.py`: a ship list guarded in both
   directions against the tree.
 - `ansible/tests/services/test_monitor_bridge_mount_layout.py`: a synthesized missing
   module must produce `No module named 'bridge.config'`.

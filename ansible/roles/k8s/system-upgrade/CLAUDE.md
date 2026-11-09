@@ -96,8 +96,7 @@ contract (H6 *Autonomous-role contract*); `homelab-k3s-restart` arrives with H6.
 - **Mode and arming.** `system_upgrade_nodes`, the node pause label `homelab/k3s-upgrade-paused`,
   and the restart timer's mask.
 - **Abort valves.** The `prepare` gates, the Job deadline, the restart unit's gates with their
-  SUC and Flux in-flight checks, its deploy lock, and one attempt per hash, a killed attempt
-  included.
+  SUC and Flux in-flight checks, and one attempt per hash, a killed attempt included.
 - **Required evidence.** The Plans' `Complete` condition and `flux/system-upgrade`, the restart
   unit's notice lines and textfile metrics, and the five alerts. `K3sUpgradeJobFailed` is in
   `ansible/roles/k8s/observability/files/rules/k3s-upgrade.yaml`.

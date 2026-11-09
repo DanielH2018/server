@@ -14,7 +14,7 @@ read as a refusal, never as a pass (failure class 3, an empty read taken as clea
 thing a check treats as clean is a document that parsed and met its rule.
 
 The checks mirror the runbook's own predicates in `scripts/deploy_tools/runbook_gates_lib/`
-(`unsafe_volumes`, `in_flight_backups`, `nodes_not_ready`, `held_sha`), which cannot ship to a
+(`unsafe_volumes`, `in_flight_backups`, `nodes_not_ready`), which cannot ship to a
 host because they import repo code. `hosts/lib/tests/test_k3s_gates_parity.py` feeds both the
 same fixtures and fails when they disagree.
 
@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import argparse
 import errno
-import fcntl
 import json
 import os
 import ssl
@@ -86,10 +85,6 @@ _SOURCE_PATHS = {
 
 # ── host files, read under `--host-root` ─────────────────────────────────────────────────────
 RESTART_MARKER = "/run/homelab-k3s-restart"
-HOLD_DIR = "/var/lib/gitops-deploy"
-HOLD_FILE = "hold_sha"  # `gitops_markers.MARKERS["hold"]`, held equal by a test.
-# `deploy_locks.lock_path(SERVICE_LOCK_ALL)`, held equal by a test.
-ALL_LOCK = "/var/lock/server-deploy-all.lock"
 _MAX_SYMLINK_HOPS = 40
 
 _SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
@@ -447,51 +442,6 @@ def check_restart_marker(root: str) -> list[str]:
     return [f"{RESTART_MARKER} exists: homelab-k3s-restart is running"]
 
 
-def check_deployer_hold(root: str) -> list[str]:
-    """Refuse on a held deploy, and on a state directory that is absent or unreadable.
-
-    An absent `hold_sha` is the deployer's no-hold state. An absent DIRECTORY is not: that is a
-    host that is not the deploy host, and `k3s_upgrade.held_sha` refuses it too.
-    """
-    state_dir = os.path.join(root, HOLD_DIR.lstrip("/"))
-    if not os.path.isdir(state_dir):
-        return [f"{HOLD_DIR} is not a readable directory"]
-    try:
-        held = Path(state_dir, HOLD_FILE).read_text().strip()
-    except FileNotFoundError:
-        return []
-    except (OSError, UnicodeDecodeError) as exc:
-        return [f"cannot read {HOLD_FILE}: {exc}"]
-    return [f"the deployer holds {held}"] if held else []
-
-
-def check_deploy_lock(root: str) -> list[str]:
-    """Refuse while a deploy holds the `all` lock, and when the lock file is absent.
-
-    The open is `O_RDONLY`, never `O_CREAT`. Under `fs.protected_regular=2` a root `O_CREAT`
-    open of the deployer-owned file fails with EACCES, and a file root creates there breaks
-    the deployer's own open. `flock` works on a read-only descriptor.
-    """
-    try:
-        path = resolve_under(root, ALL_LOCK)
-        fd = os.open(path, os.O_RDONLY)
-    except FileNotFoundError:
-        return [
-            f"{ALL_LOCK} is absent: the restart component's tmpfiles entry creates it"
-        ]
-    except OSError as exc:
-        return [f"cannot open {ALL_LOCK}: {exc}"]
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        return ["a deploy holds the all lock"]
-    except OSError as exc:
-        return [f"cannot test {ALL_LOCK}: {exc}"]
-    finally:
-        os.close(fd)  # closing the descriptor also releases the flock
-    return []
-
-
 # ── the modes ────────────────────────────────────────────────────────────────────────────────
 
 Check = tuple[str, Callable[[], list[str]]]
@@ -506,7 +456,7 @@ def checks_for(
     guard_server_restart: bool,
     notes: list[str],
 ) -> list[Check]:
-    """The ordered checks of one mode. Host mode skips the marker, the hold and the lock."""
+    """The ordered checks of one mode. Host mode skips the marker."""
     storage: list[Check] = [
         ("volumes", lambda: check_volumes(get)),
         ("backups", lambda: check_backups(get)),
@@ -520,8 +470,6 @@ def checks_for(
             *storage,
             marker,
             guard,
-            ("deployer hold", lambda: check_deployer_hold(root)),
-            ("deploy lock", lambda: check_deploy_lock(root)),
         ]
     if mode == "agent":
         return [

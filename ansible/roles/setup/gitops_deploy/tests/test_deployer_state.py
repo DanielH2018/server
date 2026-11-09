@@ -20,7 +20,6 @@ import os
 import pathlib
 
 import pytest
-import yaml
 
 from deployer_lib import deploy_io
 from gitops_ledger import (
@@ -31,7 +30,6 @@ from gitops_ledger import (
 )
 
 SHA = "c0ffee12" * 5
-ROLE = pathlib.Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
@@ -67,35 +65,6 @@ def test_every_marker_resolves_under_the_host_state_directory():
     live = deploy_io.DeployerState(deploy_io.STATE_DIR)
     for marker, basename in EXPECTED_MARKERS:
         assert live.path(marker) == f"{deploy_io.STATE_DIR}/{basename}", marker
-
-
-def _retired_basenames_install_reaps() -> list[str]:
-    tasks = yaml.safe_load((ROLE / "tasks" / "install.yml").read_text())
-    (reap,) = [
-        t
-        for t in tasks
-        if t["name"] == "Remove the state files of retired deployer markers"
-    ]
-    assert reap["ansible.builtin.file"]["state"] == "absent"
-    return reap["loop"]
-
-
-def test_the_install_reaps_the_retired_markers():
-    # Named rather than counted: a reap list emptied by a refactor must fail here, not pass.
-    reaped = set(_retired_basenames_install_reaps())
-    assert {
-        "broad_applied",
-        "manual_plane",
-        "manual_plane_tags",
-        "hold_plane",
-    } <= reaped
-
-
-def test_the_install_reaps_no_live_marker():
-    # A marker joins the reap list in the PR that retires it. One still in the table here would
-    # be deleted on every apply while the deployer still reads and writes it.
-    live = {basename for _, basename in EXPECTED_MARKERS}
-    assert not live & set(_retired_basenames_install_reaps())
 
 
 def test_an_unknown_marker_is_a_typo_not_a_new_file(state):

@@ -15,8 +15,8 @@ The census joins two sides per host:
   arm, which removes rather than writes, so it contributes nothing. Each value renders with
   the role's context for that host (`lib.render_context`), its loop items included when the
   loop is a literal list or one variable. A value that still does not render is skipped: one
-  reading a registered result, a `common` task file's caller `vars:` (`alert_unit.yml`,
-  `check_timer.yml`), or a loop over a registered list. Most skipped fields name a home
+  reading a registered result, a `common` task file's caller `vars:`
+  (`check_timer.yml`), or a loop over a registered list. Most skipped fields name a home
   directory or `/etc/systemd/system/`, where no package installs.
 - **Packages.** Every host package under `hosts/<host>/` joins that host, and every shared
   package under `hosts/packages/` joins every host. Each contributes the paths it installs,

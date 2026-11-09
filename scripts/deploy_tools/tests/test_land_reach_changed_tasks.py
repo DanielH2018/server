@@ -3,7 +3,7 @@
 PR #3971 edited box-only crons in `initial_setup/tasks/crons.yml`, a file that also holds
 ungated crons, and the landing named an apply on daniel-server and daniel-pi. PR #3890 edited
 `common/templates/unit-failure-alert.service.j2`, and `gitops_deploy`'s teardown half put the
-same two hosts in the note, though only its `has_gitops` install renders the alert. Each case
+same two hosts in the note, though only its `has_gitops` install rendered the alert. Each case
 below pairs the narrowed answer with one that must stay wide.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_changed_tasks.py
@@ -15,7 +15,6 @@ import yaml
 from deploy_tools.land_lib import land_reach
 from lib import yaml_fast
 from lib.proc_testing import run
-from lib.repo_paths import REPO
 from deploy_tools.setup_lib.setup_role_chains import changed_task_texts
 
 _CRONS = """\
@@ -205,25 +204,6 @@ def test_an_edited_template_no_task_names_keeps_the_role_reach(tmp_path):
     assert _reach(tmp_path, _UNNAMED, before, after) == _ALL
 
 
-def test_the_alert_template_reaches_gitops_deploy_through_its_install_half_only():
-    assert (REPO / _ALERT_TEMPLATE).exists()
-    assert land_reach.setup_role_hosts("gitops_deploy") == _ALL
-    assert land_reach.setup_shipped_file_hosts("gitops_deploy", _ALERT_TEMPLATE) == {
-        "daniel-box"
-    }
-
-
-@pytest.mark.parametrize("template", _CHECK_TIMER_TEMPLATES)
-def test_a_check_timer_template_reaches_no_gitops_deploy_host(template):
-    """teardown.yml imports `check_timer.yml` with state absent, so it renders nothing (#7416).
-
-    install.yml rendered the GitHub checks' timers until H7.37 moved them to a component.
-    """
-    assert land_reach.setup_shipped_file_hosts("gitops_deploy", template) == frozenset()
-    note = land_reach.remaining_setup_hosts_note([template], "daniel-box")
-    assert "`gitops_deploy`" not in note, note
-
-
 @pytest.mark.parametrize("template", _CHECK_TIMER_TEMPLATES)
 def test_a_check_timer_template_names_initial_setup_only_on_the_listed_hosts(template):
     assert land_reach.setup_shipped_file_hosts("initial_setup", template) == {
@@ -232,10 +212,10 @@ def test_a_check_timer_template_names_initial_setup_only_on_the_listed_hosts(tem
     }
 
 
-def test_a_check_timer_task_file_change_keeps_the_teardown_hosts():
-    """The file's absent arm runs on the hosts that render nothing, so its own edit owes them."""
+def test_a_check_timer_task_file_change_keeps_the_hosts_that_render_nothing():
+    """The file's absent arm runs on daniel-pi, which is off the list, so its own edit owes it."""
     tasks = "ansible/roles/setup/common/tasks/check_timer.yml"
-    assert land_reach.setup_shipped_file_hosts("gitops_deploy", tasks) == _ALL
+    assert land_reach.setup_shipped_file_hosts("initial_setup", tasks) == _ALL
 
 
 @pytest.mark.parametrize(
@@ -387,11 +367,3 @@ def test_the_tick_owes_an_initial_setup_edit_to_the_other_hosts():
     )
     assert "daniel-server" in reach["initial_setup"]
     assert "daniel-box" not in reach["initial_setup"]
-
-
-def test_the_tick_owes_nothing_for_a_role_only_its_own_host_runs():
-    """The rejecting half: `gitops_deploy` installs on the deployer alone."""
-    reach = land_reach.remaining_setup_hosts(
-        ["ansible/roles/setup/gitops_deploy/files/gitops_markers.py"], "daniel-box"
-    )
-    assert "gitops_deploy" not in reach

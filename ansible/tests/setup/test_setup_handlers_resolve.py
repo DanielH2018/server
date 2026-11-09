@@ -1,4 +1,8 @@
-"""Every `notify:` in initial_setup.yml's roles reaches a handler one of those roles defines.
+"""Every `notify:` in a setup playbook's roles reaches a handler one of those roles defines.
+
+The playbooks are initial_setup.yml and k3s-bringup.yml. At the moment only the k3s role,
+which k3s-bringup.yml applies, defines handlers; the censuses over initial_setup.yml hold
+that play to the same rule if a role gains one.
 
 The handlers moved out of the playbook into each role's `handlers/main.yml` (#3288). A notify
 naming no handler fails only on the run where its task changes something, which no syntax check
@@ -19,11 +23,13 @@ from _role_census import role_task_files
 from lib import yaml_fast
 
 PLAYBOOK = ANSIBLE / "initial_setup.yml"
+BRINGUP = ANSIBLE / "k3s-bringup.yml"
 
 
-def play_roles() -> list[str]:
-    """The role names the initial_setup.yml play lists, in order."""
-    (play,) = yaml_fast.safe_load(PLAYBOOK.read_text())
+def play_roles(playbook=PLAYBOOK) -> list[str]:
+    """The role names the playbook's `roles:` lists, in order."""
+    plays = [p for p in yaml_fast.safe_load(playbook.read_text()) if "roles" in p]
+    (play,) = plays
     return [r["role"] if isinstance(r, dict) else r for r in play["roles"]]
 
 
@@ -91,29 +97,43 @@ def test_every_handler_in_the_play_has_a_notifier() -> None:
     assert unnotified(handler_owners(roles), notified(roles)) == []
 
 
+def test_every_notify_in_k3s_bringup_resolves_to_a_handler() -> None:
+    roles = play_roles(BRINGUP)
+    assert unresolved(notified(roles), defined(roles)) == []
+
+
+def test_every_handler_in_k3s_bringup_has_a_notifier() -> None:
+    roles = play_roles(BRINGUP)
+    assert unnotified(handler_owners(roles), notified(roles)) == []
+
+
 def test_a_handler_with_no_notifier_is_flagged() -> None:
     owners = {"Restart x": ["x"], "Reload y": ["y"]}
     assert unnotified(owners, {"Reload y": {"y"}}) == ["Restart x"]
 
 
 def test_the_census_finds_a_roles_notify_of_its_own_handler() -> None:
-    """Non-vacuity: gitops_deploy's notify of its own reload handler is in the census."""
-    notifies = notified(play_roles())
-    assert "gitops_deploy" in notifies["Reload systemd for gitops_deploy"]
+    """Non-vacuity: the k3s role's notify of its own restart handler is in the census."""
+    notifies = notified(play_roles(BRINGUP))
+    assert "k3s" in notifies["Restart k3s"]
 
 
 def test_a_notify_with_no_handler_is_flagged() -> None:
-    assert unresolved({"Restart nothing": {"x"}}, defined(play_roles())) == [
+    assert unresolved({"Restart nothing": {"x"}}, defined(play_roles(BRINGUP))) == [
         "Restart nothing"
     ]
 
 
 def test_no_two_roles_in_the_play_define_one_handler_name() -> None:
-    owners = handler_owners(play_roles())
-    assert owners.get("Reload systemd for gitops_deploy") == ["gitops_deploy"], (
-        "the census no longer finds gitops_deploy's own reload handler"
+    assert duplicated(handler_owners(play_roles())) == {}
+    assert duplicated(handler_owners(play_roles(BRINGUP))) == {}
+
+
+def test_the_census_finds_the_k3s_roles_handler() -> None:
+    owners = handler_owners(play_roles(BRINGUP))
+    assert owners.get("Restart k3s") == ["k3s"], (
+        "the census no longer finds the k3s role's own restart handler"
     )
-    assert duplicated(owners) == {}
 
 
 def test_a_handler_name_two_roles_define_is_flagged() -> None:
@@ -122,5 +142,8 @@ def test_a_handler_name_two_roles_define_is_flagged() -> None:
 
 
 def test_the_playbook_defines_no_handlers() -> None:
-    (play,) = yaml_fast.safe_load(PLAYBOOK.read_text())
-    assert "handlers" not in play, "initial_setup.yml's handlers belong in its roles"
+    for playbook in (PLAYBOOK, BRINGUP):
+        for play in yaml_fast.safe_load(playbook.read_text()):
+            assert "handlers" not in play, (
+                f"{playbook.name}'s handlers belong in its roles"
+            )

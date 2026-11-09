@@ -148,7 +148,6 @@ _PROSE_HOLDERS = {
         (
             "ansible/roles/setup/common/tasks/check_timer.yml",
             "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py",
-            "ansible/roles/setup/gitops_deploy/tasks/teardown.yml",
         ),
         _UNIT_FAMILY,
     ),

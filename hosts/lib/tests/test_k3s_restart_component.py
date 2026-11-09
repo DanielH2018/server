@@ -1,7 +1,6 @@
 """The `k3s-restart` component as daniel-box's package renders it.
 
-H6.3b: the unit, the timer, the credential, the lock's `tmpfiles.d` entry and the two files the
-unit runs. `k3s_gates.py` arrives through the `k3s-gates` component, which the package lists
+H6.3b: the unit, the timer, the credential and the two files the unit runs. `k3s_gates.py` arrives through the `k3s-gates` component, which the package lists
 beside this one (#6413). The package needs `k3s_readonly_token` in `secrets.yml` and a daniel-box SOPS file to
 render, so the fixtures below stand in for both; the operator adds the real ones.
 """
@@ -13,10 +12,9 @@ import shutil
 import jinja2
 import pytest
 import yaml
-from deployer_lib import deploy_locks
 
 from lib.ansible_jinja_env import make_ansible_env
-from lib.repo_paths import ALL_VARS, REPO
+from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.host_sources import lib_source
@@ -90,16 +88,16 @@ def test_the_service_carries_the_marker_the_timeout_and_the_stop_hook(package):
     assert re.search(r"^ExecStopPost=.* --stop-post ", unit, re.M)
 
 
-def test_daniel_box_takes_the_deploy_lock_and_skips_the_server_restart_guard(package):
+def test_daniel_box_skips_the_server_restart_guard_and_the_retired_deploy_lock(package):
     [start] = re.findall(r"^ExecStart=(.*)$", text(package, SERVICE), re.M)
     assert start.startswith("/usr/lib/homelab/homelab-k3s-restart ")
-    assert "--deploy-lock" in start
+    assert "--deploy-lock" not in start
     assert "--guard-server-restart" not in start
     assert "--unit k3s.service" in start
     assert "--host daniel-box" in start
 
 
-def test_an_agent_host_render_adds_the_guard_and_drops_the_lock(package):
+def test_an_agent_host_render_adds_the_guard(package):
     env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
     template = env.from_string(
         (COMPONENT / "units/homelab-k3s-restart.service.j2").read_text()
@@ -110,13 +108,11 @@ def test_an_agent_host_render_adds_the_guard_and_drops_the_lock(package):
             **defaults,
             "inventory_hostname": "daniel-server",
             "k3s_restart_unit": "k3s-agent.service",
-            "k3s_restart_deploy_lock": False,
             "k3s_restart_guard_server_restart": True,
         }
     )
     [start] = re.findall(r"^ExecStart=(.*)$", agent, re.M)
     assert "--guard-server-restart" in start
-    assert "--deploy-lock" not in start
 
 
 def test_the_timer_carries_the_window_and_the_two_accuracy_settings(package):
@@ -153,26 +149,8 @@ def test_the_package_ships_the_script_and_the_gates_side_by_side(package):
         assert mode == 0o755
 
 
-def test_the_lock_entry_equals_the_deployers_path_through_the_var_lock_link(package):
-    [line] = [
-        raw.split()
-        for raw in text(package, TMPFILES).splitlines()
-        if raw.startswith("f ")
-    ]
-    kind, path, mode, owner, group, age = line
-    lock = deploy_locks.lock_path(deploy_locks.SERVICE_LOCK_ALL)
-    assert lock.replace("/var/lock/", "/run/lock/", 1) == path
-    assert (kind, mode, age) == ("f", "0644", "-")
-    assert owner == group
-
-
-def test_the_lock_entry_owner_is_the_user_the_deployer_runs_as(package):
-    owner = text(package, TMPFILES).split("server-deploy-all.lock")[1].split()[1]
-    unit = (
-        REPO / "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2"
-    ).read_text()
-    assert re.search(r"^User=\{\{ sys_user \}\}$", unit, re.M)
-    assert owner == yaml.safe_load(ALL_VARS.read_text())["sys_user"]
+def test_the_package_ships_no_tmpfiles_entry_for_the_deployers_lock(package):
+    assert TMPFILES not in package.files
 
 
 def test_the_manifest_lists_the_unit_so_reconcile_manages_it(package):

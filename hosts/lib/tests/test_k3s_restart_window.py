@@ -3,8 +3,9 @@
 H6 (*Verification*, *Window*). The window runs from its `OnCalendar` start to the start plus the
 timer's `AccuracySec` plus the service's `TimeoutStartSec`. Every other fire is widened by its own
 accuracy. The sources are: each setup role's crons and timers (the sources
-`scripts/docs/gen_role_glance.py` reads), each timer a host package ships, and every CronJob and
-Longhorn RecurringJob schedule under `ansible/roles/k8s/`. A monotonic timer has no calendar
+`scripts/docs/gen_role_glance.py` reads) unless the role ends on every host before its first task,
+each timer a host package ships, and every CronJob and Longhorn RecurringJob schedule under
+`ansible/roles/k8s/`. A monotonic timer has no calendar
 instant, so it passes only through `EXEMPT`, and each entry names what replaces the check.
 
 Hosts: only daniel-box ships `homelab-k3s-restart.timer` so far. daniel-server's window joins this
@@ -21,6 +22,7 @@ import pytest
 import yaml
 from _k3s_schedule import Unparseable, calendar_fires, clock_text, cron_fires
 
+from deploy_tools.setup_lib.setup_gates import role_end_guard
 from docs.catalog_lib import glance_facts
 from lib.estate import Estate
 from lib.repo_paths import K8S_ROLES
@@ -61,7 +63,6 @@ WINDOW_TIMER = "homelab-k3s-restart.timer"
 
 # Each entry names the exclusion that replaces the schedule check.
 EXEMPT = {
-    "gitops-deploy.timer": "the `all` deploy lock (step 5); H7.19a removes both",
     "homelab-updater.timer": "the `windowed` mark: reconcile never restarts k3s",
     "homelab-claude-cgroup-metrics.timer": "writes Claude cgroup metrics; never touches k3s",
     "homelab-claude-clone-sync.timer": "syncs a git clone; never touches k3s",
@@ -156,10 +157,15 @@ def _timer_schedule(name: str, keys: list[tuple[str, str]], monotonic: list[str]
     return calendar_schedule(name, calendars[-1], width)
 
 
+def applied_setup_roles() -> list:
+    """The setup role directories that apply to some host: an unguarded leading end_role applies to none."""
+    return [r for r in glance_facts.setup_role_dirs() if role_end_guard(r) != "True"]
+
+
 def role_schedules(monotonic: list[str]) -> list[Schedule]:
-    """Every setup role's crons and timers."""
+    """Every applied setup role's crons and timers."""
     found = []
-    for role in glance_facts.setup_role_dirs():
+    for role in applied_setup_roles():
         for name, expr in glance_facts.cron_jobs(role):
             found.append(cron_schedule(name, expr))
         for unit, keys in glance_facts.timer_units(role):
@@ -294,27 +300,25 @@ def test_no_schedule_that_reads_the_cluster_fires_inside_the_box_window(box_pack
 
 
 def test_each_scan_finds_the_member_that_proves_it_reads_something(box_package):
-    # No setup role installs a cron since H7.34, so the role scan's member is gitops-deploy's timer.
+    # No setup role installs a cron since H7.34, so the role scan's member is the drift check's timer.
     _, cronjobs, recurring = job_schedules()
     assert CRONJOB_MEMBER in cronjobs
     assert RECURRING_MEMBER in recurring
-    assert "gitops-deploy.timer" in {
-        u
-        for r in glance_facts.setup_role_dirs()
-        for u, _ in glance_facts.timer_units(r)
-    }
+    assert "kuma-check-setup-drift.timer" in {s.name for s in role_schedules([])}
+
+
+def test_an_emptied_role_is_left_out_of_the_role_scan():
+    names = {r.name for r in applied_setup_roles()}
+    assert "initial_setup" in names
+    assert "gitops_deploy" not in names
 
 
 def test_every_exemption_names_a_schedule_that_exists(box_package):
     jobs, _, _ = job_schedules()
     crons = {s.name for s in jobs} | {
-        n for r in glance_facts.setup_role_dirs() for n, _ in glance_facts.cron_jobs(r)
+        n for r in applied_setup_roles() for n, _ in glance_facts.cron_jobs(r)
     }
-    timers = {
-        u
-        for r in glance_facts.setup_role_dirs()
-        for u, _ in glance_facts.timer_units(r)
-    }
+    timers = {u for r in applied_setup_roles() for u, _ in glance_facts.timer_units(r)}
     # The packaged timers: the updater's, and every timer the box package ships.
     timers |= {"homelab-updater.timer"} | box_timers(box_package)
     missing = sorted(set(EXEMPT) - crons - timers)

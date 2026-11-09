@@ -1,10 +1,17 @@
-# gitops_deploy — pull-based deploy on master change (every has_gitops host)
+# gitops_deploy — emptied; the GitOps deployer's timer is retired
 
-Installs a systemd **timer** (every `gitops_deploy_tick_interval`, 10 min) that runs
-`/opt/gitops-deploy/gitops_deploy.py` as `{{ sys_user }}`. The script fetches `origin/master`;
-if it advanced, it maps each changed path to a service or a plane, `--ff-only` merges, and
-applies the setup roles it may. `promote` and Flux apply every k8s change since D6.12. `tasks/` and a role `CLAUDE.md` are deliberately NOT
-auto-deployed, and triggering a tick by hand is the **`gitops-tick` skill**.
+The role's tasks are one unconditional `meta: end_role`, under a `# DECIDED` marker in
+`ansible/roles/setup/gitops_deploy/tasks/main.yml`. H7.52 emptied it and retired
+`gitops-deploy.timer`: the `legacy:` lists of `hosts/daniel-box/package.yml`,
+`hosts/daniel-server/package.yml` and `hosts/daniel-pi/package.yml` remove the units, the polkit
+rule and the tick's textfile. `hosts/components/checkout-sync/` fast-forwards daniel-box's primary
+checkout instead. The role stays until H7.20a, because `ansible/initial_setup.yml` names it and
+an edit to that playbook parks the deployer.
+
+The deployer's code under `files/`, its unit templates and its tests stay until H7.53 re-homes
+and deletes them. The rest of this page describes that code as it ran until H7.52: every 10
+minutes the unit fetched `origin/master`, mapped each changed path to a service or a plane,
+`--ff-only` merged, and applied the setup roles it could.
 
 Config is `/etc/gitops-deploy/config.env` (0600), from the SOPS var
 `gitops_deploy_discord_webhook`; liveness is `/var/lib/gitops-deploy/last_run`. No check pages
@@ -15,17 +22,15 @@ and the trade-offs.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
-- **Applied by:** `initial_setup.yml --tags "gitops_deploy"`
-- **Timer:** `gitops-deploy.timer` (`OnBootSec=10min`, `OnUnitActiveSec=10min`)
+- **Applied by:** `initial_setup.yml --tags "gitops_deploy"`; ends on hosts where `True`
+  (leading `meta: end_role`)
+- **Crons / timers:** none (the role ends on every host before its first task)
 <!-- /generated_from -->
 
-## A host with `has_gitops: false` is reaped, and the code refuses on its own
+## The code refuses on a host that is not the deployer
 
-`tasks/main.yml` dispatches on `has_gitops`: `install.yml` on the deployer, `teardown.yml`
-everywhere else. `deploy_phases.refuse_unless_deployer` repeats the gate in code, ahead of every
-state write, and **fails OPEN on any shape but a top-level `false`** — a wrong refusal on
-daniel-box parks every landing in the fleet. ENFORCED:
-`ansible/tests/setup/test_gitops_deploy_reaps_on_non_deployer.py`.
+`deploy_phases.refuse_unless_deployer` refuses ahead of every state write, and **fails OPEN on any
+shape but a top-level `false`** — a wrong refusal on daniel-box parks every landing in the fleet.
 
 **`ansible/inventory/group_vars/all.yml:has_gitops` defaults to `false`** (#2810), and a
 non-deployer still writes it: the record page says why.
@@ -39,8 +44,9 @@ D6.12: `promote` publishes the bundle and Flux applies it.
 - **Scope / exclusions:** every setup-plane change it can apply itself. **Never** a k8s role,
   an image-pin bump, a deploy-plane path, the bring-up playbooks, a `tasks/`- or docs-only
   change, a red or unfinished CI verdict, or a held SHA.
-- **Mode (explicit + reversible):** `has_gitops` in `host_vars` arms it on one host and tears it
-  down elsewhere, so hand-deploy is that flip plus `initial_setup.yml --tags gitops_deploy`.
+- **Mode (explicit + reversible):** retired in H7.52. Re-arming it means reverting H7.52, then
+  the operator's `initial_setup.yml --tags gitops_deploy` re-apply on daniel-box
+  (**operator-only**).
 - **Authoritative sources:** `origin/master` as fetched this tick, GitHub's check-runs API, never a
   cached verdict, never the working tree.
 - **Abort valves:** the CI gate; `hold_sha` and `hold_plane`; `BROAD_DEPLOY_TIMEOUT_S`, which
@@ -51,15 +57,13 @@ D6.12: `promote` publishes the bundle and Flux applies it.
   fired; the record page lists what an earlier widening cost.
   `increase(gitops_tick_runs_total[7d])` counts the same week by outcome, lock skips and
   parks included. `files/gitops_tick_metrics.py` writes it each tick, and the unit's second
-  `ExecStopPost=` writes it for a tick `flock` skipped. Two shadow rules in
-  `ansible/roles/k8s/observability/files/rules/gitops-checks.yaml` read the file:
-  `GitOpsTickStale` and `GitOpsTickOutcomeRepeating`. The "Containers and system monitoring"
+  `ExecStopPost=` writes it for a tick `flock` skipped. The "Containers and system monitoring"
   board plots the duration and the outcomes.
 
 **The two GitHub checks left this role in H7.37.** `hosts/components/github-checks/` ships the
 ruleset-drift and interaction-limit timers in `homelab-daniel-box`, and its `defaults/main.yml`
-holds the rulesets' declarations. `tasks/teardown.yml` still removes the Ansible-era timers from a
-host with `has_gitops: false`.
+holds the rulesets' declarations. The `legacy:` lists of daniel-server's and daniel-pi's packages
+remove the Ansible-era timers from those two hosts.
 
 ## Safety
 
@@ -96,8 +100,6 @@ Each arm is a rule and the function that holds it; the record page has its incid
 - **Every k8s role path goes to `cs.flux`**, with no read of the role's `owner`. Flux applies
   it, so the tick merges and logs it and never applies, defers, alerts on or owes it.
   `docs/gitops-pipeline.md`'s *A tag Flux applies is merged and skipped* has the rule.
-- **A new module under `files/` goes in the copy `loop:` and `stamp_deployed_pairs` in
-  `tasks/code.yml`**. ENFORCED: `ansible/tests/deploy/test_gitops_deploy_ship_list.py`.
 
 ## Which apply clears a hold
 

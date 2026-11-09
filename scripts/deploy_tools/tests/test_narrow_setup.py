@@ -190,14 +190,14 @@ def test_a_shipped_row_adopted_with_use_tables_is_the_one_read(tree):
 
 
 # The setup task files #3134, #3135 and #3154 made narrowable, each with the answer `tags_of`
-# gives. Before them, `crons.yml` refused on its `always` preamble, three roles had one untagged
-# `main.yml`, and `gitops_deploy` reached its task files only through
-# `include_tasks`, so every change to them applied the whole role.
+# gives and the playbook that prints its remediation. Before them, `crons.yml` refused on its
+# `always` preamble and three roles had one untagged `main.yml`.
 NARROWED_SETUP_FILES = {
-    ("gitops_deploy", "tasks/code.yml"): {"gitops-deploy-code"},
-    ("gitops_deploy", "tasks/service.yml"): {"gitops-deploy-service"},
-    ("gitops_deploy", "tasks/teardown.yml"): {"gitops-deploy-teardown"},
+    ("initial_setup", "tasks/host-basics.yml"): {"collections", "tooling"},
+    ("k3s", "tasks/coredns.yml"): {"coredns"},
+    ("k3s", "tasks/static-address.yml"): {"node-address"},
 }
+_PLAYBOOK_OF = {"initial_setup": "initial_setup.yml", "k3s": "k3s-bringup.yml"}
 
 
 @pytest.mark.parametrize(("role", "rel"), sorted(NARROWED_SETUP_FILES))
@@ -206,7 +206,7 @@ def test_the_real_split_setup_roles_narrow_below_their_role_tag(role, rel):
     index = narrow_setup.RoleIndex(role, "HEAD", str(REPO))
     tags = index.tags_of(rel)
     assert tags == NARROWED_SETUP_FILES[(role, rel)]
-    playbook = (REPO / "ansible/initial_setup.yml").read_text()
+    playbook = (REPO / "ansible" / _PLAYBOOK_OF[role]).read_text()
     assert not tags & narrow_setup.foreign_tags(role, playbook, "HEAD", str(REPO))
 
 

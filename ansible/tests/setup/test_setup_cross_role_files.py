@@ -44,9 +44,9 @@ Run: uv run pytest ansible/tests/setup/test_setup_cross_role_files.py
 import fnmatch
 import re
 
-from _helpers import ROLES, load_yaml
+from _helpers import ROLES, SETUP_ROLES, load_yaml
 from _role_census import role_dirs, role_task_files
-
+from lib.role_installs import runs_on_no_host
 
 from deployer_lib.deploy_cross_role import (
     SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES,
@@ -60,13 +60,9 @@ _REFERENCE = re.compile(
 # Named members, so a scan that stops matching fails by name rather than agreeing with an
 # empty table.
 KNOWN_EDGES = {
-    "ansible/roles/setup/common/tasks/install_host_lib.yml": {"gitops_deploy"},
-    "hosts/lib/host_lib.py": {"gitops_deploy"},
+    "ansible/roles/setup/common/tasks/stamp_deployed.yml": {"initial_setup"},
     # Reached only through check_timer.yml, so this is the transitive edge.
-    "ansible/roles/setup/common/templates/check-timer.timer.j2": {
-        "gitops_deploy",
-        "initial_setup",
-    },
+    "ansible/roles/setup/common/templates/check-timer.timer.j2": {"initial_setup"},
 }
 # A module the setup roles ship that sits outside the setup tree since H7.2e: the shared
 # `hosts/lib/` modules and the `scripts/lib/longhorn_lib/` package. No role owns them, so every
@@ -194,13 +190,34 @@ def _setup_task_files() -> dict[str, str]:
     }
 
 
+def without_roles_that_run_nowhere(
+    table: dict[str, frozenset[str]], runs_nowhere
+) -> dict[str, frozenset[str]]:
+    """`table` minus the roles that run on no host, and minus any row left with no role.
+
+    An emptied role applies to no host, so a row naming it re-applies nothing.
+
+    Args:
+        table: a file path -> the roles a change to it re-applies.
+        runs_nowhere: a role name -> whether its tasks end the role on every host.
+    """
+    kept = {
+        path: frozenset(r for r in roles if not runs_nowhere(r))
+        for path, roles in table.items()
+    }
+    return {path: roles for path, roles in kept.items() if roles}
+
+
 def test_the_deployers_table_equals_the_trees_cross_role_files():
     # The `defaults/` rows are a variable read, not a path, so their own census holds them.
-    shipped = {
-        path: roles
-        for path, roles in SETUP_FILES_SHIPPED_BY_OTHER_ROLES.items()
-        if "/defaults/" not in path
-    }
+    shipped = without_roles_that_run_nowhere(
+        {
+            path: roles
+            for path, roles in SETUP_FILES_SHIPPED_BY_OTHER_ROLES.items()
+            if "/defaults/" not in path
+        },
+        lambda role: runs_on_no_host(SETUP_ROLES / role),
+    )
     # A file reached only through a task file nothing imports reaches no role.
     assert {path: roles for path, roles in _tree_edges().items() if roles} == shipped
 
@@ -218,6 +235,23 @@ def test_the_owner_routed_template_names_the_roles_that_render_it():
     direct = cross_role_files(_setup_task_texts())
     for path, roles in SETUP_FILES_ROUTED_TO_OWNER.items():
         assert direct.get(path) == roles, path
+
+
+def test_the_emptied_gitops_deploy_role_runs_on_no_host():
+    assert runs_on_no_host(SETUP_ROLES / "gitops_deploy")
+    assert not runs_on_no_host(SETUP_ROLES / "initial_setup")
+
+
+def test_a_row_naming_an_emptied_role_is_dropped_and_a_live_one_is_kept():
+    table = {
+        "a": frozenset({"emptied"}),
+        "b": frozenset({"emptied", "live"}),
+        "c": frozenset({"live"}),
+    }
+    assert without_roles_that_run_nowhere(table, lambda r: r == "emptied") == {
+        "b": frozenset({"live"}),
+        "c": frozenset({"live"}),
+    }
 
 
 def test_a_role_shipping_another_roles_file_is_flagged():
