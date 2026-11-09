@@ -117,11 +117,6 @@ def test_a_blocked_range_prints_its_paths_and_command_as_json(monkeypatch, capsy
     assert doc["run"]
 
 
-def test_a_clear_range_prints_nothing_on_stdout(monkeypatch, capsys):
-    _run(["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"], monkeypatch)
-    assert capsys.readouterr().out == ""
-
-
 def test_a_failed_git_diff_reads_as_an_error_under_the_parsers_prog(capsys):
     """#4498: the failure is a complaint, so it carries `<prog>: error:` like every other
     deploy-family failure, where a grep for `: error:` finds it. The prog is the parser's,

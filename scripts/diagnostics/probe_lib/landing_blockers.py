@@ -496,16 +496,20 @@ def owed_lines(row: dict) -> list[str]:
 
 
 def worktree_lines(worktrees: list[dict], blocked: bool) -> list[str]:
-    """Each worktree and its claims while something blocks, else only their count.
+    """The worktrees holding a claim while something blocks, then a count of the rest.
 
-    A blocker raises the question of whose change it is, which the claims answer.
+    A blocker raises the question of whose change it is, which the claims answer. No blocker
+    names a worktree, so a claim is the one tie the snapshot carries.
     """
-    if not blocked:
-        return [f"{len(worktrees)} worktree(s); `probe.py landing --json` lists them."]
-    lines = ["Worktrees:"]
-    for t in worktrees:
+    claimed = [t for t in worktrees if t["claims"]] if blocked else []
+    lines = ["Worktrees holding a claim:"] if claimed else []
+    for t in claimed:
         nums = " ".join(f"#{n}" for n in t["claims"])
-        lines.append(f"  {t['branch'] or t['path']}  {nums}".rstrip())
+        lines.append(f"  {t['branch'] or t['path']}  {nums}")
+    others = len(worktrees) - len(claimed)
+    if others:
+        lead = f"{others} other" if claimed else str(others)
+        lines.append(f"{lead} worktree(s); `probe.py landing --json` lists them.")
     return lines
 
 

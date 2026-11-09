@@ -239,8 +239,8 @@ the deploy notifier skips.
 
 `landing` answers CLAUDE.md's *When to wait* list from a running session. It prints three
 things: what would stop a landing now, the `land.sh` and `deploy.sh` runs in flight, and the
-worktrees with the issues each has claimed. The text view lists the worktrees only while
-something blocks, and otherwise prints their count. Exit 1 means something blocks. `--json` prints one
+worktrees with the issues each has claimed. While something blocks, the text view lists the
+worktrees holding a claim and counts the rest; otherwise it prints only the count. Exit 1 means something blocks. `--json` prints one
 document, which the [deck mod](#the-deck-mod-claudepluginsdeck) reads every minute.
 
 A blocker is one of three states: a non-empty `hold_sha`, a red master CI run, or an owed
