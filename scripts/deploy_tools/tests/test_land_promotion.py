@@ -9,12 +9,14 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_promotion.py
 
 import pytest
 from dataclasses import replace
+from pathlib import Path
 
 from _land_fakes import MERGE_SHA, Fakes
-from deploy_tools.land_lib import land_tags, promotion
+from deploy_tools.land_lib import land_flux, land_tags, promotion
 from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE
 from deploy_tools.land_lib.host_wait import HostTarget
 from deploy_tools.promote_lib.wait import WaitResult
+from lib import proc_testing
 
 HEAD = "c" * 40
 BASE = "prbase"  # what the fake `git merge-base` answers
@@ -32,7 +34,6 @@ def _fakes(**kwargs: object) -> Fakes:
     """bento-pdf is flux-owned at the merge commit, and the PR reaches it alone."""
     fakes = Fakes(
         derived=(["bento-pdf"], "pr"),
-        owners={MERGE_SHA: {"bento-pdf": "flux"}},
         land_wait=[SETTLED_BENTO],
     )
     return replace(fakes, **kwargs)
@@ -230,7 +231,6 @@ def test_a_settled_wait_that_names_a_suspended_tag_gates_the_rest(land_run):
     )
     fakes = _fakes(
         derived=(["bento-pdf", "texbrain"], "pr"),
-        owners={MERGE_SHA: {"bento-pdf": "flux", "texbrain": "flux"}},
         land_wait=[settled],
     )
     rc, out, _, calls, _ = land_run([], fakes)
@@ -242,7 +242,7 @@ def test_an_unreadable_ownership_map_after_the_wait_gates_every_changed_name(lan
     """Asked too much, a gate fails loudly; asked too little, it passes over a broken tag."""
     fakes = _fakes(
         derived=([], "pr"),
-        owners={MERGE_SHA: ValueError("owner 'flx' is not one of ...")},
+        k8s_tags={MERGE_SHA: ValueError("services.yml is not a mapping")},
     )
     rc, out, _, calls, _ = land_run([], fakes)
     assert rc == 0 and "gating every changed name" in out
@@ -293,3 +293,37 @@ def test_a_tag_a_k8s_entry_declares_is_clean(land_run):
     assert rc == 0 and "VERDICT: settled" in out
     assert "cause=tag-miss" not in logline
     assert "land_wait" in _names(calls)
+
+
+def _repo_with_services(repo: Path, services: str) -> str:
+    """A git repository at `repo` whose one commit holds `services` as the k8s service list."""
+    env = {"GIT_CONFIG_GLOBAL": "/dev/null", "HOME": str(repo), "PATH": "/usr/bin:/bin"}
+
+    def git(*args: str) -> str:
+        return proc_testing.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
+            cwd=repo,
+            env=env,
+            check=True,
+        ).stdout.strip()
+
+    (repo / "cluster").mkdir()
+    (repo / "cluster" / "services.yml").write_text(services)
+    git("init", "-q", "-b", "master")
+    git("add", "-A")
+    git("commit", "-q", "--no-gpg-sign", "-m", "services")
+    return git("rev-parse", "HEAD")
+
+
+def test_an_empty_k8s_service_read_is_flagged(tmp_path):
+    """A reader older than the merge commit's layout reads no service at all (#7807)."""
+    sha = _repo_with_services(tmp_path, "containers_list: []\n")
+    with pytest.raises(ValueError, match="older than that commit"):
+        land_flux.k8s_tags_at(tmp_path, sha)
+
+
+def test_a_non_empty_k8s_service_read_is_clean(tmp_path):
+    sha = _repo_with_services(
+        tmp_path, "containers_list:\n  - name: registry\n    platform: k8s\n"
+    )
+    assert land_flux.k8s_tags_at(tmp_path, sha) == {"registry"}

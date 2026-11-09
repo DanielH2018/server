@@ -12,7 +12,7 @@ systemd loads that unit:
     the three packages from a scratch clone of the checkout.
   * `--local-build` on daniel-box with no k3s in its seed, so install.sh downloads the release
     binary and checks its sha256 whatever the cases above seed (#7754). It runs only under
-    `--k3s-download`, in a CI step that cannot fail the PR, so a GitHub release outage cannot
+    `--k3s-download`, in a CI job that cannot fail the PR, so a GitHub release outage cannot
     fail the run.
   * `--local-build --offline <kit>` on daniel-box, in a container with no network at all, which
     is stricter than the spec's unresolvable GitHub and GHCR hostnames. The kit is stocked on the
@@ -32,7 +32,9 @@ systemd loads that unit:
 `run` prepares the clones, the kit and the seed once, then runs the cases concurrently, at
 most one per CPU (#7785). Each case boots its own container and mounts its clone and seed
 read-only. The script copies out of a kit, and uv runs the kit's `uv-python` interpreter in
-place, taking at most a file lock there. The verdicts print in plan order. A container's own
+place, taking at most a file lock there. The verdicts print in plan order, each followed by
+`[DONE] <label> in Ns`, the seconds that item's own run took; the prepare prints its seconds
+the same way (#7811). A container's own
 diagnostics print as they happen, outside the group's block.
 
 The cases read `systemctl show` after the run: the installer leaves the node's k3s unit disabled
@@ -402,12 +404,17 @@ class Bootstrap:
         return problems
 
 
-def _verdict(body) -> Exception | None:
-    """Run `body`, and return the failure it raised, or None when it passed."""
+def _verdict(body) -> tuple[Exception | None, float]:
+    """Run `body`; return the failure it raised (None when it passed) and its seconds.
+
+    The clock runs on the worker thread, so a duration excludes the wait for earlier items.
+    """
+    start = time.monotonic()
     try:
         body()
     except (CaseFailed, OSError, subprocess.SubprocessError) as exc:
-        return exc
+        return exc, time.monotonic() - start
+    return None, time.monotonic() - start
 
 
 def output_problems(
@@ -506,6 +513,7 @@ def run(cases) -> None:
     """Run every bootstrap case, and record each verdict on `cases`."""
     clone = cases.work / "bootstrap-clone"
     green = cases.work / "bootstrap-kit" / "green"
+    start = time.monotonic()
     try:
         scratch_clone(clone)
         clones = {
@@ -522,14 +530,20 @@ def run(cases) -> None:
         cases.failed.append("prepare the bootstrap cases")
         print(f"[FAIL] prepare the bootstrap cases: {exc}", file=sys.stderr)
         return
+    print(
+        f"[DONE] prepare the bootstrap cases in {time.monotonic() - start:.1f}s",
+        file=sys.stderr,
+    )
     bodies = [body_for(cases, item, clones) for item in planned]
     # Printed from this thread, in plan order: case_groups buffers stderr per group thread.
     # The offline items are CPU-bound builds, and other case groups share the runner's CPUs.
     workers = min(len(bodies), max(2, os.cpu_count() or 2))
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        for item, failure in zip(planned, pool.map(_verdict, bodies), strict=True):
+        verdicts = pool.map(_verdict, bodies)
+        for item, (failure, seconds) in zip(planned, verdicts, strict=True):
             if failure is None:
                 print(f"[PASS] {item.label}: {item.name}", file=sys.stderr)
             else:
                 cases.failed.append(item.name)
                 print(f"[FAIL] {item.label}: {item.name}: {failure}", file=sys.stderr)
+            print(f"[DONE] {item.label} in {seconds:.1f}s", file=sys.stderr)

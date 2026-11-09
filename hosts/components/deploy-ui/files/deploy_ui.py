@@ -95,6 +95,7 @@ class App:
         # A concurrent cache miss collapses to a single `gh` fetch.
         self._prs_lock = threading.Lock()
         self._prs_cache: tuple[float, list] | None = None
+        self._pr_titles: dict[str, str] = {}
 
     # ---- subprocess edge ----
     def _out(
@@ -164,11 +165,29 @@ class App:
         runs = [
             {
                 **r.__dict__,
+                "title": self._pr_title(r.pr) if r.pr else "",
                 "log": reads.log_path_of(r.pid) if r.kind != "lock" else "",
             }
             for r in reads.runs(reads.parse_ps(ps), opened, locks)
         ]
         return {"runs": runs, "locks_watched": [os.path.basename(p) for p in paths]}
+
+    def _pr_title(self, pr: str) -> str:
+        """The PR's title, cached for the daemon's life; "" while `gh` cannot answer.
+
+        A landing's PR merges mid-run and leaves `gh pr list`, so the title is read by
+        number. A failed lookup is not cached, and never makes the lock panel unavailable.
+        """
+        if pr not in self._pr_titles:
+            try:
+                out = self._out(
+                    ["gh", "pr", "view", pr, "--json", "title", "--jq", ".title"], 10
+                )
+            except Unavailable:
+                return ""
+            if out.strip():
+                self._pr_titles[pr] = out.strip()
+        return self._pr_titles.get(pr, "")
 
     def state(self) -> dict:
         try:

@@ -9,13 +9,13 @@ this role only declares the targets. It also renders `k3s-etcd-snapshot-s3-confi
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
   `--tags=longhorn-backup` with exit 5
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (H1.7b). Its `containers_list` entry carries `owner: flux` and
+- **Flux applies it, not Ansible** (H1.7b). Its `containers_list` entry is `platform: k8s` and
   `depends_on: [longhorn]`, because `longhorn`'s vendored file defines the BackupTarget and
   RecurringJob CRDs. While `longhorn` is not Ready, this tag applies nothing, so a disarm PR promotes and does
   not reach the cluster. The BackupTarget break-glass below is the lever for that state.

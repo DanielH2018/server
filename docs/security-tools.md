@@ -56,7 +56,7 @@ Files checked: 147       Suspect files: 0
 Rootkits checked: 497    Possible rootkits: 0
 ```
 
-**False positives:** rkhunter is noisy after package upgrades — it warns about changed binary hashes. **Routine upgrades are already handled:** `initial_setup` sets `APT_AUTOGEN=true` in `/etc/default/rkhunter`, so `--propupd` runs from the package-manager hook after every apt install/upgrade, including unattended-upgrades. That's the point — the only file-property changes the weekly scan flags are ones *not* explained by a trusted package event.
+**False positives:** rkhunter is noisy after package upgrades — it warns about changed binary hashes. **Routine upgrades are already handled:** the `integrity-scans` host component ships a `DPkg::Post-Invoke` hook, `/etc/apt/apt.conf.d/91homelab-rkhunter-propupd`, that starts `homelab-rkhunter-propupd.service` after every `dpkg` run, unattended-upgrades included. The unit waits for apt to release the `dpkg` lock, then runs `rkhunter --propupd`, and runs it again if `dpkg` changed packages meanwhile. rkhunter's own `APT_AUTOGEN` hook ran the same refresh inside apt and held the `dpkg` lock for about 2 minutes on the Pi, so the component sets `APT_AUTOGEN="false"` (#7680). Check a refresh with `journalctl -t rkhunter-propupd`. That's the point — the only file-property changes the weekly scan flags are ones *not* explained by a trusted package event.
 
 So don't reflexively run this after an upgrade. Reset the baseline by hand only after an intentional change apt didn't make (a manually installed binary, a hand-edited config in a watched path), and only once you've confirmed the warning is yours:
 

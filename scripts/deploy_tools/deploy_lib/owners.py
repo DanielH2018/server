@@ -1,15 +1,14 @@
 """Which deploy tags no Ansible path deploys, and what `deploy.sh` does with each.
 
 Flux applies every k8s `containers_list` entry through `promote`, so an Ansible apply of its
-tag would be a second writer. The refusal reads an entry's platform, and the
-`every-k8s-entry-is-flux-owned` census row holds that each such entry carries `owner: flux`.
-Each `deploy.sh` site asks this module:
+tag would be a second writer. The refusal reads an entry's platform. Each `deploy.sh` site
+asks this module:
 
 - the front half refuses such a tag typed into `--tags`, with exit 5 (`refuse_k8s_tags`);
 - `--list-services` names each on stderr before it runs `deploy_tags.py list`
   (`mark_k8s_tags`).
 
-`flux_owned` reads `owner` for the landing's gate.
+A landing reads the same set, at its merge commit, through `declared_k8s_tags`.
 """
 
 import subprocess
@@ -57,26 +56,11 @@ def _k8s_services(repo_root: Path, at: str) -> Generator[Path]:
         yield path
 
 
-def flux_owned(repo_root: Path = REPO, at: str = "") -> dict[str, str]:
-    """Each tag no Ansible path may deploy, mapped to its `owner`, as `tag_owners` reads it.
-
-    Reads the k8s host's `containers_list` in `repo_root`'s working tree, or as commit `at`
-    declares it. `deploy.sh --at <sha>` renders that commit, and a landing passes `--at` before
-    the tick has fast-forwarded the checkout, so a tree read would miss the `owner` the commit
-    being deployed has just set.
-
-    Raises:
-        ValueError: an entry's `owner` is outside `lib.k8s_roles.OWNER_VALUES`.
-        subprocess.CalledProcessError: `at` holds no k8s service list.
-    """
-    from lib.k8s_roles import tag_owners
-
-    with _k8s_services(repo_root, at) as path:
-        return tag_owners(path)
-
-
 def declared_k8s_tags(repo_root: Path = REPO, at: str = "") -> set[str]:
-    """Every tag of a k8s `containers_list` entry, read from the file `flux_owned` reads.
+    """Every tag of a k8s `containers_list` entry, in `repo_root`'s tree or at commit `at`.
+
+    `deploy.sh --at <sha>` renders that commit, and a landing reads it before the tick has
+    fast-forwarded the checkout, so a tree read would miss an entry the commit adds.
 
     Raises:
         subprocess.CalledProcessError: `at` holds no k8s service list.

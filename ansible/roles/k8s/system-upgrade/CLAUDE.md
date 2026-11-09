@@ -8,7 +8,7 @@ else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
   `--tags=system-upgrade` with exit 5
 - **Images:** `rancher/system-upgrade-controller` (`system_upgrade_controller_image`), `python`
   (`system_upgrade_gate_image`)
@@ -16,7 +16,7 @@ else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible** (H6.1b). Its `containers_list` entry carries `owner: flux`
+- **Flux applies it, not Ansible** (H6.1b). Its `containers_list` entry is `platform: k8s`
   from its first commit, so `deploy.sh` refuses `--tags=system-upgrade` with exit 5.
 - **The Plans select the nodes in `system_upgrade_nodes`.** The list in `defaults/main.yml` holds
   `daniel-box` since H6.3c and `daniel-server` since H6.3d. A node joins the list only after its
@@ -74,6 +74,16 @@ else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
   comes from the `k3s-gates` component (`hosts/components/k3s-gates/component.yml`). A Plan
   that selects a node without it fails `prepare`, the closed direction, as H6.3d's first merge
   did on daniel-server (#6403).
+- **`system-upgrade-verify` compares each node's binary with the pin** (H6.3e). The renderer
+  emits one Job per node in `system_upgrade_nodes` from `templates/verify/job.yaml.j2`, and
+  Flux runs them once `flux/system-upgrade` reads Ready. Each Job reads its Node as `k3s-plan`
+  and hashes `/usr/local/bin/k3s`, mounted read-only by hostPath, against
+  `k3s_binary_sha256_amd64`. A node at the pin whose sum differs fails the Job, which turns
+  `flux/system-upgrade-verify` red and holds promotion. A node on another version reads
+  pending and passes. The script is `files/system_upgrade_verify.py`, delivered by ConfigMap,
+  because the Job census refuses a script from the host.
+  `ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_verify.py` holds the census, the
+  per-node pinning and the mismatch red case.
 
 ## Autonomous-role contract
 

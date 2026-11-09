@@ -1440,7 +1440,8 @@ jobs:
           fi
           if [ "$cases" = false ]; then
             job=$(uv run python scripts/validate/host_packages.py job-changed "$base" \
-              --workflow .github/workflows/ci.yml --job host_packages_build --job host_packages)
+              --workflow .github/workflows/ci.yml --job host_packages_build --job host_packages \
+              --job k3s_download)
             if [ "$job" = true ]; then
               echo "::notice::This PR changes the host package jobs' steps, so the cases run."
               cases=true
@@ -1641,11 +1642,17 @@ jobs:
       # with the same nfpm. One tarball carries all three, because an artifact's zip does not
       # keep a file's mode and the render ships executable maintainer scripts. The tools cache
       # stays out of it: the legs restore it from actions/cache under the `tools-key` output.
+      # The excludes drop the homelab-tools binaries the cases never read, about 1.9 of 2.0 GB:
+      # the cases install only the head amd64 .deb, and `host_tools_arm64` has its own artifact.
       - name: Hand the render, the debs and nfpm to the cases legs
         if: >-
           github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
           || steps.render.outputs.cases == 'true'
-        run: tar -cf "$RUNNER_TEMP/host-packages-build.tar" -C "$RUNNER_TEMP" render debs bin/nfpm
+        run: >-
+          tar -cf "$RUNNER_TEMP/host-packages-build.tar" -C "$RUNNER_TEMP"
+          --exclude='render/*/packages/homelab-tools'
+          --exclude='debs/base/homelab-tools_*' --exclude='debs/*/homelab-tools_*_arm64.deb'
+          render debs bin/nfpm
 
       - name: Upload the hand-off for the cases legs
         if: >-
@@ -1787,23 +1794,88 @@ jobs:
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
             --work "$RUNNER_TEMP/cases" "${seed[@]}"
 
-      # A case whose seed never holds k3s, so install.sh's own download and sha256 check of the
-      # release binary run whatever the step above seeds (#7751 seeds k3s there; #7754).
-      # `continue-on-error` keeps a GitHub release outage from failing the PR; a red step here
-      # is a broken download path or an outage.
-      # One leg is enough: the download does not depend on the release under test. A job that
-      # built its image has spent most of `timeout-minutes`, and a job timeout does gate, so a
-      # built image (no RepoDigests, unlike a pulled one) skips the case.
-      - name: Run the bootstrap case that downloads k3s from its release (does not gate)
+  # The bootstrap case whose seed never holds k3s, so install.sh's own download and sha256 check
+  # of the release binary run whatever the legs seed (#7751 seeds k3s there; #7754). One release
+  # is enough: the download does not depend on the release under test.
+  #
+  # It is a job of its own, beside the legs rather than after their cases, so it adds nothing to
+  # the 26.04 leg, the longest of the run (#7810). It sits outside the `prek` gate, with a
+  # job-level `continue-on-error`, so a GitHub release outage cannot fail the PR. The image and
+  # case steps carry their own `continue-on-error` too: a job-level one still leaves a failed
+  # job's check-run red, which every reader of a PR's check rollup counts as a failure. A failed
+  # step shows as an annotation instead. `test_every_ci_job_is_gated.py` lists the job in
+  # NON_GATING_JOBS. The id does not start with `host_packages`, for the reason above.
+  #
+  # The budget matches the legs', because a Dockerfile PR builds the image here too.
+  k3s_download:
+    name: k3s release download case (does not gate)
+    needs: [prove, host_packages_build]
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' }}
+    continue-on-error: true
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read  # the pinned test image, while its GHCR package is private
+    env:
+      UV_NO_GROUP: lint
+      PYTHON: "3.14"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false  # nothing here pushes or fetches
+
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+
+      - name: Download the hand-off from the build job
         if: >-
-          !cancelled() && matrix.release == '26.04' && (github.event_name == 'workflow_dispatch'
-          || needs.host_packages_build.outputs.changed == 'true'
-          || needs.host_packages_build.outputs.cases == 'true')
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: host-packages-build
+          path: ${{ runner.temp }}/handoff
+
+      - name: Unpack the render, the debs and nfpm
+        if: >-
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
+        run: |
+          set -euo pipefail
+          tar -xf "$RUNNER_TEMP/handoff/host-packages-build.tar" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Restore the build job's homelab-tools cache
+        id: tools-cache
+        if: needs.host_packages_build.outputs.tools-key != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: ${{ needs.host_packages_build.outputs.tools-key }}
+
+      - name: Build the test image
+        if: >-
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
         continue-on-error: true
-        timeout-minutes: 10
         env:
-          RELEASE: ${{ matrix.release }}
-          PYTHON: ${{ matrix.python }}
+          UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "$UPGRADE" != true ]; then
+            echo "::notice::The merge base is HEAD, so no case can upgrade; no image is built."
+            exit 0
+          fi
+          hosts/lib/tests/container/build-image.sh 26.04
+
+      - name: Run the bootstrap case that downloads k3s from its release
+        if: >-
+          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
+          || needs.host_packages_build.outputs.cases == 'true'
+        continue-on-error: true
+        env:
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
           TOOLS_CACHE_HIT: ${{ steps.tools-cache.outputs.cache-hit }}
         run: |
@@ -1811,16 +1883,11 @@ jobs:
             echo "::notice::The merge base is HEAD, so no image was built; the k3s download case does not run."
             exit 0
           fi
-          digests=$(docker image inspect --format '{{join .RepoDigests " "}}' "homelab-host-test:$RELEASE")
-          if [ -z "$digests" ]; then
-            echo "::notice::This job built the test image, so the k3s download case does not run inside the job's timeout."
-            exit 0
-          fi
           seed=()
           if [ "$TOOLS_CACHE_HIT" = true ]; then
             seed=(--tools-cache "$RUNNER_TEMP/tools-cache")
           fi
-          uv run python scripts/validate/host_package_cases.py --image "homelab-host-test:$RELEASE" \
+          uv run python scripts/validate/host_package_cases.py --image homelab-host-test:26.04 \
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
             --work "$RUNNER_TEMP/cases-k3s-download" "${seed[@]}" --k3s-download
 

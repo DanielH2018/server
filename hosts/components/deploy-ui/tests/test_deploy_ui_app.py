@@ -131,6 +131,29 @@ def test_page_offers_land_and_no_deploy_control_is_clean(app):
     assert "/api/deploy" not in html and ">deploy<" not in html
 
 
+def test_page_links_pr_numbers_to_github_is_clean(app):
+    _, html = app.get("/")
+    assert "https://github.com/DanielH2018/server/pull/" in html
+    assert "r.pr?prLink(r.pr)" in html and "<td>${prLink(p.number)}</td>" in html
+
+
+def test_inflight_landing_carries_its_pr_title_once_fetched_is_clean(app):
+    app.run.table[("gh", "pr", "view", "1543")] = ("Fix the thing\n", 0)
+    app.get("/api/inflight")
+    rows = {r["pid"]: r for r in body(app.get("/api/inflight"))["runs"]}
+    assert rows[4321]["title"] == "Fix the thing" and rows[5000]["title"] == ""
+    assert sum(1 for c in app.run.calls if c[:3] == ["gh", "pr", "view"]) == 1
+
+
+def test_inflight_title_lookup_failure_leaves_panel_up_is_flagged(app):
+    app.run.table[("gh", "pr", "view")] = ("", 1)
+    b = body(app.get("/api/inflight"))
+    assert "unavailable" not in b
+    assert {r["pid"]: r for r in b["runs"]}[4321]["title"] == ""
+    app.get("/api/inflight")
+    assert sum(1 for c in app.run.calls if c[:3] == ["gh", "pr", "view"]) == 2
+
+
 def test_page_has_no_stale_release_panel_is_flagged(app):
     _, html = app.get("/")
     assert "/api/stale" not in html and 'id="stale"' not in html

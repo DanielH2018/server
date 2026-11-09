@@ -32,7 +32,7 @@ WHAT IT DOES NOT WRITE, deliberately:
 * No PVC, no Secret, no NetworkPolicy, no probes beyond the readiness/liveness pair on the
   service's own port. Each is a decision about the service, and a generated placeholder for a
   decision is the narration problem again in a new form.
-* No deploy. The entry is born `owner: flux` (D5.5), so no Ansible path applies the role:
+* No deploy. Flux applies every k8s entry, so no Ansible path applies the role:
   `deploy.sh --tags <name>` exits 5, `--dry-run` included. Flux applies it once the PR merges
   and `promote` publishes the next bundle.
 
@@ -199,11 +199,9 @@ def entry_lines(name, port, hostname, auth_tier, route) -> str:
     `K8S_APPLIES_LAST` role (netpol-baseline) an edge onto every other entry. An edge no
     template carries goes in `depends_on:` here, never in the position.
 
-    The entry carries `owner: flux` from D5.5 on, so a service added during D5 is born owned
-    by Flux and never needs a flip PR of its own
-    (docs/target-architecture/deploy/d5-bulk-move.md).
+    `platform: k8s` alone makes the entry Flux's; it carries no `owner` key (H1.9).
     """
-    lines = [f"  - name: {name}", "    platform: k8s", "    owner: flux"]
+    lines = [f"  - name: {name}", "    platform: k8s"]
     if route:
         lines.append(f'    hostname: "{hostname}"')
     lines.append(f"    port: {port}")
@@ -377,7 +375,7 @@ def next_steps(args, role: Path) -> str:
         f"\nNext: fill the TODOs in {(role / 'CLAUDE.md').relative_to(REPO)}, then\n"
         f"  prek run --all-files\n"
         f"  uv run python scripts/renderer/homelab_render.py cluster --out out --role {args.name}\n"
-        f"The entry carries `owner: flux`, so deploy.sh refuses --tags {args.name} with exit 5, "
+        f"Flux applies every k8s entry, so deploy.sh refuses --tags {args.name} with exit 5, "
         f"--dry-run included. Flux applies the role once the PR merges and `promote` "
         f"publishes it: see the new-k8s-service skill.\n"
         f"{probe_step}"

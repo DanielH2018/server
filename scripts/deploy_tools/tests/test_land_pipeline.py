@@ -139,7 +139,6 @@ def _sonarr_settled(**kwargs: object) -> Fakes:
     """land-wait's changed set names sonarr, and the owner that keeps it gated."""
     fakes = Fakes(
         land_wait=[WaitResult("settled", detail="1 applied", tags=("sonarr",))],
-        owners={MERGE_SHA: {"sonarr": "flux"}},
     )
     for name, value in kwargs.items():
         setattr(fakes, name, value)

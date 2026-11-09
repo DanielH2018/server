@@ -14,7 +14,7 @@ import bundle_census
 from _helpers import load_defaults
 from _k8s_render import render_role_template
 from lib import yaml_fast
-from lib.k8s_roles import tag_owners
+from lib.k8s_roles import k8s_tags
 from lib.repo_paths import K3S_HOST_CHECKS, K8S_ROLES, K8S_SERVICES
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import kustomization_text
@@ -48,18 +48,17 @@ def test_the_stamp_namespace_equals_the_host_drills():
     assert drill == host == _stamps()["metadata"]["namespace"]
 
 
-def test_the_tag_is_flux_owned_and_waits_on_longhorn():
+def test_the_tag_is_a_k8s_tag_and_waits_on_longhorn():
     entry = next(
         e
         for e in yaml_fast.safe_load(K8S_SERVICES.read_text())["containers_list"]
         if e["name"] == TAG
     )
-    assert tag_owners(K8S_SERVICES)[TAG] == "flux"
-    # Any further field widens the entry's readers beyond the four the landing expects.
+    assert TAG in k8s_tags(K8S_SERVICES)
+    # Any further field widens the entry's readers beyond the three the landing expects.
     assert entry == {
         "name": TAG,
         "platform": "k8s",
-        "owner": "flux",
         "depends_on": ["longhorn"],
     }
 

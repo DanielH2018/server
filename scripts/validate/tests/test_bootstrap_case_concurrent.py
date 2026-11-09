@@ -11,6 +11,7 @@ Run: uv run pytest scripts/validate/tests/test_bootstrap_case_concurrent.py
 import re
 import subprocess
 import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import ClassVar
@@ -19,6 +20,8 @@ import pytest
 from validate.validate_lib import bootstrap_case as case
 
 WAIT = 0.5
+SLOW = 1.5
+DONE = r"^\[DONE\] {label} in (\d+(?:\.\d+)?)s$"
 PREFIX = "homelab-host-test-bootstrap-"
 
 
@@ -70,6 +73,7 @@ class FakeContainer:
     planned: ClassVar[dict[str, case.Planned]] = {}
     overlap: ClassVar[Overlap] = Overlap(0)
     misbehaving: str | None = None
+    slow: str | None = None
 
     def __init__(
         self, image, name, work, hostname="daniel-pi", mounts=(), network=None
@@ -108,6 +112,8 @@ class FakeContainer:
         item = self.item
         if not self.overlap.enter(item.label):
             return subprocess.CompletedProcess(script, 99, "", "ran alone")
+        if item.label == self.slow:
+            time.sleep(SLOW)
         if item.label == self.misbehaving:
             return subprocess.CompletedProcess(script, 0, "", "")
         if item.refusal is None:
@@ -118,11 +124,27 @@ class FakeContainer:
         return subprocess.CompletedProcess(script, 1, item.apt_says or "", item.refusal)
 
 
-def _run(monkeypatch, tmp_path: Path, misbehaving: str | None = None):
-    """Run every bootstrap case on fake containers; returns the cases and the overlap."""
+def _green(tmp_path: Path) -> Path:
+    """The green kit directory `plan` reads, holding a stand-in k3s."""
     green = tmp_path / "bootstrap-kit" / "green"
-    green.mkdir(parents=True)
+    green.mkdir(parents=True, exist_ok=True)
     (green / "k3s").write_text("k3s")
+    return green
+
+
+def _run(
+    monkeypatch,
+    tmp_path: Path,
+    misbehaving: str | None = None,
+    slow: str | None = None,
+    prepare_seconds: float = 0.0,
+):
+    """Run every bootstrap case on fake containers; returns the cases and the overlap.
+
+    `slow` names an item whose script run takes SLOW seconds, and `prepare_seconds` is how
+    long stocking the kit takes.
+    """
+    green = _green(tmp_path)
     gating = case.selected(case.plan(tmp_path, green), k3s_download=False)
     planned = {p.label: p for p in gating}
     overlap = Overlap(len(planned))
@@ -134,11 +156,14 @@ def _run(monkeypatch, tmp_path: Path, misbehaving: str | None = None):
     monkeypatch.setattr(case, "scratch_clone", made)
     monkeypatch.setattr(case, "red_clone", lambda clone, out: made(out))
     monkeypatch.setattr(case, "fixture_clone", lambda clone, out: made(out))
-    monkeypatch.setattr(case, "stock_kit", lambda cases, clone, kit: kit)
+    monkeypatch.setattr(
+        case, "stock_kit", lambda cases, clone, kit: time.sleep(prepare_seconds)
+    )
     monkeypatch.setattr(case, "stock_seed", lambda kit, seed: made(seed))
     monkeypatch.setattr(FakeContainer, "planned", planned)
     monkeypatch.setattr(FakeContainer, "overlap", overlap)
     monkeypatch.setattr(FakeContainer, "misbehaving", misbehaving)
+    monkeypatch.setattr(FakeContainer, "slow", slow)
     monkeypatch.setattr(case, "Container", FakeContainer)
     cases = SimpleNamespace(
         image="img",
@@ -171,6 +196,52 @@ def test_a_concurrent_run_prints_one_verdict_per_item_and_fails_only_the_bad_one
     assert cases.failed == [bad]
     assert failed == [bad]
     assert passed == sorted(p.name for p in planned.values() if p.name != bad)
+
+
+def test_every_item_passed_or_failed_prints_how_long_it_took(
+    monkeypatch, tmp_path, capsys
+):
+    _, planned, _ = _run(monkeypatch, tmp_path, misbehaving="red-nfpm")
+
+    err = capsys.readouterr().err
+    timed = {
+        label
+        for label in planned
+        if re.search(DONE.format(label=re.escape(label)), err, re.MULTILINE)
+    }
+    assert timed == set(planned), err
+
+
+def test_an_item_s_duration_is_its_own_run_not_the_wait_for_earlier_items(
+    monkeypatch, tmp_path, capsys
+):
+    probe = case.selected(case.plan(tmp_path, _green(tmp_path)), k3s_download=False)
+    first, last = probe[0].label, probe[-1].label
+    _run(monkeypatch, tmp_path, slow=first)
+
+    err = capsys.readouterr().err
+    seconds = {
+        label: [
+            float(s)
+            for s in re.findall(DONE.format(label=re.escape(label)), err, re.MULTILINE)
+        ]
+        for label in (first, last)
+    }
+    assert len(seconds[first]) == 1 and seconds[first][0] >= SLOW - 0.5, err
+    assert len(seconds[last]) == 1 and seconds[last][0] < SLOW - 0.5, err
+
+
+def test_the_prepare_prints_how_long_it_took(monkeypatch, tmp_path, capsys):
+    _run(monkeypatch, tmp_path, prepare_seconds=SLOW)
+
+    err = capsys.readouterr().err
+    seconds = [
+        float(match.group(1))
+        for line in err.splitlines()
+        if "prepare" in line
+        and (match := re.search(r"\bin (\d+(?:\.\d+)?) ?s\b", line))
+    ]
+    assert len(seconds) == 1 and seconds[0] >= SLOW - 0.5, err
 
 
 @pytest.fixture(autouse=True)

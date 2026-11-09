@@ -5,7 +5,7 @@ daniel-box since E3 (2026-08-12). See repo-root `CLAUDE.md` for shared conventio
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
   `--tags=homepage` with exit 5
 - **Images:** `ghcr.io/gethomepage/homepage` (`homepage_k8s_image`), `alpine`
   (`homepage_k8s_init_image`)
@@ -15,7 +15,7 @@ daniel-box since E3 (2026-08-12). See repo-root `CLAUDE.md` for shared conventio
 
 - **Depends on:** traefik, authelia
 - **Flux applies it, not Ansible** (D5.7, the third Wave A PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. Both dependencies stay
   Ansible-owned, so the

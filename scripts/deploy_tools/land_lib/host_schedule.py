@@ -1,7 +1,8 @@
 """The schedule half of the host wait: when a host should have applied a merge.
 
-A target's deadline is the second updater fire after the merge plus 10 minutes, read from the
-first parent's rendered schedule (H3.9a). `host_wait` re-exports these names.
+A target's deadline is the second updater fire after master CI went green at the merge, plus
+10 minutes, read from the first parent's rendered schedule (H3.9a). `host_wait` re-exports
+these names.
 """
 
 from datetime import UTC, datetime
@@ -30,8 +31,8 @@ def calendar_after(expressions: list[str], after: float, count: int) -> list[flo
     return fires[:count]
 
 
-def deadline(target, merged_at: float) -> float | None:
-    """When `target` should have applied the merge: its second updater fire after, plus slack.
+def deadline(target, after: float) -> float | None:
+    """When `target` should have applied the merge: its second fire after `after`, plus slack.
 
     With several triggers, each bounds the second fire on its own, so the nearest bound wins.
 
@@ -44,9 +45,9 @@ def deadline(target, merged_at: float) -> float | None:
     try:
         for key, values in target.triggers.items():
             if key == "OnCalendar":
-                bounds.append(calendar_after(values, merged_at, 2)[1])
+                bounds.append(calendar_after(values, after, 2)[1])
             elif key == "OnUnitActiveSec":
-                bounds.append(merged_at + 2 * min(span_s(v) for v in values))
+                bounds.append(after + 2 * min(span_s(v) for v in values))
             elif key not in BOOT_ONLY:
                 return None
     except ValueError, IndexError:

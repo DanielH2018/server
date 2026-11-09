@@ -7,7 +7,7 @@ redis incident, the notifier's history and the OIDC derivations are in
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
   `--tags=authelia` with exit 5
 - **Images:** `authelia/authelia` (`authelia_k8s_image`), `redis` (`authelia_k8s_redis_image`)
 - **Route:** `auth.<domain>` · `auth.local.<domain>`, no Authelia
@@ -126,7 +126,7 @@ the container in `templates/deployment.yaml.j2`. ENFORCED:
   only when the placeholder render places it, which
   `ansible/tests/services/test_authelia_claude_ui_user.py` holds to the manage flags.
 - **Flux applies authelia, not Ansible** (D5, authelia's own window). Its `containers_list`
-  entry carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and
+  entry is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and
   a merged change reaches the cluster when `promote` publishes and verifies the next bundle.
   A rotation
   lands without `--tags`, as

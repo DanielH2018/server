@@ -40,8 +40,8 @@ which lands the PR as the operator under the landing policy, and reports that la
 and exit code as its own. ``--detach && cc-wait land <pr>`` works unchanged; ``--tags``,
 ``--since`` and ``--subject`` are refused. The mechanics are ``land_lib/handoff.py``.
 
-WHAT THIS SCRIPT DOES NOT DO. It holds no check of its own: no health logic, no staleness
-logic, and it runs no deploy.sh and no GitOps tick. promote and Flux apply every tag,
+WHAT THIS SCRIPT DOES NOT DO. It holds no check of its own: no health logic, no deploy
+staleness logic, and it runs no deploy.sh and no GitOps tick. promote and Flux apply every tag,
 deploy_detach_notify.gate owns the health verdict, await_ci.wait owns the CI wait. A check
 appearing in here is a bug, not a feature -- it would be a second implementation that drifts from the first. Which checkout each helper comes from, and why
 it is not one answer, is the docstring of ``land_lib/tools.py``.
@@ -95,7 +95,8 @@ for the outcome.
 the merge in time, the builder has not published the host package, or the health gate could
 not read its store (exit 75), so the deploy went ungraded. Re-run land.sh to grade it.
 `refused` is every other exit-1 stop: the landing policy, a PR closed unmerged or with
-changes requested, a read or a fetch that failed. The `land:` line on stderr, repeated in the
+changes requested, a read or a fetch that failed, or a checkout whose landing code master
+has changed since (`classify.refuse_stale_code`). The `land:` line on stderr, repeated in the
 verdict's detail, says which. `handoff-timeout` is land.sh giving up on a lander unit that is
 still running (`LAND_HANDOFF_UNIT` below); a re-run waits on it again. `unbuilt` replaces a
 host's `deferred` when the builder reports a failing reason and has published no package of

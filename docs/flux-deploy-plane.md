@@ -15,7 +15,7 @@ recovered by *Recovering Flux by hand*.
   `ansible/roles/k8s/flux/defaults/main.yml`. helm-controller and the image-automation
   controllers are not installed, because nothing here uses them.
 - **Flux applies them**, from `ansible/roles/k8s/flux/`'s render under the tag `flux`
-  (`owner: flux`). The Kustomization `flux` applies the components at `prune: false`, and
+  (`platform: k8s`). The Kustomization `flux` applies the components at `prune: false`, and
   `flux-deferred` applies the sync objects at `prune: true`. `deploy.sh --tags flux` exits 5.
 - **The install is vendored.** `files/gotk-components.yaml` is the output of `flux install
   --export`, filtered and pinned by digest. Its first line is the pipeline that produced it,
@@ -269,7 +269,7 @@ under its pod template. `probe_lib/takeover.py` holds the rules.
 
 The census cannot see an apply that fails on an immutable field, such as a PVC's spec or a
 selector, or one that changes a value. For those the operator renders the flip PR's head, where
-the entry carries `owner: flux`, and runs the flux CLI at `flux_version` on a machine with
+the entry is published, and runs the flux CLI at `flux_version` on a machine with
 cluster-admin access (**operator-only**):
 
 ```bash
@@ -354,10 +354,8 @@ Three things hold the ruling on the tree:
   a flux-owned service*).
   ```
 
-- **The ownership census.** The `every-k8s-entry-is-flux-owned` row in
-  `ansible/tests/repo/_flux_ownership_row.py` fails on any k8s entry without `owner: flux`.
-- **No Ansible path.** `deploy.sh --tags <tag>` exits 5 for every k8s entry, whatever its `owner`
-  reads, and the GitOps deployer has applied no k8s role since D6.12.
+- **No ownership flag.** Every `platform: k8s` entry is Flux's, so no key marks one (H1.9).
+- **No Ansible path.** `deploy.sh --tags <tag>` exits 5 for every k8s entry, and the GitOps deployer has applied no k8s role since D6.12.
 
 D6's plan,
 [*The deletion policy, and the end of the handback*](target-architecture/deploy/d6-delete-old-path.md#the-deletion-policy-and-the-end-of-the-handback),
@@ -843,7 +841,7 @@ The `promote` workflow, `.github/workflows/promote.yml`, runs after each success
 of CI on master. It publishes the commit as the OCI artifact
 `ghcr.io/danielh2018/homelab-manifests:sha-<commit>` and moves the tag `prod` to the newest
 published master commit. The `OCIRepository` `homelab` follows `prod`. While no
-`containers_list` entry carries `owner: flux`, the bundle's root Kustomization is empty, so a
+`containers_list` entry was published, the bundle's root Kustomization is empty, so a
 move changes nothing in the cluster but the commit Flux reports. The workflow has six jobs:
 
 1. `render` checks out the triggering commit and refuses one that is not on master. It builds
@@ -1296,9 +1294,12 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
 
 ## The bundle
 
-The render job publishes the deploy tags whose `containers_list` entry carries `owner: flux`.
-`promote.py published-tags` prints them. A tag that loses the marking is left out, and the
-tag rule refuses that change (*A Flux-owned service stays Flux-owned*).
+The render job publishes the deploy tags of every `platform: k8s` entry in
+`cluster/services.yml`. `promote.py published-tags` prints them. A tag whose entry goes is left
+out, and the tag rule refuses that change while its role stays (*A Flux-owned service stays
+Flux-owned*). The publish floor fails `published-tags` and `check-bundle` when the list
+publishes no `coredns`, `longhorn`, `metallb` or `traefik`, so an empty or shrunken list
+publishes nothing (`scripts/deploy_tools/bundle_census.py:PUBLISH_FLOOR`).
 
 The build step passes each published tag to the renderer with `--role` and no
 `--secret-stubs`. No `--secret-stubs` is what selects placeholder mode, the only mode that
@@ -1394,12 +1395,12 @@ The renderer generates every `dependsOn` from its own dependency map, and no tem
 writes one. The `no-template-hand-writes-depends-on` row of
 `ansible/tests/repo/test_census_rows_text.py` fails a template that does.
 `scripts/renderer/renderer_lib/cluster.py:bundle_ordering` builds the map with `build_k8s_dep_map` over the full k8s
-`containers_list` and reads ownership from the inventory, so a `--role` render gives a tag
+`containers_list`, so a `--role` render gives a tag
 the same toposort edges as a full one. The `<tag>-deferred` edges come from the tags the
 render publishes, and the publish job renders every published tag. The edges are:
 
 - **A tag's toposort edges, kept when flux-owned.** `<tag>` depends on each member of its
-  `build_k8s_dep_map` edges that the inventory marks `owner: flux`. Any other edge is
+  `build_k8s_dep_map` edges that the bundle publishes. Any other edge is
   dropped, because a `dependsOn` naming a missing Kustomization fails every reconcile.
 - **The dropped edges stay visible.** The annotation `homelab/ansible-owned-deps` lists them,
   comma-separated and sorted. Each becomes a real `dependsOn` in the first render after its
@@ -1647,8 +1648,8 @@ refuses the publish when:
 - the pull of `prod` fails.
 
 `prod` moves only on promotion, so a refusal persists through later unrelated commits until the
-tag returns or its role directory goes. The first line refuses removing `owner: flux`
-from a live entry (*A Flux-owned service stays Flux-owned*). To retire a service, remove its entry and its role in
+tag returns or its role directory goes. The first line refuses a tag that
+leaves the bundle while its role stays (*A Flux-owned service stays Flux-owned*). To retire a service, remove its entry and its role in
 one PR (*Retiring a flux-owned service*). A registry with no `prod` is the first run, and only
 the `flux` line applies. Arm 6 of the render-diff gates runs the same rule on a pull request
 against the base render, so a PR usually fails before it merges.
@@ -1935,7 +1936,7 @@ with `git log` back to `prod`'s commit.
 
 CI's render-diff gates, `scripts/validate/render_diff_gates.py`, refuse the PR before it
 merges, so a removal never reaches `decide` undeclared. Its arm 3 renders the cluster at the
-PR's base and head. It fails when a tag that is `owner: flux` at the base loses an object of
+PR's base and head. It fails when a tag the base publishes loses an object of
 any kind, or leaves the render whole, and no commit of the PR carries the `Removes-Object:` line for it. The failure line
 names the exact line to add. Two removals pass without a line:
 
@@ -1946,7 +1947,7 @@ names the exact line to add. Two removals pass without a line:
   `kustomize.toolkit.fluxcd.io/prune: disabled` passes. D5.1a2 stamps that label on claims;
   a claim rendered without it is pruned like any other object and needs the line.
 
-A tag that leaves the render, because it lost `owner: flux` or its entry, is judged
+A tag that leaves the render, because it lost its entry, is judged
 like any other, so each object still in its base render needs a line. The arm reads the PR's own commits, which a squash merge need not copy, so it runs on pull
 requests only. On master `decide` reads the same lines and applies both exemptions. The two
 checks share one implementation of them, `stem` and `prune_disabled` in

@@ -206,7 +206,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: uv run --frozen python scripts/deploy_tools/promote.py ci-verdict "$SHA"
 
-      # The bundle publishes the tags the inventory marks `owner: flux` and every shared kind,
+      # The bundle publishes the tags of every k8s entry in cluster/services.yml and every shared kind,
       # such as `cluster-vars`. The renderer writes each tag's `cluster/<tag>/` and its
       # Kustomization `flux/<tag>.yaml`, each shared kind's `cluster/<kind>/` and
       # `flux/<kind>.yaml`, the root's `flux/kustomization.yaml` and `digests.json`. Passing no

@@ -51,8 +51,9 @@ and wait. Neither the GitOps deployer nor Ansible applies a k8s workload.
 [Contracts](../target-architecture/contracts.md) C2 owns the artifact and its promotion, and
 C3 owns the Flux objects.
 
-Every k8s `containers_list` entry carries `owner: flux`, and a service stays Flux-owned or
-retires. The operator ruled on 2026-11-06 ([#7464](https://github.com/DanielH2018/server/issues/7464))
+Every k8s `containers_list` entry is Flux's, and a service stays Flux-owned or retires. H1.9
+([#7752](https://github.com/DanielH2018/server/issues/7752)) dropped the `owner: flux` key
+each entry carried, because `platform: k8s` alone says it. The operator ruled on 2026-11-06 ([#7464](https://github.com/DanielH2018/server/issues/7464))
 that a service does not move back to Ansible. A bad role change reverts through `promote` or
 holds through the `DEPLOY_HOLD` repository variable.
 
@@ -80,13 +81,13 @@ completes this record.
 
 - `deploy.sh` exits 5 for a k8s tag, `--check` and `--dry-run` included
   (`scripts/deploy_tools/deploy_lib/owners.py:refuse_k8s_tags`).
-- The census row `every-k8s-entry-is-flux-owned` in `ansible/tests/repo/_flux_ownership_row.py`
-  fails a commit that drops `owner: flux` from an entry.
+- The publish floor (`scripts/deploy_tools/bundle_census.py:PUBLISH_FLOOR`) fails publish
+  when the service list drops `coredns`, `longhorn`, `metallb` or `traefik`.
 - The deployer routes every path under `ansible/roles/k8s/<role>/` to `cs.flux` and reads no
   `owner`. `ansible/roles/setup/gitops_deploy/tests/test_changeset_has_no_service_fields.py`
   holds that the deleted `ChangeSet` fields stay deleted.
-- `test_owner_readers_agree.py` holds the two remaining readers of
-  `owner` equal.
+- `ansible/tests/repo/test_owner_entry_points_census.py` follows each entry point down to
+  `k8s_tags` or `entry_owner`, the readers of which tags Flux applies.
 
 **Removing a tag from the bundle deletes its objects.** D6.20 ([#7487](https://github.com/DanielH2018/server/pull/7487))
 switched 65 `<tag>` Kustomizations to the default deletion policy, which follows `prune`.
@@ -146,5 +147,5 @@ every path that writes the git tree, still holds for the host plane.
 ## Governs
 
 No `# DECIDED:` marker names this record, so `governs:` is empty. The tests named under
-*Consequences* enforce the decision: the census row, the owner-reader and `ChangeSet` tests,
+*Consequences* enforce the decision: the publish floor, the entry-point census, the `ChangeSet` test
 and the deletion drill.

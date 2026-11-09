@@ -407,7 +407,7 @@ def _series(sha: str = MERGE[:12], ok: str = "1", success: str = "1760700000"):
     }
 
 
-def _wait(target, fetch, clock, merged_at=None):
+def _wait(target, fetch, clock):
     """Run the wait to its end; return the Outcome, or None when it returned, and the sleeps."""
     ln, _ = make_landing()
     sleeps = []
@@ -419,9 +419,7 @@ def _wait(target, fetch, clock, merged_at=None):
         sleep=sleeps.append,
     )
     try:
-        host_wait.wait_for_hosts(
-            ln, [target], MERGE, merged_at or clock[0], reads=reads
-        )
+        host_wait.wait_for_hosts(ln, [target], MERGE, reads=reads)
     except Outcome as outcome:
         return outcome, sleeps
     return None, sleeps
@@ -510,6 +508,22 @@ def test_a_host_unsettled_past_its_deadline_ends_deferred_with_its_last_success(
     assert "not applied it by 2026-10-17 12:31 UTC" in outcome.detail
     assert "last update success was at 2026-10-17 09:35 UTC" in outcome.detail
     assert len(sleeps) == 2
+
+
+def test_the_deadline_counts_fires_from_the_first_query_not_from_the_merge():
+    # The landing reaches the wait at 12:00, once master CI is green; host-package CI ran the
+    # half hour before it. Fires at 12:05 and 12:20 put the deadline at 12:31, so a host still
+    # stale at 12:25 is waited on and settles at 12:30. Counted from an 11:30 merge, the
+    # deadline was 12:01 and the 12:25 poll deferred.
+    stale, _ = _prom(_series(sha="c" * 12))
+    fresh, _ = _prom(_series())
+    answers = iter([stale] * 6 + [fresh] * 3)
+    outcome, sleeps = _wait(
+        _pi(),
+        lambda url, timeout: next(answers)(url, timeout),
+        [_at(12, 0), _at(12, 25), _at(12, 30)],
+    )
+    assert outcome is None and sleeps == [host_wait.POLL_S] * 2
 
 
 def test_an_unreachable_prometheus_is_not_settled_and_keeps_waiting():

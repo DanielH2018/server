@@ -22,7 +22,8 @@ notification-controller posts as `flux/soak`. In order, it:
    4xx still fails;
 4. waits W past the latest first Ready among the pods R created, then fails on a restart after
    a pod's first Ready, on a pod it cannot map or order, and on a critical or `verify="true"`
-   alert activated after T0.
+   alert activated after T0. A restart counts for a container or a native sidecar (an
+   initContainer with `restartPolicy: Always`), never for a plain init container's retries.
 
 A pass prints the services it judged, then one `event=deploy` logfmt line, the cluster's deploy
 annotation. A failure prints the same line with `result=fail` and `duration_s`, writes
@@ -358,11 +359,25 @@ def _ready_since(pod: Mapping) -> float | None:
     return None
 
 
-def _restarts(pod: Mapping) -> dict[str, int]:
+def _sidecars(pod: Mapping) -> set[str]:
     return {
-        c["name"]: c.get("restartCount", 0)
-        for c in (pod.get("status") or {}).get("containerStatuses") or []
+        c["name"]
+        for c in (pod.get("spec") or {}).get("initContainers") or []
+        if c.get("restartPolicy") == "Always"
     }
+
+
+def _long_running_statuses(pod: Mapping) -> list[Mapping]:
+    """A pod's container statuses plus its native sidecars'; plain init containers retry."""
+    status = pod.get("status") or {}
+    sidecars = _sidecars(pod)
+    return (status.get("containerStatuses") or []) + [
+        c for c in status.get("initContainerStatuses") or [] if c["name"] in sidecars
+    ]
+
+
+def _restarts(pod: Mapping) -> dict[str, int]:
+    return {c["name"]: c.get("restartCount", 0) for c in _long_running_statuses(pod)}
 
 
 def judge_pods(
@@ -387,6 +402,13 @@ def judge_pods(
             f"kube_pod_container_status_restarts_total{{{selector}}}{window}", None
         )
     )
+    if any(_sidecars(pod) for pod in pods.values()):
+        scraped |= _series(
+            reads.query(
+                f"kube_pod_init_container_status_restarts_total{{{selector}}}{window}",
+                None,
+            )
+        )
     gap = 2 * inputs.scrape_seconds
     for key, pod in sorted(pods.items()):
         label = "/".join(key)
@@ -405,7 +427,7 @@ def judge_pods(
                 service, f"pod {label} is Ready but has no Ready sample since T0"
             )
         counts = before.get(pod["metadata"].get("uid"), {})
-        for status in (pod.get("status") or {}).get("containerStatuses") or []:
+        for status in _long_running_statuses(pod):
             name = status["name"]
             if status.get("restartCount", 0) > counts.get(
                 name, status.get("restartCount", 0)

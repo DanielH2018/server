@@ -1,6 +1,6 @@
 # H1 — Hand the cluster content to Flux
 
-Status: IN PROGRESS
+Status: DONE
 
 PR H1.1f, the CI pin checks: [#5256](https://github.com/DanielH2018/server/pull/5256). It
 merged on 2026-10-16 at `2e8d5b1e3` and deployed nothing. `scripts/validate/cluster_pins.py`
@@ -55,7 +55,7 @@ kubeconfig`, which read `ok=18 changed=0 failed=0`: the guard read the live Flux
 refusal skipped. The operator then cleared the line
 ([readings](https://github.com/DanielH2018/server/pull/5316#issuecomment-6224451468)).
 
-**Status, 2026-11-09: H1.1a to H1.8 are done, which unblocks H2, and H1.9 is half done.**
+**Status, 2026-11-09: H1 is done. H1.1a to H1.8 unblocked H2, and H1.9 finished H1.**
 Both exit checks are met. The last PRs moved the cluster content to Flux in this order. H1.6
 is [#5937](https://github.com/DanielH2018/server/pull/5937), H1.7a is
 [#5941](https://github.com/DanielH2018/server/pull/5941) and H1.7b is
@@ -81,10 +81,11 @@ H1.9 was split in two once R4 was done. Neither exit check names it, and H2 neve
   daniel-server's `host_vars`. It narrowed `preflight.yml` and pointed the loaders at the
   moved file. The renderer reads the list as daniel-box's `containers_list`
   (`scripts/lib/render_guard.py:host_layer`), and the cluster render did not change.
-- **H1.9b** ([#7752](https://github.com/DanielH2018/server/issues/7752)) drops the `owner`
-  key, rewrites its readers and gives the publish census its floor of named members.
-
-H1's status changes to DONE when H1.9b lands.
+- **H1.9b** ([#7752](https://github.com/DanielH2018/server/issues/7752)) dropped the `owner`
+  key and rewrote its readers to read every entry of `cluster/services.yml`. The publish census
+  gained its floor of named members: `published-tags` and `check-bundle` fail a service list
+  that publishes no `coredns`, `longhorn`, `metallb` or `traefik`
+  (`scripts/deploy_tools/bundle_census.py:PUBLISH_FLOOR`). The cluster render did not change.
 
 Depends on: D2, D4; D3 for H1.7b only; R4 for H1.9 only
 Unblocks: H2, which needs H1.1a to H1.8 and never H1.9

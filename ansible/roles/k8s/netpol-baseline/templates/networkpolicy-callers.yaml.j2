@@ -2,7 +2,7 @@
 {# One additive caller fence per containers_list entry carrying `netpol_from`: authelia,
    speedtest, ical-proxy, home-assistant, karakeep and scrutiny. Each admits its listed
    callers on the entry's `port`, and the reason for each caller sits beside it in
-   inventory/host_vars/daniel-box.yml. The macro's header says which fences fit this shape.
+   cluster/services.yml. The macro's header says which fences fit this shape.
    `netpol_callers` adds homepage to that list for an entry setting `homepage_widget: true`
    (ical-proxy, scrutiny), and an entry carrying only that key still gets a fence.
 

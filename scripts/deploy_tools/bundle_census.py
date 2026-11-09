@@ -28,16 +28,19 @@ matters most. `longhorn-restore-drill` prunes, but its stamp ConfigMap carries
 the ConfigMap as a named member at H2.3d. The census applies to a
 tag from the commit that publishes it, so a tag the bundle does not publish yet is not judged.
 
+Before either, the publish floor (`floor_problems`, H1.9) fails a service list that drops one
+of `PUBLISH_FLOOR`'s tags, so an empty or shrunken list fails `published-tags` and
+`check-bundle` rather than publishing a bundle without them.
+
 The allowlist comes from the renderer's inputs, never from its output, so a renderer bug
-cannot widen it: the tags the inventory marks `owner: flux` (`published_tags`), the literal
+cannot widen it: every k8s entry's tags (`published_tags`), the literal
 `SHARED_KINDS`, and the published tags whose role sets `manifests_deferred_files` (`deferring_tags`), read as the
 renderer reads it, and those
 whose role declares snapshot claims (`snapshot_tags`), those whose role sets
 `flux_prepull_timeout` (`prepull_tags`), those whose role ships pre-apply check Jobs as
 `templates/precheck/*.yaml.j2` (`prechecking_tags`), and those whose role ships verify or post-apply
 mutation Jobs as `templates/verify/*.yaml.j2` (`verifying_tags`) or opts a CronJob into a gate
-Job with `flux_cronjob_gates` (`gating_tags`). A tag without
-`owner: flux` is left out of both the bundle and the allowlist (C4).
+Job with `flux_cronjob_gates` (`gating_tags`).
 
 The plan is docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*,
 and docs/target-architecture/host/h1-cluster-config-to-flux.md, *Plumbing tags are never pruned*,
@@ -61,7 +64,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.exit_codes import FAILED, OK
-from lib.k8s_roles import snapshot_claims, tag_owners
+from lib.k8s_roles import k8s_tags, snapshot_claims
 from lib.repo_paths import K8S_ROLES, K8S_SERVICES
 import bundle_gates
 from renderer.renderer_lib.bundle import (
@@ -89,9 +92,22 @@ from renderer.renderer_lib.ordering import (
 from renderer.renderer_lib.task_inputs import include_vars
 
 
+# The tags every bundle publishes: the cluster's plumbing, without which nothing else serves.
+PUBLISH_FLOOR = frozenset({"coredns", "longhorn", "metallb", "traefik"})
+
+
 def published_tags(services: Path = K8S_SERVICES) -> list[str]:
-    """The sorted deploy tags the bundle publishes: those the service list marks `owner: flux`."""
-    return sorted(tag for tag, owner in tag_owners(services).items() if owner == "flux")
+    """The sorted deploy tags the bundle publishes: every tag of every k8s entry in `services`."""
+    return sorted(k8s_tags(services))
+
+
+def floor_problems(published: Iterable[str]) -> list[str]:
+    """One line for each `PUBLISH_FLOOR` tag missing from `published`."""
+    return [
+        f"the service list publishes no {tag}, a member of the publish floor: a list that "
+        "lost it would publish a bundle without it"
+        for tag in sorted(PUBLISH_FLOOR - set(published))
+    ]
 
 
 def deferring_tags(
@@ -431,12 +447,16 @@ def member_census(
     return problems
 
 
-def report(out: Path, published: list[str], roles: Path = K8S_ROLES) -> int:
+def report(
+    out: Path, published: list[str], roles: Path = K8S_ROLES, floor: Iterable[str] = ()
+) -> int:
     """Print the census's and the gates' problems, or one line saying both passed.
 
+    `floor` holds the `floor_problems` lines, which fail the report with the rest.
     Returns the exit code.
     """
     deferring, problems = deferring_tags(published, roles)
+    problems = list(floor) + problems
     snapshotting, unjudged = snapshot_tags(published, roles)
     problems += unjudged
     prepulling, unjudged = prepull_tags(published, roles)
@@ -497,15 +517,20 @@ def add_parsers(commands) -> None:
             "--services",
             type=Path,
             default=K8S_SERVICES,
-            help="the service list whose owner: flux entries the bundle publishes",
+            help="the service list whose k8s entries the bundle publishes",
         )
 
 
 def run(args: argparse.Namespace) -> int:
     """Run `check-bundle` or `published-tags`, and return the exit code."""
     published = published_tags(args.services)
+    shrunk = floor_problems(published)
     if args.command == "published-tags":
+        for line in shrunk:
+            print(f"published-tags: {line}", file=sys.stderr)
+        if shrunk:
+            return FAILED
         for tag in published:
             print(tag)
         return OK
-    return report(args.out, published)
+    return report(args.out, published, floor=shrunk)

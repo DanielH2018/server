@@ -144,7 +144,7 @@ The setup/deploy split exists because `deploy.yml` is a `containers_list` loop a
 nothing for the setup plane, so pointing an operator at it for a `roles/setup/` change is a
 no-op that leaves the change unapplied.
 
-Flux applies an entry with `owner: flux`. A `deploy.yml` or `toposort.py` change is broad, so the
+Flux applies every k8s entry. A `deploy.yml` or `toposort.py` change is broad, so the
 deployer applies none of it.
 
 A setup role the deployer cannot apply is a fourth case. `k3s` lives in `k3s-bringup.yml` and
@@ -256,18 +256,17 @@ applied. D6.15 removed the `narrow` subcommand. The two rules below remain in
 ### A tag Flux applies is merged and skipped
 
 `promote` and Flux apply every k8s role, so the tick routes each changed path under
-`ansible/roles/k8s/<role>/` to `cs.flux`, with no read of the role's `owner`. The tick never
+`ansible/roles/k8s/<role>/` to `cs.flux`, with no read of the role's entry. The tick never
 applies, defers, alerts on or owes such a role. Without that branch of
 `deploy_changes.services_from_changed_paths`, a k8s path would map to no set at all.
 
 - **The journal names the role.** `plan_tick` logs `flux: <role>: fast-forwarding <paths>`.
 
-A `containers_list` entry that sets `owner` is not Ansible-owned: with `owner: flux`, Flux
-applies the tag through `promote`. The tick skips such a tag, so the deployer never
-applies, defers, alerts on or owes it. D2's plan has the design:
+Every `platform: k8s` entry is Flux's, which applies the tag through `promote`. The tick skips
+such a tag, so the deployer never applies, defers, alerts on or owes it. D2's plan has the
+design:
 [The ownership flag and its three readers](target-architecture/deploy/d2-first-leaf.md#the-ownership-flag-and-its-three-readers).
-`scripts/lib/k8s_roles.py:tag_owners` reads the flag and raises on an `owner` value other than
-`flux`.
+H1.9 dropped the flag itself, and `scripts/lib/k8s_roles.py:k8s_tags` reads the tags.
 
 ### Both apply arms are forward-only
 

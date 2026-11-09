@@ -10,7 +10,7 @@ Claude Code runs on the **host**, not in a container, and exports to `127.0.0.1:
 and Tempo carry the same `hostIP` pin on 3100/9090/3200 for `otelq`, another host process.
 Tempo's otlp-grpc 4317 skips the pin: two hostPorts on one number wedge a pod in `Pending`.
 
-Flux applies the role (`owner: flux`).
+Flux applies the role (`platform: k8s`).
 
 The `observability-verify` Job reads the pin back from the live DaemonSet and fails without it.
 It lives in `templates/verify/` and runs `files/observability_verify.py` with `get` on the
@@ -22,7 +22,7 @@ The working-out lives in `docs/observability-dashboards.md`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
   `--tags=observability` with exit 5
 - **Images:** `otel/opentelemetry-collector-contrib` (`observability_k8s_collector_image`),
   `grafana/loki` (`observability_k8s_loki_image`), `prom/prometheus`
