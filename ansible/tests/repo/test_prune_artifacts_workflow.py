@@ -1,7 +1,7 @@
 """The `prune-artifacts` workflow deletes old artifact versions under promote's own rules.
 
-It holds its master-ref check, its permissions, its own concurrency group, and a cosign
-installer step equal to promote's, so the two pins cannot drift apart. Its GHCR login runs
+It holds its master-ref check, its permissions, its own concurrency group, and a cosign pin
+and fetch steps equal to promote's, so the two pins cannot drift apart. Its GHCR login runs
 through a copy of promote's `RETRY_FUNCTIONS`, held equal the same way. `prune_problems` names
 every broken property; the real file must produce none, and each red fixture breaks one.
 
@@ -20,7 +20,6 @@ from test_promote_workflow import (
     _load,
     _steps,
     _triggers,
-    _uses,
 )
 from test_promote_workflow_retry import LOAD_RETRY
 
@@ -28,14 +27,16 @@ PRUNE_WORKFLOW = REPO / ".github" / "workflows" / "prune-artifacts.yml"
 PRUNE_PERMISSIONS = {"contents": "read", "packages": "write"}
 PRUNE_COMMAND = "promote.py prune"
 LOGIN_STEP = "Log in to GHCR"
+COSIGN_PIN = ("COSIGN_VERSION", "COSIGN_SHA256")
 
 
 def _cosign_steps(wf: dict) -> list[dict]:
+    """Every job's cosign cache and fetch steps, in order."""
     return [
         s
         for job in (wf.get("jobs") or {}).values()
         for s in _steps(job)
-        if _uses(s, "sigstore/cosign-installer")
+        if "pinned/cosign" in str(s.get("run", "")) + str(s.get("with", ""))
     ]
 
 
@@ -47,8 +48,8 @@ def _code_lines(step: dict) -> list[str]:
 def prune_problems(wf: dict, promote_wf: dict) -> list[str]:
     """Every broken property of the prune workflow, as one line each.
 
-    `promote_wf` supplies the cosign installer step the prune job must repeat exactly, the
-    action's commit SHA and `cosign-release` both.
+    `promote_wf` supplies the cosign pin and the cache and fetch steps the prune job must
+    repeat exactly.
     """
     found = []
     triggers = _triggers(wf)
@@ -75,8 +76,11 @@ def prune_problems(wf: dict, promote_wf: dict) -> list[str]:
     if not any(PRUNE_COMMAND in str(s.get("run", "")) for s in _steps(job)):
         found.append(f"prune: runs no `{PRUNE_COMMAND}`")
     cosign, reference = _cosign_steps(wf), _cosign_steps(promote_wf)
-    if len(cosign) != 1 or any(cosign[0] != step for step in reference):
-        found.append("prune: its cosign installer step differs from promote.yml's")
+    if len(cosign) != 2 or reference != cosign * 2:
+        found.append("prune: its cosign fetch steps differ from promote.yml's")
+    for key in COSIGN_PIN:
+        if (wf.get("env") or {}).get(key) != (promote_wf.get("env") or {}).get(key):
+            found.append(f"prune: its {key} differs from promote.yml's")
     functions = (wf.get("env") or {}).get("RETRY_FUNCTIONS")
     if not functions or functions != (promote_wf.get("env") or {}).get(
         "RETRY_FUNCTIONS"
@@ -103,7 +107,7 @@ def prune_workflow() -> dict:
 
 def test_the_prune_workflow_holds_every_property(prune_workflow, workflow):
     assert prune_problems(prune_workflow, workflow) == []
-    assert len(_cosign_steps(workflow)) == 2
+    assert len(_cosign_steps(workflow)) == 4
 
 
 def _prune_in_the_promote_group(wf):
@@ -119,12 +123,12 @@ def _prune_with_a_wider_permission(wf):
 
 
 def _prune_with_a_drifted_cosign_release(wf):
-    _cosign_steps(wf)[0]["with"]["cosign-release"] = "v3.1.3"
+    wf["env"]["COSIGN_VERSION"] = "v3.1.3"
 
 
-def _prune_with_a_drifted_cosign_installer(wf):
-    step = _cosign_steps(wf)[0]
-    step["uses"] = "sigstore/cosign-installer@" + "0" * 40
+def _prune_with_a_drifted_cosign_fetch(wf):
+    step = _cosign_steps(wf)[1]
+    step["run"] = step["run"].replace("--retry 12", "--retry 5")
 
 
 def _prune_with_a_shallow_checkout(wf):
@@ -176,13 +180,13 @@ PRUNE_RED = {
         _prune_with_a_wider_permission,
         "prune: permissions are",
     ),
-    "prune with a drifted cosign-release": (
+    "prune with a drifted COSIGN_VERSION": (
         _prune_with_a_drifted_cosign_release,
-        "prune: its cosign installer step differs",
+        "prune: its COSIGN_VERSION differs",
     ),
-    "prune with a drifted cosign installer": (
-        _prune_with_a_drifted_cosign_installer,
-        "prune: its cosign installer step differs",
+    "prune with a drifted cosign fetch": (
+        _prune_with_a_drifted_cosign_fetch,
+        "prune: its cosign fetch steps differ",
     ),
     "prune with a shallow checkout": (
         _prune_with_a_shallow_checkout,

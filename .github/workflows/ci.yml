@@ -697,7 +697,7 @@ jobs:
             echo "sops $SOPS_VERSION: cached"
           else
             mkdir -p "$RUNNER_TEMP/pinned/sops"
-            curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$sops" \
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$sops" \
               "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
           fi
           echo "$SOPS_SHA256  $sops" | sha256sum -c --strict || {
@@ -1141,7 +1141,7 @@ jobs:
             echo "sops $SOPS_VERSION: cached"
           else
             mkdir -p "$RUNNER_TEMP/pinned/sops"
-            curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$sops" \
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$sops" \
               "https://github.com/getsops/sops/releases/download/$SOPS_VERSION/sops-$SOPS_VERSION.linux.amd64"
           fi
           echo "$SOPS_SHA256  $sops" | sha256sum -c --strict
@@ -1150,7 +1150,7 @@ jobs:
             echo "kind $KIND_VERSION: cached"
           else
             mkdir -p "$RUNNER_TEMP/pinned/kind"
-            curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$kind" \
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$kind" \
               "https://github.com/kubernetes-sigs/kind/releases/download/$KIND_VERSION/kind-linux-amd64"
           fi
           echo "$KIND_SHA256  $kind" | sha256sum -c --strict
