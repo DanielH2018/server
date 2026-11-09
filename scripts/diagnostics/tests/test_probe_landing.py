@@ -245,6 +245,21 @@ def test_worktrees_carry_their_claims_and_the_primary_checkout_is_left_out():
     ]
 
 
+def test_a_clear_landing_counts_the_worktrees_rather_than_listing_them():
+    """Nothing blocks, so the list answers no question; `--json` still carries it (#7896)."""
+    snap = landing.collect(lambda: None, fake_deploy_ui(CLEAR), fake_run(GREEN))
+    text = landing.format_text({**snap, "claims": None})
+    assert "2 worktree(s); `probe.py landing --json` lists them." in text
+    assert "worktree-fanout-1" not in text
+
+
+def test_a_blocked_landing_lists_each_worktree_and_its_claims():
+    held = {"hold_sha": "deadbeefcafe", "hold_plane_entries": ["setup:k3s"]}
+    snap = landing.collect(lambda: None, fake_deploy_ui(held), fake_run(GREEN))
+    text = landing.format_text({**snap, "claims": None})
+    assert "  worktree-fanout-1  #3 #12" in text
+
+
 def _deck_snapshot_fields(dts: str) -> set[str]:
     """The field names of `DeckSnapshot` in the deck mod's type contract."""
     body = re.search(r"export type DeckSnapshot = \{(.*?)\n\}", dts, re.S)

@@ -495,6 +495,20 @@ def owed_lines(row: dict) -> list[str]:
     return lines
 
 
+def worktree_lines(worktrees: list[dict], blocked: bool) -> list[str]:
+    """Each worktree and its claims while something blocks, else only their count.
+
+    A blocker raises the question of whose change it is, which the claims answer.
+    """
+    if not blocked:
+        return [f"{len(worktrees)} worktree(s); `probe.py landing --json` lists them."]
+    lines = ["Worktrees:"]
+    for t in worktrees:
+        nums = " ".join(f"#{n}" for n in t["claims"])
+        lines.append(f"  {t['branch'] or t['path']}  {nums}".rstrip())
+    return lines
+
+
 def format_text(snap: dict) -> str:
     """The snapshot as lines for a terminal, one blank line between sections.
 
@@ -531,10 +545,7 @@ def format_text(snap: dict) -> str:
             f"Last landing: {snap['last_verdict']['verdict'] or 'no VERDICT line'}",
         ]
     if snap["worktrees"]:
-        lines += ["", "Worktrees:"]
-        for t in snap["worktrees"]:
-            nums = " ".join(f"#{n}" for n in t["claims"])
-            lines.append(f"  {t['branch'] or t['path']}  {nums}".rstrip())
+        lines += ["", *worktree_lines(snap["worktrees"], bool(snap["blockers"]))]
     for c in unmatched_claims(snap):
         lines.append(
             f"Claim no worktree here works: #{c['number']} {c['reason']}".rstrip()
