@@ -157,13 +157,10 @@ def test_discover_templates_finds_the_known_set():
         "claude-clone-sync.service.j2",
         "claude-dotfiles-sync.service.j2",
         "claude-bg-resume.service.j2",
-        "check-timer.service.j2",
-        "check-timer-boot.service.j2",
-        "check-timer.timer.j2",
         "homelab-rootq.socket.j2",
         "homelab-rootq@.service.j2",
     } <= names
-    assert len(names) == 33
+    assert len(names) == 30
 
 
 def test_unit_context_layers_the_owning_roles_real_defaults():

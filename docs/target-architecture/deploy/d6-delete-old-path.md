@@ -377,7 +377,7 @@ reader that D6 does not delete.
     - `group_vars/all.yml:setup_drift_check_hosts` lists daniel-server alone. Its comment says
       manifest-prune-check "exists on daniel-box alone".
     - `test_the_reader_is_armed_where_no_manifest_prune_check_runs` in
-      `ansible/tests/deploy/test_setup_drift_check.py` asserts that no k3s server host is in
+      `test_setup_drift_check.py` asserts that no k3s server host is in
       the list. D6.16 renames it `test_every_host_that_renders_setup_templates_is_armed`.
     - The Kuma tile is "Setup Plane Drift (agent hosts)", with one token,
       `setup_drift_push_token`.
@@ -2145,7 +2145,7 @@ The steps merged in this order.
       reads 1 for `origin="daniel-box"` and for `origin="daniel-server"`. D6.5 does not open
       until that holds, because D6.5's `NotReporting` arm for the box needs a sample inside
       its deadline.
-    - **The red proof** is the fixture pair in `ansible/tests/deploy/test_setup_drift_check.py`
+    - **The red proof** is the fixture pair in `test_setup_drift_check.py`
       that runs the same `setup-drift-lib.sh`:
       `test_a_stale_deployed_copy_is_reported` and `test_a_changed_template_is_reported_stale`.
       A red verdict on a live host is not the proof. On daniel-server it would page through

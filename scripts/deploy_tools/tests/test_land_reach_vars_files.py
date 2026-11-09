@@ -21,6 +21,7 @@ from deploy_tools.land_lib import land_reach
 
 from _narrow_fixtures import _refs
 from _setup_role_fixtures import ROLE, build
+from _pre_h763_tree import PRE_H763
 
 
 @pytest.fixture
@@ -150,13 +151,17 @@ def test_a_vars_file_that_cannot_be_read_stays_wide(_knobs_role):
 # `initial_setup/defaults/main.yml` names claude_code for every edit (#4303), and claude_code
 # reads one of its keys. Two real ranges over it: 1e7eed71e bumped the uv pin, which
 # claude_code never reads, and abf8d0d4a^..acb3513b0 added the socket group key it does read.
+# Both read the tree before H7.63, which emptied initial_setup.
 _INITIAL_SETUP_DEFAULTS = ["ansible/roles/setup/initial_setup/defaults/main.yml"]
 
 
 def test_an_initial_setup_default_claude_code_never_reads_owes_it_no_host():
     """The tick drops claude_code over this range (#4361), so no hand-run of it is owed."""
     note = land_reach.remaining_setup_hosts_note(
-        _INITIAL_SETUP_DEFAULTS, "daniel-box", pr_range="1e7eed71e^..1e7eed71e"
+        _INITIAL_SETUP_DEFAULTS,
+        "daniel-box",
+        pr_range="1e7eed71e^..1e7eed71e",
+        ref=PRE_H763,
     )
     assert "`initial_setup` also reaches daniel-server" in note
     assert "`claude_code`" not in note
@@ -165,7 +170,10 @@ def test_an_initial_setup_default_claude_code_never_reads_owes_it_no_host():
 def test_an_initial_setup_default_claude_code_reads_no_longer_name_daniel_server():
     """The other half: claude_code ends on daniel-server, so the note names no host for it."""
     note = land_reach.remaining_setup_hosts_note(
-        _INITIAL_SETUP_DEFAULTS, "daniel-box", pr_range="abf8d0d4a^..acb3513b0"
+        _INITIAL_SETUP_DEFAULTS,
+        "daniel-box",
+        pr_range="abf8d0d4a^..acb3513b0",
+        ref=PRE_H763,
     )
     assert "`claude_code`" not in note, note
 

@@ -25,7 +25,7 @@ from pathlib import Path
 from deploy_tools.setup_lib.setup_gates import role_end_guard
 from docs.catalog_lib.package_timers import package_timers
 from lib import yaml_fast
-from lib.json_types import JsonObject, JsonValue, as_object
+from lib.json_types import JsonObject, JsonValue
 from lib.jinja_comments import strip_jinja_comments
 from lib.jinja_defaults import resolve
 from lib.k8s_roles import role_dirs
@@ -192,13 +192,7 @@ def cron_jobs(role_dir: Path) -> list[tuple[str, str]]:
 
 
 def timer_units(role_dir: Path) -> list[tuple[str, list[str]]]:
-    """`(unit, ["OnCalendar=…", …])` for every timer a role installs.
-
-    Two sources: a `templates/*.timer.j2` the role ships, and an import of the shared
-    `roles/setup/common/tasks/check_timer.yml`, whose `check_timer_name` and
-    `check_timer_on_calendar` vars name the unit and its cadence. The second is read from
-    `tasks/` because the template lives in `common`, not in the importing role.
-    """
+    """`(unit, ["OnCalendar=…", …])` for every `templates/*.timer.j2` a role ships."""
     units: list[tuple[str, list[str]]] = []
     for tmpl in sorted((role_dir / "templates").glob("*.timer.j2")):
         keys: list[str] = []
@@ -208,26 +202,6 @@ def timer_units(role_dir: Path) -> list[tuple[str, list[str]]]:
                 keys.append(f"{m.group(1)}={resolve(m.group(2), role_dir)}")
         keys.sort(key=lambda k: _TIMER_KEYS.index(k.split("=", 1)[0]))
         units.append((tmpl.name.removesuffix(".j2"), keys))
-    for tasks_file in sorted((role_dir / "tasks").glob("*.yml")):
-        for task in _walk_tasks(load_yaml_list(tasks_file)):
-            target = task.get("ansible.builtin.import_tasks")
-            if not isinstance(target, str) or not target.endswith(
-                "common/tasks/check_timer.yml"
-            ):
-                continue
-            variables = as_object(task.get("vars") or {}, f"{tasks_file.name} vars")
-            if variables.get("check_timer_state") == "absent":
-                continue  # a teardown arm removes the timer; it installs nothing
-            name = variables.get("check_timer_name", "unnamed")
-            cadence = variables.get("check_timer_on_calendar")
-            units.append(
-                (
-                    f"kuma-check-{name}.timer",
-                    [f"OnCalendar={resolve(str(cadence), role_dir)}"]
-                    if cadence is not None
-                    else [],
-                )
-            )
     return units
 
 

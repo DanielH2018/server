@@ -151,26 +151,6 @@ def test_a_table_holding_only_the_old_host_lib_key_routes_the_moved_file_nowhere
         deploy_cross_role.use_tables(live)
 
 
-def test_a_common_task_file_change_reaches_the_roles_importing_it():
-    """An `import_tasks` of a `common/tasks/` file is static, so the imported tasks run under
-    each importer's tags and only re-applying the importers applies the change (#3317). The
-    initial_setup consumer applies on the tick."""
-    path = "ansible/roles/setup/common/tasks/install_host_lib.yml"
-    consumers = {"gitops_deploy"}
-    assert setup_roles_for(path) == consumers
-    assert setup_tags_for([path]) == consumers
-
-
-def test_a_check_timer_template_change_reaches_the_roles_importing_its_task_file():
-    """`check_timer.yml` renders the kuma-check pair, so a template edit reaches a host
-    only through that task file's importers (#3319). `common` is not recorded, so the alert
-    does not print the resolv.conf remediation for it."""
-    path = "ansible/roles/setup/common/templates/check-timer.timer.j2"
-    consumers = {"gitops_deploy", "initial_setup"}
-    assert setup_roles_for(path) == consumers
-    assert setup_tags_for([path]) == consumers
-
-
 def test_an_initial_setup_defaults_change_reaches_only_its_own_role():
     path = "ansible/roles/setup/initial_setup/defaults/main.yml"
     assert services_from_changed_paths([path]).setup_roles == {"initial_setup"}

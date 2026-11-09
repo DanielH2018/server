@@ -5,7 +5,7 @@ three fake-remux heartbeats, the etcd restore drill with its egress-fence leg, a
 notifier and agent each write `<check>.prom` through homelab-check-lib.sh, which the rules in
 `other-setup-checks.yaml` read. Each case runs the rendered script, or the rendered function or
 unit line that writes the verdict, against the REAL library from the role tree: a CI runner has
-no /usr/local/lib/homelab-check-lib.sh, and daniel-box does, so a case that ran the script as-is
+no /usr/lib/homelab/homelab-check-lib.sh, and daniel-box does, so a case that ran the script as-is
 would pass here and fail there. `uv`, `upsc`, `systemctl`, `date` and `logger` are stubs.
 
 Properties the cases pin:
@@ -32,8 +32,7 @@ from lib.proc_testing import fake_bin, path_with, run, write_exec
 CHECK_LIB = (
     ANSIBLE / "roles" / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
 )
-CHECK_LIB_PATH = "/usr/local/lib/homelab-check-lib.sh"
-PACKAGED_CHECK_LIB_PATH = "/usr/lib/homelab/homelab-check-lib.sh"
+CHECK_LIB_PATH = "/usr/lib/homelab/homelab-check-lib.sh"
 EPOCH = 1760000000
 OVERRIDES = {
     "domain": "example.test",
@@ -176,11 +175,9 @@ def _run_fake_remux(tmp_path):
     )
     uv = tmp_path / "uv"
     write_exec(uv, STATE_PUSH)
-    for literal in (PACKAGED_CHECK_LIB_PATH, "/usr/bin/uv"):
+    for literal in (CHECK_LIB_PATH, "/usr/bin/uv"):
         assert literal in body, f"fake-remux-health.sh no longer references {literal}"
-    body = body.replace(PACKAGED_CHECK_LIB_PATH, str(CHECK_LIB)).replace(
-        "/usr/bin/uv", str(uv)
-    )
+    body = body.replace(CHECK_LIB_PATH, str(CHECK_LIB)).replace("/usr/bin/uv", str(uv))
     textfile_dir, env = _env(tmp_path, "unused")
     run(["bash", str(write_exec(tmp_path / "fr.sh", body))], env=env, check=True)
     return textfile_dir
@@ -296,7 +293,7 @@ def _run_unit_line(tmp_path, check, lib, bin_dir_env):
         f"TEXTFILE_DIR={bin_dir_env['TEXTFILE_DIR']}",
         f"LOGGED={bin_dir_env['LOGGED']}",
         *argv[3:-1],
-        argv[-1].replace(PACKAGED_CHECK_LIB_PATH, str(lib)),
+        argv[-1].replace(CHECK_LIB_PATH, str(lib)),
     ]
     return run(argv, env=bin_dir_env)
 

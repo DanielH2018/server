@@ -19,6 +19,7 @@ from lib import yaml_fast
 
 from deploy_tools.land_lib import land_reach
 from deploy_tools.land_lib import land_tags
+from _pre_h763_tree import PRE_H763
 
 
 @pytest.fixture
@@ -163,10 +164,10 @@ def test_setup_role_hosts_census_is_not_vacuous():
 
 
 def test_remaining_setup_hosts_note_flags_pr_1002():
-    """`initial_setup` reaches all three hosts, the tick converges on
+    """`initial_setup` reached all three hosts until H7.63, the tick converges on
     daniel-box alone, and the other two are owed a hand-run."""
     files = ["ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"]
-    note = land_reach.remaining_setup_hosts_note(files, "daniel-box")
+    note = land_reach.remaining_setup_hosts_note(files, "daniel-box", ref=PRE_H763)
     assert "daniel-server" in note
     assert "daniel-pi" in note
     assert "initial_setup" in note
@@ -180,7 +181,7 @@ def test_remaining_setup_hosts_note_survives_a_hand_applied_plane_beside_it():
         "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
         "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
     ]
-    note = land_reach.remaining_setup_hosts_note(files, "daniel-box")
+    note = land_reach.remaining_setup_hosts_note(files, "daniel-box", ref=PRE_H763)
     assert "daniel-server" in note
     assert "daniel-pi" in note
     assert "initial_setup" in note
@@ -204,14 +205,16 @@ def test_remaining_setup_hosts_note_is_relative_to_the_given_host():
     """The drift check's script reaches daniel-box and daniel-server only, and the note names
     the reached host the tick did not run on -- not a hardcoded daniel-box, and never the Pi."""
     files = ["ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2"]
-    from_box = land_reach.remaining_setup_hosts_note(files, "daniel-box")
+    from_box = land_reach.remaining_setup_hosts_note(files, "daniel-box", ref=PRE_H763)
     assert "reaches daniel-server" in from_box
     assert "daniel-box" not in from_box
     assert "daniel-pi" not in from_box
-    from_server = land_reach.remaining_setup_hosts_note(files, "daniel-server")
+    from_server = land_reach.remaining_setup_hosts_note(
+        files, "daniel-server", ref=PRE_H763
+    )
     assert "reaches daniel-box" in from_server
     assert "daniel-pi" not in from_server
-    from_pi = land_reach.remaining_setup_hosts_note(files, "daniel-pi")
+    from_pi = land_reach.remaining_setup_hosts_note(files, "daniel-pi", ref=PRE_H763)
     assert "reaches daniel-box" in from_pi
     assert "reaches daniel-server" in from_pi
 

@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# Shared host-check helpers for every host's checks -- managed by Ansible (initial_setup role);
-# edits overwritten. Sourced from /usr/local/lib/homelab-check-lib.sh; not executed directly.
+# Shared host-check helpers for every host's checks. The check-lib and pi-heartbeats components
+# ship it as /usr/lib/homelab/homelab-check-lib.sh; sourced, not executed directly.
 #
-# Consumers source it with `|| exit 1`, so a host that misses it fails its cron loudly instead of
-# reporting green. Its copy task is `tags: [always]`, because consumers run under other roles'
-# tags. docs/target-architecture/monitoring/m6-retire-kuma.md (*B0, B5, B7 and B8*) gives the plan.
+# Consumers source it with `|| exit 1`, so a host that misses it fails its check loudly instead of
+# reporting green. docs/target-architecture/monitoring/m6-retire-kuma.md (*B0, B5, B7 and B8*) gives the plan.
 
 # boot_grace_active GRACE_S TAG
 # True (exit 0) when the host booted less than GRACE_S ago, so the caller skips this run.

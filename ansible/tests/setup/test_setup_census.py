@@ -268,8 +268,10 @@ def test_an_apt_item_resolves_only_when_every_package_is_a_depends_entry():
 
 
 def test_an_allowlisted_name_resolves_and_the_list_names_its_reason():
-    item = Item("daniel-box", "r", "file", "Clear ansible log file")
-    assert resolved(item, HostSide())
+    item = Item("daniel-box", "r", "file", "Deleted demo task")
+    assert resolved(
+        item, HostSide(), allowlist={"Deleted demo task": "deleted: no host needs it"}
+    )
     assert not resolved(item, HostSide(), allowlist={})
     assert all(ALLOWLIST.values())
 

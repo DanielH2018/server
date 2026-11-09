@@ -1,44 +1,20 @@
-# `setup/common` — task files the other setup roles import
+# `setup/common` — the resolv.conf template two host components render
 
 Not a role a playbook applies. Nothing lists `common` in `initial_setup.yml`, and it has no
-`tasks/main.yml`, no deploy tag and nothing to run on its own: it is the include-only home for
-the pieces several setup roles need byte-identical. A caller reaches it with
-`ansible.builtin.import_tasks: "{{ role_path }}/../setup/common/tasks/<file>.yml"` (one more
-`../` from `roles/k8s/`) and passes the variables the file's header names.
-
-**A change here is applied by applying its consumers.** An `import_tasks` is static, so each
-imported task runs under the consumer's own tag. No tag of `common`'s own exists or is needed
-(#2704).
-
-How the deployer routes a change depends on the file. An edit to `hosts/lib/host_lib.py` (it
-left this role's `files/` in H7.2e) or to a `tasks/*.yml` file
-re-applies the setup roles that copy or import it
-(`deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, #3312, #3317): the initial_setup
-consumers apply on the tick.
-`common` itself is not recorded for those files. Its line would name no consumer, and leave
-one more marker to clear after the consumers are applied. A PR may add a file and its table entry together: the tick classifies
-a range that edits `deploy_cross_role.py` with origin's copy of it, not the installed one
-(#3512). The check-timer templates route to the importers of
-`check_timer.yml`, the task file that renders them (#3319). No k8s role imports
-`install_host_lib.yml` or `stamp_deployed.yml` since H2.5c. A change to `host_lib.py`
-moves the render of `configarr` and `janitorr`, whose health CronJobs stage the file into their
-ConfigMaps, and `promote` applies it; the tick applies no k8s role since D6.12.
-
-`resolv.conf.j2` records nothing. The host packages render it, so the deployer maps it to no
-role (`ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py:SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES`),
-and `land.sh` waits on each host's package instead. A `common` file in no table still records
-`common`, and its line names the commands that apply it.
+`tasks/` and no deploy tag. H7.63 deleted its last task files with their importers: the
+setup-drift check's stamp tasks, the host-check timer task and its unit templates, and the
+`host_lib.py` copy task. H7.53's census reads this directory on every host, so a new task file
+here would read as setup work left to move.
 
 | File | What it gives a caller |
 |---|---|
-| `tasks/install_host_lib.yml` | Copies `hosts/lib/host_lib.py` beside a consumer script so `import host_lib` resolves — every consumer is a directly-invoked script with only its own directory on `sys.path`. |
-| `tasks/stamp_render.yml` | Records the source checksum of a group of rendered templates, one fragment per group, so a tag-scoped run leaves the other groups' fragments stale and the drift check reports the truth. |
-| `tasks/stamp_deployed.yml` | Records `{live, src}` pairs for `copy:`-deployed artifacts, so `setup-drift-check.sh` can compare live bytes against the repo in either direction. |
-| `tasks/check_timer.yml` | Schedules a host check as a systemd timer plus oneshot service (`templates/check-timer.{service,timer}.j2`) that reruns every `RestartSec` while the check is red. The contract is the exit code: the script writes its verdict to a check textfile that a Prometheus rule reads, exits non-zero after `down` and 0 after `up`, and `Restart=on-failure` does the rest. The timer is `Persistent=true`, so a slot missed inside an outage runs at boot. A reboot ends a red check's restart loop, so `templates/check-timer-boot.service.j2` reruns it once at boot while the service's `/var/lib/kuma-check/<name>.down` marker says its last run failed (#4495). A check that judges the cluster pairs either boot run with a boot-grace arm that exits 1 without a verdict, and the restart carries the real verdict. `check_timer_state: absent` is the way out, and the legacy cron is removed in both states. Guarded by `ansible/tests/setup/test_check_timer.py`, whose `KNOWN_CHECKS` names every caller. |
-| `hosts/lib/host_lib.py` | `parse_env_file`, `atomic_write`, `discord_post` (the Cloudflare-1010 User-Agent, 2xx-only success, the one `DISCORD_MAX` clamp, and an opt-in `spool_dir` that queues an undelivered post, which the caller's `flush_discord_spool` sends on its next run, #3905), `github_token` and `github_get` (every host GitHub reader's token lookup and request), and two bound transports: `kubectl_runner` and `journal_reader` (a syslog tag's messages over a window, `None` when the read itself failed). The one copy of Python shared across setup-role host scripts; tested in `hosts/lib/tests/`. |
 | `templates/resolv.conf.j2` | The resolv.conf `hosts/components/k3s-host-dns/` renders on daniel-box. The Pi's `hosts/components/pi-resolver/` loads the same file through `role: common`. |
 
-Each task file's header carries the reasoning and the variable contract; read it before
-adding a caller. `host_lib.py` must stay importable on the host Python floor
-(`test_host_python_pin.py`), not only on the repo's 3.15 — it runs under the pinned host
-interpreter, never `uv run` against the repo.
+`resolv.conf.j2` records nothing. The host packages render it, so the deployer maps it to no
+role (`ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py:SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES`),
+and `land.sh` waits on each host's package instead.
+
+`hosts/lib/host_lib.py` left this role's `files/` in H7.2e. The host packages ship it beside
+each consumer script, and `hosts/lib/tests/` tests it. It must stay importable on the host
+Python floor (`test_host_python_pin.py`), not only on the repo's 3.15, because it runs under
+the pinned host interpreter, never `uv run` against the repo.

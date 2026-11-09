@@ -19,7 +19,9 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_se
 
 import subprocess
 
-from deployer_lib import deploy_narrow
+import pytest
+
+from deployer_lib import deploy_cross_role, deploy_narrow
 from deployer_lib.deploy_setup_roles import SECRET_READERS_SCRIPT, SecretReadersRefused
 from gitops_ledger import OWED_HOLD_PLANE, owed_line
 
@@ -35,10 +37,26 @@ RENOVATE_TEMPLATE = "ansible/roles/setup/renovate_notify/templates/notify.sh.j2"
 # `ansible/requirements.yml` is the setup-plane path that maps to no role directory at all —
 # `initial_setup` installs the collections, and the tag is `collections`.
 REQUIREMENTS = "ansible/requirements.yml"
-# A `common` task file two setup roles import, so every edit to it names both (#3317).
+# A `common` task file two setup roles import, so every edit to it names both (#3317). H7.63
+# deleted the last such file, so `_shipped_by_two_roles` puts its row back for the cases.
 SHIPPED_FILE = "ansible/roles/setup/common/tasks/stamp_deployed.yml"
 # What `narrow_setup.py` answers for a role the range reaches no host through (#4361).
 NOTHING = (deploy_narrow.NARROW_SETUP_NOTHING_EXIT, deploy_narrow.NARROWED_TO_NOTHING)
+
+
+@pytest.fixture
+def _shipped_by_two_roles():
+    """`SHIPPED_FILE`'s row, naming both roles that imported it, for the rest of one test."""
+    live = deploy_cross_role.current_tables()
+    shipped = {
+        **deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
+        SHIPPED_FILE: frozenset({"gitops_deploy", "initial_setup"}),
+    }
+    deploy_cross_role.use_tables(
+        {**live, "SETUP_FILES_SHIPPED_BY_OTHER_ROLES": shipped}
+    )
+    yield
+    deploy_cross_role.use_tables(live)
 
 
 def _playbook_argv(tick):
@@ -263,7 +281,7 @@ def test_the_narrowing_loop_stops_asking_once_its_budget_is_spent():
 
 
 def test_a_shipped_file_applies_and_holds_every_role_that_ships_it(
-    gitops_deploy, tick, state
+    gitops_deploy, tick, state, _shipped_by_two_roles
 ):
     """gitops_deploy and initial_setup both import `stamp_deployed.yml` (#3317).
 
@@ -286,7 +304,7 @@ def test_a_shipped_file_applies_and_holds_every_role_that_ships_it(
 
 
 def test_a_role_needing_no_tag_is_left_out_of_the_apply_and_the_hold(
-    gitops_deploy, tick, state
+    gitops_deploy, tick, state, _shipped_by_two_roles
 ):
     """A role the row names but the edit reaches no task of plans no tag (#4361).
 
@@ -306,7 +324,7 @@ def test_a_role_needing_no_tag_is_left_out_of_the_apply_and_the_hold(
 
 
 def test_exit_three_without_the_nothing_line_applies_the_whole_role_tag(
-    gitops_deploy, tick, state
+    gitops_deploy, tick, state, _shipped_by_two_roles
 ):
     """The rejecting half: the exit code alone is not the answer, so it stays doubt."""
     tick.paths = [SHIPPED_FILE]
@@ -319,7 +337,7 @@ def test_exit_three_without_the_nothing_line_applies_the_whole_role_tag(
 
 
 def test_a_range_no_setup_role_needs_a_tag_for_runs_no_playbook(
-    gitops_deploy, tick, state
+    gitops_deploy, tick, state, _shipped_by_two_roles
 ):
     """An empty `--tags` value runs the whole playbook, so nothing runs and the receipt says so.
 

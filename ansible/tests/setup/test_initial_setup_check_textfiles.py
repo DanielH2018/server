@@ -1,7 +1,7 @@
 """The B2 host checks write a homelab_check_* textfile and push to nothing (M6 batch B2).
 
-docs/target-architecture/monitoring/m6-retire-kuma.md, batch B2: docs-refresh, the eval sweep, the
-secret-rotation audit and the setup-drift check each write `<check>.prom` through
+docs/target-architecture/monitoring/m6-retire-kuma.md, batch B2: docs-refresh, the eval sweep and the
+secret-rotation audit each write `<check>.prom` through
 homelab-check-lib.sh, which the rules in `initial-setup-checks.yaml` read. (The Loki witness's
 cases are in test_loki_route_witness.py.) Each case runs the rendered script, or the rendered
 `on_exit` trap for the two scripts too large to run whole, with the real library and a `date`
@@ -26,7 +26,6 @@ from lib.proc_testing import fake_bin, path_with, run, write_exec
 ROLE = ANSIBLE / "roles" / "setup" / "initial_setup"
 COMPONENTS = ANSIBLE.parent / "hosts" / "components"
 CHECK_LIB = ROLE / "files" / "homelab-check-lib.sh"
-CHECK_LIB_PATH = "/usr/local/lib/homelab-check-lib.sh"
 EPOCH = 1760000000
 OVERRIDES = {
     "domain": "example.test",
@@ -48,17 +47,15 @@ PRODUCERS = {
     "docs-refresh.sh.j2": "docs-refresh",
     "eval-run.sh.j2": "eval-run",
     "secret-rotation-audit.sh.j2": "secret-rotation-audit",
-    "setup-drift-check.sh.j2": "setup-drift-check",
 }
 
 
 def _render(template: str) -> str:
-    """The script as rendered, from its host component once H7.36 moved it out of the role."""
-    for path in sorted(COMPONENTS.glob(f"*/templates/{template}")):
-        return render_shell_script(
-            "components", path.parents[1].name, template, overrides=OVERRIDES
-        )
-    return render_shell_script("setup", "initial_setup", template, overrides=OVERRIDES)
+    """The script as its host component renders it."""
+    (path,) = COMPONENTS.glob(f"*/templates/{template}")
+    return render_shell_script(
+        "components", path.parents[1].name, template, overrides=OVERRIDES
+    )
 
 
 def kuma_push_markers(body: str) -> list[str]:
@@ -170,51 +167,6 @@ def test_a_down_exit_writes_success_zero_and_logs_its_status_line(tmp_path, chec
         _series(textfile_dir, check)[f'homelab_check_success{{check="{check}"}}'] == "0"
     )
     assert "status=down a message" in _logged(tmp_path)
-
-
-# --- setup-drift-check: the whole script, with the drift library stubbed ----------------------
-
-
-def _run_setup_drift(tmp_path, drifted=""):
-    body = _render("setup-drift-check.sh.j2")
-    drift_lib = tmp_path / "setup-drift-lib.sh"
-    drift_lib.write_text(
-        'setup_drift_scan() { DRIFTED="$STUB_DRIFTED"; STALE=""; DEPLOYED_NOTE=""; '
-        'MANIFEST_NOTE=""; }\nsetup_drift_tree_age_days() { echo 1; }\n'
-    )
-    for needle in (CHECK_LIB_PATH, "/usr/local/lib/setup-drift-lib.sh"):
-        assert needle in body, f"setup-drift-check.sh no longer references {needle}"
-    body = body.replace(CHECK_LIB_PATH, str(CHECK_LIB)).replace(
-        "/usr/local/lib/setup-drift-lib.sh", str(drift_lib)
-    )
-    script = write_exec(tmp_path / "setup-drift-check.sh", body)
-    textfile_dir, env = _env(tmp_path, STUB_DRIFTED=drifted)
-    result = run([str(script)], env=env)
-    return textfile_dir, result.returncode
-
-
-def test_setup_drift_writes_success_one_when_nothing_drifted_and_exits_zero(tmp_path):
-    textfile_dir, code = _run_setup_drift(tmp_path)
-
-    series = _series(textfile_dir, "setup-drift-check")
-    assert series['homelab_check_success{check="setup-drift-check"}'] == "1"
-    assert (
-        series['homelab_check_deadline_seconds{check="setup-drift-check"}'] == "90000"
-    )
-    assert code == 0
-
-
-def test_setup_drift_writes_success_zero_on_drift_and_exits_one_for_the_timer(tmp_path):
-    textfile_dir, code = _run_setup_drift(tmp_path, drifted="ansible/x.sh")
-
-    assert (
-        _series(textfile_dir, "setup-drift-check")[
-            'homelab_check_success{check="setup-drift-check"}'
-        ]
-        == "0"
-    )
-    assert "status=down" in _logged(tmp_path)
-    assert code == 1
 
 
 # --- secret-rotation-audit: the audit's exit code is the verdict ------------------------------

@@ -300,16 +300,16 @@ def test_no_schedule_that_reads_the_cluster_fires_inside_the_box_window(box_pack
 
 
 def test_each_scan_finds_the_member_that_proves_it_reads_something(box_package):
-    # No setup role installs a cron since H7.34, so the role scan's member is the drift check's timer.
+    # No setup role installs a cron or a timer since H7.63, so the role scan has no member left.
     _, cronjobs, recurring = job_schedules()
     assert CRONJOB_MEMBER in cronjobs
     assert RECURRING_MEMBER in recurring
-    assert "kuma-check-setup-drift.timer" in {s.name for s in role_schedules([])}
 
 
 def test_an_emptied_role_is_left_out_of_the_role_scan():
     names = {r.name for r in applied_setup_roles()}
-    assert "initial_setup" in names
+    assert "k3s" in names
+    assert "initial_setup" not in names
     assert "gitops_deploy" not in names
 
 

@@ -24,7 +24,6 @@ initial_setup_worktree_sweep_cron_weekday: 0  # Sunday
 # granted anywhere else.
 initial_setup_worktree_holders_group: worktree-holders
 
-# Where the rkhunter and AIDE scripts source homelab-check-lib.sh from. crons.yml installs it
-# under /usr/local/lib; the integrity-scans host component sets /usr/lib/homelab, where the
-# check-lib component ships it.
-initial_setup_host_lib_dir: /usr/local/lib
+# Where the rkhunter and AIDE scripts source homelab-check-lib.sh from: the check-lib and
+# pi-heartbeats components ship it there.
+initial_setup_host_lib_dir: /usr/lib/homelab

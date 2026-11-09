@@ -99,7 +99,7 @@
     },
     {
       "customType": "regex",
-      "description": "Pinned prek version in CI (`pip install prek==X` in .github/actions/setup/action.yml, which every CI job installs prek through since #3723) The pin keeps the hook toolchain reproducible; track it on PyPI so the pin doesn't age silently. One manager for both files, so the two copies land in one `{{depName}}` PR (the file-scoped rule below names host-basics.yml); ansible/tests/repo/test_host_tool_pins_match_their_twins.py fails when they disagree anyway.",
+      "description": "Pinned prek version in CI (`pip install prek==X` in .github/actions/setup/action.yml, which every CI job installs prek through since #3723) The pin keeps the hook toolchain reproducible; track it on PyPI so the pin doesn't age silently.",
       "managerFilePatterns": [
         "/(^|/)\\.github/actions/setup/action\\.yml$/"
       ],
@@ -107,17 +107,6 @@
         "pip install prek==(?<currentValue>[\\d.]+)"
       ],
       "depNameTemplate": "prek",
-      "datasourceTemplate": "pypi"
-    },
-    {
-      "customType": "regex",
-      "description": "The ansible-core and ansible-lint versions the hosts install as uv tools (`- ansible-core==X`, `- ansible-lint==X` in initial_setup's host-basics.yml, #2148). Before the pins, `uv tool install ansible-core` took whatever PyPI served on provisioning day, and the two hosts ran 2.21.0 and 2.21.2 against a 2.21.4 uv.lock. Each pin has a twin: ansible-core's is pyproject.toml's `ansible-core==` (the built-in pep621 manager reads it), ansible-lint's is prek.toml's `ansible/ansible-lint` rev (the prek.toml manager above). The two lockstep packageRules below put each pair in ONE PR, and test_host_tool_pins_match_their_twins.py refuses a half-update.",
-      "managerFilePatterns": [
-        "/(^|/)ansible/roles/setup/initial_setup/tasks/host-basics\\.yml$/"
-      ],
-      "matchStrings": [
-        "- (?<depName>ansible-core|ansible-lint)==(?<currentValue>[\\d.]+)"
-      ],
       "datasourceTemplate": "pypi"
     },
     {
@@ -541,7 +530,7 @@
       "minimumReleaseAgeBehaviour": "timestamp-optional"
     },
     {
-      "description": "CI toolchain + docs-lint pins under .github/workflows/**, .github/actions/** (the setup action holds the python, node and prek pins since #3733) and .vale.ini are not container images, and the catch-all 'container images (non-major)' rule above has no matchFileNames scoping it away from them — it matches every custom.regex dep by default. That is how PR #939 opened titled \"Update dependency prek to v0.5.0\" on branch renovate/container-images-(non-major) while its diff carried only the Vale binary bump (2026-09 finding, issue #980): both prek (ci.yml) and vale-cli/vale (ci.yml) fell into this one shared group with no file scoping, so Renovate reused a single group branch across two unrelated deps and the surviving title no longer matched the surviving diff. Giving each dependency its own group by depName makes the branch and title self-name, so a stale one can never wear another's label. The Ansible task file that installs Vale on the hosts is named here too, for the same reason: it carries the same depName as ci.yml's pin, so both copies belong in one PR, and without the path it would fall into the k8s-image group above instead. {{depName}} still groups prek's setup-action and host-basics.yml pins together (same depName, two files) — only the shared catch-all name is removed, not that lockstep. automerge/platformAutomerge/minimumReleaseAge inherited from the catch-all rule above are unaffected; only groupName changes.",
+      "description": "CI toolchain + docs-lint pins under .github/workflows/**, .github/actions/** (the setup action holds the python, node and prek pins since #3733) and .vale.ini are not container images, and the catch-all 'container images (non-major)' rule above has no matchFileNames scoping it away from them — it matches every custom.regex dep by default. That is how PR #939 opened titled \"Update dependency prek to v0.5.0\" on branch renovate/container-images-(non-major) while its diff carried only the Vale binary bump (2026-09 finding, issue #980): both prek (ci.yml) and vale-cli/vale (ci.yml) fell into this one shared group with no file scoping, so Renovate reused a single group branch across two unrelated deps and the surviving title no longer matched the surviving diff. Giving each dependency its own group by depName makes the branch and title self-name, so a stale one can never wear another's label. The Ansible task file that installs Vale on the hosts is named here too, for the same reason: it carries the same depName as ci.yml's pin, so both copies belong in one PR, and without the path it would fall into the k8s-image group above instead. automerge/platformAutomerge/minimumReleaseAge inherited from the catch-all rule above are unaffected; only groupName changes.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -549,7 +538,6 @@
         ".github/workflows/**",
         ".github/actions/**",
         ".vale.ini",
-        "ansible/roles/setup/initial_setup/tasks/host-basics.yml",
         "hosts/packages/homelab-tools/package.yml",
         "hosts/bootstrap-host.sh"
       ],
@@ -820,25 +808,17 @@
       "groupName": "shellcheck-py (lockstep: prek.toml + pyproject.toml)"
     },
     {
-      "description": "ansible-core is pinned TWICE by design (#2148) — pyproject.toml `ansible-core==` (pep621, the env `uv run ansible-playbook` and the tests resolve) and host-basics.yml `- ansible-core==` (custom.regex, the uv tool that runs deploys on the hosts) — and ansible/tests/repo/test_host_tool_pins_match_their_twins.py holds them equal. One group = one PR touching both files. NO automerge: the galaxy collections group above is manual for its lockstep with ansible-core, and a merged bump reaches a host only on its next `initial_setup.yml --tags tooling` run, which is the operator's to schedule. No matchManagers filter, on purpose: it must catch the built-in pep621 manager's copy as well as the regex one.",
+      "description": "ansible-core is pinned once, in pyproject.toml `ansible-core==` (pep621, the env `uv run ansible-playbook` and the tests resolve). NO automerge: the galaxy collections group above is manual for its lockstep with ansible-core, so a bump that automerged alone would break that lockstep.",
       "matchPackageNames": [
         "ansible-core"
       ],
-      "groupName": "ansible-core (manual — lockstep: pyproject.toml + host-basics.yml; rerun --tags tooling on the hosts)",
+      "groupName": "ansible-core (no automerge — lockstep with the galaxy collections)",
       "rebaseWhen": "conflicted",
       "schedule": [
         "before 6am on monday"
       ],
       "updateNotScheduled": false,
       "automerge": false
-    },
-    {
-      "description": "ansible-lint is pinned TWICE by design (#2148) — prek.toml rev (github-releases, the hook env) and host-basics.yml `- ansible-lint==` (pypi, the uv tool on the hosts) — and test_host_tool_pins_match_their_twins.py holds them equal. One group = one PR touching both files; overrides the prek-hooks group above for this package, the shellcheck-py rule's shape.",
-      "matchPackageNames": [
-        "ansible/ansible-lint",
-        "ansible-lint"
-      ],
-      "groupName": "ansible-lint (lockstep: prek.toml + host-basics.yml)"
     },
     {
       "description": "Every `# renovate:` annotated pin (depTypeTemplate of the annotation manager). Most pair the version with a sha256 or md5 that Renovate cannot compute, so NO automerge, and the group name names the command that finishes it: `asset_pins.py --refresh <depName>` fetches every pin whose URL renders from the annotated version and rewrites its digest. This one rule replaced the per-package uv, sops, chezmoi and coredns rules (#3732), which differed only in which pin name their title quoted. groupSingleUpdates puts the work order in a single-dependency PR's title. A pin needing more than a digest (k3s, the Pi's docker engine, the crowdsec bouncer plugin, code-server's node) keeps its own rule LATER in this list, which overrides this groupName; that ordering is what keeps `k8s_autodeploy: false` in the crowdsec title, and scripts/tests/test_renovate_annotated_pins.py asserts it.",

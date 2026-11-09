@@ -1,17 +1,14 @@
 """A component retires the setup-manifest fragments its Ansible-era task actually stamped (#6279).
 
-An Ansible setup role records what it installed in two fragments, through
-`ansible/roles/setup/common/tasks/stamp_render.yml` (`setup-render-manifest.d/<stamp_render_name>`)
-and `ansible/roles/setup/common/tasks/stamp_deployed.yml`
-(`setup-deployed-manifest.d/<stamp_deployed_name>`). The two names can differ. When a component
-takes a task over, its `legacy:` list must name each fragment as the task stamped it: a fragment
-left behind names a file reconcile removed, and setup-drift-check.sh reads it as missing
-every run. loki-route-witness listed its render name for both and left
-`setup-deployed-manifest.d/loki-route-health` on daniel-box.
+An Ansible setup role recorded what it installed in two fragments,
+`setup-render-manifest.d/<stamp_render_name>` and `setup-deployed-manifest.d/<stamp_deployed_name>`,
+through the shared stamp task files H7.63 deleted. The two names can differ. When a component
+took a task over, its `legacy:` list had to name each fragment as the task stamped it, or the
+fragment stayed behind naming a file reconcile removed. loki-route-witness listed its render name
+for both and left `setup-deployed-manifest.d/loki-route-health` on daniel-box.
 
-The loki-route-witness tasks still run on daniel-server, so that row is derived from
-`initial_setup/tasks/crons.yml`. Every other mover's task is gone, so its row is recorded from
-the task file at the commit before the move.
+Every mover's task is gone, so each row is recorded from the task file at the commit before
+the move.
 
 Run: uv run pytest hosts/lib/tests/test_component_retired_stamp_fragments.py
 """
@@ -21,7 +18,6 @@ import yaml
 from lib.repo_paths import REPO
 
 COMPONENTS = REPO / "hosts" / "components"
-CRONS = REPO / "ansible" / "roles" / "setup" / "initial_setup" / "tasks" / "crons.yml"
 KINDS = {
     "/var/lib/homelab/setup-render-manifest.d/": "render",
     "/var/lib/homelab/setup-deployed-manifest.d/": "deployed",
@@ -81,9 +77,6 @@ RECORDED = {
         ("deployed", "claude-code-dotfiles-sync"),
     },
 }
-# A component whose Ansible tasks still run on another host; its row comes from those tasks, as
-# (task file, tag) pairs.
-DERIVED = {}
 
 
 def retired_fragments(spec: dict) -> set[tuple[str, str]]:
@@ -93,18 +86,6 @@ def retired_fragments(spec: dict) -> set[tuple[str, str]]:
         for prefix, kind in KINDS.items():
             if path.startswith(prefix):
                 found.add((kind, path.removeprefix(prefix)))
-    return found
-
-
-def stamped_fragments(tasks_file, tag: str) -> set[tuple[str, str]]:
-    found = set()
-    for task in yaml.safe_load(tasks_file.read_text()):
-        if tag not in (task.get("tags") or []):
-            continue
-        task_vars = task.get("vars") or {}
-        for kind in ("render", "deployed"):
-            if name := task_vars.get(f"stamp_{kind}_name"):
-                found.add((kind, name))
     return found
 
 
@@ -124,23 +105,15 @@ def components() -> dict[str, set[tuple[str, str]]]:
     }
 
 
-def expected() -> dict[str, set[tuple[str, str]]]:
-    derived = {
-        name: set().union(*(stamped_fragments(*src) for src in sources))
-        for name, sources in DERIVED.items()
-    }
-    return RECORDED | derived
-
-
 def test_every_component_retires_exactly_the_fragments_its_task_stamped():
     found = components()
     assert {"loki-route-witness", "builder", "integrity-scans"} <= set(found)
-    assert mismatches(found, expected()) == []
+    assert mismatches(found, RECORDED) == []
 
 
 def test_a_render_name_listed_for_the_deployed_fragment_is_reported():
     before_6279 = {("render", "loki-route-witness"), ("deployed", "loki-route-witness")}
-    assert mismatches({"loki-route-witness": before_6279}, expected()) == [
+    assert mismatches({"loki-route-witness": before_6279}, RECORDED) == [
         "loki-route-witness: retires [('deployed', 'loki-route-witness'), "
         "('render', 'loki-route-witness')], the task stamped "
         "[('deployed', 'loki-route-health'), ('render', 'loki-route-witness')]"

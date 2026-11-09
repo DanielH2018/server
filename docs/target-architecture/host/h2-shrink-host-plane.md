@@ -1987,7 +1987,7 @@ carries `prune: disabled`.
     - uptime-kuma's and qbittorrent's `netpol_from`, each in its CronJob's commit, and the
       prefs check's connect-retry case;
     - the deployer's cross-role tests, if D6 has not deleted the deployer;
-    - `ansible/tests/setup/test_host_lib_sibling_copies.py`, whose subject leaves with the
+    - `test_host_lib_sibling_copies.py`, whose subject leaves with the
       last import;
     - the `configarr`, `janitorr` and `qbittorrent` `CLAUDE.md` files;
     - `docs/qbittorrent-vpn-and-prefs.md`.

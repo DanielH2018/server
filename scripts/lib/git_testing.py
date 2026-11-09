@@ -24,9 +24,8 @@ Import it from any test, at any depth — `pyproject.toml` puts `scripts/` on `p
     from lib.git_testing import commit, init_repo
 
 A test whose subject IS the environment handling does not use this. `scripts/lib/tests/
-test_git.py` covers `lib.git`'s own scrub, and `ansible/tests/deploy/test_setup_drift_check.py`
-pins `GIT_CONFIG_NOSYSTEM` and `GIT_TEST_ASSUME_DIFFERENT_OWNER` and asserts why each pin is
-there. Both are named in the guard's exemption set with that reason.
+test_git.py` covers `lib.git`'s own scrub, and the guard's exemption set names it with that
+reason.
 """
 
 import os
@@ -61,7 +60,7 @@ def scrubbed_env(**overrides: str) -> dict[str, str]:
 
     Args:
         **overrides: Variables written after the scrub, for a test that needs one back.
-            `test_setup_drift_check.py`'s `GIT_TEST_ASSUME_DIFFERENT_OWNER` is the shape.
+            `GIT_TEST_ASSUME_DIFFERENT_OWNER="1"` is the shape.
 
     Returns:
         A fresh dict, safe for the caller to mutate.

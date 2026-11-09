@@ -153,7 +153,7 @@ fast-forwards and records the role instead of parking; see *A role only a hand c
 recorded, not parked* below.
 
 A setup role can ship another setup role's file by path, as `gitops_deploy` and
-`initial_setup` both import `common/tasks/stamp_deployed.yml`.
+`initial_setup` both imported `common/tasks/stamp_deployed.yml` until H7.63 deleted it.
 `deploy_changes.setup_roles_for` maps a change to such a file to its owner AND every role listed
 for it in `SETUP_FILES_SHIPPED_BY_OTHER_ROLES`. `ChangeSet.setup_roles` and `setup_tags_for` both
 read the table, so the `manual_plane` ledger class, the narrowed apply, the `hold_plane` coverage
@@ -189,7 +189,7 @@ with the reason.
   `setup_roles_for` drops `common` itself for a file with consumers, so the importers apply
   rather than the consumer-less remediation `common` would print.
 - A `common/templates/` file a common task file renders inherits that task file's importers. The
-  kuma-check pair routes to the roles importing `check_timer.yml`. `narrow_setup` finds no
+  kuma-check pair routed to the roles importing `check_timer.yml` until H7.63. `narrow_setup` finds no
   reader of the template in `gitops_deploy` or `k3s`, so those apply or are
   recorded under their whole-role tag.
 - A setup template that only host components render through `role:`, such as `resolv.conf.j2`,
@@ -873,8 +873,8 @@ the tick applies it on daniel-box, and daniel-server and daniel-pi need
 `uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy` (with `-e
 target=daniel-pi` for the Pi) run by an operator.
 
-**The two GitHub checks** are daily timers of the `github-checks` component on the deploy host, which keep the contract of
-`check_timer.yml` in the `common` role. Each writes its verdict through `write_check_textfile`, which the rules
+**The two GitHub checks** are daily timers of the `github-checks` component on the deploy host, which keep the exit-code
+contract of the retired kuma-check timers. Each writes its verdict through `write_check_textfile`, which the rules
 in `gitops-checks.yaml` read, and pushes to nothing. Each exits 1 on a down verdict, and
 `Restart=on-failure` reruns it every 30 minutes until it exits 0. Both
 authenticate with the deploy user's `gh auth token`, and without it both are red, because GitHub

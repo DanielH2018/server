@@ -24,31 +24,17 @@ from pathlib import Path
 
 # A file one setup role installs from another's `files/`, imports from another's `tasks/`, or
 # reads a variable of from another's `defaults/`, mapped to those roles, so a change to it re-applies them beside the owner (#3306, #3317).
-# A template a shared task file renders inherits that task file's importers (#3319): the
-# kuma-check pair reaches a host only through `check_timer.yml`.
+# A template a shared task file renders inherits that task file's importers (#3319).
 # `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree, and
 # `test_setup_cross_role_reads.py` holds its `defaults/` rows.
 _COMMON = "ansible/roles/setup/common"
 _HOST_LIB = frozenset({"gitops_deploy"})
-_STAMPED = _HOST_LIB | {"initial_setup"}
-_CHECK_TIMER = frozenset({"gitops_deploy", "initial_setup"})
-_ALERT_UNIT = frozenset({"gitops_deploy"})
 SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
-    f"{_COMMON}/tasks/alert_unit.yml": _ALERT_UNIT,
-    f"{_COMMON}/templates/unit-failure-alert.service.j2": _ALERT_UNIT,
-    f"{_COMMON}/templates/alert-webhook.env.j2": _ALERT_UNIT,
     # `hosts/lib/` since H7.2e: the packages ship it, and the Ansible consumers below still copy
     # it beside their scripts until their own PRs move them. `ci_verdict.py` is the deployer's
     # alone (`gitops_deploy/tasks/code.yml` copies it).
     "hosts/lib/host_lib.py": _HOST_LIB,
     "hosts/lib/ci_verdict.py": frozenset({"gitops_deploy"}),
-    f"{_COMMON}/tasks/install_host_lib.yml": _HOST_LIB,
-    f"{_COMMON}/tasks/check_timer.yml": _CHECK_TIMER,
-    f"{_COMMON}/templates/check-timer.service.j2": _CHECK_TIMER,
-    f"{_COMMON}/templates/check-timer.timer.j2": _CHECK_TIMER,
-    f"{_COMMON}/templates/check-timer-boot.service.j2": _CHECK_TIMER,
-    f"{_COMMON}/tasks/stamp_deployed.yml": _STAMPED,
-    f"{_COMMON}/tasks/stamp_render.yml": _STAMPED,
 }
 
 

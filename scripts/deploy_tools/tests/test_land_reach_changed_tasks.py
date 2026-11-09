@@ -13,6 +13,7 @@ import pytest
 import yaml
 
 from deploy_tools.land_lib import land_reach
+from _pre_h763_tree import PRE_H763
 from lib import yaml_fast
 from lib.proc_testing import run
 from deploy_tools.setup_lib.setup_role_chains import changed_task_texts
@@ -26,10 +27,6 @@ _CRONS = """\
 """
 _ALERT_TEMPLATE = "ansible/roles/setup/common/templates/unit-failure-alert.service.j2"
 _ALL = frozenset({"daniel-box", "daniel-server", "daniel-pi"})
-_CHECK_TIMER_TEMPLATES = tuple(
-    f"ansible/roles/setup/common/templates/check-timer{name}.j2"
-    for name in (".service", ".timer", "-boot.service")
-)
 
 
 def _edit(text: str, job: str) -> str:
@@ -204,20 +201,6 @@ def test_an_edited_template_no_task_names_keeps_the_role_reach(tmp_path):
     assert _reach(tmp_path, _UNNAMED, before, after) == _ALL
 
 
-@pytest.mark.parametrize("template", _CHECK_TIMER_TEMPLATES)
-def test_a_check_timer_template_names_initial_setup_only_on_the_listed_hosts(template):
-    assert land_reach.setup_shipped_file_hosts("initial_setup", template) == {
-        "daniel-box",
-        "daniel-server",
-    }
-
-
-def test_a_check_timer_task_file_change_keeps_the_hosts_that_render_nothing():
-    """The file's absent arm runs on daniel-pi, which is off the list, so its own edit owes it."""
-    tasks = "ansible/roles/setup/common/tasks/check_timer.yml"
-    assert land_reach.setup_shipped_file_hosts("initial_setup", tasks) == _ALL
-
-
 @pytest.mark.parametrize(
     "state, hosts",
     [
@@ -361,9 +344,11 @@ def test_a_tree_without_the_changed_tasks_says_the_note_stays_wide(
 
 
 def test_the_tick_owes_an_initial_setup_edit_to_the_other_hosts():
-    """The pair the GitOps tick records in its `owed` ledger (#6510): it ran the role here."""
+    """The pair the GitOps tick records in its `owed` ledger (#6510): it ran the role here.
+
+    Read from the tree before H7.63, which emptied the role."""
     reach = land_reach.remaining_setup_hosts(
-        ["ansible/roles/setup/initial_setup/tasks/main.yml"], "daniel-box"
+        ["ansible/roles/setup/initial_setup/tasks/main.yml"], "daniel-box", ref=PRE_H763
     )
     assert "daniel-server" in reach["initial_setup"]
     assert "daniel-box" not in reach["initial_setup"]

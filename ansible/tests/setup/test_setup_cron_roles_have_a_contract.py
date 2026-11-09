@@ -25,13 +25,7 @@ CONTRACT_HEADING = "## Autonomous-role contract"
 
 # Roles whose cron/timer changes no state: it reads, then pushes a heartbeat or a notification.
 # Each reason is the thing to re-check before keeping the role here.
-EXEMPT: dict[str, str] = {
-    "common": (
-        "`templates/check-timer.timer.j2` is the shared unit pair `tasks/check_timer.yml` "
-        "renders for an importing role; it has no schedule or check of its own, and the role "
-        "that imports it owns the check the timer reruns and carries the contract for it"
-    ),
-}
+EXEMPT: dict[str, str] = {}
 
 
 def _installs_a_cron_or_timer(role_dir: Path) -> bool:

@@ -112,13 +112,10 @@ def test_every_host_retires_the_crons_whose_absent_arms_left_crons_yml(host):
         assert {"cron": name, "user": user} in legacy, name
 
 
-def test_crons_yml_keeps_only_the_ansible_log_cron_arm():
-    names = {
-        task["ansible.builtin.cron"]["name"]
-        for task in _role_tasks()
-        if "ansible.builtin.cron" in task
-    }
-    assert names == {"Clear ansible log file"}
+@pytest.mark.parametrize("host", ["daniel-box", "daniel-pi", "daniel-server"])
+def test_every_host_retires_the_ansible_log_cron(host):
+    """H7.63 deleted crons.yml's last absent arm, so each host's legacy list removes the cron."""
+    assert {"cron": "Clear ansible log file", "user": "root"} in _legacy(host)
 
 
 @pytest.mark.parametrize("host", ["daniel-box", "daniel-server"])
@@ -138,9 +135,7 @@ def test_each_cluster_node_retires_the_docker_teardown_in_removal_order(host):
 
 def test_the_role_keeps_no_baseline_task_on_any_host():
     tasks = _role_tasks()
-    assert any(
-        task.get("name") == "Install Python CLI tooling as uv tools" for task in tasks
-    )
+    assert any("ansible.builtin.meta" in task for task in tasks)
     assert [t["name"] for t in tasks if _writes_a_baseline_path(t)] == []
     assert [t["name"] for t in tasks if _upgrades_packages(t)] == []
     assert not (ROLE / "handlers").exists()
