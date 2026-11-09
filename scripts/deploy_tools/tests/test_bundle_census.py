@@ -158,44 +158,68 @@ def test_d1s_empty_root_with_no_published_tag_is_flagged(tmp_path):
     )
 
 
-def _host_vars(tmp_path, owners):
-    """`owners` maps a k8s entry's name to its `owner`; None writes no `owner` key."""
-    path = tmp_path / "daniel-box.yml"
+def _services(tmp_path, k8s, docker=()):
+    """Write a service list with a k8s entry per name in `k8s` and a Docker one per `docker`."""
+    path = tmp_path / "services.yml"
     path.write_text(
         "containers_list:\n"
-        + "".join(
-            f"  - name: {name}\n    platform: k8s\n"
-            + (f"    owner: {owner}\n" if owner else "")
-            for name, owner in owners.items()
-        )
+        + "".join(f"  - name: {name}\n    platform: k8s\n" for name in k8s)
+        + "".join(f"  - name: {name}\n    platform: docker\n" for name in docker)
     )
     return path
 
 
-def test_a_tag_without_owner_is_absent_from_the_bundle_and_the_census_is_clean(
-    tmp_path,
-):
-    host_vars = _host_vars(tmp_path, {"bento-pdf": "flux", "sonarr": None})
-    assert bundle_census.published_tags(host_vars) == ["bento-pdf"]
+def test_a_docker_entry_is_absent_from_the_bundle_and_the_census_is_clean(tmp_path):
+    services = _services(tmp_path, ["bento-pdf"], docker=["sonarr"])
+    assert bundle_census.published_tags(services) == ["bento-pdf"]
     out = _bundle(tmp_path, ["bento-pdf"])
     # The CLI runs the publish gates too, and the host gate's named member is this route.
     domain = bundle_gates.inventory_domain()
     (out / "cluster" / "bento-pdf" / "ingressroute.yaml").write_text(route(domain))
-    assert promote.main(["check-bundle", str(out), "--services", str(host_vars)]) == OK
+    assert bundle_census.report(out, bundle_census.published_tags(services)) == OK
 
 
-def test_a_flux_owned_tag_missing_from_the_bundle_is_flagged(tmp_path, capsys):
-    host_vars = _host_vars(tmp_path, {"bento-pdf": "flux", "sonarr": "flux"})
+def test_a_k8s_tag_missing_from_the_bundle_is_flagged(tmp_path, capsys):
+    services = _services(tmp_path, ["bento-pdf", "sonarr"])
     out = _bundle(tmp_path, ["bento-pdf"])
-    code = promote.main(["check-bundle", str(out), "--services", str(host_vars)])
+    code = bundle_census.report(out, bundle_census.published_tags(services))
     assert code == FAILED
     assert "flux/sonarr.yaml is missing" in capsys.readouterr().err
 
 
-def test_published_tags_prints_nothing_when_no_tag_is_flux_owned(tmp_path, capsys):
-    host_vars = _host_vars(tmp_path, {"sonarr": None})
-    assert promote.main(["published-tags", "--services", str(host_vars)]) == OK
-    assert capsys.readouterr().out == ""
+def test_published_tags_lists_every_k8s_entry_and_the_floor_is_clean(tmp_path, capsys):
+    """No entry carries an `owner` key, and every k8s entry is published (H1.9)."""
+    names = [*bundle_census.PUBLISH_FLOOR, "bento-pdf"]
+    services = _services(tmp_path, names, docker=["wg-easy"])
+    assert promote.main(["published-tags", "--services", str(services)]) == OK
+    assert capsys.readouterr().out.split() == sorted(names)
+    assert bundle_census.PUBLISH_FLOOR <= set(bundle_census.published_tags())
+
+
+def test_published_tags_fails_a_service_list_without_traefik(tmp_path, capsys):
+    services = _services(tmp_path, ["coredns", "longhorn", "metallb", "bento-pdf"])
+    assert promote.main(["published-tags", "--services", str(services)]) == FAILED
+    printed = capsys.readouterr()
+    assert printed.out == ""
+    assert "publishes no traefik, a member of the publish floor" in printed.err
+
+
+def test_check_bundle_fails_an_empty_service_list_on_the_floor(tmp_path, capsys):
+    services = _services(tmp_path, [])
+    out = _bundle(tmp_path, [])
+    code = promote.main(["check-bundle", str(out), "--services", str(services)])
+    assert code == FAILED
+    err = capsys.readouterr().err
+    assert [
+        tag
+        for tag in sorted(bundle_census.PUBLISH_FLOOR)
+        if f"publishes no {tag}," in err
+    ] == [
+        "coredns",
+        "longhorn",
+        "metallb",
+        "traefik",
+    ]
 
 
 # -- the per-file rule (D4.3) ----------------------------------------------------------------
@@ -480,9 +504,9 @@ def test_the_named_members_cover_the_six_plumbing_tags_and_the_drill():
 def test_check_bundle_fails_a_published_plumbing_tag_that_drops_a_named_member(
     tmp_path, capsys
 ):
-    host_vars = _host_vars(tmp_path, {"cluster-base": "flux"})
+    services = _services(tmp_path, ["cluster-base"])
     out = _cluster_base(tmp_path, CLUSTER_BASE.replace("homelab-critical", "x"))
-    code = promote.main(["check-bundle", str(out), "--services", str(host_vars)])
+    code = bundle_census.report(out, bundle_census.published_tags(services))
     assert code == FAILED
     assert (
         "cluster-base renders no PriorityClass homelab-critical"

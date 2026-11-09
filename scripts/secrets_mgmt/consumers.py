@@ -187,7 +187,7 @@ def tree_consumers(name: str, repo: str = REPO) -> dict[str, str]:
 # `write` regenerates, because it decrypts. Landing the PR then waits on `cluster-vars` and
 # every Kustomization that depends on it. Backticked for the reason `consumer_commands` gives.
 FLUX_PATH = (
-    "%s carries owner: flux, so Flux applies it from the cluster file: the operator runs "
+    "%s is a k8s entry, so Flux applies it from the cluster file: the operator runs "
     "`uv run python scripts/secrets_mgmt/cluster_vars.py write` (operator-only), commits it "
     "with secrets.yml, and the PR lands with `./scripts/deploy_tools/land.sh`"
 )

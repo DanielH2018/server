@@ -266,7 +266,7 @@ def test_run_health_reads_the_revision_for_a_flux_owned_cronjob_role(capsys):
 
 
 def test_a_role_the_owner_map_misses_still_reads_its_revision():
-    """No tag is Ansible-owned, so a miss in `tag_owners` must not drop the Flux reference."""
+    """No tag is Ansible-owned, so a role with no entry must not drop the Flux reference."""
     role = "volume-snapshot"  # a k8s role with no `containers_list` entry
     kustomization_args = tuple(
         role if arg == "longhorn-reconcile" else arg for arg in KUSTOMIZATION_ARGS

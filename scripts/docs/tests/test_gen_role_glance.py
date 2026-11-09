@@ -415,15 +415,9 @@ def test_a_hand_edited_setup_block_is_flagged(tmp_path):
 # stance would both mislead, so one Applied by line names what applies it.
 
 
-def _littlelink_block(tmp_path, owner):
-    """The block `stale_k8s_docs` writes for a copy of littlelink, its entry carrying `owner`.
-
-    The live entry has carried `owner: flux` since D5.6, so `owner=None` drops the key.
-    """
+def _littlelink_block(tmp_path):
+    """The block `stale_k8s_docs` writes for a copy of littlelink and its live entry."""
     entry = dict(g.Estate().k8s_entries()["littlelink"])
-    entry.pop("owner", None)
-    if owner:
-        entry["owner"] = owner
     dst = _copy_role("littlelink", tmp_path / "roles")
     (tmp_path / "daniel-box.yml").write_text(
         yaml.safe_dump({"containers_list": [entry]})
@@ -433,15 +427,9 @@ def _littlelink_block(tmp_path, owner):
     return (dst / "CLAUDE.md").read_text().split("<!-- /generated_from -->")[0]
 
 
-def test_an_ansible_owned_role_glance_is_clean(tmp_path):
-    block = _littlelink_block(tmp_path, None)
-    assert '- **Deploy tag:** `--tags "littlelink"`' in block
-    assert "Auto-deploy" not in block
-    assert "Applied by" not in block
-
-
-def test_a_flux_owned_role_glance_is_flagged(tmp_path):
-    block = _littlelink_block(tmp_path, "flux")
+def test_a_k8s_role_glance_names_flux_in_place_of_the_deploy_tag(tmp_path):
+    """No `owner` key marks the entry: `platform: k8s` alone makes it Flux's (H1.9)."""
+    block = _littlelink_block(tmp_path)
     assert "- **Applied by:** Flux, through `promote`" in block
     # The block is wrapped, so match the refusal across a line break.
     unwrapped = " ".join(block.split())

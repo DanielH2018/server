@@ -122,29 +122,18 @@ def test_autodeploy_docker_is_na_when_host_has_no_gitops(tmp_path):
     assert row.autodeploy == "n/a (host has no GitOps auto-deploy path)"
 
 
-def _jellyfin_with_owner(tmp_path, owner_line):
+def _jellyfin_row(tmp_path):
     paths = make_repo(tmp_path)
     write(
         paths["k8s_roles"] / "jellyfin" / "defaults" / "main.yml",
         "k8s_autodeploy: true\n",
     )
-    box = paths["host_vars"] / "box.yml"
-    box.write_text(
-        box.read_text().replace(
-            "    platform: k8s\n    hostname: jellyfin\n",
-            "    platform: k8s\n    hostname: jellyfin\n" + owner_line,
-        )
-    )
     return next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
 
 
-def test_a_k8s_entry_with_no_owner_reports_unknown(tmp_path):
-    assert _jellyfin_with_owner(tmp_path, "").autodeploy.startswith("unknown")
-
-
-def test_autodeploy_of_a_flux_owned_entry_is_flagged(tmp_path):
-    """D2.4b: the cell names Flux and `deploy.sh`'s exit 5 in place of the stance."""
-    row = _jellyfin_with_owner(tmp_path, "    owner: flux\n")
+def test_autodeploy_of_a_k8s_entry_names_flux(tmp_path):
+    """The cell names Flux and `deploy.sh`'s exit 5, with no `owner` key on the entry (H1.9)."""
+    row = _jellyfin_row(tmp_path)
     assert row.autodeploy.startswith("n/a: applied by Flux, through `promote`")
     assert "exit 5" in row.autodeploy
 

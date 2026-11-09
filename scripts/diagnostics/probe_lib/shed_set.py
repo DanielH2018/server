@@ -15,7 +15,7 @@ happen to be scheduled.
 
 It prints names rather than `kubectl scale` commands because plain kubectl is read-only here.
 
-Every k8s service is `owner: flux` (`ansible/tests/repo/_flux_ownership_row.py`), and Flux's
+Flux applies every k8s service (`lib.k8s_roles.k8s_tags`), and Flux's
 drift correction restores a service's rendered replicas. So for each deploy tag of a scalable
 service the output also prints the suspend that must come before the scale and the resume that
 comes after it, both with the field manager `homelab-operator` (D5.1b, docs/break-glass.md's

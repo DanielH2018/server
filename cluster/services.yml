@@ -58,7 +58,6 @@ containers_list:
     platform: k8s
     # Flux applies crowdsec through `promote` and runs its ban-and-lift check as the
     # `crowdsec-verify` Job (D5, crowdsec's own window).
-    owner: flux
     # Decisions expire and re-derive from logs; Metabase dashboards are provisioned.
     no_backup_claims: [crowdsec-db]
     # daniel-server's agent and its traefik bouncer authenticate here with machine/bouncer
@@ -91,33 +90,28 @@ containers_list:
   # untiered, so `NEVER_SHED` keeps it out of the lost-node shed set.
   - name: cluster-base
     platform: k8s
-    owner: flux
   # MetalLB's vendored manifest and the address pool (H1.3). Flux applies the tag through
   # `promote` and every Ansible path skips it. It renders prune: false, and it is untiered, so
   # `NEVER_SHED` keeps it out of the lost-node shed set.
   - name: metallb
     platform: k8s
-    owner: flux
   # Cluster DNS: the CoreDNS Deployment, Service, RBAC and the Corefile key of its ConfigMap
   # (H1.4). Flux applies the tag through `promote` and every Ansible path skips it. It renders
   # prune: false, and it is untiered because its pod keeps `system-cluster-critical`, so
   # `NEVER_SHED` keeps it out of the lost-node shed set.
   - name: coredns
     platform: k8s
-    owner: flux
   # Longhorn's vendored manifest, the manager memory patch and the `longhorn` class (H1.5a). Flux
   # applies the tag through `promote` and every Ansible path skips it. It renders prune: false,
   # and it is untiered, so `NEVER_SHED` keeps it out of the lost-node shed set.
   - name: longhorn
     platform: k8s
-    owner: flux
   # The hourly CronJob that holds each Volume CR in its tier's recurring-job group and the CSI
   # sidecars' memory request (H1.6). Its objects sit in `longhorn-system`, which `longhorn`'s
   # vendored file creates, so it depends on that tag. It is untiered and prunes by default, so
   # the lost-node shed set names it on its "nothing to scale" line and `NEVER_SHED` omits it.
   - name: longhorn-reconcile
     platform: k8s
-    owner: flux
     depends_on: [longhorn]
   # The two credential Secrets, the BackupTargets `default` and `r2`, and the RecurringJobs
   # (H1.7b). The `longhorn` vendored file defines the BackupTarget and RecurringJob CRDs, so the
@@ -126,7 +120,6 @@ containers_list:
   # shed set.
   - name: longhorn-backup
     platform: k8s
-    owner: flux
     depends_on: [longhorn]
   # The restore drill's stamp ConfigMap (H2.3b), and from H2.3d its CronJob. Its objects live in
   # `homelab`, which `longhorn` cannot reach on a fresh cluster before step 8 of H1's DR order, so
@@ -134,7 +127,6 @@ containers_list:
   # It prunes, except the stamp ConfigMap, and it is untiered, so `NEVER_SHED` omits it.
   - name: longhorn-restore-drill
     platform: k8s
-    owner: flux
     depends_on: [longhorn]
   # The IngressRoute, Middleware and TLSOption CRDs, alone in their tag so it can render
   # prune: false and its directory never substitutes (#5666). traefik's tier keeps it out of
@@ -143,11 +135,9 @@ containers_list:
     platform: k8s
     # Flux applies traefik-crds and traefik through `promote`, and every Ansible path skips
     # them (D5, traefik's own window).
-    owner: flux
     tier: home-edge
   - name: traefik
     platform: k8s
-    owner: flux
     port: 8080
     depends_on: [crowdsec, traefik-crds]
     # The k8s edge's traefik_* metrics, through the dedicated traefik-metrics ClusterIP: the
@@ -165,7 +155,6 @@ containers_list:
     platform: k8s
     # Flux applies authelia through `promote`, and every Ansible path skips it (D5, authelia's
     # own window).
-    owner: flux
     # This portal's name is the OIDC issuer Jellyfin's SSO plugin points at.
     hostname: "auth"
     port: 9091
@@ -187,7 +176,6 @@ containers_list:
   - name: bento-pdf
     platform: k8s
     # Flux applies bento-pdf through `promote`, and every Ansible path skips it (D2.7).
-    owner: flux
     # Single-label on purpose — bento-pdf.local.<domain> is covered by the existing
     # *.local.<domain> wildcard cert; a nested bento-pdf.k8s.local.<domain> would not be.
     hostname: "bento-pdf"
@@ -197,7 +185,6 @@ containers_list:
   - name: texbrain
     platform: k8s
     # Flux applies texbrain through `promote`, and every Ansible path skips it (D4.5).
-    owner: flux
     # Single label, for the same wildcard-cert reason as bento-pdf above.
     hostname: "texbrain"
     port: 8080
@@ -211,7 +198,6 @@ containers_list:
     # Flux applies headlamp through `promote`, and `headlamp-verify` runs the isolation probe the
     # deleted tasks ran. Its observability RBAC is `headlamp-deferred`, which waits on observability
     # (D5, Wave D).
-    owner: flux
     hostname: "headlamp"
     port: 4466
     use_authelia: true
@@ -228,7 +214,6 @@ containers_list:
   - name: deploy-ui
     platform: k8s
     # Flux applies deploy-ui through `promote`, and every Ansible path skips it (D5.6).
-    owner: flux
     hostname: "deploy"
     port: 8790
     use_authelia: true
@@ -242,7 +227,6 @@ containers_list:
   - name: longhorn-ui
     platform: k8s
     # Flux applies longhorn-ui through `promote`, and every Ansible path skips it (D5.6).
-    owner: flux
     hostname: "longhorn"
     port: 80
     use_authelia: true
@@ -254,7 +238,6 @@ containers_list:
     platform: k8s
     # Flux applies dri-device-plugin through `promote` (D5, Wave D); its soak verify is the
     # `K8sExtendedResourceMissing` alert.
-    owner: flux
   # The shared /data volume the nine media workloads mount. Storage, not a service.
   # Must precede every media workload — a pod that mounts an undeclared claim stays
   # Pending, and WaitForFirstConsumer makes that look like a scheduling problem rather
@@ -263,7 +246,6 @@ containers_list:
     platform: k8s
     # Flux applies media-volume through `promote`, and its hardlink check runs as a Job in
     # `media-volume-verify` (D5, Wave D).
-    owner: flux
   # Mounts media-volume's claim at /data, so `depends_on` puts it after that role — as it does
   # for every other media-data mounter below. ansible/tests/deploy/test_k8s_toposort.py pins
   # each pair.
@@ -271,7 +253,6 @@ containers_list:
     platform: k8s
     # Flux applies sonarr through `promote`, and its verify Job and arr-notification's seed Job
     # run in `sonarr-verify` (D5.20).
-    owner: flux
     weekly_backup_claims: {sonarr-config: 6}  # Sat
     depends_on: [media-volume]
     hostname: "sonarr"
@@ -306,7 +287,6 @@ containers_list:
     platform: k8s
     # Flux applies qbittorrent through `promote`, decrypts its Mullvad account Secret, and runs
     # its verify, prefs and gate Jobs in `qbittorrent-verify` (D5, Wave D).
-    owner: flux
     weekly_backup_claims: {qbittorrent-config: 4}  # Thu
     depends_on: [media-volume]
     hostname: "qbittorrent"
@@ -329,7 +309,6 @@ containers_list:
     platform: k8s
     # Flux applies radarr through `promote`, and arr-notification's seed Job runs in
     # `radarr-verify` (D5.20).
-    owner: flux
     weekly_backup_claims: {radarr-config: 2}  # Tue
     depends_on: [media-volume]
     hostname: "radarr"
@@ -365,7 +344,6 @@ containers_list:
     platform: k8s
     # Flux applies prowlarr through `promote`, and its flaresolverr isolation check runs in
     # `prowlarr-verify` (#5594).
-    owner: flux
     weekly_backup_claims: {prowlarr-config: 4}  # Thu
     hostname: "prowlarr"
     port: 9696
@@ -390,7 +368,6 @@ containers_list:
   - name: bazarr
     platform: k8s
     # Flux applies bazarr through `promote`, and every Ansible path skips it (D5.9).
-    owner: flux
     weekly_backup_claims: {bazarr-config: 5}  # Fri
     depends_on: [media-volume]
     hostname: "bazarr"
@@ -411,7 +388,6 @@ containers_list:
     platform: k8s
     # Flux applies jellyfin through `promote`, caps its snapshot space and checks the render node
     # and the library in `jellyfin-verify` (D5, Wave D).
-    owner: flux
     weekly_backup_claims: {jellyfin-config: 1}  # Mon
     # dri-device-plugin advertises the `devic.es/dri` resource this pod requests.
     depends_on: [media-volume, dri-device-plugin]
@@ -428,7 +404,6 @@ containers_list:
     platform: k8s
     # Flux applies tdarr through `promote`, pulls its image in `tdarr-prepull` first, snapshots
     # both config claims, and checks the device and library in `tdarr-verify` (D5, Wave D).
-    owner: flux
     weekly_backup_claims: {tdarr-server: 1, tdarr-configs: 2}  # Mon, Tue
     # dri-device-plugin advertises the `devic.es/dri` resource this pod requests.
     depends_on: [media-volume, dri-device-plugin]
@@ -444,7 +419,6 @@ containers_list:
     platform: k8s
     # Flux applies configarr through `promote` and runs its two gate Jobs in `configarr-verify`
     # (D5, Wave D).
-    owner: flux
     depends_on: [sonarr, radarr]
 
   # No web UI, so no route. Must follow sonarr, radarr AND jellyfin: it addresses all three
@@ -453,7 +427,6 @@ containers_list:
     platform: k8s
     # Flux applies janitorr through `promote` and checks its dry-run state, its reach and its
     # leaving-soon links in `janitorr-verify` (D5, Wave D).
-    owner: flux
     depends_on: [media-volume, sonarr, radarr, jellyfin]
 
   - name: observability
@@ -461,7 +434,6 @@ containers_list:
     # Flux applies observability through `promote`, restarts a workload whose Secret changed
     # through the renderer's restart annotation, and reads the OTLP bind address back in
     # `observability-verify` (D5, Wave D).
-    owner: flux
     # `hostname`/`port` describe Grafana — the only routed workload here. The OTEL
     # collector, Loki, Prometheus and Tempo are reached on the node's loopback via hostPort
     # so `otelq`, which hardcodes 127.0.0.1, can read them from the host. Content logging is
@@ -481,7 +453,6 @@ containers_list:
   - name: littlelink
     platform: k8s
     # Flux applies littlelink through `promote`, and every Ansible path skips it (D5.6).
-    owner: flux
     hostname: "www"
     port: 3000
     use_authelia: false
@@ -489,7 +460,6 @@ containers_list:
     platform: k8s
     # Flux applies speedtest through `promote`, and substitutes its APP_KEY Secret from
     # homelab-cluster-vars (D5.9).
-    owner: flux
     hostname: "speedtest"
     port: 80
     use_authelia: true
@@ -516,11 +486,9 @@ containers_list:
     platform: k8s
     # Flux applies cloudflare-ddns through `promote` and substitutes its API-token Secret from
     # homelab-cluster-vars (D5.19).
-    owner: flux
   - name: freshrss
     platform: k8s
     # Flux applies freshrss through `promote`, and every Ansible path skips it (D5.9).
-    owner: flux
     weekly_backup_claims: {freshrss-config: 5}  # Fri
     hostname: "freshrss"
     port: 80
@@ -544,7 +512,6 @@ containers_list:
   - name: navidrome
     platform: k8s
     # Flux applies navidrome through `promote`, and every Ansible path skips it (D5.8).
-    owner: flux
     weekly_backup_claims: {navidrome-data: 3}  # Wed
     hostname: "navidrome"
     # No ingress probe while parked: the role deploys no route at replicas 0, so the probe
@@ -561,7 +528,6 @@ containers_list:
     platform: k8s
     # Flux applies livesync through `promote`, and substitutes its CouchDB credentials Secret
     # from homelab-cluster-vars (D5.9).
-    owner: flux
     hostname: "livesync"
     # blackbox-extra's http_401 target covers it: CouchDB's 401 is the end-to-end signal.
     probe: false
@@ -583,7 +549,6 @@ containers_list:
     platform: k8s
     # Flux applies homepage through `promote`, and substitutes its config Secret from
     # homelab-cluster-vars (D5.7).
-    owner: flux
     hostname: "homepage"
     port: 3000
     use_authelia: true
@@ -593,7 +558,6 @@ containers_list:
     platform: k8s
     # Flux applies peanut through `promote`, and substitutes its Secret from
     # homelab-cluster-vars (D3.6).
-    owner: flux
     hostname: "peanut"
     port: 8080
     use_authelia: true
@@ -606,7 +570,6 @@ containers_list:
   - name: artifacts
     platform: k8s
     # Flux applies artifacts through `promote`; its host directories are k8s_host_files' (D5.19).
-    owner: flux
     hostname: "artifacts"
     port: 8080
     use_authelia: true
@@ -618,7 +581,6 @@ containers_list:
   - name: docs
     platform: k8s
     # Flux applies docs through `promote`; its site directory is k8s_host_files' (D5.19).
-    owner: flux
     hostname: "docs"
     port: 8080
     use_authelia: true
@@ -630,7 +592,6 @@ containers_list:
     platform: k8s
     # Flux applies homelab-mcp through `promote`, pulls its image from GHCR, and substitutes
     # its token Secret from homelab-cluster-vars (D5.14).
-    owner: flux
     port: 8000
     use_authelia: false
     # Named Service port, which the shared default Service renders on request.
@@ -642,7 +603,6 @@ containers_list:
     platform: k8s
     # Flux applies karakeep through `promote`, snapshots karakeep-data in `karakeep-snapshot`,
     # and runs the archive pruner's gate in `karakeep-verify` (D5, Wave C).
-    owner: flux
     weekly_backup_claims: {karakeep-data: 3}  # Wed
     hostname: "karakeep"
     port: 3000
@@ -698,7 +658,6 @@ containers_list:
     # Flux applies registry through `promote`, and the `registry-verify` Jobs replace the
     # self-tests and the netpol probe (D5, Wave D). `registry-gc.sh` stays a host script and the
     # one writer of ghcr-mirror's replicas (#5732).
-    owner: flux
     tier: platform
   # two_factor even on the LAN: arbitrary workflow execution on a stolen
   # password alone. /webhook/ below is unaffected — that route carries no forward-auth at all,
@@ -706,7 +665,6 @@ containers_list:
   - name: n8n
     platform: k8s
     # Flux applies n8n through `promote`, and every Ansible path skips it (#5546).
-    owner: flux
     weekly_backup_claims: {n8n-data: 0, n8n-files: 5}  # Sun, Fri
     hostname: "n8n"
     port: 5678
@@ -728,7 +686,6 @@ containers_list:
     # Flux applies mosquitto through `promote` (D5.20). The MosquittoLanAddressNotPinned rule
     # replaces the LAN-address assert, and cluster_vars.py write refuses a `:` in
     # mqtt_password_hash.
-    owner: flux
     tier: home-automation
 
   # Must follow mosquitto — z2m resolves the broker by bare Service name. The SLZB
@@ -737,7 +694,6 @@ containers_list:
     platform: k8s
     # Flux applies zigbee2mqtt through `promote`, and substitutes its network key and MQTT
     # credentials from homelab-cluster-vars (D5.10, own window).
-    owner: flux
     depends_on: [mosquitto]
     hostname: "zigbee2mqtt"
     port: 8080
@@ -754,7 +710,6 @@ containers_list:
     platform: k8s
     # Flux applies home-assistant through `promote`, and substitutes its Google project id and
     # Google service-account Secret from homelab-cluster-vars (D5.11, own window).
-    owner: flux
     hostname: "home-assistant"
     # Records HA's own listener rather than setting it: HA binds 8123 by default, and
     # files/configuration.yaml ships verbatim, so no template can move it. Changing this moves
@@ -778,7 +733,6 @@ containers_list:
   - name: pihole
     platform: k8s
     # Flux applies pihole through `promote`, and every Ansible path skips it (D5.26).
-    owner: flux
     hostname: "pihole"
     # blackbox-extra's dns_a_homepage target covers it: a DNS query against the VIP.
     probe: false
@@ -796,7 +750,6 @@ containers_list:
   - name: pihole-exporter
     platform: k8s
     # Flux applies pihole-exporter through `promote`, and every Ansible path skips it (D5.5).
-    owner: flux
     port: 80
     depends_on: [pihole]
     # One exporter, BOTH FTL instances, every series labelled `hostname`: a panel must sum
@@ -817,14 +770,12 @@ containers_list:
   - name: gpu-exporter
     platform: k8s
     # Flux applies gpu-exporter through `promote`, and every Ansible path skips it (D5.5).
-    owner: flux
     port: 9101
 
   - name: ical-proxy
     platform: k8s
     # Flux applies ical-proxy through `promote`, pulls its image from GHCR, and substitutes
     # its calendar-feed Secret from homelab-cluster-vars (D5.14).
-    owner: flux
     hostname: "ical-proxy"
     # blackbox-extra's target for /calendar1.ics covers it, over the ClusterIP.
     probe: false
@@ -854,7 +805,6 @@ containers_list:
     platform: k8s
     # Flux applies wg-easy through `promote`, and every Ansible path skips it (D5.12, own window,
     # operator on the LAN).
-    owner: flux
     weekly_backup_claims: {wg-easy-config: 4}  # Thu
     tier: platform
     hostname: "wg-easy"
@@ -872,7 +822,6 @@ containers_list:
     # Flux applies code-server through `promote`, snapshots both claims in its
     # code-server-snapshot Job first, and substitutes its password Secret from
     # homelab-cluster-vars (D5.16).
-    owner: flux
     weekly_backup_claims: {code-server-workspace: 0}  # Sun
     # Measured composition, not an estimate. `du` inside the pod puts 5.8 G in
     # .local/share/code-server/extensions — a directory the server does NOT read, since it
@@ -894,7 +843,6 @@ containers_list:
   - name: terraria
     platform: k8s
     # Flux applies terraria through `promote`, and every Ansible path skips it (D5.15).
-    owner: flux
     weekly_backup_claims: {terraria-config: 3}  # Wed
 
   # Same shape as terraria: nothing about it is HTTP — the game answers UDP 2456-2457 on
@@ -903,7 +851,6 @@ containers_list:
     platform: k8s
     # Flux applies valheim through `promote`, and substitutes its join-password Secret from
     # homelab-cluster-vars (D5.15).
-    owner: flux
     weekly_backup_claims: {valheim-config: 2}  # Tue
 
   # The homelab log store — a SECOND cluster Loki, deliberately separate from observability's,
@@ -913,7 +860,6 @@ containers_list:
   - name: loki-homelab
     platform: k8s
     # Flux applies loki-homelab through `promote`, and every Ansible path skips it (D5.8).
-    owner: flux
     hostname: "loki-homelab"
     # `ScrapeTargetDown` (service loki-homelab) covers it, through the entry's own scrape job.
     probe: false
@@ -929,7 +875,6 @@ containers_list:
   - name: game-stats
     platform: k8s
     # Flux applies game-stats through `promote` (D5.19).
-    owner: flux
     weekly_backup_claims: {terraria-stats-data: 0, valheim-stats-data: 1}  # Sun, Mon
     depends_on: [loki-homelab]
     # One job per game, each a single replica behind its own Service. terraria-stats runs as
@@ -948,7 +893,6 @@ containers_list:
   - name: monitor-bridge
     platform: k8s
     # Flux applies monitor-bridge through `promote`, and every Ansible path skips it (#5594).
-    owner: flux
     tier: platform
     # The check exporter's listener (files/verdict_export.py), beside the deploy-pipeline
     # exporter's on monitor_bridge_deploy_pipeline_port. The `metrics` item renders the
@@ -962,12 +906,10 @@ containers_list:
   - name: node-exporter
     platform: k8s
     # Flux applies node-exporter through `promote`, and every Ansible path skips it (D5.7).
-    owner: flux
   - name: autofix-bridge
     platform: k8s
     # Flux applies autofix-bridge through `promote` and substitutes its env Secret from
     # homelab-cluster-vars (D5.19).
-    owner: flux
     # The check exporter's listener (autofix.py, through jobs_metrics.py), which serves the
     # *arr remediation loop's verdict as homelab_check_* gauges (M6 batch B7). The entry has no `port` of its own, so the item names it. The `metrics` item renders
     # the `autofix-bridge` scrape job and the Service port, and deployment.yaml.j2 hands the
@@ -985,7 +927,6 @@ containers_list:
     platform: k8s
     # Flux applies nut through `promote` and pulls its image from GHCR, first through the
     # in-cluster ghcr.io mirror (D5.17).
-    owner: flux
     tier: platform
   # The Prometheus face of the same upsd, as its own workload rather than a sidecar: the nut pod
   # is privileged and USB-pinned, and a sidecar there would restart the shutdown chain on every
@@ -993,7 +934,6 @@ containers_list:
   - name: nut-exporter
     platform: k8s
     # Flux applies nut-exporter through `promote`, and every Ansible path skips it (D5.5).
-    owner: flux
     # upsd's own variables: battery charge and runtime, load, input voltage, and ups.status as
     # a per-flag 0/1. Before this job, UPS state reached Grafana only as `hass_*` series from
     # the home-assistant job, which routes a power-loss signal through a workload the UPS
@@ -1020,7 +960,6 @@ containers_list:
     # Flux applies pi-peer-backup through `promote` and runs its gate in
     # `pi-peer-backup-verify`; its two daniel-pi writes moved to `setup/k8s_host_files` (D5,
     # Wave C).
-    owner: flux
     weekly_backup_claims: {pi-peer-backup-data: 6}  # Sat
   # SMART monitoring. UI behind Authelia; /api/* is bypassed for LAN machine traffic (the
   # collector's POSTs and monitor-bridge's summary reads) in the authelia role's config.
@@ -1028,7 +967,6 @@ containers_list:
     platform: k8s
     # Flux applies scrutiny through `promote`, and substitutes its InfluxDB credentials Secret
     # from homelab-cluster-vars (D5.8).
-    owner: flux
     weekly_backup_claims: {scrutiny-web-config: 6}  # Sat
     # The volume holds ONLY the SMART TSDB (verified single mount), regenerating from the
     # daily collector runs.
@@ -1064,7 +1002,6 @@ containers_list:
   - name: flux
     platform: k8s
     tier: platform
-    owner: flux
   # system-upgrade-controller, its CRD and the two k3s Plans (docs/target-architecture/host/
   # h6-k3s-suc.md, H6.1b). Born Flux-owned, so every Ansible path skips it from its first commit.
   # The Plans select no node until H6.3c and H6.3d widen `system_upgrade_nodes`. No port and no
@@ -1072,14 +1009,12 @@ containers_list:
   - name: system-upgrade
     platform: k8s
     tier: platform
-    owner: flux
   # The ingress probes' exporter (docs/target-architecture/monitoring/m4-blackbox-ingress.md).
   # No depends_on: the plan states no order against observability.
   - name: blackbox-exporter
     platform: k8s
     # Flux applies blackbox-exporter through `promote`, and every Ansible path skips it (D5, Wave
     # A's last PR).
-    owner: flux
     port: 9115
   # Deploys LAST: every workload role must finish before this role fences the namespace
   # (docs/networkpolicy-slice-answers.md). K8S_APPLIES_LAST in filter_plugins/toposort.py gives
@@ -1100,4 +1035,3 @@ containers_list:
     # Flux applies netpol-baseline through `promote` and checks the policies in
     # `netpol-baseline-verify`, which depends on `netpol-baseline-deferred` (D5, Wave D's last
     # flip).
-    owner: flux

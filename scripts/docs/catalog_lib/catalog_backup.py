@@ -475,7 +475,7 @@ def backup_tier(
 
 
 def owner_stance(tags: str = "") -> str:
-    """What applies a k8s service whose `containers_list` entry carries `owner`, as one clause.
+    """What applies a k8s service, as one clause.
 
     The glance and the catalogue print it in place of the deploy tag, because no Ansible path deploys such a tag. The plan is
     docs/target-architecture/deploy/d2-first-leaf.md, *What each entry point does with a tag
@@ -491,34 +491,28 @@ def owner_stance(tags: str = "") -> str:
     return f"Flux, through `promote` (`owner: flux`); `deploy.sh` refuses {tag} with exit 5"
 
 
-def entry_owner(entry: dict[str, Any], owners: dict[str, str]) -> str | None:
-    """`entry`'s `owner` as `lib.k8s_roles.tag_owners` mapped it, or None when Ansible-owned."""
-    from lib.render_guard import entry_tags
-
-    return next((owners[tag] for tag in entry_tags(entry) if tag in owners), None)
+def entry_owner(entry: dict[str, Any]) -> str | None:
+    """`flux` for a k8s entry, which Flux applies, or None for a Docker one."""
+    return "flux" if entry.get("platform") == "k8s" else None
 
 
 def autodeploy_eligibility(
     entry: dict[str, Any],
     platform: str,
     host_data: dict[str, Any],
-    owner: str | None = None,
 ) -> str:
     """Say what applies `entry`'s changes, for the catalogue's last column.
 
     Args:
         entry: The service's `containers_list` entry.
-        platform: "k8s" or "docker" — only "k8s" has a GitOps path.
+        platform: "k8s" or "docker". Flux applies every k8s entry.
         host_data: The host's parsed `host_vars`, read for `has_gitops` off k8s.
-        owner: The entry's `owner`, as `entry_owner` reads it; None for an entry without one.
 
     Returns:
-        "n/a: applied by" the entry's `owner_stance`, or an `UNKNOWN`/"n/a" explanation.
+        "n/a: applied by" `owner_stance` for a k8s entry, or an `UNKNOWN`/"n/a" explanation.
     """
-    if owner is not None:
+    if platform == "k8s":
         return f"n/a: applied by {owner_stance()}"
-    if platform != "k8s":
-        if host_data.get("has_gitops") is False:
-            return "n/a (host has no GitOps auto-deploy path)"
-        return UNKNOWN + " (docker host's has_gitops not declared)"
-    return UNKNOWN + " (k8s entry carries no owner)"
+    if host_data.get("has_gitops") is False:
+        return "n/a (host has no GitOps auto-deploy path)"
+    return UNKNOWN + " (docker host's has_gitops not declared)"

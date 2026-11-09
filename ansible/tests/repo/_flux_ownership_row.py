@@ -1,5 +1,4 @@
-"""The flux-ownership census rows: every k8s entry is flux-owned, and every k8s role is reachable
-from an entry.
+"""The census row that every k8s role is reachable from a `containers_list` entry.
 
 The row sits in its own module because `test_census_rows_roles.py`, which imports it into `ROWS`,
 is at the cap for a test module.
@@ -10,45 +9,6 @@ from _row_table import Subject, Census
 from lib.k8s_roles import k8s_entries, role_callers
 
 _K8S = "ansible/roles/k8s/"
-
-
-class RoleSubject(Subject):
-    """One k8s entry's role and its `owner`."""
-
-    def __init__(self, role: str, owner: str | None):
-        super().__init__(_K8S + role, text="")
-        self.owner = owner
-
-
-def _entry_subjects() -> list[RoleSubject]:
-    return [
-        RoleSubject(name, entry.get("owner"))
-        for name, entry in sorted(k8s_entries().items())
-    ]
-
-
-def _not_flux_owned(subject: Subject) -> list[str]:
-    owner = subject.owner if isinstance(subject, RoleSubject) else None
-    return [] if owner == "flux" else [f"owner is {owner!r}, not flux"]
-
-
-K8S_ENTRIES_ARE_FLUX_OWNED = Census(
-    name="every-k8s-entry-is-flux-owned",
-    reason=(
-        "`deploy.sh` refuses every k8s tag and the tick applies no k8s role, so a k8s "
-        "`containers_list` entry without `owner: flux` has no writer once `promote` stops "
-        "publishing it, and the default deletion policy then deletes its objects. "
-        "A handback is not a rollback since D6.12: fix a bad role forward (D6's *The deletion "
-        "policy, and the end of the handback*)."
-    ),
-    files=_entry_subjects,
-    offence=_not_flux_owned,
-    red=(RoleSubject("sonarr", None), RoleSubject("sonarr", "ansible")),
-    green=(RoleSubject("sonarr", "flux"),),
-    # The count D5 ended with. A selector that stops matching fails here, not on nothing.
-    min_matches=66,
-    must_find=frozenset({_K8S + "bento-pdf", _K8S + "flux"}),
-)
 
 
 class ReachSubject(Subject):

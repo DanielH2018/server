@@ -1,8 +1,7 @@
-"""The role glance names GHCR for a flux-owned built image (#5462).
+"""The role glance names GHCR for a k8s role's built image (#5462).
 
-A flux-owned role's built image is pulled from GHCR at its content tag (D5.4b), so its Image
-line names the GHCR repository. The Ansible default names the in-cluster registry, which only
-an Ansible-owned render still pulls from.
+A k8s role's built image is pulled from GHCR at its content tag (D5.4b), so its Image line
+names the GHCR repository rather than the in-cluster registry its defaults name.
 """
 
 import shutil
@@ -16,17 +15,10 @@ from lib.estate import Inventory
 from renderer.renderer_lib import images
 
 
-def _image_line(tmp_path: Path, name: str, *, flux: bool) -> str:
-    """The unwrapped Image(s) line `stale_k8s_docs` writes for a copy of the live role `name`.
-
-    The copy's entry carries `owner: flux` when `flux` is set and no `owner` otherwise, so
-    one role renders either way whatever its live entry says.
-    """
+def _image_line(tmp_path: Path, name: str) -> str:
+    """The unwrapped Image(s) line `stale_k8s_docs` writes for a copy of the live role `name`."""
     assert name in images.builder_roles(), f"{name} builds no image"
     entry = dict(g.Estate().k8s_entries()[name])
-    entry.pop("owner", None)
-    if flux:
-        entry["owner"] = "flux"
     roles = tmp_path / "roles"
     # The whole role, so its `k8s/image-builder` include and build context come along.
     shutil.copytree(g.K8S_ROLES / name, roles / name)
@@ -42,27 +34,18 @@ def _image_line(tmp_path: Path, name: str, *, flux: bool) -> str:
     return line
 
 
-@pytest.mark.parametrize("name", ["ical-proxy", "homelab-mcp"])
+@pytest.mark.parametrize("name", ["ical-proxy", "homelab-mcp", "terraria"])
 def test_a_flux_owned_built_image_glance_names_its_ghcr_repository(tmp_path, name):
 
-    line = _image_line(tmp_path, name, flux=True)
+    line = _image_line(tmp_path, name)
     assert f"`{images.GHCR}/{name}`" in line, line
     assert "<k8s_registry_pull_host>" not in line, line
-
-
-def test_the_image_line_follows_the_owner_of_the_same_built_image(tmp_path):
-
-    ansible_line = _image_line(tmp_path / "ansible", "terraria", flux=False)
-    assert "`<k8s_registry_pull_host>/terraria`" in ansible_line, ansible_line
-    flux_line = _image_line(tmp_path / "flux", "terraria", flux=True)
-    assert f"`{images.GHCR}/terraria`" in flux_line, flux_line
-    assert "<k8s_registry_pull_host>" not in flux_line, flux_line
 
 
 def test_a_flux_owned_role_swaps_only_its_built_image_for_ghcr(tmp_path):
     # valheim pins an upstream server image beside the mods image it builds.
 
-    line = _image_line(tmp_path, "valheim", flux=True)
+    line = _image_line(tmp_path, "valheim")
     assert "`ghcr.io/community-valheim-tools/valheim-server`" in line, line
     assert f"`{images.GHCR}/valheim`" in line, line
     assert "<k8s_registry_pull_host>" not in line, line

@@ -104,11 +104,11 @@ def test_the_repair_commands_route_each_plane_to_a_playbook_that_can_reach_it():
     deploy_cmd = [c for c in commands if "deploy.sh" in c]
     host_cmd = [c for c in commands if "host_secrets.py sync" in c]
 
-    flux_cmd = [c for c in commands if "carries owner: flux" in c]
+    flux_cmd = [c for c in commands if "is a k8s entry, so Flux applies it" in c]
 
     # deploy.sh exits 5 on every k8s tag, so no printed command may send the operator there:
     # each owned tag is named on a Flux-path line of its own instead.
     assert deploy_cmd == []
     assert len(host_cmd) == 1
     assert "sync daniel-box" in host_cmd[0]
-    assert any(c.startswith("sonarr carries owner: flux") for c in flux_cmd)
+    assert any(c.startswith("sonarr is a k8s entry") for c in flux_cmd)

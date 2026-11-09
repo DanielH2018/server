@@ -345,7 +345,7 @@ reaches ships in the `homelab-daniel-pi` package. `--tags` overrides the scope e
 **The changed set names the k8s tags, not the PR's paths.** `split_k8s` drops a path-derived
 k8s tag and keeps one `--tags` named. Every PR with a path other than a document or a test waits
 on the promotion (`land_lib/promotion.py:moves_the_bundle`), and land-wait's changed set, joined
-with any `--tags`, names the `owner: flux` tags the gate grades and the annotation names. A
+with any `--tags`, names the k8s tags the gate grades and the annotation names. A
 shared template, an inventory edit or a `manifests` change therefore gates exactly the tags whose
 render moved. A PR that moves no bundle file waits on `homelab` alone and gates nothing. The
 gate renders the merge commit from a snapshot, because the primary checkout may not hold it yet.
@@ -368,7 +368,7 @@ Instead it reads the cluster every 30 seconds:
   `land-wait` reads R's combined status with `gh` on each poll until the soak has one. No
   status, or a `pending` one, keeps the wait going. `land-wait` then writes one
   `deploy-annotation` line with `source=promote`, and the landing goes on to the health gate
-  for each `owner: flux` tag.
+  for each k8s tag.
 - **`deploy-failed`, cause `soak-failed`.** R carries a `flux/soak` `failure` or `error`.
   The wait ends at once rather than waiting for `verify` to write `DEPLOY_HOLD`. The line
   prints the read-only command that names the services the soak failed:

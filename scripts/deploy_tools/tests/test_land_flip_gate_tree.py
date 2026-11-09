@@ -1,7 +1,6 @@
 """#5744: a flip PR's health gate reads tag ownership from the commit that landed.
 
-`probe.py health` reads `owner` from the checkout it runs in (`lib.k8s_roles.tag_owners`),
-and only a tree carrying the flip knows Flux applies the tag. Run from a tree before the
+`probe.py health` reads which tags Flux applies from the checkout it runs in, and only a tree carrying the flip knows Flux applies the tag. Run from a tree before the
 flip, it grades `traefik` against Ansible's frozen release record (NOT ROLLED) and looks
 `traefik-crds` up by name, which the Pi's `docker inspect` answers with "no such object".
 
@@ -113,7 +112,7 @@ def _land(
 
 
 def _flip(**kwargs: object) -> Fakes:
-    """#5720's shape: traefik and traefik-crds flip to `owner: flux` beside an Ansible tag.
+    """#5720's shape: traefik and traefik-crds flip to Flux beside an Ansible tag.
 
     The `host_vars` edit is a deploy-plane change, and the primary checkout does not carry
     the merge commit (`merge_applied_rc` defaults to 1). The promotion's changed set names
@@ -127,7 +126,7 @@ def _flip(**kwargs: object) -> Fakes:
             }
         },
         derived=(["traefik", "traefik-crds", "artifacts"], "pr"),
-        owners={MERGE_SHA: dict.fromkeys(FLIPPED, "flux")},
+        k8s_tags={MERGE_SHA: {*FLIPPED, "artifacts"}},
         land_wait=[WaitResult("settled", detail="2 applied", tags=FLIPPED)],
     )
     return replace(fakes, **kwargs)

@@ -55,8 +55,8 @@ from lib.k8s_roles import (
     MANIFESTS_PRUNE_DEFAULT,
     SHARED_MANIFEST_DEFAULTS,
     resolved_manifest_files,
+    k8s_tags,
     role_fields,
-    tag_owners,
 )
 from lib.k8s_context import resolve_vars
 from lib.render_guard import SHARED_TPL, StrictChainableUndefined, containers_entries
@@ -217,12 +217,12 @@ def select_tags(
 
 
 def flux_owned_tags(services: Path = K8S_SERVICES) -> set[str]:
-    """The deploy tags of the k8s entries in `services` that carry `owner: flux` (C4).
+    """The deploy tags of the k8s entries in `services`, each one Flux applies (C4).
 
-    `tag_owners` maps them, the reader `promote.py published-tags` uses too, so the tags this
+    `k8s_tags` reads them, the reader `promote.py published-tags` uses too, so the tags this
     refusal checks are the tags the bundle publishes.
     """
-    return {tag for tag, owner in tag_owners(services).items() if owner == "flux"}
+    return k8s_tags(services)
 
 
 def bundle_ordering(
