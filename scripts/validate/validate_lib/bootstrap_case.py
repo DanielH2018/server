@@ -25,6 +25,12 @@ systemd loads that unit:
     `docs/host-packages.md`, *Adding a host* (`fixture_host_case.py`). The offline build then
     renders, builds and simulates the install of that host's package on a container of its name.
 
+`run` prepares the clones, the kit and the seed once, then runs every case at the same time
+(#7785). Each case boots its own container and mounts its clone and seed read-only. The script
+copies out of a kit, and uv runs the kit's `uv-python` interpreter in place, taking at most a
+file lock there. The verdicts print in plan order. A container's own
+diagnostics print as they happen, outside the group's block.
+
 The cases read `systemctl show` after the run: the installer leaves the node's k3s unit disabled
 and stopped, because the operator starts it by hand (`docs/host-packages.md`). The install is a
 simulation, so a package's enable link never lands here. `hosts/lib/tests/test_bootstrap_host_k3s.py`
@@ -63,6 +69,8 @@ import subprocess
 import sys
 import tarfile
 import time
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import NamedTuple
 
@@ -428,14 +436,13 @@ class Bootstrap:
         return problems
 
 
-def _report(cases, name: str, label: str, body) -> None:
+def _verdict(body) -> Exception | None:
+    """Run `body`, and return the failure it raised, or None when it passed."""
     try:
         body()
     except (CaseFailed, OSError, subprocess.SubprocessError) as exc:
-        cases.failed.append(name)
-        print(f"[FAIL] {label}: {name}: {exc}", file=sys.stderr)
-    else:
-        print(f"[PASS] {label}: {name}", file=sys.stderr)
+        return exc
+    return None
 
 
 def output_problems(
@@ -624,6 +631,18 @@ def bootstrap_for(cases, item: Planned, clones: dict[str, Path]) -> Bootstrap:
     )
 
 
+def body_for(cases, item: Planned, clones: dict[str, Path]) -> Callable[[], None]:
+    """The run `item` plans, as a call that raises CaseFailed when its verdict fails."""
+    bootstrap = bootstrap_for(cases, item, clones)
+    if item.refusal is not None:
+        return functools.partial(
+            _expect_refused, bootstrap, item.refusal, item.apt_says
+        )
+    # Offline the script makes neither GitHub read, so the anchor stub must not run.
+    absent = ANCHOR_ACCEPTS if item.kit is not None else None
+    return functools.partial(_expect_green, bootstrap, item.marker or "", absent)
+
+
 def run(cases) -> None:
     """Run every bootstrap case, and record each verdict on `cases`."""
     clone = cases.work / "bootstrap-clone"
@@ -644,16 +663,12 @@ def run(cases) -> None:
         cases.failed.append("prepare the bootstrap cases")
         print(f"[FAIL] prepare the bootstrap cases: {exc}", file=sys.stderr)
         return
-    for item in planned:
-        bootstrap = bootstrap_for(cases, item, clones)
-        if item.refusal is not None:
-            body = functools.partial(
-                _expect_refused, bootstrap, item.refusal, item.apt_says
-            )
-        else:
-            # Offline the script makes neither GitHub read, so the anchor stub must not run.
-            absent = ANCHOR_ACCEPTS if item.kit is not None else None
-            body = functools.partial(
-                _expect_green, bootstrap, item.marker or "", absent
-            )
-        _report(cases, item.name, item.label, body)
+    bodies = [body_for(cases, item, clones) for item in planned]
+    # Printed from this thread, in plan order: case_groups buffers stderr per group thread.
+    with ThreadPoolExecutor(max_workers=len(bodies)) as pool:
+        for item, failure in zip(planned, pool.map(_verdict, bodies), strict=True):
+            if failure is None:
+                print(f"[PASS] {item.label}: {item.name}", file=sys.stderr)
+            else:
+                cases.failed.append(item.name)
+                print(f"[FAIL] {item.label}: {item.name}: {failure}", file=sys.stderr)
