@@ -88,6 +88,44 @@ def test_a_failing_build_on_either_side_fails_the_step(
     assert "nfpm: broken spec" in log
 
 
+HANDOFF_STEP = "Hand the render, the debs and nfpm to the cases legs"
+# What `host_package_cases.Cases` and its case modules read from the hand-off.
+CASES_READ = {
+    "render/head/packages/homelab-updater/nfpm.yaml",
+    "render/head/hosts/daniel-pi/nfpm.yaml",
+    "debs/base/homelab-updater_0.1_all.deb",
+    "debs/head/homelab-updater_0.2_all.deb",
+    "debs/head/homelab-daniel-pi_0.2_all.deb",
+    "debs/head/homelab-tools_0.2_amd64.deb",
+    "bin/nfpm",
+}
+NOBODY_READS = {
+    "render/base/packages/homelab-tools/amd64/root/usr/lib/homelab/bin/flux",
+    "render/head/packages/homelab-tools/arm64/root/usr/lib/homelab/bin/flux",
+    "debs/base/homelab-tools_0.1_amd64.deb",
+    "debs/base/homelab-tools_0.1_arm64.deb",
+    "debs/head/homelab-tools_0.2_arm64.deb",
+}
+
+
+def test_the_hand_off_carries_what_the_cases_read_and_no_tool_binaries(
+    tmp_path: Path,
+) -> None:
+    temp = tmp_path / "runner"
+    for name in CASES_READ | NOBODY_READS:
+        (temp / name).parent.mkdir(parents=True, exist_ok=True)
+        (temp / name).write_text(name)
+    result = run(
+        ["bash", "-c", _step(HANDOFF_STEP)["run"]],
+        cwd=tmp_path,
+        env=scrubbed_env(RUNNER_TEMP=str(temp)),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    listed = run(["tar", "-tf", str(temp / "host-packages-build.tar")], cwd=tmp_path)
+    members = {line for line in listed.stdout.splitlines() if not line.endswith("/")}
+    assert members == CASES_READ
+
+
 def test_the_hand_off_uploads_without_compressing_again() -> None:
     upload = _step(UPLOAD_STEP)
     assert upload["uses"].startswith("actions/upload-artifact@")
