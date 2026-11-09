@@ -157,6 +157,7 @@
  "ansible/roles/k8s/sonarr/tests/test_sonarr_verify.py": 6.27,
  "ansible/roles/k8s/system-upgrade/tests/test_plan_health_exprs.py": 0.0,
  "ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_role.py": 0.33,
+ "ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_verify.py": 0.81,
  "ansible/roles/k8s/tdarr/tests/test_tdarr_verify.py": 0.9,
  "ansible/roles/k8s/traefik/tests/test_traefik_bouncer_key_precheck.py": 0.96,
  "ansible/roles/setup/gitops_deploy/tests/test_alert_once_markers.py": 0.01,
