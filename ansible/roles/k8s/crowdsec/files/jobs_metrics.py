@@ -1,7 +1,7 @@
-"""The crowdsec-jobs sidecar's check exporter: each Kuma-pushed job's verdict, served as gauges.
+"""The crowdsec-jobs sidecar's check exporter: each job's verdict, served as gauges.
 
-`crowdsec_jobs.py` records one verdict per run of a job that pushes to Kuma, and this module
-serves them on `/metrics` beside the push. It is M6's pod exporter
+`crowdsec_jobs.py` records one verdict per run of each job but the prune, and this module
+serves them on `/metrics`. It is M6's pod exporter
 (docs/target-architecture/monitoring/m6-retire-kuma.md, *B6b*), and it uses the same series
 names as monitor-bridge's check exporter (`verdict_export.py`), so one rule shape reads both:
 

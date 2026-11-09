@@ -3,7 +3,7 @@
 Stdlib only (runs on python:3.14-alpine with no extra deps). Each check returns
 (ok: bool, msg: str), and the exporter records the verdict as the row's
 `homelab_check_success` gauge, which the rules in observability's `bridge-exporter.yaml` page
-on. Since M6 batch A6's Cutover-2 nothing is pushed to Uptime Kuma.
+on.
 
 This module holds `run_once`, the gate tables it reads and the two helpers it calls. The
 registry is `registry.py`, which orders the two gate rows first and gives every `Check` the

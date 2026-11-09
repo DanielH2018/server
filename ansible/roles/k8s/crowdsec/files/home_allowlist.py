@@ -9,8 +9,8 @@ few hours. A burst test egressing over IPv6 banned the homelab's own address on 
 
 The addresses come from the `crowdsec-home-ips` ConfigMap, which the `crowdsec-home-ips`
 CronJob writes from daniel-box's host network (`home_ips_discover.py`). This job runs in the
-`crowdsec-jobs` sidecar of the LAPI pod, started by `crowdsec_jobs.py`, which owns the Kuma
-push and the log line. The split is the operator's ruling of 2026-10-18 on #5701: the sidecar
+`crowdsec-jobs` sidecar of the LAPI pod, started by `crowdsec_jobs.py`, which owns the
+verdict gauge and the log line. The split is the operator's ruling of 2026-10-18 on #5701: the sidecar
 shares the pod's IPv4-only network and cannot see the /64 itself.
 
 **The allowlist is its own state.** Each run reads the stored entries with `cscli allowlists
