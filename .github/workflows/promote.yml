@@ -6,8 +6,8 @@ name: promote
 # docs/target-architecture/contracts.md C2 is the contract. The operator's view is
 # docs/flux-deploy-plane.md.
 #
-# Ten jobs, so code that runs during a render or a decision never holds a token that can sign,
-# push or move a tag:
+# Twelve jobs, so code that runs during a render or a decision never holds a token that can
+# sign, push, move a tag or post a status:
 #   render   contents: read, checks: read, packages: read. Checks out the triggering commit, or
 #            the dispatched `sha`, refuses one that is not on master, re-reads a dispatched
 #            commit's CI, renders the bundle, runs the publish census and gates and the tag rule
@@ -32,6 +32,10 @@ name: promote
 #   verify   contents: read, statuses: read, packages: read. Runs `promote.py verify T`,
 #            which waits on T's commit statuses for T's changed set and prints `good` or
 #            `failed`, or `superseded` once a later run has moved `prod` past T.
+#   verdict-status  statuses: write. Checks out nothing. Posts `verify`'s verdict on T as the
+#            commit status `homelab/promote-verdict`, described `<verdict> <digest> <form>`,
+#            where the form names the hold `settle` writes for T: success
+#            for good, failure otherwise, nothing for superseded. `settle` does not need it.
 #   settle   packages: write, actions: write. Checks out nothing. A good verdict moves
 #            `last-good` to T. When T changes a snapshot role (D5.2b1), anything else writes
 #            DEPLOY_HOLD as `<T> stateful=<names>`, tags T `held` and leaves `prod`. When T
@@ -44,6 +48,12 @@ name: promote
 #            workflow's own commit and runs `promote.py hold`, which posts the hold, with a
 #            command block per changed snapshot role, to the deployer's Discord channel through
 #            the DEPLOY_DISCORD_WEBHOOK secret. A failed post fails the run.
+#   reconcile  packages: write, statuses: read. Checks out nothing. Runs only when `decide`
+#            names a run that ended without its `settle` (`lost_settle`, #7863). While `prod`
+#            still names that run's digest, a good `homelab/promote-verdict` for it moves
+#            `last-good`. Anything else writes the hold `settle` would have written, and tags
+#            the digest `held` when that hold leaves `prod`. With no usable status it writes
+#            `<commit> unverified`.
 #   reset-check  contents: read, packages: read, actions: read. Runs only for a
 #            `reset_to_last_good` dispatch, which skips every job above. Runs
 #            `promote.py reset-check`, which refuses without a hold or while a verification is in
@@ -101,7 +111,8 @@ permissions: {}
 env:
   # Every `uv run` here installs pyproject.toml's [project] dependencies and skips both default
   # groups, so an unreachable tool download (actionlint-py's build, #7625) cannot block a
-  # promotion. UV_NO_DEV drops only `dev`. test_promote_workflow.py fails a workflow without them.
+  # promotion. UV_NO_DEV drops only `dev`. test_promote_workflow_uv_groups.py fails a workflow
+  # without them.
   UV_NO_DEV: "1"
   UV_NO_GROUP: lint
   # The flux CLI this workflow's flux steps fetch, equal to flux_version in roles/k8s/flux and to
@@ -633,6 +644,8 @@ jobs:
       stateful: ${{ steps.decide.outputs.stateful }}
       supersedes: ${{ steps.decide.outputs.supersedes }}
       hold_read: ${{ steps.decide.outputs.hold_read }}
+      lost_settle: ${{ steps.decide.outputs.lost_settle }}
+      lost_settle_digest: ${{ steps.decide.outputs.lost_settle_digest }}
     steps:
       # This workflow's own commit, so the promote.py that runs matches the promote.yml that
       # calls it. A workflow_run always runs master's copy of this file.
@@ -941,6 +954,66 @@ jobs:
           uv run --frozen python scripts/deploy_tools/promote.py verify "$TARGET"
           --bundle-dir "$RUNNER_TEMP/verify-input" --prior "$PRIOR" --moved-at "$MOVED_AT"
           --digest "$DIGEST"
+
+  verdict-status:
+    needs: [promote, tag, verify]
+    # always() so a verify that failed, timed out or was cancelled still leaves a status. It
+    # does not gate `settle`, so a run GitHub creates without its `settle` (#7863) still
+    # records the verdict that `reconcile` acts on in a later run.
+    if: >-
+      always() &&
+      needs.tag.outputs.moved == 'true' &&
+      !inputs.verify_drill &&
+      github.ref == 'refs/heads/master' && (
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' || (
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    # DECIDED: statuses: write sits in a job that checks out nothing, never in `verify`, which
+    # runs repository code. The operator ruled the grant on 2026-11-09 (#7865, contract C2).
+    permissions:
+      statuses: write
+    steps:
+      # `good` posts success and anything else failure, each described as
+      # `<verdict> <digest> <form>`. The digest lets `reconcile` refuse a status that an earlier
+      # promotion of the same commit left. The form is the hold `settle` writes for anything
+      # but good: `stateful` when T changes a snapshot role, `no-reset` when it changes a
+      # forward-only tag, `reset` otherwise. A `superseded` verdict posts nothing: a later run
+      # owns `prod`.
+      - name: Post the verdict status
+        env:
+          TARGET: ${{ needs.promote.outputs.target }}
+          DIGEST: ${{ needs.promote.outputs.digest }}
+          STATEFUL: ${{ needs.promote.outputs.stateful }}
+          NO_RESET: ${{ needs.promote.outputs.no_reset }}
+          VERDICT: ${{ needs.verify.outputs.verdict }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          eval "$RETRY_FUNCTIONS"
+          printf '%s' "$TARGET" | grep -Eqx '[0-9a-f]{40}' \
+            || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
+          printf '%s' "$DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}' \
+            || { echo "::error::decide's digest '$DIGEST' is not sha256:<64 hex>"; exit 1; }
+          case "$VERDICT" in
+            good) state=success ;;
+            superseded) echo "verify read prod moved past sha-$TARGET, so no status is posted"; exit 0 ;;
+            failed) state=failure ;;
+            *) state=failure VERDICT=none ;;
+          esac
+          if [ -n "$STATEFUL" ]; then form=stateful
+          elif [ -n "$NO_RESET" ]; then form=no-reset
+          else form=reset
+          fi
+          retry gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$TARGET" \
+            -f state="$state" -f context=homelab/promote-verdict \
+            -f description="$VERDICT $DIGEST $form" -f target_url="$RUN_URL" > /dev/null
+          echo "posted homelab/promote-verdict=$state ($VERDICT $DIGEST $form) on $TARGET"
 
   settle:
     needs: [promote, tag, verify]
@@ -1267,6 +1340,158 @@ jobs:
           uv run --frozen python scripts/deploy_tools/promote.py hold "$TARGET"
           --hold "$HOLD" --bundle-dir "$RUNNER_TEMP/verify-input"
           --verdict "$VERDICT" --failed "$FAILED_NAMES"
+
+  # A run that ended without its `settle` (#7863): `decide` names `prod`'s commit and digest
+  # in `lost_settle` once no other run past its decide has been in progress for LOST_SETTLE_S.
+  # This job reads the `homelab/promote-verdict` status the lost run's `verdict-status` posted
+  # on that commit, and finishes what `settle` would have: a good verdict for `prod`'s digest
+  # moves `last-good`, and anything else writes the hold the status's form names. A missing
+  # status, or one for another digest, writes the unverified hold. It resets nothing and
+  # dispatches nothing: the operator decides on `reset_to_last_good` after a hold, and the next
+  # merge or the scheduled run promotes after the move. No concurrency group, because a newer pending job in `promote` would evict it.
+  reconcile:
+    needs: promote
+    if: >-
+      !cancelled() &&
+      needs.promote.result == 'success' &&
+      needs.promote.outputs.lost_settle != '' &&
+      !inputs.verify_drill &&
+      github.ref == 'refs/heads/master' && (
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' || (
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    # DECIDED: a job that checks out nothing holds packages: write to move `last-good` for a
+    # run that lost its `settle`. The operator ruled the grant on 2026-11-09 (#7865, contract
+    # C2). statuses: read is the verdict-status read.
+    permissions:
+      packages: write
+      statuses: read
+    steps:
+      - name: Cache the flux CLI release
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/pinned/flux
+          key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
+
+      - name: Fetch the pinned flux CLI and check its sha256
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/pinned/flux/flux.tar.gz"
+          if [[ -f "$archive" ]]; then
+            echo "flux $FLUX_VERSION: cached"
+          else
+            mkdir -p "$RUNNER_TEMP/pinned/flux"
+            curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$archive" \
+              "https://github.com/fluxcd/flux2/releases/download/$FLUX_VERSION/flux_${FLUX_VERSION#v}_linux_amd64.tar.gz"
+          fi
+          echo "$FLUX_SHA256  $archive" | sha256sum -c --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" flux
+          sudo install -m 0755 "$RUNNER_TEMP/flux" /usr/local/bin/flux
+          flux version --client
+
+      # `settle`'s guard holds before each write: `prod` must still name the digest `decide`
+      # read, or a later run owns the cluster and this job writes nothing. A failed read of
+      # `prod`, the hold or the status writes nothing and fails, and the next run's `decide`
+      # names the state again. The job token reads the status; PROMOTE_TOKEN writes the hold.
+      - name: Apply the lost run's verdict
+        env:
+          COMMIT: ${{ needs.promote.outputs.lost_settle }}
+          DIGEST: ${{ needs.promote.outputs.lost_settle_digest }}
+          GH_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
+        run: |
+          set -uo pipefail
+          eval "$RETRY_FUNCTIONS"
+          printf '%s' "$COMMIT" | grep -Eqx '[0-9a-f]{40}' \
+            || { echo "::error::decide's lost_settle '$COMMIT' is not 40 lowercase hex"; exit 1; }
+          printf '%s' "$DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}' \
+            || { echo "::error::decide's lost_settle_digest '$DIGEST' is not sha256:<64 hex>"; exit 1; }
+          repo=ghcr.io/danielh2018/homelab-manifests
+
+          # `settle`'s HEAD of `prod`: the digest, nothing when absent, a failure when unread.
+          live_prod() {
+            local name=danielh2018/homelab-manifests token heads status
+            token="$(printf 'user = "%s:%s"\n' "$GH_ACTOR" "$GITHUB_TOKEN" \
+              | curl --retry 3 -fsS -K - \
+                "https://ghcr.io/token?scope=repository:$name:pull&service=ghcr.io" \
+              | jq -r '.token // empty')" || return 1
+            [ -n "$token" ] || return 1
+            heads="$RUNNER_TEMP/prod-head.txt"
+            status="$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
+              | curl --retry 3 -sS -K - -I -o "$heads" -w '%{http_code}' \
+                -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json' \
+                "https://ghcr.io/v2/$name/manifests/prod")" || return 1
+            case "$status" in
+              200) tr -d '\r' < "$heads" | awk 'tolower($1) == "docker-content-digest:" { print $2 }' ;;
+              404) ;;
+              *) return 1 ;;
+            esac
+          }
+          # Exits the step unless `prod` still names DIGEST: 0 when a later run moved it, 1
+          # when the read failed.
+          require_prod() {
+            local live
+            live="$(live_prod)" || { echo "::error::prod's digest could not be read, so this job writes nothing"; exit 1; }
+            [ "$live" = "$DIGEST" ] && return 0
+            echo "prod is at '${live:-absent}', not $COMMIT's $DIGEST: a later run moved it, so this job writes nothing"
+            exit 0
+          }
+
+          require_prod
+          # The statuses list newest first, so the first match is the newest.
+          verdict="$(GH_TOKEN="$GITHUB_TOKEN" retry gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/commits/$COMMIT/statuses?per_page=100" \
+            --jq '.[] | select(.context == "homelab/promote-verdict") | "\(.state) \(.description)"')" \
+            || { echo "::error::the statuses on $COMMIT could not be read, so this job writes nothing"; exit 1; }
+          verdict="${verdict%%$'\n'*}"
+          read -r state word digest form _ <<< "$verdict"
+
+          if [ "$state $word $digest" = "success good $DIGEST" ]; then
+            require_prod
+            if ! { ghcr_login && flux tag artifact "oci://$repo@$DIGEST" --tag last-good; }; then
+              echo "::error::moving last-good to $DIGEST failed"
+              exit 1
+            fi
+            echo "last-good moved to $COMMIT's $DIGEST: its run verified good and lost its settle"
+            exit 0
+          fi
+
+          hold="$(retry gh variable get DEPLOY_HOLD -R "$GITHUB_REPOSITORY")" \
+            || { echo "::error::DEPLOY_HOLD could not be read, so this job writes nothing"; exit 1; }
+          if [ "$hold" != none ]; then
+            echo "::warning::$COMMIT's verdict reads '${verdict:-absent}', and DEPLOY_HOLD already reads '$hold', so this job writes no hold"
+            exit 0
+          fi
+          # `settle`'s hold for the form the lost run recorded. A status for another digest, or
+          # none, leaves the form unknown and holds as `unverified`.
+          [ "$digest" = "$DIGEST" ] || form=
+          case "$form" in
+            stateful) new_hold="$COMMIT stateful=unverified" ;;
+            no-reset) new_hold="$COMMIT" ;;
+            *) new_hold="$COMMIT unverified" ;;
+          esac
+          require_prod
+          if ! retry gh variable set DEPLOY_HOLD --body "$new_hold" -R "$GITHUB_REPOSITORY"; then
+            echo "::error::writing DEPLOY_HOLD='$new_hold' failed"
+            exit 1
+          fi
+          case "$form" in
+            stateful|no-reset)
+              # `held` marks prod's run as settled, as `settle` tags it after its own hold.
+              if ! { ghcr_login && flux tag artifact "oci://$repo@$DIGEST" --tag held; }; then
+                echo "::error::tagging $DIGEST held failed, so the next run after a clear waits as in flight"
+                exit 1
+              fi
+              echo "::warning::DEPLOY_HOLD set to '$new_hold': $COMMIT's verdict reads '$verdict', and $COMMIT changes a snapshot role or a forward-only tag, so prod stays on it. Do not reset it" ;;
+            *)
+              echo "::warning::DEPLOY_HOLD set to '$new_hold': $COMMIT's verdict reads '${verdict:-absent}', not good for $DIGEST. To reset prod (operator-only), dispatch promote.yml with reset_to_last_good=true, unless $COMMIT changes a snapshot role or a forward-only pin; with no status this job cannot tell (#7876)" ;;
+          esac
 
   # The `reset_to_last_good` dispatch (D5.2b2): move `prod` back to `last-good` and do nothing
   # else, for the revert runbook's Branch 1 and the broken-sync-object runbook. It follows C2's

@@ -54,7 +54,8 @@ groups:
             {{ $value | humanizeDuration }} ago, and no hold stands. Read the promote
             workflow's recent runs with gh run list --workflow promote.yml; a run that never
             settles stalls promotion as current. A run that ended without its settle job is
-            named in the next run's Decide log, with the operator command that clears it.
+            named in the next run's Decide log, and that run's reconcile job moves last-good or
+            writes the hold.
       # promote writes PROD_DIGEST each time it moves prod, so a digest that differs for longer
       # than the gap between a move and its write, plus one exporter cycle, means prod moved
       # some other way. Flux follows prod, so whatever moved it is what production runs.
