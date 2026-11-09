@@ -12,6 +12,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_blockers.py
 """
 
 import argparse
+import json
 import re
 
 
@@ -106,6 +107,14 @@ def test_the_culprit_is_named(monkeypatch, capsys):
     err = capsys.readouterr().err
     assert "ansible/bootstrap.yml" in err
     assert "ansible/roles/k8s/sonarr" not in err, "named a path that is not a blocker"
+
+
+def test_a_blocked_range_prints_its_paths_and_command_as_json(monkeypatch, capsys):
+    """land.sh reads stdout, not stderr, to name the blocker in its VERDICT (#7895)."""
+    _run(["ansible/bootstrap.yml"], monkeypatch)
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["needing_hand"] == ["ansible/bootstrap.yml"]
+    assert doc["run"]
 
 
 def test_a_failed_git_diff_reads_as_an_error_under_the_parsers_prog(capsys):

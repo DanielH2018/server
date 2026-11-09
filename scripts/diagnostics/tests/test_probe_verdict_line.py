@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import probe
 from diagnostics.probe_lib.cli_parser import _build_parser
-from lib.exit_codes import FAILED, OK, TEMP_FAIL, contract
+from lib.exit_codes import FAILED, OK, PROBE_NOT_APPLICABLE, TEMP_FAIL, contract
 from lib.exit_messages import verdict_line
 
 PROBE = "scripts/diagnostics/probe.py"
@@ -103,6 +103,12 @@ def _subparser(path):
 def test_verdict_line_renders_a_probe_verdict_for_each_probe_code(rc):
     line = verdict_line(PROBE, rc, "detail")
     assert line is not None and VERDICT_LINE.match(line), line
+
+
+def test_health_not_applicable_renders_a_skip_verdict():
+    """detach_notify grades a skip from this code, never from health's wording (#7895)."""
+    line = verdict_line(PROBE, PROBE_NOT_APPLICABLE, "probe.py health, exit 3")
+    assert line == "PROBE-VERDICT: skip (probe.py health, exit 3)"
 
 
 def test_the_probe_verdicts_for_ok_fail_and_unreadable_are_distinct():

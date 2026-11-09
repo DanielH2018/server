@@ -327,7 +327,6 @@ def test_a_failing_check_leads_the_gate_verdict():
     assert (
         head == "longhorn: the plumbing check FAILED the gate after a healthy rollout"
     )
-    assert not any(m in head for m in detach_notify.NOT_APPLICABLE_MARKERS)
 
 
 def test_a_failed_rollout_reads_no_plumbing():

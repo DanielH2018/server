@@ -32,7 +32,8 @@ Prometheus query that returned no series. On 75 the failed read is on stderr, an
 response is to retry rather than to investigate the thing probed (#4444). Each verdict
 subcommand's `--help` states what 0 and 1 mean for it.
 
-A verdict subcommand's last stdout line is `PROBE-VERDICT: <ok|fail|unreadable> (<detail>)`.
+A verdict subcommand's last stdout line is `PROBE-VERDICT: <ok|fail|unreadable> (<detail>)`,
+or `skip` when `health` exits 3 because the tag names nothing it can check.
 `main()` prints it from the exit code through `lib.exit_messages.verdict_line`, so every subcommand
 shares one vocabulary (#4454). `--json` and `--dry-run` print no verdict line, because a trailing
 line would break a JSON document or a command list. The prefix is not bare `VERDICT:`, because a
@@ -231,13 +232,15 @@ newest Job, which is that gate or a later firing. When no Job has landed since t
 check falls back to the CronJob's own daily/weekly schedule: the
 previous run must have succeeded and not be more than twice its interval old. Any other
 schedule shape fails closed rather than guess an interval. A role with neither a workload nor a CronJob (media-volume, netpol-baseline) still
-reports "declares no rollout-checkable workload," which the deploy notifier skips.
+reports "declares no rollout-checkable workload" and exits 3 (`PROBE-VERDICT: skip`), which
+the deploy notifier skips.
 
 ### `landing [--json]`
 
 `landing` answers CLAUDE.md's *When to wait* list from a running session. It prints three
 things: what would stop a landing now, the `land.sh` and `deploy.sh` runs in flight, and the
-worktrees with the issues each has claimed. Exit 1 means something blocks. `--json` prints one
+worktrees with the issues each has claimed. While something blocks, the text view lists the
+worktrees holding a claim and counts the rest; otherwise it prints only the count. Exit 1 means something blocks. `--json` prints one
 document, which the [deck mod](#the-deck-mod-claudepluginsdeck) reads every minute.
 
 A blocker is one of three states: a non-empty `hold_sha`, a red master CI run, or an owed

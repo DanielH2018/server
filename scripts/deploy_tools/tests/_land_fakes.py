@@ -75,7 +75,8 @@ class Fakes:
     pull_ref_rc: int = 0
     tip: str = MERGE_SHA
     await_ci: list[tuple[int, str]] = field(default_factory=lambda: [(0, "CI green")])
-    blockers: list[int] = field(default_factory=lambda: [0])
+    # An exit code, or (exit code, stdout) for a blocked range's JSON document.
+    blockers: list[int | tuple[int, str]] = field(default_factory=lambda: [0])
     changed: str = ""
     changed_rc: int = 0
     gate: tuple[bool, list[str]] = field(
@@ -309,7 +310,8 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
     def deploy_tags(primary: Path, args: list[str]):
         calls.append(("deploy_tags", tuple(args), {"cwd": primary}))
         if args[0] == "blockers":
-            return _cp(blockers())
+            answer = blockers()
+            return _cp(*answer) if isinstance(answer, tuple) else _cp(answer)
         if args[0] == "changed":
             return _cp(f.changed_rc, f.changed)
         raise AssertionError(args)

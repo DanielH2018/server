@@ -22,6 +22,7 @@ from _land_wait_fakes import M, P, Sim, at, digests
 from deploy_tools.deploy_lib import detach_notify
 from deploy_tools.land_lib import promotion as land_promotion
 from deploy_tools.promote_lib import wait as promote_wait
+from lib.exit_codes import PROBE_NOT_APPLICABLE
 
 # Enough tags that any "broad" threshold a fix picks is crossed; the PR's paths name the first.
 BROAD = [f"svc{i:02d}" for i in range(24)]
@@ -36,7 +37,7 @@ def _probe(argv, unhealthy: frozenset[str]):
     tag = argv[argv.index("health") + 1]
     if tag == SKIPPED:
         return types.SimpleNamespace(
-            returncode=0,
+            returncode=PROBE_NOT_APPLICABLE,
             stdout=f"{tag}: the role declares no rollout-checkable workload",
             stderr="",
         )

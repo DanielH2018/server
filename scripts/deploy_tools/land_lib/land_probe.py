@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import detach
 from deploy_tools.land_lib.outcome import (
     PROMOTE_TIMEOUT_NOTE,
+    Cause,
     STALE_GATE_NOTE,
     UNREADABLE_GATE_NOTE,
     UNREADABLE_LEDGER_NOTE,
@@ -143,19 +144,20 @@ def read(log: Path, now: float | None = None) -> dict:
 
 def _is_plain_deferral(log: Path, verdict: str) -> bool:
     """Whether a landing's 75 is `deferred` with no give-up note beside it."""
-    token = _VERDICT_TOKEN.match(verdict)
-    if not token or token.group(1) != Verdict.DEFERRED:
+    result = detach.result_in(log)
+    notes = (_UNREADABLE_GATE, _STALE_GATE, _UNREADABLE_LEDGER)
+    if result is not None:
+        token = result.get("verdict")
+        if result.get("cause") == Cause.PROMOTE_TIMEOUT:
+            return False
+    else:
+        match = _VERDICT_TOKEN.match(verdict)
+        token = match.group(1) if match else None
+        notes += (_PROMOTE_TIMEOUT,)
+    if token != Verdict.DEFERRED:
         return False
     text = log.read_text(errors="replace")
-    return not any(
-        note in text
-        for note in (
-            _PROMOTE_TIMEOUT,
-            _UNREADABLE_GATE,
-            _STALE_GATE,
-            _UNREADABLE_LEDGER,
-        )
-    )
+    return not any(note in text for note in notes)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -20,7 +20,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from deploy_tools.land_lib.outcome import CAUSES, Cause
+from deploy_tools.land_lib.outcome import CAUSES, Cause, Outcome
 from lib.repo_paths import HOST_LIB_FILES
 
 _sys.path.insert(0, str(HOST_LIB_FILES))
@@ -55,6 +55,27 @@ class Ledger:
             )
             value = Cause.INVALID
         super().__setattr__(name, value)
+
+
+# The machine line land.sh prints just above its `VERDICT:` line. `detach.result_in` reads it.
+RESULT_PREFIX = "LAND-RESULT:"
+
+
+def result_line(ledger: Ledger, outcome: Outcome) -> str:
+    """`LAND-RESULT: verdict=.. cause=.. exit=.. pr=.. sha=.. tags=<count>`, for a reader.
+
+    A field the landing never reached reads `-`, so every value is one bare token.
+    """
+    tags = [t for t in ledger.tags_label.split(",") if t]
+    fields = {
+        "verdict": outcome.verdict or "-",
+        "cause": ledger.cause or "-",
+        "exit": outcome.rc,
+        "pr": ledger.pr or "-",
+        "sha": ledger.merge_sha[:8] or "-",
+        "tags": len(tags),
+    }
+    return f"{RESULT_PREFIX} {logfmt(fields)}"
 
 
 def _phase(a: float | None, b: float | None) -> str:

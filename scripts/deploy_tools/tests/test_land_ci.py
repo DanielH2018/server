@@ -22,6 +22,17 @@ def test_blocked_when_an_incoming_change_needs_a_hand(landing):
     with pytest.raises(Outcome) as exc:
         ci.preflight(ln)
     assert (exc.value.rc, exc.value.verdict) == (1, "blocked")
+    assert "see above" not in exc.value.detail
+
+
+def test_a_blocked_verdict_names_the_path_and_the_command(landing):
+    """cc-wait relays only the VERDICT line, so the blockers document's facts go in it (#7895)."""
+    doc = '{"needing_hand": ["ansible/bootstrap.yml"], "run": "uv run ansible-playbook x"}'
+    ln, _ = landing(Fakes(blockers=[(3, doc + "\n")]))
+    with pytest.raises(Outcome) as exc:
+        ci.preflight(ln)
+    assert "ansible/bootstrap.yml" in exc.value.detail
+    assert "uv run ansible-playbook x" in exc.value.detail
 
 
 def test_a_broken_preflight_is_a_plain_failure(landing):

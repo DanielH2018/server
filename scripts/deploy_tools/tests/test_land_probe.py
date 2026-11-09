@@ -59,6 +59,28 @@ def test_a_plain_deferral_ends_the_wait_as_deferred_not_gave_up(tmp_path):
     assert land_probe.TERMINAL["deferred"] == 4
 
 
+def test_the_result_line_decides_the_verdict_over_the_prose(tmp_path):
+    """`LAND-RESULT:` names the verdict; the `VERDICT:` wording no longer decides it (#7895)."""
+    log = landing(
+        tmp_path,
+        "LAND-RESULT: verdict=deferred cause=- exit=75 pr=939 sha=- tags=0\n"
+        "VERDICT: reworded (PR #939 — landed, not yet applied)\n",
+        rc=75,
+    )
+    assert land_probe.read(log)["state"] == "deferred"
+
+
+def test_a_promote_timeout_cause_gave_up_without_its_note(tmp_path):
+    """The cause on `LAND-RESULT:` decides, not the note's wording (#7895)."""
+    log = landing(
+        tmp_path,
+        "LAND-RESULT: verdict=deferred cause=promote-timeout exit=75 pr=939 sha=- tags=1\n"
+        "VERDICT: deferred (PR #939 — no promotion covered it)\n",
+        rc=75,
+    )
+    assert land_probe.read(log)["state"] == "gave-up"
+
+
 def test_a_deferral_no_promotion_covered_still_gave_up(tmp_path):
     """A promote timeout may be a publish refusal, which no later tick clears: re-run land.sh."""
     log = landing(

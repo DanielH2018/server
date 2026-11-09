@@ -2,8 +2,8 @@
 
 configarr and pi-peer-backup declare no Deployment/DaemonSet/StatefulSet, only a CronJob. Until
 this path existed, `probe.py health` reported "declares no rollout-checkable workload" for
-both, which deploy_lib/detach_notify.py's NOT_APPLICABLE_MARKERS turns into a `skipped` verdict
-rather than a checked one. Neither role's post-deploy state was ever actually read outside the
+both, which deploy_lib/detach_notify.py turns into a `skipped` verdict rather than a checked
+one. Neither role's post-deploy state was ever actually read outside the
 deploy-time k8s/cronjob-gate run.
 
 The census that pins which roles are on this path is in `test_probe_health_resolver.py`, beside
