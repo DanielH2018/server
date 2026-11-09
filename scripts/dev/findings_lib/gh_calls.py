@@ -28,6 +28,7 @@ from dev.findings_lib.issue_model import (
     comment_cap_warning,
     find_by_fingerprint,
     pr_refs,
+    waited_on,
 )
 from dev.findings_lib.plans import is_project_failure, without_project
 from dev.findings_lib.boundaries import FindingsTools
@@ -249,6 +250,63 @@ def open_pr_refs(tools: FindingsTools) -> set[int]:
         "gh pr list",
     )
     return pr_refs([str(pr.get("body") or "") for pr in prs])
+
+
+# Each slice code costs one search, and a body that names many is citing a plan, not a wait.
+SLICE_LOOKUP_CAP = 5
+
+
+def blocker_hints(
+    body: str, own: int | str, blocked_by: list[str], tools: FindingsTools
+) -> list[str]:
+    """Hint lines for each issue ``body`` says the finding waits on but is not blocked by.
+
+    `issue_model.waited_on` finds the references; this resolves each one. A slice code
+    resolves to the issue whose title starts `<code>:`, the way slices are filed, and a code
+    with no such issue is skipped. Reads only, and only when the body names a wait.
+
+    Args:
+        own: the finding's number, or a placeholder before it exists.
+        blocked_by: the blockers already recorded, which need no hint.
+    """
+    numbers, codes = waited_on(body)
+    skip = {str(own), *(b.lstrip("#") for b in blocked_by)}
+    found: dict[int, tuple[str, str]] = {}
+    for n in numbers:
+        if str(n) in skip:
+            continue
+        issue = as_object(
+            tools.gh_json("issue", "view", str(n), "--json", "number,state"),
+            "gh issue view",
+        )
+        found.setdefault(n, (f"#{n}", str(issue.get("state"))))
+    for code in codes[:SLICE_LOOKUP_CAP]:
+        hits = as_object_list(
+            tools.gh_json(
+                "issue", "list", "--state", "all", "--limit", "5",
+                "--search", f'"{code}:" in:title', "--json", "number,title,state",
+            ),
+            "gh issue list --search",
+        )  # fmt: skip
+        for hit in hits:
+            n = int(str(hit["number"]))
+            if str(hit.get("title", "")).startswith(f"{code}:"):
+                if str(n) not in skip:
+                    found.setdefault(n, (f"{code} (#{n})", str(hit.get("state"))))
+                break
+    lines = []
+    for n, (label, state) in found.items():
+        if state == "OPEN":
+            lines.append(
+                f"hint: the body waits on {label}, which is open — `findings.py block "
+                f"{own} --on {n}` withholds it until that closes, where a date only guesses"
+            )
+        else:
+            lines.append(
+                f"hint: the body waits on {label}, which is already closed — check "
+                "whether the wait is over"
+            )
+    return lines
 
 
 def _existing_labels(tools: FindingsTools) -> set[str]:
