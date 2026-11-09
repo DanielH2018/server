@@ -19,13 +19,9 @@ server_ip: 10.0.0.x
 # The SSH-hardening tasks have no `create:` fallback, so a wrong value fails the run.
 ssh_config_path: /etc/ssh/sshd_config
 
-# Services this host runs, in dependency order-agnostic form (deploy.yml toposorts them).
-# Start empty and populate as you add services — deploy.yml dies in its first pre_task if
-# this is undefined. See the repo-root CLAUDE.md → "Adding a New Service".
-#
-# Give each entry `platform: k8s`, which puts it in deploy.yml's k8s play. An entry without the
-# key reads as `docker`, which nothing deploys: scripts/validate/compose_templates.py refuses
-# it. A Compose service on `daniel-pi` goes in that host's `compose_services`, never here.
+# A Docker host keeps this key, empty: preflight.yml asserts it there. A k3s node deletes it,
+# because the k3s services live in cluster/services.yml (repo-root CLAUDE.md, "Adding a New
+# Service"). A Compose service on `daniel-pi` goes in that host's `compose_services`.
 containers_list: []
 
 # Bring-up: revert once the host is established
