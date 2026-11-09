@@ -5,8 +5,6 @@
 | `arr_queue` | none |  |  |
 | `bazarr` | `startup_grace` |  |  |
 | `prowlarr_indexers` | `startup_grace` |  |  |
-| `gitops_alive` | none |  |  |
-| `gitops_status` | none |  |  |
 | `host_packages` | `prometheus` |  |  |
 | `etcd_restore_drill` | none |  | `k3s-etcd-restore` |
 | `scrutiny` | `startup_grace` | yes |  |

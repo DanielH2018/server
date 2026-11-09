@@ -2,9 +2,6 @@
 | Env key | Value |
 |---|---|
 | `INTERVAL` | `300` |
-| `GITOPS_MAX_AGE_MIN` | `90` |
-| `GITOPS_BEHIND_MAX_MIN` | `360` |
-| `GITOPS_CONTENTION_MAX_MIN` | `30` |
 | `N8N_FAIL_WINDOW` | `2h` |
 | `N8N_CONSECUTIVE_MAX` | `3` |
 | `N8N_SYSTEMIC_STREAK` | `2` |

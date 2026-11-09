@@ -1,4 +1,4 @@
-"""Service-health verdicts for check.py — n8n, the *arrs, Prowlarr, Home Assistant, GitOps.
+"""Service-health verdicts for check.py — n8n, the *arrs, Prowlarr, Home Assistant, host packages.
 
 The Discord webhook verdict lives in verdicts/notify.py; it moved out of here because this
 module had become the place a verdict landed when no sibling named its subject.
@@ -117,13 +117,6 @@ def n8n_verdict(
         len(ranked),
         consecutive_max,
     )
-
-
-def gitops_alive(age_s: float, max_age_s: float) -> tuple[bool, str]:
-    """Pure: is the deployer's last completed tick recent enough? Returns (ok, msg)."""
-    if age_s <= max_age_s:
-        return True, "deployer ran %.0fm ago" % (age_s / 60)
-    return False, "deployer last ran %.0fm ago (> %.0fm)" % (age_s / 60, max_age_s / 60)
 
 
 def host_packages(

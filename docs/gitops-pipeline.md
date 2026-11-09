@@ -295,18 +295,16 @@ pulls the primary checkout.
 The tick fast-forwards instead, and writes the role to the `owed` ledger
 (`/var/lib/gitops-deploy/owed.jsonl`) as one `manual_plane` line per role, carrying its
 origin SHA, playbook, first-seen stamp and narrow tags. A role already listed is not re-added,
-so its first-seen stamp is the age everything else reads. Five consequences:
+so its first-seen stamp is the age everything else reads. Four consequences:
 
 - the journal says `manual_plane: pending <roles> — apply by hand: <commands>` on **every**
   tick, not only the one that recorded it. The recording tick says
   `manual_plane: recorded <roles>` instead, naming only the roles it added, so no tick prints
   both lines;
 - Discord pages once per SHA, with the same commands and the ledger's path;
-- **GitOps Deploy — Status** goes down once the oldest pending line is older than
-  `GITOPS_BEHIND_MAX_S` (6 h), naming the roles and the clear command;
 - the **SessionStart banner** names one line per pending role — the role, its playbook, how
   long it has waited and the clear command — from the moment the tick records it. Not
-  age-gated, unlike the monitor: the monitor pages, where the banner is a passive notice, and
+  age-gated: the banner is a passive notice, and
   the session reading it is usually not the session that landed the change;
 - the receipt records that role under `manual`, not `applied` — a plane in the same range
   that DID apply still records its own, so a mixed push still proves the half it applied.
@@ -555,8 +553,9 @@ for its whole run. Since [ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-t
 rare. A tick can still queue behind an operator deploying one of the same services, on that
 service's own lock.
 
-Contention is not silent starvation: the lock path never writes `last_run`, so contention
-outlasting the maximum age pages through the GitOps-Alive monitor.
+The lock path never writes `last_run`. No check pages on a stale `last_run` since H7.49b
+removed monitor-bridge's GitOps-Alive check, so contention starves the deployer silently until
+H7.52 retires its timer.
 
 ## The deployer's record
 
@@ -572,9 +571,11 @@ carries the rule; this page carries the reasoning. The full incident accounts ar
 A failed setup-plane apply writes the SHA to `/var/lib/gitops-deploy/hold_sha`, so the next tick
 does not re-apply it, and alerts the dedicated Discord webhook. The tree stays fast-forwarded
 (*Both apply arms are forward-only*). Reverting the offending PR advances `origin` past the held
-SHA, which stops the `skip_hold` short-circuit. The marker and the red **GitOps Deploy — Status**
-monitor (which pages on a non-empty `hold_sha` with no origin comparison) stay until an apply
-covers the held plane or an operator clears the hold; *Which apply clears a hold* has the rule.
+SHA, which stops the `skip_hold` short-circuit. The marker stays until an apply covers the held
+plane or an operator clears the hold; *Which apply clears a hold* has the rule. Since H7.49b no
+monitor pages on a non-empty `hold_sha`. The failure shows in the dedicated Discord post, in the
+SessionStart banner, as `deploy-failed` from every later `land.sh` run, and in
+`probe.py landing` and `probe.py gitops-state`.
 To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state.py clear-hold
 <sha>` on daniel-box.
 
@@ -616,7 +617,7 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
     Unfinished CI is the normal state for the first tick after a push, so only *sustained*
     behind-ness is a problem.
   - **An unreachable or malformed API reads as `pending`, never `pass`.** The tick still
-    completes and writes `last_run`, so a GitHub outage does NOT trip GitOps-Alive the way
+    completes and writes `last_run`, so a GitHub outage does not age `last_run` the way
     `RetryableFetchError` would.
   - Both outcomes leave the host parked on `local`, which `behind_marker` records, so a
     persistently red master pages through the **6 h behind-origin watchdog** below. That reuse is
@@ -638,8 +639,8 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   `docs/archive/staging-cluster.md` record the removed staging arm.
 - Read-only against the repo (no push), and no apply arm rolls back.
 - Refuses to *deploy* from a dirty working tree (operator mid-edit), but the tick still completes
-  and writes `last_run` (`next_action(..., dirty=True) -> "dirty"`), so the skip does not trip the
-  GitOps-Alive stale-file threshold. `should_alert_dirty` throttles the page to twice per
+  and writes `last_run` (`next_action(..., dirty=True) -> "dirty"`), so the skip does not age
+  `last_run`. `should_alert_dirty` throttles the page to twice per
   America/Chicago day (the first tick at or after 08:00 CT and at or after 20:00 CT), with the
   slot key `YYYY-MM-DD:am|pm` in `/var/lib/gitops-deploy/dirty_alerted_date`.
 - **Test-suite paths are skipped before every plane below** (`deploy_logic._is_test_only_path`):
@@ -707,8 +708,8 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   tree while `last_run` keeps ticking (Alive green) and `is_diverged` stays false (origin is a
   strict descendant, so Status is green too). Each tick therefore records
   `"<origin_sha> <first_seen_ts>"` to `/var/lib/gitops-deploy/behind_since` when it ends behind
-  origin, and clears it on convergence. monitor-bridge's **GitOps Deploy — Status** pages once the
-  age exceeds `GITOPS_BEHIND_MAX_MIN` (6 h). The marker is written AFTER `main()` so it reflects
+  origin, and clears it on convergence. The SessionStart banner reads it; no check pages on it
+  since H7.49b. The marker is written AFTER `main()` so it reflects
   the state the tick finished in. The watchdog is age-gated because being behind is normal in the
   small: a push is behind for one tick, and the dirty path is behind for a whole edit session.
   - **The stamp measures TIME WITHOUT A FAST-FORWARD, not time behind the tip.** Any tick that
@@ -719,8 +720,8 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
     behind the tip on nearly every tick, so a per-SHA stamp would age past six hours while the
     deployer works normally. `entrypoint()` re-resolves the REAL `origin/<branch>` after `main()`
     returns, so `behind_since` names the tip and a tail that never goes green still pages at 6 h.
-    Readers state the meaning in their own prose: `scripts/lib/deployer_park.py` (shared by
-    `deploy.sh` exit 4 and the SessionStart banner) and `monitor-bridge/files/checks/gitops.py`.
+    Readers state the meaning in their own prose: `scripts/lib/deployer_park.py`, shared by
+    `deploy.sh` exit 4 and the SessionStart banner.
   - **A wedge cannot game the re-stamp.** Every path that stops the deployer converging (a park,
     a hold at the tip, a dirty tree, a diverged tree, a tail with no green ancestor or a
     contention reset) leaves HEAD where the tick found it, so `fast_forwarded` is false. A
@@ -730,14 +731,9 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
     pins the combination.
   - **The `manual_plane` ledger class is the watchdog's second arm.** A recorded role
     fast-forwards, so `behind_since` clears and every marker the watchdog reads goes quiet while
-    the role stays unapplied. `checks.gitops.gitops_status` therefore reads `manual_plane` too and
-    pages once the OLDEST pending line is older than the same `GITOPS_BEHIND_MAX_S` (6 h), naming
-    the roles and the clear command. It is reported LAST of the four arms: the other three name a
-    deployer that has stopped, where a pending role blocks nobody. The pod reads it off the same
-    `:ro` state mount as `behind_since` and parses it with `gitops_ledger.manual_plane_entries`,
-    its own generated copy, because it cannot import this tree. The SessionStart banner reads the
-    class too, through `lib.deployer_park`, and names a pending role from the moment it is
-    recorded.
+    the role stays unapplied. The SessionStart banner reads `manual_plane` through
+    `lib.deployer_park` and names a pending role from the moment it is recorded. No check pages
+    on it: monitor-bridge's GitOps Status check left in H7.49b, before H7.52 retires the timer.
 - **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
   rotation pushed from another machine) are fast-forwarded, and the tick applies only the
   readers the two bullets below derive. The new value reaches any other consumer only on its
@@ -821,7 +817,7 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   advanced), the deployer can't fast-forward and every tick noops while origin's new commits — a
   Renovate/security bump — never deploy. Both other GitOps signals stay green (`last_run` keeps
   ticking, no hold), so each tick writes the diverged SHA to `/var/lib/gitops-deploy/diverged_sha`
-  (cleared once resolved) and `monitor-bridge`'s **GitOps Deploy — Status** monitor pages on it.
+  (cleared once resolved). No check pages on it since H7.49b.
   A merely unpushed local commit (`local_ahead`) is NOT flagged — that's the plain no-op above.
 - Each `has_gitops` host runs its own independent instance of this deployer, with its own git
   clone, state dir and lock. Only daniel-box has one.
@@ -974,17 +970,15 @@ repeat of a held entry keeps its first line. An apply drops only the entries it 
 `hold_sha` clears once none is left. A torn line still counts as held, so a plane the readers
 cannot parse never lets `hold_sha` clear over it.
 
-**Clearing unconditionally erases the fault.** Every consumer gates on `hold_sha` alone:
-`checks.gitops.gitops_status` reads `hold_plane` only to choose a sentence, `land.sh` reports
+**Clearing unconditionally erases the fault.** Every consumer gates on `hold_sha` alone: `land.sh` reports
 `deploy-failed` off `hold_sha`, and `renovate_agent.decide` refuses to run while one is set. A
-hold that cleared on any successful apply turned **GitOps Deploy — Status** green over a plane
-nothing had applied (issue #878).
+hold that cleared on any successful apply hid a plane nothing had applied from every one of those
+readers, and from the since-removed **GitOps Deploy — Status** monitor (issue #878).
 
 **The way out is manual, and both surfaces name it.** A hand `ansible-playbook` run is not the
 deployer, so it clears nothing. Once every held plane is applied, clear the hold with the deploy
-UI's Clear or `gitops_state.py clear-hold <sha>`. The Discord alert and the monitor's message
-both name the two, with the full held SHA in the command, and the monitor counts the planes still
-owed. An `rm` of `hold_sha` is not the way out: it leaves the class's lines in `owed.jsonl`, and
+UI's Clear or `gitops_state.py clear-hold <sha>`. The Discord alert names the two, with the full
+held SHA in the command, and `probe.py gitops-state` counts the planes still owed. An `rm` of `hold_sha` is not the way out: it leaves the class's lines in `owed.jsonl`, and
 the next failure's hold then waits on planes nobody owes.
 
 **The Clear button in the deploy UI drops every entry at once.** `deploy_ui_writes.clear_hold`
@@ -1050,9 +1044,9 @@ smoke run wait its full 180 s and deploy nothing.
 **The failure is silent.** `-E 75` plus `SuccessExitStatus=75` in `gitops-deploy.service.j2` make
 systemd report the unit `Result=success`, so the handler's `ansible.builtin.systemd: state:
 started` returns rc 0 and the play recaps green. Nothing deploys, `last_run` does not move, the
-deployer never starts so no Discord message goes out, and no `OnFailure` fires. The first alert
-is GitOps-Alive, once `last_run` ages past `GITOPS_MAX_AGE_S` (grep that name in
-`ansible/roles/k8s/monitor-bridge/files/check.py`). The one immediate signal is the unit's
+deployer never starts so no Discord message goes out, and no `OnFailure` fires. No alert
+follows: the GitOps-Alive check that paged a stale `last_run` left monitor-bridge in H7.49b, and
+`GitOpsTickStale` is a shadow rule. The one immediate signal is the unit's
 `ExecStopPost` journal marker, `tick skipped (lock contention)`.
 
 Before `SuccessExitStatus=75`, the same contention failed the play: `Run gitops-deploy once` timed

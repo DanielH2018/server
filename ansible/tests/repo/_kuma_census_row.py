@@ -43,12 +43,9 @@ def _is_encrypted(rel: str) -> bool:
     return rel == _SECRETS_FILE or ".sops." in rel.rsplit("/", 1)[-1]
 
 
-_C4B = "`kuma_ingress_monitors` until C-4b, which waits for D6, deletes the filter."
 _REDACTION = "`/api/push/` is an output redaction rule, not a Kuma read (#7195)."
 
 _IDENTIFIER_HOLDERS = {
-    "ansible/filter_plugins/kuma_monitors.py": _C4B,
-    "scripts/lib/ansible_jinja_env.py": _C4B,
     "ansible/roles/k8s/loki-homelab/CLAUDE.md": _REDACTION,
     "ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2": _REDACTION,
     "scripts/diagnostics/probe_lib/core.py": _REDACTION,

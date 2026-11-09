@@ -1,4 +1,4 @@
-"""Rendered-manifest property rows whose subject is config a ConfigMap or an arg carries.
+"""Rendered-manifest property rows whose subject is config a ConfigMap, an arg or a hostPath carries.
 
 `test_rendered_properties.py` runs these rows beside its own. A row lives here only to keep that
 file under the test-module length cap; the rules for what makes a row are in its docstring.
@@ -10,6 +10,7 @@ from lib import yaml_fast
 
 from _k8s_render import pod_spec
 from _property_table import Property
+from _workload_property_rows import POD_KINDS
 
 _PROMETHEUS_ROLE = "observability"
 
@@ -258,6 +259,23 @@ def _local_wildcard_offence(role: str, data: dict) -> str | None:
 _PIHOLE_WILDCARD = "address=/local.example.com/10.0.0.2\nlocal=/local.example.com/\n"
 
 
+_DEPLOYER_STATE = "/var/lib/gitops-deploy"
+
+
+def host_path_volumes(role: str, tpl: str, doc: dict):
+    if doc.get("kind") in POD_KINDS:
+        for volume in pod_spec(doc).get("volumes", []):
+            if "hostPath" in volume:
+                yield f"{doc['metadata']['name']}/{volume['name']}", volume["hostPath"]
+
+
+def deployer_state_offence(role: str, host_path: dict) -> str | None:
+    path = host_path["path"].rstrip("/")
+    if path != _DEPLOYER_STATE and not path.startswith(_DEPLOYER_STATE + "/"):
+        return None
+    return f"mounts {path}, the GitOps deployer's state directory"
+
+
 CONFIG_PROPERTIES = (
     Property(
         name="speedtest-scraped-at-its-native-endpoint",
@@ -404,5 +422,25 @@ CONFIG_PROPERTIES = (
             ("pihole", {"02-wildcard.conf": "local=/local.example.com/\n"}),
         ),
         must_find=frozenset({"pihole-dns-config"}),
+    ),
+    Property(
+        name="no-pod-mounts-the-deployers-state",
+        reason=(
+            "H7.52 retires the GitOps deployer's timer, and the operator then removes "
+            "/var/lib/gitops-deploy. monitor-bridge mounted it as `type: Directory` for its "
+            "gitops_alive and gitops_status checks, and a pod that kept such a mount would fail to "
+            "start once the directory went, and never schedule on a rebuilt daniel-box. "
+            "docs/target-architecture/host/h7-delete-ansible.md, *Path readers*, assigns every "
+            "other reader of the directory."
+        ),
+        select=host_path_volumes,
+        offence=deployer_state_offence,
+        red=("monitor-bridge", {"path": "/var/lib/gitops-deploy", "type": "Directory"}),
+        green=("monitor-bridge", {"path": "/var/lib/etcd-restore-drill"}),
+        more_red=(("monitor-bridge", {"path": "/var/lib/gitops-deploy/owed.jsonl"}),),
+        more_green=(("node-exporter", {"path": "/"}),),
+        # 22 hostPath volumes render. Close enough to notice a contraction.
+        min_matches=18,
+        must_find=frozenset({"monitor-bridge/monitor-bridge-etcd-drill-state"}),
     ),
 )

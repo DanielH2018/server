@@ -1,4 +1,4 @@
-"""Health verdicts for the services: n8n, the *arr queue, gitops, Home Assistant, Loki, R2.
+"""Health verdicts for the services: n8n, the *arr queue, Home Assistant, Loki, R2.
 
 Same shape as the host probes and split from them only by subject — a service check reads an
 API and decides, where a host check reads a sensor.

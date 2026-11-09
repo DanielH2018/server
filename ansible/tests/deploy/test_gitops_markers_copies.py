@@ -34,29 +34,15 @@ EXPECTED_COPIES = frozenset(
     }
 )
 
-# Literals outside Python that must name the same directory: two manifests hand the directory
-# to a unit and a pod. They cannot import anything, so they are pinned here rather than
-# generated. The tick wrapper read the markers from a shell until #3931; it prints
-# `probe.py gitops-state`, which imports `STATE_DIR`, so it names no directory of its own.
+# Literals outside Python that must name the same directory: a manifest hands the directory
+# to a unit. It cannot import anything, so it is pinned here rather than generated. The tick
+# wrapper read the markers from a shell until #3931; it prints `probe.py gitops-state`, which
+# imports `STATE_DIR`, so it names no directory of its own.
 _DIRECTORY_LITERALS = {
     "hosts/components/deploy-ui/templates/deploy-ui.service.j2": re.compile(
         r"^Environment=DEPLOY_UI_STATE=(\S+)$", re.M
     ),
-    "ansible/roles/k8s/monitor-bridge/templates/deployment.yaml.j2": re.compile(
-        r"- name: monitor-bridge-gitops-state\n\s+hostPath:\n\s+path: (\S+)", re.M
-    ),
 }
-
-# The pod's contention threshold is rendered into its env, the one place it is set:
-# `config_service.py` reads it with no default (#3659). The SessionStart banner parks on
-# `gitops_markers.CONTENTION_PAGE_SECONDS` directly, so a bump to it that leaves this literal behind
-# quiets the banner while the pod still pages at the old threshold, or the reverse — an
-# operator sent looking for a page that never came. `GITOPS_BEHIND_MAX_MIN` is NOT pinned:
-# the banner's behind threshold is deliberately shorter than the pod's.
-_CONTENTION_ENV = (
-    "ansible/roles/k8s/monitor-bridge/templates/config/env.yaml.j2",
-    re.compile(r'^GITOPS_CONTENTION_MAX_MIN: "(\d+)"$', re.M),
-)
 
 
 def test_the_generator_knows_exactly_the_named_consumers():
@@ -136,11 +122,3 @@ def test_every_non_python_literal_names_the_same_directory():
         found = pattern.findall((REPO / path).read_text())
         assert found, f"{path}: no state-directory literal matched"
         assert found == [STATE_DIR], f"{path}: {found}"
-
-
-def test_the_pod_pages_on_contention_at_the_threshold_the_banner_parks_on():
-    from gitops_markers import CONTENTION_PAGE_SECONDS
-
-    path, pattern = _CONTENTION_ENV
-    found = pattern.findall((REPO / path).read_text())
-    assert found == [str(CONTENTION_PAGE_SECONDS // 60)], f"{path}: {found}"

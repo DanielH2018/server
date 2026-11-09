@@ -58,8 +58,9 @@ added, which leaves the largest legal `-w` at a few hundred seconds — far shor
 computes that bound from the live defaults and goes red if someone tries. (This record
 quoted the figures until 2026-09-02, and all three had moved.)
 
-**Contention is not silent starvation.** The `flock` path never writes `last_run`, so
-contention outlasting `GITOPS_MAX_AGE_S` still pages through the GitOps-Alive monitor.
+**Contention was not silent starvation.** The `flock` path never writes `last_run`, so
+contention outlasting `GITOPS_MAX_AGE_S` paged through the GitOps-Alive monitor. H7.49b removed
+that monitor, and nothing pages on a stale `last_run` until H7.52 retires the timer.
 
 **`--check` runs unlocked** because it mutates nothing, and so does `--dry-run`.
 

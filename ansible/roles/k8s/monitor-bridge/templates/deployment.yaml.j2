@@ -26,8 +26,8 @@ spec:
       # below are unreadable to this non-root uid and both file-mounted checks silently
       # self-disable ("no URL/token" — found on the twin's first cycle, 2026-08-14).
 {{ pod_shell(containers_list | tier_priority_class('monitor-bridge'), run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true) }}
-      # Stays off daniel-server so the drain (and its eventual cold boot) never takes the
-      # alerting brain down with the thing it is alerting on.
+      # Pinned to daniel-box, where the etcd drill's stamp hostPath lives, and off daniel-server
+      # so its drain (and eventual cold boot) never takes the alerting brain down with it.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
       containers:
@@ -75,9 +75,6 @@ spec:
               readOnly: true
             - name: monitor-bridge-tmp
               mountPath: /tmp
-            - name: monitor-bridge-gitops-state
-              mountPath: /gitops-state
-              readOnly: true
             - name: monitor-bridge-etcd-drill-state
               mountPath: /etcd-drill-state
               readOnly: true
@@ -123,16 +120,8 @@ spec:
                 path: healthchecks_api_read_only_key
         - name: monitor-bridge-tmp
           emptyDir: {}
-        # daniel-box's own gitops-deploy state — this pod is pinned to that node (the
-        # alerting-brain placement above), which is exactly what makes a hostPath read
-        # of the deployer it watches legitimate. Took over from the retired Docker
-        # remnant at the uninstall (2026-08-14).
-        - name: monitor-bridge-gitops-state
-          hostPath:
-            path: /var/lib/gitops-deploy
-            type: Directory
-        # The etcd restore drill's stamp dir, same node and same reasoning as the gitops state
-        # above. `DirectoryOrCreate`, NOT `Directory`: the drill creates this on its first pass,
+        # The etcd restore drill's stamp dir on daniel-box, the node this pod is pinned to.
+        # `DirectoryOrCreate`, NOT `Directory`: the drill creates this on its first pass,
         # so a plain Directory makes the pod unschedulable on a host where the drill has not run
         # yet — the check would then be absent rather than reporting the absence, which is the
         # state most worth reporting.

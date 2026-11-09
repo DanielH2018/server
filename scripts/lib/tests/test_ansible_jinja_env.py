@@ -194,10 +194,6 @@ def test_the_light_tier_loads_no_ansible_core():
     [
         ("py_table", ("ROWS = 1\n", "ROWS")),
         (
-            "kuma_ingress_monitors",
-            ([{"name": "svc", "hostname": "svc", "kuma": "yes"}],),
-        ),
-        (
             "ingress_probe_targets",
             ([{"name": "svc", "hostname": "svc", "probe": "yes"}],),
         ),

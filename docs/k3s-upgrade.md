@@ -260,8 +260,7 @@ fast-forwards the primary checkout and writes a `manual_plane` line for `k3s` to
 (`deploy_changes.py`) still park the tick. Before 2026-09-11 a `k3s` change did park the tick
 (issue #1467).
 
-A recorded line pages **GitOps Deploy — Status** six hours later unless something clears it.
-When the cluster is already upgraded by step 4, the hand-apply the line asks for is a
+A recorded line stays in the SessionStart banner until something clears it. When the cluster is already upgraded by step 4, the hand-apply the line asks for is a
 verification run, not a change. After the merge, run the apply the deployer printed if you want
 that verification, then clear the line:
 

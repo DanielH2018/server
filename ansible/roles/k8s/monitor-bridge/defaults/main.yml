@@ -63,7 +63,7 @@ monitor_bridge_modules:
   - checks/host_thermal.py
   - checks/host_edge.py
   - checks/service.py
-  - checks/gitops.py
+  - checks/host_packages.py
   - checks/notify.py
   - checks/cloudflare_ips.py
   - checks/healthchecks.py

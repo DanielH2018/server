@@ -25,7 +25,6 @@ WRAPPER = "_as_filter"
 KNOWN_WRAPPING_PLUGINS = frozenset(
     {
         "homepage_tiles",
-        "kuma_monitors",
         "longhorn_groups",
         "py_table",
         "role_label",

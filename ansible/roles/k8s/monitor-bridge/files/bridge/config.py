@@ -186,8 +186,7 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         LOKI_URL=_env("LOKI_URL").rstrip("/"),
         # Which checks THIS instance runs. The Phase F twin/remnant split ended with the Docker
         # uninstall (2026-08-14): the cluster deployment is now the ONLY bridge and runs every
-        # check (the gitops checks re-pointed at daniel-box's deployer via a hostPath — the pod
-        # is pinned there; disk_prune retired with the Docker daemon; pi_peers/renovate_alive
+        # check (disk_prune retired with the Docker daemon; pi_peers/renovate_alive
         # became direct pushers at the host flips). The CHECKS_ONLY/CHECKS_SKIP mechanism stays —
         # it is how any future split would be expressed, and check.py's guards keep it honest.
         # CHECKS_ONLY (comma-separated names) enables exactly that set; CHECKS_SKIP drops names

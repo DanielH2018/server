@@ -25,8 +25,7 @@
 #
 # The last two rules read the deployer's own `gitops_tick.prom`, which
 # roles/setup/gitops_deploy/files/gitops_tick_metrics.py rewrites at the end of every tick (#6164).
-# They carry `service: gitops-deploy`, as bridge-exporter.yaml's GitOpsDeployerNotTicking does, and
-# stay shadow beside it until the operator promotes them.
+# They carry `service: gitops-deploy` and stay shadow until the operator promotes them.
 # GitOpsTickStale's 5400s outlasts the longest gap between two writes a healthy deployer leaves,
 # the unit's TimeoutStartSec (40min) plus one timer interval (10min). It matches
 # GITOPS_MAX_AGE_MIN's 90 minutes. The same test file pins it to the gap.
