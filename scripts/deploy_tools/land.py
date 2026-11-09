@@ -96,7 +96,8 @@ the merge in time, the builder has not published the host package, or the health
 not read its store (exit 75), so the deploy went ungraded. Re-run land.sh to grade it.
 `refused` is every other exit-1 stop: the landing policy, a PR closed unmerged or with
 changes requested, a read or a fetch that failed, or a checkout whose landing code master
-has changed since (`classify.refuse_stale_code`). The `land:` line on stderr, repeated in the
+has changed since (`classify.refuse_stale_code`, and before `--arm-merge` merges anything,
+`classify.refuse_stale_code_before_merge`). The `land:` line on stderr, repeated in the
 verdict's detail, says which. `handoff-timeout` is land.sh giving up on a lander unit that is
 still running (`LAND_HANDOFF_UNIT` below); a re-run waits on it again. `unbuilt` replaces a
 host's `deferred` when the builder reports a failing reason and has published no package of

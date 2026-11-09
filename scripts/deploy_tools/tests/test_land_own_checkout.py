@@ -220,3 +220,26 @@ def test_a_module_a_later_phase_imports_lazily_is_compared(tmp_path):
         timeout=120,
     )
     assert "scripts/lib/ansible_inventory.py" in run.stdout.split()
+
+
+def test_imported_paths_follows_a_function_level_import_and_skips_the_venv(tmp_path):
+    lib = tmp_path / "scripts" / "lib"
+    lib.mkdir(parents=True)
+    (tmp_path / "scripts" / "entry.py").write_text(
+        "import json\n\ndef later():\n    from lib import lazy\n"
+    )
+    (lib / "lazy.py").write_text("from . import sibling\n")
+    (lib / "sibling.py").write_text("")
+    venv = tmp_path / ".venv" / "pkg.py"
+    venv.parent.mkdir()
+    venv.write_text("from lib import unused\n")
+    (lib / "unused.py").write_text("")
+    got = own_checkout.imported_paths(
+        tmp_path, [tmp_path / "scripts"], ["scripts/entry.py", ".venv/pkg.py"]
+    )
+    assert got == [
+        ".venv/pkg.py",
+        "scripts/entry.py",
+        "scripts/lib/lazy.py",
+        "scripts/lib/sibling.py",
+    ]

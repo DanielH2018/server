@@ -10,7 +10,7 @@ from collections.abc import Callable
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from deploy_tools.land_lib.landing import Classification, Landing
+from deploy_tools.land_lib.landing import BRANCH, Classification, Landing
 from deploy_tools.land_lib.own_checkout import OWN_CHECKOUT
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 from deploy_tools.land_lib.land_tags import DeriveSource
@@ -56,6 +56,36 @@ def resolve(ln: Landing) -> None:
     ln.fetch_branch()
 
 
+def _stale_code_reason(ln: Landing, base: str) -> str:
+    """Why land.py's checkout lags `base`; "" when it carries every change to its code."""
+    stale = ln.tools.stale_code(base)
+    if stale == []:
+        return ""
+    if stale:
+        return f"its landing code is older than master's: {', '.join(stale)}"
+    return f"git could not compare its landing code with {base}"
+
+
+def refuse_stale_code_before_merge(ln: Landing) -> None:
+    """Die before `await_merge` merges the PR when land.py's checkout lags origin/master.
+
+    `refuse_stale_code` runs after the merge, so on its own a stale checkout's merge wait
+    would merge the PR first (#7830). The base is all of master, the PR not yet on it.
+    """
+    ln.fetch_branch()
+    base = f"origin/{BRANCH}"
+    what = _stale_code_reason(ln, base)
+    if not what:
+        return
+    snap = f"/tmp/land-{ln.opts.pr}"
+    ln.die(
+        f"this landing runs from {OWN_CHECKOUT}, and {what}. Nothing is merged; re-run it "
+        f"from a checkout at {base}: `git -C {ln.opts.primary} worktree add --detach {snap} "
+        f"{base}`, then `{snap}/scripts/deploy_tools/land.sh` with the same arguments",
+        1,
+    )
+
+
 def refuse_stale_code(ln: Landing) -> None:
     """Die when land.py's checkout lacks a master change to the code this landing runs.
 
@@ -69,8 +99,8 @@ def refuse_stale_code(ln: Landing) -> None:
     earlier commits in the base and refuses too; land.sh squash-merges.
     """
     base = f"{ln.merge_sha}^1"
-    stale = ln.tools.stale_code(base)
-    if stale == []:
+    what = _stale_code_reason(ln, base)
+    if not what:
         return
     rerun = f"land.sh --pr {ln.opts.pr} --since {ln.opts.since or base}"
     if ln.git("merge-base", "--is-ancestor", base, "HEAD").returncode == 0:
@@ -81,11 +111,6 @@ def refuse_stale_code(ln: Landing) -> None:
             f"re-run it from a checkout at the merge: `git -C {ln.opts.primary} worktree add "
             f"--detach {snap} {ln.merge_sha}`, then `{snap}/scripts/deploy_tools/{rerun}`"
         )
-    what = (
-        f"its landing code is older than master's: {', '.join(stale)}"
-        if stale
-        else f"git could not compare its landing code with {base}"
-    )
     ln.die(
         f"this landing runs from {OWN_CHECKOUT}, and {what}. PR #{ln.opts.pr} is merged, "
         f"and this landing graded nothing; {where}",
