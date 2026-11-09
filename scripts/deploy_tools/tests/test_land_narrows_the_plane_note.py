@@ -60,24 +60,39 @@ def test_a_narrowed_note_clears_only_the_tags_it_told_you_to_apply(pr):
     being printed and the operator running the clear. The bare form would drop that PR's tag
     too, leaving its change merged, unapplied and recorded nowhere.
     """
-    note = land_tags.plane_note([RBAC], narrow_tags={"k3s": frozenset({"kubeconfig"})})
+    note = land_tags.plane_note(
+        [RBAC],
+        narrow_tags={"k3s": frozenset({"kubeconfig"})},
+        owed=frozenset({"k3s"}),
+    )
     assert "ansible/k3s-bringup.yml --tags kubeconfig" in note
     assert "clear-owed manual_plane k3s --applied kubeconfig" in note
 
 
 def test_a_role_tag_note_clears_the_whole_line(pr):
     """The rejecting half: a whole-role apply covers whatever the row has gained."""
-    note = land_tags.plane_note([RBAC], narrow_tags={})
+    note = land_tags.plane_note(
+        [RBAC], narrow_tags={}, owed=land_tags.forecast_owed([RBAC])
+    )
     assert "ansible/k3s-bringup.yml --tags k3s`" in note
     assert "clear-owed manual_plane k3s`" in note
     assert "--applied" not in note
 
 
-def test_the_plane_cli_narrows_from_this_prs_own_range(pr, capsys):
+def test_the_plane_cli_narrows_from_this_prs_own_range(pr, capsys, tmp_path):
     """The CLI has no merge commit to find a receipt by, so it derives the PR's own tags."""
     tree, rng = pr
     payload = json.dumps({"files": [{"path": RBAC}], "changedFiles": 1})
-    argv = ["--json", payload, "--plane", "--range", rng]
+    (tmp_path / "owed.jsonl").write_text(_K3S_OWED + "\n")
+    argv = [
+        "--json",
+        payload,
+        "--plane",
+        "--range",
+        rng,
+        "--deployer-state",
+        str(tmp_path),
+    ]
     assert land_tags_cli.main(argv, repo=tree.root) == 0
     assert "--tags kubeconfig`" in capsys.readouterr().out
 

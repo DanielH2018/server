@@ -22,6 +22,7 @@ from deploy_tools.land_lib import land_tags
 from deploy_tools.land_lib.key_readers import readable_key_readers
 from deploy_tools.land_lib.land_reach import remaining_setup_hosts_note
 from lib.cli_help import ArgumentParser
+from lib.exit_codes import LAND_GAVE_UP
 from lib.repo_paths import REPO
 
 
@@ -29,9 +30,11 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
     """Print one fact about a PR's file list -- tags, plane note, self-applied flag, or remaining-setup-hosts note.
 
     Which one prints depends on `--plane`/`--self-applied`/`--remaining-setup-hosts`; with
-    none of them, prints the derived `--tags` value. Always exits 0. `repo` is where the
-    PR's own range is read over `--range`, a seam for the tests. The CLI has no merge commit
-    to find a receipt by, so it narrows the way a fast-path landing does.
+    none of them, prints the derived `--tags` value. Exits 0, except `--plane` exits 75 when
+    the owed ledger cannot be read and a path nominates a setup role for it to answer, as the
+    landing ends `deferred` there. `repo` is where the PR's own range is read over `--range`,
+    a seam for the tests. The CLI has no merge commit to find a receipt by, so it narrows the
+    way a fast-path landing does.
     """
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -64,13 +67,24 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
             "`<old>..<new>` — read the diff to drop broad paths whose change is comments only"
         ),
     )
+    parser.add_argument(
+        "--deployer-state",
+        type=Path,
+        default=land_tags.DEPLOYER_STATE,
+        help="the deployer's state directory, whose owed ledger `--plane` reads",
+    )
     ns = parser.parse_args(argv)
     payload = json.loads(ns.json)
     paths = [f["path"] for f in payload.get("files", [])]
     quiet = land_tags.quiet_paths(paths, ns.range_)
     if ns.plane:
         narrow = land_tags.own_narrow_tags(paths, ns.range_, repo)
-        print(land_tags.plane_note(paths, quiet=quiet, narrow_tags=narrow))
+        try:
+            owed = land_tags.owed_for(paths, quiet, ns.deployer_state)
+        except land_tags.LedgerUnreadable as exc:
+            print(exc, file=sys.stderr)
+            return LAND_GAVE_UP
+        print(land_tags.plane_note(paths, quiet=quiet, narrow_tags=narrow, owed=owed))
         return 0
     if ns.self_applied:
         print("yes" if land_tags.self_applied(paths, quiet=quiet) else "")

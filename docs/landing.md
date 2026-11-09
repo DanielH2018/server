@@ -625,15 +625,26 @@ role it applied on daniel-box whose change reaches another host (#6510). No chec
 `hold_sha`. A failed apply shows in the deployer's Discord post, in the SessionStart banner and
 as `deploy-failed` from every later `land.sh` run.
 
-**A path the PR only deletes owes no hand.** `classify` reads each file's `changeType` from
-`gh pr view`. It leaves a `DELETED` path out of the plane note, because no playbook applies a
-deleted file. The service tags still read it. A PR that deletes only a setup role's files
-therefore ends `settled` or `nothing-to-deploy` (#7885).
+**The owed ledger decides which setup role a hand owes.** `land.sh` reads `owed.jsonl` in step 1.
+A setup role the tick does not apply (`k3s`, `common`) ends `needs-manual-apply` only when the
+ledger holds a `manual_plane` line for it, and the note then prints the apply command and the
+`clear-owed manual_plane <role>` after it. The PR's paths only nominate roles: a ledger line for a
+role the PR does not touch owes this PR nothing, and a modified role with no line owes nothing.
+The deployer's timer is retired (H7.52), so nothing writes a new line; a path-derived verdict
+named work no one owed (#7906). A bring-up playbook (`_BROAD_MANUAL_PREFIXES`) stays
+path-derived, because the tick parked on it and never wrote a line.
 
-**The clear command names only a role the `owed` ledger holds.** `land.sh` reads `owed.jsonl` in
-step 1. It prints `clear-owed manual_plane <role>` only for a role with a `manual_plane` line.
-A role the ledger lacks still gets its apply command, with no clear after it. An unreadable ledger
-names every role's clear.
+**A deleted path owes nothing only when the PR deletes the role's whole task set.** `classify`
+reads each file's `changeType` from `gh pr view` and the role's `tasks/` at the merge commit. It
+leaves a `DELETED` path out of the plane note when it sits outside every setup role, or when no
+task file of its role remains. The service tags still read it. A PR that deletes only a setup
+role's files therefore ends `settled` or `nothing-to-deploy` (#7885). A PR that deletes one task
+file and keeps another keeps the role, so the ledger still decides whether a hand owes it (#7906).
+
+**An unreadable ledger ends `deferred`.** When `owed.jsonl` exists but cannot be read and the PR
+changes a setup role the tick does not apply, the landing ends `deferred` (exit 75) and names the
+read error. Re-run `land.sh` once the ledger reads. A PR that nominates no such role never reads
+the ledger, so a broken one cannot defer it.
 
 **Read every remediation line, not the first one.** One PR can reach two of these at once, for
 example a plane a hand applies and a host package, and the verdict then prints one line per
@@ -656,8 +667,8 @@ the tick fast-forwards the range and records a `manual_plane` line in the `owed`
 step, and `--dry-run` shows them first. It refuses a line whose apply arms more than the change, a role
 applied by hand, and a primary checkout behind `origin/master`, so run those as printed, including any
 `--applied <tags>` on the clear. A bring-up
-playbook gets no such line, because the tick parks on those and writes no marker. A landing does
-not read the line, so it ends `nothing-to-deploy` beside a recorded role. A role the tick DID apply
+playbook gets no such line, because the tick parks on those and writes no marker. A landing reads
+the line (see above), so a PR touching a recorded role ends `needs-manual-apply`. A role the tick DID apply
 on daniel-box gets a line too when its change reaches another host (#6510): the line's `hosts`
 key names the hosts the "also reaches" note names, and the banner and monitor-bridge print the
 apply for each. Apply it there, then `clear-owed manual_plane <role>`. The clear, `--applied` and
