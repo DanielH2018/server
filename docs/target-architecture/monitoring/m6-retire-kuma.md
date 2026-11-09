@@ -125,7 +125,7 @@ push-token secret remains.
    file, so the second read prints a count and never a value. `secret_rotation.py audit --check`
    exits 0.
 3. Nothing reads Kuma. This is a functional criterion, not a sweep of every mention. It is
-   reached only after C-4b, which waits for D6.
+   reached only after C-4b, which landed after D6 (#7835).
     - None of these identifiers appears in a non-test file under `ansible/`, `hosts/`,
       `scripts/` or `.claude/`, outside the allowlist below: `/api/push/`, `kuma_push`, `KUMA_URL`,
       `KUMA_PUSH_`, `monitor_status`, `entry_port('uptime-kuma')`, `kuma-push-lib`,
@@ -165,10 +165,6 @@ push-token secret remains.
           `org.homelab.kuma-docker-monitor` labels (see *Open questions*, item 7).
         - `hosts/components/claude-code/files/homelab_rootq.py`: its `/api/push/` pattern is
           an output redaction rule, not a Kuma read.
-        - Until C-4b lands: `ansible/filter_plugins/kuma_monitors.py`, its import and its
-          `kuma_ingress_monitors` registration in `scripts/lib/ansible_jinja_env.py`, and
-          the `kuma_ingress_monitors` row in
-          `scripts/deploy_tools/narrow_lib/containers.py:FILTER_FIELDS`.
         - The other output redaction rules, which hold `/api/push/` until #7195 retires them:
           `ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2`, its
           `ansible/roles/k8s/loki-homelab/CLAUDE.md` bullet and
@@ -2028,8 +2024,8 @@ here. C-1 waits for the operator's acceptance.
       registers `ingress_probe_targets` in `scripts/lib/ansible_jinja_env.py`, beside the
       filters that file already imports, so a repo render of the probe job resolves it. No
       plugin is deleted, so the narrowing can answer (M4 open question 1).
-    - **C-4b.** Delete `kuma_monitors.py`, which no template calls after C-4a. In the same
-      commit, remove its import and the `kuma_ingress_monitors` registration from
+    - **C-4b (landed, #7835).** Delete `kuma_monitors.py`, which no template calls after
+      C-4a. In the same commit, remove its import and the `kuma_ingress_monitors` registration from
       `scripts/lib/ansible_jinja_env.py`, which would otherwise raise ImportError on every
       repo render. Remove the `kuma_ingress_monitors` row from
       `scripts/deploy_tools/narrow_lib/containers.py:FILTER_FIELDS` too, unless D6 has

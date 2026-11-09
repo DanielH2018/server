@@ -120,9 +120,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     ports and hostnames through ``entry_fields``' filters. homepage's tiles build their links and
     ClusterIP widget URLs through ``homepage_href`` and ``homepage_widget_url``, which raise on
     an entry that lacks the route or the ``homepage_widget`` key.
-    ``py_table`` reads monitor-bridge's check table out of its Python source, for the
-    env-secret and the Kuma tiles. The k3s RecurringJob template names each weekly shard
-    through ``weekly_backup_group``, which raises on a shard outside 0-6, and the restore drill
+    ``py_table`` reads monitor-bridge's check table out of its Python source. The k3s
+    RecurringJob template names each weekly shard through ``weekly_backup_group``, which
+    raises on a shard outside 0-6, and the restore drill
     names the label prefix, the opt-out group and the B2 target through ``longhorn_backup_name``.
     longhorn-reconcile's ConfigMap computes the three tier lists with ``tier_backup_claims``,
     ``longhorn_weekly_claims`` and ``longhorn_nobackup_claims``, which raise on a shard outside
@@ -165,7 +165,6 @@ def register_ansible_filters(env: Environment) -> Environment:
     from entry_fields import entry_names, lan_hostnames, published_ports
     import homepage_tiles
     import ingress_probes
-    import kuma_monitors
     import longhorn_groups
     import py_table
     import role_label
@@ -217,9 +216,6 @@ def register_ansible_filters(env: Environment) -> Environment:
     ]
     env.filters["ingress_probe_targets"] = ingress_probes.FilterModule().filters()[
         "ingress_probe_targets"
-    ]
-    env.filters["kuma_ingress_monitors"] = kuma_monitors.FilterModule().filters()[
-        "kuma_ingress_monitors"
     ]
     homepage_filters = homepage_tiles.FilterModule().filters()
     env.filters["netpol_callers"] = homepage_filters["netpol_callers"]
