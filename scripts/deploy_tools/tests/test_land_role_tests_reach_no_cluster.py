@@ -55,7 +55,10 @@ def test_a_role_test_file_is_clean():
     assert land_tags.role_for(_ROLE_TESTS) == "arr-notification"
     assert land_tags.is_role_test_path(_ROLE_TESTS) is True
     assert land_tags.shared_roles([_ROLE_TESTS]) == []
-    assert land_tags.plane_note([_ROLE_TESTS]) == ""
+    assert (
+        land_tags.plane_note([_ROLE_TESTS], owed=land_tags.forecast_owed([_ROLE_TESTS]))
+        == ""
+    )
 
 
 def test_a_test_module_beside_a_roles_code_maps_to_no_tag_on_either_side():
@@ -113,7 +116,9 @@ def _verdict(landing, files: list[str]) -> Outcome:
     ln.merge_sha = MERGE_SHA
     quiet = land_tags.quiet_paths(files, "")
     ln.classification = Classification(
-        plane=land_tags.plane_note(files, quiet=quiet),
+        plane=land_tags.plane_note(
+            files, quiet=quiet, owed=land_tags.forecast_owed(files)
+        ),
     )
     with pytest.raises(Outcome) as exc:
         deploy.no_tag_outcome(ln)

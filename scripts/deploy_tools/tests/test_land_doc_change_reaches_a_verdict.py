@@ -31,7 +31,7 @@ def test_a_role_document_is_clean():
     """The only change under a tag-less role is that role's CLAUDE.md."""
     assert land_tags.role_for(_DOC) is None
     assert land_tags.shared_roles([_DOC]) == []
-    assert land_tags.plane_note([_DOC]) == ""
+    assert land_tags.plane_note([_DOC], owed=land_tags.forecast_owed([_DOC])) == ""
     assert land_tags.self_applied([_DOC]) is False
 
 
@@ -53,7 +53,12 @@ def test_a_setup_role_document_is_clean_whatever_the_range():
     for range_ in ("", "..", "abc"):
         assert land_tags.quiet_paths([_SETUP_DOC], range_) == {_SETUP_DOC}, range_
     quiet = land_tags.quiet_paths([_SETUP_DOC], "")
-    assert land_tags.plane_note([_SETUP_DOC], quiet=quiet) == ""
+    assert (
+        land_tags.plane_note(
+            [_SETUP_DOC], quiet=quiet, owed=land_tags.forecast_owed([_SETUP_DOC])
+        )
+        == ""
+    )
     assert land_tags.self_applied([_SETUP_DOC], quiet=quiet) is False
 
 
@@ -63,7 +68,9 @@ def test_a_setup_role_yaml_file_is_flagged_with_no_range():
     files = [_SETUP_DOC, _SETUP_DEFAULTS]
     quiet = land_tags.quiet_paths(files, "")
     assert quiet == {_SETUP_DOC}
-    assert "k3s-bringup.yml --tags k3s" in land_tags.plane_note(files, quiet=quiet)
+    assert "k3s-bringup.yml --tags k3s" in land_tags.plane_note(
+        files, quiet=quiet, owed=land_tags.forecast_owed(files)
+    )
 
 
 def _verdict(landing, files: list[str]) -> Outcome:
@@ -72,7 +79,9 @@ def _verdict(landing, files: list[str]) -> Outcome:
     ln.merge_sha = MERGE_SHA
     quiet = land_tags.quiet_paths(files, "")
     ln.classification = Classification(
-        plane=land_tags.plane_note(files, quiet=quiet),
+        plane=land_tags.plane_note(
+            files, quiet=quiet, owed=land_tags.forecast_owed(files)
+        ),
     )
     with pytest.raises(Outcome) as exc:
         deploy.no_tag_outcome(ln)
