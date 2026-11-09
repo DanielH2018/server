@@ -213,6 +213,23 @@ def role_entry(spelled: str, holder: Path) -> Path:
     )
 
 
+@functools.cache
+def runs_on_no_host(role: Path) -> bool:
+    """Whether the role's first task is a `meta: end_role` with no `when:`, as an emptied role's is.
+
+    Such a role installs nothing, so a template it keeps runs on no host.
+    """
+    main = role / "tasks" / "main.yml"
+    if not main.is_file():
+        return False
+    tasks = yaml_fast.parse_yaml(main.read_text())
+    if not isinstance(tasks, list) or not tasks or not isinstance(tasks[0], dict):
+        return False
+    first = tasks[0]
+    ends = any(first.get(m) == "end_role" for m in ("meta", "ansible.builtin.meta"))
+    return ends and "when" not in first
+
+
 def role_entries() -> list[tuple[Path, tuple[str, ...]]]:
     """Each script a role or a component runs `--no-project`, run with no subcommand.
 
@@ -225,6 +242,7 @@ def role_entries() -> list[tuple[Path, tuple[str, ...]]]:
             path.suffix not in {".yml", ".yaml", ".j2"}
             or "tests" in path.parts
             or not path.is_file()
+            or runs_on_no_host(_role_of(path))
         ):
             continue
         found += [

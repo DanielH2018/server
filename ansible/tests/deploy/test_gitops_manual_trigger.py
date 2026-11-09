@@ -1,35 +1,24 @@
-"""The manual GitOps trigger keeps the two properties that make it usable and safe.
+"""The polkit rule that lets an unprivileged caller start the GitOps unit keeps its scope.
 
-Triggering a tick by hand needs a polkit rule, because `systemctl start` on a system unit
-goes over D-Bus to PID 1 and is refused with "Interactive authentication required" for an
-unprivileged caller. Two things about that rule and its wrapper fail silently if edited
-carelessly, so they are pinned here rather than left to review:
+Starting a system unit by hand goes over D-Bus to PID 1 and is refused with "Interactive
+authentication required" for an unprivileged caller, so the role installs a polkit rule. Two
+things about that rule fail silently if edited carelessly, so they are pinned here:
 
 1. **The rule must not test `subject.active` or `subject.local`, and must return YES.** A
-   non-interactive caller — a Claude Code Bash call, a systemd-run job, a cron — has no
-   active local seat. An active-gated rule, or any `AUTH_*` result, matches and then still
-   fails with the same "Interactive authentication required" the rule exists to remove. The
-   failure looks identical to having no rule at all, which is what makes it worth a test.
+   non-interactive caller (a Claude Code Bash call, a systemd-run job, a cron) has no active
+   local seat. An active-gated rule, or any `AUTH_*` result, matches and then still fails with
+   the same "Interactive authentication required" the rule exists to remove. The failure looks
+   identical to having no rule at all, which is what makes it worth a test.
 
-2. **The wrapper must start the unit with `--no-block`.** `gitops-deploy.service` is
-   Type=oneshot with a long TimeoutStartSec (`test_unit_timeout_covers_the_broad_apply_worst_case`
-   pins the exact value), so a blocking start returns only when the whole tick finishes. Any
-   caller with a shorter patience than that — a 10-minute Bash tool
-   call is the motivating one — reads that as a hang, not as a running deploy.
-
-Scope is also asserted: the rule covers this one unit and only the `start` verb. stop/restart
-/kill stay privileged, because a wedged run is an incident rather than a routine action.
+2. **The rule covers this one unit and only the `start` verb.** stop/restart/kill stay
+   privileged, because a wedged run is an incident rather than a routine action.
 """
 
 import re
-from _helpers import REPO as _REPO
 from _setup_render import rendered_setup_text
 
 
-_ROLE = _REPO / "ansible/roles/setup/gitops_deploy"
 _RULE = "50-gitops-deploy.rules.j2"
-_TASKS = _ROLE / "tasks/service.yml"
-_WRAPPER = _REPO / "scripts/deploy_tools/gitops_tick.sh"
 
 _UNIT = "gitops-deploy.service"
 
@@ -74,40 +63,12 @@ def test_rule_is_scoped_to_starting_this_one_unit():
     )
 
 
-def test_rule_is_installed_where_polkit_reads_it():
-    tasks = _TASKS.read_text()
-    assert "50-gitops-deploy.rules.j2" in tasks, (
-        f"{_RULE} exists but {_TASKS} never installs it, so no host ever gets the rule."
-    )
-    assert "/etc/polkit-1/rules.d/50-gitops-deploy.rules" in tasks
-
-
-def test_wrapper_starts_the_unit_without_blocking():
-    wrapper = _WRAPPER.read_text()
-    starts = [
-        line.strip()
-        for line in wrapper.splitlines()
-        if re.search(
-            rf"systemctl start\b.*(\$UNIT|\"\$UNIT\"|{re.escape(_UNIT)})", line
-        )
-    ]
-    assert starts, f"{_WRAPPER} no longer starts {_UNIT} at all."
-    for line in starts:
-        assert "--no-block" in line, (
-            f"{_WRAPPER} starts the unit blocking: {line!r}. Type=oneshot plus "
-            "TimeoutStartSec=40min means that returns only when the tick finishes."
-        )
-
-
 _UNIT_TEMPLATE = "gitops-deploy.service.j2"
 
 
-def test_lock_contention_exit_code_is_one_contract_across_all_three_readers():
-    # `flock -E N` in ExecStart, `SuccessExitStatus=N` in the unit, and the wrapper's handler
-    # for N are one contract expressed in three places. If the wrapper's handler lags the other
-    # two, a contention tick takes the failure branch and tells the operator that
-    # gitops-deploy-alert.service already posted to Discord. It cannot have — OnFailure never
-    # fires on a unit SuccessExitStatus makes succeed. This pins the three together.
+def test_lock_contention_exit_code_is_one_contract_across_the_unit():
+    # `flock -E N` in ExecStart, `SuccessExitStatus=N` and the ExecStopPost guard on
+    # EXIT_STATUS are one contract expressed in three places. This pins them together.
     unit = rendered_setup_text("gitops_deploy", _UNIT_TEMPLATE)
 
     flock_code = re.search(r"^ExecStart=.*?flock\s+.*?-E\s+(\d+)", unit, re.MULTILINE)
@@ -128,8 +89,8 @@ def test_lock_contention_exit_code_is_one_contract_across_all_three_readers():
         "as a failure while some unrelated exit code is silently swallowed as success."
     )
     assert code != "0", (
-        "Contention must not exit 0: gitops_deploy.py's own success also exits 0, so the "
-        "wrapper could not tell a skipped tick from a completed one."
+        "Contention must not exit 0: gitops_deploy.py's own success also exits 0, so a "
+        "skipped tick could not be told from a completed one."
     )
 
     stop_post = re.search(r"^ExecStopPost=.*$", unit, re.MULTILINE)
@@ -142,45 +103,6 @@ def test_lock_contention_exit_code_is_one_contract_across_all_three_readers():
     assert re.search(rf'EXIT_STATUS"?\s*=\s*"?{code}\b', stop_post.group(0)), (
         f"ExecStopPost does not guard on EXIT_STATUS = {code}, so it either never fires on "
         f"contention or fires on every tick. Keep it in step with `flock -E {code}`."
-    )
-
-    # The marker string, not the exit code, is what couples the unit to the wrapper. A oneshot
-    # unit with no RemainAfterExit has its ExecMainStatus reset to 0 by systemd once it goes
-    # inactive, so `systemctl show` cannot tell a contention tick from a successful deploy
-    # afterwards. Reading the exit code back would be inert.
-    marker = re.search(
-        r'^CONTENTION_MARKER="([^"]+)"', _WRAPPER.read_text(), re.MULTILINE
-    )
-    assert marker, (
-        f"{_WRAPPER} no longer defines CONTENTION_MARKER, so it cannot distinguish a skipped "
-        "tick from a completed one and will report contention as a clean success."
-    )
-    assert marker.group(1) in stop_post.group(0), (
-        f"{_WRAPPER}'s CONTENTION_MARKER {marker.group(1)!r} does not appear in the unit's "
-        f"ExecStopPost line, so the wrapper greps for a phrase the unit never emits. The two "
-        f"strings are one contract — change them together."
-    )
-
-
-def test_wrapper_stops_watching_a_joined_run_when_it_ends():
-    """A tick already in flight is JOINED, not duplicated.
-
-    The wait loop then needs a way to notice that run ending: it breaks on
-    `ExecMainStartTimestampMonotonic != started_before`, and for a joined run `started_before` IS
-    that run's stamp, so the loop could only exit at its deadline, and land.sh would sit through the
-    full 540s watch cap on a broad tick another session's merge started and read the timeout as a
-    failure. Joining must reset the stamp so the state check alone ends the wait.
-    """
-    wrapper = _WRAPPER.read_text()
-    join = re.search(
-        r'if \[\[ "\$\(show ActiveState\)" == "activating" \]\]; then(.*?)\nelse',
-        wrapper,
-        re.DOTALL,
-    )
-    assert join, f"{_WRAPPER} no longer has a join branch for a run already in flight."
-    assert re.search(r"^\s*started_before=", join.group(1), re.MULTILINE), (
-        f"{_WRAPPER}'s join branch leaves started_before at the in-flight run's own stamp, "
-        "so the wait loop cannot see that run finish and always runs to its deadline."
     )
 
 
@@ -205,55 +127,3 @@ def test_unit_timeout_covers_the_broad_apply_worst_case():
         "re-size, re-derive it against the budget arithmetic in the unit's own comment and "
         "gitops_deploy/defaults/main.yml before changing this pin."
     )
-
-
-# -- the verdict line --------------------------------------------------------
-
-_TICK_VERDICT_CALL = re.compile(r"^\s*tick_verdict (\d+) ([a-z-]+) ", re.MULTILINE)
-
-
-def _wrapper_verdicts() -> dict[int, str]:
-    """`{exit code: verdict token}` for every `tick_verdict` call in the wrapper."""
-    return {
-        int(code): verdict
-        for code, verdict in _TICK_VERDICT_CALL.findall(_WRAPPER.read_text())
-    }
-
-
-def test_the_wrappers_verdict_tokens_are_the_ones_the_exit_code_table_declares():
-    """The wrapper is bash and cannot import the table, so the two are held together here."""
-    from lib.exit_codes import contract
-
-    declared = {
-        code.value: code.verdict
-        for code in contract("scripts/deploy_tools/gitops_tick.sh")
-    }
-    assert _wrapper_verdicts() == declared
-
-
-def test_every_exit_in_the_wrapper_goes_through_the_verdict_emitter():
-    """A bare `exit` would end a run with no last line for a caller to read.
-
-    `--help`'s `exit 0` is the one exception: it answers a question rather than reporting a
-    run, and `test_entry_points_answer_help.py` requires its 0.
-    """
-    bare = [
-        line.strip()
-        for line in _WRAPPER.read_text().splitlines()
-        if re.match(r"^\s*exit \d", line)
-    ]
-    assert bare == ["exit 0"], bare
-
-
-def test_the_wrapper_declares_a_verdict_for_every_code_it_can_exit_with():
-    """Non-vacuity: the regex above finds nothing if `tick_verdict` is renamed."""
-    assert set(_wrapper_verdicts()) == {0, 1, 2, 3, 4, 64, 75}
-
-
-def test_a_bare_exit_is_flagged():
-    """The reject half, over the parser rather than the file: a wrapper that regains a bare
-    `exit 3` must fail `test_every_exit_in_the_wrapper_goes_through_the_verdict_emitter`."""
-    assert _TICK_VERDICT_CALL.findall("  exit 3\n") == []
-    assert _TICK_VERDICT_CALL.findall("  tick_verdict 3 contention 'x'\n") == [
-        ("3", "contention")
-    ]

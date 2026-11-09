@@ -15,7 +15,7 @@ RuntimeDirectory=homelab-k3s-restart
 # journald stores notice and above on these hosts (MaxLevelStore=notice).
 SyslogLevel=notice
 LoadCredential=k3s_readonly_token:/run/credstore/k3s_readonly_token
-ExecStart=/usr/lib/homelab/homelab-k3s-restart --host {{ inventory_hostname }} --unit {{ k3s_restart_unit }} --server {{ k3s_restart_server }} --ca-file {{ k3s_restart_ca_file }}{% if k3s_restart_deploy_lock %} --deploy-lock{% endif %}{% if k3s_restart_guard_server_restart %} --guard-server-restart{% endif %}
+ExecStart=/usr/lib/homelab/homelab-k3s-restart --host {{ inventory_hostname }} --unit {{ k3s_restart_unit }} --server {{ k3s_restart_server }} --ca-file {{ k3s_restart_ca_file }}{% if k3s_restart_guard_server_restart %} --guard-server-restart{% endif %}
 
 # A run killed after it restarted k3s records its attempt as failed at once, not at the next window.
 ExecStopPost=/usr/lib/homelab/homelab-k3s-restart --stop-post --host {{ inventory_hostname }}

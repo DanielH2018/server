@@ -402,14 +402,14 @@ def test_a_remote_src_copy_is_compared_by_metadata_not_the_local_file(tmp_path):
     assert binary.mode == "0755"
 
 
-def test_the_real_gitops_deploy_role_walks_its_shared_alert_import():
-    """gitops_deploy reaches common/tasks/alert_unit.yml through `{{ role_path }}`."""
-    role = applied.SETUP / "gitops_deploy"
+def test_the_real_initial_setup_role_walks_its_shared_check_timer_import():
+    """initial_setup reaches common/tasks/check_timer.yml through `{{ role_path }}`."""
+    role = applied.SETUP / "initial_setup"
     wants, skips = applied_tasks.expected(
         role, "daniel-box", applied.context(role, "daniel-box")
     )
     named = {w.path for w in wants} | {s.task for s in skips}
-    assert "/etc/systemd/system/gitops-deploy-alert.service" in named, sorted(named)
+    assert "/etc/systemd/system/kuma-check-setup-drift.timer" in named, sorted(named)
 
 
 def test_an_include_loop_walks_the_file_once_per_item_under_its_loop_var(tmp_path):

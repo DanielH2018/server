@@ -2439,8 +2439,8 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - the role `CLAUDE.md`, including its autonomous-role contract (H3.5a);
     - a row in `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py`'s census
       if that census does not derive the role on its own;
-    - the `KNOWN_ALERTS` entries in `ansible/tests/setup/test_alert_unit.py`, the builder's
-      (H3.5a) and the signer's (H3.5b);
+    - the `KNOWN_ALERTS` entries in `test_alert_unit.py`, the builder's (H3.5a) and the
+      signer's (H3.5b);
     - `homelab_builder` in `EXPECTED_CONSUMERS` of
       `ansible/tests/setup/test_host_lib_sibling_copies.py`, which compares with `==` (H3.5a);
     - `homelab_builder` in `_ALERT_UNIT` and `_HOST_LIB` of

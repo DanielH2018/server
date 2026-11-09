@@ -307,6 +307,10 @@ TIMER_TEXTFILES = {
 }
 
 
+# Retired whatever the toggles say: the GitOps deployer's tick textfile (H7.52).
+ALWAYS_RETIRED = {f"{TEXTFILES}/gitops_tick.prom"}
+
+
 def retired_textfiles(package) -> set[str]:
     return {
         e["path"] for e in package.legacy if e.get("path", "").startswith(TEXTFILES)
@@ -322,4 +326,4 @@ def test_disarming_a_timer_retires_its_textfiles(tmp_path, toggle):
 
     off = host_mode.render_host("daniel-box", inventory=Inventory(host_vars=host_vars))
 
-    assert retired_textfiles(off) == TIMER_TEXTFILES[toggle]
+    assert retired_textfiles(off) - ALWAYS_RETIRED == TIMER_TEXTFILES[toggle]

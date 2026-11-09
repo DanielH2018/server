@@ -83,7 +83,7 @@ def test_setup_role_hosts_reads_the_when_gate_per_host(_synthetic_setup_inventor
         "config_files", playbook, all_vars, host_vars_dir, playbook.parent / "roles"
     ) == frozenset({"daniel-box", "daniel-server", "daniel-pi"})
     assert land_reach.setup_role_hosts(
-        "gitops_deploy", playbook, all_vars, host_vars_dir
+        "gitops_deploy", playbook, all_vars, host_vars_dir, playbook.parent / "roles"
     ) == frozenset({"daniel-box"})
     # nut_host: `inventory_hostname == ups_host or nut_host_secondary_armed | bool` -- the
     # play gate reaches daniel-server (first clause) and daniel-box (second, armed there), and
@@ -201,11 +201,19 @@ def test_remaining_setup_hosts_note_stays_empty_for_pr_723():
 
 
 def test_remaining_setup_hosts_note_is_relative_to_the_given_host():
-    """A role reaching only the host asked about has nothing remaining, whichever host that
-    is -- the note is relative to `local_host`, not hardcoded to daniel-box."""
-    files = ["ansible/roles/setup/gitops_deploy/tasks/install.yml"]
-    assert land_reach.remaining_setup_hosts_note(files, "daniel-box") == ""
-    assert "daniel-box" in land_reach.remaining_setup_hosts_note(files, "daniel-pi")
+    """The drift check's script reaches daniel-box and daniel-server only, and the note names
+    the reached host the tick did not run on -- not a hardcoded daniel-box, and never the Pi."""
+    files = ["ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2"]
+    from_box = land_reach.remaining_setup_hosts_note(files, "daniel-box")
+    assert "reaches daniel-server" in from_box
+    assert "daniel-box" not in from_box
+    assert "daniel-pi" not in from_box
+    from_server = land_reach.remaining_setup_hosts_note(files, "daniel-server")
+    assert "reaches daniel-box" in from_server
+    assert "daniel-pi" not in from_server
+    from_pi = land_reach.remaining_setup_hosts_note(files, "daniel-pi")
+    assert "reaches daniel-box" in from_pi
+    assert "reaches daniel-server" in from_pi
 
 
 def test_an_unroutable_setup_role_has_no_remaining_hosts():

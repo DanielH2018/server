@@ -40,16 +40,10 @@ def _code(subject: Subject) -> list[tuple[int, str]]:
     ]
 
 
-# ── No role ships a test file or a markdown file ──────────────────────────────────────
+# ── No role ships a markdown file ──────────────────────────────────────
 
-# `src:`/`dest:` in a copy or template task, and the `lookup('file', ...)` a k8s ConfigMap
-# inlines a script with.
-SHIPPED_PY = re.compile(
-    r"""(?:src|dest)\s*:\s*['"]?\S*?(?P<a>[\w.-]+\.py)"""
-    r"""|lookup\(\s*['"]file['"]\s*,\s*['"]?\S*?(?P<b>[\w.-]+\.py)"""
-)
-
-# The same two shapes for a `.md`, plus a bare YAML list entry: `home-assistant`'s four
+# `src:`/`dest:` in a copy or template task, the `lookup('file', ...)` a k8s ConfigMap inlines a
+# script with, and a bare YAML list entry: `home-assistant`'s four
 # `*_files` lists in `defaults/main.yml` name what its ConfigMap ships that way.
 #
 # WHAT THIS SCAN DOES NOT SEE: a ship that names no basename. `with_fileglob`/`fileglob` over a
@@ -121,35 +115,6 @@ _POD_RESOURCES_CALL = "{{ container_resources("
 
 ROWS = (
     Census(
-        name="no-role-ships-a-test-file",
-        reason=(
-            "`deploy_logic._is_test_only_path` skips test-suite paths before every plane prefix, "
-            "so a test-only push produces an empty ChangeSet and the deployer fast-forwards it. "
-            "That is safe only while a file the deployer ignores is also a file no host "
-            "receives. A role shipping its own test suite would get a change to deployed code "
-            "fast-forwarded and never deployed — silent, and green from every repo-side check."
-        ),
-        files=lambda: _role_files("tasks", "templates", "handlers"),
-        offence=lambda s: [
-            f"line {n} ships {name}"
-            for n, name in _shipped(SHIPPED_PY, s)
-            if name == "conftest.py" or name.startswith("test_")
-        ],
-        count=lambda s: len(_shipped(SHIPPED_PY, s)),
-        red=(
-            Subject("a.yml", "- ansible.builtin.copy:\n    src: test_deploy.py\n"),
-            Subject("b.yml", "data: {{ lookup('file', 'files/conftest.py') }}\n"),
-        ),
-        green=(
-            Subject("a.yml", "- ansible.builtin.copy:\n    src: deploy_logic.py\n"),
-            Subject("b.yml", "# src: test_commented.py is not a ship\n"),
-        ),
-        # 83 ship lines across 15 files when the row landed (2026-10-03); H7.34, H7.35, H7.37,
-        # H7.50 and H7.62 moved roles out.
-        min_matches=29,
-        must_find=frozenset({"ansible/roles/setup/gitops_deploy/tasks/code.yml"}),
-    ),
-    Census(
         name="no-role-ships-a-markdown-file",
         reason=(
             "`deploy_logic.is_doc` reads every `.md` as prose no playbook applies, and the tick, "
@@ -175,12 +140,14 @@ ROWS = (
             Subject("a.yml", "# src: COMMENTED.md is not a ship\n"),
             Subject("b.yml", "example_config_files:\n  - settings.yaml\n"),
         ),
-        min_matches=500,
+        # 501 files under those directories before H7.52 deleted gitops_deploy's four task files
+        # and its handlers.
+        min_matches=493,
         # The `*_files` lists the bare-entry alternative exists for, and the deployer's own role.
         must_find=frozenset(
             {
                 "ansible/roles/k8s/home-assistant/defaults/main.yml",
-                "ansible/roles/setup/gitops_deploy/tasks/code.yml",
+                "ansible/roles/setup/gitops_deploy/tasks/main.yml",
             }
         ),
     ),
@@ -224,8 +191,9 @@ ROWS = (
         # 56 once H7.34 deleted four of hypervisor's task files (60 before), 53 once H7.50 deleted
         # three of deploy_ui's, 48 once H7.60 deleted five of initial_setup's, 47 once
         # common/tasks/release_bin.yml went, 40 once H7.48 emptied k8s_host_files, 39 once
-        # H7.48 deleted docker_install's teardown.yml.
-        min_matches=39,
+        # H7.48 deleted docker_install's teardown.yml, 34 once H7.52 deleted four of
+        # gitops_deploy's and common's alert_unit.yml.
+        min_matches=34,
         must_find=frozenset({"ansible/roles/setup/initial_setup/tasks/crons.yml"}),
     ),
     Census(

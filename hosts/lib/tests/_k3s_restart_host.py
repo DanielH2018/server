@@ -46,15 +46,8 @@ class Box:
         self.active = "active"
         self.beats_after_restart = True
         self.restarted_at: float | None = None
-        for rel in (
-            "usr/lib/homelab",
-            "var/lib/node-exporter-textfile",
-            "run/lock",
-            "var/lib/gitops-deploy",
-        ):
+        for rel in ("usr/lib/homelab", "var/lib/node-exporter-textfile"):
             (root / rel).mkdir(parents=True)
-        (root / "run/lock/server-deploy-all.lock").touch()
-        (root / "var/lock").symlink_to("/run/lock")
         self.write_config("a: 1\n")
         monkeypatch.setattr(self.mod, "ROOT", root)
         monkeypatch.setattr(self.mod, "clock", lambda: self.now)

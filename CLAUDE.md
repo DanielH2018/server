@@ -66,8 +66,8 @@ Run ansible through `uv run` so it uses the repo's pinned env
 fail.
 **A k8s service deploys through `promote`, never through Ansible.** `deploy.sh` exits 5 for a
 k8s tag, `--check` and `--dry-run` included. The merge is the deploy, and `land.sh` follows it.
-**A setup role applies through the GitOps deployer, and the Pi's services ship in its host
-package.** `./scripts/deploy.sh` runs `ansible/deploy.yml`, which applies no role.
+**No setup role applies on its own since H7.52 retired the GitOps deployer's timer, and the
+Pi's services ship in its host package.** `./scripts/deploy.sh` runs `ansible/deploy.yml`, which applies no role.
 `docs/deploying.md` says which path applies a change and what the wrapper still does, owns the
 lock rules and lists the holders.
 
@@ -82,9 +82,8 @@ initial setup.
 ## After a PR Merges — Pull, Deploy, Verify
 
 **The default is that a merge is followed through to a verified deploy, in the same session,
-without asking.** Merging is not shipping here. The GitOps deployer applies one plane on its
-own, a setup-role change; the *Safety* section of `ansible/roles/setup/gitops_deploy/CLAUDE.md`
-owns which paths fall in it. `promote` and Flux apply every k8s change, a template or
+without asking.** Merging is not shipping here. The host packages apply the host plane once
+the builder publishes them. `promote` and Flux apply every k8s change, a template or
 inventory change included, after master CI. Nothing reports whether that promotion settled
 and the changed workloads came up healthy except `land.sh`, which waits on the promotion and
 gates the tags its changed set names.
@@ -118,7 +117,7 @@ change* took effect, so exercise the thing you changed as well.
 
 ### Working alongside other sessions
 
-**The tick pulls all of master, not just your commit.** `land.sh` scopes to your PR's own files;
+**`homelab-checkout-sync` pulls all of master, not just your commit.** `land.sh` scopes to your PR's own files;
 if you override with `--tags`, keep it to your own services.
 
 ### When to wait

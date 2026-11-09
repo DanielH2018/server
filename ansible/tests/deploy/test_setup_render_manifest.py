@@ -7,8 +7,7 @@ stamped at render time, so a `template:`-rendered artifact that is NOT stamped i
 This file guards two coverage properties of that mechanism:
 
   * **Scope.** An entry carries a repo-relative path, so the manifest sees every role's
-    artifacts, not only those under `roles/setup/k3s/templates`. Four other roles stamp their
-    own.
+    artifacts, not only those under `roles/setup/k3s/templates`. `initial_setup` stamps its own.
 
   * **Granularity.** Stamps are per tag family and run last. One file rewritten wholesale by
     every partial run, or written BEFORE any `template:` task, would make `--tags
@@ -89,7 +88,6 @@ def test_other_setup_roles_stamp_their_own_artifacts():
     host runs no setup-drift-check, and stamping them would claim coverage it cannot provide.
     """
     expected = {
-        "ansible/roles/setup/gitops_deploy/tasks/service.yml",
         "ansible/roles/setup/initial_setup/tasks/crons.yml",
         # THIS LIST IS AN ENUMERATION: it cannot see the next new role. Deriving it means
         # asserting that every `src:`-referenced .j2 under roles/setup/ is stamped, which would
@@ -142,7 +140,6 @@ def test_every_role_that_deploys_code_declares_its_pairs():
     a derivation would demand pairs for all of them.
     """
     expected = {
-        "ansible/roles/setup/gitops_deploy/tasks/code.yml",
         "ansible/roles/setup/initial_setup/tasks/crons.yml",
     }
     for rel in sorted(expected):
@@ -205,10 +202,7 @@ def test_the_two_halves_hash_the_same_bytes():
     )
 
 
-_STAMP_SITES = (
-    "ansible/roles/setup/gitops_deploy/tasks/service.yml",
-    "ansible/roles/setup/initial_setup/tasks/crons.yml",
-)
+_STAMP_SITES = ("ansible/roles/setup/initial_setup/tasks/crons.yml",)
 _STAMP_REF = '"{{ role_path }}/../common/tasks/stamp_render.yml"'
 
 
@@ -220,10 +214,6 @@ def test_every_stamp_site_imports_rather_than_includes():
     selected, Ansible prints `included: .../stamp_render.yml`, the `copy:` inside it is
     filtered out, and the run reports changed=0 with no fragment on disk. `import_tasks` is
     static — the tags are attached to the imported tasks at parse time, so they are selected too.
-
-    The other roles do not show it. Their stamps sit under a ROLE-level tag
-    (`gitops_deploy`), which does reach a dynamic include's
-    children.
     """
     for rel in _STAMP_SITES:
         text = (_REPO / rel).read_text()

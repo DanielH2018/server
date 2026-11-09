@@ -49,8 +49,6 @@ INSTALLER_WRITTEN = (
 )
 # Named members: a census that stops matching fails by name rather than agreeing with an empty set.
 MUST_FIND = (
-    "/etc/systemd/system/gitops-deploy.service",
-    "/etc/systemd/system/gitops-deploy-alert.service",
     "/etc/systemd/system/kuma-check-setup-drift.timer",
     "/etc/systemd/system/kuma-check-setup-drift-boot.service",
 )
@@ -108,10 +106,6 @@ def role_destinations(task_lists: list[list[dict]]) -> set[str]:
             f"/etc/systemd/system/kuma-check-{name}{suffix}"
             for suffix in (".service", ".timer", "-boot.service")
         }
-    for name, instanced in _wired(
-        tasks, "common/tasks/alert_unit.yml", "alert_unit_name"
-    ):
-        found.add(f"/etc/systemd/system/{name}-alert{'@' if instanced else ''}.service")
     for task in tasks:
         for key, args in task.items():
             if key.split(".")[-1] not in WRITING_MODULES or not isinstance(args, dict):
@@ -135,7 +129,7 @@ def unlisted(destinations: set[str], pattern: re.Pattern[str]) -> list[str]:
 
 # The shared tasks name their units through the caller's variables, which `role_destinations`
 # resolves from each import, so the files themselves are not read.
-SHARED_TASK_FILES = {"check_timer.yml", "alert_unit.yml"}
+SHARED_TASK_FILES = {"check_timer.yml"}
 
 
 def _setup_task_lists() -> list[list[dict]]:
@@ -149,6 +143,9 @@ def _setup_task_lists() -> list[list[dict]]:
 def test_the_census_finds_the_roles_units() -> None:
     found = role_destinations(_setup_task_lists())
     assert set(MUST_FIND) <= found, sorted(set(MUST_FIND) - found)
+    assert not [d for d in found if "gitops-deploy" in d], (
+        "an emptied role writes no unit"
+    )
 
 
 def test_every_unit_a_role_installs_is_listed_as_role_written() -> None:

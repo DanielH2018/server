@@ -1,7 +1,7 @@
 """`probe.py gitops-state` — every marker the GitOps deployer keeps, read-only, with its way out.
 
 `probe.py landing` reads `hold_sha` and the `manual_plane` class only, and the one other place
-that printed the markers was the tail of the retired `gitops_tick.sh`, which ran a real tick first (#3931).
+that printed the markers was the tail of a wrapper that ran a real tick first (#3931).
 This reads the deployer's state directory and prints, without ticking:
 
 - `last_run`, whose age tells "ticked, nothing to do" from "did not tick".

@@ -113,3 +113,31 @@ legacy:
   - {path: /etc/systemd/system/docker.service.d}
   - {path: /etc/systemd/system/containerd.service.d/20-go-runtime.conf}
   - {path: /etc/systemd/system/containerd.service.d}
+  # H7.52: what gitops_deploy's teardown half removed from this host, which never ran the
+  # deployer. Its three directories are not listed: the teardown removed them, and reconcile
+  # removes a directory only when it is empty.
+  - {unit: gitops-deploy.timer}
+  - {unit: gitops-deploy.service}
+  - {unit: gitops-deploy-alert.service}
+  - {unit: staging-backfill.timer}
+  - {unit: staging-backfill.service}
+  - {unit: staging-backfill-alert.service}
+  - {path: /etc/polkit-1/rules.d/50-gitops-deploy.rules}
+  - {path: /var/lib/node-exporter-textfile/gitops_tick.prom}
+  - {path: /var/lib/homelab/setup-render-manifest.d/gitops-deploy}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/gitops-deploy}
+  - {unit: kuma-check-github-ruleset-drift.timer}
+  - {unit: kuma-check-github-ruleset-drift.service}
+  - {unit: kuma-check-github-ruleset-drift-boot.service}
+  - {unit: kuma-check-github-interaction-limit.timer}
+  - {unit: kuma-check-github-interaction-limit.service}
+  - {unit: kuma-check-github-interaction-limit-boot.service}
+  - {path: /var/lib/kuma-check/github-ruleset-drift.down}
+  - {path: /var/lib/kuma-check/github-interaction-limit.down}
+  - {cron_file: github-ruleset-drift}
+  - {cron_file: github-interaction-limit}
+  - {path: /var/lib/node-exporter-textfile/github-ruleset-drift.prom}
+  - {path: /var/lib/node-exporter-textfile/github-interaction-limit.prom}
+  - {path: /var/lib/homelab/setup-render-manifest.d/gitops-deploy-github-checks}
+  - {path: /usr/local/bin/github-ruleset-drift.sh}
+  - {path: /usr/local/bin/github-interaction-limit.sh}

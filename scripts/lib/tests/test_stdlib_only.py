@@ -31,7 +31,7 @@ from lib.repo_paths import REPO, SCRIPTS
 
 FANOUT_REVIEW_UNIT = SCRIPTS / "dev" / "fanout_lib" / "review_unit.py"
 SESSION_HEALTH = REPO / ".claude" / "hooks" / "session-health.py"
-DEPLOY_IO = repo_paths.GITOPS_DEPLOY_FILES / "deployer_lib" / "deploy_io.py"
+DEPLOY_UI = REPO / "hosts" / "components" / "deploy-ui" / "files" / "deploy_ui.py"
 # One member per kind of no-venv caller: the three `--no-project` hooks, a module reached only
 # through session-health's `REPO/scripts` insert, fan-out's dynamic review path, the land
 # and fanout cc-wait sources, and the role scripts a host runs from its install directory.
@@ -44,13 +44,10 @@ MUST_INCLUDE = frozenset(
         "scripts/dev/fanout.py",
         "scripts/dev/fanout_lib/review_unit.py",
         "scripts/deploy_tools/land_lib/land_probe.py",
-        "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
-        "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py",
         "hosts/components/deploy-ui/files/deploy_ui.py",
         "hosts/components/fake-remux/files/fake_remux.py",
         "hosts/components/fake-remux/files/mkv_attachment_repair.py",
         "hosts/components/fake-remux/files/state_push.py",
-        "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_toolbox.py",
     }
 )
 # The `--project` hooks run in the venv; secret_bearing_host_paths.py imports `yaml` legitimately.
@@ -334,14 +331,14 @@ def _install(live_dir: str) -> Path:
     return role_installs.stage() / live_dir.lstrip("/")
 
 
-def test_yaml_added_to_the_deployers_io_module_turns_the_walk_red(tmp_path):
+def test_yaml_added_to_the_deploy_ui_daemon_turns_the_walk_red(tmp_path):
     checker = _checker()
-    dirs = checker.stdlib_only_set()[DEPLOY_IO]
-    assert _install("/opt/gitops-deploy") in dirs
-    assert checker.walk(DEPLOY_IO, dirs) == []
-    injected = tmp_path / "deploy_io.py"
+    dirs = checker.stdlib_only_set()[DEPLOY_UI]
+    assert _install("/usr/lib/homelab/deploy-ui") in dirs
+    assert checker.walk(DEPLOY_UI, dirs) == []
+    injected = tmp_path / "deploy_ui.py"
     injected.write_text(
-        DEPLOY_IO.read_text(encoding="utf-8") + "\nimport yaml\n", encoding="utf-8"
+        DEPLOY_UI.read_text(encoding="utf-8") + "\nimport yaml\n", encoding="utf-8"
     )
     assert "yaml" in checker.walk(injected, [tmp_path, *dirs])
 
@@ -370,6 +367,9 @@ def test_a_staged_copy_is_checked_against_its_own_install_only():
     assert dirs == [_install("/usr/lib/homelab/renovate-notify")]
 
 
+DEPLOY_UI_UNIT = (
+    REPO / "hosts" / "components" / "deploy-ui" / "templates" / "deploy-ui.service.j2"
+)
 GITOPS_UNIT = (
     repo_paths.GITOPS_DEPLOY_FILES.parent / "templates" / "gitops-deploy.service.j2"
 )
@@ -377,15 +377,28 @@ GITOPS_UNIT = (
 
 def test_a_role_command_maps_to_its_installed_copy_is_clean():
     staged = role_installs.role_entry(
-        "/opt/gitops-deploy/gitops_deploy.py", GITOPS_UNIT
+        "/usr/lib/homelab/deploy-ui/deploy_ui.py", DEPLOY_UI_UNIT
     )
-    assert staged == _install("/opt/gitops-deploy") / "gitops_deploy.py"
+    assert staged == _install("/usr/lib/homelab/deploy-ui") / "deploy_ui.py"
 
 
 def test_a_role_command_no_copy_installs_is_flagged():
-    template = GITOPS_UNIT
     with pytest.raises(ValueError, match="no copy task"):
-        role_installs.role_entry("/opt/gitops-deploy/never_shipped.py", template)
+        role_installs.role_entry(
+            "/usr/lib/homelab/deploy-ui/never_shipped.py", DEPLOY_UI_UNIT
+        )
+
+
+def test_an_emptied_roles_template_yields_no_entry_and_a_live_role_still_does():
+    assert role_installs.runs_on_no_host(GITOPS_UNIT.parents[1])
+    assert not role_installs.runs_on_no_host(REPO / "ansible/roles/setup/initial_setup")
+    # The emptied role's unit still runs a script no copy task installs; only the skip keeps
+    # it out of the entries.
+    with pytest.raises(ValueError, match="no copy task"):
+        role_installs.role_entry("/opt/gitops-deploy/gitops_deploy.py", GITOPS_UNIT)
+    assert not any(
+        "gitops-deploy" in str(entry) for entry, _ in role_installs.role_entries()
+    )
 
 
 def test_an_import_guarded_by_import_error_is_clean(tmp_path):

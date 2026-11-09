@@ -516,15 +516,10 @@ scripts (PR #438).
 **If the change is another session's, it is theirs to clear.** Say so and stop, rather than
 applying a setup-plane change you did not write.
 
-## Triggering a tick by hand
+## Applying a commit no promotion followed
 
-To run a tick without waiting for the timer, on `daniel-box`:
-
-```bash
-systemctl start --no-block gitops-deploy.service
-```
-
-It runs the identical code path the timer runs. **There is no dry-run mode** — this deploys.
+H7.52 retired `gitops-deploy.timer` and its service, so no tick runs, by hand or on a timer.
+`homelab-checkout-sync.timer` fast-forwards daniel-box's primary checkout instead.
 
 To apply a green master commit that no promotion followed, dispatch `promote` with the commit's
 full 40-hex SHA. `promote` refuses a commit without green CI:
@@ -649,12 +644,6 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   push produces an empty `ChangeSet` and takes the `handle_merge_only` ff-merge, like a
   docs-only push. The `no-role-ships-a-test-file` row of
   `ansible/tests/repo/test_census_rows_roles.py` enforces that no role ships a test file to a host.
-- **A new module in `files/` goes in two lists in `tasks/code.yml`**: the copy task's `loop:` that
-  installs it under `/opt/gitops-deploy/`, and `stamp_deployed_pairs`, which records its render
-  provenance. pytest imports from `files/` on disk, so a module forgotten in the copy loop passes
-  CI and kills the deployer at import on its next tick. ENFORCED by
-  `ansible/tests/deploy/test_gitops_deploy_ship_list.py`, the sibling of
-  `test_monitor_bridge_modules.py`.
 - **Broad changes split three ways** (`deploy_changes._BROAD_*_PREFIXES`); *Broad changes* above
   has the table and the tag routing. **A deploy-plane path adds no plan.** `deploy_narrow.plan`
   names the setup roles this host runs, narrowed to their own block tags, `handle_broad` applies
@@ -868,19 +857,12 @@ through one function per class:
 
 ### The `has_gitops` gate, the GitHub crons and the marker module: history
 
-`tasks/main.yml` dispatches on `has_gitops`: `install.yml` on the deployer, `teardown.yml`
-everywhere else. `group_vars/all.yml` defaults the var **false**, the same safe direction
-`has_docker` takes: a host nobody has thought about gets the teardown arm rather than a timer
-that deploys to production on its own, and daniel-box's `host_vars` carries the one
-`has_gitops: true`. The three non-deployers keep an explicit `has_gitops: false` because the code
-gate below reads host_vars TEXT and fails open on an absent key.
-
-A host flipped to false needs the teardown arm, because a skipped role keeps whatever an earlier
-true run installed. `teardown.yml` removes the six units,
-the polkit rule, the two GitHub crons and their scripts, and the three directories `install.yml`
-creates (`/opt`, `/var/lib` and `/etc/gitops-deploy`). The `DECIDED:` at that task says why the
-state directory goes too. `ansible/tests/setup/test_gitops_deploy_reaps_on_non_deployer.py`
-derives both censuses from `install.yml` and fails when the teardown stops covering one.
+H7.52 emptied the role, so no task installs or reaps the deployer. The `legacy:` lists of the
+three host packages remove its units, its polkit rule and its tick textfile. daniel-server's and
+daniel-pi's lists also carry what the role's teardown arm removed there.
+`group_vars/all.yml` still defaults `has_gitops` to **false**, and daniel-box's `host_vars`
+carries the one `has_gitops: true`. The non-deployers keep an explicit `has_gitops: false`
+because the code gate below reads host_vars TEXT and fails open on an absent key.
 
 The code carries the same gate. `deploy_phases.refuse_unless_deployer` reads this host's
 `host_vars/<hostname>.yml` at the top of `main()`, ahead of the alert drain and every state

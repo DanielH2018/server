@@ -108,5 +108,5 @@ def test_a_file_the_role_ships_reaches_only_the_hosts_the_role_does(tree, tmp_pa
 
 def test_the_guard_reader_finds_no_guard_in_a_live_role_without_one():
     roles = land_reach._SETUP_ROLES_DIR
-    assert setup_gates.role_end_guard(roles / "gitops_deploy") is None
+    assert setup_gates.role_end_guard(roles / "initial_setup") is None
     assert setup_gates.role_end_guard(roles / "no_such_role") is None

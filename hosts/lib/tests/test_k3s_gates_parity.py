@@ -10,7 +10,6 @@ comparison to notice.
 import types
 from pathlib import Path
 
-import pytest
 from _k3s_gates_fixtures import backup, fake_get, listing, node, volume, with_routes
 from deploy_tools.runbook_gates_lib import gate_runner, k3s_upgrade
 from lib.kubectl import CLUSTER_NODES
@@ -129,42 +128,3 @@ def test_zero_volumes_is_refused_by_the_script_and_passed_by_the_runbook():
     empty = listing()
     assert runbook_volumes(empty) == []
     assert k3s_gates.check_volumes(fake_get(with_routes(volumes=empty))) != []
-
-
-# ── held_sha ───────────────────────────────────────────────────────────────────────────────
-
-
-def _runbook_refuses_hold(state_dir: Path) -> bool:
-    try:
-        return bool(k3s_upgrade.held_sha(state_dir))
-    except gate_runner.Unreadable:
-        return True
-
-
-def _script_refuses_hold(state_dir: Path) -> bool:
-    root = state_dir.parents[2]
-    return bool(k3s_gates.check_deployer_hold(str(root)))
-
-
-@pytest.fixture
-def state(tmp_path) -> Path:
-    path = tmp_path / "var/lib/gitops-deploy"
-    path.mkdir(parents=True)
-    return path
-
-
-@pytest.mark.parametrize(
-    "setup, refused",
-    [
-        (lambda d: None, False),
-        (lambda d: (d / "hold_sha").write_text(""), False),
-        (lambda d: (d / "hold_sha").write_text("abc123\n"), True),
-        (lambda d: (d / "hold_sha").mkdir(), True),
-        (lambda d: d.rmdir(), True),
-    ],
-    ids=["no-hold-file", "empty-hold-file", "held", "unreadable-hold", "no-state-dir"],
-)
-def test_the_hold_verdict_matches_held_sha(setup, refused, state):
-    setup(state)
-    assert _runbook_refuses_hold(state) is refused
-    assert _script_refuses_hold(state) is refused

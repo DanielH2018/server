@@ -101,6 +101,34 @@ legacy:
   - {cron: "Daily secret rotation audit", user: "{{ sys_user }}"}
   - {cron: "Weekly secret rotation (auto tier)", user: "{{ sys_user }}"}
   - {cron: "TLS cert-expiry watch", user: "{{ sys_user }}"}
+  # H7.52: what gitops_deploy's teardown half removed from this host, which never ran the
+  # deployer. Its three directories are not listed: the teardown removed them, and reconcile
+  # removes a directory only when it is empty.
+  - {unit: gitops-deploy.timer}
+  - {unit: gitops-deploy.service}
+  - {unit: gitops-deploy-alert.service}
+  - {unit: staging-backfill.timer}
+  - {unit: staging-backfill.service}
+  - {unit: staging-backfill-alert.service}
+  - {path: /etc/polkit-1/rules.d/50-gitops-deploy.rules}
+  - {path: /var/lib/node-exporter-textfile/gitops_tick.prom}
+  - {path: /var/lib/homelab/setup-render-manifest.d/gitops-deploy}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/gitops-deploy}
+  - {unit: kuma-check-github-ruleset-drift.timer}
+  - {unit: kuma-check-github-ruleset-drift.service}
+  - {unit: kuma-check-github-ruleset-drift-boot.service}
+  - {unit: kuma-check-github-interaction-limit.timer}
+  - {unit: kuma-check-github-interaction-limit.service}
+  - {unit: kuma-check-github-interaction-limit-boot.service}
+  - {path: /var/lib/kuma-check/github-ruleset-drift.down}
+  - {path: /var/lib/kuma-check/github-interaction-limit.down}
+  - {cron_file: github-ruleset-drift}
+  - {cron_file: github-interaction-limit}
+  - {path: /var/lib/node-exporter-textfile/github-ruleset-drift.prom}
+  - {path: /var/lib/node-exporter-textfile/github-interaction-limit.prom}
+  - {path: /var/lib/homelab/setup-render-manifest.d/gitops-deploy-github-checks}
+  - {path: /usr/local/bin/github-ruleset-drift.sh}
+  - {path: /usr/local/bin/github-interaction-limit.sh}
 # H7.30: the Pi's own LAN rules, beside ssh-firewall's two SSH rules. Each spec is what `ufw show
 # added` prints for the Ansible task that added it, and each legacy entry names that rule by its
 # exact spec and comment. A legacy rule that shares a declared spec is the one the arm adopts: it

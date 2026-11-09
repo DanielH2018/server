@@ -125,11 +125,6 @@ TEMPLATE_SOURCE_READERS = {
         "`_k8s_render` skips, all denylisted. Every role the render reaches reads its render, "
         "and `test_the_render_reaches_every_auto_deployable_role` holds the denylisted half"
     ),
-    "setup/test_alert_unit.py": (
-        "the shared alert template IS rendered, but with each caller's import `vars:`, which "
-        "no role-scoped render context carries; the `OnFailure=<name>-alert.service` scan "
-        "reads a literal unit name that no variable feeds"
-    ),
     "setup/test_setup_crons_write_a_textfile.py": (
         "a census over every setup role's timer and service templates, asking whether one "
         "calls write_check_textfile or imports the macro that does. A render needs each "

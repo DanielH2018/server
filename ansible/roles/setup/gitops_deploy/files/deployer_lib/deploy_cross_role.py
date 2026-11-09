@@ -32,11 +32,7 @@ _COMMON = "ansible/roles/setup/common"
 _HOST_LIB = frozenset({"gitops_deploy"})
 _STAMPED = _HOST_LIB | {"initial_setup"}
 _CHECK_TIMER = frozenset({"gitops_deploy", "initial_setup"})
-_ALERT_UNIT = frozenset({"gitops_deploy"})
 SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
-    f"{_COMMON}/tasks/alert_unit.yml": _ALERT_UNIT,
-    f"{_COMMON}/templates/unit-failure-alert.service.j2": _ALERT_UNIT,
-    f"{_COMMON}/templates/alert-webhook.env.j2": _ALERT_UNIT,
     # `hosts/lib/` since H7.2e: the packages ship it, and the Ansible consumers below still copy
     # it beside their scripts until their own PRs move them. `ci_verdict.py` is the deployer's
     # alone (`gitops_deploy/tasks/code.yml` copies it).

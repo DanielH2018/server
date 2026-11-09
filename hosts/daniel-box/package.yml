@@ -160,8 +160,6 @@ depends:
   - zsh-autosuggestions
   - zsh-syntax-highlighting
 files:
-  # The lock the deployer's tick takes, created at boot as the deployer's user (item 7).
-  - {src: tmpfiles.d/homelab-k3s-restart.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-restart.conf}
   - {src: tmpfiles.d/homelab-media-volume.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-media-volume.conf}
   # The agent's login-session slice, capped like the Remote Control unit (claude-code component).
   - src: "component:templates/login-slice-caps.conf.j2"
@@ -224,3 +222,18 @@ legacy:
   - {path: /etc/systemd/system/docker.service.d}
   - {path: /etc/systemd/system/containerd.service.d/20-go-runtime.conf}
   - {path: /etc/systemd/system/containerd.service.d}
+  # H7.52: the GitOps deployer's timer and the units, rule and records its role installed. The
+  # timer goes first, and reconcile keeps the service's entry while a tick is still running.
+  # /opt/gitops-deploy, /etc/gitops-deploy and /var/lib/gitops-deploy stay: land.sh, the banner
+  # and deploy-ui read hold_sha until H7.53, which names the state directory as the operator's
+  # cleanup.
+  - {unit: gitops-deploy.timer}
+  - {unit: gitops-deploy.service}
+  - {unit: gitops-deploy-alert.service}
+  - {unit: staging-backfill.timer}
+  - {unit: staging-backfill.service}
+  - {unit: staging-backfill-alert.service}
+  - {path: /etc/polkit-1/rules.d/50-gitops-deploy.rules}
+  - {path: /var/lib/node-exporter-textfile/gitops_tick.prom}
+  - {path: /var/lib/homelab/setup-render-manifest.d/gitops-deploy}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/gitops-deploy}

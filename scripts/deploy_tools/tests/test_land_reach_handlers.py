@@ -9,10 +9,9 @@ reach that host. The `_widget_role` fixture below holds that narrowing.
 handlers it defines, and narrows only when EVERY handler has a notifying task -- the reject
 half below, because one handler resolved by name says nothing about the next.
 
-The deployer's handlers are NOT narrowed: `gitops_deploy/handlers/main.yml` defines
-`Reload systemd for gitops_deploy` as well as `Run gitops-deploy once`, and
-`tasks/teardown.yml` notifies the reload under `when: not has_gitops`, so the handler really
-does run on daniel-server and daniel-pi. `test_the_deployer_handlers_still_reach_every_host` holds that answer.
+A handler notified from both halves is NOT narrowed: `handlers/both.yml` defines `Reload units`,
+and both task files notify it, so the handler really does run on every host.
+`test_a_handler_notified_from_both_halves_reaches_every_host` holds that answer.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_handlers.py
 """
@@ -26,16 +25,12 @@ from lib.repo_paths import REPO as REPO_ROOT
 
 # Every setup role that defines handlers, so a rename or a new role cannot leave the live
 # cases below checking nothing.
-_ROLES_WITH_HANDLERS = frozenset(
-    {
-        "gitops_deploy",
-        "k3s",
-    }
-)
+_ROLES_WITH_HANDLERS = frozenset({"k3s"})
 
 
 def test_every_role_with_handlers_is_still_named_here():
-    """Non-vacuity: the live cases below name two of these roles by path."""
+    """Non-vacuity: the synthetic cases below pin the derivation, and this keeps a live role
+    with handlers in the tree so the derivation has a real subject."""
     found = {
         path.parents[1].name
         for path in (REPO_ROOT / "ansible" / "roles" / "setup").glob(
@@ -45,23 +40,16 @@ def test_every_role_with_handlers_is_still_named_here():
     assert found >= _ROLES_WITH_HANDLERS, f"handlers moved or went away: {found}"
 
 
-def test_the_deployer_handlers_still_reach_every_host():
-    """Not every dispatcher narrows, and this one must not. `Reload systemd for gitops_deploy` is
-    notified from both halves of `gitops_deploy`, so the file's reach is the union."""
-    assert land_reach.setup_file_hosts(
-        "gitops_deploy", "ansible/roles/setup/gitops_deploy/handlers/main.yml"
-    ) == frozenset(land_reach._HOSTS)
-
-
 @pytest.fixture
 def _widget_role(tmp_path):
     """A gateless role whose handlers are notified on daniel-box alone, the dispatcher shape.
 
-    `install.yml` comes in under `when: has_gitops` and notifies both handlers of
-    `handlers/main.yml`: one directly, one through the `vars:` of a cross-role
-    `{{ role_path }}` import. `teardown.yml` is the other half and notifies neither.
-    `handlers/extra.yml` is the reject half -- a handler nothing notifies, beside one
-    whose only candidate notifier names a LONGER handler name.
+        `install.yml` comes in under `when: has_gitops` and notifies both handlers of
+        `handlers/main.yml`: one directly, one through the `vars:` of a cross-role
+        `{{ role_path }}` import. `teardown.yml` is the other half and notifies only `Reload units`,
+    which `install.yml` notifies too (`handlers/both.yml`).
+        `handlers/extra.yml` is the reject half -- a handler nothing notifies, beside one
+        whose only candidate notifier names a LONGER handler name.
     """
     playbook = tmp_path / "initial_setup.yml"
     playbook.write_text(yaml.safe_dump([{"hosts": "x", "roles": [{"role": "widget"}]}]))
@@ -97,7 +85,7 @@ def _widget_role(tmp_path):
                         "src": "widget.service.j2",
                         "dest": "/etc/systemd/system/widget.service",
                     },
-                    "notify": ["Reload systemd after widget teardown"],
+                    "notify": ["Reload systemd after widget teardown", "Reload units"],
                 },
                 {
                     "name": "Install the shared timer",
@@ -117,6 +105,7 @@ def _widget_role(tmp_path):
                         "path": "/etc/systemd/system/widget.service",
                         "state": "absent",
                     },
+                    "notify": ["Reload units"],
                 }
             ]
         )
@@ -138,6 +127,16 @@ def _widget_role(tmp_path):
                         "state": "started",
                     },
                 },
+            ]
+        )
+    )
+    (role_dir / "handlers" / "both.yml").write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "name": "Reload units",
+                    "ansible.builtin.systemd": {"daemon_reload": True},
+                }
             ]
         )
     )
@@ -179,6 +178,13 @@ def test_a_handlers_file_narrows_to_the_hosts_that_notify_it(_widget_role):
     leaf because it does not follow the import."""
     assert _hosts(_widget_role, "ansible/roles/setup/widget/handlers/main.yml") == (
         frozenset({"daniel-box"})
+    )
+
+
+def test_a_handler_notified_from_both_halves_reaches_every_host(_widget_role):
+    """Not every dispatcher narrows, and this one must not: the union of the two halves."""
+    assert _hosts(_widget_role, "ansible/roles/setup/widget/handlers/both.yml") == (
+        frozenset(land_reach._HOSTS)
     )
 
 

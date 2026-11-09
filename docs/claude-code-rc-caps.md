@@ -120,8 +120,7 @@ with curl 8.5 it retries a failed lookup but not a refused connection, and a fau
 a failure can produce either. systemd labels any exit 6 `NOTCONFIGURED`, which hides a resolve
 failure. The cost is that a dead webhook (HTTP 404) retries for about a minute before the unit
 fails, and a oneshot unit has no start timeout (`TimeoutStartUSec=infinity`), so the retries
-cannot be cut short. `test_alert_units_retry_a_failed_delivery` in the same test file holds every
-`*-alert.service.j2` to the flags.
+cannot be cut short.
 
 ## What sees an expired login (#4618)
 

@@ -2,8 +2,7 @@
 """The wait lines `deploy.sh` prints for an operator reading its log.
 
 deploy.sh can wait a long time inside `flock -w` and exit 0, so without these lines a slow start
-would read as a slow playbook. `test_land_tools.py` holds the line a landing books, which is
-`gitops_tick.sh`'s.
+would read as a slow playbook.
 
 No test here touches the real git-tree lock, the real systemd units, or the host's
 syslog. A foreground deploy takes real flock(2) locks on tmp_path files, contended by a

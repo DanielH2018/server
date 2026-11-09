@@ -1,18 +1,12 @@
 ---
-# Dispatcher, the hypervisor shape. The role is included unconditionally and has_gitops
-# picks the half, so a host with has_gitops: false still reaps what an earlier true run
-# installed.
-#
-# Both halves are STATIC imports, so `narrow_setup` can follow them and the deployer can apply
-# one subject's change under its own tag (#3154); `install.yml` names the subjects. The `when:`
-# here is attached to every imported task, which keeps the include's behaviour because no task
-# in the role changes has_gitops. The two imports carry no tags: a tag here would be inherited
-# by every task under it, and a narrowed run would apply the whole role.
+# The deployer's timer is retired (H7.52): homelab-checkout-sync fast-forwards daniel-box's checkout,
+# and the host packages' legacy lists remove the units this role installed or reaped.
+# docs/target-architecture/host/h7-delete-ansible.md. The deployer's code under files/ stays until
+# H7.53 re-homes and deletes it.
 
-- name: Install the GitOps deployer on the host that owns it
-  ansible.builtin.import_tasks: install.yml
-  when: has_gitops
-
-- name: Reap the deployer units from a host that is not the GitOps deployer
-  ansible.builtin.import_tasks: teardown.yml
-  when: not has_gitops
+# DECIDED: this role is emptied, never deleted, until H7.20a. A play that names a missing role
+# fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the
+# deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role
+# keeps the playbook line.
+- name: End the role, whose work the host packages own
+  ansible.builtin.meta: end_role

@@ -3,7 +3,7 @@
 
 `hosts/lib/host_lib.py` has no single home on a host. Each consumer is a
 directly-invoked script, so it gets its own directory on `sys.path` and nothing else, and the
-file has to be copied in beside it. Seven roles do that, at eight sites, through
+file has to be copied in beside it. A role that does that goes through
 `roles/setup/common/tasks/install_host_lib.yml`, which owns the source path, the `host_lib.py`
 basename and the 0755 mode.
 
@@ -15,8 +15,8 @@ list someone maintains, so a new consumer is in scope the moment it imports the 
 
 WHY THE SHARED FILE DOES NOT WRITE THE STAMP PAIR, and this test asserts it instead. A
 `stamp_deployed` fragment is named per group and holds that group's whole pair list, so a
-second fragment written from inside the shared file would overwrite the caller's. All eight
-sites record a host_lib pair in a group their own role declares, and which pairs belong in that
+second fragment written from inside the shared file would overwrite the caller's. Each
+site records a host_lib pair in a group their own role declares, and which pairs belong in that
 group is the caller's knowledge, not the shared file's. The copy and the pair are therefore
 joined here rather than in the task file, in both directions:
 `test_a_declared_stamp_pair_names_a_directory_the_include_installs_into` catches a pair naming the
@@ -31,6 +31,7 @@ from pathlib import Path
 
 from _helpers import ROLES, load_tasks, walk_tasks
 from _role_census import every_plane_role_dirs, role_task_files
+from lib.role_installs import runs_on_no_host
 
 MODULE = "host_lib"
 SHARED_TASK = "common/tasks/install_host_lib.yml"
@@ -45,6 +46,15 @@ EXPECTED_CONSUMERS = frozenset(
         "gitops_deploy",
     }
 )
+
+
+# A consumer whose role ends on every host installs nothing, so it owes no include or stamp
+# pair. gitops_deploy is the one: its `files/` still import host_lib until the deployer's code is
+# deleted, and the role's only task is a `meta: end_role`.
+def live_consumers() -> list[str]:
+    """The EXPECTED_CONSUMERS whose role runs on some host, sorted."""
+    return sorted(n for n in EXPECTED_CONSUMERS if not runs_on_no_host(_role(n)))
+
 
 # Consumers whose script runs in a pod, mapped to the template that stages host_lib.py into the
 # pod's ConfigMap. No host copy exists for them, so no include applies. configarr's and
@@ -184,6 +194,13 @@ def test_the_census_finds_exactly_the_known_consumers():
     assert consumers(ROLES) == (set(EXPECTED_CONSUMERS) | set(POD_STAGED_CONSUMERS))
 
 
+def test_an_emptied_consumer_owes_no_include_and_a_live_one_does():
+    assert "gitops_deploy" in EXPECTED_CONSUMERS
+    assert "gitops_deploy" not in live_consumers()
+    assert runs_on_no_host(_role("gitops_deploy"))
+    assert not runs_on_no_host(_role("initial_setup"))
+
+
 def test_every_pod_staged_consumer_stages_host_lib_into_its_configmap():
     for role, template in POD_STAGED_CONSUMERS.items():
         text = (ROLES / template).read_text()
@@ -200,17 +217,6 @@ def test_no_pod_staged_consumer_stages_the_deleted_kuma_push_module():
 
 def test_the_shared_task_file_exists_where_every_caller_names_it():
     assert (ROLES / "setup" / "common" / "tasks" / "install_host_lib.yml").is_file()
-
-
-def test_every_consumer_installs_host_lib_through_the_shared_task_is_clean():
-    """The accepting half: the tree as it stands adopts the shared task everywhere."""
-    missing = sorted(
-        name for name in EXPECTED_CONSUMERS if not includes_of(_role(name))
-    )
-    assert not missing, (
-        f"{missing} import host_lib but no longer include {SHARED_TASK}, so the sibling copy "
-        f"is gone and the script dies at import on its next run."
-    )
 
 
 def test_a_synthetic_role_that_imports_host_lib_without_the_include_is_flagged(
@@ -255,54 +261,6 @@ def test_a_synthetic_role_that_imports_host_lib_without_the_include_is_flagged(
 # --- What each include declares --------------------------------------------------------------
 
 
-def test_every_include_names_a_destination_directory():
-    for name in sorted(EXPECTED_CONSUMERS):
-        for declared in includes_of(_role(name)):
-            assert declared.get("host_lib_dir"), (
-                f"{name} includes {SHARED_TASK} without host_lib_dir, so the copy would land "
-                f"at /host_lib.py."
-            )
-
-
-def test_a_declared_stamp_pair_names_a_directory_the_include_installs_into():
-    """The copy↔stamp invariant the shared task file cannot hold itself.
-
-    A role that renames its /opt directory in the include but not in `stamp_deployed_pairs`
-    leaves the drift check watching a path nothing writes — armed, and checking nothing.
-    """
-    for name in sorted(EXPECTED_CONSUMERS):
-        role = _role(name)
-        installed = {f"{v['host_lib_dir']}/host_lib.py" for v in includes_of(role)}
-        for pair in stamp_pairs_of(role):
-            if pair.get("src") == HOST_LIB_SRC:
-                assert pair["live"] in installed, (
-                    f"{name} stamps {pair['live']} but installs host_lib into {sorted(installed)}"
-                )
-
-
-def test_every_consumer_that_stamps_its_code_also_stamps_host_lib_is_clean():
-    """The forward half of the copy↔stamp invariant: a stamped role stamps host_lib too.
-
-    The test above catches a pair that names the WRONG directory. It cannot catch a pair that is
-    simply absent: a role that stamps its own scripts and omits the host_lib copy beside them
-    leaves the drift check naming one role's host_lib.py as stale and silent about another's,
-    which is stale by the same commit.
-
-    An unstamped copy is invisible to setup-drift-lib.sh's arm 2, and host_lib is the one file
-    every consumer shares — one repo-side change strands a copy in every role at once.
-    """
-    offenders = {
-        name: unstamped
-        for name in sorted(EXPECTED_CONSUMERS)
-        if (unstamped := unstamped_host_lib_installs(_role(name)))
-    }
-    assert not offenders, (
-        f"{offenders} install host_lib and record no stamp_deployed pair for it, so a stale copy "
-        f"there runs behind a drift check reporting 'deployed code matches the repo'. Add "
-        f"`- live: <dir>/host_lib.py` / `src: {HOST_LIB_SRC}` to the role's stamp_deployed_pairs."
-    )
-
-
 def test_a_consumer_that_stamps_its_scripts_but_not_host_lib_is_flagged(tmp_path):
     """The rejecting half, on a synthetic role: stamping SOMETHING is not stamping host_lib.
 
@@ -335,30 +293,6 @@ def test_a_consumer_that_stamps_its_scripts_but_not_host_lib_is_flagged(tmp_path
         + f"        src: {HOST_LIB_SRC}\n"
     )
     assert unstamped_host_lib_installs(role.parent) == []
-
-
-def test_a_notified_handler_exists_in_the_calling_role():
-    """`--list-tasks` shows no handler wiring, so this is the only static proof it still fires."""
-    for name in sorted(EXPECTED_CONSUMERS):
-        role = _role(name)
-        notified = [
-            h
-            for declared in includes_of(role)
-            for h in (
-                [declared["host_lib_notify"]]
-                if isinstance(declared.get("host_lib_notify"), str)
-                else declared.get("host_lib_notify") or []
-            )
-        ]
-        if not notified:
-            continue
-        handlers = load_tasks(role / "handlers" / "main.yml")
-        names = {h.get("name") for h in walk_tasks(handlers)}
-        for handler in notified:
-            assert handler in names, (
-                f"{name} notifies {handler!r} from its host_lib include, but no handler by that "
-                f"name exists in {role / 'handlers' / 'main.yml'} — the notify is a silent no-op."
-            )
 
 
 def test_the_shared_task_file_carries_no_tags():

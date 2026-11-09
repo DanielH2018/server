@@ -8,7 +8,7 @@ file shipped inside the block reads as daniel-box only. A role's own `tests/*.py
 must not fall through to the role-level reach.
 
 A `tasks/<file>.yml` path that names no shipped file (the blocked role's `tasks/main.yml`,
-`gitops_deploy/tasks/install.yml`) must not fall through to the ROLE-level reach, which for a
+a dispatcher's gated `install.yml`) must not fall through to the ROLE-level reach, which for a
 role with no playbook gate reads as every host however its own tasks are gated.
 `setup_role_hosts` derives a gateless role's reach from its leaf tasks, so a block-gated role's
 role-level answer is the block gate's answer.
@@ -47,41 +47,6 @@ def test_an_ungated_shipping_task_still_reaches_every_host():
     assert land_reach.setup_role_hosts("initial_setup") == frozenset(land_reach._HOSTS)
     assert land_reach.setup_file_hosts("initial_setup", _UNGATED) == frozenset(
         land_reach._HOSTS
-    )
-
-
-# A PR's setup-plane paths, verbatim (`git show --name-only` of its merge commit), minus the
-# paths outside `ansible/roles/setup/` -- those derive tags or nothing and never reach this
-# note -- the two `gitops_markers.py` copies #3275 deleted, and the deploy UI's paths, which
-# H7.50 moved into a host package. The `tasks/` entry is one that widened it.
-_PR_2071_SETUP_PATHS = [
-    "ansible/roles/setup/gitops_deploy/CLAUDE.md",
-    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py",
-    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py",
-    "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
-    "ansible/roles/setup/gitops_deploy/files/gitops_markers.py",
-    "ansible/roles/setup/gitops_deploy/tasks/install.yml",
-    "ansible/roles/setup/gitops_deploy/tests/conftest.py",
-    "ansible/roles/setup/gitops_deploy/tests/test_deployer_state.py",
-    "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_alert_channels.py",
-    "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_alert_delivery.py",
-    "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_failure_output.py",
-    "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_main_branches.py",
-    "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_not_the_deployer.py",
-    "ansible/roles/setup/gitops_deploy/tests/test_gitops_markers.py",
-]
-
-
-def test_pr_2071_paths_still_exist():
-    """Non-vacuity for the cases below."""
-    missing = [p for p in _PR_2071_SETUP_PATHS if not (REPO_ROOT / p).exists()]
-    assert not missing, f"paths moved, so these cases check nothing: {missing}"
-
-
-def test_pr_2071_owes_no_host_beyond_the_tick():
-    """The verdict is `settled`, not `needs-manual-apply`."""
-    assert (
-        land_reach.remaining_setup_hosts_note(_PR_2071_SETUP_PATHS, "daniel-box") == ""
     )
 
 
