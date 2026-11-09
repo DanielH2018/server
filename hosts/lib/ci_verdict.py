@@ -66,6 +66,8 @@ CI_GATE_NEEDS_JOBS = frozenset(
         "build the host packages (render, nfpm, lint)",
         "host_packages (24.04, 3.12)",
         "host_packages (26.04, 3.14)",
+        "host_packages_bootstrap (24.04, 3.12)",
+        "host_packages_bootstrap (26.04, 3.14)",
         "host_tools_arm64",
     }
 )

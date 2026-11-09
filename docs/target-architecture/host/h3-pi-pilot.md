@@ -1126,8 +1126,10 @@ They need no secrets, and they do these steps:
 The `host_packages` job has no `name:` key. GitHub names each matrix leg after the job id and
 the leg's values, such as `host_packages (24.04, 3.12)`. The gate census in
 `ansible/tests/repo/test_every_ci_job_is_gated.py` falls back to the job id, and the gate's
-`needs.host_packages.result` fails when either leg fails. The build job's `name:` does not
-start with `host_packages`, so the prefix filter below still selects the two legs alone. Later
+`needs.host_packages.result` fails when either leg fails. The bootstrap cases run in
+`host_packages_bootstrap`, one leg per release in the same matrix, so the prefix filter below
+selects its legs too (#7819). The build job's `name:` does not start with `host_packages`, so
+the filter selects the case legs alone. Later
 host slices extend these jobs and add no workflow of their own. They read each leg's result from the `ci.yml` runs,
 filtered by the job name's prefix:
 

@@ -344,7 +344,7 @@ def test_a_run_that_found_age_already_installed_is_flagged(monkeypatch, tmp_path
         _age_run(monkeypatch, tmp_path, stdout)
 
 
-def test_the_host_packages_job_runs_the_three_bootstrap_groups():
+def test_the_default_groups_hold_two_bootstrap_groups_and_leave_bootstrap_case_out():
     runs = [run for _, run in case_groups.groups(host_package_cases.Cases)]
     assert {
         "bootstrap_age_case": age_case.run in runs,
@@ -352,7 +352,7 @@ def test_the_host_packages_job_runs_the_three_bootstrap_groups():
         "bootstrap_repo_case": repo_case.run in runs,
     } == {
         "bootstrap_age_case": True,
-        "bootstrap_case": True,
+        "bootstrap_case": False,
         "bootstrap_repo_case": True,
     }
 

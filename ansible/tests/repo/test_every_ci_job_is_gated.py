@@ -52,6 +52,7 @@ KNOWN_JOBS = frozenset(
         "sops_manifest_type_proof",
         "host_packages_build",
         "host_packages",
+        "host_packages_bootstrap",
         "host_tools_arm64",
         "k3s_download",
         GATE_JOB,
@@ -82,6 +83,7 @@ GATE_READS = frozenset(
         "sops_manifest_type_proof",
         "host_packages_build",
         "host_packages",
+        "host_packages_bootstrap",
         "host_tools_arm64",
     }
 )

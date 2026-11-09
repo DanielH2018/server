@@ -50,7 +50,8 @@ after its weight was recorded measured 45.67s against 0.48s, and the split packe
 A CACHE SHARED ACROSS MODULES IS A PER-WORKER COST, NOT A MODULE'S. Under xdist every worker
 builds `_k8s_render`'s render once and charges it to whichever module asks first, so its weight
 would vary from run to run. `ansible/tests/conftest.py` builds it when collection finishes,
-outside every test's timed phases, and its `# DECIDED:` comment has the numbers.
+outside every test's timed phases, and its `# DECIDED:` comment has the numbers. `render_share`
+builds the fleet render there too. `--summary` charges both per shard, as `prebuild_seconds`.
 
 The docs-refresh cron runs `--record-missing` itself, so gaps in the table fill without a human.
 
@@ -110,6 +111,8 @@ from pathlib import Path, PurePosixPath
 # Reach `scripts/lib`: a directly-invoked script gets only its own directory on sys.path,
 # and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# Reach `render_share`, which decides which test modules read the fleet render.
+sys.path.insert(1, str(Path(__file__).resolve().parents[2] / "ansible" / "tests"))
 
 from lib.cli_help import ArgumentParser
 
@@ -146,6 +149,17 @@ _TEST_FILE_GLOBS = ("test_*.py", "*_test.py")
 # Without this term the split balances recorded seconds and leaves the file COUNT wildly uneven,
 # which is how the 357-file shard became the pole while the model called every shard equal.
 _PER_FILE_SECONDS = 0.028
+
+# The wall seconds each render prebuild holds a CI leg before its first test, read off the
+# `phase timing` sections of master run 42681237857 (#7732). The leg holding no render_share
+# consumer took 11s for the k8s render alone. Legs that rendered k8s at a module's import took
+# 5-7s for the fleet render alone, and the rest about 17s for both. `--summary` adds them per
+# shard and `assign` does not: the fleet render is the only part a shard's membership changes,
+# and at 24 of about 660 runner seconds per shard it is below what the packing can resolve.
+K8S_RENDER_WALL_SECONDS = 11.0
+FLEET_RENDER_WALL_SECONDS = 6.0
+# The xdist workers on each leg's runner, every one of which waits out both prebuilds.
+CI_WORKERS = 4
 
 # The docs-refresh cron runs at 06:17 and 18:17. Two runs 12 hours apart always fall in
 # consecutive periods of this length, so successive runs visit successive slices.
@@ -514,6 +528,23 @@ def fetch_runner_logs(runs: int, gh=gh_mod.gh) -> list[str]:
     return reports
 
 
+def prebuild_seconds(members: list[str], repo: Path = REPO) -> float:
+    """The runner seconds a shard of `members` spends in render prebuilds before its first test.
+
+    Every worker of a leg waits out each prebuild, so a render costs its wall time once per
+    worker. Every shard pays the k8s render, since each holds a few dozen of its readers; only
+    a shard holding a `render_share` consumer pays the fleet render.
+    """
+    if not members:
+        return 0.0
+    import render_share
+
+    wall = K8S_RENDER_WALL_SECONDS
+    if any(render_share.is_consumer(repo / f) for f in members):
+        wall += FLEET_RENDER_WALL_SECONDS
+    return wall * CI_WORKERS
+
+
 def _summary(shards: int) -> str:
     files, weights = census(), packing_table(load_weights())
     placed = assign(files, shards, weights)
@@ -523,6 +554,7 @@ def _summary(shards: int) -> str:
         cost = sum(weights.get(f, 0.0) + _PER_FILE_SECONDS for f in members)
         lines.append(
             f"  shard {i + 1}: {len(members):>4} files, {cost:6.1f} runner seconds projected"
+            f" + {prebuild_seconds(members):4.1f} in render prebuilds"
         )
     unknown = sum(1 for f in files if f not in weights)
     lines.append(f"  {len(files)} files, {unknown} with no recorded weight")

@@ -80,6 +80,7 @@ PERMISSIONS = {
         "packages": "read",
         "pull-requests": "read",
         "statuses": "read",
+        "actions": "read",
     },
     "tag": {"packages": "write"},
     "verify": {"contents": "read", "statuses": "read", "packages": "read"},

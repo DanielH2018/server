@@ -151,6 +151,8 @@ tests:
                 The oldest green master commit that prod lacks went green 3h 0m 0s ago, and
                 no hold stands. Read the promote workflow's recent runs with gh run list
                 --workflow promote.yml; a run that never settles stalls promotion as current.
+                A run that ended without its settle job is named in the next run's Decide
+                log, with the operator command that clears it.
   - interval: 1m
     input_series:
       - series: 'homelab_deploy_unpromoted_age_seconds{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'
@@ -205,6 +207,8 @@ tests:
                 The oldest green master commit that prod lacks went green 5h 50m 0s ago, and
                 no hold stands. Read the promote workflow's recent runs with gh run list
                 --workflow promote.yml; a run that never settles stalls promotion as current.
+                A run that ended without its settle job is named in the next run's Decide
+                log, with the operator command that clears it.
 
   # ProdMovedOutsidePromote fires after 15 minutes at 0, and stays silent after 10.
   - interval: 1m

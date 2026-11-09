@@ -99,7 +99,9 @@ class FakeTransport:
         statuses: each commit's newest status per context, as `{context: state}`.
         status_times: the `updated_at` every status on a commit carries; none when absent.
         pulls: the PRs the commit-to-pulls lookup returns for each commit; none when absent.
-        runs: the in-progress runs the Actions API lists for `promote.yml`.
+        runs: the runs the Actions API lists for `promote.yml`, filtered on each one's
+            `status` (`in_progress` when absent) as the `status=` query asks.
+        jobs: each run's jobs, by run id; none when absent.
         requests: every `(method, url)` sent, in order.
     """
 
@@ -115,6 +117,7 @@ class FakeTransport:
     status_times: dict[str, str] = field(default_factory=dict)
     pulls: dict[str, list[dict]] = field(default_factory=dict)
     runs: list[dict] = field(default_factory=list)
+    jobs: dict[int, list[dict]] = field(default_factory=dict)
     requests: list[tuple[str, str]] = field(default_factory=list)
 
     def __call__(self, method, url, headers):
@@ -156,8 +159,14 @@ class FakeTransport:
         if parts.path.endswith("/actions/workflows/promote.yml/runs") and (
             parts.path not in self.api_forced
         ):
-            body = json.dumps({"workflow_runs": self.runs}).encode()
+            status = parse_qs(parts.query).get("status", [""])[0]
+            runs = [r for r in self.runs if r.get("status", "in_progress") == status]
+            body = json.dumps({"workflow_runs": runs}).encode()
             return forge.Response(200, body=body)
+        match = re.fullmatch(r"/repos/[^/]+/[^/]+/actions/runs/(\d+)/jobs", parts.path)
+        if match and parts.path not in self.api_forced:
+            jobs = self.jobs.get(int(match.group(1)), [])
+            return forge.Response(200, body=json.dumps({"jobs": jobs}).encode())
         if parts.path in self.api_forced:
             message = {"message": f"forced HTTP {self.api_forced[parts.path]}"}
             body = json.dumps(message).encode()
