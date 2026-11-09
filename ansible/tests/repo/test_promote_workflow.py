@@ -24,6 +24,7 @@ from lib import yaml_fast
 
 WORKFLOW = REPO / ".github" / "workflows" / "promote.yml"
 FLUX_DEFAULTS = REPO / "ansible" / "roles" / "k8s" / "flux" / "defaults" / "main.yml"
+FLUX_FETCH = "fluxcd/flux2/releases/download/$FLUX_VERSION/"
 DEV_GROUP_FLAG = re.compile(
     r"\buv (?:run|sync)\b[^\n]*--(?:dev|only-dev|group|all-groups)\b"
 )
@@ -223,24 +224,24 @@ def _handoff_problems(jobs: dict) -> list[str]:
     return found
 
 
-def _pin_problems(jobs: dict, flux_version: str) -> list[str]:
+def _pin_problems(wf: dict, flux_version: str) -> list[str]:
     found = []
+    jobs = wf.get("jobs") or {}
     flux_steps = [
-        (name, s)
+        name
         for name, job in jobs.items()
         for s in _steps(job)
-        if _uses(s, "fluxcd/flux2/action")
+        if FLUX_FETCH in str(s.get("run", ""))
     ]
-    if {name for name, _ in flux_steps} != {"publish", "tag", "settle", "reset-move"}:
+    if set(flux_steps) != {"publish", "tag", "settle", "reset-move"}:
         found.append(
             "the flux CLI is not installed in exactly publish, tag, settle and reset-move"
         )
-    for name, step in flux_steps:
-        version = (step.get("with") or {}).get("version")
-        if version != flux_version:
-            found.append(
-                f"{name}: flux CLI {version!r} differs from flux_version {flux_version!r}"
-            )
+    version = (wf.get("env") or {}).get("FLUX_VERSION")
+    if version != flux_version:
+        found.append(
+            f"FLUX_VERSION: flux CLI {version!r} differs from flux_version {flux_version!r}"
+        )
     cosign_steps = [
         (name, s)
         for name, job in jobs.items()
@@ -317,7 +318,7 @@ def problems(wf: dict, flux_version: str) -> list[str]:
     found += _checkout_problems(jobs)
     found += _ancestry_problems(jobs.get("render", {}))
     found += _handoff_problems(jobs)
-    found += _pin_problems(jobs, flux_version)
+    found += _pin_problems(wf, flux_version)
     found += _dev_group_problems(wf)
     return found
 
@@ -387,10 +388,7 @@ def _tag_outside_the_group(wf):
 
 
 def _flux_version_drift(wf):
-    step = next(
-        s for s in wf["jobs"]["tag"]["steps"] if _uses(s, "fluxcd/flux2/action")
-    )
-    step["with"]["version"] = "v0.0.1"
+    wf["env"]["FLUX_VERSION"] = "v0.0.1"
 
 
 def _pull_request_trigger(wf):
@@ -463,7 +461,10 @@ RED = {
         _tag_outside_the_group,
         "tag: is not in the promote",
     ),
-    "a drifted flux CLI": (_flux_version_drift, "tag: flux CLI 'v0.0.1' differs"),
+    "a drifted flux CLI": (
+        _flux_version_drift,
+        "FLUX_VERSION: flux CLI 'v0.0.1' differs",
+    ),
     "a pull_request trigger": (
         _pull_request_trigger,
         "the workflow triggers on pull_request",
