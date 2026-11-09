@@ -1,6 +1,6 @@
 # gitops_deploy — the archived role page
 
-This was `ansible/roles/setup/gitops_deploy/CLAUDE.md` until #7824 moved it here,
+This was `ansible/roles/setup/gitops_deploy/CLAUDE.md` until the follow-up to H7.52 (#7824) moved it here,
 leaving a stub. It describes the deployer as it ran until H7.52. A relative path such as
 `files/` or `tests/` is under `ansible/roles/setup/gitops_deploy/`.
 

@@ -55,7 +55,8 @@ gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>
 Do not hand-poll CI. `land.sh` owns the merge, the CI wait, the promotion wait and the verify step, and
 `scripts/deploy_tools/await_ci.py` is the CI waiter it uses; the `land-after-merge` skill has the
 invocation. Both read the check runs of the merge commit, the same endpoint checkout-sync reads,
-so your verdict and its verdict agree.
+so your verdict and its verdict agree. An empty or incomplete check-run list is pending, never
+green.
 
 A bare `gh run list --branch master --limit 1` is the wrong gate. GitHub creates the run for a
 freshly pushed merge commit a moment after the push, so that query returns the *previous* master

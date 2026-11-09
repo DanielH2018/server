@@ -1,8 +1,8 @@
 # Deploying by hand
 
-`scripts/deploy.sh` deploys no workload. `promote` and Flux apply every k8s change, the
-[GitOps pipeline](gitops-pipeline.md) applies setup roles, and the Pi's services ship in its host
-package. This page says which path applies a change, and what the wrapper still does.
+`scripts/deploy.sh` deploys no workload. `promote` and Flux apply every k8s change, the host
+packages apply the host plane, and the Pi's services ship in its host package. The
+[GitOps pipeline](gitops-pipeline.md) says what runs in the retired deployer's place. This page says which path applies a change, and what the wrapper still does.
 
 ## Which path applies a change
 
