@@ -308,14 +308,13 @@ def test_an_owed_apply_and_its_clear_each_print_alone_on_a_line():
     )
 
 
-def test_a_whole_role_apply_prints_its_warning_above_the_command():
+def test_the_emptied_k3s_roles_whole_role_apply_prints_no_warning():
+    """`--tags k3s` runs only the `end_role` stub since H7.44, so it arms nothing to warn of."""
     lines = _owed_text(
         {"subject": "k3s", "playbook": "ansible/k3s-bringup.yml"}
     ).splitlines()
-    command = lines.index(
-        "    uv run ansible-playbook ansible/k3s-bringup.yml --tags k3s"
-    )
-    assert lines[command - 2].startswith("  WARNING: ")
+    assert "    uv run ansible-playbook ansible/k3s-bringup.yml --tags k3s" in lines
+    assert not [line for line in lines if "WARNING" in line]
 
 
 def test_a_role_no_playbook_applies_prints_no_playbook_command():
