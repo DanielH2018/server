@@ -27,6 +27,7 @@ from lib.render_guard import (
 )
 
 __all__ = [
+    "failed_key",
     "resolve_vars",
 ]
 
@@ -137,6 +138,9 @@ def resolve_vars(
     A value rendered as text ends in as many newlines as ansible-core gives it: Jinja drops the
     source's last one, and ``pad_to_source_newlines`` adds back only those the render lacks. So
     ``"p {{ x }}\\n"`` with ``x`` ending in a newline resolves to one newline, not two (#4853).
+
+    An exception raised while expanding a value carries a note naming that variable, which
+    ``failed_key`` reads back.
     """
 
     def expand(node, ctx):
@@ -191,5 +195,20 @@ def resolve_vars(
         if not pending:
             break
         for key, value in pending.items():
-            resolved[key] = expand(value, {**context, **resolved})
+            try:
+                resolved[key] = expand(value, {**context, **resolved})
+            except Exception as exc:
+                exc.add_note(f"{_FAILED_KEY_NOTE}{key}")
+                raise
     return resolved
+
+
+_FAILED_KEY_NOTE = "resolve_vars failed on: "
+
+
+def failed_key(exc: BaseException) -> str | None:
+    """The variable whose value `resolve_vars` was expanding when it raised `exc`, if any."""
+    for note in getattr(exc, "__notes__", ()):
+        if note.startswith(_FAILED_KEY_NOTE):
+            return note.removeprefix(_FAILED_KEY_NOTE)
+    return None

@@ -12,6 +12,7 @@ import subprocess
 import pytest
 import pytest_shard
 import shard_weight_gate
+import render_share
 
 FILES = [f"scripts/x/tests/test_{name}.py" for name in "abcdefgh"]
 
@@ -67,6 +68,29 @@ def test_the_committed_runner_table_is_populated():
     a PR deleting a test module need not touch the table (#5989 is the same trap on the
     weight table)."""
     assert len(shard_weight_gate.load_runner_weights()) >= 100
+
+
+def test_a_shard_holding_a_fleet_render_consumer_is_charged_both_prebuilds(tmp_path):
+    # Built from the constant: the literal here would make this module a consumer too.
+    (tmp_path / "test_reader.py").write_text(
+        f"{render_share.CONSUMER_IMPORT} shared_value\n"
+    )
+    (tmp_path / "test_plain.py").write_text("def test_x(): pass\n")
+    both = pytest_shard.K8S_RENDER_WALL_SECONDS + pytest_shard.FLEET_RENDER_WALL_SECONDS
+    assert (
+        pytest_shard.prebuild_seconds(["test_plain.py", "test_reader.py"], tmp_path)
+        == both * pytest_shard.CI_WORKERS
+    )
+
+
+def test_a_shard_with_no_fleet_render_consumer_is_charged_the_k8s_render_alone(
+    tmp_path,
+):
+    (tmp_path / "test_plain.py").write_text("def test_x(): pass\n")
+    assert pytest_shard.prebuild_seconds(["test_plain.py"], tmp_path) == (
+        pytest_shard.K8S_RENDER_WALL_SECONDS * pytest_shard.CI_WORKERS
+    )
+    assert pytest_shard.prebuild_seconds([], tmp_path) == 0.0
 
 
 def test_a_runner_refresh_adds_rewrites_drifted_keeps_unmeasured_and_drops_deleted(
