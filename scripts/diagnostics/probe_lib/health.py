@@ -22,19 +22,18 @@ gated the same way on its most recent Job instead — see health_cronjob.format_
 
 WHAT "NOT FOUND" IS ALLOWED TO MEAN. This paragraph is the canonical statement of the rule, and
 the three helper modules point back at it rather than restating it. `deploy_lib/detach_notify.py`
-turns some of this command's failures into a `skipped` that does not fail the deploy verdict,
-matched by substring against its `NOT_APPLICABLE_MARKERS`. Which failures may carry such a
-marker is positional, not a property of any one message:
+grades an exit of `PROBE_NOT_APPLICABLE` (3, `PROBE-VERDICT: skip`) as `skipped`, which does not
+fail the deploy verdict. Which absences may exit 3 is positional, not a property of any one
+message:
 
   - a name GUESSED from the deploy tag, absent from the cluster, may skip: the guess only ever
     meant "maybe this tag names a workload", and a miss lets the `--docker` fallback try the Pi.
   - a name RESOLVED from the role's own rendered manifests, absent from the cluster, must NOT
     skip: the manifests say that object should exist, so its absence is a failed deploy.
 
-Every message across the four modules is written to that rule, and the `test_probe_health*.py`
-suites assert each one lands on the intended side of it. A message that reads as a skip when the
-deploy failed would let `land.sh` print `VERDICT: settled` for a deploy whose health gate never
-ran.
+Every exit code across the four modules is written to that rule, and the `test_probe_health*.py`
+suites assert each absence lands on the intended side of it. A failed deploy that exits 3 would
+let `land.sh` print `VERDICT: settled` for a deploy whose health gate never ran.
 """
 
 import functools
@@ -88,7 +87,7 @@ from diagnostics.probe_lib.health_vendored import (
     vendored_targets,
 )
 
-from lib.exit_codes import PROBE_UNREADABLE
+from lib.exit_codes import PROBE_NOT_APPLICABLE, PROBE_UNREADABLE
 from lib.kubectl import (
     DEFAULT_CLUSTER,
     DEFAULT_TOOLS,
@@ -201,10 +200,8 @@ def format_role_health(role, checked, now):
 
     `checked` is [(namespace, kind, name, workload doc or None, pods doc or None)]. A None
     workload doc is the safety-critical case this function exists for: the role's manifests
-    declare that object and the cluster does not have it, which is a failed deploy. Its message
-    deliberately carries none of the notifier's NOT_APPLICABLE_MARKERS — asserted directly in
-    test_deploy_detach_notify.py, because a rewording that happened to contain one would put a
-    failed deploy back on the skip path with every test still green.
+    declare that object and the cluster does not have it, which is a failed deploy, so it exits
+    1 and never `PROBE_NOT_APPLICABLE`, the code the notifier reads as a skip.
 
     Only the first line reaches the Discord verdict (the notifier reads `splitlines()[0]`), so
     it carries the whole result and the per-workload detail follows it.
@@ -285,8 +282,7 @@ def _with_alert_plane(role, text, code, ready_at, prom, read):
     """(text, exit code) with the tag's plumbing check, then the alert plane, folded in.
 
     A failed rollout returns unchanged, without the alert plane's waits. A failing alert plane
-    puts its own head line first: the notifier reads only the first line, and the no-workload
-    line carries a `NOT_APPLICABLE_MARKERS` substring that would report the failure `skipped`.
+    puts its own head line first, because the notifier reports only the first line.
     `read` is `_read` bound to the gate's cluster, for `health_plumbing.with_checks`.
     """
     if not code:
@@ -325,8 +321,8 @@ def format_role_cronjob_health(
 
     `checked` is [(namespace, name, cronjob doc or None, latest Job or None, pods doc or
     None, reference)], as `_fetch_cronjob` reads it. Mirrors format_role_health's shape and
-    its NOT_APPLICABLE_MARKERS constraint: a CronJob the manifests declare and the cluster
-    lacks reads as a failure here too, via format_cronjob_health's "no CronJob" message.
+    its rule for an absence: a CronJob the manifests declare and the cluster lacks exits 1 here
+    too, via format_cronjob_health's "no CronJob" message.
 
     `suspended` is the `namespace/name` set whose manifest declares `suspend: true`
     (`health_cronjob.declared_suspended`). A live-suspended CronJob in it passes with no Job
@@ -450,7 +446,7 @@ def run_health(
             workload, pods, container, datetime.now(timezone.utc)
         )
         print(text)
-        return code
+        return PROBE_NOT_APPLICABLE if workload is None else code
 
     if not targets and container == health_backup_targets.BACKUP_ROLE:
         # No workload; the gate is the targets' availability (H1.7b).
@@ -492,25 +488,23 @@ def run_health(
             return code
         # Genuinely nothing to gate — a Job-only role (media-volume, netpol-baseline) whose
         # one-shot setup Jobs are already gated to completion at deploy time inline, or a role
-        # with neither. This message is load-bearing text: deploy_lib/detach_notify.py's
-        # NOT_APPLICABLE_MARKERS matches it by substring, so a reword here must keep it intact
-        # (test_deploy_detach_notify.py asserts the exact string is in this file's source).
-        # DECIDED: exit 0, a pass with a note (#3596). Exit 1 made `probe.py health <role>`
-        # unpassable on a healthy deploy, while the notifier already skipped it via the marker.
-        # Gating the probe Jobs instead was rejected: their `ttlSecondsAfterFinished: 86400`
-        # deletes them a day after a deploy, so a later run would fail a healthy cluster.
+        # with neither.
+        # DECIDED: PROBE_NOT_APPLICABLE, a skip (#7895), not exit 1, which made `probe.py health
+        # <role>` unpassable on a healthy deploy (#3596). Exit 0 hid the skip from the notifier,
+        # which matched this message's wording instead. Gating the probe Jobs instead was
+        # rejected: their `ttlSecondsAfterFinished: 86400` deletes them a day after a deploy, so
+        # a later run would fail a healthy cluster.
         text, code = _with_alert_plane(
             container,
             f"{container}: the role declares no rollout-checkable workload "
-            "(no Deployment, DaemonSet or StatefulSet in its manifests) — nothing to gate, "
-            "reporting a pass",
+            "(no Deployment, DaemonSet or StatefulSet in its manifests) — nothing to gate",
             0,
             None,
             prom,
             read,
         )
         print(text)
-        return code
+        return code or PROBE_NOT_APPLICABLE
 
     now = datetime.now(timezone.utc)
     checked = [

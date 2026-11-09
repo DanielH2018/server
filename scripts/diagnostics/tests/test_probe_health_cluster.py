@@ -13,8 +13,7 @@ refusal comes first and is one line, and it is a failure rather than a skip when
 Run: uv run pytest scripts/diagnostics/tests/test_probe_health_cluster.py
 """
 
-from lib.exit_codes import PROBE_UNREADABLE
-from lib.kubectl import cluster_refusal
+from lib.exit_codes import PROBE_NOT_APPLICABLE, PROBE_UNREADABLE
 
 from diagnostics.probe_lib import health, health_alerts
 from _probe_health_fixtures import current_checkout
@@ -53,16 +52,16 @@ def test_run_health_still_gates_when_the_cluster_matches(capsys):
             prom=_QUIET,
             stale_reason=current_checkout,
         )
-        == 0
+        == PROBE_NOT_APPLICABLE
     )
     assert "no rollout-checkable workload" in capsys.readouterr().out
 
 
-def test_a_role_with_no_workload_passes_the_gate(capsys):
+def test_a_role_with_no_workload_exits_the_skip_code(capsys):
     """netpol-baseline renders NetworkPolicies and probe Jobs, nothing with a rollout (#3596).
 
-    Exit 1 here made `probe.py health netpol-baseline` unpassable on a healthy deploy. The
-    message keeps the marker, so the deploy notifier still reports the tag as `skipped`.
+    Exit 1 made `probe.py health netpol-baseline` unpassable on a healthy deploy, and exit 0
+    hid the skip from the deploy notifier, which grades on the code (#7895).
     """
     assert (
         health.run_health(
@@ -72,24 +71,6 @@ def test_a_role_with_no_workload_passes_the_gate(capsys):
             prom=_QUIET,
             stale_reason=current_checkout,
         )
-        == 0
+        == PROBE_NOT_APPLICABLE
     )
     assert "no rollout-checkable workload" in capsys.readouterr().out
-
-
-def test_a_refusal_is_routed_as_a_failure_not_a_skip():
-    """The refusal crosses a subprocess boundary and is classified by substring.
-
-    `deploy_lib/detach_notify.py` reads the gate's first stdout line and turns a
-    NOT_APPLICABLE_MARKERS match into a `skipped` verdict. A refusal means the gate did not
-    run, which must fail the verdict rather than skip it — the same rule the absent-workload
-    messages follow, and the only thing connecting these two modules is this assertion.
-    """
-    from deploy_tools.deploy_lib import detach_notify as notify_mod
-
-    for requested, served in (("stage", "prod"), ("prod", None)):
-        message = cluster_refusal(requested, served)
-        assert message is not None
-        assert not [
-            marker for marker in notify_mod.NOT_APPLICABLE_MARKERS if marker in message
-        ], f"a refusal would be reported as `skipped`: {message}"

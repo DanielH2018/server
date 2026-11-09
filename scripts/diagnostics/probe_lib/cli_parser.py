@@ -72,7 +72,7 @@ def _epilog():
     )
     return (
         f"Exit codes of every verdict subcommand: {codes}. A verdict subcommand's last line "
-        "is `PROBE-VERDICT: <ok|fail|unreadable> (<detail>)`, except under --json or "
+        "is `PROBE-VERDICT: <ok|fail|skip|unreadable> (<detail>)`, except under --json or "
         "--dry-run."
     )
 
@@ -372,7 +372,9 @@ def _build_parser():
     hl = sub.add_parser(
         "health",
         **_verdict_help(
-            "k8s rollout + restart rollup", "healthy", "unhealthy or missing"
+            "k8s rollout + restart rollup; exit 3 when the tag names nothing to check",
+            "healthy",
+            "unhealthy or missing",
         ),
     )
     hl.add_argument("container", help="service name, e.g. jellyfin")

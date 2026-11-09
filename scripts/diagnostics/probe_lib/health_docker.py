@@ -24,6 +24,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
 
+from lib.exit_codes import PROBE_NOT_APPLICABLE
 from lib.ansible_inventory import PI_HOST, PI_HOST_VARS, pi_entries_in
 from lib.kubectl import DEFAULT_CLUSTER, kubectl
 
@@ -116,7 +117,7 @@ def format_health(data, container, declared=False):
         return (
             f"{container}: not found, and not a declared service on any host "
             "(nothing to health-check)",
-            1,
+            PROBE_NOT_APPLICABLE,
         )
     state = data[0].get("State") or {}
     status = state.get("Status", "unknown")

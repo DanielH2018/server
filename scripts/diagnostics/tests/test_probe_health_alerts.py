@@ -14,10 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from deploy_tools.deploy_lib import detach_notify
 from diagnostics.probe_lib import core, health, health_alerts
 from lib import kubectl
-from lib.exit_codes import PROBE_UNREADABLE
+from lib.exit_codes import PROBE_NOT_APPLICABLE, PROBE_UNREADABLE
 from _probe_health_fixtures import current_checkout
 
 TAG = "littlelink"
@@ -338,21 +337,20 @@ def _netpol_baseline(fake):
 
 
 def test_a_failing_alert_plane_on_a_no_workload_role_is_flagged_not_skipped(capsys):
-    """netpol-baseline's pass line carries a skip marker; a failure must lead with its own."""
+    """netpol-baseline exits the skip code when quiet; a failing alert plane exits 1."""
     # Active after any applied_at this host can hold, so it gates whatever the record says.
     fake = FakeProm(alert(4e9, service="netpol-baseline") + START)
     code = _netpol_baseline(fake)
     first = capsys.readouterr().out.splitlines()[0]
     assert code == 1
     assert "alert plane FAILED" in first
-    assert not [m for m in detach_notify.NOT_APPLICABLE_MARKERS if m in first]
 
 
-def test_a_quiet_alert_plane_on_a_no_workload_role_keeps_its_skip_line(capsys):
+def test_a_quiet_alert_plane_on_a_no_workload_role_exits_the_skip_code(capsys):
     code = _netpol_baseline(FakeProm(START))
     first = capsys.readouterr().out.splitlines()[0]
-    assert code == 0
-    assert any(m in first for m in detach_notify.NOT_APPLICABLE_MARKERS)
+    assert code == PROBE_NOT_APPLICABLE
+    assert "declares no rollout-checkable workload" in first
 
 
 # --- The Deployment path, and a failed read ----------------------------------------------

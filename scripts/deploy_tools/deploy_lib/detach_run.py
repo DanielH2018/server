@@ -123,13 +123,10 @@ def notify(run: locked.Run, status: int, log: Path, notifier: str) -> int:
 
     DECIDED: the two halves of this gate come from different trees, and that is accepted.
     `--cwd <snapshot>` makes probe.py render the DEPLOYED commit's manifests, while the notifier
-    script itself -- and so its `NOT_APPLICABLE_MARKERS`, the list that turns a probe message into
-    `skipped` -- is the CALLING checkout's copy. The marker list is the notifier's own vocabulary
-    for reading probe output, not a fact about the deployed tree, so answering it from the tree
-    running the notifier is the right source. The failure it admits needs ONE commit to reword a
-    probe health message and its marker together, deployed by a checkout that does not yet carry
-    the reword; the same split was ruled met on the land path, where land_lib gates from a
-    snapshot with its own code from the primary.
+    script itself -- and so the exit code it reads as `skipped`, `PROBE_NOT_APPLICABLE` -- is the
+    CALLING checkout's copy. The failure it admits needs ONE commit to change that exit code,
+    deployed by a checkout that does not yet carry the change; the same split was ruled met on
+    the land path, where land_lib gates from a snapshot with its own code from the primary.
 
     A subprocess, not an import of its `main`: the black-box `--detach` tests stub it by argv,
     and an import would have them post to the host's real webhook and probe production.

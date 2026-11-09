@@ -17,6 +17,7 @@ from _probe_health_fixtures import NOW, pods
 
 from diagnostics.probe_lib import health, health_docker, health_rollout
 from diagnostics.probe_lib import health_kubectl
+from lib.exit_codes import PROBE_NOT_APPLICABLE
 
 
 def _inspect(state, restarts=0):
@@ -109,7 +110,7 @@ def test_health_exited_exits_one():
 def test_health_absent_and_undeclared_is_clean():
     """An undeclared name is a block tag or a typo — the one absence the notifier may skip."""
     text, code = health_docker.format_health([], "nope", declared=False)
-    assert code == 1
+    assert code == PROBE_NOT_APPLICABLE
     assert "not a declared service on any host" in text
 
 

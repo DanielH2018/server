@@ -87,17 +87,9 @@ DEPLOY_LOCK_PLAN_FAILED = 79
 # The subset that means staging (or a landing) never formed an opinion, because deploy.sh
 # refused before it applied anything.
 DEPLOY_SH_NO_VERDICT = frozenset(
-    {
-        DEPLOY_TAG_MISS,
-        DEPLOY_BROAD,
-        DEPLOY_STALE,
-        DEPLOY_FLUX_OWNED,
-        DEPLOY_LOCK_BUSY,
-        DEPLOY_LOCK_UNAVAILABLE,
-        DEPLOY_SNAPSHOT_FAILED,
-        DEPLOY_NO_HOSTS,
-        DEPLOY_LOCK_PLAN_FAILED,
-    }
+    {DEPLOY_TAG_MISS, DEPLOY_BROAD, DEPLOY_STALE, DEPLOY_FLUX_OWNED}
+    | {DEPLOY_LOCK_BUSY, DEPLOY_LOCK_UNAVAILABLE, DEPLOY_SNAPSHOT_FAILED}
+    | {DEPLOY_NO_HOSTS, DEPLOY_LOCK_PLAN_FAILED}
 )
 
 # -- scripts/deploy_tools/await_ci.py ---------------------------------------------------
@@ -149,9 +141,11 @@ NARROW_SETUP_NOTHING = 5
 # nothing because it could not read its source (a curl, an ssh or a kubectl read that failed,
 # or a read that came back empty). A caller retries on 75 and investigates on 1 (#4444). 64 is
 # an argument the probe cannot act on, such as `--since 3x`: no retry can succeed, and nothing
-# was observed, so it names no verdict (#4471).
+# was observed, so it names no verdict (#4471). 3 is `health` reporting that the tag names
+# nothing it can check, so a deploy gate skips the tag rather than grading it (#7895).
 PROBE_OK = OK
 PROBE_FAILED = FAILED
+PROBE_NOT_APPLICABLE = 3
 PROBE_USAGE_ERROR = USAGE_ERROR
 PROBE_UNREADABLE = TEMP_FAIL
 
@@ -351,8 +345,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "flock failed on the lock file ITSELF, so NOTHING was deployed. This is not "
             "contention — no deploy holds the lock.",
             "Check that the git-tree lock file (deploy_locks.TREE_LOCK) exists and is writable "
-            "by this user; "
-            "retrying alone changes nothing.",
+            "by this user; retrying alone changes nothing.",
             verdict="lock-unavailable",
         ),
         _c(
@@ -464,6 +457,12 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "the probe read its source and observed a bad verdict.",
             "The lines above the verdict name what failed.",
             verdict="fail",
+        ),
+        _c(
+            PROBE_NOT_APPLICABLE,
+            "PROBE_NOT_APPLICABLE",
+            "`health`: the tag names nothing to check, so a deploy gate skips it.",
+            verdict="skip",
         ),
         _c(
             PROBE_USAGE_ERROR,
