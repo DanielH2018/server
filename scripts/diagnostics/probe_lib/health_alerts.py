@@ -76,37 +76,40 @@ FLUX_LOOKBACK = "7d"
 
 
 # The query door's Traefik `rate-limit` is 300/min per client, and every gate on a host shares
-# one client address, so concurrent landings drain it together (#7721). The budget is per
-# probe.py process and stays far inside detach_notify.PROBE_TIMEOUT_S, whose expiry grades a
-# tag unhealthy rather than unread.
+# one client address, so concurrent landings drain it together (#7721).
 RATE_LIMITED = 429
 RETRY_DELAYS_S = (2, 4, 8, 16)
-RETRY_BUDGET_S = 30
+# `detach_notify.PROBE_TIMEOUT_S`, restated: probe_lib may not import deploy_tools. Its expiry
+# grades a tag unhealthy rather than unread, so a 429 retry may sleep only while every wait
+# that can still follow one (the rest of a probe poll, the re-read, a second poll) fits after it.
+PROBE_TIMEOUT_S = 300
+RETRY_CUTOFF_S = PROBE_TIMEOUT_S - (PROBE_WAIT_S + REREAD_WAIT_S + PROBE_WAIT_S) - 15
 
 
-class RetryBudget:
-    """The seconds of 429 backoff one probe process may still sleep.
+class RetryWindow:
+    """The span from a probe process's start in which a 429 retry may still sleep.
 
     Attributes:
-        left: the seconds not yet spent.
+        cutoff_s: the seconds after `start` by which a retry's sleep must end.
+        clock: a monotonic clock in seconds.
+        start: the clock reading the span opens at.
     """
 
-    def __init__(self, seconds):
-        self.left = seconds
+    def __init__(self, cutoff_s, clock=time.monotonic, start=None):
+        self.cutoff_s = cutoff_s
+        self.clock = clock
+        self.start = clock() if start is None else start
 
-    def take(self, delay):
-        """Spend `delay` seconds and return True, or return False when too few are left."""
-        if delay > self.left:
-            return False
-        self.left -= delay
-        return True
-
-
-PROCESS_BUDGET = RetryBudget(RETRY_BUDGET_S)
+    def allows(self, delay):
+        """True when a sleep of `delay` seconds from now ends inside the window."""
+        return self.clock() - self.start + delay <= self.cutoff_s
 
 
-def _get_json(url, resolve, get, sleep, budget):
-    """The parsed body of a GET on `url`, re-sent after a 429 while `budget` allows.
+PROCESS_WINDOW = RetryWindow(RETRY_CUTOFF_S)
+
+
+def _get_json(url, resolve, get, sleep, window):
+    """The parsed body of a GET on `url`, re-sent after a 429 while `window` allows.
 
     Raises:
         core.Unreadable: curl failed.
@@ -114,7 +117,7 @@ def _get_json(url, resolve, get, sleep, budget):
     """
     for delay in (*RETRY_DELAYS_S, None):
         status, body = get(url, resolve=resolve)
-        if status != RATE_LIMITED or delay is None or not budget.take(delay):
+        if status != RATE_LIMITED or delay is None or not window.allows(delay):
             break
         sleep(delay)
     if status == 0:
@@ -122,7 +125,7 @@ def _get_json(url, resolve, get, sleep, budget):
     return core.parse_json(url, body)
 
 
-def prom_query(promql, endpoint=None, fetch=None, get=None, sleep=None, budget=None):
+def prom_query(promql, endpoint=None, fetch=None, get=None, sleep=None, window=None):
     """The `result` list of one instant query.
 
     Args:
@@ -133,7 +136,8 @@ def prom_query(promql, endpoint=None, fetch=None, get=None, sleep=None, budget=N
         get: returns `(http_status, body)` for `(url, resolve=)`, status 0 for a failed curl;
             defaults to `core.get_status`.
         sleep: the backoff sleep; defaults to `time.sleep`.
-        budget: the `RetryBudget` the backoff spends; defaults to `PROCESS_BUDGET`.
+        window: the `RetryWindow` a backoff sleep must end inside; defaults to
+            `PROCESS_WINDOW`.
 
     Raises:
         core.Unreadable: curl failed, the edge kept answering 429, or Prometheus did not
@@ -149,7 +153,7 @@ def prom_query(promql, endpoint=None, fetch=None, get=None, sleep=None, budget=N
             pin,
             get or core.get_status,
             sleep or time.sleep,
-            budget or PROCESS_BUDGET,
+            window or PROCESS_WINDOW,
         )
     if not isinstance(data, dict) or data.get("status") != "success":
         raise core.Unreadable(f"Prometheus refused {promql}: {str(data)[:300]}")
