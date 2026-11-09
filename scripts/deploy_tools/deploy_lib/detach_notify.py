@@ -41,6 +41,7 @@ from lib.repo_paths import HOST_VARS, REPO
 
 # `tag_platforms` is the reader of containers_list that says which probe can see a tag's workload.
 from deploy_tools.deploy_lib import tags as deploy_tags
+from diagnostics.probe_lib.health_checkout import STALE_CHECKOUT
 from lib.exit_codes import DEPLOY_NO_HOSTS, PROBE_UNREADABLE
 
 # The inventory directory as a path relative to a checkout root. `check_one` reads the
@@ -112,11 +113,17 @@ class GateResult(NamedTuple):
     all. Prometheus rolling under the gate is the usual cause (#5543), and a re-run a minute
     later answers. An unhealthy tag beside an unreadable one leaves it False, because one
     workload already failed.
+
+    `stale` is True when the probe refused at least one ungraded tag because the tree it ran
+    in holds an older role definition than `origin/master` (`health_checkout.STALE_CHECKOUT`).
+    A re-run from that same tree refuses again, so it is no store that will answer shortly.
+    `unreadable` is True with it.
     """
 
     settled: bool
     lines: list[str]
     unreadable: bool = False
+    stale: bool = False
 
 
 def check_one(
@@ -253,13 +260,19 @@ def gate(
     if not ansible_ok:
         return GateResult(False, ["ansible-playbook exited non-zero -- see the log."])
     lines = []
-    unhealthy = unreadable = False
+    unhealthy = unreadable = stale = False
     for tag in tags:
         state, detail = check_one(tag, tools=tools, cwd=cwd)
         if state == "skipped":
             lines.append(
                 f"{tag}: not a health-checkable workload (skipped) -- {detail}"
             )
+            continue
+        if state == "unreadable" and STALE_CHECKOUT in detail:
+            lines.append(
+                f"{tag}: not graded -- the gate's tree is older than origin/master: {detail}"
+            )
+            unreadable = stale = True
             continue
         if state == "unreadable":
             lines.append(
@@ -271,7 +284,10 @@ def gate(
         if state == "unhealthy":
             unhealthy = True
     return GateResult(
-        not (unhealthy or unreadable), lines, unreadable=unreadable and not unhealthy
+        not (unhealthy or unreadable),
+        lines,
+        unreadable=unreadable and not unhealthy,
+        stale=stale and not unhealthy,
     )
 
 

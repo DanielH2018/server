@@ -88,8 +88,8 @@ def _declared_at_merge(ln: Landing) -> set[str] | None:
     )
     if declared is None:
         say(
-            f"could not read containers_list at {ln.merge_sha[:8]} — "
-            "classifying against this checkout instead"
+            f"could not read the k8s service list at {ln.merge_sha[:8]} (is this checkout "
+            "older than that commit?) — classifying against this checkout instead"
         )
     return declared
 

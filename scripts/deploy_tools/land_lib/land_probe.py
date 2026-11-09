@@ -26,7 +26,8 @@ nothing the updater does not. That ends the wait as `deferred`, exit 4, so a cal
 from a resume point without reading the verdict text. A `deferred` whose log carries
 `outcome.PROMOTE_TIMEOUT_NOTE` stays `gave-up`: no promotion covered a tag Flux applies, and a
 publish refusal does not clear on its own. So does one carrying `outcome.UNREADABLE_GATE_NOTE`:
-the health gate could not read its store, and nothing gates health again (#5543).
+the health gate could not read its store, and nothing gates health again (#5543). So does one
+carrying `outcome.STALE_GATE_NOTE`: the gate's tree was older than `origin/master` (#7816).
 """
 
 import json
@@ -38,6 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import detach
 from deploy_tools.land_lib.outcome import (
     PROMOTE_TIMEOUT_NOTE,
+    STALE_GATE_NOTE,
     UNREADABLE_GATE_NOTE,
     Verdict,
 )
@@ -61,6 +63,7 @@ _VERDICT_TOKEN = re.compile(r"^VERDICT: (\S+)")
 # The note's first line is enough to find it, and survives a rewrap of the rest.
 _PROMOTE_TIMEOUT = PROMOTE_TIMEOUT_NOTE.splitlines()[0].strip()
 _UNREADABLE_GATE = UNREADABLE_GATE_NOTE.splitlines()[0].strip()
+_STALE_GATE = STALE_GATE_NOTE.splitlines()[0].strip()
 
 # A landing's phase lines: `== 4/6  deploying ...`. The newest one is the progress detail.
 _PHASE = re.compile(r"^== (.+)$", re.MULTILINE)
@@ -141,7 +144,9 @@ def _is_plain_deferral(log: Path, verdict: str) -> bool:
     if not token or token.group(1) != Verdict.DEFERRED:
         return False
     text = log.read_text(errors="replace")
-    return not any(note in text for note in (_PROMOTE_TIMEOUT, _UNREADABLE_GATE))
+    return not any(
+        note in text for note in (_PROMOTE_TIMEOUT, _UNREADABLE_GATE, _STALE_GATE)
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

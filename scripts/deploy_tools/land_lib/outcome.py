@@ -178,6 +178,17 @@ UNREADABLE_GATE_NOTE = (
 )
 
 
+# What a `deferred` from step 6 means when the probe refused the gate's tree as older than
+# `origin/master` (#7816). The gate advances its tree to `origin/master`, so this is a master
+# that moved while the gate ran, and a re-run reads the newer tip. `land_probe` reports it as
+# `gave-up`, a resume point, as it does for UNREADABLE_GATE_NOTE.
+STALE_GATE_NOTE = (
+    "  The health gate's tree held an older role definition than origin/master, so those "
+    "workloads were not graded. This is NOT the ordinary deferral: nothing gates health again.\n"
+    "  Re-run land.sh; it gates from the origin/master it reads then. No store failed to answer."
+)
+
+
 def disarmed(where: str, consequence: str) -> str:
     """The message for await_ci's CI_DISARMED, shared by ci.py's step 3 and merge.py's direct merge.
 
