@@ -1679,8 +1679,9 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
       `.gitignore`, and `ansible/requirements.yml`;
     - `ansible/roles/setup/` and `ansible/roles/containers/`;
     - R4's runbook roles' `tasks/`, after H7.16b replaces them;
-    - the Ansible-only inventory keys `ansible_connection` and `ansible_user`, and
-      `ansible_host` after H7.18d;
+    - in H7.20a, the `ansible_connection=` keys in `hosts.ini` and their only reader,
+      `scripts/lib/ansible_inventory.py:Host.connection`;
+    - the Ansible-only inventory key `ansible_user`, and `ansible_host` after H7.18d;
     - `ansible-core` from `pyproject.toml` and `uv.lock`;
     - the `ansible-lint` prek hook and `scripts/tests/test_ansible_lint_hook.py`;
     - in H7.20d, the Pi's empty `containers_list` key and `_example.yml`'s copy of it.
@@ -1757,7 +1758,10 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
                                                                   H7.2e)
   ansible/filter_plugins/claude_agents.py                      (deleted, or its ansible
                                                                   import removed, H7.17)
-  ansible/inventory/hosts.ini                                  (host names only)
+  ansible/inventory/hosts.ini                                  (host names only;
+                                                                  - ansible_connection,
+                                                                  H7.20a)
+  scripts/lib/ansible_inventory.py                             (- Host.connection, H7.20a)
   ansible/inventory/host_vars/{daniel-pi,_example}.yml         (- containers_list, H7.20d;
                                                                   compose_services stays)
   ansible/roles/k8s/{artifacts,monitor-bridge,observability}/templates/
@@ -3138,7 +3142,17 @@ the `manual_plane` clearing, and *Rollback*'s
       `homelab-render package` for every package, at the PR's base and head. A render
       diff cannot see an import break, so the second is a full `uv run pytest
       --collect-only` at the head with no import error, and the deployer-import census
-      green with its allowlist empty;
+      green with its allowlist empty.
+      The same PR deletes `Host.connection` from `scripts/lib/ansible_inventory.py`, with
+      `test_connection_defaults_to_ssh_as_ansible_does` in
+      `scripts/lib/tests/test_ansible_inventory.py`. H7.19b deletes the property's caller in
+      `land_reach.py`, and this PR deletes the other one, in the deployer role's
+      `tests/test_gitops_markers.py`. The PR also deletes the `ansible_connection=` keys
+      from `ansible/inventory/hosts.ini`, with the header comment that explains them, the
+      sentence in the root `README.md` that cites them, and the `has_repo_checkout`
+      comment in `group_vars/all.yml` that names them. The playbooks and
+      `pre_tasks/load_secrets.yml`, which read the keys, go in the same PR. After it,
+      `git grep -n ansible_connection -- scripts` prints only fixture inventories;
     - **H7.20b** ansible-core, the collections, `ansible.cfg`, `.ansible-lint`, the prek
       hook and the setup entries left in `pyproject.toml`. The deletion census's allowlist
       is empty by then;
@@ -3179,6 +3193,7 @@ git ls-files ansible/roles/setup ansible/roles/containers ansible/pre_tasks \
   ansible/requirements.yml
 git ls-files 'ansible/roles/*/*/tasks/*'
 git grep -n '^containers_list:' -- ansible/inventory
+git grep -n ansible_connection -- ansible/inventory scripts/lib/ansible_inventory.py
 uv tree | grep -c ansible-core
 grep -c ansible-lint prek.toml
 
