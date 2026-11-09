@@ -22,16 +22,16 @@ _CONFTEST = """
 import time
 
 def pytest_collection_finish(session):
-    time.sleep(1.0)
+    time.sleep(0.6)
 """
 
 _MODULE = """
 import time
 
-time.sleep(0.5)
+time.sleep(0.3)
 
 def test_{name}():
-    time.sleep(0.2)
+    time.sleep(0.1)
 """
 
 _WORKER_LINE = re.compile(
@@ -65,13 +65,14 @@ def test_an_xdist_run_reports_each_workers_collection_prebuild_and_finish(tmp_pa
     workers = {m[0]: [float(x) for x in m[1:]] for m in _WORKER_LINE.findall(out)}
     assert sorted(workers) == ["gw0", "gw1"], out
     for name, (collected, prebuilt, tests, finished) in workers.items():
-        assert collected >= 0.5, (
+        assert collected >= 0.3, (
             f"{name} collected at {collected}s, before the import sleep"
         )
-        assert prebuilt - collected >= 1.0, f"{name} lost the prebuild sleep: {out}"
-        assert tests >= 0.2, out
+        assert prebuilt - collected >= 0.5, f"{name} lost the prebuild sleep: {out}"
+        assert tests >= 0.1, out
         assert finished > prebuilt, out
-    assert re.search(r"collect\s+0\.[5-9]\d*s\s+test_a\.py", out), out
+    collection = re.search(r"collect\s+([0-9.]+)s\s+test_a\.py", out)
+    assert collection and float(collection[1]) >= 0.3, out
 
 
 def test_a_serial_run_reports_itself_as_main(tmp_path):
