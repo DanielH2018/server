@@ -41,7 +41,7 @@ ALLOW = {
     "scripts/deploy_tools/tests/test_deploy_flags.py": "H7.53, with flags.py, its subject",
 }
 IN_A_STRING = {
-    "ansible/tests/repo/test_leakguard.py": "ansible-core's temp dir, retired by #7755",
+    "ansible/tests/repo/test_leakguard.py": "H7.56 deletes leakguard's temp-dir sweep",
     "scripts/renderer/tests/test_renderer_ansible_free.py": "the shim of its red half",
     "ansible/tests/repo/test_ansible_core_census.py": "this census's own red fixtures",
 }
