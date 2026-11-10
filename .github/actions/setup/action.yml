@@ -73,10 +73,11 @@ runs:
 
     # Whichever job finishes first writes the cache entry, so every job syncs the whole
     # profile here, even one that never runs `uv`. UV_NO_DEV and UV_NO_GROUP still narrow it.
+    # `--compile-bytecode` prints the cold compile line shard_weight_gate.py:leg_speed reads.
     - name: Sync the uv environment
       if: inputs.uv == 'true'
       shell: bash
-      run: uv sync --frozen
+      run: uv sync --frozen --compile-bytecode
 
     # Several ansible/tests read the Galaxy collections, and the ansible-lint hook's own entry
     # runs `ansible-galaxy collection install` before linting — warm that is a 0.4s no-op, cold

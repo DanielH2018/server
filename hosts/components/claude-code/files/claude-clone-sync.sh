@@ -58,7 +58,7 @@ echo "advanced ${before:0:12}..${after:0:12}"
 # The hook shim runs every guard with `uv run --no-sync`, so a pull that moves the lock and
 # leaves the venv behind leaves guards that cannot import, and each falls back to `ask` (#3513).
 if ! git diff --quiet "$before" "$after" -- uv.lock pyproject.toml; then
-  "$HOME/.local/bin/uv" sync --frozen
+  "$HOME/.local/bin/uv" sync --frozen --compile-bytecode
 fi
 # The login profile points ANSIBLE_COLLECTIONS_PATH at the clone's collections (#4108).
 if ! git diff --quiet "$before" "$after" -- ansible/requirements.yml; then

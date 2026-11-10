@@ -12,10 +12,11 @@ dependencies = [
 [tool.uv]
 package = false                      # virtual project: manage deps/lock, do not build the repo
 default-groups = ["dev", "lint"]     # `uv run` installs both; UV_NO_DEV drops only `dev`
-# DECIDED: compile at sync, as the syncing user, so a root importer finds fresh bytecode and
-# writes no root-owned __pycache__ a session cannot delete. Costs ~0.4s per cold sync on 16
-# cores and ~1.2s on 2 (measured in #6984).
-compile-bytecode = true
+# DECIDED: no `compile-bytecode` here. uv applies it to the sync inside every `uv run`, which
+# then recompiles the venv and prints `Bytecode compiled N files` on each call. The explicit
+# syncs pass `--compile-bytecode` instead (checkout_sync.py, claude-clone-sync.sh, CI's setup
+# action), so a root importer of daniel-box's checkout or the agent clone still finds bytecode
+# the syncing user wrote (#6984). A session worktree's venv goes uncompiled.
 
 # PyYAML ships no wheel for some interpreters, and a source build without libyaml's headers
 # silently falls back to the pure-Python parser, which rejects input the C loader accepts.

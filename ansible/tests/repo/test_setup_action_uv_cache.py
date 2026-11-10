@@ -22,7 +22,7 @@ from lib import yaml_fast
 
 ACTION = REPO / ".github" / "actions" / "setup" / "action.yml"
 SETUP_UV = "astral-sh/setup-uv"
-SYNC = re.compile(r"^uv sync --frozen$")
+SYNC = re.compile(r"^uv sync --frozen( --compile-bytecode)?$")
 
 
 def _steps(action: dict) -> list[dict]:

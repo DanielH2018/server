@@ -16,7 +16,14 @@ checkout-sync replaces its fast-forward* (H7.51). The run:
      below it, newest first, up to the bound, and stops at the first green one. A walk past
      `WALK_BUDGET_S` stops grading, so a slow GitHub cannot run into the unit's timeout;
   5. merges the chosen commit with `git merge --ff-only`. With no green commit it merges nothing,
-     and the next run tries again.
+     and the next run tries again;
+  6. syncs the checkout's venv with `uv sync --frozen --compile-bytecode` on every run that
+     refused nothing, up to date or not. `pyproject.toml` sets no `compile-bytecode` (its DECIDED
+     marker says why), so this sync is what writes the venv's bytecode as `sys_user` before a
+     root importer can, including for a package an interactive `uv run` installed since the
+     last run. It is exact, so it also drops a package `uv.lock` dropped. A sync that fails, or
+     would start past `VENV_SYNC_BUDGET_S`, is logged and leaves the verdict alone; the next
+     run tries again.
 
 It writes `checkout_sync.prom` in the node-exporter textfile directory: the plan's
 `homelab_checkout_*` series and M3's four `homelab_check_*` series for check `checkout-sync`.
@@ -57,6 +64,9 @@ DEADLINE_S = 7200
 REASONS = ("dirty", "branch", "ci", "token", "ancestry")
 # Seconds of grading before the walk stops, under the unit's TimeoutStartSec=150.
 WALK_BUDGET_S = 100
+# Seconds into the run after which no venv sync starts, and the most one may run until.
+VENV_SYNC_BUDGET_S = 110
+VENV_SYNC_END_S = 140
 
 
 class Refused(Exception):
@@ -95,6 +105,7 @@ class CheckoutSync:
     run: Callable[..., Any] = subprocess.run
     opener: Callable[..., Any] | None = None
     now: Callable[[], float] = time.time
+    uv: str = "uv"
     requests: int = 0
     started: float = 0.0
 
@@ -127,6 +138,7 @@ class CheckoutSync:
                 )
             self.git("fetch", "--quiet", "origin", "master")
             self.sync(contexts, bound, token)
+            self.sync_venv()
         except Refused as exc:
             log(f"refused ({exc.reason}): {exc}")
             self.write_prom(exc.reason, dirty)
@@ -194,6 +206,32 @@ class CheckoutSync:
         log(
             f"no green commit in the {len(candidates)} graded below {tip[:12]}; staying at {head[:12]}"
         )
+
+    def sync_venv(self) -> None:
+        """Sync the checkout's venv to `uv.lock` exactly; log a failure and never raise."""
+        elapsed = self.now() - self.started
+        if elapsed > VENV_SYNC_BUDGET_S:
+            log(
+                f"venv: sync not started {int(elapsed)}s into the run; the next run syncs it"
+            )
+            return
+        try:
+            proc = self.run(
+                [self.uv, "sync", "--frozen", "--compile-bytecode", "--quiet"],
+                cwd=self.checkout,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=VENV_SYNC_END_S - elapsed,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            log(f"venv: uv sync did not finish: {exc}", err=True)
+            return
+        if proc.returncode != 0:
+            log(
+                f"venv: uv sync exited {proc.returncode}: {proc.stderr.strip()[-300:]}",
+                err=True,
+            )
 
     def verdict(self, sha: str, contexts: frozenset[str], token: str) -> str:
         repo = self.env.get("GITHUB_REPO", "")
