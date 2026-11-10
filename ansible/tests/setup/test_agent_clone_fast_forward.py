@@ -145,7 +145,7 @@ def test_a_moved_lock_resyncs_the_venv_and_collections(repos: Repos) -> None:
     repos.push(**{"uv.lock": "b\n", "ansible/requirements.yml": "collections: []\n"})
     assert repos.sync().returncode == 0
     assert repos.tool_calls() == [
-        "uv sync --frozen",
+        "uv sync --frozen --compile-bytecode",
         "ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections",
     ]
 
