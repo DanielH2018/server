@@ -19,6 +19,7 @@ from pathlib import PurePosixPath
 
 import pytest
 from _helpers import REPO
+from _printed_json_row import PRINTED_JSON_IS_COMPACT
 from _row_table import (
     Census,
     Subject,
@@ -366,6 +367,7 @@ ROWS = (
         must_find=frozenset({"ansible/tests/repo/test_role_claude_md.py"}),
         allow={SELF: "the red fixtures above hold the offending spelling as text"},
     ),
+    PRINTED_JSON_IS_COMPACT,
     Census(
         name="no-two-import-roots-share-a-module-basename",
         reason=(
