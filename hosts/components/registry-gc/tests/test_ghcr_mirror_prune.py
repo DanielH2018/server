@@ -185,3 +185,27 @@ def test_a_tag_of_another_repository_keeps_nothing_here(tmp_path):
     out = _prune(tmp_path, [UNRELATED, "danielh2018/ical-proxy:abc123"])
 
     assert old not in store.revisions(), out
+
+
+def test_a_missing_layers_directory_is_created_even_with_an_empty_keep_set(tmp_path):
+    """garbage-collect aborts on the first repository whose `_layers` is missing (#7926)."""
+    store = _store(tmp_path)
+    repo = "linuxserver/bazarr"
+    store.cache(1, repo=repo)
+
+    out = _prune(tmp_path, [])
+
+    assert (store.v2 / "repositories" / repo / "_layers").is_dir(), out
+    assert f"created {repo}/_layers so garbage-collect can mark it" in out, out
+
+
+def test_a_repository_with_its_layers_directory_is_left_alone(tmp_path):
+    store = _store(tmp_path)
+    store.cache(1)
+    layers = store.v2 / "repositories" / REPO / "_layers"
+    (layers / "sha256").mkdir(parents=True)
+
+    out = _prune(tmp_path, [UNRELATED])
+
+    assert (layers / "sha256").is_dir(), out
+    assert "created" not in out, out
