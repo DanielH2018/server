@@ -27,7 +27,8 @@
 #   - every child manifest of a kept index, which a multi-arch pull caches beside the index;
 #   - any revision whose link or manifest blob it cannot read.
 # It removes every other revision link and every tag whose current link names one, and prints
-# one `pruned <repo>@<digest> tags=<tags>` line per removed revision.
+# one `pruned <repo>@<digest> tags=<tags>` line per removed revision. Before any of that, it
+# creates the empty `_layers` directory of every repository that lacks one.
 #
 # An empty or missing KEEP_FILE prunes nothing. Rank alone would then decide, and rank alone
 # deletes the images that live pods run.
@@ -48,6 +49,15 @@ KEEP_FILE=${KEEP_FILE:-/keep/digests}
 KEEP_NEWEST=${KEEP_NEWEST:-3}
 V2="${MIRROR_ROOT}/docker/registry/v2"
 DIGEST_RE='sha256:[0-9a-f]\{64\}'
+
+# garbage-collect aborts on a repo with no `_layers` (#7926); it runs even if nothing is pruned.
+if [ -d "${V2}/repositories" ]; then
+  find "${V2}/repositories" -type d -name _manifests -prune | sort | while read -r manifests; do
+    layers="${manifests%_manifests}_layers"
+    [ -d "$layers" ] && continue
+    mkdir -p "$layers" && echo "created ${layers#"${V2}/repositories/"} so garbage-collect can mark it"
+  done
+fi
 
 if [ ! -r "$KEEP_FILE" ] || ! grep -q "^${DIGEST_RE}\$" "$KEEP_FILE"; then
   echo "keep set at ${KEEP_FILE} is empty or unreadable; pruned nothing"
