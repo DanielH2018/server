@@ -42,6 +42,9 @@ ACTIVE_LINES = {
     "writes a sysctl": 'KERNEL=="sda", SYSCTL{kernel.modprobe}="/tmp/implant"',
     "runs a program after a tab": 'KERNEL=="sda",\tRUN+="/tmp/implant"',
     "runs a program on a continued line": 'KERNEL=="sda", \\\n  RUN+="/tmp/implant"',
+    "runs a program after a comment ending in a backslash": '# note \\\nKERNEL=="sda", RUN+="/tmp/implant"',
+    "runs a program after an escaped quote in a value": 'ENV{A}="x\\"", RUN+="/tmp/implant", ENV{B}="\\"y"',
+    "runs a program after an escaped quote in an e-string": 'ENV{A}=e"\\"", RUN+="/tmp/implant", ENV{B}="\\""',
 }
 # (the report's entries, the reason it pages).
 SNAPD_RULE_UNEXPLAINED = {

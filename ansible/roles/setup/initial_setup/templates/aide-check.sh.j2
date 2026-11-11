@@ -282,6 +282,7 @@ snapd_rule_verdict() {
       return key == "ENV" && arg !~ /^SYSTEMD_/
     }
     function judge(s,    q, t, key, arg, op) {
+      if (s ~ /\\/) return 0
       gsub(ENVIRON["SNAPD_UDEV_OWN"], "", s)
       q = s
       if (gsub(/"/, "", q) % 2) return 0
@@ -295,10 +296,12 @@ snapd_rule_verdict() {
       }
       return 1
     }
+    # udev skips a comment line before it handles a continuation, so a comment never continues.
+    /^[ \t]*#/ { next }
     # udev joins a line that ends in a backslash to the next.
     /\\$/ { line = line substr($0, 1, length($0) - 1); next }
     { line = line $0 }
-    line !~ /^[ \t]*(#|$)/ && !judge(line) { bad = 1 }
+    line !~ /^[ \t]*$/ && !judge(line) { bad = 1 }
     { line = "" }
     END { print (bad ? "active" : "inert") }' "$1"
 }
