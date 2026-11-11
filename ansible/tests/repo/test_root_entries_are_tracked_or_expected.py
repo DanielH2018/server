@@ -11,7 +11,7 @@ Run: uv run pytest ansible/tests/repo/test_root_entries_are_tracked_or_expected.
 
 from _helpers import REPO
 from lib.proc_testing import run
-from lib.worktree_label import write_label
+from lib.worktree_label import LABEL_FILE, write_label
 
 # Root entries the ignore rule is expected to hide. Each is a tool's own working state.
 EXPECTED_IGNORED = frozenset(
@@ -32,6 +32,7 @@ EXPECTED_IGNORED = frozenset(
         ".mkdocs-strict-check",
         ".mypy_cache",
         ".superpowers",  # SDD task specification directories
+        LABEL_FILE,  # scripts/dev/label_worktree.py names a generated worktree here
     }
 )
 
