@@ -114,7 +114,7 @@ The `claude` agent reuses that shape: its own identity script in
   and runs `/usr/local/sbin/homelab-rootq`, so the allowlist and the redaction are the sudo
   path's own. The agent runs `rootq-socket`, which takes `rootq`'s verbs. The group is the
   whole grant, so unlike the holder scan there is no per-user map. A session sees the group
-  after `claude-rc.service` restarts. `hosts/components/claude-code/CLAUDE.md` (*The
+  after `claude-rc.service` restarts. `docs/claude-code-root-helpers.md` (*The
   agent's socket*) has the protocol, and the approval list names the helper, the client and
   both units.
 - **The agent has its own GitHub identity and signing key.** A PR author cannot approve their
