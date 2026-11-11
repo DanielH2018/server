@@ -3,8 +3,7 @@
 
 Reads the running janitorr pod and its log, then records a verdict: one log line, and the
 verdict ConfigMap's annotations when `JANITORR_VERDICT_CONFIGMAP` is set. It never exits nonzero
-on a bad verdict: a DOWN is data to report, not a crash. M6 batch B6b's Cutover-2 removed its
-push to the Kuma "Janitorr Errors" monitor.
+on a bad verdict: a DOWN is data to report, not a crash.
 
 Runs as the janitorr-health CronJob (templates/health-cronjob.yaml.j2), in the repo's pinned
 python image, with kubectl copied in by an init container and the pod's own ServiceAccount
