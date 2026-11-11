@@ -149,3 +149,33 @@ def test_a_census_module_read_ahead_is_parsed_once(parses):
     assert row.offence(Subject("m.py", "x = 1\n")) == ["one x"]
     assert parses == ["x = 1\n", "z = 1\n"]
     assert sharing.held == {}, "a module outside the census was held after its parse"
+
+
+def test_prebuild_finds_every_census_modules_hits_before_a_row_asks():
+    sharing = Sharing()
+    calls = []
+    (row,) = sharing.share(
+        (
+            _toy(
+                files=lambda: ["pyproject.toml"],
+                offence=lambda s: calls.append(s.rel) or ["hit"],
+            ),
+        )
+    )
+    sharing.prebuild()
+    assert calls == ["pyproject.toml"]
+    assert row.offence(Subject("pyproject.toml")) == ["hit"]
+    assert calls == ["pyproject.toml"], "the row's own call ran its offence again"
+    assert sharing.held == {}
+
+
+def test_prebuild_keeps_a_raising_offence_for_its_own_row_to_report():
+    sharing = Sharing()
+
+    def broken(subject: Subject) -> list[str]:
+        raise ValueError(subject.rel)
+
+    (row,) = sharing.share((_toy(files=lambda: ["pyproject.toml"], offence=broken),))
+    sharing.prebuild()
+    with pytest.raises(ValueError, match=r"pyproject\.toml"):
+        row.offence(Subject("pyproject.toml"))
