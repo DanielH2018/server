@@ -99,6 +99,7 @@ _PROSE_HOLDERS = {
         (
             "ansible/roles/k8s/artifacts/files/artifact_meta.py",
             "ansible/roles/k8s/authelia/templates/config-secret.yaml.j2",
+            "ansible/roles/k8s/autofix-bridge/files/autofix.py",
             "ansible/roles/k8s/home-assistant/files/automations/system.yaml",
             "ansible/roles/k8s/home-assistant/files/input_datetime.yaml",
             "ansible/roles/k8s/loki-homelab/files/rules/homelab-logs.yaml",

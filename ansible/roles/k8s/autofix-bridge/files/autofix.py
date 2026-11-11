@@ -47,8 +47,9 @@ from bridge.common import HTTP_TIMEOUT, _env, clamp_discord, sanitize
 
 INTERVAL = int(_env("INTERVAL", "300"))
 HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
-# The cycle's verdict leaves the pod as gauges (M6 batch B7). The deadline is three cycles: one
-# missed cycle is a slow poll and two is a hung one, so the third is the first that is not noise.
+# The cycle's verdict leaves the pod as gauges (M6 batch B7). The `check` label is the name the
+# Kuma tile's token carried, and the deadline is three cycles: one missed cycle is a slow poll
+# and two is a hung one, so the third is the first that is not noise.
 # Unset or 0 serves nothing, which keeps a hand-run and the tests off the port.
 CHECK_EXPORTER_PORT = int(_env("CHECK_EXPORTER_PORT", "0"))
 CHECK = "arr-autoblock"
