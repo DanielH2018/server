@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import probe
 from diagnostics.probe_lib import core, pi_plane
+from lib.kubectl import WrongCluster
 
 
 PROMETHEUS_TEMPLATE_TEXT = pi_plane.PROMETHEUS_TEMPLATE_PATH.read_text()
@@ -206,6 +207,60 @@ def test_run_targets_prints_the_count(capsys):
     )
     assert code == 0
     assert capsys.readouterr().out == "1/1 targets up\n"
+
+
+def _run_targets_one_down(scaled):
+    """Run plain `targets` on one down `terraria-stats` target; `scaled` is the lookup's answer."""
+    target = _target("terraria-stats", health="down", last_error="refused")
+    target["labels"]["job"] = "terraria-stats"
+    payload = {"data": {"activeTargets": [_target("node"), target]}}
+
+    class Ns:
+        pi = False
+
+    return pi_plane.run_targets(
+        Ns(),
+        fetch_json=lambda url, resolve=None: (payload, None),
+        scaled_lookup=lambda cluster: scaled,
+    )
+
+
+def test_run_targets_passes_a_down_target_whose_deployment_is_scaled_to_zero(capsys):
+    """An idle on-demand game server's exporter is down by design, not a failure (#7912)."""
+    assert _run_targets_one_down({"terraria-stats"}) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "  - terraria-stats [daniel-pi] scaled to 0",
+        "1/2 targets up, 1 scaled to 0",
+    ]
+
+
+def test_run_targets_fails_a_down_target_whose_deployment_runs(capsys):
+    assert _run_targets_one_down(set()) == 1
+    assert capsys.readouterr().out.splitlines() == [
+        "  ✗ terraria-stats [daniel-pi] refused",
+        "1/2 targets up",
+    ]
+
+
+def _deployment(name, replicas):
+    return {"metadata": {"name": name}, "spec": {"replicas": replicas}}
+
+
+def test_scaled_to_zero_deployments_names_only_the_zero_replica_ones():
+    items = [_deployment("terraria-stats", 0), _deployment("grafana", 1)]
+    names = pi_plane.scaled_to_zero_deployments(
+        "prod", read=lambda *args: {"items": items}
+    )
+    assert names == {"terraria-stats"}
+
+
+def test_scaled_to_zero_deployments_is_empty_when_the_read_fails():
+    """A failed read exempts nothing, so the down target stays red, never a traceback."""
+
+    def refuse(*args):
+        raise WrongCluster("serves staging")
+
+    assert pi_plane.scaled_to_zero_deployments("prod", read=refuse) == set()
 
 
 def test_plain_targets_names_a_verdict_and_json_names_none():
