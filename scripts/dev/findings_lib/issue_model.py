@@ -174,18 +174,33 @@ _CITED_PATH_RE = re.compile(
 # The trailer `trailer()` appends, from its rule on. It names `scripts/dev/findings.py` on
 # every issue, so without cutting it every two batches would share that file.
 _TRAILER_RE = re.compile(r"^---[ \t]*\nFingerprint: `[0-9a-f]+`\n.*\Z", re.M | re.S)
+_CODE_SPAN_RE = re.compile(r"`[^`\n]*`")
+
+
+def _drop_quoted_output(span: re.Match) -> str:
+    """Blank an inline code span that lists two or more paths with commas, else keep it.
+
+    Such a span quotes program output, such as a session banner line or a `next --json` list,
+    and names files the issue does not touch. A real citation puts one path in its own span.
+    """
+    text = span.group(0)
+    if "," in text and len(_CITED_PATH_RE.findall(text)) >= 2:
+        return ""
+    return text
 
 
 def cited_paths(body: str) -> list[str]:
     """Every repo-relative file path an issue body cites, sorted and deduplicated.
 
-    The trailer is cut first: it is `findings.py`'s own text, not the finding's.
+    The trailer is cut first: it is `findings.py`'s own text, not the finding's. So is an
+    inline code span that lists several paths with commas, which quotes program output.
 
     This is the input to the fan-out's file-level collision check: two issues that cite one
     script are one batch, whatever their `domain` label says. The `--file` an issue was filed
     with lands only in the fingerprint, so the body's own citations are the record.
     """
     text = _TRAILER_RE.sub("", (body or "").replace("\r\n", "\n"))
+    text = _CODE_SPAN_RE.sub(_drop_quoted_output, text)
     return sorted({m.group(1) for m in _CITED_PATH_RE.finditer(text)})
 
 

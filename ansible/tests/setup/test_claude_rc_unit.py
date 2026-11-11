@@ -103,6 +103,27 @@ def test_path_includes_usr_local_bin(unit: str) -> None:
     )
 
 
+def test_operator_path_carries_fnms_default_node(unit: str) -> None:
+    """A session's shell never runs fnm, so without the alias it has no `node` (#7972)."""
+    sys_user = role_context(ROLE_DIR, {})["sys_user"]
+    path = [v for v in directive(unit, "Environment") if v.startswith("PATH=")][-1]
+    assert f"/home/{sys_user}/.local/share/fnm/aliases/default/bin" in path.split(
+        "=", 1
+    )[1].split(":"), f"PATH must name the operator's fnm default alias; got {path}"
+
+
+def test_agent_path_carries_no_fnm(unit: str) -> None:
+    """The agent's unit hides /home and installs its own Node, so an fnm entry is dead."""
+    ctx = role_context(ROLE_DIR, {"claude_code_user": "claude"})
+    moved = render(
+        UNIT,
+        claude_code_user=ctx["claude_code_agent_user"],
+        claude_code_user_uid=AGENT_UID,
+    )
+    path = [v for v in directive(moved, "Environment") if v.startswith("PATH=")][-1]
+    assert "fnm" not in path, f"the agent's PATH must not name fnm; got {path}"
+
+
 def test_home_is_set_to_the_real_user(unit: str) -> None:
     """Claude Code is a per-user install and reads its OAuth token from ~/.claude."""
     homes = [v for v in directive(unit, "Environment") if v.startswith("HOME=")]

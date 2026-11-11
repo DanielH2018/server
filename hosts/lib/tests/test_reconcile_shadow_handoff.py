@@ -9,6 +9,7 @@ Run: uv run pytest hosts/lib/tests/test_reconcile_shadow_handoff.py
 """
 
 import json
+import os
 
 import pytest
 from _reconcile_host import Node
@@ -132,6 +133,54 @@ def test_the_packages_enable_link_survives_the_handoff_of_the_ansible_era_link(n
     assert node.actions() == [["restart", timer]]
     verbs = {call["argv"][1] for call in node.calls("systemctl")}
     assert not {"disable", "stop", "mask"} & verbs
+
+
+def test_a_handed_off_unit_takes_its_etc_enable_links_and_keeps_every_other_link(node):
+    # #7930: retiring the Ansible-era homelab-rootq.socket left its sockets.target.wants link.
+    socket = "homelab-rootq.socket"
+    node.unit(
+        socket, "[Socket]\nNew=1\n", active="active", enabled="enabled", linked=True
+    )
+    assert node.run().returncode == 0
+    shadow(node, f"{ETC}/{socket}", "[Socket]\nOld=1\n")
+    links = {
+        "sockets.target.wants": f"/{ETC}/{socket}",
+        "multi-user.target.requires": f"/{ETC}/{socket}",
+        "timers.target.wants": f"/usr/lib/systemd/system/{socket}",
+        "default.target.wants": f"/{ETC}/other/{socket}",
+    }
+    for directory, target in links.items():
+        (node.root / ETC / directory).mkdir(parents=True)
+        os.symlink(target, node.root / ETC / directory / socket)
+    node.manifest["legacy"].append({"unit": socket})
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    left = {d for d in links if os.path.lexists(node.root / ETC / d / socket)}
+    assert left == {"timers.target.wants", "default.target.wants"}
+    assert len(reloads(node)) == 1
+    assert node.applied()["enable_links"] == [socket]
+    verbs = {call["argv"][1] for call in node.calls("systemctl")}
+    assert not {"disable", "stop", "mask"} & verbs
+
+
+def test_a_handed_off_template_takes_the_enable_links_of_its_instances(node):
+    template = "homelab-rootq@.service"
+    node.unit(template, "[Service]\nNew=1\n")
+    assert node.run().returncode == 0
+    shadow(node, f"{ETC}/{template}", "[Service]\nOld=1\n")
+    wants = node.root / ETC / "multi-user.target.wants"
+    wants.mkdir(parents=True)
+    os.symlink(f"/{ETC}/{template}", wants / "homelab-rootq@a.service")
+    os.symlink(f"/{ETC}/other@.service", wants / "other@a.service")
+    node.manifest["legacy"].append({"unit": template})
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert not os.path.lexists(wants / "homelab-rootq@a.service")
+    assert os.path.lexists(wants / "other@a.service")
 
 
 @pytest.mark.parametrize(
