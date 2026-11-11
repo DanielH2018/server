@@ -1812,11 +1812,15 @@ jobs:
   # 207-212 s (run 42697086899), each build still 244-271 s beside the other two. So each release
   # runs three shards, one offline build in each (#7879). Keep the shard count equal to the
   # number of offline builds `bootstrap_plan.plan` lists; `test_bootstrap_case.py` holds it.
+  # The `name:` leaves the shard out, so a release's three shards share the check-run name
+  # `hosts/lib/ci_verdict.py` lists. An installed host package holds that list, and a renamed
+  # leg would read as pending to every copy installed before the rename.
   #
   # The steps and their `if:`s are the legs', and the job gates like them. The id starts with
   # `host_packages`, so the prefix filter in docs/target-architecture/host/h3-pi-pilot.md selects
   # these legs too. The budget matches the legs', because a Dockerfile PR builds the image here too.
   host_packages_bootstrap:
+    name: host_packages_bootstrap (${{ matrix.release }}, ${{ matrix.python }})
     needs: [prove, host_packages_build]
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' }}
     runs-on: ubuntu-26.04
