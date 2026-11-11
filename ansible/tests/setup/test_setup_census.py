@@ -24,6 +24,7 @@ from deploy_tools.setup_lib.setup_census import (
     ALLOWLIST,
     HostSide,
     items_left,
+    main,
     package_side,
     resolved,
     strict_exit,
@@ -68,6 +69,16 @@ def test_the_real_tree_leaves_no_item_on_any_host():
     assert {
         host: [i.line() for i in items] for host, items in left.items() if items
     } == {}
+
+
+def test_the_plain_run_fails_while_an_item_is_left_and_passes_on_none(capsys):
+    """Strict is the only mode, so a run without a flag exits 1 on a leftover task."""
+    left = Item(host="daniel-box", role="demo", kind="cron", name="demo")
+    assert main([], census=lambda hosts: {"daniel-box": [left]}) == 1
+    assert (
+        main(["--host", "daniel-box"], census=lambda hosts: {h: [] for h in hosts}) == 0
+    )
+    assert "daniel-box: 1 item(s) left" in capsys.readouterr().out
 
 
 # The shapes the last setup role held before it emptied: a guarded netplan template and a sysctl

@@ -2349,6 +2349,19 @@ the `manual_plane` clearing, and *Rollback*'s
     [#7888](https://github.com/DanielH2018/server/issues/7888): `k3s/tasks/` still holds
     `server.yml` and `coredns.yml` (H7.44's code half), `storage_smoke.yml` (H7.45) and the
     guarded `static-address.yml` (H7.34, H7.35), and the census lists each of them.
+    #7888 emptied them, and the census read zero on both cluster nodes.
+    **The deleting half split again on 2026-11-11,** because it touched more than 200
+    files. The first of its three PRs moves every survivor that calls a deployer
+    function off the deployer's code: `await_ci.py` reads `hosts/lib`'s `ci_verdict` and
+    `read_check_pages`, and `promotion.py` and `cluster_pins.py` read `is_doc` and
+    `is_test_only_path` from `scripts/lib/path_kinds.py`. It lands the deployer-import
+    census, whose `allow` names each module the next two PRs delete or switch, and it
+    makes strict the setup census's only mode (H7.19c). The second PR
+    ([#7961](https://github.com/DanielH2018/server/issues/7961)) drops the reads of the
+    deployer's hold, markers and ledger. The third
+    ([#7962](https://github.com/DanielH2018/server/issues/7962)) deletes `deploy.sh`,
+    setup narrowing, `land.sh`'s setup and Pi arms and the deployer's code and tests,
+    empties the census's `allow`, and marks H7.53 landed.
 30. **H7.54** stays alone. Its parity proof covers 361 modules.
     **Landed as [#7856](https://github.com/DanielH2018/server/pull/7856).**
     The test env moved to `ansible/tests/_jinja_env.py` and registers
@@ -2653,7 +2666,7 @@ the `manual_plane` clearing, and *Rollback*'s
       empty `diff -r` of the cluster render. The fourth grep's output is the list of
       record for H7.19b.
     - **H7.2f** The setup census, in report mode. It lives in
-      `scripts/deploy_tools/setup_lib/setup_census.py` (`--host`, `--strict`), and the
+      `scripts/deploy_tools/setup_lib/setup_census.py` (`--host`; strict since H7.19c), and the
       test is `ansible/tests/setup/test_setup_census.py`. The census does not evaluate a
       task's `when:`, so a `<role>_packaged_hosts` guard cannot hide an item: the item stays
       in the report, marked `[per-host guard: ...]`, until the host's package carries it.
