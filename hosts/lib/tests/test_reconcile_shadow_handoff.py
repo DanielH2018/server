@@ -9,6 +9,7 @@ Run: uv run pytest hosts/lib/tests/test_reconcile_shadow_handoff.py
 """
 
 import json
+import os
 
 import pytest
 from _reconcile_host import Node
@@ -130,6 +131,36 @@ def test_the_packages_enable_link_survives_the_handoff_of_the_ansible_era_link(n
     assert not (node.root / ETC / "timers.target.wants" / timer).exists()
     assert node.applied()["enable_links"] == [timer]
     assert node.actions() == [["restart", timer]]
+    verbs = {call["argv"][1] for call in node.calls("systemctl")}
+    assert not {"disable", "stop", "mask"} & verbs
+
+
+def test_a_handed_off_unit_takes_its_etc_enable_links_and_keeps_every_other_link(node):
+    # #7930: retiring the Ansible-era homelab-rootq.socket left its sockets.target.wants link.
+    socket = "homelab-rootq.socket"
+    node.unit(
+        socket, "[Socket]\nNew=1\n", active="active", enabled="enabled", linked=True
+    )
+    assert node.run().returncode == 0
+    shadow(node, f"{ETC}/{socket}", "[Socket]\nOld=1\n")
+    links = {
+        "sockets.target.wants": f"/{ETC}/{socket}",
+        "multi-user.target.requires": f"/{ETC}/{socket}",
+        "timers.target.wants": f"/usr/lib/systemd/system/{socket}",
+        "default.target.wants": f"/{ETC}/other/{socket}",
+    }
+    for directory, target in links.items():
+        (node.root / ETC / directory).mkdir(parents=True)
+        os.symlink(target, node.root / ETC / directory / socket)
+    node.manifest["legacy"].append({"unit": socket})
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    left = {d for d in links if os.path.lexists(node.root / ETC / d / socket)}
+    assert left == {"timers.target.wants", "default.target.wants"}
+    assert len(reloads(node)) == 1
+    assert node.applied()["enable_links"] == [socket]
     verbs = {call["argv"][1] for call in node.calls("systemctl")}
     assert not {"disable", "stop", "mask"} & verbs
 

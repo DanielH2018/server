@@ -437,13 +437,30 @@ def shadowed(path: Path) -> tuple[str, Path | None]:
     return path.name, None
 
 
+def enable_links_to(path: Path) -> list[Path]:
+    """The `*.wants/` and `*.requires/` links in /etc/systemd/system that point at `path`.
+
+    `systemctl enable` links an /etc unit by its absolute path, so a link to the packaged unit,
+    or to any other file, is not one of them.
+    """
+    return [
+        ETC_UNIT_DIR / link.parent.name / link.name
+        for link in sorted(under_root(ETC_UNIT_DIR).glob(f"*/{path.name}"))
+        if link.parent.suffix in (".wants", ".requires")
+        and link.is_symlink()
+        and os.readlink(link) == str(path)
+    ]
+
+
 def hand_off(path: Path) -> tuple[bool, bool] | None:
     """Remove the /etc copy of a unit, or of a unit's drop-in, that the package ships.
 
+    Removing a unit file also removes the enable links in /etc that point at it.
+
     Returns:
-        None when the removal failed, else whether a file was removed and whether its bytes
-        differ from the packaged file's (a wants link has none, so it never differs, and a
-        drop-in the package does not ship always differs).
+        None when a removal failed, else whether anything was removed and whether the file's
+        bytes differ from the packaged file's (a wants link has none, so it never differs,
+        and a drop-in the package does not ship always differs).
     """
     target = under_root(path)
     present = os.path.lexists(target)
@@ -456,7 +473,13 @@ def hand_off(path: Path) -> tuple[bool, bool] | None:
         )
     except OSError:
         differs = True
-    return (present, differs) if retire_path(path) else None
+    if not retire_path(path):
+        return None
+    gone = path.parent == ETC_UNIT_DIR and not os.path.lexists(target)
+    links = enable_links_to(path) if gone else []
+    if not all(retire_path(link) for link in links):
+        return None
+    return present or bool(links), differs
 
 
 def retire_cron(name: str, user: str) -> bool:
