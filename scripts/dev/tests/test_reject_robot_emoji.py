@@ -29,9 +29,9 @@ def test_a_message_with_the_plain_footer_is_clean(tmp_path):
     assert _main_on(tmp_path, f"Add a file\n\n{footer}\n") == 0
 
 
-def test_the_emoji_in_a_git_comment_line_is_clean(tmp_path):
-    """`git commit -v` and the editor template put `#` lines in the file; git strips them."""
-    assert _main_on(tmp_path, f"Add a file\n\n# {HARNESS_FOOTER}\n") == 0
+def test_the_emoji_on_a_hash_line_is_flagged(tmp_path):
+    """`git commit -m` keeps a `#` line, so it is no comment to skip."""
+    assert _main_on(tmp_path, f"Add a file\n\n# {HARNESS_FOOTER}\n") == 1
 
 
 def test_prek_installs_and_runs_the_hook_at_the_commit_msg_stage():

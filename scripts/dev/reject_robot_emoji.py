@@ -27,11 +27,14 @@ ROBOT = "\N{ROBOT FACE}"
 
 
 def offending_lines(message: str) -> list[int]:
-    """1-based numbers of the lines that hold the robot emoji, ignoring git's `#` comments."""
+    """1-based numbers of the lines that hold the robot emoji.
+
+    A `#` line counts too: `git commit -m` and `-F` keep it, so it reaches history.
+    """
     return [
         number
         for number, line in enumerate(message.splitlines(), start=1)
-        if ROBOT in line and not line.startswith("#")
+        if ROBOT in line
     ]
 
 
