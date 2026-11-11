@@ -137,6 +137,8 @@ def _fix_round(left):
         _report(structured={"summary": "", "findings": [first]}),
         _report(f"Fixed. {PR}"),
         _report(structured={"summary": "", "findings": left}),
+        # A medium-or-worse leftover earns a second fix round (#7687); it commits nothing here.
+        *[_report(f"Fixed again. {PR}") for f in left[:1] if f["severity"] != "low"],
         _report(f"Filed #9. {PR}"),
     ]
 
@@ -189,6 +191,7 @@ def test_a_security_finding_stays_off_the_public_comment_and_the_tracker(tmp_pat
         _report(structured={"summary": "", "findings": [held]}),
         _report(f"Fixed. {PR}"),
         _report(structured={"summary": "", "findings": [held]}),
+        _report(f"Fixed again. {PR}"),
     ]
     pipeline, run = _pipeline(tmp_path, reports)
     final = pipeline.run_all()

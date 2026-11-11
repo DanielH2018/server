@@ -340,6 +340,7 @@ def test_a_draft_held_for_its_findings_is_still_marked_ready(tmp_path):
         _report(structured={"summary": "", "findings": [finding]}),
         _report(f"Could not fix it. {PR}"),
         _report(structured={"summary": "", "findings": [finding]}),
+        _report(f"Could not fix it either. {PR}"),
     ]
     pipeline, run, _ = _server_batch(tmp_path, reports)
     run.draft = True
