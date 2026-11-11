@@ -14,6 +14,10 @@
 # `stages` on a Renovate bump. ENFORCED: ansible/tests/repo/test_prek_hooks_run_only_at_commit.py
 default_stages = ["pre-commit"]
 
+# `prek install` writes a shim per type listed here. Without `commit-msg` in the list, the
+# reject-robot-emoji hook below never runs.
+default_install_hook_types = ["pre-commit", "commit-msg"]
+
 # Standard cleanup hooks
 [[repos]]
 repo = "https://github.com/pre-commit/pre-commit-hooks"
@@ -989,3 +993,14 @@ entry = "uv run --frozen mkdocs build --strict --site-dir .mkdocs-strict-check"
 language = "system"
 pass_filenames = false
 files = "^(docs/.*|mkdocs\\.yml|scripts/docs/.*\\.py|uv\\.lock)$"
+
+# The harness's attribution reminder ends every commit message with a footer that opens with
+# the robot emoji (U+1F916), and the operator's no-emoji rule wins over it. A squash merge makes
+# the message master history, so this rejects it at the commit-msg stage (#7978). It is the
+# one hook not at pre-commit: git passes it the message file, and `prek run` never runs it.
+[[repos.hooks]]
+id = "reject-robot-emoji"
+name = "Reject the robot emoji in a commit message"
+entry = "uv run --frozen python scripts/dev/reject_robot_emoji.py"
+language = "system"
+stages = ["commit-msg"]
