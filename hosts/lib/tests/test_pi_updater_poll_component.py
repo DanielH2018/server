@@ -9,6 +9,7 @@ Run: uv run pytest hosts/lib/tests/test_pi_updater_poll_component.py
 
 import gzip
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -65,6 +66,29 @@ def test_the_service_runs_the_script_and_keeps_its_state_directory(package):
     assert f"ExecStart={SCRIPT}\n" in unit
     assert "StateDirectory=homelab-updater-poll\n" in unit
     assert "LoadCredential" not in unit
+
+
+# ioprio class numbers, as `ionice -c` takes them: a lower number is served first.
+IO_CLASSES = {"realtime": 1, "best-effort": 2, "idle": 3}
+
+
+@pytest.mark.parametrize(
+    "unit", ["homelab-updater-poll.service", "homelab-updater.service"]
+)
+def test_the_updater_units_outrank_the_aide_scans_io_class(package, unit):
+    """On 2026-11-10 an idle-class AIDE scan held the idle-class updater's apt steps in D state (#7941)."""
+    source = (
+        package
+        if unit.startswith("homelab-updater-poll")
+        else host_mode.render_package("homelab-updater")
+    )
+    (unit_class,) = re.findall(
+        r"^IOSchedulingClass=(\S+)$", _text(source, f"{UNITS}/{unit}"), re.M
+    )
+    (aide_class,) = re.findall(
+        r"ionice -c(\d) \S*/aide ", _text(package, "/usr/lib/homelab/aide-check")
+    )
+    assert IO_CLASSES[unit_class] < int(aide_class)
 
 
 def test_the_component_header_carries_the_contract():

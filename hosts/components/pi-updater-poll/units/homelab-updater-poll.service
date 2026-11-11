@@ -14,7 +14,9 @@ StateDirectory=homelab-updater-poll
 # One GET with a 60 s curl bound; the updater it starts runs in its own unit, not under this one.
 TimeoutStartSec=2min
 Nice=10
-IOSchedulingClass=idle
+# Above the integrity scans' idle class, like homelab-updater.service (#7941).
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes

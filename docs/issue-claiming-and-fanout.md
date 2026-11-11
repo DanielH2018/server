@@ -6,7 +6,7 @@ nothing marks an issue as yours alone. Two sessions can pick the same issue, and
 want to keep for yourself gets picked up by the next session that reads the register.
 
 This page describes three things in `scripts/dev/findings.py` and `.claude/skills/issue-fanout/`:
-a claim protocol, a `manual` reservation, and a fan-out skill that dispatches Opus agents at a
+a claim protocol, a `manual` reservation, and a fan-out skill that dispatches agents at a
 batch of issues after triage.
 
 ## What already exists

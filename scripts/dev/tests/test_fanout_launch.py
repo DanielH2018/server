@@ -13,7 +13,6 @@ import pytest
 
 from fanout_lib.brief import Issue
 from fanout_lib.launch import (
-    BUDGET_USD,
     REVIEW_RUNTIME_MAX_S,
     RUNTIME_MAX_S,
     SYSTEM_PROMPT_FILE,
@@ -30,6 +29,7 @@ from fanout_lib.launch import (
     write_brief_command,
 )
 from fanout_lib.manifest import Batch, Manifest, load, new_run_id, save
+from fanout_lib.sizing import DEFAULT
 from fanout_lib.transport import REPO
 from _fanout_fakes import as_operator, fake_tools, ok
 
@@ -189,7 +189,7 @@ def test_the_unit_is_bounded_by_a_runtime_cap_and_a_budget():
     cmd = systemd_run_command("b")
     assert f"-p RuntimeMaxSec={RUNTIME_MAX_S} " in cmd
     assert cmd.index("RuntimeMaxSec") < cmd.index(" claude -p")
-    assert f"--max-budget-usd {BUDGET_USD}" in cmd
+    assert f"--max-budget-usd {DEFAULT.budget_usd}" in cmd
 
 
 def test_a_review_unit_runs_the_pipeline_under_the_longer_cap_and_a_plain_one_does_not():
