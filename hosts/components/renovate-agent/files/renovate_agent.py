@@ -3,7 +3,7 @@
 
 Spends one headless Claude Code session (`claude -p "/renovate-prs"`) on the repo's open
 Renovate PRs, then posts a Discord digest keyed on the MEASURED change in the open-PR set.
-Writes a last_run timestamp for the "Renovate Agent — Alive" Kuma monitor.
+The unit's ExecStartPost writes the textfile verdict that RenovateAgentNotReporting reads.
 
 The tick is gated before it costs anything: no open Renovate PRs means no session, and a
 GitOps hold means no session either. Both decisions live in agent_logic, which is pure.
