@@ -46,6 +46,16 @@ inputs:
 runs:
   using: composite
   steps:
+    # apt reads every pocket through mirror+file:/etc/apt/apt-mirrors.txt and tries each listed
+    # host in turn. All of them are ubuntu.com names, so one DNS outage fails them all (#7957).
+    - name: Add a non-ubuntu.com apt mirror as the last fallback
+      shell: bash
+      run: |
+        mirrors=/etc/apt/apt-mirrors.txt
+        if [[ -f "$mirrors" ]] && ! grep -q mirrors.edge.kernel.org "$mirrors"; then
+          sudo sed -i '$a https://mirrors.edge.kernel.org/ubuntu/' "$mirrors"
+        fi
+
     - if: inputs.python == 'true'
       uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
       with:
