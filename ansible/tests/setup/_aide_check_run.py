@@ -259,6 +259,7 @@ def _run_check(
     baseline: bool = True,
     rewrite: dict[str, str] | None = None,
     relink: dict[str, str] | None = None,
+    unreadable: tuple[str, ...] = (),
     packages_ran: tuple[str, ...] = ("tool",),
     packages_ran_before: tuple[str, ...] = (),
     packages_upgraded: tuple[str, ...] = (),
@@ -273,7 +274,8 @@ def _run_check(
     process for the run, as a scan still running from the previous week would. The aide stub
     writes aide.db.new as `--update` does; `baseline` says whether aide.db exists beforehand.
     `rewrite` replaces a path on the fake host with a regular file holding the given content, and
-    `relink` with a symlink to the given target, before the run. `dpkg_ran` dates dpkg's status
+    `relink` with a symlink to the given target, before the run. `unreadable` sets each named
+    path to mode 000. `dpkg_ran` dates dpkg's status
     log after the baseline, one `configure` line per `packages_ran` entry, as a package run does,
     and `packages_ran_before` writes the same lines a month before it, in the rotated log.
     `packages_upgraded` adds an `upgrade` line after the baseline for each package it names.
@@ -305,6 +307,8 @@ def _run_check(
         (fs / path.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
         (fs / path.lstrip("/")).unlink(missing_ok=True)
         (fs / path.lstrip("/")).write_text(content)
+    for path in unreadable:
+        (fs / path.lstrip("/")).chmod(0)
     for path, target in (relink or {}).items():
         (fs / path.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
         (fs / path.lstrip("/")).unlink(missing_ok=True)

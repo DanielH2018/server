@@ -643,6 +643,7 @@
  "ansible/tests/setup/test_aide_check_names_its_config.py": 0.0,
  "ansible/tests/setup/test_aide_check_package_activity.py": 0.6,
  "ansible/tests/setup/test_aide_check_role_written.py": 0.1,
+ "ansible/tests/setup/test_aide_check_snapd_udev.py": 0.68,
  "ansible/tests/setup/test_apt_keyring_permissions.py": 0.03,
  "ansible/tests/setup/test_artifacts_sync_alerts_once_per_outage.py": 3.34,
  "ansible/tests/setup/test_b4_rule_literals.py": 0.21,
