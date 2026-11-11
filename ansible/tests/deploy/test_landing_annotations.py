@@ -105,6 +105,8 @@ def _cause_expr() -> str:
 # No table in outcome.py pairs them; ledger.py's docstring names the same one (#4998).
 _CAUSE_BESIDE_ANOTHER_VERDICT = [
     (Verdict.DEFERRED, Cause.PROMOTE_TIMEOUT),
+    (Verdict.DEFERRED, Cause.GATE_UNREADABLE),
+    (Verdict.DEFERRED, Cause.GATE_STALE),
 ]
 
 _LABEL_FILTER = re.compile(r'^(\w+)\s*(=~|!~|!=|=)\s*"((?:[^"\\]|\\.)*)"$')
@@ -160,7 +162,7 @@ def test_the_cause_panel_selects_on_a_non_empty_cause():
 @pytest.mark.parametrize(
     ("verdict", "cause"),
     _CAUSE_BESIDE_ANOTHER_VERDICT,
-    ids=[v.value for v, _ in _CAUSE_BESIDE_ANOTHER_VERDICT],
+    ids=[c.value for _, c in _CAUSE_BESIDE_ANOTHER_VERDICT],
 )
 def test_the_cause_panel_counts_a_cause_beside_any_verdict(verdict, cause):
     """A cause beside an exit-75 verdict is a bar on the panel, not only a raw line.

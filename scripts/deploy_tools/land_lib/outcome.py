@@ -85,11 +85,18 @@ class Cause(StrEnum):
     `promote-timeout` is the wait reaching its deadline: twice the promote timeout, counted
     again from each poll that reads an earlier commit's verification in flight. It rides beside
     `deferred`: the promotion applies this PR itself, and a later one may still cover it.
+
+    GATE_* NAME A HEALTH GATE THAT GRADED NOTHING, beside `deferred` from step 6 (#7911).
+    `gate-unreadable` is a gate that could not read its store, and `gate-stale` a gate whose
+    tree was older than `origin/master`. Nothing gates health again after either, so
+    `land_probe` reads them as a give-up rather than a plain deferral.
     """
 
     TAG_MISS = "tag-miss"
     PROMOTE_HELD = "promote-held"
     PROMOTE_TIMEOUT = "promote-timeout"
+    GATE_UNREADABLE = "gate-unreadable"
+    GATE_STALE = "gate-stale"
     SOAK_FAILED = "soak-failed"
     INVALID = "invalid-cause"
 
@@ -185,8 +192,8 @@ PROMOTE_TIMEOUT_NOTE = (
 
 # What a `deferred` from step 6 means, printed by `health_verdict.health` when `probe.py health`
 # could not read its store for a tag and found no other tag unhealthy (#5543). Nothing re-gates
-# health, so this deferral never ends on its own: `land_probe` reads the note and reports the
-# landing as `gave-up`, a resume point, as it does for PROMOTE_TIMEOUT_NOTE.
+# health, so this deferral never ends on its own. The landing records `Cause.GATE_UNREADABLE`,
+# and `land_probe` reports it as `gave-up`, a resume point, as it does for `promote-timeout`.
 UNREADABLE_GATE_NOTE = (
     "  The health gate could not read its store, so the deployed workloads were not graded. "
     "This is NOT the ordinary deferral: nothing gates health again.\n"
@@ -197,8 +204,8 @@ UNREADABLE_GATE_NOTE = (
 
 # What a `deferred` from step 6 means when the probe refused the gate's tree as older than
 # `origin/master` (#7816). The gate advances its tree to `origin/master`, so this is a master
-# that moved while the gate ran, and a re-run reads the newer tip. `land_probe` reports it as
-# `gave-up`, a resume point, as it does for UNREADABLE_GATE_NOTE.
+# that moved while the gate ran, and a re-run reads the newer tip. The landing records
+# `Cause.GATE_STALE`, and `land_probe` reports it as `gave-up`, a resume point.
 STALE_GATE_NOTE = (
     "  The health gate's tree held an older role definition than origin/master, so those "
     "workloads were not graded. This is NOT the ordinary deferral: nothing gates health again.\n"

@@ -117,24 +117,22 @@ def test_a_current_checkout_lets_the_landing_continue():
     classify.refuse_stale_code(ln)
 
 
-def test_a_stale_checkout_names_the_file_and_a_checkout_at_the_merge():
+def test_a_stale_checkout_names_the_file_and_the_fresh_rerun():
     ln, _ = make_landing(Fakes(stale_code=["scripts/lib/render_guard.py"]), since="pre")
     ln.merge_sha = "m" * 40
     with pytest.raises(Outcome) as raised:
         classify.refuse_stale_code(ln)
     msg = raised.value.detail
     assert raised.value.rc == 1 and "scripts/lib/render_guard.py" in msg
-    assert f"worktree add --detach /tmp/land-999 {'m' * 40}" in msg
-    assert "land.sh --pr 999 --since pre" in msg
+    assert "`land.sh --pr 999 --since pre --fresh`" in msg
 
 
-def test_a_stale_checkout_names_the_primary_once_it_carries_master():
-    ln, _ = make_landing(Fakes(stale_code=["a.py"], merge_applied_rc=0))
+def test_a_stale_checkout_without_since_reruns_from_the_merges_parent():
+    ln, _ = make_landing(Fakes(stale_code=["a.py"]))
     ln.merge_sha = "m" * 40
     with pytest.raises(Outcome) as raised:
         classify.refuse_stale_code(ln)
-    assert f"re-run it from {PRIMARY}" in raised.value.detail
-    assert f"--since {'m' * 40}^1" in raised.value.detail
+    assert f"--since {'m' * 40}^1 --fresh" in raised.value.detail
 
 
 def test_a_comparison_git_could_not_make_refuses():
