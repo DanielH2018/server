@@ -268,3 +268,51 @@ def test_a_comparison_git_could_not_make_refuses_before_it_merges(land_run):
         c for c in calls if c[0] == "gh" and any(a.endswith("/merge") for a in c[1])
     ]
     assert not merges, f"merged when git could not compare: {merges}"
+
+
+def _armed_open_pr() -> dict:
+    return {
+        "state,title,body,reviewDecision": {
+            "state": "OPEN",
+            "title": "Document the lander",
+            "body": "",
+        },
+        "headRefOid": {"headRefOid": "c" * 40},
+        "state,mergeable,headRefOid": [
+            {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": "c" * 40},
+            {"state": "MERGED", "mergeable": "MERGEABLE", "headRefOid": "c" * 40},
+        ],
+    }
+
+
+# Before the merge (#7916's refusal) and after it, from a branch master has moved past.
+_STALE_LANDINGS = {
+    "before-merge": (["--arm-merge", "--await-merge"], _armed_open_pr()),
+    "after-merge": ([], None),
+}
+
+
+def _stale_landing_output(land_run, case: str) -> str:
+    argv, views = _STALE_LANDINGS[case]
+    fakes = Fakes(stale_code=["scripts/deploy_tools/land_lib/classify.py"])
+    if views is not None:
+        fakes.gh_views = views
+    _, out, err, _, _ = land_run(argv, fakes)
+    return out + err
+
+
+@pytest.mark.parametrize("case", sorted(_STALE_LANDINGS))
+def test_a_stale_landing_prints_no_remedy_that_redirects_git_to_the_primary(
+    land_run, case
+):
+    """#7933: a worktree-isolated session's guard denies `git -C <primary>`."""
+    printed = _stale_landing_output(land_run, case)
+    assert "git -C" not in printed
+    assert f"-C {PRIMARY}" not in printed
+
+
+@pytest.mark.parametrize("case", sorted(_STALE_LANDINGS))
+def test_a_stale_landing_needs_no_hand_made_checkout(land_run, case):
+    """#7933: a checkout refreshed by hand went stale again within minutes (#7902)."""
+    printed = _stale_landing_output(land_run, case)
+    assert "worktree add" not in printed
