@@ -47,9 +47,11 @@ the script that pins its throwaway key (#6245; `validate_lib/bootstrap_repo_case
 case runs step 3 with real apt on an image holding no age (`validate_lib/bootstrap_age_case.py`).
 
 The bootstrap cases (`validate_lib/bootstrap_case.py`) run only under `--bootstrap`, which runs
-them and nothing else. CI runs them in a job of their own, `bootstrap_cases`, beside the legs that
-run every other group: on one runner their offline builds and the other groups slowed each other,
-and they ran 338-477 s against 214-271 s for the next-longest group (#7819).
+them and nothing else. CI runs them in a job of their own, `host_packages_bootstrap`, beside the
+legs that run every other group: on one runner their offline builds and the other groups slowed
+each other, and they ran 338-477 s against 214-271 s for the next-longest group (#7819).
+`--bootstrap-shard K/N` runs one share of them, and that job runs three shares per release so no
+two offline builds share a runner (#7879).
 
 `--k3s-download` runs one case and nothing else: daniel-box's `--local-build` with no k3s seeded,
 so install.sh downloads and checks the release binary. CI runs it in a job that cannot fail the
@@ -92,6 +94,7 @@ import shutil
 import subprocess
 import sys
 import time
+from argparse import ArgumentTypeError
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -148,6 +151,7 @@ class Cases:
         self.work = args.work.resolve()
         self.tools_cache = args.tools_cache.resolve() if args.tools_cache else None
         self.k3s_download = args.k3s_download
+        self.shard = args.bootstrap_shard
         self.box = box_address(args.render / "head")
         self.failed: list[str] = []
         self.debs: dict[str, Path] = {}
@@ -519,6 +523,16 @@ class Cases:
             c.remove()
 
 
+def shard_arg(text: str) -> tuple[int, int]:
+    """`--bootstrap-shard K/N` as (K, N), refusing anything but 1 <= K <= N."""
+    number, sep, count = text.partition("/")
+    if not (sep and number.isdigit() and count.isdigit()):
+        raise ArgumentTypeError(f"a shard is K/N, not {text!r}")
+    if not 1 <= int(number) <= int(count):
+        raise ArgumentTypeError(f"shard {text} is outside 1/{count}..{count}/{count}")
+    return int(number), int(count)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--image", required=True, help="the test image's tag")
@@ -550,6 +564,12 @@ def main(argv: list[str] | None = None) -> int:
         "--bootstrap",
         action="store_true",
         help="run only the bootstrap cases, which no other run includes",
+    )
+    parser.add_argument(
+        "--bootstrap-shard",
+        type=shard_arg,
+        metavar="K/N",
+        help="run only the K-th of N shares of the bootstrap cases, one offline build each",
     )
     parser.add_argument(
         "--jobs",
