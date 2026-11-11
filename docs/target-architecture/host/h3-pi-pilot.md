@@ -520,7 +520,9 @@ and every host slice applies it.
       the named user's crontab;
     - a `cron_file` under `/etc/cron.d/`;
     - an Ansible-era unit, which is disabled and stopped, then its file is removed.
-   Reconcile never removes a path that a package owns (`dpkg -S` finds it).
+   Reconcile never removes a path that a package owns (`dpkg -S` finds it). When reconcile
+   removes an `/etc/systemd/system` copy of a unit the package ships, it also removes each
+   `*.wants/` or `*.requires/` link in `/etc/systemd/system` that points at that copy.
 
 ### Package rules (C5, made checkable)
 
