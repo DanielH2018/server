@@ -1,6 +1,6 @@
 ---
 name: issue-fanout
-description: Dispatch parallel Opus agents at a batch of open GitHub issues, one worktree and one PR each, claiming every issue before any agent starts. Use when asked to work through the backlog, clear the open findings, or fan out on issues. A single issue nobody needs to steer can launch as a batch of one, which gets the independent reviewer and red gate a solo session lacks; claim and work an issue directly only when you will steer it.
+description: Dispatch parallel agents, each sized to its batch's work, at a batch of open GitHub issues, one worktree and one PR each, claiming every issue before any agent starts. Use when asked to work through the backlog, clear the open findings, or fan out on issues. A single issue nobody needs to steer can launch as a batch of one, which gets the independent reviewer and red gate a solo session lacks; claim and work an issue directly only when you will steer it.
 allowed-tools: Bash, Read, Grep, Glob, Agent
 ---
 
@@ -92,8 +92,32 @@ Both were measured on the 2026-09-10 fan-outs:
   batch's landing. Wave 2's new `gpu-exporter` role did this while another session's Authelia
   change was mid-rollout (issue #1602), and the hold outlived the outage by twenty minutes.
 
-**Stop here for approval.** Present the grouping — which issues, which batch, why they're
-split this way — and wait. Spawning several Opus agents is not a routine action.
+**Size each batch.** Pick the rung its implementer runs at, from your reading of the issue
+bodies. `scripts/dev/fanout_lib/sizing.py:LADDER` holds the rungs, in order. The starting
+points below come from Anthropic's model guide
+([Which Claude model should you build with?](https://claude.dev/blog/which-claude-model-should-you-build-with/),
+2026-11-09). The operator ruled on 2026-11-11 that sizing may pick Fable and reach `xhigh`,
+and `xhigh` should be rare.
+
+- `sonnet-medium`: a well-scoped fix the issue fully specifies, such as one script, one
+  template value or a doc correction, where the tests show whether it worked.
+- `opus-medium`: the default. Use it for ordinary engineering and debugging, and whenever
+  you are unsure.
+- `opus-high`: a fix that needs real diagnosis, or that spans several roles or modules.
+- `fable-medium`: a migration, a large refactor, or a performance change, even one with a
+  clear spec.
+- `fable-high`: a major migration or architectural change across many files.
+- `fable-xhigh`: rare. Use it only for work `fable-high` already fell short on.
+
+A batch carrying `review-leftover` runs at no less than `opus-high`, whatever you pick.
+`place launch` raises it, and its launch line names the rung each batch runs at. To escalate a batch, move up one rung; past `high`,
+move to the next model up rather than raise effort. Each review record names the
+implementer's rung (`implementer_rung`), so a choice can be checked against what the batch
+cost and what the reviewer found.
+
+**Stop here for approval.** Present the grouping and each batch's rung — which issues, which
+batch, why they're split this way, and why a batch sits off `opus-medium` — and wait.
+Spawning several agents is not a routine action.
 
 Done when: every issue `next` returned is in exactly one batch or named as
 held for the next wave, no two batches share a role, no two batches share a cited file, at
@@ -137,8 +161,14 @@ One batch per `--batch`, every batch in ONE call so the placement can spend a re
 batch across both hosts:
 
 ```bash
-uv run python scripts/dev/fanout.py place launch --batch 1345,1386 --batch 1288
+uv run python scripts/dev/fanout.py place launch --batch 1345,1386 --batch 1288 \
+    --size 1288=sonnet-medium
 ```
+
+`--size BATCH=RUNG` sets one batch's rung, and a batch it does not name runs at
+`opus-medium`. The rung sets the implementer's model, effort and spend cap, and the fix and
+CI-fix phases that resume its session. The red-test author and the reviewer stay on Opus at
+`medium`. The launch line prints each batch's rung, and the run manifest records it.
 
 `scripts/dev/fanout.py` is the fan-out tooling's one entry point: `place`, `probe`, `review`
 and `stats`. The paths `fanout_place.py`, `fanout_probe.py`, `fanout_review.py` and
@@ -150,7 +180,7 @@ that name a role or host the batch's issues cite, the rest as a count, and, for 
 deploy tag and the test files the cited paths imply, which `findings.py show <n> --brief`
 prints for a solo session, plus the shard-weight repair and the call to `scripts/dev/repo_guards.py`, which runs the
 repo-wide guards no test beside a change reaches) and starts a headless
-Opus agent as a transient user service in a fresh worktree on whichever host has the
+agent at its rung as a transient user service in a fresh worktree on whichever host has the
 most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means nothing
 was placed: every claim was refused (step 2), or one of three placement refusals fired, which
 claim nothing. Exit 7 is a launch that started batches but dropped a refused claim. The
@@ -401,19 +431,21 @@ Done when: `launch` printed a host per batch and a run-id, and `status` shows ev
 
 ### When the dispatcher is unavailable
 
-A session with no ssh reach to daniel-server can still fan out locally: one Opus agent per
-batch, spawned with `isolation: "worktree"` and `model: "opus"` on the `Agent` call.
+A session with no ssh reach to daniel-server can still fan out locally: one agent per
+batch, spawned with `isolation: "worktree"` and the batch's rung on the `Agent` call. Split
+the rung's name into `model` and `effort`: `fable-high` is `model: "fable"`,
+`effort: "high"`.
 
 ```
-Agent(subagent_type: "general-purpose", model: "opus", isolation: "worktree", prompt: <the brief below>)
+Agent(subagent_type: "general-purpose", model: "opus", effort: "medium", isolation: "worktree", prompt: <the brief below>)
 ```
 
-**Both parameters are load-bearing, and neither is a default.** An `Agent` call without
+**Every parameter there is load-bearing, and none is a default.** An `Agent` call without
 `isolation` runs in the orchestrator's own checkout, so N agents edit one working tree at
 once and each commits over the others — the hazard `CLAUDE.md`'s parallel-sessions section
 exists to prevent, and the one thing the claim protocol assumes is not happening. Without
-`model`, the agent inherits whatever the default subagent model is, which is not necessarily
-the Opus this skill's description promises.
+`model` and `effort`, the agent inherits the session's defaults, which are not the rung the
+batch was sized at.
 
 The worktree is auto-named `agent-<hash>` and cannot be named otherwise — see *Measured: a
 subagent cannot own a named worktree* in `docs/issue-claiming-and-fanout.md`. That is why the
@@ -524,8 +556,8 @@ fleet cap on daniel-box with a 10G per-plane sub-bound (`claude_code_fleet_memor
 fan-out stalls in reclaim instead of failing loudly. Keep batches to what the triage step
 actually produced; don't split further just to add width.
 
-Done when: every batch has a spawned agent carrying both `isolation: "worktree"` and
-`model: "opus"`, and every brief names the claim already held, the comment it must post first,
+Done when: every batch has a spawned agent carrying `isolation: "worktree"` and its rung's
+`model` and `effort`, and every brief names the claim already held, the comment it must post first,
 the `cd <worktree> &&` prefix, the landing path, the blocking-wait command, the close restriction, and what to do with a
 verdict that leaves a host apply owed.
 

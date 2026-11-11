@@ -140,12 +140,12 @@ from fanout_lib.review.review_record import (
     issues_section,
 )
 from fanout_lib.launch import (
-    BUDGET_USD,
     REVIEW_RUNTIME_MAX_S,
     SYSTEM_PROMPT_FILE,
     stop_hook_settings,
 )
 from fanout_lib.prompt_tool import prompt_tool_args
+from fanout_lib.sizing import REVIEWER
 from fanout_lib.target import Target
 
 PROMPT_FILE = Path(__file__).resolve().parent / "review_system_prompt.md"
@@ -157,7 +157,6 @@ HEADLESS_PROMPT_FILE = SOURCE_ROOT / SYSTEM_PROMPT_FILE
 # `.claude/settings.json` registers too, stands down while the file exists, so one Stop spends
 # the block cap once. `.claude/hooks/fanout-stop.py` mirrors the path.
 OWN_COPY = Path(".fanout") / "stop-hook"
-REVIEW_BUDGET_USD = 15
 # A finding the fix round acts on. The reviewer reports everything, as the user-level
 # `## Code review` rule asks; this is the separate filtering pass.
 # `land.sh` waits up to about an hour for CI and the promotion. A landing started with less than
@@ -337,17 +336,18 @@ class Pipeline:
     ) -> list[str]:
         return [
             *(prefix or self._stop_hook()),
-            "-p", "--model", "opus", "--permission-mode", "auto", *prompt_tool_args(),
-            "--output-format", "json", "--max-budget-usd", str(BUDGET_USD),
-            "--append-system-prompt", self.headless_prompt + prompt, "--effort", "medium",
+            "-p", "--model", self.record.implementer.model, "--permission-mode", "auto",
+            *prompt_tool_args(), "--output-format", "json", "--max-budget-usd",
+            str(self.record.implementer.budget_usd), "--append-system-prompt",
+            self.headless_prompt + prompt, "--effort", self.record.implementer.effort,
         ]  # fmt: skip
 
     def _red_author(self) -> list[str]:
         return [
             *self._stop_hook(),
-            "-p", "--model", "opus", "--permission-mode", "auto", *prompt_tool_args(),
-            "--output-format", "json", "--max-budget-usd", str(REVIEW_BUDGET_USD),
-            "--json-schema", json.dumps(RED_SCHEMA), "--effort", "medium",
+            "-p", "--model", REVIEWER.model, "--permission-mode", "auto", *prompt_tool_args(),
+            "--output-format", "json", "--max-budget-usd", str(REVIEWER.budget_usd),
+            "--json-schema", json.dumps(RED_SCHEMA), "--effort", REVIEWER.effort,
         ]  # fmt: skip
 
     def _resume(self) -> list[str]:
@@ -369,8 +369,8 @@ class Pipeline:
         prompt += self._rules()
         return [
             *self._held_settings(),
-            "-p", "--model", "opus", "--permission-mode", "auto", *prompt_tool_args(),
-            "--output-format", "json", "--max-budget-usd", str(REVIEW_BUDGET_USD),
+            "-p", "--model", REVIEWER.model, "--permission-mode", "auto", *prompt_tool_args(),
+            "--output-format", "json", "--max-budget-usd", str(REVIEWER.budget_usd),
             "--append-system-prompt", prompt,
             "--disallowedTools", "Edit,Write,NotebookEdit", "--effort", self.record.review_effort,
             "--json-schema", json.dumps(FINDINGS_SCHEMA),

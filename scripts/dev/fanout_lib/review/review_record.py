@@ -18,13 +18,13 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from fanout_lib.brief import ISSUES_HEADING
 from fanout_lib.review.green_contest import judgment
 from fanout_lib.review.review_prompts import is_held
+from fanout_lib.sizing import DEFAULT, REVIEWER, Rung
 from fanout_lib.status import BLOCKER, NO_PR
 
 ACTIONABLE_SEVERITIES = frozenset({"critical", "high", "medium"})
 # DECIDED: 0.5, not 0.6 (#3675). Judged against 86 batches' records, 5 of the 6 medium findings
 # at 0.5-0.55 were material defects the fix round never saw; at 0.45 it was 3 of 7.
 CONFIDENCE_FLOOR = 0.5
-REVIEW_EFFORT = "medium"
 HOLD_CONFIDENCE = 0.8
 # A record's `blocker` keeps this much of the line, enough to read why the batch stopped.
 BLOCKER_CHARS = 500
@@ -68,7 +68,10 @@ class Record:
     # The `--effort` every reviewer call passes, read from here so the record names what ran
     # and actionable findings per PR can be compared between settings (#3966). A record
     # written before this field existed has no key.
-    review_effort: str = REVIEW_EFFORT
+    review_effort: str = REVIEWER.effort
+    # The `fanout_lib.sizing` rung every phase that runs or resumes the implementer passes,
+    # read from here for the same reason as `review_effort`.
+    implementer: Rung = DEFAULT
     costs: dict[str, float] = field(default_factory=dict)
     review_error: str = ""
     findings: list[dict] = field(default_factory=list)

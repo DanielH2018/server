@@ -17,6 +17,7 @@ from fanout_lib.manifest import Batch
 from fanout_lib.notify import stop_post
 from fanout_lib.placement import RESERVATION_BYTES
 from fanout_lib.prompt_tool import prompt_tool_flags, shim_guarded
+from fanout_lib.sizing import DEFAULT, Rung
 from fanout_lib.target import HEADLESS_PYTHON, SERVER_TARGET, Target, branch_name
 from fanout_lib.transport import REPO, Tools
 
@@ -27,18 +28,19 @@ LAUNCH_TIMEOUT_S = 120.0
 # worktree, which `worktree add` checks out from origin/master, so the file is always there.
 # It goes through this headless launch only; an interactive session never reads it.
 SYSTEM_PROMPT_FILE = "scripts/dev/fanout_lib/headless_system_prompt.md"
-CLAUDE_ARGS_PREFIX = (
-    "claude -p --model opus --permission-mode auto --output-format json"
-    " --max-budget-usd {budget} --append-system-prompt-file {prompt} --effort medium"
-)
-# A runaway bound, not a tight one. Over 84 fan-out sessions the largest read 64M cached
-# tokens and wrote 152k output tokens: about $18 at Opus 5.5's list prices ($0.20 per
-# million cache reads, $20 per million output, $8 per million 1h cache writes).
-# `renovate_agent.py` bounds its own headless session the same way. A spent budget ends the
-# session with `is_error: true` and `terminal_reason: budget_exhausted`, which `status`
-# reports as `failed`.
-BUDGET_USD = 40
-CLAUDE_ARGS = CLAUDE_ARGS_PREFIX.format(budget=BUDGET_USD, prompt=SYSTEM_PROMPT_FILE)
+
+
+def claude_prefix(rung: Rung, prompt: str) -> str:
+    """The `claude -p` command line at `rung`, reading its system prompt from `prompt`.
+
+    `rung.budget_usd` is a runaway bound. A spent budget ends the session with `is_error: true`
+    and `terminal_reason: budget_exhausted`, which `status` reports as `failed`.
+    """
+    return (
+        f"claude -p --model {rung.model} --permission-mode auto --output-format json"
+        f" --max-budget-usd {rung.budget_usd} --append-system-prompt-file {prompt}"
+        f" --effort {rung.effort}"
+    )
 
 
 # The `fanout-stop` Stop hook, registered for another repo's batch through `--settings`.
@@ -266,8 +268,10 @@ def write_brief_command(batch: str, target: Target = SERVER_TARGET) -> str:
     return _step(f"mkdir -p {wt}/.fanout && cat > {wt}/.fanout/brief.md", "brief write")
 
 
-def claude_args(target: Target, worktree: str, home: str | None = None) -> str:
-    """The `claude -p` command line a batch in `target`, working in `worktree`, runs.
+def claude_args(
+    target: Target, worktree: str, home: str | None = None, rung: Rung = DEFAULT
+) -> str:
+    """The `claude -p` command line a batch in `target`, working in `worktree`, runs at `rung`.
 
     The system prompt file is relative to the worktree for this repo, whose worktree always
     carries it. Another repo's worktree does not, so there it is read from the batch's
@@ -276,11 +280,9 @@ def claude_args(target: Target, worktree: str, home: str | None = None) -> str:
     register it. Both carry `fanout_lib.prompt_tool`'s flags for the user at `home`.
     """
     if target.is_server:
-        return f"{CLAUDE_ARGS} {prompt_tool_flags(home)}"
+        return f"{claude_prefix(rung, SYSTEM_PROMPT_FILE)} {prompt_tool_flags(home)}"
     root = snapshot_root(worktree)
-    prefix = CLAUDE_ARGS_PREFIX.format(
-        budget=BUDGET_USD, prompt=f"{root}/{SYSTEM_PROMPT_FILE}"
-    )
+    prefix = claude_prefix(rung, f"{root}/{SYSTEM_PROMPT_FILE}")
     settings = json.dumps(stop_hook_settings(root))
     return f"{prefix} --settings {shlex.quote(settings)} {prompt_tool_flags(home)}"
 
@@ -302,13 +304,17 @@ def review_script(batch: str, target: Target = SERVER_TARGET) -> str:
 
 
 def review_command(
-    batch: str, target: Target = SERVER_TARGET, red_green: bool = False
+    batch: str,
+    target: Target = SERVER_TARGET,
+    red_green: bool = False,
+    rung: Rung = DEFAULT,
 ) -> str:
     """The unit's command for a `--review` batch: `fanout.py review` in place of `claude -p`."""
     return (
         f"uv run --no-project --no-python-downloads --python {HEADLESS_PYTHON} "
         f"{review_script(batch, target)} review --batch {batch} --repo {target.repo}"
         + (" --red-green" if red_green else "")
+        + f" --rung {rung.name}"
     )
 
 
@@ -318,13 +324,14 @@ def systemd_run_command(
     home: str | None = None,
     review: bool = False,
     red_green: bool = False,
+    rung: Rung = DEFAULT,
 ) -> str:
     """The shim check, then the `systemd-run` step; `home` defaults to the launcher's."""
     wt = worktree_path(batch, target)
     home = home or str(_Path.home())
-    command = claude_args(target, wt, home)
+    command = claude_args(target, wt, home, rung)
     if review:
-        command = review_command(batch, target, red_green)
+        command = review_command(batch, target, red_green, rung)
     runtime = REVIEW_RUNTIME_MAX_S if review else RUNTIME_MAX_S
     run = (
         f"env PATH={unit_path(home)} systemd-run --user --unit {unit_name(batch, target)} "
@@ -353,7 +360,9 @@ def prepare_command(batch: str, target: Target) -> str:
     )
 
 
-def launch_command(batch: str, review: bool = False, red_green: bool = False) -> str:
+def launch_command(
+    batch: str, review: bool = False, red_green: bool = False, rung: Rung = DEFAULT
+) -> str:
     """The one call a batch launch runs: worktree add+lock, venv sync, brief write, systemd-run.
 
     The brief text is this command's own stdin, consumed by the `cat` in the middle of the
@@ -367,7 +376,7 @@ def launch_command(batch: str, review: bool = False, red_green: bool = False) ->
             create_worktree_command(batch),
             venv_sync_command(batch),
             write_brief_command(batch),
-            systemd_run_command(batch, review=review, red_green=red_green),
+            systemd_run_command(batch, review=review, red_green=red_green, rung=rung),
         ]
     )
 
@@ -492,6 +501,7 @@ def _launch_elsewhere(
     issues: list[int],
     target: Target,
     review: bool = False,
+    rung: Rung = DEFAULT,
 ) -> None:
     """Launch a batch in another repo: prepare the tree, claim, then start the agent.
 
@@ -519,7 +529,7 @@ def _launch_elsewhere(
         proc = _run(
             tools,
             host,
-            systemd_run_command(batch, target, review=review),
+            systemd_run_command(batch, target, review=review, rung=rung),
             None,
             "systemd-run",
         )
@@ -566,6 +576,7 @@ def launch(
     target: Target = SERVER_TARGET,
     review: bool = False,
     red_green: bool = False,
+    rung: Rung = DEFAULT,
 ) -> Batch:
     """Create the worktree, write the brief over stdin, then start the agent unit.
 
@@ -600,6 +611,7 @@ def launch(
         review: start `fanout_lib.review.review`'s pipeline instead of one `claude -p`.
         red_green: give that pipeline its red phase (`fanout_lib.review.red_gate`); this repo
             only, as `red_gate.review_flags` decides.
+        rung: the model and effort the implementer runs at (`fanout_lib.sizing`).
     """
     # DECIDED: no exit or timeout from this call can happen after the unit is live.
     # `systemd-run` (without --wait/--pty/--scope) starts the transient unit and returns
@@ -611,13 +623,13 @@ def launch(
     # `test_the_launch_command_folds_every_step_into_one_call_ending_in_systemd_run` asserts
     # `"--scope" not in cmd` as the guard.
     if not target.is_server:
-        _launch_elsewhere(tools, host, batch, brief_text, issues, target, review)
+        _launch_elsewhere(tools, host, batch, brief_text, issues, target, review, rung)
     else:
         try:
             proc = _run(
                 tools,
                 host,
-                launch_command(batch, review, red_green),
+                launch_command(batch, review, red_green, rung),
                 brief_text,
                 "launch",
             )
@@ -635,4 +647,5 @@ def launch(
         list(issues),
         datetime.now(UTC).isoformat(),
         repo=target.repo,
+        rung=rung.name,
     )
