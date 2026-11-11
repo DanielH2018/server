@@ -87,10 +87,13 @@ def refuse_stale_code_before_merge(ln: Landing) -> None:
     what = _stale_code_reason(ln, base)
     if not what:
         return
+    rerun = (
+        f"re-run the same land.sh command with `{FRESH_FLAG}`, which lands from a checkout "
+        f"of {base} it makes and removes itself"
+    )
     ln.die(
-        f"this landing runs from {OWN_CHECKOUT}, and {what}. Nothing is merged; re-run the "
-        f"same land.sh command with `{FRESH_FLAG}`, which lands from a checkout of {base} it "
-        "makes and removes itself",
+        f"this landing runs from {OWN_CHECKOUT}, and {what}. Nothing is merged; "
+        f"{_unit_rerun(ln) or rerun}",
         1,
     )
 
@@ -117,9 +120,28 @@ def refuse_stale_code(ln: Landing) -> None:
     rerun = f"land.sh --pr {ln.opts.pr} --since {since} {FRESH_FLAG}"
     ln.die(
         f"this landing runs from {OWN_CHECKOUT}, and {what}. PR #{ln.opts.pr} is merged, "
-        f"and this landing graded nothing; re-run it as `{rerun}`, which lands from a "
-        f"checkout of origin/{BRANCH} it makes and removes itself",
+        "and this landing graded nothing; "
+        + (
+            _unit_rerun(ln)
+            or f"re-run it as `{rerun}`, which lands from a checkout of origin/{BRANCH} it "
+            "makes and removes itself"
+        ),
         1,
+    )
+
+
+def _unit_rerun(ln: Landing) -> str:
+    """The re-run a lander unit's caller can make, or "" outside a unit.
+
+    The unit runs a fixed command line and its caller's `land.sh` refuses `--fresh`
+    (`handoff.refused_flags`), so the remedy is the next run of the checkout-sync timer.
+    """
+    if not ln.opts.policy_active:
+        return ""
+    return (
+        f"a lander unit cannot take `{FRESH_FLAG}`, so re-run the same land.sh command once "
+        f"{OWN_CHECKOUT} carries origin/{BRANCH}; homelab-checkout-sync fast-forwards the "
+        "primary checkout every 10 minutes"
     )
 
 

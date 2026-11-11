@@ -42,7 +42,10 @@ hand went stale again within minutes when master moved, and the `git -C <primary
 add` that made it is a command a worktree-isolated session's guard refuses. The landing
 still refuses rather than re-running on its own, so `land.sh` keeps running the release it
 ships with unless the caller asks. With `--detach`, the fork runs the fresh checkout, so the
-checkout lives until the landing ends. `land_lib/fresh.py` has the mechanics.
+checkout lives until the landing ends. `land_lib/fresh.py` has the mechanics. A lander
+unit's caller cannot pass `--fresh`, because the unit runs a fixed command line. Under a unit,
+both refusals therefore name the re-run that caller can make: the same command, once
+`homelab-checkout-sync` has fast-forwarded the primary, which it does every 10 minutes.
 
 **Without `--detach`, redirect stdout and stderr to a file yourself.** A backgrounded Bash call
 hands the script a non-blocking pipe, and Ansible refuses to start on one:

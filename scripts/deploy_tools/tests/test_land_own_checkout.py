@@ -314,3 +314,31 @@ def test_a_stale_landing_needs_no_hand_made_checkout(land_run, case):
     """#7933: a checkout refreshed by hand went stale again within minutes (#7902)."""
     printed = _stale_landing_output(land_run, case)
     assert "worktree add" not in printed
+
+
+@pytest.mark.parametrize("case", sorted(_STALE_LANDINGS))
+def test_a_stale_landing_refuses_and_names_fresh(land_run, case):
+    """The absence checks above pass for a landing that never reached the refusal."""
+    argv, views = _STALE_LANDINGS[case]
+    fakes = Fakes(stale_code=["scripts/deploy_tools/land_lib/classify.py"])
+    if views is not None:
+        fakes.gh_views = views
+    rc, out, err, _, _ = land_run(argv, fakes)
+    assert rc == 1 and "VERDICT: refused" in out
+    assert "land_lib/classify.py" in out and "--fresh`" in out + err
+
+
+@pytest.mark.parametrize(
+    "refuse",
+    [classify.refuse_stale_code, classify.refuse_stale_code_before_merge],
+    ids=["after-merge", "before-merge"],
+)
+def test_a_lander_units_stale_refusal_names_a_rerun_its_caller_can_make(refuse):
+    """The unit's caller cannot pass `--fresh`: `handoff.refused_flags` refuses it."""
+    ln, _ = make_landing(Fakes(stale_code=["a.py"]), require_branch_prefix="claude/")
+    ln.merge_sha = "m" * 40
+    with pytest.raises(Outcome) as raised:
+        refuse(ln)
+    msg = raised.value.detail
+    assert "cannot take `--fresh`" in msg and "homelab-checkout-sync" in msg
+    assert "re-run it as" not in msg and "with `--fresh`" not in msg
