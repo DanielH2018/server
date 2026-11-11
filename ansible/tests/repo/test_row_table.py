@@ -171,11 +171,15 @@ def test_prebuild_finds_every_census_modules_hits_before_a_row_asks():
 
 def test_prebuild_keeps_a_raising_offence_for_its_own_row_to_report():
     sharing = Sharing()
+    calls = []
 
     def broken(subject: Subject) -> list[str]:
+        calls.append(subject.rel)
         raise ValueError(subject.rel)
 
     (row,) = sharing.share((_toy(files=lambda: ["pyproject.toml"], offence=broken),))
     sharing.prebuild()
+    assert calls == ["pyproject.toml"]
     with pytest.raises(ValueError, match=r"pyproject\.toml"):
         row.offence(Subject("pyproject.toml"))
+    assert calls == ["pyproject.toml"], "the row's own call ran its offence again"
