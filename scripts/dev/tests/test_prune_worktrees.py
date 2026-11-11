@@ -9,6 +9,7 @@ Run: uv run pytest scripts/dev/tests/test_prune_worktrees.py
 """
 
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -331,6 +332,35 @@ def test_one_prune_removes_a_worktree_and_deletes_the_branch_it_freed(
     assert done.returncode == 0, done.stderr
     assert not (tmp_path / "done").exists()
     assert "worktree-done" not in _branch_names(repo)
+
+
+def test_a_weekly_prune_that_skips_a_worktree_a_live_process_holds_exits_0(
+    tmp_path, monkeypatch
+):
+    # #7949: one session running at 04:20 kept the sweep's check down for a week. The skip is
+    # still named on stderr; the next run removes the tree once its holder exits.
+    scrub_process_git_env(monkeypatch)
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    held = tmp_path / "held"
+    git(repo, "worktree", "add", "-q", "-b", "worktree-held", str(held))
+    git(repo, "update-ref", "refs/remotes/origin/master", "master")
+    holder = subprocess.Popen(["sleep", "120"], cwd=held)
+    try:
+        done = run(
+            [sys.executable, str(PRUNER), "--prune", "--brief"],
+            cwd=repo,
+            env=scrubbed_env(),
+        )
+    finally:
+        holder.kill()
+        holder.wait()
+
+    assert held.is_dir()
+    assert f"could not remove {held}: in use by a live process: pid {holder.pid}" in (
+        done.stderr
+    )
+    assert done.returncode == 0, done.stderr
 
 
 def test_check_names_the_layer_that_settled_a_rebase_landed_branch(
