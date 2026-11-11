@@ -32,6 +32,21 @@ _DEPLOYER_STRINGS = (
     "gitops_deploy_ci_contexts",
     "gitops_deploy_ci_ancestor_walk_max",
 )
+# The repo paths #7962 deletes; the role's `end_role` stub stays until H7.55.
+_DEPLOYER_DIRS = (
+    "roles/setup/gitops_deploy/files",
+    "roles/setup/gitops_deploy/templates",
+    "roles/setup/gitops_deploy/tests",
+)
+
+
+def _path_parts(node: ast.expr) -> list[str]:
+    """The segments of a `/` join, `?` for each one that is not a string literal."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        return _path_parts(node.left) + _path_parts(node.right)
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return [node.value]
+    return ["?"]
 
 
 def _docstrings(tree: ast.AST) -> set[int]:
@@ -54,7 +69,17 @@ def _deployer_offence(subject: Subject) -> list[str]:
         return []
     prose = _docstrings(tree)
     hits = []
+    joins: set[int] = set()
     for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.BinOp)
+            and isinstance(node.op, ast.Div)
+            and node.lineno not in joins
+        ):
+            joined = "/".join(_path_parts(node))
+            if found := [d for d in _DEPLOYER_DIRS if d in joined]:
+                joins.add(node.lineno)
+                hits += [f"line {node.lineno}: joins {d}" for d in found]
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             names = [alias.name for alias in node.names]
             if isinstance(node, ast.ImportFrom):
@@ -80,7 +105,7 @@ def _deployer_offence(subject: Subject) -> list[str]:
         ):
             hits += [
                 f"line {node.lineno}: names {needle}"
-                for needle in _DEPLOYER_STRINGS
+                for needle in (*_DEPLOYER_STRINGS, *_DEPLOYER_DIRS)
                 if needle in node.value
             ]
     return hits
@@ -111,12 +136,23 @@ DEPLOYER_IMPORTS = Census(
         Subject("d.py", 'contexts = defaults["gitops_deploy_ci_contexts"]\n'),
         Subject("e.py", "from lib.repo_paths import GITOPS_DEPLOY_FILES\n"),
         Subject("f.py", "from lib import repo_paths\nrepo_paths.GITOPS_DEPLOY_FILES\n"),
+        Subject(
+            "g.py",
+            'SRC = REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py"\n',
+        ),
+        Subject(
+            "h.py",
+            'FILES = REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "files"\n',
+        ),
     ),
     green=(
         Subject("a.py", "from lib.tree_lock import TREE_LOCK\n"),
         Subject("b.py", '"""The deployer kept /var/lib/gitops-deploy/hold_sha."""\n'),
         Subject("c.py", "# gitops_markers once lived here\nimport json\n"),
         Subject("d.py", 'contexts = defaults["ci_required_contexts"]\n'),
+        Subject(
+            "e.py", 'STUB = ROLES / "setup" / "gitops_deploy" / "tasks" / "main.yml"\n'
+        ),
     ),
     min_matches=1000,
     must_find=frozenset({"scripts/deploy_tools/await_ci.py"}),
@@ -129,6 +165,9 @@ DEPLOYER_IMPORTS = Census(
             )
             for rel in (
                 "ansible/roles/k8s/monitor-bridge/files/gitops_hold.py",
+                "scripts/dev/gen_gitops_markers.py",
+                "scripts/renderer/renderer_lib/host_inputs.py",
+                "scripts/renderer/renderer_lib/host_sources.py",
                 "ansible/roles/k8s/monitor-bridge/files/gitops_ledger.py",
                 "ansible/roles/k8s/monitor-bridge/files/gitops_markers.py",
                 "ansible/tests/deploy/test_gitops_markers_copies.py",
@@ -163,6 +202,37 @@ DEPLOYER_IMPORTS = Census(
                 "scripts/docs/reference/state.py",
                 "scripts/lib/deployer_park.py",
                 "scripts/lib/tests/test_deployer_park.py",
+            )
+        },
+        **{
+            rel: (
+                "reads or names a file under the deployer's `files/`, `templates/` or "
+                "`tests/`; #7962 deletes the read or repoints the name with that code"
+            )
+            for rel in (
+                "ansible/tests/deploy/test_deploy_runs_from_a_snapshot_under_service_locks.py",
+                "ansible/tests/deploy/test_gitops_deploy_imports.py",
+                "ansible/tests/repo/test_census_rows_layout.py",
+                "ansible/tests/repo/test_census_rows_python.py",
+                "ansible/tests/repo/test_documented_paths_exist.py",
+                "ansible/tests/repo/test_entry_points_outside_scripts_answer_help.py",
+                "ansible/tests/repo/test_installed_units_log_level.py",
+                "ansible/tests/repo/test_module_length_ratchet.py",
+                "ansible/tests/repo/test_owner_entry_points_census.py",
+                "ansible/tests/repo/test_static_ratchet_hook.py",
+                "hosts/lib/tests/test_box_dev_tooling.py",
+                "scripts/deploy_tools/tests/test_deploy_tags_blockers.py",
+                "scripts/deploy_tools/tests/test_land_policy_import_shapes.py",
+                "scripts/deploy_tools/tests/test_land_policy.py",
+                "scripts/deploy_tools/tests/test_land_reach.py",
+                "scripts/deploy_tools/tests/test_land_tags.py",
+                "scripts/dev/tests/test_fanout_autoland.py",
+                "scripts/docs/gen_doc_fragments.py",
+                "scripts/docs/tests/test_gen_reference_decisions.py",
+                "scripts/lib/exit_codes.py",
+                "scripts/lib/tests/test_doc_freshness.py",
+                "scripts/lib/tests/test_facts_citations.py",
+                "scripts/validate/tests/test_validate_setup_templates.py",
             )
         },
         **{
