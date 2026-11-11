@@ -132,7 +132,7 @@ def test_a_stale_checkout_without_since_reruns_from_the_merges_parent():
     ln.merge_sha = "m" * 40
     with pytest.raises(Outcome) as raised:
         classify.refuse_stale_code(ln)
-    assert f"--since {'m' * 40}^1 --fresh" in raised.value.detail
+    assert f"--since '{'m' * 40}^1' --fresh" in raised.value.detail
 
 
 def test_a_comparison_git_could_not_make_refuses():

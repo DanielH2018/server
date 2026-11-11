@@ -5,6 +5,7 @@ move the bundle has nothing to wait for, and CI on the merge commit is not this 
 The deployer's timer applies a setup role on its own; this landing does not watch it.
 """
 
+import shlex
 import sys as _sys
 from collections.abc import Callable
 from pathlib import Path as _Path
@@ -111,7 +112,9 @@ def refuse_stale_code(ln: Landing) -> None:
     what = _stale_code_reason(ln, base)
     if not what:
         return
-    rerun = f"land.sh --pr {ln.opts.pr} --since {ln.opts.since or base} {FRESH_FLAG}"
+    # Quoted: zsh's extendedglob reads the `^` in `<sha>^1` as a glob and refuses the line.
+    since = shlex.quote(ln.opts.since or base)
+    rerun = f"land.sh --pr {ln.opts.pr} --since {since} {FRESH_FLAG}"
     ln.die(
         f"this landing runs from {OWN_CHECKOUT}, and {what}. PR #{ln.opts.pr} is merged, "
         f"and this landing graded nothing; re-run it as `{rerun}`, which lands from a "
