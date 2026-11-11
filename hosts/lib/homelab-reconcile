@@ -441,11 +441,12 @@ def enable_links_to(path: Path) -> list[Path]:
     """The `*.wants/` and `*.requires/` links in /etc/systemd/system that point at `path`.
 
     `systemctl enable` links an /etc unit by its absolute path, so a link to the packaged unit,
-    or to any other file, is not one of them.
+    or to any other file, is not one of them. A template's instance links carry the instance's
+    name, so the match is on the target alone.
     """
     return [
         ETC_UNIT_DIR / link.parent.name / link.name
-        for link in sorted(under_root(ETC_UNIT_DIR).glob(f"*/{path.name}"))
+        for link in sorted(under_root(ETC_UNIT_DIR).glob("*/*"))
         if link.parent.suffix in (".wants", ".requires")
         and link.is_symlink()
         and os.readlink(link) == str(path)

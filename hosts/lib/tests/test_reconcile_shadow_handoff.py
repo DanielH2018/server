@@ -165,6 +165,24 @@ def test_a_handed_off_unit_takes_its_etc_enable_links_and_keeps_every_other_link
     assert not {"disable", "stop", "mask"} & verbs
 
 
+def test_a_handed_off_template_takes_the_enable_links_of_its_instances(node):
+    template = "homelab-rootq@.service"
+    node.unit(template, "[Service]\nNew=1\n")
+    assert node.run().returncode == 0
+    shadow(node, f"{ETC}/{template}", "[Service]\nOld=1\n")
+    wants = node.root / ETC / "multi-user.target.wants"
+    wants.mkdir(parents=True)
+    os.symlink(f"/{ETC}/{template}", wants / "homelab-rootq@a.service")
+    os.symlink(f"/{ETC}/other@.service", wants / "other@a.service")
+    node.manifest["legacy"].append({"unit": template})
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert not os.path.lexists(wants / "homelab-rootq@a.service")
+    assert os.path.lexists(wants / "other@a.service")
+
+
 @pytest.mark.parametrize(
     "slice_dir", ["user.slice.d", "user-1000.slice.d", "user-995.slice.d"]
 )
