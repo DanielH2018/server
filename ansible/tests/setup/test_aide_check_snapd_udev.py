@@ -87,7 +87,9 @@ def test_a_snapd_rule_beside_a_new_revision_of_its_snap_is_clean(tmp_path):
     SNAPD_RULE_FLAGGED.values(),
     ids=SNAPD_RULE_FLAGGED.keys(),
 )
-def test_a_snapd_rule_no_refresh_explains_is_flagged(tmp_path, entries, rule, reason):
+def test_a_udev_rule_the_check_cannot_explain_is_flagged(
+    tmp_path, entries, rule, reason
+):
     path = entries[0].split(": ", 1)[1]
     code, pushed, _, _ = _run_check(
         tmp_path, _report(*entries), rc=4, rewrite={path: rule}
