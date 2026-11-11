@@ -22,7 +22,7 @@ from lib.git_testing import (
     scrubbed_env,
 )
 from lib.proc_testing import run
-from lib.worktrees import REMOVABLE, Worktree
+from lib.worktrees import IN_USE, REMOVABLE, Worktree
 from prune_worktrees import (
     delete_branch,
     find_orphan_dirs,
@@ -159,6 +159,18 @@ def test_prune_all_reports_a_removal_git_refused(capsys, tmp_path):
     assert failed == 1
     err = capsys.readouterr().err
     assert "could not remove /w: is dirty\n  blocked under /w\n" in err
+
+
+def test_prune_all_counts_no_failure_for_a_tree_a_live_process_holds(capsys, tmp_path):
+    failed = prune_all(
+        str(tmp_path),
+        [_tree()],
+        advise=lambda root: [],
+        remover=lambda repo, tree: (False, f"{IN_USE}: pid 7 (cwd /w)"),
+        reaper=lambda repo: [],
+    )
+    assert failed == 0
+    assert f"could not remove /w: {IN_USE}: pid 7 (cwd /w)" in capsys.readouterr().err
 
 
 def test_prune_all_counts_no_failure_when_every_removal_succeeds(tmp_path):

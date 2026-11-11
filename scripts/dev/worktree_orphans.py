@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from dev.foreign_owned import foreign_owned_advice
 from lib.git import git
-from lib.worktrees import processes_using
+from lib.worktrees import in_use_reason
 
 ORPHAN = "orphan"
 
@@ -149,19 +149,15 @@ def prune_orphans(paths: list[str]) -> int:
     `lib.worktrees.remove` applies to a registered tree, run just before the delete.
 
     Returns:
-      How many of `paths` were left in place, each named on stderr. The caller exits non-zero
-      on any, so the weekly cron cannot read a failed removal as a clean sweep.
+      How many of `paths` failed to delete, each named on stderr. The caller exits non-zero
+      on any, so the weekly cron cannot read a failed removal as a clean sweep. An orphan a
+      live process uses is named on stderr too but not counted: it is a skip (#7949).
     """
     failed = 0
     for path in paths:
-        users = processes_using(path)
-        if users:
-            named = "; ".join(f"pid {pid} ({how})" for pid, how in users)
-            print(
-                f"could not remove {path}: in use by a live process: {named}",
-                file=sys.stderr,
-            )
-            failed += 1
+        held = in_use_reason(path)
+        if held:
+            print(f"could not remove {path}: {held}", file=sys.stderr)
             continue
         try:
             shutil.rmtree(path)
