@@ -6,11 +6,9 @@
    `feed-cache` while the sidecar's pod label is `freshrss-feed-cache`. Same disqualifier as
    traefik's metrics-service. #}
 ---
-# THE NAME IS LOAD-BEARING. FreshRSS stores the subscription URL in its database, and the
-# seeded database holds `http://feed-cache/w/atom.xml`. A Service called anything else leaves
-# that feed resolving to nothing,
-# and FreshRSS reports it as an ordinary fetch failure, so it looks like the upstream is down.
-# Same class of trap as the *arr absolute-path footgun waiting in slice 4.
+# THE NAME IS LOAD-BEARING. FreshRSS stores subscription URLs in its database as
+# `http://feed-cache.homelab.svc.cluster.local/...`, and its internal-host allowlist names the
+# same host. Renaming the Service breaks both, and FreshRSS reports an ordinary fetch failure.
 apiVersion: v1
 kind: Service
 metadata:
