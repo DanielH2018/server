@@ -40,6 +40,8 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "mkdocs",                         # test_mkdocs_repo_links renders with mkdocs.yml's extensions
   "pymdown-extensions",             # through the hook module, which imports mkdocs.utils.
   "pygments",
+  "lxml",                           # scripts/freshrss/scrape_feed.py runs XPath 1.0 with functions
+  "lxml-stubs",                     # lxml.etree is a C extension; ty resolves it only from these
 ]
 # Tools only prek hooks and hand-run commands call, never a test. The CI jobs that run no lint
 # hook set UV_NO_GROUP=lint, so a lint tool's install (actionlint-py downloads its binary from
@@ -197,6 +199,7 @@ pythonpath = [
   "scripts/docs",
   # its tests share _catalog_fixtures.py, as scripts/deploy_tools/tests share _land_fakes.py
   "scripts/docs/tests",
+  "scripts/freshrss",
   "scripts/grafana",
   "scripts/home_assistant",
   "scripts/infra_map",
@@ -365,6 +368,7 @@ extra-paths = [
   "scripts/deploy_tools",
   "scripts/dev",
   "scripts/docs",
+  "scripts/freshrss",
   "scripts/grafana",
   "scripts/home_assistant",
   "scripts/infra_map",
