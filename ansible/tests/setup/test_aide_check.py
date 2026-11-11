@@ -25,7 +25,6 @@ Run: uv run pytest ansible/tests/setup/test_aide_check.py
 
 import re
 
-import pytest
 from _aide_check_run import (
     CHANGED_CONTENT,
     CLEAN_REPORT,
@@ -155,34 +154,43 @@ def test_worktrees_and_caches_are_excluded_and_their_neighbours_are_not():
     assert [p for p in CHECKED if _excluded(p, conf)] == []
 
 
-def _selection_groups(path: str, ftype: str, conf: str) -> list[str]:
-    """The attribute groups of every selection rule in `conf` that matches `path` of `ftype`."""
-    groups = []
+def _inode_skipped(path: str, conf: str) -> bool:
+    """Whether a selection line in `conf` that matches `path` gives it a rule ending in `-i`."""
     for line in conf.splitlines():
-        fields = line.split()
-        if len(fields) < 2 or not line.startswith("/") or not re.match(fields[0], path):
+        if not line.startswith("/"):
             continue
-        if len(fields) == 3 and ftype not in fields[1].split(","):
-            continue
-        groups.append(fields[-1])
-    return groups
+        regex, *_, rule = line.split()
+        if re.match(regex, path) and rule.endswith("-i"):
+            return True
+    return False
 
 
-@pytest.mark.parametrize(
-    ("path", "ftype"),
-    [
-        ("/boot/firmware", "d"),
-        ("/boot/firmware/bootcode.bin", "f"),
-        ("/boot/firmware/overlays", "d"),
-        ("/boot/firmware/overlays/disable-bt.dtbo", "f"),
-    ],
+# Live paths whose only change was a vfat inode number: daniel-box's ESP on 2026-11-09 and
+# daniel-pi's firmware partition on 2026-11-10.
+VFAT_PATHS = (
+    "/boot/efi/EFI/ubuntu",
+    "/boot/efi/EFI/ubuntu/grubx64.efi",
+    "/boot/firmware",
+    "/boot/firmware/README",
+    "/boot/firmware/overlays/pwm.dtbo",
+    "/boot/firmware/System Volume Information/WPSettings.dat",
 )
-def test_the_pis_vfat_firmware_partition_skips_inode_numbers(path, ftype):
-    """vfat renumbers inodes when the Pi evicts them, which paged on 734 paths (#7951)."""
+# ext4 neighbours whose inode number stays a real signal.
+INODE_CHECKED = ("/boot/vmlinuz", "/boot/firmware-old", "/boot/initrd.img")
+
+
+def test_every_vfat_path_skips_its_inode_and_its_ext4_neighbours_do_not():
     conf = render_setup_text(
         "initial_setup", "98_aide_local.conf.j2", {"sys_user": "ubuntu"}
     )
-    assert _selection_groups(path, ftype, conf) == ["Full-i"]
+    assert [p for p in VFAT_PATHS if not _inode_skipped(p, conf)] == []
+    assert [p for p in INODE_CHECKED if _inode_skipped(p, conf)] == []
+
+
+def test_a_firmware_path_without_its_rule_is_flagged():
+    efi_only = "/boot/efi/EFI/(ubuntu|BOOT)/[^/]+$ f Full-i\n"
+    assert _inode_skipped("/boot/efi/EFI/ubuntu/grubx64.efi", efi_only)
+    assert not _inode_skipped("/boot/firmware/README", efi_only)
 
 
 # Debian's /etc/aide/aide.conf: `@@x_include /etc/aide/aide.conf.d ^[a-zA-Z0-9_-]+$`. A

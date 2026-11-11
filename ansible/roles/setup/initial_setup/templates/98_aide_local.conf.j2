@@ -66,18 +66,18 @@
 !/swap\.img$
 !/swapfile$
 
-# The EFI loaders Ubuntu installs, with the same Full-i the aide package's 31_aide_grub-efi gives
-# Debian's EFI/debian. vfat has no stored inode numbers, so every mount renumbers them, and the
-# 2026-11-09 check on daniel-box paged on seven of these with their 2026-07-31 mtimes intact.
-# EFI/BOOT/BOOTX64.EFI, the one file 31_aide_grub-efi covers, did not page.
+# vfat has no stored inode numbers. The kernel invents one each time it loads a file's inode,
+# so the number changes across a mount and also within one, once the inode leaves the cache.
+# Every vfat path therefore gets Full-i, the rule the aide package's 31_aide_grub-efi gives
+# Debian's EFI/debian.
+# The EFI loaders Ubuntu installs: the 2026-11-09 check on daniel-box paged on seven of these
+# with their 2026-07-31 mtimes intact. EFI/BOOT/BOOTX64.EFI, the one file 31_aide_grub-efi
+# covers, did not page.
 /boot/efi/EFI/(ubuntu|BOOT)$ d Full-i
 /boot/efi/EFI/(ubuntu|BOOT)/[^/]+$ f Full-i
-
-# The Pi's firmware partition, vfat like the EFI loaders and Full-i for the same reason, with
-# overlays/ included. The Pi's small RAM evicts these inodes during a scan, so the next scan reads
-# them back renumbered: on 2026-11-10 a re-run paged on 734 of its 737 entries without a reboot.
-/boot/firmware$ d Full-i
-/boot/firmware/.* Full-i
+# The Pi's firmware partition: the 2026-11-10 check on daniel-pi paged on 734 of its files,
+# whose only change was the inode, three hours after a baseline taken on the same boot.
+/boot/firmware(/|$) Full-i
 
 # Virtual/pseudo filesystems — not real files, cause inflated read counts
 !/proc/
