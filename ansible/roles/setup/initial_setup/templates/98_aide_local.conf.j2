@@ -73,6 +73,12 @@
 /boot/efi/EFI/(ubuntu|BOOT)$ d Full-i
 /boot/efi/EFI/(ubuntu|BOOT)/[^/]+$ f Full-i
 
+# The Pi's firmware partition, vfat like the EFI loaders and Full-i for the same reason, with
+# overlays/ included. The Pi's small RAM evicts these inodes during a scan, so the next scan reads
+# them back renumbered: on 2026-11-10 a re-run paged on 734 of its 737 entries without a reboot.
+/boot/firmware$ d Full-i
+/boot/firmware/.* Full-i
+
 # Virtual/pseudo filesystems — not real files, cause inflated read counts
 !/proc/
 !/sys/

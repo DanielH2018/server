@@ -25,6 +25,7 @@ Run: uv run pytest ansible/tests/setup/test_aide_check.py
 
 import re
 
+import pytest
 from _aide_check_run import (
     CHANGED_CONTENT,
     CLEAN_REPORT,
@@ -152,6 +153,36 @@ def test_worktrees_and_caches_are_excluded_and_their_neighbours_are_not():
     )
     assert [p for p in EXCLUDED if not _excluded(p, conf)] == []
     assert [p for p in CHECKED if _excluded(p, conf)] == []
+
+
+def _selection_groups(path: str, ftype: str, conf: str) -> list[str]:
+    """The attribute groups of every selection rule in `conf` that matches `path` of `ftype`."""
+    groups = []
+    for line in conf.splitlines():
+        fields = line.split()
+        if len(fields) < 2 or not line.startswith("/") or not re.match(fields[0], path):
+            continue
+        if len(fields) == 3 and ftype not in fields[1].split(","):
+            continue
+        groups.append(fields[-1])
+    return groups
+
+
+@pytest.mark.parametrize(
+    ("path", "ftype"),
+    [
+        ("/boot/firmware", "d"),
+        ("/boot/firmware/bootcode.bin", "f"),
+        ("/boot/firmware/overlays", "d"),
+        ("/boot/firmware/overlays/disable-bt.dtbo", "f"),
+    ],
+)
+def test_the_pis_vfat_firmware_partition_skips_inode_numbers(path, ftype):
+    """vfat renumbers inodes when the Pi evicts them, which paged on 734 paths (#7951)."""
+    conf = render_setup_text(
+        "initial_setup", "98_aide_local.conf.j2", {"sys_user": "ubuntu"}
+    )
+    assert _selection_groups(path, ftype, conf) == ["Full-i"]
 
 
 # Debian's /etc/aide/aide.conf: `@@x_include /etc/aide/aide.conf.d ^[a-zA-Z0-9_-]+$`. A
