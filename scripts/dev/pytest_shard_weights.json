@@ -695,7 +695,7 @@
  "ansible/tests/setup/test_initial_setup_check_textfiles.py": 0.17,
  "ansible/tests/setup/test_initial_setup_roles_are_visible_to_the_deployer.py": 0.0,
  "ansible/tests/setup/test_integrity_scan_rule_literals.py": 0.33,
- "ansible/tests/setup/test_journald_syslog_forwarding.py": 3.21,
+ "ansible/tests/setup/test_journald_syslog_forwarding.py": 1.57,
  "ansible/tests/setup/test_k3s_agent_component.py": 1.32,
  "ansible/tests/setup/test_k3s_agent_flags_migration.py": 0.8,
  "ansible/tests/setup/test_k3s_control_plane_hardening.py": 1.24,
