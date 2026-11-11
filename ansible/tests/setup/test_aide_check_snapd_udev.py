@@ -2,11 +2,13 @@
 
 snapd rewrites /etc/udev/rules.d/70-snap.<snap>.rules from its own snap at each refresh, so no
 package owns the file. A udev rule runs as root, so the name alone explains nothing: the rule is
-explained only beside a new revision of its snap, and only while it runs no program, starts no
-unit and grants no device access.
+explained only beside a new revision of its snap, and only while every key in it only matches,
+sets ENV or jumps.
 
 Run: uv run pytest ansible/tests/setup/test_aide_check_snapd_udev.py
 """
+
+import os
 
 import pytest
 from _aide_check_run import ADDED, CHANGED_CONTENT, _report, _run_check
@@ -24,42 +26,27 @@ KERNEL=="ttyACM[0-9]*", TAG+="snap_snapd_snap"
 TAG=="snap_snapd_snap", RUN+="/usr/lib/snapd/snap-device-helper $env{ACTION} snap_snapd_snap $devpath $major:$minor"
 LABEL="mm_end"
 """
-SNAPD_ACTIVE = (
-    "a snapd udev rule that runs a program, starts a unit or changes device access"
-)
+SNAPD_ACTIVE = "a snapd udev rule with a key that does more than match, set ENV or jump"
 SNAPD_UNREVISED = (
     "a snapd udev rule changed, but the report adds no new revision of that snap"
 )
-# (the report's entries, the rule file's content, the reason it pages).
-SNAPD_RULE_FLAGGED = {
-    "a udev rule outside snapd's names, in a snapd refresh": (
-        (f"{ADDED}: /etc/udev/rules.d/99-extra.rules", SNAPD_REVISION),
-        INERT_RULE,
-        "no package owns this login, privilege or startup file",
-    ),
-    "a snapd rule that gives the logged-in user a device": (
-        (f"{CHANGED_CONTENT}: {SNAPD_RULE}", SNAPD_REVISION),
-        INERT_RULE + 'KERNEL=="sda", TAG+="uaccess"\n',
-        SNAPD_ACTIVE,
-    ),
-    "a snapd rule that runs another program": (
-        (f"{CHANGED_CONTENT}: {SNAPD_RULE}", SNAPD_REVISION),
-        INERT_RULE + 'KERNEL=="sda", RUN+="/tmp/implant"\n',
-        SNAPD_ACTIVE,
-    ),
-    "a snapd rule that opens a disk to every user": (
-        (f"{CHANGED_CONTENT}: {SNAPD_RULE}", SNAPD_REVISION),
-        INERT_RULE + 'KERNEL=="sda", MODE="0666"\n',
-        SNAPD_ACTIVE,
-    ),
-    "a snapd rule that starts a unit": (
-        (f"{CHANGED_CONTENT}: {SNAPD_RULE}", SNAPD_REVISION),
-        INERT_RULE + 'KERNEL=="sda", ENV{SYSTEMD_WANTS}="implant.service"\n',
-        SNAPD_ACTIVE,
-    ),
+# A line appended to an otherwise inert snapd rule file, each a key udev acts on as root.
+ACTIVE_LINES = {
+    "gives the logged-in user a device": 'KERNEL=="sda", TAG+="uaccess"',
+    "runs another program": 'KERNEL=="sda", RUN+="/tmp/implant"',
+    "runs a program to match": 'KERNEL=="sda", PROGRAM=="/tmp/implant"',
+    "imports a program's output": 'KERNEL=="sda", IMPORT{program}=="/tmp/implant"',
+    "opens a disk to every user": 'KERNEL=="sda", MODE="0666"',
+    "starts a unit": 'KERNEL=="sda", ENV{SYSTEMD_WANTS}="implant.service"',
+    "writes sysfs": 'SUBSYSTEM=="usb", ATTR{authorized}="1"',
+    "writes a sysctl": 'KERNEL=="sda", SYSCTL{kernel.modprobe}="/tmp/implant"',
+    "runs a program after a tab": 'KERNEL=="sda",\tRUN+="/tmp/implant"',
+    "runs a program on a continued line": 'KERNEL=="sda", \\\n  RUN+="/tmp/implant"',
+}
+# (the report's entries, the reason it pages).
+SNAPD_RULE_UNEXPLAINED = {
     "a snapd rule changed in a week the snap did not refresh": (
         (f"{CHANGED_CONTENT}: {SNAPD_RULE}",),
-        INERT_RULE,
         SNAPD_UNREVISED,
     ),
     "a snapd rule changed beside another snap's refresh": (
@@ -67,10 +54,25 @@ SNAPD_RULE_FLAGGED = {
             f"{CHANGED_CONTENT}: {SNAPD_RULE}",
             f"{ADDED}: /etc/systemd/system/snap-core22-2045.mount",
         ),
-        INERT_RULE,
         SNAPD_UNREVISED,
     ),
+    # Kept behaviour: the snapd form names only 70-snap.<snap>.rules, so a near name pages as any
+    # unpackaged rule did before.
+    "a rule named one off the snapd form, in a snapd refresh": (
+        (f"{ADDED}: /etc/udev/rules.d/71-snap.snapd.rules", SNAPD_REVISION),
+        "no package owns this login, privilege or startup file",
+    ),
 }
+
+
+def _flagged(tmp_path, entries, rule, reason, **setup):
+    path = entries[0].split(": ", 1)[1]
+    code, pushed, _, _ = _run_check(
+        tmp_path, _report(*entries), rc=4, rewrite={path: rule}, **setup
+    )
+    assert pushed[0] == "down", pushed
+    assert f"{path} ({reason})" in pushed[1], pushed[1]
+    assert code == 1
 
 
 def test_a_snapd_rule_beside_a_new_revision_of_its_snap_is_clean(tmp_path):
@@ -82,18 +84,22 @@ def test_a_snapd_rule_beside_a_new_revision_of_its_snap_is_clean(tmp_path):
     assert code == 0
 
 
+@pytest.mark.parametrize("line", ACTIVE_LINES.values(), ids=ACTIVE_LINES.keys())
+def test_a_snapd_rule_with_an_active_key_is_flagged(tmp_path, line):
+    entries = (f"{CHANGED_CONTENT}: {SNAPD_RULE}", SNAPD_REVISION)
+    _flagged(tmp_path, entries, f"{INERT_RULE}{line}\n", SNAPD_ACTIVE)
+
+
 @pytest.mark.parametrize(
-    ("entries", "rule", "reason"),
-    SNAPD_RULE_FLAGGED.values(),
-    ids=SNAPD_RULE_FLAGGED.keys(),
+    ("entries", "reason"),
+    SNAPD_RULE_UNEXPLAINED.values(),
+    ids=SNAPD_RULE_UNEXPLAINED.keys(),
 )
-def test_a_udev_rule_the_check_cannot_explain_is_flagged(
-    tmp_path, entries, rule, reason
-):
-    path = entries[0].split(": ", 1)[1]
-    code, pushed, _, _ = _run_check(
-        tmp_path, _report(*entries), rc=4, rewrite={path: rule}
-    )
-    assert pushed[0] == "down", pushed
-    assert f"{path} ({reason})" in pushed[1], pushed[1]
-    assert code == 1
+def test_a_udev_rule_no_refresh_explains_is_flagged(tmp_path, entries, reason):
+    _flagged(tmp_path, entries, INERT_RULE, reason)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads a mode-000 file")
+def test_a_snapd_rule_the_check_cannot_read_is_flagged(tmp_path):
+    entries = (f"{CHANGED_CONTENT}: {SNAPD_RULE}", SNAPD_REVISION)
+    _flagged(tmp_path, entries, INERT_RULE, SNAPD_ACTIVE, unreadable=(SNAPD_RULE,))

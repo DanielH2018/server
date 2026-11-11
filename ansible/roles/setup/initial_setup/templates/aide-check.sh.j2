@@ -47,7 +47,7 @@
 #   MOTD scripts, /usr/local/sbin and every authorized_keys. The units the k3s installer and
 #   snapd write are listed in ROLE_WRITTEN and are judged only when a package owns them.
 #   snapd's udev rules are explained only beside a new revision of their snap, and only while
-#   they run nothing and grant no device access (SNAPD_UDEV).
+#   every key in them only matches, sets ENV or jumps (SNAPD_UDEV).
 # - An added or changed /usr/local/bin entry named like a command a package installs, because
 #   root's PATH reaches /usr/local/bin first. The roles' own scripts there have no such twin.
 # - Any of the above, or any package-owned /etc path, whose owner, group or permissions changed,
@@ -114,17 +114,15 @@ ROLE_WRITTEN='^/etc/systemd/system/(k3s(-agent)?\.service(\.env)?|snap-[a-z0-9-]
 # DECIDED: snapd's generated udev rules are not ROLE_WRITTEN (#7929). A udev rule runs as root
 # on device events, so the name alone explains nothing. One is explained only while no package
 # owns it, it is a regular file, the same report adds a mount unit for a new revision of that
-# snap, and it assigns none of SNAPD_UDEV_ACTIVE. On daniel-server on 2026-11-11,
+# snap, and snapd_rule_verdict reads every key in it as inert. On daniel-server on 2026-11-11,
 # 70-snap.snapd.rules held snapd's 836-line copy of the ModemManager and oFono rules: match keys,
 # ENV, GOTO and LABEL only. It changed on 2026-11-06 07:02 beside snap-snapd-28332.mount.
 # A rule an edit or a connected interface changes outside a refresh still pages.
 SNAPD_UDEV='^/etc/udev/rules\.d/70-snap\.[a-z0-9_-]+\.rules$'
 SNAPD_MOUNT='^/etc/systemd/system/snap-[a-z0-9-]+-[0-9]+\.mount$'
-# Assignments that run a program, start a unit or change who can open the device. snapd's own
-# helper and its snap_* tags, which put a device in a snap's cgroup, are removed from each line
-# before the test.
+# snapd's own helper and its snap_* tags, which put a device in a snap's cgroup. They are removed
+# before the keys are judged.
 SNAPD_UDEV_OWN='RUN\+="/usr/lib/snapd/snap-device-helper [^"]*"|TAG\+="snap_[a-z0-9_-]+"'
-SNAPD_UDEV_ACTIVE='(^|[ ,])(RUN|PROGRAM|IMPORT|MODE|OWNER|GROUP|OPTIONS|SECLABEL|SYMLINK|NAME|TAG)(\{[^}]*\})?[+:-]?=[^=]|SYSTEMD_'
 # DECIDED: /usr/local/bin pages on a name a package also installs, not on every unpackaged entry
 # the way /usr/local/sbin does. Root's PATH reaches /usr/local/bin before /usr/bin, so a twin of a
 # packaged command replaces it for root. A list of the legitimate names would have to cover
@@ -272,6 +270,39 @@ snaps_revised() {
     }'
 }
 
+# Prints "inert" when every key in the udev rules file $1 only matches, sets ENV or jumps, and
+# "active" otherwise. An allowlist, because udev runs a program for PROGRAM== and IMPORT== as
+# well as for RUN+=, and writes sysfs and sysctls for ATTR= and SYSCTL=. A file awk cannot read
+# prints nothing, which the caller judges as active.
+snapd_rule_verdict() {
+  SNAPD_UDEV_OWN="$SNAPD_UDEV_OWN" awk '
+    function allowed(key, arg, op) {
+      if (op == "==" || op == "!=") return key ~ /^(ACTION|DEVPATH|KERNELS?|SUBSYSTEMS?|DRIVERS?|ATTRS?|ENV|TAGS?|CONST)$/
+      if (key == "GOTO" || key == "LABEL") return op == "="
+      return key == "ENV" && arg !~ /^SYSTEMD_/
+    }
+    function judge(s,    q, t, key, arg, op) {
+      gsub(ENVIRON["SNAPD_UDEV_OWN"], "", s)
+      q = s
+      if (gsub(/"/, "", q) % 2) return 0
+      gsub(/"[^"]*"/, "\"\"", s)
+      while (match(s, /[A-Za-z_.]+(\{[^}]*\})?[ \t]*[=!+:-]?=/)) {
+        t = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
+        key = t; sub(/[^A-Za-z_.].*$/, "", key)
+        arg = ""; if (match(t, /\{[^}]*\}/)) arg = substr(t, RSTART + 1, RLENGTH - 2)
+        op = t; sub(/^.*[^=!+:-]/, "", op)
+        if (!allowed(key, arg, op)) return 0
+      }
+      return 1
+    }
+    # udev joins a line that ends in a backslash to the next.
+    /\\$/ { line = line substr($0, 1, length($0) - 1); next }
+    { line = line $0 }
+    line !~ /^[ \t]*(#|$)/ && !judge(line) { bad = 1 }
+    { line = "" }
+    END { print (bad ? "active" : "inert") }' "$1"
+}
+
 # Prints "path (reason)" for each paged entry no package explains. Reads the files as they are
 # now: AIDE has just hashed them, and a change in between is next week's report.
 unexplained_entries() {
@@ -286,12 +317,8 @@ unexplained_entries() {
         [[ "$target" == "?" || -e "$FS_ROOT$target" ]] || dangling=dangling
       elif [[ -f "$FS_ROOT$path" ]]; then
         digest=$(md5sum <"$FS_ROOT$path" | awk '{ print $1 }') || digest=-
-        # A rule file that cannot be read is judged as active. grep -c, not -q, so an early exit
-        # cannot turn a match into a pipefail status.
         if [[ "$path" =~ $SNAPD_UDEV ]]; then
-          rule=active
-          [[ -r "$FS_ROOT$path" ]] && [[ "$(grep -v '^[[:space:]]*#' -- "$FS_ROOT$path" \
-            | sed -E "s#${SNAPD_UDEV_OWN}##g" | grep -cE -- "$SNAPD_UDEV_ACTIVE")" == 0 ]] && rule=inert
+          rule=$(snapd_rule_verdict "$FS_ROOT$path") || rule=active
         fi
       fi
     fi
@@ -397,7 +424,7 @@ unexplained_entries() {
       else if (p in owned) { if (!link_ok) why = "a package owns it, but it is not the link the package installed" }
       else if (link_ok) next
       # $9 is set only for a regular file SNAPD_UDEV names.
-      else if ($9 == "active") why = "a snapd udev rule that runs a program, starts a unit or changes device access"
+      else if ($9 == "active") why = "a snapd udev rule with a key that does more than match, set ENV or jump"
       else if ($9 == "inert") {
         snap = base; sub(/^70-snap\./, "", snap); sub(/\.rules$/, "", snap)
         if (index(ENVIRON["SNAPS_REVISED"], " " snap " ") == 0) why = "a snapd udev rule changed, but the report adds no new revision of that snap"
