@@ -407,7 +407,7 @@ def render_brief(
         )
     return f"""# Fan-out batch {batch} on {host}
 
-You are a headless Opus agent in the worktree `{branch}` of {target.checkout}, checked out
+You are a headless agent in the worktree `{branch}` of {target.checkout}, checked out
 fresh from {target.base}. Work the issues below to a PR.
 
 ## Claim

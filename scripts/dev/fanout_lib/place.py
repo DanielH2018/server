@@ -3,9 +3,9 @@
 Reads memory.current against MemoryHigh for BOTH cgroups an agent lives in — user.slice (the
 fleet) and the running user's user-<uid>.slice (the login plane) — on daniel-box and daniel-server, scores each host
 on the tighter of the two, picks the host with the most headroom per batch, creates a fresh
-worktree there, and starts a headless
-Opus agent as a transient user service. daniel-box agents land their PR; daniel-server agents
-stop at `gh pr create`. It shipped in commit bd8e62bf8.
+worktree there, and starts a headless agent, at the rung `--size` names
+(`fanout_lib.sizing`), as a transient user service. daniel-box agents land their PR;
+daniel-server agents stop at `gh pr create`. It shipped in commit bd8e62bf8.
 `launch` runs `fanout.py review` unless given `--no-review`: a review between each batch's PR
 and its landing, and a red phase before a `red-green` batch's implementer. `fanout_lib/review/review.py` has the phases.
 
@@ -78,6 +78,7 @@ from fanout_lib.abandon import cmd_abandon, cmd_stop
 from fanout_lib import launch as launch_mod
 from fanout_lib import manifest as manifest_mod
 from fanout_lib import signing as signing_mod
+from fanout_lib import sizing
 from fanout_lib import status as status_mod
 from fanout_lib.status_view import one_line, runs_lines, status_lines
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
@@ -256,6 +257,10 @@ def cmd_launch(args, tools: Tools) -> int:
     batches = claims_mod.parse_batches(args.batch)
     if batches is None:
         return FANOUT_PLACE_BAD_ARGS
+    sizes = sizing.parse_sizes(args.size, batches)
+    if isinstance(sizes, str):
+        error(sizes)
+        return FANOUT_PLACE_BAD_ARGS
     try:
         target, args.host = for_launch(
             args.repo, args.host, this_host(), tools.default_ref
@@ -306,6 +311,7 @@ def cmd_launch(args, tools: Tools) -> int:
     refused = False
     for batch, host in placed:
         numbers = batches[batch]
+        chosen = sizes.get(batch)
         if target.is_server:
             # Claimed here, after every gate, so a refusal above leaves nothing claimed,
             # and per batch, so a failed launch below leaves no later batch claimed.
@@ -317,10 +323,11 @@ def cmd_launch(args, tools: Tools) -> int:
                 continue
         issues = [fetched[n] for n in numbers]
         flags = review_flags(batch, issues, args.review, target.is_server)
+        rung = sizing.size([label for i in issues for label in i.labels], chosen)
         brief = render_brief(issues, host, batch, holder, health, target, args.review)
         try:
             launched = launch_mod.launch(
-                tools, host, batch, brief, numbers, target, *flags
+                tools, host, batch, brief, numbers, target, *flags, rung=rung
             )
             run.batches.append(launched)
             # Saved per batch, not once after the loop: a launch killed between batches
@@ -353,7 +360,7 @@ def cmd_launch(args, tools: Tools) -> int:
         error("launched nothing: every issue's claim was refused")
         return FANOUT_PLACE_NOTHING_PLACED
     manifest_mod.save(run, root=args.manifest_root)
-    pairs = ", ".join(f"{b.batch} -> {b.host}" for b in run.batches)
+    pairs = ", ".join(f"{b.batch} -> {b.host} ({b.rung})" for b in run.batches)
     # `findings.py release` names the holder, so print it where the orchestrator reads.
     held = f"; claims held under `{holder}`" if target.is_server else ""
     print(f"run {run.run_id}: {pairs}{held}")
@@ -565,6 +572,13 @@ def main(argv=None, tools: Tools | None = None) -> int:
         default=True,
         help="review each batch's PR in a separate session before it lands (the default; "
         "--no-review skips it)",
+    )
+    launch_parser.add_argument(
+        "--size",
+        action="append",
+        default=[],
+        metavar="BATCH=RUNG",
+        help=sizing.SIZE_HELP,
     )
     _add_manifest_root(launch_parser)
     launch_parser.set_defaults(fn=cmd_launch)
