@@ -1333,6 +1333,7 @@
  "scripts/lib/tests/test_narrow_git.py": 0.02,
  "scripts/lib/tests/test_narrowing_readers_census.py": 0.01,
  "scripts/lib/tests/test_operator_kubectl.py": 0.0,
+ "scripts/lib/tests/test_path_kinds.py": 0.0,
  "scripts/lib/tests/test_plain_scalar.py": 0.0,
  "scripts/lib/tests/test_proc_testing.py": 0.2,
  "scripts/lib/tests/test_progress.py": 0.0,
