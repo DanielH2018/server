@@ -1167,6 +1167,7 @@
  "scripts/dev/tests/test_pytest_shard_durations.py": 0.27,
  "scripts/dev/tests/test_pytest_shard_refresh.py": 0.04,
  "scripts/dev/tests/test_pytest_shard_runner_table.py": 0.0,
+ "scripts/dev/tests/test_reject_robot_emoji.py": 0.0,
  "scripts/dev/tests/test_renovate_branch_sweep.py": 0.0,
  "scripts/dev/tests/test_renovate_rebase.py": 0.0,
  "scripts/dev/tests/test_repo_guards.py": 0.0,
