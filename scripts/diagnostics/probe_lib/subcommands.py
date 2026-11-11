@@ -62,8 +62,9 @@ SUBCOMMANDS = [
     ("metric", "Prometheus instant query", "metrics", run_query),
     (
         "targets",
-        "Prometheus scrape-target health: down targets and the up count (--pi scopes to "
-        "daniel-pi, --json prints the raw API response)",
+        "Prometheus scrape-target health: down targets and the up count, a job whose "
+        "Deployment is scaled to 0 exempt (--pi scopes to daniel-pi, --json prints the raw "
+        "API response)",
         "pi_plane",
         run_targets,
     ),

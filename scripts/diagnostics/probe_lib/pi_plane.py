@@ -1,7 +1,9 @@
 """`probe.py targets [--pi]` and `probe.py pi containers` — scrape targets and daniel-pi triage.
 
 Plain `targets` prints each down target and the up count; `targets --json` streams the raw
-Prometheus JSON through `plan()` instead. daniel-pi runs no kubelet, so `--pi` scopes the view
+Prometheus JSON through `plan()` instead. A down target whose job names a Deployment at
+`spec.replicas: 0`, such as an idle game server's stats exporter, prints as `scaled to 0` and
+does not fail the verdict. daniel-pi runs no kubelet, so `--pi` scopes the view
 to the jobs observability's prometheus.yaml.j2 declares on it.
 
 `alerts --pi` filters in probe_lib/alerts.py, beside the series it reads, and takes its job
@@ -27,6 +29,7 @@ from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST, prom_endpoint, prom_targets_url
 
 from lib.exit_codes import PROBE_UNREADABLE
+from lib.kubectl import DEFAULT_CLUSTER, MissingKubectl, WrongCluster, kubectl_json
 from lib.repo_paths import REPO
 
 PROMETHEUS_TEMPLATE_PATH = (
@@ -110,24 +113,61 @@ def format_pi_targets(declared, active_targets):
     return text, 1 if missing or down else 0
 
 
-def format_targets(active):
-    """(text, exit code) for every scrape target: one line per down target, then the count."""
+def format_targets(active, scaled_to_zero=frozenset()):
+    """(text, exit code) for every scrape target: one line per down target, then the count.
+
+    A down target whose job is in `scaled_to_zero` prints as `scaled to 0` and does not fail.
+    """
     down = [t for t in active if t.get("health") != "up"]
-    lines = []
+    lines, failed = [], 0
     for t in down:
         labels = t.get("labels") or {}
+        job, inst = labels.get("job", "?"), labels.get("instance", "?")
+        if job in scaled_to_zero:
+            lines.append(f"  - {job} [{inst}] scaled to 0")
+            continue
+        failed += 1
         err = " ".join((t.get("lastError") or "no error given").split())[:120]
-        lines.append(
-            f"  ✗ {labels.get('job', '?')} [{labels.get('instance', '?')}] {err}"
+        lines.append(f"  ✗ {job} [{inst}] {err}")
+    count = f"{len(active) - len(down)}/{len(active)} targets up"
+    if len(down) > failed:
+        count += f", {len(down) - failed} scaled to 0"
+    lines.append(count)
+    return "\n".join(lines), 1 if failed else 0
+
+
+def scaled_to_zero_deployments(cluster, read=kubectl_json):
+    """Names of the workload namespace's Deployments that declare `spec.replicas: 0`.
+
+    Any failed read returns an empty set, so a down target nobody can show to be idle on
+    purpose keeps failing the verdict. `read` replaces `kubectl_json`, for a test.
+    """
+    try:
+        data = read(
+            cluster, "-n", core.k8s_namespace(), "get", "deployments", "-o", "json"
         )
-    lines.append(f"{len(active) - len(down)}/{len(active)} targets up")
-    return "\n".join(lines), 1 if down else 0
+    except WrongCluster, MissingKubectl, subprocess.TimeoutExpired, OSError:
+        return set()
+    items = (data or {}).get("items")
+    names = set()
+    for d in items if isinstance(items, list) else []:
+        if not isinstance(d, dict):
+            continue
+        meta, spec = d.get("metadata"), d.get("spec")
+        if (
+            isinstance(meta, dict)
+            and isinstance(spec, dict)
+            and spec.get("replicas") == 0
+        ):
+            names.add(meta.get("name"))
+    return names
 
 
-def run_targets(ns, fetch_json=None):
-    """`probe.py targets` (exit 0 = every target is up); `--pi` scopes it to daniel-pi.
+def run_targets(ns, fetch_json=None, scaled_lookup=scaled_to_zero_deployments):
+    """`probe.py targets` (exit 0 = every target is up or scaled to 0); `--pi` scopes it to daniel-pi.
 
-    `fetch_json` replaces `core.fetch_json`, for a test.
+    `fetch_json` replaces `core.fetch_json` and `scaled_lookup` the live Deployment read, for a
+    test. The Deployment read runs only when a target is down.
     """
     if ns.pi:
         return run_pi_targets(ns)
@@ -135,7 +175,11 @@ def run_targets(ns, fetch_json=None):
     data, err = (fetch_json or core.fetch_json)(prom_targets_url(base), resolve=pin)
     if err:
         return err
-    text, code = format_targets((data.get("data") or {}).get("activeTargets") or [])
+    active = (data.get("data") or {}).get("activeTargets") or []
+    scaled = set()
+    if any(t.get("health") != "up" for t in active):
+        scaled = scaled_lookup(getattr(ns, "cluster", DEFAULT_CLUSTER))
+    text, code = format_targets(active, scaled)
     print(text)
     return code
 
