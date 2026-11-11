@@ -120,7 +120,10 @@ Environment=HOME={{ claude_code_user_home }}
 # recorded for the host crons: without /usr/local/bin a spawned session loses kubectl and
 # uv, then reports an EMPTY CLUSTER rather than failing. The failure is silent in precisely
 # the direction that reads like a working session.
-Environment=PATH={{ claude_code_user_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Node comes from the operator's fnm default alias: ~/.zshrc returns before fnm for the
+# non-interactive shell a session snapshots. The agent's home holds no fnm (#7972).
+{% set fnm_node = claude_code_user_home ~ '/.local/share/fnm/aliases/default/bin:' if claude_code_user == sys_user else '' %}
+Environment=PATH={{ fnm_node }}{{ claude_code_user_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=KUBECONFIG={{ claude_code_user_home }}/.kube/config
 
 {% if claude_code_rc_disable_bg_shell_pressure_reap %}

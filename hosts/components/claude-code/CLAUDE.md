@@ -146,7 +146,9 @@ directory.
 - **`--spawn=` must be passed explicitly**, or Claude Code asks on stdin and the host hangs,
   never connected, while the unit reads `active`.
 - **`PATH` must name `/usr/local/bin`**, as with cron: without it a spawned session loses `kubectl`
-  and `uv` and reports an **empty cluster** rather than failing.
+  and `uv` and reports an **empty cluster** rather than failing. The operator's unit also names
+  fnm's default alias, because `~/.zshrc` returns before fnm in the non-interactive shell a
+  session snapshots, so a session has no `node` without it (#7972).
 - **No `MemoryMax`**: systemd applies it to the whole cgroup, so one runaway session takes the
   OOM kill for every session.
 - **`claude_code_rc_capacity` bounds session count, not memory**, and `MemoryHigh` throttles rather
