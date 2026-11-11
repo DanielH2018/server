@@ -478,8 +478,11 @@ def test_cited_paths_skips_a_span_quoting_program_output():
     assert cited_paths(body) == [".claude/hooks/session-health.py"]
 
 
-def test_cited_paths_keeps_one_path_per_span_and_a_span_without_commas():
-    body = "`scripts/dev/a.py`, `scripts/dev/b.py` and `uv run pytest scripts/dev/c.py scripts/dev/d.py`"
+def test_cited_paths_keeps_a_span_with_one_path_or_without_commas():
+    body = (
+        "`scripts/dev/a.py`, `scripts/dev/b.py, line 3` and "
+        "`uv run pytest scripts/dev/c.py scripts/dev/d.py`"
+    )
     assert cited_paths(body) == [
         "scripts/dev/a.py",
         "scripts/dev/b.py",
