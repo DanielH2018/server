@@ -11,7 +11,10 @@ Type=oneshot
 SyslogLevel=notice
 ExecStart=/usr/lib/homelab/homelab-updater
 Nice=10
-IOSchedulingClass=idle
+# Best-effort at its lowest level, so the integrity scans' idle-class reads yield to the install
+# on the Pi's mq-deadline SD card (#7941). The cluster nodes' root NVMe schedules with `none`.
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
 # Reconcile's 30 minutes, the install's 10-minute DPkg::Lock::Timeout, and 10 minutes for the
 # fetch and the unpack. hosts/lib/tests/test_updater_package.py holds the inequality.
 TimeoutStartSec=50min
