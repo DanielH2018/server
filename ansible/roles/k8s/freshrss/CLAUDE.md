@@ -46,6 +46,9 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
 - The nginx sidecar (`files/nginx-feed-cache.conf`) caches a **single hard-coded upstream**
   (`rachelbythebay.com`) — it's a targeted cache for that one feed, NOT a general
   outbound-feed proxy. Adding another cached feed means editing the nginx conf.
+- A site with no feed is subscribed through FreshRSS's own XPath scraping, not a new service.
+  The `web-to-rss` skill finds the source, writes the rules and checks them with
+  `scripts/freshrss/scrape_feed.py`. The rules live only in FreshRSS's config volume.
 
 ## Editing
 - Extensions/cache: `files/` (the nginx conf is embedded into this role's ConfigMap)
