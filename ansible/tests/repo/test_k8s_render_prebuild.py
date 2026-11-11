@@ -1,7 +1,7 @@
-"""The k8s render is built before any test's timed phases, by `ansible/tests/conftest.py`.
+"""The k8s render is built before any test's timed phases, by the `render_share` plugin.
 
 Under xdist each worker builds `_k8s_render`'s render once, and `--durations` charges it to
-whichever test asks first (#4873). The conftest hook builds it when collection finishes
+whichever test asks first (#4873). The plugin's hook builds it when collection finishes
 instead, through `_k8s_render.prebuild`.
 
 The hook cases run pytest in a child process, because only a fresh session shows whether the
@@ -57,9 +57,12 @@ def test_the_render_is_built_before_the_first_test_runs():
 
 
 def test_without_the_hook_the_first_test_finds_no_render():
-    """The red half: with every conftest off, the same session reaches its first test with no
+    """The red half: with the plugin off, the same session reaches its first test with no
     render, so the case above passes only because the hook ran."""
-    assert _built_before_the_first_test("--noconftest") == "PROBE exit=0 built=[False]"
+    assert (
+        _built_before_the_first_test("-p", "no:render_share")
+        == "PROBE exit=0 built=[False]"
+    )
 
 
 def test_a_failed_render_is_read_once_and_does_not_escape_prebuild():
