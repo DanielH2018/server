@@ -42,7 +42,7 @@
 services:
   autoheal:
     restart: unless-stopped
-    image: willfarrell/autoheal:latest@sha256:b44413bd16c784a2bb33e410186ce72f44ed39737ec834517458318a78e13dd9
+    image: willfarrell/autoheal:latest@sha256:3468f3a280d61562ba96813930490716d9b30cf29382ec6cc01c9704df7beb30
     tty: true
     container_name: autoheal
     # Read-only rootfs: `docker diff` shows zero writes (busybox sh polling the lifecycle
