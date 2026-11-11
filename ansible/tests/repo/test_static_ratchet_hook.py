@@ -16,6 +16,7 @@ import shlex
 import tomllib
 
 import pytest
+import pytest_shard
 import xdist_width
 from _helpers import REPO
 
@@ -411,7 +412,8 @@ def test_the_module_that_bounded_the_main_hook_no_longer_runs_in_it():
 
     `--dist loadscope` keeps each module on one worker, so the slowest module bounds the hook.
     The oracle is CI's recorded weights, not the cost comment. If a module left in the hook
-    grows past the moved census, the split no longer buys what the comment says it does.
+    grows past the moved census, the split no longer buys what the comment says it does. The
+    census's shared pass runs before its tests, so no weight carries it and it is added here.
     """
     weights = xdist_width.load_weights(REPO)
     assert weights, "scripts/dev/pytest_shard_weights.json did not load"
@@ -420,9 +422,10 @@ def test_the_module_that_bounded_the_main_hook_no_longer_runs_in_it():
     moved = xdist_width.module_seconds(
         [REPO / m for m in sorted(_census_modules())], REPO, weights
     )
+    census = max(moved) + pytest_shard.CENSUS_PASS_WALL_SECONDS
     slowest = max(zip(seconds, main, strict=True))
-    assert slowest[0] < max(moved), (
-        f"{slowest[1]} records {slowest[0]}s, at least the moved census's {max(moved)}s"
+    assert slowest[0] < census, (
+        f"{slowest[1]} records {slowest[0]}s, at least the moved census's {census}s"
     )
 
 

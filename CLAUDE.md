@@ -253,6 +253,12 @@ census tests that no test beside a change reaches, run `uv run python scripts/de
 once before `gh pr create`.
 `.gitignore`'s root deny is load-bearing — one untracked file parks the deployer.
 
+**One hook runs at the `commit-msg` stage, and only where its shim exists.** `reject-robot-emoji`
+rejects a commit message holding U+1F916. `prek install` writes the shim, and a checkout
+installed before `prek.toml` listed `commit-msg` in `default_install_hook_types` lacks it. To
+arm the hook there, run `prek install` once in that checkout; `ls .git/hooks` then lists
+`commit-msg`.
+
 ## Python & Tests
 `uv run pytest` runs every suite `testpaths` in `pyproject.toml` names, and `uv run pytest
 scripts` runs one. `docs/python-code-organization.md` has the uv setup.

@@ -30,7 +30,7 @@ def has_error_line(output) -> bool:
 def summarize(output, maxlen: int = 200) -> str:
     """Returns the last meaningful line of configarr's output, collapsed and length-capped.
 
-    The useful tail for a Kuma/Discord one-liner: on a clean run that is configarr's Execution
+    The useful tail for a one-line verdict message: on a clean run that is configarr's Execution
     Summary, on a failure its error. The Job's log is configarr's output alone, so no line is
     skipped. Empty output returns a fixed placeholder.
     """

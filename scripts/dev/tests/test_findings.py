@@ -468,6 +468,29 @@ def test_cited_paths_ignores_the_trailer_findings_py_writes():
     assert cited_paths("nothing" + trailer("c0a05de5f0e9", "review")) == []
 
 
+def test_cited_paths_skips_a_span_quoting_program_output():
+    # #7898's body: one real citation, then a quoted session banner line.
+    body = (
+        "Edit `.claude/hooks/session-health.py`. Example: "
+        "`• fix7828 — .claude/settings.json, .claude/skills/deploy/SKILL.md, …, +88 more`.\n"
+        "paths were `['scripts/dev/a.py', 'scripts/dev/b.py']`"
+    )
+    assert cited_paths(body) == [".claude/hooks/session-health.py"]
+
+
+def test_cited_paths_keeps_a_span_with_one_path_or_without_commas():
+    body = (
+        "`scripts/dev/a.py`, `scripts/dev/b.py, line 3` and "
+        "`uv run pytest scripts/dev/c.py scripts/dev/d.py`"
+    )
+    assert cited_paths(body) == [
+        "scripts/dev/a.py",
+        "scripts/dev/b.py",
+        "scripts/dev/c.py",
+        "scripts/dev/d.py",
+    ]
+
+
 # --- the list cap ---------------------------------------------------------------------------
 
 
