@@ -31,6 +31,7 @@ Run: uv run pytest ansible/tests/repo/test_row_table.py
 """
 
 import ast
+import contextlib
 import hashlib
 import re
 from collections.abc import Callable, Iterable, Mapping
@@ -257,6 +258,11 @@ class Sharing:
         )
 
     def _hits(self, name: str, subject: Subject) -> list[str]:
+        if isinstance(found := self._find_hits(subject)[name], Exception):
+            raise found
+        return list(found)
+
+    def _find_hits(self, subject: Subject) -> dict[str, tuple[str, ...] | Exception]:
         text = subject.text
         hits = self.hits.setdefault(_digest(subject.rel, text), {})
         if missing := [other for other in self.offences if other not in hits]:
@@ -271,9 +277,17 @@ class Sharing:
                         hits[other] = error
             finally:
                 self.held.pop(text, None)
-        if isinstance(found := hits[name], Exception):
-            raise found
-        return list(found)
+        return hits
+
+    def prebuild(self) -> None:
+        """Find every shared row's hits on every census module now, before any test runs.
+
+        Without it the first census file to run in a process pays the whole pass, about 8s,
+        and its sibling about 0.05s, so neither file's `--durations` is its own (#7976). An
+        offence that raises is kept as that row's hit, for its own test to report.
+        """
+        for rel in self._census():
+            self._find_hits(Subject(rel))
 
     def _census(self) -> frozenset[str]:
         if self.census is None:
@@ -311,3 +325,14 @@ _SHARING = Sharing()
 share = _SHARING.share
 parse = _SHARING.parse
 parse_ahead = _SHARING.parse_ahead
+
+
+def prebuild_shared_rows() -> None:
+    """Find the shared rows' hits over the census, when an imported census file shared rows.
+
+    A failure leaves the hits unfound, so the first test to need them finds them again and
+    reports the error itself, rather than ending a collection hook in an INTERNALERROR.
+    """
+    if _SHARING.offences:
+        with contextlib.suppress(Exception):
+            _SHARING.prebuild()
