@@ -24,6 +24,8 @@ def _fix_round(left):
         _report(structured={"summary": "", "findings": [first]}),
         _report(f"Fixed. {PR}"),
         _report(structured={"summary": "", "findings": left}),
+        # A medium-or-worse leftover earns a second fix round (#7687); it commits nothing here.
+        *[_report(f"Fixed again. {PR}") for f in left[:1] if f["severity"] != "low"],
         _report(f"Filed #9. {PR}"),
     ]
 

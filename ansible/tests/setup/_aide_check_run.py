@@ -6,6 +6,7 @@ aide, and runs it against a fake dpkg database and filesystem that `_fake_host` 
 
 import fcntl
 import hashlib
+import json
 import os
 import time
 
@@ -85,9 +86,13 @@ PACKAGE_LINKS = {
     "/usr/bin/tool-link": "tool",
     "/usr/src/tool-headers/rust": "../tool-lib-rust/rust",
 }
-# The host package's link to a secret in the tmpfs its secrets unit fills.
+# The host package's links to secrets in the tmpfs its secrets unit fills, which its secrets
+# manifest declares: one under /etc, and one under /usr/lib as the Pi's Compose env file sits.
 SECRET_LINK = "/etc/svc/config.env"
 SECRET_TARGET = "/run/homelab-secrets/etc/svc/config.env"
+SYSTEM_SECRET_LINK = "/usr/lib/homelab/compose/compose.env"
+SYSTEM_SECRET_TARGET = "/run/homelab-secrets/usr/lib/homelab/compose/compose.env"
+SECRETS_MANIFEST = "/usr/lib/homelab/secrets.json"
 # The host package's apt hook and a script root runs, which dpkg lists with no digest here.
 HOMELAB_FILES = ("/etc/apt/apt.conf.d/91homelab-hook", "/usr/lib/homelab/check")
 
@@ -104,7 +109,7 @@ def _fake_host(root):
     and the filesystem also holds an alternatives link to the package's binary, a unit masked by
     a maintainer script, the usr-merge links, the boot links and GRUB files, a compiled module,
     a unit with its enable link, and one file in each tree nothing packages. A `homelab-host`
-    package owns SECRET_LINK.
+    package owns SECRET_LINK and SYSTEM_SECRET_LINK, which SECRETS_MANIFEST declares.
     """
     dpkg, fs = root / "dpkg", root / "fs"
     (dpkg / "info").mkdir(parents=True)
@@ -121,10 +126,19 @@ def _fake_host(root):
     for link, target in PACKAGE_LINKS.items():
         (fs / link.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
         (fs / link.lstrip("/")).symlink_to(target)
-    (fs / SECRET_LINK.lstrip("/")).parent.mkdir(parents=True)
-    (fs / SECRET_LINK.lstrip("/")).symlink_to(SECRET_TARGET)
+    for link, target in (
+        (SECRET_LINK, SECRET_TARGET),
+        (SYSTEM_SECRET_LINK, SYSTEM_SECRET_TARGET),
+    ):
+        (fs / link.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
+        (fs / link.lstrip("/")).symlink_to(target)
+    outputs = [
+        {"destination": link.lstrip("/"), "persist": False}
+        for link in (SECRET_LINK, SYSTEM_SECRET_LINK)
+    ]
+    (fs / SECRETS_MANIFEST.lstrip("/")).write_text(json.dumps({"outputs": outputs}))
     (dpkg / "info" / "homelab-host.list").write_text(
-        "".join(f"{p}\n" for p in (SECRET_LINK, *HOMELAB_FILES))
+        "".join(f"{p}\n" for p in (SECRET_LINK, SYSTEM_SECRET_LINK, *HOMELAB_FILES))
     )
     (dpkg / "info" / "tool.list").write_text(
         "".join(f"{_dpkg_name(p)}\n" for p in [*PACKAGE, *PACKAGE_LINKS])
@@ -259,6 +273,7 @@ def _run_check(
     baseline: bool = True,
     rewrite: dict[str, str] | None = None,
     relink: dict[str, str] | None = None,
+    unreadable: tuple[str, ...] = (),
     packages_ran: tuple[str, ...] = ("tool",),
     packages_ran_before: tuple[str, ...] = (),
     packages_upgraded: tuple[str, ...] = (),
@@ -273,7 +288,8 @@ def _run_check(
     process for the run, as a scan still running from the previous week would. The aide stub
     writes aide.db.new as `--update` does; `baseline` says whether aide.db exists beforehand.
     `rewrite` replaces a path on the fake host with a regular file holding the given content, and
-    `relink` with a symlink to the given target, before the run. `dpkg_ran` dates dpkg's status
+    `relink` with a symlink to the given target, before the run. `unreadable` sets each named
+    path to mode 000. `dpkg_ran` dates dpkg's status
     log after the baseline, one `configure` line per `packages_ran` entry, as a package run does,
     and `packages_ran_before` writes the same lines a month before it, in the rotated log.
     `packages_upgraded` adds an `upgrade` line after the baseline for each package it names.
@@ -305,6 +321,8 @@ def _run_check(
         (fs / path.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
         (fs / path.lstrip("/")).unlink(missing_ok=True)
         (fs / path.lstrip("/")).write_text(content)
+    for path in unreadable:
+        (fs / path.lstrip("/")).chmod(0)
     for path, target in (relink or {}).items():
         (fs / path.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
         (fs / path.lstrip("/")).unlink(missing_ok=True)

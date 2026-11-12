@@ -32,9 +32,20 @@ landing has loaded from its checkout, and every module those import, function bo
 With `--arm-merge --await-merge`, the landing first compares them with `origin/master` before
 it merges anything (#7830), and ends `refused` with nothing merged. After resolving the merge
 commit, step 1 compares them with the merge commit's first parent. It ends `refused` when master
-changed one the checkout lacks, and names the checkout to re-run from: the primary when it
-carries that parent, else a detached worktree at the merge.
+changed one the checkout lacks.
 `land_lib/classify.py:refuse_stale_code` has the rule.
+
+**Both refusals name `--fresh` as the re-run** (#7933). With `--fresh`, `land.sh` fetches
+`origin/master` in the primary and adds a detached worktree of it under `/tmp`. It runs that
+checkout's `land.sh` with the same arguments, then removes the worktree. A checkout made by
+hand went stale again within minutes when master moved, and the `git -C <primary> worktree
+add` that made it is a command a worktree-isolated session's guard refuses. The landing
+still refuses rather than re-running on its own, so `land.sh` keeps running the release it
+ships with unless the caller asks. With `--detach`, the fork runs the fresh checkout, so the
+checkout lives until the landing ends. `land_lib/fresh.py` has the mechanics. A lander
+unit's caller cannot pass `--fresh`, because the unit runs a fixed command line. Under a unit,
+both refusals therefore name the re-run that caller can make: the same command, once
+`homelab-checkout-sync` has fast-forwarded the primary, which it does every 10 minutes.
 
 **Without `--detach`, redirect stdout and stderr to a file yourself.** A backgrounded Bash call
 hands the script a non-blocking pipe, and Ansible refuses to start on one:
@@ -337,9 +348,7 @@ else.
 
 **A PR that reaches only a setup role the deployer applies waits for master CI and the
 promotion, then ends `nothing-to-deploy`.** Its author reads the outcome on the host: the changed
-state itself, or a `manual_plane` line in
-`owed.jsonl` for a role the deployer cannot apply (`k3s`). `probe.py gitops-state` prints every
-marker, read-only. A change to a plane nobody applies on its own, which `plane` names, still
+state itself. A change to a plane nobody applies on its own, which `plane` names, still
 ends `needs-manual-apply` with the command that applies it.
 
 **It scopes the derivation to the PR's own file list rather than a SHA range**, so another session's
@@ -589,7 +598,8 @@ available server` while Prometheus rolls. The workload was not graded, healthy o
 other tag reads unhealthy, `land.sh` asks the gate again every 30 seconds for up to 5
 minutes (`health_verdict.UNREADABLE_RETRY_S`). The PRs that hit this roll the store
 themselves, and the store's roll takes about 30s. Only a store still unreadable after that
-ends the landing `deferred`, exit 75, with `outcome.UNREADABLE_GATE_NOTE`. No tick gates
+ends the landing `deferred`, exit 75, cause `gate-unreadable`, with
+`outcome.UNREADABLE_GATE_NOTE`. No tick gates
 health, so `cc-wait land` reports this deferral as `gave-up`: re-run `land.sh` to grade the
 deploy. PR #5533's landing read `unhealthy` this way on 2026-10-18 while its pod was `1/1
 Running` (#5543). Before the retry, 29 landings in the 14 days to 2026-11-09 deferred on an
@@ -601,8 +611,8 @@ its tree's HEAD, so a gate pinned to the merge commit deferred on every re-run o
 commit touched a landed role (#7816). The tip can carry a role change `promote` has not applied
 yet. The gate then grades the live workload against that newer definition, which the probe
 would otherwise refuse to grade at all. When master moves while the gate runs, the probe still
-refuses, and the landing ends `deferred` with `outcome.STALE_GATE_NOTE` rather than the store
-wording. `cc-wait land` reports that deferral as `gave-up` too: re-run `land.sh`.
+refuses, and the landing ends `deferred`, cause `gate-stale`, with `outcome.STALE_GATE_NOTE`
+rather than the store wording. `cc-wait land` reports that deferral as `gave-up` too: re-run `land.sh`.
 
 **Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the 180s
 restart window. It cannot see whether *your change* took effect: an Authelia 302 fires in the
@@ -612,15 +622,16 @@ middleware before the backend is reached, and 19 dead Grafana panels sat behind 
 
 `deferred` (`LAND_GAVE_UP`, exit 75) means the landing gave up waiting and a re-run of
 `land.sh` completes it: no promotion covered the merge commit in time (cause `promote-timeout`),
-a host's package is not yet applied, or the health gate could not read its store or found
-its tree older than `origin/master` (see *The health gate*). `cc-wait land` ends the wait as `gave-up`, exit 3, for each of those that
-prints a note naming the re-run, and as `deferred`, exit 4, for any other.
+a host's package is not yet applied, or the health gate could not read its store (cause
+`gate-unreadable`) or found its tree older than `origin/master` (cause `gate-stale`; see *The
+health gate*). `cc-wait land` ends the wait as `gave-up`, exit 3, for each of those three
+causes, read from the `LAND-RESULT:` line rather than the note beside it, and for an
+unreadable owed ledger. It ends the wait as `deferred`, exit 4, for any other.
 
 `nothing-to-deploy` also covers a PR that reaches only a setup role the deployer applies.
 `land.sh` starts no tick and reads none of the deployer's state, so it reports neither the
 apply nor a failure of it, and it names no other host the role reaches. Read the host: the
-changed state itself, or `probe.py gitops-state`, which prints `last_run`, `hold_sha` and
-`owed.jsonl`. The deployer records a `manual_plane` line for a role it cannot apply, and for a
+changed state itself. The deployer records a `manual_plane` line for a role it cannot apply, and for a
 role it applied on daniel-box whose change reaches another host (#6510). No check pages on a
 `hold_sha`. A failed apply shows in the deployer's Discord post, in the SessionStart banner and
 as `deploy-failed` from every later `land.sh` run.
@@ -663,9 +674,7 @@ Two things sit in the position of needing a hand:
 
 **A setup role the deployer cannot apply also needs its marker cleared.** For `k3s` and `common`
 the tick fast-forwards the range and records a `manual_plane` line in the `owed` ledger.
-`scripts/deploy_tools/owed_run.py <role>` runs the printed apply commands and the clear in one
-step, and `--dry-run` shows them first. It refuses a line whose apply arms more than the change, a role
-applied by hand, and a primary checkout behind `origin/master`, so run those as printed, including any
+Run the printed apply commands and the clear as printed, including any
 `--applied <tags>` on the clear. A bring-up
 playbook gets no such line, because the tick parks on those and writes no marker. A landing reads
 the line (see above), so a PR touching a recorded role ends `needs-manual-apply`. A role the tick DID apply

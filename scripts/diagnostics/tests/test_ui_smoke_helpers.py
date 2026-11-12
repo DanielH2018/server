@@ -108,7 +108,7 @@ def test_settled_title_stops_reading_once_it_matches():
 def test_settled_rows_waits_out_a_panel_that_has_not_fetched_yet():
     """The panels fill from async fetches, so the first read of an empty div is not a verdict."""
     client = client_returning(with_result(0), with_result(0), with_result(5))
-    assert smoke.settled_rows(client, "#state table tr", interval=0) == 5
+    assert smoke.settled_rows(client, "#inflight > p", interval=0) == 5
 
 
 def test_settled_rows_returns_zero_when_the_panel_never_fills():
@@ -117,7 +117,7 @@ def test_settled_rows_returns_zero_when_the_panel_never_fills():
     Zero rows is exactly the state a title-only case would score green.
     """
     client = client_returning(*[with_result(0)] * smoke._PANEL_ATTEMPTS)
-    assert smoke.settled_rows(client, "#state table tr", interval=0) == 0
+    assert smoke.settled_rows(client, "#inflight > p", interval=0) == 0
 
 
 def test_close_closes_every_pipe_and_reaps_the_process():

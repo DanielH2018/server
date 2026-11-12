@@ -1,6 +1,6 @@
 """One read of a host's journal, files and unit state, made in a single process on that host.
 
-`probe.py builder`, `lander`, `gitops-state --why` and `applied` each read state that lives on
+`probe.py builder`, `lander` and `applied` each read state that lives on
 one host: a system unit's journal, a textfile, a landing log, an installed file's mode and hash.
 Every such read goes through `read_host`, which runs `READER` there with `python3 -I -` and
 parses the one JSON document it prints. On the host itself that is a local process; anywhere

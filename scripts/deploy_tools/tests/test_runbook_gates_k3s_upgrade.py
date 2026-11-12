@@ -2,8 +2,8 @@
 and the exit code naming the gate.
 
 The runner takes a `lib.kubectl.Tools`, so the cluster reads are answered from canned JSON
-keyed on the kubectl arguments and nothing touches a live API server. The hold marker is
-read from a `tmp_path` state directory through `GITOPS_STATE_DIR`'s override.
+keyed on the kubectl arguments and nothing touches a live API server. `DEPLOY_HOLD` is
+answered by a function the test hands the runner.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_runbook_gates_k3s_upgrade.py
 """
@@ -15,7 +15,7 @@ import pytest
 from _gates_fakes import fake_tools
 from deploy_tools.runbook_gates_lib import k3s_upgrade as gates
 from lib import kubectl
-from gitops_markers import MARKERS
+from deploy_tools.land_lib.pin_reads import Unreadable as HoldUnreadable
 from lib.proc_testing import run
 
 from lib.repo_paths import REPO as _REPO
@@ -63,16 +63,13 @@ def _tools(
     )
 
 
-@pytest.fixture
-def state_dir(tmp_path):
-    d = tmp_path / "gitops-deploy"
-    d.mkdir()
-    return d
+def _no_hold() -> str:
+    return "none"
 
 
-def _run(state_dir, **docs) -> tuple[int, str]:
+def _run(read_hold=_no_hold, **docs) -> tuple[int, str]:
     out = io.StringIO()
-    code = gates.run_gates(tools=_tools(**docs), state_dir=str(state_dir), out=out)
+    code = gates.run_gates(tools=_tools(**docs), read_hold=read_hold, out=out)
     return code, out.getvalue()
 
 
@@ -109,28 +106,14 @@ def test_an_in_flight_backup_is_flagged():
     assert gates.in_flight_backups(doc) == ["b1 (InProgress)", "b3 (no state yet)"]
 
 
-def test_a_missing_or_empty_hold_marker_is_clean(state_dir):
-    assert gates.held_sha(state_dir) == []
-    (state_dir / MARKERS["hold"]).write_text("\n")
-    assert gates.held_sha(state_dir) == []
+def test_a_deploy_hold_that_reads_none_is_clean():
+    assert gates.deploy_hold(_no_hold) == []
 
 
-def test_a_held_sha_is_flagged_with_the_ledgers_hold_plane_entries(state_dir):
-    """The planes are the `owed` ledger's `hold_plane` class, a newer key and all (#3392)."""
-    (state_dir / MARKERS["hold"]).write_text("abc1234\n")
-    assert gates.held_sha(state_dir) == ["abc1234"]
-    (state_dir / MARKERS["owed"]).write_text(
-        '{"class": "hold_plane", "subject": "deploy.yml sonarr", "origin": "abc", '
-        '"at": 1, "added_by_a_newer_writer": 1}\n'
-    )
-    assert gates.held_sha(state_dir) == ["abc1234 (deploy.yml sonarr)"]
-
-
-def test_an_absent_state_directory_is_not_a_cleared_hold(tmp_path):
-    # daniel-server has no /var/lib/gitops-deploy at all; that must read as "wrong host",
-    # never as "no hold".
-    found = gates.held_sha(tmp_path / "nowhere")
-    assert len(found) == 1 and "not a directory" in found[0]
+@pytest.mark.parametrize("value", [None, "", "abc1234 failed=sonarr"])
+def test_any_other_deploy_hold_is_flagged(value):
+    """A missing or empty variable reads as an error, never as no hold."""
+    assert len(gates.deploy_hold(lambda: value)) == 1
 
 
 def test_both_nodes_ready_is_clean():
@@ -164,8 +147,8 @@ def test_a_state_this_file_has_not_heard_of_is_flagged():
 # ── the runner: order, stop, exit code ──────────────────────────────────────────────────────
 
 
-def test_all_gates_passing_exits_zero(state_dir):
-    code, out = _run(state_dir)
+def test_all_gates_passing_exits_zero():
+    code, out = _run()
     assert code == 0
     assert out.count(" ok — ") == 4, out
 
@@ -185,23 +168,34 @@ def test_all_gates_passing_exits_zero(state_dir):
         ),
     ],
 )
-def test_the_exit_code_is_the_first_failing_gate(state_dir, number, docs):
-    code, out = _run(state_dir, **docs)
+def test_the_exit_code_is_the_first_failing_gate(number, docs):
+    code, out = _run(**docs)
     assert code == number
     assert f"gate {number} FAILED" in out
     # Nothing after the failing gate ran.
     assert f"gate {number + 1} " not in out
 
 
-def test_a_held_sha_stops_at_gate_three_before_the_node_read(state_dir):
-    (state_dir / MARKERS["hold"]).write_text("deadbeef\n")
-    code, out = _run(state_dir)
+def test_a_deploy_hold_stops_at_gate_three_before_the_node_read():
+    code, out = _run(lambda: "deadbeef failed=sonarr")
     assert code == 3
     assert "deadbeef" in out
     assert "gate 4" not in out
 
 
-def test_a_list_that_returns_nothing_is_unavailable_not_a_failed_gate(state_dir):
+def test_an_unreadable_deploy_hold_is_unavailable_not_gate_three():
+    """A placeholder offender would exit with the hold gate's number, claiming a hold (#4468)."""
+
+    def unreadable() -> str:
+        raise HoldUnreadable("DEPLOY_HOLD: connection refused")
+
+    code, out = _run(unreadable)
+    assert code == gates.EX_UNAVAILABLE
+    assert "cannot ask the cluster" not in out
+    assert "DEPLOY_HOLD: connection refused" in out
+
+
+def test_a_list_that_returns_nothing_is_unavailable_not_a_failed_gate():
     tools = _tools()
     real_run = tools.run
 
@@ -213,16 +207,16 @@ def test_a_list_that_returns_nothing_is_unavailable_not_a_failed_gate(state_dir)
     out = io.StringIO()
     code = gates.run_gates(
         tools=kubectl.Tools(run, tools.find_tool, tools.find_kubeconfig),
-        state_dir=str(state_dir),
+        read_hold=_no_hold,
         out=out,
     )
     assert code == gates.EX_UNAVAILABLE
     assert "returned no document" in out.getvalue()
 
 
-def test_the_wrong_cluster_is_refused_not_graded(state_dir):
+def test_the_wrong_cluster_is_refused_not_graded():
     stage = {"items": [_node("daniel-stage")]}
-    code, out = _run(state_dir, nodes=stage)
+    code, out = _run(nodes=stage)
     assert code == gates.EX_UNAVAILABLE
     assert "cannot ask the cluster" in out
 
@@ -252,13 +246,3 @@ def test_the_runbook_calls_the_script_and_it_runs():
         timeout=300,
     )
     assert proc.returncode == 64, proc.stderr
-
-
-def test_an_unreadable_ledger_raises_rather_than_reading_as_no_hold(state_dir):
-    """The snapshot reads `hold_sha` and the ledger together, so either one unreadable raises.
-
-    A placeholder offender would make the runner exit with the hold gate's number (#4468).
-    """
-    (state_dir / MARKERS["owed"]).mkdir()
-    with pytest.raises(gates.Unreadable, match="cannot read"):
-        gates.held_sha(state_dir)

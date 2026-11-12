@@ -82,8 +82,7 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 }
 
 # The longest legitimate gap between two textfile writes: the weekly timer plus two hours for the
-# worst run, the interval the deleted Kuma `Registry GC` tile had. RegistryGcNotReporting in
-# observability's rules/registry.yaml reads it, and
+# worst run. RegistryGcNotReporting in observability's rules/registry.yaml reads it, and
 # ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py pins all three.
 DEADLINE_S=612000
 

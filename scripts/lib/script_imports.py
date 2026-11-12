@@ -160,8 +160,8 @@ def _head(dotted: str, roots: Sequence[Path], scripts: Path) -> str:
     """The module stem an absolute import names, from the first root that holds it.
 
     A root outside `scripts/` that holds the module means the import resolves there, so it
-    names no script: `gitops_state.py` imports `gitops_markers` from the gitops_deploy role's
-    `files/`, not `scripts/lib/gitops_markers.py`.
+    names no script: an import of a module from a role's `files/` is not a module
+    of the same name under `scripts/lib/`.
     """
     for root in roots:
         stem = _resolve(dotted.split("."), root)

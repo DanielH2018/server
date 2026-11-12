@@ -14,6 +14,10 @@
 # `stages` on a Renovate bump. ENFORCED: ansible/tests/repo/test_prek_hooks_run_only_at_commit.py
 default_stages = ["pre-commit"]
 
+# `prek install` writes a shim per type listed here. Without `commit-msg` in the list, the
+# reject-robot-emoji hook below never runs.
+default_install_hook_types = ["pre-commit", "commit-msg"]
+
 # Standard cleanup hooks
 [[repos]]
 repo = "https://github.com/pre-commit/pre-commit-hooks"
@@ -723,7 +727,7 @@ name = "Documented checksum annotations exist in the manifests"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/k8s/test_checksum_annotations_documented.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/k8s/.*|CLAUDE\\.md|ansible/(templates|filter_plugins)/.*|ansible/tests/(_[^/]+|k8s/test_checksum_annotations_documented)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(ansible/roles/k8s/.*|CLAUDE\\.md|ansible/(templates|filter_plugins)/.*|ansible/tests/(_[^/]+|render_share|k8s/test_checksum_annotations_documented)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/secrets_mgmt/cluster_vars_check\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Every tracked `.sh` and rendered `*.sh.j2` answers `--help`. The test module renders the
 # templates through scripts/lib, scripts/validate and the filter plugins, which it reaches
@@ -748,7 +752,7 @@ name = "Renovate rules carry the autodeploy denylist marker"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py"
 language = "system"
 pass_filenames = false
-files = "^(cluster/services\\.yml|renovate\\.json|ansible/inventory/.*|ansible/roles/[^/]+/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|ansible/filter_plugins/[^/]+\\.py|ansible/tests/(_[^/]+|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/dev/k8s_autodeploy_counts\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(cluster/services\\.yml|renovate\\.json|ansible/inventory/.*|ansible/roles/[^/]+/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|ansible/filter_plugins/[^/]+\\.py|ansible/tests/(_[^/]+|render_share|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/secrets_mgmt/cluster_vars_check\\.py|scripts/dev/k8s_autodeploy_counts\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Six more rules that failed PR CI between 2026-10-18 and 2026-10-25: the eval cases'
 # CLAUDE.md quotes, the k8s_host_files pairs (deleted with the role's rows in H7.48), the Landings board, the deployer's import
@@ -989,3 +993,14 @@ entry = "uv run --frozen mkdocs build --strict --site-dir .mkdocs-strict-check"
 language = "system"
 pass_filenames = false
 files = "^(docs/.*|mkdocs\\.yml|scripts/docs/.*\\.py|uv\\.lock)$"
+
+# The harness's attribution reminder ends every commit message with a footer that opens with
+# the robot emoji (U+1F916), and the operator's no-emoji rule wins over it. A squash merge makes
+# the message master history, so this rejects it at the commit-msg stage (#7978). It is the
+# one hook not at pre-commit: git passes it the message file, and `prek run` never runs it.
+[[repos.hooks]]
+id = "reject-robot-emoji"
+name = "Reject the robot emoji in a commit message"
+entry = "uv run --frozen python scripts/dev/reject_robot_emoji.py"
+language = "system"
+stages = ["commit-msg"]

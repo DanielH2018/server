@@ -46,7 +46,6 @@ VERDICT_SUBCOMMANDS = (
     ("b2-budget",),
     ("b2-deletions",),
     ("landing",),
-    ("gitops-state",),
     ("lander",),
     ("builder",),
     ("applied",),
@@ -210,10 +209,10 @@ def test_verdict_subcommand_help_names_the_unreadable_exit(path):
 def test_a_json_view_prints_no_verdict_line_after_its_document(capsys):
     """`--json` stdout is one document, and the deck mod parses `landing --json` as one.
 
-    `gitops-state` reads the deployer's state directory and nothing over a network, so the run
-    is real; whatever the directory holds, stdout must still parse as JSON.
+    `landing-verdicts` reads one local file and nothing over a network, so the run is real;
+    whatever the file holds, stdout must still parse as JSON.
     """
-    probe.main(["gitops-state", "--json"])
+    probe.main(["landing-verdicts", "--json"])
     out = capsys.readouterr().out
     assert "PROBE-VERDICT" not in out
     json.loads(out)

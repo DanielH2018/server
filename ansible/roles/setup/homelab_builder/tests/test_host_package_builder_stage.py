@@ -147,8 +147,8 @@ def test_a_deferred_package_leaves_published_so_it_builds_when_the_gate_closes(l
 
     (etc / "release").write_text(gate_sha + "\n")
     assert go(lab) == 0
-    # The Pi is the canary of the gate this run opens, and the box waits behind it.
-    assert debs(state) == ["homelab-daniel-pi"]
+    # No second canary: the Pi and the box stage together.
+    assert debs(state) == ["homelab-daniel-box", "homelab-daniel-pi"]
 
 
 class FailsAtStage(LinkedBuilder):

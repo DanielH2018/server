@@ -11,29 +11,27 @@ The gates, in the order the runbook gives them:
   1. No Longhorn volume is `degraded` (or `faulted`). A degraded volume plus a node restart is
      how the last good replica goes. `detached`/`unknown` is an idle volume, not a stop.
   2. No Longhorn backup is mid-flight. A restart aborts it and the retry storm follows.
-  3. The GitOps deployer holds no SHA. A non-empty `hold_sha` means a previous deploy failed
-     its health gate, and the upgrade would land on top of that.
+  3. `DEPLOY_HOLD` reads `none`. A hold means a previous promotion failed its health gate,
+     and the upgrade would land on top of that.
   4. Every production node is Ready.
 
 Every cluster read goes through `lib.kubectl` with the cluster named `prod`, so the same
-identity check that guards `probe.py health` refuses a staging kubectl here. The
-hold marker is read from the deployer's own state directory (`gitops_markers`), which
-exists only on the host that runs the tick — so gate 3 fails on any other host rather than
-reading an absent directory as "no hold". Set `GITOPS_STATE_DIR` to point it elsewhere.
+identity check that guards `probe.py health` refuses a staging kubectl here. Gate 3 reads the
+`DEPLOY_HOLD` repository variable through the forge, as the landing pin gate does. A missing
+or empty variable fails the gate rather than reading as no hold.
 
 Exit codes:
   0      every gate passed
   1..4   the first gate that failed, by its number above
   69     the cluster could not be asked (no kubectl, no readable kubeconfig, wrong cluster,
-         or a list that returned nothing parseable), or a deployer marker exists and could
-         not be read
+         or a list that returned nothing parseable), or `DEPLOY_HOLD` could not be read
 
 Usage:
     uv run python scripts/deploy_tools/runbook_gates.py k3s-upgrade
 """
 
-import os
 import sys
+from collections.abc import Callable
 from pathlib import Path as _Path
 
 # Reach `scripts/`, for `lib` and `deploy_tools`: the entrypoint puts only its own directory on
@@ -52,13 +50,11 @@ from deploy_tools.runbook_gates_lib.gate_runner import (
     name_of as _name,
     unsafe_volumes,
 )
+from deploy_tools.land_lib.pin_gate import hold_problem
+from deploy_tools.land_lib.pin_reads import PinReads
+from deploy_tools.land_lib.pin_reads import Unreadable as HoldUnreadable
 from lib.kubectl import CLUSTER_NODES, DEFAULT_TOOLS, Tools
-from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
-
-# The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
-sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from gitops_hold import DeployerSnapshot
-from gitops_markers import STATE_DIR
+from lib.repo_paths import HOST_LIB_FILES
 
 # The Backup CR reader the backup-health cron ships (#3735); it imports host_lib.
 sys.path.insert(0, str(HOST_LIB_FILES))
@@ -72,6 +68,7 @@ RUNBOOK = "docs/k3s-upgrade.md"
 # empty string is a Backup CR the controller has not picked up yet.
 SETTLED_BACKUP = frozenset({longhorn_backups.COMPLETED, "Error", "Unknown"})
 
+LIVE_HOLD = PinReads().hold
 BACKUPS_ARGS = ("-n", LONGHORN_NS, *longhorn_backups.LIST_ARGS)
 NODES_ARGS = ("get", "nodes", "-o", "json")
 
@@ -98,36 +95,21 @@ def in_flight_backups(doc) -> list[str]:
     return found
 
 
-def held_sha(state_dir: str | os.PathLike) -> list[str]:
-    """The held SHA (with the planes it waits on), or the reason the state could not be read.
+def deploy_hold(read: Callable[[], str | None]) -> list[str]:
+    """`DEPLOY_HOLD`'s problem as one offender, or nothing when it reads `none`.
 
-    The planes are `DeployerSnapshot.held_planes`, the `owed` ledger's `hold_plane` class
-    (#3392).
-
-    An absent or empty `hold_sha` is a cleared hold — that is how the deployer clears it. An
-    absent state DIRECTORY is not: it means this is not the deploy host, and reading that as
-    "no hold" is exactly the vacuous pass the gate exists to refuse. A marker that exists and
-    cannot be read, the `owed` ledger included, raises `Unreadable`: the runner then exits
-    `EX_UNAVAILABLE` rather than this gate's number, which would claim a hold is set (#4468).
+    `hold_problem` owns what each value means, so this gate and the landing pin gate agree.
 
     Raises:
-        Unreadable: a marker under `state_dir` exists and could not be read.
+        Unreadable: the variable could not be read. The runner then exits `EX_UNAVAILABLE`
+            rather than this gate's number, which would claim a hold is set (#4468).
     """
-    state_dir = _Path(state_dir)
-    if not state_dir.is_dir():
-        return [
-            f"<{state_dir} is not a directory — run this on the host that runs the tick>"
-        ]
     try:
-        snap = DeployerSnapshot.load(state_dir)
-    except (OSError, UnicodeDecodeError) as exc:
-        raise Unreadable(
-            f"cannot read the deployer's state under {state_dir}: {exc}", cluster=False
-        ) from exc
-    if not snap.hold:
-        return []
-    plane = "; ".join(snap.held_planes)
-    return [f"{snap.hold} ({plane})" if plane else snap.hold]
+        value = read()
+    except HoldUnreadable as exc:
+        raise Unreadable(str(exc), cluster=False) from exc
+    problem = hold_problem(value)
+    return [problem] if problem else []
 
 
 def nodes_not_ready(doc, expected=CLUSTER_NODES[CLUSTER]) -> list[str]:
@@ -156,19 +138,19 @@ def _doc(tools: Tools, args: tuple[str, ...]):
     return cluster_doc(CLUSTER, tools, args)
 
 
-def _gate_volumes(tools: Tools, state_dir: str) -> list[str]:
+def _gate_volumes(tools: Tools, read_hold: Callable[[], str | None]) -> list[str]:
     return unsafe_volumes(_doc(tools, VOLUMES_ARGS))
 
 
-def _gate_backups(tools: Tools, state_dir: str) -> list[str]:
+def _gate_backups(tools: Tools, read_hold: Callable[[], str | None]) -> list[str]:
     return in_flight_backups(_doc(tools, BACKUPS_ARGS))
 
 
-def _gate_hold(tools: Tools, state_dir: str) -> list[str]:
-    return held_sha(state_dir)
+def _gate_hold(tools: Tools, read_hold: Callable[[], str | None]) -> list[str]:
+    return deploy_hold(read_hold)
 
 
-def _gate_nodes(tools: Tools, state_dir: str) -> list[str]:
+def _gate_nodes(tools: Tools, read_hold: Callable[[], str | None]) -> list[str]:
     return nodes_not_ready(_doc(tools, NODES_ARGS))
 
 
@@ -176,19 +158,18 @@ def _gate_nodes(tools: Tools, state_dir: str) -> list[str]:
 GATES = (
     Gate(1, "no degraded Longhorn volume", _gate_volumes),
     Gate(2, "no Longhorn backup in flight", _gate_backups),
-    Gate(3, "the GitOps deployer holds no SHA", _gate_hold),
+    Gate(3, "DEPLOY_HOLD reads none", _gate_hold),
     Gate(4, "every production node Ready", _gate_nodes),
 )
 
 
 def run_gates(
     tools: Tools = DEFAULT_TOOLS,
-    state_dir: str | None = None,
+    read_hold: Callable[[], str | None] = LIVE_HOLD,
     out=sys.stdout,
 ) -> int:
     """Run every gate in order, print one line per gate, and return the exit code."""
-    state_dir = state_dir or os.environ.get("GITOPS_STATE_DIR") or STATE_DIR
-    return gate_runner.run_gates(GATES, RUNBOOK, tools, state_dir, out=out)
+    return gate_runner.run_gates(GATES, RUNBOOK, tools, read_hold, out=out)
 
 
 def main(argv: list[str] | None = None) -> int:

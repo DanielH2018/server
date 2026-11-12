@@ -34,7 +34,7 @@ export function blockedSection(blockers: readonly string[]): string {
     '',
     "CLAUDE.md's *When to wait* applies to landing or deploying a change of your own: name the",
     'blocker below that applies, then stop. Each blocker names its own way out, and taking it',
-    '(applying an owed plane, fixing a red master) is not blocked.',
+    '(fixing a red master) is not blocked.',
     'The deck mod read these from `probe.py landing`. Run it for the current state and the',
     'apply commands.',
     '',
@@ -207,14 +207,9 @@ export const register: Register = on => {
       for (const b of snap.blockers) {
         add(`  ✗ ${b}`, 'red')
       }
-      const hold = snap.hold === null ? 'unknown' : snap.hold.sha.slice(0, 8) || 'none'
       const ci = snap.ci === null ? 'unknown' : `${snap.ci.state} ${snap.ci.sha}`
-      const owed =
-        snap.manual_planes === null ? 'unknown here' : String(snap.manual_planes.length)
-      add(`hold: ${hold}   master CI: ${ci}   manual planes: ${owed}`, undefined, true)
-      for (const plane of snap.manual_planes ?? []) {
-        add(`  owed: ${plane.line}`, 'yellow')
-      }
+      const hold = snap.promote.deploy_hold === null ? 'unknown' : snap.promote.deploy_hold || 'none'
+      add(`DEPLOY_HOLD: ${hold}   master CI: ${ci}`, undefined, true)
       add('')
       add('In flight')
       if (snap.runs === null) {

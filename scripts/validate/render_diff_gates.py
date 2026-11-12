@@ -73,7 +73,7 @@ from renderer.renderer_lib.targets import render_targets
 from lib.git import git, git_env, git_stdout
 from lib.k8s_roles import role_dirs
 from lib.render_guard import containers_entries
-from lib.repo_paths import FILTER_PLUGINS, GITOPS_DEPLOY_FILES, REPO
+from lib.repo_paths import FILTER_PLUGINS, REPO
 from renderer.renderer_lib.bundle import DIGESTS, SHARED_KINDS
 from renderer.renderer_lib.cluster import NAMESPACE_ROLE_VARS
 from renderer.renderer_lib.ordering import (
@@ -83,11 +83,9 @@ from renderer.renderer_lib.ordering import (
     split_kind,
 )
 
-# A filter plugin and the deployer's library are imported by file path, not as packages.
+# A filter plugin is imported by file path, not as a package.
 if str(FILTER_PLUGINS) not in _sys.path:
     _sys.path.insert(0, str(FILTER_PLUGINS))
-if str(GITOPS_DEPLOY_FILES) not in _sys.path:
-    _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from toposort import K8S_APPLIES_LAST, build_k8s_dep_map, filter_by_platform
 

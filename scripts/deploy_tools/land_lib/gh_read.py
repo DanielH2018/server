@@ -5,6 +5,10 @@ every one was re-run by hand. The verdict was `refused`, which reads as a policy
 than a network blip. `read` therefore retries a timeout or a 5xx after each wait in
 `BACKOFF_S`, three attempts in all. A 4xx, or any answer gh parsed, is GitHub saying no, so it
 fails at once.
+
+A rate-limit 403 is the exception to that: it says nothing about the request, so `read` waits
+until the quota resets (`lib.gh_rate_limit`) and asks again, up to `RATE_LIMIT_WAITS` times
+(#7993).
 """
 
 import re
@@ -17,11 +21,14 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.outcome import say
+from lib import gh_rate_limit
 
 T = TypeVar("T")
 
 # The waits between attempts: three attempts in all.
 BACKOFF_S = (5, 15)
+# The rate-limit waits one read sits through before it gives up.
+RATE_LIMIT_WAITS = 3
 # What gh prints for a read GitHub never answered: a timeout of its own or a 5xx.
 _TRANSIENT = re.compile(r"timed? ?out|HTTP 5\d\d", re.IGNORECASE)
 
@@ -47,13 +54,24 @@ def read(call: Callable[[], T], sleep: Callable[[float], None], label: str) -> T
     of an unparseable answer, propagates on the first attempt: gh answered, and asking again
     gets the same answer.
     """
+    rate_limit_waits = 0
     for attempt, wait in enumerate((*BACKOFF_S, None), start=1):
-        try:
-            return call()
-        except subprocess.CalledProcessError as exc:
-            why = (exc.stderr or "").strip()
-        except subprocess.TimeoutExpired:
-            why = "gh timed out"
+        while True:
+            try:
+                return call()
+            except subprocess.CalledProcessError as exc:
+                why = (exc.stderr or "").strip()
+            except subprocess.TimeoutExpired:
+                why = "gh timed out"
+            if (
+                not gh_rate_limit.is_rate_limited(why)
+                or rate_limit_waits >= RATE_LIMIT_WAITS
+            ):
+                break
+            rate_limit_waits += 1
+            pause = gh_rate_limit.wait_s(why)
+            say(f"{label} hit the GitHub rate limit; waiting {pause}s")
+            sleep(pause)
         if wait is None or not is_transient(why):
             raise GhReadFailed(why, attempt)
         say(f"{label} failed transiently ({why}); retrying in {wait}s")

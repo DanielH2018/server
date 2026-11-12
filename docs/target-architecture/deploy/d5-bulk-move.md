@@ -2428,8 +2428,8 @@ sizes its batch of roles against that projection.
   /usr/local/sbin/homelab-takeover-check --label <pr> --render <dir> --src <dir> --tags <a,b>`
   does the `flux diff`, or the server-side `kubectl diff` stand-in, and the census for each
   tag, and prints object names, field paths and exit codes only. The operator no longer runs
-  a script per flip batch. The wrapper's limits are in the `setup/claude_code` role's
-  `CLAUDE.md`, *The takeover check*.
+  a script per flip batch. The wrapper's limits are in
+  `docs/claude-code-root-helpers.md`, *The takeover check*.
 - **To pipe or redirect the output, run `takeover-check` with the same flags.** claude-guard
   allows the sudo line only alone on its line, so `… 2>&1 | tail` or a `$PWD/<dir>` argument
   is refused. The dotfiles shim `takeover-check` (dotfiles #1007) runs exactly that line, takes

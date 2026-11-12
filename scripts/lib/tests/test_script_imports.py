@@ -1,7 +1,7 @@
 """An import credits a script only when the directory it resolves from lies under `scripts/`.
 
 Matching on the basename alone credited `scripts/lib/gitops_markers.py` (deleted in #3275)
-with `gitops_state.py`'s import of the gitops_deploy role's `files/gitops_markers.py`, and
+with a script's import of the gitops_deploy role's `files/gitops_markers.py`, and
 `scripts/docs/reference/secrets.py` with the stdlib `secrets`. The synthetic pairs are
 the red proof; `test_the_real_tree_*` is the Verify-by from that issue.
 
@@ -34,7 +34,7 @@ def test_a_bare_import_through_the_files_own_path_insert_is_credited(tmp_path):
 
 
 def test_a_bare_import_no_insert_explains_is_not_credited(tmp_path):
-    """The `gitops_state.py` shape: the only insert is a name pointing outside `scripts/`."""
+    """The only insert is a name pointing outside `scripts/`."""
     body = "sys.path.insert(0, str(GITOPS_DEPLOY_FILES))\nfrom leafy import VALUE"
     assert _importers_of_leafy(tmp_path, body) == set()
 

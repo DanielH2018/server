@@ -168,18 +168,16 @@ def _issue_block(issue: Issue) -> str:
 # review batch's implementer with.
 APPLY_OWED = """### A verdict that leaves a host apply owed
 `needs-manual-apply` and `blocked` mean the PR merged and an apply is still owed on a host.
-`land.sh` has already printed the exact command — the playbook line and any
-`gitops_state.py clear-owed manual_plane <role>`. `land.sh` starts no GitOps tick
+`land.sh` has already printed the exact command — the playbook line. `land.sh` starts no GitOps tick
 and reads no deployer marker, so a PR that changes a setup role ends `nothing-to-deploy` whether
 or not the deployer applied it. Read what is still pending:
 ```bash
 uv run python scripts/diagnostics/probe.py landing
 ```
-A `DEPLOY_HOLD` other than `none`, a held setup apply, or a `manual_plane` line naming your role
-is CLAUDE.md *When to wait*. A host package the landing deferred on is the host wait's `deferred`
+A `DEPLOY_HOLD` other than `none` is CLAUDE.md *When to wait*. A host package the landing deferred on is the host wait's `deferred`
 (exit 4): the host's updater applies it, and re-running `land.sh` checks it.
 Do exactly one of these two things, never neither:
-- Apply the change and verify it, where *When to wait* leaves it to you — the marker is this
+- Apply the change and verify it, where *When to wait* leaves it to you — the apply is this
   PR's own work, no bring-up playbook sits in the range, and no other session owns it.
 - Otherwise file it with `findings.py open`, carrying the host, the role and the exact command
   `land.sh` printed, verbatim. Then list that issue number under a `MANUAL APPLY PENDING`
@@ -407,7 +405,7 @@ def render_brief(
         )
     return f"""# Fan-out batch {batch} on {host}
 
-You are a headless Opus agent in the worktree `{branch}` of {target.checkout}, checked out
+You are a headless agent in the worktree `{branch}` of {target.checkout}, checked out
 fresh from {target.base}. Work the issues below to a PR.
 
 ## Claim

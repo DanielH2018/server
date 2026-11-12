@@ -55,6 +55,7 @@ def refused_flags(opts: Options) -> list[str]:
             ("--tags", opts.tags),
             ("--since", opts.since),
             ("--subject", opts.subject),
+            ("--fresh", opts.fresh),
         )
         if value
     ]

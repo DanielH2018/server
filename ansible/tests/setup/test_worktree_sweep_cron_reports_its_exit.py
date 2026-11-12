@@ -10,24 +10,36 @@ Run: uv run pytest ansible/tests/setup/test_worktree_sweep_cron_reports_its_exit
 """
 
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 from _shell_render import render_shell_script
+from lib.git_testing import commit, git, init_repo, scrubbed_env
 from lib.proc_testing import fake_bin, run, write_exec
+from lib.repo_paths import REPO
 
 SYS_USER = "sweepuser"
 
 
-def _run(tmp_path: Path, sweep_rc: int, key: str = "k3y", host: str = "daniel-box"):
+def _run(
+    tmp_path: Path,
+    sweep_rc: int,
+    key: str = "k3y",
+    host: str = "daniel-box",
+    uv: str | None = None,
+    env: dict[str, str] | None = None,
+):
     """Run `host`'s script with the sweep exiting `sweep_rc`; return its result and the ping URL.
 
-    The `uv` stub writes the arguments it was given to `uv-args` under `tmp_path`.
+    The `uv` stub writes the arguments it was given to `uv-args` under `tmp_path`. A `uv`
+    body replaces that stub, and `env` replaces the inherited environment.
     """
     home = tmp_path / "home"
-    (home / "server").mkdir(parents=True)
+    (home / "server").mkdir(parents=True, exist_ok=True)
     write_exec(
         home / ".local/bin/uv",
-        f'printf "%s\\n" "$@" > {tmp_path / "uv-args"}\nexit {sweep_rc}\n',
+        uv or f'printf "%s\\n" "$@" > {tmp_path / "uv-args"}\nexit {sweep_rc}\n',
     )
     pinged = tmp_path / "pinged"
     stubs = fake_bin(
@@ -48,7 +60,10 @@ def _run(tmp_path: Path, sweep_rc: int, key: str = "k3y", host: str = "daniel-bo
     assert "{{" not in body, body
     script = tmp_path / "worktree-sweep"
     script.write_text(body)
-    env = {**os.environ, "CREDENTIALS_DIRECTORY": str(credentials)}
+    env = {
+        **(os.environ if env is None else env),
+        "CREDENTIALS_DIRECTORY": str(credentials),
+    }
     result = run(["bash", str(script)], env=env, stub_bin=stubs)
     return result, pinged.read_text().strip() if pinged.exists() else ""
 
@@ -88,3 +103,24 @@ def test_a_sweep_on_another_host_does_not_reap_claims(tmp_path):
         "--brief",
         "--no-reap",
     ]
+
+
+def test_a_sweep_that_skips_a_worktree_a_live_process_holds_pings_0(tmp_path):
+    # #7949: the real pruner over a checkout whose one merged worktree a live process holds.
+    server = tmp_path / "home" / "server"
+    init_repo(server)
+    commit(server, "init", **{"a.txt": "one\n"})
+    held = tmp_path / "held"
+    git(server, "worktree", "add", "-q", "-b", "worktree-held", str(held))
+    git(server, "update-ref", "refs/remotes/origin/master", "master")
+    pruner = REPO / "scripts" / "dev" / "prune_worktrees.py"
+    uv = f'shift 4\nexec {sys.executable} {pruner} "$@"\n'
+    holder = subprocess.Popen(["sleep", "120"], cwd=held)
+    try:
+        result, url = _run(tmp_path, 0, uv=uv, env=scrubbed_env())
+    finally:
+        holder.kill()
+        holder.wait()
+
+    assert f"in use by a live process: pid {holder.pid}" in result.stderr
+    assert url == "https://hc-ping.com/k3y/daniel-box-worktree-sweep/0", result.stderr

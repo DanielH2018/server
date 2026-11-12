@@ -19,6 +19,7 @@ from pathlib import PurePosixPath
 
 import pytest
 from _helpers import REPO
+from _deployer_import_row import DEPLOYER_IMPORTS
 from _printed_json_row import PRINTED_JSON_IS_COMPACT
 from _row_table import (
     Census,
@@ -405,22 +406,8 @@ ROWS = (
                 "scripts/diagnostics/probe.py",
             }
         ),
-        allow={
-            rel: (
-                "ONE module at two roots by construction: `scripts/dev/gen_gitops_markers.py` "
-                "writes monitor-bridge's copies verbatim, and "
-                "`ansible/tests/deploy/test_gitops_markers_copies.py` fails once they differ"
-            )
-            for rel in (
-                "ansible/roles/k8s/monitor-bridge/files/gitops_markers.py",
-                "ansible/roles/setup/gitops_deploy/files/gitops_markers.py",
-                "ansible/roles/k8s/monitor-bridge/files/gitops_ledger.py",
-                "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py",
-                "ansible/roles/k8s/monitor-bridge/files/gitops_hold.py",
-                "ansible/roles/setup/gitops_deploy/files/gitops_hold.py",
-            )
-        },
     ),
+    DEPLOYER_IMPORTS,
     Census(
         name="git-and-gh-go-through-lib",
         reason=(

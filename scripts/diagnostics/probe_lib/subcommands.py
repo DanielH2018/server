@@ -36,7 +36,6 @@ from diagnostics.probe_lib.b2_ledger import (
 from diagnostics.probe_lib.builder import run_builder
 from diagnostics.probe_lib.ha import run_ha, run_ha_state
 from diagnostics.probe_lib.flux import run_flux
-from diagnostics.probe_lib.gitops_view import run_gitops_state
 from diagnostics.probe_lib.lander import run_lander
 from diagnostics.probe_lib.landing_blockers import run_landing
 from diagnostics.probe_lib.landing_verdicts import run_landing_verdicts
@@ -175,13 +174,6 @@ SUBCOMMANDS = [
         run_landing_verdicts,
     ),
     (
-        "gitops-state",
-        "every GitOps deployer marker and owed-ledger line with its clear command, "
-        "read-only (exit 1 when one is unreadable)",
-        "gitops_view",
-        run_gitops_state,
-    ),
-    (
         "push-rules",
         "which GitHub ruleset rule a push of HEAD to a branch meets, and whether this login "
         "bypasses it (exit 1 when a rule refuses the push)",
@@ -236,7 +228,6 @@ VERDICT_SUBCOMMANDS = frozenset(
         "health",
         "ha",
         "landing",
-        "gitops-state",
         "push-rules",
         "lander",
         "builder",

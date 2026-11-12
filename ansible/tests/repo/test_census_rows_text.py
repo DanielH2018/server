@@ -16,6 +16,7 @@ from _workflow_rows import WORKFLOW_ROWS
 from _shimmed_path_row import PREPENDED_PATHS, RESET_PATHS, SHIMMED_PATHS
 from _test_script_bodies_row import TEST_SCRIPT_BODIES
 from _component_contract_row import COMPONENT_TIMERS_CARRY_A_CONTRACT
+from _agent_tools_key_row import AGENTS_LIMIT_TOOLS_WITH_THE_TOOLS_KEY
 from _etcd_snapshot_flags_row import ETCD_SNAPSHOT_LONG_FLAGS
 from _kuma_census_row import KUMA_IDENTIFIERS, KUMA_MENTIONS
 from _deploy_sh_callers_row import (
@@ -417,6 +418,7 @@ ROWS += (
     RESET_PATHS,
     TEST_SCRIPT_BODIES,
     ETCD_SNAPSHOT_LONG_FLAGS,
+    AGENTS_LIMIT_TOOLS_WITH_THE_TOOLS_KEY,
     KUMA_IDENTIFIERS,
     KUMA_MENTIONS,
     COMPONENT_TIMERS_CARRY_A_CONTRACT,

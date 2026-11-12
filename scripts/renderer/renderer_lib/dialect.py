@@ -65,7 +65,6 @@ FILTERS = frozenset(
         "tojson",
         "trim",
         "unique",
-        "updater_lag_grace_s",
         "upper",
         "urlencode",
         "weekly_backup_group",

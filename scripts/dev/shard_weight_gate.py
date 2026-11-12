@@ -288,7 +288,7 @@ def _under_complaint(
         f"recorded weight, so the shard split packs it as nearly free: {listed}. "
         f"Repair (seconds): {RECORD_FILES_HINT}. If it records near 0s again, the time is a "
         "per-process cache its first test built: build that cache outside the timed phases, "
-        "as ansible/tests/conftest.py does for the k8s render"
+        "as ansible/tests/render_share.py does for the k8s and fleet renders"
     )
 
 
