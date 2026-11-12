@@ -34,6 +34,7 @@ def test_the_tools_cache_argument_reaches_the_cases(tmp_path):
         debs=tmp_path,
         tools_cache=Path("cache"),
         k3s_download=False,
+        bootstrap_shard=None,
     )
 
     assert _CasesWithoutPackages(args).tools_cache == Path("cache").resolve()

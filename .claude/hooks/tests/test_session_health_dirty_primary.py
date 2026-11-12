@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the SessionStart hook's parked-deployer warning.
+"""Tests for the SessionStart hook's dirty-primary warning.
 
 A single stray file in the primary checkout `/home/ubuntu/server` makes `gitops_deploy` skip
 every tick, so nothing deploys and every session's `land.sh` fails with `deploy.sh` exit 4
@@ -7,11 +7,11 @@ naming its OWN worktree. The isolation guard refuses a git command targeting the
 checkout, so the sessions that hit the failure structurally cannot inspect its cause. This
 banner is the only place that cause reaches them.
 
-Every test drives `parked_deployer_problems` through its four injected seams rather than
+Every test drives `dirty_primary_problems` through its injected seams rather than
 patching the module, because the monkeypatch ratchet (`ansible/tests/_ratchet.py`) caps a new
 test module at zero patches on a first-party module.
 
-Run: uv run pytest .claude/hooks/tests/test_session_health_parked_deployer.py
+Run: uv run pytest .claude/hooks/tests/test_session_health_dirty_primary.py
 """
 
 import importlib.util
@@ -31,17 +31,9 @@ _PRIMARY = "/home/ubuntu/server"
 _DIRTY = " M ansible/tests/services/test_traefik_edge_selfcheck.py\n"
 
 
-def _problems(porcelain="", marker=None, now=0.0):
-    return _mod.parked_deployer_problems(
-        primary=lambda: _PRIMARY,
-        status=lambda path: porcelain,
-        read_marker=lambda: marker,
-        now=now,
-        # Pinned rather than defaulted: the default reaches the host's real `manual_plane`
-        # marker, so on daniel-box a pending setup role would add a line to every assertion
-        # here. `test_session_health_manual_plane.py` owns that line.
-        read_manual=lambda: None,
-        read_contention=lambda: None,
+def _problems(porcelain=""):
+    return _mod.dirty_primary_problems(
+        primary=lambda: _PRIMARY, status=lambda path: porcelain
     )
 
 
@@ -76,64 +68,11 @@ def test_dirty_line_summarises_beyond_the_path_limit():
     assert f"file{_mod.PRIMARY_DIRTY_LIMIT + 2}.py" not in lines[0]
 
 
-# ── the red-proof pair for the park age ──
+def test_a_failed_status_read_degrades_to_silence_rather_than_raising():
+    def boom(path):
+        raise OSError("git unreadable")
 
-
-def test_behind_since_older_than_the_park_threshold_is_flagged():
-    marker = "bec43b1c 0.0"
-    lines = _mod.behind_park_lines(marker, _mod.BEHIND_PARK_SECONDS + 600)
-    assert len(lines) == 1
-    assert "park, not a queue" in lines[0]
-    assert "55 min" in lines[0]
-
-
-def test_behind_since_within_one_tick_is_not_flagged():
-    """A routine push is behind for a tick or two. Only a stamp that survives several ticks is
-    a park, so the recent case must stay silent or the banner fires on every normal merge."""
-    marker = "bec43b1c 0.0"
-    assert _mod.behind_park_lines(marker, _mod.BEHIND_PARK_SECONDS - 60) == []
-
-
-def test_absent_behind_marker_is_not_flagged():
-    assert _mod.behind_park_lines(None, 1e9) == []
-
-
-def test_torn_behind_marker_is_not_flagged():
-    assert _mod.behind_park_lines("not-a-timestamp", 1e9) == []
-
-
-# ── failure modes: never block, but never go silently absent on a broken import ──
-
-
-def test_a_failed_read_degrades_to_silence_rather_than_raising():
-    def boom():
-        raise OSError("state dir unreadable")
-
-    lines = _mod.parked_deployer_problems(
-        primary=lambda: _PRIMARY,
-        status=lambda path: "",
-        read_marker=boom,
-        now=0.0,
-        read_manual=lambda: None,
-        read_contention=lambda: None,
-    )
-    assert lines == []
-
-
-def test_a_dirty_line_survives_a_failing_marker_read():
-    def boom():
-        raise FileNotFoundError("behind_since")
-
-    lines = _mod.parked_deployer_problems(
-        primary=lambda: _PRIMARY,
-        status=lambda path: _DIRTY,
-        read_marker=boom,
-        now=0.0,
-        read_manual=lambda: None,
-        read_contention=lambda: None,
-    )
-    assert len(lines) == 1
-    assert "is dirty" in lines[0]
+    assert _mod.dirty_primary_problems(primary=lambda: _PRIMARY, status=boom) == []
 
 
 def test_the_real_status_read_takes_no_optional_locks_on_the_shared_checkout():
@@ -151,8 +90,3 @@ def test_the_real_status_read_takes_no_optional_locks_on_the_shared_checkout():
         "the flag is global to git and must precede the subcommand"
     )
     assert "--porcelain" in argv
-
-
-def test_both_lines_are_reported_together():
-    lines = _problems(porcelain=_DIRTY, marker="bec43b1c 0.0", now=1e6)
-    assert len(lines) == 2

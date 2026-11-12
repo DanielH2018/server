@@ -378,7 +378,7 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   maintenance; an unreadable GitHub exits 1 and pages. A pass that read both also writes
   `homelab_awaiting_operator{reason}` and its `_oldest_seconds` twin to
   `/var/lib/node-exporter-textfile/fanout_operator_waits.prom`: the PRs and batches that wait
-  on a person, and the owed manual-plane applies (`scripts/dev/fanout_lib/operator_waits.py`).
+  on a person (`scripts/dev/fanout_lib/operator_waits.py`).
   Each clean run also writes `claude-fanout-server-lander.prom`, which pages a timer that
   stopped. Disarming adds both files to the component's toggle-gated `legacy:` entries, so the
   reconcile that drops the timer also removes them. The NotReporting rule still fires on the

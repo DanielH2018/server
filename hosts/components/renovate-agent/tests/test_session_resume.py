@@ -21,7 +21,6 @@ import subprocess
 
 import agent_logic
 import renovate_agent
-from gitops_hold import DeployerSnapshot
 from lib.proc_testing import write_exec
 
 SESSION_ID = "6f1c2a9e-4b7d-4e2a-9c3f-0d8b5a7e1c42"
@@ -109,7 +108,6 @@ def _tick(tmp_path: pathlib.Path, summary: str) -> tuple[_Host, pathlib.Path]:
         run=host.run,
         discord_post=host.discord_post,
         flush_discord_spool=host.flush_discord_spool,
-        deployer_state=lambda: DeployerSnapshot(None, None, None, None, None),
     )
     assert renovate_agent.main(tools, str(cfg)) == 0
     return host, worktree

@@ -16,7 +16,6 @@ Usage: deploy_ui.py   (takes no arguments; -h/--help prints this text)
 Configuration comes from the environment, which deploy-ui.service sets:
   DEPLOY_UI_TREE_LOCK  path of the git-tree lock file (required, no default)
   DEPLOY_UI_REPO       primary checkout (default /home/ubuntu/server)
-  DEPLOY_UI_STATE      gitops-deploy state dir (default gitops_markers.STATE_DIR)
   DEPLOY_UI_LOGS       log dir (default ~/.local/state/deploy-ui)
   DEPLOY_UI_CLI_LOGS   where `land.sh --detach` logs (default /tmp/homelab-landings-<user>)
   DEPLOY_UI_LOCKS      dir holding the server-deploy-*.lock files (default /var/lock)
@@ -42,7 +41,6 @@ from typing import ClassVar
 
 from deploy_ui_lib import deploy_ui_reads as reads
 from deploy_ui_lib import deploy_ui_writes as writes
-from gitops_markers import STATE_DIR
 from host_lib import logfmt
 
 # The locks the in-flight panel reads. The tree lock is held for the snapshot only (ADR-0017),
@@ -57,7 +55,6 @@ PAGE = Path(__file__).with_name("deploy_ui.html")
 @dataclass(frozen=True)
 class Config:
     repo: Path
-    state_dir: Path
     log_dir: Path
     bind: str
     port: int
@@ -76,7 +73,6 @@ class Config:
             # The unit always sets DEPLOY_UI_REPO; the default is the operator's checkout,
             # because this file ships to the host and has no repo to derive one from.
             repo=Path(e("DEPLOY_UI_REPO", "/home/ubuntu/server")),
-            state_dir=Path(e("DEPLOY_UI_STATE", STATE_DIR)),
             log_dir=Path(
                 e("DEPLOY_UI_LOGS", str(Path.home() / ".local/state/deploy-ui"))
             ),
@@ -204,12 +200,6 @@ class App:
                 self._pr_titles[pr] = out.strip()
         return self._pr_titles.get(pr, "")
 
-    def state(self) -> dict:
-        try:
-            return reads.read_state(self.cfg.state_dir)
-        except OSError as exc:
-            raise Unavailable(f"state: {exc}") from exc
-
     def prs(self) -> dict:
         with self._prs_lock:
             if self._prs_cache is not None:
@@ -318,7 +308,6 @@ class App:
                 {},
                 {},
             ),
-            self.state()["hold_sha"],
         )
         if refusal:
             return 409, refusal
@@ -347,33 +336,15 @@ class App:
         writes.audit(f"action=cancel pid={pid}")
         return 200, f"sent SIGTERM to {pid}"
 
-    def hold_clear(self, body: dict) -> tuple[int, str]:
-        # Read the entries BEFORE the clear removes them: the operator asked to drop a hold,
-        # and what they are dropping with it is one unapplied plane per entry (#2453).
-        dropped = self.state()["hold_plane_entries"]
-        refusal = writes.clear_hold(
-            self.cfg.state_dir, str(body.get("expected_sha", "")), self.cfg.tree_lock
-        )
-        if refusal:
-            return 409, refusal
-        # A count, not the entries: an entry is `<playbook> <tags>` and the space would break
-        # the logfmt line Alloy ships to Loki. The reply below names them.
-        writes.audit(
-            f"action=hold-clear sha={body.get('expected_sha')} planes={len(dropped)}"
-        )
-        return 200, writes.hold_cleared_message(dropped)
-
     # ---- routing ----
     READS: ClassVar[dict[str, str]] = {
         "/api/inflight": "inflight",
-        "/api/state": "state",
         "/api/prs": "prs",
         "/api/landings": "landings",
     }
     WRITES: ClassVar[dict[str, str]] = {
         "/api/land": "land",
         "/api/cancel": "cancel",
-        "/api/hold/clear": "hold_clear",
     }
 
     def get(self, path: str) -> tuple[int, str]:

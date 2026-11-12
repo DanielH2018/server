@@ -74,16 +74,10 @@ lock's path in as `DEPLOY_UI_TREE_LOCK`, rendered from `server_git_tree_lock`, a
 
 ## Writes
 
-Land spawns `land.sh` detached and logs to `~/.local/state/deploy-ui/`. Land, cancel and hold
-clear each emit one logfmt line via `logger -t deploy-ui`. Land refuses under `hold_sha`.
-`gitops_hold.Hold.clear` clears it, with its `owed` ledger `hold_plane` lines, against a
-typed SHA (#3658). The hold panel, the hold clear and the refusal read the deployer's state
-modules, which the component ships with `shared:` entries. They keep a subject until the
-deployer retires, and H7.19b removes them.
-
-The `hold_plane` class holds one ledger line per failed apply, and Clear drops all of them whatever is still
-unapplied. The state panel lists the entries one per line, the confirm prompt names them, and
-the reply repeats them — after the Clear nothing records those planes at all (#2453).
+Land spawns `land.sh` detached and logs to `~/.local/state/deploy-ui/`. Land and cancel each
+emit one logfmt line via `logger -t deploy-ui`. The page reads no deployer state: `land.sh`
+refuses a landing under `DEPLOY_HOLD` itself, and the hold is cleared with `gh variable set
+DEPLOY_HOLD --body none`, never from this page.
 
 Log names carry a `mkstemp` suffix as well as the second-granular timestamp. Two landings in
 one second used to name the same file, and the second open truncated a log the first process
@@ -158,6 +152,6 @@ restarts the daemon when one of them changed. A new Python file needs the same a
 daemon keeps running the old code (ENFORCED:
 `hosts/lib/tests/test_deploy_ui_component.py::test_a_changed_python_file_restarts_the_daemon_is_clean`).
 The HTML needs no action, because the daemon reads it on each request. To verify, run
-`curl -s http://<daniel-box server_ip>:8790/api/state` from the box.
+`curl -s http://<daniel-box server_ip>:8790/api/inflight` from the box.
 
 Tests: `uv run pytest hosts/components/deploy-ui/tests hosts/lib/tests/test_deploy_ui_component.py`.

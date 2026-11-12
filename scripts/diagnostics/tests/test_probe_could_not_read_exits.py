@@ -17,14 +17,13 @@ import os
 import shutil
 import subprocess
 import sys
-from types import SimpleNamespace
 
 # `scripts/diagnostics` is deliberately absent from `pythonpath` in pyproject.toml, so this
 # module puts its own parent directory on `sys.path` — the insert every sibling here carries.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import probe
-from diagnostics.probe_lib import gitops_view, ha, health
+from diagnostics.probe_lib import ha, health
 from diagnostics.probe_lib.core import SECRETS_PATH
 from lib import kubectl
 from lib.exit_codes import FAILED, PROBE_UNREADABLE
@@ -140,35 +139,3 @@ def test_ha_state_non_json_body_exits_unreadable(monkeypatch, capsys):
     assert rc == PROBE_UNREADABLE, f"a non-JSON `ha state` body exited {rc}"
     assert body.strip() in err
     assert body.strip() not in out
-
-
-def test_gitops_state_unreadable_marker_exits_unreadable_or_is_decided(
-    tmp_path, capsys
-):
-    """`hold_sha` exists and cannot be opened: the hold was not read.
-
-    A directory in the marker's place fails the read with `IsADirectoryError` for any user,
-    root included, where a `chmod 000` does not.
-    """
-    (tmp_path / gitops_view.MARKERS["hold"]).mkdir()
-    rc = _exit_code(
-        lambda: gitops_view.run_gitops_state(SimpleNamespace(json=True), tmp_path, NOW)
-    )
-    err = capsys.readouterr().err
-    if _decided_in(gitops_view.run_gitops_state):
-        return
-    assert rc == PROBE_UNREADABLE, f"an unreadable marker exited {rc}"
-    assert gitops_view.MARKERS["hold"] in err
-
-
-def test_gitops_state_absent_directory_exits_unreadable_or_is_decided(tmp_path, capsys):
-    """No state directory: either the read failed, or "not the deploy host" is the verdict."""
-    missing = tmp_path / "missing"
-    rc = _exit_code(
-        lambda: gitops_view.run_gitops_state(SimpleNamespace(json=False), missing, NOW)
-    )
-    err = capsys.readouterr().err
-    if _decided_in(gitops_view.run_gitops_state):
-        return
-    assert rc == PROBE_UNREADABLE, f"an absent state directory exited {rc}"
-    assert str(missing) in err

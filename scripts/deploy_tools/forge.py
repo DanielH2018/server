@@ -32,6 +32,11 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
+from lib import gh_rate_limit
 from forge_transport import (
     TIMEOUT_S,
     ForgeError,
@@ -71,6 +76,8 @@ CHECK_RUN_PAGE_SIZE, CHECK_RUN_PAGES_MAX = 100, 20
 # mutating requests, and a burst trips the secondary rate limit as a 403 that reads like a
 # permission error.
 DELETE_PAUSE_S = 1.0
+# The rate-limit waits `variable` sits through before it reports the failure (#7993).
+RATE_LIMIT_WAITS = 3
 
 # The keyless identity the `promote` workflow signs under, and the one the OCIRepository
 # `homelab` checks. A signature from any other workflow or ref does not verify.
@@ -120,15 +127,21 @@ class GitHub:
             ForgeError: `gh` failed for any other reason, or did not finish.
         """
         argv = ["gh", "variable", "get", name, "-R", self.repository]
-        try:
-            proc = self._run(argv, capture_output=True, text=True, timeout=TIMEOUT_S)
-        except (OSError, subprocess.TimeoutExpired) as err:
-            raise ForgeError(f"gh variable get {name}: {err}") from err
-        if proc.returncode == 0:
-            return proc.stdout.removesuffix("\n")
-        # cli/cli pkg/cmd/variable/get maps the API's 404 to this message.
-        if f"variable {name} was not found" in proc.stderr:
-            return None
+        for waits_left in range(RATE_LIMIT_WAITS, -1, -1):
+            try:
+                proc = self._run(
+                    argv, capture_output=True, text=True, timeout=TIMEOUT_S
+                )
+            except (OSError, subprocess.TimeoutExpired) as err:
+                raise ForgeError(f"gh variable get {name}: {err}") from err
+            if proc.returncode == 0:
+                return proc.stdout.removesuffix("\n")
+            # cli/cli pkg/cmd/variable/get maps the API's 404 to this message.
+            if f"variable {name} was not found" in proc.stderr:
+                return None
+            if not gh_rate_limit.is_rate_limited(proc.stderr) or not waits_left:
+                break
+            self._sleep(gh_rate_limit.wait_s(proc.stderr, self._run))
         raise ForgeError(
             f"gh variable get {name} exited {proc.returncode}: {proc.stderr.strip()}"
         )

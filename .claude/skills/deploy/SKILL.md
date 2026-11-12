@@ -100,9 +100,6 @@ maximal `k3s`. Ansible exits 0 on a tag that matches nothing, so a wrong guess r
 recap.
 
 ```bash
-# Clear the owed line your own merged PR created
-uv run python scripts/deploy_tools/owed_run.py <role>
-
 # Apply one setup role by hand, with the playbook and tag its Applied by: line names
 uv run ansible-playbook ansible/<playbook> --tags <tag>
 
