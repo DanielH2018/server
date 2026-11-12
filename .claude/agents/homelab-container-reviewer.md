@@ -1,6 +1,6 @@
 ---
 name: homelab-container-reviewer
-description: Reviews workload-infrastructure hygiene across this homelab's services — the *arr/media stack (sonarr/radarr/jellyfin/qbittorrent/tdarr/configarr/janitorr/karakeep) plus general hygiene (resource requests/limits, probes, image pinning, securityContext, PVC/volume correctness) across the k3s roles, and the same for the Pi's remaining Compose services — for gaps, improvements, and additions. Report-only by instruction — investigates and reports, makes no changes.
+description: "Report-only. Reviews workload hygiene across the k3s roles and the Pi's Compose services: resources, probes, image pins, securityContext and volumes, plus the *arr/media stack."
 model: sonnet
 tools: Read, Grep, Glob, Bash
 read_only: true
