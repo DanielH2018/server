@@ -20,6 +20,7 @@ from lib.git_testing import commit, git, init_repo
 from lib.repo_paths import REPO
 from secrets_mgmt import host_secrets as hs
 from secrets_mgmt.git_dates import (
+    RENAMED_FROM,
     ciphertext_rotation_commits,
     ciphertext_rotation_dates,
 )
@@ -162,6 +163,15 @@ def test_a_key_secrets_yml_does_not_hold_is_flagged(repo):
     assert [
         p for p in hs.check(repo, tools_for(repo)) if f"no commit in {SECRETS}" in p
     ]
+
+
+def test_a_renamed_key_synced_after_its_rename_is_clean(repo, monkeypatch):
+    monkeypatch.setitem(RENAMED_FROM, "tok_new", "tok_old")
+    commit(repo, "secrets", **{SECRETS: sops_file(tok_old="v1")})
+    commit(repo, "rename", **{SECRETS: sops_file(tok_new="v1")})
+    commit(repo, "tree", **{PACKAGE: package("tok_new")})
+    commit(repo, "sync", **{HOST_FILE: sops_file(tok_new="v1")})
+    assert hs.check(repo, tools_for(repo)) == []
 
 
 def test_a_shallow_clone_is_flagged_and_a_full_clone_is_not(repo, tmp_path):
