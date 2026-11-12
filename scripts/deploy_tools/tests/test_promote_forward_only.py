@@ -15,7 +15,7 @@ from _promote_fakes import NOW, World, bundle_files, digest_of
 
 from deploy_tools.promote_lib import forward_only, verify_promotion as vp
 
-PINS = "ansible/roles/setup/k3s/defaults/main.yml"
+PINS = "ansible/roles/k8s/system-upgrade/defaults/main.yml"
 FLAGGED = "flux_forward_only: true\n"
 LONGHORN = "ansible/roles/k8s/longhorn/defaults/main.yml"
 METALLB = "ansible/roles/k8s/metallb/defaults/main.yml"
