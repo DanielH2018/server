@@ -43,7 +43,7 @@ def _output(
             read_payload=lambda: {"source": "startup"},
             target_problems=lambda: list(targets),
             master_moved_problems=lambda: [],
-            parked_deployer_problems=lambda: [],
+            dirty_primary_problems=lambda: [],
             other_live_sessions=lambda cwd: list(sessions),
             unlabelled_worktree_lines=lambda cwd: list(unlabelled),
             stale_worktree_lines=lambda: list(worktrees),

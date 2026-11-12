@@ -21,11 +21,10 @@ from diagnostics.probe_lib.promote_state import (
     reconcile_disabled_objects,
     suspended_objects,
 )
-from test_probe_landing import CLEAR, GREEN, fake_deploy_ui, fake_run
+from test_probe_landing import GREEN, fake_deploy_ui, fake_run
 
 PROD = {"commit": "c" * 40, "digest": "sha256:" + "1" * 64}
 OTHER = {"commit": "d" * 40, "digest": "sha256:" + "2" * 64}
-HELD = {"hold_sha": "f" * 40, "hold_plane_entries": []}
 
 
 def _broken():
@@ -38,7 +37,6 @@ def _read(value):
 
 
 def _snap(
-    deployer=CLEAR,
     deploy_hold="none",
     prod=PROD,
     last_good=PROD,
@@ -52,9 +50,7 @@ def _snap(
         None if suspended is None else _read(suspended),
         None if reconcile_disabled is None else _read(reconcile_disabled),
     )
-    return landing.collect(
-        lambda: None, fake_deploy_ui(deployer), fake_run(GREEN), promote=reads
-    )
+    return landing.collect(fake_deploy_ui, fake_run(GREEN), promote=reads)
 
 
 def _lines(snap: dict) -> dict[str, str]:
@@ -62,27 +58,22 @@ def _lines(snap: dict) -> dict[str, str]:
     return {line.split(":", 1)[0]: line for line in hold_lines(snap)}
 
 
-HOLD_SHA = "hold_sha (GitOps deployer, setup plane)"
 DEPLOY_HOLD = "DEPLOY_HOLD (promote workflow, Flux-owned tags)"
 
 
 @pytest.mark.parametrize(
-    "deployer, deploy_hold, want_sha, want_hold",
+    "deploy_hold, want_hold",
     [
-        (HELD, f"{'e' * 40} failed=bento-pdf", "ffffffff", "failed=bento-pdf"),
-        (HELD, "none", "ffffffff", ": none"),
-        (CLEAR, "none", ": none", ": none"),
+        (f"{'e' * 40} failed=bento-pdf", "failed=bento-pdf"),
+        ("none", ": none"),
     ],
-    ids=["both-set", "one-set", "both-none"],
+    ids=["set", "none"],
 )
-def test_both_hold_lines_print_whatever_each_reads(
-    deployer, deploy_hold, want_sha, want_hold
-):
-    lines = _lines(_snap(deployer, deploy_hold))
-    assert want_sha in lines[HOLD_SHA]
-    assert lines[DEPLOY_HOLD].endswith(want_hold)
-    text = landing.format_text({**_snap(deployer, deploy_hold), "claims": None})
-    assert lines[HOLD_SHA] in text and lines[DEPLOY_HOLD] in text
+def test_the_hold_line_prints_whatever_it_reads(deploy_hold, want_hold):
+    snap = _snap(deploy_hold)
+    line = _lines(snap)[DEPLOY_HOLD]
+    assert line.endswith(want_hold)
+    assert line in landing.format_text({**snap, "claims": None})
 
 
 @pytest.mark.parametrize(
@@ -96,27 +87,26 @@ def test_both_hold_lines_print_whatever_each_reads(
     ids=["suspended-changed", "failed", "stateful", "stateful-unverified"],
 )
 def test_a_suspended_changed_hold_prints_its_cause(deploy_hold, cause):
-    line = _lines(_snap(CLEAR, deploy_hold))[DEPLOY_HOLD]
+    line = _lines(_snap(deploy_hold))[DEPLOY_HOLD]
     assert line.startswith(f"{DEPLOY_HOLD}: {deploy_hold}")
     assert ("cause:" in line) == bool(cause) and cause in line
 
 
-def test_both_hold_lines_print_when_neither_hold_could_be_read():
+def test_the_hold_line_prints_when_the_hold_could_not_be_read():
     """A line never goes missing: an unread hold prints `unknown`, not nothing."""
-    snap = {**_snap(), "hold": None, "promote": None, "claims": None}
-    lines = _lines(snap)
-    assert lines[HOLD_SHA].endswith(": unknown")
-    assert lines[DEPLOY_HOLD].endswith(": unknown")
-    assert lines[HOLD_SHA] in landing.format_text(snap)
+    snap = {**_snap(), "promote": None, "claims": None}
+    line = _lines(snap)[DEPLOY_HOLD]
+    assert line.endswith(": unknown")
+    assert line in landing.format_text(snap)
 
 
 def test_prod_equal_to_last_good_is_reported_when_both_digests_match():
-    assert "last-good: the same digest as prod" in hold_lines(_snap())[2]
+    assert "last-good: the same digest as prod" in hold_lines(_snap())[1]
 
 
 def test_a_failed_last_good_read_reads_unknown_and_never_equal_to_prod():
     snap = _snap(last_good=_broken)
-    line = hold_lines(snap)[2]
+    line = hold_lines(snap)[1]
     assert line.endswith("last-good: unknown")
     assert "same digest" not in line
     assert any(e.startswith("last_good: TimeoutError") for e in snap["errors"])
@@ -124,11 +114,11 @@ def test_a_failed_last_good_read_reads_unknown_and_never_equal_to_prod():
 
 
 def test_a_last_good_not_yet_seeded_reads_none():
-    assert hold_lines(_snap(last_good=None))[2].endswith("last-good: none")
+    assert hold_lines(_snap(last_good=None))[1].endswith("last-good: none")
 
 
 def test_a_last_good_on_another_digest_names_it():
-    line = hold_lines(_snap(last_good=OTHER))[2]
+    line = hold_lines(_snap(last_good=OTHER))[1]
     assert line.endswith(f"last-good: dddddddd {OTHER['digest'][:19]}")
 
 
@@ -137,7 +127,7 @@ def test_a_failed_deploy_hold_read_reads_unknown():
 
 
 def test_collect_without_the_promotion_reads_reads_none_of_them():
-    snap = landing.collect(lambda: None, fake_deploy_ui(CLEAR), fake_run(GREEN))
+    snap = landing.collect(fake_deploy_ui, fake_run(GREEN))
     assert snap["promote"] == {
         "deploy_hold": None,
         "prod": None,
@@ -186,7 +176,7 @@ def test_a_hand_suspend_and_a_git_suspend_print_their_field_managers():
         _flux_object("Kustomization", "texbrain", None, "kustomize-controller"),
         _flux_object("OCIRepository", "homelab", False, "homelab-operator"),
     ]
-    line = hold_lines(_snap(suspended=suspended_objects(items)))[3]
+    line = hold_lines(_snap(suspended=suspended_objects(items)))[2]
     assert line == (
         "suspended (Flux): Kustomization/sonarr by homelab-operator; "
         "Kustomization/radarr by kustomize-controller"
@@ -194,9 +184,9 @@ def test_a_hand_suspend_and_a_git_suspend_print_their_field_managers():
 
 
 def test_no_suspended_object_reads_none_and_an_unread_one_reads_unknown():
-    assert hold_lines(_snap(suspended=[]))[3] == "suspended (Flux): none"
+    assert hold_lines(_snap(suspended=[]))[2] == "suspended (Flux): none"
     snap = _snap(suspended=_broken)
-    assert hold_lines(snap)[3] == "suspended (Flux): unknown"
+    assert hold_lines(snap)[2] == "suspended (Flux): unknown"
     assert any(e.startswith("suspended: TimeoutError") for e in snap["errors"])
 
 
@@ -221,16 +211,16 @@ def test_an_annotated_coredns_member_is_named_and_an_unannotated_one_is_not():
         _member("ConfigMap", "coredns", {"other": "disabled"}),
         _member("Service", "kube-dns", None),
     ]
-    line = hold_lines(_snap(reconcile_disabled=reconcile_disabled_objects(items)))[4]
+    line = hold_lines(_snap(reconcile_disabled=reconcile_disabled_objects(items)))[3]
     assert line == "reconcile-disabled (Flux skips): Deployment/coredns in kube-system"
 
 
 def test_no_annotated_member_reads_none_and_an_unread_one_reads_unknown():
-    assert hold_lines(_snap(reconcile_disabled=[]))[4] == (
+    assert hold_lines(_snap(reconcile_disabled=[]))[3] == (
         "reconcile-disabled (Flux skips): none"
     )
     snap = _snap(reconcile_disabled=_broken)
-    assert hold_lines(snap)[4] == "reconcile-disabled (Flux skips): unknown"
+    assert hold_lines(snap)[3] == "reconcile-disabled (Flux skips): unknown"
     assert any(e.startswith("reconcile_disabled: TimeoutError") for e in snap["errors"])
 
 

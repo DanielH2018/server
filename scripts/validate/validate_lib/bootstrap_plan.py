@@ -219,3 +219,15 @@ def submission_order(planned: list[Planned]) -> list[int]:
 def selected(planned: list[Planned], k3s_download: bool) -> list[Planned]:
     """The cases one run takes: the gating ones, or under `--k3s-download` the rest."""
     return [item for item in planned if item.gates != k3s_download]
+
+
+def shard(planned: list[Planned], number: int, count: int) -> list[Planned]:
+    """The items shard `number` of `count` runs, in plan order.
+
+    The offline builds are dealt first, one to each shard while they last, then the other items
+    round-robin. With as many shards as builds, no two builds share a runner's CPUs (#7879).
+    """
+    dealt = [p for p in planned if p.builds_offline]
+    dealt += [p for p in planned if not p.builds_offline]
+    mine = {id(item) for k, item in enumerate(dealt) if k % count == number - 1}
+    return [item for item in planned if id(item) in mine]

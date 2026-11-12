@@ -64,7 +64,7 @@ _PRUNE = {".git", ".venv", "node_modules", "__pycache__", "collections"}
 
 def _probe_subcommands():
     # probe.py's argparse surface lives in probe_lib/: cli_parser.py, and the modules whose own
-    # add_parser() cli_parser.py calls (gitops_why.py adds `gitops-state`). probe.py itself
+    # add_parser() cli_parser.py calls (lander.py adds `lander`). probe.py itself
     # holds only main() and its dispatch table, so scanning it returns an empty set.
     lib = os.path.join(REPO, "scripts", "diagnostics", "probe_lib")
     body = "\n".join(

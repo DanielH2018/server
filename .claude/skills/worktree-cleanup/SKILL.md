@@ -64,8 +64,9 @@ step — without it the command reports success having removed nothing.
 lock names a dead pid, and deleting its `$CLAUDE_PROJECT_DIR` breaks every repo hook it runs
 (#3887). `lib.worktrees.remove`, which both the pruner and `fanout.py place clean` call,
 refuses a tree that any live process has as its cwd or its `CLAUDE_PROJECT_DIR`. The refusal
-reads `could not remove <tree>: in use by a live process: pid N (...)`. Find that session and
-end it rather than deleting the directory by hand. The check sees only processes of the uid
+reads `could not remove <tree>: in use by a live process: pid N (...)`. The pruner counts it as
+a skip, not a failure, so the weekly sweep still exits 0 and removes the tree the next week
+(#7949). Find that session and end it rather than deleting the directory by hand. The check sees only processes of the uid
 running the removal.
 
 ## Deleting the branch afterwards

@@ -108,6 +108,9 @@ _COMPARE_PATHS = "[.files[]? | .filename, (.previous_filename // empty)]"
 # read for its draft state (#6077). GitHub registered PR #6069's ready run 3s after the flip
 # at 02:09:58 on 2026-10-24, and the push-delivery grace await_ci already allows is far wider.
 DRAFT_SKIPPED_GRACE_S = await_ci.DROPPED_PUSH_GRACE_S
+# A poll that pacing holds sleeps this many merge polls. On 2026-11-11 thirteen landers polling
+# every 30s spent the hourly quota, and a held lander cannot merge sooner for polling sooner.
+HELD_POLL_FACTOR = 4
 
 
 def _reference_is_deliberate(prefix: str) -> bool:
@@ -757,10 +760,12 @@ def await_merge(ln: Landing) -> None:
                 75,
                 Verdict.MERGE_TIMEOUT,
             )
-        t.sleep(o.merge_poll)
+        # A held lander adds no throughput, so it polls slower and spends less quota (#7993).
+        step = o.merge_poll * HELD_POLL_FACTOR if hold else o.merge_poll
+        t.sleep(step)
         if hold:
-            held += o.merge_poll
+            held += step
         else:
-            waited += o.merge_poll
+            waited += step
     paced_note = f", {held}s of it held by pacing" if held else ""
     say(f"merged after {waited + held}s{paced_note}")

@@ -41,7 +41,6 @@ from diagnostics.probe_lib.host_reader import (
     unit_span_s,
 )
 from lib import yaml_fast
-from lib.deployer_park import _age_phrase
 from lib.exit_codes import PROBE_FAILED, PROBE_OK
 from lib.repo_paths import ANSIBLE, REPO
 from lib.systemd_timer import span_s
@@ -148,7 +147,7 @@ def report(
         age = int(now - newest[0].at)
         if age > deadline:
             problems.append(
-                f"the newest pass is {_age_phrase(age)} old, past {deadline}s"
+                f"the newest pass is {core.age_phrase(age)} old, past {deadline}s"
             )
         problems += [e.message for e in newest if UNREAD in e.message]
     lines = [
@@ -157,7 +156,7 @@ def report(
     ]
     if newest:
         lines.append(
-            f"newest pass {_stamp(newest[0].at)} ({_age_phrase(int(now - newest[0].at))} ago):"
+            f"newest pass {_stamp(newest[0].at)} ({core.age_phrase(int(now - newest[0].at))} ago):"
         )
         lines += [
             f"  {e.message}"

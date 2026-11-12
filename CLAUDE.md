@@ -122,22 +122,14 @@ if you override with `--tags`, keep it to your own services.
 
 ### When to wait
 
-Say which of these applies, then stop. `probe.py landing` reads the hold, master CI and owed-line
-conditions.
+Say which of these applies, then stop. `probe.py landing` reads `DEPLOY_HOLD` and master CI.
 
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
-- The host holds a non-empty `hold_sha`: a setup-plane apply failed. `hold_plane` names each
-  failed playbook.
 - A change in one of the bring-up playbooks sits in the `local..origin` range, and it is another
   session's: `bootstrap.yml`, `k3s-bringup.yml`, `initial_setup.yml`, the list
   `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:_BROAD_MANUAL_PREFIXES`
   holds. The deployer never applies these. Clearing it means applying their change; name it and
   stop.
-- A `manual_plane` line in the host's `owed.jsonl` ledger names a setup role the deployer cannot
-  apply, and another session's PR created it. That line is theirs to clear. When your own merged
-  PR created the line, do not stop: run `uv run python scripts/deploy_tools/owed_run.py <role>`
-  from any checkout. It refuses a line that needs you. The operator granted that standing
-  clearance on 2026-10-24.
 - `deploy.sh --changed` exits 3 and prints a setup or bring-up command: the range holds a broad
   path only that command applies. `deploy.sh` exits 5 for a k8s tag, and that is no reason to
   wait: `promote` and Flux apply the change.

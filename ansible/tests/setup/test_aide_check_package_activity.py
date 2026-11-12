@@ -18,6 +18,8 @@ from _aide_check_run import (
     LINK_CHANGED_MODE,
     SECRET_LINK,
     SECRET_TARGET,
+    SECRETS_MANIFEST,
+    SYSTEM_SECRET_LINK,
     _report,
     _run_check,
 )
@@ -36,6 +38,10 @@ EXPLAINED = {
     "a package file whose upgrade changed its mode": (
         f"{CHANGED_MODE}: /usr/bin/tool",
         {"packages_upgraded": ("tool",)},
+    ),
+    "the host package's /usr/lib link into its secrets tmpfs": (
+        f"{LINK_CHANGED}: {SYSTEM_SECRET_LINK}",
+        {},
     ),
     "a secret file the host package's upgrade turned into a link": (
         f"{LINK_CHANGED_MODE}: {SECRET_LINK}",
@@ -98,6 +104,25 @@ FLAGGED = {
     "a host package apt hook turned into a link into the secrets tmpfs": (
         f"{LINK_CHANGED}: /etc/apt/apt.conf.d/91homelab-hook",
         {"relink": {"/etc/apt/apt.conf.d/91homelab-hook": SECRET_TARGET}},
+        NOT_THE_LINK,
+    ),
+    "a host package script linked to its own path in the secrets tmpfs, undeclared": (
+        f"{LINK_CHANGED}: /usr/lib/homelab/check",
+        {
+            "relink": {
+                "/usr/lib/homelab/check": "/run/homelab-secrets/usr/lib/homelab/check"
+            }
+        },
+        NOT_THE_LINK,
+    ),
+    "the host package's link pointed at another output in its secrets tmpfs": (
+        f"{LINK_CHANGED}: {SYSTEM_SECRET_LINK}",
+        {"relink": {SYSTEM_SECRET_LINK: SECRET_TARGET}},
+        NOT_THE_LINK,
+    ),
+    "the host package's link while its secrets manifest is unreadable": (
+        f"{LINK_CHANGED}: {SYSTEM_SECRET_LINK}",
+        {"rewrite": {SECRETS_MANIFEST: "not json"}},
         NOT_THE_LINK,
     ),
     "the host package's link pointed outside its secrets tmpfs": (

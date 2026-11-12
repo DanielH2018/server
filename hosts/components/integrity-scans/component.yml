@@ -59,6 +59,8 @@ depends:
   # aide only Recommends it, and the updater installs with --no-install-recommends. It ships
   # /etc/aide/aide.conf, the aide.conf.d directory the exclusions land in, and aideinit.
   - aide-common
+  # The AIDE check reads homelab-secrets' manifest for the secret links it accepts.
+  - jq
 files:
   # A regular file, not a link: rkhunter skips a symlinked .local file.
   - {src: "role:rkhunter.conf.local.j2", dst: /etc/rkhunter.conf.local}

@@ -141,10 +141,7 @@ on to the host wait.
 
 **A `nothing-to-deploy` for a PR that changes a setup role does not say the role applied.**
 `land.sh` starts no tick and reads none of the deployer's markers. The deployer's own 10-minute
-timer applies the role, so read the host for the outcome: the changed state itself, or
-`uv run python scripts/diagnostics/probe.py gitops-state` for `hold_sha` and `owed.jsonl`. A role
-the deployer cannot apply (`k3s`) leaves a `manual_plane` line there, and a role whose change
-reaches another host leaves one too. CLAUDE.md *When to wait* says who clears it.
+timer applies the role, so read the changed state on the host for the outcome.
 A PR that changes `cluster-vars.sops.env` or `cluster-vars.source` waits on promotion too,
 for the `cluster-vars` Kustomization and every Kustomization that depends on it
 (`docs/landing.md`, *A tag Flux applies waits on promotion*).

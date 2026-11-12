@@ -149,6 +149,7 @@ def _run(
     slow: str | None = None,
     prepare_seconds: float = 0.0,
     quorum: int = 0,
+    shard: tuple[int, int] | None = None,
 ):
     """Run every bootstrap case on fake containers; returns the cases and the overlap.
 
@@ -183,6 +184,7 @@ def _run(
         failed=[],
         tools_cache=None,
         k3s_download=False,
+        shard=shard,
     )
     case.run(cases)
     return cases, planned, overlap
@@ -247,6 +249,16 @@ def test_the_offline_builds_start_before_the_host_items(monkeypatch, tmp_path):
     _, _, overlap = _run(monkeypatch, tmp_path, quorum=3)
 
     assert set(overlap.started[:3]) == {"offline", "red-depends", "fixture-host"}
+
+
+def test_a_shard_runs_only_its_share_of_the_items(monkeypatch, tmp_path, capsys):
+    _, planned, _ = _run(monkeypatch, tmp_path, shard=(2, 3))
+
+    share = case.shard(list(planned.values()), 2, 3)
+    ran = re.findall(r"^\[DONE\] (\S+) in ", capsys.readouterr().err, re.MULTILINE)
+    assert sorted(ran) == sorted(p.label for p in share)
+    assert [p.label for p in share if p.builds_offline] == ["red-depends"]
+    assert len(share) < len(planned)
 
 
 def test_the_prepare_prints_how_long_it_took(monkeypatch, tmp_path, capsys):
