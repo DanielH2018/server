@@ -251,6 +251,9 @@ RETIRED: frozenset[str] = frozenset(
         "monitor_bridge_wan_reachable_push_token",
         # R4: its only reader was the render_records role, which #7478 deleted.
         "render_records_push_token",
+        # Flux's github-status Provider moved to the GitHub App (#8023, #8087), and the
+        # operator revoked this fine-grained token and unset the key (#8093).
+        "flux_github_status_token",
     }
 )
 

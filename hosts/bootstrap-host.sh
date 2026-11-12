@@ -22,8 +22,8 @@
 #      cluster node, the k3s binary, with its unit neither enabled nor started, because the operator
 #      starts it after the restores.
 #      daniel-server's one LVM volume comes from the Ubuntu installer, not from this script
-#   5  install homelab-tools, homelab-updater and homelab-<hostname>, then systemd-tmpfiles
-#      --create (--local-build builds the three .deb files from the clone, then installs them);
+#   5  install homelab-tools, homelab-updater and homelab-<hostname>, then systemd-sysusers and
+#      systemd-tmpfiles --create (--local-build builds the three .deb files from the clone, then installs them);
 #      on the Pi, then log2ram from the Azlux source its package ships
 #   6  the Pi and daniel-box: stop and disable systemd-resolved, and on the Pi start
 #      homelab-docker-engine.service once
@@ -554,7 +554,8 @@ if [ -n "$k3s_mode" ]; then
 fi
 stop_after 4
 
-# Step 5: install the three packages, then create each directory a package declares in tmpfiles.d.
+# Step 5: install the three packages, then create each user a package declares in sysusers.d and
+# each directory it declares in tmpfiles.d.
 # $HOMELAB_APT is unquoted so that each option is its own argument.
 if [ -z "$clone" ]; then
     # shellcheck disable=SC2086
@@ -660,6 +661,8 @@ else
     apt-get install -y "$@" || die "apt-get install of the local build failed"
     phase "the apt-get install"
 fi
+# A tmpfiles.d line that names a user the package declares fails until sysusers creates it.
+systemd-sysusers || die "systemd-sysusers failed"
 systemd-tmpfiles --create || die "systemd-tmpfiles --create failed"
 echo "bootstrap-host: installed homelab-tools, homelab-updater and homelab-$host"
 if [ -n "$k3s_unit" ]; then

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Weekly AIDE file-integrity check — rendered by the initial_setup role, or by the integrity-scans
+# Weekly AIDE file-integrity check — rendered by the initial_setup role, or by the aide-scan
 # host component on a host whose package owns it; edits overwritten.
 #
 # Usage: aide-check.sh [-h|--help] [--accept]
@@ -71,13 +71,13 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source {{ integrity_scans_host_lib_dir }}/homelab-check-lib.sh || {
+source {{ aide_scan_host_lib_dir }}/homelab-check-lib.sh || {
   logger -t aide-check "homelab-check-lib.sh missing — install the host package"
   exit 1
 }
 
 # The longest legitimate gap between two textfile writes: the timer runs weekly (Monday 03:00,
-# hosts/components/integrity-scans/units/homelab-aide-check.timer), 604800s, and the extra 6h
+# hosts/components/aide-scan/units/homelab-aide-check.timer), 604800s, and the extra 6h
 # is the slack for a run that takes longer than the last. The deleted Uptime Kuma tile kept the
 # same 626400. Move it with the timer (#6168).
 # ansible/tests/setup/test_integrity_scan_rule_literals.py pins the rules' literals to it.

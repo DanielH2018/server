@@ -128,6 +128,8 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   AIDE Monday 03:00 and rkhunter Wednesday 02:00, because they used to overlap at full priority
   for over an hour each on the Pi. The AIDE database init is the slow part of a first run on any
   host — about 8 minutes, with progress monitoring, so expect a long pause rather than a hang.
+  Since 2026-11-12 the Pi runs no AIDE at all: its package lists no `aide-scan`, because a
+  whole-root scan outgrew its 456 MB and the watchdog reset the board twice (#8084).
 - **The AIDE and rkhunter scans report through the `host-checks` rules.** `aide-check.sh` keeps
   AIDE's exit code and writes one textfile verdict per host. It pushed one "AIDE Integrity" tile
   per host until M6 batch B9's Cutover-2. An error exit reads DOWN (#4594). A difference

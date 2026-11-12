@@ -25,7 +25,7 @@
 # `gitops_deploy_discord_webhook`, and the agent's gh login needs `claude_code_agent_gh_token`.
 #
 # Since H7.31 it ships the rest of initial_setup's subjects, the same components as daniel-pi: the
-# fail2ban group (fail2ban, integrity-scans for rkhunter and AIDE, postfix and accounting), the
+# fail2ban group (fail2ban, integrity-scans for rkhunter and aide-scan for AIDE, postfix and accounting), the
 # maintenance timers (host-maintenance: the weekly reboot, apt autoremove and dpkg purge; this
 # host has neither Docker nor fwupd) and ufw (ssh-firewall). check-lib ships the textfile library
 # the scans and the maintenance wrapper source. initial_setup keeps no task for them. The scans and the reboot read one more credential,
@@ -59,7 +59,7 @@ component: claude-code
 users:
   # uid 995 is the live uid (`getent passwd claude` on daniel-server, 2026-10-29).
   - {name: claude, uid: 995, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
-components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, hypervisor, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, uv, vale, worktree-holders, host-hardening, rsyslog-filter, loki-route-witness]
+components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, hypervisor, fail2ban, integrity-scans, aide-scan, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, uv, vale, worktree-holders, host-hardening, rsyslog-filter, loki-route-witness]
 units:
   k3s-agent.service: {policy: windowed}
 credentials:

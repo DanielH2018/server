@@ -72,7 +72,7 @@ Running it to silence a warning you haven't explained re-blesses whatever caused
 
 **What it does:** Takes a cryptographic snapshot of the filesystem (hashes, permissions, ownership, timestamps) and detects any additions, modifications, or deletions since that snapshot was taken.
 
-**Schedule:** Weekly, Monday at 3:00 AM, on every host. `homelab-aide-check.timer` runs `/usr/lib/homelab/aide-check`, which writes the report to syslog tagged `aide` and writes a verdict textfile that `AideCheckFailed` and `AideCheckNotReporting` read. A Kuma tile took the verdict until M6 batch B9 retired it.
+**Schedule:** Weekly, Monday at 3:00 AM, on daniel-box and daniel-server, whose host packages list the `aide-scan` component. daniel-pi runs no AIDE: a whole-root scan outgrew its 456 MB and the watchdog reset the board twice on 2026-11-12 ([#8084](https://github.com/DanielH2018/server/issues/8084)). `homelab-aide-check.timer` runs `/usr/lib/homelab/aide-check`, which writes the report to syslog tagged `aide` and writes a verdict textfile that `AideCheckFailed` and `AideCheckNotReporting` read. A Kuma tile took the verdict until M6 batch B9 retired it.
 
 Every `aide` command needs `--config=/etc/aide/aide.conf`. AIDE 0.18 has no default config path, so without it the command exits with `ERROR: missing configuration` and checks nothing.
 
@@ -123,7 +123,7 @@ sudo /usr/lib/homelab/aide-check
 sudo mv /var/lib/aide/aide.db.held /var/lib/aide/aide.db
 ```
 
-The verdict stays DOWN until the next run. To clear it, run `sudo /usr/lib/homelab/aide-check` again. That run scans the whole filesystem, so on the Pi it takes over an hour.
+The verdict stays DOWN until the next run. To clear it, run `sudo /usr/lib/homelab/aide-check` again. That run scans the whole filesystem, so it takes about an hour.
 
 **Check for findings:**
 
