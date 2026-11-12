@@ -403,6 +403,7 @@
  "ansible/tests/repo/test_testpaths_covers_every_test_file.py": 0.15,
  "ansible/tests/repo/test_tracked_python_hazards.py": 2.22,
  "ansible/tests/repo/test_ty_config_covers_the_repo.py": 0.0,
+ "ansible/tests/repo/test_unit_kubeconfig_row.py": 0.67,
  "ansible/tests/repo/test_uptime_robot_keywords.py": 0.0,
  "ansible/tests/repo/test_vale_matches_the_ci_pin.py": 0.0,
  "ansible/tests/repo/test_xdist_width.py": 0.0,
