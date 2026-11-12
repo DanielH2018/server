@@ -318,6 +318,34 @@ erases it.
   and `ansible/tests/repo/monkeypatch_allowlist.txt` run on one harness, `ansible/tests/_ratchet.py`,
   and neither records a textual read.
 
+## Why the check rules exist
+
+`.claude/rules/python-layout.md` states the rules a new check meets. These are the incidents
+behind them.
+
+- **A proof it can go red.** `volume-claim`'s short-circuit shipped behind 16 passing tests
+  and a mutation test, then fired for 0 of 25 claims across two full deploys. `image-smoke`'s
+  bare-boot rule never caught a real image problem across 11 failures. Both read green
+  throughout.
+- **A named member.** Nine guards broke by globbing an empty set in six consecutive PRs (#838,
+  #846, #852, two in #858, four in the monitor-bridge package move), and the non-vacuity
+  assertion alone caught every one.
+- **A measured transport.** The Pi-detached arm (PR #482) polled glances'
+  `/api/4/containers`, which took 4.43s on an idle Pi and then timed out at the 10s
+  `HTTP_TIMEOUT`, where the sibling endpoints answer in 0.03-0.06s. PR #484 reshaped it so the
+  cheap signal decides and the expensive one only explains.
+- **Retirement.** In the 90 days to 2026-09-28 the repo added 889 test files and deleted 62
+  while the service count held near 50. #3023 retired the two tests that pinned the deploy
+  and land skills' copies of their exit codes once both tools printed their own.
+- **Unique basenames.** Two roles' `app.py` failed six tests only in a full run (#2608). The
+  uid validator, then `scripts/validate/grafana_dashboards.py`, hid the filter plugin from
+  `pytest scripts` (#5956), because a `scripts/<dir>` holding a `tests/` counts as an import
+  root too.
+- **Role tests import their own `files/`.** `ansible/roles/conftest.py` added that directory
+  in #3746.
+- **No `filter_plugins/tests/`.** Ansible's `PluginLoader._get_paths_with_context` globs two
+  levels of subdirectories, so a test there loads at deploy time.
+
 ## Strengths to copy from
 
 - `scripts/deploy_tools/land_lib/tools.py`: one dataclass holding every process
