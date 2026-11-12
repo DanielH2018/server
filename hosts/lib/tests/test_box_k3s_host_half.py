@@ -15,7 +15,6 @@ import shutil
 import types
 
 import pytest
-from _setup_render import render_setup_text
 
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY, role_defaults
@@ -325,15 +324,6 @@ def test_a_password_reaches_netplan_unchanged(package, password):
     assert file["network"]["wifis"]["wlp4s0"]["access-points"] == {
         'home "net"': {"password": password}
     }
-
-
-def test_the_json_wifi_file_equals_the_roles_yaml_template(package):
-    role = render_setup_text(
-        "k3s",
-        "netplan-wifi-fallback.yaml.j2",
-        {"k3s_node_wifi_link": "wlp4s0", "wifi_ssid": "home", "wifi_password": "pw"},
-    )
-    assert _wifi_file(package, "home", "pw") == yaml_fast.safe_load(role)
 
 
 def _run_wifi_copy(tmp_path, generate_rc: int):

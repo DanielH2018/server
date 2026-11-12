@@ -15,7 +15,6 @@ import types
 
 import pytest
 from _helpers import load_tasks, load_yaml
-from _setup_render import render_setup_text
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
 from lib.proc_testing import run, write_exec
@@ -255,15 +254,6 @@ def test_a_password_reaches_netplan_unchanged(package, password):
     assert file["network"]["wifis"]["wlo1"]["access-points"] == {
         'home "net"': {"password": password}
     }
-
-
-def test_the_json_wifi_file_equals_the_roles_yaml_template(package):
-    role = render_setup_text(
-        "k3s",
-        "netplan-wifi-fallback.yaml.j2",
-        {"k3s_node_wifi_link": "wlo1", "wifi_ssid": "home", "wifi_password": "pw"},
-    )
-    assert _wifi_file(package, "home", "pw") == yaml_fast.safe_load(role)
 
 
 def test_emptying_the_wifi_link_drops_the_units_and_retires_both_copies(tmp_path):

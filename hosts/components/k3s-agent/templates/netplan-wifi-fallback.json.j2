@@ -1,8 +1,25 @@
-{#- The role's netplan-wifi-fallback.yaml.j2 as JSON, which netplan's YAML parser reads. A `format:
-    json` output is the only form in which homelab-secrets escapes each value for its string, so
-    a quote or backslash in the password cannot change the file's meaning. No comment can survive
-    in JSON: that template has the routing argument, and test_box_k3s_host_half.py and
-    test_k3s_agent_component.py hold the two equal. -#}
+{#- Join the home WiFi as a fallback uplink for when this node's ethernet link loses carrier.
+    netplan's YAML parser reads JSON, and a `format: json` output is the only form in which
+    homelab-secrets escapes each value for its string, so a quote or backslash in the password
+    cannot change the file's meaning. JSON holds no comment, so the routing argument is here.
+
+    The wired link stays preferred: its pinned routes sit at metric 100, and these at 600. The
+    fallback wins only because the address pin sets ignore_routes_with_linkdown on the wired
+    link, so a route lookup skips its pinned routes once the cable drops (#4510). networkd gives
+    the link's IPv6 RA route the same metric, through `[DHCP] RouteMetric` (#4561).
+
+    server_ip stays on the wired link with no carrier (`ignore-carrier`), and the kernel answers
+    ARP for it on any link (arp_ignore 0), so a peer that re-resolves server_ip with the cable out
+    reaches this node over WiFi at its usual address.
+
+    `optional` keeps boot from waiting for association: systemd-networkd-wait-online would
+    otherwise hold every unit ordered after network-online.target, k3s among them. The three
+    `use-dns: false` keys keep the lease's resolvers out of the node's DNS, because a pod's
+    resolv.conf holds at most 3.
+
+    The installed name, 80-homelab-wifi-fallback.yaml, sorts after the installer's 00- and 50-
+    files, so these keys merge on top of any `wifis:` entry the installer wrote for this link.
+    test_netplan_wifi_fallback.py checks each rule on both nodes' rendered files. -#}
 {
   "network": {
     "version": 2,
