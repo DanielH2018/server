@@ -81,6 +81,17 @@ def test_a_promote_timeout_cause_gave_up_without_its_note(tmp_path):
     assert land_probe.read(log)["state"] == "gave-up"
 
 
+def test_a_ledger_unreadable_cause_gave_up_without_its_note(tmp_path):
+    """#7969: an unreadable owed ledger gives up on its `LAND-RESULT:` cause alone."""
+    log = landing(
+        tmp_path,
+        "LAND-RESULT: verdict=deferred cause=ledger-unreadable exit=75 pr=939 sha=- tags=0\n"
+        "VERDICT: deferred (PR #939 — ledger unreadable)\n",
+        rc=75,
+    )
+    assert land_probe.read(log)["state"] == "gave-up"
+
+
 def test_a_deferral_no_promotion_covered_still_gave_up(tmp_path):
     """A promote timeout may be a publish refusal, which no later tick clears: re-run land.sh."""
     log = landing(
@@ -224,13 +235,17 @@ def test_the_shim_runs_the_probe_and_prints_one_json_state(tmp_path):
 
 @pytest.mark.parametrize(
     "note",
-    [outcome.UNREADABLE_GATE_NOTE, outcome.STALE_GATE_NOTE],
-    ids=["unreadable", "stale"],
+    [
+        outcome.UNREADABLE_GATE_NOTE,
+        outcome.STALE_GATE_NOTE,
+        outcome.UNREADABLE_LEDGER_NOTE,
+    ],
+    ids=["gate-unreadable", "gate-stale", "ledger-unreadable"],
 )
-def test_a_gate_note_beside_a_causeless_result_line_stays_a_plain_deferral(
+def test_a_give_up_note_beside_a_causeless_result_line_stays_a_plain_deferral(
     tmp_path, note
 ):
-    """#7911: the cause on `LAND-RESULT:` decides a gate give-up; the note's text does not."""
+    """#7911, #7969: the cause on `LAND-RESULT:` decides a give-up; the note's text does not."""
     log = landing(
         tmp_path,
         "LAND-RESULT: verdict=deferred cause=- exit=75 pr=939 sha=- tags=1\n"

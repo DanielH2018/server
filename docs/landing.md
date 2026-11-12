@@ -626,9 +626,10 @@ middleware before the backend is reached, and 19 dead Grafana panels sat behind 
 `land.sh` completes it: no promotion covered the merge commit in time (cause `promote-timeout`),
 a host's package is not yet applied, or the health gate could not read its store (cause
 `gate-unreadable`) or found its tree older than `origin/master` (cause `gate-stale`; see *The
-health gate*). `cc-wait land` ends the wait as `gave-up`, exit 3, for each of those three
-causes, read from the `LAND-RESULT:` line rather than the note beside it, and for an
-unreadable owed ledger. It ends the wait as `deferred`, exit 4, for any other.
+health gate*), or the owed ledger could not be read (cause `ledger-unreadable`).
+`cc-wait land` ends the wait as `gave-up`, exit 3, for each of those four causes, read from
+the `LAND-RESULT:` line rather than the note beside it. It ends the wait as `deferred`, exit
+4, for any other.
 
 `nothing-to-deploy` also covers a PR that reaches only a setup role the deployer applies.
 `land.sh` starts no tick and reads none of the deployer's state, so it reports neither the
@@ -656,8 +657,8 @@ role's files therefore ends `settled` or `nothing-to-deploy` (#7885). A PR that 
 file and keeps another keeps the role, so the ledger still decides whether a hand owes it (#7906).
 
 **An unreadable ledger ends `deferred`.** When `owed.jsonl` exists but cannot be read and the PR
-changes a setup role the tick does not apply, the landing ends `deferred` (exit 75) and names the
-read error. Re-run `land.sh` once the ledger reads. A PR that nominates no such role never reads
+changes a setup role the tick does not apply, the landing ends `deferred` (exit 75), cause
+`ledger-unreadable`, and names the read error. Re-run `land.sh` once the ledger reads. A PR that nominates no such role never reads
 the ledger, so a broken one cannot defer it.
 
 **Read every remediation line, not the first one.** One PR can reach two of these at once, for
