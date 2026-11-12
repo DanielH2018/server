@@ -18,7 +18,7 @@ from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 from deploy_tools.land_lib.land_tags import DeriveSource
 from deploy_tools.land_lib.promotion import moves_the_bundle
 from lib.exit_codes import LAND_BAD_ARGS
-from lib.narrow_git import CannotNarrow
+from lib.k8s_role_callers import CannotNarrow
 from renderer.renderer_lib.host_inputs import HOST_INPUTS
 
 

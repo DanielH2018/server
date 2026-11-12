@@ -65,7 +65,6 @@ def app(tmp_path):
         bind="127.0.0.1",
         port=0,
         tree_lock=tmp_path / "locks" / "tree.lock",
-        lock_dir=tmp_path / "locks",
         proc_locks=tmp_path / "proc_locks",
         cli_log_dir=tmp_path / "cli",
     )

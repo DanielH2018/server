@@ -62,7 +62,6 @@ GUARDS = (
     "scripts/validate/tests/test_validate_shell_templates.py",
     "hosts/lib/tests/test_k3s_restart_window.py",
     "scripts/renderer/tests/test_renderer_task_inputs.py",
-    "ansible/tests/setup/test_setup_crons_write_a_textfile.py",
     "scripts/deploy_tools/tests/test_land_imports.py",
 )
 

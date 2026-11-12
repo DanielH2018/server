@@ -33,7 +33,6 @@ from _ratchet_census import (
     PATCHES,
     code_line_counts,
     monkeypatch_counts,
-    module_fixtures_for,
     run_git,
 )
 from _ratchet import (
@@ -437,13 +436,6 @@ def test_a_changed_function_body_is_a_changed_guard():
     )
     assert function_differs(_HELPERS_BEFORE, widened, CAP_DECIDER)
     assert function_differs(_HELPERS_BEFORE, "X = 1\n", CAP_DECIDER)
-
-
-def test_a_conftest_fixture_reaches_a_test_below_it_but_not_a_sibling_tree():
-    by_dir = {"a/tests": frozenset({"mod"})}
-    assert module_fixtures_for("a/tests/test_x.py", by_dir) == {"mod"}
-    assert module_fixtures_for("a/tests/deep/test_x.py", by_dir) == {"mod"}
-    assert module_fixtures_for("b/tests/test_x.py", by_dir) == frozenset()
 
 
 # ---------------------------------------------------------------- the live tree

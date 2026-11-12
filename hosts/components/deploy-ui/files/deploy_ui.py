@@ -18,7 +18,6 @@ Configuration comes from the environment, which deploy-ui.service sets:
   DEPLOY_UI_REPO       primary checkout (default /home/ubuntu/server)
   DEPLOY_UI_LOGS       log dir (default ~/.local/state/deploy-ui)
   DEPLOY_UI_CLI_LOGS   where `land.sh --detach` logs (default /tmp/homelab-landings-<user>)
-  DEPLOY_UI_LOCKS      dir holding the server-deploy-*.lock files (default /var/lock)
   DEPLOY_UI_BIND       listen address (default 127.0.0.1)
   DEPLOY_UI_PORT       listen port (default 8790)
 """
@@ -43,12 +42,8 @@ from deploy_ui_lib import deploy_ui_reads as reads
 from deploy_ui_lib import deploy_ui_writes as writes
 from host_lib import logfmt
 
-# The locks the in-flight panel reads. The tree lock is held for the snapshot only (ADR-0017),
-# so for nearly all of a deploy the running thing is a `server-deploy-<tag>.lock` holder --
-# or `server-deploy-all.lock`, taken shared by every tagged run and exclusive by a full one.
 # The tree lock's path is not named here: the unit passes `server_git_tree_lock` in as
 # DEPLOY_UI_TREE_LOCK, so the one definition stays in group_vars (#3276).
-SERVICE_LOCK_GLOB = "server-deploy-*.lock"
 PAGE = Path(__file__).with_name("deploy_ui.html")
 
 
@@ -59,7 +54,6 @@ class Config:
     bind: str
     port: int
     tree_lock: Path
-    lock_dir: Path = Path("/var/lock")
     proc_locks: Path = Path("/proc/locks")
     pr_cache_s: int = 60
     # Where `land.sh --detach` writes when no session dir is set (`land_lib/detach.py`).
@@ -81,7 +75,6 @@ class Config:
             # No default: a guessed path would leave the panel reading `free` over a file
             # nobody locks.
             tree_lock=Path(os.environ["DEPLOY_UI_TREE_LOCK"]),
-            lock_dir=Path(e("DEPLOY_UI_LOCKS", "/var/lock")),
             cli_log_dir=Path(
                 e("DEPLOY_UI_CLI_LOGS", f"/tmp/homelab-landings-{getpass.getuser()}")
             ),
@@ -138,18 +131,15 @@ class App:
 
     # ---- reads ----
     def _lock_paths(self) -> list[str]:
-        """The tree lock plus every service lock file that exists, absolute, sorted."""
-        paths = sorted(self.cfg.lock_dir.glob(SERVICE_LOCK_GLOB))
-        if self.cfg.tree_lock.exists():
-            paths.insert(0, self.cfg.tree_lock)
-        return [str(p) for p in paths]
+        """The tree lock's path when the file exists, else an empty list."""
+        return [str(self.cfg.tree_lock)] if self.cfg.tree_lock.exists() else []
 
     def inflight(self) -> dict:
         """Every landing, deploy and lock holder as one row each, with its locks.
 
         Two sources, because neither alone answers "who holds what": fuser names the
-        processes with each lock file OPEN (a queued deploy has it open too), and
-        `/proc/locks` says which files are granted and which pids are blocked on them.
+        processes with the tree lock OPEN (a waiter has it open too), and `/proc/locks`
+        says whether it is granted and which pids are blocked on it.
         `locks_watched` names the files asked about. An empty list is its own state on the
         page: `free` over no files would be the empty-panel trap this module's docstring
         names. A holder this user cannot see in `/proc` is a limit of fuser, not of the
@@ -327,7 +317,7 @@ class App:
         except TypeError, ValueError:
             return 400, "pid must be an integer"
         # Only a landing is cancellable from the page. SIGTERM to a deploy mid-play leaves
-        # whatever applied before it live (deploy.sh exit 20), which is not a cancel.
+        # whatever applied before it live, which is not a cancel.
         listed = {r["pid"] for r in self.inflight()["runs"] if r["kind"] == "land"}
         refusal = writes.guard_cancel(pid, listed)
         if refusal:

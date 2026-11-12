@@ -20,9 +20,10 @@ and Flux apply every k8s change. `docs/gitops-pipeline.md` says what runs in the
 place.
 
 H7.53 deleted the deployer's code under `files/`, its unit templates and its tests. The role
-keeps its `end_role` stub and `defaults/main.yml`, whose `gitops_deploy_*` keys surviving
-checks still read. `docs/archive/gitops-deploy-role.md` and `docs/archive/gitops-deployer.md`
-hold the record of the deleted code.
+keeps only its `end_role` stub. The GitHub ruleset keys the surviving checks read live in
+`hosts/components/github-checks/defaults/main.yml` as `github_*`.
+`docs/archive/gitops-deploy-role.md` and `docs/archive/gitops-deployer.md` hold the record of
+the deleted code.
 
 ## Rollback
 A revert of H7.52 restores the role's tasks, and the operator then re-applies the role on

@@ -16,9 +16,17 @@ requires_systemd_analyze = pytest.mark.skipif(
     reason="systemd-analyze not on PATH",
 )
 
-GITOPS_DEPLOY_UNIT = (
-    v.ROLES / "setup" / "gitops_deploy" / "templates" / "gitops-deploy.service.j2"
-)
+
+@pytest.fixture
+def fixture_unit(tmp_path):
+    """A setup role's unit template whose defaults set `widget_interval`."""
+    role = tmp_path / "roles" / "setup" / "widget"
+    (role / "templates").mkdir(parents=True)
+    (role / "defaults").mkdir()
+    (role / "defaults" / "main.yml").write_text("---\nwidget_interval: 10min\n")
+    unit = role / "templates" / "widget.timer.j2"
+    unit.write_text("[Timer]\nOnUnitActiveSec={{ widget_interval }}\n")
+    return unit
 
 
 def _write_unit(tmp_path, name: str, body: str):
@@ -161,15 +169,13 @@ def test_discover_templates_finds_the_known_set():
     assert len(names) == 28
 
 
-def test_unit_context_layers_the_owning_roles_real_defaults():
-    ctx = v.unit_context(GITOPS_DEPLOY_UNIT)
-    # A real value, not "STUB" — bare StubUndefined renders OnUnitActiveSec as the literal
-    # string "STUB", which is what made the sibling timer red before this layering existed.
-    assert ctx["gitops_deploy_tick_interval"] == "10min"
+def test_unit_context_layers_the_owning_roles_real_defaults(fixture_unit):
+    # A real value, not "STUB": bare StubUndefined renders OnUnitActiveSec as "STUB".
+    assert v.unit_context(fixture_unit)["widget_interval"] == "10min"
 
 
-def test_unit_context_still_stubs_a_var_no_default_carries():
-    ctx = v.unit_context(GITOPS_DEPLOY_UNIT)
+def test_unit_context_still_stubs_a_var_no_default_carries(fixture_unit):
+    ctx = v.unit_context(fixture_unit)
     assert "inventory_hostname" not in ctx
 
 

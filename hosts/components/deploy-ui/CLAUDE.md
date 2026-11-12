@@ -3,9 +3,9 @@
 `deploy-ui.service`, `User={{ sys_user }}`, cwd the primary checkout. `homelab-daniel-box` ships
 it. H7.50 moved it from the `deploy_ui` setup role, with its in-flight panel. It serves the page
 and API `roles/k8s/deploy-ui` routes to, and runs `land.sh` and
-`gh` exactly as the operator would from a terminal. It starts no deploy: `deploy.sh` refuses
-every service tag with exit 5, because Flux applies them. The page stays as the one browser
-view of landings in progress (operator ruling, 2026-11-06).
+`gh` exactly as the operator would from a terminal. It starts no deploy, because Flux applies
+every service. The page stays as the one browser view of landings in progress (operator
+ruling, 2026-11-06).
 
 ## Trust
 
@@ -36,40 +36,35 @@ Every POST also needs `X-Deploy-UI: 1` so a cross-site form cannot ride the Auth
 
 ## In flight
 
-The panel reads the per-service locks, not the tree lock alone. `deploy.sh` holds
-the git-tree lock for the snapshot only (ADR-0017), so a page that read that
-one lock said `free` for nearly all of a deploy, and a deploy queued on
-`server-deploy-<tag>.lock` with nothing on the page saying so (#1844).
+The panel reads the git-tree lock only. The unit passes its path in as
+`DEPLOY_UI_TREE_LOCK`, and the panel lists no other lock file. A missing file leaves
+`locks_watched` empty, which the page renders as its own state rather than `free`.
 
 Two sources, because neither alone says who holds what. One merged-stream `fuser` call over
-the tree lock and every `server-deploy-*.lock` under `DEPLOY_UI_LOCKS` names the processes
-with each file OPEN — and a queued deploy has the file open too: `deploy.sh` opens the
-descriptor, then blocks on it, so fuser lists the waiter exactly like the holder (measured:
-a `flock` holder and a `flock -w` waiter both appear). `/proc/locks` is the kernel's own
-table: a granted flock per file, and a `->` line with a live pid for each process blocked
-on it. The pid on a granted line can be dead — `deploy.sh` takes its locks with a `flock`
-child on an inherited descriptor — which is why the holder comes from fuser and only the
-waiter from `/proc/locks`. Measured on daniel-box: fuser over the 31 lock files takes 45 ms.
+the tree lock names the processes with the file OPEN. A process blocked on the lock has the
+file open too, so fuser lists the waiter exactly like the holder (measured: a `flock`
+holder and a `flock -w` waiter both appear). `/proc/locks` is the kernel's own table: a
+granted flock per file, and a `->` line with a live pid for each process blocked on it.
+The pid on a granted line can be dead when a `flock` child took the lock on an inherited
+descriptor, so the holder comes from fuser and only the waiter from `/proc/locks`.
 
-`ps` with `ppid` folds each process family — a landing with the `deploy.sh` it spawned, a
-`deploy.sh` with its playbook — to one row carrying `locks` (held) and `waiting_on`. The run
-pattern also matches `deploy_cli.py`: the `deploy.sh` shim execs `uv run … deploy_cli.py`,
-which stays the family root while its python child takes the locks and runs the playbook
-(`docs/archive/deploy-sh-python-port.md`), so no process names `deploy.sh`. A `--detach` run's
-forked child is reparented to 1 and is its own root, still matching `deploy_cli.py`. A holder that matches no run pattern (the GitOps tick on the tree lock) is a `lock` row rather
-than nothing. `deploy.sh --list-services` is a read, so it is excluded by name. fuser lists only processes whose `/proc/<pid>/fd` this user can
-read; every deployer here runs as `{{ sys_user }}`, the daemon's own user.
+`ps` with `ppid` folds each process family to one row carrying `locks` (held) and
+`waiting_on`. A landing (`land.py`, its `uv run` wrapper and its children) is one `land`
+row. A bare `ansible-playbook` run is one `deploy` row. A holder that matches neither
+pattern, such as the GitOps tick on the tree lock, is a `lock` row rather than nothing.
+A `grep` for a run is not a run. fuser lists only processes whose `/proc/<pid>/fd` this
+user can read; every landing here runs as `{{ sys_user }}`, the daemon's own user.
 
 A landing row carries its PR's title. A landing merges its PR mid-run, which drops it from
 `gh pr list`, so `_pr_title` reads the title with `gh pr view <n>` and caches it for the
 daemon's life. A failed lookup leaves the title blank and is retried on the next poll; it
 never makes the lock panel unavailable. The page links each PR number to its GitHub page.
 
-Only a `land` row is cancellable. SIGTERM to a deploy mid-play leaves whatever applied
-before it live (`deploy.sh` exit 20), which is not a cancel.
+Only a `land` row is cancellable. SIGTERM to a playbook mid-play leaves whatever applied
+before it live, which is not a cancel.
 
-The daemon runs outside the venv. The unit passes the tree
-lock's path in as `DEPLOY_UI_TREE_LOCK`, rendered from `server_git_tree_lock`.
+The daemon runs outside the venv. The unit renders `DEPLOY_UI_TREE_LOCK` from
+`server_git_tree_lock`.
 
 ## Writes
 

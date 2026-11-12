@@ -340,18 +340,18 @@ def _defaults():
 
 def test_the_fence_ruleset_fixture_matches_the_role_defaults(tmp_path):
     defaults = _defaults()
-    assert defaults["gitops_deploy_ruleset_bypass_actors"] == []
-    assert defaults["gitops_deploy_ruleset_required_approvals"] == 0
-    assert defaults["gitops_deploy_fence_ruleset_id"] == FENCE_RULESET_ID
-    assert defaults["gitops_deploy_fence_ruleset_exclude"] == FENCE_EXCLUDE
-    assert sorted(defaults["gitops_deploy_fence_ruleset_bypass_actors"]) == FENCE_BYPASS
+    assert defaults["github_ruleset_bypass_actors"] == []
+    assert defaults["github_ruleset_required_approvals"] == 0
+    assert defaults["github_fence_ruleset_id"] == FENCE_RULESET_ID
+    assert defaults["github_fence_ruleset_exclude"] == FENCE_EXCLUDE
+    assert sorted(defaults["github_fence_ruleset_bypass_actors"]) == FENCE_BYPASS
 
 
 def test_the_branch_ruleset_fixture_matches_the_role_defaults(tmp_path):
     """Same honesty check as below, for the second ruleset's id and pattern."""
     defaults = _defaults()
-    assert defaults["gitops_deploy_branch_ruleset_id"] == BRANCH_RULESET_ID
-    assert defaults["gitops_deploy_branch_ruleset_renovate_exclude"] == RENOVATE_EXCLUDE
+    assert defaults["github_branch_ruleset_id"] == BRANCH_RULESET_ID
+    assert defaults["github_branch_ruleset_renovate_exclude"] == RENOVATE_EXCLUDE
 
 
 def test_the_declared_set_matches_the_role_defaults(tmp_path):
@@ -361,7 +361,7 @@ def test_the_declared_set_matches_the_role_defaults(tmp_path):
     context added to defaults without a thought about the comparison shows up here.
     """
     defaults = _defaults()
-    assert defaults["gitops_deploy_expected_ruleset_contexts"] == DECLARED, (
-        "gitops_deploy_expected_ruleset_contexts drifted from this test's fixture — if the "
+    assert defaults["github_expected_ruleset_contexts"] == DECLARED, (
+        "github_expected_ruleset_contexts drifted from this test's fixture — if the "
         "ruleset genuinely changed, update both; the monitor compares this list against GitHub"
     )

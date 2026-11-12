@@ -5,7 +5,7 @@ The glance blocks and `docs/reference/crons.md` print the resolved value whereve
 exists. When a variable comes from the role's
 `defaults/main.yml` or `group_vars/all.yml`, and no `host_vars` file sets it, every host in
 the inventory resolves it to the same value. Printing `{{ '%02d' |
-format(gitops_deploy_ruleset_drift_cron_hour | int) }}` then hides a fixed value behind
+format(github_ruleset_drift_cron_hour | int) }}` then hides a fixed value behind
 syntax a reader has to evaluate by hand.
 
 An expression resolves only when all of these hold; otherwise it is printed as written,
