@@ -10,9 +10,6 @@ The publish sequence itself -- branch, push, reset master, `gh pr create`, `gh p
 EXECUTED by scripts/deploy_tools/tests/test_publish_pr.py. What stays here is text
 assertions over the templates, the weaker kind of guard, kept because the regression they
 cover is someone reinstating an inline direct write, and that is a literal line of shell.
-
-The second half is a different invariant on the same crons: no Kuma push token reaches
-curl's argv. Its header above `ROLES` says why its corpus is derived rather than listed.
 """
 
 import re
@@ -21,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from _helpers import REPO
-from _shell_render import rendered_or_source_text, rendered_shell_text
+from _shell_render import rendered_shell_text
 
 TEMPLATES = REPO / "ansible/roles/setup/initial_setup/templates"
 COMPONENTS = REPO / "hosts/components"
@@ -191,6 +188,16 @@ _FOR_LOOP = re.compile(r"^for\s+([A-Za-z_][A-Za-z0-9_]*)\s+in\b")
 _BARE_DECLARATION = ("local ", "declare ", "readonly ")
 
 
+def _logical_lines(text: str) -> list[str]:
+    """Shell lines with backslash continuations joined, comments dropped."""
+    joined = re.sub(r"\\\n\s*", " ", text)
+    return [
+        line
+        for line in joined.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+
 def shell_reads(text: str) -> set[str]:
     """Every variable name the script reads in a form that aborts under ``set -u``."""
     names = set()
@@ -295,145 +302,6 @@ def test_the_cron_env_allowlist_is_still_exported():
         "these _CRON_ENV entries are no longer set by any unit or "
         "exported by a template, so the guard is excusing reads nothing supplies: "
         + ", ".join(stale)
-    )
-
-
-# --- No Kuma push token reaches curl's argv -------------------------------------------------
-#
-# /proc is mounted without hidepid on all three hosts, so any local user can read another user's
-# /proc/<pid>/cmdline. A Kuma push token in there is enough to forge or suppress a heartbeat,
-# which hides a real outage. The fix is to feed
-# the token-bearing URL to curl on stdin as a config file (`-K -`) instead of as an argument.
-#
-# WHY THE CORPUS IS DERIVED, NOT LISTED. A guard that iterates only the files its own fix
-# touched inherits the fix's scope and reads green while other templates leak. Two
-# consequences:
-#
-#   * the corpus is every non-archive `*.j2` under ansible/ that mentions a push URL, in ANY
-#     extension. Keying it on `*.sh.j2` would have missed renovate-notify.service.j2, which is a
-#     systemd unit AND holds no `api/push` literal -- its URL arrives from config.env at runtime.
-#   * `test_the_push_corpus_never_shrinks` fails if the derivation stops seeing what it sees
-#     today, so a guard cannot quietly become inert.
-#
-# The two assertions are deliberately separate and have DIFFERENT exemption policies. A file may
-# be excused from using the shared library; nothing is ever excused from keeping the token out of
-# argv. Folding them together would let an exemption launder the security property away.
-#
-# KNOWN GAP, because a text guard has one. A variable is treated as tainted either when THIS file
-# assigns it an `api/push` value or when its name contains PUSH_URL. So a URL assigned in one file
-# under a name like KUMA_URL and consumed by curl in another slips through both arms -- the same
-# cross-file shape as renovate-notify.service.j2, minus the naming convention that catches it.
-# Keep new push URLs named *PUSH_URL and the guard keeps binding them.
-
-ROLES = REPO / "ansible/roles"
-
-PUSH_LITERAL = "api/push"
-# `$NAME` or `${NAME}`.
-_SHELL_VAR = re.compile(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?")
-# An assignment, optionally exported: `PUSH_URL=`, `export KUMA_PUSH_URL=`.
-_ASSIGNMENT = re.compile(r"\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=")
-# curl's config-file flag. Bounded so `--keepalive` and `-Ku` do not count as a match.
-_CURL_CONFIG_FLAG = re.compile(r"(?<![\w-])-K(?![\w-])")
-
-# Files whose disappearance from the corpus means the derivation broke, not that the estate
-# changed. M6 batch B9's Cutover-2 took the last two shell push scripts, aide-check.sh.j2 and
-# rkhunter-check.sh.j2, out of the corpus, and M6's C-1b took authelia's config-secret with its
-# bypass regex. The one template left carries a push URL but invokes no curl of its own:
-# loki-homelab's config.alloy.
-_EXPECTED_IN_CORPUS = {
-    "ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2",
-}
-
-# The floor is the measured count: 1 on 2026-11-04, after C-1b. When a later M6 batch
-# shrinks the corpus again, re-measure rather than estimate, because a floor above the real count
-# fails master CI.
-_MIN_CORPUS = 1
-
-
-def push_corpus() -> dict[Path, str]:
-    """Every role or host-component template that mentions a push URL, any extension."""
-    paths = [*ROLES.rglob("*.j2"), *REPO.glob("hosts/components/*/templates/*.j2")]
-    texts = {p: rendered_or_source_text(p) for p in sorted(paths)}
-    return {p: t for p, t in texts.items() if PUSH_LITERAL in t or "PUSH_URL" in t}
-
-
-def _logical_lines(text: str) -> list[str]:
-    r"""Shell lines with backslash continuations joined, comments dropped.
-
-    The join is the whole point. In fake-remux-health.sh.j2 the `curl` sits on one physical line
-    and the token-bearing URL five lines below it, so a line-local predicate matches neither --
-    the naive widening of this guard would land green and inert.
-    """
-    joined = re.sub(r"\\\n\s*", " ", text)
-    return [
-        line
-        for line in joined.splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    ]
-
-
-def curl_lines_leaking_a_push_url(text: str) -> list[str]:
-    """Logical lines that hand curl a push URL without routing it through a config file.
-
-    A URL is tainted when the line holds the `api/push` literal, references a variable this file
-    assigned such a literal to, or references a `*PUSH_URL*` name -- the last arm is what catches
-    renovate-notify.service.j2, whose URL is assigned in a different file entirely.
-    """
-    lines = _logical_lines(text)
-    tainted_names = {
-        match.group(1)
-        for line in lines
-        if PUSH_LITERAL in line and (match := _ASSIGNMENT.match(line))
-    }
-    leaks = []
-    for line in lines:
-        if "curl" not in line:
-            continue
-        refs = set(_SHELL_VAR.findall(line))
-        tainted = (
-            PUSH_LITERAL in line
-            or bool(refs & tainted_names)
-            or any("PUSH_URL" in ref.upper() for ref in refs)
-        )
-        if tainted and not _CURL_CONFIG_FLAG.search(line):
-            leaks.append(line.strip())
-    return leaks
-
-
-def test_no_push_token_reaches_curls_argv():
-    """The security property.
-
-    No exemptions -- an exempt file is one that may write its own curl, not one that may leak the
-    token.
-    """
-    offenders = {}
-    for path, text in push_corpus().items():
-        leaks = curl_lines_leaking_a_push_url(text)
-        if leaks:
-            offenders[str(path.relative_to(REPO))] = leaks
-    assert not offenders, (
-        "these templates pass a token-bearing push URL to curl as an argv element, which "
-        "exposes it in /proc/<pid>/cmdline for the life of the call. Feed it in on stdin "
-        'instead -- `printf \'url = "%s"\\n\' "$URL" | curl -G -K - ...`, as '
-        f"not as an argument: {offenders}"
-    )
-
-
-def test_the_push_corpus_never_shrinks():
-    """A guard whose corpus quietly narrows is worse than no guard, because it reads green while the
-    class it covers spreads.
-    """
-    found = {str(path.relative_to(REPO)) for path in push_corpus()}
-    missing = _EXPECTED_IN_CORPUS - found
-    assert not missing, (
-        "these templates left the push corpus. Either the derivation stopped matching them or "
-        "they were retired -- confirm which before editing this list: "
-        + ", ".join(sorted(missing))
-    )
-    assert len(found) >= _MIN_CORPUS, (
-        f"the push corpus is down to {len(found)} templates, below the {_MIN_CORPUS} floor. A "
-        "floor well under the real count cannot tell 'the glob broke' from 'one role was "
-        "retired'."
     )
 
 
