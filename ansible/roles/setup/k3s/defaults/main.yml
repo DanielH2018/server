@@ -128,10 +128,9 @@ k3s_node_wifi_link: ""
 
 # ── Agent join ─────────────────────────────────────────────────────────────
 # daniel-server joins as an AGENT, not a second server (a two-member etcd halves
-# availability rather than doubling it). Run via:
-#   sudo ufw status | grep k3s-join   # on daniel-box first; its package holds these rules
-#   uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server
-k3s_server_join_url: "https://{{ hostvars['daniel-box'].server_ip }}:6443"
+# availability rather than doubling it). hosts/bootstrap-host.sh joins it, with K3S_URL and
+# K3S_TOKEN from the operator; docs/host-packages.md's *Rebuilding daniel-server* has the steps.
+# daniel-box's package holds the join firewall rules (`sudo ufw status | grep k3s-join`).
 
 # The agent's flags are `k3s_agent_config` in hosts/components/k3s-agent/component.yml since
 # H6.5b. The package renders them into /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, and they

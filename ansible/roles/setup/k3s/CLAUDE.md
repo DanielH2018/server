@@ -33,7 +33,8 @@ silent end would read as a finished join or pin.
   and SUC's Plans are the only writers of each node's version.
 
 `defaults/main.yml` and `templates/` stay, because both components render through `role: k3s`
-and read those keys and the netplan template.
+and read those keys and the address-pin template. Each component ships its own WiFi fallback
+template, `netplan-wifi-fallback.json.j2`.
 
 ## Rollback
 

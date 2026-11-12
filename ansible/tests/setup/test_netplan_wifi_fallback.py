@@ -4,16 +4,38 @@ WHY THIS EXISTS. The fallback works only while its routes sit behind the pinned 
 100 and ahead of nothing else, and while boot does not wait for it. A metric at or below 100
 would move the node's traffic onto WiFi with the cable in, and a missing `optional: true` would
 hold k3s at boot until WiFi associates. Both fail with nothing visibly broken.
+
+The subject is the file each node's package installs: the k3s components'
+`netplan-wifi-fallback.json.j2`, after homelab-secrets substitutes the SOPS values into it.
 """
+
+import types
 
 from lib.repo_paths import HOST_VARS, REPO
 from lib import yaml_fast
-from _setup_render import render_setup_text
+from renderer.renderer_lib import host as host_mode
 
-_TEMPLATE = "netplan-wifi-fallback.yaml.j2"
+_WIFI_TEMPLATE = (
+    "/usr/lib/homelab/secret-templates/etc/netplan/80-homelab-wifi-fallback.yaml"
+)
 _NODES = ("daniel-box", "daniel-server")
 # The pinned link's route metric, from netplan-static-address.yaml.j2.
 _PINNED_METRIC = 100
+
+
+def _installed_wifi_file(host: str, ssid: str, password: str) -> str:
+    """The wifi file `host`'s package installs, through homelab-secrets' own substitution."""
+    package = host_mode.render_host(host)
+    script = REPO / "hosts" / "lib" / "homelab-secrets"
+    secrets = types.ModuleType("homelab_secrets")
+    exec(compile(script.read_text(), str(script), "exec"), secrets.__dict__)
+    (output,) = [o for o in package.outputs if "wifi_password" in o["keys"]]
+    return secrets.substitute(
+        package.files[_WIFI_TEMPLATE][0].decode(),
+        set(output["keys"]),
+        {"wifi_ssid": ssid, "wifi_password": password},
+        output.get("format"),
+    )
 
 
 def wifi_fallback_problems(text: str, link: str, ssid: str, password: str) -> list[str]:
@@ -39,18 +61,15 @@ def wifi_fallback_problems(text: str, link: str, ssid: str, password: str) -> li
     return problems
 
 
-def test_each_node_renders_a_fallback_behind_its_pin() -> None:
-    # The sentinel carries the characters a YAML scalar must quote.
-    ssid, password = "home: net", 'p"a#ss: word'
+def test_each_node_installs_a_fallback_behind_its_pin() -> None:
+    # The sentinel carries the characters a JSON string must escape.
+    ssid, password = "home: net", 'p"a#ss\\ word'
     for host in _NODES:
-        hv = yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text())
-        link = hv.get("k3s_node_wifi_link")
-        assert link, f"{host} sets no k3s_node_wifi_link"
-        text = render_setup_text(
-            "k3s",
-            _TEMPLATE,
-            {"k3s_node_wifi_link": link, "wifi_ssid": ssid, "wifi_password": password},
+        link = yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()).get(
+            "k3s_node_wifi_link"
         )
+        assert link, f"{host} sets no k3s_node_wifi_link"
+        text = _installed_wifi_file(host, ssid, password)
         assert wifi_fallback_problems(text, link, ssid, password) == [], host
 
 
@@ -83,16 +102,3 @@ def test_a_fallback_that_holds_boot_is_flagged() -> None:
     assert wifi_fallback_problems(doc, "wlo1", "home", "pw") == [
         "optional is not true, so boot waits for WiFi"
     ]
-
-
-def test_both_k3s_components_ship_the_same_wifi_installer() -> None:
-    """Each node's package carries its own copy, so a fix to one must land in both."""
-    components = REPO / "hosts" / "components"
-    for rel in (
-        "files/homelab-netplan-wifi",
-        "units/homelab-netplan-wifi.service",
-        "templates/netplan-wifi-fallback.json.j2",
-    ):
-        server = (components / "k3s-server" / rel).read_bytes()
-        agent = (components / "k3s-agent" / rel).read_bytes()
-        assert server == agent, f"k3s-server/{rel} and k3s-agent/{rel} differ"
