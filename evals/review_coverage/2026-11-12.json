@@ -1,0 +1,200 @@
+[
+  {
+    "date": "2026-11-12",
+    "domain": "security",
+    "agent": "security-review (opus, effort medium)",
+    "status": "covered",
+    "reviewed": [
+      "ansible/.sops.yaml",
+      "docs/flux-deploy-plane.md",
+      "docs/claude-agent-user.md",
+      "scripts/deploy_tools/land_lib/policy.py",
+      "hosts/components/claude-code/templates",
+      "hosts/components/claude-code/files",
+      "hosts/components/renovate-agent/templates",
+      "ansible/templates/ingressroute.yml.j2",
+      "ansible/roles/k8s/navidrome",
+      "ansible/roles/k8s/traefik",
+      "ansible/roles/k8s/authelia",
+      "ansible/roles/k8s/headlamp",
+      "ansible/roles/k8s/cluster-base",
+      "ansible/roles/k8s/homelab-mcp",
+      "ansible/roles/k8s/loki-homelab",
+      "ansible/roles/k8s/ical-proxy",
+      "ansible/tests/k8s/test_k8s_manifests_routes.py",
+      "ansible/tests/k8s/test_k8s_manifests_rbac.py",
+      "cluster/services.yml",
+      "hosts/components/pi-compose/services"
+    ],
+    "findings": [
+      "sec-held-1-approval-floor-readonly-binding",
+      "route-test-clientip-exemption",
+      "bypass-route-carries-no-extra-middlewares"
+    ],
+    "leads": [
+      "subsonic-credentials-in-access-log",
+      "subsonic-login-failure-invisible-to-crowdsec"
+    ],
+    "notes": "No Bash and no ghread, so no finding was checked against open PRs by the reviewer. Depth went to the landing gate, the Flux secrets path and the #8191 pre-review. Per-role NetworkPolicies and host unit hardening were spot-checked only. The PR #4248 landing-gate fix was confirmed to have survived the code move."
+  },
+  {
+    "date": "2026-11-12",
+    "domain": "network",
+    "agent": "homelab-network-diagnostician (sonnet)",
+    "status": "covered",
+    "reviewed": [
+      "ansible/templates/ingressroute.yml.j2",
+      "ansible/roles/k8s/traefik/templates",
+      "ansible/roles/k8s/navidrome",
+      "ansible/roles/k8s/karakeep/templates/ingressroute.yaml.j2",
+      "ansible/roles/k8s/pihole",
+      "ansible/roles/k8s/metallb",
+      "ansible/roles/k8s/netpol-baseline",
+      "ansible/roles/k8s/observability/files/rules/storage.yaml",
+      "ansible/tests/k8s/test_k8s_manifests_routes.py",
+      "docs/pihole-dns-continuity-record.md",
+      "hosts/components/pi-compose/services/wg-easy/compose.yaml.j2",
+      "live: kubectl nodes, describe node, svc, ipaddresspools, networkpolicy; Prometheus"
+    ],
+    "findings": [
+      "8191-bypass-is-public-router-only"
+    ],
+    "leads": [
+      "subsonic-login-failure-invisible-to-crowdsec",
+      "alertmanager-discord-notifications-failed"
+    ],
+    "notes": "No new gap in routing, DNS, MetalLB, NetworkPolicy or the control plane. etcd is at about 6 percent of quota. The only finding is a pre-review condition on #8191. ghread was denied, so open PRs were not searched by the reviewer. CrowdSec bouncer wiring was read at the entrypoint only."
+  },
+  {
+    "date": "2026-11-12",
+    "domain": "backup-observability",
+    "agent": "homelab-backup-observability-reviewer (opus, effort medium)",
+    "status": "covered",
+    "reviewed": [
+      "ansible/roles/k8s/longhorn-reconcile",
+      "ansible/roles/k8s/longhorn-restore-drill",
+      "ansible/roles/k8s/observability",
+      "ansible/roles/k8s/monitor-bridge",
+      "ansible/roles/k8s/nut",
+      "ansible/roles/k8s/navidrome",
+      "hosts/components/k3s-host-checks",
+      "hosts/components/nut-secondary",
+      "hosts/daniel-box/package.yml",
+      "docs/longhorn-backup-tiering.md",
+      "docs/longhorn-disaster-recovery.md",
+      "docs/k3s-etcd-restore.md",
+      "scripts/diagnostics/probe_lib/longhorn.py",
+      "scripts/diagnostics/probe_lib/longhorn_budget.py",
+      "scripts/diagnostics/probe_lib/b2_ledger.py"
+    ],
+    "findings": [
+      "daniel-server-no-page-at-longhorn-75-percent-floor",
+      "b2-budget-verdict-has-no-reader",
+      "ups-fsd-drill-precondition-deleted-not-met"
+    ],
+    "leads": [],
+    "notes": "Host hardware and cost were in the brief. SMART reads clean on both NVMe drives. The Pi could not be reached by name from daniel-server, so the Pi's hardware was read through Prometheus only. #8196 is resolved live."
+  },
+  {
+    "date": "2026-11-12",
+    "domain": "cicd",
+    "agent": "homelab-cicd-reviewer (opus, effort medium)",
+    "status": "covered",
+    "reviewed": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/promote.yml",
+      ".github/actions/setup/action.yml",
+      "scripts/dev/tested_tree.py",
+      "hosts/lib/ci_verdict.py",
+      "scripts/deploy_tools/land_lib/detach.py",
+      "scripts/deploy_tools/land_lib/merge.py",
+      "scripts/deploy_tools/land_lib/tools.py",
+      "prek.toml",
+      "renovate.json",
+      "scripts/secrets_mgmt",
+      "ansible/roles/k8s/observability/defaults/main.yml",
+      "ansible/roles/k8s/observability/files/rules/host-checks.yaml",
+      "ansible/roles/k8s/monitor-bridge/files/checks/host_packages.py",
+      "docs/host-packages.md"
+    ],
+    "findings": [
+      "host-update-stale-covers-only-the-pi",
+      "#8142",
+      "#8147",
+      "#8163",
+      "#8195",
+      "promote-moves-tags-by-mutable-sha-tag",
+      "sec-held-2-tested-tree-status-any-creator"
+    ],
+    "leads": [
+      "7490-pi-reconcile-timeout-unread",
+      "8055-hold-cleared-promotion-unverified"
+    ],
+    "notes": "ghread was denied, so the master run list and open PRs were not read by the reviewer, and #7688 and #7877 were not checked. Renovate was read at the manager list only. image-smoke was not read."
+  },
+  {
+    "date": "2026-11-12",
+    "domain": "container",
+    "agent": "homelab-container-reviewer (sonnet)",
+    "status": "covered",
+    "reviewed": [
+      "ansible/templates/arr-deployment.yml.j2",
+      "ansible/templates/exportarr.yml.j2",
+      "ansible/templates/workload-shell.yml.j2",
+      "ansible/templates/lsio-env.yml.j2",
+      "ansible/roles/k8s/qbittorrent",
+      "ansible/roles/k8s/navidrome",
+      "ansible/roles/k8s/media-volume",
+      "ansible/roles/k8s/janitorr",
+      "ansible/roles/k8s/jellyfin",
+      "ansible/roles/k8s/tdarr",
+      "ansible/roles/k8s/system-upgrade",
+      "ansible/roles/k8s/observability",
+      "cluster/services.yml",
+      "hosts/components/pi-compose/services"
+    ],
+    "findings": [
+      "janitorr-fsgroup-on-media-tree",
+      "daniel-box-root-no-page-below-90-percent",
+      "observability-workloads-lack-liveness-probe",
+      "system-upgrade-controller-besteffort",
+      "#4246"
+    ],
+    "leads": [
+      "slskd-unconnectable-without-forwarded-port"
+    ],
+    "notes": "ghread was denied, so open PRs were not searched by the reviewer. The daniel-box disk finding conflicts with the backup reviewer's reading that disk-health pages daniel-box at 75 percent; a skeptic reconciles the two. Roles outside the media stack and observability were scanned for resources and strategy only."
+  },
+  {
+    "date": "2026-11-12",
+    "domain": "docs",
+    "agent": "homelab-docs-freshness-reviewer (sonnet)",
+    "status": "covered",
+    "reviewed": [
+      "docs/deploying.md",
+      "docs/break-glass.md",
+      "docs/k3s-etcd-restore.md",
+      "docs/longhorn-disaster-recovery.md",
+      "docs/k3s-upgrade.md",
+      "docs/longhorn-upgrade.md",
+      "docs/secret-rotation.md",
+      "docs/landing.md",
+      "CLAUDE.md",
+      "prek.toml",
+      ".claude/skills/land-after-merge/SKILL.md",
+      ".claude/skills/new-container/SKILL.md",
+      ".claude/skills/deploy/SKILL.md",
+      "docs/reference/backlog.md",
+      "ansible/roles/k8s/crowdsec/CLAUDE.md",
+      "ansible/roles/k8s/flux/CLAUDE.md",
+      "ansible/roles/k8s/observability/CLAUDE.md",
+      "ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md"
+    ],
+    "findings": [
+      "etcd-restore-runbook-names-nonexistent-k3s-role",
+      "five-citations-of-missing-claude-md-heading"
+    ],
+    "leads": [],
+    "notes": "fact_status.py lint printed nothing. All 7 sections that notice listed were checked. Runbooks were checked by path and command existence, not sentence by sentence. The stale-Ansible prose class is covered by #8141 to #8187 and was not re-reported."
+  }
+]
