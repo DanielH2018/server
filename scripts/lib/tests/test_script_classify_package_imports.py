@@ -122,6 +122,30 @@ def test_the_same_path_in_an_argv_list_is_still_an_invocation(tmp_path):
     )
 
 
+def _named_in_a_role_file(tmp_path, statement: str) -> str:
+    """The verdict on `leaf.py` when a role's `files/pkg/table.py` carries `statement`."""
+    repo, scripts = _package(tmp_path, '"""Summary."""\n')
+    lib = repo / "ansible" / "roles" / "k8s" / "svc" / "files" / "pkg"
+    lib.mkdir(parents=True)
+    (lib / "table.py").write_text(f"{statement}\n")
+    return sc.classify(repo, scripts)["leaf.py"][0]
+
+
+def test_a_path_keying_a_roles_python_table_is_not_an_invocation(tmp_path):
+    """A dict keyed by module paths names files as data, never as an argv element."""
+    assert (
+        _named_in_a_role_file(tmp_path, 'TABLE = {"scripts/dev/pkg/leaf.py": "svc"}')
+        != "gate"
+    )
+
+
+def test_a_path_in_a_roles_argv_list_is_a_deploy_gate(tmp_path):
+    assert (
+        _named_in_a_role_file(tmp_path, 'ARGV = ["python", "scripts/dev/pkg/leaf.py"]')
+        == "gate"
+    )
+
+
 def test_the_real_tree_still_classifies_each_shape_as_a_library():
     verdicts = sc.classify(REPO, SCRIPTS)
     wrong = {
