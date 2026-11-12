@@ -4,8 +4,8 @@
 # (hosts/components/pi-updater-poll); edits are overwritten.
 #
 # The Pi runs its updater once a day (H3.13, #6911), because the updater's common path peaked at
-# 114 MB on a board with about 150 MB available. A Pi canary would then hold every other host's
-# package at the builder's rollout gate for up to a day. This poll costs one HTTP GET of the
+# 114 MB on a board with about 150 MB available. A landing that changes the Pi's package would
+# then wait up to a day for it. This poll costs one HTTP GET of the
 # homelab Packages index, so it can run every 15 minutes, and the expensive run happens only once
 # per published version.
 #

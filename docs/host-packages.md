@@ -478,7 +478,7 @@ sudo rm /etc/homelab-builder/hold
 
 The next builder run builds the newest green commit and stages again any set the hold kept.
 The signer then publishes it. `HostPackageBuilderStalled` pages once a hold has left a
-commit waiting to be built for 90060 seconds, the lag grace (*The rollout gate*).
+commit waiting to be built for 7200 seconds.
 
 To stop the pipeline for longer than an incident, pause the timer instead. Run
 `sudo systemctl mask --now homelab-builder.timer`, and `sudo systemctl unmask homelab-builder.timer
@@ -489,21 +489,20 @@ updater then fails its fetch.
 
 ## Releasing the other hosts before the canary reports: the rollout gate
 
-A run whose changed set holds more than one host package stages only the canary's package
-(daniel-server, then daniel-pi, then daniel-box) and opens a gate at that commit. While the gate
-is open, the unbuilt-since series reads `reason="canary"`, and its `sha` names the gate's commit.
-The gate closes by itself once Prometheus reports the canary at that commit or a descendant with
-`homelab_host_reconcile_ok` at 1. daniel-server leads because the Pi's updater fires once a day,
-at 03:05 (H3.13, #6911). A run that changes only the Pi's and daniel-box's packages still makes
-the Pi the canary. The Pi's `homelab-updater-poll.timer` starts its updater within about 15
-minutes of a newer `homelab-daniel-pi` publish, once per version (#7065), so daniel-box's package
-waits for that run. When the poll skips, because the updater timer is masked or apt is busy,
-or the started run fails, the wait runs to the Pi's next daily fire. The
-series then carries `host="daniel-pi"`, and `HostPackageBuilderStalled` pages once that
-gate has stayed open for 90060 seconds, a grace derived from that gap, which
-`ansible/filter_plugins/updater_lag_grace.py` reads from the Pi's timer drop-in. A gate whose
-canary is any other host pages after 7200 seconds, like every other reason (#6919). To release daniel-box's package sooner, start the Pi's updater by hand or write
-the release file below.
+daniel-server is the only canary. A run that changes daniel-server's package and at least one
+other host's stages daniel-server's alone and opens a gate at that commit. While the gate is
+open, the unbuilt-since series reads `reason="canary"`, and its `sha` names the gate's commit.
+The gate closes by itself once Prometheus reports daniel-server at that commit or a descendant
+with `homelab_host_reconcile_ok` at 1, and the next run stages every deferred package together.
+A run that leaves daniel-server's package unchanged opens no gate.
+
+The Pi is never a canary: the operator ruled on 2026-11-12 that the Pi gets no work daniel-box
+or daniel-server could do, after a Pi canary held daniel-box's package a median 18 minutes and
+up to 8 hours. daniel-box runs the builder and the signer, so it is never a canary either.
+`NEVER_CANARY` in `hosts/lib/builder_rollout_gate.py` names both. A gate whose host is not in
+`CANARY_ORDER`, such as one an older builder opened, closes on the builder's next run.
+`HostPackageBuilderStalled` pages once a gate has stayed open for 7200 seconds, like every
+other reason (#6919).
 
 To close the gate before the canary reports, name the gate's commit on daniel-box. The gate's
 commit is the `sha` label of the series, and a descendant of it also works:
@@ -1015,12 +1014,10 @@ arm64 only.
 1. Add the host to every other set that names hosts:
     - `NAMED` in `scripts/validate/validate_lib/package_roots.py`, as `homelab-<host>`, which both
       `host_packages` scans read;
-    - `CANARY_ORDER` in `hosts/lib/builder_rollout_gate.py`, after daniel-box, for this PR only.
-      This PR changes both `hosts/<host>` and `hosts/daniel-box`, and the rollout gate stages only
-      the first of them in `CANARY_ORDER`. With daniel-box first, daniel-box installs the rule
-      below before the builder publishes `homelab-<host>`. With the new host first, its package
-      publishes while daniel-box's firewall still refuses it, and the gate waits on a host that
-      cannot install. Step 7 moves the host ahead of daniel-box;
+    - `NEVER_CANARY` in `hosts/lib/builder_rollout_gate.py`. This PR changes both
+      `hosts/<host>` and `hosts/daniel-box`. Neither is a canary, so the builder publishes both
+      packages together, and step 6 waits for daniel-box to install the rule below. Step 7
+      decides whether the host becomes a canary;
     - a third `apt-repo-<host>` rule under `ufw:` in `hosts/components/builder/component.yml`, or
       daniel-box's firewall refuses the host's `apt-get update` in step 6;
     - one `HostReconcileFailed` rule in
@@ -1041,11 +1038,10 @@ arm64 only.
 
     A new cluster node instead needs a k3s mode in `hosts/bootstrap-host.sh` and an entry in `NODES`
     in `hosts/lib/k3s_gates.py`.
-1. **Operator-only**, after the merge: once the builder has published `homelab-<host>`, run the
-   script to the end. The gate publishes it only after daniel-box reports the merge commit, so
-   daniel-box's firewall already holds the rule. Do not write the release file to publish it
-   sooner. To confirm the rule, check on daniel-box that the host's `server_ip` appears on port
-   8791:
+1. **Operator-only**, after the merge: once the builder has published `homelab-<host>` and
+   `homelab_host_applied_info{host="daniel-box"}` names the merge commit or a descendant, run
+   the script to the end. daniel-box's firewall then holds the rule. To confirm the rule, check
+   on daniel-box that the host's `server_ip` appears on port 8791:
 
     ```bash
     sudo ufw status | grep 8791
@@ -1055,14 +1051,16 @@ arm64 only.
     sudo ./bootstrap-host.sh <host>
     ```
 
-1. Once Prometheus reports `homelab_host_applied_info` for the host, open a second PR that moves
-   the host ahead of daniel-box in `CANARY_ORDER`. daniel-box runs the builder, the signer and the repository, so it always
-   comes last otherwise: a package that breaks daniel-box can stop the publish of its own fix
-   (`docs/target-architecture/host/h3-pi-pilot.md`, *Staged rollout (C5)*). Until this PR merges,
-   any run that changes daniel-box's and the new host's packages makes daniel-box the canary.
+1. Once Prometheus reports `homelab_host_applied_info` for the host, decide whether it should
+   be a canary. To make it one, open a second PR that moves it from `NEVER_CANARY` into
+   `CANARY_ORDER`, after daniel-server. A host that applies more slowly than daniel-server
+   stays in `NEVER_CANARY`, because a canary holds every other host's package until it
+   reports. daniel-box runs the builder, the signer and the repository, so it is never a
+   canary: a package that breaks daniel-box can stop the publish of its own fix
+   (`docs/target-architecture/host/h3-pi-pilot.md`, *Staged rollout (C5)*).
 
 `hosts/lib/tests/test_host_census.py` fails when a directory under `hosts/` is missing from `NAMED`,
-`CANARY_ORDER` or `HOSTS`, or has no creation rule of its own. It names the set. The `host_packages`
+from both `CANARY_ORDER` and `NEVER_CANARY`, or from `HOSTS`, or has no creation rule of its own. It names the set. The `host_packages`
 job builds a fixture host from step 1's file list, so the YAML block above stays one that renders.
 
 ## Upgrading a host's Ubuntu release
@@ -1273,9 +1271,8 @@ persists, in two cases:
 
 - the builder's last good fetch of master is older than 30 minutes, or its series is absent.
   That covers a dead `homelab-builder.timer`, a missing token and a fetch that keeps failing;
-- a commit of master has waited more than 7200 seconds to be built, or 90060 seconds behind a gate
-  whose canary is daniel-pi, which covers the Pi's longest gap between updater fires, a day on its
-  daily schedule (#6919). The builder runs and exits 0 in each of these cases,
+- a commit of master has waited more than 7200 seconds to be built (#6919). The builder runs and
+  exits 0 in each of these cases,
   so only the alert reports them.
 
 The check's message names the `reason` and `sha` labels of
