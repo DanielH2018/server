@@ -430,7 +430,7 @@ def derived_names(tags: list[str]) -> frozenset[str]:
 
     Every name `task_inputs.derived_facts` returns and every `include_role` var
     `task_inputs.include_vars` returns for any tag, the secret keys and the sentinel, and the
-    `containers_list` view `context.play_context` lays down.
+    `containers_list` view `context.template_context` lays down.
     """
     stubs = shadow_diff.stub_vars()
     secrets = yaml_fast.safe_load(shadow_diff.SECRETS.read_text())

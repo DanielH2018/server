@@ -483,6 +483,15 @@ _LOG_SECRET_RE = re.compile(r"(refresh_token[\"']?:\s*[\"']?)[0-9a-f]{32,}")
 # filters the raw body, where a JSON encoder may write the `&` as `\u0026`.
 _APIKEY_RE = re.compile(r"(apikey=)[^&#;\s\"'\\]+", re.IGNORECASE)
 
+# Flux's Discord webhook token, a Home Assistant webhook id in Traefik's access lines, and
+# PeaNUT's session secret. The Alloy stages strip them from new records; these cover the older
+# ones `loki-query` prints. Each class stops at a JSON string's end, for the `--json` raw body.
+_LOG_TOKEN_RES = (
+    re.compile(r"(discord(?:app)?\.com/api/webhooks/[0-9]+/)[A-Za-z0-9_-]{20,}"),
+    re.compile(r"(/api/webhook/)[0-9A-Za-z_-]{16,}"),
+    re.compile(r"(AUTH_SECRET(?: already exists)?: )[A-Za-z0-9+/=]+"),
+)
+
 REDACTED = "<redacted>"
 
 # Matched as lowercase substrings against a credential-bearing name: an *arr field or key name,
@@ -501,12 +510,20 @@ SECRET_NAME_PARTS = (
 
 # Query parameter names that carry a credential but contain none of SECRET_NAME_PARTS. Indexer
 # and tracker URLs use them (`key=`, `rsskey=`, `torrent_pass=`). Matched whole, not as
-# substrings, so `sortKey=date` in an *arr API URL still prints.
-_SECRET_QUERY_NAMES = frozenset({"key", "rsskey", "pass", "torrentpass"})
+# substrings, so `sortKey=date` in an *arr API URL still prints. `code` is an OAuth
+# authorization code.
+_SECRET_QUERY_NAMES = frozenset({"key", "rsskey", "pass", "torrentpass", "code"})
 
-# A URL query parameter inside any text: `?apikey=…`, `&token=…`. The value stops at a quote or
-# a backslash so a match inside a raw JSON body never runs past the end of its string.
-_QUERY_PARAM_RE = re.compile(r"([?&;])([^=&#?;\s\"'\\]+)=([^&#;\s\"'\\]*)")
+# Subsonic credentials: user, token, salt and password. They are redacted under `/rest/` only,
+# because a bare `p=` is pagination on other paths. The Alloy stages in `roles/k8s/loki-homelab`
+# redact the same names for new records; test_alloy_redacts_access_log_query_credentials.py
+# fails when the two sets differ.
+SUBSONIC_REST_PARAMS = ("u", "t", "s", "p")
+
+# A URL query parameter inside any text: `?apikey=…`, `&token=…`, or the JSON-escaped
+# `\u0026token=…`. The value stops at a quote or a backslash so a match inside a raw JSON body
+# never runs past the end of its string.
+_QUERY_PARAM_RE = re.compile(r"([?&;]|u0026)([^=&#?;\s\"'\\]+)=([^&#;\s\"'\\]*)")
 
 # The same parameter inside a percent-encoded URL nested in another URL's value:
 # `link=https%3A%2F%2Fhost%2Fdl%3Fid%3D1%26apikey%3DKEY`. `%3F`/`%26`/`%3B` separate and `%3D`
@@ -514,6 +531,13 @@ _QUERY_PARAM_RE = re.compile(r"([?&;])([^=&#?;\s\"'\\]+)=([^&#;\s\"'\\]*)")
 _ENCODED_QUERY_PARAM_RE = re.compile(
     r"(%3F|%26|%3B)([^=&#?;%\s\"'\\]+)(%3D)((?:(?!%26|%3B|%23)[^&#;\s\"'\\])*)",
     re.IGNORECASE,
+)
+
+# A Subsonic parameter under a `/rest/` path. The path may not continue a longer one
+# (`/api/rest/…`), and the `u0026` alternative covers a JSON-escaped `&`.
+_SUBSONIC_PARAM_RES = tuple(
+    re.compile(rf"((?<![A-Za-z_.~%-])/rest/[^\"\s]*(?:[?&]|u0026){name}=)[^&\"\s\\]+")
+    for name in SUBSONIC_REST_PARAMS
 )
 
 
@@ -539,18 +563,22 @@ def redact_query_params(text):
             return f"{m.group(1)}{m.group(2)}{m.group(3)}{REDACTED}"
         return m.group(0)
 
+    for pattern in _SUBSONIC_PARAM_RES:
+        text = pattern.sub(rf"\g<1>{REDACTED}", text)
     text = _QUERY_PARAM_RE.sub(_sub, text)
     return _ENCODED_QUERY_PARAM_RE.sub(_encoded_sub, text)
 
 
 def redact_log_secrets(text):
-    """Return `text` with credential values that HA and the *arr apps log replaced by `<redacted>`.
+    """Return `text` with credential values that pods log replaced by `<redacted>`.
 
     Pure, so a test asserts what reaches stdout without stubbing the HTTP call. Operates on raw
     text rather than a parsed body, because `/api/error_log` is a plain-text log, not JSON.
     """
     text = _LOG_SECRET_RE.sub(rf"\g<1>{REDACTED}", text)
     text = _APIKEY_RE.sub(rf"\g<1>{REDACTED}", text)
+    for pattern in _LOG_TOKEN_RES:
+        text = pattern.sub(rf"\g<1>{REDACTED}", text)
     return redact_query_params(text)
 
 

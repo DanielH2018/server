@@ -144,8 +144,97 @@ def test_raw_json_log_body_is_clean_past_the_key():
     )
 
 
+DISCORD_TOKEN = "x" * 68
+HA_WEBHOOK_ID = "f" * 64
+AUTH_SECRET = "A" * 43 + "="
+
+
+@pytest.mark.parametrize(
+    ("line", "secret", "kept"),
+    [
+        (
+            "POST https://discord.com/api/webhooks/1556410786111426693/"
+            f"{DISCORD_TOKEN}/slack giving up after 1 attempt(s)",
+            DISCORD_TOKEN,
+            "webhooks/1556410786111426693/<redacted>/slack giving up",
+        ),
+        (
+            f'{{"RequestPath":"/api/webhook/{HA_WEBHOOK_ID}","RouterName":"ha"}}',
+            HA_WEBHOOK_ID,
+            '"/api/webhook/<redacted>","RouterName":"ha"',
+        ),
+        (
+            f"Generated new AUTH_SECRET: {AUTH_SECRET}",
+            AUTH_SECRET,
+            "Generated new AUTH_SECRET: <redacted>",
+        ),
+        (
+            f'["1", "AUTH_SECRET already exists: {AUTH_SECRET}"], ["2", "next"]',
+            AUTH_SECRET,
+            'AUTH_SECRET already exists: <redacted>"], ["2", "next"]',
+        ),
+    ],
+    ids=["discord-token", "ha-webhook-id", "peanut-generated", "peanut-set-raw-json"],
+)
+def test_pod_log_token_is_redacted_and_the_line_kept(line, secret, kept):
+    out = core.redact_log_secrets(line)
+    assert secret not in out
+    assert kept in out
+
+
 def test_json_escaped_ampersand_apikey_is_flagged():
     body = '"GET /api?t=search\\u0026apikey=abc123\\u0026limit=1"'
     out = core.redact_log_secrets(body)
     assert "abc123" not in out
     assert "\\u0026limit=1" in out
+
+
+# Traefik's access log carries the query string in `RequestPath`. The Alloy stages redact new
+# records; the names below are the ones they redact, and `loki-query` prints the older ones.
+@pytest.mark.parametrize("param", ["api_key", "ApiKey", "access_token", "code"])
+def test_access_log_credential_param_is_redacted(param):
+    line = f'"RequestPath":"/cb?{param}=notasecret1&x=1","RequestPort":"443"'
+    out = core.redact_log_secrets(line)
+    assert "notasecret1" not in out
+    assert f'/cb?{param}=<redacted>&x=1","RequestPort"' in out
+
+
+def test_json_escaped_ampersand_before_a_credential_param_is_redacted():
+    out = core.redact_log_secrets(
+        '"RequestPath":"/cb?x=1\\u0026code=notasecret1\\u0026y=2"'
+    )
+    assert out == '"RequestPath":"/cb?x=1\\u0026code=<redacted>\\u0026y=2"'
+
+
+def test_subsonic_credentials_under_rest_are_redacted():
+    out = core.redact_log_secrets(
+        '"RequestPath":"/rest/ping?u=alice&p=pw&t=tok&s=salt&c=app"'
+    )
+    assert out == (
+        '"RequestPath":"/rest/ping?u=<redacted>&p=<redacted>&t=<redacted>&s=<redacted>&c=app"'
+    )
+
+
+def test_a_webhook_path_loses_both_its_id_and_its_token():
+    out = core.redact_log_secrets(
+        f'"RequestPath":"/api/webhook/{"f" * 64}?token=notasecret1"'
+    )
+    assert out == '"RequestPath":"/api/webhook/<redacted>?token=<redacted>"'
+
+
+def test_json_escaped_ampersand_before_a_subsonic_param_is_redacted():
+    out = core.redact_log_secrets(
+        '"RequestPath":"/rest/ping?u=alice\\u0026p=pw\\u0026c=app"'
+    )
+    assert (
+        out == '"RequestPath":"/rest/ping?u=<redacted>\\u0026p=<redacted>\\u0026c=app"'
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/api/items?p=2", "/api/rest/items?p=2&s=10", "/api/items", "/api/items?encode=1"],
+)
+def test_a_path_with_no_credential_param_is_printed(path):
+    line = f'"RequestPath":"{path}"'
+    assert core.redact_log_secrets(line) == line

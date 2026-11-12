@@ -153,8 +153,8 @@ def test_the_render_refuses_a_cycle_and_writes_nothing(tmp_path, capsys):
     assert not out.exists() or list(out.iterdir()) == []
 
 
-def test_the_live_ordering_reads_the_play_map_and_its_rules():
-    """bento-pdf is routed behind Authelia, so the play's map gives it both edges."""
+def test_the_live_ordering_reads_the_dep_map_and_its_rules():
+    """bento-pdf is routed behind Authelia, so the dependency map gives it both edges."""
     ordering = cluster_mod.bundle_ordering({"bento-pdf"})
     assert {"authelia", "traefik"} <= set(ordering.deps["bento-pdf"])
     assert "netpol-baseline" in ordering.applies_last

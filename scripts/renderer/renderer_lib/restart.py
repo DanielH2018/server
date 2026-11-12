@@ -101,7 +101,7 @@ def restart_targets(
 
     Args:
         tag: The deploy tag, whose role is `roles/<tag>`.
-        context: The play context the role's Jinja values resolve against.
+        context: The template context the role's Jinja values resolve against.
         roles: The k8s roles directory; a test passes a fixture tree.
 
     Raises:
@@ -135,7 +135,7 @@ def self_rollouts(tag: str, context: Mapping, roles: Path = K8S_ROLES) -> list[s
 
     Args:
         tag: The deploy tag, whose role is `roles/<tag>`.
-        context: The play context the role's Jinja values resolve against.
+        context: The template context the role's Jinja values resolve against.
         roles: The k8s roles directory; a test passes a fixture tree.
 
     Raises:

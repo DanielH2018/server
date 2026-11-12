@@ -2,8 +2,8 @@
 
 `toposort_containers` orders the renderer's entries by the map `build_k8s_dep_map` derives from
 each role's templates and entry, and `filter_by_platform` selects one platform's entries.
-deploy.yml's Docker play runs no role: every entry is `platform: k8s`, and the Pi's services
-deploy from `compose_services` in its package.
+Every `containers_list` entry is `platform: k8s`; the Pi's services deploy from
+`compose_services` in its package.
 """
 
 import heapq
@@ -129,7 +129,7 @@ def _role_renders_traefik_crd(role_templates_dir):
 
 
 def build_k8s_dep_map(containers_list, playbook_dir, applies_last=None):
-    """Derive the k8s play's dependency map.
+    """Derive the k8s roles' dependency map.
 
     There is no hand-authored per-role dependency file, and no constraint rests on list
     position. Three rules are derived, which is what lets a new role's edges arrive for free:
@@ -146,13 +146,11 @@ def build_k8s_dep_map(containers_list, playbook_dir, applies_last=None):
     jellyfin and tdarr declare dri-device-plugin, which advertises the `devic.es/dri`
     resource they request.
 
-    Takes the FULL containers_list, never a tag-narrowed one. The k8s play applies `--tags`
-    per-role inside a single loop rather than narrowing the list before dependency
-    resolution, so building this map from a tagged subset would leave every role outside that subset with an empty dep
-    list -- silently falling back to list order for exactly the roles a tagged deploy is
-    most likely to append one after.
+    Takes the FULL containers_list, never a `--role` subset. `cluster.bundle_ordering`
+    generates every tag's `dependsOn` from this map, so a map built from a subset would give
+    each role outside it no edges, and a tag's edges would depend on what else rendered.
 
-    `applies_last` replaces K8S_APPLIES_LAST when given. The play never passes it; a test
+    `applies_last` replaces K8S_APPLIES_LAST when given. The renderer never passes it; a test
     passes an empty dict to show the edge goes away with the dict.
     """
     applies_last = K8S_APPLIES_LAST if applies_last is None else applies_last

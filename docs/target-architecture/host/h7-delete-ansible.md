@@ -457,8 +457,8 @@ waived, so the status is DONE. Each reading uses the commands its observation na
   before apt runs and recreates each one afterwards", and that a `daemon.json` edit restarts
   dockerd and leaves docker-proxy on a stale socket inode. H5.7 changes `engine-upgrade.yml`
   to stop and start `homelab-compose.service`.
-- **The Docker networks are external.** H5's Baseline says "The `networks.yml.j2` macro
-  declares each network `external: true`", and that `docker_install` creates `proxy` and
+- **The Docker networks are external.** H5's Baseline says each Pi compose file declares
+  its networks `external: true`, and that `docker_install` creates `proxy` and
   `lifecycle`, the two the Pi's project attaches to. The task `Create Docker networks` in
   `docker_install/tasks/install.yml` loops over eight names, not two, and sets no `labels:`.
   Compose labels a network it creates itself, so the live networks lack the labels a
@@ -2303,7 +2303,7 @@ the `manual_plane` clearing, and *Rollback*'s
       checks that the package's own enable link survives the removal.
     - **Ruling 4, 2026-10-24: credstore paths.** The builder unit writes
       `LoadCredential=github_token:/run/credstore/homelab_builder_github_token` and the alert
-      unit writes `LoadCredential=discord_webhook:/run/credstore/gitops_deploy_discord_webhook`.
+      unit writes `LoadCredential=discord_webhook:/run/credstore/discord_alert_webhook`.
       The builder reads `$CREDENTIALS_DIRECTORY/github_token`, so `config.env` holds no
       secret. `hosts/lib/homelab-secrets` writes `/run/credstore/<sops key>`.
     - **Ruling 5, 2026-10-24: `UV_PYTHON_DOWNLOADS` is set on `ExecStart=` only.** The
@@ -2317,7 +2317,7 @@ the `manual_plane` clearing, and *Rollback*'s
           with no shell wrapper.
         - The `UFW_SPEC` grammar rejects quotes, so the commented ufw rules need legacy
           entries with `replaced_by`.
-        - H7.41b needs `homelab_builder_github_token` and `gitops_deploy_discord_webhook` in
+        - H7.41b needs `homelab_builder_github_token` and `discord_alert_webhook` in
           daniel-box's host SOPS file, through an operator sync
           (**operator-only**: `host_secrets.py sync daniel-box`).
 18. **H7.42** stays alone. It carries the bootstrap, offline and bootstrap-pins proofs.
@@ -3090,9 +3090,9 @@ the `manual_plane` clearing, and *Rollback*'s
           `alert_unit.yml` renders. That file's instanced form (`alert_unit_instanced`) is
           the model. The component keeps the retry-until-delivered behaviour and the
           once-per-failure `Failed at <UTC time>` record.
-        - The webhook arrives through `LoadCredential=discord_webhook:/run/credstore/gitops_deploy_discord_webhook`,
+        - The webhook arrives through `LoadCredential=discord_webhook:/run/credstore/discord_alert_webhook`,
           the form `k3s-restart` and checkout-sync use. The credential is the SOPS key
-          `gitops_deploy_discord_webhook`, the key `alert_unit.yml` renders today.
+          `discord_alert_webhook`, the key `alert_unit.yml` renders today.
           daniel-box's `package.yml` lists it under `credentials:`, and the operator runs
           `host_secrets.py sync daniel-box` to copy it into the host's SOPS file
           (**operator-only**). The role's teardown stops owning the env file.

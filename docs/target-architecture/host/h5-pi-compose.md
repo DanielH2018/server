@@ -82,8 +82,7 @@ The exit criterion is three observations:
 - **pi-peer-backup reads wg-easy's data path.**
   `ansible/roles/k8s/pi-peer-backup/defaults/main.yml:pi_peer_backup_src_dir` is
   `/home/{{ sys_user }}/server/containers/wg-easy/config/`.
-- **Networks are external.** The `networks.yml.j2` macro declares each network `external:
-  true`. The `docker_install` role's install task loop creates `proxy` and `lifecycle`.
+- **Networks are external.** Each Pi compose file declares its networks `external: true`. The `docker_install` role's install task loop creates `proxy` and `lifecycle`.
 - **Three Pi services read three secret keys.**
     - autoheal's template reads `monitor_discord_webhook_url`.
     - wg-easy's template reads `domain` in `WG_HOST`.

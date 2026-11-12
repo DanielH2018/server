@@ -8,7 +8,8 @@ file (`test_container_security_context.py` is the example).
 
 Rows that would push this file past the test-module length cap live in
 `_config_property_rows.py`, `_workload_property_rows.py`, `_image_property_rows.py`,
-`_scrape_property_rows.py` and `_edge_property_rows.py`, and run here with the rest.
+`_scrape_property_rows.py`, `_edge_property_rows.py` and `_rbac_property_rows.py`, and run here
+with the rest.
 
 A row's `reason` is the long form a reader needs before changing the property. Keep it as
 specific as the file docstring it replaced.
@@ -27,6 +28,7 @@ from _image_property_rows import IMAGE_PROPERTIES
 from _k8s_render import pod_spec
 from _port_property_rows import PORT_PROPERTIES
 from _property_table import Property, check
+from _rbac_property_rows import RBAC_PROPERTIES
 from _scrape_property_rows import SCRAPE_PROPERTIES
 from _workload_property_rows import OBSERVABILITY, POD_KINDS, WORKLOAD_PROPERTIES
 
@@ -394,6 +396,7 @@ PROPERTIES = (
     + SCRAPE_PROPERTIES
     + EDGE_PROPERTIES
     + PORT_PROPERTIES
+    + RBAC_PROPERTIES
 )
 
 _IDS = [p.name for p in PROPERTIES]

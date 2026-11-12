@@ -111,7 +111,7 @@ def test_onfailure_pages(unit: str) -> None:
 def test_the_unit_holds_no_webhook(unit: str) -> None:
     """`systemctl show -p ExecStart` serves unit content over the system bus to any local user."""
     assert "discord.com/api/webhooks" not in unit
-    assert "gitops_deploy_discord_webhook" not in unit
+    assert "discord_alert_webhook" not in unit
 
 
 def test_unit_timeout_sits_above_the_wrapper_timeout(defaults: dict) -> None:

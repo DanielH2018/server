@@ -1,7 +1,9 @@
 # The directory media-volume's static PersistentVolume names, and the two the media stack links
 # between. The PV's local path must exist before a mounter's pod starts. No mode: the library keeps
 # the modes it came with from daniel-server, and a `-` leaves an existing directory's mode alone.
+# media/music is navidrome's subPath; without it kubelet creates the directory owned by root.
 #Type Path Mode User Group Age
 d {{ media_volume_host_path }} - {{ puid }} {{ pgid }} -
 d {{ media_volume_host_path }}/media - {{ puid }} {{ pgid }} -
+d {{ media_volume_host_path }}/media/music - {{ puid }} {{ pgid }} -
 d {{ media_volume_host_path }}/torrents - {{ puid }} {{ pgid }} -

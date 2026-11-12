@@ -102,7 +102,6 @@ BUILT_IMAGE_TAG_STUBS: dict[str, str] = {
 # Non-secret fallbacks for host facts not in the plaintext inventory. Anything still missing
 # (SOPS secrets, role vars) renders via StubUndefined — fine for a STRUCTURAL parse/lint check.
 BASE_CONTEXT = {
-    "docker_network": "proxy",
     "puid": 1000,
     "pgid": 1000,
     "tz": "America/Chicago",
@@ -291,9 +290,8 @@ SERVICES_IN_TREE = K8S_SERVICES.relative_to(REPO).as_posix()
 def entry_tags(entry: dict) -> list[str]:
     """The tags one ``containers_list`` entry selects under.
 
-    ``deploy.yml:116`` -- ``container_item.tags | default([container_item.name])``. Mirror that
-    precedence exactly, or an entry that overrides its tags is validated against a name that no
-    longer selects it. One definition, because ``deploy_tags.service_tags`` reads the working
+    An entry's own ``tags`` win, else its ``name`` alone. Every tag reader goes through here, or
+    an entry that overrides its tags is validated against a name that no longer selects it. One definition, because ``deploy_tags.service_tags`` reads the working
     tree, and ``service_tags_at`` below reads a git ref.
     """
     return list(entry.get("tags") or [entry["name"]])

@@ -2,7 +2,7 @@
 # The k3s services: one entry per k8s deploy tag. Flux applies every entry through `promote`.
 # The renderer and every script read this list as daniel-box's `containers_list`
 # (`scripts/lib/render_guard.py:host_layer`), so templates and filter plugins see the same
-# variable they always did. Ansible does not load this file: no Ansible play deploys a k8s role.
+# variable they always did.
 #
 # The renderer (scripts/renderer/renderer_lib/context.py) toposorts this list with
 # build_k8s_dep_map / toposort_containers (ansible/filter_plugins/toposort.py) rather than
@@ -507,17 +507,12 @@ containers_list:
           - freshrss  # the subscription URL lives in FreshRSS's own database, so no template
                       # names `feed-cache` as a target and a grep cannot see this caller.
                       # Confirm after a deploy that the rachelbythebay feed still refreshes.
-  # Parked at replicas 0 — see roles/k8s/navidrome/defaults/main.yml. The entry stays in the
-  # list so the Deployment and Service keep being reconciled; only the pod count is 0.
   - name: navidrome
     platform: k8s
     # Flux applies navidrome through `promote`, and every Ansible path skips it (D5.8).
     weekly_backup_claims: {navidrome-data: 3}  # Wed
     depends_on: [media-volume]
     hostname: "navidrome"
-    # No ingress probe while parked: the role deploys no route at replicas 0, so the probe
-    # would fail permanently. Delete this line when bringing it back.
-    probe: false
     port: 4533
     use_authelia: true
     auth_tier: one_factor

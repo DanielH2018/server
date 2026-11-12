@@ -1,11 +1,12 @@
 ---
 server_ip: 10.0.0.215
-# The link carrying server_ip. setup/k3s pins the address on it statically, so k3s still
-# starts when the gateway's DHCP server is down (#3882). Confirm the gateway keeps server_ip
-# out of its DHCP pool before applying it: with DHCPv4 off, nothing renews a lease on it.
+# The link carrying server_ip. The k3s-server component's netplan file pins the address on it
+# statically, so k3s still starts when the gateway's DHCP server is down (#3882). Confirm the
+# gateway keeps server_ip out of its DHCP pool before applying it: with DHCPv4 off, nothing
+# renews a lease on it.
 k3s_node_static_link: eno1
-# The MediaTek MT7922, the fallback uplink while eno1 has no carrier (setup/k3s,
-# tasks/static-address.yml).
+# The MediaTek MT7922, the fallback uplink while eno1 has no carrier (the k3s-server
+# component's netplan-wifi-fallback.json.j2).
 k3s_node_wifi_link: wlp4s0
 # daniel-server's node-to-node traffic (6443/8472/10250, k3s_join_server_ports) is
 # UFW-allowed here by the k3s-server component's k3s-join-* rules. Derived from daniel-server's one
@@ -129,8 +130,11 @@ render_gid: 993
 #
 # Disarmed on 2026-10-03 and re-armed on 2026-10-05, once the session ran as its own user on
 # a repo-scoped token with no contents write (renovate_agent_gh_token) and the lander unit
-# alone could merge. Do not arm it again without both in place.
-renovate_agent_enabled: true
+# alone could merge. Disarmed again by the operator's ruling of 2026-11-12 (#8241): the
+# session's token can still write to PRs and Actions. Re-arm only once two slices of the
+# guardrails plan have landed: B2r, which moves that write to a controller user and gives the
+# session a read-only token, and B3, which fences the session's egress.
+renovate_agent_enabled: false
 
 # The window in which homelab-k3s-restart may restart k3s (H6.3b, hosts/components/k3s-restart).
 # An OnCalendar value, read by the component's timer: host_vars sit above a component's defaults,

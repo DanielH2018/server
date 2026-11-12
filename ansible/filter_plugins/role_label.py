@@ -122,9 +122,6 @@ def homelab_role_label(text: str, role: str) -> str:
     """
     if not role:
         raise ValueError("needs the role name to stamp")
-    # ansible-core passes a templated value as a tagged `str` subclass, which SafeDumper
-    # refuses to represent ("cannot represent an object").
-    role = str(role)
     docs = [doc for doc in yaml.load_all(str(text), Loader=_Loader) if doc is not None]
     if not docs:
         raise ValueError(

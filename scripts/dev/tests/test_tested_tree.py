@@ -28,8 +28,25 @@ def _pr(merge_commit_sha=SQUASH):
     return [{"merge_commit_sha": merge_commit_sha, "head": {"sha": HEAD}}]
 
 
-def _status(tree=TREE, state="success", context=tested_tree.CONTEXT):
-    return [{"context": context, "state": state, "description": tree}]
+RUN_URL = f"https://github.com/{REPO_NAME}/actions/runs/123456"
+
+
+def _status(
+    tree=TREE,
+    state="success",
+    context=tested_tree.CONTEXT,
+    login=tested_tree.CREATOR,
+    target_url=RUN_URL,
+):
+    return [
+        {
+            "context": context,
+            "state": state,
+            "description": tree,
+            "creator": {"login": login},
+            "target_url": target_url,
+        }
+    ]
 
 
 def _prove(pulls, statuses, tree=TREE, sha=SQUASH):
@@ -47,6 +64,26 @@ def test_unequal_trees_are_not_proven():
 def test_a_failed_or_foreign_status_is_not_proven():
     assert _prove(_pr(), _status(state="failure")) is False
     assert _prove(_pr(), _status(context="ci/other")) is False
+
+
+def test_a_status_from_another_creator_is_not_proven():
+    assert _prove(_pr(), _status(login="fake-operator")) is False
+    status = _status()
+    del status[0]["creator"]
+    assert _prove(_pr(), status) is False
+
+
+def test_a_status_not_pointing_at_this_repositorys_runs_is_not_proven():
+    for url in (
+        None,
+        "",
+        "https://example.invalid/o/r/actions/runs/1",
+        "https://github.com/fake-owner/r/actions/runs/1",
+        f"https://github.com/{REPO_NAME}/actions/runs/",
+        f"https://github.com/{REPO_NAME}/actions/runs/1/attempts/2",
+        f"https://github.com/{REPO_NAME}x/actions/runs/1",
+    ):
+        assert _prove(_pr(), _status(target_url=url)) is False, url
 
 
 def test_a_pr_that_merely_contains_the_commit_is_not_proven():
