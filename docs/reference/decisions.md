@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-12 22:01 UTC
-generated_sha: c57d60752
+generated_at: 2026-11-12 22:48 UTC
+generated_sha: 7e7f2d39f
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: c57d60752
 
 # Decisions
 
-528 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
+527 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -473,7 +473,6 @@ generated_sha: c57d60752
 | `stage` stays after daniel-stage was retired (#2941). on a staging cluster existing: a `--cluster stage` request against this prod kubectl has to REFUSE rather than answer a healthy prod verdict, which is the #1663 failure. Drop the entry and that request becomes an unknown-cluster ValueError instead, and `cluster_of` degenerates to a one-entry lookup that can never disagree with itself. `daniel-stage` is therefore the one name here that is deliberately not an inventory host — the exemption is named in scripts/lib/tests/test_kubectl.py::test_every_named_node_is_a_host_in_the_inventory. The operator ruled on 2026-09-30 (#2944) that a staging cluster may come back, so the entry and its callers stay as they are rather than being re-derived later. | `scripts/lib/kubectl.py` | 2026-09-29 |
 | only weekly-tier volumes are checked. chance the following night, inside check 4's daily limit, so flagging it would hold the check DOWN for a day after every cold start over a gap that closes on its own. A weekly volume waits seven days for its next run and up to 198 h for check 4 to notice (#3968). | `scripts/lib/longhorn_lib/longhorn_skipped_volumes_logic.py` | 2026-10-09 |
 | secret values render as stubs, so a rendered-manifest guard must key on field names and assert a non-empty denominator, never on credential-shaped values. | `scripts/lib/render_guard.py` | 2026-09-30 |
-| land.sh never deploys to daniel-stage, and the entry stays after #2941 retired that guest. The guest sat on daniel-server's libvirt NAT network, which daniel-box cannot route to, so landing any of the six staging-subset tags (traefik, authelia, node-exporter, ...) ran ``deploy.sh -e target=daniel-stage`` from daniel-box after the box's own deploy had succeeded, and the unreachable host turned a good landing into ``deploy-failed``. The host declares no tag now, so the filter is inert against the live inventory — it is kept because what it names is "a host land.sh must not deploy to", and the retired guest is still the worked example of one. The operator ruled on 2026-09-30 (#2944) that a staging cluster may come back, so the entry stays rather than being re-derived later. | `scripts/lib/render_guard.py` | 2026-09-29 |
 | a separate module despite one production importer (`lib.script_classify`). Its interface is two functions over ~200 lines of import resolution, so it is deep rather than a pass-through seam, and folding it in would push `script_classify` past 650 lines. Weighed and kept in the #3667 deep-modules pass. | `scripts/lib/script_imports.py` | 2026-10-09 |
 | an insert whose argument is a name (`HOST_LIB_FILES`, `FILTER_PLUGINS`) is skipped rather than evaluated. Every such insert in the tree points outside `scripts/`, or at `scripts/` itself, which `_roots` already covers. An import only such an insert explains resolves outside the tree, so it credits nothing here (#3038). | `scripts/lib/script_imports.py` | 2026-11-12 |
 | a library module contributes only the imports and inserts that run when it is imported, never those inside a function body. A call-time import is how a module keeps a venv-only dependency off the no-venv path (`fanout_lib/brief.py:_precomputed`, #4167), and following it would put the venv's whole reach in the set. An entry run with no subcommand contributes everything, because its `main` runs on every call; one run with a subcommand contributes its import-time code plus what that subcommand dispatches to (`_dispatched`). | `scripts/lib/stdlib_only.py` | 2026-10-11 |

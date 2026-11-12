@@ -30,7 +30,11 @@ class Host:
     """A fake host: its passwd and group files, and a runner that records each command."""
 
     def __init__(
-        self, tmp_path, passwd=PASSWD, ps_output="user@995.service\nclaude-rc.service\n"
+        self,
+        tmp_path,
+        passwd=PASSWD,
+        ps_output="user@995.service\nclaude-rc.service\n",
+        uid_find_stderr=None,
     ):
         (tmp_path / "manifest.json").write_text(
             json.dumps({"users": {"users": DECLARED}})
@@ -38,6 +42,7 @@ class Host:
         (tmp_path / "passwd").write_text(passwd)
         (tmp_path / "group").write_text(GROUP)
         self.dir, self.ps_output, self.calls = tmp_path, ps_output, []
+        self.uid_find_stderr = uid_find_stderr
 
     def run(self, argv):
         self.calls.append(list(argv))
@@ -48,6 +53,8 @@ class Host:
             passwd.write_text(
                 passwd.read_text().replace(":995:995:", f":{argv[2]}:995:")
             )
+        if argv[0] == "find" and "-uid" in argv and self.uid_find_stderr:
+            return subprocess.CompletedProcess(argv, 1, "", self.uid_find_stderr)
         return subprocess.CompletedProcess(argv, 0, "", "")
 
     def main(self, *args, euid=0):
@@ -83,8 +90,14 @@ def test_a_dry_run_prints_each_move_and_its_commands_and_changes_nothing(
         in out
     )
     assert "    usermod -u 900 claude\n    groupmod -g 900 claude\n" in out
-    assert "find /var/lib/claude /tmp -xdev -uid 995 -exec chown -h 900 '{}' +" in out
-    assert "find /var/lib/claude /tmp -xdev -gid 995 -exec chown -h :900 '{}' +" in out
+    assert (
+        "find /var/lib/claude /tmp -xdev -ignore_readdir_race -uid 995"
+        " -exec chown -h 900 '{}' +" in out
+    )
+    assert (
+        "find /var/lib/claude /tmp -xdev -ignore_readdir_race -gid 995"
+        " -exec chown -h :900 '{}' +" in out
+    )
     assert "    systemctl start user@900.service" in out
     assert "builder" not in out.split("\n", 1)[1], (
         "a user at its uid is counted, not listed"
@@ -107,6 +120,7 @@ def test_apply_moves_the_user_once_and_a_second_run_does_nothing(tmp_path, capsy
             "/var/lib/claude",
             "/tmp",
             "-xdev",
+            "-ignore_readdir_race",
             "-uid",
             "995",
             "-exec",
@@ -121,6 +135,7 @@ def test_apply_moves_the_user_once_and_a_second_run_does_nothing(tmp_path, capsy
             "/var/lib/claude",
             "/tmp",
             "-xdev",
+            "-ignore_readdir_race",
             "-gid",
             "995",
             "-exec",
@@ -142,6 +157,45 @@ def test_apply_moves_the_user_once_and_a_second_run_does_nothing(tmp_path, capsy
         "every user is at its declared uid, so nothing runs, not even ps"
     )
     assert "0 move, 0 blocked, 2 ok, 1 absent" in capsys.readouterr().out
+
+
+def test_a_find_that_only_lost_vanished_paths_continues_to_the_gid_chown_and_the_starts(
+    tmp_path,
+):
+    host = Host(
+        tmp_path,
+        uid_find_stderr=(
+            "find: '/tmp/tmp.rFnnWjBEr2': No such file or directory\n"
+            "find: '/tmp/cross-plane-tar-2bz1odxh': No such file or directory\n"
+        ),
+    )
+
+    assert host.main("--apply") == 0
+
+    assert [c[:2] for c in host.changes()[-4:]] == [
+        ["find", "/var/lib/claude"],
+        ["find", "/var/lib/claude"],
+        ["systemctl", "start"],
+        ["systemctl", "start"],
+    ]
+    assert "-gid" in host.changes()[-3]
+
+
+def test_a_find_that_failed_for_another_reason_stops_before_the_gid_chown(
+    tmp_path, capsys
+):
+    host = Host(
+        tmp_path,
+        uid_find_stderr=(
+            "find: '/tmp/tmp.rFnnWjBEr2': No such file or directory\n"
+            "find: '/tmp/locked': Permission denied\n"
+        ),
+    )
+
+    assert host.main("--apply") == 1
+
+    assert not any(c[0] == "find" and "-gid" in c for c in host.changes())
+    assert "Permission denied" in capsys.readouterr().err
 
 
 def test_a_uid_another_account_holds_is_named_and_left_alone(tmp_path, capsys):

@@ -50,7 +50,6 @@ __all__ = [
     "ANSIBLE",
     "BASE_CONTEXT",
     "BUILT_IMAGE_TAG_STUBS",
-    "HOSTS_LAND_SH_NEVER_DEPLOYS",
     "HOST_VARS",
     "HOST_VARS_IN_TREE",
     "INVENTORY",
@@ -103,7 +102,6 @@ BUILT_IMAGE_TAG_STUBS: dict[str, str] = {
 # Non-secret fallbacks for host facts not in the plaintext inventory. Anything still missing
 # (SOPS secrets, role vars) renders via StubUndefined — fine for a STRUCTURAL parse/lint check.
 BASE_CONTEXT = {
-    "docker_network": "proxy",
     "puid": 1000,
     "pgid": 1000,
     "tz": "America/Chicago",
@@ -292,9 +290,8 @@ SERVICES_IN_TREE = K8S_SERVICES.relative_to(REPO).as_posix()
 def entry_tags(entry: dict) -> list[str]:
     """The tags one ``containers_list`` entry selects under.
 
-    ``deploy.yml:116`` -- ``container_item.tags | default([container_item.name])``. Mirror that
-    precedence exactly, or an entry that overrides its tags is validated against a name that no
-    longer selects it. One definition, because ``deploy_tags.service_tags`` reads the working
+    An entry's own ``tags`` win, else its ``name`` alone. Every tag reader goes through here, or
+    an entry that overrides its tags is validated against a name that no longer selects it. One definition, because ``deploy_tags.service_tags`` reads the working
     tree, and ``service_tags_at`` below reads a git ref.
     """
     return list(entry.get("tags") or [entry["name"]])
@@ -404,20 +401,6 @@ def service_records_at_or_none(
         return service_records_at(ref, cwd) or None
     except subprocess.SubprocessError, OSError, ValueError, yaml_fast.UnparsableYaml:
         return None
-
-
-# Hosts that DECLARE a tag but that land.sh must not deploy to.
-#
-# DECIDED: land.sh never deploys to daniel-stage, and the entry stays after #2941 retired that
-# guest. The guest sat on daniel-server's libvirt NAT network, which daniel-box cannot route
-# to, so landing any of the six staging-subset tags (traefik, authelia, node-exporter, ...)
-# ran ``deploy.sh -e target=daniel-stage`` from daniel-box after the box's own deploy had
-# succeeded, and the unreachable host turned a good landing into ``deploy-failed``. The host
-# declares no tag now, so the filter is inert against the live inventory — it is kept because
-# what it names is "a host land.sh must not deploy to", and the retired guest is still the
-# worked example of one. The operator ruled on 2026-09-30 (#2944) that a staging
-# cluster may come back, so the entry stays rather than being re-derived later.
-HOSTS_LAND_SH_NEVER_DEPLOYS = frozenset({"daniel-stage"})
 
 
 def service_tags_at(ref: str, cwd: Path) -> set[str]:

@@ -96,11 +96,9 @@ jobs:
           # manual-merge dockerfile-manager updates with no custom.regex automerge match.
           #
           # What this proves is narrow, and the boot step below says which half is which. The
-          # real gate is post-merge — the play runs `rollout status` + the stabilisation gate,
-          # and for auto-deploy-eligible services gitops_deploy rolls back and holds on failure.
-          # That backstop only exists for the 14 eligible roles; the other 41 are merged by
-          # Renovate and applied by hand, so for them this job is the last automated check
-          # before a human runs the deploy. Which is why it now covers every ref rather than
+          # real gate is post-merge: promote and Flux apply the merged change, and `land.sh`
+          # waits for the changed workloads to come up healthy. That gate runs after the image
+          # already deployed, so this job is the last automated check before it does. Which is why it now covers every ref rather than
           # excluding the ones that cannot boot bare — all 9 roles the old exclusion list
           # touched were denylisted ones.
           diff="$(git diff "origin/$BASE_REF"...HEAD -- \

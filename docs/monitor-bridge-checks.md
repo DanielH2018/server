@@ -374,7 +374,7 @@ checks each gate suppresses.
   on, and a stale stamp does not heal by itself. Runbook: `k3s-etcd-restore`.)
 - **`discord`** (GET-verifies **all five** Discord notification webhooks: Alertmanager's
   `monitor_discord_webhook_url`; CrowdSec's `crowdsec_discord_webhook_url`, which CrowdSec posts
-  ban alerts to *directly*, not via Alertmanager; `gitops_deploy_discord_webhook`, which delivers the
+  ban alerts to *directly*, not via Alertmanager; `discord_alert_webhook`, which delivers the
   `gitops-deploy` rollback alert AND every `renovate_notify` digest (the Renovate Notifier — Alive
   marker greens even when the POST fails); `arr_discord_webhook_url`, which Sonarr/Radarr/Prowlarr
   POST their own onHealthIssue alerts to through in-app Discord Connect (the config lives in the

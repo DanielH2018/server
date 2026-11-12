@@ -374,7 +374,7 @@ computes three sets from the tree:
   enters an included role.
 - **Derived:** every name that R1's `task_inputs.derived_facts` returns for any of the 56 tags,
   every `include_role` var that `task_inputs.include_vars` returns, the secret keys, and the
-  `containers_list` view that `context.play_context` lays down.
+  `containers_list` view that `context.template_context` lays down.
 - **Reached:** the walk starts from the names read by the templates that the render reads.
   For each of the 56 tags, those are the files `scripts/lib/k8s_roles.py:resolved_manifest_files`
   returns, the role's deferred files, and every template those pull in through

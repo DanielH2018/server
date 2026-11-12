@@ -10,7 +10,7 @@ Type=oneshot
 # The webhook arrives as a credential and appears in no unit text: systemd serves unit content
 # over the system bus, so an embedded value would print for any local user. homelab-secrets
 # writes /run/credstore/<sops key>.
-LoadCredential=discord_webhook:/run/credstore/gitops_deploy_discord_webhook
+LoadCredential=discord_webhook:/run/credstore/discord_alert_webhook
 # Retries every failure, a refused connection and a failed DNS lookup included. Two minutes of
 # curl retries do not cover an outage, so systemd re-runs a failed delivery every five minutes
 # until it succeeds. While a retry is pending the unit reads `activating (auto-restart)`.

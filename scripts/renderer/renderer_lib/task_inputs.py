@@ -195,8 +195,8 @@ def image_contexts(role_dir: Path, ctx: dict) -> dict[str, ImageContext]:
 def built_image_tags(role_dir: Path, ctx: dict) -> dict[str, str]:
     """`k8s_built_image_tags` after `role_dir`'s builds: each image's name mapped to its tag.
 
-    `ansible/deploy.yml` resets the map to empty before the k8s play, and each build adds its
-    own image, so a role that builds nothing reads an empty map. A build whose `when:` is false
+    The map starts empty for each role, and each build adds its own image, so a role that
+    builds nothing reads an empty map. A build whose `when:` is false
     adds nothing, and its consumer falls back to `latest`.
     """
     return {name: c.tag for name, c in image_contexts(role_dir, ctx).items()}

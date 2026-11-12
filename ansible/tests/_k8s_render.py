@@ -19,7 +19,7 @@ from _role_census import role_dirs
 from lib.render_context import render_context
 from render_share import shared_value
 from renderer.renderer_lib.bundle import KUSTOMIZATION
-from renderer.renderer_lib.cluster import play_context, render_tag, role_context
+from renderer.renderer_lib.cluster import template_context, render_tag, role_context
 from renderer.renderer_lib.environment import RenderError, render_file, renderer_env
 from renderer.shadow_diff import stub_vars
 from validate.k8s_manifests import K8S_ROLES, SKIP_ROLES, k8s_entries
@@ -205,7 +205,10 @@ def _template_context(role: str, overrides: dict | None, host: str) -> dict:
     stubs = _stubs(overrides)
     if role in _entry_names(host):
         return role_context(role, stubs, host)[0]
-    return {**play_context(K8S_ROLES / role, stubs, host), "manifests_service": role}
+    return {
+        **template_context(K8S_ROLES / role, stubs, host),
+        "manifests_service": role,
+    }
 
 
 def render_pod_env(

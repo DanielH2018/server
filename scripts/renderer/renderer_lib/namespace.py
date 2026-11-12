@@ -1,18 +1,15 @@
 """The shared kind `homelab-namespace`: the `homelab` Namespace and its LimitRange (D5 step 30).
 
 `bundle.bundle_files` renders it into every bundle, and it is the only writer of both objects.
-`ansible/deploy.yml` applied them from two pre_tasks until D5's namespace PR deleted them,
-because a gate on role ownership would let an entry without `owner` re-arm Ansible's apply
-beside this kind with no end to the overlap. The bundle gets:
+No role template writes them, so no second writer overlaps this kind. The bundle gets:
 
 - `flux/homelab-namespace.yaml`, the Kustomization `homelab-namespace`, with a tag's fields
   and no `dependsOn`. Its `deletionPolicy: Orphan` keeps both objects if the kind ever leaves
   the bundle;
 - `cluster/homelab-namespace/`: the Namespace `k8s_namespace`, labelled with `k8s_psa_labels`
   and `kustomize.toolkit.fluxcd.io/prune: disabled`, and the LimitRange
-  `default-container-limits` from `k8s_default_limitrange` with `type: Container`. Those are the
-  inputs the deleted pre_task read, and an empty `k8s_default_limitrange` renders no LimitRange,
-  as it applied none.
+  `default-container-limits` from `k8s_default_limitrange` with `type: Container`. An empty
+  `k8s_default_limitrange` renders no LimitRange.
 
 Every flux-owned tag that renders into the namespace depends on this Kustomization
 (`ordering.kustomization_edges`). This module imports neither Ansible nor Jinja, like

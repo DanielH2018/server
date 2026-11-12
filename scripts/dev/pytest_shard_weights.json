@@ -363,7 +363,6 @@
  "ansible/tests/repo/test_leakguard.py": 1.88,
  "ansible/tests/repo/test_leakguard_child_env.py": 0.65,
  "ansible/tests/repo/test_m6_alerts_for_state_restart_reading.py": 0.0,
- "ansible/tests/repo/test_m6_census_plan_citation.py": 0.06,
  "ansible/tests/repo/test_m6_status_records.py": 0.17,
  "ansible/tests/repo/test_module_length_ratchet.py": 5.35,
  "ansible/tests/repo/test_owner_entry_points_census.py": 0.21,

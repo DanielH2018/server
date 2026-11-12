@@ -132,6 +132,7 @@ def test_the_hook_runs_every_expected_module_and_each_exists():
         ".claude/skills/homelab-review/SKILL.md",
         "evals/cases/review-standing.json",
         "scripts/lib/__pycache__/gh.cpython-314.pyc",
+        "prek.toml",
     ],
 )
 def test_the_gate_matches_an_edit_the_tests_react_to(path):
@@ -174,6 +175,13 @@ def test_claude_md_states_how_many_files_the_hook_runs():
 def test_the_gate_skips_a_path_no_test_reads(path):
     """The docs-refresh and eval-run crons commit these, and a docs-only commit pays nothing."""
     assert not re.search(_hook()["files"], path)
+
+
+def test_the_gate_skips_a_role_asset_no_row_reads():
+    """No census row reads a dashboard or other non-code asset under a role's `files/`."""
+    assert not re.search(
+        _hook()["files"], "ansible/roles/k8s/observability/files/dashboards/a.json"
+    )
 
 
 def _sweeps(workflow: str) -> list[str]:
@@ -229,6 +237,32 @@ def test_a_sweep_skipping_only_the_main_hook_is_flagged():
     ) == [(line, "static-ratchet-tests-python")]
 
 
+def _stale_skips(sweeps: list[str], ids: list[str]) -> list[tuple[str, str]]:
+    """(sweep, id) for each `--skip` of a ratchet-shaped id that no prek hook defines."""
+    out = []
+    for line in sweeps:
+        tokens = shlex.split(line)
+        out += [
+            (line, after)
+            for flag, after in itertools.pairwise(tokens)
+            if flag == "--skip" and after.startswith(HOOK_ID) and after not in ids
+        ]
+    return out
+
+
+def test_no_ci_prek_sweep_skips_a_ratchet_hook_that_does_not_exist():
+    """A skip naming a deleted hook stays listed silently, since prek ignores an unknown id."""
+    ids = [hook["id"] for hook in _ratchet_hooks()]
+    assert _stale_skips(_sweeps(CI_WORKFLOW.read_text()), ids) == []
+
+
+def test_a_sweep_skipping_a_deleted_ratchet_hook_is_flagged():
+    line = "run: prek run --all-files --skip static-ratchet-tests --skip static-ratchet-tests-gone"
+    assert _stale_skips([line], ["static-ratchet-tests"]) == [
+        (line, "static-ratchet-tests-gone")
+    ]
+
+
 @pytest.mark.parametrize(
     "path",
     [
@@ -236,6 +270,9 @@ def test_a_sweep_skipping_only_the_main_hook_is_flagged():
         "ansible/roles/k8s/bento-pdf/templates/deployment.yaml.j2",
         "ansible/roles/k8s/flux/defaults/main.yml",
         "ansible/roles/k8s/observability/files/rules/x.yml",
+        "hosts/components/claude-code/templates/claude-land@.service.j2",
+        "hosts/components/renovate-agent/templates/renovate-agent-land@.service.j2",
+        "hosts/components/renovate-agent/files/land_renovate_pr.py",
     ],
 )
 def test_the_lander_gate_matches_every_k8s_input_its_render_reads(path):

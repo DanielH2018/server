@@ -57,8 +57,8 @@ PI_HOST_VARS = host_vars_file(PI_HOST)
 def containers_entries_in(data: dict | None) -> list[dict]:
     """The named ``containers_list`` entries in an already-parsed host_vars mapping.
 
-    Entries with no ``name`` are dropped rather than raising: ``deploy.yml`` derives a
-    service's tags from its name, so an unnamed entry selects nothing. A non-mapping entry
+    Entries with no ``name`` are dropped rather than raising: ``render_guard.entry_tags``
+    derives a service's tags from its name, so an unnamed entry selects nothing. A non-mapping entry
     is dropped for the same reason, because it cannot answer ``.get("name")``.
     """
     entries = (data or {}).get("containers_list") or []

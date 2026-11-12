@@ -53,6 +53,9 @@ RENAMED_FROM: dict[str, str] = {
     # docs/adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md.
     f"longhorn_b2_{suffix}": f"kopia_b2_{suffix}"
     for suffix in ("application_key", "bucket", "endpoint", "key_id")
+} | {
+    f"discord_alert_{suffix}": f"gitops_deploy_discord_{suffix}"
+    for suffix in ("webhook",)
 }
 
 # Keys the store held once and holds no longer, dropped WITH the service or job that read
@@ -286,15 +289,20 @@ def _is_whole_file_reencrypt(newer: dict[str, str], current: dict[str, str]) -> 
     return changed / len(shared) >= _REENCRYPT_FRACTION
 
 
-def rotation_evidence(name: str, newer_value: str, older: dict[str, str]) -> bool:
+def rotation_evidence(
+    name: str,
+    newer_value: str,
+    older: dict[str, str],
+    renamed_from: Mapping[str, str] = RENAMED_FROM,
+) -> bool:
     """True when `older` shows `name` held a value different from `newer_value`.
 
-    False at a rename boundary — where the older revision spells the key its old way —
-    because a rename is not a rotation. See `RENAMED_FROM`.
+    False at a rename boundary — where the older revision spells the key its old way under
+    `renamed_from` — because a rename is not a rotation. See `RENAMED_FROM`.
     """
     if name in older:
         return older[name] != newer_value
-    was = RENAMED_FROM.get(name)
+    was = renamed_from.get(name)
     if was is not None and was in older:
         return False
     return True
@@ -353,11 +361,16 @@ def ciphertext_rotation_commits(
 
     The sibling of `ciphertext_rotation_dates` that `host_secrets.py check` orders with
     `git merge-base --is-ancestor`, because a day cannot order two commits made on one day.
+    A rename counts as a change here: a host copy has to postdate the commit that first
+    stored the value under its current name, whatever `RENAMED_FROM` says about rotation.
     """
-    return {name: sha for name, (sha, _day) in _rotation_walk(tools, path).items()}
+    walked = _rotation_walk(tools, path, renamed_from={})
+    return {name: sha for name, (sha, _day) in walked.items()}
 
 
-def _rotation_walk(tools: RotationTools, path: str) -> dict[str, tuple[str, str]]:
+def _rotation_walk(
+    tools: RotationTools, path: str, renamed_from: Mapping[str, str] = RENAMED_FROM
+) -> dict[str, tuple[str, str]]:
     """name -> (SHA, "YYYY-MM-DD") of the newest commit that changed the key in `path`."""
     # DECIDED: the whole-file re-encrypt guard runs for `secrets.yml` only. Every
     # `host_secrets.py sync` rewrites each value of a host file, and that commit is the event
@@ -385,7 +398,7 @@ def _rotation_walk(tools: RotationTools, path: str) -> dict[str, tuple[str, str]
                 # to the (pre-re-encrypt) value in `current`, so an earlier real rotation
                 # still gets found on a later iteration.
                 continue
-            if rotation_evidence(name, value, current):
+            if rotation_evidence(name, value, current, renamed_from):
                 found[name] = (newer_rev, newer_day)
         if tracked <= set(found):
             break

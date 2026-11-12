@@ -104,8 +104,8 @@ def register_ansible_filters(env: Environment) -> Environment:
     judged by name as usual.
 
     ``filter_by_platform``, ``authelia_service_rules`` and ``tier_priority_class`` are this
-    repo's own filter plugins: ``deploy.yml`` splits each host's entries by platform through the
-    first, and authelia's config Secret derives its per-service access_control rules
+    repo's own filter plugins: ``renderer_lib.context`` splits each host's entries by platform
+    through the first, and authelia's config Secret derives its per-service access_control rules
     through the second, which raises on a ``use_authelia: true`` entry with no ``auth_tier``.
     A tiered role's pods take their PriorityClass from the third, which raises on an entry
     with no ``tier``. observability's blackbox probe jobs ask ``in_service_tier`` whether a

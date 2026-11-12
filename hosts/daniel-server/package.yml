@@ -22,7 +22,7 @@
 #
 # H7.39 adds `claude-code`, the agent user and everything the claude_code role installed here,
 # and `failure-alert`, the page its oneshots name. The role ends on this host. Both need
-# `gitops_deploy_discord_webhook`, and the agent's gh login needs `claude_code_agent_gh_token`.
+# `discord_alert_webhook`, and the agent's gh login needs `claude_code_agent_gh_token`.
 #
 # Since H7.31 it ships the rest of initial_setup's subjects, the same components as daniel-pi: the
 # fail2ban group (fail2ban, integrity-scans for rkhunter and aide-scan for AIDE, postfix and accounting), the

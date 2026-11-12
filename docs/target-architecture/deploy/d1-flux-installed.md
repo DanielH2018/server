@@ -538,7 +538,7 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
       then stamps all three `restart: true`. No task restarts them, so `probe.py health flux`
       fails each as NOT ROLLED. That happens first at D1.5's landing, which adds
       `secret.yaml.j2`, and again at every rotation of `flux_github_status_token` or
-      `gitops_deploy_discord_webhook`.
+      `discord_alert_webhook`.
     - No signal applies. No controller reads a Secret or a ConfigMap through `env`, `envFrom`
       or a `subPath` (*Baseline*). notification-controller reads the Provider's Secret through
       the API on each event. A change to a controller's pod template rolls it through the
@@ -602,7 +602,7 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
   event.involvedObject.name"`. Alert `commit-status` sends it every Kustomization event with
   `eventSeverity: info`, which includes error events, so a failure reaches GitHub too.
 - **Errors also go to Discord.** Provider `discord` reads the webhook from
-  `gitops_deploy_discord_webhook`, the same channel the deployer posts to. Alert
+  `discord_alert_webhook`, the same channel the deployer posts to. Alert
   `deploy-errors` sends it events of severity `error` from two sources only: every
   Kustomization, and the OCIRepository named `homelab`. The `verify-drill` OCIRepository is
   not a source, so the signature drill posts nothing to Discord.

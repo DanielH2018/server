@@ -9,7 +9,7 @@ Wants=homelab-secrets.service
 
 [Service]
 Type=oneshot
-LoadCredential=discord_webhook:/run/credstore/gitops_deploy_discord_webhook
+LoadCredential=discord_webhook:/run/credstore/discord_alert_webhook
 Restart=on-failure
 RestartSec=5min
 RestartPreventExitStatus=3

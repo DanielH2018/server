@@ -18,7 +18,7 @@ from _test_script_bodies_row import TEST_SCRIPT_BODIES
 from _component_contract_row import COMPONENT_TIMERS_CARRY_A_CONTRACT
 from _agent_tools_key_row import AGENTS_LIMIT_TOOLS_WITH_THE_TOOLS_KEY
 from _etcd_snapshot_flags_row import ETCD_SNAPSHOT_LONG_FLAGS
-from _kuma_census_row import KUMA_IDENTIFIERS, KUMA_MENTIONS
+from _prek_files_paths_row import PREK_FILES_PATHS_RESOLVE
 from _unit_kubeconfig_row import UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG
 from _helpers import REPO, discover_docs
 from deploy_tools.land_lib import policy
@@ -416,9 +416,8 @@ ROWS += (
     TEST_SCRIPT_BODIES,
     ETCD_SNAPSHOT_LONG_FLAGS,
     AGENTS_LIMIT_TOOLS_WITH_THE_TOOLS_KEY,
-    KUMA_IDENTIFIERS,
-    KUMA_MENTIONS,
     COMPONENT_TIMERS_CARRY_A_CONTRACT,
+    PREK_FILES_PATHS_RESOLVE,
     UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG,
 )
 
