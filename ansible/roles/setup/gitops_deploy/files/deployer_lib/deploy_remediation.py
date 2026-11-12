@@ -21,7 +21,6 @@ from deployer_lib.deploy_changes import (
 )
 from gitops_ledger import OWED_MANUAL_PLANE
 from gitops_markers import (
-    MAXIMAL_ROLE_GATED_TAGS,
     PLAYBOOK_CMD,
     owed_clear_cmd,
     on_hosts,
@@ -234,45 +233,6 @@ def manual_plane_clear_for(
     )
 
 
-# Setup roles whose role tag applies far more than any one change to them needs, and what
-# running it actually does. A role in this map gets this warning where the printed command is
-# the whole-role tag. Beside a narrowed `--tags` it would describe a run the operator is not
-# being told to make, so `_setup_commands` swaps it for `_MAXIMAL_ROLE_GATED_WARNING` when
-# the narrowed tags still reach the gated tasks, and drops it otherwise.
-#
-# THE NARROWER TAG IS DERIVED, AND THIS IS THE FALLBACK (#2307). `deploy_defer.record` asks
-# `scripts/deploy_tools/narrow_setup.py` which of the role's own tags the changed paths reach,
-# and stores the answer as the `tags` key of the role's `manual_plane` ledger line; every
-# surface quoting this composer reads that key, so all four print the same narrow tag. The derivation refuses on
-# any doubt — an untagged task file, a variable nothing in the role reads, a `handlers/` change
-# — and a refusal lands here, on the whole-role tag plus this warning. That is the safe
-# direction: a `--tags` value matching nothing makes Ansible exit 0 having applied nothing,
-# which is worse than a command that applies too much and says so.
-#
-# Keyed by ROLE NAME, which is what every caller passes — `setup_role_tag` maps that to the
-# `--tags` value, and the two differ for `chezmoi_setup`.
-# Empty since H7.44 emptied the k3s role, the one setup role whose whole-role tag armed gated
-# control-plane tasks.
-_MAXIMAL_ROLE_TAGS: dict[str, str] = {}
-
-# The narrower tags that still reach a role's gated tasks live in `gitops_markers`, imported
-# above: the SessionStart banner needs the same set and cannot reach this module (#2345). What
-# stays here is the long prose, which only the surfaces with room for it print.
-_MAXIMAL_ROLE_GATED_WARNING: dict[str, str] = {}
-
-
-def maximal_tag_warning(role: str) -> str:
-    """What running `role`'s whole-role tag does, or '' when its tag is not a blunt instrument.
-
-    A three-line RBAC addition to `k3s_readonly_crd_api_groups` was answered with
-    `ansible-playbook ansible/k3s-bringup.yml --tags k3s` on 2026-09-22 (#2294). That command
-    restarts the control plane; the change needed `--tags kubeconfig`, which was applied
-    instead with ok=15 changed=2. An operator following the printed command as written takes
-    the restart, and a session on the default follow-through path takes it unattended.
-    """
-    return _MAXIMAL_ROLE_TAGS.get(role, "")
-
-
 def _setup_commands(
     setup_roles: set[str] | None,
     narrow_tags: dict[str, frozenset[str]] | None = None,
@@ -288,17 +248,11 @@ def _setup_commands(
             gets the whole-role tag.
         playbooks: changed bring-up playbooks. One that `setup_role_playbook` routes a role
             to is named by that role's command, so `k3s-bringup.yml` prints
-            `--tags k3s` with its maximal-tag warning. Any other is named as a whole run:
+            `--tags k3s`. Any other is named as a whole run:
             `bootstrap.yml` and `initial_setup.yml` have no single role a playbook-level edit
             maps to.
         hosts: role tag -> the hosts its command runs against, where those are not the
             host the routing gates it onto. A role absent from it takes the routing's host.
-
-    A role in `_MAXIMAL_ROLE_TAGS` gets its command annotated with what that command does, so
-    every surface quoting this composer — land.sh's `needs-manual-apply` note, the deployer's
-    journal, the `manual_plane` Discord alert — carries the warning from one place. The
-    whole-role warning goes only on the whole-role tag. A narrowed `--tags` that still reaches
-    the role's gated tasks (`_MAXIMAL_ROLE_GATED_TAGS`) carries the shorter gated warning.
     """
     roles = set(setup_roles or ())
     cmds = []
@@ -332,24 +286,14 @@ def _role_command(
     narrow_tags: dict[str, frozenset[str]],
     hosts: dict[str, tuple[str, ...]],
 ) -> str:
-    """The command that applies a routed setup role, with its maximal-tag warning."""
+    """The command that applies a routed setup role."""
     role_tag = setup_role_tag(role)
     narrowed = _narrowed_tags(role, narrow_tags)
     selected = narrowed or {role_tag}
     gated = setup_role_host(role)
     targets = hosts.get(role_tag) or ((gated,) if gated else ())
     apply = f"{PLAYBOOK_CMD} {playbook} --tags {','.join(sorted(selected))}"
-    cmd = f"`{on_hosts(apply, targets)}`"
-    if not narrowed:
-        warning = maximal_tag_warning(role)
-    elif selected & MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset()):
-        warning = _MAXIMAL_ROLE_GATED_WARNING[role]
-    else:
-        warning = ""
-    # Parenthesised, not appended after a dash: `manual_plane_remediation` adds ", then
-    # <clear command>" after this list, and an unbracketed warning made that clause read
-    # as a continuation of the warning's own last sentence.
-    return f"{cmd} (WARNING: {warning})" if warning else cmd
+    return f"`{on_hosts(apply, targets)}`"
 
 
 def _consumers_command(role: str) -> str:
