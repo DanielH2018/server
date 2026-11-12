@@ -13,7 +13,7 @@ failure report and the couplings it depends on:
   temp-file cleanup and the verdict cannot both hang off EXIT through separate traps.
 - **The status defaults to down.** Eleven exit paths, one of which is a bare crash.
 
-test_initial_setup_check_textfiles.py holds the script to pushing nothing to Kuma.
+test_host_check_textfiles.py holds the script to pushing nothing to Kuma.
 """
 
 import re

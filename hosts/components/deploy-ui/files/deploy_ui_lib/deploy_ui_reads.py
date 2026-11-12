@@ -259,7 +259,7 @@ VERDICT_HINTS: dict[str, tuple[str, str]] = {
     "deploy-failed": (
         "bad",
         "The deploy failed. Cause promote-held is the operator's DEPLOY_HOLD to clear. "
-        "Every other cause re-runs safely, except a playbook task that failed after applying.",
+        "The verdict line names any other cause.",
     ),
     "needs-manual-apply": (
         "warn",

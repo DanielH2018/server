@@ -89,7 +89,6 @@ def test_files_holding_no_bytes_fail_the_floor() -> None:
 
 def test_a_declared_empty_volume_passes_with_no_files() -> None:
     """CLEAN half of the waiver: n8n-files restores to files=0 and that is its proven state."""
-    # fact: ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)
     declared = load_yaml(DRILL_DEFAULTS)["k3s_longhorn_restore_drill_empty_ok_pvcs"]
     assert "n8n-files" in declared
     result = _run_floor_guard(files=0, byte_count=0, pvc="n8n-files")
@@ -98,7 +97,6 @@ def test_a_declared_empty_volume_passes_with_no_files() -> None:
 
 def test_a_declared_volume_over_the_size_gate_fails_with_no_files() -> None:
     """FLAGGED half of the size gate: the waiver is withdrawn once the source holds real data."""
-    # fact: ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)
     defaults = load_yaml(DRILL_DEFAULTS)
     ceiling = defaults["k3s_longhorn_restore_drill_empty_ok_max_actual_bytes"]
     result = _run_floor_guard(
@@ -115,7 +113,7 @@ def test_a_declared_volume_over_the_size_gate_fails_with_no_files() -> None:
 
 def test_an_undeclared_volume_still_fails_with_no_files() -> None:
     """FLAGGED half of the waiver: the exception must not widen past the names that declare it."""
-    # fact: ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
     result = _run_floor_guard(files=0, byte_count=0, pvc="authelia-config")
     assert result.returncode == 1
     assert "has no files" in result.stderr

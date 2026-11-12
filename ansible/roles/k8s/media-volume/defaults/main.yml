@@ -40,15 +40,15 @@ media_volume_size: 400Gi
 # The media-volume Kustomization applies the claim, `media-local` and the PV together. On a fresh
 # cluster a claim created before the PV waits Pending; the PV's pre-bound `claimRef` binds it
 # once the PV exists.
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: "{{ media_volume_claim }}"
     storage_class: "{{ media_volume_storage_class }}"
     size: "{{ media_volume_size }}"
     access_modes: [ReadWriteMany]
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "a StorageClass, a PV and a claim that re-apply unchanged, and a verify Job in media-volume-verify that Flux runs to completion whenever the PV or StorageClass render changes; no image pin of its own"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "a StorageClass, a PV and a claim that re-apply unchanged, and a verify Job in media-volume-verify that Flux runs to completion whenever the PV or StorageClass render changes; no image pin of its own"
 
 # No Deployment in this role — it is storage, not a workload.
-manifests_rollout: ""  # noqa var-naming[no-role-prefix]
+manifests_rollout: ""

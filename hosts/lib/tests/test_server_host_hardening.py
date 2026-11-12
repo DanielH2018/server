@@ -1,10 +1,10 @@
 """daniel-server's host baseline and Loki witness move into its package (H7.59).
 
-`test_pi_initial_setup_part3.py` holds the `host-hardening` component's content. These tests hold
+`test_pi_host_hardening.py` holds the `host-hardening` component's content. These tests hold
 what is specific to this host: the i915 option, the witness's uv path and textfile directory on a
 rebuilt host, and the retirement of what the role left behind.
 
-Run: uv run pytest hosts/lib/tests/test_server_initial_setup_part3.py
+Run: uv run pytest hosts/lib/tests/test_server_host_hardening.py
 """
 
 import json

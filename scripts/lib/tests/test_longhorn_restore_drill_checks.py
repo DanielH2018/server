@@ -5,7 +5,7 @@ Split out of `test_longhorn_backup_health.py` when it reached its line cap, with
 `..._is_clean` / `..._is_flagged` pairing. The stamp files these arms read are pinned by real
 subprocess runs in `test_longhorn_backup_health_reader.py`.
 
-Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_restore_drill_checks.py
+Run: uv run pytest scripts/lib/tests/test_longhorn_restore_drill_checks.py
 """
 
 from longhorn_lib import longhorn_backup_health_logic as logic

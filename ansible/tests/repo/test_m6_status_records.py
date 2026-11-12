@@ -26,7 +26,7 @@ _BATCH_ROW = re.compile(r"^\| ([AB]\d+[a-z]?) ", re.M)
 _PR_ROW = re.compile(r"^\| ([BC]-\d+)[a-z]? ", re.M)
 
 # Batches that held a record when the status block was split, and so must still be found.
-RECORDED = {"a2", "a3", "a4", "a5", "b8", "pr-b-1", "pr-c-0"}
+RECORDED = {"a2", "a3", "a4", "a5", "b0", "b8", "pr-b-1", "pr-c-0"}
 
 
 def _includes() -> list[str]:

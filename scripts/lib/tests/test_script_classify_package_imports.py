@@ -9,9 +9,6 @@ modules that cannot be run at all, because none has an `if __name__ == "__main__
   against `scripts/dev` and not against `scripts/`;
 - a module whose only importers are its tests, `grafana_panel_report.py`.
 
-A fourth shape: a role's tasks naming a guardless module to ship it into an
-image, `obs_api.py`, which read as a deploy-time gate.
-
 The synthetic cases below are the red proof for each shape. `test_the_real_tree_*` is the
 non-vacuity half: the census reads the tree, so a directory move or a rename can empty it.
 
@@ -21,9 +18,9 @@ Run: uv run pytest scripts/lib/tests/test_script_classify_package_imports.py
 from lib import script_classify as sc
 from lib.repo_paths import REPO, SCRIPTS
 
-# The four shapes, one live module each. A rename here is fine; an empty census is not.
+# The three shapes, one live module each. A rename here is fine; an empty census is not.
 MUST_BE_LIBRARIES = frozenset(
-    {"citations.py", "manifest.py", "grafana_panel_report.py", "obs_api.py"}
+    {"citations.py", "manifest.py", "grafana_panel_report.py"}
 )
 
 
@@ -95,35 +92,6 @@ def test_a_test_importing_an_entry_point_does_not_make_it_a_library(tmp_path):
     assert sc.classify(repo, scripts)["leaf.py"][0] == "adhoc"
 
 
-def _shipped_by_a_role(repo, leaf_body: str):
-    """Write `leaf.py` with `leaf_body`, then name it in a role's tasks, as an image ship list does."""
-    (repo / "scripts" / "dev" / "pkg" / "leaf.py").write_text(leaf_body)
-    tasks = repo / "ansible" / "roles" / "k8s" / "svc" / "tasks"
-    tasks.mkdir(parents=True)
-    (tasks / "main.yml").write_text(
-        '- vars:\n    files:\n      "../scripts/dev/pkg/leaf.py": leaf.py\n'
-    )
-
-
-def test_a_guardless_module_a_role_ships_is_a_library(tmp_path):
-    repo, scripts = _package(tmp_path, '"""Summary."""\n')
-    _shipped_by_a_role(repo, '"""Summary."""\nVALUE = 1\n')
-    verdict, evidence = sc.classify(repo, scripts)["leaf.py"]
-    assert verdict == "library"
-    assert "carried by deploy: ansible/roles/k8s/svc/tasks/main.yml" in evidence
-
-
-def test_a_guardless_module_a_roles_python_table_names_is_a_library(tmp_path):
-    """The deployer keys `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` by module paths, which the argv
-    reading of a `.py` file takes for a run."""
-    repo, scripts = _package(tmp_path, '"""Summary."""\n')
-    _shipped_by_a_role(repo, '"""Summary."""\nVALUE = 1\n')
-    lib = repo / "ansible" / "roles" / "setup" / "svc" / "files" / "pkg"
-    lib.mkdir(parents=True)
-    (lib / "table.py").write_text('TABLE = {"scripts/dev/pkg/leaf.py": "svc"}\n')
-    assert sc.classify(repo, scripts)["leaf.py"][0] == "library"
-
-
 def _gate_naming_leaf(tmp_path, statement: str):
     """A CI-run `sibling.py` that imports `leaf.py` and carries `statement` naming it."""
     repo, scripts = _package(tmp_path, "")
@@ -155,11 +123,14 @@ def test_the_same_path_in_an_argv_list_is_still_an_invocation(tmp_path):
 
 
 def test_a_guarded_script_a_role_names_is_a_deploy_gate(tmp_path):
-    """The reject half: a script with a `__main__` guard named by a role's tasks runs there."""
+    """The reject half: a script with a `__main__` guard named by a role's `files/` runs there."""
     repo, scripts = _package(tmp_path, '"""Summary."""\n')
-    _shipped_by_a_role(
-        repo, '"""Summary."""\nif __name__ == "__main__":\n    print(1)\n'
+    (scripts / "dev" / "pkg" / "leaf.py").write_text(
+        '"""Summary."""\nif __name__ == "__main__":\n    print(1)\n'
     )
+    files = repo / "ansible" / "roles" / "k8s" / "svc" / "files"
+    files.mkdir(parents=True)
+    (files / "run.yml").write_text('- args: ["python", "scripts/dev/pkg/leaf.py"]\n')
     assert sc.classify(repo, scripts)["leaf.py"][0] == "gate"
 
 

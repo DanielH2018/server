@@ -32,11 +32,11 @@ observability_k8s_grafana_image: grafana/grafana:13.2.4@sha256:dbbc38ea21103cefb
 # 20s for the image. 600s covers it down to 0.8 MB/s. The Job has no deadline, so a pull slower
 # still costs that revision its verdict, the Job keeps pulling, and Flux applies observability
 # on a later retry.
-flux_prepull_timeout: 600s  # noqa var-naming[no-role-prefix]
+flux_prepull_timeout: 600s
 # The Job pulls for Grafana alone (#5875). The role's other images are under 115 MB, their
 # Deployments pin no node, and grafana/loki, grafana/tempo and kube-state-metrics carry no `sh`
 # for the Job's no-op script, so a pre-pull of the whole role could neither place nor run.
-flux_prepull_workloads: [grafana]  # noqa var-naming[no-role-prefix]
+flux_prepull_workloads: [grafana]
 # Distinct from the metrics-server k3s already bundles: that serves the
 # resource-metrics API for `kubectl top`/HPA, while this exports kube_pod_status_ready and
 # kube_deployment_status_* — the only readiness signal the seven routeless workloads have.
@@ -111,8 +111,8 @@ observability_ksm_flux_resource_state:
 # watching it. ALSO Recreate + a PVC on each stateful sub-service (loki-data, grafana-data,
 # prometheus-data, tempo-data, alertmanager-data) — several independently migrating-state-shaped Deployments behind
 # one role, which compounds the risk across more than one component at once.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "observability — the cluster metrics plane and Claude Code's own telemetry stack, one sub-image per workload across several Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo/alertmanager) is Recreate + its own PVC — compounding, not single-component. COUPLING NOTE for a future promotion: UI-edited Grafana dashboards live only in the PVC until an export script round-trips them to git; a revert discards unsaved edits"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "observability — the cluster metrics plane and Claude Code's own telemetry stack, one sub-image per workload across several Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo/alertmanager) is Recreate + its own PVC — compounding, not single-component. COUPLING NOTE for a future promotion: UI-edited Grafana dashboards live only in the PVC until an export script round-trips them to git; a revert discards unsaved edits"
 
 # longhorn-nobackup, NOT longhorn. Two reasons, either sufficient on its own:
 #   - Volume: Loki with content logging on grows fast, and Prometheus TSDB is high-churn.
@@ -137,7 +137,7 @@ observability_alertmanager_storage: 1Gi
 # live beside their workloads in k8s_observability_namespace, not in the shared k8s_namespace.
 # No `k8s_autodeploy_snapshot_pvcs` here, so the claims are applied by the directory apply,
 # after 00-namespace.yaml creates the namespace on a fresh cluster.
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: loki-data
     storage_class: "{{ observability_storage_class }}"
     size: "{{ observability_loki_storage }}"
@@ -391,15 +391,15 @@ observability_stabilise_workloads:
     restart_secrets: [alertmanager-secret.yaml]
 
 # The entry's `port` is Grafana's, whose Service grafana.yaml renders itself.
-manifests_exclude_files: [service.yaml]  # noqa var-naming[no-role-prefix]
+manifests_exclude_files: [service.yaml]
 
 # The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has several,
 # in a different namespace.
-manifests_rollout: ''  # noqa var-naming[no-role-prefix]
+manifests_rollout: ''
 
 # The workloads the renderer's restart annotation targets. `namespace` is load-bearing:
 # the fingerprints default to k8s_namespace, and these workloads live in
 # k8s_observability_namespace.
-manifests_self_rollouts: >-  # noqa var-naming[no-role-prefix]
+manifests_self_rollouts: >-
   {{ observability_stabilise_workloads
      | map('combine', {'namespace': k8s_observability_namespace}) | list }}

@@ -31,8 +31,8 @@ volume_snapshot_poll_interval: 2
 # renders no manifest for `rollout status` to gate, and it pins no `_image:` var for Renovate
 # to bump. Declared rather than added to `lib.k8s_roles.SHARED_ROLES`, because it carries a
 # defaults/main.yml — the same choice image-builder makes for the same reason.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "deploys no workload of its own — a pre-apply snapshot step other roles include; it renders no manifest and pins no image for Renovate to bump"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "deploys no workload of its own — a pre-apply snapshot step other roles include; it renders no manifest and pins no image for Renovate to bump"
 
 # Fraction of a volume's `spec.snapshotMaxSize` at which claim.yml warns that the snapshot
 # space is nearly full. A cap is only dangerous as it is approached: when it is REACHED,

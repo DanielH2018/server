@@ -78,16 +78,16 @@ secret can touch.
 ### Rotating a value the cluster reads
 
 A value can have several consumers Flux applies, as `peanut_password` does for homepage and
-peanut, and a setup role or host package can read it too. Every step that handles the value is **operator-only**.
+peanut, and a host package can read it too. Every step that handles the value is **operator-only**.
 
 1. Set the new value with `sops set` (**operator-only**).
 2. Run `uv run python scripts/secrets_mgmt/cluster_vars.py write` (**operator-only**). Commit
    `secrets.yml`, the cluster files it rewrote and the registry together, then open the PR.
 3. Run `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <key>`. It prints the
-   Flux path for each k8s consumer, and a command for each setup role and host package.
+   Flux path for each k8s consumer, and a command for each host package.
 4. Land the PR with `land.sh`. A PR that changes either cluster file waits on the
    `cluster-vars` Kustomization and on every Kustomization that depends on it.
-5. Run any setup-role or host-package command from step 3.
+5. Run any host-package command from step 3.
 
 ### Changing secrets.yml's recipients
 

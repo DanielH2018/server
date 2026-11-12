@@ -65,7 +65,7 @@ component and step 4 of `hosts/bootstrap-host.sh`, and deleted the tasks.
   Ubuntu `Include` line is read first, so the `10-` drop-in wins there too. Those lines stay
   there as harmless duplicates. The `Match` file sorts last so its block cannot reach another
   drop-in. `reload:ssh.service` runs `sshd -t` first, and
-  `hosts/lib/tests/test_pi_initial_setup_part1.py` runs `sshd -T` over both drop-ins for the
+  `hosts/lib/tests/test_pi_sshd_apt_and_tuning.py` runs `sshd -T` over both drop-ins for the
   operator account and for another user. rkhunter still reads only the main `sshd_config`, so the Pi's
   `PermitRootLogin` read is unchanged by the move. H7's last host PR deleted the role's sshd tasks.
 - **The UFW LAN allow must sort above the SSH limit rule**, which is why the `ssh-firewall`
@@ -119,7 +119,8 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   render this role's templates in place (`role: initial_setup`), and each cron becomes a timer
   at the cron's slot. The weekly reboot refuses while the validation flag of `homelab-reconcile` exists. The
   push tokens and the Healthchecks.io key arrive as unit credentials, not as `/etc` env files.
-  The first AIDE and rkhunter baselines and the mask on `dailyaidecheck.timer` stay host state.
+  The first rkhunter baseline stays host state on every host. The first AIDE baseline and the
+  mask on `dailyaidecheck.timer` stay host state on daniel-box and daniel-server only.
   The role keeps no task of either subject for any host. The weekly
   firmware update ships only where `has_fwupd` is true, which is daniel-box alone.
 - **AIDE and rkhunter are scheduled against each other, and the package's own timer is masked.**
@@ -128,6 +129,8 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   AIDE Monday 03:00 and rkhunter Wednesday 02:00, because they used to overlap at full priority
   for over an hour each on the Pi. The AIDE database init is the slow part of a first run on any
   host — about 8 minutes, with progress monitoring, so expect a long pause rather than a hang.
+  Since 2026-11-12 the Pi runs no AIDE at all: its package lists no `aide-scan`, because a
+  whole-root scan outgrew its 456 MB and the watchdog reset the board twice (#8084).
 - **The AIDE and rkhunter scans report through the `host-checks` rules.** `aide-check.sh` keeps
   AIDE's exit code and writes one textfile verdict per host. It pushed one "AIDE Integrity" tile
   per host until M6 batch B9's Cutover-2. An error exit reads DOWN (#4594). A difference

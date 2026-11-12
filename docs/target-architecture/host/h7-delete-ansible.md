@@ -1430,6 +1430,9 @@ steps are:
    `/var/lib/aide/aide.db` and `/var/lib/rkhunter/db/rkhunter.dat` exist, and
    `systemctl is-enabled dailyaidecheck.timer` prints `masked`. To move `/var/log` to RAM,
    reboot the Pi, because `log2ram` mounts only at boot. Then `findmnt /var/log` shows a tmpfs.
+   *Note, 2026-11-12:* #8084 and #8085 removed AIDE from the Pi, so step 7 writes only the
+   rkhunter baseline there, and no `aide.db` or `dailyaidecheck.timer` mask appears.
+   `docs/break-glass.md` holds the current check.
 7. If step 3 created a key, the operator adds it as a recipient **without removing the old
    one** (**operator-only**). The old key leaves the recipient list only after the rebuild
    is accepted.

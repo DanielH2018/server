@@ -7,8 +7,8 @@ karma_k8s_image: ghcr.io/prymitive/karma:v0.134@sha256:479c7bfad3c176b9c35c5a48c
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # `lib.k8s_roles.k8s_autodeploy_denylist` raises on a role that declares neither. The reason is what makes the stance reviewable, so replace the text below
 # with the property that actually decides it.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "a stateless viewer over Alertmanager: a broken bump loses the dashboard, never an alert or a page"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "a stateless viewer over Alertmanager: a broken bump loses the dashboard, never an alert or a page"
 
 # Every `severity` value the alert rules use, in sort order: Karma ranks alert groups by list
 # position and colours each value's label chip. ansible/roles/k8s/karma/tests/test_karma_config.py

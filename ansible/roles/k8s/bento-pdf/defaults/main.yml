@@ -6,8 +6,8 @@ bento_pdf_k8s_image: ghcr.io/alam00000/bentopdf:latest@sha256:b107c37d9f1f27b7ed
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Stateless: RollingUpdate Deployment, no PVC, readinessProbe on the only Deployment, and the
 # image is digest-pinned rather than a mutable tag.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image"
 
 bento_pdf_k8s_cpu_limit: "500m"
 bento_pdf_k8s_mem_limit: 256Mi

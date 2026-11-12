@@ -57,7 +57,7 @@ CI_PENDING = TEMP_FAIL
 # -- scripts/deploy_tools/land.sh -------------------------------------------------------
 # Documented in land.py's module docstring, which is what `--help` prints.
 # LAND_BAD_ARGS is the spine's 64. argparse's own SystemExit(2) would leave a caller unable
-# to tell "you typed the command wrong" from `CI_DISARMED` or `DEPLOY_TAG_MISS` arriving
+# to tell "you typed the command wrong" from `CI_DISARMED` arriving
 # through the same pipeline, so `land.py` remaps argparse's 2 onto 64.
 LAND_SETTLED = OK
 LAND_FAILED = FAILED

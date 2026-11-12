@@ -76,7 +76,6 @@ def test_trim_evidence_is_clean_on_a_clean_run():
 
 def test_cron_evidence_is_flagged_on_a_failed_trim():
     """A per-volume failure leaves the Job succeeded, so only the pod log can report it."""
-    # fact: ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)
     problems = logic.check_trim(_cronjob(), _JOBS, _POD_FAILED, _NOW)
     assert problems == [
         (
@@ -128,7 +127,6 @@ def test_trim_evidence_is_flagged_on_a_failed_job():
 
 def test_trim_is_flagged_when_its_cronjob_is_gone():
     """The RecurringJob deleted, or Longhorn not reconciling it: no trim is scheduled."""
-    # fact: ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)
     problems = logic.check_trim(None, _JOBS, _POD_CLEAN, _NOW)
     assert problems == [
         (

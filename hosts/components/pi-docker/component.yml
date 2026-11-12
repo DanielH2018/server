@@ -87,8 +87,9 @@ enable:
 lines:
   # containerd's metrics listener, scraped as `containerd-pi`, and the shim environment that
   # undoes the daemon's GOGC=off for every shim and runc it spawns. containerd appends this `env`
-  # after the inherited environment, and Go keeps the last value of a duplicate key. The marker
-  # is the Ansible task's, so the first run adopts the block it wrote.
+  # after the inherited environment, and Go keeps the last value of a duplicate key.
+  # DECIDED: the marker keeps the deleted Ansible task's text, role path included, because it
+  # must match the block already in the Pi's file; a new marker would add a second block (#8072).
   - path: /etc/containerd/config.toml
     marker: "# {mark} ANSIBLE MANAGED BLOCK (roles/setup/docker_install)"
     block: |

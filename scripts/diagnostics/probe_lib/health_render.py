@@ -18,7 +18,7 @@ from lib.repo_paths import K8S_ROLES  # noqa: E402
 def render_context():
     """(validator module, containers_list entries), built once per process.
 
-    The import is deferred because it pulls in ansible-core, PyYAML and jsonschema,
+    The import is deferred because it pulls in PyYAML, jsonschema and the k8s manifest validator,
     and twelve of probe.py's thirteen subcommands never need any of it. Measured on daniel-box:
     0.41s to import, ~5 ms to build one role's context (2026-10-09), 0.02s median to render
     one role and 0.22s for the slowest (home-assistant) — against the 300s `PROBE_TIMEOUT_S`

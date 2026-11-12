@@ -125,7 +125,7 @@ def test_a_docs_page_resolves_to_itself(index: dict[str, tuple[str, str]]) -> No
         "tasks/main.yml",
         "defaults/main.yml",
         # Operator docs that live in the tree, not on the site.
-        "ansible/roles/setup/gitops_deploy/CLAUDE.md",
+        "hosts/components/claude-code/CLAUDE.md",
         "CLAUDE.md",
         # A test, and a module that is not a first-party script.
         "test_service_catalog.py",

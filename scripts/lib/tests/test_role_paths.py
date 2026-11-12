@@ -12,7 +12,9 @@ def test_role_of_names_the_plane_role_and_subdirectory():
     assert role_of("ansible/roles/k8s/sonarr/templates/deployment.yaml.j2") == RolePath(
         "k8s", "sonarr", "templates"
     )
-    assert role_of("ansible/roles/setup/k3s/CLAUDE.md") == RolePath("setup", "k3s", "")
+    assert role_of("ansible/roles/k8s/longhorn/CLAUDE.md") == RolePath(
+        "k8s", "longhorn", ""
+    )
 
 
 def test_role_of_names_nothing_outside_a_role():

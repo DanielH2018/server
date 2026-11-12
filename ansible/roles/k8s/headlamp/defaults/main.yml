@@ -6,8 +6,8 @@ headlamp_k8s_image: ghcr.io/headlamp-k8s/headlamp:v0.46.0@sha256:8a0ef97527544ba
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Stateless: RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image. The
 # headlamp-verify Job is a one-shot check, not a workload the rollout gate needs to cover.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image"
 
 headlamp_k8s_cpu_limit: "500m"
 headlamp_k8s_mem_limit: 256Mi
@@ -129,7 +129,7 @@ headlamp_k8s_oidc_scopes: "profile,email,groups"
 # The Prometheus proxy Role and RoleBinding live in the observability namespace, which the
 # armed apply's `-n homelab` refuses (#3575). The renderer emits them as the deferred
 # document `headlamp-deferred`.
-manifests_deferred_files:  # noqa var-naming[no-role-prefix]
+manifests_deferred_files:
   - rbac-observability.yaml
 
-manifests_deferred_dir_name: headlamp-observability  # noqa var-naming[no-role-prefix]
+manifests_deferred_dir_name: headlamp-observability

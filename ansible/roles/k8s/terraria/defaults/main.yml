@@ -16,8 +16,8 @@ terraria_k8s_image: "{{ k8s_registry_pull_host }}/terraria:{{ k8s_built_image_ta
 # strategy is Recreate and the worlds/config PVC comes from k8s_claims below (hardcoded
 # ReadWriteOnce), holding the one irreplaceable dataset the backup consolidation exists to
 # protect. Either alone would justify the denylist entry.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe; (2) migrating state — Recreate + RWO PVC holding irreplaceable worlds"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe; (2) migrating state — Recreate + RWO PVC holding irreplaceable worlds"
 
 # 36 M of worlds + config — `longhorn`, BACKED UP: this is the one irreplaceable dataset in
 # the service.
@@ -37,13 +37,13 @@ terraria_k8s_mem_request: 512Mi
 # not cross a role boundary.
 
 # The claim the renderer emits for this role, which the terraria Kustomization applies (#3387).
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: "{{ terraria_k8s_claim }}"
     storage_class: "{{ terraria_k8s_storage_class }}"
     size: "{{ terraria_k8s_size }}"
 
-image_builder_builds:  # noqa var-naming[no-role-prefix]
+image_builder_builds:
   - image_builder_name: terraria
     image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/terraria/templates/Dockerfile.j2"
 
-manifests_rollout: terraria  # noqa var-naming[no-role-prefix]
+manifests_rollout: terraria

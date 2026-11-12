@@ -11,7 +11,7 @@ import json
 
 import pytest
 from _reconcile_arms import live_unit
-from test_pi_initial_setup_part1 import seeded_pi
+from test_pi_sshd_apt_and_tuning import seeded_pi
 
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY

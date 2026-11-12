@@ -13,7 +13,7 @@ Two properties each case pins:
 - since B2's Cutover-2 every render pushes nothing to Kuma: no library, no `kuma_push`, no push URL
   and no push credential, so a run needs neither to write its verdict.
 
-Run: uv run pytest ansible/tests/setup/test_initial_setup_check_textfiles.py
+Run: uv run pytest ansible/tests/setup/test_host_check_textfiles.py
 """
 
 import re

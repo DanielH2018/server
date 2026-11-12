@@ -1,0 +1,51 @@
+# The weekly AIDE check, split from integrity-scans so a host package opts in by listing it.
+# daniel-pi does not: a whole-root scan outgrew its 456 MB and the watchdog reset the board twice
+# on 2026-11-12, even with sha256 only and no /usr/src. The operator chose to leave AIDE off the Pi
+# (#8084). integrity-scans keeps rkhunter, and the retired Ansible-era AIDE cron, on every host.
+#
+# No unit loads a credential: the scan writes a textfile, and that is its only verdict.
+#
+# What the component leaves to bootstrap: hosts/bootstrap-host.sh step 7 runs these once on a
+# host whose package ships homelab-aide-check.timer.
+#
+# - The first baseline: `aideinit`, guarded by the database it creates. DECIDED: bootstrap, never
+#   a `ConditionPathExists=!` oneshot in this package (#6674). A oneshot would rebaseline any host
+#   whose database went missing, so a deleted aide.db would turn into a fresh, trusted one instead
+#   of a DOWN. Bootstrap refuses the same case: a missing database on a host whose aideinit log
+#   survives needs `--rebaseline`, unless bootstrap's own `.pending` marker shows the log is its
+#   unfinished first init.
+# - The mask on the aide package's dailyaidecheck.timer, which would run a second, nightly full
+#   scan. A mask is a symlink in /etc/systemd/system, outside what a package owns.
+#
+# Autonomous-role contract (the scan runs weekly with no human in the loop). It reads the
+# filesystem, reports, and advances its own baseline.
+#
+# - Scope / exclusions: `aide --update` at idle CPU and IO priority, and the `aide-check` textfile
+#   in node_exporter's textfile directory. The check moves `aide.db.new` over `aide.db` after a run
+#   whose every difference a package explains (#4599). It never advances on a DOWN, and never
+#   creates an `aide.db` that is missing. Nothing reaches another host.
+# - Mode (explicit and reversible): the timer's enable link arms it. Dropping the component from a
+#   host package stops the timer on the install that drops it. A DOWN on an unexplained change
+#   stays DOWN until an operator reviews it and runs `/usr/lib/homelab/aide-check --accept`.
+# - Authoritative sources: AIDE's own exit code and report, and dpkg's file lists and digests; the
+#   script's header has why the exit code alone cannot say.
+# - Abort valves: a DOWN advances no baseline, and a missing `aide.db` stays missing.
+# - Required evidence, every run: an `aide-check` line in the journal and the textfile the
+#   `host-checks` rule group reads (#6168).
+defaults:
+  aide_scan_host_lib_dir: /usr/lib/homelab
+depends:
+  - aide
+  # aide only Recommends it, and the updater installs with --no-install-recommends. It ships
+  # /etc/aide/aide.conf, the aide.conf.d directory the exclusions land in, and aideinit.
+  - aide-common
+  # The AIDE check reads homelab-secrets' manifest for the secret links it accepts.
+  - jq
+files:
+  # No dot in the name: aide.conf includes conf.d names matching ^[a-zA-Z0-9_-]+$ only (#5785).
+  - {src: templates/98_aide_local.conf.j2, dst: /etc/aide/aide.conf.d/98_aide_local}
+  - {src: templates/aide-check.sh.j2, dst: /usr/lib/homelab/aide-check, mode: "0755"}
+  - {src: units/homelab-aide-check.service.j2, dst: /usr/lib/systemd/system/homelab-aide-check.service}
+  - {src: units/homelab-aide-check.timer, dst: /usr/lib/systemd/system/homelab-aide-check.timer}
+enable:
+  homelab-aide-check.timer: timers.target

@@ -9,8 +9,8 @@ nut_exporter_k8s_image: ghcr.io/druggeri/nut_exporter:3.3.0@sha256:276460d141c73
 # unattended image bump there can take the UPS offline. This one is a read-only network client
 # with a readinessProbe, no volume, no node pin and no privilege — a bad image bump costs UPS
 # metrics, not power protection, and the health gate catches it.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "read-only NUT network client with a readinessProbe — no privilege, no volume, no node pin; a bad image bump costs UPS metrics, not the shutdown chain, which lives in the separate denylisted `nut` role"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "read-only NUT network client with a readinessProbe — no privilege, no volume, no node pin; a bad image bump costs UPS metrics, not the shutdown chain, which lives in the separate denylisted `nut` role"
 
 # The UPS name upsd knows is NOT a variable of this role, and neither is the metrics port. The
 # exporter scrapes one UPS per request and takes the name as a `ups=` query param, so the name
@@ -48,4 +48,4 @@ nut_exporter_k8s_mem_limit: 64Mi
 nut_exporter_k8s_cpu_request: "10m"
 nut_exporter_k8s_mem_request: 16Mi
 
-manifests_rollout: nut-exporter  # noqa var-naming[no-role-prefix]
+manifests_rollout: nut-exporter

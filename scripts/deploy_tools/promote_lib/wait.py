@@ -569,7 +569,7 @@ def _reboot_window(reads: WaitReads) -> tuple[int | None, str]:
 def annotate_promotion(
     annotate: Callable[[str], None], services: list[str], revision: str
 ) -> None:
-    """Record a settled promotion as the deploy annotation `deploy.sh` writes for an apply.
+    """Record a settled promotion as a deploy annotation.
 
     `promote` runs on a GitHub runner, and the line reaches Grafana only through the host's
     syslog, so `land-wait` writes it on the host. `deploy-failed` and `gave-up` write none: a

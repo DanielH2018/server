@@ -1,7 +1,7 @@
 """Everything the command line sets, plus the budgets a test shortens.
 
 Two of those budgets also read the environment, the way land.sh did before the port
-(`land.sh:108-109` at f319437c^): `LAND_PRIMARY` names the checkout every git and deploy.sh
+(`land.sh:108-109` at f319437c^): `LAND_PRIMARY` names the checkout every git
 call runs in, and `LAND_MERGE_POLL` is the merge wait's poll interval. A test that runs the
 shim as a process has no other way to aim a landing away from the live checkout.
 """

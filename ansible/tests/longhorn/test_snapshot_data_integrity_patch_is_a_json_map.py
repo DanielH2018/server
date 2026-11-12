@@ -63,6 +63,7 @@ def _is_map_of(value: object, expected: str) -> bool:
 @pytest.mark.parametrize("name", MAP_SETTINGS)
 def test_a_rendered_setting_carries_its_default_as_a_json_map_string(name: str) -> None:
     """The shape Longhorn actually reads, built from the value the defaults hold."""
+    # fact: ansible/roles/k8s/longhorn/CLAUDE.md#At a glance
     default = load_yaml(LONGHORN_DEFAULTS)[MAP_SETTINGS[name]]
     assert _is_map_of(_rendered_value(name), default), (
         f"{name} must render as a string holding {{'v1': {default!r}, 'v2': {default!r}}}; "
@@ -72,6 +73,7 @@ def test_a_rendered_setting_carries_its_default_as_a_json_map_string(name: str) 
 
 def test_a_bare_string_value_is_flagged() -> None:
     """The mistake this guard exists for: copying a sibling setting's `value: enabled`."""
+    # fact: ansible/roles/k8s/longhorn/CLAUDE.md#At a glance
     assert _is_map_of('{"v1":"enabled","v2":"enabled"}', "enabled")
     assert not _is_map_of("enabled", "enabled")
     assert not _is_map_of({"v1": "enabled", "v2": "enabled"}, "enabled")

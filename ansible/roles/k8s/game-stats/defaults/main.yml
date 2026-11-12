@@ -9,8 +9,8 @@ game_stats_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d371324
 # migrating-state shape: Recreate + a ReadWriteOnce PVC holding the all-time SQLite DB. Loki's
 # ~31-day window cannot reconstruct terraria's totals, and valheim's were never seeded, so a lost
 # volume starts them at zero with nothing to rebuild from.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "games — companions to the hand-operated terraria and valheim servers. ALSO Recreate + RWO PVCs holding irreplaceable stats — two independent reasons"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "games — companions to the hand-operated terraria and valheim servers. ALSO Recreate + RWO PVCs holding irreplaceable stats — two independent reasons"
 
 # terraria-stats-data rides the weekly backup tier: a tiny file of irreplaceable totals.
 game_stats_terraria_claim: terraria-stats-data
@@ -25,7 +25,7 @@ game_stats_valheim_pvc_size: 1Gi
 game_stats_valheim_storage_class: longhorn
 
 # The claims the renderer emits for this role, which the game-stats Kustomization applies (#3387).
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: "{{ game_stats_terraria_claim }}"
     storage_class: "{{ game_stats_terraria_storage_class }}"
     size: "{{ game_stats_terraria_pvc_size }}"
@@ -33,7 +33,7 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
     storage_class: "{{ game_stats_valheim_storage_class }}"
     size: "{{ game_stats_valheim_pvc_size }}"
 
-manifests_rollout: terraria-stats  # noqa var-naming[no-role-prefix]
+manifests_rollout: terraria-stats
 
-manifests_extra_rollouts:  # noqa var-naming[no-role-prefix]
+manifests_extra_rollouts:
   - name: valheim-stats

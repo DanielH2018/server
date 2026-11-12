@@ -69,7 +69,7 @@ FLUX_HELP = (
     "one is not Ready and not reconciling, is suspended, lags its source while Ready or a "
     "tag has none; a row reconciling or waiting on a dependency prints under PENDING",
 )
-FLUX_TAGS_HELP = "deploy tags, as `./scripts/deploy.sh --tags` takes them"
+FLUX_TAGS_HELP = "deploy tags, as `land.sh --tags` takes them"
 
 # The per-tag kinds the renderer writes beside `<tag>`. This module runs under the cc-wait
 # source with no project environment, so it cannot import

@@ -31,7 +31,7 @@ def test_a_doc_a_template_or_no_citation_is_not_eligible():
         ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"]
     )
     # A role with no `tests/` of its own: nothing would run a red test against its files.
-    assert not red_green_eligible(["ansible/roles/setup/nosuchrole/files/x.py"])
+    assert not red_green_eligible(["ansible/roles/k8s/nosuchrole/files/x.py"])
     assert not red_green_eligible([])
 
 

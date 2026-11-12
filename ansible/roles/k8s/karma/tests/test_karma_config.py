@@ -47,6 +47,7 @@ def uncovered(severities: set[str], config: dict) -> list[str]:
 
 
 def test_every_rule_severity_has_a_colour_and_a_rank():
+    # fact: ansible/roles/k8s/karma/CLAUDE.md#Notable
     severities = _rule_severities()
     assert {"critical", "warning", "info"} <= severities, severities
     config = _karma_config()

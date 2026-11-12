@@ -73,8 +73,10 @@ host probes stay green.
   `default-replica-count` and both `snapshot-data-integrity` Settings render
   `{"v1":"...","v2":"..."}` in the compact form the manager stores, so the render equals the
   live value.
+  `ansible/tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py::test_a_rendered_setting_carries_its_default_as_a_json_map_string`
+  holds the shape of both `snapshot-data-integrity` Settings, and
   `ansible/tests/longhorn/test_snapshot_data_integrity_patch_is_a_json_map.py::test_a_bare_string_value_is_flagged`
-  holds the shape.
+  is its red half. No test holds `default-replica-count`'s shape.
 - **The CSI sidecars' memory request is a Setting, not a patch** (#5958).
   `system-managed-csi-components-resource-limits` carries
   `ansible/roles/k8s/longhorn/defaults/main.yml:k3s_longhorn_csi_sidecar_memory_request` for

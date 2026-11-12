@@ -64,6 +64,7 @@ def test_the_door_admits_the_lan_and_both_host_source_families():
 
 
 def test_karma_is_behind_authelia_and_lan_only_even_with_public_routes_on():
+    # fact: ansible/roles/k8s/karma/CLAUDE.md#Notable
     route = _route(
         "karma",
         KARMA_TEMPLATE,

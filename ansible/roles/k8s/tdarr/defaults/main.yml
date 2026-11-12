@@ -23,7 +23,7 @@ tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:3.00.00@sha256:7ba5325ea64951181a30f2
 # The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
 # Kustomization `timeout` only from a literal role default (`role_fields` in
 # scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default (#5464).
-manifests_rollout_timeout: 600s  # noqa var-naming[no-role-prefix]
+manifests_rollout_timeout: 600s
 tdarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 
 # The budget of the tdarr-prepull Kustomization, whose Job pulls tdarr's image onto its node
@@ -35,7 +35,7 @@ tdarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 # (#5525), which would take 4550-7150s here. The Job has no deadline, so a pull that slow
 # costs that revision its verdict, the Job keeps pulling, and Flux applies tdarr on a later
 # retry; a longer budget would hold a worker for over an hour on every cold pull instead.
-flux_prepull_timeout: 3000s  # noqa var-naming[no-role-prefix]
+flux_prepull_timeout: 3000s
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Flux's tdarr-snapshot Job snapshots both config claims below before each revision applies,
@@ -53,14 +53,14 @@ flux_prepull_timeout: 3000s  # noqa var-naming[no-role-prefix]
 #      so a revert can leave the pair at different points in time.
 # k8s_autodeploy_snapshot_pvcs stays declared below: the snapshot Job still runs on every
 # revision.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "state coupled outside the volume — rewrites media-data (shared RWX, not reverted) in place, an irreversible transcode the snapshot/revert can't undo; ALSO non-atomic two-claim revert (tdarr-configs, tdarr-server)"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "state coupled outside the volume — rewrites media-data (shared RWX, not reverted) in place, an irreversible transcode the snapshot/revert can't undo; ALSO non-atomic two-claim revert (tdarr-configs, tdarr-server)"
 # The claims snapshotted before each revision applies. Under Flux the renderer turns this
 # list into the tdarr-snapshot Kustomization, whose Job snapshots them before tdarr applies
 # (D5.2a). Two claims, two seeds — same pairing as
 # tdarr_k8s_server_claim/tdarr_k8s_configs_claim below.
 # Declared regardless of k8s_autodeploy.
-k8s_autodeploy_snapshot_pvcs: [tdarr-configs, tdarr-server]  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_snapshot_pvcs: [tdarr-configs, tdarr-server]
 
 # ── two config claims, not one ──────────────────────────────────────────────────────────────
 # /app/server is the 204 M database (library state, transcode history, node registrations) and
@@ -80,7 +80,7 @@ tdarr_k8s_storage_class: longhorn
 
 # The claims the renderer emits for this role. The tdarr Kustomization applies them after the
 # tdarr-snapshot Job.
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: "{{ tdarr_k8s_server_claim }}"
     storage_class: "{{ tdarr_k8s_storage_class }}"
     size: "{{ tdarr_k8s_server_size }}"

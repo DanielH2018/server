@@ -34,7 +34,7 @@ BASE_TREE = {f"{V}/validate_lib.py": F, f"{V}/k8s_schema.py": F}
 
 def _arm(landing, tmp_path, files, tree, reviews=(), **opts):
     approval = tmp_path / "approval-paths"
-    approval.write_text("ansible/roles/setup/claude_code/\n")
+    approval.write_text("hosts/components/claude-code/\n")
     fakes = Fakes(
         gh_views={
             "state,title,body,reviewDecision": {

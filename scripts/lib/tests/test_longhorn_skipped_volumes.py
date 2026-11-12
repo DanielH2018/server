@@ -4,7 +4,7 @@
 The reader-side half, that the pod-log read reaches this check with the right flags, is
 `test_longhorn_backup_health_reader.py::test_reader_pages_naming_a_weekly_volume_its_job_skipped`.
 
-Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_skipped_volumes.py
+Run: uv run pytest scripts/lib/tests/test_longhorn_skipped_volumes.py
 """
 
 from longhorn_lib import longhorn_skipped_volumes_logic as logic

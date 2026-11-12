@@ -37,6 +37,7 @@ def _probe_bound_seconds() -> int:
 
 
 def test_the_deadline_clears_the_restore_timeout_plus_the_probe_bound() -> None:
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
     defaults = load_yaml(DRILL_DEFAULTS)
     job = _cronjob()["spec"]["jobTemplate"]["spec"]
     deadline = job["activeDeadlineSeconds"]
@@ -60,6 +61,7 @@ def test_the_grace_period_covers_one_poll_and_the_four_cleanup_deletes() -> None
 
 
 def test_the_cronjob_is_unsuspended_and_never_overlaps() -> None:
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
     spec = _cronjob()["spec"]
     assert spec["suspend"] is False, (
         "H2.3e unsuspended it, after the host cron file was gone"

@@ -7,8 +7,8 @@
 configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.39.1@sha256:e61e12c776f33d2e14a8d7ded4b27fc7253181df9b8fd3a6c7e510f323cf8f46
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in configarr-verify, which proves the new image RUNS and fails the revision on a sync that exits non-zero; the gate Job has no ownerReference, so concurrencyPolicy Forbid cannot keep a scheduled run off it, but the reconciler is convergent, so running the same sync twice is harmless; the configarr-health CronJob is gated the same way, and an extra run of it only re-reads the last Job and re-pushes its verdict"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in configarr-verify, which proves the new image RUNS and fails the revision on a sync that exits non-zero; the gate Job has no ownerReference, so concurrencyPolicy Forbid cannot keep a scheduled run off it, but the reconciler is convergent, so running the same sync twice is harmless; the configarr-health CronJob is gated the same way, and an extra run of it only re-reads the last Job and re-pushes its verdict"
 
 # The gate Jobs Flux runs in `configarr-verify`, one per CronJob, which the renderer copies from
 # each jobTemplate (scripts/renderer/renderer_lib/cronjob_gate.py). They replaced the two
@@ -26,7 +26,7 @@ k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in configa
 # has. A failed sync fails configarr-verify on its own. Ordering the gates would need a second
 # -verify Kustomization in the renderer, and dropping the health gate would lose the only
 # deploy-time proof of the reader's Renovate-bumped images. The role CLAUDE.md has the long form.
-flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
+flux_cronjob_gates:
   configarr:
     kind: mutation
     rerun_safe: ansible/roles/k8s/configarr/tests/test_configarr_gate.py::test_a_second_sync_reports_no_change
@@ -96,4 +96,4 @@ configarr_k8s_mem_request: 16Mi
 
 # No Deployment to wait on. The manifests role treats '' as "skip the rollout entirely",
 # which is the whole reason that option exists.
-manifests_rollout: ""  # noqa var-naming[no-role-prefix]
+manifests_rollout: ""

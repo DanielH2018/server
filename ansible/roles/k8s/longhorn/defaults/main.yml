@@ -12,7 +12,7 @@
 # version-to-version upgrade constraints and does not support arbitrary version skips. Tracked
 # for the signal, never automerged.
 # renovate: datasource=github-releases depName=longhorn/longhorn
-k3s_longhorn_version: v1.13.0  # noqa var-naming[no-role-prefix]
+k3s_longhorn_version: v1.13.0
 longhorn_vendored_manifests:
   - name: longhorn.yaml
     url: "https://raw.githubusercontent.com/longhorn/longhorn/{{ k3s_longhorn_version }}/deploy/longhorn.yaml"
@@ -30,7 +30,7 @@ longhorn_vendored_manifests:
 # too low would trade "killed by badness" for "killed by cgroup cap". Headroom is roughly double
 # the measured RSS: enough to absorb ordinary growth without inflating node allocatable so far
 # that real pressure elsewhere goes unschedulable.
-k3s_longhorn_manager_memory_request: 256Mi  # noqa var-naming[no-role-prefix]
+k3s_longhorn_manager_memory_request: 256Mi
 
 # Memory REQUEST only (no limit) for longhorn-global-manager, the Deployment v1.13 added to run the
 # cluster-wide pod and PV controllers. Upstream ships it with no `resources` (BestEffort), so it
@@ -38,14 +38,14 @@ k3s_longhorn_manager_memory_request: 256Mi  # noqa var-naming[no-role-prefix]
 # longhorn-global-manager.yaml, which a test holds equal to this key. Measured 2026-10-24, 31h
 # after the v1.13.0 bump: the leader held a 37Mi working set and the two standbys 33-34Mi. 64Mi
 # is about 1.7x the leader, rounded to a power of two.
-k3s_longhorn_global_manager_memory_request: 64Mi  # noqa var-naming[no-role-prefix]
+k3s_longhorn_global_manager_memory_request: 64Mi
 
 # Replicas of longhorn-global-manager. Upstream ships 3; the replicas elect one leader through
 # the `longhorn-global-manager` lease and the rest stand by. Its anti-affinity is only
 # preferred, so on this two-node cluster the third replica lands beside another and adds no
 # failover a second one lacks. Two puts one standby on each node. Applied by the same patch,
 # which a test holds equal to this key.
-k3s_longhorn_global_manager_replicas: 2  # noqa var-naming[no-role-prefix]
+k3s_longhorn_global_manager_replicas: 2
 
 # Memory REQUEST only (no limit) for the four csi-* sidecar Deployments (csi-attacher,
 # csi-provisioner, csi-resizer, csi-snapshotter), applied through the
@@ -61,7 +61,7 @@ k3s_longhorn_global_manager_replicas: 2  # noqa var-naming[no-role-prefix]
 # Deployments, the manager cleared it, and each Deployment rolled about twice an hour. The driver
 # deployer also reads the Setting when it creates a Deployment, so a recreated one starts with
 # the request.
-k3s_longhorn_csi_sidecar_memory_request: 192Mi  # noqa var-naming[no-role-prefix]
+k3s_longhorn_csi_sidecar_memory_request: 192Mi
 
 # The Longhorn Settings this role renders (templates/settings.yaml.j2), each under the name
 # it had in setup/k3s's defaults. Flux applies them, so a change here is a change to the live
@@ -76,7 +76,7 @@ k3s_longhorn_csi_sidecar_memory_request: 192Mi  # noqa var-naming[no-role-prefix
 # to StorageClasses that do not pin a count themselves. That is why the role replaces
 # upstream's class with the `longhorn` role's files/patches/longhorn-storageclass.yaml, which
 # deliberately omits numberOfReplicas — so changing this stays a Setting change.
-k3s_longhorn_replica_count: 2  # noqa var-naming[no-role-prefix]
+k3s_longhorn_replica_count: 2
 
 # How hard Longhorn checks a snapshot disk file against its recorded checksum. Upstream's
 # default is `fast-check`, which re-hashes only when the file is unhashed or its mtime moved —
@@ -96,7 +96,7 @@ k3s_longhorn_replica_count: 2  # noqa var-naming[no-role-prefix]
 # never dropped below 17.5 GB, and no Longhorn pod restarted — the memory pressure #1243 warns
 # about did not appear. Six minutes every seventh day at 00:00 UTC is acceptable. The numbers
 # and the queries that produced them are on #1364.
-k3s_longhorn_snapshot_data_integrity: enabled  # noqa var-naming[no-role-prefix]
+k3s_longhorn_snapshot_data_integrity: enabled
 
 # When the integrity check above runs. Upstream's default, restated here so the schedule is a
 # variable rather than a value only the cluster knows: `0 0 */7 * *` is a DAY-OF-MONTH step on
@@ -106,7 +106,7 @@ k3s_longhorn_snapshot_data_integrity: enabled  # noqa var-naming[no-role-prefix]
 # reverted at the next reconcile. Never use a repeating `*/N` for it: a full-hash schedule stranded by a dead session risks the
 # memory pressure that OOM-kills the storage control plane.
 # Same DataEngineSpecific JSON-map shape as the mode above.
-k3s_longhorn_snapshot_data_integrity_cronjob: "0 0 */7 * *"  # noqa var-naming[no-role-prefix]
+k3s_longhorn_snapshot_data_integrity_cronjob: "0 0 */7 * *"
 
 # Back up detached volumes too. pi-peer-backup-data is mounted only for the minutes its
 # nightly pull CronJob runs, so at the 03:30 daily-backup tick it is detached — and with
@@ -114,7 +114,7 @@ k3s_longhorn_snapshot_data_integrity_cronjob: "0 0 */7 * *"  # noqa var-naming[n
 # backup. "true" attaches such a volume in maintenance mode for the
 # backup and detaches it after; the attach is brief and it is the only detached
 # default-group volume, so the global scope costs nothing.
-k3s_longhorn_backup_detached_volumes: "true"  # noqa var-naming[no-role-prefix]
+k3s_longhorn_backup_detached_volumes: "true"
 
 # Block size, in MiB, for volumes created from here on. Every B2 cost Longhorn incurs is priced
 # PER BLOCK: pruning a backup issues ~1.28 Class C LISTs per stored block (it walks the volume's
@@ -135,7 +135,7 @@ k3s_longhorn_backup_detached_volumes: "true"  # noqa var-naming[no-role-prefix]
 # immutable, which is the trap `numberOfReplicas` springs (see
 # the `longhorn` role's files/patches/longhorn-storageclass.yaml and
 # ansible/tests/longhorn/test_longhorn_storageclass.py).
-k3s_longhorn_backup_block_size: 16  # noqa var-naming[no-role-prefix]
+k3s_longhorn_backup_block_size: 16
 
 # How many volume engines Longhorn upgrades per node once the manager moves to a new version.
 # Upstream ships 0, which means engines NEVER follow the manager — after a version bump every
@@ -144,7 +144,7 @@ k3s_longhorn_backup_block_size: 16  # noqa var-naming[no-role-prefix]
 # manager more than one engine version ahead is outside what upstream tests. 3 upgrades the
 # healthy volumes a few at a time rather than all at once; Longhorn skips any volume that
 # is degraded, so this cannot stampede a rebuild.
-k3s_longhorn_concurrent_engine_upgrade: 3  # noqa var-naming[no-role-prefix]
+k3s_longhorn_concurrent_engine_upgrade: 3
 
 # What Longhorn does with a pod whose node goes down while the pod holds an RWO volume.
 # `do-nothing` is upstream's default: the pod stays Terminating, so its volume stays attached
@@ -159,7 +159,7 @@ k3s_longhorn_concurrent_engine_upgrade: 3  # noqa var-naming[no-role-prefix]
 # whole load until the shed set is scaled to zero (docs/break-glass.md, *daniel-server is
 # dead*), and that step is manual too. Stateless pods still reschedule on their own. Revisit
 # when a third node or a fencing mechanism exists.
-k3s_longhorn_node_down_pod_deletion_policy: do-nothing  # noqa var-naming[no-role-prefix]
+k3s_longhorn_node_down_pod_deletion_policy: do-nothing
 
 # The longest the tag's Kustomization waits for longhorn-manager to roll. The DaemonSet rolls
 # with maxUnavailable 1 (files/patches/longhorn-manager-update-strategy.yaml, #6009), so the
@@ -172,7 +172,7 @@ k3s_longhorn_node_down_pod_deletion_policy: do-nothing  # noqa var-naming[no-rol
 # timeout also covers longhorn-driver-deployer
 # (which the old play waited on for 600s), longhorn-ui and longhorn-global-manager. A timeout on
 # a forward-only tag writes DEPLOY_HOLD, so the value is the manifests default of 600s, not 2m.
-manifests_rollout_timeout: 10m  # noqa var-naming[no-role-prefix]
+manifests_rollout_timeout: 10m
 
 # DECIDED: never pruned. Under prune: true, a render that dropped the manager DaemonSet or a CRD
 # would make Flux delete it, and deleting a Longhorn CRD deletes every Volume, Engine and Replica
@@ -180,17 +180,17 @@ manifests_rollout_timeout: 10m  # noqa var-naming[no-role-prefix]
 # leaves it serving. The cost is that an object removed here, or retired by a later upstream
 # release, stays live until the operator deletes it (**operator-only**). Full analysis: the H1
 # plan's *Plumbing tags are never pruned*.
-flux_prune: false  # noqa var-naming[no-role-prefix]
+flux_prune: false
 
 # Forward-only (the H1 plan's *Forward-only tags and the promote rule*). Longhorn supports no
 # downgrade, so a promote that fails on a revision changing this tag holds without resetting
 # `prod`. H1.5a (#5922) omitted this flag; the H1 plan names longhorn, so #5927 sets it.
 # scripts/deploy_tools/promote_lib/forward_only.py reads the flag from a top-level line.
-flux_forward_only: true  # noqa var-naming[no-role-prefix]
+flux_forward_only: true
 
 # Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
 # merge here is not a routine bump.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "platform — Longhorn holds every PVC; a bad apply or a version skip detaches or corrupts the volumes under every stateful service, and host probes stay green through that outage"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "platform — Longhorn holds every PVC; a bad apply or a version skip detaches or corrupts the volumes under every stateful service, and host probes stay green through that outage"
 
-manifests_rollout: ''  # noqa var-naming[no-role-prefix]
+manifests_rollout: ''

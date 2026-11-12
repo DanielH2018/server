@@ -29,9 +29,7 @@ from pathlib import Path
 LAND_SH = Path("scripts") / "deploy_tools" / "land.sh"
 # The verdicts after which an apply is owed or the deploy needs a look. The landing is
 # finished for every other verdict, or gave up at a resume point an operator re-runs.
-RESUME_VERDICTS = frozenset(
-    {"unhealthy", "deploy-failed", "needs-manual-apply", "blocked"}
-)
+RESUME_VERDICTS = frozenset({"unhealthy", "deploy-failed", "needs-manual-apply"})
 # The verdicts after which the PR is merged and nothing more is owed. `deferred` is one: a host's
 # updater applies its package, and cc-wait ends it with exit 4, not 0.
 FINISHED_VERDICTS = frozenset({"settled", "nothing-to-deploy", "deferred"})

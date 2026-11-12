@@ -112,7 +112,7 @@ AUTHELIA_SCHEMA_PATH = ("authelia.com", f"configuration_{AUTHELIA_SCHEMA_MINOR}.
 def kubernetes_tag(k3s_defaults: str) -> str:
     """The kubernetes/kubernetes tag a k3s release is built from: v1.36.4+k3s1 -> v1.36.4.
 
-    Reads the line as text, so a trailing `# noqa` comment is allowed after the version.
+    Reads the line as text, so a trailing comment is allowed after the version.
     """
     match = re.search(
         r"^k3s_version:\s*(v\d+\.\d+\.\d+)\+k3s\d+\s*(?:#.*)?$",

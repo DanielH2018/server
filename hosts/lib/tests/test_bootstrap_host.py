@@ -76,6 +76,15 @@ def test_the_named_host_gets_the_keyring_the_source_and_both_packages(host):
     assert "tmpfiles --create" in host.commands()
 
 
+def test_step_5_creates_the_declared_users_before_the_directories_that_name_them(host):
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 0, result.stderr
+    commands = host.commands()
+    assert "sysusers " in commands
+    assert commands.index("sysusers ") < commands.index("tmpfiles --create")
+
+
 def test_another_host_is_refused_before_anything_is_written(host):
     result = host.run("daniel-server")
 

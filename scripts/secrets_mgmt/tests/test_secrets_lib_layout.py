@@ -2,9 +2,9 @@
 
 `secret_classify` and `secret_registry` are libraries, so they move into a PEP 420 namespace
 package beside the entry points, the way `deploy_tools/land_lib/` holds `land.py`'s modules.
-`secret_rotation.py` and `secret_bearing_host_paths.py` stay where they are, because the cron
-and the root CLAUDE.md name them. The move changes no behaviour, so these tests check where
-the code is and that it still runs from there.
+`secret_rotation.py` stays where it is, because the cron and the root CLAUDE.md name it. The
+move changes no behaviour, so these tests check where the code is and that it still runs from
+there.
 
 The tests find each library by the function it defines rather than by its file name, so the
 move may keep or shorten the basenames.
@@ -23,7 +23,7 @@ from lib.repo_paths import REPO
 
 SECRETS_MGMT = REPO / "scripts" / "secrets_mgmt"
 SECRETS_LIB = SECRETS_MGMT / "secrets_lib"
-ENTRYPOINTS = {"secret_rotation.py", "secret_bearing_host_paths.py"}
+ENTRYPOINTS = {"secret_rotation.py"}
 
 
 def _tracked(*pathspec: str) -> list[str]:
@@ -64,7 +64,7 @@ def test_libraries_are_tracked_in_secrets_lib_without_an_init_file():
     assert "scripts/secrets_mgmt/secrets_lib/__init__.py" not in lib
 
 
-def test_only_the_two_entrypoints_keep_the_secret_prefix_at_the_top_level():
+def test_only_the_entrypoint_keeps_the_secret_prefix_at_the_top_level():
     top = {
         p.rsplit("/", 1)[1]
         for p in _tracked("scripts/secrets_mgmt/secret_*.py")

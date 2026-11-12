@@ -10,7 +10,9 @@ paths:
 The root `CLAUDE.md`, *Secrets Management*, is the home of the safety rules: what `git diff` of
 `secrets.yml` prints, never decrypt, and never commit plaintext. This file is the home of the
 `.sops.yaml` and key-check mechanics, and of the enforcement detail these paths carry. A template
-reads a value as `{{ name }}`, and the `community.sops.sops_decrypt` lookup decrypts it at runtime.
+reads a value as `{{ name }}`. Flux decrypts the cluster's SOPS file with the cluster's age key
+(ADR 0022), and each host decrypts its own file under `ansible/vars/hosts/` with that host's key
+(ADR 0029).
 
 - A direct Edit/Write to `secrets.yml` is **denied by the block-protected-edits hook** (content-based
   detection of the SOPS markers) — there's no way to "just quickly edit" it; use `sops` / `/add-secret`.

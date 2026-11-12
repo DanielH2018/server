@@ -51,8 +51,8 @@ drifted from the row in Authelia's database.
 
 The agent user `claude` has no age key, so it reads none of those SOPS values. Where
 `~/.config/homelab-ui/credentials.json` exists, the one_factor tier logs in with the username,
-password and domain in it: a third Authelia account, `claude-agent`, which `roles/setup/claude_code`
-writes as a 0600 file. The file wins over SOPS, and an operator has none. The two_factor tier
+password and domain in it: a third Authelia account, `claude-agent`, which the `claude-code` host
+component writes as a 0600 file. The file wins over SOPS, and an operator has none. The two_factor tier
 never reads it, because that account has no TOTP registration.
 
 Exit 0 = a usable state file is on disk. Exit 1 = it is missing, expired or rejected.

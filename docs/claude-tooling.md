@@ -762,10 +762,6 @@ reason — never a deny, because the path extraction is a heuristic over command
 extraction must not block work. Each written path is classified against the checkout that owns
 it, as `block-protected-edits` does, not against the session's cwd.
 
-It also **denies** a content-printing read (`cat`, `head`, `grep` without `-o`/`-c`/`-l`) of a
-deployed host script that renders a credential inline;
-`scripts/secrets_mgmt/secret_bearing_host_paths.py` derives that set from the tree.
-
 It **denies** a write from a read-only agent: one whose frontmatter in `.claude/agents/` sets
 `read_only: true`, matched against the payload's `agent_type`. The arm denies a redirect into a
 file outside `/dev/`, `/tmp/`, `/var/tmp/` and `~/.cache/claude/`. It then judges every command

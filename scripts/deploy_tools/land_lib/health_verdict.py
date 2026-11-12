@@ -1,6 +1,6 @@
 """Step 6: the health verdict, and the plane a healthy deploy can still leave open.
 
-The gate is the half `ansible-playbook` exiting 0 cannot speak to: readiness flips a
+The gate is the half a settled promotion cannot speak to: readiness flips a
 Deployment to Available before a bad liveness probe starts killing it. It is asked with
 --no-post semantics -- the verdict returns to the session, not to Discord, where the
 --detach path already reports.

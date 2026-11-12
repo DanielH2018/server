@@ -23,26 +23,18 @@ from lib import yaml_fast
 from lib.k8s_lookups import k8s_lookup_map
 
 
-# Planes a role can live on, and what redeploying it actually costs the operator. The
-# distinction is not cosmetic: `deploy.sh` derives its valid tags from `containers_list`, so a
-# setup-plane role HAS no deploy tag and `deploy.sh --tags gitops_deploy` exits 2 having deployed
-# nothing (`scripts/lib/exit_codes.py`, `DEPLOY_TAG_MISS`). That is the trap this census exists
-# to surface.
-_ROLE_PLANES = {
-    "k8s": "deploy",
-    "containers": "deploy",
-    "setup": "setup",
-}
+# The two planes a consumer lives on. A k8s role is applied by Flux from the cluster file
+# (`FLUX_PATH`). A host package carries the value in its host's SOPS file, which only the
+# operator's `host_secrets.py sync` rewrites.
+K8S_PLANE = "k8s"
+HOST_PLANE = "host"
 
+# The host packages (H5.7). A file under `hosts/components/<component>/` that names a secret
+# makes every host package listing that component a consumer, on the host plane.
+_COMPONENTS = os.path.join("hosts", "components")
 # Directories whose hits are not consumers. `collections/` is vendored third-party; the
 # registry and secrets file name every secret by definition, so including them would make
 # every census non-empty and the check vacuous.
-# The host packages (H5.7). A file under `hosts/components/<component>/` that names a secret
-# makes every host package listing that component a consumer, on this plane. A host package is
-# not a role: `deploy.sh` cannot reach it, and the host's SOPS file carries the value, which
-# only the operator's `host_secrets.py sync` rewrites.
-HOST_PLANE = "host"
-_COMPONENTS = os.path.join("hosts", "components")
 _CENSUS_SKIP = ("collections",)
 # The manifests role's standalone-value guard map names about 150 keys and renders none of
 # them: the guard reads each value at deploy time and writes nothing, so a rotation owes the
@@ -58,7 +50,7 @@ _CENSUS_SKIP_FILES = {
 # claim consumers that hold no copy — and sends the operator to redeploy a role that cannot
 # help. Measured across all 149 secrets: 5 secrets gained 11 doc-only roles, and
 # `r2_access_key_id` is the clearest — monitor-bridge's CLAUDE.md discusses it while the only
-# renderers are setup/k3s's longhorn-r2-secret.yaml.j2 and the k3s-host-checks output.
+# renderers are the longhorn-r2-secret.yaml.j2 template and the k3s-host-checks output.
 #
 # Checked in the direction that matters before making the change: excluding docs creates ZERO
 # new phantom tags, so no real consumer is only discoverable through prose.
@@ -67,12 +59,12 @@ _CENSUS_SKIP_SUFFIXES = (".md",)
 
 @lru_cache(maxsize=None)
 def _census_corpus(repo: str = REPO) -> tuple[tuple[str, str, str], ...]:
-    """Every censusable file under `ansible/`, read once — (text, role, plane) per file.
+    """Every censusable k8s role and host component file, read once — (text, role, plane) each.
 
-    A caller that asks about many secrets in one process matches each against the one corpus,
+    The files are those under `ansible/roles/k8s/` and `hosts/components/`. A caller that asks about many secrets in one process matches each against the one corpus,
     a fraction of the I/O of walking ~1600 files per name.
 
-    Only files that belong to a role on a known plane are kept: a hit anywhere else cannot
+    Only files that belong to a k8s role are kept from `ansible/`: a hit anywhere else cannot
     name a consumer, so carrying its text would cost memory for a match that is discarded.
 
     The corpus is cached for the process, which is correct for every caller here — the
@@ -88,9 +80,9 @@ def _census_corpus(repo: str = REPO) -> tuple[tuple[str, str, str], ...]:
             dirnames[:] = []
             continue
         parts = rel.split(os.sep)
-        if not (len(parts) >= 3 and parts[0] == "roles" and parts[1] in _ROLE_PLANES):
+        if not (len(parts) >= 3 and parts[0] == "roles" and parts[1] == "k8s"):
             continue
-        role, plane = parts[2], _ROLE_PLANES[parts[1]]
+        role = parts[2]
         for filename in filenames:
             if filename in _CENSUS_SKIP_FILES or filename.endswith(
                 _CENSUS_SKIP_SUFFIXES
@@ -106,12 +98,12 @@ def _census_corpus(repo: str = REPO) -> tuple[tuple[str, str, str], ...]:
                 # not something a census can act on. Skipping is right; failing the whole
                 # census on one unreadable file would make the tool useless in a worktree.
                 continue
-            corpus.append((text, role, plane))
+            corpus.append((text, role, K8S_PLANE))
             # A k8s role that `lookup()`s this file from another role renders what it holds,
             # so it is a consumer too (#3781).
             rel = os.path.relpath(os.path.join(dirpath, filename), ansible_dir)
             for reader in sorted(lookups.get(rel, ())):
-                corpus.append((text, reader, _ROLE_PLANES["k8s"]))
+                corpus.append((text, reader, K8S_PLANE))
     corpus.extend(_host_package_corpus(repo))
     return tuple(corpus)
 
@@ -166,10 +158,9 @@ def tree_consumers(name: str, repo: str = REPO) -> dict[str, str]:
     `monitor_bridge_*` tokens to a role that renders them nowhere. It answers the question a
     rotation actually poses — "who now holds a stale copy?" — for every secret.
 
-    Returns a plane per role because the repair command differs by plane and one of them is
-    unreachable from `deploy.sh` — see `_ROLE_PLANES`. A host package that carries the secret
-    through a component under `hosts/components/` is a consumer on `HOST_PLANE`, named by its
-    host.
+    Returns a plane per consumer because the repair command differs by plane. A host package
+    that carries the secret through a component under `hosts/components/` is a consumer on
+    `HOST_PLANE`, named by its host.
     """
     found: dict[str, str] = {}
     for text, role, plane in _census_corpus(repo):
@@ -192,12 +183,11 @@ FLUX_PATH = (
 def consumer_commands(name: str, repo: str = REPO) -> list[str]:
     """The exact commands that make a rotated `name` take effect everywhere.
 
-    Setup-plane roles are listed with their own playbook, host packages with the SOPS file they
-    carry, and each k8s consumer with the Flux path, `FLUX_PATH`.
+    Host packages are listed with the SOPS file they carry, and each k8s consumer with the Flux
+    path, `FLUX_PATH`.
     """
     consumers = tree_consumers(name, repo=repo)
-    deploy_roles = sorted(r for r, plane in consumers.items() if plane == "deploy")
-    setup_roles = sorted(r for r, plane in consumers.items() if plane == "setup")
+    k8s_roles = sorted(r for r, plane in consumers.items() if plane == K8S_PLANE)
     host_packages = sorted(r for r, plane in consumers.items() if plane == HOST_PLANE)
     # BACKTICKS ARE LOAD-BEARING, not decoration. This module is reached by a cron, and
     # `reference/scripts.py` classifies a script as `scheduled` when a scheduled script's
@@ -207,15 +197,11 @@ def consumer_commands(name: str, repo: str = REPO) -> list[str]:
     # carrying a backtick is prose CITING a command rather than running one, which is exactly
     # what these strings are. Quoting them says so in the one way the tree can read.
     commands = []
-    for role in setup_roles:
-        commands.append(
-            "`uv run ansible-playbook ansible/initial_setup.yml --tags %s`" % role
-        )
     for host in host_packages:
         commands.append(
             "`uv run python scripts/secrets_mgmt/host_secrets.py sync %s` (operator-only: "
             "it decrypts) rewrites the SOPS file that the package `hosts/%s/package.yml` "
             "carries" % (host, host)
         )
-    commands.extend(FLUX_PATH % tag for tag in deploy_roles)
+    commands.extend(FLUX_PATH % role for role in k8s_roles)
     return commands

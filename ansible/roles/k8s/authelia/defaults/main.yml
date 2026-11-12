@@ -6,8 +6,8 @@ authelia_k8s_image: authelia/authelia:4.39.28@sha256:bd97cff4fcbf715b5ff1f9ae286
 # out access to the rest of the fleet, including whatever tooling would be used to fix it.
 # Also Recreate + a PVC (its own SQLite session/config store) on its own state, which compounds
 # the risk but isn't the primary reason.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "platform — SSO/OIDC gate; a failed deploy locks out access to everything behind it, including the tools to fix it"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "platform — SSO/OIDC gate; a failed deploy locks out access to everything behind it, including the tools to fix it"
 
 # The CrowdSec agent sidecar that parses this pod's auth log into the in-cluster LAPI, and
 # the init container that seeds its config. False for a cluster that does not run the
@@ -45,7 +45,7 @@ authelia_k8s_manage_oidc: true
 # when authelia_k8s_manage_oidc is true, like any other secret file. `sops-manifest-entries`
 # in scripts/renderer/renderer_lib/sops_entries.py holds the entry to one Secret of
 # `SOPS_MANIFEST_KEYS` keys.
-render_sops_manifests: [oidc-jwk-secret.yaml]  # noqa var-naming[no-role-prefix]
+render_sops_manifests: [oidc-jwk-secret.yaml]
 
 # Deliver identity-verification codes by email rather than to a file inside the pod. False
 # falls back to the filesystem notifier. Leave it true; false is the break-glass path for a
@@ -98,7 +98,7 @@ authelia_k8s_storage: 1Gi
 authelia_k8s_storage_class: longhorn
 
 # The claim the renderer emits for this role, which the authelia Kustomization applies (#3387).
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: authelia-config
     storage_class: "{{ authelia_k8s_storage_class }}"
     size: "{{ authelia_k8s_storage }}"
@@ -207,7 +207,7 @@ authelia_agent_password_argon2: ''
 # off would delete the live redis Deployment, Service and NetworkPolicy the lever exists to
 # keep. #3388 counts authelia as deliberately excluded. The prune is armed by default since
 # #3662, so this line is the opt-out.
-manifests_prune: false  # noqa var-naming[no-role-prefix]
+manifests_prune: false
 
 # The redis pair is concatenated rather than listed, for the same reason crowdsec-secret is
 # below: authelia_k8s_redis_sessions is a rollback lever, and dropping the names here is
@@ -226,7 +226,7 @@ manifests_prune: false  # noqa var-naming[no-role-prefix]
 # deployment.yaml lands before networkpolicy-redis.yaml and the portal may crashloop once
 # before the policy admits it. It self-heals within a backoff because the policy arrives
 # in the same deploy.
-manifests_files: >-  # noqa var-naming[no-role-prefix]
+manifests_files: >-
   {{ ['deployment.yaml', 'service.yaml', 'ingressroute.yaml',
       'forwardauth-middleware.yaml']
      + (['deployment-redis.yaml', 'service-redis.yaml', 'networkpolicy-redis.yaml']
@@ -239,7 +239,7 @@ manifests_files: >-  # noqa var-naming[no-role-prefix]
 # wins whole, so a template named nowhere here is never rendered, and the Deployment would
 # mount a Secret no deploy wrote. It is never in manifests_files, which stages a file
 # world-readable and outside no_log.
-manifests_secret_files: >-  # noqa var-naming[no-role-prefix]
+manifests_secret_files: >-
   {{ ['config-secret.yaml']
      + (['oidc-jwk-secret.yaml'] if authelia_k8s_manage_oidc | bool else [])
      + (['crowdsec-secret.yaml'] if authelia_k8s_manage_crowdsec | bool else [])
@@ -253,6 +253,6 @@ manifests_secret_files: >-  # noqa var-naming[no-role-prefix]
 # store, while a rotated `authelia_redis_password` or an edited redis.conf does (#7575). Gated
 # on the lever like the pair above: with it off on a cluster that never ran redis, `rollout
 # status` on a Deployment that does not exist would fail the drain.
-manifests_extra_rollouts: >-  # noqa var-naming[no-role-prefix]
+manifests_extra_rollouts: >-
   {{ [{'name': 'authelia-redis', 'restart_on': ['secret']}]
      if authelia_k8s_redis_sessions | bool else [] }}

@@ -12,19 +12,19 @@
 # a revision before a disarm would re-arm B2 and restart the transaction-cap spiral. The hold
 # clears only by hand: `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`. Full
 # analysis: the H1 plan's *Forward-only tags and the promote rule*.
-flux_forward_only: true  # noqa var-naming[no-role-prefix]
+flux_forward_only: true
 
 # DECIDED: never pruned. Under prune: true, a render that dropped a BackupTarget would make Flux
 # delete it, and a lingering RecurringJob keeps running with its own `retain`. With prune: false a
 # render that drops an object leaves it live. The cost is that an object removed here stays live
 # until the operator deletes it (**operator-only**). Full analysis: the H1 plan's *Plumbing tags
 # are never pruned*.
-flux_prune: false  # noqa var-naming[no-role-prefix]
+flux_prune: false
 
 # Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
 # merge here is not a routine bump.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "platform — the arm flags and the schedules govern every Longhorn backup; a wrong arm re-opens the B2 transaction-cap spiral, and host probes stay green through it"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "platform — the arm flags and the schedules govern every Longhorn backup; a wrong arm re-opens the B2 transaction-cap spiral, and host probes stay green through it"
 
 # The B2 region of the `default` target's URL, `s3://<bucket>@<region>/<prefix>`. A plain
 # variable, not a secret: docs/break-glass.md already publishes the B2 target URL. It replaces the
@@ -160,4 +160,4 @@ k3s_longhorn_r2_backup_prefix: longhorn
 # only cost is UI staleness between nightlies. Raise deliberately.
 k3s_longhorn_r2_poll_interval: 0
 
-manifests_rollout: ''  # noqa var-naming[no-role-prefix]
+manifests_rollout: ''

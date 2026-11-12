@@ -41,13 +41,12 @@ def drill(tmp_path: Path):
 
 def test_a_failed_attempt_is_redrilled_ahead_of_the_rotation(drill) -> None:
     """The issue's verify-by: the failure jumps the queue rather than waiting out a cycle."""
-    # fact: ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)
     assert selected(drill, drill()) == FAILED
 
 
 def test_a_retry_already_spent_leaves_the_rotation_alone(drill) -> None:
     """The bound: one retry per failed attempt, so a broken volume cannot take every night."""
-    # fact: ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
     drill.seed({f"retries.{FAILED}": _FAILED_AT + 1})
     assert selected(drill, drill()) == OLDEST
 

@@ -33,6 +33,7 @@ def _drill_script() -> str:
 
 def test_the_drill_role_grants_every_call_its_script_makes() -> None:
     """H2.3d: the rendered Roles and ClusterRole hold the set the real script derives."""
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
     script = _drill_script()
     docs = [
         doc
@@ -49,6 +50,7 @@ def test_the_drill_role_grants_every_call_its_script_makes() -> None:
 
 def test_a_drill_role_without_the_volume_delete_wait_is_flagged() -> None:
     """Red half: drop `watch` on volumes, and kubectl skips the teardown wait without an error."""
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
     script = _drill_script()
     docs = [
         doc

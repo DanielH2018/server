@@ -33,7 +33,7 @@ autofix_bridge_modules:
 # fixing *arr queue issues with no page of its own (AutofixBridgeStale is a slower
 # backstop, not a rollout gate). ALSO renders no readinessProbe on its Deployment (probe-less),
 # which compounds independently of the observability classification.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "observability — auto-remediation loop; a broken deploy silently stops fixing arr issues. ALSO no readinessProbe (probe-less) — two independent reasons"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "observability — auto-remediation loop; a broken deploy silently stops fixing arr issues. ALSO no readinessProbe (probe-less) — two independent reasons"
 
-manifests_rollout: autofix-bridge  # noqa var-naming[no-role-prefix]
+manifests_rollout: autofix-bridge

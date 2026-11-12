@@ -14,8 +14,8 @@ scrutiny_k8s_influxdb_image: influxdb:2.9@sha256:e4572d094ac3272f06528ea904ce6b4
 # redeploy, never unsupervised auto-merge. ALSO Recreate + a real config PVC from k8s_claims
 # below (hardcoded ReadWriteOnce) — the migrating-state shape compounds the
 # manual-upgrade policy, on top of the pinned influxdb engine holding the SMART trend history.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "stateful / manual-upgrade — rolling branch tag on a stateful monitor, deliberately manual. ALSO Recreate + RWO PVC (migrating-state shape) — two independent reasons"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "stateful / manual-upgrade — rolling branch tag on a stateful monitor, deliberately manual. ALSO Recreate + RWO PVC (migrating-state shape) — two independent reasons"
 
 # SMART history is trend data and the whole point of the tool — backed-up class.
 # It measures 3.1 MB; 2Gi leaves influxdb compaction headroom.
@@ -29,7 +29,7 @@ scrutiny_k8s_config_size: 1Gi
 scrutiny_k8s_config_storage_class: longhorn
 
 # The claims the renderer emits for this role, which the scrutiny Kustomization applies (#3387).
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: "{{ scrutiny_k8s_influxdb_claim }}"
     storage_class: "{{ scrutiny_k8s_influxdb_storage_class }}"
     size: "{{ scrutiny_k8s_influxdb_size }}"
@@ -41,7 +41,7 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
 # must not depend on the image's default.
 scrutiny_k8s_collector_cron: "0 0 * * *"
 
-manifests_rollout: scrutiny-web  # noqa var-naming[no-role-prefix]
+manifests_rollout: scrutiny-web
 
 # The other two workloads, listed so the batch drain WAITS on their rollouts, never so this
 # role restarts them (#4564). A Renovate digest bump of `scrutiny_k8s_influxdb_image` or
@@ -50,7 +50,7 @@ manifests_rollout: scrutiny-web  # noqa var-naming[no-role-prefix]
 # ConfigMap as a directory, which kubelet syncs and each cron run re-reads, and InfluxDB
 # reads its credentials file only at first-run setup. A restart on every scrutiny manifest
 # change would take InfluxDB, a Recreate Deployment, down for nothing.
-manifests_extra_rollouts:  # noqa var-naming[no-role-prefix]
+manifests_extra_rollouts:
   - name: scrutiny-influxdb
     restart_on: []
   - name: scrutiny-collector
@@ -65,4 +65,4 @@ manifests_extra_rollouts:  # noqa var-naming[no-role-prefix]
 #
 # The Services live in influxdb.yaml and web.yaml, so the entry's `port` must not also
 # earn the shared default Service.
-manifests_exclude_files: [service.yaml]  # noqa var-naming[no-role-prefix]
+manifests_exclude_files: [service.yaml]
