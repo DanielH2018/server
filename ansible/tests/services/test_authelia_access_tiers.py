@@ -243,6 +243,7 @@ def test_a_user_outside_admins_is_denied_a_silence_ui():
     """claude-agent has no groups and holds a one_factor session. Without the `deny` rule
     it would skip the subject-scoped rule and fall through to the `*.local` wildcard."""
     # fact: ansible/roles/k8s/authelia/CLAUDE.md#Access control comes from containers_list
+    # fact: ansible/roles/k8s/karma/CLAUDE.md#Notable
     rules = _rendered_rules()
     host = _karma_host(rules)
     assert _policy(rules, host, "10.0.0.5") == "deny"

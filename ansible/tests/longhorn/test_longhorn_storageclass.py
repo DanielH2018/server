@@ -164,6 +164,7 @@ def test_the_patch_targets_the_configmap_the_upstream_file_declares():
 def test_the_class_differs_from_upstreams_only_by_the_replica_count():
     # Step 2 of the per-hop procedure (docs/longhorn-upgrade.md): a release that adds a
     # parameter fails here until the patch carries it.
+    # fact: ansible/roles/k8s/longhorn/CLAUDE.md#At a glance
     drift = _drift_from_upstream(
         _class_in(_upstream_configmap()), _class_in(_patched_configmap())
     )

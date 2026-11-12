@@ -130,6 +130,9 @@ def test_never_shed_matches_the_untiered_roles_that_never_prune():
     Each must sit in `k8s_entries()` and stay out of `shed_set()`. CoreDNS at zero replicas stops
     cluster DNS, and Flux then cannot fetch the bundle that restores it.
     """
+    # fact: ansible/roles/k8s/cluster-base/CLAUDE.md#At a glance
+    # fact: ansible/roles/k8s/longhorn/CLAUDE.md#At a glance
+    # fact: ansible/roles/k8s/metallb/CLAUDE.md#At a glance
     entries = list(k8s_entries().values())
     assert sum(not e.get("tier") for e in entries) >= 20
     assert _never_shed_drift(entries, K8S_ROLES, NEVER_SHED) == ([], [])
