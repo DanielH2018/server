@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Host-side UPS secondary watchdog — managed by Ansible (nut_host role); edits overwritten.
+# Host-side UPS secondary watchdog — shipped by the nut-secondary host package; edits overwritten.
 #
-# Usage: ups-secondary-health.sh [-h|--help]
-# Takes no arguments. Root cron job "UPS secondary watchdog" (cron file ups-secondary-health) runs
-# it every nut_host_watchdog_interval_minutes minutes on daniel-server, only while
-# nut_host_watchdog_armed is true. It reads /etc/nut/upsmon.conf. Running it by hand needs root.
+# Usage: ups-secondary-health [-h|--help]
+# Takes no arguments. homelab-ups-watchdog.timer runs it every nut_host_watchdog_interval_minutes
+# minutes on both cluster nodes, and its enable link ships only while nut_host_watchdog_armed is
+# true. It reads /var/lib/homelab-secrets/etc/nut/upsmon.conf. Running it by hand needs root.
 # Each run writes its verdict to $TEXTFILE_DIR/ups-secondary-health.prom for node_exporter's
 # textfile collector, which UpsSecondaryFailed and UpsSecondaryNotReporting read (M6 batch B4,
 # other-setup-checks.yaml). B4's Cutover-2 removed its Kuma push.
@@ -12,10 +12,10 @@
 # Answers the one question nothing else in this estate asks: can THIS host's upsmon still
 # reach upsd, right now?
 #
-# The role's `wait_for` assert proves that at deploy time and never again. Two things break it
-# silently in between, and both stay invisible until the power cut the chain exists for:
-#   * the nut Service is recreated with a different ClusterIP, stranding the address frozen
-#     into /etc/nut/upsmon.conf (the Service does not pin its clusterIP — see defaults/main.yml)
+# Nothing else re-proves that link after the package installs. Two things break it silently,
+# and both stay invisible until the power cut the chain exists for:
+#   * the address in upsmon.conf stops reaching upsd: the pod's hostPort on ups_host, or the
+#     nut Service's pinned ClusterIP (nut_k8s_cluster_ip) on any other host
 #   * nut-monitor dies or is left disabled
 #
 # WHY THE NEIGHBOURING CHECKS DO NOT COVER THIS, all three for the same reason — they observe a
@@ -23,26 +23,24 @@
 #   * observability's UPS* rules (UPSOnBattery, UPSBatteryLow and the rest, in hosts.yaml) read
 #     nut-exporter's scrape of upsd, i.e. the UPS as seen THROUGH the cluster. They say the UPS is
 #     fine, not that this host can hear it.
-#   * the "k3s nut (upsd)" Kuma tile is a TCP probe from the Kuma POD over Service DNS,
-#     re-resolved every cycle. A ClusterIP change that strands this host's frozen literal leaves
-#     that tile green — it is the wrong side of the exact thing in dispute.
+#   * the "k3s nut (upsd)" Kuma tile is a TCP probe from the Kuma POD over Service DNS. It
+#     crosses the pod network, not the host-netns path this host's upsmon takes, so it can stay
+#     green while that path is broken.
 #   * node-exporter runs without --collector.systemd, so no node_systemd_unit_state series
 #     exists for anything to alert on nut-monitor being dead.
 #
-# THE ADDRESS IS READ OUT OF THE DEPLOYED FILE, not re-templated from an Ansible var. A var
-# would be resolved fresh at render time, so a tag-scoped run that touched this cron without
-# re-rendering upsmon.conf would bake a CURRENT ClusterIP into the check while upsmon kept using
-# the stale one — the check would pass against an address upsmon does not use, reproducing the
-# blindness it exists to remove.
+# THE ADDRESS IS READ OUT OF THE RENDERED upsmon.conf, not templated into this script. A
+# templated value could differ from the file upsmon actually reads, and the check would then
+# pass against an address upsmon does not use, reproducing the blindness it exists to remove.
 #
 # The MONITOR line carries nut_monitor_password in field 5, which is why the read is
 # field-scoped awk and never a bare grep: printing that line prints the credential into syslog
 # and into any agent transcript that ran the check. This estate has rotated three secrets after
 # exactly that mistake.
 #
-# Runs as root because /etc/nut/upsmon.conf is 0640 root:nut. Same trade-off as
-# setup-drift-check.sh: root buys the file read, nothing more. The consequence worth knowing
-# is that an agent session cannot trigger a beat to verify this one by hand.
+# Runs as root because upsmon.conf is 0640 root:nut. Root buys the file read, nothing more.
+# The consequence worth knowing is that an agent session cannot trigger a run to verify this
+# one by hand.
 set -uo pipefail
 
 for arg in "$@"; do
@@ -57,9 +55,9 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
   exit 1
 }
 
-# The longest legitimate gap between two textfile writes: two cron periods plus 300s, the rule
+# The longest legitimate gap between two textfile writes: two timer periods plus 300s, the rule
 # M3 fixed (docs/target-architecture/monitoring/m3-textfile-timer.md, "The deadline for
-# disk-health"). It renders from the same variable as the cron, and
+# disk-health"). It renders from the same variable as the timer, and
 # ansible/tests/setup/test_b4_rule_literals.py pins the rules' literals to this value.
 DEADLINE_S={{ 2 * 60 * (nut_host_watchdog_interval_minutes | int) + 300 }}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}

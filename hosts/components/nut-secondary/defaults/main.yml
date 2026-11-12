@@ -6,19 +6,16 @@
 # /32s precisely because "a cross-node host->pod packet arrives as the SENDING node's flannel.1
 # address". No policy change is needed for this.
 #
-# Resolved at deploy time rather than hardcoded, because the Service does not pin its clusterIP.
-# That makes the rendered value a snapshot: see the reachability assert in tasks/main.yml, which
-# is what stops a stale snapshot from sitting silently broken until the next power cut.
+# The Service pins its clusterIP (H7.33), and component.yml's `defaults:` carries that address
+# as nut_host_upsd_clusterip.
 nut_host_upsd_host: "{{ '127.0.0.1' if inventory_hostname == ups_host else nut_host_upsd_clusterip | default('') }}"
 
 # ── Runtime watchdog for the secondary's upsd link ──────────────────────────────
-# The assert in tasks/main.yml proves reachability exactly once, at deploy. The two things
-# that would break it in between — the nut Service being
-# recreated with a different ClusterIP, or nut-monitor dying — are both invisible until the
-# power cut this chain exists for. The k8s "nut (upsd)" probe does not cover it: that probe
-# runs from a POD and re-resolves Service DNS every cycle, while this host's upsmon connects
-# from the host netns to a ClusterIP frozen into /etc/nut/upsmon.conf at deploy time. A green
-# probe there says nothing about this path.
+# Nothing at install time proves the address reaches upsd, and nut-monitor can die later. Both
+# are invisible until the power cut this chain exists for. The k8s "nut (upsd)" probe does not
+# cover it: that probe runs from a POD over Service DNS, while this host's upsmon connects from
+# the host netns to the address in /var/lib/homelab-secrets/etc/nut/upsmon.conf. A green probe
+# there says nothing about this path.
 nut_host_watchdog_armed: true
 
 # One value drives both the timer cadence and the check's DEADLINE_S, so a schedule change
