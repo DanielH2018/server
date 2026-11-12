@@ -90,8 +90,8 @@ def defaults_main(
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # `lib.k8s_roles.k8s_autodeploy_denylist` raises on a role that declares neither. The reason is what makes the stance reviewable, so replace the text below
 # with the property that actually decides it.
-k8s_autodeploy: {stance}  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "{reason}"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: {stance}
+k8s_autodeploy_reason: "{reason}"
 
 {prefix}_k8s_cpu_limit: "500m"
 {prefix}_k8s_mem_limit: 256Mi

@@ -310,8 +310,8 @@ def test_no_script_outside_the_invoker_builds_a_kubectl_argv():
 
     A module that spells `"kubectl"` as a string literal is building its own
     argv, which is the thing this module exists to make unnecessary — and any such call
-    runs against an unnamed cluster. `"k3s"` is not matched: it is also a role name in a
-    path (`roles/setup/k3s`), and `k3s kubectl` cannot be spelled without the second word.
+    runs against an unnamed cluster. `"k3s"` is not matched: it is also a name in a
+    path (`hosts/components/k3s-server`), and `k3s kubectl` cannot be spelled without the second word.
 
     What this cannot see: a module that imports an argument builder (`k8s_pods_args`) and
     runs it through its own `subprocess.run` never spells the literal — `monitors.py` was

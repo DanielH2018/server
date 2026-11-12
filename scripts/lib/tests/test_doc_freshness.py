@@ -8,7 +8,7 @@ TRACKED = {
     "docs/deploying.md",
     "docs/adr/0011-x.md",
     "scripts/deploy.sh",
-    "ansible/roles/setup/k3s/defaults/main.yml",
+    "hosts/components/k3s-server/defaults/main.yml",
     "scripts/deploy_tools/land_lib/land_tags.py",
     "scripts/deploy_tools/tests/test_land_tags.py",
     "scripts/x/dup.py",
@@ -77,8 +77,8 @@ def test_a_repo_relative_name_resolves():
 
 
 def test_a_unique_suffix_resolves_without_its_prefix():
-    got = f.resolve("k3s/defaults/main.yml", "docs/deploying.md", TRACKED)
-    assert got == "ansible/roles/setup/k3s/defaults/main.yml"
+    got = f.resolve("k3s-server/defaults/main.yml", "docs/deploying.md", TRACKED)
+    assert got == "hosts/components/k3s-server/defaults/main.yml"
 
 
 def test_an_ambiguous_suffix_resolves_to_nothing():
@@ -102,14 +102,14 @@ def test_a_source_changed_after_the_page_is_moved():
     dates = {
         "docs/deploying.md": "2026-08-01",
         "scripts/deploy.sh": "2026-09-01",
-        "ansible/roles/setup/k3s/defaults/main.yml": "2026-07-01",
+        "hosts/components/k3s-server/defaults/main.yml": "2026-07-01",
     }
-    text = "`scripts/deploy.sh` reads `k3s/defaults/main.yml`"
+    text = "`scripts/deploy.sh` reads `k3s-server/defaults/main.yml`"
     got = f.page_freshness("docs/deploying.md", text, dates, TRACKED)
     assert got.changed == "2026-08-01"
     assert [p for p, _ in got.sources] == [
         "scripts/deploy.sh",
-        "ansible/roles/setup/k3s/defaults/main.yml",
+        "hosts/components/k3s-server/defaults/main.yml",
     ]
     assert got.moved == [("scripts/deploy.sh", "2026-09-01")]
 

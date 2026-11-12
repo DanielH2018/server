@@ -10,8 +10,8 @@ pihole_k8s_unbound_image: klutchell/unbound:1.26.2@sha256:50cbeb32b5838a829a7226
 # of outage — DNS-dependent tooling (including the ability to reach a fix) goes dark first.
 # Also Recreate + PVC (the gravity/FTL databases) on its own state, which compounds the risk
 # but isn't the primary reason.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "platform — LAN DNS resolver; a failed deploy breaks name resolution fleet-wide, and host probes stay green through that kind of outage"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "platform — LAN DNS resolver; a failed deploy breaks name resolution fleet-wide, and host probes stay green through that kind of outage"
 
 pihole_k8s_claim: pihole-etc
 # Second instance, for deploy-time DNS continuity. Its own claim because /etc/pihole is RWO
@@ -27,7 +27,7 @@ pihole_k8s_size: 2Gi
 
 # Both instances' claims, which the renderer emits for this role and the pihole Kustomization
 # applies (#3387).
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: "{{ pihole_k8s_claim }}"
     storage_class: "{{ pihole_k8s_storage_class }}"
     size: "{{ pihole_k8s_size }}"
@@ -86,17 +86,17 @@ pihole_k8s_regex_deny:
 # Both Pi-holes are restart targets, so the renderer stamps `checksum/restart` on each
 # (scripts/renderer/renderer_lib/restart.py). Flux rolls instance 1 in `pihole` and instance 2
 # in `pihole-deferred`, after instance 1 is Ready. No Flux path runs a restart task.
-manifests_rollout: ''  # noqa var-naming[no-role-prefix]
+manifests_rollout: ''
 
-manifests_self_rollouts:  # noqa var-naming[no-role-prefix]
+manifests_self_rollouts:
   - { name: pihole, kind: deploy }
   - { name: pihole-2, kind: deploy }
 
 # The Deployment macro both instances' templates import. It renders no document of its own.
-manifests_exclude_files: [pihole-deployment.yaml]  # noqa var-naming[no-role-prefix]
+manifests_exclude_files: [pihole-deployment.yaml]
 
 # Instance 2's Deployment renders into `pihole-deferred`, which waits on `pihole`.
-manifests_deferred_files:  # noqa var-naming[no-role-prefix]
+manifests_deferred_files:
   - deployment-2.yaml
 
-manifests_deferred_dir_name: pihole-instance-2  # noqa var-naming[no-role-prefix]
+manifests_deferred_dir_name: pihole-instance-2

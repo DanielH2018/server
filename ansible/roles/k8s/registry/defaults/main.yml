@@ -9,8 +9,8 @@ registry_k8s_image: registry:3.1.2@sha256:38907510915c3f1604c7e83d6ab602ab3020d0
 # without a new pull). ALSO Recreate + its own PVC (the blob store) — a failed image swap can
 # also migrate its own stored blobs before the gate observes a fault, compounding the
 # dependency-edge risk with a migrating-state-shaped risk on registry's own data.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "dependency edges — image-supply path for n8n/homelab-mcp/ical-proxy/nut/pi-peer-backup/code-server/terraria/valheim/karakeep; no intra-tick ordering. ALSO Recreate + its own PVC (blob store) — two independent reasons. COUPLING NOTE for a future promotion: a revert drops recently-pushed digests from the blob store while nodes that already pulled them keep running until their next pull 404s"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "dependency edges — image-supply path for n8n/homelab-mcp/ical-proxy/nut/pi-peer-backup/code-server/terraria/valheim/karakeep; no intra-tick ordering. ALSO Recreate + its own PVC (blob store) — two independent reasons. COUPLING NOTE for a future promotion: a revert drops recently-pushed digests from the blob store while nodes that already pulled them keep running until their next pull 404s"
 
 # The address vars (k8s_registry_port / _host_ip / _pull_host) live in group_vars/all.yml
 # because roles/setup/k3s needs them too, to write containerd's trust config.
@@ -56,7 +56,7 @@ registry_k8s_dockerhub_mirror_keep_revisions: 3
 registry_k8s_dockerhub_mirror_debug_port: 5006
 
 # The claim the renderer emits for this role, which the registry Kustomization applies (#3387).
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: "{{ registry_k8s_claim }}"
     storage_class: "{{ registry_k8s_storage_class }}"
     size: "{{ registry_k8s_size }}"
@@ -151,7 +151,7 @@ registry_k8s_netpol_agent_flannel: 10.42.1.0/32
 # The ghcr.io mirror (templates/ghcr-mirror.yaml.j2). `restart_on: []`, because it reads no
 # ConfigMap or Secret: an unrelated edit to this role would otherwise restart it and drop
 # every pull in flight.
-manifests_extra_rollouts:  # noqa var-naming[no-role-prefix]
+manifests_extra_rollouts:
   - name: ghcr-mirror
     restart_on: []
   # The docker.io mirror (templates/dockerhub-mirror.yaml.j2), for the same reason.

@@ -6,7 +6,7 @@ tasks on daniel-pi. These tests hold what the move must keep: each cron the role
 retired and replaced by a timer, the scans read the Pi's own tokens, the weekly reboot refuses
 after a failed validation, and reconcile adopts the Pi's Ansible-era firewall rules in place.
 
-Run: uv run pytest hosts/lib/tests/test_pi_initial_setup_part2.py
+Run: uv run pytest hosts/lib/tests/test_pi_firewall_and_maintenance.py
 """
 
 import json
@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 
 import pytest
-from test_pi_initial_setup_part1 import seeded_pi
+from test_pi_sshd_apt_and_tuning import seeded_pi
 
 from lib.estate import REPO_INVENTORY
 from lib.proc_testing import fake_bin, run, write_exec

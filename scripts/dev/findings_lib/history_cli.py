@@ -213,7 +213,7 @@ def cmd_show(args: argparse.Namespace, tools: FindingsTools) -> int:
     if args.brief:
         # The fan-out brief's block, for a session working the issue by hand (#3955).
         # DECIDED: a call-time import. `precomputed` reaches land.sh's classifier, which
-        # imports from `ansible/roles/setup/gitops_deploy/files/`. Another repo's batch runs
+        # reads the `ansible/` tree through `lib.render_guard`. Another repo's batch runs
         # findings.py from a snapshot holding only `launch.SNAPSHOT_PATHS`, with no `ansible/`,
         # and a module-level import crashed every subcommand there on import (#4271).
         from dev.findings_lib.precomputed import precomputed

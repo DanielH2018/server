@@ -1,2 +1,2 @@
-# Managed by Ansible (roles/setup/initial_setup) — edits here are overwritten.
+# Shipped by the host-hardening host component — edits here are overwritten.
 Defaults timestamp_type=global, timestamp_timeout=60

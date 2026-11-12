@@ -422,29 +422,6 @@ def test_the_real_classifier_derives_nothing_from_a_docs_only_path(land_run):
     assert "gate" not in _names(calls)
 
 
-def test_a_setup_role_only_pr_ends_nothing_to_deploy_without_a_tick(land_run):
-    """H7.49a: the deployer's timer applies the role, and the landing neither starts nor awaits it.
-
-    The real `Classifier` runs over a real setup-role path. Before H7.49a this PR was
-    `self_applied`, so the landing awaited a tick and graded the deployer's markers.
-    """
-    fakes = Fakes(
-        pull_ref_rc=1,
-        gh_views={
-            "files,changedFiles": {
-                "files": [
-                    {
-                        "path": "ansible/roles/setup/renovate_agent/files/renovate_agent.py"
-                    }
-                ],
-                "changedFiles": 1,
-            }
-        },
-    )
-    rc, out, *_ = land_run([], fakes, classifier=Classifier())
-    assert rc == 0 and "VERDICT: nothing-to-deploy" in out
-
-
 def test_every_numbered_step_header_uses_the_same_denominator(land_run):
     """Finding 27: `/6` was written out seven times against eight prints, checked by nobody."""
     from deploy_tools.land_lib import pipeline

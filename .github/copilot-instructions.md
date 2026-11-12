@@ -1,6 +1,7 @@
-# GitHub Copilot Instructions for Ansible Repository
+# GitHub Copilot Instructions for the Homelab Repository
 
-This repository contains Ansible playbooks and roles for server management.
+This repository manages a k3s homelab as code: k3s roles that Flux applies, and the host
+packages that configure each host.
 
 > **Source of truth:** this file is a summary. The repo-root `CLAUDE.md` and the per-role
 > `CLAUDE.md` files are authoritative — in particular, always run Python tools via `uv run`
@@ -16,11 +17,6 @@ This repository contains Ansible playbooks and roles for server management.
 - **Rendered output**: the Pi's Compose project is rendered into its host package from `hosts/components/pi-compose/` — never edit it on the host.
 
 ## Development Guidelines
-
-### Ansible Best Practices
-- **Idempotency**: Ensure tasks are idempotent. Running a playbook multiple times should not have side effects.
-- **Modules**: Use specific Ansible modules (e.g., `ansible.builtin.apt`, `ansible.builtin.copy`, `ansible.builtin.template`) instead of `shell` or `command` where possible.
-- **Naming**: Give meaningful names to all tasks.
 
 ### Version Control
 - **Ignored Files**: Ensure runtime data, caches, logs, and other non-configuration files are excluded from the repository via `.gitignore`.

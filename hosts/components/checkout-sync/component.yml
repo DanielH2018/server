@@ -41,7 +41,7 @@
 #
 # ENFORCED: hosts/lib/tests/test_checkout_sync.py (the sync over a fixture repository) and
 # hosts/lib/tests/test_checkout_sync_component.py (the units), and
-# ansible/tests/services/test_initial_setup_check_rule_literals.py (the rule's deadline).
+# ansible/tests/services/test_not_reporting_rule_deadlines.py (the rule's deadline).
 defaults:
   checkout_sync_github_repo: DanielH2018/server
 depends:

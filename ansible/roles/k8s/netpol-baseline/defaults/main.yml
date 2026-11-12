@@ -59,8 +59,8 @@ netpol_baseline_node_cidrs: "{{ k3s_cni0_gateways }}"
 netpol_baseline_traefik_https_sources: "{{ (cloudflare_ips | reject('search', ':') | list) + [lan_subnet, wg_client_subnet, k3s_pod_cidr] }}"
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "renders NetworkPolicies plus one verify Job and pins no image; Flux applies it, and the Job fails the revision if the live exempt set has drifted"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "renders NetworkPolicies plus one verify Job and pins no image; Flux applies it, and the Job fails the revision if the live exempt set has drifted"
 
 # The observability namespace fence. It carries its OWN enforcement flag and its
 # OWN node-CIDR list, deliberately: the shared netpol_baseline_node_cidrs is read by the 16
@@ -231,16 +231,16 @@ netpol_baseline_probe_active: >-
                   + ['flux-system'])
      | list }}
 
-manifests_rollout: ""  # noqa var-naming[no-role-prefix]
+manifests_rollout: ""
 
 # The observability namespace's baseline and its three caller policies, which the armed
 # apply's `-n homelab` refuses (#3575). The renderer writes them to
 # `cluster/netpol-baseline-deferred/`, which Flux applies after every other tag's
 # Kustomization.
-manifests_deferred_files:  # noqa var-naming[no-role-prefix]
+manifests_deferred_files:
   - networkpolicy-observability.yaml
   - networkpolicy-prometheus.yaml
   - networkpolicy-loki.yaml
   - networkpolicy-alertmanager.yaml
 
-manifests_deferred_dir_name: netpol-baseline-observability  # noqa var-naming[no-role-prefix]
+manifests_deferred_dir_name: netpol-baseline-observability

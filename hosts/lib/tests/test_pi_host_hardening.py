@@ -5,7 +5,7 @@ and the package tasks of host-basics on daniel-pi. H7.60 deleted those tasks, so
 constants beside it carry what they wrote. These tests hold the shipped bytes to them, and the
 line-arm edits that adopt them.
 
-Run: uv run pytest hosts/lib/tests/test_pi_initial_setup_part3.py
+Run: uv run pytest hosts/lib/tests/test_pi_host_hardening.py
 """
 
 import shutil
@@ -27,10 +27,6 @@ BANNER = (
 )
 # The bytes initial_setup's tasks wrote to each path before H7.60 deleted them.
 WRITTEN = {
-    SUDOERS: (
-        "# Managed by Ansible (roles/setup/initial_setup) — edits here are overwritten.\n"
-        "Defaults timestamp_type=global, timestamp_timeout=60\n"
-    ),
     "/etc/audit/rules.d/hardening.rules": (
         "# Identity file changes\n"
         "-w /etc/passwd -p wa -k identity\n"
@@ -47,6 +43,8 @@ WRITTEN = {
         "[Coredump]\nStorage=none\nProcessSizeMax=0\n"
     ),
 }
+# The one directive the task wrote to SUDOERS; the file's comment header is the component's own.
+SUDOERS_DIRECTIVE = "Defaults timestamp_type=global, timestamp_timeout=60"
 BLACKLIST_WRITTEN = (
     "install dccp /bin/true\n"
     "install sctp /bin/true\n"
@@ -83,7 +81,6 @@ def _edits(package: host_mode.Package, path: str) -> list[dict]:
 @pytest.mark.parametrize(
     "dst, mode",
     [
-        (SUDOERS, 0o440),
         ("/etc/audit/rules.d/hardening.rules", 0o640),
         ("/etc/modules-load.d/wireguard.conf", 0o644),
         ("/etc/systemd/coredump.conf.d/disable.conf", 0o644),
@@ -93,6 +90,16 @@ def test_each_shipped_file_holds_the_bytes_and_mode_its_task_wrote(package, dst,
     data, shipped_mode = package.files[dst]
     assert data.decode() == WRITTEN[dst]
     assert shipped_mode == mode
+
+
+def sudoers_directives(data: bytes) -> list[str]:
+    return [ln for ln in data.decode().splitlines() if ln and not ln.startswith("#")]
+
+
+def test_the_sudoers_file_holds_only_the_directive_its_task_wrote(package):
+    data, shipped_mode = package.files[SUDOERS]
+    assert sudoers_directives(data) == [SUDOERS_DIRECTIVE]
+    assert shipped_mode == 0o440
 
 
 def test_visudo_accepts_the_sudoers_file_and_rejects_a_broken_copy(package, tmp_path):

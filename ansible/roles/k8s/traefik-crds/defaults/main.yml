@@ -19,13 +19,13 @@ traefik_crds_vendored_manifests:
 # The cost is that a CRD a later upstream release retires stays live until the operator deletes
 # it. scripts/renderer/tests/test_renderer_crd_census.py fails a CRD in any tag that renders
 # prune: true. Full analysis: d5-bulk-move.md, step 26's traefik bullet.
-flux_prune: false  # noqa var-naming[no-role-prefix]
+flux_prune: false
 
 # Auto-deploy stance. Flux applies the tag, so this gates no apply; it is traefik's stance,
 # because the CRDs are the edge's own kinds and a bad apply takes every route with them.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "platform — the IngressRoute, Middleware and TLSOption kinds every route depends on; a bad CRD apply removes the ingress edge, and host probes stay green through that kind of outage"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "platform — the IngressRoute, Middleware and TLSOption kinds every route depends on; a bad CRD apply removes the ingress edge, and host probes stay green through that kind of outage"
 
-manifests_files: []  # noqa var-naming[no-role-prefix]
+manifests_files: []
 
-manifests_rollout: ''  # noqa var-naming[no-role-prefix]
+manifests_rollout: ''

@@ -5,12 +5,12 @@ code_server_k8s_image: "{{ k8s_registry_pull_host }}/code-server:{{ k8s_built_im
 # `code_server_k8s_image` above names a content tag computed from the build inputs, with no
 # upstream version scheme, so Renovate's k8s-defaults manager has nothing to bump. Since D5.16
 # Flux applies this role, so the flag's live reader is Renovate's automerge denylist.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "in-cluster-built registry image with no upstream version scheme — Renovate can never generate an update PR for it, so there is no bump event to auto-deploy regardless of the migrating-state PVC shape below"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "in-cluster-built registry image with no upstream version scheme — Renovate can never generate an update PR for it, so there is no bump event to auto-deploy regardless of the migrating-state PVC shape below"
 # The claims snapshotted before each revision applies. Under Flux the renderer turns this list
 # into the code-server-snapshot Kustomization, whose Job snapshots both claims before
 # code-server applies (D5.2a).
-k8s_autodeploy_snapshot_pvcs: [code-server-config, code-server-workspace]  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_snapshot_pvcs: [code-server-config, code-server-workspace]
 
 # 6.2 G — mostly extensions and npm/pip caches; the workspace itself is ~2 M.
 code_server_k8s_claim: code-server-config
@@ -155,7 +155,7 @@ code_server_k8s_rust_src_sha256: e485a88c45db546b73571df7bebfcb4454ba4fb552c492e
 
 # The claims the renderer emits for this role. The code-server Kustomization applies them after
 # the code-server-snapshot Job, which snapshots both (k8s_autodeploy_snapshot_pvcs above).
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: "{{ code_server_k8s_claim }}"
     storage_class: "{{ code_server_k8s_storage_class }}"
     size: "{{ code_server_k8s_size }}"
@@ -175,9 +175,9 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
 # that revision its verdict, the Job keeps pulling, and Flux applies code-server on a later
 # retry. Only Flux reads it: the renderer adds the Kustomization for a published tag alone,
 # so an Ansible deploy ignores it.
-flux_prepull_timeout: 4500s  # noqa var-naming[no-role-prefix]
+flux_prepull_timeout: 4500s
 
-image_builder_builds:  # noqa var-naming[no-role-prefix]
+image_builder_builds:
   - image_builder_name: code-server
     image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/code-server/templates/Dockerfile.j2"
     # The one file the Dockerfile COPYs (flat — ConfigMap keys cannot contain '/').
@@ -202,4 +202,4 @@ image_builder_builds:  # noqa var-naming[no-role-prefix]
     # registry layer cache re-runs only the steps below the first changed one.
     image_builder_timeout: 3600
 
-manifests_rollout: code-server  # noqa var-naming[no-role-prefix]
+manifests_rollout: code-server

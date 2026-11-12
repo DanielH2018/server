@@ -11,7 +11,7 @@ home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.11.1-ls264@sha2
 # deadline, so a pull slower still costs that revision its verdict, the Job keeps pulling, and
 # Flux applies home-assistant on a later retry. Only Flux reads it: the renderer adds the
 # Kustomization for a published tag alone, so an Ansible deploy ignores it.
-flux_prepull_timeout: 4500s  # noqa var-naming[no-role-prefix]
+flux_prepull_timeout: 4500s
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Migrating state — the sharpest case in the fleet: strategy is Recreate and the config volume
@@ -23,19 +23,19 @@ flux_prepull_timeout: 4500s  # noqa var-naming[no-role-prefix]
 # revision that changes home-assistant writes the stateful hold without a reset, and the operator
 # reverts the claim through docs/volume-snapshot-drills.md, so a bad swap can be
 # reverted instead of leaving the .storage device/entity registries unreadable by the old image.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the home-assistant-snapshot Job before each revision and an operator revert to it after a failed one; -lsNN versioning still hides a breaking bump as a MINOR. WEIGHED: a companion-app long-lived token minted after the snapshot is invalidated by a revert, forcing that device to re-auth"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the home-assistant-snapshot Job before each revision and an operator revert to it after a failed one; -lsNN versioning still hides a breaking bump as a MINOR. WEIGHED: a companion-app long-lived token minted after the snapshot is invalidated by a revert, forcing that device to re-auth"
 # The claim snapshotted before each revision applies. Under Flux the renderer turns this
 # list into the home-assistant-snapshot Kustomization, whose Job snapshots it before home-assistant applies
 # (D5.2a). The snapshot is the recovery point this role's auto-deploy depends on.
-k8s_autodeploy_snapshot_pvcs: [home-assistant-config]  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_snapshot_pvcs: [home-assistant-config]
 
 # The manifests whose Secret holds a multi-line key, which no Flux placeholder can carry. A
 # placeholder render (scripts/renderer, target slice R2) leaves each out, and D3 ships it as a
 # SOPS-encrypted manifest instead. Ansible renders and applies it like any other secret file.
 # `sops-manifest-entries` in scripts/renderer/renderer_lib/secret_checks.py holds each entry
 # to one Secret of `SOPS_MANIFEST_KEYS` keys.
-render_sops_manifests: [google-sa-secret.yaml]  # noqa var-naming[no-role-prefix]
+render_sops_manifests: [google-sa-secret.yaml]
 
 # The LSIO image has no `install`; the config-install initContainer needs alpine instead.
 # Same init image peanut and zigbee2mqtt use.
@@ -110,9 +110,9 @@ home_assistant_k8s_size: 4Gi
 
 # The claims the renderer emits for this role. The home-assistant Kustomization applies them after
 # the home-assistant-snapshot Job.
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: "{{ home_assistant_k8s_claim }}"
     storage_class: "{{ home_assistant_k8s_storage_class }}"
     size: "{{ home_assistant_k8s_size }}"
 
-manifests_rollout: home-assistant  # noqa var-naming[no-role-prefix]
+manifests_rollout: home-assistant

@@ -9,7 +9,7 @@ slower to page than the producer's cadence calls for (M1 convention 1).
 The Loki witness renders one script that both nodes run, so one DEADLINE_S pins both of its rules.
 checkout-sync is Python, so its DEADLINE_S is the module constant rather than a render.
 
-Run: uv run pytest ansible/tests/services/test_initial_setup_check_rule_literals.py
+Run: uv run pytest ansible/tests/services/test_not_reporting_rule_deadlines.py
 """
 
 import re

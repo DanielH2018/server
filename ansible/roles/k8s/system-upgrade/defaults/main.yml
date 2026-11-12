@@ -14,20 +14,20 @@
 # The `+k3sN` suffix is semver build metadata, which Renovate ignores when comparing: an
 # upstream bump (v1.36.2 -> v1.37.0) is offered, a same-version re-tag (+k3s1 -> +k3s2) is not.
 # renovate: datasource=github-releases depName=k3s-io/k3s
-k3s_version: v1.37.2+k3s1  # noqa var-naming[no-role-prefix]
+k3s_version: v1.37.2+k3s1
 # The installer script at that same tag, and its hash. get.k3s.io serves master's copy, which
 # can differ from the tag's and moves with no signal, and the script runs as root on both
 # nodes. Renovate bumps k3s_version through the annotation above; the sha256 is a MANUAL
 # finish on that PR:
 #   uv run python scripts/validate/asset_pins.py --refresh k3s-io/k3s
-k3s_install_script_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version }}/install.sh"  # noqa var-naming[no-role-prefix]
-k3s_install_script_sha256: ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b  # noqa var-naming[no-role-prefix]
+k3s_install_script_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version }}/install.sh"
+k3s_install_script_sha256: ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b
 # The `k3s` line of that release's sha256sum-amd64.txt. The system-upgrade-verify Jobs
 # (files/system_upgrade_verify.py) compare each node's /usr/local/bin/k3s with it, and
 # scripts/validate/k3s_binary_sum.py refuses a change to k3s_version that leaves it. Finish it on
 # the version-bump PR with the line from
 #   gh release download <k3s_version> -R k3s-io/k3s -p sha256sum-amd64.txt -D <empty dir>
-k3s_binary_sha256_amd64: 265b3ee6a3198ef14033c63ef46cbb32370d83795199fb6d1b01f21575eddbda  # noqa var-naming[no-role-prefix]
+k3s_binary_sha256_amd64: 265b3ee6a3198ef14033c63ef46cbb32370d83795199fb6d1b01f21575eddbda
 
 # The controller manifest and the Plan CRD are in-tree copies under files/upstream/, byte for
 # byte what each item's `url` serves. No render may fetch a URL (D5, C1), so the renderer
@@ -87,18 +87,18 @@ system_upgrade_job_backoff_limit: 2
 # CRD deletes every Plan. The cost: a Plan removed from the render stays live and keeps
 # selecting its nodes until the operator deletes it (**operator-only**), so a revert of a PR
 # that added a Plan is followed by `kubectl -n system-upgrade delete plan <name>`.
-flux_prune: false  # noqa var-naming[no-role-prefix]
+flux_prune: false
 
 # DECIDED: forward-only (H1's flag). A failed or timed-out revision that changes this tag holds
 # without resetting `prod`, so `promote` never lowers the Plans below a version a node already
 # runs. The flag does not make `k3s_version` one of H1's gated pins: this slice's gates run in
 # each Plan's `prepare`.
-flux_forward_only: true  # noqa var-naming[no-role-prefix]
+flux_forward_only: true
 
 # The Kustomization's timeout: the agent Plan's 90-minute deadline plus ten minutes. A healthy
 # bump ends well inside it, and a Job that fails or runs out its deadline turns the
 # Kustomization red first.
-flux_timeout: 100m  # noqa var-naming[no-role-prefix]
+flux_timeout: 100m
 
 # How Flux reads a Plan's status (H6, *The Plans' outcome reaches flux/system-upgrade*). SUC's
 # Plan status has no observedGeneration, so the expressions reject a status that predates the
@@ -106,7 +106,7 @@ flux_timeout: 100m  # noqa var-naming[no-role-prefix]
 # version with `+` replaced by `-` (`MungeVersion`), so the renderer renders the literal below
 # from `k3s_version`. A missing field reads as stale, through has(). Flux evaluates `inProgress`,
 # then `failed`, then `current`, and the first true one decides.
-flux_health_check_exprs:  # noqa var-naming[no-role-prefix]
+flux_health_check_exprs:
   - apiVersion: upgrade.cattle.io/v1
     kind: Plan
     inProgress: >-
@@ -125,7 +125,7 @@ flux_health_check_exprs:  # noqa var-naming[no-role-prefix]
 
 # Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
 # merge here is not a routine bump.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "platform — a merged change to a Plan upgrades the k3s binary on every node it selects; the Plans select no node until H6.3c, and the gates, deadlines and forward-only hold are the protection"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "platform — a merged change to a Plan upgrades the k3s binary on every node it selects; the Plans select no node until H6.3c, and the gates, deadlines and forward-only hold are the protection"
 
-manifests_rollout: ''  # noqa var-naming[no-role-prefix]
+manifests_rollout: ''

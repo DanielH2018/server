@@ -198,10 +198,10 @@ def test_a_folded_list_in_defaults_is_read(tmp_path):
         tmp_path,
         "widget",
         "---\n"
-        "manifests_files: >-  # noqa var-naming[no-role-prefix]\n"
+        "manifests_files: >-\n"
         "  {{ ['deployment.yaml'] + (['route.yaml'] if lever | bool else []) }}\n"
         "\n"
-        "manifests_secret_files:  # noqa var-naming[no-role-prefix]\n"
+        "manifests_secret_files:\n"
         "  - secret.yaml\n"
         "other: unrelated.yaml\n",
     )

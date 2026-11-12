@@ -238,8 +238,7 @@ The renderer writes a tag's files by these rules:
 ### Where render metadata lives
 
 A role sets the keys of `scripts/lib/k8s_roles.py:RENDER_KEYS` in its
-`defaults/main.yml`, and `image_builder_builds` lists the images it builds. Each key in
-defaults carries `# noqa var-naming[no-role-prefix]`. `include_vars`, `image_builder_sites` and
+`defaults/main.yml`, and `image_builder_builds` lists the images it builds. `include_vars`, `image_builder_sites` and
 `scripts/lib/k8s_roles.py:resolved_manifest_files` read `defaults/main.yml` only, and each raises
 on a role without that file.
 

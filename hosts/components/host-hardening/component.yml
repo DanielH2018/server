@@ -22,7 +22,7 @@
 # at the next boot, through the tmpfiles.d line.
 #
 # Keep the sudoers file valid: a malformed drop-in locks sudo out. `visudo -cf` in
-# hosts/lib/tests/test_pi_initial_setup_part3.py holds it where classic sudo is installed, which
+# hosts/lib/tests/test_pi_host_hardening.py holds it where classic sudo is installed, which
 # excludes the ubuntu-26.04 runner. That runner's visudo rejects `timestamp_type`.
 #
 # unattended-upgrades is a Depends here. Its origin policy is the `unattended-upgrades` component's.

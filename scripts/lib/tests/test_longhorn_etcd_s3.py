@@ -1,6 +1,6 @@
 """Check 12 of the backup heartbeat: k3s's S3 etcd snapshots must stay fresh and armed.
 
-The reader-side half is in `ansible/roles/setup/k3s/tests/test_longhorn_backup_health_reader.py`,
+The reader-side half is in `hosts/components/k3s-host-checks/tests/test_longhorn_backup_health_reader.py`,
 and `ansible/tests/setup/test_k3s_server_component.py` runs the parser over the rendered drop-in.
 """
 
@@ -89,7 +89,6 @@ def test_a_snapshot_inside_the_bound_is_clean():
 
 
 def test_a_snapshot_past_the_bound_is_flagged():
-    # fact: ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)
     problem, _ = logic.check_newest_snapshot(
         [_snapshot(ALLOWED_S + 3600)], ALLOWED_S, NOW
     )

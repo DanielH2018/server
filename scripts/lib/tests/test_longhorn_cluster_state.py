@@ -3,7 +3,7 @@
 `test_longhorn_host_readers_follow_the_cluster.py` runs the whole reader against a stub kubectl.
 These cases pin the decisions it rests on, without a subprocess.
 
-Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_cluster_state.py
+Run: uv run pytest scripts/lib/tests/test_longhorn_cluster_state.py
 """
 
 import pytest

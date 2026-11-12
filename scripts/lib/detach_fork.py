@@ -1,4 +1,4 @@
-"""Run work that outlives its caller: `land.sh --detach` and `deploy.sh --detach` share this.
+"""Run work that outlives its caller: `land.sh --detach`, through `land_lib/detach.py`.
 
 Two different kills can reach a detached run, and each half of this module escapes one.
 
@@ -29,8 +29,8 @@ service of its own, where `leave_unit_cgroup` works as it does for a fan-out uni
 
 THE RUN RECORDS ITS OWN PID AND EXIT CODE BESIDE ITS LOG. A grandchild cannot be reaped by
 whoever waits on it, so the caller writes `<log stem>.pid` and the run writes `<log stem>.rc`
-after flushing its last line (`record_code`). A cc-wait probe (`land_probe.py`,
-`deploy_lib/detach_probe.py`) reads the code first and the log second, and reads a dead pid with no code
+after flushing its last line (`record_code`). The cc-wait probe
+(`land_lib/land_probe.py`) reads the code first and the log second, and reads a dead pid with no code
 as a run that was killed. A log with neither file that has sat unchanged for `START_GRACE_S`
 is a run that never recorded its start, and reads as killed too (`never_started`).
 """

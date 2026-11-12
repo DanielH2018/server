@@ -1,28 +1,25 @@
-"""daniel-box ships the same three `initial_setup` subjects as the Pi (H7.29).
+"""daniel-server ships the same three `initial_setup` subjects as the Pi (H7.28).
 
-The components are host-neutral and `test_pi_initial_setup_part1.py` holds their content. These
+The components are host-neutral and `test_pi_sshd_apt_and_tuning.py` holds their content. These
 tests hold what is specific to this host: the package names the components, its sysctl edits
 equal the Pi's, and its sshd Match block names its own sys user.
 
-Run: uv run pytest hosts/lib/tests/test_server_initial_setup_part1.py
+Run: uv run pytest hosts/lib/tests/test_server_sshd_apt_and_tuning.py
 """
 
 import pytest
 
-from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
-from lib.repo_paths import REPO
 from lib.render_context import render_context
 from renderer.renderer_lib import host as host_mode
 
 SSHD_D = "/etc/ssh/sshd_config.d"
 SYSCTL = "/etc/sysctl.conf"
-PI_TUNING = REPO / "hosts" / "components" / "pi-tuning" / "component.yml"
 
 
 @pytest.fixture(scope="module")
 def package() -> host_mode.Package:
-    return host_mode.render_host("daniel-box")
+    return host_mode.render_host("daniel-server")
 
 
 def test_the_package_ships_the_three_components_and_activates_ssh_and_journald(package):
@@ -35,27 +32,22 @@ def test_the_package_ships_the_three_components_and_activates_ssh_and_journald(p
     assert "/etc/apt/apt.conf.d/52unattended-upgrades-local" in package.files
 
 
-def test_the_sysctl_edits_equal_the_pis_twenty_keys():
-    server = host_mode.render_host("daniel-box")
+def test_the_sysctl_edits_are_the_pis_without_its_memory_keys_plus_the_agents_inotify_key():
+    server = host_mode.render_host("daniel-server")
     pi = host_mode.render_host("daniel-pi")
 
     def lines(pkg):
         return {e["line"] for e in pkg.lines if e["path"] == SYSCTL}
 
-    # The Pi also ships its zram tuning (vm.swappiness, vm.page-cluster) from pi-tuning, which
-    # daniel-box must not share, so the hardening keys are the Pi's set without that component's.
-    tuning = yaml_fast.safe_load(PI_TUNING.read_text())["lines"]
-    pi_tuning = {e["line"] for e in tuning if e["path"] == SYSCTL}
-
-    assert len(pi_tuning) == 2
-    # k3s-server's inotify key is the one daniel-box adds, and the Pi runs no kubelet.
-    hardening = lines(server) - {"fs.inotify.max_user_instances=1024"}
-    assert len(hardening) == 20
-    assert hardening == lines(pi) - pi_tuning
+    assert len(lines(server)) == 21
+    # vm.swappiness and vm.page-cluster belong to the Pi's zram tuning (pi-tuning), not here.
+    pi_only = {"vm.swappiness=130", "vm.page-cluster=0"}
+    agent_only = {"fs.inotify.max_user_instances=1024"}
+    assert lines(server) == (lines(pi) - pi_only) | agent_only
 
 
 def test_the_apt_origin_patterns_include_the_servers_github_cli_origin(package):
-    patterns = render_context(None, "daniel-box", inventory=REPO_INVENTORY)[
+    patterns = render_context(None, "daniel-server", inventory=REPO_INVENTORY)[
         "unattended_upgrades_origins_patterns"
     ]
     local = package.files["/etc/apt/apt.conf.d/52unattended-upgrades-local"][0].decode()
@@ -65,6 +57,6 @@ def test_the_apt_origin_patterns_include_the_servers_github_cli_origin(package):
 
 
 def test_the_match_block_names_the_hosts_sys_user(package):
-    user = render_context(None, "daniel-box", inventory=REPO_INVENTORY)["sys_user"]
+    user = render_context(None, "daniel-server", inventory=REPO_INVENTORY)["sys_user"]
     match = package.files[f"{SSHD_D}/90-homelab-match.conf"][0].decode()
     assert f"Match User {user}\n" in match

@@ -3,7 +3,7 @@
 
 WHY THIS PAGE IS WORTH HAVING. Some of these jobs commit, push, deploy or delete without a
 human in the loop. That set is the reason to read the page, and it is not obvious from any
-single role: the jobs are spread across roles/setup/, roles/k8s/ and the host packages.
+single role: the jobs are spread across roles/k8s/ and the host packages.
 
 TWO SOURCES. A timer row comes from the rendered host packages
 (`docs.catalog_lib.package_timers`), so it shows what each host receives. A cron row comes

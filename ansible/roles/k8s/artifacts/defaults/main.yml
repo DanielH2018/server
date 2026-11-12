@@ -9,8 +9,8 @@ artifacts_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d3713249
 # above is a real version, not a mutable :latest or an -lsNN scheme that hides a breaking bump.
 # Deliberately unprefixed: one constant key name every role uses, so the completeness guard
 # can check for it without knowing the role's own prefix.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe gates the rollout, pinned image tag"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe gates the rollout, pinned image tag"
 
 # The Python files that make up the running server, mirroring autofix-bridge's
 # `autofix_bridge_modules` and carrying the same risk: a module missing here never reaches the

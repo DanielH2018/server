@@ -43,7 +43,6 @@ def test_nightly_run_drills_the_rotations_own_pick(drill) -> None:
 
 def test_argv_pin_drills_that_volume_not_the_rotations_pick(drill) -> None:
     """`longhorn-restore-drill.sh <pvc>` reaches the selection; the oldest stamp is untouched."""
-    # fact: ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)
     before = _attempted(drill, OLDEST)
     assert selected(drill, drill([PINNED])) == PINNED
     assert _attempted(drill, OLDEST) == before

@@ -2,8 +2,8 @@
 # Remote Control host (claude-rc.service). See CLAUDE.md in this role for what the
 # service is and why it exists.
 #
-# Every var here carries the role's `claude_code_` prefix (ansible-lint
-# var-naming[no-role-prefix]), so the Remote Control ones read `claude_code_rc_*`.
+# Every var here carries the component's `claude_code_` prefix, so the Remote Control ones read
+# `claude_code_rc_*`.
 
 # The service hands anything holding the claude.ai account a session on the k3s
 # control-plane node, and it depends on a prerequisite Ansible cannot check: whether a

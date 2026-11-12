@@ -9,8 +9,8 @@ peanut_k8s_init_image: alpine:3.24@sha256:f59abe656b692d901e184be3445e0847866021
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Stateless RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image. Talks to the
 # nut Service as a client only — it owns no UPS state of its own.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image"
 
 # Blast-radius caps for peanut itself; the nut role carries its own.
 peanut_k8s_cpu_limit: "500m"
@@ -20,4 +20,4 @@ peanut_k8s_mem_request: 32Mi
 # upsd's port on the in-cluster `nut` Service.
 peanut_k8s_nut_port: 3493
 
-manifests_rollout: peanut  # noqa var-naming[no-role-prefix]
+manifests_rollout: peanut

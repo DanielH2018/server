@@ -17,8 +17,8 @@ nut_k8s_cluster_ip: 10.43.171.124
 # both. That, plus this being the pod half of the UPS/nut_host emergency-shutdown chain
 # (privileged: true, direct /dev/bus/usb access) makes it worth a human watching every deploy,
 # regardless of probe coverage.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "NOT probe-less (has a readinessProbe) despite the denylist comment grouping — real reason: USB-passthrough + node-exclusive hostPort (Recreate strategy) on the UPS shutdown-chain pod, privileged:true"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "NOT probe-less (has a readinessProbe) despite the denylist comment grouping — real reason: USB-passthrough + node-exclusive hostPort (Recreate strategy) on the UPS shutdown-chain pod, privileged:true"
 
 # Blast-radius caps.
 nut_k8s_cpu_limit: "500m"
@@ -52,7 +52,7 @@ nut_k8s_mem_request: 16Mi
 # `upsmon -c fsd` drill there, and only then list the nut-secondary component in its host package.
 nut_onbatt_shutdown_delay: 300
 
-image_builder_builds:  # noqa var-naming[no-role-prefix]
+image_builder_builds:
   - image_builder_name: nut
     image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/nut/templates/Dockerfile.j2"
     # Embedded verbatim (lookup('file')) — shell scripts Jinja must not touch.
@@ -66,6 +66,6 @@ image_builder_builds:  # noqa var-naming[no-role-prefix]
 # excluded. The prune is armed by default since #3662, so this line is the opt-out.
 # The renderer reads the line and leaves the role label off nut's objects; Flux's own prune
 # tracks them by its inventory, not by that label.
-manifests_prune: false  # noqa var-naming[no-role-prefix]
+manifests_prune: false
 
-manifests_rollout: nut  # noqa var-naming[no-role-prefix]
+manifests_rollout: nut

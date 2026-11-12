@@ -12,8 +12,8 @@
 # could tear the other's restore down, and a bump of the runner image would run a real restore
 # with nothing watching it. The stance matches janitorr's and crowdsec's, which pin the same
 # `alpine/k8s` digest. Contradict this with a measured gate that cannot overlap the 04:10 UTC run.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "the drill restores a real Volume, PV and PVC under a fixed name, so an extra run is not harmless; it runs on its own schedule and a bump of its runner image waits for a person"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "the drill restores a real Volume, PV and PVC under a fixed name, so an extra run is not harmless; it runs on its own schedule and a bump of its runner image waits for a person"
 
 # The namespace the stamp ConfigMap, the script ConfigMap, the CronJob and the RBAC live in. It
 # mirrors `k3s_longhorn_restore_drill_namespace`, which backup health's readers read until H2.3f.
@@ -137,4 +137,4 @@ k3s_longhorn_restore_drill_timeout_s: 2700
 # drill never contends with a backup in flight.
 k3s_longhorn_restore_drill_cron: "10 4 * * *"
 
-manifests_rollout: ''  # noqa var-naming[no-role-prefix]
+manifests_rollout: ''

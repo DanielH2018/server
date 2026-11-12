@@ -14,8 +14,8 @@ texbrain_k8s_image: ghcr.io/danielh2018/texbrain:latest@sha256:c97188d8b271fab5a
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Stateless: RollingUpdate Deployment, no PVC, readinessProbe on the only Deployment, and
 # the image is digest-pinned rather than a mutable tag.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image"
 
 # nginx-unprivileged runs as this UID. It is also the fsGroup: emptyDir mounts 0755
 # root-owned, so without one the container EPERMs on its cache and tmp directories.

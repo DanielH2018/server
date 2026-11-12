@@ -4,8 +4,8 @@
 pi_peer_backup_k8s_image: "{{ k8s_registry_pull_host }}/pi-peer-backup:{{ k8s_built_image_tags.get('pi-peer-backup', 'latest') }}"
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in pi-peer-backup-verify, which proves the new image RUNS and fails the revision on a run that exits non-zero; the gate Job has no ownerReference, so concurrencyPolicy Forbid cannot keep a scheduled run off it, but the rsync mirror is retention-free, so the extra run is idempotent. NOTHING CAN TRIGGER AN AUTOMERGE: the only pin, pi_peer_backup_k8s_image, is a registry-built image listed in REGISTRY_BUILT_IMAGES (scripts/tests/test_renovate_managers.py) — no upstream ref for Renovate to compare against and no version for it to offer — so what moves is the FROM in templates/Dockerfile.j2, and every automerge rule in renovate.json is custom.regex-only, so that dockerfile-manager bump never automerges. The stance is correct and harmless, not active."  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in pi-peer-backup-verify, which proves the new image RUNS and fails the revision on a run that exits non-zero; the gate Job has no ownerReference, so concurrencyPolicy Forbid cannot keep a scheduled run off it, but the rsync mirror is retention-free, so the extra run is idempotent. NOTHING CAN TRIGGER AN AUTOMERGE: the only pin, pi_peer_backup_k8s_image, is a registry-built image listed in REGISTRY_BUILT_IMAGES (scripts/tests/test_renovate_managers.py) — no upstream ref for Renovate to compare against and no version for it to offer — so what moves is the FROM in templates/Dockerfile.j2, and every automerge rule in renovate.json is custom.regex-only, so that dockerfile-manager bump never automerges. The stance is correct and harmless, not active."
 
 pi_peer_backup_k8s_claim: pi-peer-backup-data
 # Plain `longhorn` ON PURPOSE (not -nobackup): riding the Longhorn backup to B2 (the Saturday
@@ -52,11 +52,11 @@ pi_peer_backup_src_dir: "/home/{{ sys_user }}/server/containers/wg-easy/config/"
 # it as a SOPS-encrypted manifest instead. Ansible renders and applies it like any other
 # secret file. `sops-manifest-entries` in scripts/renderer/renderer_lib/secret_checks.py holds
 # the entry to one Secret of `SOPS_MANIFEST_KEYS` keys.
-render_sops_manifests: [ssh-key-secret.yaml]  # noqa var-naming[no-role-prefix]
+render_sops_manifests: [ssh-key-secret.yaml]
 
 # The claim the renderer emits for this role, which the pi-peer-backup Kustomization applies
 # with the CronJob (#3387).
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: "{{ pi_peer_backup_k8s_claim }}"
     storage_class: "{{ pi_peer_backup_k8s_storage_class }}"
     size: "{{ pi_peer_backup_k8s_size }}"
@@ -64,10 +64,10 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
 # Under Flux the renderer copies the CronJob into one verify Job per role revision, in
 # `pi-peer-backup-verify` (scripts/renderer/renderer_lib/cronjob_gate.py). It replaced the
 # k8s/cronjob-gate include at the flip.
-flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
+flux_cronjob_gates:
   pi-peer-backup: {kind: verify}
 
-image_builder_builds:  # noqa var-naming[no-role-prefix]
+image_builder_builds:
   - image_builder_name: pi-peer-backup
     image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/pi-peer-backup/templates/Dockerfile.j2"
     # Embedded verbatim (lookup('file')) — a shell script Jinja must not touch.
@@ -76,4 +76,4 @@ image_builder_builds:  # noqa var-naming[no-role-prefix]
 
 # A CronJob — nothing to wait on at deploy; the first scheduled (or manually
 # triggered) run is the proof.
-manifests_rollout: ''  # noqa var-naming[no-role-prefix]
+manifests_rollout: ''

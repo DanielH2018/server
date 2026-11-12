@@ -48,7 +48,6 @@ from _helpers import ANSIBLE
 # patterns has no update signal, and one outside this glob has no pinning requirement.
 PIN_FILE_GLOBS = (
     "roles/k8s/*/defaults/main.yml",
-    "roles/setup/*/defaults/main.yml",
     "inventory/group_vars/all.yml",
 )
 

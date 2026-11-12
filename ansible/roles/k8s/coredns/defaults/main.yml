@@ -50,16 +50,16 @@ coredns_max_fails: 2
 # restores it. With prune: false a render that drops an object leaves it serving. The cost is
 # that an object removed here stays live until the operator deletes it (**operator-only**).
 # Full analysis: the H1 plan's *Plumbing tags are never pruned*.
-flux_prune: false  # noqa var-naming[no-role-prefix]
+flux_prune: false
 
 # DECIDED: forward-only. A failed revision holds rather than resets `prod`, because a reset
 # would re-fetch an older bundle through the DNS that just failed. Full analysis: the H1 plan's
 # *Forward-only tags and the promote rule*.
-flux_forward_only: true  # noqa var-naming[no-role-prefix]
+flux_forward_only: true
 
 # Auto-deploy stance. Flux applies the tag, so this gates no apply; the reason records why a bad
 # merge here is not a routine bump.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "platform — cluster DNS for every pod and for Flux's own controllers; a bad Corefile or a pod that fails to start stops name resolution, and Flux resolves GHCR through the DNS it owns"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "platform — cluster DNS for every pod and for Flux's own controllers; a bad Corefile or a pod that fails to start stops name resolution, and Flux resolves GHCR through the DNS it owns"
 
-manifests_rollout: ''  # noqa var-naming[no-role-prefix]
+manifests_rollout: ''

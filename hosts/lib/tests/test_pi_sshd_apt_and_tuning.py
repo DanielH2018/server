@@ -5,7 +5,7 @@ tasks on daniel-pi. These tests hold what the move added: the rendered files, th
 edits that adopt what Ansible wrote, the `activate:` actions, and sshd's own reading of the two
 drop-ins. Each component is host-neutral, so daniel-server and daniel-box reuse it.
 
-Run: uv run pytest hosts/lib/tests/test_pi_initial_setup_part1.py
+Run: uv run pytest hosts/lib/tests/test_pi_sshd_apt_and_tuning.py
 """
 
 import json
