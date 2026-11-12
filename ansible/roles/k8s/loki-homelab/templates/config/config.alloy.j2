@@ -180,6 +180,45 @@ loki.process "pods" {
       replace    = "<redacted>"
     }
   }
+
+  // Redact credential-bearing query parameters out of Traefik's access log. The sidecar's
+  // stdout copy carries the full request line in `RequestPath`, query string included. As
+  // above, only the capture group goes, so the parameter name stays countable and the rest of
+  // the record survives. A value ends at `&`, a quote, whitespace, a backslash or the end of
+  // the line; the backslash covers the `\u0026` that Go's JSON encoder writes for `&`. The
+  // prefix is a non-capturing group because RE2 has no lookbehind and a second capture group
+  // would be replaced too. Prospective only: probe.py redacts the records already in Loki
+  // (probe_lib/core.py:redact_log_secrets), and
+  // ansible/tests/k8s/test_alloy_redacts_access_log_query_credentials.py holds the two lists
+  // equal.
+  //
+  // The Subsonic credentials `u`, `t`, `s` and `p` are redacted under /rest/ only, because a
+  // bare `p=` is pagination on other paths. RE2 cannot scope a match without consuming it, and
+  // a match that starts at the path ends at its value, so each name gets its own stage: one
+  // alternation would redact the first parameter on a URL and skip the rest.
+  stage.match {
+    selector = "{container=\"access-log-rotate\"}"
+    stage.replace {
+      expression = "(?i)(?:[?&]|u0026)(?:api_key|apikey|access_token|token|code)=([^&\"\\s\\\\]+)"
+      replace    = "<redacted>"
+    }
+    stage.replace {
+      expression = "\"RequestPath\":\"/rest/[^\"\\s]*(?:[?&]|u0026)u=([^&\"\\s\\\\]+)"
+      replace    = "<redacted>"
+    }
+    stage.replace {
+      expression = "\"RequestPath\":\"/rest/[^\"\\s]*(?:[?&]|u0026)t=([^&\"\\s\\\\]+)"
+      replace    = "<redacted>"
+    }
+    stage.replace {
+      expression = "\"RequestPath\":\"/rest/[^\"\\s]*(?:[?&]|u0026)s=([^&\"\\s\\\\]+)"
+      replace    = "<redacted>"
+    }
+    stage.replace {
+      expression = "\"RequestPath\":\"/rest/[^\"\\s]*(?:[?&]|u0026)p=([^&\"\\s\\\\]+)"
+      replace    = "<redacted>"
+    }
+  }
 }
 
 // ---- Host files. Root + DAC_READ_SEARCH in the DaemonSet exist for these. ---------------

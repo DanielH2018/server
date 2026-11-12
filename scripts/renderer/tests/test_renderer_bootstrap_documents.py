@@ -26,6 +26,27 @@ from lib.exit_codes import RENDER_OK
 from renderer import homelab_render
 
 SYNC = ("cluster", "flux-deferred", "sync.yaml")
+# The two names a hand-applied closure must never reach: `flux-deferred` applies the root.
+FORBIDDEN_IN_CLOSURE = frozenset({"flux-deferred", "homelab"})
+
+
+def closure_problems(depends: dict[str, list[str]], plumbing: set[str]) -> list[str]:
+    """Name each plumbing tag whose closure reaches `flux-deferred` or the root."""
+    return [
+        f"{tag}: the dependsOn closure reaches {sorted(hit)}"
+        for tag in sorted(plumbing)
+        if (hit := drill.dependson_closure(depends, {tag}) & FORBIDDEN_IN_CLOSURE)
+    ]
+
+
+def sync_problems(docs: list[dict]) -> list[str]:
+    """Name what `cluster/flux-deferred/` lacks of the objects steps 5 and 9 apply."""
+    held = {(d.get("kind"), d.get("metadata", {}).get("name")) for d in docs}
+    return [
+        f"flux-deferred holds no {kind} {name}"
+        for kind, name in (("OCIRepository", "homelab"), ("Kustomization", "homelab"))
+        if (kind, name) not in held
+    ]
 
 
 def _docs(path):
@@ -55,11 +76,11 @@ def published_render(tmp_path_factory):
 
 
 def test_the_flux_role_renders_the_sync_directory(flux_render):
-    assert drill.sync_problems(_sync(flux_render)) == []
+    assert sync_problems(_sync(flux_render)) == []
 
 
 def test_a_renderer_that_gates_the_sync_directory_on_the_owner_is_caught():
-    assert drill.sync_problems([]) == [
+    assert sync_problems([]) == [
         "flux-deferred holds no OCIRepository homelab",
         "flux-deferred holds no Kustomization homelab",
     ]
@@ -96,8 +117,14 @@ def test_no_plumbing_closure_reaches_flux_deferred_or_the_root(published_render)
         "cluster-vars",
     }
     # Every rendered Kustomization, a superset of the plumbing tags that are flux-owned.
-    assert drill.closure_problems(depends, set(depends)) == []
+    assert closure_problems(depends, set(depends)) == []
     assert plumbing <= set(depends)
+
+
+def test_a_closure_reaching_flux_deferred_or_the_root_is_caught():
+    assert closure_problems({"a": ["cluster-vars"], "cluster-vars": []}, {"a"}) == []
+    assert closure_problems({"a": ["b"], "b": ["homelab"]}, {"a"})
+    assert closure_problems({"a": ["flux-deferred"]}, {"a"})
 
 
 def test_flux_renders_prune_false_and_flux_deferred_prune_true(flux_render):

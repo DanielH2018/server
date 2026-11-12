@@ -187,3 +187,54 @@ def test_json_escaped_ampersand_apikey_is_flagged():
     out = core.redact_log_secrets(body)
     assert "abc123" not in out
     assert "\\u0026limit=1" in out
+
+
+# Traefik's access log carries the query string in `RequestPath`. The Alloy stages redact new
+# records; the names below are the ones they redact, and `loki-query` prints the older ones.
+@pytest.mark.parametrize("param", ["api_key", "ApiKey", "access_token", "code"])
+def test_access_log_credential_param_is_redacted(param):
+    line = f'"RequestPath":"/cb?{param}=notasecret1&x=1","RequestPort":"443"'
+    out = core.redact_log_secrets(line)
+    assert "notasecret1" not in out
+    assert f'/cb?{param}=<redacted>&x=1","RequestPort"' in out
+
+
+def test_json_escaped_ampersand_before_a_credential_param_is_redacted():
+    out = core.redact_log_secrets(
+        '"RequestPath":"/cb?x=1\\u0026code=notasecret1\\u0026y=2"'
+    )
+    assert out == '"RequestPath":"/cb?x=1\\u0026code=<redacted>\\u0026y=2"'
+
+
+def test_subsonic_credentials_under_rest_are_redacted():
+    out = core.redact_log_secrets(
+        '"RequestPath":"/rest/ping?u=alice&p=pw&t=tok&s=salt&c=app"'
+    )
+    assert out == (
+        '"RequestPath":"/rest/ping?u=<redacted>&p=<redacted>&t=<redacted>&s=<redacted>&c=app"'
+    )
+
+
+def test_a_webhook_path_loses_both_its_id_and_its_token():
+    out = core.redact_log_secrets(
+        f'"RequestPath":"/api/webhook/{"f" * 64}?token=notasecret1"'
+    )
+    assert out == '"RequestPath":"/api/webhook/<redacted>?token=<redacted>"'
+
+
+def test_json_escaped_ampersand_before_a_subsonic_param_is_redacted():
+    out = core.redact_log_secrets(
+        '"RequestPath":"/rest/ping?u=alice\\u0026p=pw\\u0026c=app"'
+    )
+    assert (
+        out == '"RequestPath":"/rest/ping?u=<redacted>\\u0026p=<redacted>\\u0026c=app"'
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/api/items?p=2", "/api/rest/items?p=2&s=10", "/api/items", "/api/items?encode=1"],
+)
+def test_a_path_with_no_credential_param_is_printed(path):
+    line = f'"RequestPath":"{path}"'
+    assert core.redact_log_secrets(line) == line

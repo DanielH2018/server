@@ -695,7 +695,6 @@
         "ansible/roles/k8s/monitor-bridge/defaults/main.yml",
         "ansible/roles/k8s/mosquitto/defaults/main.yml",
         "ansible/roles/k8s/n8n/defaults/main.yml",
-        "ansible/roles/k8s/navidrome/defaults/main.yml",
         "ansible/roles/k8s/nut/defaults/main.yml",
         "ansible/roles/k8s/pihole/defaults/main.yml",
         "ansible/roles/k8s/qbittorrent/defaults/main.yml",

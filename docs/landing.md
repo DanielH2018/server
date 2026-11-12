@@ -107,8 +107,10 @@ run: without `--await-merge` the arm dies, and `--await-merge` alone only polls.
 
 **A master CI backlog holds a green PR's merge.** Before the direct merge, `land_lib/pace.py`
 counts the master push runs of `ci.yml` that are not completed. At 2 or more it prints
-`pacing the merge: …` and waits for the next poll. A full sweep is about 18 jobs against the
-account's 20-job runner cap, so a second unfinished sweep already queues. On 2026-10-24, eight
+`pacing the merge: …` and waits for the next poll. A full sweep runs 25 jobs, and 20 measured
+sweeps peaked at 18 of them in progress at once. Against the account's 20-job runner cap, a
+second unfinished sweep already queues
+([#8143](https://github.com/DanielH2018/server/issues/8143) measured 82 runs on 2026-11-12). On 2026-10-24, eight
 concurrent landings left six master runs unfinished, their jobs waited 8-17 minutes for a
 runner, and each landing waited 29-61 minutes for its merge commit's verdict (#5526).
 

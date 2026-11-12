@@ -89,8 +89,8 @@ listed here.
   crash-consistent either way.
 - `navidrome-data`: added after the original doc on 2026-09-03 (issue #946). It moved from
   Sunday into healthchecks-config's index when that role retired (#2806). `ND_DATAFOLDER`
-  holds Navidrome's SQLite DB and artwork cache, not the music library, which is an emptyDir
-  mount (`navidrome/templates/deployment.yaml.j2`).
+  holds Navidrome's SQLite DB and artwork cache, not the music library, which is a read-only
+  `media-data` subPath (`navidrome/templates/deployment.yaml.j2`) that nothing backs up.
 - `scrutiny-influxdb-data` (no backup): kopia excluded `scrutiny/influxdb2/`, and the volume
   IS the TSDB (single mount, verified).
 - `crowdsec-db` (no backup): Docker's `crowdsec-db` named volume was deliberately outside

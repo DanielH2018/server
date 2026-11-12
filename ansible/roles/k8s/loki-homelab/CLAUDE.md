@@ -48,7 +48,7 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   `group_vars/all.yml`, shared with the Pi's Alloy and with every selector that reads them
   (#3740). `ansible/tests/services/test_loki_stream_labels.py` fails when an emitted value
   and the consumers' values drift apart.
-- **Five `stage.replace` stages redact credentials on the way in.** Each substitutes the
+- **`stage.replace` stages redact credentials on the way in.** Each substitutes the
   capture group only, so the rest of the record survives:
   - Home Assistant's cast `refresh_token`, which a failed cast logs (issue #3015) unless HA's
     own `logger.filters` drops the record first, so this stage is the backstop.
@@ -60,11 +60,17 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
     registration's id authenticates the companion app.
   - PeaNUT's `AUTH_SECRET`. PeaNUT prints it at every start, whether it generated the secret
     or read it from the environment, so setting the env var does not stop the line.
+  - Credential-bearing query parameters in the `access-log-rotate` container's Traefik lines:
+    `api_key` and `apikey` in any letter case, `access_token`, `token` and `code`, plus the
+    Subsonic `u`, `t`, `s` and `p` under `/rest/` only, because `p=` is pagination elsewhere.
+    The parameter name stays, so a count by name still works.
 
   `ansible/tests/k8s/_alloy_pods_pipeline.py` runs the rendered stages over a line, scoped as
   Alloy scopes them, and the `test_alloy_redacts_*` files under `ansible/tests/k8s/` fail on
   either half. `scripts/diagnostics/probe_lib/core.py:redact_log_secrets` carries the same
-  patterns for output. Each stage is prospective: a record shipped before it still carries
+  patterns for output.
+  `ansible/tests/k8s/test_alloy_redacts_access_log_query_credentials.py` also fails when the
+  access-log stages and `redact_log_secrets` redact different names. Each stage is prospective: a record shipped before it still carries
   the value for the 744h retention window, and `kubectl logs` still shows it, because Alloy
   reads the pod's log file and never rewrites it.
 - **Host lines carry a `program` label, and the line itself is untouched.** The
