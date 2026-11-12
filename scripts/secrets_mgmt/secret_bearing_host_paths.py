@@ -17,7 +17,7 @@ withholds every secret key and refuses a template that reads one
 `homelab-secrets` writes:
 
 - an `outputs:` entry, whose `keys:` list names exactly the secrets the file holds. It renders
-  under `host_outputs.OUTPUT_ROOTS`, and its `path` is where the consumer reads it;
+  under `lib.host_secret_roots.OUTPUT_ROOTS`, and its `path` is where the consumer reads it;
 - a `credentials:` entry, which lands at `/run/credstore/<key>`.
 
 Both are read from every `hosts/components/*/component.yml` and `hosts/*/package.yml`. A key the
@@ -39,12 +39,11 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.cli_help import answer_help
+from lib.host_secret_roots import CREDSTORE, OUTPUT_ROOTS
 
 from lib.repo_paths import ANSIBLE, REPO
-from renderer.renderer_lib.host_outputs import OUTPUT_ROOTS
 
 REGISTRY = ANSIBLE / "secret_rotation.yml"
-CREDSTORE = "/run/credstore"
 
 # Every path this module returns starts with one of these. The hook short-circuits on the same
 # literal before it imports anything, so a path outside them would be invisible to it.

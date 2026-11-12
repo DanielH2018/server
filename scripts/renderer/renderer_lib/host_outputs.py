@@ -56,6 +56,7 @@ import re
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 
+from lib.host_secret_roots import OUTPUT_ROOTS
 from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.host_manifest import UNIT_NAME
 from renderer.renderer_lib.host_package import Package
@@ -70,7 +71,6 @@ TEMPLATE_ROOT = PurePosixPath("/usr/lib/homelab/secret-templates")
 COMPOSE_ROOT = PurePosixPath("/usr/lib/homelab/compose")
 SECRETS_JSON = "/usr/lib/homelab/secrets.json"
 SOPS_ROOT = PurePosixPath("/usr/lib/homelab/secrets")
-OUTPUT_ROOTS = {False: "/run/homelab-secrets", True: "/var/lib/homelab-secrets"}
 # Names the script keeps at the top of each output root for its queue and digests.
 STATE_NAMES = frozenset({".digests", ".hmac-key", "pending.json", "pending.lock"})
 SOPS_SUFFIX = ".sops.yaml"

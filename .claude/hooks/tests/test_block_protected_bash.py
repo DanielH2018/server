@@ -197,7 +197,7 @@ def test_a_structural_or_unrelated_read_is_clean(command, fixture_root):
 
 
 def test_the_cheap_gate_skips_the_derivation_entirely():
-    """The derivation imports the host renderer and must not run per Bash call.
+    """The derivation parses every host spec and must not run per Bash call.
 
     Every path it can return starts with a secret root, so a command naming none cannot
     match — and this asserts the derivation is not reached, not merely that the answer is None.

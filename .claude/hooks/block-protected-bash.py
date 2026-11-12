@@ -150,8 +150,8 @@ def prints_whole_lines(args):
     return True
 
 
-# Cheap gate. The derivation below imports the host renderer and reads every host spec, which
-# is too slow to run on every Bash call — and every path it can return starts with one of these.
+# Cheap gate. The derivation below parses every host spec, which is too slow to run on every
+# Bash call — and every path it can return starts with one of these.
 _SECRET_PATH_ROOTS = ("/etc/", "/run/", "/var/lib/", "/usr/lib/homelab/")
 
 
