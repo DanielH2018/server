@@ -65,10 +65,10 @@
 {% set spec_text %}
 # A retry would ban the Pi a second time, and a flaky check must fail rather than pass on it.
 backoffLimit: 0
-# Below the 600s `manifests_rollout_timeout_default` every `<tag>-verify` Kustomization takes:
-# the login, the ban and its read-back at 10s each plus 60s of connect retries on the first,
-# then the 300s window.
-activeDeadlineSeconds: 480
+# The login, the ban and its read-back at 10s each plus 60s of connect retries on the first,
+# the 300s window, the 180s outage grace and the last reads and the lift, with slack. The
+# renderer raises `crowdsec-verify`'s Kustomization timeout above it (`ordering.verify_timeout`).
+activeDeadlineSeconds: 660
 template:
   metadata:
     labels:
@@ -113,6 +113,9 @@ template:
           # One 1-minute probe period, one 1-minute scrape and its 30s timeout, with slack.
           - name: WINDOW_SECONDS
             value: "300"
+          # How long the script waits, in all, while Prometheus cannot scrape the Pi.
+          - name: OUTAGE_GRACE_SECONDS
+            value: "180"
           # Renames the Job whenever the crowdsec pod rolls; see the note above.
           - name: CROWDSEC_ROLL_DIGEST8
             value: "{{ roll_digest8 }}"

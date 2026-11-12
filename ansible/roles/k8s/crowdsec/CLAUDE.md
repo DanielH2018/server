@@ -198,6 +198,12 @@ operator confirmed its evidence channel on 2026-10-18 (D5 *Open questions* 9).
   from `flux_cronjob_gates` in `defaults/main.yml`. It replaced the `k8s/cronjob-gate`
   include. The Job keeps no ownerReference to the CronJob, so a scheduled firing can overlap
   it, and both patch the same ConfigMap with one lookup's values.
+- **A Pi that Prometheus cannot scrape pauses the verdict, for a while.** While
+  `up{job="alloy-pi"}` is not 1, the script waits rather than bans, and a poll in the window
+  that finds the scrape down does not count against it. `OUTAGE_GRACE_SECONDS` in
+  `templates/verify/job.yaml.j2` bounds the waits. Past it the Job fails naming the channel
+  (#8060), and the way out is `docs/volume-snapshot-drills.md`, *A verify Job that failed for
+  an environmental reason*: delete the Job, then clear the hold.
 - **A failed Job holds the revision.** The old gate reported a non-zero exit from the home-ips
   run and continued. Under Flux any non-zero exit fails `crowdsec-verify`, and the soak does
   not pass.

@@ -133,6 +133,32 @@ the failed Job so that Flux creates it again. Both are `kubectl` writes. Then cl
 with `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server` and dispatch `promote`
 for R.
 
+### A verify Job that failed for an environmental reason
+
+A `<tag>-verify` Job can fail while R itself is sound. On 2026-11-12, `crowdsec-verify`
+failed because Prometheus could not scrape daniel-pi, which was out of memory and rebooting
+(#8060). Its log line names the cause: `crowdsec_verify.py` names the evidence channel and
+this section. Nothing applied R wrongly, so no volume needs a revert and no commit needs a
+forward revert.
+
+**Clearing the hold alone re-holds.** The Job's name derives from its inputs, so the next
+promotion applies the same name. Flux never re-runs a Job that already failed under that
+name, so the verify fails again with no new run. Delete the Job first. Every step that
+writes is **operator-only**.
+
+1. **Read the failed Job's log** to confirm the cause was environmental:
+   `kubectl -n homelab logs job/<the failed Job>`.
+2. **Wait until the cause has settled.** For `crowdsec-verify`, `up{job="alloy-pi"}` reads 1
+   again in Prometheus.
+3. **Delete the failed Job**, so that Flux creates it again:
+
+    ```bash
+    sudo k3s kubectl -n homelab delete job <the failed Job>
+    ```
+
+4. **Clear the hold** with `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`,
+   and dispatch `promote` for R.
+
 ### The entry point
 
 `scripts/backup/volume_revert.py` runs on daniel-box and needs no Ansible. It takes

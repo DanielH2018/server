@@ -40,6 +40,7 @@ ENV = {
     "BAN_DURATION": "15m",
     "PROMETHEUS_URL": "http://prometheus:9090",
     "WINDOW_SECONDS": "300",
+    "OUTAGE_GRACE_SECONDS": "180",
 }
 
 
@@ -48,12 +49,16 @@ def _series(status: str, value: float) -> dict:
 
 
 class World(cv.Http):
-    """A fixture LAPI and Prometheus. `samples` is the counter's value per read, in order."""
+    """A fixture LAPI and Prometheus.
+
+    `samples` is the counter's value per read, in order, and `up` is `up{job="alloy-pi"}` per
+    read, a single value for every read; the last of either repeats once the list runs out.
+    """
 
     def __init__(self, samples, up=1, ban_reads_back=True, lift_status=200):
         super().__init__()
         self.samples = list(samples)
-        self.up = up
+        self.ups = list(up) if isinstance(up, list) else [up]
         self.ban_reads_back = ban_reads_back
         self.lift_status = lift_status
         self.banned = False
@@ -79,7 +84,8 @@ class World(cv.Http):
             return self.lift_status, {"nbDeleted": "1"}
         query = urllib.parse.parse_qs(parsed.query)["query"][0]
         if query == cv.CHANNEL_UP:
-            result = [_series("", self.up)] if self.up is not None else []
+            up = self.ups.pop(0) if len(self.ups) > 1 else self.ups[0]
+            result = [_series("", up)] if up is not None else []
         else:
             sample = self.samples.pop(0) if len(self.samples) > 1 else self.samples[0]
             result = [_series(s, v) for s, v in sample.items()]
@@ -133,8 +139,37 @@ def test_a_dead_alloy_pi_scrape_fails_naming_the_channel_before_any_ban(capsys):
     world = World([BEFORE], up=0)
     result, message = _run(world, capsys)
     assert (result, message.split(":")[0]) == ("failed", "the evidence channel")
+    assert "stayed below 1 through the 180s grace" in message
     # Nothing was banned, so nothing needed lifting.
     assert ("POST", "/v1/alerts") not in world.calls
+
+
+def test_a_scrape_blip_before_the_ban_waits_rather_than_fails(capsys):
+    world = World([BEFORE, BEFORE, {"302": 100.0, "403": 1.0}], up=[0, 0, 1])
+    assert _run(world, capsys)[0] == "passed"
+
+
+def test_a_scrape_outage_in_the_window_extends_it_rather_than_fails(capsys):
+    """The Pi is unscrapable for 150s after the ban; its 403 is first counted at t=330."""
+    banned = {"302": 100.0, "403": 1.0}
+    # The read before the ban, then one per 15s poll from t=0: the 24th read is t=330.
+    world = World([BEFORE] * 23 + [banned], up=[1] + [0] * 10 + [1])
+    assert _run(world, capsys) == (
+        "passed",
+        f"the edge answered 403 to {PI} 1 time(s) while banned",
+    )
+    assert not world.banned
+
+
+def test_an_outage_past_the_grace_fails_naming_the_channel_and_lifts(capsys):
+    world = World([BEFORE], up=[1, 0])
+    result, message = _run(world, capsys)
+    assert result == "failed"
+    assert message.startswith(
+        'the evidence channel: up{job="alloy-pi"} was below 1 for 180s of the window'
+    )
+    assert "delete this Job and clear the hold" in message
+    assert not world.banned
 
 
 def test_a_counter_with_no_sample_in_the_window_fails_naming_the_channel(capsys):
