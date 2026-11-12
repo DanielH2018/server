@@ -750,6 +750,7 @@
  "hosts/lib/tests/test_host_package_builder_rollout.py": 1.66,
  "hosts/lib/tests/test_host_package_builder_stage.py": 0.67,
  "hosts/lib/tests/test_host_package_builder_tools.py": 0.24,
+ "hosts/lib/tests/test_host_package_tmpfiles_users.py": 1.28,
  "hosts/lib/tests/test_hosts_tree_is_tracked.py": 0.0,
  "hosts/lib/tests/test_infra_map_component.py": 0.09,
  "hosts/lib/tests/test_k3s_gates_api.py": 5.5,
