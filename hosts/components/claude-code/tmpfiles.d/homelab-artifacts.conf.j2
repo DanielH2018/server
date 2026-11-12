@@ -14,6 +14,9 @@
 #
 # The textfile directory both timers write to matches the k3s role's disk-health task.
 #Type Path Mode User Group Age
+# The parent first: tmpfiles would create it root-owned, then refuse ubuntu -> root -> ubuntu as an
+# unsafe path transition. `:` applies the mode only when creating it.
+d {{ claude_code_artifacts_host_dir | dirname }} :0700 {{ sys_user }} {{ sys_user }} -
 d {{ claude_code_artifacts_host_dir }} 0750 {{ sys_user }} {{ sys_user }} -
 d {{ claude_code_artifacts_peer_dir }} 0750 {{ sys_user }} {{ sys_user }} -
 {% for peer in claude_code_artifacts_peer_sources %}
