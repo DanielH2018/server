@@ -14,13 +14,12 @@ daniel-box since E3 (2026-08-12). See repo-root `CLAUDE.md` for shared conventio
 <!-- /generated_from -->
 
 - **Depends on:** traefik, authelia
-- **Flux applies it, not Ansible** (D5.7, the third Wave A PR). Its `containers_list` entry
-  is `platform: k8s`, so nothing applies it by hand, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
-  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. Both dependencies stay
-  Ansible-owned, so the
-  Kustomization records them in its `homelab/ansible-owned-deps` annotation, not in
-  `dependsOn`.
+- **Flux applies it, not Ansible** (D5.7, the third Wave A PR). Its `containers_list` entry is
+  `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when
+  `promote` publishes and verifies the next bundle. Its image-bump PRs therefore draw no
+  `land-wait` and no `probe.py health` run. authelia and traefik are flux-owned too, so the
+  Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
+  Kustomizations are Ready.
 - **Where the task went.** Flux applies the same render, and the
   Kustomization's `wait` replaces the rollout wait. `k8s_autodeploy` no longer gates an
   apply, because the deployer skips the tag. It still decides whether Renovate automerges the

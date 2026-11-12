@@ -34,11 +34,10 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   `get`/`list` on pods, `pods/log`, nodes, deployments and daemonsets — no `watch`, no
   secrets, no exec. Deliberately narrower than the shell's own read-only ServiceAccount.
 - **Secrets** (SOPS keys, not values): `homelab_mcp_token`, `claude_ha_token`.
-- **Flux applies it, not Ansible** (D5.14, the first Wave C PR). Its `containers_list` entry
-  is `platform: k8s`, so nothing applies it by hand, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
-  Kustomization has no Ansible-owned
-  dependency to record, because the role renders no route.
+- **Flux applies it, not Ansible** (D5.14, the first Wave C PR). Its `containers_list` entry is
+  `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when
+  `promote` publishes and verifies the next bundle. Its Kustomization's `dependsOn` names no other
+  role, because the role renders no route.
 - **The token Secret substitutes from `homelab-cluster-vars`.** `homelab_mcp_token` and
   `claude_ha_token` are `${<key>}` placeholders in the published render. Flux substitutes the
   values from the `homelab-cluster-vars` Secret, which it decrypts from

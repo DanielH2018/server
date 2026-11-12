@@ -32,13 +32,11 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
 - **Renovate does not automerge its image bumps** (`k8s_autodeploy: false`). The images ride
   rolling branch tags on a stateful monitor, and the InfluxDB and web Deployments are
   `Recreate` with RWO claims, so a bump that rolls either takes the UI and API down briefly.
-- **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is
-  `platform: k8s`, so nothing applies it by hand, and a merged
-  change reaches the cluster when `promote` publishes and verifies the next bundle. Its
-  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. Both dependencies,
-  authelia and traefik, stay
-  Ansible-owned, so the Kustomization records them in its `homelab/ansible-owned-deps`
-  annotation, not in `dependsOn`.
+- **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is `platform:
+  k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote`
+  publishes and verifies the next bundle. Its image-bump PRs therefore draw no `land-wait` and no
+  `probe.py health` run. authelia and traefik are flux-owned too, so the Kustomization lists them
+  in `dependsOn`, and Flux applies this tag only after their Kustomizations are Ready.
 - **Where the task went.** The default `manifests_rollout:
   scrutiny-web` names
   the web Deployment for the stabilisation gate and the shared restart. The Kustomization's

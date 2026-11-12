@@ -21,11 +21,11 @@ rendering attacker-supplied pages in a headless browser.
   keys. flaresolverr's browser profile is disposable and sits on an emptyDir.
 - **Secrets:** `prowlarr_api_key` (also reused as the exportarr sidecar's credential —
   Prowlarr has no scoped read-only key to mint instead).
-- **Flux applies it, not Ansible** (#5594, a Wave D PR with monitor-bridge). Its
-  `containers_list` entry is `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
-  verifies the next bundle. authelia and traefik stay Ansible-owned, so the Kustomization records
-  them in its
-  `homelab/ansible-owned-deps` annotation, not in `dependsOn`.
+- **Flux applies it, not Ansible** (#5594, a Wave D PR with monitor-bridge). Its `containers_list`
+  entry is `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster
+  when `promote` publishes and verifies the next bundle. authelia and traefik are flux-owned too,
+  so the Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
+  Kustomizations are Ready.
 - **The `prowlarr-snapshot` Job snapshots `prowlarr-config` before each revision applies**
   (`k8s_autodeploy_snapshot_pvcs: [prowlarr-config]`). The prowlarr Kustomization depends on
   it, so a revision applies only after the snapshot is ready. The Deployment is `Recreate`. A

@@ -23,13 +23,12 @@ runbooks, design documents and generated reference pages are readable in a brows
   `mkdocs.yml`'s `exclude_docs`.
 - **Built by:** `scripts/docs/build_docs.py`, run by `homelab-docs-refresh.service`. **Not by this role** —
   a deploy renders manifests, it does not rebuild the site.
-- **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
-  is `platform: k8s`, so nothing applies it by hand, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. traefik
-  and authelia stay
-  Ansible-owned, so the Kustomization records them in its `homelab/ansible-owned-deps`
-  annotation, not in `dependsOn`. The Deployment is `RollingUpdate` with one replica, so a
-  roll keeps one pod serving.
+- **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry is
+  `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when
+  `promote` publishes and verifies the next bundle. authelia and traefik are flux-owned too, so
+  the Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
+  Kustomizations are Ready. The Deployment is `RollingUpdate` with one replica, so a roll keeps
+  one pod serving.
 - **Where the task went.** The Kustomization's `wait` replaces the
   rollout wait, and the restart checksum the renderer stamps replaces the shared restart, so
   an nginx config edit still rolls the pod. The site directory is the host package's (below).
