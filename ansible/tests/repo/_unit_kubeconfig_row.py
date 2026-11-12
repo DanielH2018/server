@@ -30,6 +30,8 @@ _USER = re.compile(r"^User=(.*)$", re.M)
 _EXEC_START = re.compile(r"^ExecStart=(.*)$", re.M)
 _TOKEN = re.compile(r"[^\s\"']+")
 _REPO_SCRIPT = re.compile(r"\bscripts/[\w./-]+\.(?:py|sh)\b")
+# A module path a dispatcher hands to `importlib.import_module`, as `fanout.py` does.
+_DOTTED_MODULE = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+")
 _SHELL_KUBECTL = re.compile(r"(?:^|[\s/\"'(])kubectl\b")
 # A string constant naming the kubectl binary: `kubectl`, a path to it, or `k3s kubectl`.
 _KUBECTL_BINARY = re.compile(r"(?:\S*/)?(?:k3s )?kubectl")
@@ -94,13 +96,26 @@ def _resolve_import(module: str, here: Path) -> Path | None:
     return None
 
 
+def _path_built(node: ast.AST) -> str | None:
+    """The path a `Path("scripts") / "dir" / "name"` expression of constants builds, else None."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        left, right = _path_built(node.left), _path_built(node.right)
+        return f"{left}/{right}" if left and right else None
+    if isinstance(node, ast.Call) and len(node.args) == 1 and not node.keywords:
+        return _path_built(node.args[0])
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
 @cache
 def _python_facts(path: Path, runs: bool) -> tuple[bool, tuple[Path, ...]]:
     """Whether a module runs kubectl or Claude Code itself, and the files it leads to.
 
     A module the unit runs leads to the repo scripts its constants name, as `build_docs.py`
-    runs each generator. An imported module leads only to its imports: `lib.exit_codes` names
-    every script in a table and runs none of them.
+    runs each generator. An imported module leads only to its imports and to a script path it
+    builds from `Path` parts, as `fanout_lib`'s `LAND_SH` does: `lib.exit_codes` names every
+    script in a table of plain strings and runs none of them.
     """
     tree = ast.parse(path.read_text())
     docstrings = {
@@ -123,6 +138,12 @@ def _python_facts(path: Path, runs: bool) -> tuple[bool, tuple[Path, ...]]:
         elif isinstance(node, ast.Attribute) and node.attr == "kubectl_runner":
             reaches = True
         elif (
+            isinstance(node, ast.BinOp)
+            and (built := _path_built(node))
+            and _REPO_SCRIPT.fullmatch(built)
+        ):
+            leads.append(REPO / built)
+        elif (
             isinstance(node, ast.Constant)
             and isinstance(node.value, str)
             and id(node) not in docstrings
@@ -133,6 +154,8 @@ def _python_facts(path: Path, runs: bool) -> tuple[bool, tuple[Path, ...]]:
             )
             if runs and _REPO_SCRIPT.fullmatch(value):
                 leads.append(REPO / value)
+            if runs and _DOTTED_MODULE.fullmatch(value):
+                leads += filter(None, [_resolve_import(value, path)])
     return reaches, tuple(p for p in leads if p.is_file())
 
 
@@ -198,6 +221,12 @@ _B2_BUDGET = (
 )
 _CLAUDE_RC = "hosts/components/claude-code/templates/claude-rc.service.j2"
 _LANDER = "hosts/components/claude-code/templates/claude-land@.service.j2"
+_SERVER_LANDER = (
+    "hosts/components/claude-code/templates/claude-fanout-server-lander.service.j2"
+)
+_PIPELINE_TIMELINE = (
+    "hosts/components/claude-code/templates/claude-pipeline-timeline.service.j2"
+)
 _LOKI_WITNESS = (
     "hosts/components/loki-route-witness/units/homelab-loki-route-witness.service.j2"
 )
@@ -224,6 +253,8 @@ UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG = Census(
         _stripped(_DOCS_REFRESH),
         _stripped(_B2_BUDGET),
         _stripped(_CLAUDE_RC),
+        # fanout.py imports its subcommand by name, and autoland runs `Path` parts naming land.sh.
+        _stripped(_SERVER_LANDER),
     ),
     green=(
         Subject(_B2_BUDGET),
@@ -240,6 +271,7 @@ UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG = Census(
             _CLAUDE_RC,
             "hosts/components/claude-code/templates/claude-bg-resume.service.j2",
             "hosts/components/claude-code/templates/claude-triage@.service.j2",
+            _SERVER_LANDER,
         }
     ),
     allow={
@@ -251,6 +283,11 @@ UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG = Census(
         _LOKI_WITNESS: (
             "probe.py loki-labels reads Loki over HTTP and runs no kubectl. The row counts it "
             "because probe.py imports every subcommand, some of which reach lib.kubectl"
+        ),
+        _PIPELINE_TIMELINE: (
+            "pipeline_timeline.py imports only RECORD_NAME and SAVED_FORMAT from "
+            "fanout_lib.review.api, and runs no landing. The row counts it because that module "
+            "imports review_land, which builds the path to land.sh"
         ),
     },
 )
