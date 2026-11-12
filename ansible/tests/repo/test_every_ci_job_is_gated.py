@@ -7,7 +7,7 @@ merge gate covers it, and a job whose failure cannot block a merge is a check no
 The gate is reachable two ways, so both count as gated:
 
 - `prek` re-reports its dependencies under the one required context name.
-- A job whose display name is in `gitops_deploy_expected_ruleset_contexts` is required by the
+- A job whose display name is in `github_expected_ruleset_contexts` is required by the
   ruleset directly, as `renovate config validator` is.
 
 A job in `NON_GATING_JOBS` is exempt on purpose, because its verdict must not block a merge.
@@ -145,9 +145,9 @@ def _ruleset_contexts() -> set[str]:
         REPO / "hosts" / "components" / "github-checks" / "defaults" / "main.yml"
     ).read_text()
     block = re.search(
-        r"^gitops_deploy_expected_ruleset_contexts:\s*\n((?:\s*-\s.+\n)+)", text, re.M
+        r"^github_expected_ruleset_contexts:\s*\n((?:\s*-\s.+\n)+)", text, re.M
     )
-    assert block, "gitops_deploy_expected_ruleset_contexts is not a literal list"
+    assert block, "github_expected_ruleset_contexts is not a literal list"
     return {line.strip().lstrip("-").strip() for line in block.group(1).splitlines()}
 
 
@@ -158,7 +158,7 @@ def test_every_ci_job_is_gated_by_a_required_context():
     assert not ungated, (
         f"ci.yml jobs that block no merge: {sorted(ungated)}. Add each to the `prek` job's "
         "`needs` AND to the result comparison in its step, or make it a required context in "
-        "the ruleset and record it in gitops_deploy_expected_ruleset_contexts."
+        "the ruleset and record it in github_expected_ruleset_contexts."
     )
 
 

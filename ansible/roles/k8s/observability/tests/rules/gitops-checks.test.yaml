@@ -70,7 +70,7 @@ tests:
               description: >-
                 github-ruleset-drift.sh on daniel-box ended with status=down: the repo is not
                 public, a ruleset's required contexts, bypass actors, Renovate exclusion or
-                agent-branch fence differ from roles/setup/gitops_deploy/defaults/main.yml, or
+                agent-branch fence differ from hosts/components/github-checks/defaults/main.yml, or
                 GitHub could not be read. The `github-ruleset-drift` syslog tag names the ruleset
                 id and the property. Revert the ruleset change unless it was deliberate,
                 otherwise update the defaults.
