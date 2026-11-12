@@ -489,14 +489,15 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
 
     ```bash
     findmnt /var/log
-    ls /var/lib/aide/aide.db /var/lib/rkhunter/db/rkhunter.dat
-    systemctl is-enabled dailyaidecheck.timer
+    ls /var/lib/rkhunter/db/rkhunter.dat
     systemctl is-active homelab-compose.service
     sudo docker ps
     ```
 
-    `findmnt` shows a tmpfs, `systemctl is-enabled` prints `masked`, `systemctl is-active` prints
+    `findmnt` shows a tmpfs, `ls` finds the rkhunter database, `systemctl is-active` prints
     `active`, and `docker ps` lists `wg-easy`, `alloy`, `autoheal` and `docker-proxy` running.
+    The Pi runs no AIDE (#8084), so a rebuilt Pi has no `aide.db` and no mask on
+    `dailyaidecheck.timer`.
 9. To re-pin the host key, write the output of
     `ssh daniel-pi cat /etc/ssh/ssh_host_ed25519_key.pub` to
     `ansible/roles/k8s/pi-peer-backup/files/daniel-pi-ssh-host-ed25519.pub` and merge through a
