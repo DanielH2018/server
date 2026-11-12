@@ -9,9 +9,7 @@ import textwrap
 from invocation_sites import (
     claude_hook_files,
     claude_settings_entries,
-    cron_jobs,
     prek_hook_entries,
-    sh_j2_templates,
     systemd_exec_lines,
     workflow_run_steps,
 )
@@ -86,52 +84,6 @@ def test_workflow_run_steps_skips_a_step_with_no_run_field(tmp_path):
         """,
     )
     assert workflow_run_steps(tmp_path) == []
-
-
-# --- ansible.builtin.cron -------------------------------------------------------------------
-
-
-def test_cron_jobs_is_tree_wide_not_just_initial_setup(tmp_path):
-    """traefik, observability and eight other roles carry their own cron tasks -- a reader
-    scoped to `initial_setup/tasks/crons.yml` alone misses all of them."""
-    _write(
-        tmp_path / "ansible" / "roles" / "traefik" / "tasks" / "main.yml",
-        """
-        - name: Rotate something
-          ansible.builtin.cron:
-            name: Rotate something
-            job: "uv run python scripts/dev/rotate.py"
-        """,
-    )
-    jobs = cron_jobs(tmp_path)
-    assert [j.job for j in jobs] == ["uv run python scripts/dev/rotate.py"]
-    assert jobs[0].name == "Rotate something"
-
-
-def test_cron_jobs_skips_an_absent_cron(tmp_path):
-    _write(
-        tmp_path / "ansible" / "roles" / "r" / "tasks" / "main.yml",
-        """
-        - name: Retired job
-          ansible.builtin.cron:
-            name: Retired job
-            job: "uv run python scripts/dev/retired.py"
-            state: absent
-        """,
-    )
-    assert cron_jobs(tmp_path) == []
-
-
-# --- shell-wrapper templates ---------------------------------------------------------------
-
-
-def test_sh_j2_templates_finds_a_template_anywhere_in_the_tree(tmp_path):
-    _write(
-        tmp_path / "ansible" / "roles" / "r" / "templates" / "wrap.sh.j2",
-        "#!/bin/sh\nuv run python scripts/dev/wrapped.py\n",
-    )
-    found = sh_j2_templates(tmp_path)
-    assert [p.name for p in found] == ["wrap.sh.j2"]
 
 
 # --- .claude/hooks wrappers ------------------------------------------------------------------

@@ -254,27 +254,25 @@ ROWS = (
             Subject("k2.py", 'T = ROLES / "t" / "drill.sh" ".j2"\nT.read_text()\n'),
             # A resolver hands back paths, so the module names no `*.sh.j2` anywhere.
             Subject(
-                "e.py",
-                "for tpl, _task_file, _cron, _env in ct.iter_cron_targets():\n"
-                "    tpl.read_text()\n",
+                "e.py", "for tpl in sv.discover_templates():\n    tpl.read_text()\n"
             ),
             Subject("f.py", "for tpl in discover_templates():\n    tpl.read_text()\n"),
             Subject(
                 "g.py",
-                "CRONS = ct.cron_job_scripts()\nfor tpl, _task in CRONS.items():\n"
+                "TEMPLATES = sv.discover_templates()\nfor tpl in TEMPLATES:\n"
                 "    tpl.read_bytes()\n",
             ),
             # A fixture hands its resolver result to consumers as a parameter.
             Subject(
                 "h.py",
-                "@pytest.fixture(scope='module')\ndef cron_map():\n"
-                "    return ct.cron_job_scripts()\ndef test_x(cron_map):\n"
-                "    for tpl in cron_map:\n        tpl.read_text()\n",
+                "@pytest.fixture(scope='module')\ndef templates():\n"
+                "    return sv.discover_templates()\ndef test_x(templates):\n"
+                "    for tpl in templates:\n        tpl.read_text()\n",
             ),
             Subject(
                 "i.py",
-                "@pytest.fixture\ndef cron_map():\n    yield ct.cron_job_scripts()\n"
-                "def test_x(cron_map):\n    for tpl, _task in cron_map.items():\n"
+                "@pytest.fixture\ndef templates():\n    yield sv.discover_templates()\n"
+                "def test_x(templates):\n    for tpl in templates:\n"
                 "        tpl.read_bytes()\n",
             ),
             # A local helper's parameter does the reading, so the CALL is the read.
@@ -305,24 +303,23 @@ ROWS = (
             # A resolver pointed at a tree the test wrote itself, through a fixture or not.
             Subject(
                 "d.py",
-                "for tpl in ct.cron_job_scripts(tmp_path):\n    tpl.read_text()\n",
+                "for tpl in sv.discover_templates(tmp_path):\n    tpl.read_text()\n",
             ),
             Subject(
                 "e.py",
-                "@pytest.fixture\ndef cron_map(tmp_path):\n"
-                "    return ct.cron_job_scripts(tmp_path)\ndef test_x(cron_map):\n"
-                "    for tpl in cron_map:\n        tpl.read_text()\n",
+                "@pytest.fixture\ndef templates(tmp_path):\n"
+                "    return sv.discover_templates(tmp_path)\ndef test_x(templates):\n"
+                "    for tpl in templates:\n        tpl.read_text()\n",
             ),
             Subject(
                 "f.py",
                 "@pytest.fixture\ndef names():\n    return frozenset({'drill.sh.j2'})\n"
                 "def test_x(names):\n    for tpl in names:\n        tpl.read_text()\n",
             ),
-            # `iter_cron_targets` yields the template first; its task FILE is not the rule.
+            # A tuple-unpack over a resolver binds only its first element.
             Subject(
                 "g.py",
-                "for _tpl, task_file, _cron, _env in ct.iter_cron_targets():\n"
-                "    task_file.read_text()\n",
+                "for _tpl, other in sv.discover_templates():\n    other.read_text()\n",
             ),
             Subject(
                 "h.py",
@@ -355,13 +352,6 @@ ROWS = (
             ),
         ),
         min_matches=MODULE_FLOOR,
-        allow={
-            "scripts/validate/tests/test_shell_template_cron_rules.py": (
-                "hands a cron rule its own second argument — the rule under test takes the "
-                "template TEXT, and `shell_templates.py` reads it off disk the same way in "
-                "production, so a render would test a different call than the gate makes"
-            ),
-        },
     ),
 )
 

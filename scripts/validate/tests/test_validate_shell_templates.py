@@ -1,9 +1,8 @@
 """Tests for scripts/validate/shell_templates.py and the scripts/lib/ modules it composes.
 
 This module keeps the validator machinery: template discovery, the render/lint/syntax passes,
-the shellcheck batch attribution and `main`'s fail-closed behaviour. The cron rules the
-validator composes live in `test_shell_template_cron_rules.py`, and the rendered
-longhorn-backup-health shim in `test_backup_health_shim.py`.
+the shellcheck batch attribution and `main`'s fail-closed behaviour. The rendered
+longhorn-backup-health shim is tested in `test_backup_health_shim.py`.
 
 Run: uv run pytest scripts/validate/tests/test_validate_shell_templates.py
 """
@@ -143,7 +142,7 @@ def test_check_template_catches_a_broken_render(tmp_path):
     orig_repo = v.REPO
     v.REPO = tmp_path
     try:
-        err = v.check_template(broken, {"sys_user": "ubuntu"}, out_dir, "bash", {})
+        err = v.check_template(broken, {"sys_user": "ubuntu"}, out_dir, "bash")
     finally:
         v.REPO = orig_repo
 
@@ -165,7 +164,7 @@ def test_check_template_passes_a_clean_render(tmp_path):
     v.REPO = tmp_path
     try:
         err = v.check_template(
-            clean, {"sys_user": "ubuntu"}, out_dir, shutil.which("shellcheck"), {}
+            clean, {"sys_user": "ubuntu"}, out_dir, shutil.which("shellcheck")
         )
     finally:
         v.REPO = orig_repo

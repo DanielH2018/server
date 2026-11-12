@@ -5,9 +5,9 @@ The generator renders the page; this module answers the question the page is abo
 does so without importing a single script it classifies.
 
 WHY IT IS DERIVED RATHER THAN DECLARED. A hand-kept list of "these ones are automated" is
-stale the first time someone adds a cron. The tree already says how every script is reached:
-``prek.toml`` names the commit gates, ``ansible.builtin.cron`` names the scheduled ones, the
-workflows name the CI ones, and the import graph names the modules that are libraries rather
+stale the first time someone adds a timer. The tree already says how every script is reached:
+``prek.toml`` names the commit gates, the host components' timers name the scheduled ones,
+the workflows name the CI ones, and the import graph names the modules that are libraries rather
 than entry points. ``classify`` reads those, so the page cannot drift from the tree.
 
 The census helpers (``candidates``, ``by_name``) live here rather than in the generator
@@ -29,8 +29,6 @@ from pathlib import Path
 
 from lib.invocation_sites import (
     claude_hook_files as _claude_hook_files,
-    cron_jobs as _shared_cron_jobs,
-    sh_j2_templates as _sh_j2_templates,
     workflow_files as _workflow_files,
 )
 from lib.repo_paths import REPO, SCRIPTS
@@ -65,7 +63,7 @@ SUFFIXES = (".py", ".sh")
 # because that is the one that decides how much a break costs: a scheduled script fails
 # unattended at 3am, an adhoc one fails in front of the person who ran it.
 RUNS = {
-    "scheduled": "a cron runs it unattended",
+    "scheduled": "a timer runs it unattended",
     "gate": "every commit, CI run, deploy or Claude session runs it",
     "library": "imported by another script — not an entry point",
     "adhoc": "a person runs it",
@@ -89,11 +87,6 @@ ARGV_RE = re.compile(r"(?:\./)?scripts/(?:[A-Za-z0-9_]+/)*([A-Za-z0-9_-]+\.(?:py
 _RUN_CONTEXT_RE = re.compile(
     r"uv run|python|bash|/bin/sh|\bexec\b|entry\s*=|\./scripts/"
 )
-
-# A wrapper installed on the host, as a cron `job:` names it. Resolving one back to its
-# template is what makes `build_docs.py` (run by docs-refresh.sh, run by a cron) scheduled
-# rather than invisible.
-_WRAPPER_RE = re.compile(r"([A-Za-z0-9_.-]+\.sh)\b")
 
 
 def _invoked_in(text: str) -> set[str]:
@@ -254,37 +247,6 @@ def _invoked_by(path: Path, catalogue: dict[str, Path]) -> set[str]:
     return {n for n in found if n in catalogue}
 
 
-def _cron_jobs(repo: Path) -> list[tuple[str, str]]:
-    """(cron name, command) for every present `ansible.builtin.cron` task in the tree.
-
-    File discovery and field extraction live in `lib.invocation_sites`, shared with
-    `scripts/test_invoker_paths_resolve.py` — both need the same "which files, which
-    field" answer for a cron `job:`.
-    """
-    return [(job.name, job.job) for job in _shared_cron_jobs(repo)]
-
-
-def _wrapper_templates(repo: Path) -> dict[str, Path]:
-    """Shell-wrapper basename -> the template that renders it."""
-    return {path.name[: -len(".j2")]: path for path in _sh_j2_templates(repo)}
-
-
-def _scheduled(repo: Path) -> dict[str, str]:
-    """Script filename -> the cron that reaches it, directly or through a wrapper."""
-    wrappers = _wrapper_templates(repo)
-    reached: dict[str, str] = {}
-    for name, command in _cron_jobs(repo):
-        for script in _invoked_in(command):
-            reached.setdefault(script, name)
-        for wrapper in _WRAPPER_RE.findall(command):
-            template = wrappers.get(wrapper)
-            if template is None:
-                continue
-            for script in _invoked_in(file_text(template)):
-                reached.setdefault(script, f"{name} (via {wrapper})")
-    return reached
-
-
 def _component_timer_jobs(repo: Path) -> dict[str, str]:
     """Script filename -> the host-component unit that reaches it (H7.10).
 
@@ -399,7 +361,7 @@ def _has_main_guard(text: str) -> bool:
 def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str, str]]:
     """Script filename -> (how it runs, the evidence for saying so)."""
     verdicts: dict[str, tuple[str, str]] = {}
-    # Each script is read once per question for this call. Four checks below ask its
+    # Each script is read once per question for this call. Three checks below ask its
     # `_main_shape`, and a dispatch target is asked what it invokes twice; the repeats were
     # a sixth of this function's time (#5564).
     shape = functools.cache(lambda path: _main_shape(file_text(path)))
@@ -411,8 +373,6 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
         verdicts[script] = (kind, evidence)
         return True
 
-    for script, cron in _scheduled(repo).items():
-        record(script, "scheduled", f"cron: {cron}")
     for script, unit in _component_timer_jobs(repo).items():
         record(script, "scheduled", f"timer: {unit}")
 
@@ -452,8 +412,8 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
             runs_in_process.setdefault(caller, set()).update(runs)
 
     # One script running another inherits the caller's kind, so the six reference
-    # generators are scheduled by way of `build_docs.py` and its cron rather than reading
-    # as things nobody runs. Iterated to a fixpoint: the chain is cron → build_docs.py →
+    # generators are scheduled by way of `build_docs.py` and its timer rather than reading
+    # as things nobody runs. Iterated to a fixpoint: the chain is timer → build_docs.py →
     # generator, and a longer one would otherwise resolve only as far as it was walked.
     callers = {
         path: invoked(path) | runs_in_process.get(path.name, set())

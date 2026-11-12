@@ -243,7 +243,7 @@ def shortcut_if_nothing(ln: Landing) -> None:
     """A PR reaching no tag, no plane and no host candidate has nothing to wait for.
 
     A PR whose paths may move the bundle reaches none of them and still waits on a promotion
-    (`promotion.moves_the_bundle`), whose changed set names its tags (D6.12). A setup role is such a path, so it waits too.
+    (`promotion.moves_the_bundle`), whose changed set names its tags (D6.12).
     """
     cl = ln.classification
     if not (

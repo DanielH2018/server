@@ -6,7 +6,7 @@ this graph asks the same question of it: which tags does a change to the helper 
 key readers' tag mapping (`narrow_lib/role_reads.py`) reads it. `lib.k8s_roles` re-exports it, where its
 readers import it from.
 
-A task file that does not load raises `CannotNarrow`, because it can hold the only edge to a
+A template that does not read raises `CannotNarrow`, because it can hold the only edge to a
 helper. The key readers refuse, the
 landing dies naming the file, and the `--tags` expansion leaves the name for the tag validation
 to refuse.
@@ -24,38 +24,23 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import re
 from pathlib import Path
 
-from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES, REPO
 
 __all__ = ["CannotNarrow", "role_callers"]
 
 
 class CannotNarrow(Exception):
-    """A role's task file does not load, so the caller graph may be missing an edge.
+    """A role's template does not read, so the caller graph may be missing an edge.
 
     Import it as `lib.k8s_role_callers`, never bare: a module imported under two names is two
     classes, and an `except CannotNarrow` written against one does not catch the other.
     """
 
 
-# How one k8s role reaches another's tasks: `include_role`/`import_role` naming it as
-# `k8s/<role>`. Whoever deploys the caller runs the callee's tasks.
-#
-# An `import_tasks` of a sibling role's file by path
-# (`{{ role_path }}/../<role>/tasks/<file>.yml`) is the same edge spelled without a role name,
-# and the walk does not cover it: no role reaches a sibling by path.
-_ROLE_KEYS = (
-    "ansible.builtin.include_role",
-    "include_role",
-    "ansible.builtin.import_role",
-    "import_role",
-)
-_ROLE_NAME = re.compile(r"^k8s/([^/\s]+)$")
-
-# The second edge: a role's template or task `lookup()`s a file another k8s role owns, so the
+# The first edge: a role's template `lookup()`s a file another k8s role owns, so the
 # owner's bytes render into the reader's manifests. sonarr's and radarr's
 # `templates/verify/notification.yaml.j2` read arr-notification's script and defaults this way,
-# and since their includes went (#5561) that lookup is the only edge arr-notification has.
+# and that lookup is the only edge arr-notification has.
 # The same shape as `k8s_lookups.K8S_LOOKUP_RE`, which captures the whole file path rather
 # than the owning role.
 _ROLE_LOOKUP = re.compile(
@@ -63,7 +48,7 @@ _ROLE_LOOKUP = re.compile(
     r"'/roles/k8s/([^/']+)/[^']+'\s*(?:,[^)]*)?\)"
 )
 
-# The third edge: a key in a role's defaults makes the renderer read a helper role for it.
+# The second edge: a key in a role's defaults makes the renderer read a helper role for it.
 # `image_builder_builds` reads image-builder's context template, and
 # `k8s_autodeploy_snapshot_pvcs` reads volume-snapshot's defaults for the role's snapshot Job.
 _DEFAULTS_KEY_ROLES = {
@@ -72,30 +57,10 @@ _DEFAULTS_KEY_ROLES = {
 }
 
 
-def _callees(node) -> set[str]:
-    """Every k8s role the tasks under `node` reach. Walks blocks, which nest tasks."""
-    found: set[str] = set()
-    if isinstance(node, list):
-        for item in node:
-            found |= _callees(item)
-        return found
-    if not isinstance(node, dict):
-        return found
-    for key in _ROLE_KEYS:
-        value = node.get(key)
-        name = value.get("name") if isinstance(value, dict) else value
-        if isinstance(name, str) and (m := _ROLE_NAME.match(name.strip())):
-            found.add(m.group(1))
-    for value in node.values():
-        if isinstance(value, list | dict):
-            found |= _callees(value)
-    return found
-
-
 def _looked_up(role_dir: Path) -> set[str]:
-    """Every k8s role whose file a template or task of `role_dir` `lookup()`s by path."""
+    """Every k8s role whose file a template of `role_dir` `lookup()`s by path."""
     found: set[str] = set()
-    for src in [*role_dir.glob("templates/**/*.j2"), *role_dir.glob("tasks/*.yml")]:
+    for src in role_dir.glob("templates/**/*.j2"):
         try:
             found.update(_ROLE_LOOKUP.findall(src.read_text(errors="ignore")))
         except OSError as exc:
@@ -117,24 +82,22 @@ def _read_through_defaults(role_dir: Path) -> set[str]:
 
 
 def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
-    """For each k8s role another role includes, `lookup()`s or reads through its defaults, those roles.
+    """For each k8s role another role `lookup()`s or reads through its defaults, those roles.
 
     A helper role has no `containers_list` entry and so no deploy tag of its own, but a
-    caller's deploy applies it: an include runs its tasks under the caller's tag, and a lookup
-    or a defaults key renders its file into the caller's manifests. A change to it is therefore applied by
-    deploying its callers — which is what `scripts/deploy_tools/land_lib/land_tags.py` asks
+    caller's deploy applies it: a lookup or a defaults key renders its file into the caller's
+    manifests. A change to it is therefore applied by deploying its callers — which is what `scripts/deploy_tools/land_lib/land_tags.py` asks
     this to decide, so that landing a helper-role change alongside all of its callers stops
     reading as `needs-manual-apply`.
 
-    Only ``roles/k8s`` is walked. The Pi's deleted Compose roles included `containers/common`, not a k8s
-    role, and no k8s role is reachable from them.
+    Only ``roles/k8s`` is walked.
 
     ``repo`` names the checkout to walk, for a caller that reads a tree other than the one
     this module was imported from (``role_reads.context_for(ref, cwd)``). Omitted, it walks
     ``lib.repo_paths.K8S_ROLES``, which is this file's own checkout.
 
     Raises:
-        CannotNarrow: a task file does not load. It can hold the only edge from a caller to a
+        CannotNarrow: a template does not read. It can hold the only edge from a caller to a
             helper, and a graph short by that edge names too few tags.
     """
     roles_dir = K8S_ROLES if repo is None else Path(repo) / K8S_ROLES.relative_to(REPO)
@@ -151,16 +114,6 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
     for role_dir in sorted(p for p in roles_dir.iterdir() if p.is_dir()):
         caller = role_dir.name
         reached = _looked_up(role_dir) | _read_through_defaults(role_dir)
-        for task_file in sorted(role_dir.glob("tasks/*.yml")):
-            try:
-                reached |= _callees(yaml_fast.parse_yaml(task_file.read_text()))
-            except (
-                OSError,
-                UnicodeDecodeError,
-                yaml_fast.UnparsableYaml,
-                RecursionError,
-            ) as exc:
-                raise CannotNarrow(f"{task_file} does not load: {exc}") from exc
         for callee in reached - {caller}:
             callers.setdefault(callee, set()).add(caller)
     return callers

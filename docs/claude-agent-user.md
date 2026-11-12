@@ -325,9 +325,14 @@ daniel-box sets it to the agent. The variable routes the unit's `User=`, `Group=
   the older copied subset off, and `tasks/agent_operator_config.yml` has its mechanics. The
   agent's telemetry carries the resource attribute `process.owner=claude`, so its metrics carry
   the label `process_owner="claude"` and the operator's carry none.
-- **The memory store is copied once.** `tasks/agent_memory_seed.yml` runs as root while the
-  agent's `MEMORY.md` does not exist, so a later apply never overwrites what the agent wrote. It
-  gives the files to the agent with group `ubuntu` and mode `0640`, and it strips
+- **The memory store is re-copied after every stint as the operator.** `claude-agent-home`
+  copies the operator's store into the agent's while the agent's `MEMORY.md` does not exist. It
+  also copies it on the first run as the agent after a run as the operator, if the two stores
+  differ. A run as the operator sets the flag `claude_code_agent_memory_seed_stale` outside the
+  agent's home, and the copy clears it. That copy replaces the agent's store, so a flip of
+  `claude_code_user` back to the agent never makes a stale store the `claude-memory-sync` source
+  (#8074). Once the host runs as the agent, a later run never overwrites what the agent wrote.
+  The copy gives the files to the agent with group `ubuntu` and mode `0640`, and it strips
   `/home/ubuntu/server/` from every copied `.md` so a link reads `docs/x.md` and resolves in any
   clone. The `ubuntu` store is not touched.
 - **`claude-memory-sync` reads the agent's store** and writes the operator's store on

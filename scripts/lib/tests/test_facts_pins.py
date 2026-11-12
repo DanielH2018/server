@@ -29,18 +29,6 @@ def test_the_real_config_names_the_built_in_managers_pins():
     assert "on" not in keys
 
 
-def test_the_built_in_ansible_manager_pins_an_image_in_a_tasks_file(tmp_path):
-    """No tracked tasks file holds an `image:` line, so a fixture proves the selection."""
-    tasks = tmp_path / "ansible" / "roles" / "demo" / "tasks"
-    tasks.mkdir(parents=True)
-    (tasks / "main.yml").write_text(
-        "- name: First\n  debug:\n- name: Second\n  vars:\n    image: demo:1\n"
-    )
-    (tmp_path / "renovate.json").write_text("{}")
-    rel = "ansible/roles/demo/tasks/main.yml"
-    assert pinned_keys(tmp_path, rel) == frozenset({"1"})
-
-
 def test_a_disabled_built_in_manager_pins_nothing(tmp_path):
     (tmp_path / ".github" / "workflows").mkdir(parents=True)
     (tmp_path / ".github" / "workflows" / "ci.yml").write_text(
