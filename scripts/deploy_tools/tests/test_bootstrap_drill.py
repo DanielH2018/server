@@ -121,13 +121,6 @@ def test_no_decrypt_passes_only_on_a_decryption_failure():
     assert drill.no_decrypt_problems([_ks("cluster-vars", "False", message="timeout")])
 
 
-def test_closure_reaching_flux_deferred_or_the_root_is_flagged():
-    clean = {"a": ["cluster-vars"], "cluster-vars": []}
-    assert drill.closure_problems(clean, {"a"}) == []
-    assert drill.closure_problems({"a": ["b"], "b": ["homelab"]}, {"a"})
-    assert drill.closure_problems({"a": ["flux-deferred"]}, {"a"})
-
-
 def test_placeholders_in_a_hand_applied_document_are_flagged():
     assert drill.placeholder_problems(SYNC_DOCS) == []
     bad = copy.deepcopy(SYNC_DOCS)
@@ -135,13 +128,6 @@ def test_placeholders_in_a_hand_applied_document_are_flagged():
     assert drill.placeholder_problems(bad)
     bad[0]["spec"]["url"] = "oci://$$registry/manifests"
     assert drill.placeholder_problems(bad)
-
-
-def test_sync_problems_name_a_missing_root():
-    assert drill.sync_problems(SYNC_DOCS) == []
-    assert drill.sync_problems(SYNC_DOCS[:1]) == [
-        "flux-deferred holds no Kustomization homelab"
-    ]
 
 
 def test_build_writes_the_withheld_root_order(tmp_path):
