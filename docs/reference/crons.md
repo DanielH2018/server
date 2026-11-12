@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-10 06:17 UTC
-generated_sha: e27d5c427
+generated_at: 2026-11-12 18:17 UTC
+generated_sha: 3febc5ec5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,7 +19,7 @@ generated_sha: e27d5c427
 
 | Job | Schedule | Host | User | Changes state | Defined in |
 |---|---|---|---|---|---|
-| homelab-aide-check.timer | `OnCalendar=Mon *-*-* 03:00:00` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/integrity-scans/units/homelab-aide-check.timer` |
+| homelab-aide-check.timer | `OnCalendar=Mon *-*-* 03:00:00` | daniel-box, daniel-server | `root` | read the script | `hosts/components/aide-scan/units/homelab-aide-check.timer` |
 | homelab-apt-autoremove.timer | `OnCalendar=Sun *-*-* 02:00:00` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/host-maintenance/units/homelab-apt-autoremove.timer` |
 | homelab-b2-budget-listing.timer | `OnCalendar=*-*-* 7:20:00` | daniel-box | `ubuntu` | read the script | `hosts/components/k3s-host-checks/units/homelab-b2-budget-listing.timer.j2` |
 | homelab-b2-deletion-accounting.timer | `OnCalendar=*-*-* 7:10:00` | daniel-box | `ubuntu` | read the script | `hosts/components/k3s-host-checks/units/homelab-b2-deletion-accounting.timer.j2` |
