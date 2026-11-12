@@ -22,8 +22,9 @@
 #      cluster node, the k3s binary, with its unit neither enabled nor started, because the operator
 #      starts it after the restores.
 #      daniel-server's one LVM volume comes from the Ubuntu installer, not from this script
-#   5  install homelab-tools, homelab-updater and homelab-<hostname>, then systemd-sysusers and
-#      systemd-tmpfiles --create (--local-build builds the three .deb files from the clone, then installs them);
+#   5  create the users homelab-<hostname> declares in sysusers.d, then install homelab-tools,
+#      homelab-updater and homelab-<hostname>, then systemd-sysusers and systemd-tmpfiles --create
+#      (--local-build builds the three .deb files from the clone, then installs them);
 #      on the Pi, then log2ram from the Azlux source its package ships
 #   6  the Pi and daniel-box: stop and disable systemd-resolved, and on the Pi start
 #      homelab-docker-engine.service once
@@ -554,12 +555,31 @@ if [ -n "$k3s_mode" ]; then
 fi
 stop_after 4
 
-# Step 5: install the three packages, then create each user a package declares in sysusers.d and
-# each directory it declares in tmpfiles.d.
+# create_declared_users <deb>: create the users the .deb declares in sysusers.d. A Depends that
+# creates a system user takes the next free uid down from 999, the range the host packages
+# declare, so this runs before any install. A declared uid already held is the users arm's fault.
+create_declared_users() {
+    users_dir=$(mktemp -d)
+    CLEAN="$CLEAN $users_dir"
+    dpkg-deb -x "$1" "$users_dir" || die "cannot extract $1"
+    [ -f "$users_dir/usr/lib/sysusers.d/homelab.conf" ] || return 0
+    systemd-sysusers "$users_dir/usr/lib/sysusers.d/homelab.conf" ||
+        die "systemd-sysusers failed on the users $1 declares"
+}
+
+# Step 5: create the users homelab-<hostname> declares, install the three packages, then create
+# each directory a package declares in tmpfiles.d.
 # $HOMELAB_APT is unquoted so that each option is its own argument.
 if [ -z "$clone" ]; then
     # shellcheck disable=SC2086
     apt-get update --error-on=any $HOMELAB_APT || die "apt-get update of the homelab source failed"
+    download_dir=$(mktemp -d)
+    CLEAN="$CLEAN $download_dir"
+    (cd "$download_dir" && apt-get download "homelab-$host") ||
+        die "apt-get download homelab-$host failed"
+    host_deb=$(find "$download_dir" -name "homelab-${host}_*.deb")
+    [ -n "$host_deb" ] || die "apt-get download wrote no homelab-$host .deb"
+    create_declared_users "$host_deb"
     apt-get install -y homelab-tools || die "apt-get install homelab-tools failed"
     apt-get install -y homelab-updater "homelab-$host" ||
         die "apt-get install homelab-updater homelab-$host failed"
@@ -658,6 +678,7 @@ else
     # One install, so apt resolves the three packages' Depends among themselves.
     set -- "$work"/debs/homelab-tools_*.deb "$work"/debs/homelab-updater_*.deb \
         "$work/debs/homelab-$host"_*.deb
+    create_declared_users "$3"
     apt-get install -y "$@" || die "apt-get install of the local build failed"
     phase "the apt-get install"
 fi

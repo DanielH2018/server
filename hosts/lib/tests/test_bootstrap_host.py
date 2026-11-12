@@ -66,7 +66,8 @@ def test_the_named_host_gets_the_keyring_the_source_and_both_packages(host):
     # test_lan_facts_have_one_source.py holds the address itself.
     assert [line for line in sources if line.startswith("URIs: http://")]
     assert f"Signed-By: /{INSTALLED_KEYRING}" in sources
-    update, tools, install, *_log2ram = host.apt_calls()
+    update, download, tools, install, *_log2ram = host.apt_calls()
+    assert download == "download homelab-daniel-pi"
     assert update.startswith("update --error-on=any ")
     assert "-o Dir::Etc::sourcelist=sources.list.d/homelab.sources" in update
     assert "-o Dir::Etc::sourceparts=-" in update
@@ -83,6 +84,20 @@ def test_step_5_creates_the_declared_users_before_the_directories_that_name_them
     commands = host.commands()
     assert "sysusers " in commands
     assert commands.index("sysusers ") < commands.index("tmpfiles --create")
+
+
+def test_step_5_creates_the_users_the_host_package_declares_before_any_install(host):
+    host.declare_users(
+        'u node_exporter 999 "Node exporter" /nonexistent /usr/sbin/nologin\n'
+    )
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 0, result.stderr
+    commands = host.commands()
+    [early] = [c for c in commands if c.endswith("/usr/lib/sysusers.d/homelab.conf")]
+    first_install = next(c for c in commands if c.startswith("apt-get install"))
+    assert commands.index(early) < commands.index(first_install)
 
 
 def test_another_host_is_refused_before_anything_is_written(host):
