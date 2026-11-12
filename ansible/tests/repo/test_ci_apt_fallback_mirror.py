@@ -10,7 +10,7 @@ Run: uv run pytest ansible/tests/repo/test_ci_apt_fallback_mirror.py
 from _helpers import REPO
 from lib import yaml_fast
 
-SETUP = "./.github/actions/setup"
+SETUP = "$/.github/actions/setup"
 ACTION = REPO / ".github" / "actions" / "setup" / "action.yml"
 WORKFLOWS = REPO / ".github" / "workflows"
 # (workflow, job) pairs the census must find, so a reshaped workflow cannot pass empty.
