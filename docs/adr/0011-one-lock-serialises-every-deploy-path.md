@@ -3,8 +3,7 @@ id: "0011"
 title: One lock serialises every path that writes the git tree
 status: Accepted
 date: 2026-08-23
-governs:
-  - "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2#contention exits 75"
+governs: []
 ---
 
 # ADR-0011: One lock serialises every path that writes the git tree

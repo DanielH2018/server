@@ -4,8 +4,7 @@
 #4480 and #4505 seven plugins carried their own verbatim copy, so a change to its contract had
 to be made seven times and nothing checked the copies agreed.
 
-Each plugin's `filters()` stays a literal `{"name": _as_filter(fn)}` dict, because
-`scripts/deploy_tools/narrow_lib/filters.py:filter_names` reads the filter names statically.
+Each plugin's `filters()` stays a literal `{"name": _as_filter(fn)}` dict.
 
 Run: uv run pytest ansible/tests/repo/test_filter_plugins_share_as_filter.py
 """
@@ -74,7 +73,6 @@ def test_as_filter_is_defined_at_most_once_in_the_tracked_code():
 
 
 def test_each_wrapping_plugin_imports_as_filter_and_keeps_a_literal_filters_dict():
-    filter_names = importlib.import_module("narrow_lib.filters").filter_names
     problems = []
     for name in sorted(KNOWN_WRAPPING_PLUGINS):
         rel = _plugin_rel(name)
@@ -98,11 +96,6 @@ def test_each_wrapping_plugin_imports_as_filter_and_keeps_a_literal_filters_dict
         if unwrapped:
             problems.append(
                 f"{rel}: filters() values not wrapped in `{WRAPPER}`: {unwrapped}"
-            )
-        keys = {k.value for k in returned.keys if isinstance(k, ast.Constant)}
-        if filter_names(text, rel) != keys:
-            problems.append(
-                f"{rel}: the narrowing census no longer reads its filter names"
             )
     assert not problems, "\n".join(problems)
 

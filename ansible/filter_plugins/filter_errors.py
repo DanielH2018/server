@@ -3,12 +3,8 @@
 It re-raises a filter's `ValueError` as `FilterError("<filter>: ...")`. Seven plugins
 carried a verbatim copy after #4480 and #4505; each now imports this one.
 
-DECIDED: the home is `ansible/filter_plugins/`, not a directory outside it. A change here
-then stays a deploy-plane path, and `narrow_lib/filters.py:plugin_names` refuses to narrow it
-because sibling plugins import it ("is imported by ..."). The empty `filters()` refuses there
-too. Refusing is the right answer: the wrapper reaches every caller of every importer. The
-setup roles those importers reach are this file's row of
-`deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS`.
+DECIDED: the home is `ansible/filter_plugins/`, not a directory outside it, because the
+wrapper reaches every caller of every importer and belongs beside them.
 
 Ansible loads every `.py` here as a plugin, so this module carries an empty `FilterModule`.
 Ansible imports a plugin by file path without putting this directory on `sys.path`, so each

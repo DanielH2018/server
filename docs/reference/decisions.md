@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-12 03:37 UTC
-generated_sha: c395c1372
+generated_at: 2026-11-12 03:50 UTC
+generated_sha: 503bbaba5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -780,7 +780,7 @@ generated_sha: c395c1372
 | a\n# DECIDED: a b\n") | `scripts/lib/tests/test_facts_atoms.py` | 2026-09-19 |
 | a", "m.py", "a"), tmp_path) | `scripts/lib/tests/test_facts_atoms.py` | 2026-09-19 |
 | zzz", "m.py", "zzz"), tmp_path) | `scripts/lib/tests/test_facts_atoms.py` | 2026-09-19 |
-| fire on ANY change`" | `scripts/lib/tests/test_facts_citations.py` | 2026-11-12 |
+| fire on ANY change`") | `scripts/lib/tests/test_facts_citations.py` | 2026-11-12 |
 | keep it\n") | `scripts/lib/tests/test_facts_lint.py` | 2026-09-19 |
 | keep it`.\n" | `scripts/lib/tests/test_facts_lint.py` | 2026-09-19 |
 | keep`\n") | `scripts/lib/tests/test_facts_lint.py` | 2026-09-30 |
@@ -964,7 +964,7 @@ generated_sha: c395c1372
 | a job that checks out nothing holds packages: write to move `last-good` for a run that lost its `settle`. The operator ruled the grant on 2026-11-09 (#7865, contract C2). statuses: read is the verdict-status read. | `.github/workflows/promote.yml` | 2026-11-09 |
 | `[A-Z][A-Z]+`, not `[A-Z]{2,}`. `{2,}` form parses as two broken patterns. The first attempt silently ignored nothing; wrapped in a group, it failed with "missing closing )". | `.vale.ini` | 2026-09-25 |
 | ` at the line it governs.** Reviewer briefs grep for the | `CLAUDE.md` | 2026-11-05 |
-| the home is `ansible/filter_plugins/`, not a directory outside it. | `ansible/filter_plugins/filter_errors.py` | 2026-10-12 |
+| the home is `ansible/filter_plugins/`, not a directory outside it, because the | `ansible/filter_plugins/filter_errors.py` | 2026-11-12 |
 | a task names a group by its own spelling, `'no-backup' \| backup_group_label`, not by | `ansible/filter_plugins/longhorn_groups.py` | 2026-10-10 |
 | the shard is declared per claim, never derived from a position. | `ansible/filter_plugins/longhorn_groups.py` | 2026-10-10 |
 | ` marker named. | `ansible/filter_plugins/role_label.py` | 2026-10-04 |
