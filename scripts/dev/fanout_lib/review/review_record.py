@@ -130,6 +130,9 @@ class Record:
     ci_gate: str = ""
     ci_resumed: bool = False
     ci_rerun: bool = False
+    # The jobs the first CI attempt failed, kept when the gate re-ran them (#7884): `ci_gate`
+    # names jobs only while the head is still red. [] in a record written before this field.
+    ci_rerun_jobs: list[str] = field(default_factory=list)
     # Per phase: wall-clock seconds, and the tool calls the classifier denied.
     durations: dict[str, float] = field(default_factory=dict)
     permission_denials: dict[str, int] = field(default_factory=dict)
