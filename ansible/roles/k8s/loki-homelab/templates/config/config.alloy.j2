@@ -147,6 +147,39 @@ loki.process "pods" {
       replace    = "<redacted>"
     }
   }
+
+  // Redact the token half of any Discord webhook URL. Flux's notification-controller logs the
+  // full URL when a post fails, and the token alone lets its holder post to the alert channel.
+  // Unscoped: Alertmanager, CrowdSec, monitor-bridge and the *arr notification checks hold
+  // Discord webhook URLs too. The numeric id half stays, so the channel is still identifiable.
+  stage.replace {
+    expression = "discord(?:app)?\\.com/api/webhooks/[0-9]+/([A-Za-z0-9_-]{20,})"
+    replace    = "<redacted>"
+  }
+
+  // Redact the Home Assistant webhook id from Traefik's access lines. A mobile_app registration's
+  // id authenticates the companion app, and an unencrypted one can call any HA service. Only the
+  // id goes, so the route, status and client of a failed webhook POST stay readable. CrowdSec
+  // reads the raw access-log file, not this stdout copy, so the WAF still sees the full path.
+  stage.match {
+    selector = "{container=\"access-log-rotate\"}"
+    stage.replace {
+      expression = "/api/webhook/([0-9A-Za-z_-]{16,})"
+      replace    = "<redacted>"
+    }
+  }
+
+  // Redact PeaNUT's session-signing secret, which it prints at every start: `Generated new
+  // AUTH_SECRET: <secret>` when the env var is unset, `AUTH_SECRET already exists: <secret>`
+  // when it is set (upstream src/server/auth-config.ts). Setting AUTH_SECRET therefore does not
+  // stop the line; this stage is the only fix.
+  stage.match {
+    selector = "{container=\"peanut\"}"
+    stage.replace {
+      expression = "AUTH_SECRET(?: already exists)?: ([A-Za-z0-9+/=]+)"
+      replace    = "<redacted>"
+    }
+  }
 }
 
 // ---- Host files. Root + DAC_READ_SEARCH in the DaemonSet exist for these. ---------------

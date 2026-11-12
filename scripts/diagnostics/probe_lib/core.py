@@ -483,6 +483,15 @@ _LOG_SECRET_RE = re.compile(r"(refresh_token[\"']?:\s*[\"']?)[0-9a-f]{32,}")
 # filters the raw body, where a JSON encoder may write the `&` as `\u0026`.
 _APIKEY_RE = re.compile(r"(apikey=)[^&#;\s\"'\\]+", re.IGNORECASE)
 
+# Flux's Discord webhook token, a Home Assistant webhook id in Traefik's access lines, and
+# PeaNUT's session secret. The Alloy stages strip them from new records; these cover the older
+# ones `loki-query` prints. Each class stops at a JSON string's end, for the `--json` raw body.
+_LOG_TOKEN_RES = (
+    re.compile(r"(discord(?:app)?\.com/api/webhooks/[0-9]+/)[A-Za-z0-9_-]{20,}"),
+    re.compile(r"(/api/webhook/)[0-9A-Za-z_-]{16,}"),
+    re.compile(r"(AUTH_SECRET(?: already exists)?: )[A-Za-z0-9+/=]+"),
+)
+
 REDACTED = "<redacted>"
 
 # Matched as lowercase substrings against a credential-bearing name: an *arr field or key name,
@@ -544,13 +553,15 @@ def redact_query_params(text):
 
 
 def redact_log_secrets(text):
-    """Return `text` with credential values that HA and the *arr apps log replaced by `<redacted>`.
+    """Return `text` with credential values that pods log replaced by `<redacted>`.
 
     Pure, so a test asserts what reaches stdout without stubbing the HTTP call. Operates on raw
     text rather than a parsed body, because `/api/error_log` is a plain-text log, not JSON.
     """
     text = _LOG_SECRET_RE.sub(rf"\g<1>{REDACTED}", text)
     text = _APIKEY_RE.sub(rf"\g<1>{REDACTED}", text)
+    for pattern in _LOG_TOKEN_RES:
+        text = pattern.sub(rf"\g<1>{REDACTED}", text)
     return redact_query_params(text)
 
 

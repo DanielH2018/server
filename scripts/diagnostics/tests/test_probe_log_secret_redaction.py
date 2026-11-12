@@ -144,6 +144,44 @@ def test_raw_json_log_body_is_clean_past_the_key():
     )
 
 
+DISCORD_TOKEN = "x" * 68
+HA_WEBHOOK_ID = "f" * 64
+AUTH_SECRET = "A" * 43 + "="
+
+
+@pytest.mark.parametrize(
+    ("line", "secret", "kept"),
+    [
+        (
+            "POST https://discord.com/api/webhooks/1556410786111426693/"
+            f"{DISCORD_TOKEN}/slack giving up after 1 attempt(s)",
+            DISCORD_TOKEN,
+            "webhooks/1556410786111426693/<redacted>/slack giving up",
+        ),
+        (
+            f'{{"RequestPath":"/api/webhook/{HA_WEBHOOK_ID}","RouterName":"ha"}}',
+            HA_WEBHOOK_ID,
+            '"/api/webhook/<redacted>","RouterName":"ha"',
+        ),
+        (
+            f"Generated new AUTH_SECRET: {AUTH_SECRET}",
+            AUTH_SECRET,
+            "Generated new AUTH_SECRET: <redacted>",
+        ),
+        (
+            f'["1", "AUTH_SECRET already exists: {AUTH_SECRET}"], ["2", "next"]',
+            AUTH_SECRET,
+            'AUTH_SECRET already exists: <redacted>"], ["2", "next"]',
+        ),
+    ],
+    ids=["discord-token", "ha-webhook-id", "peanut-generated", "peanut-set-raw-json"],
+)
+def test_pod_log_token_is_redacted_and_the_line_kept(line, secret, kept):
+    out = core.redact_log_secrets(line)
+    assert secret not in out
+    assert kept in out
+
+
 def test_json_escaped_ampersand_apikey_is_flagged():
     body = '"GET /api?t=search\\u0026apikey=abc123\\u0026limit=1"'
     out = core.redact_log_secrets(body)
