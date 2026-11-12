@@ -117,24 +117,22 @@ def test_a_current_checkout_lets_the_landing_continue():
     classify.refuse_stale_code(ln)
 
 
-def test_a_stale_checkout_names_the_file_and_a_checkout_at_the_merge():
+def test_a_stale_checkout_names_the_file_and_the_fresh_rerun():
     ln, _ = make_landing(Fakes(stale_code=["scripts/lib/render_guard.py"]), since="pre")
     ln.merge_sha = "m" * 40
     with pytest.raises(Outcome) as raised:
         classify.refuse_stale_code(ln)
     msg = raised.value.detail
     assert raised.value.rc == 1 and "scripts/lib/render_guard.py" in msg
-    assert f"worktree add --detach /tmp/land-999 {'m' * 40}" in msg
-    assert "land.sh --pr 999 --since pre" in msg
+    assert "`land.sh --pr 999 --since pre --fresh`" in msg
 
 
-def test_a_stale_checkout_names_the_primary_once_it_carries_master():
-    ln, _ = make_landing(Fakes(stale_code=["a.py"], merge_applied_rc=0))
+def test_a_stale_checkout_without_since_reruns_from_the_merges_parent():
+    ln, _ = make_landing(Fakes(stale_code=["a.py"]))
     ln.merge_sha = "m" * 40
     with pytest.raises(Outcome) as raised:
         classify.refuse_stale_code(ln)
-    assert f"re-run it from {PRIMARY}" in raised.value.detail
-    assert f"--since {'m' * 40}^1" in raised.value.detail
+    assert f"--since '{'m' * 40}^1' --fresh" in raised.value.detail
 
 
 def test_a_comparison_git_could_not_make_refuses():
@@ -268,3 +266,79 @@ def test_a_comparison_git_could_not_make_refuses_before_it_merges(land_run):
         c for c in calls if c[0] == "gh" and any(a.endswith("/merge") for a in c[1])
     ]
     assert not merges, f"merged when git could not compare: {merges}"
+
+
+def _armed_open_pr() -> dict:
+    return {
+        "state,title,body,reviewDecision": {
+            "state": "OPEN",
+            "title": "Document the lander",
+            "body": "",
+        },
+        "headRefOid": {"headRefOid": "c" * 40},
+        "state,mergeable,headRefOid": [
+            {"state": "OPEN", "mergeable": "MERGEABLE", "headRefOid": "c" * 40},
+            {"state": "MERGED", "mergeable": "MERGEABLE", "headRefOid": "c" * 40},
+        ],
+    }
+
+
+# Before the merge (#7916's refusal) and after it, from a branch master has moved past.
+_STALE_LANDINGS = {
+    "before-merge": (["--arm-merge", "--await-merge"], _armed_open_pr()),
+    "after-merge": ([], None),
+}
+
+
+def _stale_landing_output(land_run, case: str) -> str:
+    argv, views = _STALE_LANDINGS[case]
+    fakes = Fakes(stale_code=["scripts/deploy_tools/land_lib/classify.py"])
+    if views is not None:
+        fakes.gh_views = views
+    _, out, err, _, _ = land_run(argv, fakes)
+    return out + err
+
+
+@pytest.mark.parametrize("case", sorted(_STALE_LANDINGS))
+def test_a_stale_landing_prints_no_remedy_that_redirects_git_to_the_primary(
+    land_run, case
+):
+    """#7933: a worktree-isolated session's guard denies `git -C <primary>`."""
+    printed = _stale_landing_output(land_run, case)
+    assert "git -C" not in printed
+    assert f"-C {PRIMARY}" not in printed
+
+
+@pytest.mark.parametrize("case", sorted(_STALE_LANDINGS))
+def test_a_stale_landing_needs_no_hand_made_checkout(land_run, case):
+    """#7933: a checkout refreshed by hand went stale again within minutes (#7902)."""
+    printed = _stale_landing_output(land_run, case)
+    assert "worktree add" not in printed
+
+
+@pytest.mark.parametrize("case", sorted(_STALE_LANDINGS))
+def test_a_stale_landing_refuses_and_names_fresh(land_run, case):
+    """The absence checks above pass for a landing that never reached the refusal."""
+    argv, views = _STALE_LANDINGS[case]
+    fakes = Fakes(stale_code=["scripts/deploy_tools/land_lib/classify.py"])
+    if views is not None:
+        fakes.gh_views = views
+    rc, out, err, _, _ = land_run(argv, fakes)
+    assert rc == 1 and "VERDICT: refused" in out
+    assert "land_lib/classify.py" in out and "--fresh`" in out + err
+
+
+@pytest.mark.parametrize(
+    "refuse",
+    [classify.refuse_stale_code, classify.refuse_stale_code_before_merge],
+    ids=["after-merge", "before-merge"],
+)
+def test_a_lander_units_stale_refusal_names_a_rerun_its_caller_can_make(refuse):
+    """The unit's caller cannot pass `--fresh`: `handoff.refused_flags` refuses it."""
+    ln, _ = make_landing(Fakes(stale_code=["a.py"]), require_branch_prefix="claude/")
+    ln.merge_sha = "m" * 40
+    with pytest.raises(Outcome) as raised:
+        refuse(ln)
+    msg = raised.value.detail
+    assert "cannot take `--fresh`" in msg and "homelab-checkout-sync" in msg
+    assert "re-run it as" not in msg and "with `--fresh`" not in msg

@@ -1,10 +1,9 @@
 """A systemd timer's triggers read from its unit text, and a daily `OnCalendar=` expanded.
 
-Three readers share it: `test_renderer_host_update_limits.py`, which bounds the longest gap
-between two updater fires, the landing's host wait (`land_lib/host_wait.py`), which needs the
-fires after a merge, and `ansible/filter_plugins/updater_lag_grace.py`, which sizes
-monitor-bridge's builder lag grace from the same gap (#6530). All read the timer as the host
-renderer emits it, so none asks systemd on the machine it runs on.
+Two readers share it: `test_renderer_host_update_limits.py`, which bounds the longest gap
+between two updater fires, and the landing's host wait (`land_lib/host_wait.py`), which needs
+the fires after a merge. Both read the timer as the host renderer emits it, so neither asks
+systemd on the machine it runs on.
 
 Only the forms the host packages use are read. Anything else raises `ValueError`, so a
 schedule neither reader can expand fails rather than reads as some other schedule.

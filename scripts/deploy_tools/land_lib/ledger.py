@@ -4,9 +4,10 @@ This is the only record of where a landing's time goes: how long the merge took 
 how long master CI took after it, the deploy.
 
 `cause` is a one-token reason beside a `deploy-failed` verdict. One exit-75 verdict carries one
-too: `deferred` with `promote-timeout`, the wait on a promotion that no promotion covered in
-time. Every other verdict leaves it empty. The Landings board's cause panel selects `cause!=""`,
-so it counts that one beside the `deploy-failed` causes (#4998). The verdict alone cannot tell
+too: `deferred`, with `promote-timeout` for a promotion wait that no promotion covered in time,
+or with `gate-unreadable` or `gate-stale` for a health gate that graded nothing (#7911). Every
+other verdict leaves it empty. The Landings board's cause panel selects `cause!=""`, so it
+counts those beside the `deploy-failed` causes (#4998). The verdict alone cannot tell
 a tag nothing applies from a held promotion, so `cause` lets the board split
 them. Its vocabulary is `outcome.Cause` and it is checked HERE, on assignment,
 because the board groups by the field: a value invented at one of the writing sites

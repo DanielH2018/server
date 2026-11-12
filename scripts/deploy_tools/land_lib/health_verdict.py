@@ -18,6 +18,7 @@ from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import (
     STALE_GATE_NOTE,
     UNREADABLE_GATE_NOTE,
+    Cause,
     Verdict,
     say,
 )
@@ -174,6 +175,7 @@ def health(ln: Landing) -> NoReturn:
     if ln.plane:
         print(f"  STILL UNAPPLIED, and no deploy tag covers it: {ln.plane}")
     if result.stale:
+        ln.ledger.cause = Cause.GATE_STALE
         print(STALE_GATE_NOTE)
         end(
             Verdict.DEFERRED,
@@ -181,6 +183,7 @@ def health(ln: Landing) -> NoReturn:
             " — deployed, but the health gate's tree was older than origin/master",
         )
     if result.unreadable:
+        ln.ledger.cause = Cause.GATE_UNREADABLE
         print(UNREADABLE_GATE_NOTE)
         end(
             Verdict.DEFERRED,

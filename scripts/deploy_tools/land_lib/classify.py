@@ -5,12 +5,14 @@ move the bundle has nothing to wait for, and CI on the merge commit is not this 
 The deployer's timer applies a setup role on its own; this landing does not watch it.
 """
 
+import shlex
 import sys as _sys
 from collections.abc import Callable
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import BRANCH, Classification, Landing
+from deploy_tools.land_lib.fresh import FRESH_FLAG
 from deploy_tools.land_lib.own_checkout import OWN_CHECKOUT
 from deploy_tools.land_lib.outcome import (
     UNREADABLE_LEDGER_NOTE,
@@ -85,11 +87,13 @@ def refuse_stale_code_before_merge(ln: Landing) -> None:
     what = _stale_code_reason(ln, base)
     if not what:
         return
-    snap = f"/tmp/land-{ln.opts.pr}"
+    rerun = (
+        f"re-run the same land.sh command with `{FRESH_FLAG}`, which lands from a checkout "
+        f"of {base} it makes and removes itself"
+    )
     ln.die(
-        f"this landing runs from {OWN_CHECKOUT}, and {what}. Nothing is merged; re-run it "
-        f"from a checkout at {base}: `git -C {ln.opts.primary} worktree add --detach {snap} "
-        f"{base}`, then `{snap}/scripts/deploy_tools/land.sh` with the same arguments",
+        f"this landing runs from {OWN_CHECKOUT}, and {what}. Nothing is merged; "
+        f"{_unit_rerun(ln) or rerun}",
         1,
     )
 
@@ -103,26 +107,41 @@ def refuse_stale_code(ln: Landing) -> None:
     the primary. Against the merge itself, every PR editing landing code would refuse there.
     The cost: such a PR that also moves a layout is not caught landing from an older checkout.
     DECIDED: refuse rather than re-exec from a fresh checkout, so `land.sh` keeps running the
-    release it ships with (#7820). A rebase merge of a PR that edits landing code puts its
-    earlier commits in the base and refuses too; land.sh squash-merges.
+    release it ships with (#7820). The refusal names `--fresh`, the caller's opt-in to that
+    re-run (#7933), so no hand makes a checkout. A rebase merge of a PR that edits landing
+    code puts its earlier commits in the base and refuses too; land.sh squash-merges.
     """
     base = f"{ln.merge_sha}^1"
     what = _stale_code_reason(ln, base)
     if not what:
         return
-    rerun = f"land.sh --pr {ln.opts.pr} --since {ln.opts.since or base}"
-    if ln.git("merge-base", "--is-ancestor", base, "HEAD").returncode == 0:
-        where = f"re-run it from {ln.opts.primary}: `{ln.opts.primary}/scripts/deploy_tools/{rerun}`"
-    else:
-        snap = f"/tmp/land-{ln.opts.pr}"
-        where = (
-            f"re-run it from a checkout at the merge: `git -C {ln.opts.primary} worktree add "
-            f"--detach {snap} {ln.merge_sha}`, then `{snap}/scripts/deploy_tools/{rerun}`"
-        )
+    # Quoted: zsh's extendedglob reads the `^` in `<sha>^1` as a glob and refuses the line.
+    since = shlex.quote(ln.opts.since or base)
+    rerun = f"land.sh --pr {ln.opts.pr} --since {since} {FRESH_FLAG}"
     ln.die(
         f"this landing runs from {OWN_CHECKOUT}, and {what}. PR #{ln.opts.pr} is merged, "
-        f"and this landing graded nothing; {where}",
+        "and this landing graded nothing; "
+        + (
+            _unit_rerun(ln)
+            or f"re-run it as `{rerun}`, which lands from a checkout of origin/{BRANCH} it "
+            "makes and removes itself"
+        ),
         1,
+    )
+
+
+def _unit_rerun(ln: Landing) -> str:
+    """The re-run a lander unit's caller can make, or "" outside a unit.
+
+    The unit runs a fixed command line and its caller's `land.sh` refuses `--fresh`
+    (`handoff.refused_flags`), so the remedy is the next run of the checkout-sync timer.
+    """
+    if not ln.opts.policy_active:
+        return ""
+    return (
+        f"a lander unit cannot take `{FRESH_FLAG}`, so re-run the same land.sh command once "
+        f"{OWN_CHECKOUT} carries origin/{BRANCH}; homelab-checkout-sync fast-forwards the "
+        "primary checkout every 10 minutes"
     )
 
 
