@@ -77,9 +77,8 @@ resolved from `origin/master` before the merge is armed, so you do not pass it.
 ./scripts/deploy_tools/land.sh --pr <n> --subject "..." ...        # override the squash subject
 ```
 
-**Without `--detach`, run it under `runlog`.** Ansible refuses to start on the non-blocking
-pipe a backgrounded Bash call hands the script, and the error names Ansible rather than the
-harness. `runlog land<n> -- ./scripts/deploy_tools/land.sh --pr <n> …` gives it blocking
+**Without `--detach`, run it under `runlog`.** A backgrounded Bash call hands the script a
+non-blocking pipe, and a Python write that finds it full raises `BlockingIOError`. `runlog land<n> -- ./scripts/deploy_tools/land.sh --pr <n> …` gives it blocking
 stdio and writes the output to a log in the session's own directory, whose path it prints
 first. Then wait with `cc-wait file <log> --match '^VERDICT:' --fail '^Traceback'` and **do
 not end your turn** on the landing.
