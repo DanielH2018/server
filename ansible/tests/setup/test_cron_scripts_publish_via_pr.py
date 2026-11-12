@@ -20,7 +20,6 @@ import pytest
 from _helpers import REPO
 from _shell_render import rendered_shell_text
 
-TEMPLATES = REPO / "ansible/roles/setup/initial_setup/templates"
 COMPONENTS = REPO / "hosts/components"
 DOCS_REFRESH = COMPONENTS / "docs-refresh/templates/docs-refresh.sh.j2"
 ROTATION_AUDIT = COMPONENTS / "secret-rotation/templates/secret-rotation-audit.sh.j2"
@@ -35,11 +34,7 @@ SCRIPTS = [
 
 
 def read(path: Path) -> str:
-    in_component = COMPONENTS in path.parents
-    role = path.parent.parent.name if in_component else "initial_setup"
-    text = rendered_shell_text(
-        "components" if in_component else "setup", role, path.name
-    )
+    text = rendered_shell_text("components", path.parent.parent.name, path.name)
     assert len(text) > 2000, f"{path.name} is only {len(text)} bytes — has it moved?"
     return text
 

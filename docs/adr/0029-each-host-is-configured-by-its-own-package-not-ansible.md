@@ -13,10 +13,13 @@ governs:
 
 Accepted on 2026-11-12. The operator approved this record
 ([H7](../target-architecture/host/h7-delete-ansible.md), exit observation 6) and ruled that
-ADR-0001, ADR-0003, ADR-0011, ADR-0013 and ADR-0017 each carry an "Amended by ADR-0029"
-note (*Amendments* below).
+ADR-0001, ADR-0003, ADR-0011 and ADR-0013 each carry an "Amended by ADR-0029" note
+(*Amendments* below). From the post-migration audit, also on 2026-11-12
+([#8178](https://github.com/DanielH2018/server/issues/8178)), the operator added ADR-0012,
+ADR-0021 and ADR-0022 to that list.
 
-This record supersedes the bring-up sections of the setup roles' `CLAUDE.md` files.
+This record supersedes [ADR-0017](0017-the-tree-lock-guards-the-tree-not-the-cluster.md) and
+the bring-up sections of the setup roles' `CLAUDE.md` files.
 
 ## Context
 
@@ -177,8 +180,9 @@ because every open branch conflicts with it.
 
 ## Amendments
 
-The operator ruled on 2026-11-12 that five records gain an "Amended by ADR-0029" note in
-their *Status*. Each decision text is unchanged.
+The operator ruled on 2026-11-12 that seven records gain an "Amended by ADR-0029" note in
+their *Status*, and that this record supersedes ADR-0017. Each decision text is unchanged.
+Each note names which of slices H7.53 to H7.57 removed the statements it marks as history.
 
 - **[ADR-0001](0001-mkdocs-site-with-generated-reference.md).** Its title says the
   reference pages are generated from the Ansible tree. The generators under `scripts/docs/`
@@ -197,14 +201,31 @@ their *Status*. Each decision text is unchanged.
   `gitops-deploy.service` are no longer holders: H7.52 retired the deployer's timer, and
   H7.53 deleted `deploy.sh` and the deployer's code. `homelab-checkout-sync` and the crons
   that write the tree (docs-refresh and eval-run) still take the tree lock.
+- **[ADR-0012](0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md).** Its two gates
+  describe the Ansible deploy path, and its ADR-0020 amendment says `deploy.sh` refuses a
+  k8s tag. H7.53 deleted `deploy.sh`, H7.55 deleted `ansible/deploy.yml`, and H7.56 removed
+  ansible-core, so no Ansible path remains. The soak Job and `promote.py verify` gate every
+  k8s deploy, and the rationale stands.
 - **[ADR-0013](0013-daniel-pi-stays-on-docker.md).** Its 2026-10-28 amendment says
   "`-e target=daniel-pi` stays for the setup plays." The setup plays are deleted. The Pi's
   setup plane ships in `homelab-daniel-pi`, and `homelab-docker-engine.service` moves the
   Docker engine. Nothing reaches the Pi over SSH with `-e target=daniel-pi`.
-- **[ADR-0017](0017-the-tree-lock-guards-the-tree-not-the-cluster.md).** Its tree-lock half
-  stands, through ADR-0011. Its per-service-lock half has no subject left: `deploy.sh` took
-  those locks for the playbook, `deploy.sh` is deleted, and k8s changes deploy only through
-  `promote` and Flux.
+- **[ADR-0021](0021-the-host-package-builder-trusts-master-plus-green-ci.md).** It cites
+  the GitOps deployer as the anchor's precedent and the `homelab_builder` role as the path to
+  the signing key. H7.53 deleted the deployer, and H7.55 deleted the role. The anchor stands,
+  and `homelab-checkout-sync` and the builder's own package take those places.
+- **[ADR-0022](0022-the-cluster-decrypts-its-own-file-with-its-own-key.md).** It cites
+  `ansible/roles/setup/sops_setup/CLAUDE.md` for the recipient runbook, which H7.55 deleted.
+  The header of `ansible/.sops.yaml` and `docs/secret-rotation.md` carry the runbook. Both
+  decryption decisions stand.
+
+### ADR-0017 is superseded
+
+[ADR-0017](0017-the-tree-lock-guards-the-tree-not-the-cluster.md) decided how long
+`deploy.sh` held the tree lock and which per-service locks a deploy took. H7.53 deleted
+`deploy.sh`, its snapshot step and the deployer's lock code, and H7.55 deleted the
+playbooks, so nothing it decides has a subject. Its tree-lock half stands, through ADR-0011.
+No ADR uses a "Retired" status, so this record supersedes it.
 
 ## Governs
 

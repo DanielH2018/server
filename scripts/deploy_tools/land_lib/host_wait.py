@@ -83,8 +83,9 @@ from lib.systemd_timer import timer_settings
 # 2s; the bound stops a wedged one, which `host_targets` reads as a failed render.
 # DECIDED: `--no-sync`. Both snapshots share the primary's `.venv`, and `uv.lock` is a
 # HOST_INPUTS member, so a synced render would upgrade that venv at the merge commit and
-# downgrade it at the first parent while the tick may be using it. A render that needs a
-# dependency the venv lacks fails instead, and a failed render waits on every host.
+# downgrade it at the first parent while a session or `homelab-checkout-sync` may be using
+# it. A render that needs a dependency the venv lacks fails instead, and a failed render
+# waits on every host.
 HOST_RENDER_ARGV = (
     "uv",
     "run",

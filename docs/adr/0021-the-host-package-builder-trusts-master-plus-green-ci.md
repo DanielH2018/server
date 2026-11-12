@@ -15,6 +15,26 @@ Accepted. The operator chose option (a) of
 [H3](../target-architecture/host/h3-pi-pilot.md) *Open questions* 1 on 2026-10-14, with the
 answer "(a) Master + green CI."
 
+Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) on
+2026-11-12. The decision stands: the builder builds a commit on `origin/master`'s
+first-parent chain with a green CI verdict, and checks no signature. The GitOps deployer that
+*Context*, *Decision* and *Consequences* use as the anchor's precedent is gone: H7.52
+retired its timer, and H7.53 deleted its code. Slices H7.53 to H7.57 make these statements
+below history. They stay as written:
+
+- *Context*, "`ci_walk_candidates` already gives the GitOps deployer that anchor, and both
+  k3s nodes take setup roles from master on it": H7.53 deleted the deployer, and H7.55
+  deleted the setup roles. `homelab-checkout-sync` is the walk's other caller
+  (`hosts/lib/checkout_sync.py`), and every host takes its setup plane from its package.
+- *Context*, option (b)'s argument that "the tick applies the `homelab_builder` role there":
+  H7.55 deleted that role. The builder ships as a component of `homelab-daniel-box`, so a
+  merged change to it still reaches the signing key through the builder's own package. The
+  argument holds with the package in place of the tick.
+- *Decision*, "the C5 anchor the GitOps deployer already uses"; and *Consequences*, "true of
+  the two k3s nodes through the GitOps deployer": the anchor is the builder's and
+  `homelab-checkout-sync`'s. H7.56 removed ansible-core, and H7.57 accepted ADR-0029, which
+  records the result.
+
 ## Context
 
 Slice H3 adds a LAN builder on `daniel-box`. The builder renders each host's package from

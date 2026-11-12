@@ -167,8 +167,8 @@ authelia_k8s_manage_claude_user: true
 # Empty stand-ins, NOT values. SOPS supplies both on a cluster that manages the user, and
 # play vars outrank role defaults, so these are what a cluster with the flag off resolves
 # instead of failing on an undefined name. An empty one reaching a cluster with the flag ON
-# is a misconfiguration, and tasks/main.yml asserts against exactly that: the digest assert
-# refuses an empty digest, and the TOTP assert an empty shared secret. The plaintext
+# is a misconfiguration, and `cluster_vars.py write` refuses exactly that: an empty value for
+# a key the render places, which covers the digest and the TOTP shared secret. The plaintext
 # `authelia_claude_password` has no stand-in, because this role does not read it;
 # scripts/diagnostics/ui_login.py does.
 authelia_claude_password_argon2: ''

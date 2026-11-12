@@ -18,7 +18,7 @@ dashboard and the dashboard findings.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5, crowdsec's own window). Its `containers_list` entry
-  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged
+  is `platform: k8s`, so nothing applies it by hand. A merged
   change reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Traefik's entry declares `depends_on: [crowdsec]`**, so the LAPI is up before the bouncer
   that needs its credential.

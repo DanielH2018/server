@@ -34,7 +34,7 @@ claude_code_rootq_enabled: true
 # The same inspector for the agent user through a socket (issue #6350). False removes the
 # socket, its units, the helper, the client and the group, and the agent leaves the group.
 claude_code_rootq_socket_enabled: true
-# daniel-box's agent logs in here as `claude` with the key agent_peers.yml generates there.
+# daniel-box's agent logs in here as `claude` with the key claude-agent-home generates there.
 # False removes the key and the ssh-users membership.
 claude_agent_ssh_login_enabled: true
 # The agent user takes the operator's dotfiles here too, as on daniel-box. A fan-out batch

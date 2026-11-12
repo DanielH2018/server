@@ -4,9 +4,9 @@
 # policy in the repo mean something.
 #
 # INGRESS ONLY. An Egress policy selects pods correctly on this cluster and blocks nothing
-# (measured 2026-08-07, recorded in sonarr/tasks/main.yml — the probe that produced the
-# measurement was retired as dead code on 2026-08-17, so the prose there is now the only record;
-# no live job re-proves it, and netpol-probe-slice2-job.yaml.j2 tests ingress only). Writing one
+# (measured 2026-08-07, recorded in the header of sonarr's tasks/main.yml, which only git
+# history holds since the Ansible plane's deletion — the probe that produced the measurement
+# was retired as dead code on 2026-08-17; no live job re-proves it, and netpol-probe-slice2-job.yaml.j2 tests ingress only). Writing one
 # would read like a control in the repo and do nothing in the cluster.
 #
 # Kubelet probe traffic needs no rule here: flaresolverr admits :8191 only from prowlarr yet is
@@ -22,8 +22,8 @@ spec:
     # Every pod EXCEPT the ones that opt out. A bare `{}` here would select the four workloads
     # carrying a policy tighter than this one (flaresolverr, headlamp, n8n, registry) and, because
     # policies are additive, ADD this allow-list on top of theirs — widening exactly the fences
-    # those policies exist to draw. `netpol_baseline_exempt_workloads` names them, and a live gate
-    # in tasks/main.yml refuses to apply this if the cluster's exempt set differs.
+    # those policies exist to draw. `netpol_baseline_exempt_workloads` names them, and the
+    # exempt-set check in templates/verify/job.yaml.j2 fails if the cluster's exempt set differs.
     #
     # DoesNotExist, not `NotIn: ["true"]`: a pod with no such key satisfies DoesNotExist with no
     # ambiguity, where NotIn against an absent key is the kind of semantics that reads two ways.
@@ -37,9 +37,9 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# `| bool`, matching the `when:` in tasks/main.yml. Without it the two disagree for a STRING:
-   `-e netpol_baseline_enforced=false` is truthy to Jinja (this branch renders, fencing applied)
-   and False to Ansible's `when:` (every probe task skipped) — enforcement with no probe, from
+{# `| bool`, matching `netpol_baseline_probe_active` in defaults/main.yml. Without it the two disagree for a
+   STRING: `'false'` is truthy to Jinja (this branch renders, fencing applied) and False to
+   that list (the verify Job dials no leg) — enforcement with no probe, from
    the exact override an operator reaches for mid-incident. #}
 {% if netpol_baseline_enforced | bool %}
     # Three callers legitimately reach almost every pod. Stating them once here is the whole

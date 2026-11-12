@@ -6,8 +6,7 @@ tests stop standing for anything.
 
 The derivation is layered, base first, and each consumer imports from the layer it needs:
 
-  * _autodeploy.py — the roles, the denylist, the task walker that decides what runs on a
-    normal deploy, and the two declarations `_auto_deployable` and `_declares_autodeploy`
+  * _autodeploy.py — the roles, the denylist, the template readers, and the two declarations `_auto_deployable` and `_declares_autodeploy`
   * _autodeploy_batch.py — is a Job or CronJob credited as gated
     (test_k8s_autodeploy_batch_gates.py)
   * _autodeploy_rollout.py — is a Deployment or DaemonSet credited as gated
@@ -60,18 +59,6 @@ def _roles() -> list[Path]:
     )
 
 
-# The DaemonSet-alias sweep below deliberately does NOT reuse _roles() or _SHARED: those exist
-# to enumerate *deployable* roles for the auto-deploy guards above, and excluding manifests
-# is correct for that job. The sweep's job is different — it must see the shared
-# roles too, since manifests/tasks/main.yml and manifests/tasks/drain.yml are two of the
-# three consumers that key on the literal 'daemonset'. Kept as an independent file list so the
-# two concerns can't drift into each other.
-_KUBECTL_CONSUMER_ROOTS = (
-    _K8S_ROLES,  # includes manifests/, unlike _roles()
-    _REPO / "ansible/post_tasks",
-    _REPO / "ansible/tasks",
-)
-
 # kubectl accepts 'ds', 'daemonsets' and any casing of 'DaemonSet' as the same resource; this
 # repo's convention is the exact lowercase singular 'daemonset'. Anchored on the kubectl verbs
 # that take a resource-type argument, plus the `<kind>/<name>` shorthand `rollout status` and
@@ -93,20 +80,16 @@ def _daemonset_alias_matches(text: str) -> list[str]:
 
 
 def _kubectl_consumer_paths() -> list[Path]:
-    """Every file under the roots that actually issue kubectl commands against a kind.
+    """Every file under `roles/k8s/`, the tree whose templates issue kubectl against a kind.
 
-    Not repo-wide in the literal sense (READMEs, CI workflows, etc. are out of scope — they
-    don't run kubectl), but wide enough to cover manifests/ and the post_tasks/
-    and tasks/ playbooks that read a queued `kind` — the three consumers the F1 assert names.
+    Not repo-wide (READMEs and CI workflows don't run kubectl), and not `_roles()`: the sweep
+    reads every role, the shared ones included.
     """
-    paths = []
-    for root in _KUBECTL_CONSUMER_ROOTS:
-        if not root.is_dir():
-            continue
-        for p in sorted(root.rglob("*")):
-            if p.is_file() and "__pycache__" not in p.parts:
-                paths.append(p)
-    return paths
+    return [
+        p
+        for p in sorted(_K8S_ROLES.rglob("*"))
+        if p.is_file() and "__pycache__" not in p.parts
+    ]
 
 
 _RENDERED: dict[str, dict[str, str]] | None = None
@@ -202,185 +185,14 @@ def _strip_comments(text: str) -> str:
     A comment is the argument against a thing, and a text matcher that credits it counts the
     argument as the thing itself. A commented-out wait counts as a gate, and a comment
     explaining why a role does NOT use `kubectl wait` satisfies a check for `kubectl wait`.
-    Stripping whole-line comments alone leaves the trailing form open: `_has_completion_gate`
-    credits `- name: x  # we deliberately do not use wait --for=condition=complete`.
+    Stripping whole-line comments alone leaves the trailing form open.
 
-    Applied to command text as well as to file text, so it also covers a `#` comment inside a
-    `shell: |` block scalar, where YAML itself does no stripping and the `#` is a real shell
-    comment. `re.MULTILINE` is what makes the trailing form strip on every line of such a block
-    rather than only after the last newline. An expression that legitimately contained ` #`
-    would be truncated, which can only make a check stricter.
+    `re.MULTILINE` is what makes the trailing form strip on every line rather than only after
+    the last newline. An expression that legitimately contained ` #` would be truncated, which
+    can only make a check stricter.
     """
     kept = [line for line in text.splitlines() if not line.lstrip().startswith("#")]
     return re.sub(r"\s#.*$", "", "\n".join(kept), flags=re.MULTILINE)
-
-
-_FALSY_WHEN_LITERALS = {
-    # `False` alone also matches the int 0: they hash equal, so `0 in this_set` is True. A
-    # literal `0` entry would be the same key written twice, not a second form covered.
-    False,
-    "false",
-    "False",
-    "FALSE",
-    "no",
-    "No",
-    "NO",
-    "off",
-    "Off",
-    "OFF",
-    "0",
-}
-
-
-def _when_is_falsy_literal(when) -> bool:
-    """Whether a `when:` value is a statically-decidable falsey literal, not just `when: false`.
-
-    Ansible templates a `when:` string through Jinja and evaluates the result the same way it
-    evaluates the bare boolean, so `when: "false"`, `'no'`, `'False'` and `when: 0` all skip the
-    task exactly as `when: false` does.
-    These are plain YAML scalars, decidable without rendering; a `when:` that references a
-    variable or filter is genuine Jinja and is left alone rather than guessed at, the same
-    fail-closed choice the rest of this file makes for anything it cannot resolve statically.
-
-    A `when:` list ANDs every entry, so if it is a list, any one entry testing falsy is enough
-    on its own to skip the task regardless of the others.
-    """
-    if isinstance(when, list):
-        return any(_when_is_falsy_literal(w) for w in when)
-    if isinstance(when, (bool, int, str)):
-        return when in _FALSY_WHEN_LITERALS
-    return False
-
-
-def _normalize_tags(tags) -> tuple:
-    if tags is None:
-        return ()
-    if isinstance(tags, str):
-        return (tags,)
-    return tuple(tags)
-
-
-def _iter_task_dicts(
-    tasks, _inherited_tags: tuple = (), _inherited_when_falsy: bool = False
-) -> "list[tuple[dict, tuple, bool]]":
-    """Every task in a parsed tasks/main.yml, as `(task, effective_tags, effective_when_falsy)`.
-
-    Descends into `block`/`rescue`/`always` and PROPAGATES the enclosing block's own `when:`/`tags:` down to every task it contains,
-    the way Ansible itself does: a block's `tags:` UNION into each child's effective tags, and a
-    block's `when:` ANDs with each child's own `when:`, so a falsey block `when:` (or a
-    `tags: [never]`/`tags: [config]` on the block) excludes every task inside it regardless of
-    what that task states on its own. A walk that finds the nested task but doesn't carry this
-    down discovers the gate without discovering whether it runs — all four dead-gate
-    constructions this file guards against (`when: false`, `tags: [never]`, `tags: [config]`,
-    a `debug` posing as a wait) credit again the moment the construction sits on the `block:`
-    instead of on the task itself, which defeats the whole point of walking into the block.
-    """
-    out: list[tuple[dict, tuple, bool]] = []
-    for task in tasks or []:
-        if not isinstance(task, dict):
-            continue
-        effective_tags = _inherited_tags + _normalize_tags(task.get("tags"))
-        effective_when_falsy = _inherited_when_falsy or _when_is_falsy_literal(
-            task.get("when")
-        )
-        out.append((task, effective_tags, effective_when_falsy))
-        for key in ("block", "rescue", "always"):
-            nested = task.get(key)
-            if isinstance(nested, list):
-                out.extend(
-                    _iter_task_dicts(nested, effective_tags, effective_when_falsy)
-                )
-    return out
-
-
-def _task_runs_on_a_normal_deploy(
-    effective_tags: tuple, effective_when_falsy: bool
-) -> bool:
-    """Whether a full, untagged deploy of this role would actually run a task with these
-    effective `tags:`/`when:` — already merged down from any enclosing `block:` by
-    `_iter_task_dicts`, so this function only has to apply the exclusion rules, not discover
-    ancestry.
-
-    Fail-closed: anything this can't positively confirm reads as "does not run", because a
-    false exemption here is invisible while a false offender is cheap to fix.
-
-    - a statically falsey `when:` (`_when_is_falsy_literal`) never runs, whether it sits on the
-      task or on an ancestor block.
-    - `tags: never`, likewise at either level, is Ansible's own reserved exclusion tag: it runs
-      only when a play names it explicitly, which a normal auto-deploy never does.
-    - every real gate task in this repo (headlamp, media-volume, n8n, netpol-baseline, prowlarr,
-      registry) carries `tags: [deploy]`. A task whose
-      EFFECTIVE tags are non-empty but exclude `deploy` is read as excluded here, even though a
-      plain `--tags <role>` run would still select it via `include_role: apply: tags:`
-      mechanics — this repo also runs config-only deploys (`--skip-tags deploy`), and crediting
-      a `[config]`-tagged wait as a real gate is how a task that stops running under THAT mode
-      still reads as gated under this one. A task (and every enclosing block) with NO tags at
-      all is not excluded by this rule: omitting tags is this repo's unremarkable default
-      shape, not a signal of anything.
-    """
-    if effective_when_falsy:
-        return False
-    if "never" in effective_tags:
-        return False
-    if not effective_tags:
-        return True
-    return "deploy" in effective_tags
-
-
-def _live_tasks(role: Path) -> list[dict]:
-    """Every task in the role's tasks/main.yml that a normal, untagged deploy actually runs.
-
-    The single entry point for "what does this role do", shared by `_batch_gated_names`,
-    `_has_completion_gate` and `_has_failure_escalation` so the three cannot drift apart. Two
-    matchers reading the same file differently credit a `debug` describing a wait, or a `fail`
-    under `when: false`, in one and not in the other. Anything a matcher here
-    wants to read about a role goes through this walker first, and the module discipline is
-    then whichever module key the matcher reads off the returned dict.
-    """
-    tasks_file = role / "tasks/main.yml"
-    if not tasks_file.is_file():
-        return []
-    parsed = yaml_fast.safe_load(tasks_file.read_text())
-    return [
-        task
-        for task, tags, when_falsy in _iter_task_dicts(parsed)
-        if _task_runs_on_a_normal_deploy(tags, when_falsy)
-    ]
-
-
-def _task_command_text(task: dict) -> str | None:
-    """The shell/command string this task runs, or None if it isn't a command/shell task.
-
-    Only `ansible.builtin.command`/`ansible.builtin.shell` (FQCN or the short `command`/`shell`
-    module names Ansible also accepts) credit a wait. An `ansible.builtin.debug` whose `msg:`
-    merely describes a wait in prose — "run kubectl wait --for=condition=complete
-    job/widget-job yourself" — never runs anything, and reading its text as a gate would be the
-    same "argument-against read as the thing itself" shape `_uncommented` exists to close for a
-    comment, wearing a module instead of a `#`.
-
-    Reads both spellings a command/shell task can take: `cmd:` (a single string, however it was
-    folded/literal-blocked in YAML — `yaml.safe_load` already normalized that) and `argv:` (a
-    list of raw arguments, joined with spaces here so the same regexes downstream can read
-    either form). A guard that could not read the `argv:` spelling would false-offend the next
-    role that writes its wait that way.
-    """
-    for module in (
-        "ansible.builtin.command",
-        "ansible.builtin.shell",
-        "command",
-        "shell",
-    ):
-        args = task.get(module)
-        if isinstance(args, dict):
-            cmd = args.get("cmd")
-            if isinstance(cmd, str):
-                return cmd
-            argv = args.get("argv")
-            if isinstance(argv, list) and all(isinstance(a, str) for a in argv):
-                return " ".join(argv)
-        elif isinstance(args, str):
-            return args
-    return None
 
 
 _LITERAL_NAME = re.compile(r"^[\w.-]+$")

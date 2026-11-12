@@ -1,7 +1,7 @@
 ---
 id: "0017"
 title: The tree lock guards the tree, and per-service locks guard the cluster
-status: Accepted
+status: Superseded by ADR-0029
 date: 2026-09-11
 governs: []
 ---
@@ -14,13 +14,24 @@ that lock is held and what else a deploy takes.
 
 ## Status
 
-Accepted.
+Superseded by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) on
+2026-11-12. The decision was accepted on 2026-09-11. The text below stays as written, because
+the record of a decision that was later reversed is worth more than a rewrite.
 
-Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) on
-2026-11-12. The tree-lock half stands, through [ADR-0011](0011-one-lock-serialises-every-deploy-path.md).
-The per-service-lock half has no subject left: `deploy.sh` took those locks for the playbook,
-`deploy.sh` is deleted, and k8s changes deploy only through `promote` and Flux. No code under
-`scripts/`, `hosts/` or `ansible/` takes a per-service lock.
+Slices H7.53 to H7.57 removed every subject this record decides:
+
+- H7.53 deleted `scripts/deploy.sh`, the snapshot step, `deploy_lib/under_locks.py`, the
+  GitOps deployer's code and its `deploy_locks.py`. Nothing takes the tree lock for a
+  snapshot, and nothing takes a per-service lock. The three `# DECIDED:` markers that
+  *Governs* names went with those files.
+- H7.55 deleted `initial_setup.yml` and the other playbooks, so no broad apply is left to
+  take `all` exclusively.
+- H7.56 removed ansible-core, and H7.57 accepted ADR-0029, which records the result.
+
+The tree-lock half survives through [ADR-0011](0011-one-lock-serialises-every-deploy-path.md),
+which ADR-0029 amends: `homelab-checkout-sync` and the crons that write the tree still take
+`/var/lock/server-git-tree.lock`. k8s changes deploy only through `promote` and Flux. No code
+under `scripts/`, `hosts/` or `ansible/` takes a per-service lock.
 
 ## Context
 

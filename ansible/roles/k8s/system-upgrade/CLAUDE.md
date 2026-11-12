@@ -17,7 +17,7 @@ else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (H6.1b). Its `containers_list` entry is `platform: k8s`
-  from its first commit, so `deploy.sh` refuses `--tags=system-upgrade` with exit 5.
+  from its first commit, so nothing applies it by hand.
 - **The Plans select the nodes in `system_upgrade_nodes`.** The list in `defaults/main.yml` holds
   `daniel-box` since H6.3c and `daniel-server` since H6.3d. A node joins the list only after its
   host package installs the `k3s-gates` component, because each Plan's `prepare` runs

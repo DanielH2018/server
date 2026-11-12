@@ -7,7 +7,7 @@
   is safe; this file only schedules it.
 
   karakeep_k8s_pruner_apply gates every change. False, a run logs what it would do and changes
-  nothing, so each deploy's gate run (tasks/main.yml) is a dry-run report.
+  nothing, so each revision's gate run (the `karakeep-verify` Job) is a dry-run report.
 #}
 ---
 apiVersion: batch/v1

@@ -3,7 +3,7 @@
 n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 
 > **Migrated to k3s on 2026-08-06, and handed to Flux on its Wave C flip (#5546).** Flux
-> applies it through `promote`; `deploy.sh` refuses `--tags n8n`. Its two images are built
+> applies it through `promote`, and nothing applies it by hand. Its two images are built
 > from `templates/Dockerfile.j2`, `templates/Dockerfile-runners.j2` and
 > `templates/config/n8n-task-runners.json.j2`. The Docker role's compose template is gone, and
 > only git history has it; `containers/n8n/data` is on disk.
@@ -20,7 +20,7 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (#5546, Wave C). Its `containers_list` entry is
-  `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged change
+  `platform: k8s`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy: false`
   still stops Renovate's
   automerge of a base-digest bump.

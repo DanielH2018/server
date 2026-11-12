@@ -15,7 +15,7 @@ replaced the retired Kopia scope for the Pi.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (#5652, Wave C). Its `containers_list` entry is
-  `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged change
+  `platform: k8s`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. Its Kustomization
   renders `decryption`, because the
   private key arrives as the SOPS manifest `pi-peer-backup.ssh-key-secret.sops.yaml`.

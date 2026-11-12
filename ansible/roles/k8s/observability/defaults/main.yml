@@ -242,14 +242,13 @@ observability_dashboard_folders:
     - lapi-metrics.json
 
 # ── deploy annotations ────────────────────────────────────────────────────────────────────────
-# Three sources mark a deploy. `deploy.sh` (deploy_lib/playbook.annotate) and `promote.py
-# land-wait` (promote_lib/wait.py:annotate_promotion, through flux_host.py) both call `logger`
-# on the host, and this query reads their syslog lines. The soak Job prints a line for every
+# Two sources mark a deploy. `promote.py land-wait` (promote_lib/wait.py:annotate_promotion,
+# through flux_host.py) calls `logger` on the host, and this query reads its syslog lines,
+# plus the lines deploy.sh wrote before H7.53c deleted it. The soak Job prints a line for every
 # promotion that passes its soak, which `observability_flux_deploy_annotation_expr` reads. Alloy
 # ships both to loki-homelab, and every dashboard gets one annotation query per source injected
 # at render time by the grafana_deploy_annotated filter (ansible/filter_plugins/grafana_dashboards.py).
-# No Grafana API call, so no pinned ClusterIP and no standing write credential — see the
-# `annotate` comments in deploy_lib/playbook.py. Every line carries
+# No Grafana API call, so no pinned ClusterIP and no standing write credential. Every line carries
 # `result=ok|fail|rollback` (hosts/lib/host_lib.py:deploy_event, #6164), and the marker's title
 # shows it, so a failed deploy draws a marker that says so.
 #
@@ -352,8 +351,7 @@ observability_rule_groups:
 observability_expected_hosts:
   daniel-pi: {job: node-pi, limit_seconds: 90000}
 
-# The telemetry workloads, as the {kind, name} pairs tasks/main.yml passes to the include as
-# `manifests_self_rollouts`. The renderer stamps `checksum/restart` on each one's pod template
+# The telemetry workloads, as the {kind, name} pairs `manifests_self_rollouts` reads. The renderer stamps `checksum/restart` on each one's pod template
 # (scripts/renderer/renderer_lib/restart.py), so a Secret or ConfigMap change rolls the
 # workload that reads it.
 #

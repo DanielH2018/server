@@ -3,7 +3,7 @@
 # `systemd-tmpfiles --create` on this file before they start, and so does every boot.
 #
 # The inbox, the records and the lock, written by the agent. Under operator_read the operator's
-# group gets traverse and no listing, so `probe.py applied` can stat the inbox (#6452). It is the
+# group gets traverse and no listing, so the operator can stat the inbox (#6452). It is the
 # units' UMask=0027 that keeps what they write out of the operator's read, not the group.
 d {{ pins.state_dir }} {{ '0710' if claude_code_agent_operator_read else '0750' }} {{ pins.agent_user }} {{ sys_user if claude_code_agent_operator_read else pins.agent_user }} -
 d {{ pins.state_dir }}/inbox 0750 {{ pins.agent_user }} {{ pins.agent_user }} -

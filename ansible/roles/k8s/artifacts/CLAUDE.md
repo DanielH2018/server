@@ -17,7 +17,7 @@ file still documents how it behaves.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
-  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Deployment is `RollingUpdate`
   with one replica, so a roll keeps one pod serving. The host directories it mounts are the

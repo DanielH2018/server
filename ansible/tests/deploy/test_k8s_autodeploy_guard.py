@@ -137,10 +137,7 @@ def test_daemonset_alias_matcher_flags_kubectl_args_but_not_manifest_kind_fields
 
 
 def test_no_kubectl_invocation_spells_the_daemonset_kind_by_alias() -> None:
-    """One spelling of the kind, across every file that actually issues a kubectl command
-    against it — manifests/ (excluded from _roles()/_SHARED on
-    purpose, see _kubectl_consumer_paths), every other role under roles/k8s/, and the
-    post_tasks/ and tasks/ playbooks that consume a queued `kind`.
+    """One spelling of the kind, across every file under roles/k8s/ (`_kubectl_consumer_paths`).
 
     `manifests_rollout_kind` and two other consumers match the literal 'daemonset', so a
     kubectl invocation using 'ds', 'daemonsets', or any casing of 'DaemonSet' is a working

@@ -307,32 +307,22 @@ requires a verified commit signature, and a PR signed with an unregistered key s
 with every check green (PR #1572 needed a hand re-sign), so the dispatcher checks the key
 before it spends an agent.
 
-`launch` fast-forwards a host with no GitOps tick to `origin/master` before it creates the
-worktree, between the `fetch` and the `worktree add`. `.claude/settings.json` names every hook
-by an absolute path into that host's primary checkout, so a worktree cut from a fresher
-`origin/master` registers hook scripts the checkout does not have yet: `/bin/sh` exits 127,
-Claude Code logs a non-blocking hook error, and the tool call runs with the guard skipped.
-About 2,100 Bash calls on daniel-server ran with no `PreToolUse:Bash` guard across two windows
-in September 2026 — one opened by the commit adding `inject-nested-docs`, one by the commit
-adding `bash-pretool.sh`, each closing when that checkout next pulled (issue #2675).
-
-The fast-forward is gated on HEAD being `master`, because `merge --ff-only origin/master` on a
-checkout parked on another branch takes master's commits onto that branch. A refusal —
-detached HEAD, a local commit, a tree `--ff-only` cannot cross — refuses the launch: the host's
-hook state is then unknown, which is exactly when a batch must not be placed on it.
-
-**It does nothing on daniel-box.** The tick pulls that checkout every 10 minutes, so the window
-there is bounded already, and the tick takes `/var/lock/server-git-tree.lock` for its own
-`--ff-only` merge. A launch does not take that lock. The tick holds it for its whole unit run,
-which can outlast `LAUNCH_TIMEOUT_S` (120 seconds), so taking it would turn a bounded stale-hook
-window into a failed launch.
-
 That check compares each candidate host's `user.signingkey` against the account's live list,
 read with `gh api /users/<login>/ssh_signing_keys`. `launch` exits 6 when no candidate host
 passes, and also when the list could not be read at all — a `gh` outage refuses the launch
 rather than placing a batch whose PR might not merge. `read` prints the same verdict per host
 as `signing=ok|unverified|unknown`, where `unknown` is that unreadable list, so it answers
 what exit 6 would refuse without spending an agent.
+
+**HISTORY — the GitOps tick and the launch fast-forward.** `launch` used to fast-forward a
+host's primary checkout to `origin/master` before it cut the worktree. `.claude/settings.json`
+then named every hook by an absolute path into that checkout, so a worktree cut from a fresher
+`origin/master` registered hook scripts the checkout lacked, and about 2,100 Bash calls on
+daniel-server ran with no `PreToolUse:Bash` guard in September 2026 (issue #2675). The
+fast-forward skipped daniel-box, whose checkout the GitOps deployer already pulled every 10
+minutes. #3394 registered each hook through `$CLAUDE_PROJECT_DIR`, so a session runs the copy
+its own checkout carries, and deleted the fast-forward. H7.53 deleted the GitOps deployer;
+`homelab-checkout-sync` fast-forwards daniel-box's checkout.
 
 ## The `/issue-fanout` skill
 

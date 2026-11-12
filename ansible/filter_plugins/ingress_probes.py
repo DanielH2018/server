@@ -8,7 +8,7 @@ per entry in the `blackbox-ingress` scrape job, which blackbox_exporter probes (
 
 An entry opts out with `probe: false`, and says why in a comment. That is the key's only form.
 
-No Ansible import, so `probe_lib/health_alerts.py` reads the same function the playbook runs.
+No Ansible import, so `probe_lib/health_alerts.py` reads the same function the renderer runs.
 `FilterModule` registers the filter through `_as_filter`, so a refusal reaches the operator as
 `FilterError("ingress_probe_targets: ...")` (#4505).
 """

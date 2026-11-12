@@ -42,11 +42,11 @@ artifacts_host_dir: /home/ubuntu/.claude/artifacts
 # `<artifacts_k8s_node>-claude`, beside the operator's `<artifacts_k8s_node>`.
 # The pod is not root: it runs as puid:pgid (the operator), so it reads this tree through the
 # group grant on the directory (2750 claude:ubuntu, default ACL g:ubuntu:rX), not through
-# DAC_OVERRIDE. This role does not create the directory; roles/setup/claude_code does.
+# DAC_OVERRIDE. This role does not create the directory; hosts/components/claude-code/ does.
 artifacts_agent_dir: "{{ '/var/lib/claude/.claude/artifacts' if (claude_code_agent_user_enabled | default(false) | bool) else '' }}"
 # Where daniel-box holds the other hosts' copies: one subdirectory per host, which becomes
-# the /a/<host>/ path segment the index and the GUI filter on. roles/setup/claude_code's peer
-# sync writes them, from its twin claude_code_artifacts_peer_dir.
+# the /a/<host>/ path segment the index and the GUI filter on. hosts/components/claude-code/'s
+# peer sync writes them, from its twin claude_code_artifacts_peer_dir.
 artifacts_peer_dir: /home/ubuntu/.claude/artifacts-peer
 
 # The star list the GUI writes: one `<host>/<relpath>` line per starred artifact, which
@@ -59,7 +59,7 @@ artifacts_stars_dir: /var/lib/artifact-stars
 artifacts_stars_name: stars.txt
 
 # The peer hosts whose artifact trees the pod serves, one read-only mount of
-# artifacts_peer_dir/<name> per entry. roles/setup/claude_code's peer sync pulls each one onto
+# artifacts_peer_dir/<name> per entry. hosts/components/claude-code/'s peer sync pulls each onto
 # daniel-box and owns the transport fields; its twin claude_code_artifacts_peer_sources must
 # list the same entries.
 artifacts_peer_sources:
@@ -68,9 +68,9 @@ artifacts_peer_sources:
     path: /home/ubuntu/.claude/artifacts
     stars_path: /home/ubuntu/.claude/artifact-stars.txt
 
-# Platform components that carry no containers_list entry because they are installed by
-# roles/setup/k3s rather than deployed as workloads. Longhorn is the reason this list exists:
-# it is the most-discussed subject in the corpus and matched nothing without it.
+# Platform components the index names beside the containers_list services. Longhorn is the
+# reason this list exists: it is the most-discussed subject in the corpus and matched nothing
+# without it.
 artifacts_platform_services:
   - longhorn
   - k3s

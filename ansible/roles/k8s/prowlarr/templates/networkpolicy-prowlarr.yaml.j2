@@ -20,8 +20,7 @@
 # template loses the label, this line is what keeps the UI up.
 #
 # sonarr and radarr reach prowlarr by bare name from their own application databases — the indexer
-# definitions live on their PVCs, not in this repo. Recorded in
-# roles/k8s/sonarr/tasks/main.yml's header.
+# definitions live on their PVCs, not in this repo.
 #
 # prowlarr-verify is the CONTROL leg of this role's OWN isolation check, the Job in
 # templates/verify/ that Flux runs in the `prowlarr-verify` Kustomization: before it asserts

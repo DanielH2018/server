@@ -132,25 +132,6 @@ def test_the_workload_matcher_sees_daemonsets(widget_role) -> None:
     ]
 
 
-def test_rollout_gate_credits_a_fully_gated_batch_role(widget_role) -> None:
-    """A batch-only role that gates every rendered workload is not an offender.
-
-    `manifests_rollout: ''` is correct and unavoidable here — there is no Deployment to roll —
-    and the role-local `wait --for=condition=complete job/widget` is the alternative gate. This
-    is the positive-proof case `_rollout_gate_offender` exists to recognise.
-    """
-    role = widget_role(
-        defaults="manifests_service: widget\nmanifests_rollout: ''\n",
-        tasks="- ansible.builtin.command:\n"
-        "    cmd: kubectl wait --for=condition=complete job/widget --timeout=180s\n",
-        templates={},
-    )
-    (role / "templates" / "job.yaml.j2").write_text(
-        "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: widget\n"
-    )
-    assert _rollout_gate_offender(role) is False
-
-
 def test_rollout_gate_flags_a_batch_role_that_does_not_gate_its_workload(
     widget_role,
 ) -> None:
@@ -223,94 +204,49 @@ def test_primary_rollout_name_agrees_with_sets_empty_rollout_on_a_comment(
 def _widget_with_a_deployment(
     widget_role, deployment_doc: str, deployment_filename: str = "deployment.yaml.j2"
 ) -> Path:
-    """A role gating one batch workload (widget-job) while also rendering a Deployment.
+    """A role that skips its primary rollout and renders one Deployment, spelled as given.
 
-    Shared by the three control cases below — they differ only in how
-    the Deployment's `kind:` line is spelled, or whether it shares a file with another
-    document.
+    Shared by the three control cases below. They differ only in how the Deployment's `kind:`
+    line is spelled, or whether it shares a file with another document.
     """
     role = widget_role(
         defaults="manifests_service: widget\nmanifests_rollout: ''\n",
-        tasks="- name: Wait for widget-job\n"
-        "  tags: [deploy]\n"
-        "  ansible.builtin.command:\n"
-        "    cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n",
-        templates={},
+        templates={deployment_filename: deployment_doc},
     )
-    (role / "templates" / "job.yaml.j2").write_text(
-        "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: widget-job\n"
-    )
-    (role / "templates" / deployment_filename).write_text(deployment_doc)
     return role
 
 
-def test_rollout_gate_still_flags_a_role_with_a_quoted_kind_deployment(
-    widget_role,
-) -> None:
-    """A fully-gated batch workload does not exempt a role that also renders a Deployment.
+def test_a_quoted_kind_deployment_reads_as_ungated(widget_role) -> None:
+    """`kind: "Deployment"` is valid YAML that kubectl applies exactly like the bare form.
 
-    `_rollout_gate_offender` must check whether the role also renders a Deployment or
-    DaemonSet, not only the batch workloads it can see. A matcher blind to `kind: "Deployment"`
-    — valid YAML, applied by kubectl exactly like the bare form — would read a role in this
-    shape as a fully-gated batch-only role while its Deployment has no rollout wait at all.
+    A matcher blind to it would let a role skip its rollout wait while rendering one.
     """
     role = _widget_with_a_deployment(
         widget_role,
-        'apiVersion: apps/v1\nkind: "Deployment"\nmetadata:\n  name: widget\n',
+        'apiVersion: apps/v1\nkind: "Deployment"\nmetadata:\n  name: widget-web\n',
     )
-    assert _rollout_gate_offender(role) is True
+    assert _ungated_deployments(role) == ["deployment.yaml.j2"]
 
 
-def test_rollout_gate_still_flags_a_role_with_a_commented_kind_deployment(
-    widget_role,
-) -> None:
+def test_a_commented_kind_deployment_reads_as_ungated(widget_role) -> None:
     """Same control as the quoted-kind case, for `kind: Deployment  # web`."""
     role = _widget_with_a_deployment(
         widget_role,
-        "apiVersion: apps/v1\nkind: Deployment  # web\nmetadata:\n  name: widget\n",
+        "apiVersion: apps/v1\nkind: Deployment  # web\nmetadata:\n  name: widget-web\n",
     )
-    assert _rollout_gate_offender(role) is True
+    assert _ungated_deployments(role) == ["deployment.yaml.j2"]
 
 
-def test_rollout_gate_still_flags_a_role_with_a_split_document_deployment(
-    widget_role,
-) -> None:
+def test_a_split_document_deployment_reads_as_ungated(widget_role) -> None:
     """Same control, for a Deployment sharing a `---`-split template with another document."""
     role = _widget_with_a_deployment(
         widget_role,
         "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: widget-cfg\n"
         "---\n"
-        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: widget\n",
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: widget-web\n",
         deployment_filename="deployment-pair.yaml.j2",
     )
-    assert _rollout_gate_offender(role) is True
-
-
-def test_rollout_gate_flags_one_gated_and_one_ungated_batch_workload(
-    widget_role,
-) -> None:
-    """A role gating one of two rendered Jobs is still an offender, not exempt.
-
-    `_rollout_gate_offender`'s final line uses `any(...)`, which is correct — a role must gate
-    EVERY batch workload it renders, not just one. Most tests in this file render at most one
-    batch workload, so a bug that quietly swapped `any` for `all` would leave them green. This
-    fixture goes red under that substitution.
-    """
-    role = widget_role(
-        defaults="manifests_service: widget\nmanifests_rollout: ''\n",
-        tasks="- name: Wait for widget-a\n"
-        "  tags: [deploy]\n"
-        "  ansible.builtin.command:\n"
-        "    cmd: k3s kubectl wait --for=condition=complete job/widget-a --timeout=120s\n",
-        templates={},
-    )
-    (role / "templates" / "job-a.yaml.j2").write_text(
-        "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: widget-a\n"
-    )
-    (role / "templates" / "job-b.yaml.j2").write_text(
-        "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: widget-b\n"
-    )
-    assert _rollout_gate_offender(role) is True
+    assert _ungated_deployments(role) == ["deployment-pair.yaml.j2"]
 
 
 def test_rollout_gate_does_not_falsely_accuse_a_role_gated_via_extras(

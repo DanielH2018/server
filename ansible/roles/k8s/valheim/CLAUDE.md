@@ -36,7 +36,7 @@ longer exists. `k8s/terraria` is the sibling this role copies.
 - **Auth:** none possible — a raw UDP game protocol reaches no Traefik, Authelia or CrowdSec
   chain, so the join password is the only access control.
 - **Flux applies it, not Ansible** (D5.15, Wave C). Its `containers_list` entry is
-  `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged
+  `platform: k8s`, so nothing applies it by hand, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy:
   false` still stops Renovate's
   automerge of the wrapper bump. The Deployment is `Recreate`, so a change that rolls it takes
@@ -116,4 +116,4 @@ deployment sets no `PRE_BEPINEX_CONFIG_HOOK`, and the three log lines that look 
 
 ## Editing
 - Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`
-- Deploy: merge, and `promote` applies it. `./scripts/deploy.sh --tags "valheim"` exits 5.
+- Deploy: merge, and `promote` applies it. Nothing applies it by hand.

@@ -1,4 +1,4 @@
-"""Crediting a batch workload as gated: which `wait` and which `flux_cronjob_gates` entry count.
+"""Crediting a batch workload as gated: which `flux_cronjob_gates` entry counts.
 
 A Job or CronJob is never gated through `manifests_rollout`, so a role that renders one must
 carry its own completion gate. These are the shapes that must and must not be credited as that
@@ -8,11 +8,9 @@ not run is the fail-open direction.
 Synthetic roles rather than live ones on purpose: a case pinned to a real role stops being a
 regression test the day that role is retired. The `widget_role` fixture builds them.
 
-This file holds the `wait`-shaped credit, the `flux_cronjob_gates` credit and the two
-tree-wide assertions; what counts as a completion gate and a failure escalation is `test_k8s_autodeploy_completion_gates.py`.
+This file holds how batch templates are read, the `flux_cronjob_gates` credit and the
+tree-wide assertion.
 """
-
-import pytest
 
 from _autodeploy import (
     _K8S_ROLES,
@@ -20,10 +18,7 @@ from _autodeploy import (
     _batch_templates,
     _roles,
 )
-from _autodeploy_batch import (
-    _batch_gated_names,
-    flux_gated_names,
-)
+from _autodeploy_batch import flux_gated_names
 
 
 def test_batch_templates_sees_every_document_in_a_multi_job_template(
@@ -49,141 +44,6 @@ def test_batch_templates_sees_every_document_in_a_multi_job_template(
     assert found == {"widget-pull", "widget-pull-agent"}
 
 
-def test_commented_out_wait_does_not_count_as_gated(widget_role) -> None:
-    """A `wait --for=condition=complete job/<name>` inside a `#` comment must not gate.
-
-    Synthetic rather than a live role: a fixture pins the behavior against a mutation
-    instead of a role that might be retired. The vulnerable shape is a
-    single-line comment — the whole `wait ... job/<name>` command on one line with a `#`
-    only at its start, so nothing sits between "complete" and "job/" to break the match. A
-    disabled task folded across two YAML lines (each independently `#`-prefixed) happens to
-    self-defeat the same regex for an unrelated reason — the `#` on the second line lands
-    between "complete" and "job/" — so that shape passes regardless and is not
-    the case this test needs to cover.
-    """
-    role = widget_role(
-        "# disabled: k3s kubectl -n ns wait --for=condition=complete "
-        "job/widget-probe --timeout=120s\n"
-    )
-    assert _batch_gated_names(role) == set()
-
-
-def test_a_wait_in_a_trailing_shell_comment_does_not_count_as_gated(
-    widget_role,
-) -> None:
-    """The same shape on the higher-stakes path: `_batch_gated_names`, not the shared-role check.
-
-    A `#` inside a `shell: |` block scalar is literal content to YAML, so the command text a
-    live task hands over can still carry a comment — and a `# TODO: wait
-    --for=condition=complete job/<name>` in it would put that name in the gated set, clearing
-    the very Job it says is not yet gated. The whole-line case above cannot reach here (a
-    commented-out task never parses as a task at all), so this is the shape that needed
-    `_strip_comments` on this path too.
-    """
-    role = widget_role(
-        "- name: Apply the probe\n"
-        "  ansible.builtin.shell: |\n"
-        "    k3s kubectl -n ns apply -f /tmp/probe.yaml"
-        "  # TODO: wait --for=condition=complete job/widget-probe --timeout=120s\n"
-    )
-    assert _batch_gated_names(role) == set()
-
-
-def test_single_wait_naming_two_jobs_credits_both(widget_role) -> None:
-    """One `wait --for=condition=complete` naming two Jobs must credit both names.
-
-    Synthetic mirror of registry's former `wait ... job/registry-selftest-pull
-    job/registry-selftest-pull-agent`, pinned independently so the guard's behavior on a
-    multi-name wait doesn't depend on that role continuing to exist or stay denylisted.
-    """
-    role = widget_role(
-        "- ansible.builtin.command:\n"
-        "    cmd: >-\n"
-        "      k3s kubectl -n ns wait --for=condition=complete\n"
-        "      job/widget-a job/widget-b --timeout=120s\n"
-    )
-    assert _batch_gated_names(role) == {"widget-a", "widget-b"}
-
-
-def test_a_from_cronjob_token_in_the_same_command_is_not_credited(widget_role) -> None:
-    """An unrelated `job/<name>`-shaped token in the same command must not be credited.
-
-    `_WAIT_JOB_NAMES` anchors the scan to the run of tokens immediately after the wait flag,
-    so a `--from=cronjob/otherthing` earlier in the same one-liner is not picked up as if the
-    wait had named it too.
-    """
-    role = widget_role(
-        "- name: Create and wait for widget-job\n"
-        "  tags: [deploy]\n"
-        "  ansible.builtin.shell:\n"
-        "    cmd: >-\n"
-        "      k3s kubectl create job widget-job --from=cronjob/otherthing ;\n"
-        "      k3s kubectl wait --for=condition=complete job/widget-job --timeout=60s\n"
-    )
-    assert _batch_gated_names(role) == {"widget-job"}
-
-
-def test_a_jinja_job_name_in_a_wait_is_refused_outright(widget_role) -> None:
-    """A `job/<name>` token that isn't a full literal must be refused, not truncated.
-
-    The live instance: image-builder's wait names `job/build-{{ image_builder_name }}`.
-    Truncating at the first non-`[\\w.-]` character would credit the shorter, wrong-but-plausible literal `build-`; refusing the whole token
-    credits nothing instead — still fail-closed, but honest about why.
-    """
-    role = widget_role(
-        "- name: Wait for the build\n"
-        "  tags: [deploy]\n"
-        "  ansible.builtin.command:\n"
-        "    cmd: >-\n"
-        "      k3s kubectl wait --for=condition=complete\n"
-        "      job/build-{{ widget_name }} --timeout=120s\n"
-    )
-    assert _batch_gated_names(role) == set()
-
-
-def test_argv_form_wait_is_credited(widget_role) -> None:
-    """An `argv:` list form of the wait command must be credited, same as `cmd:`.
-
-    `argv:` is a spelling Ansible accepts, and a guard that cannot read it would false-offend
-    the next role that writes its wait that way.
-    """
-    role = widget_role(
-        "- name: Wait for widget-job\n"
-        "  tags: [deploy]\n"
-        "  ansible.builtin.command:\n"
-        "    argv:\n"
-        "      - k3s\n"
-        "      - kubectl\n"
-        "      - wait\n"
-        "      - --for=condition=complete\n"
-        "      - job/widget-job\n"
-        "      - --timeout=120s\n"
-    )
-    assert _batch_gated_names(role) == {"widget-job"}
-
-
-def test_short_command_module_name_is_credited(widget_role) -> None:
-    """The short `command:`/`shell:` module spellings (not just the FQCN) must be credited."""
-    role = widget_role(
-        "- name: Wait for widget-job\n"
-        "  tags: [deploy]\n"
-        "  command:\n"
-        "    cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
-    )
-    assert _batch_gated_names(role) == {"widget-job"}
-
-
-def test_a_double_spaced_wait_command_is_still_credited(widget_role) -> None:
-    """Extra whitespace inside the command string must not defeat the match."""
-    role = widget_role(
-        "- name: Wait for widget-job\n"
-        "  tags: [deploy]\n"
-        "  ansible.builtin.command:\n"
-        "    cmd: 'k3s kubectl wait  --for=condition=complete  job/widget-job --timeout=120s'\n"
-    )
-    assert _batch_gated_names(role) == {"widget-job"}
-
-
 def test_batch_templates_sees_quoted_and_commented_kind(widget_role) -> None:
     """`kind: "Job"` and `kind: Job  # comment` must both be seen as batch templates.
 
@@ -203,146 +63,6 @@ def test_batch_templates_sees_quoted_and_commented_kind(widget_role) -> None:
     }
 
 
-def test_a_debug_message_describing_a_wait_does_not_count(widget_role) -> None:
-    """A `debug` task whose message merely describes a wait must not credit its Job.
-
-    The case that matters most: this needs no sabotage, only plausible prose — a
-    comment-shaped instruction telling the operator to run the wait by hand. A `debug` module
-    runs nothing; `_task_command_text` only reads `ansible.builtin.command`/`.shell`, so this
-    task contributes no command text at all regardless of its `tags:`/`when:`.
-    """
-    role = widget_role(
-        "- name: Note the manual gate\n"
-        "  tags: [deploy]\n"
-        "  ansible.builtin.debug:\n"
-        "    msg: >-\n"
-        "      run kubectl wait --for=condition=complete job/widget-job yourself\n"
-    )
-    assert _batch_gated_names(role) == set()
-
-
-def test_a_wait_inside_a_when_false_block_does_not_count(widget_role) -> None:
-    """A wait task must not credit its Job when the FALSEY `when:` sits on the enclosing block.
-
-    A raw top-level walk finds the nested task but does not carry the block's own
-    `when:`/`tags:` down to it, so all four dead-gate constructions credit again the moment they
-    sit on the `block:` instead of the task. This pins the `when: false` case.
-    """
-    role = widget_role(
-        "- name: Gate group\n"
-        "  when: false\n"
-        "  block:\n"
-        "    - name: Wait for widget-job\n"
-        "      tags: [deploy]\n"
-        "      ansible.builtin.command:\n"
-        "        cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
-    )
-    assert _batch_gated_names(role) == set()
-
-
-def test_a_wait_inside_a_never_tagged_block_does_not_count(widget_role) -> None:
-    """The `tags: [never]` case, with the tag on the enclosing block."""
-    role = widget_role(
-        "- name: Gate group\n"
-        "  tags: [never]\n"
-        "  block:\n"
-        "    - name: Wait for widget-job\n"
-        "      ansible.builtin.command:\n"
-        "        cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
-    )
-    assert _batch_gated_names(role) == set()
-
-
-def test_a_wait_inside_a_config_tagged_block_does_not_count(widget_role) -> None:
-    """The `tags: [config]` case, with the tag on the enclosing block rather than the task.
-
-    The inner task carries no tags of its own at all — its effective tags come entirely from
-    the block, which is exactly the shape a bare per-task tag check misses.
-    """
-    role = widget_role(
-        "- name: Gate group\n"
-        "  tags: [config]\n"
-        "  block:\n"
-        "    - name: Wait for widget-job\n"
-        "      ansible.builtin.command:\n"
-        "        cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
-    )
-    assert _batch_gated_names(role) == set()
-
-
-def test_a_nested_block_when_false_propagates_two_levels_down(widget_role) -> None:
-    """A block inside a block must still propagate a falsey `when:` to the innermost task.
-
-    `_iter_task_dicts` accumulates as it descends rather than reading only the immediate
-    parent, so this is the case that would catch a merge that stopped one level too soon.
-    """
-    role = widget_role(
-        "- name: Outer group\n"
-        "  when: false\n"
-        "  block:\n"
-        "    - name: Inner group\n"
-        "      block:\n"
-        "        - name: Wait for widget-job\n"
-        "          tags: [deploy]\n"
-        "          ansible.builtin.command:\n"
-        "            cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
-    )
-    assert _batch_gated_names(role) == set()
-
-
-def _wait_task(header: str) -> str:
-    """A tasks/main.yml holding one wait on widget-job, under the given `when:`/`tags:` lines."""
-    return (
-        "- name: Wait for widget-job\n" + header + "  ansible.builtin.command:\n"
-        "    cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n"
-    )
-
-
-# Whether a wait runs at all, decided from its `when:` and `tags:` alone. Every falsy spelling
-# below is one Ansible skips, so crediting it would report a role as gated while nothing ran —
-# the fail-open direction. The last two rows are the controls: without them a check that simply
-# refused every `when:` would pass this whole table.
-_LIVENESS_CASES = [
-    # A text-matching check reads no `when:` at all, so a wait disabled as a temporary "skip
-    # this slow probe" edit would still grant the exemption.
-    ("  tags: [deploy]\n  when: false\n", set(), "when-false"),
-    # The string spellings skip exactly like the literal boolean.
-    ('  tags: [deploy]\n  when: "false"\n', set(), "when-string-false"),
-    ("  tags: [deploy]\n  when: 'no'\n", set(), "when-no"),
-    ("  tags: [deploy]\n  when: 'False'\n", set(), "when-capital-false"),
-    ("  tags: [deploy]\n  when: 0\n", set(), "when-integer-zero"),
-    # A `when:` list ANDs its entries, so one falsy entry skips the task whatever else is
-    # in the list.
-    ('  tags: [deploy]\n  when:\n    - "false"\n', set(), "when-list-with-falsy"),
-    # `never` is Ansible's own reserved exclusion tag — it runs only when a play asks for
-    # it by name, which an auto-deploy never does.
-    ("  tags: [never]\n", set(), "tagged-never"),
-    # Every real gate task here is `tags: [deploy]`. `--skip-tags deploy` is a documented
-    # invocation that skips the apply-and-wait pair, so a wait tagged only `config` would read
-    # the role as gated under a run where nothing was applied for it to wait on.
-    ("  tags: [config]\n", set(), "tagged-config"),
-    # The controls. A real Jinja condition cannot be evaluated statically, so it is left alone
-    # rather than guessed at, and a plain deploy-tagged wait is credited normally.
-    (
-        "  tags: [deploy]\n  when: some_condition | bool\n",
-        {"widget-job"},
-        "when-variable",
-    ),
-    ("  tags: [deploy]\n", {"widget-job"}, "no-condition"),
-]
-
-
-@pytest.mark.parametrize(
-    "header, expected",
-    [(h, e) for h, e, _ in _LIVENESS_CASES],
-    ids=[i for _, _, i in _LIVENESS_CASES],
-)
-def test_a_wait_is_credited_only_when_it_actually_runs(
-    widget_role, header, expected
-) -> None:
-    assert _batch_gated_names(widget_role(_wait_task(header))) == expected
-
-
 def test_auto_deployable_roles_gate_every_batch_workload_they_render() -> None:
     """An auto-deployable role must wait on every Job/CronJob it renders.
 
@@ -357,17 +77,15 @@ def test_auto_deployable_roles_gate_every_batch_workload_they_render() -> None:
     for role in _roles():
         if not _auto_deployable(role):
             continue
-        gated = _batch_gated_names(role)
+        gated = flux_gated_names(role)
         for template, name in _batch_templates(role):
             if not name or name not in gated:
                 offenders.append(
                     f"{role.name}: {template} renders {name or '<unnamed>'}"
                 )
     assert not offenders, (
-        "Auto-deployable role(s) rendering an ungated batch workload. For a Job, add a "
-        "`wait --for=condition=complete job/<name>` after the apply. For a CronJob nothing "
-        "runs at deploy time and no such wait can be written — hand the role to Flux and name "
-        "the CronJob in `flux_cronjob_gates` (docs/flux-deploy-plane.md). Or set "
+        "Auto-deployable role(s) rendering an ungated batch workload. Name the CronJob in "
+        "`flux_cronjob_gates` (docs/flux-deploy-plane.md). Or set "
         "k8s_autodeploy: false with a k8s_autodeploy_reason:\n  "
         + "\n  ".join(offenders)
     )
@@ -393,4 +111,3 @@ def test_pi_peer_backup_is_gated_by_its_flux_gate_alone() -> None:
     """The named member: its CronJob is credited through `flux_cronjob_gates` (#5652)."""
     role = _K8S_ROLES / "pi-peer-backup"
     assert flux_gated_names(role) == {"pi-peer-backup"}
-    assert _batch_gated_names(role) == {"pi-peer-backup"}
