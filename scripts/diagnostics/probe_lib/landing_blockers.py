@@ -9,7 +9,7 @@ Every fact comes from a reader that already exists; this module only joins them:
 - **Master CI.** The newest `ci.yml` run on master, through `gh`. A conclusion in
   `deploy_git._CI_NO_VERDICT_CONCLUSIONS` is no verdict and a run in progress is pending.
   Neither is red, per `docs/landing.md`.
-- **Runs in flight.** deploy-ui's `/api/inflight`: every `land.sh` and `deploy.sh` family on
+- **Runs in flight.** deploy-ui's `/api/inflight`: every `land.sh` family on
   the deployer's host. A run's `VERDICT:` line comes from `land_lib.detach.verdict_in` where
   its log is readable on this host, and from deploy-ui's `/api/log` tail elsewhere. That
   endpoint serves only the logs of runs deploy-ui started, so a terminal run's verdict shows

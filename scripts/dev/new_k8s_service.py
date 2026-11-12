@@ -32,9 +32,8 @@ WHAT IT DOES NOT WRITE, deliberately:
 * No PVC, no Secret, no NetworkPolicy, no probes beyond the readiness/liveness pair on the
   service's own port. Each is a decision about the service, and a generated placeholder for a
   decision is the narration problem again in a new form.
-* No deploy. Flux applies every k8s entry, so no Ansible path applies the role:
-  `deploy.sh --tags <name>` exits 5, `--dry-run` included. Flux applies it once the PR merges
-  and `promote` publishes the next bundle.
+* No deploy. Flux applies every k8s entry once the PR merges and `promote` publishes the next
+  bundle, and `land.sh` follows the promotion.
 
 The output is meant to pass `prek run --all-files` and the renderer's `cluster` render of the
 new tag with no hand edits; `scripts/dev/tests/test_new_k8s_service.py` renders it through
@@ -371,8 +370,7 @@ def next_steps(args, role: Path) -> str:
         f"\nNext: fill the TODOs in {(role / 'CLAUDE.md').relative_to(REPO)}, then\n"
         f"  prek run --all-files\n"
         f"  uv run python scripts/renderer/homelab_render.py cluster --out out --role {args.name}\n"
-        f"Flux applies every k8s entry, so deploy.sh refuses --tags {args.name} with exit 5, "
-        f"--dry-run included. Flux applies the role once the PR merges and `promote` "
+        f"Flux applies {args.name} once the PR merges and `promote` "
         f"publishes it: see the new-k8s-service skill.\n"
         f"{probe_step}"
         f"Secrets and NetworkPolicies are not scaffolded. Add each as a template under "

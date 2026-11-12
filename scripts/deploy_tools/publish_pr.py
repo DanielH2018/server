@@ -173,7 +173,7 @@ def real_tools(
         return gh_mod.gh(*args, check=False)
 
     def land(*args: str) -> subprocess.CompletedProcess[str]:
-        # The landing deploys through deploy.sh and ansible, which need `uv` and kubectl on
+        # The landing runs `land.sh`, which needs `uv` and kubectl on
         # PATH; cron provides neither directory.
         env = dict(os.environ)
         env["PATH"] = os.pathsep.join(

@@ -196,8 +196,8 @@ def main(
     # measured 592 such rows in Loki's 744h window. The wrapper below still annotates
     # nothing: it only renumbers the code, and `--help` (exit 0) passes through untouched.
     #
-    # WHY IT IS WRAPPED AGAIN. argparse's 2 collided with three other meanings a caller sees
-    # through this same pipeline -- `CI_DISARMED`, `DEPLOY_TAG_MISS` and `PUBLISH_PUSHED_NO_PR`
+    # WHY IT IS WRAPPED AGAIN. argparse's 2 collided with two other meanings a caller sees
+    # through this same pipeline -- `CI_DISARMED` and `PUBLISH_PUSHED_NO_PR`
     # -- so `land.sh` alone answered a bad command line with a different number from every
     # other entry point here. `LAND_BAD_ARGS` is the shared 64.
     try:

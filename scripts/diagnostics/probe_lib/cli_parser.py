@@ -353,9 +353,7 @@ def _build_parser():
         "fields a manager kustomize-controller cleans owns and the render omits. Paths only, "
         "never values. Exit 75 when a read fails or no rendered object is live.",
     )
-    tk.add_argument(
-        "tag", help="the deploy tag, as `./scripts/deploy.sh --tags` takes it"
-    )
+    tk.add_argument("tag", help="the deploy tag, as `land.sh --tags` takes it")
     _dry_run(tk, "render the tag and print the kubectl reads without making them")
     pi = sub.add_parser(
         "pi",
