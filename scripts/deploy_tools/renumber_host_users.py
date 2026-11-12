@@ -13,8 +13,14 @@ declared one, `--apply` runs, in this order:
   1. `systemctl stop` for each service unit running a process as the user;
   2. `usermod -u`, which re-owns the home directory;
   3. `groupmod -g`, when the user's primary group is named like the user and holds the old uid;
-  4. `find -uid <old>` with `chown -h`, over the home and the shared directories in SHARED_DIRS;
+  4. `find -uid <old>` with `chown -h`, over the home and the shared directories in SHARED_DIRS,
+     then the same for `-gid` when step 3 ran;
   5. `systemctl start` for the stopped units, `user@<old>.service` as `user@<new>.service`.
+
+Other processes create and delete files under /tmp while `find` walks it, so `find` runs with
+`-ignore_readdir_race`, and a `find` that still exits 1 counts as done when every line it wrote to
+stderr ends with `No such file or directory`: a path vanished during the walk. Any other `find`
+error stops the run, as does any other failed command.
 
 A second run finds every user at its declared uid and runs nothing. Without `--apply` the script
 prints each user's old and new uid, the account that already holds the new uid, if any, and every
@@ -149,7 +155,7 @@ def restart_name(unit: str, move: Account) -> str:
 def changes(move: Account, exists: Exists) -> list[list[str]]:
     """The commands that renumber the user and re-own its files, in order."""
     roots = [path for path in (move.home, *SHARED_DIRS) if exists(path)]
-    find = ["find", *roots, "-xdev"]
+    find = ["find", *roots, "-xdev", "-ignore_readdir_race"]
     chown = ["-exec", "chown", "-h"]
     argvs = [["usermod", "-u", str(move.new), move.name]]
     if move.regroup:
@@ -172,6 +178,16 @@ def commands(move: Account, exists: Exists) -> list[list[str]]:
     ]
 
 
+def vanished_paths_only(argv: Sequence[str], stderr: str) -> bool:
+    """Whether a failed `find` complained only of paths that vanished during its walk."""
+    lines = [line for line in stderr.splitlines() if line.strip()]
+    return (
+        argv[0] == "find"
+        and bool(lines)
+        and all(line.endswith("No such file or directory") for line in lines)
+    )
+
+
 def apply(move: Account, run: Run, exists: Exists) -> bool:
     """Run the move. The units that were running start again whether or not it succeeded."""
     stopped, ok, moved = [], True, False
@@ -185,7 +201,7 @@ def apply(move: Account, run: Run, exists: Exists) -> bool:
     for index, argv in enumerate(steps):
         result = run(argv)
         moved = moved or argv[0] == "usermod"
-        if result.returncode != 0:
+        if result.returncode != 0 and not vanished_paths_only(argv, result.stderr):
             print(
                 f"{move.name}: {shlex.join(argv)} failed: {result.stderr.strip()}",
                 file=sys.stderr,
