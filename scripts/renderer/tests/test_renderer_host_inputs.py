@@ -69,7 +69,6 @@ def render(tmp_path_factory) -> dict:
             **os.environ,
             "PYTHONPATH": str(SCRIPTS),
             "PYTHONPYCACHEPREFIX": str(tmp / "pycache"),
-            "ANSIBLE_LOCAL_TEMP": str(tmp / "ansible"),
         },
         timeout=120,
     )

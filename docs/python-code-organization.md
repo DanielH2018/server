@@ -47,8 +47,8 @@ source are recorded so the next reader can check whether the reason still holds.
 `uv.lock`. A virtual project pins its dependencies and the pytest config. `[project]
 dependencies` holds only what the renderer imports at runtime, `pyyaml` and `jinja2`. The
 `lint` group holds the tools that only prek hooks and hand-run commands call: ruff, ty,
-`actionlint-py`, `zizmor` and `mkdocs-material`. The `dev` group holds everything else: the test
-deps, the deploy-side `ansible-core`, and the `community.docker` deps `requests` and `docker`.
+`actionlint-py`, `zizmor` and `mkdocs-material`. The `dev` group holds everything else, which is
+the test deps. No group holds `ansible-core` since H7.56.
 `[tool.uv] default-groups` names both groups, so `uv run` installs both. `promote.yml` sets
 `UV_NO_DEV` and `UV_NO_GROUP=lint`, so a promotion installs those two packages and no tool. A
 dependency that a promote job imports therefore goes in `[project] dependencies`. The four

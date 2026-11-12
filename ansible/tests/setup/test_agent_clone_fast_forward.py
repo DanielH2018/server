@@ -37,13 +37,9 @@ class Repos:
         git(root, "clone", "-q", str(self.origin), str(self.clone))
         self.home = root / "home"
         self.calls = root / "calls.log"
-        # Stand-ins for the agent's uv and the clone venv's ansible-galaxy, recording their
-        # arguments. Untracked, so the status gate never sees them.
-        for tool in (
-            self.home / ".local/bin/uv",
-            self.clone / ".venv/bin/ansible-galaxy",
-        ):
-            write_exec(tool, f'echo "{tool.name} $*" >> {self.calls}\n')
+        # A stand-in for the agent's uv, recording its arguments.
+        uv = self.home / ".local/bin/uv"
+        write_exec(uv, f'echo "{uv.name} $*" >> {self.calls}\n')
 
     def push(self, **files: str) -> str:
         sha = commit(self.pusher, "upstream", **files)
@@ -141,13 +137,12 @@ def test_a_diverged_master_fails(repos: Repos) -> None:
     assert result.returncode != 0, "a master that cannot fast-forward must page"
 
 
-def test_a_moved_lock_resyncs_the_venv_and_collections(repos: Repos) -> None:
+def test_a_moved_lock_resyncs_the_venv_and_installs_no_collections(
+    repos: Repos,
+) -> None:
     repos.push(**{"uv.lock": "b\n", "ansible/requirements.yml": "collections: []\n"})
     assert repos.sync().returncode == 0
-    assert repos.tool_calls() == [
-        "uv sync --frozen --compile-bytecode",
-        "ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections",
-    ]
+    assert repos.tool_calls() == ["uv sync --frozen --compile-bytecode"]
 
 
 def test_the_timer_runs_the_script_as_the_agent() -> None:

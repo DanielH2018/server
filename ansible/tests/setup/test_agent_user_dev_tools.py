@@ -15,9 +15,7 @@ from pathlib import Path
 from _agent_package import agent_setup_script
 from _helpers import REPO
 from lib.proc_testing import run
-from _setup_render import CLAUDE_CODE, render_component_text
-
-CLONE_SYNC = CLAUDE_CODE / "files" / "claude-clone-sync.sh"
+from _setup_render import render_component_text
 
 
 HOOK_TYPES = tomllib.loads((REPO / "prek.toml").read_text())[
@@ -58,47 +56,16 @@ def test_the_install_reruns_while_any_listed_shim_is_missing(tmp_path) -> None:
     assert not install_guard_fires(setup, tmp_path / "all", HOOK_TYPES)
 
 
-def collections_path_problems(profile: str, clone: str) -> list[str]:
-    """Where the profile's collections path misses the local-first, clone-fallback order."""
-    lines = [
-        ln
-        for ln in profile.splitlines()
-        if ln.startswith("export ANSIBLE_COLLECTIONS_PATH=")
-    ]
-    if len(lines) != 1:
-        return [f"{len(lines)} ANSIBLE_COLLECTIONS_PATH exports"]
-    entries = lines[0].split("=", 1)[1].split(":")
-    want = ["ansible/collections", f"{clone}/ansible/collections"]
-    return [] if entries == want else [f"entries {entries}"]
-
-
-def test_the_profile_falls_back_to_the_agents_own_collections() -> None:
-    clone = "/srv/clone"
+def test_the_profile_sets_no_ansible_collections_path() -> None:
     profile = render_component_text(
         "claude-code",
         "agent-user-profile.j2",
         {
             "claude_code_agent_user_home": "/srv/agent",
-            "claude_code_agent_user_clone_dir": clone,
+            "claude_code_agent_user_clone_dir": "/srv/clone",
         },
     )
-    assert collections_path_problems(profile, clone) == []
-    # The fallback is only worth something where the clone sync installs into it.
-    assert (
-        "ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections"
-        in CLONE_SYNC.read_text()
-    )
-
-
-def test_an_operator_fallback_or_a_clone_first_path_is_flagged() -> None:
-    clone = "/srv/clone"
-    operator = "export ANSIBLE_COLLECTIONS_PATH=ansible/collections:/home/ubuntu/server/ansible/collections\n"
-    clone_first = f"export ANSIBLE_COLLECTIONS_PATH={clone}/ansible/collections:ansible/collections\n"
-    assert collections_path_problems(operator, clone) != []
-    assert collections_path_problems(clone_first, clone) != []
-    assert collections_path_problems("PATH=x\n", clone) == [
-        "0 ANSIBLE_COLLECTIONS_PATH exports"
-    ]
+    assert "ANSIBLE_COLLECTIONS_PATH" not in profile
 
 
 JSONQ_COPY = "Give the agent user the operator's jsonq"

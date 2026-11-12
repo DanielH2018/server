@@ -15,7 +15,7 @@ description: >-
 # through Renovate.
 #
 # The caller checks the repository out first. The steps below read the checkout (uv.lock,
-# prek.toml, ansible/requirements.yml), and each job's checkout differs anyway (fetch-depth).
+# prek.toml), and each job's checkout differs anyway (fetch-depth).
 #
 # DECIDED: callers write `uses: $/.github/actions/setup`, which pins this action to the
 # workflow's own commit, and the `actionlint` prek hook runs through
@@ -32,9 +32,6 @@ inputs:
   uv:
     description: Install uv with its download cache keyed on uv.lock. Needs `python`.
     default: "true"
-  galaxy:
-    description: Restore and save the Ansible collections cache (ansible/collections).
-    default: "false"
   prek-cache-key:
     description: >-
       Install the pinned prek and cache its hook environments under this key prefix. Empty
@@ -68,7 +65,7 @@ runs:
       uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3  # no floating major tag is published; pin the exact release
       with:
         # Most prek hooks shell out to `uv run`, which resolves the `dev` and `lint` groups
-        # (ansible-core, pytest, docker, flask, ruff, ty, shellcheck-py) before the first one
+        # (pytest, flask, ruff, ty, shellcheck-py) before the first one
         # executes. Without this the download is repaid on every run. Keyed on uv.lock by
         # the action itself, so a lock change invalidates it exactly.
         enable-cache: true
@@ -90,16 +87,6 @@ runs:
       if: inputs.uv == 'true'
       shell: bash
       run: uv sync --frozen --compile-bytecode
-
-    # Several ansible/tests read the Galaxy collections, and the ansible-lint hook's own entry
-    # runs `ansible-galaxy collection install` before linting — warm that is a 0.4s no-op, cold
-    # a ~40 MB download. One key for every job that asks, so they share one entry.
-    - name: Cache Ansible collections
-      if: inputs.galaxy == 'true'
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: ansible/collections
-        key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
 
     # prek bootstraps one isolated environment per remote hook repo whenever its cache is
     # cold — uncached, that is every CI run. Worth ~14s in the `hooks` job (the step measured

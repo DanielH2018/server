@@ -204,7 +204,7 @@ jobs:
           esac
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-      # Python and uv for the renderer and promote.py. The renderer imports no Galaxy collection.
+      # Python and uv for the renderer and promote.py.
       - uses: $/.github/actions/setup
 
       # A workflow_run carries CI's own success. A dispatched `sha` carries none, so its CI is

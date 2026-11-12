@@ -59,7 +59,6 @@ CI_GATE_NEEDS_JOBS = frozenset(
         "pytest (shard 4 of 6)",
         "pytest (shard 5 of 6)",
         "pytest (shard 6 of 6)",
-        "ansible-lint",
         "deck mod (claude plugin validate + test)",
         "flux round trip (placeholder render against stub render)",
         "sops-manifest-type-proof (an all-digit stringData value stays a string)",
