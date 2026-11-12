@@ -98,12 +98,12 @@ def test_a_cap_of_zero_turns_pacing_off(landing):
 
 def test_a_backlog_that_outlasts_merge_timeout_merges_without_pacing(landing, capsys):
     # A backlog that never drains, against a 2s budget: a lander queued behind others (#6466).
-    ln, calls = _landing(landing, 3, [BACKLOG], merge_timeout=2, merge_poll=1)
+    ln, calls = _landing(landing, 2, [BACKLOG], merge_timeout=2, merge_poll=1)
     merge.await_merge(ln)
     assert _merges(calls) == 1
     out = capsys.readouterr().out
     assert "reaching merge_timeout=2s; merging without pacing" in out
-    assert "merged after 2s, 2s of it held by pacing" in out
+    assert "merged after 4s, 4s of it held by pacing" in out
 
 
 def test_a_head_green_after_ci_spent_the_budget_merges_into_a_backlog(landing, capsys):
@@ -126,7 +126,11 @@ def test_the_cap_rises_by_one_for_each_quarter_hour_held(landing, capsys):
     # Two unfinished runs never drain: a cap of 1 holds, the raised cap of 2 holds, and the
     # cap of 3 reached after half an hour held admits the merge.
     ln, calls = _landing(
-        landing, 3, [BACKLOG], merge_poll=pace.RAISE_CAP_EVERY_S, pace_master_runs=1
+        landing,
+        3,
+        [BACKLOG],
+        merge_poll=pace.RAISE_CAP_EVERY_S // merge.HELD_POLL_FACTOR,
+        pace_master_runs=1,
     )
     merge.await_merge(ln)
     assert _merges(calls) == 1
@@ -159,3 +163,11 @@ def test_by_default_two_unfinished_master_runs_hold_the_merge_and_one_does_not(
     out = capsys.readouterr().out
     assert out.count("pacing the merge:") == 1
     assert "pacing the merge: 2 master CI run(s) unfinished" in out
+
+
+def test_a_held_poll_sleeps_longer_than_an_unheld_one(landing):
+    """A held lander adds no throughput, so it polls slower (#7993)."""
+    ln, calls = _landing(landing, 2, [BACKLOG, []], merge_poll=5)
+    merge.await_merge(ln)
+    sleeps = [args[0] for name, args, _ in calls if name == "sleep"]
+    assert sleeps[0] == 5 * merge.HELD_POLL_FACTOR
