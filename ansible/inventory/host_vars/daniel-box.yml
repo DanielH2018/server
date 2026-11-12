@@ -121,24 +121,6 @@ claude_code_watch_uids: ["{{ claude_code_login_uid }}"]
 # the symptom of a wrong value is EACCES on open — distinct from the EPERM that means the
 # cgroup filter refused.
 render_gid: 993
-# Run the host-side secondary upsmon here, so a UPS shutdown powers this node off cleanly
-# instead of letting it run to battery end and lose power mid-write. This node holds etcd,
-# Longhorn's primary replicas, Traefik, Prometheus and LAN DNS, so the unclean cut was the
-# most expensive one in the fleet. It draws from the same UPS as daniel-server (measured,
-# see group_vars/all.yml).
-#
-# NOT A LONE EDIT. Arming at a 120 s ONBATT delay would stop the control plane two minutes into
-# any blip — worse availability than the hard cut it replaces, since most outages never reach
-# two minutes. The delay is 300 in roles/k8s/nut/defaults/main.yml, and that ordering is what
-# the role's own comment prescribes.
-#
-# DEPLOY ORDER, and it is not optional: run the console-attended `upsmon -c fsd` drill from
-# roles/k8s/nut/CLAUDE.md before this reaches the host. Setting it true installs a chain whose
-# only job is to power this machine off, and a broken chain is indistinguishable from a working
-# one while mains power is up. The role asserts upsd is reachable at deploy time, which catches
-# a stale ClusterIP snapshot then; `nut_host_watchdog_armed` (roles/nut_host/defaults/main.yml)
-# is what re-checks it afterwards, every 10 minutes via ups-secondary-health.sh.
-nut_host_secondary_armed: true
 
 # The unattended Renovate agent (hosts/components/renovate-agent). The timer fires at 06:00
 # America/Chicago daily and spends one headless session over the open Renovate PRs, landing up

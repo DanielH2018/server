@@ -6,11 +6,7 @@ ups.load by ~5 points ≈ 45 W, three transitions phase-locked across two cycles
 secondary upsmon it has no orderly shutdown at all: no /etc/nut, no nut-monitor, no cron,
 no HA automation with a power-off action.
 
-Three properties are load-bearing here, and each one fails in a way that looks like success:
-
-DISARMED BY DEFAULT. A secondary upsmon exists to power the machine off. Arming one on the
-control-plane node without the console-attended drill risks an unplanned cluster shutdown, and
-nothing about a wrong configuration is visible while mains power is up.
+Two properties are load-bearing here, and each one fails in a way that looks like success:
 
 THE HOST HALF IS PACKAGE-OWNED. Since H4.3c the homelab-daniel-server package installs the udev
 rule, and since H7.33 both cluster nodes' packages install the secondary upsmon. The role is one
@@ -24,7 +20,7 @@ Run: uv run pytest ansible/tests/setup/test_nut_host_secondary.py
 """
 
 from lib import yaml_fast
-from _helpers import ALL_VARS, ANSIBLE, HOST_VARS
+from _helpers import ALL_VARS, ANSIBLE
 
 from _shell_render import rendered_shell_text
 from lib.proc_testing import run
@@ -48,14 +44,6 @@ SHUTDOWN_RESERVE_S = 300
 # mostly shorter than this, and stopping inside that window trades a clean shutdown for a full
 # cluster restart on every flicker — a worse deal than the hard cut arming was meant to fix.
 BLIP_RIDE_OUT_S = 300
-
-
-def test_secondary_is_disarmed_by_default():
-    """Arming powers a machine off; it must be an explicit, per-host decision."""
-    assert "nut_host_secondary_armed: false" in ALL_VARS_TEXT, (
-        "the cross-node secondary must default to disarmed — a wrong SHUTDOWNCMD or an "
-        "unreachable upsd looks exactly like a working one until mains power fails"
-    )
 
 
 def daniel_box_package(tmp_path):
@@ -135,17 +123,19 @@ def onbatt_delay_verdict(delay: int, armed_beyond_ups_host: bool) -> str | None:
 
 
 def _armed_hosts_beyond_ups_host() -> list[str]:
+    """Hosts other than ups_host whose package lists the nut-secondary component."""
     ups_host = yaml_fast.safe_load(ALL_VARS_TEXT)["ups_host"]
-    armed = []
-    for path in sorted(HOST_VARS.glob("*.yml")):
-        host = path.stem
-        if host == ups_host:
-            continue
-        if (yaml_fast.safe_load(path.read_text()) or {}).get(
-            "nut_host_secondary_armed"
-        ):
-            armed.append(host)
-    return armed
+    return [
+        path.parent.name
+        for path in sorted((REPO / "hosts").glob("*/package.yml"))
+        if path.parent.name != ups_host
+        and "nut-secondary" in yaml_fast.safe_load(path.read_text())["components"]
+    ]
+
+
+def test_daniel_box_counts_as_armed_beyond_ups_host():
+    """The census must find the one armed host it exists to find, or the band check is vacuous."""
+    assert _armed_hosts_beyond_ups_host() == ["daniel-box"]
 
 
 def test_the_repos_onbatt_delay_suits_its_arming():

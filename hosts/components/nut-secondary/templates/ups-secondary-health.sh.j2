@@ -51,9 +51,6 @@ for arg in "$@"; do
   esac
 done
 
-{# H4.3b3: the packaged branch. Only the component's render context sets
-   nut_host_watchdog_packaged, so every host the role applies to renders the Ansible-era
-   branch. The branch differs in one line: the upsmon.conf path. #}
 # shellcheck source=/dev/null
 source /usr/lib/homelab/homelab-check-lib.sh || {
   logger -t ups-secondary-health "homelab-check-lib.sh missing — the check-lib component ships it"
@@ -67,11 +64,7 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 DEADLINE_S={{ 2 * 60 * (nut_host_watchdog_interval_minutes | int) + 300 }}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
-{% if nut_host_watchdog_packaged | bool %}
 UPSMON_CONF=/var/lib/homelab-secrets/etc/nut/upsmon.conf
-{% else %}
-UPSMON_CONF=/etc/nut/upsmon.conf
-{% endif %}
 
 # Field 2 only: `MONITOR <ups>@<host> <powervalue> <user> <password> <mode>`.
 ENDPOINT="$(awk '$1 == "MONITOR" { print $2; exit }' "$UPSMON_CONF" 2>/dev/null)"

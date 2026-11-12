@@ -25,10 +25,3 @@ nut_host_watchdog_armed: true
 # cannot leave the deadline derived from the old one. The deadline is 2x the cadence plus
 # 300 s, which is one missed run of slack (M3's rule).
 nut_host_watchdog_interval_minutes: 10
-
-# ── The packaged watchdog (H4.3b3) ──────────────────────────────────────────────
-# True only in the host-package component's render context (hosts/components/nut-secondary,
-# H4.3c), which sets it above these defaults. No task and no inventory file sets it, so every
-# host the role applies to renders the Ansible-era branch of ups-secondary-health.sh.j2. In the
-# packaged branch the script reads the endpoint from the file upsmon uses.
-nut_host_watchdog_packaged: false
