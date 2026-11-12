@@ -148,3 +148,4 @@ def test_json_escaped_ampersand_apikey_is_flagged():
     body = '"GET /api?t=search\\u0026apikey=abc123\\u0026limit=1"'
     out = core.redact_log_secrets(body)
     assert "abc123" not in out
+    assert "\\u0026limit=1" in out
