@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-12 18:17 UTC
-generated_sha: 3febc5ec5
+generated_at: 2026-11-12 18:40 UTC
+generated_sha: 65e094073
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,10 +12,10 @@ generated_sha: 3febc5ec5
 
 # Scheduled jobs
 
-53 job(s) scheduled by the roles' crons and the host packages' timers.
+53 job(s) scheduled by the host packages' timers.
 
 !!! warning "The state column is a heuristic"
-    It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
+    It is judged from the command text, and nothing in a unit declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
 
 | Job | Schedule | Host | User | Changes state | Defined in |
 |---|---|---|---|---|---|
@@ -74,7 +74,5 @@ generated_sha: 3febc5ec5
 | homelab-worktree-sweep.timer | `OnCalendar=Sun *-*-* 04:20:00` | daniel-box, daniel-server | `ubuntu` | read the script | `hosts/components/worktree-sweep/units/homelab-worktree-sweep.timer` |
 
 ## Schedule format
-
-Five fields: minute, hour, day-of-month, month, day-of-week. A schedule or user shows the value every host resolves when its variables come from role defaults or `group_vars/all.yml` and no host overrides them. A value still showing `{{ ... }}` differs by host or does not evaluate statically, so it only resolves at deploy time, and the template is the honest rendering.
 
 A host package's timer shows its triggers as systemd reads them, each host's drop-ins applied. A host marked `(no enable link)` receives the unit and does not arm it.

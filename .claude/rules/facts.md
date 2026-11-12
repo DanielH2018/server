@@ -49,9 +49,8 @@ A YAML key whose value Renovate bumps is not citable as a YAML atom. Every bump 
 atom, which puts a notice on every bump PR for a section whose prose the bump cannot change.
 Cite the file as a path atom and name the key in prose. The lint's `renovate-pin`
 rule derives the managed keys from `renovate.json`'s `customManagers`, plus the built-in
-github-actions and ansible managers, whose default file patterns `scripts/lib/facts/pins.py`
-restates. A claim that must hold for one specific version belongs in a
-test, which the bump PR runs.
+github-actions manager, whose default file patterns `scripts/lib/facts/pins.py` restates. A
+claim that must hold for one specific version belongs in a test, which the bump PR runs.
 
 ## Rules that read prose, and the history marker
 

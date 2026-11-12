@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/hosts.py
-generated_at: 2026-11-12 18:17 UTC
-generated_sha: 3febc5ec5
+generated_at: 2026-11-12 18:40 UTC
+generated_sha: 65e094073
 ---
 
 !!! warning "Generated file — do not edit"
@@ -47,7 +47,3 @@ k3s agent node. Intel iGPU for transcoding, LVM storage, and the UPS hardware be
 | Host package | `homelab-daniel-server` (28 components) |
 | Services declared | 0 |
 | Has Docker | no |
-
-## Running a playbook against a host
-
-Both cluster nodes run plays on themselves, so a play's `hosts:` defaults to the local hostname. **`--limit daniel-pi` therefore matches zero hosts** — target the Pi with `-e target=daniel-pi` instead. A one-shot play that ignores this runs on the wrong box while appearing to succeed.

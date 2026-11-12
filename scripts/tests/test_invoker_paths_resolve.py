@@ -1,15 +1,15 @@
 """Guard 1: every `scripts/*.py`/`scripts/*.sh` path a real invoker names must exist.
 
-A cron, a systemd unit, a prek hook `entry:`, a CI step, or a `.claude/hooks` wrapper that
+A systemd unit, a prek hook `entry:`, a CI step, or a `.claude/hooks` wrapper that
 names a script by a stale path only fails at RUNTIME -- no other test walks these invocation
 sites.
 
 `pyproject.toml`'s `pythonpath` list is a pytest-only mechanism (see
-`.claude/rules/python-layout.md`): it lets pytest itself resolve a cross-directory import, but a cron or
+`.claude/rules/python-layout.md`): it lets pytest itself resolve a cross-directory import, but a timer or
 a prek hook invokes the script directly, with no pytest involved, so a stale path there raises
 nothing pytest can see. This test reads the same invocation sites a human would check by hand
-after a rename -- prek's `entry =`, a GitHub Actions `run:` step, an `ansible.builtin.cron`
-`job:`, the shell templates timers wrap, a systemd unit's `ExecStart*=`, a `.claude/hooks`
+after a rename -- prek's `entry =`, a GitHub Actions `run:` step, the shell
+templates timers wrap, a systemd unit's `ExecStart*=`, a `.claude/hooks`
 wrapper, and `.claude/settings*.json`'s permission strings -- and asserts every `scripts/...`
 token found there names a file that exists on disk.
 
@@ -17,8 +17,8 @@ File discovery and field extraction (WHICH files, WHICH field) live in
 `lib/invocation_sites.py`, shared with `scripts/docs/reference/scripts.py` -- the other
 place that walks these same sites, to say HOW a script is run rather than whether it exists.
 What stays local to this file is the token regex below and the comment-line filtering: this
-test deliberately takes a conservative superset for the shell categories (the `initial_setup`
-and host-component `*.sh.j2` templates and the `.claude/hooks` wrappers), where the generator excludes comment
+test deliberately takes a conservative superset for the shell categories (the
+host-component `*.sh.j2` templates and the `.claude/hooks` wrappers), where the generator excludes comment
 lines, backtick prose and `echo` lines. Extraction is scoped to the exact field each mechanism
 executes, not a blind grep for the substring `scripts/` over whole files. That substring also
 shows up in comments and docstrings that execute nothing, and in `docs/archive/` (deliberately
@@ -27,7 +27,7 @@ fixture proving a stale path is not re-linked). Neither is one of the invocation
 test reads, so neither needs excluding here -- but if this test is ever extended to a new
 source, re-check that both stay out of scope rather than relying on a regex to skip them.
 
-For the two shell-syntax categories (the `initial_setup` and host-component `*.sh.j2` templates and the
+For the two shell-syntax categories (the host-component `*.sh.j2` templates and the
 `.claude/hooks` `*.sh`/`*.py` wrappers) a whole-line `#` comment is skipped; anything else on a
 non-comment line is scanned, including a `scripts/...` mention embedded in a string argument
 (e.g. a `gh pr create --body` message) -- a conservative superset, not a gap, since a stale
@@ -40,9 +40,7 @@ from pathlib import Path
 from lib.invocation_sites import (
     claude_hook_files,
     claude_settings_entries,
-    cron_jobs as _shared_cron_jobs,
     prek_hook_entries,
-    sh_j2_templates as _shared_sh_j2_templates,
     systemd_exec_lines as _shared_systemd_exec_lines,
     workflow_run_steps as _shared_workflow_run_steps,
 )
@@ -85,28 +83,9 @@ def workflow_run_steps() -> list[tuple[str, str]]:
     ]
 
 
-def cron_jobs() -> list[tuple[str, str]]:
-    """Every `scripts/...` token in an `ansible.builtin.cron` task's `job:`, tree-wide.
-
-    Not scoped to `initial_setup` -- traefik, observability, qbittorrent and eight other
-    roles each carry their own cron tasks (`lib/invocation_sites.py` finds all of them).
-    """
-    return [
-        (f"{job.path.relative_to(REPO)} task {job.name!r} job=", token)
-        for job in _shared_cron_jobs(REPO)
-        for token in _tokens(job.job)
-    ]
-
-
 def sh_j2_templates() -> list[tuple[str, str]]:
-    """Every `scripts/...` token on a non-comment line of an initial_setup or component `*.sh.j2`."""
+    """Every `scripts/...` token on a non-comment line of a host component's `*.sh.j2`."""
     out = []
-    for tpl in _shared_sh_j2_templates(REPO):
-        if tpl.parent.parent.name != "initial_setup":
-            continue
-        for lineno, line in _non_comment_lines(tpl):
-            for token in _tokens(line):
-                out.append((f"{tpl.relative_to(REPO)}:{lineno}", token))
     for plane, component, name, text in rendered_shell_texts():
         if plane != "components":
             continue
@@ -157,8 +136,7 @@ def claude_settings() -> list[tuple[str, str]]:
 _SOURCES = {
     "prek.toml entry=": prek_entries,
     "workflow run: steps": workflow_run_steps,
-    "crons.yml job:": cron_jobs,
-    "initial_setup and component *.sh.j2": sh_j2_templates,
+    "component *.sh.j2": sh_j2_templates,
     "systemd ExecStart*=": systemd_exec_lines,
     ".claude/hooks wrappers": claude_hook_wrappers,
     ".claude/settings*.json": claude_settings,
@@ -179,23 +157,12 @@ def test_every_invoked_script_path_resolves():
     )
 
 
-# The setup roles hold no cron task that names a `scripts/...` path. The extractor stays live so
-# a role that adds one is caught.
-_EXPECTED_EMPTY_SOURCES = {"crons.yml job:"}
-
-
 def test_each_source_is_reachable():
     """A parser regression that silently returns [] for one source would make the assertion
-    above vacuous for that source. Every category except the documented exemption above
-    currently names at least one real scripts/ path -- pin that so a broken extractor (e.g.
-    crons.yml failing to parse as YAML and being swallowed) is caught here instead of by the
-    guard going quiet."""
+    above vacuous for that source. Every category names at least one real scripts/ path --
+    pin that so a broken extractor is caught here instead of by the guard going quiet."""
     counts = {name: len(fn()) for name, fn in _SOURCES.items()}
-    empty = [
-        name
-        for name, count in counts.items()
-        if count == 0 and name not in _EXPECTED_EMPTY_SOURCES
-    ]
+    empty = [name for name, count in counts.items() if count == 0]
     assert not empty, (
         f"these sources found zero scripts/ tokens (extractor regression?): {empty}. Counts: {counts}"
     )

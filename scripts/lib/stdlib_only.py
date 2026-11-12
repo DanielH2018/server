@@ -22,10 +22,10 @@ subcommand it runs. `FANOUT_UNITS` and `RUNBOOK_UNITS` list the legs whose comma
 built in Python or in an array of a shell script; `FANOUT_UNITS` lists the two fan-out legs built in
 Python, which `scripts/lib/tests/test_stdlib_only.py` pins against the builders. The fourth is
 the role scripts a host runs `--no-project` (#4455), which `lib.role_installs` reads from each
-role's tasks and templates.
+role's templates and each host component's files.
 
-A role script runs from the path its role's `copy` task installs it to, so its `sys.path` is
-the install directory, not its tree path. `lib.role_installs` copies every installed file to
+A role script runs from the path a host component's `files` entry installs it to, so its
+`sys.path` is the install directory, not its tree path. `lib.role_installs` copies every installed file to
 that layout under a temporary root, and a role entry is reached from its staged copy, so an
 import resolves only against what the role actually ships beside it. `stdlib_only_set()`
 keys a staged member by its tree source; `members()` keeps each staged copy with its own
@@ -524,7 +524,7 @@ def walk(path: Path, dirs: list[Path]) -> list[str]:
             continue
         resolved = _files(module, names, dirs)
         # DECIDED: an import resolving inside a staged install directory passes, a basename
-        # two roles share included. The role's copy task chose which file sits there, so the
+        # two roles share included. The component's `files` entry chose which file sits there, so the
         # host has exactly one candidate and `sys.path` order is not a question.
         if resolved is not None and resolved[0].is_relative_to(role_installs.stage()):
             continue

@@ -146,6 +146,8 @@ authorized key.
 - **`~/.claude` is `drwx------ claude:ubuntu`.** `claude-agent-setup` sets that mode on every
   run, because the directory holds the session's login. Slice 4 widens it for the operator's
   group.
+- **A detached landing logs per user.** The log directory is `/tmp/homelab-landings-<user>`, so
+  one user's directory never blocks the other's `land.sh --detach`.
 - **The Claude Code installer runs with `CLAUDE_INSTALL_ALLOW_SUDO=1`**, because the installer
   refuses to run under a sudo guard otherwise.
 
@@ -537,8 +539,8 @@ out](#what-this-page-leaves-out) has where it lives.
 
 ## Slice 7: a pre-merge dry run without secrets (optional)
 
-`deploy.sh` is deleted, so this plan is history. It read: add a `deploy.sh --dry-run` mode that
-renders with placeholder secret values and applies with a dry-run-only ServiceAccount. A ValidatingAdmissionPolicy denies that
+**Build:** add a pre-merge dry run that renders with placeholder secret values and applies
+with a dry-run-only ServiceAccount. A ValidatingAdmissionPolicy denies that
 ServiceAccount every request whose `request.dryRun` is false.
 
 **Unverified:** whether this k3s version's admission CEL exposes `request.dryRun`, and whether
@@ -800,6 +802,7 @@ operator can log in as `claude`, so only the operator can run the checks that st
 
 | Capability | Why | Where it goes instead |
 |---|---|---|
+| A dry run against the cluster before a merge | It needs decrypted SOPS values, and the agent has no age key | Merged work deploys through the lander (slice 3). A pre-merge dry run returns with slice 7. |
 | `sudo` | No sudo rights and no `SUDO_ASKPASS` helper | The operator, or the deployer after a merge |
 | Adding or rotating a secret | `sops` needs the data key to write a value | The operator. Key names stay readable, because SOPS encrypts values only. |
 | ssh as `ubuntu` to the peers | That shell has sudo | The operator. The agent reaches daniel-server as its own `claude` agent user, for fan-out only (slice 5). The Pi has no agent login, because the one `probe.py` ssh path needs its `docker` group. |

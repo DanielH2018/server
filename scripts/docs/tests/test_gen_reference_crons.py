@@ -1,212 +1,44 @@
 """Tests for scripts/docs/reference/crons.py.
 
-Fixture-driven: synthetic roles under tmp_path, never the real tree, which changes.
-
 Run: uv run pytest scripts/docs/tests/test_gen_reference_crons.py
 """
 
 import re
-import textwrap
 
 from docs.reference import crons as g
 
 
-def _role(tmp_path, role: str, body: str):
-    path = tmp_path / role / "tasks" / "main.yml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(textwrap.dedent(body))
-    return path
+def _row(**overrides):
+    row = {
+        "name": "homelab-example.timer",
+        "schedule": "OnCalendar=daily",
+        "host": "daniel-box",
+        "user": "root",
+        "changes_state": "read the script",
+        "source": "hosts/components/example/units/homelab-example.timer",
+    }
+    return row | overrides
 
 
-def _basic(tmp_path):
-    _role(
-        tmp_path,
-        "alpha",
-        """\
-        ---
-        - name: Schedule a read-only check
-          when: inventory_hostname == 'daniel-box'
-          ansible.builtin.cron:
-            name: "Check something"
-            minute: "5"
-            hour: "3"
-            user: ubuntu
-            job: "/usr/local/bin/probe --check"
-        """,
-    )
-    _role(
-        tmp_path,
-        "beta",
-        """\
-        ---
-        - name: Schedule a committing job
-          ansible.builtin.cron:
-            name: "Rotate secrets"
-            special_time: weekly
-            user: root
-            job: "cd /repo && git commit -am x && git push"
-        """,
-    )
-    return tmp_path
-
-
-def test_finds_cron_tasks_across_roles(tmp_path):
-    rows = g.build_rows(_basic(tmp_path))
-    assert {r["name"] for r in rows} == {"Check something", "Rotate secrets"}
-
-
-def test_records_the_defining_file(tmp_path):
-    """Without it the page says a job exists but not where to change it."""
-    rows = {r["name"]: r for r in g.build_rows(_basic(tmp_path))}
-    assert rows["Check something"]["source"].endswith("alpha/tasks/main.yml")
-
-
-def test_five_field_schedule_and_special_time(tmp_path):
-    rows = {r["name"]: r for r in g.build_rows(_basic(tmp_path))}
-    assert rows["Check something"]["schedule"] == "5 3 * * *"
-    assert rows["Rotate secrets"]["schedule"] == "@weekly"
-
-
-def test_host_comes_from_the_when_clause(tmp_path):
-    rows = {r["name"]: r for r in g.build_rows(_basic(tmp_path))}
-    assert rows["Check something"]["host"] == "daniel-box"
-    assert rows["Rotate secrets"]["host"] == "every host in the play"
-
-
-def test_state_changing_jobs_are_flagged(tmp_path):
-    rows = {r["name"]: r for r in g.build_rows(_basic(tmp_path))}
-    assert rows["Rotate secrets"]["changes_state"].startswith("yes")
-    assert "git commit" in rows["Rotate secrets"]["changes_state"]
-
-
-def test_a_wrapper_script_is_not_guessed_at(tmp_path):
-    """A job whose command is a script says so instead of claiming read-only.
-
-    Clearing a wrapper as harmless is the failure that costs something; saying
-    'read the script' costs a reader one moment.
-    """
-    _role(
-        tmp_path,
-        "gamma",
-        """\
-        ---
-        - name: Schedule a wrapper
-          ansible.builtin.cron:
-            name: "Wrapped"
-            minute: "0"
-            job: "/usr/local/bin/some-wrapper.sh"
-        """,
-    )
-    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
-    assert rows["Wrapped"]["changes_state"] == "read the script"
-
-
-def test_absent_crons_are_skipped(tmp_path):
-    """`state: absent` removes a job; listing it would describe the opposite of reality."""
-    _role(
-        tmp_path,
-        "delta",
-        """\
-        ---
-        - name: Remove an old cron
-          ansible.builtin.cron:
-            name: "Retired job"
-            state: absent
-        """,
-    )
-    assert "Retired job" not in {r["name"] for r in g.build_rows(tmp_path)}
-
-
-def test_unresolved_jinja_is_printed_not_guessed(tmp_path):
-    """These pages never run Ansible, so a template is the honest rendering."""
-    _role(
-        tmp_path,
-        "epsilon",
-        """\
-        ---
-        - name: Templated schedule
-          ansible.builtin.cron:
-            name: "Templated"
-            minute: "{{ some_minute }}"
-            job: "/bin/true"
-        """,
-    )
-    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
-    assert "{{ some_minute }}" in rows["Templated"]["schedule"]
-
-
-def test_markdown_opens_with_the_provenance_banner(tmp_path):
-    out = g.render_markdown(g.build_rows(_basic(tmp_path)))
+def test_markdown_opens_with_the_provenance_banner():
+    out = g.render_markdown([_row()])
     assert out.startswith("---\n")
     assert "generated_from: scripts/docs/reference/crons.py" in out
 
 
-def test_a_filter_pipe_in_the_when_clause_stays_in_its_cell(tmp_path):
-    """`not k8s_dry_run | bool` split ten live rows one column to the right."""
-    _role(
-        tmp_path,
-        "gamma",
-        """\
-        ---
-        - name: Schedule a guarded job
-          when: not k8s_dry_run | bool
-          ansible.builtin.cron:
-            name: "Guarded"
-            minute: "5"
-            user: root
-            job: "/usr/local/bin/probe"
-        """,
+def test_a_pipe_in_a_cell_stays_in_its_cell():
+    out = g.render_markdown([_row(host="a | b")])
+    row = next(
+        line for line in out.splitlines() if line.startswith("| homelab-example")
     )
-    out = g.render_markdown(g.build_rows(tmp_path))
-    row = next(line for line in out.splitlines() if line.startswith("| Guarded "))
     cells = re.split(r"(?<!\\)\|", row)[1:-1]
     assert len(cells) == 6
-    assert cells[2].strip() == r"conditional (not k8s_dry_run \| bool)"
 
 
-def test_markdown_ends_with_exactly_one_newline(tmp_path):
-    out = g.render_markdown(g.build_rows(_basic(tmp_path)))
+def test_markdown_ends_with_exactly_one_newline():
+    out = g.render_markdown([_row()])
     assert out.endswith("\n")
     assert not out.endswith("\n\n")
-
-
-def _var_gated_role(tmp_path, gate: str):
-    _role(
-        tmp_path,
-        "zeta",
-        f"""\
-        ---
-        - name: Schedule a var-gated job
-          when: inventory_hostname == {gate}
-          ansible.builtin.cron:
-            name: "Var gated"
-            minute: "5"
-            user: root
-            job: "/bin/true"
-        """,
-    )
-    defaults = tmp_path / "zeta" / "defaults" / "main.yml"
-    defaults.parent.mkdir(parents=True, exist_ok=True)
-    defaults.write_text("---\ncron_host: some-host\n")
-    return tmp_path
-
-
-def test_a_variable_host_gate_resolves_to_the_host_it_names(tmp_path):
-    """`inventory_hostname == ops_cron_host` names a host as surely as a quoted literal.
-
-    Reading only the literal form degraded every converted gate to `conditional (...)`,
-    which is the column this page exists to answer.
-    """
-    rows = {r["name"]: r for r in g.build_rows(_var_gated_role(tmp_path, "cron_host"))}
-    assert rows["Var gated"]["host"] == "some-host"
-
-
-def test_a_variable_the_resolver_cannot_settle_is_printed_as_written(tmp_path):
-    """A name with no fleet-wide value is left as the template, never guessed at."""
-    rows = {
-        r["name"]: r for r in g.build_rows(_var_gated_role(tmp_path, "no_such_host"))
-    }
-    assert rows["Var gated"]["host"] == "{{ no_such_host }}"
 
 
 def test_a_timer_whose_command_names_only_a_wrapper_needs_the_script_read():
@@ -220,8 +52,7 @@ def test_a_timer_whose_command_names_a_mutating_word_is_flagged():
 
 
 def test_the_live_page_lists_a_packaged_timer(tmp_path):
-    """A named member: an empty read of the packages fails here. No setup role installs a cron
-    since H7.34, so the role-cron source has no member to name."""
+    """A named member: an empty read of the packages fails here."""
     out = tmp_path / "crons.md"
     assert g.main(["--out", str(out)]) == 0
     page = out.read_text()

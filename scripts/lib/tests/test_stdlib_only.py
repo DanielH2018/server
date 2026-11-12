@@ -359,7 +359,7 @@ def test_a_role_command_maps_to_its_installed_copy_is_clean():
 
 
 def test_a_role_command_no_copy_installs_is_flagged():
-    with pytest.raises(ValueError, match="no copy task"):
+    with pytest.raises(ValueError, match="no component"):
         role_installs.role_entry(
             "/usr/lib/homelab/deploy-ui/never_shipped.py", DEPLOY_UI_UNIT
         )
