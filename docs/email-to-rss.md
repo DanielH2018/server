@@ -58,6 +58,14 @@ routed and its script runs"; it deliberately does **not** cover the ingest path 
 via ForwardEmail, KV writes), which is unmonitored — a silent stop in newsletter delivery
 still surfaces only as feeds going quiet.
 
+**Two traps when checking a change:**
+
+- `wrangler kv key list` and the other `kv` subcommands read the local simulator by default.
+  Pass `--remote` to read the production namespace; without it an empty result means nothing.
+- The RSS response carries `Cache-Control: max-age=1800` (`Email-to-RSS/src/routes/rss.ts`), so
+  a feed fetched right after a deploy can be up to 30 minutes old. Add a query string to bypass
+  the cache.
+
 **Redeploying after changes** (on `daniel-server`):
 
 1. `cd ~/server/Email-to-RSS`

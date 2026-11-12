@@ -96,6 +96,17 @@ session, remember-me included.
   `authelia_session*` strings are cookie names
   (`ansible/roles/k8s/authelia/defaults/main.yml:authelia_k8s_cookie_name`), so the registry holds
   no such key and that absence is not an untracked credential.
+- **The `local.` cookie must stay first in `session.cookies`.** Authelia takes the first cookie
+  domain that matches the request, so with the public entry first a `.local` login lands on the
+  public cookie. Each entry needs its own `name`, or the two sessions overwrite each other.
+  `.local` one_factor works only because LAN requests arrive from internal IPs; a login through
+  Cloudflare arrives from a public IP and is forced to two_factor.
+- **A cookie whose `default_redirection_url` equals its `authelia_url` crash-loops Authelia**,
+  which refuses that config at boot.
+- **A 431 with Traefik's `OriginStatus: 0` behind SSO is Authelia's read buffer**, not the
+  backend. forwardAuth sends Authelia the full URI and cookies, and fasthttp rejects a request
+  larger than `server.buffers.read` (16384 in `templates/config-secret.yaml.j2`). The Pi-hole
+  query log's long URLs hit it. Raise the buffer rather than chase the backend.
 - **Three init containers seed the crowdsec-agent sidecar, not its entrypoint**, running hub →
   config → data. `crowdsec-hub-install` going FIRST is load-bearing, and **exit 23 is the only
   status the rsync tolerates**. Verify by the sidecar's restart count — one restart failed every

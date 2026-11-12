@@ -125,3 +125,14 @@ because a role doc is loaded on every task in this directory whether it is neede
   and fix the config before refreshing the snapshot.
 - **`| float(0)` and `unknown` in an exclusion list hide a dead entity**, converting a crash
   into a permanent wrong answer. Treat both idioms as suspects when reviewing HA Jinja.
+- **HA lists Repairs only over the WebSocket API** (`repairs/list_issues`); no REST endpoint
+  lists them. `scripts/diagnostics/probe_lib/ha.py` has a stdlib WebSocket client to reuse. A
+  `service_not_found` repair survives both the fix and a restart. Clear it with
+  `POST /api/repairs/issues/fix` (domain and issue id), then
+  `POST /api/repairs/issues/fix/<flow_id>`.
+- **After an unclean shutdown, a deploy's restart can restore stale overrides.** HA restores
+  `bedroom_sleep_mode` and `bedroom_manual_off` from before its last clean save, so the bedroom
+  can come back in a mode it already left. The operator chose not to add a reset on
+  `homeassistant` start: the Tap Dial's exit-sleep action and the morning reset clear it. Do not
+  propose the on-start reset again without new evidence. `bedroom_fan_manual` is not affected,
+  because `bedroom_fan_startup_reconcile` in `files/automations/fan-and-air.yaml` rebuilds it.
