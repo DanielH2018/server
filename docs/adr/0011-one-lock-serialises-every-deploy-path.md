@@ -18,6 +18,13 @@ snapshot of `HEAD` and takes per-service locks for the playbook itself. Read the
 everything below about what the lock is for, and about contention being a resume point, is
 unchanged.
 
+Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) on
+2026-11-12. The decision stands: `scripts/lib/tree_lock.py` still names the tree lock. The
+holders that *Context* and *Decision* name, the GitOps timer and `./scripts/deploy.sh`, are
+gone: H7.52 retired the timer, and H7.53 deleted `deploy.sh` and the deployer. The holders
+are `homelab-checkout-sync` and the two crons that write the tree, docs-refresh and
+eval-run. The deploy-ui panel reads the lock and holds none.
+
 ## Context
 
 Several things deploy from the same checkout: the GitOps timer on its tick interval

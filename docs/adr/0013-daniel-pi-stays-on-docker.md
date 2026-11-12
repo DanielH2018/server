@@ -14,6 +14,12 @@ Accepted. Decided with [ADR-0002](0002-k3s-over-docker-compose-for-the-cluster-n
 Amended 2026-10-28: the Pi's services ship in its host package, and `ansible/roles/containers/`
 is retired (*Amendment* below).
 
+Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) on
+2026-11-12. The amendment's line "`-e target=daniel-pi` stays for the setup plays" no longer
+holds: the setup plays are deleted. The Pi's setup plane ships in `homelab-daniel-pi`,
+`homelab-docker-engine.service` moves the Docker engine, and nothing reaches the Pi over SSH
+with `-e target=daniel-pi`.
+
 ## Context
 
 The k3s migration covered `daniel-box` and `daniel-server`. `daniel-pi` was named explicitly

@@ -12,6 +12,12 @@ governs: []
 
 Accepted.
 
+Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) on
+2026-11-12. The title names the Ansible tree, and the reference generators under `scripts/docs/`
+no longer read it: since H7.18a they read `hosts/*/package.yml`, the component units and the
+timers, because no playbook or setup role is left to read. The decision, a MkDocs site with
+generated reference pages, stands, and the title stays as the record's name.
+
 ## Context
 
 Three facts about the repo set the scope.

@@ -16,6 +16,12 @@ that lock is held and what else a deploy takes.
 
 Accepted.
 
+Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) on
+2026-11-12. The tree-lock half stands, through [ADR-0011](0011-one-lock-serialises-every-deploy-path.md).
+The per-service-lock half has no subject left: `deploy.sh` took those locks for the playbook,
+`deploy.sh` is deleted, and k8s changes deploy only through `promote` and Flux. No code under
+`scripts/`, `hosts/` or `ansible/` takes a per-service lock.
+
 ## Context
 
 ADR-0011 says the lock guards the tree. `scripts/deploy.sh` held it for the whole playbook.

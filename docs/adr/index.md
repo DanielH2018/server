@@ -73,7 +73,7 @@ wrong is worth more than the record of one that did not.
 | [0026](0026-one-alert-plane-on-prometheus-and-alertmanager.md) | One alert plane on Prometheus and Alertmanager; Uptime Kuma retired | Accepted | 2026-10-24 |
 | [0027](0027-fanout-batches-stay-on-host-cgroups.md) | Fan-out batches stay on host cgroups, with per-batch limits, not in k8s pods | Accepted | 2026-10-31 |
 | [0028](0028-the-renderer-supports-a-closed-jinja-subset.md) | The cluster render supports a closed Jinja subset | Accepted | 2026-11-06 |
-| [0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) | Each host is configured by its own package, and Ansible is gone | Proposed | 2026-11-12 |
+| [0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) | Each host is configured by its own package, and Ansible is gone | Accepted | 2026-11-12 |
 
 ## The long-form behind a record
 
