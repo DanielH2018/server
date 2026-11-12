@@ -165,6 +165,5 @@ any other file under `.claude/` — because each of those measurements landed he
 
 ## Before you start, and when to stop
 
-Read `CLAUDE.md` → *After a PR Merges* for the *When to wait* list and the *Working alongside
-other sessions* notes. Both stay resident there deliberately: they change default behaviour, so
-they have to be loaded whether or not this skill is.
+Read `CLAUDE.md` → *After a PR Merges* for the *When to wait* list. It stays resident there
+deliberately: it changes default behaviour, so it has to be loaded whether or not this skill is.
