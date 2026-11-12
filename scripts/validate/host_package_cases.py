@@ -44,7 +44,8 @@ the homelab repository satisfies (H7.15a; `validate_lib/bootstrap_case.py`) and 
 the *Adding a host* walkthrough (H7.15d; `validate_lib/fixture_host_case.py`). The last runs the
 script without `--local-build` on daniel-pi, against the test repository with a rewritten copy of
 the script that pins its throwaway key (#6245; `validate_lib/bootstrap_repo_case.py`). A last
-case runs step 3 with real apt on an image holding no age (`validate_lib/bootstrap_age_case.py`).
+case runs step 3 with real apt on an image holding no age (`validate_lib/bootstrap_age_case.py`);
+it gives no verdict, not a failure, when snapshot.ubuntu.com answers 5xx or not at all.
 
 The bootstrap cases (`validate_lib/bootstrap_case.py`) run only under `--bootstrap`, which runs
 them and nothing else. CI runs them in a job of their own, `host_packages_bootstrap`, beside the
@@ -79,8 +80,9 @@ Usage:
         --work "$RUNNER_TEMP/cases" --tools-cache "$RUNNER_TEMP/tools-cache"
     uv run python scripts/validate/host_package_cases.py ... --bootstrap
 
-Exit codes: 0 every case passed; 1 a case failed, each `[FAIL]` line on stderr naming it and why,
-or a container never booted; 64 a usage error.
+Exit codes: 0 no case failed, with a last `[NO VERDICT]` line counting the cases a mirror outage
+left untested; 1 a case failed, each `[FAIL]` line on stderr naming it and why, or a container
+never booted; 64 a usage error.
 """
 
 import sys as _sys
@@ -100,7 +102,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from lib.cli_help import ArgumentParser
-from validate.validate_lib.case_groups import groups, run_groups
+from validate.validate_lib.case_groups import groups, run_groups, verdict
 from validate.validate_lib.host_container import (
     LAST_SUCCESS,
     PORT,
@@ -154,6 +156,7 @@ class Cases:
         self.shard = args.bootstrap_shard
         self.box = box_address(args.render / "head")
         self.failed: list[str] = []
+        self.no_verdict: list[str] = []
         self.debs: dict[str, Path] = {}
         self.versions: dict[str, str] = {}
         # The head homelab-tools build the real Pi package Depends on (H3.11), if any.
@@ -587,13 +590,9 @@ def main(argv: list[str] | None = None) -> int:
         run_groups(cases, [("bootstrap_case", bootstrap_case.run)], 1)
     else:
         run_groups(cases, groups(Cases), args.jobs)
-    if cases.failed:
-        print(
-            f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", file=sys.stderr
-        )
-        return 1
-    print("every case passed", file=sys.stderr)
-    return 0
+    line, status = verdict(cases)
+    print(line, file=sys.stderr)
+    return status
 
 
 if __name__ == "__main__":

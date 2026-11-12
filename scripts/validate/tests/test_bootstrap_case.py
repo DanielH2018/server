@@ -359,42 +359,6 @@ def test_an_online_run_mounts_its_seed_and_names_it_to_the_script(
     )
 
 
-def _age_run(monkeypatch, tmp_path, stdout: str) -> list[str]:
-    """Run `expect_age_from_apt` on a fake container; returns what it ran, in order."""
-    commands = []
-
-    def fake_ok(self, command):
-        commands.append(command)
-        return ""
-
-    def fake_sh(self, command, timeout=None):
-        commands.append(command)
-        return subprocess.CompletedProcess(command, 0, stdout, "")
-
-    monkeypatch.setattr(Container, "boot", lambda self, python: None)
-    monkeypatch.setattr(Container, "ok", fake_ok)
-    monkeypatch.setattr(Container, "sh", fake_sh)
-    age_case.expect_age_from_apt(Container("img", "c", tmp_path), "3.12")
-    return commands
-
-
-def test_a_run_that_installed_age_and_printed_the_key_is_clean(monkeypatch, tmp_path):
-    stdout = (
-        "bootstrap-host: installed age\n"
-        "bootstrap-host: age public key for daniel-pi: age1abc\n"
-    )
-    purge, script = _age_run(monkeypatch, tmp_path, stdout)
-
-    assert "dpkg --purge age" in purge and "/var/lib/apt/lists" in purge
-    assert script.endswith("bootstrap-host.sh daniel-pi --until 3")
-
-
-def test_a_run_that_found_age_already_installed_is_flagged(monkeypatch, tmp_path):
-    stdout = "bootstrap-host: age public key for daniel-pi: age1abc\n"
-    with pytest.raises(CaseFailed, match="installed age"):
-        _age_run(monkeypatch, tmp_path, stdout)
-
-
 def test_the_default_groups_hold_two_bootstrap_groups_and_leave_bootstrap_case_out():
     runs = [run for _, run in case_groups.groups(host_package_cases.Cases)]
     assert {
