@@ -30,13 +30,13 @@ traefik_k8s_uid: 65532
 
 # Per-cluster subsystem switches. Both are true for prod and false for a staging cluster that
 # has neither a Cloudflare account nor the SOPS keys behind one — see docs/archive/staging-cluster.md
-# Decision 4. They gate ANSIBLE-side inclusion, not just template branches, because the ACME
+# Decision 4. They gate file-list inclusion, not just template branches, because the ACME
 # half spans a PVC, a Secret, an init container and two volumes as well as the resolver block.
 #
-# DECIDED: these are one-way for a cluster that has already deployed with them on. Dropping a
-# name from manifests_files deletes the STAGED file (manifests/tasks/main.yml:148) but never
-# the live object — see kubectl-apply-leaves-orphaned-objects. Flipping either to false on
-# prod therefore needs a hand `kubectl delete`.
+# DECIDED: these are one-way for a cluster that has already deployed with them on. traefik's
+# tag prunes, so dropping a name from the file lists makes Flux delete the live object at the
+# next promotion. Flipping either to false on prod therefore sheds a subsystem the edge
+# still serves.
 # Nothing does that today; the flags exist so a new cluster can come up without the subsystem,
 # not so prod can shed it.
 # Namespaces this cluster's Traefik watches. rbac.yaml.j2 renders one namespaced Role per

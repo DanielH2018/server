@@ -19,7 +19,7 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   k8s/image-builder before D5.16.
 - **Host:** daniel-box (k3s), pinned by a required node affinity · **Port:** 8443
 - **Flux applies it, not Ansible** (D5.16, Wave C). Its `containers_list` entry is
-  `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged
+  `platform: k8s`, so nothing applies it by hand, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy:
   false` still stops Renovate's
   automerge of a base-image or build-pin bump.

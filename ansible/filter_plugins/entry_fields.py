@@ -3,7 +3,7 @@
 A template that loops `containers_list` itself may read any field of any entry (#4395). Each
 filter here returns only the values its template renders, never an entry.
 
-No Ansible import, so the render harnesses register the same functions the playbook runs.
+No Ansible import, so the render harnesses register the same functions the renderer runs.
 """
 
 

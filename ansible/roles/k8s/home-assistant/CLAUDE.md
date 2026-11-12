@@ -22,7 +22,7 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   macro tests, `sanctioned_writers.yml` and the skills all anchor here, and its ConfigMap
   ships `files/` into the cluster. Edit HA config HERE, then merge; `promote` applies it.
 - **Flux applies it, not Ansible** (D5.11, an own-window flip). Its `containers_list` entry
-  is `platform: k8s`, so no local script applies it, and a
+  is `platform: k8s`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Deployment is `Recreate`, so a
   change that rolls it takes HA down for the length of the pod restart, about 2 minutes. The
@@ -113,8 +113,7 @@ because a role doc is loaded on every task in this directory whether it is neede
 - The Google service account JSON has a Secret of its own,
   `templates/google-sa-secret.yaml.j2`, which `configuration.yaml` reads through `!include`.
   `docs/platform.md` has the wiring.
-- Deploy: merge the PR, and `promote` applies it; no local script applies a k8s workload.
-  After the apply, run the health + loaded-config gates of
+- Deploy: merge the PR, and `promote` applies it. Nothing applies it by hand. After the apply, run the health + loaded-config gates of
   `/ha-edit-automation` (`probe.py ha verify-automations`).
 
 ## Traps

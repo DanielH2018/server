@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Cgroup resource metrics for claude-rc.service, user-1000.slice and each live fan-out batch
-# unit — managed by Ansible (claude_code role); edits overwritten.
+# unit. Shipped by the homelab host package (hosts/components/claude-code); edits are overwritten.
 #
 # Issue #1238: claude-rc.service is bounded (MemoryHigh/MemorySwapMax) and user-1000.slice
 # (sessions started with `claude agents` from an SSH shell, #1213) is not — but neither

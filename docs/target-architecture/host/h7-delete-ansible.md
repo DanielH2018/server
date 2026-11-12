@@ -1,7 +1,7 @@
 # H7 — Remaining roles, then delete Ansible
 
-Status: IN PROGRESS. Partial landings through 2026-11-01, named by PR: [#6081](https://github.com/DanielH2018/server/pull/6081), [#6087](https://github.com/DanielH2018/server/pull/6087), [#6084](https://github.com/DanielH2018/server/pull/6084), [#6138](https://github.com/DanielH2018/server/pull/6138), [#6169](https://github.com/DanielH2018/server/pull/6169), [#6190](https://github.com/DanielH2018/server/pull/6190), [#6201](https://github.com/DanielH2018/server/pull/6201), [#6224](https://github.com/DanielH2018/server/pull/6224), [#6242](https://github.com/DanielH2018/server/pull/6242), [#6248](https://github.com/DanielH2018/server/pull/6248), [#6264](https://github.com/DanielH2018/server/pull/6264), [#6230](https://github.com/DanielH2018/server/pull/6230), [#6339](https://github.com/DanielH2018/server/pull/6339), [#6593](https://github.com/DanielH2018/server/pull/6593), [#6600](https://github.com/DanielH2018/server/pull/6600), [#6637](https://github.com/DanielH2018/server/pull/6637), [#6683](https://github.com/DanielH2018/server/pull/6683), [#6701](https://github.com/DanielH2018/server/pull/6701), [#6717](https://github.com/DanielH2018/server/pull/6717), [#6719](https://github.com/DanielH2018/server/pull/6719), [#6782](https://github.com/DanielH2018/server/pull/6782), [#6788](https://github.com/DanielH2018/server/pull/6788), [#6806](https://github.com/DanielH2018/server/pull/6806), [#6856](https://github.com/DanielH2018/server/pull/6856), [#6871](https://github.com/DanielH2018/server/pull/6871), [#7222](https://github.com/DanielH2018/server/pull/7222), [#7524](https://github.com/DanielH2018/server/pull/7524), [#7642](https://github.com/DanielH2018/server/pull/7642), [#7756](https://github.com/DanielH2018/server/pull/7756). Which numbered steps are complete is not recorded. Exit observations 3, 4 and 5 do
-not hold yet: *Exit readings, 2026-11-12* records all seven.
+Status: IN PROGRESS. Partial landings through 2026-11-01, named by PR: [#6081](https://github.com/DanielH2018/server/pull/6081), [#6087](https://github.com/DanielH2018/server/pull/6087), [#6084](https://github.com/DanielH2018/server/pull/6084), [#6138](https://github.com/DanielH2018/server/pull/6138), [#6169](https://github.com/DanielH2018/server/pull/6169), [#6190](https://github.com/DanielH2018/server/pull/6190), [#6201](https://github.com/DanielH2018/server/pull/6201), [#6224](https://github.com/DanielH2018/server/pull/6224), [#6242](https://github.com/DanielH2018/server/pull/6242), [#6248](https://github.com/DanielH2018/server/pull/6248), [#6264](https://github.com/DanielH2018/server/pull/6264), [#6230](https://github.com/DanielH2018/server/pull/6230), [#6339](https://github.com/DanielH2018/server/pull/6339), [#6593](https://github.com/DanielH2018/server/pull/6593), [#6600](https://github.com/DanielH2018/server/pull/6600), [#6637](https://github.com/DanielH2018/server/pull/6637), [#6683](https://github.com/DanielH2018/server/pull/6683), [#6701](https://github.com/DanielH2018/server/pull/6701), [#6717](https://github.com/DanielH2018/server/pull/6717), [#6719](https://github.com/DanielH2018/server/pull/6719), [#6782](https://github.com/DanielH2018/server/pull/6782), [#6788](https://github.com/DanielH2018/server/pull/6788), [#6806](https://github.com/DanielH2018/server/pull/6806), [#6856](https://github.com/DanielH2018/server/pull/6856), [#6871](https://github.com/DanielH2018/server/pull/6871), [#7222](https://github.com/DanielH2018/server/pull/7222), [#7524](https://github.com/DanielH2018/server/pull/7524), [#7642](https://github.com/DanielH2018/server/pull/7642), [#7756](https://github.com/DanielH2018/server/pull/7756). Which numbered steps are complete is not recorded. Exit observation 3 does not hold
+yet: *Exit readings, 2026-11-12* records all seven.
 Depends on: H2, H5, H6, R4, per PR (the *Waits on* column of *Steps, as PRs*)
 Unblocks: none (it closes Area 3)
 
@@ -108,8 +108,10 @@ The exit criterion is seven observations:
 
 ## Exit readings, 2026-11-12
 
-Taken at `34ab03eed` (#8114). Three observations do not hold yet, so the status stays IN
-PROGRESS. Each reading uses the commands its observation names.
+Taken at `34ab03eed` (#8114). Exits 4 and 5 were re-read at `73e730d65` the same day, after
+the operator's ruling on exit 4 and the operator's cleanup for exit 5. Observation 3 does not
+hold yet, so the status stays IN PROGRESS. Each reading uses the commands its observation
+names.
 
 1. **Holds.** `git ls-files ':(glob)ansible/*.yml' ':(glob)ansible/*.sh'` prints only
    `ansible/secret_rotation.yml`. The second and third listings print nothing, and
@@ -124,7 +126,7 @@ PROGRESS. Each reading uses the commands its observation names.
    drill green on 2026-11-07, run `20261107T213915Z`, from a hand `systemctl start`. That
    run read `k3s version v1.37.2+k3s1` and `fence=hold`. The agent's installer env file,
    which the drill reads the join token from, is present, owned by root and mode `0600`.
-4. **The host half holds. The Flux half was not observed as worded**
+4. **Holds.** The Flux half holds by the operator's ruling of 2026-11-12
    ([#8136](https://github.com/DanielH2018/server/issues/8136)).
     - *The host half.* `etcd-restore-drill-vm --rehearse-bootstrap`, run
       `20261112T165424Z` at `2be52fcf6`, an ancestor of `origin/master`, logged
@@ -141,18 +143,23 @@ PROGRESS. Each reading uses the commands its observation names.
       so the reading as worded can no longer be taken. The workflow ran green on
       2026-11-12 at a head after #7700 merged
       ([run 43259067232](https://github.com/DanielH2018/server/actions/runs/43259067232)).
-      Whether that run counts is the operator's ruling.
-5. **Fails**
-   ([#8128](https://github.com/DanielH2018/server/issues/8128)).
-   On daniel-box, `/opt/gitops-deploy` is present, and so are `/etc/gitops-deploy` and
-   `/var/lib/gitops-deploy`. `hosts/daniel-box/package.yml` leaves removing them to the
-   operator. The other readings hold:
+      The operator ruled on 2026-11-12 that a green `bootstrap-drill.yml` run at or after
+      #7700's merge counts as the Flux-half reading. Run 43259067232 is that reading.
+5. **Holds**, re-read at `73e730d65`
+   ([#8128](https://github.com/DanielH2018/server/issues/8128)). The first reading at
+   `34ab03eed` failed: `/opt/gitops-deploy`, `/etc/gitops-deploy` and
+   `/var/lib/gitops-deploy` were present. `hosts/daniel-box/package.yml` leaves removing
+   them to the operator, who removed all three on 2026-11-12. The re-read:
+    - `ls -d /opt/gitops-deploy /etc/gitops-deploy /var/lib/gitops-deploy` reports each as
+      `No such file or directory`.
     - `systemctl list-unit-files 'gitops-deploy*'` lists 0 unit files.
     - `homelab-checkout-sync.timer` is active.
-    - The primary checkout's `HEAD` equals `origin/master`.
-    - No tracked module imports a deployer module. The only matches are two code samples
-      in `docs/target-architecture/render/r4-delete-k8s-ansible-path.md`.
-    - `uv run pytest --collect-only` reports no error: 20893/20915 tests collected.
+    - The primary checkout's `HEAD` equals `origin/master`, `73e730d65`.
+    - No tracked module imports a deployer module. The only matches are code samples in
+      `docs/` and string fixtures in two test files,
+      `ansible/tests/repo/_deployer_import_row.py` and
+      `scripts/deploy_tools/tests/test_promote_forge_boundary.py`.
+    - `uv run pytest --collect-only` reports no error: 20840/20862 tests collected.
 6. **Holds.**
    `docs/adr/0029-each-host-is-configured-by-its-own-package-not-ansible.md` reads
    `status: Accepted`.

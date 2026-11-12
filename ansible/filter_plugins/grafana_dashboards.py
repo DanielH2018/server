@@ -18,7 +18,7 @@ it. An injected annotation must not become something a UI export commits back as
 the injection is idempotent by name as well: a board that already declares an annotation with
 a given name keeps it exactly as it is.
 
-No Ansible import at load time, so the tests call the same function the playbook runs.
+No Ansible import at load time, so the tests call the same function the renderer runs.
 `FilterModule` registers it through `_as_filter`, which re-raises a `ValueError` as
 `FilterError("grafana_deploy_annotated: ...")` and fails the render task before any
 apply.

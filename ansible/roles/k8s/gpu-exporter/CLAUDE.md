@@ -15,7 +15,7 @@ secret, no volume. See repo-root `CLAUDE.md` for shared conventions.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5.5, the first Wave A PR). Its `containers_list` entry
-  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
 - **Where the task went.** Flux applies the same render, and the

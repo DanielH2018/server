@@ -5,7 +5,7 @@ run's budget, turns or wall clock, run the unit as another user, or arm the poll
 package renderer puts the inventory above a component's defaults, so a component default would pin
 nothing. The `claude-triage` template prefix is on the lander's approval list (operator decision,
 2026-10-15). Each value is a literal. ansible/tests/setup/test_claude_triage.py holds them equal to
-the role defaults and to tasks/triage.yml's block vars.
+the component's defaults/main.yml.
 -#}
 {%- set agent_user = "claude" -%}
 {%- set agent_home = "/var/lib/claude" -%}

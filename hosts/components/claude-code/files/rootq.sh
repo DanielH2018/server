@@ -1,6 +1,6 @@
 #!/bin/sh
 # /usr/local/bin/rootq: read root-only host state through homelab-rootq's one sudoers line
-# (issue #6323). Installed by tasks/rootq.yml.
+# (issue #6323). Shipped by the homelab host package (hosts/components/claude-code).
 #
 # Usage: rootq stat PATH | sha256 PATH | matches PATH REPO_FILE|HEX   (tier 1, no content)
 #        rootq nft | ufw | sshd | crontab | cat PATH                  (tier 2, redacted)
@@ -9,9 +9,9 @@
 # `matches` is the exception: this shim hashes REPO_FILE as the caller and passes only the
 # hash, so root never opens a caller-named file. REPO_FILE must be relative, hold no `..`
 # and resolve inside the checkout around the working directory. A 64-hex SHA-256 in its place
-# goes to root as it is: `probe.py applied` asks that way on a host with no checkout, and any
-# hash it could pass, a file in a checkout could produce (#6357). sudo is named by path and
-# stdin is /dev/null, so `sudo -n` never reads a password. HOMELAB_ROOTQ_SUDO is a test seam:
+# goes to root as it is, for a caller on a host with no checkout. Any hash such a caller could
+# pass, a file in a checkout could produce (#6357). sudo is named by path and stdin is
+# /dev/null, so `sudo -n` never reads a password. HOMELAB_ROOTQ_SUDO is a test seam:
 # this shim runs as the caller, so naming another program gains nothing.
 
 sudo=${HOMELAB_ROOTQ_SUDO:-/usr/bin/sudo}

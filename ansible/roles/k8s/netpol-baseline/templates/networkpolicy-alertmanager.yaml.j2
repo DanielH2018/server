@@ -41,7 +41,7 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# `| bool`, matching the `when:` in tasks/main.yml, for the string trap
+{# `| bool`, matching `netpol_baseline_probe_active` in defaults/main.yml, for the string trap
    networkpolicy-prometheus.yaml.j2 explains in full. #}
 {% if netpol_baseline_obs_enforced | bool %}
     - from:

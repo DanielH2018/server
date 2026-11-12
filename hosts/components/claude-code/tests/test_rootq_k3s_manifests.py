@@ -59,7 +59,7 @@ def test_a_listed_k3s_manifest_refuses_every_verb_but_stat(capsys, argv):
 
 
 # The operator's #7007 ruling: the two mirror GC Jobs hold no secret, so they leave DENY by
-# exact name and `probe.py applied` can ask `matches` of them.
+# exact name and a caller can ask `matches` of them.
 EXEMPT = [
     f"{MANIFESTS}/registry-jobs/ghcr-mirror-gc-job.yaml",
     f"{MANIFESTS}/registry-jobs/dockerhub-mirror-gc-job.yaml",
@@ -86,8 +86,8 @@ def test_the_exemption_covers_the_two_exact_paths_and_not_their_tree() -> None:
     assert rootq.denied(EXEMPT[0] + ".bak")
 
 
-# `deny=yes` is what host_reader reads as a credential file, which stops `probe.py applied`
-# asking `matches`; an exempt path's stat line must carry size and mtime instead.
+# `deny=yes` marks a credential file, which a caller must not ask `matches` of; an exempt
+# path's stat line must carry size and mtime instead.
 @pytest.mark.parametrize("live", EXEMPT)
 def test_stat_of_an_exempt_gc_job_prints_size_and_no_deny_marker(tmp_path, live):
     (tmp_path / "job.yaml").write_text("kind: Job\n")

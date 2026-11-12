@@ -1,6 +1,6 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-12 19:31 UTC
+generated_at: 2026-11-12 19:32 UTC
 generated_sha: 73e730d65
 ---
 
@@ -12,7 +12,7 @@ generated_sha: 73e730d65
 
 # Decisions
 
-775 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
+773 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -902,7 +902,6 @@ generated_sha: 73e730d65
 | a changed guard may RAISE an entry, not only add one. patches that were always there in files that already have a line, which is what the string-target fix hit: test_session_health.py went 33 -> 36 and no exemption covered it. The cost is that `raised_entries` serves both ratchets, so a branch editing _ratchet.py may also raise a module-length entry; the bound is that the trigger is narrow (this file, its test module, or _helpers.is_test_file), the guard diff is in the same PR a reviewer reads, and a file the branch edited gets no exemption at all. A rewording alone would wave through any growth, so the restated reason has to name the number it approves (#4301 review). | `ansible/tests/_ratchet.py` | 2026-09-06 |
 | an entry has to MATCH its file, not merely bound it. and the stance this reversed, are in this module's docstring. | `ansible/tests/_ratchet.py` | 2026-09-05 |
 | the string form counts, resolved against `first_party` rather than `bound`. is the object form's equal at runtime, and counting only the object form taught authors which spelling the guard could not see. The rationale and the incident are in this module's docstring. | `ansible/tests/_ratchet_patches.py` | 2026-10-10 |
-| no `archive` exclusion. `archive` part, written for `roles/containers/archive/`. That tree was deleted in 8d825a872, and a role directory is a role whatever it is named, so the filter matched nothing and only let two guards disagree with the rest about the same question. | `ansible/tests/_role_census.py` | 2026-10-09 |
 | keep each module's hits, not its tree. from 11.7s to 8.4s but held 618 MiB per process (measured 2026-10-29, 1624 modules), and dropping the trees did not lower RSS: pymalloc keeps the freed arena pages resident (#6465). An LRU of trees never hits, because each row sweeps the census in the same order. The hits are a few strings per module, and PR #6464 records the measurements. | `ansible/tests/_row_table.py` | 2026-10-29 |
 | ` rule in | `ansible/tests/_setup_render.py` | 2026-10-02 |
 | ` rule in `lib/render_guard.py`), so a | `ansible/tests/_shell_render.py` | 2026-10-02 |
@@ -913,7 +912,6 @@ generated_sha: 73e730d65
 | ` marker at the wrapper has the reasoning. | `ansible/tests/leakguard.py` | 2026-10-29 |
 | the wrapper shims a hand-built PATH per binary, never by prepending the whole stub directory. That would put every shim in FRONT of the test's own stub directory, so a test's stub `curl` would lose to the shim, and a test that pins `/usr/bin:/bin` to hide a binary would find a shim instead. `shim_hand_built_path` shims only a name whose first match on the child's PATH is already the real binary, so neither case changes (#6418). It runs only while a non-exempt test owns the process, as the PATH prefix in `pytest_runtest_setup` does. `shim_absolute_program` follows the same rule for a child started by absolute path: only a program in a real PATH directory is swapped (#6463). | `ansible/tests/leakguard.py` | 2026-10-29 |
 | both renders leave `--durations`, on purpose. | `ansible/tests/render_share.py` | 2026-11-12 |
-| exempt by name, because the census exists for the keys whose value a flip changes, and a flip of these changes a stance and no host-visible state. A role's render metadata is the same convention: it decides what the renderer writes, and no host file reads its value. | `ansible/tests/repo/_flux_born_keys_row.py` | 2026-10-22 |
 | the cap prompts a decision; it does not force a split (#3661, operator ruling 2026-10-09). Split a module over the cap when each piece reads alone. When every split would leave a piece conjoined with its parent, so that it calls methods only the parent defines or copies a literal it may not import, list the module with a `conjoined:` reason instead. The reason has to be on the entry's own line. A conjoined entry rises only in a diff that rewrites its reason to name the new max, so growth past it restates the decision. Why: such a split adds an interface and hides nothing, and each one made here added a module, often a copied literal, and a test comparing the copies. What is given up is that every long module awaits a split; what is kept is that every long module states why it is long. docs/python-code-organization.md has the long form. | `ansible/tests/repo/module_length_allowlist.txt` | 2026-10-10 |
 | ` markers must reference each other, in both directions. | `ansible/tests/repo/test_adr_links.py` | 2026-08-24 |
 | ` markers sit at the lines they govern, and | `ansible/tests/repo/test_adr_links.py` | 2026-10-01 |

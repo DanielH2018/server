@@ -34,7 +34,7 @@ A job needing auth, relabeling or pod discovery stays hand-written in the templa
 key raises rather than being ignored, so a `basic_auth:` written here fails the render instead of
 rendering a job without it.
 
-No Ansible import, so the render harnesses register the same function the playbook runs.
+No Ansible import, so the render harnesses register the same function the renderer runs.
 `FilterModule` re-raises a function's `ValueError` as `FilterError` prefixed with the
 filter's name.
 """

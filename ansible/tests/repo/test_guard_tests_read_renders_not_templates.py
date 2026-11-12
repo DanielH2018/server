@@ -102,6 +102,10 @@ TEMPLATE_SOURCE_READERS = {
         "the account must render with an int `mullvad_account`, as SOPS types it, and "
         "`_k8s_render`'s stubs are strings; the to_json red case also mutates the source"
     ),
+    "services/test_storage_rule_literals.py": (
+        "which ROLES write `snapshotMaxSize` in a verify Job — the census keys on the field "
+        "NAME, which a render does not change, across every role's verify templates"
+    ),
     "services/test_smtp_wiring.py": (
         "a `# DECIDED:` comment in authelia's config-secret template, which no render carries"
     ),

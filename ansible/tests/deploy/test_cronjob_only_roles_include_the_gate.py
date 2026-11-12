@@ -14,7 +14,7 @@ from functools import cache
 
 from _autodeploy import _K8S_ROLES
 from _role_census import role_dirs
-from _autodeploy_batch import _batch_gated_names
+from _autodeploy_batch import flux_gated_names
 from diagnostics.probe_lib import health
 from diagnostics.probe_lib.health_cronjob import declared_schedule_gated
 from diagnostics.probe_lib.health_render import rendered_docs
@@ -70,16 +70,16 @@ def test_census_matches_the_known_cronjob_only_roles():
 def test_every_cronjob_only_role_is_gated_at_deploy_time():
     """Each CronJob-only role names every CronJob its own manifests declare in
     `flux_cronjob_gates`, and Flux runs the gate Job in `<tag>-verify`
-    (`_autodeploy_batch.flux_gated_names`). A role-local `job/<name>` wait also counts."""
+    (`_autodeploy_batch.flux_gated_names`)."""
     for role, targets in _cronjob_only_census().items():
         if role in UNGATED_BY_DESIGN:
             continue
-        gated = _batch_gated_names(_K8S_ROLES / role)
+        gated = flux_gated_names(_K8S_ROLES / role)
         declared = {name for _, name in targets}
         missing = declared - gated
         assert not missing, (
-            f"{role} declares CronJob(s) {sorted(missing)} with no flux_cronjob_gates entry "
-            "and no job/<name> wait in tasks/main.yml. A CronJob a gate "
+            f"{role} declares CronJob(s) {sorted(missing)} with no flux_cronjob_gates entry. "
+            "A CronJob a gate "
             "Job cannot copy goes in UNGATED_BY_DESIGN and carries `homelab/gate: schedule`"
         )
 
@@ -98,7 +98,7 @@ def test_every_ungated_exemption_is_a_cronjob_only_role_with_no_gate():
         _stale_exemptions(
             UNGATED_BY_DESIGN,
             _cronjob_only_census(),
-            lambda role: _batch_gated_names(_K8S_ROLES / role),
+            lambda role: flux_gated_names(_K8S_ROLES / role),
         )
         == []
     )

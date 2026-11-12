@@ -72,19 +72,6 @@ BARE_ROLE_WALK = re.compile(
     r"|\b\w*roles\w*\.iterdir\(\)"
 )
 
-# A role's task files read inline: a plane-wide `*/tasks/` glob, one role's `tasks` directory
-# globbed, or a name bound to that directory (`tasks_dir`, `TASKS`) and globbed on a later
-# line. `_role_census.task_files`/`role_task_files` answer that question, and the inline copies
-# disagreed on depth and on a retired role's shell (#3770). A `main.yml`-only glob asks which
-# roles have an entry point, a different question, so it stays clean. A binding whose name
-# does not say `tasks` (`d = role / "tasks"`) still escapes; no walk on the tree is spelt so.
-INLINE_TASK_WALK = re.compile(
-    r'glob\("(?:\*/){1,2}tasks/(?!main\.yml")'
-    r'|glob\("tasks/(?!main\.yml")'
-    r'|"tasks"\s*\)\s*\.r?glob\('
-    r"|\b\w*(?i:tasks)\w*\.r?glob\("
-)
-
 # Every module whose role census goes through `role_dirs`, pinned by name so a rewrite that
 # drops the call fails even when it also drops the spelling BARE_ROLE_WALK reads.
 ROLE_DIRS_CALLERS = frozenset(
@@ -164,45 +151,6 @@ ROWS = (
             "ansible/tests/deploy/_autodeploy.py": (
                 "filters with is_leftover_dir inline, the predicate role_dirs uses"
             ),
-            "ansible/tests/_role_census.py": "is role_dirs, the walk every other guard calls",
-        },
-    ),
-    Census(
-        name="role-task-walks-use-task-files",
-        reason=(
-            "Inline `tasks` globs read the role task files to three different depths, and some "
-            "skipped a retired role's `__pycache__/` shell while others read it. A top-level "
-            "glob passes a nested `include_tasks: sub/x.yml` offender (#3770). Use "
-            "`_role_census.task_files(plane)` or `role_task_files(role)`."
-        ),
-        files=lambda: tracked("ansible/tests/*.py"),
-        offence=lines_matching(INLINE_TASK_WALK),
-        red=(
-            Subject("a.py", 'for f in sorted((role / "tasks").glob("*.yml")):'),
-            Subject("b.py", 'for f in (role_dir / "tasks").rglob("*.yml"):'),
-            Subject("c.py", 'for f in sorted(roles_dir.glob("*/tasks/*.yml")):'),
-            Subject("d.py", 'for f in sorted(ROLES.glob("*/*/tasks/**/*.yml")):'),
-            Subject(
-                "e.py", 'tasks_dir = role / "tasks"\nfor f in tasks_dir.glob("*.yml"):'
-            ),
-            Subject("f.py", 'for f in sorted(TASKS.glob("*.yml")):'),
-            Subject("g.py", 'for f in role.glob("tasks/*.yml"):'),
-            Subject("h.py", 'for f in (role / "tasks" ).rglob("*.yml"):'),
-        ),
-        green=(
-            Subject("a.py", "for f in role_task_files(role):"),
-            Subject("b.py", 'for f in sorted(K8S_ROLES.glob("*/tasks/main.yml")):'),
-            Subject("c.py", 'for f in sorted(ROLES.glob("*/*/tasks/main.yml")):'),
-        ),
-        min_matches=100,
-        must_find=frozenset(
-            {
-                "ansible/tests/_role_census.py",
-            }
-        ),
-        allow={
-            SELF: "the red fixtures above hold the offending spelling as text",
-            "ansible/tests/_role_census.py": "is role_task_files, the walk every guard calls",
         },
     ),
     Census(

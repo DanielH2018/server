@@ -18,7 +18,7 @@ Prometheus `node_exporter` as a DaemonSet, added at the Phase F drain so daniel-
 - **Mounts:** `/proc`, `/sys`, `/` (as `/rootfs`), all **read-only** `hostPath` — no write
   access despite `hostNetwork`/`hostPID`.
 - **Flux applies it, not Ansible** (D5.7, the third Wave A PR). Its `containers_list` entry
-  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
 - **Where the task went.** Its `manifests_rollout:
