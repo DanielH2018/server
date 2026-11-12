@@ -1,9 +1,10 @@
 ### PR B-10
 
-PR B-10, triage's poller drops its Kuma source: [#6997](https://github.com/DanielH2018/server/pull/6997), drafted, not merged. It merges only after A6's
-Cutover-1b is live, so that every Kuma pager has an `ALERTS` rule and the `ALERTS` path sees each
-fall the Kuma path saw. [#6876](https://github.com/DanielH2018/server/pull/6876) named the poller
-as a Kuma consumer.
+PR B-10, triage's poller drops its Kuma source:
+[#6997](https://github.com/DanielH2018/server/pull/6997). It merged on 2026-11-02 at `589c932c8`.
+It was held until A6's Cutover-1b was live, so that every Kuma pager had an `ALERTS` rule and the
+`ALERTS` path saw each fall the Kuma path saw. [#6876](https://github.com/DanielH2018/server/pull/6876)
+named the poller as a Kuma consumer.
 
 The PR removes `KUMA_QUERY`, `KUMA_UP_QUERY`, `kuma_up_keys`, the `kuma` arm of `unknown_sources`
 and of `down_keys`, and the `kuma_up` argument of `step` from
@@ -18,5 +19,6 @@ before the change put the file in `homelab-daniel-box` and not in `homelab-danie
 **Order** and C-1a's precondition once said "both hosts". They now say daniel-box, because
 daniel-server has no poller to read the scrape job that C-1a deletes.
 
-C-1a's precondition stays open until `land.sh` reports daniel-box applied and the journal of
-`homelab-claude-triage-poll` on daniel-box shows a poll with no `uptime-kuma` query.
+C-1a's precondition asked for daniel-box applied and a journal of `homelab-claude-triage-poll`
+on daniel-box with no `uptime-kuma` query. It held before C-1a merged: *PR C-1a and C-1b*
+records 667 `query=` lines after 2026-11-03 00:50:25Z and no `uptime-kuma` line.
