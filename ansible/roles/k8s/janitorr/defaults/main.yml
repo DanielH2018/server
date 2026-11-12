@@ -49,7 +49,7 @@ janitorr_k8s_startup_grace_seconds: 600
 
 # The janitorr-health CronJob's schedule. Until H2.5c
 # (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 14) it was a daniel-box
-# host cron; tasks/main.yml keeps the absent arms that remove it. */10 like the other
+# host cron. */10 like the other
 # cluster-side health readers. The `JanitorrHealthNotReporting` rule reads the CronJob's last
 # successful time. The host cron's UTC minute field, unchanged.
 janitorr_k8s_health_schedule: "*/10 * * * *"

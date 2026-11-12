@@ -22,7 +22,7 @@ directory, so the library mount is an `emptyDir`.
 - **Parked at `navidrome_k8s_replicas: 0`.** `k8s_autodeploy: false` stops Renovate
   automerging the image bump, because a bump would never reach a pod.
 - **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is
-  `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged
+  `platform: k8s`, so nothing applies it by hand, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. Both dependencies,
   authelia and traefik, stay
@@ -56,4 +56,4 @@ directory, so the library mount is an `emptyDir`.
 Set `navidrome_k8s_replicas: 1`, point `navidrome_k8s_music_dir` at a real library on the
 media volume, flip `k8s_autodeploy: true`, and delete the entry's `probe: false` so the
 `blackbox-ingress` job derives its ingress probe (one added while parked would fire forever). The route comes back with the replica count — no separate step. Merge the change;
-`promote` applies it, because `deploy.sh --tags navidrome` exits 5 for a flux-owned tag.
+`promote` applies it, and nothing applies it by hand.

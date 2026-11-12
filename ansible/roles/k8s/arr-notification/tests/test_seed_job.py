@@ -104,7 +104,7 @@ def test_the_flipped_seed_job_passes_every_job_census_row(flipped, app):
 
 @pytest.mark.parametrize("app", APPS)
 def test_the_job_declares_what_the_ansible_seed_declares(flipped, app):
-    """The non-secret inputs match what `tasks/main.yml` passes for the same app."""
+    """The non-secret inputs match what the role's defaults declare for the same app."""
     env = {e["name"]: e.get("value") for e in _container(flipped[app])["env"]}
     username = jinja2.Template(DEFAULTS["arr_notification_username"]).render(
         arr_notification_app=app

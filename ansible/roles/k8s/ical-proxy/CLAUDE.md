@@ -20,7 +20,7 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
 - **Host:** daniel-box (k8s), since 2026-08-10 — slice-7 Phase C
 - **The route guards by ClientIP** so only Homepage reads the unauthenticated private feeds
 - **Flux applies it, not Ansible** (D5.14, the first Wave C PR). Its `containers_list` entry
-  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. traefik
   stays Ansible-owned, so the
   Kustomization records it in its `homelab/ansible-owned-deps` annotation, not in `dependsOn`.

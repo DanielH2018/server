@@ -137,14 +137,15 @@ flux_job_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362
 
 # The OCIRepository, the root Kustomization, the Providers and the Alerts are kinds whose
 # CRDs components.yaml installs, so one directory apply would refuse them on a cluster
-# that lacks the CRDs. The tasks at the end of tasks/main.yml wait for the CRDs, then apply them.
+# that lacks the CRDs. The renderer writes them into cluster/flux-deferred/, whose Kustomization
+# depends on `flux`, so they apply after the CRDs.
 manifests_deferred_files:
   - sync.yaml
 
 manifests_deferred_dir_name: flux-sync
 
 # The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has three, in
-# another namespace. Skip its wait, and tasks/main.yml waits instead.
+# another namespace. Skip its wait; the `flux` Kustomization's `wait` checks all three.
 manifests_rollout: ''
 
 # ...but tell the release record which workloads this role owns, so the shared role

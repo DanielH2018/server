@@ -47,10 +47,9 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# `| bool`, matching the `when:` in tasks/main.yml — same trap netpol_baseline_obs_enforced
-   already guards against for the namespace baseline: a STRING override like
-   `-e netpol_baseline_obs_enforced=false` is truthy to bare Jinja and False to Ansible's
-   `when:`, so without `| bool` the two sides disagree and this policy would fence prometheus
+{# `| bool`, matching `netpol_baseline_probe_active` in defaults/main.yml — same trap netpol_baseline_obs_enforced
+   already guards against for the namespace baseline: a STRING value like `'false'` is
+   truthy to bare Jinja and False to that list, which picks the verify Job's legs, so without `| bool` the two sides disagree and this policy would fence prometheus
    with no probe to catch it. #}
 {% if netpol_baseline_obs_enforced | bool %}
     - from:

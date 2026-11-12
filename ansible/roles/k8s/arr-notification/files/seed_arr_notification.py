@@ -23,22 +23,21 @@ than building one from scratch, so those keep whatever they hold; the create pat
 from `GET /api/v3/notification/schema`, which is where the app's own defaults live.
 
 WHERE THE SECRETS COME FROM. The process environment — `ARR_API_KEY` and
-`ARR_DISCORD_WEBHOOK_URL`, set by `tasks/main.yml` under `no_log`, or by the seed Job in
-sonarr's and radarr's `templates/verify/` from two Secrets. Never argv, and nothing
-here prints a field value: the output is the decision (created / updated / no-op) and the
-`SEED_CHANGED: <n>` marker `changed_when` reads. `probe.py arr <app> notification` prints the
+`ARR_DISCORD_WEBHOOK_URL`, set by the seed Job in sonarr's and radarr's `templates/verify/`
+from two Secrets, or by the operator's shell for a hand run (the role's `CLAUDE.md`,
+*Verifying it by hand*). Never argv, and nothing here prints a field value: the output is
+the decision (created / updated / no-op) and the `SEED_CHANGED: <n>` marker. `probe.py arr <app> notification` prints the
 webhook URL in full, which is why verifying this by hand needs a filter and this script does
 not need one.
 
 ONE TRANSPORT, TWO CALLERS. Every request goes through `flux_job_connect.open_url`, the
 helper the Job census requires of a script Flux runs, so the script imports only modules that
-census admits. The Job's ConfigMap carries the helper beside the script. `tasks/main.yml`
-runs this file on the controller with `PYTHONPATH` at the directory where the helper lives,
-rather than keeping a second transport here. A refused connect therefore
-retries for 60 seconds on both paths.
+census admits. The Job's ConfigMap carries the helper beside the script. A hand run sets
+`PYTHONPATH` at the directory where the helper lives, rather than this file keeping a second
+transport. A refused connect therefore retries for 60 seconds on both paths.
 
-RUN IT: `tasks/main.yml` invokes it with no arguments to seed, and with `--test` to make the
-app POST a real Discord message through the resolved spec. `ARR_PORT` overrides the app's
+RUN IT: the seed Job invokes it with no arguments to seed. A hand run passes `--test` to make
+the app POST a real Discord message through the resolved spec. `ARR_PORT` overrides the app's
 port, for a fixture server. Nothing runs at import, so the tests exercise the decision without
 a cluster.
 """
@@ -59,8 +58,8 @@ API_VERSION = "v3"
 
 IMPLEMENTATION = "Discord"
 
-# The last line of stdout. tasks/main.yml turns the count into Ansible's changed flag, so a
-# no-op deploy has to be able to say zero rather than print nothing.
+# The last line of stdout: the count of rows written, so a no-op run says zero rather than
+# printing nothing.
 CHANGED_PREFIX = "SEED_CHANGED:"
 
 HTTP_TIMEOUT = 30
@@ -206,8 +205,8 @@ def request(base_url: str, api_key: str, path: str, method: str = "GET", body=No
 def env_or_fail(key: str) -> str:
     """A required environment value.
 
-    Absent, not empty: `tasks/main.yml` sets every key unconditionally, so a missing one means
-    the task was edited, and reporting "nothing to configure" would leave the row unwritten.
+    Absent, not empty: the seed Job sets every key unconditionally, so a missing one means
+    the Job was edited, and reporting "nothing to configure" would leave the row unwritten.
     """
     if key not in os.environ:
         raise SeedError(f"{key} is not in this process's environment")

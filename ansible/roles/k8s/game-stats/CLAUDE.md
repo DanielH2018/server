@@ -21,7 +21,7 @@ claims are unchanged.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
-  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Both
   Deployments are `Recreate` over
   an RWO claim, so a roll stops the old pod before the new one starts and the exporter's

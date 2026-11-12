@@ -18,7 +18,7 @@ the prune deleting every live object that file used to declare.
 Only `metadata.labels` changes. A Deployment's `spec.selector` and pod-template labels stay as
 rendered, so labelling a workload rolls no pods and touches no Service selector.
 
-No Ansible import at load time, so the tests call the same function the playbook runs.
+No Ansible import at load time, so the tests call the same function the renderer runs.
 `FilterModule` registers it through `_as_filter`, which re-raises a `ValueError` as
 `FilterError("homelab_role_label: ...")` and fails the render task before any apply
 (#4505).

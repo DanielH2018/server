@@ -16,7 +16,7 @@ repo-root `CLAUDE.md` for shared conventions.
   `database.sqlite`, but its Laravel `APP_KEY` lives in SOPS so a rebuilt instance still
   works — losing the volume loses history, not function.
 - **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry
-  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. Both dependencies,
   authelia and traefik, stay

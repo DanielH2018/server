@@ -24,7 +24,7 @@ when both paths share one mount.
   absolute root-folder paths. Also mounts `media-data` (`radarr_k8s_media_claim`), shared RWX.
 - **`radarr-striptracks`** Docker mod strips unwanted audio/subtitle tracks on import.
 - **Flux applies it, not Ansible** (D5.20, a Wave D PR with sonarr and mosquitto). Its
-  `containers_list` entry is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. Its image-bump PRs therefore draw no `land-wait` and no `probe.py
   health` run. authelia, media-volume and traefik stay Ansible-owned, so the Kustomization records
   them in

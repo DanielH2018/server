@@ -4,7 +4,7 @@ The shadow render compares `homelab-render` with the Ansible manifests role for 
 inputs, and the inputs it can share without decrypting anything are stub values: every
 secret key `K` renders as `stub-` plus `K` with underscores turned to hyphens. That shape is a
 valid DNS label, so a stubbed host name still passes `kubectl apply --dry-run=server`. This
-module is the one definition of the form, which R1's renderer and its playbook checks are
+module is the one definition of the form, which the renderer and its render guards are
 built to share, so neither restates it. `docs/homelab-render.md` is the operator's page.
 
 Ansible loads every module under `filter_plugins/` in every play, so this one imports the

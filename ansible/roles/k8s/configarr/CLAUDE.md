@@ -22,7 +22,7 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5, Wave D). Its `containers_list` entry is
-  `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged change
+  `platform: k8s`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Host: daniel-box (k8s CronJob).** This role renders `templates/config/config.yml.j2` and
   stages `files/configarr_lib/configarr_status.py` into a ConfigMap. Edit the config HERE.

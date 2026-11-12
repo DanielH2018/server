@@ -67,7 +67,7 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
   other tag, so a revision whose workload change fails its `wait` never reaches
   `netpol-baseline` or its verify Job. The flip PR repeats D4's drill on this edge.
 - **Flux applies it, not Ansible** (D5, Wave D's last flip). The `containers_list` entry
-  is `platform: k8s`, so `deploy.sh`, the play and the GitOps deployer skip it, and a
+  is `platform: k8s`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
   `defaults/main.yml` holds the deferred file list.
 - **`templates/verify/` is the probe's Flux form.** The Job runs

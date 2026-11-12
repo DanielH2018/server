@@ -23,7 +23,7 @@ finding and why the prefs plane is shaped this way.
   shared claim — mounted here, owned elsewhere.
 
 - **Flux applies it, not Ansible** (D5, Wave D). Its `containers_list` entry is
-  `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged change
+  `platform: k8s`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy: false`
   still stops Renovate's
   automerge of a pin bump.
