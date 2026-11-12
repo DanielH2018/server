@@ -853,8 +853,7 @@ proof of health.
 
 The dirty checkout and the park stop every deploy in the fleet. A worktree session cannot
 inspect either, because the isolation guard refuses a git command targeting the shared
-checkout, and `land.sh` exit 4 names the session's own tree. The banner is the only place
-that cause reaches the session that pays for it.
+checkout. The banner is the only place that cause reaches the session that pays for it.
 
 The banner ends with a triage line of whole `probe.py` commands joined by `or`. It names
 `landing` when a deployer line is present, and `targets` and `health <svc>` when a scrape
