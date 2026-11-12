@@ -1,9 +1,9 @@
-"""The packaged branch of the UPS watchdog, rendered the way a host package renders it (H4.3b3).
+"""The UPS watchdog, rendered the way a host package renders it.
 
-Since H4.3c, daniel-server's `nut-secondary` component sets `nut_host_watchdog_packaged` and
-renders its template in host mode, where no secret exists. These tests render the template
-that way for daniel-server directly, so the branch is known to render, to read no secret and to
-be valid shell, whatever the component's file entry does with it.
+The `nut-secondary` component renders its template in host mode, where no secret exists. These
+tests render the template that way for daniel-server directly, so the script is known to
+render, to read no secret and to be valid shell, whatever the component's file entry does with
+it.
 
 Run: uv run pytest hosts/lib/tests/test_nut_secondary_packaged_watchdog.py
 """
@@ -25,9 +25,7 @@ SECRET = "ups_secondary_push_token"
 
 
 def defaults() -> dict:
-    """The component's defaults with the flag set as its `defaults:` map sets it."""
-    own = yaml_fast.safe_load((COMPONENT / "defaults" / "main.yml").read_text())
-    return {**own, "nut_host_watchdog_packaged": True}
+    return yaml_fast.safe_load((COMPONENT / "defaults" / "main.yml").read_text())
 
 
 def render(directory, name: str = WATCHDOG) -> str:
@@ -47,8 +45,7 @@ def test_the_packaged_render_succeeds_with_every_secret_stripped():
     script = render(COMPONENT / "templates")
     body = "\n".join(code_lines(script))
     assert "UPSMON_CONF=/var/lib/homelab-secrets/etc/nut/upsmon.conf" in body
-    # Nothing of the Ansible-era branch survives in code, and since M6 batch B4's Cutover-2
-    # nothing of the Kuma push either: no library, no credential, no call.
+    # No Ansible-era path and no Kuma push: no library, no credential, no call.
     for old in (
         "UPSMON_CONF=/etc/nut/upsmon.conf",
         "kuma-push-lib",
@@ -68,11 +65,7 @@ def test_the_packaged_render_is_valid_shell(tmp_path):
     assert result.returncode == 0, result.stderr
 
 
-def test_a_secret_read_inside_the_packaged_branch_is_flagged(tmp_path):
-    (tmp_path / "leaky.sh.j2").write_text(
-        "{% if nut_host_watchdog_packaged | bool %}\nTOKEN={{ "
-        + SECRET
-        + " }}\n{% endif %}\n"
-    )
+def test_a_secret_read_in_the_watchdog_render_is_flagged(tmp_path):
+    (tmp_path / "leaky.sh.j2").write_text("TOKEN={{ " + SECRET + " }}\n")
     with pytest.raises(RenderError, match=SECRET):
         render(tmp_path, "leaky.sh.j2")

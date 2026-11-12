@@ -49,7 +49,7 @@ nut_k8s_mem_request: 16Mi
 # hosts/components/nut-secondary/templates/host-upsmon.conf.j2 for why the two hosts need no staggering.
 #
 # Order of operations when arming a further host: raise this FIRST, run the console-attended
-# `upsmon -c fsd` drill there, and only then set nut_host_secondary_armed for it.
+# `upsmon -c fsd` drill there, and only then list the nut-secondary component in its host package.
 nut_onbatt_shutdown_delay: 300
 
 image_builder_builds:  # noqa var-naming[no-role-prefix]
