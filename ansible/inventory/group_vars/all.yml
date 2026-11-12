@@ -700,12 +700,11 @@ claude_agent_ssh_key_path: /var/lib/claude/.ssh/peers_ed25519
 # consumed by the hosted Mend app when it opens PRs, a plane no deploy path touches. Blocking the
 # gate on it would park every later image bump behind a dependency-management fault.
 #
-# Four readers outlive the deployer, so the list lives here and not in `gitops_deploy`'s role
-# defaults, which H7.20a deletes: `scripts/deploy_tools/promote.py decide`, the host packages'
-# builder, `homelab-checkout-sync` and `ansible/tests/repo/test_ci_contexts_match_workflows.py`.
-# `decide` reads this file by path, not through Ansible, and refuses anything but a non-empty
-# list of strings, so this key stays a literal list. The deployer's role default is a reference
-# to it until H7.19a, and `scripts/deploy_tools/await_ci.py` names it in a comment.
+# Four readers share the list, so it lives here: `scripts/deploy_tools/promote.py decide`, the
+# host packages' builder, `homelab-checkout-sync` and
+# `ansible/tests/repo/test_ci_contexts_match_workflows.py`. `decide` reads this file by path, not
+# through Ansible, and refuses anything but a non-empty list of strings, so this key stays a
+# literal list. `scripts/deploy_tools/await_ci.py` names it in a comment.
 #
 # A change to this key or to `ci_ancestor_walk_max` reaches daniel-box only through its host
 # package: the builder and checkout-sync components render both into `homelab-daniel-box`, so
@@ -726,13 +725,12 @@ ci_required_contexts:
 # lock is held. A range longer than ten commits behind a red tail is a state for the
 # behind-origin watchdog to page on, not one to keep spending requests on.
 #
-# Worst case, authenticated: ten GETs on one run against 5000/hour per token. ANONYMOUS the walk
-# does not run at all in the deployer: `deploy_phases._newest_green_ancestor` asks
-# `tools.github_authenticated()` first and logs one line saying it skipped. The anonymous limit
-# is 60/hour per source IP, shared with every landing's await_ci.py poll (45 per 900s wait), so
-# a ten-request burst per run would exhaust it and every reader on the host would then read
-# `HTTP Error 403`, which the gate maps to `pending`. 0 (or any value below it) disarms the walk
-# on every host.
+# Worst case: ten GETs on one run against 5000/hour per token. Neither walker reads GitHub
+# anonymously: the builder and `hosts/lib/checkout_sync.py` refuse to run without their
+# `github_token` credential. The anonymous limit is 60/hour per source IP, shared with every
+# landing's await_ci.py poll (45 per 900s wait), so a ten-request burst per run would exhaust it.
+# A value that is not a positive integer stops both readers (reason `ci`); it does not disarm
+# the walk.
 ci_ancestor_walk_max: 10
 
 # Physical location, feeds the homepage weather widget.

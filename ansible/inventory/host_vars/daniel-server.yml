@@ -15,8 +15,7 @@ ssh_config_path: /etc/ssh/sshd_config
 has_igpu: true
 # Dissolves docker-proxy-codeserver and the `codeserver` net from the docker-proxy compose.
 has_code_server: false
-# No engine, so no deployer to run. The gitops watchdog lives on — the cluster bridge
-# watches daniel-box's deployer instead.
+# No Docker engine: this host is a k3s agent node.
 has_docker: false
 
 # Claude Code session host for issue-fanout agents. The Remote Control unit
