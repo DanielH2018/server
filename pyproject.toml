@@ -435,7 +435,7 @@ include = [
 exclude = ["ansible/collections", "site", ".claude/worktrees"]
 
 [tool.ty.rules]
-# unresolved-attribute, invalid-assignment and unsupported-operator are errors since
+# missing-attribute, invalid-assignment and unsupported-operator are errors since
 # 2026-10-08. They were off from 2026-09-02, counted at 32, 10 and 14. While off they grew to 87,
 # 18 and 76, because a rule that is off does not stop new code adding to it. Each of the 181 was
 # fixed at its cause, not exempted. The causes, most common first:
@@ -466,7 +466,8 @@ exclude = ["ansible/collections", "site", ".claude/worktrees"]
 # without making anything safer; each is a place a real type would be better if the shape were
 # ever pinned down.
 invalid-argument-type = "error"
-unresolved-attribute = "error"
+missing-attribute = "error"
+missing-union-attribute = "error"
 invalid-assignment = "error"
 unsupported-operator = "error"
 # Warning by default; an error here. `import urllib` alone then reaching `urllib.error` resolves
@@ -501,13 +502,13 @@ import-not-found = "ignore"
 
 [[tool.ty.overrides]]
 # The vendored karakeep script is byte-pinned (ruff's per-file-ignores above has why), so a fix
-# for its four `unresolved-attribute` diagnostics cannot land here. `__init__` sets
+# for its four `missing-union-attribute` diagnostics cannot land here. `__init__` sets
 # `self.karakeep = None` and a later method assigns the client before any caller reads it, an
 # ordering ty cannot follow. The
 # override covers that one rule in that one file; ty checks every other rule there.
 include = ["ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py"]
 [tool.ty.overrides.rules]
-unresolved-attribute = "ignore"
+missing-union-attribute = "ignore"
 
 [[tool.ty.overrides]]
 # `claude_guard` is a different kind of external import from the block above: not a container
