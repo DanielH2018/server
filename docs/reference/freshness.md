@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-11-12 23:52 UTC
-generated_sha: bc2ba15d5
+generated_at: 2026-11-12 23:54 UTC
+generated_sha: 950ad45a3
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,11 +12,10 @@ generated_sha: bc2ba15d5
 
 # Doc freshness
 
-123 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
+122 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
 
 | Page | Changed | Sources named | Moved since | Most recently moved |
 |---|---|---|---|---|
-| [target-architecture/monitoring/m5-loki-ruler.md](../target-architecture/monitoring/m5-loki-ruler.md) | 2026-11-05 | 64 | 51 | `scripts/diagnostics/probe.py` (2026-11-12) |
 | [target-architecture/render/r2-secret-placeholders.md](../target-architecture/render/r2-secret-placeholders.md) | 2026-11-05 | 73 | 46 | `ansible/vars/secrets.yml` (2026-11-12) |
 | [target-architecture/deploy/d3-secrets.md](../target-architecture/deploy/d3-secrets.md) | 2026-11-05 | 45 | 36 | `scripts/secrets_mgmt/cluster_vars.py` (2026-11-12) |
 | [target-architecture/monitoring/m2-first-bridge-family.md](../target-architecture/monitoring/m2-first-bridge-family.md) | 2026-11-06 | 52 | 34 | `scripts/diagnostics/probe.py` (2026-11-12) |
@@ -109,7 +108,6 @@ generated_sha: bc2ba15d5
 | [renovate-agent-bounds-and-digest.md](../renovate-agent-bounds-and-digest.md) | 2026-11-12 | 28 | 0 | — |
 | [secret-rotation.md](../secret-rotation.md) | 2026-11-12 | 34 | 0 | — |
 | [security-tools.md](../security-tools.md) | 2026-11-12 | 7 | 0 | — |
-| [setup-role-loop-measurement.md](../setup-role-loop-measurement.md) | 2026-11-12 | 0 | 0 | — |
 | [target-architecture/contracts.md](../target-architecture/contracts.md) | 2026-11-12 | 24 | 0 | — |
 | [target-architecture/deploy/d1-flux-installed.md](../target-architecture/deploy/d1-flux-installed.md) | 2026-11-12 | 48 | 0 | — |
 | [target-architecture/deploy/d2-first-leaf.md](../target-architecture/deploy/d2-first-leaf.md) | 2026-11-12 | 56 | 0 | — |
@@ -128,6 +126,7 @@ generated_sha: bc2ba15d5
 | [target-architecture/host/h7-delete-ansible.md](../target-architecture/host/h7-delete-ansible.md) | 2026-11-12 | 189 | 0 | — |
 | [target-architecture/monitoring/alertmanager-ui-and-readers.md](../target-architecture/monitoring/alertmanager-ui-and-readers.md) | 2026-11-12 | 24 | 0 | — |
 | [target-architecture/monitoring/m1-alertmanager.md](../target-architecture/monitoring/m1-alertmanager.md) | 2026-11-12 | 52 | 0 | — |
+| [target-architecture/monitoring/m5-loki-ruler.md](../target-architecture/monitoring/m5-loki-ruler.md) | 2026-11-12 | 64 | 0 | — |
 | [target-architecture/monitoring/m6-retire-kuma.md](../target-architecture/monitoring/m6-retire-kuma.md) | 2026-11-12 | 259 | 0 | — |
 | [target-architecture/render/r1-shadow-render.md](../target-architecture/render/r1-shadow-render.md) | 2026-11-12 | 47 | 0 | — |
 | [target-architecture/render/r3-remove-live-reads.md](../target-architecture/render/r3-remove-live-reads.md) | 2026-11-12 | 47 | 0 | — |

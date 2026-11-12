@@ -57,6 +57,7 @@ recording rather than that nobody looked.
 | `anilist-integration.md` | Phase 1 shipped 2026-08-25; Phase 2 never started (the page's own status line) | `docs/jellyfin-plugins.md`; the ani-sync comment in `ansible/roles/k8s/jellyfin/defaults/main.yml`; `ansible/tests/services/test_anisync_pin_matches_server.py` | the ani-sync comment in `ansible/roles/k8s/jellyfin/defaults/main.yml`, which records why the role installs a watch-status sync rather than a rating bridge |
 | `gitops-deployer.md` (from `docs/gitops-pipeline.md`) | H7.52 retired `gitops-deploy.timer` ([#7828](https://github.com/DanielH2018/server/pull/7828)); the deployer's code stays under `ansible/roles/setup/gitops_deploy/files/` until H7.53 deletes it | `docs/gitops-pipeline.md`, which keeps what runs in the deployer's place; `hosts/components/checkout-sync/` | the `# DECIDED:` markers at the lines they govern in the deployer's code |
 | `gitops-deploy-role.md` (from the `gitops_deploy` role's `CLAUDE.md`) | the same H7.52 retirement; H7.55 deleted the emptied role | `docs/gitops-pipeline.md` | the H7.55 entry in `docs/target-architecture/host/h7-delete-ansible.md` |
+| `setup-role-loop-measurement.md` | the #4265 measurement for #3734, taken 2026-10-10; H7.55 deleted `ansible/initial_setup.yml` and `ansible/deploy.yml`, so the question it answers no longer arises | none — no playbook remains | — |
 
 `docs/superpowers/plans/` and `docs/superpowers/ledgers/` are **not** in this archive: that
 directory is gitignored (`.gitignore:6`, see commit `eadfdd57`) and untracked, so
