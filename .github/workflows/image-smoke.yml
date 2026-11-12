@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 20  # cap a hung docker pull / image that never reaches healthy (per-container boot is already bounded)
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false  # nothing here pushes; pr_changed_files.sh's fetch carries its own token

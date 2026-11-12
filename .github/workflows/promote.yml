@@ -172,7 +172,7 @@ jobs:
     steps:
       # The triggering commit's tree is the bundle. A dispatch has no workflow_run event, so it
       # renders the `sha` input, or master's tip when the input is empty.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.sha || github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0  # the ancestry check reads origin/master's history
@@ -277,7 +277,7 @@ jobs:
       # one PR. The download is cached under that URL, so a release outage (#7625) blocks only
       # the promotion that first needs a new version; the checksum check still runs every time.
       - name: Cache the gitleaks release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/gitleaks
           key: gitleaks-${{ runner.os }}-${{ env.GITLEAKS_URL }}
@@ -304,7 +304,7 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           "$RUNNER_TEMP/gitleaks" dir out --config .gitleaks.toml --no-banner --redact
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: bundle
           path: out/
@@ -343,7 +343,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
@@ -351,7 +351,7 @@ jobs:
       # DECIDED: the download-artifact steps run once, unlike the curl and gh calls. Over
       # 2026-10-13..11-12 no promote download failed at all (#8005); ci.yml's host_packages
       # job carries the full measurement.
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: bundle
           path: out
@@ -393,7 +393,7 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: bundle
           path: out
@@ -405,7 +405,7 @@ jobs:
       # The flux CLI comes from an actions/cache keyed on the FLUX_* pin, and the release only on a
       # miss, with nfpm's 12x30s retry window (#7778). The sha256 check runs on a hit too.
       - name: Cache the flux CLI release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/flux
           key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
@@ -427,7 +427,7 @@ jobs:
           flux version --client
 
       - name: Cache the cosign release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/cosign
           key: cosign-${{ runner.os }}-${{ env.COSIGN_VERSION }}-${{ env.COSIGN_SHA256 }}
@@ -670,7 +670,7 @@ jobs:
     steps:
       # This workflow's own commit, so the promote.py that runs matches the promote.yml that
       # calls it. A workflow_run always runs master's copy of this file.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           # The walk, and decide's Removes-Object lines, read master back to prod's commit.
@@ -680,7 +680,7 @@ jobs:
       - uses: $/.github/actions/setup
 
       - name: Cache the cosign release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/cosign
           key: cosign-${{ runner.os }}-${{ env.COSIGN_VERSION }}-${{ env.COSIGN_SHA256 }}
@@ -729,7 +729,7 @@ jobs:
       # The two bundles `decide` pulled before anything moved, and its record of `prod`'s
       # statuses. `verify` reads them, so it waits on T's own changed set rather than on the
       # render of the commit that triggered, and excuses only a dependent already failing.
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: actions/upload-artifact@v7.0.2
         if: ${{ steps.decide.outputs.verdict == 'promote' }}
         with:
           name: verify-input
@@ -778,7 +778,7 @@ jobs:
       moved_at: ${{ steps.move.outputs.moved_at }}
     steps:
       - name: Cache the flux CLI release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/flux
           key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
@@ -949,14 +949,14 @@ jobs:
       verdict: ${{ steps.verify.outputs.verdict }}
       failed: ${{ steps.verify.outputs.failed }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
 
       - uses: $/.github/actions/setup
 
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: verify-input
           path: ${{ runner.temp }}/verify-input
@@ -1061,7 +1061,7 @@ jobs:
       stateful_hold: ${{ steps.apply.outputs.stateful_hold }}
     steps:
       - name: Cache the flux CLI release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/flux
           key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
@@ -1334,14 +1334,14 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
 
       - uses: $/.github/actions/setup
 
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: verify-input
           path: ${{ runner.temp }}/verify-input
@@ -1396,7 +1396,7 @@ jobs:
       statuses: read
     steps:
       - name: Cache the flux CLI release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/flux
           key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
@@ -1563,7 +1563,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
@@ -1596,7 +1596,7 @@ jobs:
       packages: write
     steps:
       - name: Cache the flux CLI release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/flux
           key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}

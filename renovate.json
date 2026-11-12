@@ -3,8 +3,7 @@
   "extends": [
     "config:recommended",
     ":dependencyDashboard",
-    ":semanticCommitsDisabled",
-    "helpers:pinGitHubActionDigests"
+    ":semanticCommitsDisabled"
   ],
   "labels": [
     "dependencies"
@@ -247,6 +246,18 @@
       "packageNameTemplate": "https://github.com/DanielH2018/dotfiles",
       "currentValueTemplate": "main",
       "datasourceTemplate": "git-refs"
+    },
+    {
+      "customType": "regex",
+      "description": "The gh-actions-lock extension release the ci.yml `lockfile` job installs with `gh extension install --pin` (#8014). The pin is the release tag, so the github-releases datasource tracks it.",
+      "managerFilePatterns": [
+        "/(^|/)\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "gh extension install github/gh-actions-lock --pin (?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "github/gh-actions-lock",
+      "datasourceTemplate": "github-releases"
     },
     {
       "customType": "regex",
@@ -568,6 +579,16 @@
       ],
       "updateNotScheduled": false,
       "automerge": false
+    },
+    {
+      "description": "Workflow steps name actions by full version tag, and `.github/workflows/actions.lock` pins each tag to a commit (#8014). Renovate runs `gh actions-lock` after bumping a tag and commits the rewritten lockfile, so a digest pin in the `uses:` line would only duplicate the lockfile. The top-level `pinDigests: true` would otherwise put SHAs back on every step, so this rule turns it off for `action` deps only. A reusable-workflow call (`jobs.<id>.uses`, depType `workflow`) keeps its digest pin, because the lockfile does not cover those calls. The `lockfile` job in ci.yml fails a Renovate PR whose lockfile Renovate did not regenerate.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDepTypes": [
+        "action"
+      ],
+      "pinDigests": false
     },
     {
       "description": "Every Python pin the repo keeps in lockstep, in ONE PR (issue #5479): the CI setup action's `python-version:` (the custom.regex manager, datasource python-version), `.python-version` (the built-in pyenv manager) and the Dockerfile `FROM python:` tags (the built-in dockerfile manager). Three managers report the same packageName `python`, and before this rule each opened its own PR. Renovate PR #5363 bumped only the CI pin to 3.15.0, so ansible/tests/repo/test_python_version_consistency.py and test_renovate_dockerfiles.py::test_python_version_pins_in_lockstep failed on it forever, and Renovate rebased it onto every master move: 57 SHAs and 44 red CI runs in about 46 hours, 52% of the 85 failed ci.yml runs from 2026-10-15 to 2026-10-17. It sits AFTER the `{{depName}}` rule for .github/** (which would otherwise name the CI-only group) and the dockerfile rules above. matchUpdateTypes is minor and major only: a patch bump edits the three-part CI pin alone, which the lockstep tests accept, so it keeps flowing through the groups above. The k8s `python:3.14-alpine@sha256` image pins in roles/k8s/*/defaults/main.yml share the packageName but are excluded by matchFileNames: they are Job and Deployment images `promote` applies, and the manual half of this PR is not theirs. The manual half: a minor or major interpreter bump is moved by a person across the three sites, because the suite and the image smoke job must pass on the new interpreter before merge and the PR cannot automerge. The weekly keys are the ones scripts/tests/test_renovate_manual_rules_push_weekly.py requires of every `(manual` rule, so a red Python PR is pushed at most once a week, not on every master move. The pin sites falling in one group is ENFORCED by scripts/tests/test_renovate_python_group.py::test_every_python_pin_site_falls_in_one_manual_group.",

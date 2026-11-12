@@ -60,7 +60,7 @@ jobs:
       FLUX_VERSION: v2.9.6
       FLUX_SHA256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -68,7 +68,7 @@ jobs:
 
       # The same FLUX_* pin and fetch as ci.yml's flux_roundtrip job. It pushes the fixture artifact.
       - name: Cache the flux CLI release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/flux
           key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
@@ -110,13 +110,13 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Cache the sops release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/sops
           key: sops-${{ runner.os }}-${{ steps.pins.outputs.sops_version }}-${{ steps.pins.outputs.sops_sha256 }}
 
       - name: Cache the kind release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/kind
           key: kind-${{ runner.os }}-${{ steps.pins.outputs.kind_version }}-${{ steps.pins.outputs.kind_sha256 }}

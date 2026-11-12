@@ -67,7 +67,7 @@ jobs:
         kustomization.kustomize.toolkit.fluxcd.io,ocirepository.source.toolkit.fluxcd.io,deployment,persistentvolumeclaim,namespace,configmap
         -A -o json
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0  # the merge-base diff below needs history
           persist-credentials: false
@@ -107,7 +107,7 @@ jobs:
       # The same FLUX_* pin and fetch as the bootstrap drill. It pushes each artifact.
       - name: Cache the flux CLI release
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/flux
           key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
@@ -133,7 +133,7 @@ jobs:
       # drill's run on a PR that moves the COSIGN_* pin proves the pin before promote reads it.
       - name: Cache the cosign release
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/cosign
           key: cosign-${{ runner.os }}-${{ env.COSIGN_VERSION }}-${{ env.COSIGN_SHA256 }}
@@ -170,7 +170,7 @@ jobs:
 
       - name: Cache the kind release
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/kind
           key: kind-${{ runner.os }}-${{ steps.kind.outputs.version }}-${{ steps.kind.outputs.sha256 }}

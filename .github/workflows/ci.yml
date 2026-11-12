@@ -147,7 +147,7 @@ jobs:
     outputs:
       proven: ${{ steps.prove.outputs.proven }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - name: Compare the pushed tree with the tree a green PR run recorded
@@ -194,7 +194,7 @@ jobs:
       # The Vale release the `vale` hook runs, in job env so the cache key below can read it.
       VALE_URL: https://github.com/vale-cli/vale/releases/download/v3.26.0/vale_3.26.0_Linux_64-bit.tar.gz
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0  # the merge-base diff below needs history
           persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
@@ -232,14 +232,14 @@ jobs:
       # The cache holds the download, never the installed binary, and each run checks its digest
       # where it has one. ENFORCED by ansible/tests/repo/test_ci_release_downloads_are_cached.py.
       - name: Cache the Vale release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/vale
           key: vale-${{ runner.os }}-${{ env.VALE_URL }}
 
       # vale.sh's stamp skips `vale sync` when the restored package matches .vale.ini's pin.
       - name: Cache the Vale style package
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: styles/Google
           key: vale-styles-${{ runner.os }}-${{ hashFiles('.vale.ini') }}
@@ -270,7 +270,7 @@ jobs:
       # the entry: it is 570 MB unpacked. The children are listed, because a `!` pattern
       # filters only paths the globs above it expand, never a directory's contents.
       - name: Cache promtool, amtool, pint and lokitool
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: |
             .git/alert-tools/*
@@ -295,7 +295,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache the Alloy release zip
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/alloy
           key: alloy-zip-${{ runner.os }}-${{ steps.alloy.outputs.version }}
@@ -416,7 +416,7 @@ jobs:
         if: github.event_name == 'pull_request' && steps.notice.outcome != 'success'
         continue-on-error: true
         timeout-minutes: 5
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: notice-step-failed
           path: ${{ runner.temp }}/notice.err
@@ -464,7 +464,7 @@ jobs:
       UV_NO_DEV: "1"
     steps:
       # The gates read HEAD^1 and the PR's commits, so the checkout keeps history.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         if: github.event_name == 'pull_request'
         with:
           fetch-depth: 0
@@ -577,7 +577,7 @@ jobs:
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0  # several tests read git history and worktree state
           persist-credentials: false
@@ -598,7 +598,7 @@ jobs:
           echo "version=$sops_version" >> "$GITHUB_OUTPUT"
           echo "sha256=$sops_sha256" >> "$GITHUB_OUTPUT"
       - name: Cache the sops release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/sops
           key: sops-${{ runner.os }}-${{ steps.sops.outputs.version }}-${{ steps.sops.outputs.sha256 }}
@@ -777,7 +777,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0  # the merge-base diff below needs history
           persist-credentials: false  # nothing here pushes; pr_changed_files.sh's fetch carries its own token
@@ -800,7 +800,7 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+      - uses: actions/setup-node@v7.1.0
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
         with:
           node-version: "26.13.0"
@@ -815,6 +815,29 @@ jobs:
           "$claude" --version
           "$claude" plugin validate .claude/plugins/deck
           "$claude" plugin test .claude/plugins/deck
+
+  # Workflows name actions by version tag, and `.github/workflows/actions.lock` pins each tag to
+  # a commit (#8014). `--verify` fails when the lockfile is out of step with the workflows, or
+  # when a locked commit no longer verifies upstream, such as a moved tag. After changing a
+  # `uses:` line, run `gh actions-lock` and commit the lockfile it rewrites.
+  lockfile:
+    needs: prove
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
+    name: actions lockfile (gh actions-lock --verify)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false  # nothing here pushes
+
+      - name: Verify the lockfile
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh extension install github/gh-actions-lock --pin v0.4.1
+          gh actions-lock --verify
 
   # Target slice R2's round trip (docs/homelab-render.md, *The round trip*). It needs the flux
   # CLI, which the `pytest` job does not install, so it runs here. The probe step proves on
@@ -840,7 +863,7 @@ jobs:
       FLUX_VERSION: v2.9.6
       FLUX_SHA256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -852,7 +875,7 @@ jobs:
       # The flux CLI comes from an actions/cache keyed on the FLUX_* pin, and the release only on a
       # miss, with nfpm's 12x30s retry window (#7778). The sha256 check runs on a hit too.
       - name: Cache the flux CLI release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/flux
           key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
@@ -958,7 +981,7 @@ jobs:
       FLUX_VERSION: v2.9.6
       FLUX_SHA256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0  # the merge-base diff below needs history
           persist-credentials: false  # nothing here pushes; pr_changed_files.sh's fetch carries its own token
@@ -994,7 +1017,7 @@ jobs:
       # The flux_roundtrip job's pin and fetch. The CLI pushes the fixture artifact.
       - name: Cache the flux CLI release
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/flux
           key: flux-${{ runner.os }}-${{ env.FLUX_VERSION }}-${{ env.FLUX_SHA256 }}
@@ -1032,14 +1055,14 @@ jobs:
 
       - name: Cache the sops release
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/sops
           key: sops-${{ runner.os }}-${{ steps.sops.outputs.version }}-${{ steps.sops.outputs.sha256 }}
 
       - name: Cache the kind release
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/kind
           key: kind-${{ runner.os }}-${{ env.KIND_VERSION }}-${{ env.KIND_SHA256 }}
@@ -1241,7 +1264,7 @@ jobs:
       # Its scripts import only [project] dependencies (test_promote_runtime_imports.py).
       UV_NO_DEV: "1"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0  # the merge-base render below needs history
           persist-credentials: false  # nothing here pushes or fetches
@@ -1251,7 +1274,7 @@ jobs:
       # 12 retries 30s apart outlast a release-host outage, as TOOL_RETRY_WINDOW_S does for the
       # pins below. A persistent outage fails at the first download, inside the job's timeout.
       - name: Cache the nfpm release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/nfpm
           key: nfpm-${{ runner.os }}-${{ env.NFPM_VERSION }}-${{ env.NFPM_SHA256 }}
@@ -1389,7 +1412,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache the gitleaks release
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/pinned/gitleaks
           key: gitleaks-${{ runner.os }}-${{ steps.gitleaks.outputs.version }}
@@ -1448,7 +1471,7 @@ jobs:
 
       - name: Restore the homelab-tools cache
         if: steps.tools-key.outputs.key != ''
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6.1.0
         with:
           path: ${{ runner.temp }}/tools-cache
           key: ${{ steps.tools-key.outputs.key }}
@@ -1533,7 +1556,7 @@ jobs:
       # The `host_tools_arm64` job installs this build on a real arm64 runner.
       - name: Hand the arm64 homelab-tools build to the arm64 job
         if: steps.arm64.outputs.built == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: homelab-tools-arm64
           path: ${{ runner.temp }}/debs/head/homelab-tools_*_arm64.deb
@@ -1588,7 +1611,7 @@ jobs:
         if: >-
           github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
           || steps.render.outputs.cases == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: host-packages-build
           path: ${{ runner.temp }}/host-packages-build.tar
@@ -1632,7 +1655,7 @@ jobs:
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false  # nothing here pushes or fetches
 
@@ -1645,7 +1668,7 @@ jobs:
         if: >-
           github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
           || needs.host_packages_build.outputs.cases == 'true'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           name: host-packages-build
           path: ${{ runner.temp }}/handoff
@@ -1668,7 +1691,7 @@ jobs:
       - name: Restore the build job's homelab-tools cache
         id: tools-cache
         if: needs.host_packages_build.outputs.tools-key != ''
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@v6.1.0
         with:
           path: ${{ runner.temp }}/tools-cache
           key: ${{ needs.host_packages_build.outputs.tools-key }}
@@ -1772,7 +1795,7 @@ jobs:
     env:
       UV_NO_GROUP: lint
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false  # nothing here pushes or fetches
 
@@ -1782,7 +1805,7 @@ jobs:
         if: >-
           github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
           || needs.host_packages_build.outputs.cases == 'true'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           name: host-packages-build
           path: ${{ runner.temp }}/handoff
@@ -1800,7 +1823,7 @@ jobs:
       - name: Restore the build job's homelab-tools cache
         id: tools-cache
         if: needs.host_packages_build.outputs.tools-key != ''
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@v6.1.0
         with:
           path: ${{ runner.temp }}/tools-cache
           key: ${{ needs.host_packages_build.outputs.tools-key }}
@@ -1875,7 +1898,7 @@ jobs:
       UV_NO_GROUP: lint
       PYTHON: "3.14"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false  # nothing here pushes or fetches
 
@@ -1885,7 +1908,7 @@ jobs:
         if: >-
           github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
           || needs.host_packages_build.outputs.cases == 'true'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           name: host-packages-build
           path: ${{ runner.temp }}/handoff
@@ -1902,7 +1925,7 @@ jobs:
       - name: Restore the build job's homelab-tools cache
         id: tools-cache
         if: needs.host_packages_build.outputs.tools-key != ''
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@v6.1.0
         with:
           path: ${{ runner.temp }}/tools-cache
           key: ${{ needs.host_packages_build.outputs.tools-key }}
@@ -1972,13 +1995,13 @@ jobs:
       contents: read
       packages: read  # the pinned test image, while its GHCR package is private
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false  # nothing here pushes or fetches
 
       - name: Download the arm64 homelab-tools build
         if: needs.host_packages_build.outputs.arm64-tools == 'true'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           name: homelab-tools-arm64
           path: ${{ runner.temp }}/debs
@@ -2021,7 +2044,7 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
-    needs: [prove, hooks, pr_gates, pytest, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_packages_bootstrap, host_tools_arm64]
+    needs: [prove, hooks, pr_gates, pytest, deck_mod, lockfile, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_packages_bootstrap, host_tools_arm64]
     # On a draft the gate skips with its dependents. A red gate there would pin the head red
     # for every reader that takes the worst check run per name (`deploy_git.ci_verdict`), even
     # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
@@ -2054,6 +2077,7 @@ jobs:
           PR_GATES: ${{ needs.pr_gates.result }}
           PYTEST: ${{ needs.pytest.result }}
           DECK_MOD: ${{ needs.deck_mod.result }}
+          LOCKFILE: ${{ needs.lockfile.result }}
           FLUX_ROUNDTRIP: ${{ needs.flux_roundtrip.result }}
           SOPS_TYPE_PROOF: ${{ needs.sops_manifest_type_proof.result }}
           HOST_PACKAGES_BUILD: ${{ needs.host_packages_build.result }}
@@ -2062,7 +2086,7 @@ jobs:
           HOST_TOOLS_ARM64: ${{ needs.host_tools_arm64.result }}
         run: |
           echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pr-gates=$PR_GATES pytest=$PYTEST" \
-            "deck-mod=$DECK_MOD flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
+            "deck-mod=$DECK_MOD lockfile=$LOCKFILE flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
             "host-packages-build=$HOST_PACKAGES_BUILD host-packages=$HOST_PACKAGES" \
             "host-packages-bootstrap=$HOST_PACKAGES_BOOTSTRAP" \
             "host-tools-arm64=$HOST_TOOLS_ARM64"
@@ -2073,7 +2097,7 @@ jobs:
           proven=false
           if [ "$PROVE" = success ] && [ "${PROVEN:-}" = true ]; then proven=true; fi
           ok() { [ "$1" = success ] || { [ "$proven" = true ] && [ "$1" = skipped ]; }; }
-          ok "$HOOKS" && ok "$PR_GATES" && ok "$PYTEST" && ok "$DECK_MOD" \
+          ok "$HOOKS" && ok "$PR_GATES" && ok "$PYTEST" && ok "$DECK_MOD" && ok "$LOCKFILE" \
             && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES_BUILD" \
             && ok "$HOST_PACKAGES" && ok "$HOST_PACKAGES_BOOTSTRAP" \
             && ok "$HOST_TOOLS_ARM64"
@@ -2111,7 +2135,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 20  # six install attempts at 60s, plus a wedged fetch
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0  # the merge-base diff below needs history
           persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token

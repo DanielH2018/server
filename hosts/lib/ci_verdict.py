@@ -60,6 +60,7 @@ CI_GATE_NEEDS_JOBS = frozenset(
         "pytest (shard 5 of 6)",
         "pytest (shard 6 of 6)",
         "deck mod (claude plugin validate + test)",
+        "actions lockfile (gh actions-lock --verify)",
         "flux round trip (placeholder render against stub render)",
         "sops-manifest-type-proof (an all-digit stringData value stays a string)",
         "build the host packages (render, nfpm, lint)",
