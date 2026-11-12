@@ -423,16 +423,16 @@ def test_an_unreadable_log_reads_as_none(tmp_path):
 
 
 def _run_capped(
-    tmp_path: Path, live_pids: list[int]
+    tmp_path: Path, live_pids: list[int], **env: str
 ) -> subprocess.CompletedProcess[str]:
-    """`--detach` with the cap at 1 and one slot file per pid in `live_pids`."""
+    """`--detach` with one slot file per pid in `live_pids`."""
     group = tmp_path / "live" / "default"
     group.mkdir(parents=True)
     for pid in live_pids:
         (group / f"{pid}.slot").write_text("")
     return subprocess.run(
         ["bash", str(_LAND_SH), "--pr", "939", "--detach"],
-        env={**_env(tmp_path), detach.MAX_LIVE_ENV: "1"},
+        env={**_env(tmp_path), **env},
         capture_output=True,
         text=True,
         timeout=180,
@@ -441,16 +441,47 @@ def _run_capped(
 
 def test_a_detach_over_the_live_cap_is_refused_as_a_resume_point(tmp_path):
     """#8018: with the cap's worth of landings live, no new landing forks and the caller may retry."""
-    result = _run_capped(tmp_path, [os.getpid()])
+    result = _run_capped(tmp_path, [os.getpid()], LAND_MAX_LIVE="1")
 
     assert result.returncode == LAND_GAVE_UP, result.stderr
     assert "1 landings are already live" in result.stderr
+    assert "LAND_MAX_LIVE=1" in result.stderr
+    assert _logs(tmp_path) == []
+
+
+def test_a_fourth_detach_with_no_override_is_refused(tmp_path):
+    """#8142: the default limit is 3 per group."""
+    sleepers = [subprocess.Popen(["sleep", "60"]) for _ in range(3)]
+    try:
+        result = _run_capped(tmp_path, [p.pid for p in sleepers])
+    finally:
+        for sleeper in sleepers:
+            sleeper.kill()
+            sleeper.wait()
+
+    assert result.returncode == LAND_GAVE_UP, result.stderr
+    assert "3 landings are already live" in result.stderr
+    assert "the default of 3" in result.stderr
     assert _logs(tmp_path) == []
 
 
 def test_a_dead_landings_slot_does_not_hold_the_cap(tmp_path):
     """A landing SIGKILLed before it released its slot must not block the orchestrator forever."""
-    result = _run_capped(tmp_path, [2**22 + 12345])
+    result = _run_capped(tmp_path, [2**22 + 12345], LAND_MAX_LIVE="1")
 
     assert result.returncode == 0, result.stderr
     assert len(_logs(tmp_path)) == 1
+
+
+def test_a_foreground_landing_holds_a_slot_only_while_it_runs(monkeypatch, tmp_path):
+    """#8142: a lander unit's foreground landing counts against the `--detach` landings beside it.
+
+    The inner slot is a `--fresh` child landing, which runs inside its parent's slot.
+    """
+    monkeypatch.setenv(detach.LIVE_DIR_ENV, str(tmp_path / "live"))
+    slots = tmp_path / "live" / "default"
+    with detach.holding_slot("serial"):
+        assert (slots / f"{os.getpid()}.slot").read_text() == "serial"
+        with detach.holding_slot("serial"):
+            assert len(list(slots.glob("*.slot"))) == 1
+    assert list(slots.glob("*.slot")) == []

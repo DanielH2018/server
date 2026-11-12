@@ -65,6 +65,43 @@ the host unit turns the reaper off (`CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=
 `hosts/components/claude-code/templates/claude-rc.service.j2`), so only a session started some other
 way meets it.
 
+### The limit on live landings
+
+**A group of landings runs at most 3 at once.** Every landing polls GitHub on one shared
+token, whose core quota is 5000 calls an hour. On 2026-11-11 thirteen live landings spent
+about 148 calls a minute and drained it (#8018). The operator set the limit to 3 per token on
+2026-11-12. `land_lib/live_limit.py` owns the number, and `land_lib/detach.py` owns the
+registry of live landings it is compared with.
+
+- A group is one UNIX user's landings, unless `LAND_ORCHESTRATOR` names another group. Every
+  `ubuntu` landing therefore shares one group: the orchestrator session, the
+  `claude-fanout-server-lander` timer, the lander units and other sessions. That matches the
+  quota, which is per token.
+- A `--detach` over the limit forks nothing and exits 75. Its `land:` line names the
+  condition that set the limit. Re-run the same command once a landing ends.
+- `LAND_MAX_LIVE` overrides the 3. The conditions below can only lower what it sets.
+- A foreground `land.sh` takes a slot while it runs, but it is never refused. The lander
+  units (`renovate-agent-land@`, `claude-land@`) run it in the foreground and have no retry,
+  so a refusal would page rather than wait. Their slot still lowers the room every
+  `--detach` beside them sees. A `--fresh` child landing runs inside its parent's slot.
+
+**Five conditions lower the limit for a new `--detach`.** The lowest one wins.
+
+- To 1 while the core quota has fewer than 1500 calls left and resets more than 15 minutes
+  away. `gh api rate_limit` costs no core quota.
+- To 2 while 2 or more master `ci.yml` push runs have been unfinished for more than 15
+  minutes. The count is the one merge pacing reads, so a wedged run does not count.
+- To 0 for a PR that changes a k8s role while `DEPLOY_HOLD` holds. "Holds" means what the pin
+  gate means by it: any value but `none`.
+- To 1 for a PR that changes a k8s role inside the no-promotion window around the weekly
+  reboot. `promote_lib/reboot_window.py` derives the window from the reboot schedule.
+- To 1 while a landing of a serial PR is live, or when the new PR is one. A serial PR changes
+  the `longhorn` or `metallb` role, which hold the forward-only pins, the `flux` role, or the
+  cluster-vars file.
+
+**A read that fails lowers nothing.** The limit is a throughput control, as merge pacing is.
+A landing still meets `DEPLOY_HOLD` at the pin gate and at the promotion.
+
 ### Exit codes and verdicts
 
 A generated table lists the exit codes, and generated lists name the verdicts and causes. They
@@ -116,7 +153,8 @@ A cap of 1 ran from 2026-10-25 to 2026-10-29 (#6308). It aimed to merge a re-tes
 the tree it tested, so that `prove` skips the push sweep. The share of push runs that skipped
 the sweep did not rise, because the untested tree comes from master moving during the PR's
 re-test rather than at merge time (#6309). The `DECIDED:` marker on `PACE_MASTER_RUNS` in
-`land_lib/options.py` has the measurement. Batching the merges is the open route (#6521).
+`land_lib/options.py` has the measurement. Batching the merges was proposed as the next route
+and closed as not planned on 2026-11-02 (#6521).
 
 - The count is a read, not a lock. Two landings that read at the same poll can both merge.
   Pacing lowers the average queue depth; it does not close the race that makes the `prove`
