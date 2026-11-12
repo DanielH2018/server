@@ -8,11 +8,14 @@ import io
 import urllib.error
 
 import await_ci
+import pytest
 
 INTERVAL_S = 20
 
 
-def _rate_limited() -> urllib.error.HTTPError:
+@pytest.fixture
+def rate_limited():
+    """GitHub's 403 for a spent core quota, closed after the test."""
     headers = email.message.Message()
     headers["X-RateLimit-Limit"] = "5000"
     headers["X-RateLimit-Remaining"] = "0"
@@ -20,21 +23,25 @@ def _rate_limited() -> urllib.error.HTTPError:
     headers["X-RateLimit-Reset"] = "4000000000"
     headers["X-RateLimit-Resource"] = "core"
     body = b'{"message": "API rate limit exceeded for user ID 41801780."}'
-    return urllib.error.HTTPError(
+    error = urllib.error.HTTPError(
         "https://api.github.com/x",
         403,
         "rate limit exceeded",
         headers,
         io.BytesIO(body),
     )
+    yield error
+    error.close()
 
 
-def test_a_rate_limit_403_waits_for_the_reset_rather_than_polling_as_pending():
+def test_a_rate_limit_403_waits_for_the_reset_rather_than_polling_as_pending(
+    rate_limited,
+):
     green = [
         {"name": name, "status": "completed", "conclusion": "success"}
         for name in await_ci.required_contexts()
     ]
-    answers = iter([_rate_limited()])
+    answers = iter([rate_limited])
 
     def fetch(_sha):
         answer = next(answers, green)
@@ -60,3 +67,16 @@ def test_a_rate_limit_403_waits_for_the_reset_rather_than_polling_as_pending():
     )
     assert code == 0
     assert slept and slept[0] > INTERVAL_S
+
+
+def test_a_rate_limit_403_is_not_read_as_a_pending_verdict(rate_limited):
+    """The descendant walk reads each commit through `verdict_for`'s own catch."""
+
+    def fetch(_sha):
+        raise rate_limited
+
+    try:
+        got = await_ci.verdict_for("abc", fetch, await_ci.required_contexts())
+    except Exception:
+        return
+    assert got != "pending"
