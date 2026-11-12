@@ -32,7 +32,6 @@ No Ansible import at load time, so the tests call the function the renderer runs
 """
 
 import copy
-import json
 
 import yaml
 
@@ -109,25 +108,8 @@ def flux_components(
             Or `controller_args` or `controller_resources` names a Deployment the install
             does not hold, so a flag or a request would silently go unset.
     """
-    # ansible-core hands templated values over as tagged builtin subclasses, which SafeDumper
-    # refuses to represent. A JSON round trip leaves plain dicts, lists and strings.
-    (
-        pod_patch,
-        priority_class,
-        volume_suffixes,
-        controller_args,
-        controller_resources,
-    ) = json.loads(
-        json.dumps(
-            [
-                pod_patch,
-                priority_class,
-                volume_suffixes,
-                controller_args or {},
-                controller_resources or {},
-            ]
-        )
-    )
+    controller_args = controller_args or {}
+    controller_resources = controller_resources or {}
     docs = [doc for doc in yaml.load_all(str(text), Loader=_Loader) if doc is not None]
     deployments = [doc for doc in docs if doc.get("kind") == "Deployment"]
     if not deployments:

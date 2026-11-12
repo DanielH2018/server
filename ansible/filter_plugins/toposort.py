@@ -2,8 +2,8 @@
 
 `toposort_containers` orders the renderer's entries by the map `build_k8s_dep_map` derives from
 each role's templates and entry, and `filter_by_platform` selects one platform's entries.
-deploy.yml's Docker play runs no role: every entry is `platform: k8s`, and the Pi's services
-deploy from `compose_services` in its package.
+Every `containers_list` entry is `platform: k8s`; the Pi's services deploy from
+`compose_services` in its package.
 """
 
 import heapq

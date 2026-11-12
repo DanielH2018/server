@@ -2,7 +2,7 @@
 # The k3s services: one entry per k8s deploy tag. Flux applies every entry through `promote`.
 # The renderer and every script read this list as daniel-box's `containers_list`
 # (`scripts/lib/render_guard.py:host_layer`), so templates and filter plugins see the same
-# variable they always did. Ansible does not load this file: no Ansible play deploys a k8s role.
+# variable they always did.
 #
 # The renderer (scripts/renderer/renderer_lib/context.py) toposorts this list with
 # build_k8s_dep_map / toposort_containers (ansible/filter_plugins/toposort.py) rather than
