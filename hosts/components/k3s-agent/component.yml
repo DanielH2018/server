@@ -18,7 +18,7 @@
 # The rest of the agent's host half (H7.34): the Longhorn packages, the multipath drop-in, the
 # inotify key, the join rules and the address pin. The join itself is bootstrap-host.sh's. No
 # host-half path lives only in setup/k3s on daniel-server, whose role is still daniel-box's until
-# H7.35, so the pin's templates render in place through `role: k3s`.
+# H7.35, so the pin's template renders in place through `role: k3s`.
 #
 # DECIDED: the wifi fallback reaches /etc/netplan through a copy, never an output's symlink.
 # `netplan generate` fails on a dangling link in that directory (measured 2026-11-07), so a

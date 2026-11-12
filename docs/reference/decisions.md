@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-12 03:50 UTC
-generated_sha: 503bbaba5
+generated_at: 2026-11-12 04:58 UTC
+generated_sha: 07a39b942
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 503bbaba5
 
 # Decisions
 
-804 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
+815 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -271,6 +271,8 @@ generated_sha: 503bbaba5
     * `ansible/tests/repo/test_adr_links.py` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py`: `
     * `ansible/tests/repo/test_adr_links.py` and `scripts/lib/b2.py`: `
     * `ansible/tests/repo/test_adr_links.py` and `scripts/lib/render_context.py`: `
+    * `ansible/tests/repo/test_adr_links.py` and `ansible/tests/repo/test_census_rows_roles.py`: ")
+    * `ansible/tests/repo/test_adr_links.py` and `ansible/tests/repo/test_census_rows_roles.py`: ")
     * `ansible/tests/repo/test_adr_links.py` and `ansible/tests/repo/test_census_rows_roles.py`: ")
     * `ansible/tests/setup/test_aide_check.py` and `docs/archive/gitops-deployer.md`: ` marker has the measurement.
     * `docs/adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md` and `docs/adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md`: ` marker references this record yet.
@@ -956,10 +958,12 @@ generated_sha: 503bbaba5
 | ` marker makes the | `.claude/skills/homelab-review/SKILL.md` | 2026-08-29 |
 | ` marker at the line | `.claude/skills/homelab-review/accepted-designs.md` | 2026-09-21 |
 | ` marker in | `.claude/skills/worktree-cleanup/SKILL.md` | 2026-09-24 |
-| callers write `uses: ./.github/actions/setup` with a `zizmor: ignore[self-repository]` comment, not GitHub's `$/.github/actions/setup` form (added 2026-07-30). zizmor 1.30.1 asks for `$/`, but the pinned actionlint rejects it as "ref is missing", and actionlint is the hook that validates each caller's `with:` keys against the inputs below. Measured 2026-10-09. Switch to `$/` and drop the ignores once a Renovate bump gives actionlint the syntax. | `.github/actions/setup/action.yml` | 2026-10-09 |
+| callers write `uses: $/.github/actions/setup`, which pins this action to the workflow's own commit, and the `actionlint` prek hook runs through scripts/validate/actionlint_dollar_refs.py (2026-11-12). actionlint 1.7.12 rejects `$/` as "ref is missing" and then skips checking the caller's `with:` keys against the inputs below (rhysd/actionlint#711). The wrapper lints a copy rewritten to `./`. Once an actionlint release accepts `$/`, point the hook back at `uv run --frozen actionlint` and delete the wrapper and its test. | `.github/actions/setup/action.yml` | 2026-11-12 |
 | a cancelled or failed `prove` runs the dependents ahead of `!cancelled()` and the proof. A job timeout and a user's cancel look the same to an expression, so a run cancelled by hand while `prove` is running still starts the sweep. That costs free runner minutes on a public repo; the alternative is a red master on every hung runner. A cancel after `prove` concluded still stops the sweep, through `!cancelled()`. `proven` cannot be trusted from a cancelled or failed job, because the job set it and then did not succeed. | `.github/workflows/ci.yml` | 2026-10-22 |
 | ansible-lint gets its own job, again. 2026-08-14, and restored it on 2026-09-10 (#1332). The revert is not a precedent to re-apply, because the two facts it rested on have both gone: | `.github/workflows/ci.yml` | 2026-09-10 |
 | the notice never blocks a merge, during the soak or after the lock retires. PR that moves a cited atom gets a notice, not a red check. The trade, and the coverage it gives up, is in docs/adr/0023-fact-support-is-a-diff-notice.md. (ADR-0023) | `.github/workflows/ci.yml` | 2026-10-17 |
+| no download-artifact step in ci.yml or promote.yml retries, unlike their curl and gh calls. Over 2026-10-13..11-12, `scripts/dev/ci_failures.py` found no download failure that a rerun cleared; every red one followed a build that never uploaded (#8005). | `.github/workflows/ci.yml` | 2026-11-12 |
+| the download-artifact steps run once, unlike the curl and gh calls. 2026-10-13..11-12 no promote download failed at all (#8005); ci.yml's host_packages job carries the full measurement. | `.github/workflows/promote.yml` | 2026-11-12 |
 | statuses: write sits in a job that checks out nothing, never in `verify`, which runs repository code. The operator ruled the grant on 2026-11-09 (#7865, contract C2). | `.github/workflows/promote.yml` | 2026-11-09 |
 | a job that checks out nothing holds packages: write to move `last-good` for a run that lost its `settle`. The operator ruled the grant on 2026-11-09 (#7865, contract C2). statuses: read is the verdict-status read. | `.github/workflows/promote.yml` | 2026-11-09 |
 | `[A-Z][A-Z]+`, not `[A-Z]{2,}`. `{2,}` form parses as two broken patterns. The first attempt silently ignored nothing; wrapped in a group, it failed with "missing closing )". | `.vale.ini` | 2026-09-25 |
@@ -1014,8 +1018,16 @@ generated_sha: 503bbaba5
 | alpha and beta. | `ansible/tests/repo/test_adr_links.py` | 2026-09-12 |
 | host-shipped `ansible/roles/*/*/files/*.py` (and, since H7.2e, `hosts/lib/` and `scripts/lib/longhorn_lib/`) is EXEMPT, and the exemption is not cosmetic. Those programs run under the hosts' own interpreter, not the repo's uv env: `python3 -V` on daniel-server and daniel-pi both report 3.12.3 (measured 2026-09-05), and the k8s `files/*.py` run under whatever python their pod image ships. Below 3.14 there is no PEP 649, so annotations evaluate EAGERLY at def/class time and the import is load-bearing insurance against a forward reference — `def merge(self, other: Foo) -> Foo:` inside `class Foo` raises NameError without it. The repo suite cannot observe that: it runs on 3.14, where every such annotation is lazy either way. So the exemption is what keeps a green suite from authorising a cron-time NameError on a host. | `ansible/tests/repo/test_census_rows_python.py` | 2026-10-24 |
 | ` says which (#3701). | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
+| ` says which (#3701). | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
+| ` says which (#3701). | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
+| ") | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
+| ") | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
 | ") | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
 | marker"] | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
+| marker"] | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
+| marker"] | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
+| x. | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
+| x. | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
 | x. | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
 | `git ls-files`, not an `rglob` plus a skip list. to be on disk, and this repo grows untracked trees during ordinary work: `.venv`, `ansible/collections/` (vendored per worktree), `__pycache__`, and `styles/`, which `vale sync` creates and which carries `.txt` and `.json` files the repo itself does not have. That last one moves `_REPO_EXTENSIONS` below, so the same citation would be checked on a synced checkout and skipped on a fresh one. A guard whose verdict depends on whether someone has run `vale sync` has the defect this module rejected `.claude/worktrees/` for. | `ansible/tests/repo/test_documented_paths_exist.py` | 2026-10-03 |
 | minus `go` -- the only Go here is the traefik role's local plugin (files/cloudflare-realip/), while the docs cite UPSTREAM Go by basename (`docs/longhorn-backup-tiering.md`: Longhorn's `deltablock.go:117`, `s3.go:88`), which counting the plugin would turn into missing-file failures. | `ansible/tests/repo/test_documented_paths_exist.py` | 2026-09-24 |
@@ -1155,6 +1167,7 @@ generated_sha: 503bbaba5
 | raising CEILING is an operator ruling, never part of an ordinary change. is design.md's trigger to cut reconcile, to raise the ceiling in the H7 ADR with a reason, or to switch the host plan to ansible-pull. The ceiling and its derivation are in docs/target-architecture/host/h7-delete-ansible.md, *Reconcile's line ceiling*. | `hosts/lib/tests/test_reconcile_size_census.py` | 2026-10-24 |
 | chezmoi is pinned as its .tar.gz. and `member` names the file the builder installs from inside the archive. | `hosts/packages/homelab-tools/package.yml` | 2026-10-23 |
 | docs/archive stays; size was never the concern, and a PR number is not greppable offline the way the linked record is. Deleting the archive in favour of PR numbers was re-examined on 2026-09-28 (#2808) and kept. | `mkdocs.yml` | 2026-09-30 |
+| ` marker in .github/actions/setup/action.yml says when to call actionlint directly again. A change to the action or to the wrapper's own modules re-lints every workflow, so the hook passes no filenames. | `prek.toml` | 2026-11-12 |
 | ` marker in ansible/tests/_ratchet.py), which made every such PR edit a line by hand: 70 commits touched one of the two lists in the 30 days to 2026-09-28, 49 of them only lowering or deleting. It only ever tightens -- a grown file's entry is left verbatim, so the ratchet still fails on it -- and it writes unconditionally, never running the suite first, which is what keeps it out of the #1799 repair deadlock. | `prek.toml` | 2026-09-28 |
 | ` marker in a template, and the doc fragments read role defaults, inventory and the fail2ban template. The shard partition test reads ci.yml and pyproject.toml's `testpaths`. test_role_claude_md reads every role's CLAUDE.md beside its tasks and templates. The census rows read tracked `.py` files, and four more kinds of path: - every workflow under .github/workflows/, for the runner-pin and shared-fetch rows; - any file under a role's templates/, defaults/ or files/, for the row that refuses a literal uptime-kuma port, because a `.sh` or `.conf` there can dial it; - Markdown and JSON under .claude/skills/, .claude/agents/ and evals/cases/, for the rows on the review surfaces' standing-list slug and the agents' inline re-flag list; - a compiled module (`.pyc`, `.so`, anything under __pycache__/), for the row that refuses a tracked one. The macro row reads every Markdown doc under docs/ and .claude/ and every CLAUDE.md, and only the CLAUDE.md files, the skills and the agents are gated. A docs/ page or a .claude/rules/ file that names a deleted macro goes red in CI instead. Gating all Markdown would charge every docs-only commit the cost above, and the edit that usually breaks the row deletes a macro template, which `.j2` already gates. | `prek.toml` | 2026-10-05 |
 | never widen this hook to docs/reference/; the docs-refresh cron commits those paths with hooks running, so a strict failure stops every refresh. A style error there aborts the commit and alerts on every run until someone fixes the generator. ENFORCED by the same test. | `prek.toml` | 2026-09-30 |

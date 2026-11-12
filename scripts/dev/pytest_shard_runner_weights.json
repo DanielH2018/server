@@ -643,7 +643,6 @@
  "ansible/tests/setup/test_setup_crons_write_a_textfile.py": 0.08,
  "ansible/tests/setup/test_setup_cross_role_files.py": 0.08,
  "ansible/tests/setup/test_setup_cross_role_reads.py": 0.36,
- "ansible/tests/setup/test_setup_handlers_resolve.py": 0.05,
  "ansible/tests/setup/test_ufw_sysctl_keeps_log_martians.py": 2.94,
  "ansible/tests/setup/test_unattended_origins_pattern.py": 2.66,
  "ansible/tests/setup/test_wan_probe_urls_match_the_bridge.py": 0.01,

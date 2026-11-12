@@ -28,8 +28,8 @@ cause `promote-timeout` on its `LAND-RESULT:` line stays `gave-up`: no promotion
 Flux applies, and a publish refusal does not clear on its own. So does one with cause
 `gate-unreadable`: the health gate could not read its store, and nothing gates health again
 (#5543). So does one with cause `gate-stale`: the gate's tree was older than `origin/master`
-(#7816). The cause decides, never the note beside it (#7911); a log from before `LAND-RESULT:`
-existed falls back to the notes.
+(#7816). The cause decides, never the note beside it (#7911, #7969); a log from before
+`LAND-RESULT:` existed falls back to the notes.
 """
 
 import json
@@ -69,7 +69,11 @@ _UNREADABLE_GATE = UNREADABLE_GATE_NOTE.splitlines()[0].strip()
 _STALE_GATE = STALE_GATE_NOTE.splitlines()[0].strip()
 # The causes beside `deferred` that nothing clears on its own.
 _GIVE_UP_CAUSES = frozenset(
-    {Cause.PROMOTE_TIMEOUT, Cause.GATE_UNREADABLE, Cause.GATE_STALE}
+    {
+        Cause.PROMOTE_TIMEOUT,
+        Cause.GATE_UNREADABLE,
+        Cause.GATE_STALE,
+    }
 )
 
 # A landing's phase lines: `== 4/6  deploying ...`. The newest one is the progress detail.
@@ -146,20 +150,18 @@ def read(log: Path, now: float | None = None) -> dict:
 
 
 def _is_plain_deferral(log: Path, verdict: str) -> bool:
-    """Whether a landing's 75 is `deferred` with no give-up cause or note beside it."""
+    """Whether a landing's 75 is `deferred` with no give-up cause; a log without one, no note."""
     result = detach.result_in(log)
-    notes: tuple[str, ...] = ()
     if result is not None:
-        token = result.get("verdict")
-        if result.get("cause") in _GIVE_UP_CAUSES:
-            return False
-    else:
-        match = _VERDICT_TOKEN.match(verdict)
-        token = match.group(1) if match else None
-        notes += (_PROMOTE_TIMEOUT, _UNREADABLE_GATE, _STALE_GATE)
-    if token != Verdict.DEFERRED:
+        return (
+            result.get("verdict") == Verdict.DEFERRED
+            and result.get("cause") not in _GIVE_UP_CAUSES
+        )
+    match = _VERDICT_TOKEN.match(verdict)
+    if not match or match.group(1) != Verdict.DEFERRED:
         return False
     text = log.read_text(errors="replace")
+    notes = (_PROMOTE_TIMEOUT, _UNREADABLE_GATE, _STALE_GATE)
     return not any(note in text for note in notes)
 
 

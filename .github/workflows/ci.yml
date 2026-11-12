@@ -238,7 +238,7 @@ jobs:
 
       # Python, uv and prek, with their caches. The pins and the reasoning behind each cache
       # live in the action. No Galaxy cache: see the DECIDED block above.
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
         with:
           prek-cache-key: prek
 
@@ -511,7 +511,7 @@ jobs:
 
       # Python and uv only. Neither gate runs prek or reads a Galaxy collection; both ran in
       # `hooks` before this job existed, where neither cache was restored for them.
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
         if: github.event_name == 'pull_request'
 
       # The render-diff gates (D4.4, renamed from the cross-plane gate in D6.12, which deleted
@@ -566,7 +566,7 @@ jobs:
 
       # Its own prek cache prefix rather than the `hooks` job's. The two jobs build disjoint hook
       # environments, and one shared key would have them overwrite each other's entry every run.
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
         with:
           prek-cache-key: prek-lint
           galaxy: "true"
@@ -661,7 +661,7 @@ jobs:
           persist-credentials: false
       # Several ansible/tests read the Galaxy collections, so they must be on disk. The action's
       # Galaxy cache key is the one the `ansible_lint` job uses, so the two share one entry.
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
         with:
           galaxy: "true"
       - name: Install Ansible collections
@@ -929,7 +929,7 @@ jobs:
           persist-credentials: false
 
       # The renderer imports no Galaxy collection, so no Galaxy cache.
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
 
       # The same FLUX_* pin as promote.yml's, so the CLI that checks the round trip is the CLI
       # that publishes and the controllers' release. scripts/tests/test_renovate_flux_cli.py
@@ -1073,7 +1073,7 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
 
       # The flux_roundtrip job's pin and fetch. The CLI pushes the fixture artifact.
@@ -1332,7 +1332,7 @@ jobs:
           persist-credentials: false  # nothing here pushes or fetches
 
       # The renderer imports no Galaxy collection, so no Galaxy cache.
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
 
       # 12 retries 30s apart outlast a release-host outage, as TOOL_RETRY_WINDOW_S does for the
       # pins below. A persistent outage fails at the first download, inside the job's timeout.
@@ -1722,8 +1722,11 @@ jobs:
         with:
           persist-credentials: false  # nothing here pushes or fetches
 
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
 
+      # DECIDED: no download-artifact step in ci.yml or promote.yml retries, unlike their curl and
+      # gh calls. Over 2026-10-13..11-12, `scripts/dev/ci_failures.py` found no download failure
+      # that a rerun cleared; every red one followed a build that never uploaded (#8005).
       - name: Download the hand-off from the build job
         if: >-
           github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
@@ -1817,12 +1820,24 @@ jobs:
   # serial prepare took 18-42 s of that. The items took the rest: three CPU-bound offline builds
   # ran 227-303 s each, sharing the leg's 4 vCPUs with every other group. Alone here, the first run
   # still took 329-385 s against 208-215 s for `upgrade_path`, so `run` submits the three builds
-  # first and the host items fill in behind them (#7866).
+  # first and the host items fill in behind them (#7866). That took it to 264-298 s against
+  # 207-212 s (run 42697086899), each build still 244-271 s beside the other two. So each release
+  # runs three shards, one offline build in each (#7879). The split left each build at 224-244 s
+  # with a runner to itself (runs 43146660058 and 43148777838), so a build is slow on its own, and
+  # these legs still end 28-80 s after the `host_packages` legs. A local run copies the kit's uv
+  # cache in under a second and builds the venv from it in less, so each item prints each phase of
+  # the script's local build under its `[DONE]` line to find the rest (#7982). Keep the shard
+  # count equal to the number of offline builds `bootstrap_plan.plan` lists;
+  # `test_bootstrap_case.py` holds it.
+  # The `name:` leaves the shard out, so a release's three shards share the check-run name
+  # `hosts/lib/ci_verdict.py` lists. An installed host package holds that list, and a renamed
+  # leg would read as pending to every copy installed before the rename.
   #
   # The steps and their `if:`s are the legs', and the job gates like them. The id starts with
   # `host_packages`, so the prefix filter in docs/target-architecture/host/h3-pi-pilot.md selects
   # these legs too. The budget matches the legs', because a Dockerfile PR builds the image here too.
   host_packages_bootstrap:
+    name: host_packages_bootstrap (${{ matrix.release }}, ${{ matrix.python }})
     needs: [prove, host_packages_build]
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' }}
     runs-on: ubuntu-26.04
@@ -1834,8 +1849,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {release: "24.04", python: "3.12"}
-          - {release: "26.04", python: "3.14"}
+          - {release: "24.04", python: "3.12", shard: "1/3"}
+          - {release: "24.04", python: "3.12", shard: "2/3"}
+          - {release: "24.04", python: "3.12", shard: "3/3"}
+          - {release: "26.04", python: "3.14", shard: "1/3"}
+          - {release: "26.04", python: "3.14", shard: "2/3"}
+          - {release: "26.04", python: "3.14", shard: "3/3"}
     env:
       UV_NO_GROUP: lint
     steps:
@@ -1843,7 +1862,7 @@ jobs:
         with:
           persist-credentials: false  # nothing here pushes or fetches
 
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
 
       - name: Download the hand-off from the build job
         if: >-
@@ -1896,6 +1915,7 @@ jobs:
         env:
           RELEASE: ${{ matrix.release }}
           PYTHON: ${{ matrix.python }}
+          SHARD: ${{ matrix.shard }}
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
           TOOLS_CACHE_HIT: ${{ steps.tools-cache.outputs.cache-hit }}
         run: |
@@ -1911,7 +1931,8 @@ jobs:
           fi
           uv run python scripts/validate/host_package_cases.py --image "homelab-host-test:$RELEASE" \
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
-            --work "$RUNNER_TEMP/cases-bootstrap" "${seed[@]}" --bootstrap
+            --work "$RUNNER_TEMP/cases-bootstrap" "${seed[@]}" --bootstrap \
+            --bootstrap-shard "$SHARD"
 
   # The bootstrap case whose seed never holds k3s, so install.sh's own download and sha256 check
   # of the release binary run whatever the legs seed (#7751 seeds k3s there; #7754). One release
@@ -1944,7 +1965,7 @@ jobs:
         with:
           persist-credentials: false  # nothing here pushes or fetches
 
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
 
       - name: Download the hand-off from the build job
         if: >-
@@ -2183,7 +2204,7 @@ jobs:
           fetch-depth: 0  # the merge-base diff below needs history
           persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
 
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
         with:
           python: "false"
           uv: "false"

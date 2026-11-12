@@ -20,8 +20,8 @@
 #
 # The rest of the server's host half (H7.35, docs/target-architecture/host/h7-delete-ansible.md):
 # Longhorn's packages and multipath drop-in, the read-only kubeconfig, the inotify key, the join
-# rules and the address pin. The pin's templates stay in setup/k3s, which daniel-server's pin play
-# still applies, so they render in place through `role: k3s`. `k3s-host-dns` holds the resolver.
+# rules and the address pin. The pin's template stays in setup/k3s, which daniel-server's pin play
+# still applies, so it renders in place through `role: k3s`. `k3s-host-dns` holds the resolver.
 #
 # DECIDED: the wifi fallback reaches /etc/netplan through a copy, never an output's symlink.
 # `netplan generate` fails on a dangling link in that directory, so a missing SOPS key would take

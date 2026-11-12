@@ -185,6 +185,7 @@ clone={{ claude_code_agent_user_clone_dir }}
 if [ ! -e "$clone/.git" ]; then
   as_agent git clone --quiet "https://github.com/{{ claude_code_agent_user_repo }}.git" "$clone"
 fi
-if [ ! -e "$clone/.git/hooks/pre-commit" ] && [ -x "$home/.local/bin/prek" ]; then
+if { [ ! -e "$clone/.git/hooks/pre-commit" ] || [ ! -e "$clone/.git/hooks/commit-msg" ]; } \
+  && [ -x "$home/.local/bin/prek" ]; then
   (cd "$clone" && as_agent "$home/.local/bin/prek" install)
 fi

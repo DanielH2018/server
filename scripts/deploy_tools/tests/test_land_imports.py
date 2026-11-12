@@ -16,6 +16,7 @@ MODULES = frozenset(
         "landing",
         "merge",
         "pace",
+        "stuck_checks",
         "policy",
         "classify",
         "closing_refs",
@@ -86,9 +87,12 @@ ALLOWED = {
         "policy",
         "pr_json",
         "gh_read",
+        "stuck_checks",
     },
     # The master CI backlog read that holds --await-merge's direct merge (#5526).
     "pace": {"landing", "outcome"},
+    # The read that ends --await-merge on a check GitHub never finishes (#7996).
+    "stuck_checks": {"landing", "gh_read"},
     # The pin gate runs inside --await-merge's direct merge, and `land.py --regate` alone.
     "pin_gate": {"landing", "outcome", "pin_reads"},
     # Its boundaries. It imports `promote.py`'s `last-good` reader, outside land_lib.

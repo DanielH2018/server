@@ -108,8 +108,8 @@ main handlers list nor in the listening handlers list`. The probe returned the s
 `--tags b`, and with `b` placed before `a` in the list. A cross-role notify into an unconditional
 role such as `initial_setup` resolves in both shapes. A cross-role notify into a GATED role would
 fail the play under a loop, where the static playbook skips it silently.
-`ansible/tests/setup/test_setup_handlers_resolve.py` reads the `roles:` list, so it is one of the
-readers below and can carry the rule.
+The handler-resolution test read the `roles:` list, so it was one of the readers below and could
+have carried the rule. It retired once no setup role defined a handler (#7915).
 
 The harness and the probe leave two differences unmeasured, and neither applies to this tree:
 

@@ -11,19 +11,15 @@ whole gate green.
 
 The setup plane is hand-applied by construction, which makes the gap worse rather than better:
 no routine deploy exercises it, so the first run of a bad template is a bring-up someone reaches
-for during an incident. `roles/setup/k3s/templates/longhorn-b2-secret.yaml.j2` is the worked
-example — it renders Longhorn's B2 credential, and an undefined variable there produces an empty
-`AWS_ACCESS_KEY_ID` rather than an error, surfacing as backups silently not working.
+for during an incident.
 
 WHAT COUNTS AS UNDEFINED. Rendering with a bare `StrictUndefined` would fail on every SOPS
-secret and every fact a task supplies at runtime, so this guard renders with a tracking
+secret and every key a host component supplies, so this guard renders with a tracking
 Undefined and then judges each name it collected. A name is allowed to be undefined when it is:
 
   - Ansible-supplied — `ansible_*`, `inventory_hostname`, `hostvars`, `groups`, `item`
     (`ANSIBLE_SUPPLIED` / `ANSIBLE_SUPPLIED_PREFIXES`);
   - a SOPS secret, by name, from the plaintext registry `ansible/secret_rotation.yml`;
-  - runtime-supplied by a setup-plane task — a `set_fact` key, a task-level `vars:` key, or a
-    `register:` name, derived from the tasks themselves (`runtime_vars`), never listed;
   - defined anywhere in the inventory — `group_vars/all.yml` or any host's `host_vars` file;
   - declared in the template's own role defaults. `lib.render_context` leaves out a default
     whose value will not expand (it names a filter the light environment lacks), so the key
@@ -33,7 +29,7 @@ Undefined and then judges each name it collected. A name is allowed to be undefi
 
 Everything else is a failure naming the template and the variable. That is the shape a rename
 takes: the producer moves and the consumer keeps the old name, which then matches none of the
-four sources above.
+sources above.
 
 The YAML templates (`*.yaml.j2` / `*.yml.j2`) are additionally parsed, the same structural check
 the other three guards make. The rest are rendered only — a `.env`, a Corefile and libvirt XML
@@ -90,8 +86,6 @@ ANSIBLE_SUPPLIED = frozenset(
 )
 ANSIBLE_SUPPLIED_PREFIXES = ("ansible_",)
 
-SET_FACT_KEYS = frozenset({"set_fact", "ansible.builtin.set_fact"})
-
 # Ansible-supplied values given a plausible rendering rather than a stub: the `comment` filter
 # raises on an Undefined, so `{{ ansible_managed | comment }}` cannot render without one.
 ANSIBLE_RUNTIME_CONTEXT = {
@@ -146,44 +140,6 @@ def secret_names(registry: Path = SECRET_REGISTRY) -> frozenset[str]:
     return frozenset(load_yaml(registry).get("entries") or {})
 
 
-def _walk(node, out: set[str]) -> None:
-    if isinstance(node, dict):
-        for key, value in node.items():
-            # Both spellings: this repo writes `ansible.builtin.set_fact`, and matching the
-            # bare name alone silently missed every one of them — the whole derivation
-            # returned only the handful written short.
-            if key in SET_FACT_KEYS and isinstance(value, dict):
-                out.update(k for k in value if k != "cacheable")
-            elif key == "vars" and isinstance(value, dict):
-                out.update(value)
-            elif key == "register" and isinstance(value, str):
-                out.add(value)
-            _walk(value, out)
-    elif isinstance(node, list):
-        for entry in node:
-            _walk(entry, out)
-
-
-def runtime_vars(setup: Path = SETUP) -> frozenset[str]:
-    """Variable names the setup-plane tasks supply at runtime.
-
-    A `set_fact` key, a task-level `vars:` key, or a `register:` name. Derived from every
-    `tasks/**/*.yml` under the setup roles rather than listed, so renaming the producer without
-    the consumer is exactly what stops matching. Deliberately plane-wide rather than per-role:
-    `roles/setup/common/templates/resolv.conf.j2` reads `common_resolver_nameservers`, which the
-    k3s role sets before including it.
-    """
-    out: set[str] = set()
-    for tasks in sorted(setup.glob("*/tasks/**/*.yml")):
-        try:
-            _walk(yaml_fast.safe_load(tasks.read_text()), out)
-        except yaml.YAMLError:
-            # A task file that does not parse is `check-yaml`'s and ansible-lint's problem, not
-            # this guard's. Skipping it can only widen the failure list, never narrow it.
-            continue
-    return frozenset(out)
-
-
 def inventory_names() -> frozenset[str]:
     """Every variable name the plaintext inventory defines, group_vars plus every host."""
     names = set(load_yaml(ALL_VARS))
@@ -195,7 +151,7 @@ def inventory_names() -> frozenset[str]:
 def is_allowed_undefined(name: str, known: frozenset[str]) -> bool:
     """Whether an undefined variable is one this guard tolerates.
 
-    `known` is the union of the secret registry, the runtime-supplied names and the inventory;
+    `known` is the union of the secret registry and the inventory;
     Ansible's own magic vars are matched here rather than folded into it, because they come from
     the runtime rather than from any file this repo could census.
     """
@@ -279,8 +235,7 @@ def component_supplied(role: str, components: Path = COMPONENTS) -> frozenset[st
     """Variable names the host components rendering `role` supply to its templates.
 
     A component that names the role in `role:` renders the role's templates with its own
-    `defaults:` and, for each secret key an output declares, `<key>_value`. The role's tasks no
-    longer supply these, so they are read from the component rather than from `runtime_vars`.
+    `defaults:` and, for each secret key an output declares, `<key>_value`.
     `role` may also name a component, whose own templates get the same names from its spec.
     """
     out: set[str] = set()
@@ -300,7 +255,7 @@ def check_role_template(
     """`check_template` under the context a deploy renders `tpl` with.
 
     The owning role's or component's defaults under the inventory, as Ansible layers them,
-    minus the secrets and runtime facts `known` covers. The default names join `known`, because
+    minus the secrets and inventory names `known` covers. The default names join `known`, because
     a default whose value will not expand is left out of the context and still counts as
     defined. `components` is where `component_supplied` looks, a parameter for the tests.
     """
@@ -323,7 +278,7 @@ def main(argv: Sequence[str] = ()) -> int:
     """
     answer_help(__doc__, list(argv))
     ok = ok_printer(argv)
-    known = secret_names() | runtime_vars() | inventory_names()
+    known = secret_names() | inventory_names()
     templates = discover_templates()
     failures = 0
     for tpl in templates:

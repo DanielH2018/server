@@ -33,7 +33,7 @@ MUST_FIND = frozenset(
 
 @pytest.fixture(scope="module")
 def known():
-    return v.secret_names() | v.runtime_vars() | v.inventory_names()
+    return v.secret_names() | v.inventory_names()
 
 
 @pytest.fixture(scope="module")
@@ -49,7 +49,7 @@ def test_the_census_finds_the_named_setup_templates():
     """Non-vacuity: the glob must return these by name, not merely return something."""
     found = {_rel(p) for p in v.discover_templates()}
     assert MUST_FIND <= found, f"discovery lost: {sorted(MUST_FIND - found)}"
-    assert len(found) >= 94
+    assert len(found) >= 93
 
 
 def test_every_real_setup_template_renders_with_no_unresolved_variable(known):
@@ -128,16 +128,6 @@ def test_a_jinja_syntax_error_is_flagged(tmp_path, ctx, known):
     problems = v.check_template(tpl, ctx, known)
     assert problems
     assert "render error" in problems[0]
-
-
-def test_runtime_vars_reads_both_set_fact_spellings(tmp_path):
-    """`ansible.builtin.set_fact` is what this repo writes; matching the bare name found none."""
-    tasks = tmp_path / "role" / "tasks" / "main.yml"
-    tasks.parent.mkdir(parents=True)
-    tasks.write_text(
-        "- ansible.builtin.set_fact: {long_spelling: 1}\n- set_fact: {short_spelling: 1}\n"
-    )
-    assert v.runtime_vars(tmp_path) == {"long_spelling", "short_spelling"}
 
 
 def test_an_ansible_magic_var_is_allowed_and_an_unknown_name_is_not():
