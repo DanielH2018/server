@@ -271,7 +271,6 @@ def test_a_sweep_skipping_a_deleted_ratchet_hook_is_flagged():
         "ansible/roles/k8s/flux/defaults/main.yml",
         "ansible/roles/k8s/observability/files/rules/x.yml",
         "hosts/components/claude-code/templates/claude-land@.service.j2",
-        "hosts/components/claude-code/defaults/main.yml",
         "hosts/components/renovate-agent/templates/renovate-agent-land@.service.j2",
         "hosts/components/renovate-agent/files/land_renovate_pr.py",
     ],
