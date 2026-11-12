@@ -7,10 +7,10 @@
 #
 # DECIDED: a floor, not every path that widens the agent's authority (operator decision,
 # 2026-10-10). It keeps the explicit grant points and the gate itself. The agent's roles, the
-# deployer and the inventory land without approval. This is not a barrier to root: the deployer
-# applies any setup-role change as root, so a task in an unlisted role reaches root. That was
-# already true under the wider list. docs/claude-agent-user.md, "The approval floor", has the
-# reasoning. The list is literal here, not a variable, so the inventory cannot override it.
+# deployer and the inventory land without approval. This is not a barrier to root: a host
+# package installs any host component change as root, so a change in an unlisted component
+# reaches root. That was already true under the wider list. docs/claude-agent-user.md, "The
+# approval floor", has the reasoning. The list is literal here, not a variable, so the inventory cannot override it.
 #
 # The lander: this list, the unit that reads it, the rule that lets the agent start it, the
 # template that pins the lander's name and settings, and the host component that ships them and

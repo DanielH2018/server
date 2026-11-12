@@ -8,17 +8,20 @@ import pytest
 from lib.role_paths import RolePath, is_test_path, role_for, role_of, tag_for
 
 
-def test_role_of_names_the_plane_role_and_subdirectory():
+def test_role_of_names_the_role_and_subdirectory():
     assert role_of("ansible/roles/k8s/sonarr/templates/deployment.yaml.j2") == RolePath(
-        "k8s", "sonarr", "templates"
+        "sonarr", "templates"
     )
-    assert role_of("ansible/roles/k8s/longhorn/CLAUDE.md") == RolePath(
-        "k8s", "longhorn", ""
-    )
+    assert role_of("ansible/roles/k8s/longhorn/CLAUDE.md") == RolePath("longhorn", "")
 
 
-def test_role_of_names_nothing_outside_a_role():
-    assert role_of("ansible/templates/macros.j2") is None
+@pytest.mark.parametrize(
+    "path",
+    ["ansible/templates/macros.j2", "ansible/roles/setup/k3s/tasks/main.yml"],
+    ids=["outside-a-role", "outside-the-k8s-tree"],
+)
+def test_role_of_names_nothing_outside_a_k8s_role(path):
+    assert role_of(path) is None
 
 
 @pytest.mark.parametrize(
