@@ -233,8 +233,8 @@ def bundle_ordering(
 ) -> Ordering:
     """What the bundle generates `dependsOn` from: the full dependency map (D4.2).
 
-    The map is `build_k8s_dep_map` over the full k8s `containers_list`, the list
-    `template_context` sorts by, never a `--role` subset, so a tag's edges do not depend on what else renders.
+    The map is `build_k8s_dep_map` over the full k8s `containers_list`, the same
+    map `template_context` sorts with, never a `--role` subset, so a tag's edges do not depend on what else renders.
     The suspended tags are read over every flux-owned role for the same reason (D5.1b).
 
     Raises:
@@ -331,9 +331,9 @@ def role_context(
     role_dir = roles / tag
     try:
         ctx = tag_context(role_dir, tag, stubs, host, inventory)
-        # A role default can read a fact a task sets, as every `*_k8s_image` built here reads
+        # A role default can read a derived fact, as every `*_k8s_image` built here reads
         # `k8s_built_image_tags`. The first pass leaves such a default undefined, so the facts
-        # go in as the overrides of a second pass, as `set_fact` outranks every file layer.
+        # go in as the overrides of a second pass, above every file layer.
         # The stub file's extra vars outrank them in turn.
         facts = derived_facts(role_dir, ctx, built)
         ctx = tag_context(role_dir, tag, {**facts, **stubs}, host, inventory)

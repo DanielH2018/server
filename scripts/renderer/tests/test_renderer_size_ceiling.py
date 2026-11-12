@@ -22,7 +22,7 @@ from lib.repo_paths import REPO
 # 13672 once #7961 dropped the deployer-state modules from the host source tables.
 # 13618 once H7.55 dropped the `role:` sources, which the components now own.
 # 13622 once #8023 listed the Flux GitHub App's three keys in `SOPS_MANIFEST_KEYS`.
-# 13619 once #8172 rewrote the renderer docstrings that cited the deleted deploy.yml.
+# 13619 once #8172 rewrote the renderer's docstrings.
 LINE_CEILING = 13619
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
