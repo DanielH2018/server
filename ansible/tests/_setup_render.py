@@ -6,9 +6,9 @@ only scan template SOURCE, and a source scan cannot follow an alias: a template 
 secret through a second variable holds it while the scan sees nothing (#3183).
 
 Each template renders from its OWN component's context, the one `validate/setup_templates.py`
-gives it: `lib.render_context` with Ansible's runtime names on top. `overrides` go on top as
-well, so a guard can set a secret to a sentinel and look for it, and a default of
-`"{{ some_secret }}"` carries the sentinel rather than the secret's stub.
+gives it: `lib.render_context` with the host renderer's `inventory_hostname` on top.
+`overrides` go on top as well, so a guard can set a secret to a sentinel and look for it, and a
+default of `"{{ some_secret }}"` carries the sentinel rather than the secret's stub.
 
 Secret values a caller does not override render as `STUB` (the `DECIDED:` rule in
 `lib/render_guard.py`).
@@ -21,7 +21,7 @@ from lib.ansible_jinja_env import template_env
 from lib.render_context import render_context
 from lib.render_guard import render_or_error
 from validate.setup_templates import (
-    ANSIBLE_RUNTIME_CONTEXT,
+    HOST_RENDER_CONTEXT,
     COMPONENTS,
     component_context,
     discover_templates,
@@ -37,7 +37,7 @@ def role_context(role_dir: Path, overrides: dict | None = None) -> dict:
     there names.
     """
     return render_context(
-        role_dir, overrides={**ANSIBLE_RUNTIME_CONTEXT, **(overrides or {})}
+        role_dir, overrides={**HOST_RENDER_CONTEXT, **(overrides or {})}
     )
 
 
@@ -57,7 +57,7 @@ def render_setup_texts(
         directory = tpl.parents[1]
         if directory not in contexts:
             contexts[directory] = component_context(
-                directory, {**ANSIBLE_RUNTIME_CONTEXT, **(overrides or {})}
+                directory, {**HOST_RENDER_CONTEXT, **(overrides or {})}
             )
         root, name = template_loader(tpl)
         rendered, err = render_or_error(template_env(root), name, contexts[directory])

@@ -20,5 +20,5 @@ binaryData:
    every ordinary icon path. Anything the CDN does serve (github, google-maps, gmail, …) is
    referenced by bare name in services.yaml.j2 and must NOT be added here. #}
 {% for icon in ['anilist.png', 'monarch.png', 'tacticstools.png'] %}
-  {{ icon }}: {{ lookup('pipe', 'base64 -w0 ' ~ playbook_dir ~ '/roles/k8s/homepage/files/' ~ icon) }}
+  {{ icon }}: {{ lookup('b64file', playbook_dir ~ '/roles/k8s/homepage/files/' ~ icon) }}
 {% endfor %}

@@ -12,4 +12,4 @@
   `manifests_label_src` is the absolute path of the template this wraps, set per loop item by
   the render task.
 #}
-{{ lookup('ansible.builtin.template', manifests_label_src) | homelab_role_label(manifests_service) }}
+{{ lookup('template', manifests_label_src) | homelab_role_label(manifests_service) }}

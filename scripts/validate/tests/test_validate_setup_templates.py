@@ -41,7 +41,7 @@ def known():
 @pytest.fixture(scope="module")
 def ctx():
     return v.render_context(
-        v.COMPONENTS / "pi-resolver", overrides=v.ANSIBLE_RUNTIME_CONTEXT
+        v.COMPONENTS / "pi-resolver", overrides=v.HOST_RENDER_CONTEXT
     )
 
 
@@ -134,10 +134,11 @@ def test_a_jinja_syntax_error_is_flagged(tmp_path, ctx, known):
     assert "render error" in problems[0]
 
 
-def test_an_ansible_magic_var_is_allowed_and_an_unknown_name_is_not():
+def test_a_host_render_name_is_allowed_and_an_unknown_name_is_not():
     known = frozenset({"defined_somewhere"})
-    assert v.is_allowed_undefined("ansible_facts.hostname", known)
     assert v.is_allowed_undefined("inventory_hostname", known)
+    assert not v.is_allowed_undefined("ansible_facts.hostname", known)
+    assert not v.is_allowed_undefined("ansible_managed", known)
     assert v.is_allowed_undefined("defined_somewhere", known)
     assert not v.is_allowed_undefined("typo_var", known)
 
