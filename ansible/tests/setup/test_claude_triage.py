@@ -327,8 +327,8 @@ def alert_rules() -> list[tuple[str, str, str]]:
     """(alert, ruler, expr) for every alerting rule Prometheus or the Loki ruler evaluates."""
     found = []
     for ruler, directory in (("prometheus", PROMETHEUS_RULES), ("loki", LOKI_RULES)):
-        for path in sorted(directory.glob("*.yaml")):
-            for group in yaml_fast.safe_load(path.read_text())["groups"]:
+        for rule_file in sorted(directory.glob("*.yaml")):
+            for group in yaml_fast.safe_load(rule_file.read_text())["groups"]:
                 found += [
                     (r["alert"], ruler, r["expr"])
                     for r in group["rules"]
