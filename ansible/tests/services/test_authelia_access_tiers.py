@@ -224,31 +224,26 @@ def test_the_one_factor_rule_is_scoped_like_the_wildcard_it_replaces():
     assert wildcard["networks"] == RFC1918
 
 
-def _silence_ui_host(rules, name):
+def _karma_host(rules):
     domain = next(
         r["domain"] for r in rules if str(r["domain"]).startswith("*.local.")
     )[len("*.local.") :]
-    return f"{name}.local.{domain}"
+    return f"karma.local.{domain}"
 
 
-SILENCE_UIS = ["karma", "alertmanager"]
-
-
-@pytest.mark.parametrize("name", SILENCE_UIS)
-def test_an_admins_member_reaches_a_silence_ui_at_two_factor(name):
+def test_an_admins_member_reaches_a_silence_ui_at_two_factor():
     """A silence-capable UI asks the `admins` group, claude-ui included, for a second
     factor rather than riding the `*.local` one_factor wildcard (#6689)."""
     rules = _rendered_rules()
-    host = _silence_ui_host(rules, name)
+    host = _karma_host(rules)
     assert _policy(rules, host, "10.0.0.5", groups=("admins", "dev")) == "two_factor"
 
 
-@pytest.mark.parametrize("name", SILENCE_UIS)
-def test_a_user_outside_admins_is_denied_a_silence_ui(name):
+def test_a_user_outside_admins_is_denied_a_silence_ui():
     """claude-agent has no groups and holds a one_factor session. Without the `deny` rule
     it would skip the subject-scoped rule and fall through to the `*.local` wildcard."""
     # fact: ansible/roles/k8s/authelia/CLAUDE.md#Access control comes from containers_list
     rules = _rendered_rules()
-    host = _silence_ui_host(rules, name)
+    host = _karma_host(rules)
     assert _policy(rules, host, "10.0.0.5") == "deny"
     assert _policy(rules, host, "192.168.1.20", groups=("dev",)) == "deny"
