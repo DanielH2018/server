@@ -979,9 +979,10 @@ publishes a second host package.
       it costs off-LAN access until a LAN session repairs it (*Risks*). It is also the
       pilot, and the hostname every container case runs under.
 
-  The order is daniel-server, daniel-pi, daniel-box. When the server's package is not in a
-  run's changed set, the first host in that order whose package changed is that run's
-  canary. The Pi led this order until H3.13 put it on the daily fallback schedule.
+  daniel-server is the only canary. When its package is not in a run's changed set, the run
+  opens no gate and stages every host package at once. The Pi led the order until H3.13 put
+  it on the daily fallback schedule, and stayed eligible until 2026-11-12 (*The Pi is never a
+  canary*, below).
 - **The gate.** A run that stages the canary's package at version V records V's SHA as an
   open gate in the builder's state. While a gate is open, the builder builds the canary's
   package as usual, and moves the gate to each newer canary version. It builds no other
