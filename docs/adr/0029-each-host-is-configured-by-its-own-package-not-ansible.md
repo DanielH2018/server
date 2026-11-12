@@ -1,7 +1,7 @@
 ---
 id: "0029"
 title: Each host is configured by its own package, and Ansible is gone
-status: Proposed
+status: Accepted
 date: 2026-11-12
 governs:
   - "hosts/lib/tests/test_reconcile_size_census.py#raising CEILING is an operator ruling"
@@ -11,14 +11,12 @@ governs:
 
 ## Status
 
-Proposed. Approving this record is **operator-only**
-([H7](../target-architecture/host/h7-delete-ansible.md), exit observation 6). Step H7.57 is
-not landed until the operator approves it.
+Accepted on 2026-11-12. The operator approved this record
+([H7](../target-architecture/host/h7-delete-ansible.md), exit observation 6) and ruled that
+ADR-0001, ADR-0003, ADR-0011, ADR-0013 and ADR-0017 each carry an "Amended by ADR-0029"
+note (*Amendments* below).
 
-On approval, this record amends ADR-0003 and ADR-0013 (*Amendments* below), and it
-supersedes the bring-up sections of the setup roles' `CLAUDE.md` files. Whether ADR-0001,
-ADR-0011 and ADR-0017 need an amendment is a separate **operator-only** ruling, and
-*Questions for the operator* below states the facts for each.
+This record supersedes the bring-up sections of the setup roles' `CLAUDE.md` files.
 
 ## Context
 
@@ -179,34 +177,34 @@ because every open branch conflicts with it.
 
 ## Amendments
 
-On approval, this record amends two Accepted records. The amended record gains an "Amended
-by ADR-0029" note in its *Status*; its decision text is not rewritten.
+The operator ruled on 2026-11-12 that five records gain an "Amended by ADR-0029" note in
+their *Status*. Each decision text is unchanged.
 
+- **[ADR-0001](0001-mkdocs-site-with-generated-reference.md).** Its title says the
+  reference pages are generated from the Ansible tree. The generators under `scripts/docs/`
+  read the setup roles until H7.18a. Since H7.18a they read `hosts/*/package.yml`, the
+  component units and the timers, and no playbook or setup role is left to read. The
+  decision, a MkDocs site with generated reference pages, stands, and the title stays as the
+  record's name.
 - **[ADR-0003](0003-sops-with-age-for-secrets-at-rest.md).** Its decision says the
   `community.sops.sops_decrypt` lookup decrypts values at deploy time. ansible-core and the
   collections are gone, so no deploy-time lookup remains. ADR-0022 already records the two
   readers that replaced it: the cluster decrypts its own file with its own key, and a host
   decrypts its own per-host file with its own key. `secrets.yml` stays the encrypted source
   of record.
+- **[ADR-0011](0011-one-lock-serialises-every-deploy-path.md).** The decision stands:
+  `scripts/lib/tree_lock.py` still guards the tree lock. `deploy.sh` and
+  `gitops-deploy.service` are no longer holders: H7.52 retired the deployer's timer, and
+  H7.53 deleted `deploy.sh` and the deployer's code. `homelab-checkout-sync` and the crons
+  that write the tree (docs-refresh and eval-run) still take the tree lock.
 - **[ADR-0013](0013-daniel-pi-stays-on-docker.md).** Its 2026-10-28 amendment says
   "`-e target=daniel-pi` stays for the setup plays." The setup plays are deleted. The Pi's
   setup plane ships in `homelab-daniel-pi`, and `homelab-docker-engine.service` moves the
   Docker engine. Nothing reaches the Pi over SSH with `-e target=daniel-pi`.
-
-## Questions for the operator
-
-Each of these is an **operator-only** ruling on whether the record needs an amendment.
-This record states the facts and decides none of them.
-
-- **[ADR-0001](0001-mkdocs-site-with-generated-reference.md).** Its title says the
-  reference pages are generated from the Ansible tree. The generators under `scripts/docs/`
-  read the setup roles until H7.18a. Since H7.18a they read `hosts/*/package.yml`, the
-  component units and the timers, and no playbook or setup role is left to read.
-- **[ADR-0011](0011-one-lock-serialises-every-deploy-path.md) and
-  [ADR-0017](0017-the-tree-lock-guards-the-tree-not-the-cluster.md).** `deploy.sh` and
-  `gitops-deploy.service` are no longer lock holders: H7.52 retired the deployer's timer,
-  and H7.53 deleted `deploy.sh` and the deployer's code. `homelab-checkout-sync` and the crons that write the tree still take
-  the tree lock.
+- **[ADR-0017](0017-the-tree-lock-guards-the-tree-not-the-cluster.md).** Its tree-lock half
+  stands, through ADR-0011. Its per-service-lock half has no subject left: `deploy.sh` took
+  those locks for the playbook, `deploy.sh` is deleted, and k8s changes deploy only through
+  `promote` and Flux.
 
 ## Governs
 

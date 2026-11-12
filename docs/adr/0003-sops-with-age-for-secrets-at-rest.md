@@ -20,6 +20,11 @@ file with its own age key, and never `secrets.yml`.
 the same day: a host that runs from a package decrypts its own per-host file with its own key,
 and never `secrets.yml`.
 
+Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) on
+2026-11-12. The `community.sops.sops_decrypt` lookup that the decision names no longer exists,
+because ansible-core and its collections are deleted. The two readers above replaced it, and
+`secrets.yml` stays the encrypted source of record.
+
 ## Context
 
 The homelab is deployed from a git repository by Ansible, and the deploy needs credentials:
