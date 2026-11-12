@@ -70,6 +70,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from _gui_html import GUI_HTML, STAR_JS
 from artifact_meta import (
     apply_metadata,
+    derive_origin,
     load_known_services,
     parse_html,
     parse_markdown,
@@ -229,7 +230,7 @@ def build_index(
 
     Returns:
         The index dict, with keys `generated`, `count`, `hosts`, `categories`, `statuses`,
-        `star_writable` and `artifacts`.
+        `origins`, `star_writable` and `artifacts`.
     """
     known = load_known_services() if known_services is None else known_services
     starred = stars.load() if stars else set()
@@ -257,6 +258,7 @@ def build_index(
         entry.setdefault("summary", "")
         if suffix in PARSEABLE:
             apply_metadata(entry, body, suffix == ".md", known)
+        entry.setdefault("origin", derive_origin(path.name))
         # An .md alongside an .html of the same stem is the same document — the skill writes
         # both. Flagged so the GUI can fold the Markdown copy away by default.
         entry["companion_html"] = (
@@ -272,6 +274,7 @@ def build_index(
         # category nothing uses never appears as a dead dropdown entry.
         "categories": sorted({e["category"] for e in entries if e.get("category")}),
         "statuses": sorted({e["status"] for e in entries if e.get("status")}),
+        "origins": sorted({e["origin"] for e in entries}),
         "star_writable": bool(stars and stars.writable),
         "artifacts": entries,
     }

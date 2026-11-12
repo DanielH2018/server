@@ -136,6 +136,16 @@ CATEGORY_KEYWORDS = {
 # Chosen only when nothing more specific scores — see derive_category.
 FALLBACK_CATEGORY = "infra"
 
+# Where an artifact came from. A headless run with no operator in the session, such as the
+# changelog-watch timer, declares `scheduled`; anything that declares nothing was written by an
+# interactive session, which is how every artifact here was written before the field existed.
+SCHEDULED_ORIGIN = "scheduled"
+SESSION_ORIGIN = "session"
+
+# Filename prefixes of scheduled generators whose artifacts predate `artifact:origin`. A
+# generator that declares its origin needs no entry here.
+SCHEDULED_NAME_PREFIXES = ("changelog-watch_",)
+
 # How many service chips a document shows, most-mentioned first. Uncapped, a broad review
 # tagged a dozen services and the row stopped carrying information (measured: 5.8 per tagged
 # document across the real corpus).
@@ -260,8 +270,9 @@ def declared_metadata(body: str, is_markdown: bool = False) -> dict:
     meta: dict = {}
     if found.get("category"):
         meta["category"] = found["category"].strip().lower()
-    if found.get("status"):
-        meta["status"] = found["status"].strip().lower()
+    for key in ("status", "origin"):
+        if found.get(key):
+            meta[key] = found[key].strip().lower()
     for key in ("services", "tags"):
         if found.get(key):
             meta[key] = split_list(found[key])
@@ -335,6 +346,13 @@ def derive_status(slices: dict | None) -> str:
     return "done" if slices.get("done") else ""
 
 
+def derive_origin(
+    name: str, scheduled_prefixes: tuple[str, ...] = SCHEDULED_NAME_PREFIXES
+) -> str:
+    """`scheduled` for a file named by a known scheduled generator, else `session`."""
+    return SCHEDULED_ORIGIN if name.startswith(scheduled_prefixes) else SESSION_ORIGIN
+
+
 def apply_metadata(entry: dict, body: str, is_markdown: bool, known: list[str]) -> None:
     """Merge declared and derived metadata onto an index entry.
 
@@ -351,6 +369,7 @@ def apply_metadata(entry: dict, body: str, is_markdown: bool, known: list[str]) 
             lambda: derive_category(entry.get("title", ""), entry.get("text", "")),
         ),
         ("status", lambda: derive_status(entry.get("slices"))),
+        ("origin", lambda: derive_origin(entry.get("name", ""))),
         (
             "services",
             lambda: derive_services(
