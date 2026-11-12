@@ -49,7 +49,8 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   (#3740). `ansible/tests/services/test_loki_stream_labels.py` fails when an emitted value
   and the consumers' values drift apart.
 - **Two `stage.replace` stages redact credentials on the way in:** Home Assistant's cast
-  `refresh_token`, which HA logs on a failed cast (issue #3015), and Prowlarr's `apikey=` in
+  `refresh_token`, which a failed cast logs (issue #3015) unless HA's own `logger.filters`
+  drops the record first, so this stage is the backstop, and Prowlarr's `apikey=` in
   the *arr Torznab error URLs (#6276). Each substitutes the capture group only, so the rest of
   the record survives. `ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py` and
   `ansible/tests/k8s/test_alloy_redacts_arr_apikey.py` fail on either half. Each stage is
