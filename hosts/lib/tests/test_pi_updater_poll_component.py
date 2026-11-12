@@ -85,8 +85,10 @@ def test_the_updater_units_outrank_the_aide_scans_io_class(package, unit):
     (unit_class,) = re.findall(
         r"^IOSchedulingClass=(\S+)$", _text(source, f"{UNITS}/{unit}"), re.M
     )
+    # daniel-pi lists no aide-scan, so the scan's class is read where it ships.
+    box = host_mode.render_host("daniel-box")
     (aide_class,) = re.findall(
-        r"ionice -c(\d) \S*/aide ", _text(package, "/usr/lib/homelab/aide-check")
+        r"ionice -c(\d) \S*/aide ", _text(box, "/usr/lib/homelab/aide-check")
     )
     assert IO_CLASSES[unit_class] < int(aide_class)
 

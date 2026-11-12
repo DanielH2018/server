@@ -12,13 +12,13 @@ Run: uv run pytest ansible/tests/setup/test_aide_check_names_its_config.py
 import re
 
 import pytest
-from _host_packages import HOSTS, shipped_text
+from _host_packages import shipped_text
 from _shell_render import rendered_shell_text
 
 UNIT_DIR = "/usr/lib/systemd/system"
 TIMER = f"{UNIT_DIR}/homelab-aide-check.timer"
 SERVICE = f"{UNIT_DIR}/homelab-aide-check.service"
-SCRIPT = ("components", "integrity-scans", "aide-check.sh.j2")
+SCRIPT = ("components", "aide-scan", "aide-check.sh.j2")
 
 # `aide` as a command word, followed by `--config=<path>` or `--config <path>` before the end.
 _AIDE_WITH_CONFIG = re.compile(
@@ -26,7 +26,7 @@ _AIDE_WITH_CONFIG = re.compile(
 )
 
 
-@pytest.mark.parametrize("host", HOSTS)
+@pytest.mark.parametrize("host", ["daniel-box", "daniel-server"])
 def test_the_weekly_cron_runs_the_check_script(host: str):
     """homelab-aide-check.timer starts the service whose ExecStart is the check script."""
     assert not re.search(r"^Unit=", shipped_text(host, TIMER), re.M), (

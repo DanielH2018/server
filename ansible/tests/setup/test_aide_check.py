@@ -38,6 +38,16 @@ from _setup_render import render_component_text
 from _shell_render import render_shell_script
 
 TIMER = "/usr/lib/systemd/system/homelab-aide-check.timer"
+# The hosts whose package lists aide-scan; daniel-pi's does not.
+AIDE_HOSTS = [host for host in HOSTS if TIMER in package(host).files]
+
+
+def test_only_the_hosts_listing_aide_scan_ship_aide():
+    """daniel-pi's scan outgrew its 456 MB and reset it twice on 2026-11-12 (#8084)."""
+    assert AIDE_HOSTS == ["daniel-box", "daniel-server"]
+    assert [path for path in package("daniel-pi").files if "aide" in path] == []
+
+
 WEEK_S = 7 * 24 * 3600
 
 
@@ -139,7 +149,7 @@ CHECKED = (
 )
 
 
-AIDE_LOCAL_VARS = {"sys_user": "ubuntu", "integrity_scans_aide_lean": False}
+AIDE_LOCAL_VARS = {"sys_user": "ubuntu"}
 
 
 def _excluded(path: str, conf: str) -> bool:
@@ -150,9 +160,7 @@ def _excluded(path: str, conf: str) -> bool:
 
 
 def test_worktrees_and_caches_are_excluded_and_their_neighbours_are_not():
-    conf = render_component_text(
-        "integrity-scans", "98_aide_local.conf.j2", AIDE_LOCAL_VARS
-    )
+    conf = render_component_text("aide-scan", "98_aide_local.conf.j2", AIDE_LOCAL_VARS)
     assert [p for p in EXCLUDED if not _excluded(p, conf)] == []
     assert [p for p in CHECKED if _excluded(p, conf)] == []
 
@@ -183,9 +191,7 @@ INODE_CHECKED = ("/boot/vmlinuz", "/boot/firmware-old", "/boot/initrd.img")
 
 
 def test_every_vfat_path_skips_its_inode_and_its_ext4_neighbours_do_not():
-    conf = render_component_text(
-        "integrity-scans", "98_aide_local.conf.j2", AIDE_LOCAL_VARS
-    )
+    conf = render_component_text("aide-scan", "98_aide_local.conf.j2", AIDE_LOCAL_VARS)
     assert [p for p in VFAT_PATHS if not _inode_skipped(p, conf)] == []
     assert [p for p in INODE_CHECKED if _inode_skipped(p, conf)] == []
 
@@ -212,31 +218,6 @@ def _aide_local_dest(host: str) -> str:
     return dests[0]
 
 
-# The 456 MB Pi, whose full-digest scan swapped until its watchdog reset it on 2026-11-12.
-LEAN_HOSTS = frozenset({"daniel-pi"})
-
-
-def _scans_lean(conf: str) -> bool:
-    """Whether `conf`'s first root rule is the sha256-only one and it skips the kernel headers."""
-    roots = [line for line in conf.splitlines() if line.startswith("/ ")]
-    return roots[:1] == ["/ HomelabLean"] and _excluded(
-        "/usr/src/linux-headers-6.8.0/x", conf
-    )
-
-
-def test_only_the_small_host_scans_lean():
-    lean = {h for h in HOSTS if _scans_lean(shipped_text(h, _aide_local_dest(h)))}
-    assert lean == LEAN_HOSTS
-    assert set(HOSTS) - LEAN_HOSTS, "no full-scan host left to compare against"
-
-
-def test_a_lean_rule_after_a_full_root_rule_is_flagged():
-    """AIDE takes the first root rule in file order, so the lean one must come first."""
-    lean_last = "!/usr/src(/|$)\n/ 0 Full\n/ HomelabLean\n"
-    assert _scans_lean("!/usr/src(/|$)\n/ HomelabLean\n")
-    assert not _scans_lean(lean_last)
-
-
 def test_the_include_pattern_skips_a_dotted_name_and_loads_a_plain_one():
     assert not DEBIAN_INCLUDE_NAME.match("98_aide_local.conf")
     assert DEBIAN_INCLUDE_NAME.match("98_aide_local")
@@ -244,7 +225,7 @@ def test_the_include_pattern_skips_a_dotted_name_and_loads_a_plain_one():
 
 def test_the_exclusions_deploy_under_a_name_aide_loads():
     """From 2026-05-31 to 2026-10-20 the file was `98_aide_local.conf` and no rule in it ran."""
-    for host in HOSTS:
+    for host in AIDE_HOSTS:
         dest = _aide_local_dest(host)
         assert DEBIAN_INCLUDE_NAME.match(dest.rsplit("/", 1)[1]), (
             f"{host}: {dest} fails aide.conf's include pattern, so AIDE never reads it"
@@ -297,20 +278,20 @@ def test_a_report_longer_than_a_pipe_buffer_logs_no_broken_pipe(tmp_path):
 
 def test_the_timer_runs_a_slot_it_missed():
     """daniel-pi's timer was stopped over the 2026-11-09 03:00 slot and never ran it (#7920)."""
-    for host in HOSTS:
+    for host in AIDE_HOSTS:
         assert re.search(r"^Persistent=true$", shipped_text(host, TIMER), re.M), host
 
 
 def test_the_push_deadline_covers_one_week_and_not_two():
-    """The producer is homelab-aide-check.timer (integrity-scans component), weekly on Monday."""
-    for host in HOSTS:
+    """The producer is homelab-aide-check.timer (aide-scan component), weekly on Monday."""
+    for host in AIDE_HOSTS:
         on_calendar = re.search(r"^OnCalendar=(.+)$", shipped_text(host, TIMER), re.M)
         assert on_calendar and re.fullmatch(
             r"Mon \*-\*-\* \d\d:\d\d:\d\d", on_calendar[1]
         ), (
             f"{host}: this test reads the timer as weekly; give it the new period if that changes"
         )
-    body = render_shell_script("components", "integrity-scans", "aide-check.sh.j2")
+    body = render_shell_script("components", "aide-scan", "aide-check.sh.j2")
     [deadline] = re.findall(r"^\s*DEADLINE_S=(\d+)$", body, re.M)
     assert WEEK_S < int(deadline) < 2 * WEEK_S, (
         f"DEADLINE_S {deadline}s must exceed the timer's weekly period, and stay "

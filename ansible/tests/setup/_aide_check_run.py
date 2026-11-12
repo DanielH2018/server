@@ -14,7 +14,7 @@ from _helpers import REPO
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, run, write_exec
 
-SCRIPT = ("components", "integrity-scans", "aide-check.sh.j2")
+SCRIPT = ("components", "aide-scan", "aide-check.sh.j2")
 
 # The real library, so the scan writes its textfile under TEXTFILE_DIR rather than the host's
 # own directory, which node_exporter scrapes.
