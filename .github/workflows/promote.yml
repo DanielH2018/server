@@ -381,6 +381,11 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-26.04
     timeout-minutes: 10
+    # GitHub can deliver one CI completion as two workflow_run events, and two publishes of one
+    # commit then race to write its signature (run 42710237024 was refused `write_package`).
+    concurrency:
+      group: publish-${{ needs.render.outputs.sha }}
+      cancel-in-progress: false
     permissions:
       packages: write
       id-token: write
@@ -441,11 +446,16 @@ jobs:
 
       # `--reproducible` fixes the created timestamp, so pushing one commit twice yields one
       # digest. The revision is the form promote.py's REVISION_ANNOTATION parser reads.
+      # A digest that already verifies is not signed again: GHCR refuses a second signature write
+      # with `write_package`. cosign can read a registry error as unsigned (#4829), which only
+      # costs a redundant sign.
       - name: Push and sign the bundle
         id: push
         if: ${{ !inputs.verify_drill }}
         env:
           SHA: ${{ needs.render.outputs.sha }}
+          IDENTITY: https://github.com/DanielH2018/server/.github/workflows/promote.yml@refs/heads/master
+          ISSUER: https://token.actions.githubusercontent.com
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -468,7 +478,15 @@ jobs:
             exit 1
           fi
           echo "pushed $repo:sha-$SHA at $digest"
-          cosign sign --yes "$repo@$digest"
+          sign_unless_signed() {
+            if cosign verify --certificate-identity "$IDENTITY" \
+              --certificate-oidc-issuer "$ISSUER" "$1" > /dev/null; then
+              echo "$1 already carries promote's signature"
+              return 0
+            fi
+            cosign sign --yes "$1"
+          }
+          retry sign_unless_signed "$repo@$digest"
 
       # The drill pushes an unsigned bundle to its own tag. It never writes sha-<X>, because an
       # unsigned sha-<X> makes `decide` report an error for that commit. The annotation gives

@@ -92,7 +92,9 @@ def test_runs_all_lists_every_run_and_batch():
     assert "  2 on daniel-box: b2 #2 cleaned 2026-10-09" in lines
 
 
-def test_launch_prints_one_line_with_the_run_id_and_the_batch_hosts(tmp_path, capsys):
+def test_launch_prints_one_line_with_the_run_id_and_each_batchs_host_and_rung(
+    tmp_path, capsys
+):
     issues = [Issue(1, "one", "body one", ("claude",))]
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=issues)
     run.answers_by_call = [ok(HEADROOM), ok(""), ok("")]
@@ -100,7 +102,8 @@ def test_launch_prints_one_line_with_the_run_id_and_the_batch_hosts(tmp_path, ca
     assert main([*argv, str(tmp_path)], tools) == 0
     out = capsys.readouterr().out
     assert re.fullmatch(
-        r"run \d{8}T\d{6}Z: 1 -> daniel-box; claims held under `worktree-orch`\n", out
+        r"run \d{8}T\d{6}Z: 1 -> daniel-box \(opus-medium\); claims held under `worktree-orch`\n",
+        out,
     )
 
 
