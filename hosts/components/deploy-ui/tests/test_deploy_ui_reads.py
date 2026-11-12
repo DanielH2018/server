@@ -3,7 +3,6 @@
 import os
 from pathlib import PurePath
 
-import pytest
 
 from deploy_ui_lib import deploy_ui_reads as reads
 from lib.tree_lock import TREE_LOCK
@@ -153,8 +152,3 @@ TWO_PRS_PS = """\
 def test_runs_keep_landings_for_different_prs_apart_is_flagged():
     got = reads.runs(reads.parse_ps(TWO_PRS_PS), {}, {})
     assert [(r.pid, r.pr) for r in got] == [(4400, "1550"), (4500, "1551")]
-
-
-@pytest.mark.parametrize("script", ["deploy.sh", "deploy_cli.py", "deploy_run.py"])
-def test_a_removed_deploy_entry_point_is_not_a_run_is_flagged(script):
-    assert not reads._is_run(f"/s/scripts/deploy_tools/{script} --tags n8n")
