@@ -55,6 +55,7 @@ ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
         "homepage",
         "ical-proxy",
         "jellyfin",
+        "karma",
         "littlelink",
         "livesync",
         "loki-homelab",

@@ -2,6 +2,14 @@
 
 Status: DECIDED (spike [#6688](https://github.com/DanielH2018/server/issues/6688), closed 2026-10-31). B-6a shipped the `admins` option ([#6743](https://github.com/DanielH2018/server/pull/6743)); the operator accepted that option on 2026-11-05 (open question 1).
 
+**HISTORY — answer 1 (b) is superseded.** On 2026-11-12 the operator retired the
+`alertmanager.local` UI route in favour of Karma (`ansible/roles/k8s/karma/`). Alertmanager's own
+UI shows no severity until a group is expanded, and it cannot rank alerts by severity. Karma
+colours and sorts by severity, filters by any label, and manages silences. It reaches
+Alertmanager in-cluster, behind the same `two_factor` plus `group:admins` Authelia pair on
+`karma.local.<domain>`. Amendment 2 (`--web.external-url`) left with the route. The read door,
+answer 2, stays.
+
 Alertmanager became the homelab's paging path when M6 began retiring Uptime Kuma. Nothing
 outside the cluster can see it. During M6's cutovers on 2026-10-30 and 2026-10-31, every read of
 alert state went through `probe.py metric` against Prometheus' `ALERTS` series. That series

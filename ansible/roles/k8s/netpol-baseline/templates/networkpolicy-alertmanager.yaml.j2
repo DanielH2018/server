@@ -1,13 +1,14 @@
 {# DECIDED: alertmanager-callers sits in the observability namespace and admits loki-homelab
-   from the homelab namespace, so it stays bespoke.
+   and karma from the homelab namespace, so it stays bespoke.
    The callers model (`netpol_from` / `netpol_fences`, macro in
    ansible/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
    peers, and its header rules out growing it to absorb another shape. Census: #3701.
 #}
 ---
-# Alertmanager has one cross-namespace, in-cluster caller: loki-homelab's ruler, which sends
-# each firing LogQL alert to `alertmanager_url` (loki-homelab/templates/configmap.yaml.j2). The
-# M5 plan (docs/target-architecture/monitoring/m5-loki-ruler.md, "The cross-namespace grant")
+# Alertmanager has two cross-namespace, in-cluster callers. loki-homelab's ruler sends each
+# firing LogQL alert to `alertmanager_url` (loki-homelab/templates/configmap.yaml.j2). Karma
+# reads alerts and silences and proxies the silence writes its UI makes
+# (karma/templates/config/karma.yaml.j2). The M5 plan (docs/target-architecture/monitoring/m5-loki-ruler.md, "The cross-namespace grant")
 # lands this grant after the ruler, so the ruler's refused sends were recorded first.
 #
 # The loki-homelab pod runs one container and no sidecar, so `app: loki-homelab` admits the
@@ -18,10 +19,9 @@
 # selects alertmanager; NetworkPolicies add up, so this file only widens it:
 #   - prometheus, its only alert source before the ruler, and its own scrape of the
 #     `alertmanager` job: the intra-namespace `podSelector: {}`.
-#   - traefik, for the two routes on alertmanager.local: the UI behind Authelia
-#     (observability/templates/alertmanager-ingressroute.yaml.j2) and the GET-only read door
-#     (alertmanager-read-ingressroute.yaml.j2). The baseline's homelab-namespace traefik peer
-#     admits both.
+#   - traefik, for the GET-only read door on alertmanager.local
+#     (observability/templates/alertmanager-read-ingressroute.yaml.j2). The baseline's
+#     homelab-namespace traefik peer admits it.
 #
 # 9093 is the containerPort AND the Service targetPort (observability/templates/alertmanager.yaml.j2).
 #
@@ -45,15 +45,17 @@ spec:
 {% if netpol_baseline_obs_enforced | bool %}
     - from:
         # namespaceSelector and podSelector are SIBLING KEYS in ONE list item, so they AND
-        # together: loki-homelab, but only inside {{ k8s_namespace }}. As two separate list
+        # together: loki-homelab and karma, but only inside {{ k8s_namespace }}. As two separate list
         # items they would OR, admitting the entire {{ k8s_namespace }} namespace, which the
         # probe's refused alertmanager row would then reach.
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ k8s_namespace }}
           podSelector:
-            matchLabels:
-              app: loki-homelab
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [loki-homelab, karma]
       ports:
         - protocol: TCP
           port: 9093

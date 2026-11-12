@@ -84,11 +84,9 @@
                       format: number
         - Alertmanager:
             icon: prometheus.png
-            # DECIDED: hand-written, not homepage_href. The observability entry's one
-            # `hostname` is grafana, and the Alertmanager UI is a second, hand-written route
-            # (observability/templates/alertmanager-ingressroute.yaml.j2, M6 B-6b) behind
-            # Authelia two_factor, because it can silence every alert.
-            href: https://alertmanager.local.{{ domain }}
+            # Karma is the alert UI. `lan=True`: its route matches no public name, because it
+            # can silence every alert.
+            href: {{ containers_list | homepage_href('karma', domain, lan=True) }}
             description: Alerts
             # The alert plane at a glance, read from Prometheus's ALERTS series (M6 B-4,
             # docs/target-architecture/monitoring/m6-retire-kuma.md). Critical and Warning

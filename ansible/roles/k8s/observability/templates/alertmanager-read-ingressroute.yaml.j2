@@ -19,10 +19,8 @@
         the loki-homelab read route's comment has the measurement). Pods and WireGuard peers
         are excluded, as on the Prometheus door.
 
-   The silence-capable UI is a separate router behind Authelia two_factor on the same host
-   (alertmanager-ingressroute.yaml.j2, M6 B-6b). This router's rule must stay the longer of
-   the two, because Traefik ranks routers by rule length and a UI win on these paths would
-   put Authelia in front of `probe.py`.
+   This is the host's only router; the silence-capable UI is Karma (roles/k8s/karma), which
+   reaches Alertmanager in-cluster.
    ansible/tests/k8s/test_alertmanager_read_route.py is the guard. #}
 {% set clients = [lan_subnet] + k3s_cni0_gateways + k3s_flannel_node_ips %}
 apiVersion: traefik.io/v1alpha1
