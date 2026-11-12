@@ -18,7 +18,7 @@ TEMPLATE = (
     K8S / "observability" / "templates" / "alertmanager-read-ingressroute.yaml.j2"
 )
 KARMA_TEMPLATE = K8S / "karma" / "templates" / "ingressroute.yaml.j2"
-KARMA_ENTRY = {"name": "karma", "hostname": "karma", "port": 8080}
+KARMA_ENTRY = {"name": "karma", "hostname": "karma", "port": 8080, "use_authelia": True}
 
 
 def _route(role, template, name: str, middlewares: list[str], **overrides) -> dict:
@@ -34,10 +34,6 @@ def _match() -> str:
     return _route("observability", TEMPLATE, "alertmanager-read", ["rate-limit"])[
         "match"
     ]
-
-
-def _clients(match: str) -> list[str]:
-    return sorted(match.split("ClientIP(`")[1:])
 
 
 def test_the_door_is_get_only_on_the_two_read_paths():
@@ -76,10 +72,8 @@ def test_karma_is_behind_authelia_and_lan_only_even_with_public_routes_on():
         k8s_public_route=True,
         container_item=KARMA_ENTRY,
     )
-    match = route["match"]
-    assert match.startswith("Host(`karma.local.example.com`) && ("), (
-        f"{match!r} is not the LAN name alone; a public name would put the silence UI on "
-        "the internet"
+    # `_route` unpacks exactly one document, so a `karma-public` object fails it too.
+    assert route["match"] == "Host(`karma.local.example.com`)", (
+        f"{route['match']!r} is not the LAN name alone; a public name would put the silence "
+        "UI on the internet, and a ClientIP fence refuses blackbox-exporter's pod address"
     )
-    assert match.count("Host(") == 1, match
-    assert _clients(match) == _clients(_match()), (match, _match())

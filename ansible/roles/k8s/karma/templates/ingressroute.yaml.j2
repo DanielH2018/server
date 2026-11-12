@@ -1,40 +1,16 @@
-{# Karma can create and expire silences on every page, so its route is the retired Alertmanager
-   UI router's shape: LAN-only plus the node addresses a host process arrives as (so the
-   `claude-ui` browser reaches it), whatever k8s_public_route says. The default route would add
-   a public `karma.<domain>` object, which lands on Authelia's `*.<domain>` two_factor wildcard
-   with no `group:admins` subject. Authelia's hand-written karma.local rule pair is the other
-   half of the control (roles/k8s/authelia/templates/config-secret.yaml.j2). #}
-{% set clients = [lan_subnet] + k3s_cni0_gateways + k3s_flannel_node_ips %}
+{% from 'ingressroute.yml.j2' import ingressroute with context %}
 ---
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: karma
-  namespace: {{ k8s_namespace }}
-spec:
-  entryPoints:
-    - https
-  routes:
-    - kind: Rule
-      # OR'd ClientIP matchers, NOT ClientIP(a, b): the multi-arg form fails rule parsing on
-      # this Traefik and the router vanishes (observability/templates/prometheus-ingressroute.yaml.j2).
-      match: "Host(`{{ container_item.hostname }}.local.{{ domain }}`) && ({% for cidr in clients %}ClientIP(`{{ cidr }}`){% if not loop.last %} || {% endif %}{% endfor %})"
-      middlewares:
-        - name: rate-limit
-        - name: authelia
-      services:
-        - name: karma
-          port: {{ container_item.port }}
-  tls:
-{% if k8s_tls_cert_resolver %}
-    certResolver: {{ k8s_tls_cert_resolver }}
-{% endif %}
-    options:
-      name: modern
-{% if k8s_tls_cert_resolver %}
-    domains:
-      - main: "{{ domain }}"
-        sans:
-          - "*.{{ domain }}"
-          - "*.local.{{ domain }}"
-{% endif %}
+{#
+  `public=false`: Karma can create silences on every page, so it keeps to the LAN name. A public
+  `karma.<domain>` would land on Authelia's `*.<domain>` two_factor wildcard, which carries no
+  `group:admins` subject. The authelia role's hand-written karma.local pair is the other half
+  of the control. No ClientIP fence: blackbox-exporter probes this route from a pod address.
+#}
+{{ ingressroute(
+    container_item.name,
+    container_item.hostname,
+    container_item.port,
+    container_item.use_authelia,
+    public=false
+  )
+}}
