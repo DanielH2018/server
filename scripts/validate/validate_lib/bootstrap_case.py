@@ -31,7 +31,9 @@ systemd loads that unit:
 
 `run` prepares the clones, the kit and the seed once, then runs the cases concurrently, at
 most one per CPU (#7785). It submits the offline builds first, because they are the longest
-items and the host items fill in behind them (#7866). Each case boots its own container and mounts its clone and seed
+items and the host items fill in behind them (#7866). Under `--bootstrap-shard K/N` it runs only
+`bootstrap_plan.shard`'s K-th share, so CI can give each offline build a runner of its own
+(#7879). Each case boots its own container and mounts its clone and seed
 read-only. The script copies out of a kit, and uv runs the kit's `uv-python` interpreter in
 place, taking at most a file lock there. The verdicts print in plan order, each followed by
 `[DONE] <label> in Ns`, the seconds that item's own run took; the prepare prints its seconds
@@ -93,6 +95,7 @@ from validate.validate_lib.bootstrap_plan import (
     red_kit as red_kit,
     script_value,
     selected,
+    shard,
     submission_order,
 )
 from validate.validate_lib.host_container import CaseFailed, Container, expect
@@ -528,6 +531,8 @@ def run(cases) -> None:
         stock_kit(cases, clone, green)
         stock_seed(green, cases.work / SEED_DIR)
         planned = selected(plan(cases.work, green), cases.k3s_download)
+        if cases.shard is not None:
+            planned = shard(planned, *cases.shard)
     except (CaseFailed, OSError, subprocess.SubprocessError, StopIteration) as exc:
         cases.failed.append("prepare the bootstrap cases")
         print(f"[FAIL] prepare the bootstrap cases: {exc}", file=sys.stderr)
