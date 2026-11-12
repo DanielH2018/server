@@ -995,7 +995,6 @@
  "scripts/lib/tests/test_git_testing.py": 0.2,
  "scripts/lib/tests/test_help_check_rejects_work_output.py": 0.12,
  "scripts/lib/tests/test_jinja_comments.py": 0.2,
- "scripts/lib/tests/test_jinja_defaults.py": 0.01,
  "scripts/lib/tests/test_k8s_context.py": 0.01,
  "scripts/lib/tests/test_k8s_lookups.py": 0.03,
  "scripts/lib/tests/test_k8s_role_callers.py": 0.03,

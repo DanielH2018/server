@@ -1,26 +1,18 @@
 #!/usr/bin/env python3
-"""Generate docs/reference/crons.md — every scheduled job the tree installs.
+"""Generate docs/reference/crons.md — every systemd timer the host packages ship.
 
 WHY THIS PAGE IS WORTH HAVING. Some of these jobs commit, push, deploy or delete without a
 human in the loop. That set is the reason to read the page, and it is not obvious from any
-single role: the jobs are spread across roles/k8s/ and the host packages.
+single component: the timers are spread across the host packages.
 
-TWO SOURCES. A timer row comes from the rendered host packages
-(`docs.catalog_lib.package_timers`), so it shows what each host receives. A cron row comes
-from the tasks of the roles that still install one.
+ONE SOURCE. Each row comes from the rendered host packages
+(`docs.catalog_lib.package_timers`), so it shows what each host receives. No role installs a
+cron: the roles render k8s manifests only, and a k8s CronJob is not listed here.
 
-STATIC PARSING ONLY for the crons. Every `ansible.builtin.cron` task is read with yaml.safe_load. Jinja
-in a schedule or user, and a variable a `when:` compares `inventory_hostname` against, resolve
-only where every host would get the same value: their variables
-come from role defaults or `group_vars/all.yml` and no `host_vars` file sets them
-(`lib.jinja_defaults`). Anywhere else it is printed as written, because a value that differs
-by host cannot be resolved without a real deploy, and an unresolved `{{ var }}` is the honest
-rendering there, not a guess.
-
-WHAT IT CANNOT DECIDE. Whether a job changes state is judged from its command by the
-keyword list below, and a job whose command is a wrapper script is marked as needing the
-script read. That is a heuristic and says so on the page; nothing in a cron task declares
-its own blast radius.
+WHAT IT CANNOT DECIDE. Whether a job changes state is judged from its `ExecStart=` command by
+the keyword list below, and a job whose command is a wrapper script is marked as needing the
+script read. That is a heuristic and says so on the page; nothing in a unit declares its own
+blast radius.
 
 Usage::
 
@@ -30,7 +22,6 @@ Usage::
 import re
 from pathlib import Path
 
-import yaml
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -45,11 +36,9 @@ if __name__ == "__main__":
 from lib.cli_help import ArgumentParser
 
 from docs.catalog_lib.package_timers import package_timers
-from lib import yaml_fast
 from lib.docs_provenance import md_cell
-from lib.jinja_defaults import resolve
 
-from lib.repo_paths import REPO, ROLES
+from lib.repo_paths import REPO
 
 HOSTS = REPO / "hosts"
 
@@ -71,59 +60,6 @@ _MUTATING = (
     "snapshot",
     "reboot",
 )
-
-# A host gate, written either as a quoted literal or as the name of a variable holding it
-# (`inventory_hostname == ops_cron_host`). Both forms are in the tree, and the variable form is
-# the one that keeps a host rename to a single edit, so a reader that understood only the
-# literal degraded 13 rows of this page to "conditional (...)" the moment one was converted.
-_HOST_RE = re.compile(
-    r"inventory_hostname\s*==\s*(?:'([^']+)'|\"([^\"]+)\"|([A-Za-z_]\w*))"
-)
-
-
-def _cron_tasks(path: Path) -> list[dict]:
-    """Every ansible.builtin.cron task in one tasks file."""
-    try:
-        loaded = yaml_fast.safe_load(path.read_text())
-    except OSError, yaml.YAMLError:
-        return []
-    if not isinstance(loaded, list):
-        return []
-    return [t for t in loaded if isinstance(t, dict) and "ansible.builtin.cron" in t]
-
-
-def _host_for(task: dict, role_dir: Path) -> str:
-    """The host a `when:` restricts the task to, or 'all hosts in the play'.
-
-    Args:
-        task: One Ansible task, read for its `when:`.
-        role_dir: The role the task belongs to, for resolving a variable gate against that
-            role's defaults and `group_vars/all.yml`.
-
-    Returns:
-        The host name, or a phrase describing the gate when it names no single host. A
-        variable the fleet-wide resolver cannot settle is returned as written, the same
-        honest rendering the schedule column uses.
-    """
-    when = task.get("when")
-    text = " ".join(when) if isinstance(when, list) else str(when or "")
-    match = _HOST_RE.search(text)
-    if match:
-        single, double, var = match.groups()
-        if var:
-            return resolve("{{ " + var + " }}", role_dir)
-        return single or double
-    return "every host in the play" if not text else f"conditional ({text[:60]})"
-
-
-def schedule_text(spec: dict) -> str:
-    """The five-field (or `@special`) schedule one cron spec declares, Jinja printed as written."""
-    if spec.get("special_time"):
-        return f"@{spec['special_time']}"
-    fields = [
-        str(spec.get(k, "*")) for k in ("minute", "hour", "day", "month", "weekday")
-    ]
-    return " ".join(fields)
 
 
 def _changes_state(job: str) -> str:
@@ -194,52 +130,6 @@ def cadence_minutes(schedule: str) -> float | None:
     return None
 
 
-def _rel(path: Path, roles: Path) -> str:
-    """Repo-relative path where possible, else relative to the roles root.
-
-    Tests pass a tmp_path as `roles`, which is not under REPO — so anchoring only on
-    REPO raises rather than degrading.
-    """
-    for base in (REPO, roles.parent, roles):
-        try:
-            return path.relative_to(base).as_posix()
-        except ValueError:
-            continue
-    return path.as_posix()
-
-
-def build_rows(roles: Path = ROLES) -> list[dict[str, str]]:
-    """Collect every active cron task under `roles` into one row per job.
-
-    Skips any task whose cron spec sets `state: absent`.
-
-    Args:
-        roles: Root directory to search for `tasks/*.yml` files.
-
-    Returns:
-        One dict per cron job, keyed by the columns rendered in `render_markdown`.
-    """
-    rows = []
-    for path in sorted(roles.rglob("tasks/*.yml")):
-        for task in _cron_tasks(path):
-            spec = task["ansible.builtin.cron"] or {}
-            if str(spec.get("state", "present")) == "absent":
-                continue
-            job = str(spec.get("job", ""))
-            role_dir = path.parent.parent
-            rows.append(
-                {
-                    "name": str(spec.get("name", task.get("name", "unnamed"))),
-                    "schedule": resolve(schedule_text(spec), role_dir),
-                    "host": _host_for(task, role_dir),
-                    "user": resolve(str(spec.get("user", "root")), role_dir),
-                    "changes_state": _changes_state(job),
-                    "source": _rel(path, roles),
-                }
-            )
-    return rows
-
-
 def _timer_changes_state(service: str) -> str:
     """The state verdict for a timer's service, never "no".
 
@@ -298,7 +188,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     """Render `rows` as the "Scheduled jobs" reference page, banner and schedule notes included.
 
     Args:
-        rows: Cron job rows as returned by `build_rows`.
+        rows: Timer rows as returned by `build_timer_rows`.
 
     Returns:
         The full page as Markdown text, ending in a single trailing newline.
@@ -307,12 +197,10 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
 
     parts = [generated_banner("scripts/docs/reference/crons.py")]
     parts.append("# Scheduled jobs\n")
-    parts.append(
-        f"{len(rows)} job(s) scheduled by the roles' crons and the host packages' timers.\n"
-    )
+    parts.append(f"{len(rows)} job(s) scheduled by the host packages' timers.\n")
     parts.append(
         '!!! warning "The state column is a heuristic"\n'
-        "    It is judged from the command text, and nothing in a cron task declares its "
+        "    It is judged from the command text, and nothing in a unit declares its "
         'own blast radius. A job that runs a wrapper script reads as "read the script" '
         "rather than being guessed at. Treat it as a pointer, not an authority.\n"
     )
@@ -327,11 +215,6 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
 
     parts.append(
         "\n## Schedule format\n\n"
-        "Five fields: minute, hour, day-of-month, month, day-of-week. A schedule or user "
-        "shows the value every host resolves when its variables come from role defaults or "
-        "`group_vars/all.yml` and no host overrides them. A value still showing `{{ ... }}` "
-        "differs by host or does not evaluate statically, so it only resolves at deploy "
-        "time, and the template is the honest rendering.\n\n"
         "A host package's timer shows its triggers as systemd reads them, each host's "
         "drop-ins applied. A host marked `(no enable link)` receives the unit and does not "
         "arm it.\n"
@@ -340,19 +223,18 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Build the cron rows, render the reference page, and write it if the body changed.
+    """Build the timer rows, render the reference page, and write it if the body changed.
 
     Returns:
         The exit code from `finish_generator` (0 on success, non-zero on a write failure).
     """
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="output file path")
-    parser.add_argument("--roles", type=Path, default=ROLES)
     args = parser.parse_args(argv)
 
     from lib.docs_provenance import finish_generator
 
-    rows = build_rows(args.roles) + build_timer_rows()
+    rows = build_timer_rows()
     return finish_generator(
         "docs.reference.crons", args.out, rows, render_markdown, "job"
     )

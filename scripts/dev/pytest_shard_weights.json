@@ -1157,7 +1157,6 @@
  "scripts/lib/tests/test_help_check_rejects_work_output.py": 0.05,
  "scripts/lib/tests/test_invocation_sites.py": 0.0,
  "scripts/lib/tests/test_jinja_comments.py": 0.1,
- "scripts/lib/tests/test_jinja_defaults.py": 0.0,
  "scripts/lib/tests/test_json_types.py": 0.0,
  "scripts/lib/tests/test_k8s_context.py": 0.0,
  "scripts/lib/tests/test_k8s_lookups.py": 0.01,

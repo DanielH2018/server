@@ -20,16 +20,14 @@ tunable it reads. A commit that skipped prek fails
 `uv run python scripts/docs/gen_doc_fragments.py` and a commit of what it writes.
 
 **A role `CLAUDE.md`'s `## At a glance` block is generated the same way, in place.**
-`scripts/docs/gen_role_glance.py` writes one field set per role shape between two
-`generated_from` markers under that heading: a deployed k8s role's deploy tag, image
-repositories, route, claims with the Longhorn backup tier of each, and auto-deploy stance; a
-setup role's applying playbook and tag, crons and timers, and the timers of each host component
-naming it as `role:`. The prose below the markers stays hand-written. Changing a
-role's defaults, templates, tasks, playbook entry or `containers_list` entry — or, for a
-claim's tier, its StorageClass or the `longhorn-reconcile` role's `k3s_longhorn_*_volumes` lists — moves the
-block. The `regen-role-glance` prek hook runs `gen_role_glance.py --fix` on that commit. It
-rewrites the block and fails once like a formatter, so stage the rewritten doc and commit
-again. `scripts/docs/tests/test_gen_role_glance.py` is the CI backstop for a commit that
+`scripts/docs/gen_role_glance.py` writes one field set between two `generated_from` markers
+under that heading: a k8s role's **Applied by** line and deploy tag, image repositories, route,
+claims with the Longhorn backup tier of each, and auto-deploy stance. The prose below the
+markers stays hand-written. Changing a role's defaults, templates or `containers_list` entry —
+or, for a claim's tier, its StorageClass or the `longhorn-reconcile` role's
+`k3s_longhorn_*_volumes` lists — moves the block. The `regen-role-glance` prek hook runs
+`gen_role_glance.py --fix` on that commit. It rewrites the block and fails once like a
+formatter, so stage the rewritten doc and commit again. `scripts/docs/tests/test_gen_role_glance.py` is the CI backstop for a commit that
 skipped the hook. The docs-refresh cron does not run the generator: a write under
 `ansible/roles/` is outside the paths the cron stages, so it would leave the primary checkout
 dirty.

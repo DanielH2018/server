@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-10 06:17 UTC
-generated_sha: e27d5c427
+generated_at: 2026-11-12 17:26 UTC
+generated_sha: 061b0146e
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,14 +12,14 @@ generated_sha: e27d5c427
 
 # Scheduled jobs
 
-53 job(s) scheduled by the roles' crons and the host packages' timers.
+53 job(s) scheduled by the host packages' timers.
 
 !!! warning "The state column is a heuristic"
-    It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
+    It is judged from the command text, and nothing in a unit declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
 
 | Job | Schedule | Host | User | Changes state | Defined in |
 |---|---|---|---|---|---|
-| homelab-aide-check.timer | `OnCalendar=Mon *-*-* 03:00:00` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/integrity-scans/units/homelab-aide-check.timer` |
+| homelab-aide-check.timer | `OnCalendar=Mon *-*-* 03:00:00` | daniel-box, daniel-server | `root` | read the script | `hosts/components/aide-scan/units/homelab-aide-check.timer` |
 | homelab-apt-autoremove.timer | `OnCalendar=Sun *-*-* 02:00:00` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/host-maintenance/units/homelab-apt-autoremove.timer` |
 | homelab-b2-budget-listing.timer | `OnCalendar=*-*-* 7:20:00` | daniel-box | `ubuntu` | read the script | `hosts/components/k3s-host-checks/units/homelab-b2-budget-listing.timer.j2` |
 | homelab-b2-deletion-accounting.timer | `OnCalendar=*-*-* 7:10:00` | daniel-box | `ubuntu` | read the script | `hosts/components/k3s-host-checks/units/homelab-b2-deletion-accounting.timer.j2` |
@@ -74,7 +74,5 @@ generated_sha: e27d5c427
 | homelab-worktree-sweep.timer | `OnCalendar=Sun *-*-* 04:20:00` | daniel-box, daniel-server | `ubuntu` | read the script | `hosts/components/worktree-sweep/units/homelab-worktree-sweep.timer` |
 
 ## Schedule format
-
-Five fields: minute, hour, day-of-month, month, day-of-week. A schedule or user shows the value every host resolves when its variables come from role defaults or `group_vars/all.yml` and no host overrides them. A value still showing `{{ ... }}` differs by host or does not evaluate statically, so it only resolves at deploy time, and the template is the honest rendering.
 
 A host package's timer shows its triggers as systemd reads them, each host's drop-ins applied. A host marked `(no enable link)` receives the unit and does not arm it.
