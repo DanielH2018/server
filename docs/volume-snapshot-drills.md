@@ -60,6 +60,10 @@ Then pick the branch:
 - **Branch 1** when a changed snapshot role that attempted R failed: its `<s>` or
   `<s>-verify` failed or timed out, or the soak named its service.
 - **Branch 3** when a `<s>-snapshot` Job failed on a full cap.
+- ***A verify Job that failed for an environmental reason*** below, when the only failure
+  is a `<tag>-verify` Job whose log names an environmental cause, such as
+  `crowdsec-verify` naming the evidence channel. Check this before Branch 2, whose forward
+  revert would revert a sound commit.
 - **Branch 2** otherwise.
 
 ### Branch 1: a snapshot role failed
