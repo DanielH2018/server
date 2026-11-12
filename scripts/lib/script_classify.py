@@ -148,7 +148,7 @@ def _argv_references(nodes: list[ast.AST]) -> set[str]:
     itself, and a `See scripts/diagnostics/probe.py` in a docstring is a mention.
 
     The string must be a bare path and nothing else. `session-health.py` carries the
-    sentence "…the staleness gate (scripts/deploy_tools/deploy_lib/staleness.py, exit 4)…" in a
+    sentence "…the staleness gate (scripts/deploy_tools/land_lib/classify.py, exit 4)…" in a
     string it prints, and reading that as an invocation would put a deploy gate behind a session hook.
 
     A dict key is skipped too. It names a file as data, never as an argv element: the

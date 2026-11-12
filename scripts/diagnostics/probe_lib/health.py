@@ -12,7 +12,7 @@
 
 What stays here is the part that needs all of them: resolving a deploy tag to the workloads the
 role's rendered manifests declare, fetching each one, and rolling the per-workload verdicts up
-into the line `deploy_lib/detach_notify.py` reads.
+into the line `land_lib/health_gate.py` reads.
 
 The gate exits 0 only when the workload is fully rolled out AND nothing restarted recently,
 and then only when the tag's plumbing check and the alert plane agree (`_with_alert_plane`).
@@ -21,7 +21,7 @@ role with no Deployment/DaemonSet/StatefulSet but a CronJob (configarr, pi-peer-
 gated the same way on its most recent Job instead — see health_cronjob.format_cronjob_health.
 
 WHAT "NOT FOUND" IS ALLOWED TO MEAN. This paragraph is the canonical statement of the rule, and
-the three helper modules point back at it rather than restating it. `deploy_lib/detach_notify.py`
+the three helper modules point back at it rather than restating it. `land_lib/health_gate.py`
 grades an exit of `PROBE_NOT_APPLICABLE` (3, `PROBE-VERDICT: skip`) as `skipped`, which does not
 fail the deploy verdict. Which absences may exit 3 is positional, not a property of any one
 message:

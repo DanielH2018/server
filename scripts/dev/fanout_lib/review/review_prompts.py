@@ -229,7 +229,7 @@ The end of the landing's log:
 {tail}
 {fence}
 
-For `needs-manual-apply` or `blocked`, follow the section below. For `unhealthy` or
+For `needs-manual-apply`, follow the section below. For `unhealthy` or
 `deploy-failed`, read the log for whether this PR's change caused it. Where the log names a
 re-run as the remedy, re-land once with `{rerun}`. Otherwise file what you found with
 `findings.py open`, naming the verdict.

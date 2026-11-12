@@ -10,6 +10,8 @@ import json
 import subprocess
 
 from _review_fakes import PR, _pipeline, _report
+from deploy_tools.land_lib.outcome import VERDICTS
+from fanout_lib.review.review_land import FINISHED_VERDICTS, RESUME_VERDICTS
 
 EARLIER = "https://github.com/DanielH2018/server/pull/7295"
 EARLIER_ROW = {"url": EARLIER, "number": 7295, "state": "MERGED"}
@@ -125,6 +127,11 @@ def test_a_landing_still_running_at_the_deadline_names_the_wait_to_resume(tmp_pa
     assert len(run.lands) == 2
     assert final["result"].startswith("needs input: the landing of")
     assert "cc-wait land 4000 --log-dir" in final["result"]
+
+
+def test_every_verdict_the_review_acts_on_is_one_land_sh_emits():
+    acted_on = RESUME_VERDICTS | FINISHED_VERDICTS
+    assert acted_on <= VERDICTS, sorted(acted_on - VERDICTS)
 
 
 def test_a_land_sh_refusal_is_needs_input_with_its_output(tmp_path):
