@@ -131,6 +131,9 @@ re-test rather than at merge time (#6309). The `DECIDED:` marker on `PACE_MASTER
   pacing. The pre-merge wait therefore stays inside `merge_timeout`, or twice it when the
   landing updates the branch, which the `LAND_DEADLINE` sizing below counts on.
 - A failed read merges without pacing. Pacing controls throughput; it is not a safety gate.
+- A rate-limit refusal is the exception: it holds the poll. The quota runs out only when many
+  landings are live, so merging on the refusal would release every held landing at once
+  (#8139). The held poll counts toward `merge_timeout` like any other.
 - `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off.
 - A PR armed by hand with `gh pr merge --auto` merges without this check.
 

@@ -33,6 +33,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib import gh_rate_limit
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import CI_DISARMED, CI_RED, CI_UNPROVEN
 from lib.git import git, git_stdout
@@ -98,6 +99,33 @@ class DisarmedGateError(RuntimeError):
     """
 
 
+class RateLimitedError(Exception):
+    """GitHub refused a read for the caller's request rate, which says nothing about the SHA.
+
+    It is not a `URLError`, so it passes every catch that reads an unreachable API as pending,
+    and `wait` sleeps `wait_s` before the next poll (#8139).
+    """
+
+    def __init__(self, wait_s: int) -> None:
+        self.wait_s = wait_s
+        super().__init__(f"GitHub rate limit; the quota frees in {wait_s}s")
+
+
+def _unless_rate_limited(read):
+    """`read`, raising `RateLimitedError` in place of a rate-limit `HTTPError`."""
+
+    def checked(sha: str) -> list[dict]:
+        try:
+            return read(sha)
+        except urllib.error.HTTPError as exc:
+            pause = gh_rate_limit.http_wait_s(exc)
+            if pause is None:
+                raise
+            raise RateLimitedError(pause) from exc
+
+    return checked
+
+
 def required_contexts() -> frozenset[str]:
     return REQUIRED_CONTEXTS
 
@@ -160,14 +188,19 @@ def _github_pages(path: str, key: str) -> list[dict]:
 
 
 def verdict_for(sha: str, fetch=fetch_check_runs, required=None, suites=None) -> str:
-    """`pass` / `pending` / `fail` for one SHA. An unreachable API reads as pending."""
+    """`pass` / `pending` / `fail` for one SHA. An unreachable API reads as pending.
+
+    Raises:
+        DisarmedGateError: no context is required.
+        RateLimitedError: GitHub refused the read for its rate.
+    """
     required = required_contexts() if required is None else required
     if not required:
         raise DisarmedGateError(
             "no required CI contexts -- refusing to report a verdict"
         )
     try:
-        runs = fetch(sha)
+        runs = _unless_rate_limited(fetch)(sha)
     except urllib.error.URLError, TimeoutError, ValueError, OSError:
         return "pending"
     return ci_verdict(runs, required, lambda: (suites or fetch_check_suites)(sha))
@@ -494,148 +527,161 @@ def wait(
     wait converges on them: a red nearest descendant with a green one after it, a red nearest
     descendant followed by a tip GitHub never ran CI for, and a budget spent with no CI
     registered for any commit from the SHA to the tip.
+
+    A rate-limit refusal waits for the quota to free, within the budget, rather than polling
+    again after `interval_s`.
     """
+    fetch = _unless_rate_limited(fetch)
+    fetch_suites = _unless_rate_limited(fetch_suites)
     started = clock()
     deadline = started + timeout_s
     target = sha
     dropped = False
     while True:
-        # One check-suites read per SHA per poll. `_no_verdict_will_ever_arrive` and the
-        # dropped-push check both want it while no required run exists, and reading it twice
-        # made each such poll cost 3 requests rather than 2 (#6148).
-        suites_this_poll = _read_once(fetch_suites)
         try:
-            runs = fetch(target)
-        except urllib.error.URLError, TimeoutError, ValueError, OSError:
-            runs = []
-        # `runs` is bound as a default rather than closed over: verdict_for calls this
-        # synchronously within the iteration, so late binding is harmless today, but a
-        # future caller that deferred the call would silently read the next poll's runs.
-        verdict = verdict_for(
-            target, lambda _s, _runs=runs: _runs, None, suites_this_poll
-        )
-        if verdict == "pass":
-            return 0, f"{target[:8]}: CI green"
-        if verdict == "fail":
-            return 1, f"{target[:8]}: CI RED"
-        if _no_verdict_will_ever_arrive(target, runs, suites_this_poll):
-            moved = resolve_sha(target)
-            if moved != target:
-                print(
-                    f"{target[:8]} has no verdict (cancelled/stale) — "
-                    f"following the tip {moved[:8]}"
-                )
-                target = moved
-                continue
-        now = clock()
-        if now - started >= DROPPED_PUSH_GRACE_S and not dropped:
+            # One check-suites read per SHA per poll. `_no_verdict_will_ever_arrive` and the
+            # dropped-push check both want it while no required run exists, and reading it twice
+            # made each such poll cost 3 requests rather than 2 (#6148).
+            suites_this_poll = _read_once(fetch_suites)
             try:
-                dropped = _push_was_dropped(
-                    runs, suites_this_poll(target), required_contexts()
-                )
+                runs = fetch(target)
             except urllib.error.URLError, TimeoutError, ValueError, OSError:
-                dropped = False
-        if any(r.get("name") in required_contexts() for r in runs):
-            # A push that was only late, not dropped: its own run now carries the verdict.
-            dropped = False
-        if dropped and not walk_descendants:
-            return 75, (
-                f"{target[:8]}: GitHub never ran CI for it, and reading its descendants' CI "
-                "needs a GitHub token -- run `gh auth login`, then re-run"
-            )
-        if dropped:
-            nearest, verdict = descendant_verdict(
-                target, fetch=fetch, descendants=descendants
+                runs = []
+            # `runs` is bound as a default rather than closed over: verdict_for calls this
+            # synchronously within the iteration, so late binding is harmless today, but a
+            # future caller that deferred the call would silently read the next poll's runs.
+            verdict = verdict_for(
+                target, lambda _s, _runs=runs: _runs, None, suites_this_poll
             )
             if verdict == "pass":
-                return 0, (
-                    f"{nearest[:8]}: CI green (GitHub never ran CI for {target[:8]}; "
-                    f"{nearest[:8]} descends from it)"
-                )
+                return 0, f"{target[:8]}: CI green"
             if verdict == "fail":
-                fixed, unsettled = green_after(
-                    target,
-                    nearest,
-                    fetch=fetch,
-                    descendants=descendants,
-                    fetch_suites=fetch_suites,
-                )
-                if fixed:
-                    tip = _tip_of(target, descendants)
-                    return CI_UNPROVEN, (
-                        f"{target[:8]}: no verdict can arrive — GitHub never ran CI for it, "
-                        f"its nearest descendant {nearest[:8]} is RED and {fixed[:8]} after "
-                        f"it is green, and neither verdict changes on a re-run. The tip "
-                        f"{tip[:8]} contains {target[:8]}: promote it with "
-                        f"{_promote_command(tip)}"
-                        + (f" once {tip[:8]} is green" if tip != fixed else "")
+                return 1, f"{target[:8]}: CI RED"
+            if _no_verdict_will_ever_arrive(target, runs, suites_this_poll):
+                moved = resolve_sha(target)
+                if moved != target:
+                    print(
+                        f"{target[:8]} has no verdict (cancelled/stale) — "
+                        f"following the tip {moved[:8]}"
                     )
-                if not unsettled:
-                    return CI_RED, (
-                        f"{nearest[:8]}: CI RED (GitHub never ran CI for {target[:8]}; "
-                        f"{nearest[:8]} is its nearest descendant with a verdict)"
+                    target = moved
+                    continue
+            now = clock()
+            if now - started >= DROPPED_PUSH_GRACE_S and not dropped:
+                try:
+                    dropped = _push_was_dropped(
+                        runs, suites_this_poll(target), required_contexts()
                     )
-                # A later commit may still go green and stand in for the merge commit,
-                # which is the usual #4649 shape at merge time: the fix's CI is running.
-                if now >= deadline and _is_run_less(unsettled, fetch, fetch_suites):
-                    # Only the tip is left, and GitHub never ran CI for it either: no re-run
-                    # converges until something runs CI on it (#4667).
-                    return CI_UNPROVEN, (
-                        f"{target[:8]}: no verdict can arrive — GitHub never ran CI for it, "
-                        f"its nearest descendant {nearest[:8]} is RED, and GitHub never ran "
-                        f"CI for the tip {unsettled[:8]} after it. Run it on the tip with "
-                        "`gh workflow run ci.yml --ref master`, then re-run: a green tip "
-                        "ends ci-unproven and names the command that promotes it"
-                    )
-                if now >= deadline:
-                    return CI_RED, (
-                        f"{nearest[:8]}: CI RED (GitHub never ran CI for {target[:8]}; "
-                        f"{nearest[:8]} is its nearest descendant with a verdict). "
-                        f"{unsettled[:8]} after it has no verdict yet; if it goes green, "
-                        "a re-run ends ci-unproven and names the command that promotes it"
-                    )
-                sleep(interval_s)
-                continue
-        if now >= deadline:
-            tip = (
-                run_less_tip(
-                    target,
-                    fetch=fetch,
-                    fetch_suites=fetch_suites,
-                    descendants=descendants,
-                    fetch_tip=fetch_tip,
-                )
-                if dropped
-                else ""
-            )
-            if tip:
-                after = (
-                    "and it is the master tip"
-                    if tip == target
-                    else f"nor for any master commit after it up to the tip {tip[:8]}"
-                )
-                return CI_UNPROVEN, (
-                    f"{target[:8]}: no verdict can arrive — GitHub never ran CI for it, "
-                    f"{after}, so no re-run converges until something runs CI. Run it on "
-                    f"the tip {tip[:8]} with `gh workflow run ci.yml --ref master`. A "
-                    "dispatched CI run starts no promotion, and `promote` refuses a commit "
-                    "without green CI, so once it is green promote the tip with "
-                    f"{_promote_command(tip)}, then re-run"
+                except urllib.error.URLError, TimeoutError, ValueError, OSError:
+                    dropped = False
+            if any(r.get("name") in required_contexts() for r in runs):
+                # A push that was only late, not dropped: its own run now carries the verdict.
+                dropped = False
+            if dropped and not walk_descendants:
+                return 75, (
+                    f"{target[:8]}: GitHub never ran CI for it, and reading its descendants' CI "
+                    "needs a GitHub token -- run `gh auth login`, then re-run"
                 )
             if dropped:
-                return 75, (
-                    f"{target[:8]}: no verdict after {timeout_s}s — GitHub never ran CI "
-                    "for it, and no later master commit is green yet; a re-run converges "
-                    "once one is"
+                nearest, verdict = descendant_verdict(
+                    target, fetch=fetch, descendants=descendants
                 )
-            if draft_skipped(runs, required_contexts()):
-                return 75, (
-                    f"{target[:8]}: no verdict after {timeout_s}s — {DRAFT_SKIPPED}, and a "
-                    "re-run skips again; mark the PR ready, or, if it is ready already, "
-                    "convert it to draft and back, or push"
+                if verdict == "pass":
+                    return 0, (
+                        f"{nearest[:8]}: CI green (GitHub never ran CI for {target[:8]}; "
+                        f"{nearest[:8]} descends from it)"
+                    )
+                if verdict == "fail":
+                    fixed, unsettled = green_after(
+                        target,
+                        nearest,
+                        fetch=fetch,
+                        descendants=descendants,
+                        fetch_suites=fetch_suites,
+                    )
+                    if fixed:
+                        tip = _tip_of(target, descendants)
+                        return CI_UNPROVEN, (
+                            f"{target[:8]}: no verdict can arrive — GitHub never ran CI for it, "
+                            f"its nearest descendant {nearest[:8]} is RED and {fixed[:8]} after "
+                            f"it is green, and neither verdict changes on a re-run. The tip "
+                            f"{tip[:8]} contains {target[:8]}: promote it with "
+                            f"{_promote_command(tip)}"
+                            + (f" once {tip[:8]} is green" if tip != fixed else "")
+                        )
+                    if not unsettled:
+                        return CI_RED, (
+                            f"{nearest[:8]}: CI RED (GitHub never ran CI for {target[:8]}; "
+                            f"{nearest[:8]} is its nearest descendant with a verdict)"
+                        )
+                    # A later commit may still go green and stand in for the merge commit,
+                    # which is the usual #4649 shape at merge time: the fix's CI is running.
+                    if now >= deadline and _is_run_less(unsettled, fetch, fetch_suites):
+                        # Only the tip is left, and GitHub never ran CI for it either: no re-run
+                        # converges until something runs CI on it (#4667).
+                        return CI_UNPROVEN, (
+                            f"{target[:8]}: no verdict can arrive — GitHub never ran CI for it, "
+                            f"its nearest descendant {nearest[:8]} is RED, and GitHub never ran "
+                            f"CI for the tip {unsettled[:8]} after it. Run it on the tip with "
+                            "`gh workflow run ci.yml --ref master`, then re-run: a green tip "
+                            "ends ci-unproven and names the command that promotes it"
+                        )
+                    if now >= deadline:
+                        return CI_RED, (
+                            f"{nearest[:8]}: CI RED (GitHub never ran CI for {target[:8]}; "
+                            f"{nearest[:8]} is its nearest descendant with a verdict). "
+                            f"{unsettled[:8]} after it has no verdict yet; if it goes green, "
+                            "a re-run ends ci-unproven and names the command that promotes it"
+                        )
+                    sleep(interval_s)
+                    continue
+            if now >= deadline:
+                tip = (
+                    run_less_tip(
+                        target,
+                        fetch=fetch,
+                        fetch_suites=fetch_suites,
+                        descendants=descendants,
+                        fetch_tip=fetch_tip,
+                    )
+                    if dropped
+                    else ""
                 )
-            return 75, f"{target[:8]}: no verdict after {timeout_s}s"
-        sleep(interval_s)
+                if tip:
+                    after = (
+                        "and it is the master tip"
+                        if tip == target
+                        else f"nor for any master commit after it up to the tip {tip[:8]}"
+                    )
+                    return CI_UNPROVEN, (
+                        f"{target[:8]}: no verdict can arrive — GitHub never ran CI for it, "
+                        f"{after}, so no re-run converges until something runs CI. Run it on "
+                        f"the tip {tip[:8]} with `gh workflow run ci.yml --ref master`. A "
+                        "dispatched CI run starts no promotion, and `promote` refuses a commit "
+                        "without green CI, so once it is green promote the tip with "
+                        f"{_promote_command(tip)}, then re-run"
+                    )
+                if dropped:
+                    return 75, (
+                        f"{target[:8]}: no verdict after {timeout_s}s — GitHub never ran CI "
+                        "for it, and no later master commit is green yet; a re-run converges "
+                        "once one is"
+                    )
+                if draft_skipped(runs, required_contexts()):
+                    return 75, (
+                        f"{target[:8]}: no verdict after {timeout_s}s — {DRAFT_SKIPPED}, and a "
+                        "re-run skips again; mark the PR ready, or, if it is ready already, "
+                        "convert it to draft and back, or push"
+                    )
+                return 75, f"{target[:8]}: no verdict after {timeout_s}s"
+            sleep(interval_s)
+        except RateLimitedError as exc:
+            left = deadline - clock()
+            if left <= 0:
+                return 75, f"{target[:8]}: no verdict after {timeout_s}s -- {exc}"
+            pause = max(1, min(exc.wait_s, int(left)))
+            print(f"{target[:8]}: {exc}; polling again in {pause}s")
+            sleep(pause)
 
 
 def main(argv: list[str] | None = None) -> int:
