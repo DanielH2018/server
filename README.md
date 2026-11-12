@@ -95,8 +95,8 @@ namespace. Where policies do exist, **ingress** rules are enforced; **egress** r
 
 ## How deploys work
 
-A k3s workload deploys through `promote` and Flux once its PR merges. `./scripts/deploy.sh`
-exits 5 for a k8s tag.
+A k3s workload deploys through `promote` and Flux once its PR merges. No script deploys a
+workload by hand.
 
 - **The render** — `homelab_render.py` orders `roles/k8s/<name>` with `build_k8s_dep_map` /
   `toposort_containers` (`ansible/filter_plugins/toposort.py`, unit-tested in

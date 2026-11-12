@@ -13,8 +13,8 @@ allowed-tools: Read, Write, Edit, Glob, Bash, WebFetch, WebSearch
 > Service".
 
 The Pi's Docker services are one Compose project, `homelab`, which the `homelab-daniel-pi`
-host package installs and `homelab-compose.service` runs. There is no Ansible role and no
-`deploy.sh` path for them: H5.12 deleted `ansible/roles/containers/`. The design is
+host package installs and `homelab-compose.service` runs. There is no Ansible role for
+them: H5.12 deleted `ansible/roles/containers/`. The design is
 `docs/target-architecture/host/h5-pi-compose.md`, and the package mechanics are
 `docs/host-packages.md`.
 

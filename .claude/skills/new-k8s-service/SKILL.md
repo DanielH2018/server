@@ -152,8 +152,7 @@ Secret template*, before you remove a key from a `secret.yaml.j2`.
 
 ## 4. Deploy
 
-**Flux applies the new role, not `deploy.sh`.** Flux applies every k8s entry, so
-`./scripts/deploy.sh --tags "<name>"` exits 5 (`DEPLOY_FLUX_OWNED`), `--dry-run` included.
+**Flux applies the new role once its PR merges; no script deploys it by hand.**
 To check the role before the merge, render every published tag the way `promote` does, then
 check the bundle. `check-bundle` examines each tag `published-tags` lists, so a render of the
 new role alone fails it for every tag the render left out:

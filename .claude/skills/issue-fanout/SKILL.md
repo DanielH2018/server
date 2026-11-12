@@ -86,11 +86,12 @@ Both were measured on the 2026-09-10 fan-outs:
   hand-resolvable; the second lander has to take master's file wholesale and re-mint its own
   value on top. Two of eight wave-1 agents hit exactly that (PRs #1556 and #1567), and one
   stalled six hours on it. Hold the second secret issue for the next wave.
-- **A batch that adds a `containers_list` entry, or otherwise touches a `_BROAD_*` path, runs
-  alone.** A broad change makes the tick apply the whole plane, so one crashlooping service
-  anywhere fails that apply and writes `hold_sha`, which reports `deploy-failed` to every other
-  batch's landing. Wave 2's new `gpu-exporter` role did this while another session's Authelia
-  change was mid-rollout (issue #1602), and the hold outlived the outage by twenty minutes.
+- **A batch that adds a `containers_list` entry, or otherwise touches a path every tag
+  renders, runs alone.** `promote` publishes the whole bundle, so one crashlooping service
+  anywhere fails that promotion and sets `DEPLOY_HOLD`, which reports `deploy-failed` to every
+  other batch's landing. Wave 2's new `gpu-exporter` role did this while another session's
+  Authelia change was mid-rollout (issue #1602), and the hold outlived the outage by twenty
+  minutes.
 
 **Size each batch.** Pick the rung its implementer runs at, from your reading of the issue
 bodies. `scripts/dev/fanout_lib/sizing.py:LADDER` holds the rungs, in order. The starting
@@ -508,17 +509,9 @@ Each agent starts with none of this conversation's context, so its brief must ca
 
   Why the wait has to be in-turn, and what the hand-written `tail -f | grep` wait it replaced
   cost (#1291), is in `docs/landing.md`.
-- That `deploy.sh` exit 75 is a **resume point to retry**, not a failure to report.
-- **What to do with a verdict that leaves a host apply owed.** `needs-manual-apply` and
-  `blocked` mean the PR merged and an apply is still owed on a host — a `manual_plane` role, a
-  non-empty `hold_sha`, a bring-up playbook in the range, or a daniel-server or daniel-pi
-  change. `land.sh` prints the exact command for each; nothing else records that it is owed.
-  Tell the agent to read the deployer's markers after the verdict:
-
-  ```bash
-  cat /var/lib/gitops-deploy/hold_sha /var/lib/gitops-deploy/owed.jsonl
-  ```
-
+- **What to do with a verdict that leaves a host apply owed.** `needs-manual-apply` means the
+  PR merged and an apply is still owed by hand, such as a rotated secret. `land.sh` prints the
+  exact command; nothing else records that it is owed.
   Then exactly one of two things, never neither: apply and verify the change where CLAUDE.md
   *When to wait* leaves it to this session, or file it with `findings.py open` carrying the
   host, the role and `land.sh`'s own command verbatim, and list that issue number under a
@@ -563,9 +556,8 @@ verdict that leaves a host apply owed.
 
 ## 4. Land
 
-Each agent goes through to a verified deploy, per `land-after-merge`. Every agent's `land.sh`
-queues on the same git-tree lock, so `deploy.sh` exit 75 is expected under
-width and is a retry, never a report.
+Each agent goes through to a verified deploy, per `land-after-merge`. A `land.sh` exit 75
+means its wait ran out of budget with the landing still open; it is a retry, never a report.
 
 Done when: every agent has either landed (a `VERDICT:` line) or is still queued on the lock, and
 none has been reported failed on a resume-point exit.

@@ -93,9 +93,8 @@ validation catches Jinja-syntax and structural errors, but NOT HA schema or enti
 path here. **Prefer the live REST API over the recorder DB.** This section is also the entry
 point when an automation didn't fire, or when you need ground-truth live HA state.
 
-HA runs in the k3s cluster on `daniel-box` and is Flux-owned: `deploy.sh --tags
-home-assistant` exits 5 (`DEPLOY-VERDICT: flux-owned`). The change reaches the cluster when
-its PR merges and `promote` publishes it (ConfigMaps + Secret, then a rollout restart of
+HA runs in the k3s cluster on `daniel-box` and is Flux-owned: no script deploys it by hand.
+The change reaches the cluster when its PR merges and `promote` publishes it (ConfigMaps + Secret, then a rollout restart of
 ~60-120s).
 
 1. **A new config file must be added to its `home_assistant_*_files` list in the role's
@@ -180,8 +179,8 @@ with `kubectl -n homelab get pods -l app=home-assistant` and the pod logs.
 
 ## 6. Commit
 
-Commit the changed file(s) under the role. Commit before deploying: `deploy.sh` deploys `HEAD`,
-not the working tree.
+Commit the changed file(s) under the role. Only a merged commit deploys: `promote` publishes
+master, never a working tree.
 Note any non-templated side-effects (e.g. a Z2M device setting via `z2m-device-setting`) in the
 role `CLAUDE.md` so they survive a re-pair.
 
