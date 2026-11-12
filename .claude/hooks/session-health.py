@@ -15,9 +15,8 @@ When a Claude Code session opens in this repo, this prints anything already brok
 work doesn't start blind:
   * Prometheus scrape targets that are down (fleet-wide, via scripts/diagnostics/probe.py)
   * this branch sitting behind origin/master's last-fetched ref (local-only, no `git fetch`)
-  * a dirty primary checkout, or a GitOps deployer parked behind origin — the two states that
-    stop every deploy in the fleet and that a worktree session cannot look at for itself,
-    because the isolation guard refuses a git command targeting the shared checkout
+  * a dirty primary checkout, which a worktree session cannot look at for itself, because the
+    isolation guard refuses a git command targeting the shared checkout
 
 It also appends one `session_start` row to the instructions log for the auto-memory
 `MEMORY.md` and one for the active output style. Claude Code fires no InstructionsLoaded
@@ -61,9 +60,8 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Two sections of the banner live in `.claude/hooks/hooklib/` (its own docstrings cover
-# `hooklib`-not-`lib`): the worktree and scrape-target lines. Wrapped like
-# `lib.deployer_park` below, in its own try so a failure names the package that broke rather
-# than deployer_park's unrelated line. `SyntaxError` is caught alongside `ImportError` because
+# `hooklib`-not-`lib`): the worktree and scrape-target lines. Wrapped in its own try so a
+# failure names the package that broke. `SyntaxError` is caught alongside `ImportError` because
 # these modules use PEP 758 syntax and `run-hook.sh` sends this hook's stderr to /dev/null, exits 0.
 # An uncaught SyntaxError at import would take the WHOLE banner out silently: nothing at
 # module scope may be able to stop the banner.
@@ -77,7 +75,7 @@ except ImportError, SyntaxError:
         return None
 
     # Without the primary checkout the dirty-primary line has no tree to read, so it is
-    # skipped; the park lines that follow it do not need one.
+    # skipped.
     def primary_checkout():
         return None
 
@@ -109,54 +107,6 @@ except (ImportError, SyntaxError) as exc:
                 out.append([])
         return out
 
-
-# The park decision lives in `scripts/lib/deployer_park.py`, because `deploy.sh` exit 4 asks
-# the same question of the same marker and a second derivation would drift; the
-# marker parsers and clear commands come from `gitops_markers`, the deployer's own module,
-# which `deployer_park` imports from the gitops_deploy role's files/. `GITOPS_STATE_DIR` is mode 0750 owned by `ubuntu`: any other host reads silence.
-#
-# Wrapped, because NOTHING at module scope may be able to stop the banner. This
-# file is run by `run-hook.sh`, which sends its stderr to /dev/null and exits 0, so an
-# ImportError here would take out the scrape-target, live-session and stale-worktree
-# sections as well — silently, and for a reason no session could see. The failure is reported
-# in `parked_deployer_problems` instead, the same way its deferred `lib.git` import already is.
-sys.path.insert(0, os.path.join(REPO, "scripts"))
-try:
-    from lib.deployer_park import (
-        BEHIND_PARK_SECONDS,
-        CONTENTION_PARK_SECONDS,
-        GITOPS_STATE_DIR,
-        park_age,
-        read_behind_marker,
-        read_contention_marker,
-        contention_lines,
-        manual_plane_lines,
-        read_manual_plane_marker,
-    )
-
-    DEPLOYER_PARK_IMPORT_ERROR = ""
-except ImportError as exc:
-    DEPLOYER_PARK_IMPORT_ERROR = str(exc)
-
-    # Inert placeholders, never read: `parked_deployer_problems` returns its `⚠` line before it
-    # asks the park question. They keep the names defined and singly-typed for the type checker.
-    # NOT a fallback copy of the real values — a second BEHIND_PARK_SECONDS here would be a
-    # second derivation — and the raising stubs say so if one is ever called.
-    BEHIND_PARK_SECONDS = 0
-    CONTENTION_PARK_SECONDS = 0
-    GITOPS_STATE_DIR = ""
-
-    def _park_unavailable(*_args, **_kwargs):
-        raise ImportError(DEPLOYER_PARK_IMPORT_ERROR)
-
-    park_age = _park_unavailable
-    read_behind_marker = _park_unavailable
-    manual_plane_lines = _park_unavailable
-    read_manual_plane_marker = _park_unavailable
-    contention_lines = _park_unavailable
-    read_contention_marker = _park_unavailable
-
-__all__ = ["BEHIND_PARK_SECONDS", "GITOPS_STATE_DIR"]
 
 # How many dirty paths the banner names before it summarises the rest. Enough to recognise whose
 # work it is; short enough to stay one line.
@@ -210,41 +160,8 @@ def dirty_primary_lines(porcelain, path):
     ]
 
 
-def behind_park_lines(marker, now):
-    """One banner line when the deployer has gone too long without a fast-forward, or [].
-
-    `behind_since` holds `"<origin_sha> <unix_ts_first_seen>"` while the host is behind
-    `origin/master`. Any tick that fast-forwarded renews the stamp, so its age is how long the
-    deployer has moved the tree nowhere rather than how long it has been behind the tip — which
-    is the number that means something because the tick lands at the newest green ancestor. A
-    routine push clears in one tick; a stamp older than `BEHIND_PARK_SECONDS` means several
-    ticks in a row moved nothing, which is a park. This catches the parks a dirty tree does not
-    explain (a held SHA, an unapplied broad plane) as well as the one it does.
-
-    Malformed or unparsable content reads as "no park": the marker is written atomically, and a
-    banner that guessed an age from a torn value would be worse than one that said nothing. The
-    decision is `lib.deployer_park.park_age`, shared with `deploy.sh` exit 4; this
-    function owns only the banner line it becomes.
-    """
-    age = park_age(marker, now)
-    if age is None:
-        return []
-    return [
-        f"  ✗ the GitOps deployer has not fast-forwarded for {int(age // 60)} min and is behind "
-        "origin/master — that is a park, not a queue; check "
-        "`journalctl -u gitops-deploy.service` for the skip reason"
-    ]
-
-
-def parked_deployer_problems(
-    primary=None,
-    status=None,
-    read_marker=None,
-    now=None,
-    read_manual=None,
-    read_contention=None,
-):
-    """The primary-checkout and deployer-park banner lines, as one list.
+def dirty_primary_problems(primary=None, status=None):
+    """The primary-checkout banner lines, as one list.
 
     The seams are parameters rather than patched attributes so the tests can drive this
     without pinning a module name (the repo's monkeypatch ratchet caps a new test module at
@@ -259,7 +176,7 @@ def parked_deployer_problems(
     try:
         from lib.git import git
     except ImportError as exc:
-        return [f"  ⚠ parked-deployer detection is broken: {exc}"]
+        return [f"  ⚠ dirty-primary detection is broken: {exc}"]
 
     # `lib.git.git` strips every `GIT_*` variable, so `cwd` alone decides which tree is read —
     # neither `git -C` nor a `cwd=` overrides an inherited `GIT_DIR`.
@@ -272,56 +189,11 @@ def parked_deployer_problems(
         def status(path):
             return git(*PRIMARY_STATUS_ARGV, cwd=path, check=False, timeout=5).stdout
 
-    if read_marker is None:
-
-        def read_marker():
-            return read_behind_marker(GITOPS_STATE_DIR)
-
-    if read_manual is None:
-
-        def read_manual():
-            return read_manual_plane_marker(GITOPS_STATE_DIR)
-
-    if read_contention is None:
-
-        def read_contention():
-            return read_contention_marker(GITOPS_STATE_DIR)
-
-    # Deferred like the `lib.git` import above, and for the same reason the rest of this file
-    # defers: nothing at module scope may be able to stop the banner. The one module-scope
-    # import this file does keep — `lib.deployer_park` — is wrapped up there and reported here.
-    import time
-
-    lines = []
-    if DEPLOYER_PARK_IMPORT_ERROR:
-        # Added BEFORE the reads below rather than after them, so a `primary` that raises
-        # cannot swallow it: an empty list is indistinguishable from "nothing to report", and
-        # that is what hid a whole banner section for a month.
-        lines.append(
-            f"  ⚠ parked-deployer detection is broken: {DEPLOYER_PARK_IMPORT_ERROR}"
-        )
     try:
         path = primary()
-        if path:
-            lines += dirty_primary_lines(status(path), path)
-        if DEPLOYER_PARK_IMPORT_ERROR:
-            # The dirty-primary half still answered and is kept; only the park half is
-            # unanswerable, and `park_age` raises if it is asked.
-            return lines
-        # An absent marker is the healthy case — the deployer removes it on convergence — and
-        # `read_behind_marker` answers None for it, which reads as "no park". An INJECTED
-        # read_marker may still raise, and the dirty lines gathered before it are still worth
-        # printing.
-        clock = time.time() if now is None else now
-        lines += behind_park_lines(read_marker(), clock)
-        # After the park line and independent of it: the two are different deferrals of the
-        # same tick, and a host can be in both. A read that raises keeps the lines gathered
-        # before it, the same way the park read does.
-        lines += manual_plane_lines(read_manual(), clock)
-        lines += contention_lines(read_contention(), clock)
+        return dirty_primary_lines(status(path), path) if path else []
     except Exception:
-        return lines
-    return lines
+        return []
 
 
 def _run(cmd, timeout):
@@ -612,7 +484,7 @@ def main(
     read_payload=read_payload,
     target_problems=target_problems,
     master_moved_problems=master_moved_problems,
-    parked_deployer_problems=parked_deployer_problems,
+    dirty_primary_problems=dirty_primary_problems,
     other_live_sessions=other_live_sessions,
     unlabelled_worktree_lines=unlabelled_worktree_lines,
     stale_worktree_lines=stale_worktree_lines,
@@ -664,7 +536,7 @@ def main(
         [
             ("the scrape-target check", target_problems),
             ("the behind-master check", master_moved_problems),
-            ("the parked-deployer check", parked_deployer_problems),
+            ("the dirty-primary check", dirty_primary_problems),
             ("the other-session scan", lambda: other_live_sessions(cwd)),
             ("the worktree-label check", lambda: unlabelled_worktree_lines(cwd)),
             ("the removable-worktree survey", stale_worktree_lines),

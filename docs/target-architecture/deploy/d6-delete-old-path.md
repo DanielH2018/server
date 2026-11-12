@@ -233,9 +233,9 @@ reader that D6 does not delete.
       `clear-hold <sha>` clears `hold_sha` with its `hold_plane` lines.
 - **Readers of `k8s_deferred` and `k8s_unapplied` outside the deployer's modules:**
     - monitor-bridge's `files/checks/gitops.py`, plus `files/gitops_markers.py` and
-      `files/gitops_ledger.py`. Those two are generated copies that
-      `scripts/dev/gen_gitops_markers.py` writes and
-      `ansible/tests/deploy/test_gitops_markers_copies.py` checks;
+      `files/gitops_ledger.py`. Those two were generated copies that
+      `scripts/dev/gen_gitops_markers.py` wrote and a test in `ansible/tests/deploy/`
+      checked. #7961 deleted all three;
     - `ansible/roles/setup/deploy_ui/files/deploy_ui_reads.py` and
       `ansible/roles/setup/renovate_agent/files/agent_logic.py`;
     - `.claude/hooks/session-health.py`, with `test_session_health_k8s_deferred.py` and

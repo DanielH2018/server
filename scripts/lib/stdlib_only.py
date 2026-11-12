@@ -449,7 +449,7 @@ def _role_module(top: str, dirs: list[Path]) -> bool:
     """Whether `top` resolves to exactly one of `dirs`, and the map lists it for that one.
 
     Exactly one, because the static walk does not model `sys.path` order: with both
-    MONITOR_BRIDGE_FILES and GITOPS_DEPLOY_FILES on the path, which `gitops_hold` loads is
+    two role directories on the path, which one loads a shared basename is
     the question the map exists to answer, so two holders are refused rather than guessed.
     """
     holders = [d for d in dirs if (d / f"{top}.py").is_file() or (d / top).is_dir()]

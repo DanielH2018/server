@@ -7,15 +7,10 @@ Run: uv run pytest hosts/components/renovate-agent/tests/test_agent_logic.py
 """
 
 import json
-import pathlib
-from dataclasses import replace
 
 import agent_logic as al
 import pytest
 import renovate_agent
-from gitops_hold import DeployerSnapshot
-
-CLEAR = DeployerSnapshot(None, None, None, None, None)
 
 
 def _pr(number: int) -> al.OpenPR:
@@ -37,35 +32,16 @@ def _result(**over) -> str:
 
 
 class TestDecide:
-    def test_a_backlog_with_no_hold_is_clean(self) -> None:
-        gate = al.decide([_pr(1), _pr(2)], "", "")
+    def test_a_backlog_is_clean(self) -> None:
+        gate = al.decide([_pr(1), _pr(2)])
         assert gate.run
         assert "2 open" in gate.reason
 
     def test_an_empty_backlog_is_flagged_quietly(self) -> None:
         """The steady state must not post — a daily 'nothing to do' trains the channel away."""
-        gate = al.decide([], "", "")
+        gate = al.decide([])
         assert not gate.run
         assert gate.quiet
-
-    def test_a_hold_is_flagged_loudly(self) -> None:
-        gate = al.decide([_pr(1)], "deadbeefcafe\n", "")
-        assert not gate.run
-        assert not gate.quiet
-        assert "deadbeef" in gate.reason
-
-    def test_a_hold_outranks_an_empty_backlog(self) -> None:
-        """A held host is a condition to clear even when there is nothing else to do."""
-        assert not al.decide([], "deadbeefcafe", "").quiet
-
-    def test_a_hold_names_the_clear_command_with_the_full_sha(self) -> None:
-        held = "deadbeef" * 5
-        gate = al.decide([_pr(1)], f"{held}\n", "")
-        assert f"gitops_state.py clear-hold {held}`" in gate.reason
-
-    def test_a_hold_plane_names_the_playbook(self) -> None:
-        gate = al.decide([_pr(1)], "deadbeefcafe", "k3s-bringup.yml")
-        assert "k3s-bringup.yml" in gate.reason
 
 
 class TestParseRun:
@@ -296,64 +272,7 @@ def _tools(host: _FakeHost) -> renovate_agent.AgentTools:
         discord_post=host.discord_post,
         flush_discord_spool=host.flush_discord_spool,
         read_file=lambda path: "",
-        deployer_state=lambda: CLEAR,
     )
-
-
-def _held_state(tmp_path: pathlib.Path) -> pathlib.Path:
-    """A state directory holding `deadbeefcafe` on two ledger planes and one torn line."""
-    tmp_path.mkdir()
-    (tmp_path / "hold_sha").write_text("deadbeefcafe\n")
-    lines = [
-        json.dumps(
-            {"class": "hold_plane", "subject": s, "origin": "abc", "at": at, **extra}
-        )
-        for s, at, extra in [
-            ("ansible/deploy.yml sonarr", 0, {}),
-            ("ansible/initial_setup.yml k3s", 1, {"added_by_a_newer_writer": 1}),
-        ]
-    ]
-    torn = b'{"class": "hold_plane", "subject": "torn\xff", "origin": "a", "at": 2}'
-    (tmp_path / "owed.jsonl").write_bytes("\n".join(lines).encode() + b"\n" + torn)
-    return tmp_path
-
-
-class TestHoldGate:
-    """`main()` reads the hold through `DeployerSnapshot`, and an unreadable state fails."""
-
-    def _cfg(self, tmp_path) -> str:
-        cfg = tmp_path / "config.env"
-        cfg.write_text(
-            f"REPO=o/r\nREPO_DIR=/repo\nPROMPT_FILE=/p.txt\nSTATE_DIR={tmp_path}/state\n"
-        )
-        return str(cfg)
-
-    def test_a_held_state_skips_naming_every_readable_plane(self, tmp_path) -> None:
-        state = DeployerSnapshot.load(_held_state(tmp_path / "gitops"))
-        host = _FakeHost(prs=[1])
-        tools = replace(_tools(host), deployer_state=lambda: state)
-
-        assert renovate_agent.main(tools, self._cfg(tmp_path)) == 0
-        (post,) = host.posts
-        assert "deadbeef" in post
-        assert "ansible/deploy.yml sonarr; ansible/initial_setup.yml k3s" in post
-        assert "torn" not in post
-
-    def test_an_unreadable_state_is_a_unit_failure(self, tmp_path) -> None:
-        """An unreadable hold is not "no hold", and no other tile pages on it (#3703)."""
-
-        def unreadable() -> DeployerSnapshot:
-            raise PermissionError(13, "Permission denied")
-
-        host = _FakeHost(prs=[1])
-        tools = replace(_tools(host), deployer_state=unreadable)
-
-        rc = renovate_agent.main(tools, self._cfg(tmp_path))
-
-        assert rc == renovate_agent.EXIT_STATE_UNREADABLE != 0
-        (post,) = host.posts
-        assert "a hold cannot be ruled out" in post
-        assert _records(tmp_path)[-1]["result"] == "blocked"
 
 
 class TestPrStates:

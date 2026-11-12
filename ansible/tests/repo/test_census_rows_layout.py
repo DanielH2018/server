@@ -204,13 +204,11 @@ ROWS = (
         ),
         # Five groups on 2026-10-11, after #4416-#4418 moved the last three flat families.
         min_matches=5,
-        # A suffix family, a role-`files/` family with an entrypoint, and monitor-bridge's
-        # copies, a role-`files/` family with none.
+        # A suffix family, and a role-`files/` family with an entrypoint.
         must_find=frozenset(
             {
                 "scripts/validate/*_templates.py",
                 "ansible/roles/setup/gitops_deploy/files/gitops_*.py",
-                "ansible/roles/k8s/monitor-bridge/files/gitops_*.py",
             }
         ),
         allow={
@@ -219,10 +217,8 @@ ROWS = (
                 "filter in prek.toml"
             ),
             "ansible/roles/setup/gitops_deploy/files/gitops_*.py": (
-                "the `gitops_*` copies: `scripts/dev/gen_gitops_markers.py` copies "
-                "gitops_hold, gitops_ledger and gitops_markers verbatim into monitor-bridge's "
-                "flat `files/`, and the deploy-ui and renovate-agent host components ship them from "
-                "these paths"
+                "the GitOps deployer's own `gitops_*` modules, which #7962 deletes with the "
+                "deployer"
             ),
         },
     ),

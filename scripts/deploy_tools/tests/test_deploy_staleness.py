@@ -21,24 +21,12 @@ from deploy_tools.deploy_lib.staleness import (
     main,
     unscoped_reason,
 )
-from lib.deployer_park import BEHIND_PARK_SECONDS
 from lib.exit_codes import DEPLOY_STALE
 from lib.git_testing import commit, git_out, init_repo
-from gitops_markers import MARKERS
 
 
 def _commit(repo: Path, name: str) -> None:
     commit(repo, name, **{name: name})
-
-
-def _no_state(clone: Path) -> str:
-    """An empty deployer state directory beside `clone`, so no test reads the host's (#5784).
-
-    `main` reads `behind_since` from `--state-dir`, whose default is the live
-    `/var/lib/gitops-deploy`. On daniel-box while the deployer is parked, that marker adds
-    the park hint to the refusal and fails assertions about its wording.
-    """
-    return str(clone.parent / "no-gitops-state")
 
 
 @pytest.fixture
@@ -87,27 +75,20 @@ def test_the_incident_shape_is_behind_and_ahead(repos):
 
 def test_main_exits_zero_when_current(repos):
     _origin, clone = repos
-    assert (
-        main(["--repo", str(clone), "--no-fetch", "--state-dir", _no_state(clone)]) == 0
-    )
+    assert main(["--repo", str(clone), "--no-fetch"]) == 0
 
 
 def test_main_exits_zero_when_only_ahead(repos):
     _origin, clone = repos
     _commit(clone, "mine")
-    assert (
-        main(["--repo", str(clone), "--no-fetch", "--state-dir", _no_state(clone)]) == 0
-    )
+    assert main(["--repo", str(clone), "--no-fetch"]) == 0
 
 
 def test_main_refuses_when_behind(repos):
     origin, clone = repos
     _commit(origin, "theirs")
     git_out(clone, "fetch", "-q", "origin")
-    assert (
-        main(["--repo", str(clone), "--no-fetch", "--state-dir", _no_state(clone)])
-        == DEPLOY_STALE
-    )
+    assert main(["--repo", str(clone), "--no-fetch"]) == DEPLOY_STALE
 
 
 def test_refusal_names_the_count_and_the_fix(repos):
@@ -149,8 +130,6 @@ def test_a_tree_behind_on_an_unrelated_role_still_deploys(repos, capsys):
             "--repo",
             str(clone),
             "--no-fetch",
-            "--state-dir",
-            _no_state(clone),
             "--tags",
             "sonarr",
         ]
@@ -167,8 +146,6 @@ def test_a_tree_behind_on_the_role_being_deployed_is_refused(repos, capsys):
             "--repo",
             str(clone),
             "--no-fetch",
-            "--state-dir",
-            _no_state(clone),
             "--tags",
             "sonarr,radarr",
         ]
@@ -186,8 +163,6 @@ def test_a_tree_behind_on_a_broad_path_is_refused_whatever_the_tags(repos, capsy
             "--repo",
             str(clone),
             "--no-fetch",
-            "--state-dir",
-            _no_state(clone),
             "--tags",
             "sonarr",
         ]
@@ -209,8 +184,6 @@ def test_a_tree_behind_on_the_secrets_file_is_refused(repos, capsys):
             "--repo",
             str(clone),
             "--no-fetch",
-            "--state-dir",
-            _no_state(clone),
             "--tags",
             "sonarr",
         ]
@@ -231,8 +204,6 @@ def test_a_block_tag_falls_back_to_the_unscoped_rule(repos, capsys):
             "--repo",
             str(clone),
             "--no-fetch",
-            "--state-dir",
-            _no_state(clone),
             "--tags",
             "config",
         ]
@@ -257,52 +228,7 @@ def test_unreadable_host_vars_refuses_to_narrow_at_all():
 def test_a_full_run_is_refused_for_any_commit_behind(repos):
     """No tags means the deploy is unscoped, so today's rule stands: any tail refuses."""
     clone = _behind_on(repos, RADARR)
-    assert (
-        main(["--repo", str(clone), "--no-fetch", "--state-dir", _no_state(clone)])
-        == DEPLOY_STALE
-    )
-
-
-def _behind_marker(tmp_path: Path, age_s: float, now: float = 2_000_000_000.0) -> Path:
-    """A deployer state directory whose `behind_since` is `age_s` seconds old."""
-    state = tmp_path / "gitops-state"
-    state.mkdir()
-    (state / MARKERS["behind"]).write_text(f"abc123 {now - age_s}\n")
-    return state
-
-
-def test_exit_four_names_the_parked_deployer_when_one_is_parked(
-    repos, tmp_path, capsys
-):
-    """A rebase of THIS tree is the wrong repair when the primary checkout is what is stuck.
-
-    Time is not injectable through the CLI, so the stamp is a fixed epoch old enough that the
-    park window has elapsed under any clock this suite runs on.
-    """
-    origin, clone = repos
-    _commit(origin, "theirs")
-    git_out(clone, "fetch", "-q", "origin")
-    state = _behind_marker(tmp_path, BEHIND_PARK_SECONDS + 600, now=1_700_000_000.0)
-    rc = main(["--repo", str(clone), "--no-fetch", "--state-dir", str(state)])
-    err = capsys.readouterr().err
-    assert rc == DEPLOY_STALE
-    assert "primary checkout" in err
-    assert "journalctl -u gitops-deploy.service" in err
-
-
-def test_exit_four_says_nothing_extra_when_the_deployer_is_converged(
-    repos, tmp_path, capsys
-):
-    origin, clone = repos
-    _commit(origin, "theirs")
-    git_out(clone, "fetch", "-q", "origin")
-    state = tmp_path / "gitops-state"
-    state.mkdir()
-    rc = main(["--repo", str(clone), "--no-fetch", "--state-dir", str(state)])
-    err = capsys.readouterr().err
-    assert rc == DEPLOY_STALE
-    assert "rebase" in err
-    assert "primary checkout" not in err
+    assert main(["--repo", str(clone), "--no-fetch"]) == DEPLOY_STALE
 
 
 def test_an_unresolvable_ref_does_not_refuse(repos, capsys):
@@ -318,8 +244,6 @@ def test_an_unresolvable_ref_does_not_refuse(repos, capsys):
                 "--repo",
                 str(clone),
                 "--no-fetch",
-                "--state-dir",
-                _no_state(clone),
                 "--ref",
                 "origin/nonexistent",
             ]
@@ -346,8 +270,6 @@ def test_a_deploy_of_the_incoming_commit_is_not_behind_on_it(repos, capsys):
             "--repo",
             str(clone),
             "--no-fetch",
-            "--state-dir",
-            _no_state(clone),
             "--sha",
             tip,
             "--tags",
@@ -367,8 +289,6 @@ def test_a_sha_that_is_itself_behind_still_refuses(repos, capsys):
             "--repo",
             str(clone),
             "--no-fetch",
-            "--state-dir",
-            _no_state(clone),
             "--sha",
             head,
             "--tags",

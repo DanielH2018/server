@@ -243,16 +243,12 @@ worktrees with the issues each has claimed. While something blocks, the text vie
 worktrees holding a claim and counts the rest; otherwise it prints only the count. Exit 1 means something blocks. `--json` prints one
 document, which the [deck mod](#the-deck-mod-claudepluginsdeck) reads every minute.
 
-A blocker is one of three states: a non-empty `hold_sha`, a red master CI run, or an owed
-`manual_plane` role. The command computes that list itself, so every surface that shows it
+A blocker is one of two states: a `DEPLOY_HOLD` that reads anything but `none`, or a red
+master CI run. The command computes that list itself, so every surface that shows it
 agrees. Each fact comes from a reader that already exists:
 
-- Where the running user can read the deployer's state directory, `hold_sha` and the `owed`
-  ledger are read from it through `gitops_hold.DeployerSnapshot`. The directory is 0750
-  and owned by the deploy user. So off daniel-box, and for the `claude` user on it, deploy-ui's
-  `/api/state` serves the hold and the `manual_plane` ledger lines instead.
-- A deploy-ui older than the `manual_plane_owed` key leaves the manual planes `null`. A `null`
-  field means the source was not readable, not that nothing is owed. It adds no blocker.
+- `DEPLOY_HOLD` comes from one `gh variable get`. The blocker line says the hold is set and
+  leaves its value to the text view, because the value is free text.
 - Master CI is the newest `ci.yml` run on master. A run in progress is pending, and a
   conclusion in `ci_verdict._CI_NO_VERDICT_CONCLUSIONS` is no verdict. Neither counts as red.
 - deploy-ui's `/api/inflight` lists the runs in flight. A run's `VERDICT:` line is read with
@@ -283,28 +279,6 @@ Every landing appends its line as it exits, plain, `--detach` or crashed, to
 it off as well as by the lander unit. The file is per user and per host, so a landing run on
 daniel-box reads back only on daniel-box. `land_lib/verdict_log.py` owns the format and the
 trim.
-
-### `gitops-state [--json]`
-
-`gitops-state` prints every marker the GitOps deployer keeps, without ticking (#3931). It reads
-`last_run`, `hold_sha` with its `hold_plane` lines, `behind_since`, `diverged_sha`,
-`contention_since`, and the `owed` ledger's `manual_plane` lines. Each set marker carries what discharges it and the command that clears it after. The
-hold's command is `gitops_state.py clear-hold <sha>` with the held SHA filled in.
-`hold_plane` lines with no `hold_sha` print as orphaned, with `clear-hold --orphaned`.
-
-It reads `/var/lib/gitops-deploy` directly, so it answers only on daniel-box as the deploy
-user. Elsewhere it says there is no state directory. A marker that exists and cannot be read is
-reported as unreadable, never as absent. Exit 75 means the directory or a marker could not be
-read, and stderr names which. The exit says nothing about what the markers hold, so it is
-never 1.
-
-`--why` adds the failure lines of the tick that wrote `hold_sha` (#6324,
-`probe_lib/gitops_why.py`). It finds that tick by the marker's mtime. It reads
-`gitops-deploy.service`'s journal from one `TimeoutStartSec` before the mtime to two minutes
-after it. It takes the unit run that logged the line nearest the mtime, and prints that
-run's deployer lines at priority err with Ansible's `fatal:` and `FAILED!` lines. The line
-also names the run's `_SYSTEMD_INVOCATION_ID`, for `journalctl` to show the whole run. A
-journal it cannot read exits 75. Under `--json` the section is the `why` key.
 
 ### `push-rules <branch> [--rev HEAD] [--remote origin]`
 
@@ -918,14 +892,11 @@ and timeout-bounded. Its probes run at the same time, in `hooklib/sections.py`, 
 prints a `⚠ … did not finish` line rather than nothing. The banner's problem lines come in three groups, in this order:
 
 - **Service lines** (`.claude/hooks/hooklib/service_lines.py`): a down Prometheus scrape target.
-- **Deployer lines** (`parked_deployer_problems`): a **dirty primary checkout**, a **GitOps
-  deployer parked behind origin**, a **setup role the tick merged but cannot apply** (the
-  `manual_plane` ledger class), consecutive ticks deferred on a service lock, an image bump
-  the tick merged but deferred, and a k8s change the deployer never applies.
+- **Primary checkout line** (`dirty_primary_problems`): a **dirty primary checkout**.
 - **Branch line**: this worktree is behind origin/master, so a deploy from it would be refused.
 
 A failed import is loud and a failed read is silent. A module the banner cannot import (`lib.git`,
-`lib.deployer_park`, `lib.worktrees`) prints a `⚠ … is broken` line, and a failed `hooklib`
+`lib.worktrees`) prints a `⚠ … is broken` line, and a failed `hooklib`
 import is reported in the fan-out section below. A read that fails at run time, such as a
 `git status` timeout or an unreadable marker file, returns no line, so a silent banner is not
 proof of health.

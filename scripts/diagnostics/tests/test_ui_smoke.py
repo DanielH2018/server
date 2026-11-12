@@ -87,12 +87,6 @@ TWO_FACTOR_SERVICES = [
     ("deploy", "Deploy queue", "/"),
 ]
 
-# Exactly four: `state()` in `deploy_ui.html` renders `hold_sha`, `hold_plane`, `last_run` and
-# `behind_since`, and a failed read renders a `<span class="unavail">` with no table at all —
-# which is what makes an exact count a rejecting assertion. `test_ui_smoke_deploy_rows.py`
-# holds this count to the page source in CI.
-DEPLOYER_STATE_ROWS = 4
-
 # The panels fill from async `/api/*` fetches after load, so the first read lands on an empty
 # div. Same shape and the same reasoning as `settled_title`: absorb the fetch, not a failure.
 _PANEL_ATTEMPTS = 8
@@ -480,19 +474,18 @@ def test_deploy_ui_renders_a_panel_not_just_its_shell(two_factor_browser, domain
     """deploy.local drew a row its own API produced, not just its static headings.
 
     The `deploy` entry in `TWO_FACTOR_SERVICES` checks the title, which `deploy_ui.html`
-    ships as literal markup — so does every panel heading. A daemon answering
-    `{"unavailable": ...}` on all four panels still passes it. This asserts the deployer-state
-    table, whose rows exist only if `/api/state` answered and the page rendered it.
+    ships as literal markup, and so does every panel heading. A daemon answering
+    `{"unavailable": ...}` on every panel still passes it. This asserts the in-flight
+    panel's lines, which exist only if `/api/inflight` answered and the page rendered it.
     """
     report, is_error = two_factor_browser.navigate(f"https://deploy.local.{domain}/")
     assert not is_error, f"deploy: navigation reported an error:\n{report}"
     assert "auth.local." not in report, (
         f"deploy: landed on the Authelia portal — re-mint the session with `{MINT_HINT}`."
     )
-    rows = settled_rows(two_factor_browser, "#state table tr")
-    assert rows == DEPLOYER_STATE_ROWS, (
-        f"deploy: expected {DEPLOYER_STATE_ROWS} rows in the deployer-state panel, saw "
-        f"{rows}. Zero means the panel rendered `unavailable` — the daemon could not read "
-        f"/var/lib/gitops-deploy — while the page's title and headings still say `Deploy "
-        f"queue`. Check `curl -s http://10.0.0.215:8790/api/state` from daniel-box."
+    rows = settled_rows(two_factor_browser, "#inflight > p")
+    assert rows >= 1, (
+        f"deploy: expected the in-flight panel to render, saw {rows} lines. Zero means "
+        f"the panel rendered `unavailable` while the page's title and headings still say "
+        f"`Deploy queue`. Check `curl -s http://10.0.0.215:8790/api/inflight` from daniel-box."
     )

@@ -41,9 +41,6 @@ files:
   - {src: files/run_worktree.py, dst: /usr/lib/homelab/renovate-agent/run_worktree.py}
   - {src: files/agent_logic.py, dst: /usr/lib/homelab/renovate-agent/agent_logic.py}
   - {src: files/land_renovate_pr.py, dst: /usr/lib/homelab/renovate-agent/land_renovate_pr.py, mode: "0755"}
-  - {shared: gitops_markers.py, dst: /usr/lib/homelab/renovate-agent/gitops_markers.py}
-  - {shared: gitops_ledger.py, dst: /usr/lib/homelab/renovate-agent/gitops_ledger.py}
-  - {shared: gitops_hold.py, dst: /usr/lib/homelab/renovate-agent/gitops_hold.py}
   - {lib: host_lib.py, dst: /usr/lib/homelab/renovate-agent/host_lib.py}
   - {src: templates/prompt.txt.j2, dst: /usr/lib/homelab/renovate-agent/prompt.txt}
   - {src: templates/renovate-agent-setup.sh.j2, dst: /usr/lib/homelab/renovate-agent-setup, mode: "0755"}

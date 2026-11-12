@@ -91,7 +91,7 @@ def _run_main(
         read_payload=lambda: payload,
         target_problems=lambda: targets or [],
         master_moved_problems=lambda: master_moved or [],
-        parked_deployer_problems=lambda: parked or [],
+        dirty_primary_problems=lambda: parked or [],
         other_live_sessions=lambda cwd: sessions or [],
         unlabelled_worktree_lines=lambda cwd: [],
         stale_worktree_lines=lambda: worktrees or [],
@@ -134,14 +134,14 @@ def test_main_stays_silent_when_no_other_session_is_live(monkeypatch, capsys):
 
 
 def test_main_is_clean_when_the_parked_deployer_probe_is_quiet(monkeypatch, capsys):
-    """main() prints nothing when parked_deployer_problems() finds no dirty checkout or park."""
+    """main() prints nothing when dirty_primary_problems() finds no dirty checkout or park."""
     run_main = _run_main(monkeypatch, '{"source":"startup"}', parked=[])
     assert run_main() == 0
     assert capsys.readouterr().out == ""
 
 
 def test_main_is_flagged_when_the_parked_deployer_probe_reports(monkeypatch, capsys):
-    """main() prints the banner when parked_deployer_problems() finds a dirty primary checkout.
+    """main() prints the banner when dirty_primary_problems() finds a dirty primary checkout.
 
     Paired with the _is_clean case above: this is the RED proof that isolating this seam in
     _run_main did not just neuter the assert-silence tests — a genuine report from this probe

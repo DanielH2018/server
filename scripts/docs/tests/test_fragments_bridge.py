@@ -268,7 +268,7 @@ def test_a_check_domain_missing_from_the_checks_row_is_reported():
 def test_every_top_level_module_has_a_row_in_the_module_table():
     modules = {p.name for p in fb.MONITOR_BRIDGE_FILES.glob("*.py")} - {"__init__.py"}
     rows = module_table(INTERNALS_PAGE.read_text())
-    assert {"cli.py", "check_table.py", "gitops_hold.py"} <= modules
+    assert {"cli.py", "check_table.py", "registry.py"} <= modules
     assert undocumented_modules(rows, modules) == set()
 
 

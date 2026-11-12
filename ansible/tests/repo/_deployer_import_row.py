@@ -160,48 +160,12 @@ DEPLOYER_IMPORTS = Census(
         SELF: "the red fixtures above hold the offending names as text",
         **{
             rel: (
-                "reads the deployer's hold, markers or ledger, which no host writes "
-                "since H7.52; the read goes or switches to DEPLOY_HOLD in #7961"
+                "names the ACL grant on `/var/lib/gitops-deploy`, which stays until the "
+                "operator removes the directory"
             )
             for rel in (
-                "ansible/roles/k8s/monitor-bridge/files/gitops_hold.py",
-                "scripts/dev/gen_gitops_markers.py",
-                "scripts/renderer/renderer_lib/host_inputs.py",
-                "scripts/renderer/renderer_lib/host_sources.py",
-                "ansible/roles/k8s/monitor-bridge/files/gitops_ledger.py",
-                "ansible/roles/k8s/monitor-bridge/files/gitops_markers.py",
-                "ansible/tests/deploy/test_gitops_markers_copies.py",
                 "ansible/tests/k8s/_config_property_rows.py",
                 "ansible/tests/setup/test_agent_gitops_read.py",
-                "hosts/components/deploy-ui/files/deploy_ui.py",
-                "hosts/components/deploy-ui/files/deploy_ui_lib/deploy_ui_reads.py",
-                "hosts/components/deploy-ui/files/deploy_ui_lib/deploy_ui_writes.py",
-                "hosts/components/deploy-ui/tests/test_deploy_ui_app.py",
-                "hosts/components/deploy-ui/tests/test_deploy_ui_reads.py",
-                "hosts/components/renovate-agent/files/agent_logic.py",
-                "hosts/components/renovate-agent/files/agent_toolbox.py",
-                "hosts/components/renovate-agent/files/renovate_agent.py",
-                "hosts/components/renovate-agent/tests/test_agent_logic.py",
-                "hosts/components/renovate-agent/tests/test_session_resume.py",
-                "scripts/deploy_tools/gitops_state.py",
-                "scripts/deploy_tools/owed_run.py",
-                "scripts/deploy_tools/runbook_gates_lib/k3s_upgrade.py",
-                "scripts/deploy_tools/runbook_gates_lib/metallb_upgrade.py",
-                "scripts/deploy_tools/tests/test_gitops_state.py",
-                "scripts/deploy_tools/tests/test_gitops_state_hold.py",
-                "scripts/deploy_tools/tests/test_gitops_state_owed.py",
-                "scripts/deploy_tools/tests/test_k3s_upgrade_held_sha_unreadable.py",
-                "scripts/deploy_tools/tests/test_runbook_gates_k3s_upgrade.py",
-                "scripts/deploy_tools/tests/test_runbook_gates_metallb_upgrade.py",
-                "scripts/dev/fanout_lib/operator_waits.py",
-                "scripts/diagnostics/probe_lib/gitops_view.py",
-                "scripts/diagnostics/probe_lib/gitops_why.py",
-                "scripts/diagnostics/probe_lib/landing_blockers.py",
-                "scripts/diagnostics/tests/test_probe_gitops_state.py",
-                "scripts/diagnostics/tests/test_ui_smoke.py",
-                "scripts/docs/reference/state.py",
-                "scripts/lib/deployer_park.py",
-                "scripts/lib/tests/test_deployer_park.py",
             )
         },
         **{
@@ -211,6 +175,7 @@ DEPLOYER_IMPORTS = Census(
             )
             for rel in (
                 "ansible/tests/deploy/test_deploy_runs_from_a_snapshot_under_service_locks.py",
+                "hosts/components/deploy-ui/tests/test_deploy_ui_app.py",
                 "ansible/tests/deploy/test_gitops_deploy_imports.py",
                 "ansible/tests/repo/test_census_rows_layout.py",
                 "ansible/tests/repo/test_census_rows_python.py",
@@ -271,8 +236,6 @@ DEPLOYER_IMPORTS = Census(
                 "scripts/deploy_tools/setup_routing.py",
                 "scripts/deploy_tools/tests/_deploy_sh_fakes.py",
                 "scripts/deploy_tools/tests/test_deploy_detach_notify.py",
-                "scripts/deploy_tools/tests/test_deploy_staleness.py",
-                "scripts/deploy_tools/tests/test_deploy_staleness_isolation.py",
                 "scripts/deploy_tools/tests/test_forge_check_run_pages.py",
                 "scripts/deploy_tools/tests/test_land_classify.py",
                 "scripts/deploy_tools/tests/test_land_reach_repo_shipped_files.py",

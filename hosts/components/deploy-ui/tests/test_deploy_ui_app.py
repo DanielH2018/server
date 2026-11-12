@@ -89,11 +89,10 @@ def _table(lock_dir):
     return t
 
 
-def _bare_config(tmp_path, state_dir):
+def _bare_config(tmp_path):
     """A Config with no lock files and the default /proc/locks."""
     return deploy_ui.Config(
         repo=tmp_path,
-        state_dir=state_dir,
         log_dir=tmp_path,
         bind="",
         port=0,
@@ -102,10 +101,9 @@ def _bare_config(tmp_path, state_dir):
 
 
 @pytest.fixture
-def app(tmp_path, state_dir, lock_dir):
+def app(tmp_path, lock_dir):
     cfg = deploy_ui.Config(
         repo=tmp_path,
-        state_dir=state_dir,
         log_dir=tmp_path / "logs",
         bind="127.0.0.1",
         port=0,
@@ -127,7 +125,7 @@ def test_index_serves_the_page(app):
 
 def test_page_offers_land_and_no_deploy_control_is_clean(app):
     _, html = app.get("/")
-    assert "/api/land" in html and "/api/cancel" in html and "/api/hold/clear" in html
+    assert "/api/land" in html and "/api/cancel" in html
     assert "/api/deploy" not in html and ">deploy<" not in html
 
 
@@ -218,14 +216,13 @@ def test_inflight_asks_fuser_about_every_lock_file_is_clean(app, lock_dir):
     ]
 
 
-def test_inflight_with_no_lock_files_says_so_is_flagged(tmp_path, state_dir):
+def test_inflight_with_no_lock_files_says_so_is_flagged(tmp_path):
     """`free` over no files is the empty-panel trap; the page needs the count to tell."""
     empty = tmp_path / "nolocks"
     empty.mkdir()
     (tmp_path / "proc_locks").write_text("")
     cfg = deploy_ui.Config(
         repo=tmp_path,
-        state_dir=state_dir,
         log_dir=tmp_path,
         bind="",
         port=0,
@@ -239,13 +236,10 @@ def test_inflight_with_no_lock_files_says_so_is_flagged(tmp_path, state_dir):
     assert not any(c[0] == "fuser" for c in run.calls)
 
 
-def test_inflight_unreadable_proc_locks_is_unavailable_is_flagged(
-    tmp_path, state_dir, lock_dir
-):
+def test_inflight_unreadable_proc_locks_is_unavailable_is_flagged(tmp_path, lock_dir):
     """A lock read that errors must never render `free`."""
     cfg = deploy_ui.Config(
         repo=tmp_path,
-        state_dir=state_dir,
         log_dir=tmp_path,
         bind="",
         port=0,
@@ -257,31 +251,12 @@ def test_inflight_unreadable_proc_locks_is_unavailable_is_flagged(
     assert "missing" in b["unavailable"]
 
 
-def test_inflight_degrades_when_ps_fails_is_flagged(tmp_path, state_dir):
+def test_inflight_degrades_when_ps_fails_is_flagged(tmp_path):
     t = dict(TABLE)
     t[("ps", "-eo", "pid=,ppid=,etimes=,args=")] = ("", "raise")
-    cfg = _bare_config(tmp_path, state_dir)
+    cfg = _bare_config(tmp_path)
     b = body(deploy_ui.App(cfg, run=FakeRun(t)).get("/api/inflight"))
     assert b["unavailable"].startswith("ps")
-
-
-def test_state_reads_markers_is_clean(app, state_dir):
-    (state_dir / "hold_sha").write_text("deadbeef")
-    assert body(app.get("/api/state"))["hold_sha"] == "deadbeef"
-
-
-def test_state_unreadable_marker_is_unavailable_and_land_refuses(app, state_dir):
-    marker = state_dir / "hold_sha"
-    marker.write_text("deadbeef")
-    marker.chmod(0o000)
-    try:
-        assert "unavailable" in body(app.get("/api/state"))
-        status, _ = app.post(
-            "/api/land", HDRS, json.dumps({"pr": "9999", "since": "72c1a41"})
-        )
-        assert status == 503
-    finally:
-        marker.chmod(0o644)
 
 
 def test_prs_are_cached_is_clean(app):
@@ -290,9 +265,9 @@ def test_prs_are_cached_is_clean(app):
     assert sum(1 for c in app.run.calls if c[:2] == ["gh", "pr"]) == 1
 
 
-def test_prs_first_call_after_boot_runs_gh_is_clean(tmp_path, state_dir, monkeypatch):
+def test_prs_first_call_after_boot_runs_gh_is_clean(tmp_path, monkeypatch):
     """A fresh App's cache sentinel must not read as fresher than an early-boot clock."""
-    cfg = _bare_config(tmp_path, state_dir)
+    cfg = _bare_config(tmp_path)
     run = FakeRun(dict(TABLE))
     app = deploy_ui.App(cfg, run=run)
     monkeypatch.setattr(deploy_ui.time, "monotonic", lambda: 5.0)
@@ -344,24 +319,6 @@ def test_land_duplicate_is_refused_is_flagged(app):
     assert status == 409 and "1543" in text
 
 
-def test_hold_clear_pair_is_clean(app, state_dir, monkeypatch):
-    """`hold_sha` and every held plane go, and the reply names each plane that went.
-
-    A Clear drops each `hold_plane` entry whatever is still unapplied, so the reply is the
-    last place that can name them: nothing records those planes afterwards.
-    """
-    monkeypatch.setattr(deploy_ui.writes, "audit", lambda line: None)
-    (state_dir / "hold_sha").write_text("deadbeef")
-    line = '{"class": "hold_plane", "subject": "%s", "origin": "a", "at": 1}\n'
-    (state_dir / "owed.jsonl").write_text(line % "k3s" + line % "deploy.yml sonarr")
-    status, text = app.post(
-        "/api/hold/clear", HDRS, json.dumps({"expected_sha": "deadbeef"})
-    )
-    assert status == 200 and not (state_dir / "owed.jsonl").exists()
-    assert not (state_dir / "hold_sha").exists()
-    assert "k3s" in text and "deploy.yml sonarr" in text
-
-
 def test_cancel_deploy_row_is_flagged(app):
     """A deploy is listed in flight but is not cancellable: SIGTERM mid-play is exit 20."""
     status, text = app.post("/api/cancel", HDRS, json.dumps({"pid": 5000}))
@@ -385,13 +342,11 @@ def test_land_non_hex_since_is_flagged(app):
     assert status == 400 and "hex" in text
 
 
-def test_read_raising_an_unexpected_error_is_unavailable_is_flagged(
-    tmp_path, state_dir
-):
+def test_read_raising_an_unexpected_error_is_unavailable_is_flagged(tmp_path):
     """A gh payload missing a field must reach the page as red text, not a traceback."""
     t = dict(TABLE)
     t[("gh", "pr", "list")] = ('[{"title":"no number here"}]', 0)
-    cfg = _bare_config(tmp_path, state_dir)
+    cfg = _bare_config(tmp_path)
     b = body(deploy_ui.App(cfg, run=FakeRun(t)).get("/api/prs"))
     assert "prs" not in b
     assert b["unavailable"].startswith("KeyError")
