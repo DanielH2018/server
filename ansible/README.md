@@ -78,9 +78,10 @@ touching SOPS:
    new host can set with its default and why it matters. At minimum:
    - `server_ip` — the host's LAN IP (no default exists; every role that publishes a
      LAN-bound port or firewalls by IP needs it).
-   - `containers_list: []` on a Docker host only. A k3s node drops the key, because the k3s
-     services live in `cluster/services.yml` (see the repo-root `CLAUDE.md` → "Adding a New
-     Service").
+   - `compose_services: []` on a Docker host only, which its host package deploys. A k3s
+     node drops the key, because the k3s services live in `cluster/services.yml` (see the
+     repo-root `CLAUDE.md` → "Adding a New Service"). No host_vars file defines
+     `containers_list`.
    - Any hardware capability flags a role you plan to deploy expects — e.g. `has_igpu: true`
      only if the host has an Intel iGPU (gates `/dev/dri` passthrough for jellyfin/tdarr;
      defaults to `false` in `group_vars/all.yml`).
