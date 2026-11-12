@@ -113,6 +113,7 @@ def test_a_declared_volume_over_the_size_gate_fails_with_no_files() -> None:
 
 def test_an_undeclared_volume_still_fails_with_no_files() -> None:
     """FLAGGED half of the waiver: the exception must not widen past the names that declare it."""
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
     result = _run_floor_guard(files=0, byte_count=0, pvc="authelia-config")
     assert result.returncode == 1
     assert "has no files" in result.stderr

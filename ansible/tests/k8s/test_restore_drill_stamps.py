@@ -31,6 +31,7 @@ def _stamps() -> dict:
 
 
 def test_the_stamp_configmap_renders_empty_with_both_annotations():
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#At a glance
     doc = _stamps()
     assert doc["kind"] == "ConfigMap"
     assert doc["metadata"]["name"] == "longhorn-restore-drill-stamps"
@@ -43,6 +44,7 @@ def test_the_stamp_configmap_renders_empty_with_both_annotations():
 
 def test_the_stamp_namespace_equals_the_host_drills():
     """A mirrored pair: the host drill reads the `k3s-host-checks` key until H2.3f."""
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#At a glance
     drill = load_defaults(ROLE)["longhorn_drill_namespace"]
     host = load_defaults(K3S_HOST_CHECKS)["k3s_longhorn_restore_drill_namespace"]
     assert drill == host == _stamps()["metadata"]["namespace"]

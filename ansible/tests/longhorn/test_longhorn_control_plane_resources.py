@@ -88,6 +88,7 @@ def test_manager_patch_sets_a_request_and_no_limit():
 def test_manager_patch_holds_the_value_of_the_defaults_key():
     # A kustomize patch is copied verbatim and cannot read a variable, so the key in the
     # role's defaults is only as true as this test makes it.
+    # fact: ansible/roles/k8s/longhorn/CLAUDE.md#At a glance
     resources = _container_resources(_manager_patch())
     assert resources["requests"]["memory"] == str(
         LONGHORN_DEFAULT_VALUES["k3s_longhorn_manager_memory_request"]
