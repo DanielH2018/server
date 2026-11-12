@@ -323,8 +323,8 @@ def descendant_verdict(
     """
     # DECIDED: the nearest finished descendant's verdict stands in for a merge commit GitHub
     # never ran CI for. That descendant's run tested a tree that contains every change in the
-    # merge commit, which is the rule the tick already deploys by (it fast-forwards to the
-    # newest green ancestor of the tip). What it does not prove is the merge commit's own
+    # merge commit, which is the rule `homelab-checkout-sync` already follows (it
+    # fast-forwards to the newest green ancestor of the tip). What it does not prove is the merge commit's own
     # tree, the one the landing gates. Nothing can prove that once the
     # push event is gone, and the alternative is a landing no re-run converges (#4621).
     # A RED one ends the walk rather than being stepped over: a later green commit may hold

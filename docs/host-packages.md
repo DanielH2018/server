@@ -543,7 +543,7 @@ key. Every step is **operator-only**, and each host step runs from a LAN session
 
     Until the apply in the step after next, the signer has no key to sign with. A re-sign
     that falls due before then fails, and pages once with `sign`.
-1. Merge the PR. The tick applies nothing for a change under `hosts/`.
+1. Merge the PR. A merge applies nothing under `hosts/`: the builder and the updater do.
 1. Let the builder rewrite `/etc/homelab-builder/archive-key.fpr`. Its `ExecStartPre=+` script
    `builder-fingerprint` writes the file from the signer's GnuPG home on every run, so no
    Ansible apply is needed. A held builder still runs it. To write it now, run
@@ -1254,9 +1254,10 @@ new version, which costs each host one install.
 The builder grades each commit over `CI_CONTEXTS`, which the role renders from
 `ci_required_contexts`. When a CI job is renamed, no commit carries the old context, so no
 commit is ever green. Change `ci_required_contexts` in `ansible/inventory/group_vars/all.yml` to
-the new name, spelled exactly as `ci.yml`'s `name:`, and merge that. The key is a deploy-plane
-change, so the tick re-renders neither settings file. The updater installs the
-builder's copy once the builder builds `homelab-daniel-box` with the new list.
+the new name, spelled exactly as `ci.yml`'s `name:`, and merge that. The builder's
+`builder.conf` and the `homelab-checkout-sync` unit both render the key, so neither changes
+until a host package carries it. The updater installs the builder's copy once the builder
+builds `homelab-daniel-box` with the new list.
 
 ### `reason="keyring"`
 

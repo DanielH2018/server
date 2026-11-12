@@ -12,8 +12,8 @@ disappears from the pod, and an edit made in the HA UI does not survive a deploy
 shows these scripts as read-only, because a directory include leaves the script editor no
 file to write to.
 
-To change one, edit the file and merge the change; Flux's `promote` applies it, because
-`deploy.sh --tags home-assistant` refuses a Flux-owned tag with exit 5.
+To change one, edit the file and merge the change. `promote` and Flux apply it; no local
+script applies a k8s workload.
 
 To add a file, also add its name to `home_assistant_script_files` in `defaults/main.yml`.
 That list is what the ConfigMap carries and the init container installs, and `validate_ha_config.py`
