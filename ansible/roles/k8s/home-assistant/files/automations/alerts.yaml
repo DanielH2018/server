@@ -182,6 +182,12 @@
             # to the recovery default below.
             - if: "{{ not severe_shadowed }}"
               then:
+                # Light pulse only for air quality (cfg.pulse) and only when the lights are already on
+                # — never wakes you, never fights Adaptive Lighting / the manual-off override at night.
+                # Before the notify, which a renamed notify service aborts.
+                - if: "{{ cfg.pulse and is_state('light.bedroom_lights', 'on') }}"
+                  then:
+                    - service: script.bedroom_alert_pulse
                 - service: script.bedroom_notify
                   data:
                     title: "{{ cfg.bad }}"
@@ -191,11 +197,6 @@
                     pierce: "{{ cfg.pierce }}"
                     critical_away: "{{ cfg.critical_away | default(false) }}"
                     actions: "{{ boost_actions }}"
-                # Light pulse only for air quality (cfg.pulse) and only when the lights are already on
-                # — never wakes you, never fights Adaptive Lighting / the manual-off override at night.
-                - if: "{{ cfg.pulse and is_state('light.bedroom_lights', 'on') }}"
-                  then:
-                    - service: script.bedroom_alert_pulse
       # off<->on edges only, so the remaining case (edge == 'ok') is the default. Recovery is always
       # routine (no watch/pierce); the severe tier skips it (cfg.recovery false).
       default:

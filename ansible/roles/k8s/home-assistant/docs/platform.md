@@ -108,19 +108,23 @@ logs `_connect_hass failed` and raises `PyChromecastError` into
   14:24:06, 30.03 s later, that cast failed with `Exception in _handle_signal_show_view` on
   `homeassistant.util.logging`. The traceback ends at the `raise` in `_connect_hass`, which only
   the thread that sent `connect` and waited can reach. So the worker, not `Thread-5`, held the
-  wait, and no reply arrived. Why that reply was lost is not established. The record is not
-  silenced, and its message carries the cast user's `refresh_token` in plaintext. A cast that
+  wait, and no reply arrived. Why that reply was lost is not established. The record's message
+  carries the cast user's `refresh_token` in plaintext. A cast that
   runs into a blocked `Thread-5` fails differently: it returns early, its callback later
   receives `False`, and it logs nothing.
 
-  **Two seams redact that token, and neither stops HA writing it (issue #3015).** Alloy's
-  `stage.replace` in `roles/k8s/loki-homelab` strips it on the way into Loki, and
+  **HA does not write that token anywhere (issues #3015, #8203).** `logger.filters` in
+  `files/configuration.yaml` drops any `homeassistant.util.logging` record that matches
+  `refresh_token` before a handler sees it. So the record reaches neither the container's stdout,
+  which `kubectl logs` reads unredacted, nor `system_log` and `/api/error_log`.
+  `tests/test_logger_filter_drops_refresh_token.py` applies HA's own matching rule to the
+  shipped config. The redaction layers stay as a backstop for a record the filter misses:
+  Alloy's `stage.replace` in `roles/k8s/loki-homelab` strips the token on the way into Loki, and
   `redact_log_secrets` in `scripts/diagnostics/probe_lib/core.py` strips it out of `probe.py ha
-  get` and `probe.py loki-query`. Both leave the `_handle_signal_show_view` marker intact. HA
-  still writes the token to its own `system_log` and `/api/error_log`, and the records Loki took
-  before the stage shipped keep it until the 744h retention expires — so rotating the cast user's
-  refresh token is the only thing that ends the exposure. `probe.py loki-query --json` streams the
-  raw body and is NOT redacted.
+  get` and `probe.py loki-query`. The filter does not reach copies written before it shipped:
+  the pod's log file on daniel-box until kubelet rotates it, and Loki records stored before the
+  Alloy stage until the 744h retention expires. Rotating the cast user's refresh token is what
+  ends those. `probe.py loki-query --json` streams the raw body and is NOT redacted.
 - **The fault is episodic.** The 197 warnings fall in 11 hour-buckets across 4 of the 7 days
   (09-21, 09-22, 09-23, 09-26), and 3 days have none. The longest clean gap inside the window
   is about 56 h, so a quiet day or two is not evidence the fault has cleared. Inside a burst,
@@ -171,15 +175,20 @@ channel that survived, and they came from the pinned theme's TypeError above. Wi
 unpinned they stop, so the loop itself now has no audible signal. That is accepted with #2800,
 and the guard that kept the channel audible was retired with the pin.
 
-A cast that timed out on a worker thread still logs `_handle_signal_show_view`:
+A cast that timed out on a worker thread leaves no record either. Its
+`_handle_signal_show_view` record carries the cast `refresh_token`, so the logger filter above
+drops it. That was the operator's choice on 2026-11-12, over closing `kubectl logs`; the
+`DECIDED:` marker at the filter in `configuration.yaml` records it. #8206 tracks a Loki rule on
+pychromecast's `Heartbeat timeout` lines to replace the lost signal. This query still finds
+records stored before the filter shipped, until the 744h retention expires:
 
 ```logql
 {job="k8s", container="home-assistant"} |= "_handle_signal_show_view"
 ```
 
-`probe.py loki-query` redacts the cast `refresh_token` out of that record and keeps the
-marker, so the query still works — but `--json`, `logcli` and Grafana Explore read the stored
-line, which carries the token for anything shipped before the Alloy redaction stage.
+`probe.py loki-query` redacts the token and keeps the marker. `--json`, `logcli` and Grafana
+Explore read the stored line, which carries the token for anything shipped before the Alloy
+redaction stage.
 
 ### Browser Mod does not extend the cast display (investigated 2026-09-10, issue #1454)
 

@@ -10,5 +10,5 @@ encyclopedia); link to them instead.
 
 ## Learnings
 <!-- e.g. - FP300 running-fan presence false-hold → no setting fixes it; accepted, see docs/lighting-and-presence.md -->
-- [clear_notification pattern](ha-clear-notification-pattern.md) — DELIVERED Android push ≠ persistent_notification; clear via `message: clear_notification` + `data.tag` (repo's first, use notify.mobile_app_pixel_9_pro + continue_on_error). bedroom_away arrive-home push strand FIXED 2026-07-04.
+- [clear_notification pattern](ha-clear-notification-pattern.md) — DELIVERED Android push ≠ persistent_notification; clear via `message: clear_notification` + `data.tag` (use notify.mobile_app_pixel_9_pro, LAST in the sequence: a renamed slug aborts every later step even under continue_on_error). bedroom_away arrive-home push strand FIXED 2026-07-04.
 - [UPS Replace-Battery (RB) coverage](ha-ups-replace-battery.md) — M2 done 2026-07-14: RB branch in ups_power_event + new binary_sensor.apc_ups_replace_battery; sensor MUST stay strictly on/off so the UPS dashboard's fallback series stays in the scrape (no alert reads it; UPSReplaceBattery reads nut-exporter). Don't make it emit unknown.

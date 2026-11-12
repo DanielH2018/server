@@ -18,9 +18,11 @@ Clearing a bedroom alert has TWO surfaces, and they need TWO different calls:
       data:
         tag: <tag>
   ```
-  `clear_notification` is a no-op when nothing's showing (safe to fire unconditionally). Always add
-  `continue_on_error: true` — a re-paired phone renames the `notify.mobile_app_*` slug → ServiceNotFound
-  would abort the rest of the automation (same rationale as `bedroom_notify`'s pushes, files/scripts/alerts.yaml).
+  `clear_notification` is a no-op when nothing's showing (safe to fire unconditionally). Put it LAST in
+  its sequence. `continue_on_error: true` covers a failed delivery only: a re-paired phone renames the
+  `notify.mobile_app_*` slug, and HA re-raises the resulting ServiceNotFound even under
+  `continue_on_error`, so it aborts every step after the notify (#8203).
+  `tests/test_notify_runs_after_state_changes.py` fails on a state change placed after any notify.
 
 **Repo state (2026-07-04):** this was the repo's FIRST `clear_notification` — grep found none before.
 `notify.mobile_app_pixel_9_pro` is the established phone notify service (used by `bedroom_notify`
@@ -31,8 +33,7 @@ clear (it always sends a title/message push + runs away-hold logic) — call the
 true` so it bypasses the hold and lands as a real push) only cleared on a "Turn back on" tap. A genuine
 away (you don't tap) stranded it. `automation.bedroom_arrive_home` already dismissed the *persistent
 note* (added earlier by the maintainer); the remaining strand was the *phone push*. Added the
-`clear_notification` above right after the dismiss in `bedroom_arrive_home` (before its fan/light resume,
-which is untouched). Deployed + all 33 automations loaded; can't live-fire without a real person.daniel→home
+`clear_notification` above to `bedroom_arrive_home`; since #8203 it runs after the fan/light resume. Deployed + all 33 automations loaded; can't live-fire without a real person.daniel→home
 GPS transition. The sibling orphan class — `bedroom_notify`'s away-hold recovery branch leaving
 bare-`tag` visibility notes stranded for watch-tier alerts (a different bug from this one) — was
 fixed the same day: it now dismisses both `hold_{{ tag }}` and `{{ tag }}`
