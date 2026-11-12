@@ -19,10 +19,10 @@ server_ip: 10.0.0.x
 # The sshd and integrity-scans components read this path.
 ssh_config_path: /etc/ssh/sshd_config
 
-# A Docker host keeps this key, empty. A k3s node deletes it,
-# because the k3s services live in cluster/services.yml (repo-root CLAUDE.md, "Adding a New
-# Service"). A Compose service on `daniel-pi` goes in that host's `compose_services`.
-containers_list: []
+# A Docker host lists its Compose services here, which its host package deploys. A k3s node
+# deletes the key, because the k3s services live in cluster/services.yml (repo-root CLAUDE.md,
+# "Adding a New Service").
+compose_services: []
 
 # Bring-up: revert once the host is established
 

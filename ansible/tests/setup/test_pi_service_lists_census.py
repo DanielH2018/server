@@ -1,65 +1,41 @@
 #!/usr/bin/env python3
-"""The Pi's two service lists hold each service once, and every reader reads both (H5.1).
+"""The Pi's services are its `compose_services`, and no host_vars file lists `containers_list`.
 
-daniel-pi's host_vars hold two service keys: `containers_list`, which stays empty because nothing
-deploys a Docker entry, and `compose_services`, which the `homelab-daniel-pi` package deploys.
-H3's two-writer rule applies to the pair, and so does a reader rule: a service that moves from one key to the
-other must change nothing a reader renders. This census fails on three conditions:
+The `homelab-daniel-pi` package deploys the Pi's `compose_services` (H5). H7.20d deleted the
+Pi's empty `containers_list`, and H1.9 had already moved the cluster's list to
+`cluster/services.yml`, so a `containers_list` key in any host_vars file is a list nothing
+deploys. This census fails on three conditions:
 
-- a name appears in both keys;
+- a host_vars file defines `containers_list`;
+- the Pi's `compose_services` lacks `docker-proxy` or `alloy`;
 - a `compose_services` entry has no legacy entry for its Ansible-era compose file in the Pi
-  package;
-- one of the two cluster readers (observability, artifacts) or the recovery heartbeat's script
-  renders differently after any one entry moves.
-
-The cluster readers render twice. One render is `_k8s_render`'s, which builds `hostvars` with
-`lib.render_context`. The other is C1's renderer (`renderer_lib/cluster.py:render_tag`) in
-placeholder mode, which builds its own `hostvars` and is what publishes a flux-owned reader.
-Each render takes the moved lists as its `hostvars` for the Pi, so neither needs a patched
-module.
+  package.
 
 Run: uv run pytest ansible/tests/setup/test_pi_service_lists_census.py
 """
 
-import copy
-import dataclasses
-import shutil
+from pathlib import Path
 
-import pytest
-import yaml
-from _k8s_render import render_texts
-from _role_census import role_dirs
 from lib import yaml_fast
-from lib.render_context import REPO_INVENTORY
-from lib.repo_paths import HOST_VARS, K8S_ROLES, REPO
-from renderer import homelab_render
-from renderer.renderer_lib import cluster
+from lib.repo_paths import HOST_VARS
 from renderer.renderer_lib import host as host_mode
-from renderer.renderer_lib.placeholders import placeholder_vars
 
 HOST = "daniel-pi"
-# The hosts a reader's `hostvars` names: the Pi's lists, and the cluster's own addresses.
-HOSTS = (HOST, "daniel-box", "daniel-server")
-READERS = ("observability", "artifacts")
-OBSERVABILITY = frozenset({"observability"})
-RECOVERY_SCRIPT = "/usr/lib/homelab/pi-recovery-health"
-# Named members the census must find, so a census that read neither key would fail.
+# Named members the census must find in the Pi's `compose_services`.
 MUST_FIND = {"docker-proxy", "alloy"}
-PI_PORTS_JOB = "blackbox-pi-ports"
 
 
-def host_doc(host: str) -> dict:
-    return yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text())
+def host_doc(path: Path) -> dict:
+    return yaml_fast.safe_load(path.read_text()) or {}
 
 
-def pi_lists(doc: dict) -> tuple[list[dict], list[dict]]:
-    return doc["containers_list"] or [], doc["compose_services"] or []
-
-
-def names_in_both(doc: dict) -> set[str]:
-    """The names that appear in `containers_list` and in `compose_services`."""
-    ansible, package = pi_lists(doc)
-    return {e["name"] for e in ansible} & {e["name"] for e in package}
+def defining_containers_list(host_vars: Path) -> list[str]:
+    """The host_vars files under `host_vars` that define `containers_list`, by stem."""
+    return sorted(
+        path.stem
+        for path in host_vars.glob("*.yml")
+        if "containers_list" in host_doc(path)
+    )
 
 
 def without_legacy(doc: dict, legacy: list[dict]) -> set[str]:
@@ -67,200 +43,34 @@ def without_legacy(doc: dict, legacy: list[dict]) -> set[str]:
     paths = [entry.get("path", "") for entry in legacy]
     return {
         entry["name"]
-        for entry in pi_lists(doc)[1]
+        for entry in doc["compose_services"] or []
         if not any(
             p.endswith(f"/containers/{entry['name']}/docker-compose.yml") for p in paths
         )
     }
 
 
-def reverted(name: str) -> dict:
-    """The Pi's host_vars with `name` put back from `compose_services` into `containers_list`.
-
-    H5.9 moved the last listed service, so no entry is left to move forward. A move changes no
-    render exactly when its reverse changes none, so each check below compares the real
-    inventory with this one. The reverse is also the shape a revert of a move PR restores.
-    """
-    doc = host_doc(HOST)
-    entry = next(e for e in doc["compose_services"] if e["name"] == name)
-    doc["compose_services"] = [e for e in doc["compose_services"] if e is not entry]
-    doc["containers_list"] = [*doc["containers_list"], entry]
-    return doc
+def test_no_host_vars_file_defines_containers_list():
+    assert defining_containers_list(HOST_VARS) == []
 
 
-def moved_inventory(tmp_path, pi: dict):
-    """The repo's inventory with the Pi's host_vars replaced by `pi`."""
-    host_vars = tmp_path / "host_vars"
-    shutil.copytree(REPO_INVENTORY.host_vars, host_vars)
-    (host_vars / f"{HOST}.yml").write_text(yaml.safe_dump(pi, sort_keys=False))
-    return dataclasses.replace(REPO_INVENTORY, host_vars=host_vars)
+def test_a_host_vars_file_with_a_pi_containers_list_is_flagged(tmp_path):
+    (tmp_path / f"{HOST}.yml").write_text("containers_list: []\ncompose_services: []\n")
+    (tmp_path / "daniel-box.yml").write_text("server_ip: 10.0.0.2\n")
+    assert defining_containers_list(tmp_path) == [HOST]
 
 
-def ansible_render(pi: dict, only=frozenset(READERS), overrides=None) -> dict:
-    """Each reader's rendered template, keyed by (role, template), through `_k8s_render`."""
-    hostvars = {host: host_doc(host) for host in HOSTS} | {HOST: pi}
-    texts = render_texts({"hostvars": hostvars, **(overrides or {})}, only=only)
-    return {(role, template): text for role, template, text in texts}
-
-
-def c1_render(pi: dict, roles=K8S_ROLES, tags=READERS, extra=None) -> dict:
-    """Each reader's C1 render in placeholder mode, keyed by (tag, directory, file)."""
-    stubs = {**placeholder_vars(homelab_render.secret_keys()), **(extra or {})}
-    rendered = {}
-    for tag in tags:
-        hostvars = copy.deepcopy(
-            cluster.tag_context(roles / tag, tag, stubs)["hostvars"]
-        )
-        hostvars[HOST] |= {
-            key: pi[key] for key in ("containers_list", "compose_services")
-        }
-        tag_render = cluster.render_tag(
-            tag, {**stubs, "hostvars": hostvars}, roles=roles
-        )
-        for directory, files in tag_render.directories().items():
-            rendered |= {(tag, directory, name): text for name, text in files.items()}
-    return rendered
-
-
-def recovery_script(tmp_path, inventory=REPO_INVENTORY) -> bytes:
-    """The recovery heartbeat's rendered script, from a copy of `hosts/` without `pi-compose`.
-
-    A moved entry has no service tree in the real component, so the whole package would refuse
-    to render. The script reads only the two lists, and `pi-compose` contributes nothing to it.
-    """
-    root = tmp_path / "hosts"
-    shutil.copytree(REPO / "hosts", root, dirs_exist_ok=True)
-    # Shared files resolve against the repo root that holds `hosts/`.
-    (tmp_path / "ansible").symlink_to(REPO / "ansible")
-    package = root / HOST / "package.yml"
-    spec = yaml_fast.safe_load(package.read_text())
-    spec["components"] = [c for c in spec["components"] if c != "pi-compose"]
-    package.write_text(yaml.safe_dump(spec))
-    rendered = host_mode.render_host(HOST, root, inventory=inventory)
-    return rendered.files[RECOVERY_SCRIPT][0]
-
-
-def published_ports(texts) -> str:
-    """The `service:port` pairs of observability's `blackbox-pi-ports` job, comma-joined.
-
-    Read from the rendered `prometheus.yml`: one target per Pi container with a `port`, labelled
-    with the container's name.
-    """
-    values = set()
-    for text in texts:
-        for doc in yaml_fast.safe_load_all(text):
-            if not doc or doc.get("kind") != "ConfigMap":
-                continue
-            config = yaml_fast.safe_load(
-                doc.get("data", {}).get("prometheus.yml", "{}")
-            )
-            for job in config.get("scrape_configs", []):
-                if job["job_name"] != PI_PORTS_JOB:
-                    continue
-                values.add(
-                    ",".join(
-                        f"{item['labels']['service']}:{target.rpartition(':')[2]}"
-                        for item in job["static_configs"] or []
-                        for target in item["targets"]
-                    )
-                )
-    (value,) = values
-    return value
-
-
-def observability_texts(rendered: dict) -> list[str]:
-    return [text for key, text in rendered.items() if "observability" in key]
-
-
-def test_no_name_is_in_both_lists():
-    assert names_in_both(host_doc(HOST)) == set()
-
-
-def test_a_name_in_both_lists_is_flagged():
-    doc = {
-        "containers_list": [{"name": "autoheal"}, {"name": "alloy"}],
-        "compose_services": [{"name": "autoheal"}],
-    }
-    assert names_in_both(doc) == {"autoheal"}
+def test_the_pis_compose_services_hold_the_named_members():
+    doc = host_doc(HOST_VARS / f"{HOST}.yml")
+    assert MUST_FIND <= {e["name"] for e in doc["compose_services"]}
 
 
 def test_every_compose_service_has_a_legacy_entry():
     legacy = host_mode.render_host(HOST).legacy
-    assert without_legacy(host_doc(HOST), legacy) == set()
+    assert without_legacy(host_doc(HOST_VARS / f"{HOST}.yml"), legacy) == set()
 
 
 def test_a_compose_service_with_no_legacy_entry_is_flagged():
     legacy = [{"path": "/home/ubuntu/server/containers/alloy/docker-compose.yml"}]
-    doc = {
-        "containers_list": [],
-        "compose_services": [
-            {"name": "alloy"},
-            {"name": "autoheal"},
-        ],
-    }
+    doc = {"compose_services": [{"name": "alloy"}, {"name": "autoheal"}]}
     assert without_legacy(doc, legacy) == {"autoheal"}
-
-
-def test_the_census_reads_both_keys_and_finds_the_named_members():
-    doc = host_doc(HOST)
-    assert set(doc) >= {"containers_list", "compose_services"}
-    assert MUST_FIND <= {e["name"] for e in sum(pi_lists(doc), [])}
-    # Each render produced observability's value, so an empty render cannot pass the moves below.
-    assert "alloy:12345" in published_ports(
-        observability_texts(ansible_render(doc, only=OBSERVABILITY))
-    )
-    assert "alloy:12345" in published_ports(
-        observability_texts(c1_render(doc, tags=("observability",)))
-    )
-
-
-@pytest.fixture(scope="module")
-def unmoved(tmp_path_factory) -> dict:
-    """The three renders of the inventory as it is, built once for every reverted move below."""
-    doc = host_doc(HOST)
-    return {
-        "ansible": ansible_render(doc),
-        "c1": c1_render(doc),
-        "recovery": recovery_script(tmp_path_factory.mktemp("unmoved")),
-    }
-
-
-@pytest.mark.parametrize("name", ["wg-easy"])
-def test_a_move_changes_no_render(name, unmoved, tmp_path):
-    pi = reverted(name)
-    assert name in {e["name"] for e in pi["containers_list"]}
-    assert ansible_render(pi) == unmoved["ansible"]
-    assert c1_render(pi) == unmoved["c1"]
-    after = recovery_script(tmp_path, moved_inventory(tmp_path, pi))
-    assert after == unmoved["recovery"]
-
-
-def test_a_reader_of_containers_list_alone_is_flagged(tmp_path):
-    """REJECT: an observability that reads `containers_list` alone renders differently after a move.
-
-    The fixture is a copy of the role whose Pi job drops the second key. Only C1's render reads
-    a role from the fixture's `roles` directory; `_k8s_render` reads the real tree, so the same
-    rejection for that render is `test_a_publisher_in_either_key_is_still_watched` in
-    `ansible/tests/services/test_pi_publishing_containers.py`.
-    """
-    # `ansible/roles/k8s/`: the plane in the path picks the host a role renders for.
-    playbook = tmp_path / "ansible"
-    roles = playbook / "roles" / "k8s"
-    shutil.copytree(K8S_ROLES / "observability", roles / "observability")
-    # The role reads files of its siblings through `playbook_dir`, so every other path resolves to
-    # the real tree.
-    for sibling in role_dirs(K8S_ROLES):
-        if sibling.name != "observability":
-            (roles / sibling.name).symlink_to(sibling)
-    template = roles / "observability" / "templates" / "prometheus.yaml.j2"
-    source = template.read_text()
-    second = " + (hostvars['daniel-pi'].compose_services | published_ports)"
-    assert second in source
-    template.write_text(source.replace(second, ""))
-    fixture = {"playbook_dir": str(playbook)}
-    packaged_pi, listed_pi = host_doc(HOST), reverted("wg-easy")
-
-    tags = ("observability",)
-    after = c1_render(packaged_pi, roles, tags, fixture)
-    assert after != c1_render(listed_pi, roles, tags, fixture)
-    assert "wg-easy:51821" not in published_ports(observability_texts(after))

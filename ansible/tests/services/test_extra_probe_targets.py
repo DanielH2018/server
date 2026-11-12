@@ -54,19 +54,17 @@ KEYWORDS = {"http_body_ok": "ok", "http_body_OK": "OK"}
 
 
 def rendered_jobs(
-    containers_list: list[dict] | None = None,
+    pi_services: list[dict] | None = None,
     box_containers: list[dict] | None = None,
 ) -> dict[str, dict]:
     """Every scrape job of the rendered `prometheus.yml`, by name.
 
-    `containers_list` replaces the Pi's services; `box_containers` replaces the cluster's.
+    `pi_services` replaces the Pi's `compose_services`; `box_containers` replaces the cluster's.
     """
     overrides = {}
-    if containers_list is not None:
+    if pi_services is not None:
         hostvars = copy.deepcopy(host_context()["hostvars"])
-        # The job reads both service keys, so the override replaces both.
-        hostvars["daniel-pi"]["containers_list"] = containers_list
-        hostvars["daniel-pi"]["compose_services"] = []
+        hostvars["daniel-pi"]["compose_services"] = pi_services
         overrides["hostvars"] = hostvars
     if box_containers is not None:
         overrides["containers_list"] = box_containers
@@ -83,23 +81,20 @@ def rendered_jobs(
 
 def targets(
     job: str,
-    containers_list: list[dict] | None = None,
+    pi_services: list[dict] | None = None,
     box_containers: list[dict] | None = None,
 ) -> dict[str, dict]:
     """A job's targets, each mapped to its labels."""
     return {
         target: item["labels"]
-        for item in rendered_jobs(containers_list, box_containers)[job][
-            "static_configs"
-        ]
+        for item in rendered_jobs(pi_services, box_containers)[job]["static_configs"]
         for target in item["targets"]
     }
 
 
 def pi_containers() -> list[dict]:
-    """Every Pi service entry, from `containers_list` and the package's `compose_services`."""
-    pi = host_context()["hostvars"]["daniel-pi"]
-    return copy.deepcopy([*pi["containers_list"], *pi["compose_services"]])
+    """Every Pi service entry, from the package's `compose_services`."""
+    return copy.deepcopy(host_context()["hostvars"]["daniel-pi"]["compose_services"])
 
 
 def probe_by_service() -> dict[str, tuple[str, str, str]]:

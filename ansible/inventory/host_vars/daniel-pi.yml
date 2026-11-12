@@ -24,7 +24,7 @@ ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 ansible_ssh_timeout: 30
 # The only Docker host, so this is the one host that
 # opts IN to the engine (group_vars/all.yml defaults it false). Every service in
-# containers_list and compose_services below runs on it.
+# compose_services below runs on it.
 has_docker: true
 # rsyslog is masked here (journald is the log of record; rsyslog's text logs landed in
 # the RAM-backed log2ram tmpfs), so homelab-daniel-pi must not list the `rsyslog-filter`
@@ -56,11 +56,6 @@ container_healthcheck_interval: 60s
 # covers that at once, the healthcheck only covers a wedged-but-running one.
 container_healthcheck_timeout: 60s
 container_healthcheck_retries: 5
-# Empty since H5.9: every service moved to compose_services. The key stays, because every reader
-# of the Pi's services reads both keys and fails on a missing one (h5-pi-compose.md, *The service
-# list*). H5.12 deleted the Ansible Compose path that read it, so a Docker entry here deploys
-# nothing; scripts/validate/compose_templates.py refuses one.
-containers_list: []
   # Host metrics for the central Prometheus are NOT a container here: node_exporter runs as a
   # host unit from hosts/components/pi-node-exporter/, on the LAN IP and port 9100 the
   # cluster's `node-pi` scrape job reads. The cluster `node` scrape job uses pod discovery, so
@@ -71,13 +66,9 @@ containers_list: []
   # literally, one rule per host, so a new host needs its own copies there. This host has its
   # own Pi* rules in the same file, with thresholds sized for a 456 MB box.
 # The Pi's services that the `homelab-daniel-pi` package deploys as one Compose project (H5).
-# The package deploys this key. containers_list stays empty: H5.12 deleted the Ansible Compose
-# path that deployed it. Entries keep containers_list's
-# field names. It holds docker-proxy (H5.6), autoheal (H5.7), alloy (H5.8) and wg-easy (H5.9); H5.10
-# removed H5.2b's canary. Every
-# reader of the Pi's services reads both keys and fails on a missing one, so keep the key even
-# when it is empty. The cluster templates that read it are named in
-# docs/target-architecture/host/h5-pi-compose.md (The service list).
+# Entries use the field names of cluster/services.yml's entries. Every reader of the Pi's
+# services fails on a missing key, so keep it even when it is empty. The cluster templates that
+# read it are named in docs/target-architecture/host/h5-pi-compose.md (The service list).
 compose_services:
   # The read-only Docker socket proxy, which serves Alloy's docker_sd log discovery. The
   # package's service file also declares the docker-proxy-lifecycle sub-proxy (restart-only,

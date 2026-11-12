@@ -133,7 +133,7 @@ def test_health_absent_but_declared_is_flagged():
 # reads the fail-closed branch by passing one, rather than by patching a module global.
 
 
-def test_declared_on_pi_reads_the_pis_containers_list():
+def test_declared_on_pi_reads_the_pis_compose_services():
     assert health_docker.declared_on_pi("wg-easy") is True
     assert health_docker.declared_on_pi("definitely-not-a-service") is False
 
@@ -144,18 +144,18 @@ def _pi_inventory(tmp_path, text):
     return path
 
 
-def test_declared_on_pi_reads_a_service_that_moved_to_compose_services(tmp_path):
-    """ACCEPT: a name in the second key is declared, and a name in neither is not (H5.1)."""
+def test_declared_on_pi_reads_compose_services_alone(tmp_path):
+    """ACCEPT: a `compose_services` name is declared, and a `containers_list` name is not."""
     path = _pi_inventory(
         tmp_path,
         "containers_list:\n  - name: autoheal\ncompose_services:\n  - name: alloy\n",
     )
     assert health_docker.declared_on_pi("alloy", path) is True
-    assert health_docker.declared_on_pi("autoheal", path) is True
+    assert health_docker.declared_on_pi("autoheal", path) is False
     assert health_docker.declared_on_pi("wg-easy", path) is False
 
 
-def test_declared_on_pi_raises_when_either_service_key_is_missing(tmp_path):
+def test_declared_on_pi_raises_when_compose_services_is_missing(tmp_path):
     """REJECT: a file without `compose_services` is not read as a list that omits the name."""
     path = _pi_inventory(tmp_path, "containers_list:\n  - name: alloy\n")
     with pytest.raises(ValueError, match="compose_services"):

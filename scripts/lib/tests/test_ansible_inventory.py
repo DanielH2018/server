@@ -176,24 +176,21 @@ def test_containers_entries_keep_named_mappings_only():
     assert containers_entries_in({"containers_list": None}) == []
 
 
-def test_pi_entries_in_reads_both_service_keys_in_order():
+def test_pi_entries_in_reads_compose_services_alone():
     data = {
-        "containers_list": [{"name": "a"}, {"name": ""}, "not-a-mapping"],
-        "compose_services": [{"name": "b"}, {"port": 1}],
+        "containers_list": [{"name": "a"}],
+        "compose_services": [{"name": "b"}, {"name": ""}, {"port": 1}, "not-a-mapping"],
     }
-    assert [e["name"] for e in pi_entries_in(data)] == ["a", "b"]
-    assert pi_entries_in({"containers_list": None, "compose_services": None}) == []
+    assert [e["name"] for e in pi_entries_in(data)] == ["b"]
+    assert pi_entries_in({"compose_services": None}) == []
 
 
-@pytest.mark.parametrize("missing", ["containers_list", "compose_services"])
-def test_pi_entries_in_raises_when_either_key_is_missing(missing):
-    data = {"containers_list": [], "compose_services": []}
-    del data[missing]
-    with pytest.raises(ValueError, match=missing):
-        pi_entries_in(data)
+def test_pi_entries_in_raises_when_compose_services_is_missing():
+    with pytest.raises(ValueError, match="compose_services"):
+        pi_entries_in({"containers_list": [{"name": "a"}]})
 
 
-def test_the_live_pi_host_vars_carry_both_service_keys():
+def test_the_live_pi_host_vars_list_the_pis_services():
     """Named members: the helper finds alloy and docker-proxy in the real inventory."""
     names = {
         e["name"] for e in pi_entries_in(yaml_fast.safe_load(PI_HOST_VARS.read_text()))

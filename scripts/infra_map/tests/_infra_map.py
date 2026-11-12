@@ -31,9 +31,9 @@ def docker_host(containers_list):
     return {"server_ip": "10.0.0.161", "containers_list": containers_list}
 
 
-def pi_host(containers_list, compose_services=()):
-    """daniel-pi's host_vars, which carry both service keys (H5)."""
-    return {**docker_host(containers_list), "compose_services": list(compose_services)}
+def pi_host(compose_services=()):
+    """daniel-pi's host_vars, whose services are `compose_services` entries (H5)."""
+    return {"server_ip": "10.0.0.161", "compose_services": list(compose_services)}
 
 
 def live_ok(data):

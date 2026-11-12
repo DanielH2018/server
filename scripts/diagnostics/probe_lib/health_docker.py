@@ -190,9 +190,9 @@ def resolve_ip(container):
 def declared_on_pi(container, host_vars=None):
     """Does daniel-pi's inventory declare a Docker service by this name?
 
-    The Pi is the only Docker host left, so its `containers_list` and `compose_services` are
-    the whole population an absent container can be measured against. A host_vars file that
-    lacks either key raises, as `pi_entries_in` does, and is not read as a skip.
+    The Pi is the only Docker host left, so its `compose_services` is the whole population an
+    absent container can be measured against. A host_vars file that lacks the key raises, as
+    `pi_entries_in` does, and is not read as a skip.
 
     Args:
         container: The service name an absent container was asked about.
