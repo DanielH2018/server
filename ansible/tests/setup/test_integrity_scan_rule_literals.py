@@ -2,7 +2,8 @@
 
 `files/rules/host-checks.yaml` is plain YAML, so each NotReporting rule carries its deadline as a
 literal twice: the `>` of the stale-file arm and the `[<n>s]` window of the absent_over_time arm.
-Both scans run on every host, so one DEADLINE_S pins three rules each. A timer moved without its
+One DEADLINE_S pins the rule of every host whose package schedules that scan; daniel-pi
+schedules no AIDE scan, and a rule paging for it is flagged. A timer moved without its
 rules fails here rather than paging on every healthy week (M1 convention 1). The DEADLINE_S
 equalled the interval of the Kuma tile the rules shadowed until M6 batch B9's Cutover-1a deleted
 the tiles.
@@ -29,6 +30,21 @@ PRODUCERS = {
 }
 
 
+COMPONENT = (
+    K8S_ROLES.parents[2] / "hosts" / "components" / "integrity-scans" / "component.yml"
+)
+
+
+def scheduled_hosts() -> dict[str, list[str]]:
+    """Alert prefix -> the hosts whose package schedules that scan, so carry its rules."""
+    defaults = yaml_fast.safe_load(COMPONENT.read_text())["defaults"]
+    unscheduled = set(defaults["integrity_scans_aide_unscheduled_hosts"])
+    return {
+        "AideCheck": [h for h in HOSTS if h not in unscheduled],
+        "RkhunterScan": list(HOSTS),
+    }
+
+
 def rendered_deadline(template: str) -> int:
     """DEADLINE_S as the scan script renders it."""
     body = render_shell_script("components", "integrity-scans", template)
@@ -52,9 +68,16 @@ def not_reporting_rules(text: str) -> dict[tuple[str, str], str]:
 def literal_problems(rules: dict[tuple[str, str], str], deadlines: dict[str, int]):
     """Why a rule's deadline literals differ from its scan's DEADLINE_S, or nothing."""
     problems = []
+    scheduled = scheduled_hosts()
     for prefix, (_, check) in PRODUCERS.items():
         for host in HOSTS:
             expr = rules.get((prefix, host))
+            if host not in scheduled[prefix]:
+                if expr is not None:
+                    problems.append(
+                        f"{prefix}NotReporting pages for {host}, which runs no scan"
+                    )
+                continue
             if expr is None:
                 problems.append(f"{prefix}NotReporting has no rule for {host}")
                 continue
@@ -82,9 +105,19 @@ def shipped_deadlines() -> dict[str, int]:
 
 def test_literal_problems_is_clean_on_the_shipped_rules():
     rules = not_reporting_rules(RULES.read_text())
-    # Non-vacuity: one rule per scan per host.
-    assert len(rules) == len(PRODUCERS) * len(HOSTS)
+    # Non-vacuity: one rule per scan per host that schedules it, and daniel-pi schedules no AIDE.
+    assert scheduled_hosts()["AideCheck"] == ["daniel-box", "daniel-server"]
+    assert len(rules) == sum(len(hosts) for hosts in scheduled_hosts().values())
     assert literal_problems(rules, shipped_deadlines()) == []
+
+
+def test_literal_problems_is_flagged_on_a_rule_for_an_unscheduled_host():
+    rules = not_reporting_rules(RULES.read_text()) | {
+        ("AideCheck", "daniel-pi"): "expr"
+    }
+    assert literal_problems(rules, shipped_deadlines()) == [
+        "AideCheckNotReporting pages for daniel-pi, which runs no scan"
+    ]
 
 
 def test_literal_problems_is_flagged_on_a_window_that_drifted():
@@ -100,7 +133,7 @@ def test_literal_problems_is_flagged_on_a_window_that_drifted():
 def test_literal_problems_is_flagged_when_a_deadline_moves_without_its_rules():
     deadlines = shipped_deadlines() | {"AideCheck": 604800}
     problems = literal_problems(not_reporting_rules(RULES.read_text()), deadlines)
-    assert len(problems) == 6  # two literals on each of the three hosts
+    assert len(problems) == 4  # two literals on each of the two scheduled hosts
     assert all("DEADLINE_S renders 604800" in p for p in problems)
 
 

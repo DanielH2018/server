@@ -29,8 +29,10 @@ TIMERS = {
     "Weekly system restart": "homelab-reboot.timer",
     "Clean unused Docker images": "homelab-docker-prune.timer",
     "Weekly rkhunter malware scan": "homelab-rkhunter-check.timer",
-    "Weekly AIDE file integrity check": "homelab-aide-check.timer",
 }
+# Retired with no replacement: the Pi's AIDE scan outgrew its memory and reset the board
+# (integrity_scans_aide_unscheduled_hosts).
+UNSCHEDULED = {"Weekly AIDE file integrity check": "homelab-aide-check.timer"}
 LAN = "allow from {lan} to any port 22 proto tcp"
 
 
@@ -59,10 +61,19 @@ def test_each_cron_the_role_once_wrote_is_retired_and_a_timer_replaces_it(
     retired = {e["cron"]: e["user"] for e in manifest["legacy"] if "cron" in e}
     # Every job sat in root's crontab: the live Pi's sys_user crontab holds no Ansible entry
     # (2026-10-30), and the prune's `ansible_facts.user_id` was root under the play's become.
-    assert {name: retired.get(name) for name in TIMERS} == dict.fromkeys(TIMERS, "root")
+    jobs = TIMERS | UNSCHEDULED
+    assert {name: retired.get(name) for name in jobs} == dict.fromkeys(jobs, "root")
     for timer in TIMERS.values():
         assert timer in manifest["enable_links"]
         assert f"/usr/lib/systemd/system/{timer}" in package.files
+    for timer in UNSCHEDULED.values():
+        assert timer not in manifest["enable_links"]
+
+
+def test_the_unscheduled_aide_scan_leaves_no_stale_verdict(manifest):
+    """A leftover textfile keeps its deadline, so HostCheckOverdue would page a week later."""
+    stale = "/var/lib/node-exporter-textfile/aide-check.prom"
+    assert stale in {e.get("path") for e in manifest["legacy"]}
 
 
 def test_the_scan_packages_install_with_their_config_under_no_install_recommends(

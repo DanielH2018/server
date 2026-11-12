@@ -415,18 +415,33 @@ def test_host_sets_names_every_host_check_rule():
     b9_alerts = (
         "AideCheckFailed AideCheckNotReporting RkhunterScanFailed RkhunterScanNotReporting"
     ).split()
-    assert set(host_sets(shadow=False)) >= {
-        "DiskHealthFailed/daniel-box",
-        "DiskHealthNotReporting/daniel-box",
-        "FanoutSlotsIdleWithFreeWork/daniel-box",
-    } | {
+    # daniel-pi schedules no AIDE scan, so it carries no AIDE pair.
+    b9_keys = {
         f"{alert}/{host}"
-        for alert in ("HostReconcileFailed", "HostRebootOverdue", "HostCheckOverdue")
+        for alert in b9_alerts
         for host in hosts
-    } | {f"{alert}/{host}" for alert in b9_alerts for host in hosts}
-    for alert in b9_alerts:
-        for host in hosts:
-            assert PAGING[f"{alert}/{host}"][1] == ["discord"]
+        if not (alert.startswith("Aide") and host == "daniel-pi")
+    }
+    assert (
+        set(host_sets(shadow=False))
+        >= {
+            "DiskHealthFailed/daniel-box",
+            "DiskHealthNotReporting/daniel-box",
+            "FanoutSlotsIdleWithFreeWork/daniel-box",
+        }
+        | {
+            f"{alert}/{host}"
+            for alert in (
+                "HostReconcileFailed",
+                "HostRebootOverdue",
+                "HostCheckOverdue",
+            )
+            for host in hosts
+        }
+        | b9_keys
+    )
+    for key in b9_keys:
+        assert PAGING[key][1] == ["discord"]
 
 
 def test_loki_sets_name_every_m5_rule():
