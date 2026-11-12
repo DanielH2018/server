@@ -3,13 +3,17 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_pace.py
 """
 
+import re
 import subprocess
 from datetime import UTC, datetime
+from math import prod
 
 
 from _land_fakes import Fakes
 from deploy_tools.land_lib import merge, pace
+from lib import yaml_fast
 from lib.exit_codes import CI_GREEN, CI_PENDING
+from lib.repo_paths import REPO
 
 HEAD = "a" * 40
 # The fakes' wall clock.
@@ -196,3 +200,49 @@ def test_a_rate_limited_backlog_read_holds_the_poll_and_merges_once_read(
     assert [c[0] for c in calls].count("gh:master-runs") == 2
     out = capsys.readouterr().out
     assert "pacing the merge: GitHub refused the master CI run count" in out
+
+
+def _matrix_jobs(job: dict) -> int:
+    """How many jobs one workflow job expands to: its matrix's include list or axis product."""
+    matrix = job.get("strategy", {}).get("matrix")
+    if matrix is None:
+        return 1
+    assert isinstance(matrix, dict) and "exclude" not in matrix, (
+        f"unhandled matrix: {matrix}"
+    )
+    axes = [v for k, v in matrix.items() if k != "include"]
+    assert not (axes and "include" in matrix), f"axes beside include: {matrix}"
+    return len(matrix["include"]) if "include" in matrix else prod(len(v) for v in axes)
+
+
+def _full_sweep_jobs(event: str) -> int:
+    """The jobs a full `ci.yml` sweep runs on `event`, less the event-gated ones that skip."""
+    skipped_by = {
+        "push": "github.event_name != 'push'",
+        "pull_request": "github.event_name == 'push'",
+    }
+    jobs = yaml_fast.safe_load((REPO / ".github" / "workflows" / "ci.yml").read_text())[
+        "jobs"
+    ]
+    return sum(
+        _matrix_jobs(j)
+        for j in jobs.values()
+        if skipped_by[event] not in str(j.get("if", ""))
+    )
+
+
+def test_every_cited_sweep_size_is_the_workflows_job_count():
+    """The pacing rationale quotes a sweep size, which drifted to 17-18 against 25 run (#8143)."""
+    sweep = _full_sweep_jobs("push")
+    assert sweep == _full_sweep_jobs("pull_request")
+    cited = {
+        ".github/workflows/ci.yml": 2,
+        "scripts/deploy_tools/land_lib/pace.py": 1,
+        "scripts/deploy_tools/land_lib/options.py": 1,
+        "docs/landing.md": 1,
+    }
+    for path, sites in cited.items():
+        found = re.findall(
+            r"full[\s#]+sweep[\s#]+runs[\s#]+(\d+)[\s#]+jobs", (REPO / path).read_text()
+        )
+        assert [int(n) for n in found] == [sweep] * sites, path
