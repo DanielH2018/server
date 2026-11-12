@@ -184,11 +184,15 @@ def test_a_rate_limited_backlog_read_does_not_merge_without_pacing(landing, caps
     assert "merging without pacing" not in capsys.readouterr().out
 
 
-def test_a_backlog_read_refused_through_every_rate_limit_wait_holds_the_poll(landing):
+def test_a_rate_limited_backlog_read_holds_the_poll_and_merges_once_read(
+    landing, capsys
+):
     limited = subprocess.CalledProcessError(
-        1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
+        1, "gh", stderr="gh: API rate limit exceeded for user ID 41801780. (HTTP 403)"
     )
-    ln, _calls = _landing(landing, 1, [limited])
-    assert pace.hold(ln, 0, 0).startswith(
-        "pacing the merge: could not count unfinished master CI runs"
-    )
+    ln, calls = _landing(landing, 2, [limited, []])
+    merge.await_merge(ln)
+    assert _merges(calls) == 1
+    assert [c[0] for c in calls].count("gh:master-runs") == 2
+    out = capsys.readouterr().out
+    assert "pacing the merge: GitHub refused the master CI run count" in out
