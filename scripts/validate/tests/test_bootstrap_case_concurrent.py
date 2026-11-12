@@ -113,6 +113,13 @@ class FakeContainer:
             return "ubuntu ssh-users\n"
         if script.startswith("systemctl is-enabled"):
             return "masked\n"
+        if script == "getent passwd":
+            return "".join(
+                f"{name}:x:{uid}:{uid}::/:/bin/sh\n"
+                for _, name, uid, *_ in map(
+                    str.split, case.declared_users(self.hostname).splitlines()
+                )
+            )
         return ""
 
     def read(self, path: str) -> str:

@@ -11,8 +11,7 @@ container runtime bind-mounts both, so a rename onto either fails with EBUSY unt
 unmounted. The package restarts `auditd.service` after it caps the log, and the container has no
 auditd, so a stub unit stands in. The node exporter unit listens on the Pi's LAN address, which
 the container lacks, so a drop-in swaps its `ExecStart=` for `sleep`; the unit's tmpfiles
-`ExecStartPre=` still runs. The Pi already holds the `node_exporter` user, which the users arm
-adopts by uid.
+`ExecStartPre=` still runs. The users arm creates the `node_exporter` user at its declared uid.
 
 H7.30 adds two. The Pi's package declares ufw rules, so reconcile's ufw arm runs. The live Pi's
 firewall is active, so the seed installs an active stand-in `ufw`, and an `iptables` that shows the

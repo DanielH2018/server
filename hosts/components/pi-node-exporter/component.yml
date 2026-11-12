@@ -19,15 +19,16 @@
 #   `systemd-tmpfiles --create` in ExecStartPre= with the `+` prefix, and
 #   systemd-tmpfiles-setup.service applies the file at boot. The directory is not a dpkg-owned
 #   path, so removing the package leaves it in place.
-# - The users arm declares node_exporter at the uid the live Pi holds. The arm compares uids and
-#   creates only a missing user. The live group has gid 986; a rebuilt Pi gets gid equal to uid.
+# - The users arm declares node_exporter in the homelab band 900-949, below the uids Ubuntu hands
+#   out from 999 down (#8100). The live Pi held 999 and moves with
+#   scripts/deploy_tools/renumber_host_users.py. The live group has gid 986; a rebuilt Pi gets gid equal to uid.
 # - The LAN's 9100 ufw rule is the Pi package's `node-exporter` rule (hosts/daniel-pi/package.yml)
 #   since H7.30, which adopted the Ansible-era rule (`optimize_pi: node_exporter`) in place.
 # - Retired on the live Pi, and left to the next rebuild: /opt/node_exporter-<version>.linux-arm64
 #   and /usr/local/src/node_exporter-<version>.linux-arm64.tar.gz hold about 40 MB of the old
 #   download. Legacy entries remove files, not directories, so the operator removes both by hand.
 users:
-  - {name: node_exporter, uid: 999, home: /home/node_exporter, shell: /usr/sbin/nologin, comment: Prometheus node exporter}
+  - {name: node_exporter, uid: 904, home: /home/node_exporter, shell: /usr/sbin/nologin, comment: Prometheus node exporter}
 files:
   - {src: units/node_exporter.service.j2, dst: /usr/lib/systemd/system/node_exporter.service}
   - {src: tmpfiles.d/homelab-node-exporter.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-node-exporter.conf}

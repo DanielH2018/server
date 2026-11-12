@@ -248,6 +248,38 @@ class Container:
         )
 
 
+SYSUSERS = "/usr/lib/sysusers.d/homelab.conf"
+
+
+def uid_problems(sysusers: str, passwd: str) -> list[str]:
+    """Each user a sysusers.d file declares that a `getent passwd` listing shows at another uid."""
+    live = {
+        f[0]: f[2]
+        for f in (line.split(":") for line in passwd.splitlines())
+        if len(f) > 2
+    }
+    declared = [
+        line.split()[1:3] for line in sysusers.splitlines() if line.startswith("u ")
+    ]
+    return [
+        f"{name} has uid {live.get(name, 'none')}, not the declared {uid}"
+        for name, uid in declared
+        if live.get(name) != uid
+    ]
+
+
+def expect_declared_uids(c: Container) -> None:
+    """Every user the installed host package declares holds its declared uid in `c`.
+
+    Raises:
+        CaseFailed: The package declares no user, or a user is missing or at another uid.
+    """
+    sysusers = c.read(SYSUSERS)
+    expect(sysusers.startswith("u "), f"{SYSUSERS} declares no user")
+    problems = uid_problems(sysusers, c.ok("getent passwd"))
+    expect(not problems, "; ".join(problems))
+
+
 TOOLS_BIN = "/usr/lib/homelab/bin"
 # Whether each homelab-tools binary is on PATH. homelab-tools keeps every one off it, and the
 # host packages' sops component puts sops back as an exec of the packaged binary.

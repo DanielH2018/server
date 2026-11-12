@@ -26,9 +26,11 @@ The operator's own Claude Code install is the dotfiles repo's (H7.38).
   packaged names. Two instanced alerts keep their names,
   `claude-stop-alert@` and `fanout-alert@`, because the dotfiles hook and the fan-out tooling
   start them by name.
-- **The agent user is declared to the users arm** in each host's `package.yml`, with its live
-  uid: 995 on daniel-server and 996 on daniel-box. The agent's `user-<uid>.slice.d` cap sits
-  there too, because its path carries the uid.
+- **The agent user is declared to the users arm** in each host's `package.yml`, at uid 900 on
+  both hosts. The uid sits in the homelab band 900-949, below the uids Ubuntu hands out from
+  999 down. The live account held 995 on daniel-server and 996 on daniel-box, and
+  `scripts/deploy_tools/renumber_host_users.py` moves it once. The agent's
+  `user-<uid>.slice.d` cap sits there too, because its path carries the uid.
   `homelab-claude-agent.service` runs `claude-agent-setup` at boot and on each change to its
   inputs. It sets the agent's groups, home directories, profile, git identity and signing key,
   and it clones the dotfiles and the repo when they are missing. The agent's gh token is a

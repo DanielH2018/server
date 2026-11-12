@@ -262,8 +262,8 @@ def test_the_alert_template_pages_with_the_instance_name_and_a_credential(packag
 
 def test_users_are_declared_by_uid_alone(package):
     assert {u["name"]: u["uid"] for u in package.users} == {
-        "homelab-builder": 995,
-        "homelab-signer": 994,
+        "homelab-builder": 902,
+        "homelab-signer": 903,
     }
     assert all("gid" not in u for u in package.users)
 

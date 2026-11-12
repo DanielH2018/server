@@ -99,7 +99,10 @@ from validate.validate_lib.bootstrap_plan import (
     shard,
     submission_order,
 )
-from validate.validate_lib.host_container import CaseFailed, Container, expect
+from lib.repo_paths import REPO
+from renderer.renderer_lib import host as host_mode
+from validate.validate_lib.host_container import SYSUSERS, CaseFailed, Container, expect
+from validate.validate_lib.host_container import uid_problems
 from validate.validate_lib.host_fixtures import run_logged
 from validate.validate_lib.scratch_clones import ANCHOR_ACCEPTS, red_clone
 from validate.validate_lib.scratch_clones import fixture_clone, scratch_clone
@@ -412,7 +415,16 @@ class Bootstrap:
             "/etc/fstab"
         ):
             problems.append("/etc/fstab holds no swap line after step 4")
+        if (REPO / "hosts" / self.host).is_dir():
+            sysusers = declared_users(self.host)
+            problems += uid_problems(sysusers, c.ok("getent passwd"))
         return problems
+
+
+@functools.cache
+def declared_users(host: str) -> str:
+    """The sysusers.d file `host`'s package renders from this tree, which step 5 creates from."""
+    return host_mode.render_host(host).files[SYSUSERS][0].decode()
 
 
 def _verdict(body) -> tuple[Exception | None, float]:
