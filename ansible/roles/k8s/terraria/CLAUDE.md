@@ -37,8 +37,7 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
   correction now resets a hand scale as well. The value has three readers: this role's
   Deployment, game-stats' `terraria-stats` Deployment and observability's `terraria-stats`
   scrape job. All three roles are Flux-owned, so unparking is one merge that `promote`
-  applies. The restore checklist on #822 has the rest. The comment above the value in
-  `group_vars` still names `--tags terraria`, a tag nothing applies by hand.
+  applies. The restore checklist on #822 has the rest.
 - **Where the tasks went.** The build became
   the `images` job (D5.4), which pushes `ghcr.io/danielh2018/terraria:<content tag>`. The
   defaults name `<k8s_registry_pull_host>/terraria`; the renderer rewrites that ref to the GHCR
