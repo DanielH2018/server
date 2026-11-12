@@ -373,8 +373,8 @@ data:
             replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ containers_list | entry_port('blackbox-exporter') }}'
       # One tcp_connect target per container the Pi publishes a port for, from the
       # `published_ports` selection, which this job alone reads. A container added
-      # to daniel-pi's containers_list or compose_services gets a probe with no edit here. The
-      # targets sort by name, so a service moving between the two keys moves no target.
+      # to daniel-pi's compose_services gets a probe with no edit here. The targets sort by
+      # name, so the probe order is independent of the entries' order in the list.
       # `service` is the container name. A container recreated by a deploy closes its port for a
       # few seconds, which PiPortDead's `for:` rides out. A container that comes back attached
       # to no Docker network stays closed until someone recreates it, and that is what this job
@@ -557,7 +557,7 @@ data:
       # loki_write_dropped_entries_total are what make that visible. check_shipper_dropped
       # already reads the second one estate-wide, so this target joins an existing check
       # rather than needing a new one. The port is the Pi's alloy entry's, read through
-      # `hostvars` because daniel-box's own containers_list holds no Pi entry (#3860).
+      # `hostvars` because the entry lives in daniel-pi's compose_services (#3860).
       - job_name: alloy-pi
         scrape_interval: 1m
         scrape_timeout: 30s
