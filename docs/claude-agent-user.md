@@ -675,13 +675,15 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   `EtcdRestoreDrillFailed` and `HostReconcileFailed`, open nothing until a route names them.
 - **No routed alert counts log text a session can write.** This is invariant I6 of the
   guardrails plan ([dotfiles#967](https://github.com/DanielH2018/dotfiles/issues/967)). A
-  session can write a syslog line with any tag, so a rule that filters log lines, or matches
-  the `program` label, would let it open the next episode.
-  `test_no_routed_alert_selects_on_text_a_session_controls` in
+  session can write a syslog line with any tag, so any rule that counts log lines, whatever it
+  filters on, would let it open the next episode.
+  `test_no_routed_alert_counts_log_lines_a_session_can_write` in
   `ansible/tests/setup/test_claude_triage.py` runs once per routed alert. It fails when a
-  `loki-homelab` rule for the alert filters lines or matches `program`, or when a Prometheus rule
-  for it reads a count Alloy makes from log lines. `HostLogErrors` and `HostOutOfMemoryKill`
-  are such rules, so neither can be routed.
+  `loki-homelab` rule for the alert counts lines over any stream, or when a Prometheus rule for
+  it reads a log-volume series: a count Alloy makes from log lines, or Loki's own
+  `loki_distributor_lines_received` or `loki_distributor_bytes_received`. `absent_over_time` is
+  the one exemption, because an added line can only keep it from firing. `HostLogErrors`,
+  `HostOutOfMemoryKill` and `WorkloadLogErrors` are counting rules, so none can be routed.
 - **A storm is one run.** More than three routed keys of one profile falling in one poll make
   a single storm episode that lists them all. Unrouted falls never count towards a storm.
 - **Two gates defer an episode.** One is a firing `DeployHoldActive`. The other is the mute window

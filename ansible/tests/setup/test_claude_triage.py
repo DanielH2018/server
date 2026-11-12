@@ -315,12 +315,15 @@ def test_the_runners_own_directories_are_declared_without_a_listing() -> None:
 # episode. A session can write syslog lines with any tag, so a routed alert must not count them.
 PROMETHEUS_RULES = ANSIBLE / "roles" / "k8s" / "observability" / "files" / "rules"
 LOKI_RULES = ANSIBLE / "roles" / "k8s" / "loki-homelab" / "files" / "rules"
-# Alloy's `loki.process` prefixes every `stage.metrics` name with this: a count of log lines.
-LOG_METRIC_PREFIX = "loki_process_custom_"
-# A stream selector's body, then the pipeline between it and the range.
-LOG_RANGE = re.compile(r"\{([^{}]*)\}([^\[\]]*)\[")
-# The syslog tag, which `logger -t` sets to anything.
-SESSION_LABELS = {"program"}
+# Prometheus series that count log lines or bytes: Alloy's `stage.metrics` counters and Loki's
+# own ingest volume.
+LOG_VOLUME_METRICS = (
+    "loki_process_custom_",
+    "loki_distributor_lines_received",
+    "loki_distributor_bytes_received",
+)
+# The LogQL function applied to each range over a stream selector.
+LOG_RANGE_FUNCTION = re.compile(r"(\w+)\s*\(\s*\{[^{}]*\}[^\[\]]*\[")
 
 
 def alert_rules() -> list[tuple[str, str, str]]:
@@ -337,15 +340,17 @@ def alert_rules() -> list[tuple[str, str, str]]:
     return found
 
 
-def selects_on_session_text(ruler: str, expr: str) -> bool:
-    """Whether the rule filters log lines by their text or by a label a session sets."""
+def session_can_raise(ruler: str, expr: str) -> bool:
+    """Whether log lines a session writes can push the rule towards firing.
+
+    Any count of lines can, whatever it filters on: a session adds lines with `logger`. Only
+    `absent_over_time` is exempt, because an added line can only keep it from firing.
+    """
     if ruler == "prometheus":
-        return LOG_METRIC_PREFIX in expr
-    for selector, pipeline in LOG_RANGE.findall(expr):
-        labels = set(re.findall(r"(\w+)\s*(?:=~|!~|!=|=)", selector))
-        if pipeline.strip() or labels & SESSION_LABELS:
-            return True
-    return False
+        return any(metric in expr for metric in LOG_VOLUME_METRICS)
+    return any(
+        function != "absent_over_time" for function in LOG_RANGE_FUNCTION.findall(expr)
+    )
 
 
 def routed_alerts() -> list[str]:
@@ -353,24 +358,28 @@ def routed_alerts() -> list[str]:
 
 
 @pytest.mark.parametrize("alert", routed_alerts())
-def test_no_routed_alert_selects_on_text_a_session_controls(alert) -> None:
+def test_no_routed_alert_counts_log_lines_a_session_can_write(alert) -> None:
     rules = [(ruler, expr) for name, ruler, expr in alert_rules() if name == alert]
     assert rules, f"{alert} is routed but no rule defines it"
     for ruler, expr in rules:
-        assert not selects_on_session_text(ruler, expr), (
-            f"{alert} is routed, and its {ruler} rule selects on log text: {expr}"
+        assert not session_can_raise(ruler, expr), (
+            f"{alert} is routed, and its {ruler} rule counts log lines: {expr}"
         )
 
 
-def test_the_session_text_check_flags_the_log_rules_it_exists_for() -> None:
-    """The red half: routing either of these would fail the test above."""
+def test_the_log_count_check_flags_the_rules_it_exists_for() -> None:
+    """The red half: routing any of these would fail the test above."""
     flagged = {
-        name
-        for name, ruler, expr in alert_rules()
-        if selects_on_session_text(ruler, expr)
+        name for name, ruler, expr in alert_rules() if session_can_raise(ruler, expr)
     }
-    assert {"HostLogErrors", "HostOutOfMemoryKill"} <= flagged
+    assert {"HostLogErrors", "HostOutOfMemoryKill", "WorkloadLogErrors"} <= flagged
     assert "LokiHostLogsSilent" not in flagged
-    assert selects_on_session_text(
+    assert session_can_raise(
+        "loki", 'sum(count_over_time({job="syslog", machine="daniel-box"}[5m])) > 500'
+    )
+    assert session_can_raise(
         "prometheus", "increase(loki_process_custom_crowdsec_edge_probe_total[1h]) > 0"
+    )
+    assert session_can_raise(
+        "prometheus", "rate(loki_distributor_lines_received_total[5m]) > 1000"
     )
