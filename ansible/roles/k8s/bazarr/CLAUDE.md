@@ -68,6 +68,12 @@ cross-checked against `GET /api/providers`, authed with the SOPS `bazarr_api_key
 
 One language profile, `English`, with no cutoff and no forced/HI variants.
 
+**jimaku.cc is Japanese-only.** It was enabled once to find English anime subtitles and
+reverted, so do not recommend it for English. `minimum_score` drops a subtitle whose release
+does not match the file. When an anime episode has no English subtitle, grab a release with
+English softsubs, which configarr's custom formats prefer
+(`ansible/roles/k8s/configarr/CLAUDE.md`), rather than lowering the score.
+
 To re-read it, query the pod directly rather than through Traefik — the route is behind
 Authelia and an API key does not satisfy that middleware:
 
