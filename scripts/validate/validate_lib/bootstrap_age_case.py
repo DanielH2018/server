@@ -8,8 +8,10 @@ package ships `age-keygen`, and that the update survives a dead source. The scri
 points at a closed port, the way step 2's source reads while the homelab repository is down.
 
 The fetch goes to snapshot.ubuntu.com, which answers 5xx often enough to redden PRs (#8041). A
-failed run whose apt output shows that mirror answering 5xx, or not answering at all, gives no
-verdict rather than a failure. A 404 still fails: it means the pinned snapshot is wrong.
+run that dies at the age install while apt shows that mirror answering 5xx, or not answering at
+all, gives no verdict rather than a failure, and `host_package_cases.py` counts it in its last
+line. A 404 still fails: it means the pinned snapshot is wrong. So does a run that dies anywhere
+else, such as on a package that ships no `age-keygen`.
 """
 
 import sys as _sys
@@ -37,6 +39,7 @@ MIRROR_DOWN = re.compile(
     r"Failed to fetch https?://snapshot\.ubuntu\.com/\S*\s+"
     r"(?:5\d\d\b|Could not connect|Could not resolve|Temporary failure resolving)"
 )
+INSTALL_DIED = "bootstrap-host: cannot install age,"
 
 
 class MirrorDown(Exception):
@@ -48,7 +51,8 @@ def expect_age_from_apt(c: Container, python: str) -> None:
 
     Raises:
         CaseFailed: The run failed, or its output lacks a marker.
-        MirrorDown: The run failed while snapshot.ubuntu.com answered 5xx or not at all.
+        MirrorDown: The age install failed while snapshot.ubuntu.com answered 5xx or not
+            at all.
     """
     c.boot(python)
     c.ok(
@@ -56,8 +60,9 @@ def expect_age_from_apt(c: Container, python: str) -> None:
         " && rm -rf /var/lib/apt/lists/*"
     )
     result = c.sh(f"sh {SCRATCH}/bootstrap-host.sh {HOST} --until 3", 900)
-    down = MIRROR_DOWN.search(result.stdout + result.stderr)
-    if result.returncode != 0 and down:
+    output = result.stdout + result.stderr
+    down = MIRROR_DOWN.search(output)
+    if result.returncode != 0 and INSTALL_DIED in output and down:
         raise MirrorDown(down[0])
     for marker in MARKERS:
         problems = output_problems(
@@ -85,6 +90,7 @@ def run(cases) -> None:
         shutil.copy(KEYRING, scratch / KEYRING.name)
         expect_age_from_apt(c, cases.python)
     except MirrorDown as exc:
+        cases.no_verdict.append(NAME)
         print(f"[NO VERDICT] {NAME}: {exc}", file=sys.stderr)
     except (CaseFailed, OSError, subprocess.SubprocessError) as exc:
         cases.failed.append(NAME)

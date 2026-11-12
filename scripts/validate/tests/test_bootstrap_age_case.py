@@ -80,14 +80,27 @@ def test_a_snapshot_5xx_on_a_failed_run_gives_no_verdict(monkeypatch, tmp_path, 
         + NO_AGE
     )
     _fake_age_container(monkeypatch, "", returncode=1, stderr=stderr)
-    cases = SimpleNamespace(work=tmp_path, image="img", python="3.12", failed=[])
+    cases = SimpleNamespace(
+        work=tmp_path, image="img", python="3.12", failed=[], no_verdict=[]
+    )
 
     age_case.run(cases)
 
-    assert cases.failed == []
+    assert (cases.failed, cases.no_verdict) == ([], [age_case.NAME])
     assert f"[NO VERDICT] {age_case.NAME}: Failed to fetch {SNAPSHOT}  502" in (
         capsys.readouterr().err
     )
+
+
+def test_a_snapshot_5xx_on_a_run_that_died_past_the_install_is_flagged(
+    monkeypatch, tmp_path
+):
+    stderr = (
+        f"W: Failed to fetch {SNAPSHOT}  502  Bad Gateway [IP: 185.125.189.69 443]\n"
+        "bootstrap-host: the age package installed no age-keygen\n"
+    )
+    with pytest.raises(CaseFailed, match="exited 1"):
+        _age_run(monkeypatch, tmp_path, "", returncode=1, stderr=stderr)
 
 
 def test_a_failed_run_with_only_the_dead_homelab_source_is_flagged(
