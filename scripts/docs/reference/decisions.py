@@ -10,14 +10,15 @@ that owns it, so a reviewer can browse rather than guess a phrase to grep.
 
 WHAT A MARKER LOOKS LIKE. `# DECIDED: <reasoning>`, usually followed by more `#`-prefixed
 lines continuing the same paragraph — `docs/adr/index.md`'s convention. `_marker_at` decides
-which lines carry one. A marker either opens its line, or sits outside backticks on a comment
-line. Opening the line means that after leading whitespace, an optional comment leader (`#`,
-`//`, `{#`, `<!--`, `--`, `;`), then an optional Markdown bullet and `**`, the next text is
-`DECIDED:`. That admits a marker inside a docstring, a Jinja `{# #}` block or a CLAUDE.md
-paragraph. A comment line can also carry a marker mid-sentence ("…was measured first.
-DECIDED: keep `enabled`."). Anything else is prose about the convention: a CLAUDE.md telling
-a reviewer to grep `` `# DECIDED:` ``, or a test fixture's quoted string. Counting those would
-fill the "Possible duplicates" block with near-identical prose.
+which lines carry one. A marker either opens its line, or starts a sentence outside backticks
+on a comment line. Opening the line means that after leading whitespace, optional comment
+leaders (`#`, `//`, `{#`, `<!--`, `--`, `;`), then an optional Markdown bullet and `**`, the
+next text is `DECIDED:`. That admits a marker inside a docstring, a Jinja `{# #}` block or a
+CLAUDE.md paragraph. A comment line can also carry one mid-line ("…was measured first.
+DECIDED: keep `enabled`."). Anything else is prose about the convention: a comment saying
+"see the DECIDED: marker", a CLAUDE.md telling a reviewer to grep `` `# DECIDED:` ``, or a
+test fixture's quoted string. Counting those would fill the "Possible duplicates" block with
+near-identical prose.
 
 STATIC TEXT SCAN, NOT A PARSER. Every line of every file `git ls-files` tracks that carries
 a marker is a row. A `#`/`//`/`--`/`;`-prefixed line pulls in the immediately
@@ -79,9 +80,10 @@ from lib.repo_paths import REPO
 _MARKER = "DECIDED:"
 _COMMENT_LEADER = r"(?:#|//|\{#|<!--|--|;)"
 _MARKER_OPENS_LINE_RE = re.compile(
-    rf"^\s*(?:{_COMMENT_LEADER}\s*)?(?:[-*]\s+)?(?:\*\*)?" + re.escape(_MARKER)
+    rf"^\s*(?:{_COMMENT_LEADER}\s*)*(?:[-*]\s+)?(?:\*\*)?" + re.escape(_MARKER)
 )
 _COMMENT_LINE_RE = re.compile(rf"^\s*{_COMMENT_LEADER}")
+_SENTENCE_START_RE = re.compile(r"[.!?]\s+$")
 
 # Directories a tree-wide text scan must prune: VCS internals, other sessions' worktrees,
 # build output and virtualenvs. Pruning, not filtering, is what keeps this fast — see
@@ -213,14 +215,16 @@ def _iter_candidate_files(root: Path):
 def _marker_at(line: str) -> int:
     """Where `line`'s marker starts, or -1 when the line has none or only mentions one.
 
-    A marker either opens the line or sits in a comment line outside backticks.
+    A marker either opens the line, or starts a sentence on a comment line outside backticks.
     """
     if _MARKER_OPENS_LINE_RE.match(line):
         return line.find(_MARKER)
     if not _COMMENT_LINE_RE.match(line):
         return -1
     at = line.find(_MARKER)
-    while at != -1 and line.count("`", 0, at) % 2:
+    while at != -1 and (
+        line.count("`", 0, at) % 2 or not _SENTENCE_START_RE.search(line[:at])
+    ):
         at = line.find(_MARKER, at + 1)
     return at
 
@@ -324,6 +328,8 @@ def build_rows(root: Path = REPO, repo: Path = REPO) -> list[dict[str, str]]:
             if marker_at == -1:
                 continue
             after = line[marker_at + len(_MARKER) :].strip()
+            if line[:marker_at].endswith("**"):
+                after = after.replace("**", "", 1)
             first_sentence = _first_sentence(after) if after else ""
             continuation: list[str] = []
             comment_match = _COMMENT_PREFIX_RE.match(line)

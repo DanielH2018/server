@@ -112,7 +112,9 @@ def test_a_mid_line_mention_is_not_a_marker(tmp_path):
     assert _rows(tmp_path) == []
 
 
-def test_a_marker_opening_a_docstring_bullet_or_jinja_line_counts(tmp_path):
+def test_a_marker_opening_a_docstring_bullet_or_jinja_line_counts_without_its_bold(
+    tmp_path,
+):
     _write(
         tmp_path,
         "scripts/foo.py",
@@ -121,20 +123,23 @@ def test_a_marker_opening_a_docstring_bullet_or_jinja_line_counts(tmp_path):
     _write(tmp_path, "docs/skill.md", "- **DECIDED: as a bullet.**\n")
     _write(tmp_path, "docs/t.yaml.j2", "{# DECIDED: in Jinja. #}\n")
     _write(tmp_path, "docs/t.xml", "  <!-- DECIDED: in XML. -->\n")
+    _write(tmp_path, "docs/c.py", "# # DECIDED: in a quoted comment.\n")
     assert sorted(r["first_sentence"] for r in _rows(tmp_path)) == [
-        "as a bullet.**",
+        "as a bullet.",
         "in Jinja.",
         "in XML.",
         "in a docstring.",
+        "in a quoted comment.",
     ]
 
 
-def test_a_marker_mid_comment_counts_unless_backticked(tmp_path):
+def test_a_marker_mid_comment_counts_only_when_it_starts_a_sentence(tmp_path):
     _write(
         tmp_path,
         "scripts/foo.yml",
         "# Measured first. DECIDED: keep it.\n"
-        "# The `DECIDED: 30m` floor in rules.yaml is the reason.\n",
+        "# The `DECIDED: 30m` floor in rules.yaml is the reason.\n"
+        "# See the DECIDED: marker on that rule.\n",
     )
     assert [r["first_sentence"] for r in _rows(tmp_path)] == ["keep it."]
 
