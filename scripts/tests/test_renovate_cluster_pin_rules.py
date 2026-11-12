@@ -14,7 +14,13 @@ import pytest
 from _renovate import _CONFIG_MANAGERS, _PACKAGE_RULES, _resolve_setting
 from lib.renovate_annotations import is_annotation_manager
 
-K3S_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
+# The file each pin lives in, which a rule's matchFileNames is matched against.
+PIN_FILES = {
+    "k3s-io/k3s": "ansible/roles/k8s/system-upgrade/defaults/main.yml",
+    "metallb/metallb": "ansible/roles/k8s/metallb/defaults/main.yml",
+    "longhorn/longhorn": "ansible/roles/k8s/longhorn/defaults/main.yml",
+    "coredns/coredns": "hosts/packages/homelab-tools/package.yml",
+}
 DEP_TYPE = next(m for m in _CONFIG_MANAGERS if is_annotation_manager(m))[
     "depTypeTemplate"
 ]
@@ -28,9 +34,11 @@ PINS = ("k3s-io/k3s", *GATED)
 
 
 def _setting(
-    field: str, dep: str, path: str = K3S_DEFAULTS, datasource="github-releases"
+    field: str, dep: str, path: str | None = None, datasource="github-releases"
 ):
-    return _resolve_setting(field, dep, path, "minor", datasource, dep_type=DEP_TYPE)
+    return _resolve_setting(
+        field, dep, path or PIN_FILES[dep], "minor", datasource, dep_type=DEP_TYPE
+    )
 
 
 @pytest.mark.parametrize("dep", PINS)

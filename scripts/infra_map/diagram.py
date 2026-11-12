@@ -19,7 +19,7 @@ from typing import Any
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from infra_map.style import e
-from lib.ansible_inventory import GITOPS_HOST, PI_HOST
+from lib.ansible_inventory import LANDING_HOST, PI_HOST
 
 CAPTION = (
     "How a request reaches a workload, and what it runs on. Box outlines carry live "
@@ -81,7 +81,7 @@ def diagram_svg_fragment(model: dict) -> str:
     """The diagram as a bare ``<svg>`` element, with no figure wrapper and no caption."""
     ep = model["endpoints"]
     cluster = model["cluster"]
-    box = next((h for h in model["hosts"] if h["name"] == GITOPS_HOST), None)
+    box = next((h for h in model["hosts"] if h["name"] == LANDING_HOST), None)
     pi = next((h for h in model["hosts"] if h["name"] == PI_HOST), None)
     routed = box["routed_count"] if box else 0
     gated = box["authelia_count"] if box else 0

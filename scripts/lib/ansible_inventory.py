@@ -11,7 +11,7 @@ tuples. This module imports only the standard library and ``repo_paths``, the sa
 ``containers_entries_in`` takes an already-parsed mapping, so the caller keeps its own YAML
 loader and its own error handling. ``render_guard`` re-exports it.
 
-Three host roles a script must name without parsing YAML: ``GITOPS_HOST``, ``PI_HOST``
+Three host roles a script must name without parsing YAML: ``LANDING_HOST``, ``PI_HOST``
 and ``K8S_HOST`` below. Each is a literal rather than a read of the inventory var that confers the
 role, because this module imports no YAML loader. ``scripts/lib/tests/test_ansible_inventory.py``
 pins each literal to that var instead, so moving the role in the inventory fails a test rather
@@ -37,12 +37,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.repo_paths import HOST_VARS, HOSTS_INI
 
 # The host that runs `land.sh`, the fan-out and the host-package builder.
-GITOPS_HOST = "daniel-box"
+LANDING_HOST = "daniel-box"
 # The one host whose host_vars set `has_docker: true`, driven over ssh with `-e target=`.
 PI_HOST = "daniel-pi"
 # The host whose `containers_list` the renderer fills from `cluster/services.yml`, the
-# group_vars `k8s_primary_node`. The same host as GITOPS_HOST, but a different fact: moving the
-# deployer would not move the services.
+# group_vars `k8s_primary_node`. The same host as LANDING_HOST, but a different fact: moving the
+# landing host would not move the services.
 K8S_HOST = "daniel-box"
 
 

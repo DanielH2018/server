@@ -31,14 +31,14 @@ import re
 
 from _helpers import REPO
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS, K3S_DEFAULTS
+from lib.repo_paths import ALL_VARS, K3S_DEFAULTS, K3S_SERVER
 from _k8s_render import render_role_template
 
 _REPO = REPO
 
 _SWITCH = "k3s_etcd_expose_metrics"
 _JOB = "- job_name: etcd"
-_COMPONENT = REPO / "hosts" / "components" / "k3s-server" / "component.yml"
+_COMPONENT = K3S_SERVER / "component.yml"
 
 
 def _prometheus_config(switch: bool) -> str:

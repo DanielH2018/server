@@ -144,8 +144,7 @@ _CONTROL_PLANE_DEFAULTS = SYSTEM_UPGRADE_DEFAULTS.relative_to(REPO).as_posix()
 def test_control_plane_version_pins_are_tracked() -> None:
     """Every `*_version:` pin in roles/k8s/system-upgrade/defaults must be matched by a customManager.
 
-    k3s and system-upgrade-controller are pinned here (H6.1b moved the k3s pin from
-    roles/setup/k3s), and the k8s-images manager one directory over
+    k3s and system-upgrade-controller are pinned here, and the k8s-images manager one directory over
     scans roles/k8s/*/defaults and matches `_image:` keys, so neither its file patterns nor the
     per-image coverage test above can see these. Widening that test's glob would NOT have caught
     it — these are version vars, not image vars — which is why this is a separate guard.
@@ -258,14 +257,12 @@ def test_every_k8s_role_image_is_renovate_tracked() -> None:
     # cluster image would be structurally blind to the one image (the WAF core) whose staleness
     # is a security problem.
     #
-    # The setup roles' defaults and the registry-gc component's are included for the same reason:
+    # The registry-gc component's defaults are included for the same reason:
     # registry_k8s_image and registry_k8s_netpol_probe_image
     # (hosts/components/registry-gc/defaults/main.yml) sit outside the k8s role defaults, so a
-    # role-defaults-only glob would leave them matched by no manager and by no test. The restore
-    # drill's busybox probe image was the first such pin and moved into the k8s tree at H2.3d.
+    # role-defaults-only glob would leave them matched by no manager and by no test.
     defaults = sorted((_REPO / "ansible/roles/k8s").glob("*/defaults/main.yml"))
     assert defaults, "no k8s role defaults found"
-    defaults += sorted((_REPO / "ansible/roles/setup").glob("*/defaults/main.yml"))
     defaults.append(_REPO / "hosts/components/registry-gc/defaults/main.yml")
     defaults.append(ALL_VARS)
     untracked = []

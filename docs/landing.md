@@ -48,14 +48,9 @@ both refusals therefore name the re-run that caller can make: the same command, 
 `homelab-checkout-sync` has fast-forwarded the primary, which it does every 10 minutes.
 
 **Without `--detach`, redirect stdout and stderr to a file yourself.** A backgrounded Bash call
-hands the script a non-blocking pipe, and Ansible refuses to start on one:
-
-```
-ERROR: Ansible requires blocking IO on stdin/stdout/stderr. Non-blocking file handles detected: <stdout>, <stderr>
-```
-
-`land.sh` then prints `VERDICT: deploy-failed` with nothing deployed. The error names Ansible
-rather than the harness, so it reads as a playbook bug.
+hands the script a non-blocking pipe. A Python write that finds such a pipe full raises
+`BlockingIOError` and drops the line. `land.py` clears the flag on its own descriptors, but
+another holder of the same pipe can set it again, and only a file of its own cannot.
 
 **Do not end your turn on a backgrounded landing.** A backgrounded Bash call whose output is
 redirected to a file is not a harness-tracked child, so nothing wakes the session when it exits

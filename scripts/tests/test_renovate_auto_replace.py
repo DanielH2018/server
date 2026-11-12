@@ -25,8 +25,7 @@ from _renovate import (
 )
 
 # The digest pin is named rather than counted, so a rename breaks these guards loudly instead of
-# leaving them asserting over an empty set. It is a k8s role default rather than the one in
-# roles/setup/k3s, which several sessions edit at once.
+# leaving them asserting over an empty set.
 TEMPLATE_DIGEST_PIN = "homepage_k8s_image"
 
 # A bare pin is the shape the template exists for: without one, Renovate substitutes

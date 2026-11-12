@@ -22,28 +22,29 @@ from lib.repo_paths import REPO
 # The `lib.repo_paths` names a test module reads the tree through, each with the segments it
 # stands for. A chain's segments start with those, so `INVENTORY / "hosts.ini"` spells the
 # same path as `REPO / "ansible/inventory/hosts.ini"`. `_REPO` and `REPO_ROOT` are the
-# spellings `local_repo_roots` leaves behind, and `SETUP_ROLES` is `ansible/tests/_helpers`'
-# own. A module's aliases of these are resolved per module.
+# spellings `local_repo_roots` leaves behind. A module's aliases of these are resolved per
+# module.
 _PATH_ANCHORS = {
     "REPO": (),
     "_REPO": (),
     "REPO_ROOT": (),
     "ANSIBLE": ("ansible",),
     "ROLES": ("ansible", "roles"),
-    "SETUP_ROLES": ("ansible", "roles", "setup"),
     "INVENTORY": ("ansible", "inventory"),
-    "K3S_ROLE": ("ansible", "roles", "setup", "k3s"),
+    "K3S_SERVER": ("hosts", "components", "k3s-server"),
+    "K3S_HOST_CHECKS": ("hosts", "components", "k3s-host-checks"),
 }
 # The paths `lib.repo_paths` owns, by the segments that spell each, and the constant to import.
 # The k3s entries run most specific first, and a chain reports only its first match, so
-# `ROLES / "setup/k3s/defaults/main.yml"` is one hit naming `K3S_DEFAULTS`.
+# `REPO / "hosts/components/k3s-server/defaults/main.yml"` is one hit naming `K3S_DEFAULTS`.
 _OWNED_PATHS = (
     (("inventory", "hosts.ini"), "HOSTS_INI"),
     (("group_vars", "all.yml"), "ALL_VARS"),
     (("host_vars",), "HOST_VARS"),
-    (("setup", "k3s", "defaults", "main.yml"), "K3S_DEFAULTS"),
-    (("setup", "k3s", "files"), "K3S_FILES"),
-    (("setup", "k3s"), "K3S_ROLE"),
+    (("components", "k3s-server", "defaults", "main.yml"), "K3S_DEFAULTS"),
+    (("components", "k3s-host-checks", "files"), "K3S_FILES"),
+    (("components", "k3s-server"), "K3S_SERVER"),
+    (("components", "k3s-host-checks"), "K3S_HOST_CHECKS"),
 )
 
 Segments = tuple[str, ...]
@@ -239,8 +240,8 @@ def _local_anchors(
 ) -> dict[str, Segments]:
     """The anchors plus every name `tree` binds to a path in the repo, at any scope.
 
-    `from _helpers import ROLES as _ROLES` binds an alias, and `K3S = ROLES / "setup" /
-    "k3s"` binds a name a later chain is rooted at (#4135). The bindings resolve to a fixed
+    `from _helpers import ROLES as _ROLES` binds an alias, and `K3S = REPO / "hosts" /
+    "components" / "k3s-server"` binds a name a later chain is rooted at (#4135). The bindings resolve to a fixed
     point, so a name bound through another local resolves too. A name bound to two different
     things anywhere in the module is dropped, because the walk does not know which scope a
     chain reads it from.
@@ -324,12 +325,12 @@ def inline_inventory_paths(
     """The `/` chains `source` builds to a path `lib.repo_paths` owns, each with its constant.
 
     A hit is a chain rooted in the repo whose string parts spell the inventory,
-    `group_vars/all.yml`, `host_vars`, or the k3s role directory, its `files/` or its
+    `group_vars/all.yml`, `host_vars`, or the k3s component directories, their `files/` or
     defaults, whether the parts are one string or several. The root is an anchor, a local name
     bound to one, a name imported from a first-party module that binds one, or `__file__`
     arithmetic evaluated at `module` or at an imported module's file. `sources` supplies a
     module's text in place of the file on disk. A chain counts only for the
-    segments it spells itself, so `K3S_ROLE / "tasks"` passes. Only the outermost chain is
+    segments it spells itself, so `K3S_SERVER / "templates"` passes. Only the outermost chain is
     read, so one expression is one hit. A repo-relative STRING
     (`"ansible/inventory/group_vars/all.yml"`) is not a chain and not a hit: the deploy
     classifiers' tests hand those to the code under test as inputs.

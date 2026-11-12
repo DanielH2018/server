@@ -27,13 +27,13 @@ from fanout_lib.status import BatchStatus, parse_status
 from findings_lib.issue_model import cited_paths
 from findings_lib.solo_only import solo_only_reasons
 from findings_lib.tracked_paths import resolve_fragments
-from lib.ansible_inventory import GITOPS_HOST
+from lib.ansible_inventory import LANDING_HOST
 from lib.cli_help import error, warn
 
 # The host `fanout.py place` normally runs on; its launches go over `bash -c`, never ssh, so the
 # per-host ssh budget below doesn't apply to it. The orchestrator runs on the deploy host, which
 # is a coupling of convention: move one and this names the wrong host.
-LOCAL_HOST = GITOPS_HOST
+LOCAL_HOST = LANDING_HOST
 # ufw limit ssh REJECTs a 6th connection to one host within 30s. Two of those five go to the
 # headroom and health reads, leaving room for at most this many batch launches — each its
 # own ssh connection — before the run risks the 6th.

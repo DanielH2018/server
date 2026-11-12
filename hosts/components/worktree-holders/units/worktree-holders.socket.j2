@@ -8,13 +8,13 @@ Description=Worktree holder scan socket
 
 [Socket]
 # systemd resolves SocketGroup= when it binds, so the group and sys_user's membership come first.
-ExecStartPre=+/usr/sbin/groupadd -f -r {{ initial_setup_worktree_holders_group }}
-ExecStartPre=+/usr/sbin/usermod -aG {{ initial_setup_worktree_holders_group }} {{ sys_user }}
+ExecStartPre=+/usr/sbin/groupadd -f -r {{ worktree_holders_group }}
+ExecStartPre=+/usr/sbin/usermod -aG {{ worktree_holders_group }} {{ sys_user }}
 ListenStream=/run/worktree-holders.sock
 # One worktree-holders@.service instance per connection, with the connection on its stdin.
 Accept=yes
 SocketUser=root
-SocketGroup={{ initial_setup_worktree_holders_group }}
+SocketGroup={{ worktree_holders_group }}
 SocketMode=0660
 # Without this, a stopped socket leaves its file behind. A connect to it is then refused,
 # which the callers read as a failed scan and refuse every removal; an absent file makes them

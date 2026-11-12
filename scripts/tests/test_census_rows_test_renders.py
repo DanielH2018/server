@@ -23,7 +23,7 @@ from _test_module_rules import MODULE_FLOOR, pytest_only_modules
 from lib.repo_paths import REPO
 
 # The sibling module the sibling-import red subject reads, at the path it resolves to.
-_SIBLINGS = {REPO / "ansible/tests/x/_drill.py": 'SETUP = ROLES / "setup"\n'}
+_SIBLINGS = {REPO / "ansible/tests/x/_drill.py": 'HOSTS = REPO / "hosts"\n'}
 
 ROWS = (
     Census(
@@ -113,15 +113,18 @@ ROWS = (
     Census(
         name="tests-take-inventory-paths-from-repo-paths",
         reason=(
-            "`lib.repo_paths` owns `HOSTS_INI`, `ALL_VARS`, `HOST_VARS`, `K3S_ROLE`, "
-            "`K3S_FILES` and `K3S_DEFAULTS`, and #3912, #3982 and #4133 moved the test modules "
+            "`lib.repo_paths` owns `HOSTS_INI`, `ALL_VARS`, `HOST_VARS`, `K3S_SERVER`, "
+            "`K3S_HOST_CHECKS`, `K3S_FILES` and `K3S_DEFAULTS`, and #3912, #3982 and #4133 "
+            "moved the test modules "
             "onto them. A hit is a `/` chain whose string parts spell one of those paths; the "
             "message names the constant. Its root is `REPO` (or `_REPO`, `REPO_ROOT`), `ANSIBLE`, `ROLES`, "
-            "`SETUP_ROLES`, `INVENTORY` or `K3S_ROLE` (also as `Path(...)` or `v.ROLES`), an "
-            'alias of one, a local name bound to an anchored chain (`K3S = ROLES / "setup" / '
-            '"k3s"`, then `K3S / "defaults" / "main.yml"`), or `Path(__file__)` arithmetic '
+            "`INVENTORY`, `K3S_SERVER` or `K3S_HOST_CHECKS` (also as `Path(...)` or "
+            "`v.ROLES`), an "
+            'alias of one, a local name bound to an anchored chain (`K3S = REPO / "hosts" / '
+            '"components" / "k3s-server"`, then `K3S / "defaults" / "main.yml"`), or '
+            "`Path(__file__)` arithmetic "
             "evaluated at the module (#4135). A chain counts only for the segments it spells "
-            'itself, so `K3S_ROLE / "tasks"` passes. A module binding its own `INVENTORY` is a '
+            'itself, so `K3S_SERVER / "templates"` passes. A module binding its own `INVENTORY` is a '
             'hit too. A repo-relative string such as `"ansible/inventory/group_vars/all.yml"` '
             "is not a chain, which is how the deploy classifiers' tests pass those as inputs. "
             "A name imported from a first-party module takes that module's binding "
@@ -135,23 +138,33 @@ ROWS = (
             Subject("b.py", 'ANSIBLE / "inventory" / "group_vars" / "all.yml"\n'),
             Subject("c.py", 'Path(REPO) / "ansible/inventory/host_vars" / name\n'),
             Subject(
-                "d.py", '_REPO / "ansible/roles" / "setup/k3s/defaults/main.yml"\n'
+                "d.py", '_REPO / "hosts/components" / "k3s-server/defaults/main.yml"\n'
             ),
-            Subject("e.py", 'ROLES / "setup" / "k3s" / "defaults" / "main.yml"\n'),
+            Subject(
+                "e.py",
+                'REPO / "hosts" / "components" / "k3s-server" / "defaults" / "main.yml"\n',
+            ),
             # A local INVENTORY shadowing the repo_paths one, and a chain built from it.
             Subject("f.py", 'INVENTORY = ANSIBLE / "inventory"\n'),
             Subject("g.py", 'INVENTORY / "group_vars" / "all.yml"\n'),
-            # The k3s role directory and its files/, however the chain is rooted (#4133).
-            Subject("h.py", 'ANSIBLE / "roles" / "setup" / "k3s"\n'),
-            Subject("i.py", 'SETUP_ROLES / "k3s" / "files" / "x.py"\n'),
-            Subject("j.py", 'v.ROLES / "setup/k3s" / "tasks"\n'),
-            # A path built in two steps (#4135). The first step of `l.py` is a hit on its
-            # own; `k.py`'s owns nothing, so only resolving SETUP makes it red.
+            # The k3s component directories and files/, however the chain is rooted (#4133).
+            Subject("h.py", 'REPO / "hosts" / "components" / "k3s-host-checks"\n'),
             Subject(
-                "l.py", 'K3S = ROLES / "setup" / "k3s"\nK3S / "defaults" / "main.yml"\n'
+                "i.py", 'REPO / "hosts/components/k3s-host-checks/files" / "x.py"\n'
             ),
             Subject(
-                "k.py", 'SETUP = ROLES / "setup"\nSETUP / "k3s/defaults/main.yml"\n'
+                "j.py", 'v.ANSIBLE.parent / "hosts/components/k3s-server" / "units"\n'
+            ),
+            # A path built in two steps (#4135). The first step of `l.py` is a hit on its
+            # own; `k.py`'s owns nothing, so only resolving HOSTS makes it red.
+            Subject(
+                "l.py",
+                'K3S = REPO / "hosts" / "components" / "k3s-server"\n'
+                'K3S / "defaults" / "main.yml"\n',
+            ),
+            Subject(
+                "k.py",
+                'HOSTS = REPO / "hosts"\nHOSTS / "components/k3s-server/defaults/main.yml"\n',
             ),
             # A root outside the anchor set, evaluated from the module's own location.
             Subject(
@@ -162,14 +175,15 @@ ROWS = (
             # A root bound in a sibling module, which owns nothing until the import resolves.
             Subject(
                 "ansible/tests/x/test_y.py",
-                'from _drill import SETUP\nSETUP / "k3s" / "defaults" / "main.yml"\n',
+                "from _drill import HOSTS\n"
+                'HOSTS / "components" / "k3s-server" / "defaults" / "main.yml"\n',
             ),
             # A root computed from another module's file: monitor-bridge's `files/check.py`.
             Subject(
                 "ansible/roles/k8s/monitor-bridge/tests/test_y.py",
                 "import check\n"
-                "Path(check.__file__).resolve().parents[3]"
-                ' / "setup" / "k3s" / "defaults" / "main.yml"\n',
+                "Path(check.__file__).resolve().parents[5]"
+                ' / "hosts/components/k3s-server" / "defaults" / "main.yml"\n',
             ),
         ),
         green=(
@@ -179,10 +193,13 @@ ROWS = (
             Subject("b.py", 'classify(["ansible/inventory/group_vars/all.yml"])\n'),
             Subject("c.py", 'tmp_path / "inventory" / "hosts.ini"\n'),
             Subject("d.py", 'REPO / "ansible" / "templates"\n'),
-            Subject("e.py", 'K3S_ROLE / "tasks" / "main.yml"\n'),
+            Subject("e.py", 'K3S_SERVER / "templates" / "config.yaml.j2"\n'),
             # A local alias of a constant spells nothing past it.
-            Subject("f.py", 'K3S = K3S_ROLE\nK3S / "templates"\n'),
-            Subject("g.py", 'ROLES / "setup" / role / "defaults" / "main.yml"\n'),
+            Subject("f.py", 'K3S = K3S_HOST_CHECKS\nK3S / "templates"\n'),
+            Subject(
+                "g.py",
+                'REPO / "hosts" / "components" / name / "defaults" / "main.yml"\n',
+            ),
         ),
         min_matches=MODULE_FLOOR,
         # The classifier tests holding repo-relative inventory strings as inputs, and modules
@@ -225,12 +242,12 @@ ROWS = (
             ),
             Subject(
                 "b.py",
-                'T: Path = Path("ansible/roles/setup/k3s/templates/drill.sh.j2")\n'
+                'T: Path = Path("hosts/components/k3s-host-checks/templates/drill.sh.j2")\n'
                 "T.read_bytes()\n",
             ),
             Subject(
                 "c.py",
-                '(ROLES / "setup" / "k3s" / "templates" / "drill.sh.j2").read_text()\n',
+                '(K3S_HOST_CHECKS / "templates" / "drill.sh.j2").read_text()\n',
             ),
             Subject("d.py", 'for p in TEMPLATES.glob("*.sh.j2"):\n    pass\n'),
             # One `.sh.j2` constant that no substring of the source text spells (#5501).
@@ -265,20 +282,20 @@ ROWS = (
                 "j.py",
                 "def _source(path):\n"
                 "    return '\\n'.join(l for l in path.read_text().splitlines())\n"
-                'CHECK = ROLES / "setup" / "k3s" / "templates" / "drill.sh.j2"\n'
+                'CHECK = K3S_HOST_CHECKS / "templates" / "drill.sh.j2"\n'
                 "_source(path=CHECK)\n",
             ),
             Subject(
                 "k.py",
                 "def _source(path):\n    return path.read_text()\n"
-                '_source(ROLES / "setup" / "k3s" / "templates" / "drill.sh.j2")\n',
+                '_source(K3S_HOST_CHECKS / "templates" / "drill.sh.j2")\n',
             ),
         ),
         green=(
             Subject(
                 "a.py",
                 "from _shell_render import rendered_shell_text\n"
-                'SCRIPT = rendered_shell_text("setup", "k3s", "drill.sh.j2")\n',
+                'SCRIPT = rendered_shell_text("components", "k3s-host-checks", "drill.sh.j2")\n',
             ),
             Subject("b.py", 'NAMES = frozenset({"drill.sh.j2"})\n'),
             Subject(
@@ -317,18 +334,18 @@ ROWS = (
             Subject(
                 "i.py",
                 "def _name(path):\n    return path.name\n"
-                'CHECK = ROLES / "setup" / "k3s" / "templates" / "drill.sh.j2"\n'
+                'CHECK = K3S_HOST_CHECKS / "templates" / "drill.sh.j2"\n'
                 "_name(CHECK)\n",
             ),
             Subject(
                 "j.py",
                 "from _shell_render import render_shell_script\n"
-                'render_shell_script("setup", "k3s", "drill.sh.j2")\n',
+                'render_shell_script("components", "k3s-host-checks", "drill.sh.j2")\n',
             ),
             Subject(
                 "k.py",
                 "def _source(path):\n    return path.read_text()\n"
-                'CHECK = ROLES / "setup" / "k3s" / "templates" / "drill.sh.j2"\n'
+                'CHECK = K3S_HOST_CHECKS / "templates" / "drill.sh.j2"\n'
                 "def test_x(_source):\n    _source(CHECK)\n",
             ),
             Subject(

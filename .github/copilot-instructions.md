@@ -40,4 +40,4 @@ This repository contains Ansible playbooks and roles for server management.
 - Use Jinja2 templating (`{{ var }}`) for variables.
 - **Encryption**: Use `sops` with `age` for encrypting sensitive files. Per the `.sops.yaml` configuration, any `.yml` or `.yaml` files inside a `vars/` or `secrets/` directory will be encrypted.
 - **Editing Secrets**: To edit an encrypted file, use the command `sops path/to/encrypted/file.yml`.
-- **Automation**: The `community.sops.sops_decrypt` lookup is used in playbooks to decrypt data at runtime.
+- **Decryption**: Flux decrypts the cluster's own SOPS file with the cluster's age key, and each host decrypts its own per-host file under `ansible/vars/hosts/` with that host's key (ADR 0022, ADR 0029).

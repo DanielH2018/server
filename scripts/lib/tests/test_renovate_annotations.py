@@ -22,7 +22,7 @@ _ANNOTATION_MANAGERS = [
     m for m in _CONFIG["customManagers"] if is_annotation_manager(m)
 ]
 
-DEFAULTS = "ansible/roles/setup/tool/defaults/main.yml"
+DEFAULTS = "ansible/roles/k8s/tool/defaults/main.yml"
 
 FIXTURE = """\
 ---
@@ -86,7 +86,7 @@ def test_expand_builds_a_per_pin_manager_scoped_to_the_annotated_line():
         "pkg_version",
     ]
     assert deb["managerFilePatterns"] == [
-        "/^ansible/roles/setup/tool/defaults/main\\.yml$/"
+        "/^ansible/roles/k8s/tool/defaults/main\\.yml$/"
     ]
     assert deb["matchStrings"] == ['pkg_version:\\s*"?(?<currentValue>[^"\\s]+)"?']
     assert (deb["depNameTemplate"], deb["datasourceTemplate"]) == ("pkg", "deb")

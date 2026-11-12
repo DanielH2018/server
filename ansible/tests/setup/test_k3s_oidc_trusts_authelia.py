@@ -28,7 +28,7 @@ from _helpers import ANSIBLE, load_defaults
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
-from lib.repo_paths import ALL_VARS, REPO
+from lib.repo_paths import ALL_VARS, K3S_SERVER
 from renderer.renderer_lib import host as host_mode
 
 HEADLAMP = ANSIBLE / "roles" / "k8s" / "headlamp"
@@ -62,7 +62,7 @@ def _env() -> jinja2.Environment:
     return make_ansible_env(undefined_cls=jinja2.StrictUndefined)
 
 
-COMPONENT = REPO / "hosts" / "components" / "k3s-server"
+COMPONENT = K3S_SERVER
 AUTH_CONFIG = "/var/lib/rancher/k3s/server/authentication-config.yaml"
 SERVER_CONFIG = "/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
 

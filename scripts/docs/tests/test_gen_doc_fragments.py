@@ -280,19 +280,19 @@ def test_deadman_cadences_assembles_each_cron_from_its_variables():
         "weekly_reboot_weekday": 0,
         "ops_cron_host": "box",
     }
-    initial_setup = {
-        "initial_setup_docker_prune_cron_minute": 30,
-        "initial_setup_docker_prune_cron_hour": 6,
-        "initial_setup_worktree_sweep_cron_minute": 20,
-        "initial_setup_worktree_sweep_cron_hour": 4,
-        "initial_setup_worktree_sweep_cron_weekday": 0,
+    host_timers = {
+        "host_maintenance_docker_prune_cron_minute": 30,
+        "host_maintenance_docker_prune_cron_hour": 6,
+        "worktree_sweep_cron_minute": 20,
+        "worktree_sweep_cron_hour": 4,
+        "worktree_sweep_cron_weekday": 0,
     }
     out = renderers.render_deadman_cadences(
         k3s,
         {"pi_peer_backup_k8s_schedule": "30 23 * * *"},
         registry,
         group_vars,
-        initial_setup,
+        host_timers,
         {"box": False, "pi": True},
         {"observability_alertmanager_watchdog_repeat_seconds": 60},
         ["box", "server"],
@@ -333,11 +333,11 @@ def test_deadman_cadences_gives_a_prune_slug_only_to_a_docker_host():
             "ops_cron_host": "box",
         },
         {
-            "initial_setup_docker_prune_cron_minute": 30,
-            "initial_setup_docker_prune_cron_hour": 6,
-            "initial_setup_worktree_sweep_cron_minute": 20,
-            "initial_setup_worktree_sweep_cron_hour": 4,
-            "initial_setup_worktree_sweep_cron_weekday": 0,
+            "host_maintenance_docker_prune_cron_minute": 30,
+            "host_maintenance_docker_prune_cron_hour": 6,
+            "worktree_sweep_cron_minute": 20,
+            "worktree_sweep_cron_hour": 4,
+            "worktree_sweep_cron_weekday": 0,
         },
         {"box": False},
         {"observability_alertmanager_watchdog_repeat_seconds": 60},

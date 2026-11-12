@@ -29,8 +29,10 @@ wait that runs out of budget exits 75 and prints the command that resumes it: re
 ``land.sh``, which would start a second landing. ``--await-verdict`` is retired and refused.
 
 WITHOUT ``--detach``, REDIRECT STDOUT AND STDERR TO A FILE YOURSELF. A backgrounded Bash call
-hands this script a non-blocking pipe, and Ansible refuses to start on one ("Ansible requires
-blocking IO on stdin/stdout/stderr"). ``main`` clears O_NONBLOCK on its own fds, but ``> "$CLAUDE_JOB_DIR/tmp/land<n>.log" 2>&1`` is still the whole fix.
+hands this script a non-blocking pipe, and a Python write to a full one raises
+``BlockingIOError`` and loses the line. ``main`` clears O_NONBLOCK on its own fds, but another
+holder of the pipe can set it again, so ``> "$CLAUDE_JOB_DIR/tmp/land<n>.log" 2>&1`` is still
+the whole fix.
 ``main`` also line-buffers stdout, so that log fills phase by phase instead of arriving at
 exit -- see ``_prepare_stdio``.
 
@@ -150,7 +152,8 @@ def _prepare_stdio() -> None:
     """Clear O_NONBLOCK on 0/1/2, and line-buffer stdout so a redirected log fills as we go.
 
     Two separate hazards on the same fds. A backgrounded Bash call hands us non-blocking
-    pipes, which Ansible refuses to start on. And a landing is always run with stdout
+    pipes, where a write that finds the pipe full raises `BlockingIOError`, in this process
+    and in every Python child that inherits the fds. And a landing is always run with stdout
     redirected to a file, where Python block-buffers it -- so the log would stay EMPTY for
     the whole ten-to-fifteen-minute run and appear all at once at exit, leaving a session
     tailing it unable to tell which phase was in flight. stderr is line-buffered either way,

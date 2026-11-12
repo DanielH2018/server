@@ -23,10 +23,10 @@ from fanout_lib.target import (
     branch_name,
 )
 from findings_lib.issue_model import cited_paths
-from lib.ansible_inventory import GITOPS_HOST
+from lib.ansible_inventory import LANDING_HOST
 
 # `land.sh` and the deployer run on the GitOps host, so only batches placed there land.
-LANDS = GITOPS_HOST
+LANDS = LANDING_HOST
 # The label `findings.py` puts on every issue it files. The launch gate refuses anything
 # else: this repo is public, so an unlabelled issue is text an arbitrary GitHub account
 # wrote, and the consumer is an agent running under `--permission-mode auto`.

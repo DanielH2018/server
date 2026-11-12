@@ -18,7 +18,7 @@ from _wifi_fallback import WIFI_FILE, WIFI_RENDERED, installed_wifi_file
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
 from lib.proc_testing import run, write_exec
-from lib.repo_paths import K3S_DEFAULTS, REPO
+from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, REPO
 from renderer.renderer_lib import host as host_mode
 
 COMPONENT = REPO / "hosts" / "components" / "k3s-agent"
@@ -211,7 +211,7 @@ def wifi_copies_that_differ(server, agent) -> list[str]:
 
 
 def test_the_server_and_agent_wifi_copies_are_equal():
-    server = REPO / "hosts" / "components" / "k3s-server"
+    server = K3S_SERVER
     assert wifi_copies_that_differ(server, COMPONENT) == []
 
 

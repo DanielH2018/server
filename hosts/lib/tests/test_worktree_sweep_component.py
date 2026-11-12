@@ -3,7 +3,7 @@
 Until H7.36 `initial_setup` installed the sweep as the `Weekly git object-store repair` cron in
 `/etc/cron.d/git-object-store-repair`. These tests hold what the move carries: the unit that runs
 the script as `sys_user`, the timer's slot, which equals the component's
-`initial_setup_worktree_sweep_cron_*` defaults the deadman fragment reads, the Healthchecks.io key credential
+`worktree_sweep_cron_*` defaults the deadman fragment reads, the Healthchecks.io key credential
 every package shipping the sweep lists (#6815), and the legacy entry. The script's exit-code ping is run in
 `ansible/tests/setup/test_worktree_sweep_cron_reports_its_exit.py`.
 
@@ -50,9 +50,9 @@ def slot_problems(timer: str, defaults: dict) -> list[str]:
         return ["the timer has no `OnCalendar=<day> *-*-* HH:MM:00`"]
     day, hour, minute = DAYS[match.group(1)], int(match.group(2)), int(match.group(3))
     want = (
-        defaults["initial_setup_worktree_sweep_cron_weekday"],
-        defaults["initial_setup_worktree_sweep_cron_hour"],
-        defaults["initial_setup_worktree_sweep_cron_minute"],
+        defaults["worktree_sweep_cron_weekday"],
+        defaults["worktree_sweep_cron_hour"],
+        defaults["worktree_sweep_cron_minute"],
     )
     return (
         []

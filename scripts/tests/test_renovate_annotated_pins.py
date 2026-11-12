@@ -58,7 +58,7 @@ UNTRACKED_BY_DECISION: dict[str, str] = {
 
 _ANNOTATION_LINE = re.compile(r"^\s*#\s*renovate:", re.MULTILINE)
 
-K3S_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
+K3S_SERVER_PINS = "hosts/components/k3s-server/component.yml"
 TRAEFIK_DEFAULTS = "ansible/roles/k8s/traefik/defaults/main.yml"
 PI_TOOL_PINS = "hosts/packages/homelab-tools/package.yml"
 NODE_EXPORTER_DEFAULTS = "ansible/roles/k8s/node-exporter/defaults/main.yml"
@@ -203,7 +203,7 @@ def test_a_pin_version_no_manager_matches_is_flagged():
 def test_an_annotated_pin_is_a_manual_pr_naming_the_refresh_command():
     group = _resolve_group_name(
         "coredns/coredns",
-        K3S_DEFAULTS,
+        K3S_SERVER_PINS,
         "minor",
         "github-releases",
         dep_type=DEP_TYPE,
@@ -212,7 +212,7 @@ def test_an_annotated_pin_is_a_manual_pr_naming_the_refresh_command():
     automerge = _resolve_setting(
         "automerge",
         "coredns/coredns",
-        K3S_DEFAULTS,
+        K3S_SERVER_PINS,
         "minor",
         "github-releases",
         dep_type=DEP_TYPE,
