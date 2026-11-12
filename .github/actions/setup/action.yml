@@ -24,6 +24,12 @@ description: >-
 # (rhysd/actionlint#711). The wrapper lints a copy rewritten to `./`. Once an actionlint release
 # accepts `$/`, point the hook back at `uv run --frozen actionlint` and delete the wrapper and
 # its test.
+#
+# DECIDED: the steps below name actions by version tag with `zizmor: ignore[unpinned-uses]`
+# (#8014). `.github/workflows/actions.lock` pins each one under every workflow that calls this
+# action, and the ci.yml `lockfile` job verifies those pins. zizmor 1.32.0 applies the lockfile
+# to workflow files only, so it reads this file as unpinned. Drop the ignores once zizmor reads
+# the lockfile for a `$/` composite action.
 
 inputs:
   python:
@@ -56,13 +62,13 @@ runs:
         fi
 
     - if: inputs.python == 'true'
-      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+      uses: actions/setup-python@v7.1.0  # zizmor: ignore[unpinned-uses]
       with:
         python-version: "3.15.2"
 
     - name: Install uv
       if: inputs.uv == 'true'
-      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3  # no floating major tag is published; pin the exact release
+      uses: astral-sh/setup-uv@v10.3.3  # zizmor: ignore[unpinned-uses]
       with:
         # Most prek hooks shell out to `uv run`, which resolves the `dev` and `lint` groups
         # (pytest, flask, ruff, ty, shellcheck-py) before the first one
@@ -109,7 +115,7 @@ runs:
     # where its own entry does not exist yet; for the `hooks` job it repeats the first.
     - name: Cache prek hook environments
       if: inputs.prek-cache-key != ''
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache@v6.1.0  # zizmor: ignore[unpinned-uses]
       with:
         path: |
           ~/.cache/prek/repos
@@ -126,6 +132,6 @@ runs:
       run: pip install prek==0.5.10  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
 
     - if: inputs.node == 'true'
-      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+      uses: actions/setup-node@v7.1.0  # zizmor: ignore[unpinned-uses]
       with:
         node-version: "26.13.0"
