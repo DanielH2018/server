@@ -72,8 +72,9 @@ concurrency:
   # Grouping by SHA means a master run is never queued behind another and so can never be
   # evicted. The cost is concurrent master sweeps rather than serialised ones. Runner minutes
   # are free on a public repo, but runner slots are not: the account runs at most 20 hosted
-  # jobs at once, and a full sweep runs 25 jobs, up to 18 of them at once (82 runs measured
-  # 2026-11-12, #8143). The queue measurement that prompted this
+  # jobs at once, and a full sweep runs 25 jobs (82 runs measured 2026-11-12, #8143). At most
+  # 18 of them were in progress at once across 20 of those sweeps, a peak seen under contention,
+  # not a ceiling the workflow sets. The queue measurement that prompted this
   # grouping found job start lag at 1-4s with nothing waiting on a slot. That no longer holds.
   # Measured 2026-10-25 over 95 minutes (#6306), the pool was full 17% of the time, and a
   # `ci.yml` job waited 76s for a runner at the median, 293s at p90 and 572s at worst. A
