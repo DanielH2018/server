@@ -4,9 +4,10 @@
 A squash merge usually lands the tree that the PR's own run checked: the PR run checks out
 `refs/pull/N/merge`, and the squash commit has the same tree whenever master did not move under
 the PR. The PR run's `prek` gate records that tree on the PR head commit as a commit status with
-context `ci/tested-tree`, success state and the tree id as its description. This script is the
-reader. The push run of ci.yml calls it first, and every other job skips when it answers
-`proven=true`.
+context `ci/tested-tree`, success state and the tree id as its description. The status counts
+only when the Actions token created it and its `target_url` is one of this repository's Actions
+runs. This script is the reader. The push run of ci.yml calls it first, and every other job
+skips when it answers `proven=true`.
 
 It fails safe in every direction: any error, any missing status and any mismatch answers
 `proven=false`, and the push run then sweeps in full. It exits 0 in all of those cases, so a
@@ -34,11 +35,31 @@ from lib.cli_help import ArgumentParser
 # it; ansible/tests/repo/test_ci_skip_proven_master.py pins both sides to this name.
 CONTEXT = "ci/tested-tree"
 
+CREATOR = "github-actions[bot]"
+
 _OBJECT_ID = re.compile(r"[0-9a-f]{40}([0-9a-f]{24})?")
 _TIMEOUT_S = 20
 
 Rows = list[dict[str, Any]]
 Get = Callable[[str], Rows]
+
+
+def _is_recorded_run(status: dict[str, Any], repo: str, tree: str) -> bool:
+    """Whether `status` is the green record that this repository's CI wrote for `tree`."""
+    creator = status.get("creator")
+    login = creator.get("login") if isinstance(creator, dict) else None
+    url = status.get("target_url")
+    return (
+        status.get("context") == CONTEXT
+        and status.get("state") == "success"
+        and status.get("description") == tree
+        and login == CREATOR
+        and isinstance(url, str)
+        and re.fullmatch(
+            rf"https://github\.com/{re.escape(repo)}/actions/runs/\d+", url
+        )
+        is not None
+    )
 
 
 def tree_is_proven(get: Get, repo: str, sha: str, tree: str) -> tuple[bool, str]:
@@ -59,18 +80,14 @@ def tree_is_proven(get: Get, repo: str, sha: str, tree: str) -> tuple[bool, str]
         for head in heads:
             statuses = get(f"repos/{repo}/commits/{head}/statuses?per_page=100")
             for status in statuses:
-                if (
-                    status.get("context") == CONTEXT
-                    and status.get("state") == "success"
-                    and status.get("description") == tree
-                ):
+                if _is_recorded_run(status, repo, tree):
                     return (
                         True,
                         f"PR head {head[:8]} recorded a green run on tree {tree[:8]}",
                     )
         return (
             False,
-            f"no green {CONTEXT} status on the PR head carries tree {tree[:8]}",
+            f"no green {CONTEXT} status from this repository's CI on the PR head carries tree {tree[:8]}",
         )
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         return False, f"the lookup failed: {type(exc).__name__}: {exc}"

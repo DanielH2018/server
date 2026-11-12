@@ -279,7 +279,11 @@ truth, with a reason beside each entry. It holds:
 - `ansible/roles/k8s/cluster-base/`, the agent's read-only cluster RBAC. The operator added it
   on 2026-10-16 (H1 Open question 7). Before H1, that RBAC applies only through
   `k3s-bringup.yml`, which the operator runs by hand. Once Flux applies `cluster-base` on
-  merge, the floor is what keeps a widened grant from landing without the operator.
+  merge, this entry holds a change under that directory for the operator. It does not cover a
+  binding that another role renders. The `read-only-identity-is-bound-only-to-read-roles` row of
+  `ansible/tests/k8s/test_rendered_properties.py` covers those: it fails when any role binds the
+  identity, or a `system:serviceaccounts` group that contains it, to a role outside the
+  read-only set.
 
 Two choices keep the floor from being bypassed through the inventory:
 
