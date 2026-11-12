@@ -139,6 +139,9 @@ CHECKED = (
 )
 
 
+AIDE_LOCAL_VARS = {"sys_user": "ubuntu", "integrity_scans_aide_lean": False}
+
+
 def _excluded(path: str, conf: str) -> bool:
     """Whether a `!` rule in `conf` matches `path`, matched the way AIDE does: a regex anchored at
     the path's start."""
@@ -148,7 +151,7 @@ def _excluded(path: str, conf: str) -> bool:
 
 def test_worktrees_and_caches_are_excluded_and_their_neighbours_are_not():
     conf = render_component_text(
-        "integrity-scans", "98_aide_local.conf.j2", {"sys_user": "ubuntu"}
+        "integrity-scans", "98_aide_local.conf.j2", AIDE_LOCAL_VARS
     )
     assert [p for p in EXCLUDED if not _excluded(p, conf)] == []
     assert [p for p in CHECKED if _excluded(p, conf)] == []
@@ -181,7 +184,7 @@ INODE_CHECKED = ("/boot/vmlinuz", "/boot/firmware-old", "/boot/initrd.img")
 
 def test_every_vfat_path_skips_its_inode_and_its_ext4_neighbours_do_not():
     conf = render_component_text(
-        "integrity-scans", "98_aide_local.conf.j2", {"sys_user": "ubuntu"}
+        "integrity-scans", "98_aide_local.conf.j2", AIDE_LOCAL_VARS
     )
     assert [p for p in VFAT_PATHS if not _inode_skipped(p, conf)] == []
     assert [p for p in INODE_CHECKED if _inode_skipped(p, conf)] == []
@@ -207,6 +210,31 @@ def _aide_local_dest(host: str) -> str:
         f"{host} ships {dests} under {AIDE_CONF_D}, not one exclusions file"
     )
     return dests[0]
+
+
+# The 456 MB Pi, whose full-digest scan swapped until its watchdog reset it on 2026-11-12.
+LEAN_HOSTS = frozenset({"daniel-pi"})
+
+
+def _scans_lean(conf: str) -> bool:
+    """Whether `conf`'s first root rule is the sha256-only one and it skips the kernel headers."""
+    roots = [line for line in conf.splitlines() if line.startswith("/ ")]
+    return roots[:1] == ["/ HomelabLean"] and _excluded(
+        "/usr/src/linux-headers-6.8.0/x", conf
+    )
+
+
+def test_only_the_small_host_scans_lean():
+    lean = {h for h in HOSTS if _scans_lean(shipped_text(h, _aide_local_dest(h)))}
+    assert lean == LEAN_HOSTS
+    assert set(HOSTS) - LEAN_HOSTS, "no full-scan host left to compare against"
+
+
+def test_a_lean_rule_after_a_full_root_rule_is_flagged():
+    """AIDE takes the first root rule in file order, so the lean one must come first."""
+    lean_last = "!/usr/src(/|$)\n/ 0 Full\n/ HomelabLean\n"
+    assert _scans_lean("!/usr/src(/|$)\n/ HomelabLean\n")
+    assert not _scans_lean(lean_last)
 
 
 def test_the_include_pattern_skips_a_dotted_name_and_loads_a_plain_one():
