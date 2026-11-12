@@ -6,10 +6,11 @@
 #}
 ---
 # Alertmanager has two cross-namespace, in-cluster callers. loki-homelab's ruler sends each
-# firing LogQL alert to `alertmanager_url` (loki-homelab/templates/configmap.yaml.j2). Karma
-# reads alerts and silences and proxies the silence writes its UI makes
-# (karma/templates/config/karma.yaml.j2). The M5 plan (docs/target-architecture/monitoring/m5-loki-ruler.md, "The cross-namespace grant")
-# lands this grant after the ruler, so the ruler's refused sends were recorded first.
+# firing LogQL alert to `alertmanager_url` (loki-homelab/templates/configmap.yaml.j2). Karma,
+# the alert UI, reads alerts and silences and proxies the silence writes its UI makes. The M5
+# plan (docs/target-architecture/monitoring/m5-loki-ruler.md, "The cross-namespace grant")
+# lands the loki-homelab grant after the ruler, so the ruler's refused sends were recorded
+# first.
 #
 # The loki-homelab pod runs one container and no sidecar, so `app: loki-homelab` admits the
 # ruler and nothing else. Alloy, the other workload in that role, is `app: alloy` and is not
@@ -45,9 +46,9 @@ spec:
 {% if netpol_baseline_obs_enforced | bool %}
     - from:
         # namespaceSelector and podSelector are SIBLING KEYS in ONE list item, so they AND
-        # together: loki-homelab and karma, but only inside {{ k8s_namespace }}. As two separate list
-        # items they would OR, admitting the entire {{ k8s_namespace }} namespace, which the
-        # probe's refused alertmanager row would then reach.
+        # together: loki-homelab and karma, but only inside {{ k8s_namespace }}. As two
+        # separate list items they would OR, admitting the entire {{ k8s_namespace }}
+        # namespace, which the probe's refused alertmanager row would then reach.
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ k8s_namespace }}
