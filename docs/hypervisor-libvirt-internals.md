@@ -220,7 +220,3 @@ third writer of firewall state arriving as a side effect of a package install is
 of problem as the Docker reinstall that preceded this role, so the package retires that network's
 `autostart` link and `etcd-drill-prepare` stops it. The staging network is declared explicitly; this
 makes sure nothing else is.
-
-`community.libvirt` is deliberately not a dependency. Adding a pinned collection is a lockstep
-change with `ansible-core` (`ansible/requirements.yml`), and three `command` calls did not
-justify it. Revisit if the guest definition needs the module.

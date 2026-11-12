@@ -10,9 +10,9 @@
 # --config is a global flag and goes before the subcommand:
 #   sops --config ansible/.sops.yaml updatekeys ansible/vars/cluster-vars.sops.env
 #
-# Multi-recipient is OR: ANY listed key decrypts the WHOLE file. Only a host Ansible drives
-# locally (`ansible_connection=local`) decrypts, because pre_tasks/load_secrets.yml decrypts on
-# the controller; a host driven over ssh needs no key and should not hold one.
+# Multi-recipient is OR: ANY listed key decrypts the WHOLE file. A host decrypts its own file
+# under vars/hosts/ with its own key (ADR 0029); Flux decrypts the cluster files with the cluster
+# key (ADR 0022).
 #
 # Four rules, five kinds of file. SOPS takes the FIRST rule whose path_regex matches, so the
 # cluster rules and the per-host rule must stay ahead of the generic rule: it also matches every
@@ -33,8 +33,8 @@
 # the rule when it is first written.
 #
 # Add a host:
-#   1. On that host:  ansible-playbook ansible/bootstrap.yml --limit <host>
-#      (generates the host's own age key, prints its PUBLIC key — no secret needed).
+#   1. On that host:  hosts/bootstrap-host.sh <host>
+#      (step 3 generates the host's own age key, prints its PUBLIC key — no secret needed).
 #   2. Append the printed pubkey to the comma-separated `age:` string of ALL THREE rules
 #      below. Each is ONE quoted scalar, not a YAML list, so a per-key trailing comment is
 #      impossible; extend the position->host note above the generic rule instead.
