@@ -265,9 +265,9 @@ def findings_labels(path: _Path) -> list[tuple[str, str, str]]:
         )
     assign = loop.body[0]
     assert isinstance(assign, ast.Assign) and isinstance(assign.value, ast.Tuple)
-    name_node = assign.targets[0].slice  # ty: ignore[unresolved-attribute]
+    name_node = assign.targets[0].slice  # ty: ignore[missing-attribute]
     colour_node, description_node = assign.value.elts
-    var = loop.target.id  # ty: ignore[unresolved-attribute]
+    var = loop.target.id  # ty: ignore[missing-attribute]
     for domain in domains:
         env = {var: domain}
         labels.append(

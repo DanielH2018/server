@@ -795,8 +795,7 @@ Two alert paths report the host plane, so a hold or a stall is never silent:
       `monitor_bridge_builder_max_fetch_age_s`, 1800 seconds by default, or absent. That
       covers a dead builder timer, a missing token and a fetch that keeps failing;
     - `homelab_builder_unbuilt_since_timestamp_seconds` is non-zero and older than
-      `monitor_bridge_builder_max_lag_s`, 2 hours by default, raised to the Pi's schedule
-      need for a gate whose canary is daniel-pi (*Staged rollout*, the Pi canary bullet). That covers a trust refusal,
+      `monitor_bridge_builder_max_lag_s`, 2 hours by default. That covers a trust refusal,
       a keyring refusal, a tools refusal, a rewritten master, an empty CI context list, a
       CI context that no longer matches, a builder hold, a rollout gate the canary never
       closes, and a master that stays red for 2 hours. In each of these the builder runs
@@ -997,29 +996,21 @@ publishes a second host package.
   descendant, closes the gate at once. The operator removes the file after use.
 - **An open gate pages.** While a gate is open, the unbuilt-since series carries
   `reason="canary"`, its `sha` names V's commit, and its value is that commit's committer
-  time. H3.5c's lag arm fires once the gate stays open past its grace, which is derived from
-  the Pi's schedule and is 90060 seconds (*The Pi canary holds the gate
-  until its daily fire*, below). A held canary fires `HostReconcileFailed` first. An unreachable Prometheus keeps the gate open, which fails
+  time. H3.5c's lag arm fires once the gate stays open past 7200 seconds,
+  the floor every reason shares. A held canary fires `HostReconcileFailed` first. An unreachable Prometheus keeps the gate open, which fails
   closed.
 - **Shared packages are outside the gate.** `homelab-updater` and `homelab-tools` publish
   in the run that builds them, and every host installs them at its next fire (*Open
   questions* 10).
-- **The Pi canary holds the gate until its daily fire.** Under the 15-minute schedule the Pi
-  led the order at all hours, and its two 2h15m gaps held the other hosts' packages past the
-  2-hour lag arm (#6524). The operator ruled on 2026-10-29 to keep the Pi as canary and accept
-  that delay (#6530). H3.13 put the Pi on a daily schedule, under which a Pi canary would hold
-  every other host for up to a day, so `CANARY_ORDER` puts daniel-server first (#6911). A run
-  that changes only the Pi's and daniel-box's packages still makes the Pi the canary. The lag
-  arm's grace for that gate therefore still follows the Pi's schedule, and every other reason
-  keeps the 7200 s floor (#6919). The builder names the gate's host in the series' `host` label,
-  and `ansible/filter_plugins/updater_lag_grace.py` renders the larger of
-  `monitor_bridge_builder_max_lag_s` and the Pi's longest gap between fires (86400 s), plus the
-  timer's `RandomizedDelaySec` (60 s), the updater's `TimeoutStartSec` (3000 s) and 600 s of
-  slack. That is 90060 s. Moving the Pi's drop-in moves the grace with it.
-  On 2026-11-03 the operator kept the Pi eligible and chose a trigger over a reorder (#7047).
-  `hosts/components/pi-updater-poll/` polls the repository every 15 minutes and starts the
-  updater once per newer `homelab-daniel-pi` (#7065). The daily fire stays the fallback for a
-  poll that skips or a run that fails, so the grace keeps following the drop-in.
+- **The Pi is never a canary.** The Pi led the order until H3.13 put it on a daily schedule,
+  then daniel-server led and a run changing only the Pi's and daniel-box's packages still made
+  the Pi the canary (#6530, #6911, #7047). After the builder released daniel-server, then the
+  Pi, then daniel-box, a Pi canary held daniel-box's package a median 18 minutes and up to 8
+  hours. The operator ruled on 2026-11-12 that the Pi gets no work daniel-box or daniel-server
+  could do. daniel-server is the only canary in `CANARY_ORDER`, and `NEVER_CANARY` names the
+  Pi and daniel-box. The Pi-specific lag grace and its `updater_lag_grace_s` filter went with
+  it. `hosts/components/pi-updater-poll/` still starts the Pi's updater within about 15
+  minutes of a newer `homelab-daniel-pi` publish (#7065).
 
 ### CI (builds, never signs)
 
