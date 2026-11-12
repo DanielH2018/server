@@ -171,13 +171,12 @@ shapes:
 ## Where the deployer should read the list
 
 **HISTORY — the GitOps tick this section advised is gone.** H7.53 deleted the GitOps deployer,
-and H7.55b deleted the setup roles whose list it would have read.
-
-From the tree each deployer run had just fetched, through the subprocess the deployer already uses for
-YAML. The deployer runs under `uv run --no-project` and cannot import `yaml` (see
-`deploy_narrow.py`'s docstring), so `narrow_setup.py` and `narrow_lib/role_reads.py` already parse the
-fetched tree from `scripts/deploy_tools/`. A `setup_roles:` list in the inventory is read the
-same way, and the run that routes a newly added role sees that role. A copy rendered by the
-`gitops_deploy` role would be one apply behind, which is the staleness #4265 names. A committed,
-generated JSON file avoids that staleness too, but it adds a generator and a drift check that
-the subprocess route does not need.
+and H7.55b deleted the setup roles whose list it would have read. The recommendation was to
+read the list from the tree each deployer run had just fetched, through the subprocess the
+deployer used for YAML. The deployer ran under `uv run --no-project` and could not import
+`yaml`, so `narrow_setup.py` and `narrow_lib/role_reads.py` parsed the fetched tree from
+`scripts/deploy_tools/`. A `setup_roles:` list in the inventory would have been read the same
+way, so the run that routed a newly added role would have seen that role. A copy rendered by
+the `gitops_deploy` role would have been one apply behind, which is the staleness #4265 names.
+A committed, generated JSON file avoided that staleness too, but it added a generator and a
+drift check that the subprocess route did not need.
