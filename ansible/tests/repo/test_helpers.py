@@ -7,6 +7,7 @@ coverage rather than relying on the callers to notice.
 
 import pytest
 from lib import yaml_fast
+from lib.repo_paths import K3S_ROLE
 
 from _helpers import (
     ANSIBLE,
@@ -131,13 +132,13 @@ def test_task_named_refuses_anything_but_one_match(fragment):
 
 
 def test_load_tasks_reads_a_real_role_and_returns_dicts():
-    tasks = load_tasks(K8S_ROLES / "volume-revert" / "tasks" / "main.yml")
+    tasks = load_tasks(K3S_ROLE / "tasks" / "agent.yml")
     assert tasks and all(isinstance(t, dict) for t in tasks)
 
 
 def test_the_roots_point_at_the_real_tree():
     assert (REPO / "pyproject.toml").is_file()
-    assert (ANSIBLE / "deploy.yml").is_file()
+    assert (ANSIBLE / "secret_rotation.yml").is_file()
     assert K8S_ROLES.is_dir()
 
 

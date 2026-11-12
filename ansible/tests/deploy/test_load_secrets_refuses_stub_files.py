@@ -23,14 +23,12 @@ import pytest
 import yaml
 from lib import yaml_fast
 from lib.git_testing import scrubbed_env
-from lib.repo_paths import HOST_VARS
 from renderer import shadow_diff
 from secret_stubs import homelab_secret_stub
 
 from _helpers import ANSIBLE, REPO
 
 PREAMBLE = ANSIBLE / "pre_tasks" / "load_secrets.yml"
-DEPLOY = ANSIBLE / "deploy.yml"
 
 OUTSIDE = "Refuse a secret stub file outside a k8s dry run"
 INCOMPLETE = "Refuse a stub file that does not stub every key"
@@ -230,60 +228,11 @@ def test_the_asserts_precede_the_sops_load_and_always_run() -> None:
         assert not task.get("run_once"), f"{task['name']!r} must decide per host"
 
 
-def _deploy_allowed_expressions() -> list[object]:
-    return [
-        play.get("vars", {}).get("load_secrets_stubs_allowed")
-        for play in yaml_fast.safe_load(DEPLOY.read_text())
-    ]
-
-
-def test_only_deploy_yml_allows_a_stub_file() -> None:
-    """A stub file passed to any other importer stops at its preamble, dry run or not."""
+def test_no_playbook_allows_a_stub_file() -> None:
+    """A stub file passed to any importer stops at its preamble, dry run or not."""
     setters = sorted(
         str(path.relative_to(REPO))
         for path in ANSIBLE.rglob("*.yml")
-        if "load_secrets_stubs_allowed" in path.read_text()
-        and path not in (DEPLOY, PREAMBLE)
+        if "load_secrets_stubs_allowed" in path.read_text() and path != PREAMBLE
     )
-    assert setters == [], (
-        f"only deploy.yml may set load_secrets_stubs_allowed: {setters}"
-    )
-    [docker_play] = _deploy_allowed_expressions()
-    assert (
-        isinstance(docker_play, str) and "filter_by_platform('docker')" in docker_play
-    )
-
-
-def test_the_docker_play_allows_a_stub_file_only_on_a_host_with_no_docker_entry() -> (
-    None
-):
-    """Evaluated against the real inventory, whose hosts all pass, and a host with a Docker entry."""
-    from lib.render_guard import SHARED_TPL
-    from renderer.renderer_lib.environment import evaluate, strict_env
-
-    docker_play = _deploy_allowed_expressions()[0]
-    assert isinstance(docker_play, str)
-    verdicts = {}
-    # H5.9 emptied the Pi's containers_list, so the Pi has no docker entry any more, and
-    # daniel-box's host_vars declare none at all. The synthetic host keeps the refusing side
-    # of the rule under test.
-    lists = {
-        host: yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()).get(
-            "containers_list"
-        )
-        for host in ("daniel-box", "daniel-pi")
-    }
-    assert lists["daniel-box"] is None
-    lists["a host with a docker entry"] = [{"name": "wg-easy"}]
-    env = strict_env(SHARED_TPL)
-    for host, containers_list in lists.items():
-        verdicts[host] = evaluate(
-            env,
-            docker_play,
-            {} if containers_list is None else {"containers_list": containers_list},
-        )
-    assert verdicts == {
-        "daniel-box": True,
-        "daniel-pi": True,
-        "a host with a docker entry": False,
-    }
+    assert setters == [], f"no playbook may set load_secrets_stubs_allowed: {setters}"

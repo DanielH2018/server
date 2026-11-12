@@ -136,7 +136,7 @@ def _purge(kubectl, node: str, volumes: set[str]) -> int:
     only reach its own node's pod CIDR, and kube-proxy's per-connection pick over the Service
     fails whenever it lands on the other node's manager (measured 2026-08-16: 27 of 37 calls).
 
-    The ready-pod rule is `longhorn_manager.ready_manager_ip`, shared with `k8s/longhorn-api`
+    The ready-pod rule is `longhorn_manager.ready_manager_ip`, shared with `volume_revert.py`
     and the trim cron (#3736).
 
     Returns the number of volumes left unpurged, so 0 means every POST was accepted. A path

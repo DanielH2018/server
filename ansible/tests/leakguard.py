@@ -38,7 +38,7 @@ cluster. Shimming a binary the host lacks would make `which` find it, turn the s
 run, and fail CI. So the shim set is intersected with what is actually installed.
 
 **An allowlisted test runs with the real PATH.** The tests in `_LIVE_API_TESTS` exist to
-run the role's own argv against a live API server; handing them a stub would leave them
+run a real systemd unit or a real container; handing them a stub would leave them
 passing while proving nothing, which is the failure mode this whole guard is about.
 
 **A `ui`-marked test runs with the real PATH too.** `scripts/diagnostics/tests/test_ui_smoke.py`
@@ -180,18 +180,15 @@ SHIMMED_BINARIES = (
     "wget",
 )
 
-# Tests that run the role's own argv against a live API server on purpose. Each is documented
-# in its module docstring and already guarded by `skipif(shutil.which("kubectl") is None)`
-# plus a "no reachable cluster" skip, so they skip rather than fail where there is no cluster.
-# They run with the real PATH: a stub would leave them green while checking nothing.
+# Tests that reach real infrastructure on purpose. Each is documented in its module docstring
+# and skips where that infrastructure is missing. They run with the real PATH: a stub would
+# leave them green while checking nothing.
 _LIVE_API_TESTS = frozenset(
     {
-        "ansible/tests/longhorn/test_longhorn_api.py::test_the_resolve_returns_a_pod_ip_on_this_node",
-        "ansible/tests/longhorn/test_volume_revert.py::test_the_listing_jsonpath_parses",
-        # Not a cluster read: it starts and stops a real systemd user unit, because issue #3160
-        # is about what that stop kills. Skipped where no user manager answers.
+        # It starts and stops a real systemd user unit, because issue #3160 is about what that
+        # stop kills. Skipped where no user manager answers.
         "scripts/deploy_tools/tests/test_land_detach.py::test_stopping_the_callers_unit_leaves_the_landing_running_to_its_verdict",
-        # Not a cluster read either: they `docker run` crowdsec's sidecar modules in the pinned
+        # They `docker run` crowdsec's sidecar modules in the pinned
         # images, which is the linkage the operator's ruling on #5655 asked to check. They
         # skip where docker is missing and CI is unset.
         "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py::test_the_appsec_verify_runs_in_the_jobs_image_against_a_stub_cscli",

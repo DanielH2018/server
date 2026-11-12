@@ -1,8 +1,7 @@
 # `hosts/components/claude-code` — Claude Code's host half (daniel-server and daniel-box)
 
-This component ships what the `claude_code` setup role installed. The role is emptied: its tasks
-are one unconditional `meta: end_role` in `ansible/roles/setup/claude_code/tasks/main.yml`, and
-its stub `ansible/roles/setup/claude_code/CLAUDE.md` points here. The role's `templates/`,
+This component ships what the `claude_code` setup role installed. H7.55 deleted the emptied
+role. The role's `templates/`,
 `files/` and `defaults/main.yml` sit beside this file (#6773). The renderer loads
 `defaults/main.yml` beneath `component.yml`'s `defaults:`, and each host's `package.yml` reaches
 the component's templates and defaults with `component: claude-code`. This file holds the rules

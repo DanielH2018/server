@@ -33,7 +33,6 @@ work already executed.
 
 ```
 ansible/          # Playbooks, roles, inventory, templates   ← EDIT HERE
-  deploy.yml          # A Docker play with no entries, so it runs no role
   k3s-bringup.yml     # Cluster foundation (k3s, Longhorn, Traefik CRDs, …)
   initial_setup.yml   # Host hardening / bootstrap
   roles/k8s/          # One role per k8s workload (manifests rendered from templates)
@@ -107,11 +106,10 @@ workload by hand.
   traefik, for the LAPI machine credential) is declared as `depends_on:` on the entry instead.
   List order in `cluster/services.yml` is only the sort's tiebreak.
 
-- **`deploy.yml`** — runs a Docker play that deploys nothing, because no host lists a Docker
-  entry: `scripts/validate/compose_templates.py:undeployed_docker_entries` refuses one. The Pi's
-  containers are `compose_services` entries that its `homelab-daniel-pi` package deploys, so
-  `deploy.yml` never starts them. The Pi's ordering, docker-proxy before autoheal and alloy, is
-  each service file's `depends_on`, and
+- **The Pi's containers** are `compose_services` entries that its `homelab-daniel-pi` package
+  deploys. No host lists a Docker `containers_list` entry:
+  `scripts/validate/compose_templates.py:undeployed_docker_entries` refuses one. The Pi's
+  ordering, docker-proxy before autoheal and alloy, is each service file's `depends_on`, and
   `ansible/tests/deploy/test_platform_filter_real_inventory.py` pins it.
 
 Ansible plays run against the host named by `-e target=` — but `daniel-server` and `daniel-box`

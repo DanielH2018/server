@@ -89,9 +89,8 @@ See repo-root `CLAUDE.md` for shared conventions.
   Init waits for a human rather than being caught by a rollout gate, on the one role in the
   fleet that deletes real media. Contradict this at a cited `file:line` with new evidence.
 - **The `containers_list` `depends_on: [media-volume, sonarr, radarr, jellyfin]` is not a fix
-  for the above.** It orders the Ansible applies within one deploy run (`ansible/deploy.yml`
-  toposorts from it); it does not gate pod start after a node reboot, when no Ansible run is
-  involved at all.
+  for the above.** The renderer toposorts it into the bundle's `dependsOn` edges, which order
+  Flux's applies; it does not gate pod start after a node reboot, when no apply runs at all.
 
 ## The Flux verify Job
 

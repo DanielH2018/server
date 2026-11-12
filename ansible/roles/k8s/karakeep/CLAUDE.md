@@ -124,7 +124,7 @@ loop to auto-tag bookmarks.
     - **`Forbid` no longer keeps the 05:15 firing off a gate run.** The copy carries no
       ownerReference to the CronJob. The rules key on age, so an overlapping run acts only on
       what is already due.
-- The snapshot/revert pair (`k8s/volume-snapshot`/`k8s/volume-revert`) covers `karakeep-data`
+- The snapshot/revert pair (`k8s/volume-snapshot` and `scripts/backup/volume_revert.py`) covers `karakeep-data`
   only — reverting it alone desyncs the search index until a manual reindex.
 - `karakeep-chrome` runs on a read-only root, so every path headless chromium writes needs its
   own emptyDir: `/tmp` (profile, crash dumps, the shm files `--disable-dev-shm-usage` moves out

@@ -429,25 +429,6 @@ k8s_rollout_stabilise_seconds: 60
 # availability gaps. Widen only against a measured run.
 k8s_rollout_batch_width: 5
 
-# Opt-in no-mutation mode for the k8s plane: `-e k8s_dry_run=true`, or `scripts/deploy.sh
-# --dry-run`. Renders every manifest to a temp dir and runs `kubectl apply --dry-run=server`
-# against the LIVE API server, so CRDs, admission and schema defaulting all judge the
-# manifests for real, then throws the temp dir away.
-#
-# Deliberately weaker than a staging cluster and stronger than `--check`: --check skips the
-# apply entirely, so the manifests are never seen by an API server at all, and its skipped
-# tasks break downstream consumers besides. Dry-run catches render bugs, bad
-# apiVersions/field names, CRD-ordering mistakes and schema drift. It does NOT catch
-# scheduling, PVC binding, probe or rollout behaviour — that needs a real cluster.
-#
-# Global rather than a role default: deploy.yml's own pre_tasks apply the namespace, so the
-# flag must be visible before any role runs.
-k8s_dry_run: false
-# "This run must not change the cluster", whichever mode asked for it. `--check` and
-# k8s_dry_run want the same tasks skipped for different reasons, and a role that guards only
-# one of them is guarded against neither in practice — a `--check`-clean image-builder would
-# still build and PUSH an image under a dry run.
-k8s_no_mutate: "{{ ansible_check_mode or (k8s_dry_run | bool) }}"
 # Telemetry lives apart from the service workloads. Global rather than a role default
 # because TWO roles need it: observability puts its workloads here, and the traefik role must
 # list it under the CRD provider's watched namespaces — Traefik ignores IngressRoutes in

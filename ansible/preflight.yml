@@ -2,8 +2,7 @@
 # Fail fast on the handful of new-host mistakes that otherwise surface deep inside a long
 # run: a missing host_var, a wrong ssh_config_path, a sudo password that doesn't match the
 # SOPS become_password, or a repo cloned to the wrong path. Each of those fails partway
-# through initial_setup.yml (or, for a Docker host's containers_list, in deploy.yml's first
-# pre_task) with an error that doesn't name the real cause.
+# through initial_setup.yml with an error that doesn't name the real cause.
 #
 # Read-only: asserts and stats only, no changes. Run it between README §5 and §8.
 #     uv run ansible-playbook ansible/preflight.yml
@@ -37,16 +36,6 @@
           inventory/host_vars/{{ inventory_hostname }}.yml — see ansible/README.md §4.
         success_msg: "server_ip and ssh_config_path are set"
 
-    # A host without Docker lists no service: the k3s services are cluster/services.yml's.
-    - name: A Docker host declares containers_list
-      ansible.builtin.assert:
-        that: containers_list is defined
-        fail_msg: >-
-          {{ inventory_hostname }} has has_docker true and no containers_list, which has no
-          default. Copy it from inventory/host_vars/_example.yml — see ansible/README.md §4.
-        success_msg: "containers_list is set"
-      when: has_docker | bool
-
     - name: Stat the configured sshd config file
       ansible.builtin.stat:
         path: "{{ ssh_config_path }}"
@@ -64,7 +53,7 @@
 
     - name: Stat the repo checkout at its expected path
       ansible.builtin.stat:
-        path: "/home/{{ sys_user }}/server/ansible/deploy.yml"
+        path: "/home/{{ sys_user }}/server/ansible/initial_setup.yml"
       register: preflight_repo
 
     - name: The repo is cloned where the role templates expect it
@@ -72,8 +61,7 @@
         that: preflight_repo.stat.exists
         fail_msg: >-
           No repo found at /home/{{ sys_user }}/server. That path is hardcoded into
-          gitops-deploy's REPO_DIR, the secret-rotation crons, AIDE's local config and every
-          container role's bind mount. Clone it there as {{ sys_user }} — see README §2.
+          homelab-checkout-sync, the secret-rotation timers and AIDE's local config. Clone it there as {{ sys_user }} — see README §2.
         success_msg: "repo present at /home/{{ sys_user }}/server"
 
     - name: Read unallocated volume-group space
@@ -95,16 +83,3 @@
           filesystem before deploying, per ansible/README.md §6.
       loop: "{{ preflight_vg_free.stdout_lines | default([]) }}"
       when: item.split() | length == 2 and (item.split()[1] | float) > 10
-
-    - name: Warn when a fresh host still has GitOps auto-deploy enabled
-      ansible.builtin.debug:
-        msg: >-
-          has_gitops is true and cluster/services.yml lists no service. initial_setup.yml
-          will run a full deploy.yml at the end and fail the play if it fails. Set
-          has_gitops: false until this host's first manual deploy succeeds (README §4).
-      when:
-        - has_gitops | default(true)
-        - preflight_services.containers_list | default([]) | length == 0
-      vars:
-        preflight_services: >-
-          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../cluster/services.yml') | from_yaml }}

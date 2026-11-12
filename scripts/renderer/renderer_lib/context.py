@@ -77,10 +77,10 @@ def play_context(
     # variable whose value names an undefined one is left undefined rather than resolved to
     # STUB or None, so a template that reads it stops the render. Not `strict=True`: a built-image
     # pin reads `k8s_built_image_tags`, a play fact, and Ansible fails only a task that reads one.
-    # `base`: names no layer holds that `k8s_no_mutate` and `claude_code_watch_uids` read (#7845).
+    # `base`: a name no layer holds that `claude_code_watch_uids` reads (#7845).
     claude = load_yaml(REPO / "hosts/components/claude-code/defaults/main.yml")
     uid = claude["claude_code_login_uid"]
-    base = {"ansible_check_mode": False, "claude_code_login_uid": uid}
+    base = {"claude_code_login_uid": uid}
 
     def resolve(overrides: dict) -> dict:
         return render_context(

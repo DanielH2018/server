@@ -9,7 +9,7 @@ This repository contains Ansible playbooks and roles for server management.
 > follow `CLAUDE.md`.
 
 ## Repository Structure
-- **Playbooks**: Located in `ansible/` (e.g., `ansible/initial_setup.yml`, `ansible/deploy.yml`).
+- **Playbooks**: Located in `ansible/` (e.g., `ansible/initial_setup.yml`, `ansible/k3s-bringup.yml`).
 - **Roles**: Located in `ansible/roles/`. New services are k3s workloads under `ansible/roles/k8s/`; the Pi's Docker services live in `hosts/components/pi-compose/services/`.
 - **Inventory**: Host-specific variables are in `ansible/inventory/host_vars`. Shared variables are in `ansible/inventory/group_vars`.
 - **Secrets**: Sensitive data is in `ansible/vars/secrets.yml` (SOPS-encrypted).

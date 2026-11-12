@@ -3,7 +3,7 @@
 This role deploys nothing. Its defaults feed the `<tag>-snapshot` Job that the renderer emits
 for each opted-in caller. The Job takes a Longhorn snapshot of each of the caller's RWO volumes,
 waits until the snapshot is usable, then prunes that service's older snapshots of the same
-volume. It gives you a recovery point; `k8s/volume-revert` consumes one.
+volume. It gives you a recovery point; `scripts/backup/volume_revert.py` consumes one.
 
 **Why a `Recreate` + RWO role needs it:** such a role attaches its volume to a freshly-created pod
 on an image bump, and the application may migrate its on-disk format before anything observes a
@@ -40,7 +40,7 @@ autodeploy-<tag>-<digest8>-<claim>-<token>
 
 `<digest8>` is the role's spec digest. `<token>` is the UTC time the Job's pod starts, so every
 claim in one run shares it. `autodeploy-<tag>-<digest8>-<claim>` survives as a **prefix**, which
-`k8s/volume-revert` reconstructs and matches on.
+`scripts/backup/volume_revert.py` reconstructs and matches on.
 
 - **The token makes the prefix a non-unique lookup**, so the revert picks the NEWEST match.
 - **Renaming a service strands its old snapshots permanently**: the prune selects on
@@ -67,9 +67,9 @@ inventory lists and the cluster lacks fails the Job, naming it.
 Longhorn v1.12.1 snapshots a detached volume with healthy replicas, so a detached claim takes the
 ordinary path (#2740).
 
-## Reverting through k8s/volume-revert
+## Reverting through volume_revert.py
 
-**No automated rollback runs.** `k8s/volume-revert` runs only from the operator's runbook.
+**No automated rollback runs.** `scripts/backup/volume_revert.py` runs only from the operator's runbook.
 
 **The revert is an operator-only runbook.** The `<tag>-snapshot` Job takes
 the snapshot in this role's name shape, with the role's `digest8` in place of `<sha8>`. `promote`

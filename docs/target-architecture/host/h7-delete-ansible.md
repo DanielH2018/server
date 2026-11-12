@@ -2379,8 +2379,8 @@ the `manual_plane` clearing, and *Rollback*'s
     census's named member moved to `test_pi_escalation_timeout.py`. Part two of the parity
     proof is H7.46's filter census, unchanged. No module retired. The volume-revert role's
     selection and input check use `regex_escape`, `regex_search`, `split` and `match`, which
-    no rendered template uses, so `ansible/tests/longhorn/_volume_revert.py` registers local
-    stand-ins until H7.55 deletes those tasks. ansible-core stays in the `dev` group until
+    no rendered template uses, so the longhorn tests' `_volume_revert.py` registered local
+    stand-ins until H7.55 deleted those tasks. ansible-core stays in the `dev` group until
     H7.56, because three allowlisted files still import it and the playbooks still run.
 31. **H7.55** stays alone. It merges only after daniel-box shows H7.53's version and lists no
     `gitops-deploy` unit file. It carries the two-part proof, exit observation 1's listings
@@ -2388,7 +2388,22 @@ the `manual_plane` clearing, and *Rollback*'s
     Deleting `test_pi_escalation_timeout.py` removes the deletion census's named member, so
     H7.55 repoints or drops the two named-member asserts in
     `ansible/tests/repo/test_ansible_core_census.py`. It also deletes the volume-revert role's
-    tasks, and with them the stand-ins in `ansible/tests/longhorn/_volume_revert.py`.
+    tasks, and with them the longhorn tests' `_volume_revert.py` stand-ins.
+    **Split in two on 2026-11-12,** because one PR would have touched well over 100 files.
+    The first PR deletes everything no reader of the setup tree reads: `deploy.yml`,
+    `prune_backups.yml` with `ansible/prune_backups/`, `seed_volume_backup.yml`,
+    `volume-revert.yml`, the thirteen emptied setup roles that no remaining playbook needs,
+    both runbook roles (`k8s/volume-revert` and `k8s/longhorn-api`, directories and all), and
+    the tests whose subject went with them. Those tests include the skipped-register,
+    retried-command and dual-tag censuses and the k8s dry-run guard, because no setup role's
+    tasks hold a `register:` or a `retries:` and no k8s role holds a task. The second PR
+    ([#8035](https://github.com/DanielH2018/server/issues/8035)) deletes what is left, which
+    is one graph whose parts read each other: `initial_setup.yml`, `k3s-bringup.yml`,
+    `bootstrap.yml`, `preflight.yml`, `bring-up.sh`, `pre_tasks/`, the `common`,
+    `initial_setup`, `k3s`, `nut_host`, `homelab_builder` and `sops_setup` roles, the sources
+    the host renderer still reads in place through `role:`, `setup_lib/` with its censuses,
+    `probe.py applied`, and `test_pi_escalation_timeout.py` with the census's named member.
+    The second PR marks H7.55 landed.
 32. **H7.56.** Both steps follow H7.55 and remove the last Ansible inputs: ansible-core with its
     config, its hook and leakguard's temp-dir sweep, and the Pi's empty key. *Removed in
     H7.20* names the sweep's parts. Neither moves a rendered byte. It carries exit

@@ -85,11 +85,6 @@ def test_a_name_no_layer_supplies_is_flagged(ctx):
         _render(ctx, "{{ k8s_built_image_tags }}")
 
 
-def test_k8s_no_mutate_is_false_in_a_render(ctx):
-    # `ansible_check_mode` is false in a render, and group_vars leaves `k8s_dry_run` false.
-    assert ctx.get("k8s_no_mutate") is False
-
-
 def _inventory(tmp_path, **edits):
     """Each host's layer as the renderer reads it, those named in `edits` edited."""
     host_vars = tmp_path / "host_vars"

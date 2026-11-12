@@ -88,7 +88,7 @@ source ~/.bashrc   # (or re-login) to pick up ~/.local/bin on PATH
 
 ## 4. Add the host to inventory
 
-Every playbook (`bootstrap.yml`, `initial_setup.yml`, `deploy.yml`) resolves its target through
+Every playbook (`bootstrap.yml`, `initial_setup.yml`, `k3s-bringup.yml`) resolves its target through
 `ansible/inventory/hosts.ini` — a host that isn't listed there matches nothing, and the run
 just silently no-ops. `./ansible/bring-up.sh --scaffold [--host <name>]` creates both files
 below if they're missing (it never overwrites) and then stops so you can fill them in. Before
@@ -121,18 +121,13 @@ touching SOPS:
    - Any hardware capability flags a role you plan to deploy expects — e.g. `has_igpu: true`
      only if the host has an Intel iGPU (gates `/dev/dri` passthrough for jellyfin/tdarr;
      defaults to `false` in `group_vars/all.yml`).
-   - `has_gitops: false` **until the host's first successful manual deploy**.
-     `group_vars/all.yml` sets the same `false`. Write the line anyway, because
-     `deploy_inventory.declares_no_gitops` reads a host's own file and fails open on an absent
-     key. With `has_gitops: true`, the `gitops_deploy` role's "Run gitops-deploy once" handler
-     shells a full `uv run ansible-playbook deploy.yml` at the end of §8's `initial_setup.yml`,
-     and fails the play if that deploy fails. On a brand-new host that fires before you have
-     ever deployed by hand, so a single bad service takes down the whole OS-hardening run. Flip
-     it to `true` and re-run `--tags gitops_deploy` once §8's `deploy.yml` succeeds.
+   - `has_gitops: false`. `group_vars/all.yml` sets the same `false`. The key only gates the
+     emptied `homelab_builder` role in `initial_setup.yml`, because H7.53 deleted the GitOps
+     deployer it once armed.
 
 ## 5. Onboard the host to SOPS
 
-This **gates §8**: `initial_setup.yml` (and `deploy.yml`) decrypt `ansible/vars/secrets.yml` in
+This **gates §8**: `initial_setup.yml` decrypts `ansible/vars/secrets.yml` in
 a `pre_tasks` block that runs *before any role*. The host therefore needs `sops`, the pinned
 collections and an age key first, and no playbook provides any of the three.
 
@@ -255,7 +250,7 @@ Router port-forwarding, Cloudflare DNS and the other off-box prerequisites are i
 
 ## 9. Post-deploy setup that Ansible can't do
 
-`deploy.yml` finishing green does **not** mean the host is done. The steps below live in each
+Flux applying the host's workloads green does **not** mean the host is done. The steps below live in each
 app's own database, which Ansible never writes. Most of them **fail silently** — the container
 stays healthy while the feature behind it does nothing (the exception is Authelia, whose role
 asserts up front and fails the deploy). Work top-down.
@@ -266,7 +261,7 @@ uv run python scripts/diagnostics/postflight.py   # exercises every item below a
 
 It authenticates with each SOPS credential exactly as the real consumers do, prints one line
 per item, and exits non-zero naming what's still pending. A service this host doesn't run
-reports SKIP. Run it after `deploy.yml` and again after working through the list.
+reports SKIP. Run it once Flux has applied the host's workloads, and again after working through the list.
 
 1. **Seed the *arr API keys.** `sonarr_api_key`, `radarr_api_key`, `prowlarr_api_key` and
    `jellyfin_api_key` in SOPS are what configarr, janitorr, homepage, monitor-bridge and

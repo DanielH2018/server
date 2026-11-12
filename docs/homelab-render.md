@@ -722,10 +722,8 @@ key before the load, so neither assert fires.
 
 - "Refuse a secret stub file outside a k8s dry run" requires `k8s_dry_run`, the play
   variable `load_secrets_stubs_allowed` and the sentinel. A stub file stripped of its sentinel
-  is refused even in an allowed dry run. Only `ansible/deploy.yml` sets that variable. Its
-  Docker play sets it to true only where the host's `containers_list` holds no Docker entry,
-  so a stubbed run aimed at a host with a Docker entry stops before any role. A stub file passed
-  to any other playbook stops at its preamble, dry run or not.
+  is refused even in an allowed dry run. No playbook sets that variable since H7.55 deleted
+  `deploy.yml`, so a stub file passed to any playbook stops at its preamble, dry run or not.
 - "Refuse a stub file that does not stub every key" reads the key names from the ciphertext
   `secrets.yml` and names each key that does not hold exactly its stub. A stub file written
   before a secret was added fails here and names the new key. To fix it, write a fresh stub

@@ -51,8 +51,8 @@ PLANES = [
     Plane(
         "setup",
         SETUP_ROLES,
-        floor=12,
-        members=frozenset({"gitops_deploy", "k3s", "common", "nut_host"}),
+        floor=6,
+        members=frozenset({"initial_setup", "k3s", "common", "nut_host"}),
     ),
 ]
 PLANE_IDS = [p.name for p in PLANES]

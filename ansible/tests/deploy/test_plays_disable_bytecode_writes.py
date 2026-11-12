@@ -53,13 +53,9 @@ _PLAYBOOK_DIR = _REPO / "ansible"
 _KNOWN = frozenset(
     {
         "bootstrap.yml",
-        "deploy.yml",
         "initial_setup.yml",
         "k3s-bringup.yml",
         "preflight.yml",
-        "prune_backups.yml",
-        "seed_volume_backup.yml",
-        "volume-revert.yml",
     }
 )
 

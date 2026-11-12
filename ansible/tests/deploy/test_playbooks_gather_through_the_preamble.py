@@ -62,7 +62,6 @@ def test_the_census_finds_every_playbook_that_gathered_on_its_own() -> None:
         "initial_setup.yml",
         "preflight.yml",
         "k3s-bringup.yml",
-        "deploy.yml",
     } <= set(preamble_plays())
 
 

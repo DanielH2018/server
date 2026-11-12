@@ -221,7 +221,6 @@ KNOWN_MEMBERS = frozenset(
         "longhorn/test_daily_group_membership_is_the_r2_list.py",
         "longhorn/test_longhorn_reap_never_scheduled.py",
         "longhorn/test_longhorn_restore_drill_byte_floor.py",
-        "longhorn/test_prune_backups.py",
         "repo/_render_gate.py",
         "repo/test_census_rows_roles.py",
         "repo/test_render_gate.py",

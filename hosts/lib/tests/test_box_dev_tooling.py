@@ -77,17 +77,6 @@ def test_the_package_depends_on_what_the_roles_installed(box):
     assert "gh" in host_mode.render_host("daniel-server").depends
 
 
-@pytest.mark.parametrize("role", ["chezmoi_setup", "github_cli"])
-def test_the_role_applies_as_a_no_op(role):
-    tasks = yaml_fast.safe_load((ROLES / role / "tasks" / "main.yml").read_text())
-    assert tasks == [
-        {
-            "name": "End the role, whose work the host packages and the dotfiles repo own",
-            "ansible.builtin.meta": "end_role",
-        }
-    ]
-
-
 def test_the_uv_pin_left_with_the_tasks_that_read_it():
     defaults = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
     assert "initial_setup_uv_version" not in defaults
