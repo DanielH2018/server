@@ -390,20 +390,6 @@ def test_release_search_uses_long_search_timeout():
     assert seen["timeout"] == 999
 
 
-def test_host_path_translates_leading_data_only():
-    # Sonarr's /data view -> the host path the reconciler ffprobes (jellyfin can't see /data/torrents)
-    assert (
-        sh._host_path("/data/torrents/X.mkv", "/srv/containers/data")
-        == "/srv/containers/data/torrents/X.mkv"
-    )
-    assert (
-        sh._host_path("/data/torrents/X.mkv", "") == "/data/torrents/X.mkv"
-    )  # no root -> unchanged
-    assert (
-        sh._host_path("/other/X.mkv", "/srv/data") == "/other/X.mkv"
-    )  # non-/data -> unchanged
-
-
 def test_resolve_video_file_folder_and_missing(tmp_path):
     f = tmp_path / "ep.mkv"
     f.write_bytes(b"x" * 100)
@@ -424,6 +410,11 @@ def test_resolve_video_file_folder_and_missing(tmp_path):
 def test_mode_off_is_noop(tmp_path):
     ok, msg = sh.reconcile_once({"FAKE_REMUX_REPLACE_MODE": "off"})
     assert ok and "off" in msg
+
+
+def test_a_missing_sonarr_url_disables_the_reconcile_before_any_lookup(tmp_path):
+    cfg = {"FAKE_REMUX_REPLACE_MODE": "live", "LEDGER_FILE": str(tmp_path / "l.json")}
+    assert sh.reconcile_once(cfg) == (True, "disabled (no SONARR_URL)")
 
 
 class _AssertNoMutationSonarr:

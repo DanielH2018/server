@@ -2,7 +2,7 @@
 
 Split from the I/O shell so it stays stdlib-only (runs via `uv run --no-project --python <pin>`,
 host_python_version in ansible/inventory/group_vars/all.yml) and fully
-unit-testable without docker/HTTP. The shell reads Sonarr's library, runs ffprobe inside jellyfin,
+unit-testable without HTTP or ffprobe. The shell reads Sonarr's library, runs the host's ffprobe,
 and hands the results here to decide which "remux"-quality files are actually re-encodes.
 
 The signal (definitive, codec/resolution/size-independent — the generalization of the old codec
@@ -252,11 +252,8 @@ def seed_ledger(ledger, fakes, max_concurrent, now):
 def host_path(path, host_data_root):
     """Map a Sonarr path (its `/data` container view) to the host path an ffprobe can open.
 
-    Lives here rather than in either caller because BOTH host crons need it once the scan stops
-    probing via `docker exec jellyfin`: the reconciler always did (downloads land in /data/torrents,
-    which jellyfin does not mount), and after the move to daniel-box the scan does too — that node
-    runs no Docker at all, so there is no container to exec into and the library is simply a local
-    directory.
+    Lives here rather than in either caller because BOTH host crons need it: the scan probes the
+    library under /data/media and the reconciler probes downloads under /data/torrents.
 
     Only the leading `/data` is rewritten. An empty host_data_root leaves the path unchanged, which
     makes the probe fail safe: it opens nothing, returns "", and the file is SKIPPED rather than
