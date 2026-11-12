@@ -402,7 +402,7 @@ together, or the fresh `NotReporting` rule pages until the first heartbeat lands
 ## Resolver
 
 A static `/etc/resolv.conf`, rendered from the SHARED
-`roles/setup/common/templates/resolv.conf.j2` that daniel-box also uses, lists the cluster
+`hosts/components/pi-resolver/templates/resolv.conf.j2` that daniel-box also uses, lists the cluster
 Pi-hole first and a public resolver behind it, and systemd-resolved is disabled. Before this
 the DHCP lease's ISP resolvers answered everything, including every internal
 `*.local.<domain>` name — those resolve publicly via the Cloudflare wildcard, so the private

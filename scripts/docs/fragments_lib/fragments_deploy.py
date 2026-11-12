@@ -30,10 +30,7 @@ LAND_ENTRY_POINT = "scripts/deploy_tools/land.sh"
 LAND_OUTCOME = "scripts/deploy_tools/land_lib/outcome.py"
 EXIT_CODES = "scripts/lib/exit_codes.py"
 
-INITIAL_SETUP_TEMPLATES = "ansible/roles/setup/initial_setup/templates"
-# H7.10 moved the checkout timers' scripts into host components; they take the lock there.
 HOST_COMPONENTS = "hosts/components"
-SETUP_ROLES = "ansible/roles/setup"
 
 ISSUE_MODEL = "scripts/dev/findings_lib/issue_model.py"
 FINDINGS_LIB = "scripts/dev/findings_lib"
@@ -140,11 +137,7 @@ def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
         ValueError: when a template imports the macro and never calls it with a job name.
     """
     holders = []
-    units = [
-        *sorted((repo / SETUP_ROLES).glob("*/templates/*.service.j2")),
-        *sorted((repo / HOST_COMPONENTS).glob("*/units/*.service.j2")),
-    ]
-    for unit in units:
+    for unit in sorted((repo / HOST_COMPONENTS).glob("*/units/*.service.j2")):
         if _UNIT_LOCK.search(unit.read_text()):
             holders.append(
                 {
@@ -153,11 +146,7 @@ def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
                     "source": unit.relative_to(repo).as_posix(),
                 }
             )
-    cron_scripts = [
-        *sorted((repo / INITIAL_SETUP_TEMPLATES).glob("*.j2")),
-        *sorted((repo / HOST_COMPONENTS).glob("*/templates/*.j2")),
-    ]
-    for template in cron_scripts:
+    for template in sorted((repo / HOST_COMPONENTS).glob("*/templates/*.j2")):
         text = template.read_text()
         if not _LOCK_IMPORT.search(text):
             continue

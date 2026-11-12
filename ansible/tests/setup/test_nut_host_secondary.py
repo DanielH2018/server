@@ -27,15 +27,11 @@ from lib import yaml_fast
 from _helpers import ALL_VARS, ANSIBLE, HOST_VARS
 
 from _shell_render import rendered_shell_text
-from deploy_tools.setup_lib import setup_gates
 from lib.proc_testing import run
 from lib.repo_paths import REPO
 
 
-ROLE = ANSIBLE / "roles" / "setup" / "nut_host"
-TASKS = (ROLE / "tasks" / "main.yml").read_text()
 ALL_VARS_TEXT = ALL_VARS.read_text()
-SETUP = (ANSIBLE / "initial_setup.yml").read_text()
 NUT_DEFAULTS = ANSIBLE / "roles" / "k8s" / "nut" / "defaults" / "main.yml"
 NUT_SERVICE = ANSIBLE / "roles" / "k8s" / "nut" / "templates" / "service.yaml.j2"
 NUT_COMPONENT = REPO / "hosts" / "components" / "nut-secondary" / "component.yml"
@@ -60,25 +56,6 @@ def test_secondary_is_disarmed_by_default():
         "the cross-node secondary must default to disarmed — a wrong SHUTDOWNCMD or an "
         "unreachable upsd looks exactly like a working one until mains power fails"
     )
-
-
-def test_the_play_gate_reads_the_arm_flag():
-    """ups_host runs unconditionally; any other host needs the flag."""
-    assert "nut_host_secondary_armed | bool" in SETUP, (
-        "initial_setup.yml must gate the non-ups_host case on the arm flag, or deploying the "
-        "role installs a shutdown chain on every host that runs the play"
-    )
-
-
-def test_the_role_is_one_unconditional_end_role():
-    """H7.33 emptied the role: both cluster nodes' secondary is package-owned.
-
-    A guard that names a host would let the tick write the old files again on that host, and a
-    second task would give the role work the packages do not own.
-    """
-    assert setup_gates.role_end_guard(ROLE) == "True"
-    [task] = yaml_fast.safe_load(TASKS)
-    assert task["ansible.builtin.meta"] == "end_role"
 
 
 def daniel_box_package(tmp_path):
@@ -204,8 +181,12 @@ def test_the_band_binds_only_once_a_second_host_is_armed():
 # watchdog reading the wrong address, or one leaking the credential that sits on the line it
 # reads, both look exactly like a working one.
 
-WATCHDOG = rendered_shell_text("setup", "nut_host", "ups-secondary-health.sh.j2")
-NUT_HOST_DEFAULTS = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
+WATCHDOG = rendered_shell_text(
+    "components", "nut-secondary", "ups-secondary-health.sh.j2"
+)
+NUT_HOST_DEFAULTS = yaml_fast.safe_load(
+    (NUT_COMPONENT.parent / "defaults" / "main.yml").read_text()
+)
 
 # A MONITOR line in the shape host-upsmon.conf.j2 renders. The fifth field is a fake stand-in
 # for the credential that sits there in the real file; it exists only to be searched for in the

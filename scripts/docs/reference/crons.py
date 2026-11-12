@@ -34,8 +34,8 @@ import yaml
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
 from pathlib import Path as _Path
+import sys as _sys
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # This directory's secrets.py would shadow the stdlib module the host renderer needs.
@@ -113,8 +113,6 @@ def _host_for(task: dict, role_dir: Path) -> str:
         if var:
             return resolve("{{ " + var + " }}", role_dir)
         return single or double
-    if "has_gitops" in text:
-        return "the gitops host"
     return "every host in the play" if not text else f"conditional ({text[:60]})"
 
 

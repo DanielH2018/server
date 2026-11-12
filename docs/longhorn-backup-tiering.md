@@ -131,7 +131,7 @@ weekdays moves only the claims it names.
 > cut block count per volume roughly 8.6x (sonarr 200 → 23, prowlarr 216 → 25), and the cost basis
 > here is per block. The worst projected shard is now **~220 Class C against a 2,100 budget** (the
 > 2,500 cap less a 400 reserve), where d2 alone used to be 1,359. The live numbers are
-> `k3s_longhorn_daily_backup_budget` in `ansible/roles/setup/k3s/defaults/main.yml` and
+> `k3s_longhorn_daily_backup_budget` in `hosts/components/k3s-server/defaults/main.yml` and
 > `uv run python scripts/diagnostics/probe.py b2-budget`, which prices every shard against the current store.
 > The reasoning below is still correct; only the magnitudes moved.
 

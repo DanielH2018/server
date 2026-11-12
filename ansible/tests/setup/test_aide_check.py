@@ -34,7 +34,7 @@ from _aide_check_run import (
     _run_check,
 )
 from _host_packages import HOSTS, package, shipped_text
-from _setup_render import render_setup_text
+from _setup_render import render_component_text
 from _shell_render import render_shell_script
 
 TIMER = "/usr/lib/systemd/system/homelab-aide-check.timer"
@@ -147,8 +147,8 @@ def _excluded(path: str, conf: str) -> bool:
 
 
 def test_worktrees_and_caches_are_excluded_and_their_neighbours_are_not():
-    conf = render_setup_text(
-        "initial_setup", "98_aide_local.conf.j2", {"sys_user": "ubuntu"}
+    conf = render_component_text(
+        "integrity-scans", "98_aide_local.conf.j2", {"sys_user": "ubuntu"}
     )
     assert [p for p in EXCLUDED if not _excluded(p, conf)] == []
     assert [p for p in CHECKED if _excluded(p, conf)] == []
@@ -180,8 +180,8 @@ INODE_CHECKED = ("/boot/vmlinuz", "/boot/firmware-old", "/boot/initrd.img")
 
 
 def test_every_vfat_path_skips_its_inode_and_its_ext4_neighbours_do_not():
-    conf = render_setup_text(
-        "initial_setup", "98_aide_local.conf.j2", {"sys_user": "ubuntu"}
+    conf = render_component_text(
+        "integrity-scans", "98_aide_local.conf.j2", {"sys_user": "ubuntu"}
     )
     assert [p for p in VFAT_PATHS if not _inode_skipped(p, conf)] == []
     assert [p for p in INODE_CHECKED if _inode_skipped(p, conf)] == []
@@ -282,7 +282,7 @@ def test_the_push_deadline_covers_one_week_and_not_two():
         ), (
             f"{host}: this test reads the timer as weekly; give it the new period if that changes"
         )
-    body = render_shell_script("setup", "initial_setup", "aide-check.sh.j2")
+    body = render_shell_script("components", "integrity-scans", "aide-check.sh.j2")
     [deadline] = re.findall(r"^\s*DEADLINE_S=(\d+)$", body, re.M)
     assert WEEK_S < int(deadline) < 2 * WEEK_S, (
         f"DEADLINE_S {deadline}s must exceed the timer's weekly period, and stay "

@@ -20,7 +20,8 @@ from lib.repo_paths import REPO
 # 13680 once #7845 gave the k8s play context the two names its inventory values read.
 # 13679 once the Pi stopped being a rollout canary and the dialect dropped `updater_lag_grace_s`.
 # 13672 once #7961 dropped the deployer-state modules from the host source tables.
-LINE_CEILING = 13672
+# 13618 once H7.55 dropped the `role:` sources, which the components now own.
+LINE_CEILING = 13618
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 

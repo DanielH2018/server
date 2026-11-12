@@ -9,11 +9,11 @@ it with a failing guard instead of skipping silently.
 import re
 
 import pytest
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, REPO
 from _shell_render import render_shell_script
 from lib.proc_testing import run
 
-LIB = ANSIBLE / "roles/setup/initial_setup/files/homelab-check-lib.sh"
+LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
 LIB_PATH = "/usr/lib/homelab/homelab-check-lib.sh"
 SOURCE_LINE = re.compile(
     r"^\s*(?:source|\.)\s+" + re.escape(LIB_PATH) + r"(?P<rest>.*)$"

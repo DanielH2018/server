@@ -22,9 +22,9 @@ This document covers the security and monitoring tools deployed by `ansible/role
 
 No verdict for a week and 2 hours also pages, through `RkhunterScanNotReporting`, which means the cron stopped running or the scan never finished.
 
-Every warning pages (#4638). Before that change, every host warned every week from two benign causes. rkhunter reported `/etc/.updated` and `/etc/.resolv.conf.systemd-resolved.bak` as hidden files on all three hosts. It also reported `PermitRootLogin` unset on daniel-pi, because rkhunter reads only the main `/etc/ssh/sshd_config` and the Pi hardens a drop-in. `initial_setup` renders `/etc/rkhunter.conf.local` to allowlist both causes, so a healthy week has no warnings. The `DECIDED:` marker in `ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2` holds the evidence. The script's verdict goes to syslog tagged `rkhunter-check` as `status=<up|down> <message>`.
+Every warning pages (#4638). Before that change, every host warned every week from two benign causes. rkhunter reported `/etc/.updated` and `/etc/.resolv.conf.systemd-resolved.bak` as hidden files on all three hosts. It also reported `PermitRootLogin` unset on daniel-pi, because rkhunter reads only the main `/etc/ssh/sshd_config` and the Pi hardens a drop-in. `initial_setup` renders `/etc/rkhunter.conf.local` to allowlist both causes, so a healthy week has no warnings. The `DECIDED:` marker in `hosts/components/integrity-scans/templates/rkhunter-check.sh.j2` holds the evidence. The script's verdict goes to syslog tagged `rkhunter-check` as `status=<up|down> <message>`.
 
-To clear a warning, find its cause first. rkhunter reports a user or group added to `/etc/passwd` or `/etc/group` once, the week after a package or the operator adds it. Once you have confirmed the account is yours, run `sudo /usr/local/bin/rkhunter-check.sh` again; rkhunter stored the new account list on the run that warned, so the rerun reads UP. A benign warning that recurs every week needs an `ALLOW*` line in `ansible/roles/setup/initial_setup/templates/rkhunter.conf.local.j2`, applied with `--tags rkhunter`.
+To clear a warning, find its cause first. rkhunter reports a user or group added to `/etc/passwd` or `/etc/group` once, the week after a package or the operator adds it. Once you have confirmed the account is yours, run `sudo /usr/local/bin/rkhunter-check.sh` again; rkhunter stored the new account list on the run that warned, so the rerun reads UP. A benign warning that recurs every week needs an `ALLOW*` line in `hosts/components/integrity-scans/templates/rkhunter.conf.local.j2`, applied with `--tags rkhunter`.
 
 To prove the alert pages, make rkhunter fail to start on one host and run the script by hand. `ionice` then cannot execute it and exits 126 without touching the log, so the verdict goes DOWN within seconds:
 
@@ -250,7 +250,7 @@ The `S` flag means the process ran with superuser privileges.
 
 ## fail2ban (Intrusion Prevention)
 
-**What it does:** Watches auth logs and bans IPs that show repeated failed logins, enforcing the ban at the firewall (`banaction = ufw`). Jails are enabled for **sshd** and **postfix**, plus a **recidive** jail that re-bans repeat offenders for much longer. Configured in `/etc/fail2ban/jail.d/homelab.conf` (deployed from `ansible/roles/setup/initial_setup/templates/fail2ban_homelab.conf.j2`).
+**What it does:** Watches auth logs and bans IPs that show repeated failed logins, enforcing the ban at the firewall (`banaction = ufw`). Jails are enabled for **sshd** and **postfix**, plus a **recidive** jail that re-bans repeat offenders for much longer. Configured in `/etc/fail2ban/jail.d/homelab.conf` (deployed from `hosts/components/fail2ban/templates/fail2ban_homelab.conf.j2`).
 
 **Schedule:** Runs continuously as a systemd service — it reacts to log events in real time, not on a cron.
 

@@ -158,7 +158,7 @@ def test_the_regressed_suffix_strip_matches_what_the_publisher_prints():
 # ${VAR:-}, ${VAR-}, ${VAR:+}, ${VAR+}, ${VAR:=}, ${VAR=} -- are not reads. Nothing else is
 # exempt: ${VAR#...}, ${VAR//...} and ${#VAR} all abort on an unset VAR just as `$VAR` does.
 
-CHECK_LIB = REPO / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
+CHECK_LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
 
 # Environment the unit supplies, with provenance (test_the_cron_env_allowlist_is_still_exported).
 _CRON_ENV = {

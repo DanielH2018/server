@@ -56,8 +56,8 @@ from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
 from pathlib import Path as _Path
+import sys as _sys
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
@@ -109,7 +109,6 @@ def build_rows(
 
     rows: list[ServiceRow] = []
     for host in estate.host_vars_hosts():
-        host_data = estate.own_vars(host)
         for entry in estate.entries(host):
             name = entry["name"]
             platform = entry.get("platform", "docker")
@@ -128,11 +127,7 @@ def build_rows(
                         k8s_roles,
                         claim_classes,
                     ),
-                    autodeploy=autodeploy_eligibility(
-                        entry,
-                        platform,
-                        host_data,
-                    ),
+                    autodeploy=autodeploy_eligibility(entry, platform),
                 )
             )
     return rows

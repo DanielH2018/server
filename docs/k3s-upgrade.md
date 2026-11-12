@@ -17,7 +17,7 @@ compares the full tag. `test_renovate_k3s_cap_follows_the_schema` holds the cap 
 the schema.
 
 The pin is `k3s_version` in `ansible/roles/k8s/system-upgrade/defaults/main.yml`, moved there from
-`ansible/roles/setup/k3s/defaults/main.yml` by H6.1b. The `setup/k3s` tasks read it with `include_vars`.
+`hosts/components/k3s-server/defaults/main.yml` by H6.1b. The `setup/k3s` tasks read it with `include_vars`.
 It covers both nodes.
 The system-upgrade-controller (SUC) writes both nodes' versions. Its `k3s-server` Plan selects
 daniel-box since H6.3c, and its `k3s-agent` Plan selects daniel-server since H6.3d. Each Plan

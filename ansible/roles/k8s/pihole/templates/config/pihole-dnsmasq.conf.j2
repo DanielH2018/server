@@ -14,7 +14,7 @@
         `.local.` lookups reach 1.1.1.1 and still land on the right VIP BECAUSE of the public
         record. Drop it and that degradation becomes NXDOMAIN.
      2. daniel-box's own host resolver has the same failover. Its /etc/resolv.conf names
-        only 127.0.0.1 (roles/setup/common/templates/resolv.conf.j2, which
+        only 127.0.0.1 (hosts/components/pi-resolver/templates/resolv.conf.j2, which
         hosts/components/k3s-host-dns/ renders), and the host CoreDNS forwarder behind it
         (hosts/components/k3s-host-dns/templates/host-corefile.j2) forwards `policy
         sequential` with health_check, Pi-hole's VIP first and 1.1.1.1 and 1.0.0.1 after. It

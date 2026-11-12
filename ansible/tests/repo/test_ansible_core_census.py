@@ -34,10 +34,9 @@ from lib.render_guard import SHARED_TPL
 from renderer.renderer_lib.environment import strict_env
 
 CHILD = Path(__file__).with_name("_collect_without_ansible.py")
-ALLOW = {
-    "ansible/tests/setup/test_pi_escalation_timeout.py": "H7.55 deletes it with the playbooks",
-}
-PI_TIMEOUT = "ansible/tests/setup/test_pi_escalation_timeout.py"
+ALLOW: dict[str, str] = {}
+# The grep half's named member: an import held in a string, which H7.56 deletes.
+LEAKGUARD = "ansible/tests/repo/test_leakguard.py"
 IN_A_STRING = {
     "ansible/tests/repo/test_leakguard.py": "H7.56 deletes leakguard's temp-dir sweep",
     "scripts/renderer/tests/test_renderer_ansible_free.py": "the shim of its red half",
@@ -65,9 +64,6 @@ def _collect(tmp_path: Path, *pytest_args: str) -> dict[str, list[str]]:
 
 def test_the_suite_collects_with_ansible_core_refused_outside_the_allowlist(tmp_path):
     importers = _collect(tmp_path)
-    assert PI_TIMEOUT in importers, (
-        "the collection never reached test_pi_escalation_timeout.py"
-    )
     offenders = {rel: names for rel, names in importers.items() if rel not in ALLOW}
     assert not offenders, f"these files import ansible-core: {offenders}"
 
@@ -79,7 +75,7 @@ def importers_by_text(paths: list[str]) -> list[str]:
 
 def test_no_tracked_python_names_ansible_core_in_an_import_outside_the_allowlist():
     found = importers_by_text(tracked("*.py"))
-    assert PI_TIMEOUT in found, "the grep no longer finds test_pi_escalation_timeout.py"
+    assert LEAKGUARD in found, "the grep no longer finds test_leakguard.py's import"
     offenders = sorted(set(found) - set(ALLOW) - set(IN_A_STRING))
     assert not offenders, f"these files import ansible-core: {offenders}"
 

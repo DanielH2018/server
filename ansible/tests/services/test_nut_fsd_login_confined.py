@@ -1,10 +1,10 @@
 """Only the UPS shutdown chain renders upsd's FSD-capable login.
 
 `nut_monitor_password` is the `upsmon` primary login. It can raise FSD, which powers off every
-armed node. The in-cluster nut role's own upsmon and the hosts' secondaries (`nut_host`) need
+armed node. The in-cluster nut role's own upsmon and the hosts' secondaries (`nut-secondary`) need
 it. Anything that only reads the UPS takes the read-only `nut_ha_password` login instead.
 
-The census renders every role on all three planes with the password set to a sentinel and
+The census renders every role and host component with the password set to a sentinel and
 counts the renders that carry it, so a template aliasing the secret through a second variable
 is caught where a scan of template source would miss it (#3183). Beside each plane's manifest
 and config templates it renders every `*.sh.j2` and every k8s `Dockerfile*.j2`, the two
@@ -23,10 +23,11 @@ from _helpers import ANSIBLE
 from _k8s_render import render_build_texts
 from _k8s_render import render_texts as k8s_render_texts
 from _setup_render import render_setup_texts
+from validate.setup_templates import COMPONENTS
 from _shell_render import render_shell_texts
 
 ROLES = ANSIBLE / "roles"
-SHUTDOWN_CHAIN = frozenset({"k8s/nut", "setup/nut_host"})
+SHUTDOWN_CHAIN = frozenset({"k8s/nut", "components/nut-secondary"})
 # Distinctive enough that no template renders it by accident.
 SENTINEL = "nut-monitor-password-sentinel-3183"
 
@@ -45,12 +46,18 @@ def test_the_shutdown_chain_alone_is_clean():
 
 
 def _roles_naming_the_login() -> set[str]:
-    """`<plane>/<role>` for every role with a template whose SOURCE names the primary login."""
-    return {
+    """`<plane>/<role>` for every role or component whose template SOURCE names the login."""
+    roles = {
         "/".join(path.relative_to(ROLES).parts[:2])
         for path in ROLES.glob("*/*/templates/**/*.j2")
         if "nut_monitor_password" in path.read_text()
     }
+    components = {
+        f"components/{path.relative_to(COMPONENTS).parts[0]}"
+        for path in COMPONENTS.glob("*/templates/**/*.j2")
+        if "nut_monitor_password" in path.read_text()
+    }
+    return roles | components
 
 
 def _roles_rendering(overrides: dict, marker: str) -> set[str]:
@@ -58,7 +65,7 @@ def _roles_rendering(overrides: dict, marker: str) -> set[str]:
     planes = (
         ("k8s", k8s_render_texts(overrides)),
         ("k8s", render_build_texts(overrides)),
-        ("setup", render_setup_texts(overrides)),
+        ("components", render_setup_texts(overrides)),
         ("containers", compose_render_texts({**pi_host_vars(), **overrides})),
     )
     rendered = {
@@ -85,7 +92,7 @@ def _roles_rendering_the_login() -> frozenset[str]:
     return frozenset(_roles_rendering({"nut_monitor_password": SENTINEL}, SENTINEL))
 
 
-def test_an_alias_of_the_login_reaches_a_setup_render(tmp_path):
+def test_an_alias_of_the_login_reaches_a_component_render(tmp_path):
     role = tmp_path / "aliasing_role"
     (role / "templates").mkdir(parents=True)
     (role / "defaults").mkdir()
@@ -95,7 +102,7 @@ def test_an_alias_of_the_login_reaches_a_setup_render(tmp_path):
     (role / "defaults" / "main.yml").write_text(
         'upsmon_secret: "{{ nut_monitor_password }}"\n'
     )
-    texts = render_setup_texts({"nut_monitor_password": SENTINEL}, setup=tmp_path)
+    texts = render_setup_texts({"nut_monitor_password": SENTINEL}, components=tmp_path)
     assert texts == (("aliasing_role", "upsmon.conf.j2", f"MONITOR ups {SENTINEL}\n"),)
 
 
@@ -105,7 +112,7 @@ def test_a_role_naming_nothing_renders_no_sentinel(tmp_path):
     (role / "templates" / "upsmon.conf.j2").write_text(
         "MONITOR ups {{ nut_ha_password }}\n"
     )
-    texts = render_setup_texts({"nut_monitor_password": SENTINEL}, setup=tmp_path)
+    texts = render_setup_texts({"nut_monitor_password": SENTINEL}, components=tmp_path)
     assert SENTINEL not in texts[0][2]
 
 

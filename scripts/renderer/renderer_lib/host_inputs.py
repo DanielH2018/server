@@ -25,26 +25,8 @@ HOST_INPUTS = (
     # The ciphertext a host package carries (`host_outputs.finish`): a change to a host's file
     # changes that host's package (H4.2, H4.5).
     "ansible/vars/hosts/",
-    # `host_sources.SHARED_FILES`, which M6 B5 copies into the Pi's package.
-    "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
-    # The drill script daniel-server's hypervisor component ships.
+    # The drill script daniel-server's hypervisor component ships (`host_sources.SHARED_FILES`).
     "scripts/backup/etcd_restore_drill.sh",
-    # What both nodes' k3s components render through `role: k3s` (H7.34, H7.35).
-    "ansible/roles/setup/k3s/defaults/main.yml",
-    "ansible/roles/setup/k3s/templates/netplan-static-address.yaml.j2",
-    # What a component's `role:` renders (`host_sources.ROLE_SOURCES`): the role's defaults and
-    # the two templates daniel-server's package renders in place (H4.3a, H4.3c).
-    "ansible/roles/setup/nut_host/defaults/main.yml",
-    "ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2",
-    "ansible/roles/setup/nut_host/templates/ups-secondary-health.sh.j2",
-    # What the H7.30 components render on every host through `role: initial_setup`: the role's
-    # defaults, its templates and the maintenance wrapper.
-    "ansible/roles/setup/initial_setup/defaults/main.yml",
-    "ansible/roles/setup/initial_setup/templates/",
-    "ansible/roles/setup/initial_setup/files/host-maintenance.sh",
-    # The resolver template the Pi's pi-resolver component renders through `role: common` (H7.25),
-    # shared with the k3s role until H7.20a moves it.
-    "ansible/roles/setup/common/templates/resolv.conf.j2",
     # Past the plan's list, found by the audit test: `homelab_render.py` imports it at load, for
     # cluster mode.
     "scripts/secrets_mgmt/cluster_vars_check.py",

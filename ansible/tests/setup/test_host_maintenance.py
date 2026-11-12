@@ -22,16 +22,19 @@ import os
 import re
 
 import pytest
-from _helpers import ALL_VARS, K8S_ROLES, ROLES, load_defaults
+from _helpers import ALL_VARS, K8S_ROLES, REPO, load_defaults
 from _host_packages import package, shipped_text
 from lib import yaml_fast
 from lib.proc_testing import fake_bin, run, write_exec
 from _aide_check_run import LOGGER_STUB
 from test_aide_check import _textfile
 
-ROLE = ROLES / "setup" / "initial_setup"
-SCRIPT = ROLE / "files" / "host-maintenance.sh"
-CHECK_LIB = ROLE / "files" / "homelab-check-lib.sh"
+SCRIPT = (
+    REPO / "hosts" / "components" / "host-maintenance" / "files" / "host-maintenance.sh"
+)
+CHECK_LIB = (
+    REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
+)
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "host-checks.yaml"
 STALE_ARM = re.compile(r"(?<![<>=!])>(?!=)\s*(\d+)")
 # The guard on the absent arm: the series existed in this window, so a never-written file is quiet.

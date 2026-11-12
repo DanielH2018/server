@@ -330,7 +330,7 @@ def rendered_build_text(role: str, template: str = "Dockerfile.j2") -> str:
 def rendered_k8s_text(role: str, template: str) -> str:
     """One entry of `rendered_texts`, by role and template name.
 
-    The k8s counterpart of `_setup_render.rendered_setup_text` and
+    The k8s counterpart of `_setup_render.rendered_component_text` and
     `_shell_render.rendered_shell_text`. Fails naming the template when the render set does not
     hold it — a role outside `k8s_entries()`, a template in a nested `templates/` subdirectory
     (which `_render_texts` does not glob), or a renamed file. Each of those would otherwise

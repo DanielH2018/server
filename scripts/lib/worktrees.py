@@ -351,9 +351,9 @@ def _inside(held: str, tree: Path) -> bool:
     return path == tree or tree in path.parents
 
 
-# The root-run scan `initial_setup` installs beside the worktree sweep cron, and the socket
-# systemd answers it on, one service instance per connection. Its group decides who may connect.
-# The source is ansible/roles/setup/initial_setup/files/worktree_holders.py. It reports only
+# The root-run scan the worktree-holders component ships, and the socket systemd answers it on,
+# one service instance per connection. Its group decides who may connect. The source is
+# hosts/components/worktree-holders/files/worktree_holders.py. It reports only
 # under the root WORKTREE_HOLDER_ROOTS maps the caller's uid to, which `holder_root` reads too.
 WORKTREE_HOLDERS_SOCKET = "/run/worktree-holders.sock"
 WORKTREE_HOLDER_ROOTS = "/etc/worktree-holders.json"

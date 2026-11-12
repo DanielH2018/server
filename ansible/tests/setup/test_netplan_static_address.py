@@ -11,7 +11,7 @@ import functools
 
 from lib.repo_paths import ALL_VARS, HOST_VARS
 from lib import yaml_fast
-from _setup_render import render_setup_text
+from _setup_render import render_component_text
 from renderer.renderer_lib import host as host_mode
 
 _TEMPLATE = "netplan-static-address.yaml.j2"
@@ -63,8 +63,8 @@ def test_each_node_renders_its_own_address_pinned() -> None:
         hv = _host_vars(host)
         link = hv.get("k3s_node_static_link")
         assert link, f"{host} sets no k3s_node_static_link, so its k3s still needs DHCP"
-        text = render_setup_text(
-            "k3s",
+        text = render_component_text(
+            "k3s-server",
             _TEMPLATE,
             {"server_ip": hv["server_ip"], "k3s_node_static_link": link},
         )

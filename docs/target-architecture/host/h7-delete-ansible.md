@@ -184,8 +184,8 @@ The exit criterion is seven observations:
       (`test_toposort.py`, `test_k8s_autodeploy_denylist.py` and
       `test_k8s_retired_services.py` in `deploy`, `test_authelia_access_tiers.py` in
       `services`, and `test_claude_agent_profiles.py` in `setup`);
-    - `ansible/tests/setup/test_pi_escalation_timeout.py`, which imports the ssh connection
-      plugin;
+    - `test_pi_escalation_timeout.py` in `setup` (deleted by H7.55), which imported the ssh
+      connection plugin;
     - `scripts/deploy_tools/deploy_lib/flags.py` (`PlaybookCLI`), and
       `scripts/lib/ansible_jinja_env.py` with its test in `scripts/lib/tests/`;
     - the five filter plugins below.
@@ -521,8 +521,8 @@ an entry in the census's short allowlist of deleted items. The allowlist names e
 with a reason, for example `Clear ansible log file`. The census is strict: it prints the
 items left per host and fails while any setup role still has a task that applies to a host.
 Every setup role is emptied, so `test_the_real_tree_leaves_no_item_on_any_host` holds every
-host at zero. The census's named members therefore sit on a fixture role in
-`ansible/tests/setup/test_setup_census.py`, which holds the shapes the last setup role held:
+host at zero. The census's named members therefore sat on a fixture role in
+`test_setup_census.py`, deleted with the census by H7.55, which held the shapes the last setup role held:
 the `template` task that pins the node's LAN address in netplan, and an
 `ansible.posix.sysctl` looped over both address families. An emptied role's
 `meta: end_role` stub is a control module, so the census never flags it.
@@ -2690,7 +2690,7 @@ the `manual_plane` clearing, and *Rollback*'s
       record for H7.19b.
     - **H7.2f** The setup census, in report mode. It lives in
       `scripts/deploy_tools/setup_lib/setup_census.py` (`--host`; strict since H7.19c), and the
-      test is `ansible/tests/setup/test_setup_census.py`. The census does not evaluate a
+      test was `test_setup_census.py` in `setup`, both deleted by H7.55. The census does not evaluate a
       task's `when:`, so a `<role>_packaged_hosts` guard cannot hide an item: the item stays
       in the report, marked `[per-host guard: ...]`, until the host's package carries it.
     - H7.2a also adds the reconcile-size census with its ceiling constant, and measures B
@@ -3603,9 +3603,9 @@ progress.
 - *The deletion census.* Two rows, each with a named member:
     - in `ansible/tests/repo/test_ansible_core_census.py`, landed by H7.17: a subprocess
       collects the whole suite with `sys.modules['ansible'] = None`, and any import error
-      outside the allowlist fails it. Since H7.54 the named member is
-      `ansible/tests/setup/test_pi_escalation_timeout.py`, which the collection must import,
-      and a fixture module holding `import ansible.errors` is flagged. The allowlist is
+      outside the allowlist fails it. H7.54's named member was
+      `test_pi_escalation_timeout.py`, which H7.55 deleted, so the grep half's named member is
+      `ansible/tests/repo/test_leakguard.py`, and a fixture module holding `import ansible.errors` is flagged. The allowlist is
       empty before H7.20b merges;
     - in `ansible/tests/repo/test_census_rows_text.py`, no tracked file names
       `ansible-playbook`, except under `docs/archive/`, `docs/adr/`,

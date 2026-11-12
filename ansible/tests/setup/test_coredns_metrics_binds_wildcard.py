@@ -20,7 +20,7 @@ import re
 
 from _helpers import load_yaml
 from lib.repo_paths import K3S_HOST_DNS
-from _setup_render import rendered_setup_text
+from _setup_render import rendered_component_text
 
 _COREFILE = "host-corefile.j2"
 _PORT_VAR = "k3s_host_dns_metrics_port"
@@ -70,7 +70,7 @@ def metrics_bind_problem(corefile: str, port: int) -> str | None:
 
 def test_the_live_corefile_binds_the_wildcard() -> None:
     problem = metrics_bind_problem(
-        rendered_setup_text("k3s-host-dns", _COREFILE), expected_port()
+        rendered_component_text("k3s-host-dns", _COREFILE), expected_port()
     )
     assert problem is None, problem
 

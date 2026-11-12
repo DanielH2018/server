@@ -712,7 +712,7 @@ jobs:
           "$RUNNER_TEMP/bin/sops" --version --disable-version-check
           age-keygen --version
       # The repository signer's tests drive apt-ftparchive, as the signer does on daniel-box
-      # (ansible/roles/setup/homelab_builder/tests/test_repo_signer.py).
+      # (hosts/lib/tests/test_repo_signer.py).
       - name: Install apt-utils for the repository signer tests
         run: |
           set -euo pipefail

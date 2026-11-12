@@ -345,7 +345,7 @@ checks each gate suppresses.
   it into the cluster. Its `crowdsec-home-ips` CronJob, on daniel-box's host network, probes
   the same endpoints in `home_ips_discover.py` and marks a failed lookup `WAN unreachable`.
   The CrowdSec sidecar's job reports that as an `up` skip. Each host cron consults `wan_reachable`
-  in `ansible/roles/setup/initial_setup/files/homelab-check-lib.sh` on the failure path that reached
+  in `hosts/components/check-lib/files/homelab-check-lib.sh` on the failure path that reached
   the internet, and reports `skipped: WAN unreachable` as an `up` when neither provider answers.
   The probe classifies, not the error text: parsing curl exit codes and git stderr across
   heterogeneous crons is the "green and inert" shape that library's header records paying for

@@ -84,7 +84,7 @@ mechanism.
 
 **The cluster credential is the ceiling for `kubectl`, and it is lower than any of this.** Plain `kubectl`
 authenticates as `system:serviceaccount:kube-system:homelab-readonly`, which holds `get list watch`
-and nothing else (`k3s_readonly_sa_name` in `ansible/roles/setup/k3s/defaults/main.yml`). Every write
+and nothing else (`k3s_readonly_sa_name` in `hosts/components/k3s-server/defaults/main.yml`). Every write
 verb is refused by RBAC. `kubectl auth can-i` answers **no** for `delete pods`, `delete pvc` and
 `pods/exec`, and `kubectl exec` returns *"cannot create resource pods/exec"* rather than a
 permission prompt.

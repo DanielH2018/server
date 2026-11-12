@@ -2,9 +2,8 @@
 
 H6 (*Verification*, *Window*). The window runs from its `OnCalendar` start to the start plus the
 timer's `AccuracySec` plus the service's `TimeoutStartSec`. Every other fire is widened by its own
-accuracy. The sources are: each setup role's crons and timers (the sources
-`scripts/docs/gen_role_glance.py` reads) unless the role ends on every host before its first task,
-each timer a host package ships, and every CronJob and Longhorn RecurringJob schedule under
+accuracy. The sources are each timer a host package ships, and every CronJob and Longhorn
+RecurringJob schedule under
 `ansible/roles/k8s/`. A monotonic timer has no calendar
 instant, so it passes only through `EXEMPT`, and each entry names what replaces the check.
 
@@ -22,8 +21,6 @@ import pytest
 import yaml
 from _k3s_schedule import Unparseable, calendar_fires, clock_text, cron_fires
 
-from deploy_tools.setup_lib.setup_gates import role_end_guard
-from docs.catalog_lib import glance_facts
 from lib.estate import Estate
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib import host as host_mode
@@ -157,25 +154,6 @@ def _timer_schedule(name: str, keys: list[tuple[str, str]], monotonic: list[str]
     return calendar_schedule(name, calendars[-1], width)
 
 
-def applied_setup_roles() -> list:
-    """The setup role directories that apply to some host: an unguarded leading end_role applies to none."""
-    return [r for r in glance_facts.setup_role_dirs() if role_end_guard(r) != "True"]
-
-
-def role_schedules(monotonic: list[str]) -> list[Schedule]:
-    """Every applied setup role's crons and timers."""
-    found = []
-    for role in applied_setup_roles():
-        for name, expr in glance_facts.cron_jobs(role):
-            found.append(cron_schedule(name, expr))
-        for unit, keys in glance_facts.timer_units(role):
-            pairs = [(k.split("=", 1)[0], k.split("=", 1)[1]) for k in keys]
-            schedule = _timer_schedule(unit, pairs, monotonic)
-            if schedule:
-                found.append(schedule)
-    return found
-
-
 def package_schedules(package, monotonic: list[str]) -> list[Schedule]:
     texts: dict[str, str] = {}
     for dst, (body, _mode) in package.files.items():
@@ -290,8 +268,7 @@ def test_the_window_is_found_in_the_box_package_and_runs_on_weekdays_only(box_pa
 def test_no_schedule_that_reads_the_cluster_fires_inside_the_box_window(box_package):
     window, span = _window(box_package)
     monotonic: list[str] = []
-    others = role_schedules(monotonic)
-    others += package_schedules(box_package, monotonic)
+    others = package_schedules(box_package, monotonic)
     others += package_schedules(host_mode.render_package("homelab-updater"), monotonic)
     jobs, _, _ = job_schedules()
     assert violations(window, span, others + jobs) == []
@@ -300,25 +277,16 @@ def test_no_schedule_that_reads_the_cluster_fires_inside_the_box_window(box_pack
 
 
 def test_each_scan_finds_the_member_that_proves_it_reads_something(box_package):
-    # No setup role installs a cron or a timer since H7.63, so the role scan has no member left.
     _, cronjobs, recurring = job_schedules()
     assert CRONJOB_MEMBER in cronjobs
     assert RECURRING_MEMBER in recurring
 
 
-def test_every_emptied_role_is_left_out_of_the_role_scan():
-    # k3s was the last setup role with tasks (H7.44), so the scan has no member left.
-    assert {r.name for r in applied_setup_roles()} == set()
-
-
 def test_every_exemption_names_a_schedule_that_exists(box_package):
     jobs, _, _ = job_schedules()
-    crons = {s.name for s in jobs} | {
-        n for r in applied_setup_roles() for n, _ in glance_facts.cron_jobs(r)
-    }
-    timers = {u for r in applied_setup_roles() for u, _ in glance_facts.timer_units(r)}
+    crons = {s.name for s in jobs}
     # The packaged timers: the updater's, and every timer the box package ships.
-    timers |= {"homelab-updater.timer"} | box_timers(box_package)
+    timers = {"homelab-updater.timer"} | box_timers(box_package)
     missing = sorted(set(EXEMPT) - crons - timers)
     assert missing == [], f"EXEMPT names that no schedule carries: {missing}"
 

@@ -13,7 +13,7 @@ import longhorn_reconcile as lr
 from _helpers import load_defaults
 from _k8s_render import render_role_template
 from lib import yaml_fast
-from lib.repo_paths import JOB_FILES, K3S_ROLE, K8S_ROLES
+from lib.repo_paths import JOB_FILES, K3S_SERVER, K8S_ROLES
 from lib.service_tiers import resolved_tier_lists
 
 ROLE = K8S_ROLES / "longhorn-reconcile"
@@ -45,7 +45,7 @@ def test_the_configmap_tiers_are_the_three_lists_of_the_role_defaults():
 
 def test_setup_k3s_no_longer_defines_the_tier_lists():
     """One home per key: a copy left in `setup/k3s` would drift from the ConfigMap's."""
-    host_plane = load_defaults(K3S_ROLE)
+    host_plane = load_defaults(K3S_SERVER)
     for key in (
         "k3s_longhorn_r2_volumes",
         "k3s_longhorn_weekly_volumes",

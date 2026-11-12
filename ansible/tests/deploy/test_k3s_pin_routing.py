@@ -1,6 +1,6 @@
 """A bump of the k3s pin routes to the Flux-owned `system-upgrade` tag, not to a setup role (H6.1b).
 
-The pin moved from `ansible/roles/setup/k3s/defaults/main.yml`, whose change nothing applies,
+The pin moved from the k3s defaults, now `hosts/components/k3s-server/defaults/main.yml`, whose change nothing applies,
 to the `system-upgrade` role's defaults. A diff that changes only `k3s_version` there derives
 the tag `system-upgrade`, which `land.sh` waits on through promotion. The same diff on the old
 file derives no tag, which the second test holds so the routing difference is what the move
@@ -15,7 +15,7 @@ from lib.repo_paths import K3S_DEFAULTS, REPO, SYSTEM_UPGRADE_DEFAULTS
 
 PIN_KEYS = ("k3s_version", "k3s_install_script_url", "k3s_install_script_sha256")
 NEW = "ansible/roles/k8s/system-upgrade/defaults/main.yml"
-OLD = "ansible/roles/setup/k3s/defaults/main.yml"
+OLD = "hosts/components/k3s-server/defaults/main.yml"
 
 
 def test_a_pin_bump_derives_the_flux_tag():

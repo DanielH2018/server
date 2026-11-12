@@ -86,8 +86,6 @@ _LOADS = frozenset({"safe_load", "safe_load_all"})
 
 def _narrowing_modules() -> list[str]:
     return [
-        "scripts/deploy_tools/setup_lib/setup_gates.py",
-        "scripts/deploy_tools/setup_lib/setup_role_chains.py",
         "scripts/lib/render_guard.py",
         "scripts/lib/k8s_role_callers.py",
     ]
@@ -161,7 +159,6 @@ NARROWING_CENSUS = Census(
     ),
     must_find=frozenset(
         {
-            "scripts/deploy_tools/setup_lib/setup_role_chains.py",
             "scripts/lib/render_guard.py",
             "scripts/lib/k8s_role_callers.py",
         }

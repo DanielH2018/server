@@ -18,7 +18,7 @@ from _shell_render import rendered_shell_text
 UNIT_DIR = "/usr/lib/systemd/system"
 TIMER = f"{UNIT_DIR}/homelab-aide-check.timer"
 SERVICE = f"{UNIT_DIR}/homelab-aide-check.service"
-SCRIPT = ("setup", "initial_setup", "aide-check.sh.j2")
+SCRIPT = ("components", "integrity-scans", "aide-check.sh.j2")
 
 # `aide` as a command word, followed by `--config=<path>` or `--config <path>` before the end.
 _AIDE_WITH_CONFIG = re.compile(

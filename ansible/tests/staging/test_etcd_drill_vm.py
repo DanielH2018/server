@@ -29,7 +29,7 @@ from lib.proc_testing import run, write_exec
 from renderer.renderer_lib import host as host_mode
 from lib.ansible_jinja_env import make_ansible_env, template_env
 from _helpers import ALL_VARS, REPO
-from _setup_render import rendered_setup_text
+from _setup_render import rendered_component_text
 from _shell_render import rendered_shell_text
 
 
@@ -320,7 +320,7 @@ def test_the_fence_verdict_has_a_check_of_its_own():
     label is only message text. M6 batch B4's Cutover-2 dropped both Kuma pushes, so the second
     check is what alarms on it.
     """
-    body = rendered_setup_text("hypervisor", "etcd-restore-drill-vm.sh.j2")
+    body = rendered_component_text("hypervisor", "etcd-restore-drill-vm.sh.j2")
     assert "CHECK_FENCE=etcd-restore-drill-egress-fence" in body
     assert 'write_verdict "$CHECK_FENCE"' in body
     for leftover in ("kuma-push-lib", "kuma_push", "/api/push/", "PUSH_TOKEN"):

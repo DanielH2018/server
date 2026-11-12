@@ -246,21 +246,6 @@ k8s_namespace: homelab
 # variable only answers "which node is the primary one here".
 k8s_primary_node: daniel-box
 
-# Hosts k3s-bringup.yml will install a k3s SERVER on. One entry: daniel-box is prod's control
-# plane. daniel-server is deliberately absent —
-# it is an agent in prod's cluster, and installing a server there would give one node two
-# control planes.
-#
-# An allowlist rather than a denylist, so a host nobody thought about is refused rather than
-# admitted. ENFORCED by ansible/tests/setup/test_k3s_server_hosts.py.
-k3s_server_hosts:
-  - daniel-box
-
-# The k3s agent nodes. Each one's host package owns its agent half (H7.34), and
-# k3s-bringup.yml's join plays name it until H7.20a retires them.
-k3s_agent_hosts:
-  - daniel-server
-
 # The label values loki-homelab's streams carry, one entry per stream role (#3740). Both Alloy
 # configs stamp their streams from this map: roles/k8s/loki-homelab for the cluster nodes and
 # hosts/components/pi-compose/services/alloy for daniel-pi. monitor-bridge's LogQL selectors in config/env.yaml.j2
@@ -637,11 +622,6 @@ weekly_reboot_mute_lead_minutes: 5
 # 08:15 at the committed schedule. observability's alertmanager-secret.yaml.j2 does that sum;
 # nothing here repeats it.
 weekly_reboot_mute_recovery_minutes: 40
-# Whether this host runs its own gitops_deploy pull-based auto-deployer. FALSE by default:
-# daniel-box is the one deployer, and a host nobody has thought about yet gets the teardown arm
-# rather than a timer that deploys to production on its own. Arming a host is `has_gitops: true` in its host_vars plus
-# `initial_setup.yml --tags gitops_deploy`; see gitops_deploy CLAUDE.md.
-has_gitops: false
 # Whether this host runs Docker. FALSE by default: daniel-pi is the only Docker host, both
 # cluster nodes run k3s's own containerd, and the k3s role fails closed on a node that already
 # runs Docker. A host nobody thought about gets the teardown arm rather than a second container
@@ -671,15 +651,8 @@ docker_engine_packages:
 # `rsyslog-filter` component (hosts/components/rsyslog-filter/). ENFORCED by
 # ansible/tests/setup/test_journald_syslog_forwarding.py.
 has_rsyslog: true
-# Whether this host holds a checkout of THIS repository at ~/server. True by default — every
-# host built by initial_setup.yml has had one, which is why a handful of tasks reach for
-# `{{ playbook_dir }}` or `~/server/...` with no gate at all. No host overrides it false; the
-# gate stays because those tasks would fail outright on a host that is driven over ssh and
-# never checks the repo out.
-#
-# NOT derivable from ansible_connection. daniel-pi is `connection=ssh` and DOES hold a
-# checkout (/home/ubuntu/server/ansible exists there), so deriving this
-# from the connection type would skip three tasks that work on the Pi today.
+# Whether this host holds a checkout of THIS repository at ~/server. True by default, and no
+# host overrides it.
 has_repo_checkout: true
 
 # The libvirt NAT network the hypervisor host builds, as a CIDR. The monthly etcd restore

@@ -99,7 +99,7 @@ manager that is not ready runs no trim at all, and check 10 then sees the missed
 
 **The B2 accounting is a host cron, so its evidence is the journal.** Check 9 reports `down` on an
 `UNPRICED` line from `b2-deletions` anywhere in
-`ansible/roles/setup/k3s/defaults/main.yml:k3s_longhorn_cron_evidence_window_hours`. Check 10
+`hosts/components/k3s-server/defaults/main.yml:k3s_longhorn_cron_evidence_window_hours`. Check 10
 reports `down` when the window holds no line a completed run writes: its `/etc/cron.d` entry
 removed, the crontab lost, or the run itself dying part-way. It judges on the summary line
 `probe.py b2-deletions` ends every completed run with (#2545); before that it took any line at

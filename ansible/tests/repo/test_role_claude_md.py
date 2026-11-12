@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from _helpers import K8S_ROLES, REPO, SETUP_ROLES, run
+from _helpers import K8S_ROLES, REPO, run
 from _role_census import role_dirs
 
 MIN_NON_BLANK_LINES = 8
@@ -47,12 +47,6 @@ PLANES = [
         floor=60,
         members=frozenset({"pihole", "traefik", "flux"}),
         deploy_tag=True,
-    ),
-    Plane(
-        "setup",
-        SETUP_ROLES,
-        floor=6,
-        members=frozenset({"initial_setup", "k3s", "common", "nut_host"}),
     ),
 ]
 PLANE_IDS = [p.name for p in PLANES]

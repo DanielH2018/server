@@ -80,7 +80,7 @@ FSD, not to complete `SHUTDOWNCMD`, and both hosts observe it within one `POLLFR
 (5 s) of the pod's `upsmon -c fsd` — far ahead of daniel-server's poweroff reaching
 containerd. Staggering by `FINALDELAY` would additionally rest on that setting applying in
 secondary mode, which `upsmon.conf(5)` documents for **primary** mode only. Hence the
-`# DECIDED:` marker at `FINALDELAY` in `ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2`.
+`# DECIDED:` marker at `FINALDELAY` in `hosts/components/nut-secondary/templates/host-upsmon.conf.j2`.
 
 ### Timer vs. safety net
 `nut_onbatt_shutdown_delay` (300 s, `defaults/main.yml`) decides how long a blip is ridden out
@@ -99,7 +99,7 @@ and `ansible/tests/setup/test_nut_host_secondary.py` pins the two together.
 console access to each): `kubectl -n homelab exec deploy/nut -- upsmon -c fsd` → host poweroff
 within ~15 s (HOSTSYNC).
 
-**A watchdog re-proves the link.** `ansible/roles/setup/nut_host/templates/ups-secondary-health.sh.j2`
+**A watchdog re-proves the link.** `hosts/components/nut-secondary/templates/ups-secondary-health.sh.j2`
 checks it every `nut_host_watchdog_interval_minutes` (10 min), from the persisted
 `/var/lib/homelab-secrets/etc/nut/upsmon.conf`, on **every** armed host (daniel-box and
 `ups_host`/daniel-server both). A `homelab-ups-watchdog.timer` runs it. Each host writes its

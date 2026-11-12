@@ -18,10 +18,10 @@ The scripts are the `pi-heartbeats` host component's (H3.8b), and `COMPONENT_DEF
 
 import re
 
+from _helpers import HOST_VARS, REPO, load_yaml
+from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, path_with, write_exec
 from lib.proc_testing import run as launch
-from _helpers import HOST_VARS, SETUP_ROLES, load_yaml
-from _shell_render import render_shell_script
 from validate.shell_templates import COMPONENTS
 
 
@@ -31,7 +31,9 @@ COMPONENT_DEFAULTS = load_yaml(COMPONENT / "component.yml")["defaults"]
 # path; the test sources the role's file, so it needs neither the package nor a host that has
 # installed the library.
 REAL_CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
-ROLE_CHECK_LIB = SETUP_ROLES / "initial_setup" / "files" / "homelab-check-lib.sh"
+ROLE_CHECK_LIB = (
+    REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
+)
 REAL_LOG = "/var/log/pi-health/health.log"
 # Enough of the docker CLI for pi-recovery-health: the `ps -q` liveness probe, `inspect`,
 # and `start`. Running containers live in $STATE_FILE, one name per line; $UNSTARTABLE names

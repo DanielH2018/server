@@ -20,8 +20,8 @@ from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-import sys as _sys
 from pathlib import Path as _Path
+import sys as _sys
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
@@ -38,8 +38,8 @@ HOSTS = REPO / "hosts"
 # feature flags, never a host's purpose. Kept here so the page states it, with the
 # derived facts alongside carrying whether it is still true.
 ROLES = {
-    "daniel-box": "k3s server / control-plane node. Ansible runs here, and so do the "
-    "GitOps timer, the docs build and most workloads.",
+    "daniel-box": "k3s server / control-plane node. The host-package builder, the docs build, "
+    "landings and most workloads run here.",
     "daniel-server": "k3s agent node. Intel iGPU for transcoding, LVM storage, and the "
     "UPS hardware behind the NUT shutdown chain.",
     "daniel-pi": "Raspberry Pi, and the only remaining Docker host. LAN-only utilities.",
@@ -107,7 +107,6 @@ def build_rows(
                 "ip": str(data.get("server_ip", f"{UNKNOWN} (server_ip not declared)")),
                 "package": _package(name, hosts_root),
                 "services": str(len(estate.entries(name))),
-                "gitops": _flag(estate, name, "has_gitops"),
                 "docker": _flag(estate, name, "has_docker"),
             }
         )
@@ -137,7 +136,6 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
         parts.append(f"| LAN address | `{row['ip']}` |")
         parts.append(f"| Host package | {row['package']} |")
         parts.append(f"| Services declared | {row['services']} |")
-        parts.append(f"| Runs the GitOps timer | {row['gitops']} |")
         parts.append(f"| Has Docker | {row['docker']} |")
 
     parts.append(

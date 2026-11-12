@@ -42,11 +42,6 @@ autofix_fake_remux_policy:
   max_attempts: 3
   history_retention_days: 14
 
-# False until this host's first manual initial_setup.yml + deploy.yml run finishes green
-# (README §4): the gitops_deploy handler shells a full deploy at the end of
-# initial_setup.yml and fails the play with it, so one bad service would take down the
-# whole OS-hardening run.
-has_gitops: true
 # This is the k3s node — it must NOT have Docker. k3s brings its own containerd and its
 # flannel/kube-proxy iptables rules, and the k3s role's fail-closed guard blocks
 # k3s-bringup.yml on a node that runs Docker. Keep this false.

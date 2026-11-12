@@ -2,8 +2,7 @@
 # a root cron that initial_setup installed; each is a oneshot service on a timer at the
 # cron's slot here.
 #
-# - homelab-apt-autoremove and homelab-dpkg-purge run the role's host-maintenance.sh, copied in
-#   place through `role: initial_setup` until the last host PR moves it. It writes the textfile
+# - homelab-apt-autoremove and homelab-dpkg-purge run files/host-maintenance.sh. It writes the textfile
 #   verdict the AptAutoremoveNotReporting and DpkgPurgeNotReporting rules read (#6179).
 # - homelab-reboot pings this host's `weekly-reboot-<host>` Healthchecks.io check, then schedules
 #   the reboot `weekly_reboot_shutdown_delay_minutes` ahead. It refuses while
@@ -18,8 +17,8 @@
 #   FirmwareUpdateNotReporting rule reads.
 #
 # The schedules render from the variables the old crons read: `weekly_reboot_*` in group_vars,
-# which Alertmanager's reboot mute also reads, and the role's
-# `initial_setup_docker_prune_cron_*`, which the Healthchecks.io cadences fragment and
+# which Alertmanager's reboot mute also reads, and this component's
+# `initial_setup_docker_prune_cron_*` (defaults/main.yml), which the Healthchecks.io cadences fragment and
 # monitor-bridge read. The Healthchecks.io key arrives as the credential `healthchecks_ping_key`,
 # so each host package lists that key.
 #
@@ -37,9 +36,8 @@
 # - Required evidence: a `weekly-restart`, `apt-autoremove`, `dpkg-purge`, `fwupd-auto` or
 #   `docker-prune` line in the journal, the Healthchecks.io checks for the reboot and the prune, and
 #   the `apt-autoremove`, `dpkg-purge` and `firmware-update` textfiles.
-role: initial_setup
 files:
-  - {src: "role-file:host-maintenance.sh", dst: /usr/lib/homelab/host-maintenance, mode: "0755"}
+  - {src: files/host-maintenance.sh, dst: /usr/lib/homelab/host-maintenance, mode: "0755"}
   - {src: units/homelab-apt-autoremove.service, dst: /usr/lib/systemd/system/homelab-apt-autoremove.service}
   - {src: units/homelab-apt-autoremove.timer, dst: /usr/lib/systemd/system/homelab-apt-autoremove.timer}
   - {src: units/homelab-dpkg-purge.service, dst: /usr/lib/systemd/system/homelab-dpkg-purge.service}

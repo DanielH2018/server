@@ -23,17 +23,19 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
-from lib.proc_testing import run as launch
 from pathlib import Path
 
 import leakguard
 import pytest
-from _helpers import ROLES, load_defaults
-from _shell_render import render_shell_script, rendered_shell_text
-from renderer.renderer_lib import host as host_mode
+from _helpers import REPO, load_defaults
 from _setup_render import CLAUDE_CODE
+from _shell_render import render_shell_script, rendered_shell_text
+from lib.proc_testing import run as launch
+from renderer.renderer_lib import host as host_mode
 
-CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
+CHECK_LIB = (
+    REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
+)
 TEMPLATE = ("components", "claude-code", "sync-artifacts.sh.j2")
 UNITS = "/usr/lib/systemd/system"
 

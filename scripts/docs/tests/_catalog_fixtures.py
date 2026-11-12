@@ -33,7 +33,6 @@ def make_repo(tmp_path):
     write(
         host_vars / "pi.yml",
         """\
-        has_gitops: false
         containers_list:
           - name: dozzle
             port: 8080
