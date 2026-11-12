@@ -40,7 +40,6 @@ def legacy(component: str) -> list[dict]:
     ("timer", "calendar"),
     [
         ("homelab-renovate-notify", "*-*-* 13:00:00"),
-        ("homelab-renovate-agent", "*-*-* 06:00:00 America/Chicago"),
         ("homelab-fake-remux-scan", "*-*-* 04:45:00"),
         ("homelab-fake-remux-reconcile", "*:0/20:00"),
         ("homelab-mkv-attachment-repair", "*:0/15:00"),
@@ -54,6 +53,17 @@ def test_each_timer_is_enabled_at_the_slot_the_ansible_unit_or_cron_held(
 ):
     assert f"OnCalendar={calendar}\n" in text(package, f"{UNITS}/{timer}.timer")
     assert f"{timer}.timer" in package.enable_links()
+
+
+def test_the_renovate_agent_ships_disarmed_at_its_slot(package):
+    timer = "homelab-renovate-agent.timer"
+    assert "OnCalendar=*-*-* 06:00:00 America/Chicago\n" in text(
+        package, f"{UNITS}/{timer}"
+    )
+    assert timer not in package.enable_links()
+    assert (
+        "/var/lib/node-exporter-textfile/renovate-agent-disarmed.prom" in package.files
+    )
 
 
 @pytest.mark.parametrize(
