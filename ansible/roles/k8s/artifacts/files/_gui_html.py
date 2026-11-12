@@ -16,7 +16,7 @@ GUI_HTML = r"""<!doctype html>
 <style>
 :root{--base:#1e1e2e;--mantle:#181825;--crust:#11111b;--surface0:#313244;--surface1:#45475a;
 --text:#cdd6f4;--subtext0:#a6adc8;--overlay0:#6c7086;--blue:#89b4fa;--green:#a6e3a1;
---yellow:#f9e2af;--mauve:#cba6f7;--red:#f38ba8}
+--yellow:#f9e2af;--mauve:#cba6f7;--red:#f38ba8;--peach:#fab387}
 *{box-sizing:border-box}
 body{margin:0;background:var(--base);color:var(--text);
 font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
@@ -44,6 +44,7 @@ color:var(--crust)}
 .chip-active{background:var(--yellow)}.chip-planned{background:var(--overlay0)}
 .chip-cat{background:var(--blue)}.chip-svc{background:var(--surface1);color:var(--text)}
 .chip-tag{background:transparent;color:var(--subtext0);border:1px solid var(--surface1)}
+.chip-auto{background:var(--peach)}
 /* Derived, not declared: hollow rather than filled, so a guess never reads as a statement. */
 .chip-derived{background:transparent;border:1px dashed var(--overlay0);color:var(--subtext0)}
 .tagrow{margin-top:8px}
@@ -64,6 +65,7 @@ footer{color:var(--overlay0);font-size:12px;padding:0 24px 30px;max-width:1100px
     <select id="host"><option value="">All hosts</option></select>
     <select id="category"><option value="">All categories</option></select>
     <select id="status"><option value="">Any status</option></select>
+    <select id="origin"><option value="">Any origin</option></select>
     <select id="sort">
       <option value="mtime">Newest first</option>
       <option value="title">Title A-Z</option>
@@ -97,7 +99,7 @@ function fmtSize(n) {
 function matches(a, terms) {
   if (!terms.length) return true;
   const hay = [a.title, a.summary, a.name, a.host, a.text, a.category, a.status,
-               (a.services || []).join(" "), (a.tags || []).join(" ")]
+               a.origin, (a.services || []).join(" "), (a.tags || []).join(" ")]
     .join(" ").toLowerCase();
   return terms.every(t => hay.includes(t));
 }
@@ -115,12 +117,14 @@ function render() {
   const host = $("host").value;
   const category = $("category").value;
   const status = $("status").value;
+  const origin = $("origin").value;
   const sort = $("sort").value;
   const dupes = $("dupes").checked;
   const starredOnly = $("starred").checked;
   let items = DATA.artifacts.filter(a =>
     (!host || a.host === host) && (!category || a.category === category) &&
-    (!status || a.status === status) && (!starredOnly || a.starred) &&
+    (!status || a.status === status) && (!origin || a.origin === origin) &&
+    (!starredOnly || a.starred) &&
     (dupes || !a.companion_html) && matches(a, terms));
   items.sort((x, y) => sort === "title" ? x.title.localeCompare(y.title)
            : sort === "host" ? (x.host + x.title).localeCompare(y.host + y.title)
@@ -138,6 +142,9 @@ function render() {
       ? `<span class="chip chip-cat${der("category")}"${derTitle("category")}>${esc(a.category)}</span>` : "";
     const stat = a.status
       ? `<span class="chip chip-${a.status}${der("status")}"${derTitle("status")}>${esc(a.status)}</span>` : "";
+    // Only the minority origin gets a chip; a "session" chip on nearly every card says nothing.
+    const auto = a.origin === "scheduled"
+      ? `<span class="chip chip-auto${der("origin")}"${derTitle("origin")}>scheduled</span>` : "";
     const svcs = (a.services || []).map(s =>
       `<span class="chip chip-svc${der("services")}"${derTitle("services")}>${esc(s)}</span>`).join(" ");
     const tags = (a.tags || []).map(t => `<span class="chip chip-tag">${esc(t)}</span>`).join(" ");
@@ -154,7 +161,7 @@ function render() {
       ${a.summary ? `<p>${highlight(a.summary, terms)}</p>` : ""}
       <div class="meta">
         <span class="chip chip-host">${esc(a.host)}</span>
-        ${cat}${stat}
+        ${cat}${stat}${auto}
         <span>${esc(a.name)}</span>
         <span>${fmtDate(a.updated || a.mtime)}</span>
         <span>${fmtSize(a.size)}</span>
@@ -189,11 +196,12 @@ async function load() {
   fill("host", "All hosts", DATA.hosts);
   fill("category", "All categories", DATA.categories);
   fill("status", "Any status", DATA.statuses);
+  fill("origin", "Any origin", DATA.origins);
   $("foot").textContent = "Indexed " + fmtDate(DATA.generated) +
     " - starred artifacts are kept; the rest are pruned 30 days after their last update.";
   render();
 }
-["q", "host", "category", "status", "sort", "starred", "dupes"].forEach(
+["q", "host", "category", "status", "origin", "sort", "starred", "dupes"].forEach(
   id => $(id).addEventListener("input", render));
 $("list").addEventListener("click", e => {
   const btn = e.target.closest("button.star");
