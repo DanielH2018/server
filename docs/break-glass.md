@@ -270,8 +270,8 @@ Each host holds up to two age keys, and they have different readers.
 
 The decision recorded with H7.24b on 2026-10-30, and the ruling of 2026-11-09 (#6643):
 
-- **daniel-box keeps its user-home key.** The deployer, `deploy.sh` and the rotation timer run
-  there as the operator, and every one of them reads it.
+- **daniel-box keeps its user-home key.** The operator's `sops` edits, the `add-secret` skill
+  and the rotation timer run there as the operator, and every one of them reads it.
 - **daniel-server holds no user-home key.** H4.2 left a duplicate there. The operator ruled on
   2026-11-09 to retire it and to rely on the recovery key (item 1) for the case where
   daniel-box is dead. The key is deleted from the generic rule and both cluster rules of
@@ -281,8 +281,9 @@ The decision recorded with H7.24b on 2026-10-30, and the ruling of 2026-11-09 (#
   **operator-only**. daniel-server keeps its host key, `/etc/homelab/age.key` (item 11),
   which decrypts only `vars/hosts/daniel-server.sops.yaml`.
 - **daniel-pi holds no user-home key**, since 2026-10-03.
-- **No playbook creates a user-home key.** The retired `sops_setup` role did. A new host that
-  runs Ansible gets one by hand, as `ansible/README.md` §5 says.
+- **No script creates a user-home key.** The retired `sops_setup` role did. A new host needs
+  only its host key, `/etc/homelab/age.key`, which step 3 of `hosts/bootstrap-host.sh`
+  creates.
 
 ## What to do first, by scenario
 
@@ -548,8 +549,8 @@ daniel-box is down, whatever this step frees.
 
 Every step below is **operator-only**. Each needs the k3s admin kubeconfig or a write to the
 `DEPLOY_HOLD` repository variable, and an agent session has neither. A flux-owned service
-needs more than a scale: Flux's drift correction restores the rendered `replicas`, and
-`./scripts/deploy.sh --tags <svc>` exits 5 for a flux-owned tag. So a flux-owned service is
+needs more than a scale: Flux's drift correction restores the rendered `replicas`, and no
+local script applies a k8s workload, because `promote` and Flux do. So a flux-owned service is
 suspended before it is scaled and resumed rather than redeployed.
 
 1. Print the shed set: `uv run python scripts/diagnostics/probe.py shed-set`. It lists the
@@ -590,7 +591,7 @@ suspended before it is scaled and resumed rather than redeployed.
       `stateful=` roles, is worked by `docs/flux-deploy-plane.md`'s *Verification* instead,
       then resume as below.
     - **The hold still reads step 2's reason.** Resume each suspended tag with the same patch
-      and `false`, rather than running `deploy.sh`:
+      and `false`:
 
         ```bash
         sudo k3s kubectl -n flux-system patch kustomization <tag> --type merge \
@@ -716,7 +717,7 @@ For a second person without deep familiarity with the repo:
 **Operator-only to run.** The normal deploy path needs GitHub, GHCR and Sigstore at once:
 `promote` runs on GitHub, the artifact lives on GHCR, and the OCIRepository verifies keyless
 against the `promote` identity. While any of the three is down, no local path writes the
-cluster, because `deploy.sh` skips every flux-owned entry. This runbook publishes one artifact
+cluster, because no local script applies a k8s workload. This runbook publishes one artifact
 to the in-cluster registry, signs it with the break-glass key, and points the OCIRepository at
 it. The kind drill `.github/workflows/flux-deletion-drill.yml` runs cases `break-glass` and
 `break-glass-red` against the flux role's own break-glass templates. It does not run the

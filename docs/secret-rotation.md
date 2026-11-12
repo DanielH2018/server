@@ -232,8 +232,8 @@ before deciding what is due. Examples:
   `secret_rotation.py consumers alloy_pi_http_password` names the package and prints the `sync`
   command. The password sits in alloy's container environment, where the read-only docker-proxy
   can return it, and the H5.8 PR body records the operator's approval of that exposure
-  (`h5-pi-compose.md`, *Open questions* 6). No redeploy step exists: `deploy.sh` no longer
-  reaches alloy, and the recreate follows from the environment change.
+  (`h5-pi-compose.md`, *Open questions* 6). No redeploy step exists: the recreate follows from
+  the environment change.
 - `mqtt_password_hash`: `mosquitto_passwd` writes a `username:hash` line. Store only the part
   after the first `:`, because the template prepends `mqtt_username` itself. The mosquitto
   deploy refuses a stored hash that holds a colon, before the apply.
@@ -246,7 +246,7 @@ before deciding what is due. Examples:
   on every pod start, and adds a machine only when it is absent (#5741). It passes no
   `--force` and has no update path, so a rotation that skips the deletes leaves every machine on
   the old password. A deleted machine comes back only when the engine pod next starts.
-  Flux owns the `crowdsec`, `traefik` and `authelia` roles, so `deploy.sh` exits 5 on each tag.
+  Flux owns the `crowdsec`, `traefik` and `authelia` roles, and no local script applies them.
   Rotation is therefore: `sops set` the new value → `cluster_vars.py write` and open the PR →
   delete the old registrations on the engine → land the PR with `land.sh`, without `--tags`.
   Flux applies all three roles, and the `checksum/restart` annotation the renderer stamps
@@ -380,8 +380,7 @@ SOPS name.
    `cluster_vars.py check` refuses the PR until `write` runs. `write` also refuses a malformed
    or duplicated digest, naming the key only. Commit both SOPS values and the cluster files
    `write` rewrote in one commit, then open the PR.
-4. Run `land.sh` without `--tags`. Flux owns authelia, and `deploy.sh` exits 5 on a
-   flux-owned tag. The PR changes the cluster file, so `land.sh` waits on the `cluster-vars`
+4. Run `land.sh` without `--tags`. Flux owns authelia, and no local script applies it. The PR changes the cluster file, so `land.sh` waits on the `cluster-vars`
    Kustomization and on every Kustomization that depends on it, as step 4 of *Rotating a
    value the cluster reads* describes. The renderer stamps a `checksum/restart` annotation
    on the authelia pod, which hashes the `.source` line of each key its Secret references.
