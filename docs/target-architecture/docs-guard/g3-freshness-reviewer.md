@@ -1,10 +1,32 @@
 # G3 — (optional) Notice dispatches the freshness reviewer
 
-Status: PLANNED
+Status: DECLINED. The operator declined G3 on 2026-11-12, under
+[#7232](https://github.com/DanielH2018/server/issues/7232). Nothing in this plan is built.
 
 Depends on: [G2](g2-retire-lock.md)
 
 Unblocks: none
+
+## Ruling
+
+The operator ruled on 2026-11-12 not to build G3. The ruling rests on an interim reading
+taken 7 days after G2's PR 3, not the 30 days *Goal and exit criterion* names. The operator
+asked for the early reading.
+
+- **Post-G2 figure: 16/30 = 0.53.** The command was
+  `uv run python scripts/dev/fact_status.py report --days 7 --json`, over a window that
+  starts 2026-11-05T19:42:16Z. Its `notice_replay` object read `moved` 30 and
+  `moved_prose_edited` 16, out of 436 commits, 23 of them with a notice.
+- **G1's exit figure: 27/40 = 0.675.** ADR-0023 records it. G1 took it while the lock forced
+  a re-read.
+- **The suggested rule builds G3 below half of G1's figure, which is 0.34.** The post-G2
+  figure of 0.53 is above that threshold, so the rule says do not build.
+- **The sample is larger than the plan assumed.** The window held 30 moves in 7 days. The
+  plan assumed about five content moves a month, so this reading already exceeds what a
+  30-day reading was expected to hold.
+
+To revisit the ruling, take the same reading over a later window and file a new issue that
+quotes both figures. The plan below stays as the design such an issue would build.
 
 ## Goal and exit criterion
 
