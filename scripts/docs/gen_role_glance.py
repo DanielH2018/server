@@ -19,21 +19,20 @@ Re-examined 2026-09-28 (#2808). Both renders share one derivation, so moving the
 single source of truth, and it loses locality: inject-nested-docs puts a role doc's head, this
 block first, in front of a session that touches the role, and nothing injects `services.md`.
 
-ONE FIELD SET PER ROLE SHAPE, not one schema (#2096). The two planes declare different
-facts in different places, and a single schema would print "none" for most fields on most
-roles:
+ONE FIELD SET. Every role is a k8s service role (`roles/k8s/<name>/`, every `platform: k8s`
+entry of the cluster host's `containers_list`), and its block carries:
 
-- a k8s service role (`roles/k8s/<name>/`, every `platform: k8s` entry of the cluster host's
-  `containers_list`): the deploy tag (`entry_tags`, the same precedence `deploy.yml` uses),
-  the image REPOSITORIES and the vars that pin them (for a built image, its GHCR
-  repository, the one Flux's render pulls), the route and its auth tier (the same
-  derivation `docs/reference/services.md` prints, so the two cannot disagree), every PVC
-  claim by name with its Longhorn backup tier beside it (the catalogue's `backup_tier`
-  column, per claim — `catalog_backup.claim_tiers` is the one derivation both print, so a
-  tier here is read from the claim's StorageClass and the k3s role's `k3s_longhorn_*_volumes`
-  lists, never typed, and a claim named by a shell variable has none). For every k8s entry
-  (`catalog_backup.entry_owner`), an **Applied by** line replaces the deploy tag: it names Flux and `promote`,
-  and says `land.sh --tags=<tag>` gates the rollout;
+- an **Applied by** line (`catalog_backup.entry_owner`): it names Flux and `promote`, and says
+  `land.sh --tags=<tag>` gates the rollout, the tag from `entry_tags`;
+- the image REPOSITORIES and the vars that pin them (for a built image, its GHCR repository,
+  the one Flux's render pulls);
+- the route and its auth tier, the same derivation `docs/reference/services.md` prints, so the
+  two cannot disagree;
+- every PVC claim by name with its Longhorn backup tier beside it. `catalog_backup.claim_tiers`
+  is the one derivation both print, so a tier is read from the claim's StorageClass and the
+  k3s role's `k3s_longhorn_*_volumes` lists, never typed, and a claim named by a shell
+  variable has none.
+
 A doc with no `## At a glance` heading is refused (all of them carry it, and
 `test_service_role_claude_md_has_at_a_glance.py` requires it).
 
@@ -60,12 +59,10 @@ and Write, and the hook skips any doc the harness already loaded, so a block tha
 only at injection time is absent from most sessions. It would also be absent on GitHub, in
 an editor, on the MkDocs site and in a PR diff, where a reviewer sees a route or claim move.
 
-STATIC PARSING ONLY, like every generator here: role defaults, tasks and playbooks through
-`yaml.safe_load`, templates through regexes, nothing imported from the deployer. The one
-renderer module it reads, `renderer_lib/task_inputs.py`, parses the `k8s/image-builder`
-includes from the tasks YAML and evaluates nothing. Jinja in a
-schedule, a `when:` or a timer key is printed as written — an unresolved `{{ var }}` is the
-honest rendering, the same rule `docs/reference/crons.md` follows.
+STATIC PARSING ONLY, like every generator here: role defaults through `yaml.safe_load`,
+templates through regexes, nothing imported from the deployer. The one renderer module it
+reads, `renderer_lib/task_inputs.py`, reads the image builds from a role's defaults and
+evaluates nothing.
 
 Usage::
 
@@ -109,7 +106,7 @@ SELF = "scripts/docs/gen_role_glance.py"
 HEADING = "## At a glance"
 # `generated_from:` is the literal the repo's other generated content carries; a reader
 # who greps for it finds every generated region at once. The marker names what moves the
-# block, and that differs per role shape, so each plane opens with its own text.
+# block.
 BEGIN_PREFIX = f"<!-- generated_from: {SELF} -- "
 
 

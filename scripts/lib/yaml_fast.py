@@ -3,13 +3,8 @@
 
 WHY THIS EXISTS. PyYAML's `safe_load` uses a parser written in Python, and this repo
 parses a lot of YAML: every guard that renders the k8s tree, every validator that reads
-`roles/**/tasks/*.yml`, every test that loads a manifest. Measured over the 184
-`ansible/**/tasks/*.yml` files, warm, the two parsers differ by 10x:
-
-    yaml.safe_load (pure Python):   0.42s
-    yaml.load(..., CSafeLoader):    0.04s
-
-That was the largest single cost in the test suite. Full run at `-n 4`, the two variants
+role defaults, every test that loads a manifest. libyaml's C parser was the largest single
+saving in the test suite. Full run at `-n 4`, the two variants
 interleaved on the same box so a busy neighbour could not favour either:
 
     yaml.safe_load throughout:  44.4s / 64.4s

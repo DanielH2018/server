@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`role_callers` — which k8s roles include or `lookup()` another role, read from the live tree.
+"""`role_callers` — which k8s roles `lookup()` another role, read from the live tree.
 
 The consumer is `scripts/deploy_tools/land_lib/land_tags.py`: a helper role whose callers were ALL
 deployed is already applied, and reporting it as `needs-manual-apply` sends an operator at a
@@ -16,7 +16,7 @@ from lib.k8s_roles import k8s_entries, role_callers
 from lib.k8s_role_callers import CannotNarrow
 
 # The helper roles: every role under ansible/roles/k8s/ that another role reaches and that has
-# no containers_list entry of its own. Named, not counted -- a rename or a moved tasks file
+# no containers_list entry of its own. Named, not counted -- a rename or a moved template
 # leaves a count-based assertion passing over a map that lost the member it was checking.
 # cronjob-gate left the set when configarr and qbittorrent, its last callers, flipped to Flux.
 _HELPERS = frozenset(
@@ -36,7 +36,9 @@ def callers():
 def test_every_named_helper_has_at_least_one_caller(callers):
     """Non-vacuity. A helper with no caller derived means a task form the walk misses."""
     missing = sorted(h for h in _HELPERS if not callers.get(h))
-    assert not missing, f"no caller derived for {missing} -- the include form changed?"
+    assert not missing, (
+        f"no caller derived for {missing} -- the lookup or defaults form changed?"
+    )
 
 
 def test_the_defaults_form_resolves(callers):
@@ -73,20 +75,20 @@ def test_a_template_lookup_into_another_role_is_an_edge(tmp_path):
 
 def test_a_lookup_with_keyword_arguments_is_an_edge(tmp_path):
     """A keyword argument after the path, such as `rstrip=False`, does not hide the edge."""
-    tasks = tmp_path / "ansible" / "roles" / "k8s" / "reader" / "tasks"
-    tasks.mkdir(parents=True)
-    (tasks / "main.yml").write_text(
+    templates = tmp_path / "ansible" / "roles" / "k8s" / "reader" / "templates"
+    templates.mkdir(parents=True)
+    (templates / "x.yaml.j2").write_text(
         "x: \"{{ lookup('template', playbook_dir ~ '/roles/k8s/helper/templates/a.j2',"
         ' rstrip=False) }}"\n'
     )
     assert role_callers(tmp_path) == {"helper": {"reader"}}
 
 
-def test_a_role_nothing_includes_or_looks_up_is_not_a_callee(callers):
+def test_a_role_nothing_looks_up_is_not_a_callee(callers):
     """The reject half: a walk matching any `k8s/` string would call sonarr a helper.
 
     A service can be a callee: crowdsec and monitor-bridge are, through other roles' lookups.
-    sonarr and jellyfin are named because nothing includes them or reads their files.
+    sonarr and jellyfin are named because nothing reads their files.
     """
     assert "sonarr" not in callers
     assert "jellyfin" not in callers
@@ -106,9 +108,11 @@ def test_a_named_repo_is_walked_instead_of_this_checkout(tmp_path, callers):
     meaningful: the derived edge is the throwaway tree's, and none of the live tree's
     helpers may appear in it.
     """
-    tasks = tmp_path / "ansible" / "roles" / "k8s" / "caller" / "tasks"
-    tasks.mkdir(parents=True)
-    (tasks / "main.yml").write_text("- include_role:\n    name: k8s/helper\n")
+    templates = tmp_path / "ansible" / "roles" / "k8s" / "caller" / "templates"
+    templates.mkdir(parents=True)
+    (templates / "x.yaml.j2").write_text(
+        "data: {{ lookup('file', playbook_dir + '/roles/k8s/helper/files/x.py') }}\n"
+    )
 
     derived = role_callers(tmp_path)
 
@@ -117,31 +121,9 @@ def test_a_named_repo_is_walked_instead_of_this_checkout(tmp_path, callers):
     assert not (set(derived) & set(callers)), derived
 
 
-@pytest.mark.parametrize(
-    "text",
-    ["d: 2026-13-45\n", "- &x {block: [*x]}\n", "- [unclosed\n"],
-    ids=["impossible-date", "recursive-alias", "syntax"],
-)
-def test_a_task_file_that_cannot_be_read_refuses_by_name(tmp_path, text):
-    tasks = tmp_path / "ansible" / "roles" / "k8s" / "caller" / "tasks"
-    tasks.mkdir(parents=True)
-    (tasks / "bad.yml").write_text(text)
-    (tasks / "good.yml").write_text("- include_role:\n    name: k8s/helper\n")
-    with pytest.raises(CannotNarrow, match=r"bad\.yml"):
-        role_callers(tmp_path)
-
-
-def test_a_task_file_that_is_not_utf8_refuses_by_name(tmp_path):
-    tasks = tmp_path / "ansible" / "roles" / "k8s" / "caller" / "tasks"
-    tasks.mkdir(parents=True)
-    (tasks / "bad.yml").write_bytes(b"- name: \xff\n")
-    with pytest.raises(CannotNarrow, match=r"bad\.yml"):
-        role_callers(tmp_path)
-
-
-def test_a_dangling_task_file_symlink_refuses_by_name(tmp_path):
-    tasks = tmp_path / "ansible" / "roles" / "k8s" / "caller" / "tasks"
-    tasks.mkdir(parents=True)
-    (tasks / "bad.yml").symlink_to(tmp_path / "gone.yml")
-    with pytest.raises(CannotNarrow, match=r"bad\.yml"):
+def test_a_dangling_template_symlink_refuses_by_name(tmp_path):
+    templates = tmp_path / "ansible" / "roles" / "k8s" / "caller" / "templates"
+    templates.mkdir(parents=True)
+    (templates / "bad.yaml.j2").symlink_to(tmp_path / "gone.yaml.j2")
+    with pytest.raises(CannotNarrow, match=r"bad\.yaml\.j2"):
         role_callers(tmp_path)

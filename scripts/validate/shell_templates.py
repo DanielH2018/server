@@ -27,9 +27,7 @@ instead of falling back to bash -n alone).
 
 This module is the entry point. `ansible_jinja_env` in `scripts/lib/` supplies Ansible's
 `search` test and `bool` filter, which vanilla Jinja2 lacks. The pieces only this validator
-imports live in `validate_lib/`: `shell_lint` (render, then `bash -n` and shellcheck),
-`cron_targets` (which templates a cron `job:` actually schedules) and `cron_checks` (the PATH
-and KUBECONFIG rules those targets must satisfy).
+imports live in `validate_lib/`: `shell_lint` (render, then `bash -n` and shellcheck).
 """
 
 import shutil
@@ -47,12 +45,6 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from validate.validate_lib.ok_lines import ok_printer
 from lib.cli_help import answer_help
-from validate.validate_lib.cron_checks import (
-    cron_kubeconfig_error,
-    cron_path_error,
-    cron_uv_interpreter_error,
-)
-from validate.validate_lib.cron_targets import cron_job_scripts
 from lib.estate import role_defaults
 from lib.render_context import render_context
 from lib.render_guard import (
@@ -135,7 +127,6 @@ def check_template(
     ctx: dict,
     out_dir: Path,
     shellcheck_bin: str | None,
-    cron_map: dict[Path, Path],
 ) -> str | None:
     """Render one template, write it under out_dir, and lint the rendered file.
 
@@ -169,18 +160,6 @@ def check_template(
             print(f"\n----- rendered {rel} -----", file=sys.stderr)
             dump_numbered(rendered)
             return f"shellcheck: {err}"
-
-    err = cron_path_error(path, rendered, cron_map)
-    if err:
-        return err
-
-    err = cron_kubeconfig_error(path, rendered)
-    if err:
-        return err
-
-    err = cron_uv_interpreter_error(path, rendered)
-    if err:
-        return err
 
     return None
 
@@ -220,17 +199,15 @@ def main(
         )
         return 1
 
-    cron_map = cron_job_scripts()
-
     failures = 0
     with tempfile.TemporaryDirectory(prefix="validate-shell-templates-") as tmp:
         out_dir = Path(tmp)
-        # Render + `bash -n` + the cron checks per template; shellcheck once over everything
+        # Render + `bash -n` per template; shellcheck once over everything
         # that got that far (see shellcheck_batch for why one process, not one per file).
         rendered_ok: dict[Path, Path] = {}
         for path in templates:
             rel = path.relative_to(REPO)
-            err = check_template(path, template_context(path), out_dir, None, cron_map)
+            err = check_template(path, template_context(path), out_dir, None)
             if err:
                 failures += 1
                 print(f"  [FAIL] {rel}: {err}", file=sys.stderr)

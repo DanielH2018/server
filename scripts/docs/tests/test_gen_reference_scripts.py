@@ -174,35 +174,31 @@ def _repo(tmp_path):
         tmp_path / ".github" / "workflows" / "ci.yml",
         "jobs:\n  x:\n    steps:\n      - run: python scripts/shipped.py\n",
     )
+    units = tmp_path / "hosts" / "components" / "c" / "units"
     _write(
-        tmp_path / "ansible" / "roles" / "r" / "tasks" / "main.yml",
-        """
-        - name: A cron
-          ansible.builtin.cron:
-            name: Nightly thing
-            job: "uv run python scripts/cronned.py"
-        - name: A wrapper cron
-          ansible.builtin.cron:
-            name: Wrapped thing
-            job: "/usr/local/bin/wrap.sh"
-        """,
+        units / "homelab-nightly.service",
+        "[Service]\nExecStart=uv run python scripts/cronned.py\n",
     )
     _write(
-        tmp_path / "ansible" / "roles" / "r" / "templates" / "wrap.sh.j2",
+        units / "homelab-wrapped.service",
+        "[Service]\nExecStart=/usr/lib/homelab/wrap\n",
+    )
+    _write(
+        tmp_path / "hosts" / "components" / "c" / "templates" / "wrap.sh.j2",
         "#!/bin/sh\nuv run python scripts/wrapped.py\n",
     )
     return tmp_path, scripts
 
 
-def test_a_cron_job_makes_a_script_scheduled(tmp_path):
+def test_a_timer_makes_a_script_scheduled(tmp_path):
     repo, scripts = _repo(tmp_path)
     verdicts = sc.classify(repo, scripts)
     assert verdicts["cronned.py"][0] == "scheduled"
-    assert "Nightly thing" in verdicts["cronned.py"][1]
+    assert "homelab-nightly.service" in verdicts["cronned.py"][1]
 
 
-def test_a_cron_reaches_through_its_wrapper_template(tmp_path):
-    """build_docs.py is named only by docs-refresh.sh, which is what its cron runs."""
+def test_a_timer_reaches_through_its_wrapper_template(tmp_path):
+    """build_docs.py is named only by docs-refresh.sh, which is what its timer runs."""
     repo, scripts = _repo(tmp_path)
     verdicts = sc.classify(repo, scripts)
     assert verdicts["wrapped.py"][0] == "scheduled"
@@ -242,7 +238,7 @@ def test_a_prose_mention_is_not_an_invocation(tmp_path):
     """Every CLAUDE.md and half the role defaults cite these scripts in backticks."""
     repo, scripts = _repo(tmp_path)
     _write(
-        tmp_path / "ansible" / "roles" / "r" / "tasks" / "notes.yml",
+        tmp_path / "ansible" / "roles" / "r" / "templates" / "notes.yml",
         "- name: See `uv run python scripts/lonely.py` for detail\n",
     )
     assert sc.classify(repo, scripts)["lonely.py"][0] == "adhoc"

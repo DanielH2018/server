@@ -134,6 +134,15 @@ def test_a_guarded_script_a_role_names_is_a_deploy_gate(tmp_path):
     assert sc.classify(repo, scripts)["leaf.py"][0] == "gate"
 
 
+def test_a_path_keying_a_roles_python_table_is_not_an_invocation(tmp_path):
+    """A dict keyed by module paths names files as data, never as an argv element."""
+    repo, scripts = _package(tmp_path, '"""Summary."""\n')
+    files = repo / "ansible" / "roles" / "k8s" / "svc" / "files" / "pkg"
+    files.mkdir(parents=True)
+    (files / "table.py").write_text('TABLE = {"scripts/dev/pkg/leaf.py": "svc"}\n')
+    assert sc.classify(repo, scripts)["leaf.py"][0] != "gate"
+
+
 def test_the_real_tree_still_classifies_each_shape_as_a_library():
     verdicts = sc.classify(REPO, SCRIPTS)
     wrong = {

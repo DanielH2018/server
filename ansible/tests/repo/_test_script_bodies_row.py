@@ -183,7 +183,7 @@ TEST_SCRIPT_BODIES = Census(
             '"#!/bin/sh\\nexport PATH=\\"${PATH}:/usr/local/bin\\"\\nk3s ctr images ls\\n"\n',
         ),
     ),
-    min_matches=1173,
+    min_matches=1139,
     must_find=frozenset(
         {
             "hosts/lib/tests/container/build-image.sh",
@@ -193,10 +193,6 @@ TEST_SCRIPT_BODIES = Census(
     allow={
         "ansible/tests/repo/_test_script_bodies_row.py": (
             "its shebang strings are this row's own red subjects, which the row reads as text"
-        ),
-        "scripts/validate/tests/test_shell_template_cron_rules.py": (
-            "its shebang strings, `K3S_ABS` among them, are fixtures `cron_checks` reads as "
-            "text; no test writes one to disk or runs it"
         ),
     },
 )

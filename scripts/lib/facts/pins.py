@@ -12,14 +12,12 @@ is a managed key, so a sibling of a pin inside the same mapping reads as managed
 
 Renovate's built-in managers also rewrite YAML, and their file selection lives inside Renovate
 rather than in this repo's config (#4158). ``_BUILT_IN`` restates the default
-``managerFilePatterns`` of the two that select a tracked YAML file here, copied from
-``lib/modules/manager/<name>/index.ts`` upstream, with the value lines each one extracts:
+``managerFilePatterns`` of the one that selects a tracked YAML file here, copied from
+``lib/modules/manager/<name>/index.ts`` upstream, with the value lines it extracts:
+``github-actions`` reads ``uses:``, ``runs-on:``, ``container:`` and ``image:`` in workflow
+and action files, so every ``jobs`` (or ``runs``) selector is managed.
 
-- ``github-actions`` reads ``uses:``, ``runs-on:``, ``container:`` and ``image:`` in workflow
-  and action files, so every ``jobs`` (or ``runs``) selector is managed.
-- ``ansible`` reads ``image:`` in any ``tasks/*.yml``.
-
-docker-compose, helm-values and gitlabci select no tracked file, and the kubernetes manager has
+ansible, docker-compose, helm-values and gitlabci select no tracked file, and the kubernetes manager has
 no default pattern; add a row when one starts to. A built-in manager is active unless
 ``enabledManagers`` leaves it out or its own object sets ``"enabled": false``.
 
@@ -48,10 +46,6 @@ _BUILT_IN = {
         re.compile(
             r"^\s*(?:-\s*)?(?:uses:\s*['\"]?(?!\.)\S|(?:runs-on|container|image):\s*\S)"
         ),
-    ),
-    "ansible": (
-        ("/(^|/)tasks/[^/]+\\.ya?ml$/",),
-        re.compile(r"^\s*(?:-\s*)?image:\s*\S"),
     ),
 }
 

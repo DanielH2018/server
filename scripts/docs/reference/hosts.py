@@ -138,13 +138,6 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
         parts.append(f"| Services declared | {row['services']} |")
         parts.append(f"| Has Docker | {row['docker']} |")
 
-    parts.append(
-        "\n## Running a playbook against a host\n\n"
-        "Both cluster nodes run plays on themselves, so a play's "
-        "`hosts:` defaults to the local hostname. **`--limit daniel-pi` therefore matches "
-        "zero hosts** — target the Pi with `-e target=daniel-pi` instead. A one-shot play "
-        "that ignores this runs on the wrong box while appearing to succeed.\n"
-    )
     return "\n".join(parts).rstrip("\n") + "\n"
 
 
