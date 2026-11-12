@@ -178,7 +178,8 @@ its collections; 595 files (about 25.2k YAML/Jinja lines) under `roles/setup` an
 `roles/containers`, part of which moves to Flux; 290 lines of bring-up playbooks; the
 local/ssh inventory model; every `has_X` teardown arm; and setup-drift.
 
-**Remains:** non-file state (users, ufw, libvirt, LVM) needs one small reconciler per kind. A
+**Remains:** non-file state (users, ufw, libvirt) and in-place line edits need one small
+reconciler each, four in all; the Ubuntu installer, not a reconciler, creates the LVM volumes. A
 hand edit is reverted on the next version, and `dpkg --verify` reports it in between. A k3s
 config change restarts the API server, so it is gated to a window. Prior art is thin.
 
