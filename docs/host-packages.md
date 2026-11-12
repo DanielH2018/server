@@ -1066,8 +1066,11 @@ job builds a fixture host from step 1's file list, so the YAML block above stays
 ## Upgrading a host's Ubuntu release
 
 No package depends on one Ubuntu release, and the `host_packages` container suite runs on every
-release the fleet runs or is moving to. One host moves at a time, in the canary order: daniel-server,
-then daniel-pi, then daniel-box. Each step is **operator-only**, apart from the matrix PR.
+release the fleet runs or is moving to. One host moves at a time: daniel-server, then daniel-box.
+daniel-pi moves on its own, at any time after daniel-server, and neither other host waits for it:
+the Pi gets no work daniel-box or daniel-server could do (operator ruling, 2026-11-12), and its
+arm64 Raspberry Pi image proves little about daniel-box. Each step is **operator-only**, apart from the
+matrix PR.
 
 1. To make the host's package one the suite has tested on the target, merge a PR that adds the
    release to the `host_packages` matrix in `.github/workflows/ci.yml`, with the suite green. The
