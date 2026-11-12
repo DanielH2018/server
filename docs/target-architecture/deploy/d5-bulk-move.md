@@ -1423,9 +1423,9 @@ mirror's stays with its cron (Wave D's registry bullet).
     - whether `prod` was reset, and the runbook in `docs/volume-snapshot-drills.md`.
 
   A failed post fails the `promote` run, so GitHub shows a red run. The webhook is a repository
-  secret, `DEPLOY_DISCORD_WEBHOOK`, holding the value of `gitops_deploy_discord_webhook`.
+  secret, `DEPLOY_DISCORD_WEBHOOK`, holding the value of `discord_alert_webhook`.
   Adding it is **operator-only**, because it decrypts a SOPS value and changes GitHub
-  settings. The rotation registry entry for `gitops_deploy_discord_webhook` notes the copy.
+  settings. The rotation registry entry for `discord_alert_webhook` notes the copy.
 - **A reset input.** `promote.yml` gains a `workflow_dispatch` input, `reset_to_last_good`. It
   moves `prod` to `last-good` and does nothing else. Like D1's inputs, it runs only from
   `refs/heads/master`. The failure path already performs this reset. The input exposes it to
