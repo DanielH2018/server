@@ -24,8 +24,8 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 # `promote_lib/wait.py` imports `forge` and `changed_set` bare, from scripts/deploy_tools.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
-from deploy_tools.deploy_lib.owners import declared_k8s_tags
 from deploy_tools.land_lib.pin_reads import PinReads
+from lib.k8s_roles import k8s_tags_in
 
 import forge
 from deploy_tools.promote_lib.wait import WaitResult, land_wait
@@ -44,7 +44,7 @@ def k8s_tags_at(primary: Path, ref: str) -> set[str]:
         subprocess.CalledProcessError: `ref` holds no k8s service list.
         ValueError: the list at `ref` names no k8s service.
     """
-    tags = declared_k8s_tags(primary, ref)
+    tags = k8s_tags_in(primary, ref)
     if not tags:
         raise ValueError(
             f"no k8s service read at {ref[:12]}; is this checkout older than that commit?"

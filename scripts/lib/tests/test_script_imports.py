@@ -35,7 +35,7 @@ def test_a_bare_import_through_the_files_own_path_insert_is_credited(tmp_path):
 
 def test_a_bare_import_no_insert_explains_is_not_credited(tmp_path):
     """The only insert is a name pointing outside `scripts/`."""
-    body = "sys.path.insert(0, str(GITOPS_DEPLOY_FILES))\nfrom leafy import VALUE"
+    body = "sys.path.insert(0, str(MONITOR_BRIDGE_FILES))\nfrom leafy import VALUE"
     assert _importers_of_leafy(tmp_path, body) == set()
 
 

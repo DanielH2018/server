@@ -111,16 +111,6 @@ def test_a_deferral_whose_gate_tree_was_stale_still_gave_up(tmp_path):
     assert land_probe.read(log)["state"] == "gave-up"
 
 
-def test_a_deferral_whose_owed_ledger_could_not_read_still_gave_up(tmp_path):
-    """#7906: no updater answers an unreadable ledger, so only a re-run of land.sh does."""
-    log = landing(
-        tmp_path,
-        f"{outcome.UNREADABLE_LEDGER_NOTE}\nVERDICT: deferred (PR #939 — ledger unreadable)\n",
-        rc=75,
-    )
-    assert land_probe.read(log)["state"] == "gave-up"
-
-
 def test_a_refusal_without_a_verdict_reports_its_land_line(tmp_path):
     """A landing-policy `die()` writes no VERDICT line; its reason is the last `land:` line."""
     log = landing(

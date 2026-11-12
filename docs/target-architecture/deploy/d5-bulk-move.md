@@ -2259,7 +2259,7 @@ one task file per source role, in a conversion PR before that role flips:
       several tasks puts the copies in one `block:`'s `vars:`. The copy never goes in
       `k8s_host_files`' defaults: role defaults are play-wide in `initial_setup.yml`, so a
       defaults copy of a key another setup role names is a cross-role read, which
-      `ansible/tests/setup/test_setup_cross_role_reads.py` refuses without a deployer table
+      the cross-role reads census (deleted by H7.53) refuses without a deployer table
       row (#5472). A change then edits
       both, and each half routes to its own plane: the copy to the setup plane, which the tick
       applies. A shared key in `group_vars/all.yml` would route to the deploy plane only

@@ -28,7 +28,7 @@ CENSUS_IMPORTER = "scripts/lib/tests/test_help_check_rejects_work_output.py"
 # collected nothing, cannot pass on speed alone. The census needs its entry-point names at
 # collection, and `deploy.sh` is the entry point whose answer the census was written for.
 MUST_COLLECT = {
-    CENSUS: f"{CENSUS}::test_the_entry_point_answers_help_with_exit_zero[deploy.sh]",
+    CENSUS: f"{CENSUS}::test_the_entry_point_answers_help_with_exit_zero[land.sh]",
     CENSUS_IMPORTER: (
         f"{CENSUS_IMPORTER}::"
         "test_the_help_check_refuses_an_entry_point_that_runs_its_job"

@@ -10,9 +10,8 @@ here would read as setup work left to move.
 |---|---|
 | `templates/resolv.conf.j2` | The resolv.conf `hosts/components/k3s-host-dns/` renders on daniel-box. The Pi's `hosts/components/pi-resolver/` loads the same file through `role: common`. |
 
-`resolv.conf.j2` records nothing. The host packages render it, so the deployer maps it to no
-role (`ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py:SETUP_FILES_RENDERED_ONLY_BY_HOST_PACKAGES`),
-and `land.sh` waits on each host's package instead.
+`resolv.conf.j2` records nothing. The host packages render it, so `land.sh` waits on each
+host's package instead.
 
 `hosts/lib/host_lib.py` left this role's `files/` in H7.2e. The host packages ship it beside
 each consumer script, and `hosts/lib/tests/` tests it. It must stay importable on the host

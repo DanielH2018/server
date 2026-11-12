@@ -202,23 +202,13 @@ ROWS = (
             _fixture("scripts/x/foo_*.py", foo_a="X = 1\n", foo_b="", foo_c=""),
             _fixture("scripts/x/foo_*.py", foo=_MAIN, foo_a=_SHIM, foo_b=_SHIM),
         ),
-        # Five groups on 2026-10-11, after #4416-#4418 moved the last three flat families.
-        min_matches=5,
-        # A suffix family, and a role-`files/` family with an entrypoint.
-        must_find=frozenset(
-            {
-                "scripts/validate/*_templates.py",
-                "ansible/roles/setup/gitops_deploy/files/gitops_*.py",
-            }
-        ),
+        # Four groups once #7962 deleted the deployer's `gitops_*` family.
+        min_matches=4,
+        must_find=frozenset({"scripts/validate/*_templates.py"}),
         allow={
             "scripts/validate/*_templates.py": (
                 "each is the entry of its own prek hook, which runs it under its own `files` "
                 "filter in prek.toml"
-            ),
-            "ansible/roles/setup/gitops_deploy/files/gitops_*.py": (
-                "the GitOps deployer's own `gitops_*` modules, which #7962 deletes with the "
-                "deployer"
             ),
         },
     ),

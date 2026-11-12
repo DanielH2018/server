@@ -5,7 +5,7 @@ changed-set line, the health lines and the `VERDICT:` line. The landing runs in 
 sessions, so each repeat costs context. The full list belongs in the verdict file.
 
 Every boundary is a `_land_fakes.py` fake except land-wait, the real `promote_wait.land_wait`
-over `_land_wait_fakes.Sim`, and the health gate, the real `detach_notify.gate` over a faked
+over `_land_wait_fakes.Sim`, and the health gate, the real `health_gate.gate` over a faked
 probe.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_broad_log_names_each_tag_once.py
@@ -19,7 +19,7 @@ import pytest
 
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes, build_classifier, build_tools
 from _land_wait_fakes import M, P, Sim, at, digests
-from deploy_tools.deploy_lib import detach_notify
+from deploy_tools.land_lib import health_gate
 from deploy_tools.land_lib import promotion as land_promotion
 from deploy_tools.promote_lib import wait as promote_wait
 from lib.exit_codes import PROBE_NOT_APPLICABLE
@@ -81,10 +81,9 @@ def broad_landing(monkeypatch, capsys, tmp_path):
         sick = frozenset({UNHEALTHY} if unhealthy else ())
 
         def gate(tags, cwd=None):
-            return detach_notify.gate(
+            return health_gate.gate(
                 tags,
-                ansible_ok=True,
-                tools=detach_notify.NotifyTools(
+                tools=health_gate.GateTools(
                     run=lambda argv, **_: _probe(argv, sick),
                     tag_platforms=lambda tag, host_vars: {"k8s"},
                 ),

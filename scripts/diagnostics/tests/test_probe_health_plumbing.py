@@ -12,7 +12,7 @@ import time
 
 import pytest
 
-from deploy_tools.deploy_lib import detach_notify
+from deploy_tools.land_lib import health_gate
 from diagnostics.probe_lib import core, health, health_alerts, health_plumbing
 
 _QUIET = health_alerts.PromTools(query=lambda promql: [], sleep=lambda s: None)
@@ -396,4 +396,4 @@ def test_a_plumbing_tags_worst_case_waits_end_inside_the_probe_timeout():
     )
     with pytest.raises(core.Unreadable, match="re-read"):
         health_alerts.gate("coredns", _NOW, _NOW, True, tools)
-    assert clock.now - _NOW < detach_notify.PROBE_TIMEOUT_S
+    assert clock.now - _NOW < health_gate.PROBE_TIMEOUT_S

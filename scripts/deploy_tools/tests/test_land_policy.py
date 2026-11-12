@@ -120,12 +120,6 @@ REFUSALS = {
         {"pr_files": [{"status": "modified", "filename": "scripts/lib/gh.py"}]},
         "need the operator's approval: scripts/lib/gh.py",
     ),
-    "a held deployer": ({"state": {"hold_sha": "deadbeef"}}, "holding deadbeef"),
-    "a held deployer, with the shell clear": (
-        {"state": {"hold_sha": "deadbeef"}},
-        "gitops_state.py clear-hold deadbeef`",
-    ),
-    "an unreadable hold": ({"state": {"hold_sha": None}}, "could not be read"),
     "a head that moved during the checks": (
         {"head_again": "d" * 40},
         "head moved during the checks",
@@ -408,7 +402,7 @@ def test_a_new_file_that_would_import_under_a_loaded_name_is_flagged(path):
         "scripts/lib/gh.cpython-314-x86_64-linux-gnu.so",
         "scripts/json.abi3.so",
         "scripts/lib/gh.pyc",
-        "ansible/roles/setup/gitops_deploy/files/__pycache__/notes.txt",
+        "hosts/lib/__pycache__/notes.txt",
     ],
     ids=[
         "pycache-pyc-of-a-loaded-module",
@@ -437,8 +431,8 @@ def test_the_real_landing_process_counts_its_shared_modules():
         "scripts/lib/gh.py",
         "scripts/lib/repo_paths.py",
         "scripts/deploy_tools/land_lib/policy.py",
-        "scripts/deploy_tools/narrow_lib/paths.py",
-        "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py",
+        "scripts/deploy_tools/land_lib/health_gate.py",
+        "scripts/lib/role_paths.py",
     ]
     files = [parse_file({"status": "modified", "filename": p}) for p in members]
     assert policy.gate_hits(files, policy.CHECKOUT, sys.modules, sys.path) == members

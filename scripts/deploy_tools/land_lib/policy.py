@@ -20,7 +20,7 @@ which is every interactive session and renovate-agent's lander:
   changes-requested or a dismissal undoes it, and so does a push: the approval then names an
   older commit. Unset, nothing lifts the refusal.
 
-When either of the first two is set, the policy also refuses while the deployer holds a SHA, and `check`
+When either of the first two is set, `check`
 returns the head SHA it checked. `merge.py` pins every merge path to that SHA, so a push after
 the checks fails the merge rather than landing unchecked.
 
@@ -41,7 +41,7 @@ from typing import NoReturn
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import gh_read
 from deploy_tools.land_lib.landing import BRANCH, Landing
-from deploy_tools.land_lib.outcome import hold_clear_hint, say
+from deploy_tools.land_lib.outcome import say
 from deploy_tools.land_lib.pr_json import (
     PrFile,
     PrReview,
@@ -369,15 +369,6 @@ def check(ln: Landing) -> str:
         problems = branch_problems(view, o.require_branch_prefix)
         if problems:
             _refuse(ln, "; ".join(problems))
-    hold = ln.state("hold_sha")
-    if hold is None:
-        _refuse(ln, "the deployer's hold_sha could not be read")
-    if hold:
-        _refuse(
-            ln,
-            f"the deployer is holding {hold}; a merge now would deploy on top of a failed "
-            f"apply. {hold_clear_hint(hold)}",
-        )
     if o.approval_paths:
         try:
             prefixes = read_approval_paths(o.approval_paths)

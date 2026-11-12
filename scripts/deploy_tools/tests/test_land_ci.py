@@ -1,46 +1,14 @@
-"""Pre-flight (can the tick cross what is incoming?) and the master CI wait.
+"""The master CI wait.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_ci.py
 """
 
 import pytest
 
-from _land_fakes import PRIMARY, Fakes
+from _land_fakes import Fakes
 from deploy_tools.land_lib import ci
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.tools import CiVerdict
-
-
-def test_preflight_passes_when_nothing_is_incoming(landing):
-    ln, calls = landing()
-    ci.preflight(ln)
-    assert calls[-1] == ("deploy_tags", ("blockers", "origin/master"), {"cwd": PRIMARY})
-
-
-def test_blocked_when_an_incoming_change_needs_a_hand(landing):
-    ln, _ = landing(Fakes(blockers=[3]))
-    with pytest.raises(Outcome) as exc:
-        ci.preflight(ln)
-    assert (exc.value.rc, exc.value.verdict) == (1, "blocked")
-    assert "see above" not in exc.value.detail
-
-
-def test_a_blocked_verdict_names_the_path_and_the_command(landing):
-    """cc-wait relays only the VERDICT line, so the blockers document's facts go in it (#7895)."""
-    doc = '{"needing_hand": ["ansible/bootstrap.yml"], "run": "uv run ansible-playbook x"}'
-    ln, _ = landing(Fakes(blockers=[(3, doc + "\n")]))
-    with pytest.raises(Outcome) as exc:
-        ci.preflight(ln)
-    assert "ansible/bootstrap.yml" in exc.value.detail
-    assert "uv run ansible-playbook x" in exc.value.detail
-
-
-def test_a_broken_preflight_is_a_plain_failure(landing):
-    """Not `blocked`: nothing in the range was judged, so it takes the exit-1 catch-all."""
-    ln, _ = landing(Fakes(blockers=[1]))
-    with pytest.raises(Outcome) as exc:
-        ci.preflight(ln)
-    assert exc.value.rc == 1 and exc.value.verdict == "refused"
 
 
 @pytest.mark.parametrize(

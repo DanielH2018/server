@@ -5,7 +5,7 @@ flip, it grades `traefik` against Ansible's frozen release record (NOT ROLLED) a
 `traefik-crds` up by name, which the Pi's `docker inspect` answers with "no such object".
 
 Every boundary is a `_land_fakes.py` fake but the gate. The gate here is the real
-`detach_notify.gate`, over a probe subprocess that answers as the real probe did from each
+`health_gate.gate`, over a probe subprocess that answers as the real probe did from each
 tree on 2026-10-18. The tree is decided by the `cwd` the landing hands the gate.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_flip_gate_tree.py
@@ -23,8 +23,8 @@ from _land_fakes import (
     build_classifier,
     build_tools,
 )
-from deploy_tools.deploy_lib import detach_notify
-from deploy_tools.deploy_lib.detach_notify import NotifyTools
+from deploy_tools.land_lib import health_gate
+from deploy_tools.land_lib.health_gate import GateTools
 from deploy_tools.promote_lib.wait import WaitResult
 from lib.exit_codes import PROBE_NOT_APPLICABLE, PROBE_UNREADABLE
 
@@ -87,7 +87,7 @@ def _probe(f: Fakes, healthy_everywhere: frozenset[str] = frozenset()):
             return set()
         return {"k8s"}
 
-    return NotifyTools(run=run, tag_platforms=tag_platforms)
+    return GateTools(run=run, tag_platforms=tag_platforms)
 
 
 def _land(
@@ -101,7 +101,7 @@ def _land(
 
     def gate(tags, cwd=None, **_kwargs):
         calls.append(("gate", (tags,), {"cwd": cwd}))
-        return detach_notify.gate(tags, True, tools=notify_tools, cwd=cwd)
+        return health_gate.gate(tags, tools=notify_tools, cwd=cwd)
 
     @contextlib.contextmanager
     def snapshot(primary, sha):

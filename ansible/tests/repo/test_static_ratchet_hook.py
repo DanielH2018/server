@@ -64,9 +64,8 @@ ADDED_BY_5481 = {
 ADDED_2026_10_25 = {
     "evals/tests/test_eval_cases.py": "CLAUDE.md",
     "ansible/tests/deploy/test_landing_annotations.py": "scripts/deploy_tools/land_lib/ledger.py",
-    "ansible/tests/deploy/test_gitops_deploy_imports.py": "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_handlers.py",
     "scripts/validate/tests/test_validate_alert_rules.py": "ansible/roles/k8s/observability/files/rules/ingress-probes.yaml",
-    "scripts/validate/tests/test_validate_unit_templates.py": "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
+    "scripts/validate/tests/test_validate_unit_templates.py": "hosts/components/claude-code/templates/claude-clone-sync.service.j2",
 }
 
 NUMBER_WORDS = {

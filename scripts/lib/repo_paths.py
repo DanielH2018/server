@@ -58,9 +58,6 @@ ROLES = ANSIBLE / "roles"
 K8S_ROLES = ROLES / "k8s"
 JOB_FILES = SCRIPTS / "renderer" / "job_files"
 FILTER_PLUGINS = ANSIBLE / "filter_plugins"
-# deploy_logic.py lives in the role that deploys it, so a script that has to agree with the
-# deployer imports it from here rather than carrying a second derivation.
-GITOPS_DEPLOY_FILES = ROLES / "setup" / "gitops_deploy" / "files"
 # `longhorn_robustness.py`'s one copy lives in monitor-bridge's `files/` without shipping in its
 # pod; the runbook gates import it from here (#3668).
 MONITOR_BRIDGE_FILES = K8S_ROLES / "monitor-bridge" / "files"
@@ -107,6 +104,5 @@ ANSIBLE_TESTS = ANSIBLE / "tests"
 # directory constant. `lib/stdlib_only.py`'s walk refuses an import from a role directory, or
 # of a basename two of them share, that this map does not list.
 ROLE_MODULES = {
-    GITOPS_DEPLOY_FILES: ["gitops_hold", "gitops_ledger", "gitops_markers"],
     MONITOR_BRIDGE_FILES: ["longhorn_robustness"],
 }

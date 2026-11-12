@@ -7,10 +7,7 @@ import re
 
 import pytest
 
-import secret_stubs
-from deploy_tools.narrow_lib.filters import filter_names
 from lib import yaml_fast
-from lib.narrow_git import CannotNarrow
 from lib.repo_paths import ANSIBLE
 from secret_stubs import (
     NEVER_STUB,
@@ -32,29 +29,6 @@ def _file_keys() -> set[str]:
 def _stub_map() -> dict[str, str]:
     keys = homelab_stub_keys(yaml_fast.safe_load(SECRETS.read_text()))
     return {key: homelab_secret_stub(key) for key in keys}
-
-
-FILTERS = {"homelab_secret_stub", "homelab_stub_keys", "homelab_unstubbed_keys"}
-PLUGIN_REL = "ansible/filter_plugins/secret_stubs.py"
-
-
-def test_filters_register_as_one_literal_dict_is_clean():
-    """The deployer reads the names statically; a refusal there defers every service."""
-    source = (ANSIBLE / "filter_plugins" / "secret_stubs.py").read_text()
-    assert filter_names(source, PLUGIN_REL) == FILTERS
-    assert set(secret_stubs.FilterModule().filters()) == FILTERS
-
-
-def test_filters_built_any_other_way_is_flagged():
-    source = (ANSIBLE / "filter_plugins" / "secret_stubs.py").read_text()
-    literal = source[source.index("        return {\n") :]
-    built = source.replace(
-        literal,
-        "        return dict(homelab_secret_stub=homelab_secret_stub)\n",
-    )
-    assert built != source
-    with pytest.raises(CannotNarrow, match="literal dict"):
-        filter_names(built, PLUGIN_REL)
 
 
 def test_stub_keys_are_every_secret_key_but_sops_and_never_stub():

@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 from _role_census import task_files_by_role
 from _task_guards import guarded_tasks
-from deploy_tools.land_lib.land_reach import setup_role_hosts
+from deploy_tools.setup_lib.role_hosts import setup_role_hosts
 from deploy_tools.setup_lib.setup_gates import HOSTS, packaged_guard_hosts
 from lib.repo_paths import ANSIBLE
 from renderer.renderer_lib import host as host_mode

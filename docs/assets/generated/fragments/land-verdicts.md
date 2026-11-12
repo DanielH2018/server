@@ -6,6 +6,6 @@
 | 64 | `LAND_BAD_ARGS` | the command line is wrong. |
 | 75 | `LAND_GAVE_UP` | gave up waiting — a budget elapsed, no promotion covered the merge in time, the health gate could not read its store, or no host package containing the merge is published. |
 
-The `VERDICT:` line ends with one of 16 words: `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`, `needs-manual-apply`, `deferred`, `merge-conflict`, `pr-ci-red`, `merge-timeout`, `ci-red`, `ci-timeout`, `ci-unproven`, `refused`, `handoff-timeout`, `unbuilt`.
+The `VERDICT:` line ends with one of 15 words: `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `needs-manual-apply`, `deferred`, `merge-conflict`, `pr-ci-red`, `merge-timeout`, `ci-red`, `ci-timeout`, `ci-unproven`, `refused`, `handoff-timeout`, `unbuilt`.
 
 A `deploy-failed` verdict carries one of 7 causes in the landing annotation: `tag-miss`, `promote-held`, `promote-timeout`, `gate-unreadable`, `gate-stale`, `soak-failed`, `invalid-cause`.

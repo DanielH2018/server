@@ -13,7 +13,7 @@ still runs steps 1 to M.
 
 WHAT EACH PHASE READS AND WRITES on the shared `Landing`. The state is threaded through every
 phase, so this table is the contract no signature states. `classification` is written once
-and frozen; `plane` is a read-only property over it and `narrowed_plane`:
+and frozen; `plane` is a read-only property over it:
 
 | Phase | Reads | Writes |
 |---|---|---|
@@ -23,15 +23,13 @@ and frozen; `plane` is a read-only property over it and `narrowed_plane`:
 | `classify.resolve` | `opts.pr` | `merge_sha`, `ledger.t_merged`, `ledger.merge_sha` |
 | `classify.refuse_stale_code` | `merge_sha`, `opts.since`, `opts.primary`, `tools.stale_code` | -- |
 | `closing_refs.close_stranded` | `opts.pr` | `warnings` |
-| `classify.classify` | `merge_sha`, `opts.since`, `opts.primary`, what each host the note would name holds (`deployed_copies`) | `classification` (frozen: the plane note and its inputs), `resolved_tags`, `needs_diff` |
+| `classify.classify` | `merge_sha`, `opts.since`, `opts.primary` | `classification` (frozen: the plane note and its inputs), `resolved_tags`, `needs_diff` |
 | `classify.reaches_host_inputs` (in step 1) | `classification`, `needs_diff` | `host_candidate` |
 | `classify.shortcut_if_nothing` | `resolved_tags`, `plane`, `classification`, `needs_diff`, `host_candidate` | -- |
-| `ci.preflight` | `opts.primary` | -- |
 | `ci.wait_master_ci` | `merge_sha`, `opts.ci_timeout` | `ledger.t_ci` |
-| `host_wait.host_targets` (in step 3, only when `host_candidate`) | `host_candidate`, `merge_sha`, `opts.primary` | `host_targets`, and `host_candidate` cleared when none differ |
-| `classify.narrow_plane` (in step 3, after the CI wait) | `classification`, `opts.primary` | `narrowed_plane` |
+| `host_wait.host_targets` (in step 2, only when `host_candidate`) | `host_candidate`, `merge_sha`, `opts.primary` | `host_targets`, and `host_candidate` cleared when none differ |
 | `deploy.deploy_phase` | `resolved_tags`, `needs_diff`, `host_targets`, `classification`, `opts.since`, `merge_sha` | `resolved_tags`, `named_k8s_tags`, `flux_tags`, `suspended_tags`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.t_deploy` |
-| `host_wait.wait_for_hosts` (step 6) | `host_targets`, `merge_sha`, `opts.pr`, `opts.primary` | -- |
+| `host_wait.wait_for_hosts` (step 4) | `host_targets`, `merge_sha`, `opts.pr`, `opts.primary` | -- |
 | `health_verdict.health` | `resolved_tags`, `host_targets`, `flux_tags`, `suspended_tags`, `deployed_at`, `plane`, `classification` | `ledger.cause` |
 
 Every phase may end the landing by raising an `Outcome`, and the last one always does.
@@ -75,7 +73,6 @@ def _step_ci(ln: Landing) -> None:
     """
     ci.wait_master_ci(ln, ln.merge_sha)
     ln.ledger.t_ci = ln.tools.clock()
-    classify.narrow_plane(ln)
     if not ln.host_candidate:
         return
     render = ln.tools.host_targets or host_wait.host_targets
@@ -101,7 +98,6 @@ def _step_hosts(ln: Landing) -> None:
 # module does not reach the pipeline. Patch an entry of `_STEPS` instead.
 _STEPS: tuple[tuple[str, Callable[[Landing], None]], ...] = (
     ("resolving PR #{pr}", _step_resolve),
-    ("pre-flight: can the tick cross what is incoming?", ci.preflight),
     ("waiting for master CI", _step_ci),
     ("waiting on the promotion", deploy.deploy_phase),
     ("waiting for hosts to apply", _step_hosts),
@@ -123,11 +119,11 @@ def run(ln: Landing) -> Outcome:
     # rather than raised, because `run`'s own `except Outcome` above would not catch an
     # Outcome raised here and land.py would see a traceback instead of an exit code. It
     # carries a verdict so the `VERDICT:` line still prints and the ledger is not `aborted`.
-    ln.ledger.verdict = Verdict.BLOCKED
+    ln.ledger.verdict = Verdict.REFUSED
     return Outcome(
         1,
         "the last phase must end the landing",
-        verdict=Verdict.BLOCKED,
+        verdict=Verdict.REFUSED,
         error="pipeline fell through",
     )
 

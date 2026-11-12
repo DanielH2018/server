@@ -286,7 +286,6 @@ def test_the_import_roots_are_the_landers_own_inserts():
     assert {
         "scripts",
         "scripts/deploy_tools",
-        "ansible/roles/setup/gitops_deploy/files",
         "hosts/lib",
     } <= set(roots)
     assert "" not in roots

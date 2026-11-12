@@ -21,8 +21,8 @@ MUST_FIND = frozenset(
     {
         "hosts/components/k3s-host-dns/templates/netplan-dns.yaml.j2",
         "hosts/components/k3s-host-dns/templates/host-corefile.j2",
-        "roles/setup/gitops_deploy/templates/config.env.j2",
-        "roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
+        "hosts/components/claude-code/templates/claude-triage-config.env.j2",
+        "hosts/components/claude-code/templates/claude-clone-sync.service.j2",
         "roles/setup/common/templates/resolv.conf.j2",
         "roles/setup/nut_host/templates/host-upsmon.conf.j2",
         "hosts/components/hypervisor/templates/staging-nwfilter.xml.j2",

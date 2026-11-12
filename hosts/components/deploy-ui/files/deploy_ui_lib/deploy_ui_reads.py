@@ -277,11 +277,6 @@ VERDICT_HINTS: dict[str, tuple[str, str]] = {
         "The deploy failed. Cause promote-held is the operator's DEPLOY_HOLD to clear. "
         "Every other cause re-runs safely, except a playbook task that failed after applying.",
     ),
-    "blocked": (
-        "warn",
-        "Not this PR's failure: something else in the incoming range needs an operator. "
-        "Nothing was deployed.",
-    ),
     "needs-manual-apply": (
         "warn",
         "Landed but not live. Read every remediation line above, not only the first.",

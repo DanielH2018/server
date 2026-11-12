@@ -7,7 +7,7 @@ import ast
 
 import pytest
 import yaml
-from _row_table import Census, Subject, check, proof_problems, tracked
+from _row_table import Census, Subject, check, proof_problems
 
 from lib import yaml_fast
 
@@ -86,9 +86,6 @@ _LOADS = frozenset({"safe_load", "safe_load_all"})
 
 def _narrowing_modules() -> list[str]:
     return [
-        *tracked("scripts/deploy_tools/narrow_lib/*.py"),
-        "scripts/deploy_tools/narrow_setup.py",
-        "scripts/deploy_tools/land_lib/land_reach.py",
         "scripts/deploy_tools/setup_lib/setup_gates.py",
         "scripts/deploy_tools/setup_lib/setup_role_chains.py",
         "scripts/lib/narrow_git.py",
@@ -165,7 +162,7 @@ NARROWING_CENSUS = Census(
     ),
     must_find=frozenset(
         {
-            "scripts/deploy_tools/narrow_lib/task_walk.py",
+            "scripts/deploy_tools/setup_lib/setup_role_chains.py",
             "scripts/lib/render_guard.py",
             "scripts/lib/k8s_role_callers.py",
         }

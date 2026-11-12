@@ -153,7 +153,7 @@ def test_the_real_scripts_directory_yields_the_known_shape(live_verdicts):
     rows = g.build_rows(verdicts=live_verdicts)
     names = {r["name"] for r in rows}
     assert "probe.py" in names
-    assert "deploy.sh" in names
+    assert "land.sh" in names
     assert not any(n.startswith(("test_", "_")) for n in names)
     assert "conftest.py" not in names
     assert len(rows) >= 30
@@ -304,21 +304,13 @@ def test_the_live_tree_classifies_the_names_we_already_know(live_verdicts):
         "unit_templates.py": "gate",
         "validate_ha_config.py": "gate",
         "grafana_dashboard_uids.py": "gate",
-        "deploy_tags.py": "gate",
-        "deploy_cli.py": "gate",
-        "staleness.py": "gate",
-        "detach_notify.py": "gate",
         "smoke_extract.py": "gate",
         # "scheduled" rather than "gate": the B2 accounting cron (roles/setup/k3s) invokes
         # `probe.py b2-deletions`, and "scheduled" outranks "gate" in _PRECEDENCE. probe.py is
-        # still a gate too (deploy.sh, hooks) -- the cron adds a caller, it doesn't drop one.
+        # still a gate too (hooks) -- the cron adds a caller, it doesn't drop one.
         "probe.py": "scheduled",
         "docs_provenance.py": "library",
         "core.py": "library",
-        # "gate" rather than "adhoc" because monitor-bridge's copy of `gitops_markers.py` builds
-        # the `./scripts/deploy.sh --tags` command, and the classifier cites that file. A person
-        # also runs it by hand; the gate is simply a caller the classifier can see.
-        "deploy.sh": "gate",
         "etcd_restore_drill.sh": "adhoc",  # a package ships it, and its cron names a full path
     }
     assert {name: verdicts[name][0] for name in expected} == expected

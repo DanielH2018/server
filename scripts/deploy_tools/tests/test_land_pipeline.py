@@ -28,16 +28,6 @@ def test_nothing_to_deploy_is_decided_before_the_ci_wait(land_run):
     assert "verdict=nothing-to-deploy cause= exit=0" in logline
 
 
-def test_preflight_runs_before_the_ci_wait(land_run):
-    _, _, _, calls, _ = land_run([], Fakes(await_ci=[(1, "red")]))
-    blockers = next(
-        i
-        for i, c in enumerate(calls)
-        if c[0] == "deploy_tags" and c[1][0] == "blockers"
-    )
-    assert blockers < _names(calls).index("await_ci")
-
-
 def test_the_annotation_is_written_on_a_verdict(land_run):
     _, _, _, _, logline = land_run([], Fakes(await_ci=[(75, "no verdict")]))
     assert (
@@ -308,8 +298,8 @@ def test_the_diff_fallback_derives_between_the_ci_wait_and_the_promotion_wait(la
     _, _, _, calls, _ = land_run(
         ["--since", "abc"], Fakes(derived=([], "fallback"), changed="sonarr")
     )
-    names = [c[1][0] if c[0] == "deploy_tags" else c[0] for c in calls]
-    assert names.index("await_ci") < names.index("changed") < names.index("land_wait")
+    names = [c[1][0] if c[0] == "git" else c[0] for c in calls]
+    assert names.index("await_ci") < names.index("diff") < names.index("land_wait")
 
 
 def test_a_missing_primary_checkout_is_named_before_any_phase_runs(land_run):

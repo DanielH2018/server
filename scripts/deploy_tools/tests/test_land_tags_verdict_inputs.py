@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """What `land.sh` asks `land_tags` BEYOND the tag list, to reach a verdict.
 
-Three questions, the first two each behind a landing that read as success over unfinished work:
+Two questions:
 
 * `service_tags_at` -- which tags exist AT A REF. Asked of a checkout, a role the
   PR itself registers reads as UNREGISTERED, which is what a role nobody registered reads as
   too, so the landing prints the expensive remedy for work one `--tags` run does.
-* `self_applied_command` -- what a hand runs when the tick CONVERGED without applying the PR
-  (issue #1537).
-* `plane_note` on a rotation -- which k8s readers of a changed key the tick applies itself, so
-  the operator does not repeat its apply (#5610).
+* `plane_note` on a rotation -- where every k8s reader of a changed key gets the new value
+  (#5610).
 
 Its own module rather than test_land_tags.py: that file pins the DERIVATION against a fixture
 and patches `declared_tags` away, while these read real git and the real remediation text.
@@ -22,9 +20,9 @@ import subprocess
 import pytest
 
 
-from deploy_tools.deploy_lib import tags as deploy_tags
 from deploy_tools.land_lib import land_tags
 from lib.git_testing import git_out, init_repo
+from lib.repo_paths import REPO
 from deploy_tools.land_lib import tools
 
 # THE RETIREMENT CONVENTION: a retired role is DELETED, and the same PR names its tag here. A
@@ -48,7 +46,7 @@ def two_commit_repo(tmp_path):
     """A repo whose SECOND commit registers `pihole-exporter`; yields (repo, first, second).
 
     The role and its inventory entry arrive together, so the entry exists at the merge
-    commit and in no checkout until the tick fast-forwards.
+    commit and in no checkout until checkout-sync fast-forwards.
     """
     repo = tmp_path / "repo"
     inventory = repo / "ansible" / "inventory" / "host_vars"
@@ -119,37 +117,12 @@ def test_this_repo_at_head_agrees_with_its_own_working_tree():
     that still declares it. It is told apart by `RETIRED_TAGS` above: a lost tag named there
     is a retirement, and any other lost tag is still the reader dropping an entry.
     """
-    at_head = land_tags.service_tags_at("HEAD", deploy_tags.REPO)
-    in_tree = deploy_tags.service_tags()
+    at_head = land_tags.service_tags_at("HEAD", REPO)
+    in_tree = land_tags.declared_tags()
     assert "traefik" in at_head
     assert len(at_head) >= 50, sorted(at_head)
     lost = at_head - in_tree
     assert lost <= RETIRED_TAGS, sorted(lost - RETIRED_TAGS)
-
-
-# ── self_applied_command: the hand-apply the tick would otherwise have done ──
-
-
-def test_the_command_names_the_role_the_tick_would_have_applied():
-    files = ["ansible/roles/setup/renovate_agent/files/renovate_agent.py"]
-    command = land_tags.self_applied_command(files)
-    assert "ansible/initial_setup.yml --tags renovate_agent" in command
-    assert "merge --ff-only" in command
-
-
-@pytest.mark.parametrize(
-    "files",
-    [
-        ["docs/gitops-pipeline.md"],
-        ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"],
-        ["ansible/bootstrap.yml"],
-    ],
-)
-def test_the_command_is_empty_for_a_pr_the_tick_never_applies(files):
-    """The must-not-fire half, over exactly the paths `self_applied` answers False for: a
-    command here would send an operator at a plane apply their PR never needed."""
-    assert land_tags.self_applied_command(files) == ""
-    assert land_tags.self_applied(files) is False
 
 
 @pytest.mark.parametrize(
@@ -165,12 +138,8 @@ def test_the_command_is_empty_for_a_pr_the_tick_never_applies(files):
     ids=["secrets-only", "beside-a-k8s-role", "beside-the-deploy-plane"],
 )
 def test_a_secrets_rotation_sends_every_k8s_reader_through_cluster_vars(files):
-    """The tick applies no k8s reader since D6.12, whatever else the range carries.
-
-    The note named a `secret-readers:` journal line or a `deploy.yml` receipt before, and
-    the tick writes neither now.
-    """
-    note = land_tags.plane_note(files, owed=land_tags.forecast_owed(files))
+    """Whatever else the range carries, every k8s reader gets the value through cluster-vars."""
+    note = land_tags.plane_note(files)
     assert "cluster_vars.py write" in note
     assert "secret-readers:" not in note
     assert "this landing waits on that apply" not in note

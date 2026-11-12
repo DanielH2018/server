@@ -41,8 +41,8 @@ and exit code as its own. ``--detach && cc-wait land <pr>`` works unchanged; ``-
 ``--since``, ``--subject`` and ``--fresh`` are refused. The mechanics are ``land_lib/handoff.py``.
 
 WHAT THIS SCRIPT DOES NOT DO. It holds no check of its own: no health logic, no deploy
-staleness logic, and it runs no deploy.sh and no GitOps tick. promote and Flux apply every tag,
-deploy_detach_notify.gate owns the health verdict, await_ci.wait owns the CI wait. A check
+staleness logic. promote and Flux apply every tag, `land_lib/health_gate.gate` owns the health
+verdict, await_ci.wait owns the CI wait. A check
 appearing in here is a bug, not a feature -- it would be a second implementation that drifts from the first. Which checkout each helper comes from, and why
 it is not one answer, is the docstring of ``land_lib/tools.py``.
 
@@ -76,29 +76,25 @@ exits 0 when it posted and 1 when it refused. `land_lib/pin_gate.py` has the rul
 
 Exit codes:
   0   deployed and settled, or there was nothing to deploy
-  1   CI red or unproven, blocked by a change needing a hand, a tag matching no k8s entry, a
+  1   CI red or unproven, a tag matching no k8s entry, a
       held or failed promotion, the health gate failed, or the PR was closed
       unmerged, conflicts with master, or its own CI is red
   64  bad arguments
   75  gave up waiting -- the merge budget or CI budget elapsed, no promotion covered the
-      merge in time, the health gate or the owed ledger could not be read, or the builder has not
+      merge in time, the health gate could not read its store, or the builder has not
       published a host package that contains the merge
 
 Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
-blocked | needs-manual-apply | deferred | merge-conflict | pr-ci-red | merge-timeout |
+needs-manual-apply | deferred | merge-conflict | pr-ci-red | merge-timeout |
 ci-red | ci-timeout | ci-unproven | refused | handoff-timeout | unbuilt.
 
-`blocked` is not a failure of this PR -- something else in the incoming range needs an
-operator, and nothing was deployed. `needs-manual-apply` means this PR reaches something
-neither a deploy tag nor a host package covers, so it is landed but not live.
-`nothing-to-deploy` also covers a PR that reaches only a setup role: the deployer's timer
-applies it, and this landing does not watch that apply, so read the host (or `owed.jsonl`)
-for the outcome.
+`needs-manual-apply` means this PR rotates a secret, whose consumers neither a deploy tag nor a
+host package covers, so it is landed but not live. `nothing-to-deploy` also covers a PR that
+reaches only a setup role, which no landing applies.
 `deferred` means this landing gave up waiting and a re-run completes it: no promotion covered
 the merge in time, the builder has not published the host package, or the health gate could
 not read its store or found its tree older than origin/master (exit 75), so the deploy went
-ungraded. Re-run land.sh to grade it. It also
-means the owed ledger could not be read while the PR changes a setup role the tick does not apply.
+ungraded. Re-run land.sh to grade it.
 `refused` is every other exit-1 stop: the landing policy, a PR closed unmerged or with
 changes requested, a read or a fetch that failed, or a checkout whose landing code master
 has changed since (`classify.refuse_stale_code`, and before `--arm-merge` merges anything,

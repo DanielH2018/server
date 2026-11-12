@@ -84,14 +84,14 @@ def test_the_header_is_one_line_with_no_frontmatter():
 # --- readers against the real tree ---------------------------------------------------------
 
 
-def test_module_constant_reads_a_tuple_without_importing():
-    prefixes = readers.module_constant(g.DEPLOY_CHANGES, "_BROAD_MANUAL_PREFIXES")
-    assert "ansible/bootstrap.yml" in prefixes
+def test_module_constant_reads_a_mapping_without_importing():
+    tiers = readers.module_constant(g.SECRET_ROTATION, "TIER_DAYS")
+    assert tiers
 
 
 def test_module_constant_rejects_a_name_that_is_not_assigned():
     with pytest.raises(KeyError):
-        readers.module_constant(g.DEPLOY_CHANGES, "_NO_SUCH_CONSTANT")
+        readers.module_constant(g.SECRET_ROTATION, "_NO_SUCH_CONSTANT")
 
 
 def test_registry_counts_cover_every_registered_secret():
@@ -148,13 +148,6 @@ def test_longhorn_tiers_fails_on_a_missing_default_rather_than_guessing():
         renderers.render_longhorn_tiers(
             {k: v for k, v in _DEFAULTS.items() if "retain" not in k}
         )
-
-
-def test_gitops_prefixes_lists_every_prefix_under_its_constant():
-    out = renderers.render_gitops_prefixes(("s/",), ("d/", "e/"), ("m.yml",))
-    assert "| Setup, scoped | `s/` (`_BROAD_SETUP_PREFIXES`)" in out
-    assert "`d/`, `e/` (`_BROAD_DEPLOY_PREFIXES`)" in out
-    assert "`m.yml` (`_BROAD_MANUAL_PREFIXES`)" in out
 
 
 def test_autodeploy_coverage_renders_counts_and_denylist():

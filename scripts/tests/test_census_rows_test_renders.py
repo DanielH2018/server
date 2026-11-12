@@ -61,7 +61,6 @@ ROWS = (
                 "ansible/tests/longhorn/_restore_drill.py",
                 "ansible/tests/longhorn/test_longhorn_reap_guard.py",
                 "ansible/tests/staging/test_staging_network.py",
-                "scripts/deploy_tools/tests/test_deploy_exit_codes.py",
                 "scripts/docs/tests/test_mkdocs_repo_links.py",
             }
         ),
@@ -190,7 +189,6 @@ ROWS = (
         # #4002, #4133 and #4135 converted, are in the census the row reads.
         must_find=frozenset(
             {
-                "scripts/deploy_tools/tests/test_deploy_tags_blockers.py",
                 "ansible/tests/deploy/test_tree_lock_single_definition.py",
                 "ansible/tests/setup/test_host_python_invocations.py",
                 "evals/tests/test_eval_cases.py",

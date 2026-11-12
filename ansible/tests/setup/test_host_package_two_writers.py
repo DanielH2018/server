@@ -26,7 +26,7 @@ The census joins two sides per host:
   `cron_file` as `/etc/cron.d/<name>`, a `unit` as `/etc/systemd/system/<unit>`, the file
   `homelab-reconcile:retire_unit` removes, and a `cron` as its `(user, name)`.
 
-A role reaches the hosts `land_reach.setup_role_hosts` names, less those its leading
+A role reaches the hosts `setup_lib/role_hosts.setup_role_hosts` names, less those its leading
 `meta: end_role` guard ends it on. A task, or its nearest enclosing block, naming a
 `delegate_to:` host writes on that host, not on the host its playbook entry runs on (H5.14). A task, its block or its import guarded by
 `<role>_packaged_hosts` writes nothing on a host the map lists
@@ -51,7 +51,7 @@ import pytest
 from _helpers import load_tasks, walk_tasks
 from _role_census import task_files_by_role
 from _task_guards import delegated_tasks
-from deploy_tools.land_lib.land_reach import setup_role_hosts
+from deploy_tools.setup_lib.role_hosts import setup_role_hosts
 from deploy_tools.setup_lib.setup_gates import HOSTS, packaged_guard_hosts
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env

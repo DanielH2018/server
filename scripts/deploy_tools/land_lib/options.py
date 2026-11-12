@@ -14,11 +14,7 @@ from pathlib import Path
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.cli_help import ArgumentParser
-from lib.repo_paths import GITOPS_DEPLOY_FILES, PRIMARY_CHECKOUT
-
-# The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
-_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from gitops_markers import STATE_DIR
+from lib.repo_paths import PRIMARY_CHECKOUT
 
 MERGE_POLL_S = 30
 # The master CI wait: ci.yml's longest `timeout-minutes` chain into the `prek` gate, 82 min
@@ -130,7 +126,6 @@ class Options:
     merge_poll: int = MERGE_POLL_S
     pace_master_runs: int = PACE_MASTER_RUNS
     primary: Path = PRIMARY_CHECKOUT
-    deployer_state: Path = Path(STATE_DIR)
     # `--detach` forks the landing into a logfile this script names and returns; `cc-wait land
     # <pr>` is the wait. It defaults off, so an invocation that omits it reaches the same code
     # path as a plain landing.

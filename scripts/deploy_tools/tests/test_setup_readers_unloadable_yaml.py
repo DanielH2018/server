@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from deploy_tools.land_lib import land_reach
+from deploy_tools.setup_lib import role_hosts
 from deploy_tools.setup_lib import setup_gates
 from deploy_tools.setup_lib import setup_role_chains as chains
 
@@ -167,24 +167,22 @@ def test_changed_task_texts_reads_a_number_block_as_holding_no_tasks():
 
 
 @NON_LIST_BODIES
-def test_land_reach_keeps_the_role_reach_on_a_role_of_one_non_list_block(
+def test_role_hosts_keeps_the_role_reach_on_a_role_of_one_non_list_block(
     tmp_path, body
 ):
     args = _gate_tree(tmp_path / "tree", _block(body))
-    every_host = frozenset(land_reach._HOSTS)
-    path = "ansible/roles/setup/demo/files/shipped.j2"
-    assert land_reach.setup_role_hosts("demo", *args) == every_host
-    assert land_reach.setup_shipped_file_hosts("demo", path, *args) == every_host
+    every_host = frozenset(setup_gates.HOSTS)
+    assert role_hosts.setup_role_hosts("demo", *args) == every_host
 
 
 def _playbook_reach(root: Path, text: str):
     root.mkdir()
     playbook = root / "initial_setup.yml"
     playbook.write_text(text)
-    return land_reach.setup_role_hosts("common", playbook, roles_dir=root)
+    return role_hosts.setup_role_hosts("common", playbook, roles_dir=root)
 
 
-def test_land_reach_reads_a_playbook_date_as_a_syntax_error(tmp_path):
+def test_role_hosts_reads_a_playbook_date_as_a_syntax_error(tmp_path):
     play = "- hosts: all\n  roles: [common]\n  vars: {d: 2026-13-45}\n"
     assert _answer(_playbook_reach, tmp_path / "date", play) == _answer(
         _playbook_reach, tmp_path / "syntax", SYNTAX_ERROR
@@ -229,23 +227,12 @@ def _gate_tree(root: Path, tasks: str, all_vars: str = "ups_host: daniel-server\
     )
 
 
-def test_a_shipped_file_read_keeps_the_gate_on_a_task_holding_a_date(tmp_path):
-    tasks = (
-        "- name: Ships it\n  src: shipped.j2\n  vars: {d: 2026-01-01}\n"
-        "  when: inventory_hostname == ups_host\n"
-        "- name: Something else\n  ansible.builtin.debug: {}\n"
-    )
-    args = _gate_tree(tmp_path / "tree", tasks)
-    path = "ansible/roles/setup/common/files/shipped.j2"
-    assert land_reach.setup_shipped_file_hosts("demo", path, *args) == {"daniel-server"}
-
-
 def test_a_date_in_a_when_chain_reads_as_every_host(tmp_path):
     _, all_vars, host_vars, roles = _gate_tree(tmp_path / "tree", LOADABLE)
     chain = (datetime.date(2026, 1, 1),)
-    hosts = frozenset(land_reach._HOSTS)
+    hosts = frozenset(setup_gates.HOSTS)
     assert (
-        land_reach._hosts_passing([chain], hosts, all_vars, host_vars, roles / "demo")
+        role_hosts._hosts_passing([chain], hosts, all_vars, host_vars, roles / "demo")
         == hosts
     )
 
@@ -253,7 +240,7 @@ def test_a_date_in_a_when_chain_reads_as_every_host(tmp_path):
 @pytest.mark.parametrize("vars_text", [IMPOSSIBLE_DATE, BAD_BOOL, SYNTAX_ERROR])
 def test_a_vars_file_that_does_not_load_reads_as_every_host(tmp_path, vars_text):
     _, all_vars, host_vars, _ = _gate_tree(tmp_path / "tree", LOADABLE, vars_text)
-    assert land_reach._eval_when("no_such_var == 1", "daniel-box", all_vars, host_vars)
+    assert setup_gates._eval_when("no_such_var == 1", "daniel-box", all_vars, host_vars)
 
 
 @pytest.mark.parametrize("text", [IMPOSSIBLE_DATE, BAD_BOOL])

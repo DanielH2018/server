@@ -11,7 +11,6 @@ from pathlib import Path
 
 import pytest
 
-from deploy_tools.land_lib import land_reach
 from deploy_tools.setup_lib import setup_role_chains as chains
 
 SYNTAX_ERROR = "- [unclosed\n"
@@ -176,56 +175,3 @@ def test_a_target_imported_through_two_chains_beside_a_cycle_keeps_both(tmp_path
         ("first_gate",),
         ("second_gate",),
     ]
-
-
-def _shipped_file_hosts(root: Path, sub_files: dict[str, str]):
-    root.mkdir()
-    (root / "initial_setup.yml").write_text("- hosts: x\n  roles: [demo]\n")
-    (root / "all.yml").write_text("leaf_gate: true\nsub_gate: true\nother_gate: true\n")
-    (root / "host_vars").mkdir()
-    (root / "roles").mkdir()
-    _full_role(root / "roles" / "demo", sub_files)
-    return land_reach.setup_shipped_file_hosts(
-        "demo",
-        "ansible/roles/setup/demo/files/shipped.j2",
-        root / "initial_setup.yml",
-        root / "all.yml",
-        root / "host_vars",
-        root / "roles",
-    )
-
-
-def test_land_reach_reads_a_cycle_as_an_unreadable_file(tmp_path):
-    expected = _answer(_shipped_file_hosts, tmp_path / "syntax", UNREADABLE_SUB)
-    assert expected
-    assert _answer(_shipped_file_hosts, tmp_path / "cycle", CYCLES["self"]) == expected
-
-
-@pytest.mark.parametrize("cycle", CYCLES.values(), ids=CYCLES.keys())
-def test_land_reach_keeps_the_narrowed_hosts_beside_a_cycle(tmp_path, cycle):
-    """daniel-pi fails the leaf's gate but passes `sub_gate`, so a chain out of the cycle adds it."""
-
-    def hosts(root: Path, sub_files: dict[str, str]):
-        root.mkdir()
-        (root / "initial_setup.yml").write_text("- hosts: x\n  roles: [demo]\n")
-        (root / "all.yml").write_text(
-            "leaf_gate: true\nsub_gate: true\nother_gate: true\n"
-        )
-        (root / "host_vars").mkdir()
-        (root / "host_vars" / "daniel-pi.yml").write_text(
-            "leaf_gate: false\nother_gate: false\n"
-        )
-        (root / "roles").mkdir()
-        _full_role(root / "roles" / "demo", sub_files)
-        return land_reach.setup_shipped_file_hosts(
-            "demo",
-            "ansible/roles/setup/demo/files/shipped.j2",
-            root / "initial_setup.yml",
-            root / "all.yml",
-            root / "host_vars",
-            root / "roles",
-        )
-
-    narrowed = {"daniel-box", "daniel-server"}
-    assert hosts(tmp_path / "syntax", UNREADABLE_SUB) == narrowed
-    assert hosts(tmp_path / "cycle", cycle) == narrowed

@@ -141,8 +141,6 @@ def test_discover_templates_finds_the_known_set():
     names = frozenset(p.name for p in v.discover_templates())
     assert {
         "deploy-ui.service.j2",
-        "gitops-deploy.service.j2",
-        "gitops-deploy.timer.j2",
         "homelab-renovate-agent.timer.j2",
         "renovate-agent-land@.service.j2",
         "claude-land@.service.j2",
@@ -160,7 +158,7 @@ def test_discover_templates_finds_the_known_set():
         "homelab-rootq.socket.j2",
         "homelab-rootq@.service.j2",
     } <= names
-    assert len(names) == 30
+    assert len(names) == 28
 
 
 def test_unit_context_layers_the_owning_roles_real_defaults():
@@ -235,7 +233,6 @@ requires_node = pytest.mark.skipif(
 # glob, and the check would pass over the rules that remain.
 KNOWN_RULES = frozenset(
     {
-        "50-gitops-deploy.rules.j2",
         "50-renovate-agent-land.rules.j2",
         "50-claude-land.rules.j2",
     }
