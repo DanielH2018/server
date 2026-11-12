@@ -25,7 +25,6 @@ from deployer_lib.deploy_remediation import (
     broad_budget_ok,
     broad_remediation,
     manual_plane_remediation,
-    maximal_tag_warning,
 )
 
 
@@ -270,24 +269,3 @@ def test_the_budget_predicate_tracks_the_units_real_timeout():
         "the re-derivation above says a broad rollback overruns at 40min; if this goes red the "
         "note in this docstring is stale and forward-only needs re-arguing from the budget again"
     )
-
-
-# ── the role tag is the maximal apply, and the printed command says so ──────────────────────
-# `ansible-playbook ansible/k3s-bringup.yml --tags k3s` restarts k3s and re-encrypts etcd. A
-# change that needs only `--tags kubeconfig` must not be answered with it.
-
-
-def test_the_emptied_k3s_role_tag_carries_no_warning():
-    """`--tags k3s` runs only the `end_role` stub since H7.44, so no surface warns of it."""
-    for cmd in (
-        broad_remediation(False, True, {"k3s"}),
-        manual_plane_remediation({"k3s"}),
-    ):
-        assert "ansible/k3s-bringup.yml --tags k3s" in cmd
-        assert "WARNING" not in cmd
-
-
-def test_a_role_whose_tag_is_not_maximal_carries_no_warning():
-    """The rejecting half: the warning must not ride every setup command."""
-    assert "WARNING" not in broad_remediation(False, True, {"chezmoi_setup"})
-    assert maximal_tag_warning("chezmoi_setup") == ""

@@ -966,6 +966,7 @@
  "scripts/deploy_tools/tests/test_land_manual_plane_reads_no_deployer_state.py": 0.01,
  "scripts/deploy_tools/tests/test_land_merge.py": 0.0,
  "scripts/deploy_tools/tests/test_land_merge_past_review.py": 0.0,
+ "scripts/deploy_tools/tests/test_land_merge_stuck_check.py": 0.0,
  "scripts/deploy_tools/tests/test_land_narrows_the_plane_note.py": 0.54,
  "scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py": 0.03,
  "scripts/deploy_tools/tests/test_land_one_line_per_fact.py": 0.0,

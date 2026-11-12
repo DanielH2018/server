@@ -8,4 +8,4 @@
 
 The `VERDICT:` line ends with one of 16 words: `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`, `needs-manual-apply`, `deferred`, `merge-conflict`, `pr-ci-red`, `merge-timeout`, `ci-red`, `ci-timeout`, `ci-unproven`, `refused`, `handoff-timeout`, `unbuilt`.
 
-A `deploy-failed` verdict carries one of 7 causes in the landing annotation: `tag-miss`, `promote-held`, `promote-timeout`, `gate-unreadable`, `gate-stale`, `soak-failed`, `invalid-cause`.
+A `deploy-failed` verdict carries one of 8 causes in the landing annotation: `tag-miss`, `promote-held`, `promote-timeout`, `gate-unreadable`, `gate-stale`, `ledger-unreadable`, `soak-failed`, `invalid-cause`.

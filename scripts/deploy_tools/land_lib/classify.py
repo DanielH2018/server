@@ -16,6 +16,7 @@ from deploy_tools.land_lib.fresh import FRESH_FLAG
 from deploy_tools.land_lib.own_checkout import OWN_CHECKOUT
 from deploy_tools.land_lib.outcome import (
     UNREADABLE_LEDGER_NOTE,
+    Cause,
     Outcome,
     Verdict,
     say,
@@ -257,6 +258,7 @@ def owed_manual_planes(
             paths, quiet, ln.opts.deployer_state, ln.tools.read_owed
         )
     except land_tags.LedgerUnreadable as exc:
+        ln.ledger.cause = Cause.LEDGER_UNREADABLE
         print(UNREADABLE_LEDGER_NOTE)
         ln.finish(Verdict.DEFERRED, 75, f"PR #{ln.opts.pr}: {exc}")
 

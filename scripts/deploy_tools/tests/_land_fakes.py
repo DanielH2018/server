@@ -161,6 +161,11 @@ class Fakes:
             {"id": 1, "status": "completed", "conclusion": "skipped"}
         ]
     )
+    # What the PR head's check-runs and check-suites listings answer on every call, as
+    # `stuck_checks.find` reads them: `{name, suite}` per pending run, and the completed suite
+    # ids. An exception is raised in place of an answer.
+    pending_checks: Any = field(default_factory=list)
+    completed_suites: Any = field(default_factory=list)
     # `tools.k8s_tags_at`: every tag of a k8s entry at a ref, by ref. A ref absent here keeps
     # an entry for every tag the landing derived, so a test retires a tag only by saying so.
     # An exception is raised in place of a set.
@@ -256,6 +261,15 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             if isinstance(f.head_runs, Exception):
                 raise f.head_runs
             return f.head_runs
+        for route, answer in (
+            ("/check-runs?", f.pending_checks),
+            ("/check-suites?", f.completed_suites),
+        ):
+            if args[0] == "api" and route in args[1]:
+                calls.append((f"gh:{route[1:-1]}", args, kwargs))
+                if isinstance(answer, Exception):
+                    raise answer
+                return answer
         if args[0] == "api" and "/workflows/ci.yml/runs?branch=" in args[1]:
             answer = runs_seq(*args, **kwargs)
             if isinstance(answer, Exception):

@@ -1724,6 +1724,9 @@ jobs:
 
       - uses: $/.github/actions/setup
 
+      # DECIDED: no download-artifact step in ci.yml or promote.yml retries, unlike their curl and
+      # gh calls. Over 2026-10-13..11-12, `scripts/dev/ci_failures.py` found no download failure
+      # that a rerun cleared; every red one followed a build that never uploaded (#8005).
       - name: Download the hand-off from the build job
         if: >-
           github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
@@ -1817,12 +1820,19 @@ jobs:
   # serial prepare took 18-42 s of that. The items took the rest: three CPU-bound offline builds
   # ran 227-303 s each, sharing the leg's 4 vCPUs with every other group. Alone here, the first run
   # still took 329-385 s against 208-215 s for `upgrade_path`, so `run` submits the three builds
-  # first and the host items fill in behind them (#7866).
+  # first and the host items fill in behind them (#7866). That took it to 264-298 s against
+  # 207-212 s (run 42697086899), each build still 244-271 s beside the other two. So each release
+  # runs three shards, one offline build in each (#7879). Keep the shard count equal to the
+  # number of offline builds `bootstrap_plan.plan` lists; `test_bootstrap_case.py` holds it.
+  # The `name:` leaves the shard out, so a release's three shards share the check-run name
+  # `hosts/lib/ci_verdict.py` lists. An installed host package holds that list, and a renamed
+  # leg would read as pending to every copy installed before the rename.
   #
   # The steps and their `if:`s are the legs', and the job gates like them. The id starts with
   # `host_packages`, so the prefix filter in docs/target-architecture/host/h3-pi-pilot.md selects
   # these legs too. The budget matches the legs', because a Dockerfile PR builds the image here too.
   host_packages_bootstrap:
+    name: host_packages_bootstrap (${{ matrix.release }}, ${{ matrix.python }})
     needs: [prove, host_packages_build]
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' }}
     runs-on: ubuntu-26.04
@@ -1834,8 +1844,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {release: "24.04", python: "3.12"}
-          - {release: "26.04", python: "3.14"}
+          - {release: "24.04", python: "3.12", shard: "1/3"}
+          - {release: "24.04", python: "3.12", shard: "2/3"}
+          - {release: "24.04", python: "3.12", shard: "3/3"}
+          - {release: "26.04", python: "3.14", shard: "1/3"}
+          - {release: "26.04", python: "3.14", shard: "2/3"}
+          - {release: "26.04", python: "3.14", shard: "3/3"}
     env:
       UV_NO_GROUP: lint
     steps:
@@ -1896,6 +1910,7 @@ jobs:
         env:
           RELEASE: ${{ matrix.release }}
           PYTHON: ${{ matrix.python }}
+          SHARD: ${{ matrix.shard }}
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
           TOOLS_CACHE_HIT: ${{ steps.tools-cache.outputs.cache-hit }}
         run: |
@@ -1911,7 +1926,8 @@ jobs:
           fi
           uv run python scripts/validate/host_package_cases.py --image "homelab-host-test:$RELEASE" \
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
-            --work "$RUNNER_TEMP/cases-bootstrap" "${seed[@]}" --bootstrap
+            --work "$RUNNER_TEMP/cases-bootstrap" "${seed[@]}" --bootstrap \
+            --bootstrap-shard "$SHARD"
 
   # The bootstrap case whose seed never holds k3s, so install.sh's own download and sha256 check
   # of the release binary run whatever the legs seed (#7751 seeds k3s there; #7754). One release
