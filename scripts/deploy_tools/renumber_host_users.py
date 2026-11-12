@@ -28,7 +28,8 @@ checkout runs it from a copy of those three files at the same relative paths. De
 and the pointer in `hosts/lib/reconcile_lib/users.py` once daniel-box, daniel-server and
 daniel-pi have each run it.
 
-Run: sudo python3 scripts/deploy_tools/renumber_host_users.py [--apply]
+Run: sudo python3 -B scripts/deploy_tools/renumber_host_users.py [--apply]
+`-B` keeps root from writing .pyc files into the checkout.
 """
 
 import json
