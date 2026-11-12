@@ -16,7 +16,7 @@ from _autodeploy import (
     _deployment_templates,
     _template_texts,
 )
-from _autodeploy_batch import _batch_gated_names, _owners
+from _autodeploy_batch import _owners
 
 
 def _sets_empty_rollout(role: Path) -> bool:
@@ -48,8 +48,8 @@ def _rollout_gate_offender(role: Path) -> bool:
 
     That single rule covers three shapes:
 
-    - A batch-only role (no Deployment/DaemonSet at all) whose rendered Jobs/CronJobs are all
-      credited by `_batch_gated_names`.
+    - A role rendering a Job or CronJob. Only a flux-owned role can gate one, through
+      `flux_cronjob_gates`, and a flux-owned role returns before this point.
     - A role that skips the PRIMARY rollout but gates its Deployment through
       `manifests_extra_rollouts` instead. Extras roll and soak independently of the primary, so `_ungated_deployments(role) == []` is
       already proof this Deployment IS gated, and an unconditional "renders a Deployment ⇒
@@ -61,7 +61,7 @@ def _rollout_gate_offender(role: Path) -> bool:
       Deployment is, without a separate "renders any Deployment at all" check.
 
     The condition on ALL of that is `manifests_rollout: ''`, written literally in the role's
-    tasks. A role that does not write it returns False at the top and is never judged here,
+    defaults. A role that does not write it returns False at the top and is never judged here,
     including a role that renders no workload at all. A flux-owned role returns False as well:
     no Ansible apply runs for it, and the batch guard judges its CronJobs instead.
 
@@ -83,12 +83,8 @@ def _rollout_gate_offender(role: Path) -> bool:
         return False
     if _ungated_deployments(role):
         return True
-    batch = _batch_templates(role)
-    total_workloads = len(_deployment_templates(role)) + len(batch)
-    if not total_workloads:
-        return True
-    gated = _batch_gated_names(role)
-    return any(not name or name not in gated for _, name in batch)
+    # Only a flux-owned role can gate a batch workload, so any batch workload here is ungated.
+    return bool(_batch_templates(role)) or not _deployment_templates(role)
 
 
 def _render_metadata_text(role: Path) -> str:

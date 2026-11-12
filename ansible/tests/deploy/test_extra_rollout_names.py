@@ -67,8 +67,8 @@ def test_extra_rollout_entry_with_a_second_key_hides_no_later_entry(
 
     The old pattern stopped at the first line that was not `- name:`, so `widget-cache` read as
     ungated and karakeep had to keep its `restart_on` entry last (#4578). A sibling var's own
-    `- name:` list after the block still credits nothing, nor does the next task's `- name:`
-    across a blank line, which the old `\\s*` crossed to credit cloudflare-ddns with `Wait`.
+    `- name:` list after the block still credits nothing, nor does a `- name:` across a blank
+    line, which the old `\\s*` crossed to credit cloudflare-ddns with `Wait`.
     """
     role = widget_role(
         defaults="manifests_extra_rollouts:\n"
@@ -84,12 +84,12 @@ def test_extra_rollout_entry_with_a_second_key_hides_no_later_entry(
         templates={},
     )
     assert _extra_rollouts(role) == {"widget-chrome", "widget-agent", "widget-cache"}
-    followed_by_a_task = widget_role(
-        defaults="manifests_extra_rollouts:\n  - name: widget-direct\n\n",
-        tasks="- name: Wait for the widget rollouts\n",
+    after_a_blank_line = widget_role(
+        defaults="manifests_extra_rollouts:\n  - name: widget-direct\n\n"
+        "  - name: not-an-extra\n",
         templates={},
     )
-    assert _extra_rollouts(followed_by_a_task) == {"widget-direct"}
+    assert _extra_rollouts(after_a_blank_line) == {"widget-direct"}
     # scrutiny lists scrutiny-collector after a `restart_on: []` entry, the real-role shape
     # the old pattern missed.
     assert _extra_rollouts(_K8S_ROLES / "scrutiny") == {

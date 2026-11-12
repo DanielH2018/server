@@ -146,7 +146,6 @@
  "ansible/tests/deploy/test_image_builder_content_tag.py": 0.7,
  "ansible/tests/deploy/test_k3s_pin_routing.py": 0.01,
  "ansible/tests/deploy/test_k8s_autodeploy_batch_gates.py": 0.06,
- "ansible/tests/deploy/test_k8s_autodeploy_completion_gates.py": 0.01,
  "ansible/tests/deploy/test_k8s_autodeploy_guard.py": 0.75,
  "ansible/tests/deploy/test_k8s_autodeploy_rollout_gates.py": 0.15,
  "ansible/tests/deploy/test_k8s_toposort.py": 0.19,
