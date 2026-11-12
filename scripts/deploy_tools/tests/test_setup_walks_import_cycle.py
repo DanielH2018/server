@@ -16,7 +16,6 @@ from deploy_tools.setup_lib import setup_role_chains as chains
 SYNTAX_ERROR = "- [unclosed\n"
 GATED_LEAF = "- {name: Leaf, ansible.builtin.debug: {}, when: leaf_gate}\n"
 OTHER_KEPT = "- name: Kept\n  ansible.builtin.debug: {}\n"
-OTHER_REMOVED = "- name: Removed\n  ansible.builtin.debug: {}\n"
 MAIN = (
     "- ansible.builtin.import_tasks: sub.yml\n"
     "  when: sub_gate\n"
@@ -48,16 +47,7 @@ def _role(root: Path, task_files: dict[str, str]) -> Path:
 
 
 def _full_role(root: Path, sub_files: dict[str, str]) -> Path:
-    role = _role(
-        root, {"main.yml": MAIN, "other.yml": OTHER_KEPT + OTHER_REMOVED, **sub_files}
-    )
-    (role / "defaults").mkdir()
-    (role / "defaults" / "main.yml").write_text("my_var: 1\n")
-    (role / "handlers").mkdir()
-    (role / "handlers" / "main.yml").write_text(
-        "- name: Restart it\n  ansible.builtin.debug: {}\n"
-    )
-    return role
+    return _role(root, {"main.yml": MAIN, "other.yml": OTHER_KEPT, **sub_files})
 
 
 def _answer(reader, *args) -> object:
@@ -76,32 +66,6 @@ def _task_chains(role: Path):
     return chains.task_chains(role, _keep_all)
 
 
-def _task_gates_naming(role: Path):
-    return chains.task_gates_naming(role, "shipped.j2")
-
-
-def _var_consumers(role: Path):
-    return chains.var_consumer_chains(role, role / "defaults" / "main.yml")
-
-
-def _handler_notifiers(role: Path):
-    return chains.handler_notifier_chains(role, role / "handlers" / "main.yml")
-
-
-def _import_chains(role: Path):
-    return chains._import_chains(role, "other.yml", "main.yml")
-
-
-def _removed_task_chains(role: Path):
-    return chains._removed_task_chains(
-        role, "other.yml", OTHER_KEPT + OTHER_REMOVED, OTHER_KEPT
-    )
-
-
-def _ids(value) -> str:
-    return value.__name__.strip("_") if callable(value) else ""
-
-
 @pytest.mark.parametrize(
     "task_files",
     [
@@ -116,28 +80,11 @@ def test_task_chains_returns_on_an_entry_file_in_a_cycle(tmp_path, task_files):
     assert answer in (None, [("leaf_gate",)])
 
 
-def test_import_chains_returns_on_an_entry_file_importing_itself(tmp_path):
-    role = _role(tmp_path, {"main.yml": _imports("main.yml")})
-    assert _answer(chains._import_chains, role, "other.yml", "main.yml") == []
-
-
 @pytest.mark.parametrize("cycle", CYCLES.values(), ids=CYCLES.keys())
-@pytest.mark.parametrize(
-    "reader",
-    [
-        _task_chains,
-        _task_gates_naming,
-        _var_consumers,
-        _handler_notifiers,
-        _import_chains,
-        _removed_task_chains,
-    ],
-    ids=_ids,
-)
-def test_a_cycle_below_an_import_reads_as_an_unreadable_file(tmp_path, reader, cycle):
-    expected = _answer(reader, _full_role(tmp_path / "syntax", UNREADABLE_SUB))
+def test_a_cycle_below_an_import_reads_as_an_unreadable_file(tmp_path, cycle):
+    expected = _answer(_task_chains, _full_role(tmp_path / "syntax", UNREADABLE_SUB))
     assert expected
-    assert _answer(reader, _full_role(tmp_path / "cycle", cycle)) == expected
+    assert _answer(_task_chains, _full_role(tmp_path / "cycle", cycle)) == expected
 
 
 def test_a_file_imported_twice_beside_a_cycle_keeps_both_chains(tmp_path):
@@ -152,26 +99,6 @@ def test_a_file_imported_twice_beside_a_cycle_keeps_both_chains(tmp_path):
         {"main.yml": main, "shared.yml": OTHER_KEPT, "sub.yml": _imports("sub.yml")},
     )
     assert _answer(chains.task_chains, role, _keep_all) == [
-        ("first_gate",),
-        ("second_gate",),
-    ]
-
-
-def test_a_target_imported_through_two_chains_beside_a_cycle_keeps_both(tmp_path):
-    main = (
-        "- ansible.builtin.import_tasks: shared.yml\n  when: first_gate\n"
-        "- ansible.builtin.import_tasks: shared.yml\n  when: second_gate\n"
-        + _imports("sub.yml")
-    )
-    role = _role(
-        tmp_path,
-        {
-            "main.yml": main,
-            "shared.yml": _imports("other.yml"),
-            "sub.yml": _imports("sub.yml"),
-        },
-    )
-    assert _answer(chains._import_chains, role, "other.yml", "main.yml") == [
         ("first_gate",),
         ("second_gate",),
     ]

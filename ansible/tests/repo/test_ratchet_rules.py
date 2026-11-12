@@ -15,7 +15,6 @@ Run: uv run pytest ansible/tests/repo/test_ratchet_rules.py
 from _ratchet_patches import (
     count_module_patches,
     first_party_module_names,
-    module_fixture_names,
 )
 
 
@@ -76,42 +75,6 @@ def test_a_module_bound_by_importlib_is_counted_in_both_spellings():
     patch = "def test_x(monkeypatch):\n    monkeypatch.setattr(_mod, 'f', 1)\n"
     assert count_module_patches(spec + patch, set()) == 1
     assert count_module_patches(named + patch, set()) == 1
-
-
-def test_a_conftest_fixture_that_hands_back_a_module_is_found_in_both_spellings():
-    annotated = (
-        "import pytest\n"
-        "@pytest.fixture(scope='session')\n"
-        "def mod() -> ModuleType:\n    return None\n"
-    )
-    imported = "import pytest\n@pytest.fixture\ndef mod():\n    import thing\n    return thing\n"
-    assert module_fixture_names(annotated) == {"mod"}
-    assert module_fixture_names(imported) == {"mod"}
-
-
-def test_a_fixture_that_hands_back_something_else_is_not_a_module_fixture():
-    """And a plain function with the annotation is not one either — pytest never calls it."""
-    other = "import pytest\n@pytest.fixture\ndef mod() -> Path:\n    return Path('.')\n"
-    undecorated = "def mod() -> ModuleType:\n    return None\n"
-    assert module_fixture_names(other) == frozenset()
-    assert module_fixture_names(undecorated) == frozenset()
-
-
-def test_a_patch_on_a_module_fixture_parameter_is_counted():
-    src = (
-        "def test_x(monkeypatch, gitops_deploy):\n"
-        "    monkeypatch.setattr(gitops_deploy, 'REPO', '/tmp')\n"
-    )
-    assert count_module_patches(src, set(), {"gitops_deploy"}) == 1
-
-
-def test_the_same_patch_is_not_counted_when_no_fixture_returns_a_module():
-    """The parameter is an ordinary object until a conftest says otherwise."""
-    src = (
-        "def test_x(monkeypatch, gitops_deploy):\n"
-        "    monkeypatch.setattr(gitops_deploy, 'REPO', '/tmp')\n"
-    )
-    assert count_module_patches(src, set()) == 0
 
 
 def test_a_hand_rolled_patch_of_a_first_party_module_is_counted_once():

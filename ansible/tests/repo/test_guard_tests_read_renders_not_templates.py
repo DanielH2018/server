@@ -125,11 +125,6 @@ TEMPLATE_SOURCE_READERS = {
         "`_k8s_render` skips, all denylisted. Every role the render reaches reads its render, "
         "and `test_the_render_reaches_every_auto_deployable_role` holds the denylisted half"
     ),
-    "setup/test_setup_crons_write_a_textfile.py": (
-        "a census over every setup role's timer and service templates, asking whether one "
-        "calls write_check_textfile or imports the macro that does. A render needs each "
-        "role's host context and a guess at loop items, and the call is the same text either way"
-    ),
     "deploy/test_tree_lock_single_definition.py": (
         "whether a host cron CALLS git-tree-lock.j2's macro or writes the `exec 9>` idiom out "
         "by hand; both render the same two lines, so only the source tells them apart. The "

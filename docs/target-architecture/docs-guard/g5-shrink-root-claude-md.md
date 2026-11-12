@@ -193,7 +193,7 @@ and `services_from_changed_paths` tests it ahead of every plane branch.
 section says. The sweep command in *Verification* prints 125 such lines outside the root,
 `docs/archive/`, `docs/target-architecture/` and `docs/facts.lock`. Examples:
 
-- `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py` cites the *Where to Look*
+- `test_setup_cron_roles_have_a_contract.py` (deleted, #8027) cites the *Where to Look*
   cron row in an assertion message.
 - `docs/break-glass.md` cites *Project Overview* for "Ansible runs from daniel-box".
 - `ansible/tests/k8s/test_uncovered_roles_justifications_resolve.py`,

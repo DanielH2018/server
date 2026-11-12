@@ -13,7 +13,7 @@ Run: uv run pytest scripts/lib/tests/test_k8s_role_callers.py
 import pytest
 
 from lib.k8s_roles import k8s_entries, role_callers
-from lib.narrow_git import CannotNarrow
+from lib.k8s_role_callers import CannotNarrow
 
 # The helper roles: every role under ansible/roles/k8s/ that another role reaches and that has
 # no containers_list entry of its own. Named, not counted -- a rename or a moved tasks file

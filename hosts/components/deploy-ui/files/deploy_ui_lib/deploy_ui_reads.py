@@ -12,18 +12,11 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
-# `deploy_cli.py`: the `deploy.sh` shim execs `uv run … deploy_cli.py`, and that `uv` process
-# stays the family root while the locked half runs under it (#2412), so no process says
-# `deploy.sh` at all. `deploy_run.py` is what the shim execed before #4347, and a deploy from
-# an older checkout still runs it.
-_RUN_RE = re.compile(
-    r"\b(land\.py|deploy\.sh|deploy_cli\.py|deploy_run\.py|ansible-playbook)\b"
-)
+_RUN_RE = re.compile(r"\b(land\.py|ansible-playbook)\b")
 _PR_RE = re.compile(r"--pr\s+(\d+)")
 _TAGS_RE = re.compile(r"--tags[= ]+(\S+)")
-# `deploy.sh --list-services` is a read, and `grep` is whoever is looking for a run. Neither
-# is a run.
-_NOT_A_RUN = re.compile(r"^grep\b|--list-services\b")
+# `grep` is whoever is looking for a run, not a run.
+_NOT_A_RUN = re.compile(r"^grep\b")
 
 
 @dataclass(frozen=True)
@@ -39,11 +32,9 @@ class Run:
     """One process family in flight: a landing, a deploy, or a bare lock holder.
 
     `locks` names the lock files the family holds and `waiting_on` the ones it is queued
-    on, both by basename. `deploy.sh` opens a service lock's descriptor and then blocks
-    on it, so a queued second deploy of the same service has the file OPEN for the whole
+    on, both by basename. A process blocked on a lock has the file OPEN for the whole
     wait and fuser lists it like the holder; only the kernel's lock table (`/proc/locks`)
-    tells the two apart. A `deploy` row with a `waiting_on` is the queue that was
-    silent before #1844.
+    tells the two apart.
     """
 
     pid: int
@@ -67,9 +58,8 @@ class FileLock:
 
 # `56: FLOCK  ADVISORY  WRITE 1930784 fc:00:6564011 0 EOF` is a granted flock;
 # `56: -> FLOCK …` under it is a process blocked on the same lock. The pid on a granted
-# line can be dead: `deploy.sh` takes its locks with a `flock` CHILD on an inherited
-# descriptor, and the lock outlives the child. The pid on a `->` line is alive by
-# construction, blocked inside flock(2).
+# line can be dead: a lock taken by a `flock` CHILD on an inherited descriptor outlives the
+# child. The pid on a `->` line is alive by construction, blocked inside flock(2).
 _PROC_LOCK_RE = re.compile(
     r"^\d+:\s*(->\s*)?FLOCK\s+\S+\s+(?:READ|WRITE)\s+(\d+)\s+"
     r"([0-9a-f]+):([0-9a-f]+):(\d+)\s"
@@ -145,9 +135,9 @@ def runs(
     """Fold processes into one row per family.
 
     The topmost run or lock holder on a pid's ancestor chain owns every run and holder
-    below it. A landing is `uv run … land.py`, its python child, and the `deploy.sh` and
-    `ansible-playbook` it spawns: one row, kind `land`. A terminal deploy is
-    `deploy.sh`, `uv run ansible-playbook` and its child: one row, kind `deploy`. A lock
+    below it. A landing is `uv run … land.py`, its python child, and any
+    `ansible-playbook` it spawns: one row, kind `land`. A terminal playbook run is
+    `uv run ansible-playbook` and its child: one row, kind `deploy`. A lock
     holder that is neither — the GitOps tick on the tree lock — is a row of kind `lock`,
     so a held lock is never invisible because its holder matched no pattern. fuser lists
     every process with the file open, children included, which is why the fold has to

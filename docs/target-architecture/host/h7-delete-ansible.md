@@ -441,7 +441,7 @@ The exit criterion is seven observations:
   The other three are the absent half of a cron still live on another host, such as
   `Remove the firmware cron on hosts without fwupd`.
 - **Contract checks derive from setup tasks.**
-  `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py` derives the cron-installing set from `tasks/`, and `ansible/tests/repo/test_role_claude_md.py`
+  `test_setup_cron_roles_have_a_contract.py` (deleted, #8027) derives the cron-installing set from `tasks/`, and `ansible/tests/repo/test_role_claude_md.py`
   requires a `CLAUDE.md` per setup role. Both pass vacuously once the roles are gone.
   `ansible/tests/setup/` holds 114 tracked files.
 - **Docs that name the playbooks.** `git grep -l 'ansible-playbook' -- ':!docs/archive'`
@@ -3617,7 +3617,7 @@ progress.
   that ships a timer marked `changes_state: true`. Its named members are docs-refresh,
   secret-rotation, compose-adopt, checkout-sync and claude-memory-sync. A fixture component
   with such a timer and no heading is flagged.
-  `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py` and the setup half of
+  `test_setup_cron_roles_have_a_contract.py` (deleted, #8027) and the setup half of
   `ansible/tests/repo/test_role_claude_md.py` retire in H7.20c, when their subject does.
   Amended 2026-11-05, on H7.47's PR. No component marks a timer `changes_state: true`, and
   `COMPONENT_KEYS` refuses a new key, so the census's subject is every component that ships a

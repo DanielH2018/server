@@ -70,10 +70,8 @@ def test_an_ansible_only_filter_stays_as_written(tree):
     assert resolve(text, role, inventory) == text
 
 
-def test_the_real_tree_resolves_the_renovate_agents_schedule():
+def test_the_real_tree_resolves_the_ruleset_drift_hour():
     """Non-vacuity against the live inventory."""
     jinja_defaults._inventory_values.cache_clear()
-    role = (
-        jinja_defaults.INVENTORY.parents[1] / "hosts" / "components" / "renovate-agent"
-    )
-    assert "{{" not in resolve("OnCalendar={{ renovate_agent_oncalendar }}", role)
+    component = jinja_defaults.INVENTORY.parents[1] / "hosts/components/github-checks"
+    assert "{{" not in resolve("{{ github_ruleset_drift_cron_hour }}", component)

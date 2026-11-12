@@ -15,15 +15,8 @@ What the heuristic counts, and what it misses:
   `importlib.import_module(...)`. That is how the hook and cluster-side tests reach a module
   whose filename is not an identifier (`session-health.py`); 57 patches across five files
   were invisible while only `import` statements were read.
-- Counted: a parameter named after a conftest fixture that hands back a module. A fixture is
-  read as module-returning when it is annotated `-> ModuleType`, or when it imports a name and
-  returns it. `gitops_deploy/tests/conftest.py` does both, and three of its sibling test
-  modules patched the deployer through that argument while counting 0 — five patches in
-  `test_gitops_deploy_alert_channels.py`, four and two in the other two. The caller collects the fixture names from
-  every `conftest.py` on a test's directory chain, the way pytest resolves one.
-- Not counted: a fixture that returns a module with neither the annotation nor a bare
-  `import`/`return` of the same name — a factory closure, say. The annotation is the signal
-  the repo already writes; a dataflow analysis across a conftest's own imports is not.
+- Not counted: a parameter named after a conftest fixture that hands back a module. No
+  conftest in the tree has such a fixture.
 - Counted: the string-target form `monkeypatch.setattr("<mod>.<attr>", ...)`, when the first
   dotted segment is a first-party module name. It is the object form's equal at runtime and
   pins the same module name into the test, so counting one and not the other selected a
@@ -61,51 +54,6 @@ from collections.abc import Collection, Iterable
 # bind a module to a plain name, which no import statement records.
 DYNAMIC_IMPORTS = frozenset({"module_from_spec", "import_module"})
 
-# What a conftest fixture writes when it hands a test the module itself.
-MODULE_ANNOTATIONS = frozenset({"ModuleType", "types.ModuleType"})
-
-
-def _returns_a_module(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Whether this function hands back a module, by its annotation or by its body.
-
-    Two spellings, because a conftest writes either: `-> ModuleType`, or an `import x` inside
-    the fixture followed by `return x` (which is how a fixture defers an import that must not
-    run at collection).
-    """
-    if fn.returns is not None and ast.unparse(fn.returns) in MODULE_ANNOTATIONS:
-        return True
-    imported = {
-        alias.asname or alias.name.split(".")[0]
-        for node in ast.walk(fn)
-        if isinstance(node, ast.Import)
-        for alias in node.names
-    }
-    return any(
-        isinstance(node, ast.Return)
-        and isinstance(node.value, ast.Name)
-        and node.value.id in imported
-        for node in ast.walk(fn)
-    )
-
-
-def module_fixture_names(source: str) -> frozenset[str]:
-    """Every top-level `@pytest.fixture` in `source` that hands back a module.
-
-    A test module never imports these — it names one as a parameter and pytest passes the
-    module in, so `_bound_module_names` has no import statement to read. The caller unions
-    this over every `conftest.py` on a test's directory chain, the way pytest resolves one.
-    """
-    return frozenset(
-        node.name
-        for node in ast.parse(source).body
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-        and any(
-            ast.unparse(dec).split("(")[0].endswith("fixture")
-            for dec in node.decorator_list
-        )
-        and _returns_a_module(node)
-    )
-
 
 def first_party_module_names(tracked: Iterable[str]) -> frozenset[str]:
     """Every bare name an `import` in this repo could bind to a module of this repo.
@@ -123,25 +71,11 @@ def first_party_module_names(tracked: Iterable[str]) -> frozenset[str]:
     return frozenset(names)
 
 
-def _bound_module_names(
-    tree: ast.AST,
-    first_party: Collection[str],
-    module_fixtures: Collection[str] = (),
-) -> set[str]:
-    """The local names in `tree` that hold a first-party module.
-
-    `module_fixtures` are conftest fixture names that hand back a module; a function parameter
-    spelled with one of them holds that module without any import saying so.
-    """
+def _bound_module_names(tree: ast.AST, first_party: Collection[str]) -> set[str]:
+    """The local names in `tree` that hold a first-party module."""
     bound: set[str] = set()
     for node in ast.walk(tree):
         match node:
-            case ast.FunctionDef(args=args) | ast.AsyncFunctionDef(args=args):
-                bound |= {
-                    arg.arg
-                    for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs)
-                    if arg.arg in module_fixtures
-                }
             case ast.Import(names=aliases):
                 for alias in aliases:
                     head, tail = alias.name.split(".")[0], alias.name.split(".")[-1]
@@ -230,20 +164,14 @@ def _restore_nodes(tree: ast.AST) -> set[int]:
     }
 
 
-def count_module_patches(
-    source: str,
-    first_party: Collection[str],
-    module_fixtures: Collection[str] = (),
-) -> int:
+def count_module_patches(source: str, first_party: Collection[str]) -> int:
     """How many patches in `source` target a first-party module.
 
     A patch is a `monkeypatch.setattr` call, or an assignment to an attribute of a name bound
-    to a first-party module (`mod.attr = double`, `mod.sub.attr = double`). `module_fixtures`
-    names the conftest fixtures that hand back a module, so a patch on such a parameter
-    counts. The module docstring lists what this deliberately does not see.
+    to a first-party module (`mod.attr = double`, `mod.sub.attr = double`). The module docstring lists what this deliberately does not see.
     """
     tree = ast.parse(source)
-    bound = _bound_module_names(tree, first_party, module_fixtures)
+    bound = _bound_module_names(tree, first_party)
     restores = _restore_nodes(tree)
 
     counted = 0
