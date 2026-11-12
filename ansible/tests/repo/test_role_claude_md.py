@@ -5,9 +5,8 @@ cold. `PLANES` has one row per role tree, and every check below runs once per ro
 
 A row carries what differs between planes and nothing else:
 
-- `deploy_tag`: the doc must name the role beside a literal `--tags`. Only k8s, where the
-  deploy tag IS the role's directory name. Setup roles are applied through `initial_setup.yml`
-  with tags that do not follow that convention, and setup's `common` role is include-only.
+- `deploy_tag`: the doc must name the role beside a literal `--tags`, because the k8s deploy
+  tag IS the role's directory name.
 - `floor` and `members`: non-vacuity. A row whose tree yields no roles fails with "subject gone:
   delete this row" instead of passing over nothing, and each row names roles a broken census
   must still find.

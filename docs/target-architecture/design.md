@@ -144,7 +144,7 @@ Most cluster-reading crons become CronJobs, one family per PR, and a few stay on
 decision (H2). Two native features replace hand-written ones: Longhorn's `filesystem-trim`
 RecurringJob and k3s `etcd-s3` snapshots to R2. Those snapshots exclude the server token. The
 token stays out of band, as `docs/break-glass.md` item 2 records, and a daily comparison on
-daniel-box reports drift (H2). H7's fresh join decides whether agents move to an agent-scoped
+daniel-box reports drift (H2). The agent keeps the server token, and H7 adds no agent-scoped
 token (H6 Open question 4).
 
 Registry garbage collection does not move. D5 retires it in wave D, because after D5.4 no
@@ -178,7 +178,8 @@ its collections; 595 files (about 25.2k YAML/Jinja lines) under `roles/setup` an
 `roles/containers`, part of which moves to Flux; 290 lines of bring-up playbooks; the
 local/ssh inventory model; every `has_X` teardown arm; and setup-drift.
 
-**Remains:** non-file state (users, ufw, libvirt, LVM) needs one small reconciler per kind. A
+**Remains:** non-file state (users, ufw, libvirt) and in-place line edits need one small
+reconciler each, four in all; the Ubuntu installer, not a reconciler, creates the LVM volumes. A
 hand edit is reverted on the next version, and `dpkg --verify` reports it in between. A k3s
 config change restarts the API server, so it is gated to a window. Prior art is thin.
 
@@ -420,8 +421,9 @@ a tag that is not flux-owned (M6 Open question 4), so that flip waits on the dri
 1. **The `Depends` question.** Whether the updater's `apt-get install` installs a newly added
    `Depends` cleanly on every host. H3 tests it first. If it fails, ansible-pull becomes the
    host plan and H4 to H7 are revised.
-1. **Reconciler size.** Whether the reconcilers for ufw, libvirt and users stay small enough
-   to justify a second mechanism beside dpkg. Each H-slice that adds one reports its size.
+1. **Reconciler size.** Whether the four reconcilers, for ufw, libvirt, users and in-place
+   line edits ([ADR-0029](../adr/0029-each-host-is-configured-by-its-own-package-not-ansible.md)),
+   stay small enough to justify a second mechanism beside dpkg. Each H-slice that adds one reports its size.
    H7 sets a line ceiling on reconcile as an exit criterion. Crossing it is the trigger to
    switch the host plan to ansible-pull.
 1. **The host trust anchor** (H3 Open question 1, ruled 2026-10-14). The builder trusts a
