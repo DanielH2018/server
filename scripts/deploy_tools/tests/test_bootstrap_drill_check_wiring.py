@@ -7,6 +7,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_bootstrap_drill_check_wiring.
 """
 
 import ast
+import sys
 from pathlib import Path
 
 import pytest
@@ -57,3 +58,35 @@ def test_check_reaches_the_verdict_or_it_is_deleted(verdict):
     assert verdict in _reachable_from_main(), (
         f"{verdict} is defined in bootstrap_drill.py but `check` never calls it"
     )
+
+
+_MODULE = """
+def wired(items):
+    return []
+
+
+def unwired(items):
+    return []
+
+
+def build(out):
+    unwired(out)
+
+
+def main():
+    problems = {"a": lambda: wired([])}
+    return problems
+"""
+
+
+def test_a_verdict_main_reaches_is_clean(tmp_path, monkeypatch):
+    (tmp_path / "drill.py").write_text(_MODULE)
+    monkeypatch.setattr(sys.modules[__name__], "DRILL", tmp_path / "drill.py")
+    assert "wired" in _reachable_from_main()
+
+
+def test_a_verdict_only_build_reaches_is_flagged(tmp_path, monkeypatch):
+    (tmp_path / "drill.py").write_text(_MODULE)
+    monkeypatch.setattr(sys.modules[__name__], "DRILL", tmp_path / "drill.py")
+    assert "unwired" in _top_level()[0]
+    assert "unwired" not in _reachable_from_main()
