@@ -10,6 +10,7 @@ Run: uv run pytest ansible/tests/setup/test_claude_triage.py
 """
 
 import ast
+import json
 import re
 
 import pytest
@@ -36,7 +37,7 @@ PINNED = {
     "run_timeout_s": "claude_code_triage_run_timeout_s",
     "daily_cap": "claude_code_triage_daily_cap",
     "poll_mode": "claude_code_triage_poll_mode",
-    "poll_min_severity": "claude_code_triage_poll_min_severity",
+    "poll_routes": "claude_code_triage_poll_routes",
 }
 
 
@@ -99,7 +100,7 @@ RAISED = {
     "claude_code_triage_run_timeout_s": 99999,
     "claude_code_triage_daily_cap": 99,
     "claude_code_triage_poll_mode": "armed",
-    "claude_code_triage_poll_min_severity": "none",
+    "claude_code_triage_poll_routes": {"HostLogErrors": "triage"},
 }
 
 
@@ -123,7 +124,7 @@ def test_the_config_carries_the_pins() -> None:
     assert config["BUDGET_USD"] == str(pinned["budget_usd"])
     assert config["DAILY_CAP"] == str(pinned["daily_cap"])
     assert config["POLL_MODE"] == pinned["poll_mode"]
-    assert config["POLL_MIN_SEVERITY"] == pinned["poll_min_severity"]
+    assert json.loads(config["POLL_ROUTES"]) == pinned["poll_routes"]
     assert config["STATE_DIR"] == pinned["state_dir"]
 
 
@@ -308,3 +309,68 @@ def test_the_runners_own_directories_are_declared_without_a_listing() -> None:
     state_dir = pins()["state_dir"]
     assert declared[f"{state_dir}/runs"][0] == "0750"
     assert declared[f"{state_dir}/done"][0] == "0750"
+
+
+# I6 of the guardrails plan (dotfiles#967): a session has no write path into what opens the next
+# episode. A session can write syslog lines with any tag, so a routed alert must not count them.
+PROMETHEUS_RULES = ANSIBLE / "roles" / "k8s" / "observability" / "files" / "rules"
+LOKI_RULES = ANSIBLE / "roles" / "k8s" / "loki-homelab" / "files" / "rules"
+# Alloy's `loki.process` prefixes every `stage.metrics` name with this: a count of log lines.
+LOG_METRIC_PREFIX = "loki_process_custom_"
+# A stream selector's body, then the pipeline between it and the range.
+LOG_RANGE = re.compile(r"\{([^{}]*)\}([^\[\]]*)\[")
+# The syslog tag, which `logger -t` sets to anything.
+SESSION_LABELS = {"program"}
+
+
+def alert_rules() -> list[tuple[str, str, str]]:
+    """(alert, ruler, expr) for every alerting rule Prometheus or the Loki ruler evaluates."""
+    found = []
+    for ruler, directory in (("prometheus", PROMETHEUS_RULES), ("loki", LOKI_RULES)):
+        for path in sorted(directory.glob("*.yaml")):
+            for group in yaml_fast.safe_load(path.read_text())["groups"]:
+                found += [
+                    (r["alert"], ruler, r["expr"])
+                    for r in group["rules"]
+                    if "alert" in r
+                ]
+    return found
+
+
+def selects_on_session_text(ruler: str, expr: str) -> bool:
+    """Whether the rule filters log lines by their text or by a label a session sets."""
+    if ruler == "prometheus":
+        return LOG_METRIC_PREFIX in expr
+    for selector, pipeline in LOG_RANGE.findall(expr):
+        labels = set(re.findall(r"(\w+)\s*(?:=~|!~|!=|=)", selector))
+        if pipeline.strip() or labels & SESSION_LABELS:
+            return True
+    return False
+
+
+def routed_alerts() -> list[str]:
+    return sorted({key.split(":", 1)[0] for key in pins()["poll_routes"]})
+
+
+@pytest.mark.parametrize("alert", routed_alerts())
+def test_no_routed_alert_selects_on_text_a_session_controls(alert) -> None:
+    rules = [(ruler, expr) for name, ruler, expr in alert_rules() if name == alert]
+    assert rules, f"{alert} is routed but no rule defines it"
+    for ruler, expr in rules:
+        assert not selects_on_session_text(ruler, expr), (
+            f"{alert} is routed, and its {ruler} rule selects on log text: {expr}"
+        )
+
+
+def test_the_session_text_check_flags_the_log_rules_it_exists_for() -> None:
+    """The red half: routing either of these would fail the test above."""
+    flagged = {
+        name
+        for name, ruler, expr in alert_rules()
+        if selects_on_session_text(ruler, expr)
+    }
+    assert {"HostLogErrors", "HostOutOfMemoryKill"} <= flagged
+    assert "LokiHostLogsSilent" not in flagged
+    assert selects_on_session_text(
+        "prometheus", "increase(loki_process_custom_crowdsec_edge_probe_total[1h]) > 0"
+    )

@@ -1,6 +1,12 @@
 # Alert-triggered diagnostic agent — design note and no-go (#4616)
 
-**Recommendation: do not build it now.** Over the 31 days of alert history that Loki keeps,
+> **Superseded 2026-10-15 — the no-go below no longer holds.** On 2026-10-15 the operator ruled
+> that the `claude` user handles a monitor alert end to end. `docs/claude-agent-user.md`,
+> *Alert-triggered triage*, holds that ruling and the design built from it. This page keeps
+> its measurement method (*The benefit, measured*) and its reopen figures (*When to reopen*),
+> which a review of the triage runs can still use.
+
+**HISTORY — Recommendation: do not build it now.** Over the 31 days of alert history that Loki keeps,
 11 of 70 incidents passed every gate an alert-triggered run needs and paged without naming
 their cause. Those 11 come down to 6 causes. Six of the incidents were one recurring Home
 Assistant log fault, which #2781 diagnosed and fixed. Two were service outages where a first
