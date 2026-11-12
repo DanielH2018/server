@@ -48,13 +48,25 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   `group_vars/all.yml`, shared with the Pi's Alloy and with every selector that reads them
   (#3740). `ansible/tests/services/test_loki_stream_labels.py` fails when an emitted value
   and the consumers' values drift apart.
-- **Two `stage.replace` stages redact credentials on the way in:** Home Assistant's cast
-  `refresh_token`, which a failed cast logs (issue #3015) unless HA's own `logger.filters`
-  drops the record first, so this stage is the backstop, and Prowlarr's `apikey=` in
-  the *arr Torznab error URLs (#6276). Each substitutes the capture group only, so the rest of
-  the record survives. `ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py` and
-  `ansible/tests/k8s/test_alloy_redacts_arr_apikey.py` fail on either half. Each stage is
-  prospective: a record shipped before it still carries the token for the 744h retention window.
+- **Five `stage.replace` stages redact credentials on the way in.** Each substitutes the
+  capture group only, so the rest of the record survives:
+  - Home Assistant's cast `refresh_token`, which a failed cast logs (issue #3015) unless HA's
+    own `logger.filters` drops the record first, so this stage is the backstop.
+  - Prowlarr's `apikey=` in the *arr Torznab error URLs (#6276).
+  - The token half of any Discord webhook URL, which Flux's notification-controller logs when
+    a post fails. This stage is unscoped, because other workloads hold Discord webhook URLs
+    too.
+  - Home Assistant's `/api/webhook/<id>` in Traefik's access lines. A mobile_app
+    registration's id authenticates the companion app.
+  - PeaNUT's `AUTH_SECRET`. PeaNUT prints it at every start, whether it generated the secret
+    or read it from the environment, so setting the env var does not stop the line.
+
+  `ansible/tests/k8s/_alloy_pods_pipeline.py` runs the rendered stages over a line, scoped as
+  Alloy scopes them, and the `test_alloy_redacts_*` files under `ansible/tests/k8s/` fail on
+  either half. `scripts/diagnostics/probe_lib/core.py:redact_log_secrets` carries the same
+  patterns for output. Each stage is prospective: a record shipped before it still carries
+  the value for the 744h retention window, and `kubectl logs` still shows it, because Alloy
+  reads the pod's log file and never rewrites it.
 - **Host lines carry a `program` label, and the line itself is untouched.** The
   `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).
   `HostLogErrors` counts syslog's fatal-pattern lines per machine and program over 6h, and
