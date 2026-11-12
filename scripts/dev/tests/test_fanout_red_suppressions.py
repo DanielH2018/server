@@ -28,6 +28,13 @@ def test_an_added_ignore_naming_the_rule_ty_prints_for_a_missing_module_is_named
     assert stale_suppressions(BASE, red) == ["line 6: `# ty: ignore[import-not-found]`"]
 
 
+def test_an_added_ignore_naming_the_rule_ty_prints_for_a_missing_attribute_is_named():
+    red = BASE + "x = mod.new_name  # ty: ignore[missing-attribute]\n"
+    assert stale_suppressions(BASE, red) == [
+        "line 3: `# ty: ignore[missing-attribute]`"
+    ]
+
+
 def test_a_blanket_ignore_in_either_spelling_is_named():
     red = BASE + "x = 1  # type: ignore\ny = 2  # ty:ignore\n"
     assert stale_suppressions(BASE, red) == [
