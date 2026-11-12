@@ -65,7 +65,13 @@ class Runs:
         return peak
 
 
-def _stub(runs: Runs, name: str, fail: str | None, raise_in: str | None) -> Callable:
+def _stub(
+    runs: Runs,
+    name: str,
+    fail: str | None,
+    raise_in: str | None,
+    no_verdict: str | None = None,
+) -> Callable:
     def body(target) -> None:
         start = time.monotonic()
         for line in range(3):
@@ -78,6 +84,8 @@ def _stub(runs: Runs, name: str, fail: str | None, raise_in: str | None) -> Call
         if name == fail:
             target.failed.append(name)
             print(f"[FAIL] stub: {name}: it was told to fail", file=cases.sys.stderr)
+        if name == no_verdict:
+            target.no_verdict.append(name)
 
     return body
 
@@ -88,14 +96,19 @@ def _run_main(
     fail: str | None = None,
     raise_in: str | None = None,
     flags: tuple[str, ...] = (),
+    no_verdict: str | None = None,
 ) -> tuple[Runs, int | BaseException]:
     runs = Runs()
     monkeypatch.setattr(cases.Cases, "_prepare", lambda self, render, debs: None)
     monkeypatch.setattr(cases, "box_address", lambda render: "10.0.0.215")
     for method in METHODS:
-        monkeypatch.setattr(cases.Cases, method, _stub(runs, method, fail, raise_in))
+        monkeypatch.setattr(
+            cases.Cases, method, _stub(runs, method, fail, raise_in, no_verdict)
+        )
     for name, module in MODULES.items():
-        monkeypatch.setattr(module, "run", _stub(runs, name, fail, raise_in))
+        monkeypatch.setattr(
+            module, "run", _stub(runs, name, fail, raise_in, no_verdict)
+        )
     argv = ["--image", "homelab-host-test:24.04", "--python", "3.12"]
     argv += ["--render", str(tmp_path / "render"), "--debs", str(tmp_path / "debs")]
     argv += ["--work", str(tmp_path / "work"), *flags]
@@ -114,6 +127,18 @@ def test_a_failing_case_fails_the_concurrent_leg(tmp_path, monkeypatch):
         "ran": set(runs.spans),
         "concurrent": runs.max_overlap() >= 2,
     } == {"status": 1, "ran": GROUPS, "concurrent": True}
+
+
+def test_a_case_with_no_verdict_passes_the_leg_and_is_counted_last(
+    tmp_path, monkeypatch, capfd
+):
+    _, status = _run_main(tmp_path, monkeypatch, no_verdict="bootstrap_age_case")
+
+    last = capfd.readouterr().err.splitlines()[-1]
+    assert (status, last) == (
+        0,
+        "[NO VERDICT] 1 cases gave no verdict, and every other case passed: ['bootstrap_age_case']",
+    )
 
 
 def test_a_group_that_raises_fails_the_leg_and_the_rest_still_run(
