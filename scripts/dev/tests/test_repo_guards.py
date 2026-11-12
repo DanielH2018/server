@@ -24,6 +24,22 @@ def test_every_guard_exists_and_the_list_covers_every_hook_file():
     assert uncovered == []
 
 
+def test_a_new_ratchet_hook_file_becomes_a_guard_unless_a_listed_directory_holds_it(
+    tmp_path,
+):
+    (tmp_path / "prek.toml").write_text(
+        '[[repos]]\nrepo = "local"\n[[repos.hooks]]\nid = "static-ratchet-tests-new"\n'
+        'entry = "uv run pytest -q scripts/new/tests/test_new.py '
+        'ansible/tests/repo/test_held.py"\n'
+        '[[repos.hooks]]\nid = "other"\nentry = "uv run pytest scripts/x/test_other.py"\n'
+    )
+    guards = repo_guards.guards(tmp_path)
+    assert "scripts/new/tests/test_new.py" in guards
+    assert "ansible/tests/repo/test_held.py" not in guards
+    assert "scripts/x/test_other.py" not in guards
+    assert guards[: len(repo_guards.LISTED)] == repo_guards.LISTED
+
+
 @pytest.mark.parametrize("code", [0, 1])
 def test_a_run_names_every_guard_and_returns_pytests_exit_code(code):
     calls = []

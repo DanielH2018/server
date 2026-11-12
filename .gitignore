@@ -91,12 +91,10 @@ id_ed25519
 # Output of scripts/deploy_tools/backfill_staging_gate.py — one JSONL row per replayed commit,
 # regenerated on every run. Local measurement, not repo content.
 #
-# It is ignored rather than merely untracked because the GitOps deployer reads
-# `git status --porcelain` (gitops_deploy.py:998), which COUNTS untracked files, and treats a
-# dirty tree as a healthy skip: the tick completes and writes last_run, so GitOps-Alive stays
-# green while nothing fast-forwards. The file would park the primary checkout behind origin
-# with every signal green: the deployer works exactly as designed and the only cause is the
-# file existing.
+# It is ignored rather than merely untracked because `homelab-checkout-sync` reads
+# `git status --porcelain`, which COUNTS untracked files, and refuses a dirty tree. The file
+# would park the primary checkout behind origin, and the only cause would be the file
+# existing.
 .claude/staging-backfill.jsonl
 
 # Claude Code writes a `tsconfig.json` into the root of each plugin it loads from a plugin

@@ -167,8 +167,8 @@ waived, so the status is DONE. Each reading uses the commands its observation na
     - `homelab-checkout-sync.timer` is active.
     - The primary checkout's `HEAD` equals `origin/master`, `73e730d65`.
     - No tracked module imports a deployer module. The only matches are code samples in
-      `docs/` and string fixtures in two test files,
-      `ansible/tests/repo/_deployer_import_row.py` and
+      `docs/` and string fixtures in two test files: the deployer-import census row, which
+      [#8177](https://github.com/DanielH2018/server/issues/8177) later retired, and
       `scripts/deploy_tools/tests/test_promote_forge_boundary.py`.
     - `uv run pytest --collect-only` reports no error: 20840/20862 tests collected.
 6. **Holds.**
