@@ -163,6 +163,11 @@ def test_the_seed_copies_the_store_and_strips_the_prefix_as_a_literal(rendered, 
 
 def test_a_run_as_the_agent_after_one_as_the_agent_keeps_what_it_wrote(rendered, home):
     (home["operator_memory"] / "MEMORY.md").write_text("the operator's\n")
+    (home["agent_memory"] / "MEMORY.md").write_text("stale\n")
+    home["stale"].parent.mkdir()
+    home["stale"].touch()
+    run(rendered)
+    assert not home["stale"].exists()
     (home["agent_memory"] / "MEMORY.md").write_text("the agent's\n")
     run(rendered)
     assert (home["agent_memory"] / "MEMORY.md").read_text() == "the agent's\n"
