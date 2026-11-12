@@ -262,7 +262,6 @@
  "ansible/tests/deploy/test_scaffolded_role_rollout_gate.py": 0.0,
  "ansible/tests/deploy/test_toposort.py": 0.0,
  "ansible/tests/deploy/test_tree_lock_single_definition.py": 0.0,
- "ansible/tests/deploy/test_updater_lag_grace_filter.py": 0.0,
  "ansible/tests/deploy/test_volume_revert_playbook_applies_nothing_from_a_tick.py": 0.0,
  "ansible/tests/k8s/test_aggregated_clusterroles.py": 0.0,
  "ansible/tests/k8s/test_alertmanager_read_route.py": 0.03,

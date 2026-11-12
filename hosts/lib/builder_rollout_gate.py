@@ -22,17 +22,12 @@ from pathlib import Path
 from host_lib import log as host_log
 
 RELEASE = "/etc/homelab-builder/release"
-# The canary order (*Staged rollout*): daniel-box runs the builder, so it always comes last.
-# DECIDED: daniel-server leads, ahead of daniel-pi, since H3.13 put the Pi on a daily updater
-# schedule (#6911). The operator's 2026-10-29 ruling that the Pi lead at all hours (#6530) assumed
-# its 15-minute schedule. A run that changes the Pi's and daniel-box's packages alone still makes
-# the Pi the canary. The operator kept it eligible on 2026-11-03 (#7047): the Pi's
-# homelab-updater-poll.timer starts its updater within about 15 minutes of a newer publish (#7065),
-# so a Pi canary holds the other hosts for one updater run, not a day. The daily fire stays the
-# fallback, so monitor-bridge still derives the lag grace for a gate whose `host` label is
-# daniel-pi from the Pi's drop-in (ansible/filter_plugins/updater_lag_grace.py, rendered in
-# monitor-bridge's env.yaml.j2), and every other reason keeps the 7200 s floor (#6919).
-CANARY_ORDER = ("daniel-server", "daniel-pi", "daniel-box")
+# DECIDED: daniel-server is the only canary (operator, 2026-11-12). The Pi gets no work that
+# daniel-box or daniel-server could do: a Pi canary held daniel-box's package a median 18 minutes
+# and up to 8 hours. daniel-box runs the builder and the signer, so it is never a canary either.
+# A run that changes no canary's package stages every host package at once.
+CANARY_ORDER = ("daniel-server",)
+NEVER_CANARY = ("daniel-pi", "daniel-box")
 APPLIED = "homelab_host_applied_info"
 RECONCILE_OK = "homelab_host_reconcile_ok"
 QUERY_TIMEOUT_S = 10
@@ -70,12 +65,10 @@ def admit(
     """
     hosts = [p for p in changed if host_of(p)]
     if gate is None:
-        if len(hosts) < 2:
-            return changed, [], None
         order = [h for h in CANARY_ORDER if f"hosts/{h}" in hosts]
-        # A host outside the order is last, and a name sort keeps the choice stable.
-        canary = order[0] if order else host_of(sorted(hosts)[0])
-        gate = {"host": canary, "sha": chosen}
+        if len(hosts) < 2 or not order:
+            return changed, [], None
+        gate = {"host": order[0], "sha": chosen}
     canary_package = f"hosts/{gate['host']}"
     staged = [p for p in changed if not host_of(p) or p == canary_package]
     deferred = [p for p in changed if host_of(p) and p != canary_package]
@@ -105,11 +98,13 @@ class RolloutGate:
         raise NotImplementedError
 
     def close_gate(self) -> None:
-        """Close the open gate when the release file or the canary's report says to."""
+        """Close the open gate when its host is no canary, or the release file or the canary's report says to."""
         gate = self.state.get("gate")
         if not gate:
             return
-        if self.descends(gate["sha"], self.release_text()):
+        if gate["host"] not in CANARY_ORDER:
+            why = f"{gate['host']} is no longer a canary"
+        elif self.descends(gate["sha"], self.release_text()):
             why = f"{self.release_path} names it or a descendant"
         elif self.canary_reports(gate):
             why = f"{gate['host']} reports it at reconcile_ok 1"

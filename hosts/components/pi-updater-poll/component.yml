@@ -1,8 +1,7 @@
-# The Pi's updater trigger (#7065, the third Fix bullet of #7047). The operator decided on
-# 2026-11-03 to keep daniel-pi eligible as the builder's rollout canary
-# (hosts/lib/builder_rollout_gate.py:CANARY_ORDER) and to start its updater when the builder
-# publishes a new daniel-pi package. Without it a Pi canary held every other host's package for up
-# to a day, until the daily 03:05 fire (H3.13, #6911).
+# The Pi's updater trigger (#7065). It starts the Pi's updater when the builder publishes a new
+# daniel-pi package, so a landing that changes the Pi's package settles within about 15 minutes
+# instead of at the daily 03:05 fire (H3.13, #6911). The Pi is never the builder's rollout canary
+# (hosts/lib/builder_rollout_gate.py:NEVER_CANARY), so this trigger holds no other host.
 #
 # homelab-updater-poll.timer fires every 15 minutes. The script fetches the homelab Packages index
 # from the URI in homelab.sources and starts homelab-updater.service once per published version
@@ -35,8 +34,9 @@
 #   unit's result in `systemctl status homelab-updater-poll.service`. A run that finds nothing
 #   to do logs nothing. A started run is visible as the updater's own
 #   `homelab_host_applied_info` advancing to the published version.
-# - Next-run review: a gate whose `host="daniel-pi"` stays open past about 20 minutes plus an
-#   updater run means the poll did not start the updater. Read
+# - Next-run review: a published homelab-daniel-pi that `homelab_host_applied_info{host="daniel-pi"}`
+#   has not reached after about 20 minutes plus an updater run means the poll did not start the
+#   updater. Read
 #   `journalctl -u homelab-updater-poll.service` and /var/lib/homelab-updater-poll/triggered on
 #   the Pi before starting the updater by hand.
 #

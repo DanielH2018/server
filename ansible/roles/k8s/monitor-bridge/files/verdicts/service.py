@@ -125,7 +125,6 @@ def host_packages(
     now: float,
     max_fetch_age_s: float,
     max_lag_s: float,
-    pi_canary_lag_s: float,
     drift: list[tuple[dict[str, str], float]] | None = None,
 ) -> tuple[bool, str]:
     """Pure: is the host-package builder fetching, and is master getting built?
@@ -140,10 +139,7 @@ def host_packages(
     - The fetch is older than `max_fetch_age_s`, or absent. A dead builder timer, a missing
       token and a fetch that keeps failing all end here, because a failed fetch writes nothing.
     - The oldest unbuilt commit is older than `max_lag_s`. In each of those cases the builder
-      runs and exits 0 while no host receives a change, so no unit failure reports it. An open
-      rollout gate whose canary is daniel-pi (`reason="canary"`, `host="daniel-pi"`) gets
-      `pi_canary_lag_s` instead, because the Pi's updater fires once a day (#6919). A canary
-      series with no `host` label gets it too: a builder older than that label writes none.
+      runs and exits 0 while no host receives a change, so no unit failure reports it.
 
     An absent unbuilt-since series pages too: the builder writes both series in one file, so a
     fetch without it is a file the builder did not write. A label-set change can leave two
@@ -169,12 +165,6 @@ def host_packages(
         if shown is not None
         else ""
     )
-    if (
-        oldest
-        and oldest[0].get("reason") == "canary"
-        and oldest[0].get("host", "daniel-pi") == "daniel-pi"
-    ):
-        max_lag_s = pi_canary_lag_s
     problems = []
     if not fetch_ts:
         problems.append("builder fetch series absent or 0 (timer dead, token missing?)")
