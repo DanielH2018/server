@@ -165,6 +165,22 @@ cancelled, so `ci.yml`'s concurrency group did not cause it.
   draft, because a draft PR never merges. The remedy is then a push, or the same two commands
   by hand.
 
+**A check left pending under a completed workflow run ends the wait at `merge-timeout`.**
+GitHub can leave a job `queued` with no runner after its workflow run reads `completed`. PR
+#7975's required `pull + boot changed images` check did this on 2026-11-11. GitHub refused
+every direct merge, and the landing waited about 75 minutes towards `merge-timeout` (#7996).
+
+- `gh run rerun` refuses a completed run, and a `workflow_dispatch` run does not replace the
+  PR's check. Only a new head commit gives the PR a fresh set of checks.
+- Once `await_ci` has read a head green and the PR has stayed unmerged for
+  `stuck_checks.AFTER_S` (600s), the merge wait reads the head's check runs and check suites,
+  and reads them again every 600s after. A head that is not green is never read this way.
+- A check still pending in a completed suite ends the wait at `merge-timeout`, exit 75. The
+  message names the check and the remedy: push an empty commit to the PR branch, then re-run
+  `land.sh`.
+- A pending check in a suite still running is ordinary CI and keeps the wait. A failed read
+  names nothing, so the wait goes on to its budget.
+
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
 `renovate-agent-land@.service` sets it to `app/renovate`, so the unattended agent can only merge
 Renovate's PRs (issue #2170). `--any-author` lifts it for a session that is allowed to merge the
