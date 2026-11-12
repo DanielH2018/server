@@ -1,12 +1,9 @@
-"""Every deployed host script that embeds a credential is unreadable to `other`.
+"""Every declared secret output is unreadable to `other`.
 
-`secret_bearing_host_paths()` derives which `/usr/local/bin` and `/opt/homelab` files render
-a tracked secret inline; this holds each one's install task to a mode with no `other` bits.
-Four roles carried a `DECIDED: 0700` marker for it and twelve did not, and three of those
-twelve were `0755` on 2026-09-17: `docs-refresh.sh`, `eval-run.sh` and
-`ups-secondary-health.sh`, each readable by any local user and each holding a live token.
-The bound is `other`, not "exactly 0700": the root-run crowdsec, traefik and gitops_deploy
-scripts are `0750 root:root`, which is the same guarantee for their callers.
+A host component's `outputs:` entry names a file `homelab-secrets` renders with a credential in
+it, and the entry's `mode` is the file's mode. This holds each one to a mode with no `other`
+bits. The bound is `other`, not "exactly 0600": `/etc/nut/upsmon.conf` is `0640` so the nut
+group can read it, which is the same guarantee for everyone outside that group.
 
 Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_bearing_host_scripts_are_not_world_readable.py
 """
@@ -15,17 +12,20 @@ from pathlib import Path
 
 import pytest
 
+from lib.repo_paths import K3S_HOST_CHECKS
 from secrets_mgmt.secret_bearing_host_paths import (
     readable_beyond_owner_and_group,
-    world_readable_secret_bearing_tasks,
+    world_readable_outputs,
 )
 
 
-def test_no_secret_bearing_host_script_is_world_readable():
-    # The census is empty since M6 batch B6c's Cutover-2 dropped registry-gc.sh's push, the last
-    # script that embedded a token, so no real subject remains and the line that counted one went
-    # with it. The synthetic cases below keep the rule: one world-readable script is flagged.
-    assert world_readable_secret_bearing_tasks() == []
+def test_no_declared_secret_output_is_world_readable():
+    assert world_readable_outputs() == []
+
+
+def test_the_real_tree_declares_an_output_to_check():
+    """Non-vacuity: the check above passes over nothing if the specs declare no output."""
+    assert "outputs:" in (K3S_HOST_CHECKS / "component.yml").read_text()
 
 
 @pytest.mark.parametrize(
@@ -43,37 +43,22 @@ def test_the_other_bits_decide(mode, readable):
     assert readable_beyond_owner_and_group(mode) is readable
 
 
-def _tree(tmp_path: Path, mode_line: str) -> Path:
-    role = tmp_path / "roles" / "demo"
-    (role / "tasks").mkdir(parents=True)
-    (role / "templates").mkdir()
-    (role / "templates" / "thing.sh.j2").write_text("KUMA={{ demo_push_token }}\n")
-    (role / "tasks" / "main.yml").write_text(
-        "- name: Install thing\n"
-        "  ansible.builtin.template:\n"
-        "    src: thing.sh.j2\n"
-        "    dest: /usr/local/bin/thing.sh\n" + mode_line
-    )
-    (tmp_path / "secret_rotation.yml").write_text(
-        "entries:\n  demo_push_token:\n    tier: auto\n    last_rotated: '2026-01-01'\n"
+def _tree(tmp_path: Path, mode: str) -> Path:
+    spec = tmp_path / "hosts" / "components" / "demo" / "component.yml"
+    spec.parent.mkdir(parents=True)
+    spec.write_text(
+        "outputs:\n  - {src: templates/demo.conf.j2, path: /etc/demo/demo.conf,"
+        f' owner: root, group: root, mode: "{mode}", keys: [demo_push_token]}}\n'
     )
     return tmp_path
 
 
-def test_a_world_readable_secret_bearing_script_is_flagged(tmp_path: Path):
-    tree = _tree(tmp_path, '    mode: "0755"\n')
-    assert world_readable_secret_bearing_tasks(tree, tree / "secret_rotation.yml") == [
-        ("roles/demo/tasks/main.yml", "/usr/local/bin/thing.sh", "0755")
+def test_a_world_readable_output_is_flagged(tmp_path: Path):
+    tree = _tree(tmp_path, "0644")
+    assert world_readable_outputs(tree) == [
+        ("hosts/components/demo/component.yml", "/etc/demo/demo.conf", "0644")
     ]
 
 
-def test_an_owner_only_script_and_a_secret_free_script_are_clean(tmp_path: Path):
-    tree = _tree(tmp_path, '    mode: "0700"\n')
-    assert world_readable_secret_bearing_tasks(tree, tree / "secret_rotation.yml") == []
-    (tree / "roles" / "demo" / "templates" / "thing.sh.j2").write_text("echo hi\n")
-    (tree / "roles" / "demo" / "tasks" / "main.yml").write_text(
-        (tree / "roles" / "demo" / "tasks" / "main.yml")
-        .read_text()
-        .replace('"0700"', '"0755"')
-    )
-    assert world_readable_secret_bearing_tasks(tree, tree / "secret_rotation.yml") == []
+def test_an_owner_only_output_is_clean(tmp_path: Path):
+    assert world_readable_outputs(_tree(tmp_path, "0600")) == []

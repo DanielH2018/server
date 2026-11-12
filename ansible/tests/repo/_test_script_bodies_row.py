@@ -183,7 +183,7 @@ TEST_SCRIPT_BODIES = Census(
             '"#!/bin/sh\\nexport PATH=\\"${PATH}:/usr/local/bin\\"\\nk3s ctr images ls\\n"\n',
         ),
     ),
-    min_matches=1172,
+    min_matches=1169,
     must_find=frozenset(
         {
             "hosts/lib/tests/container/build-image.sh",

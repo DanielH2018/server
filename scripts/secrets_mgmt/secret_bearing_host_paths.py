@@ -1,209 +1,132 @@
 #!/usr/bin/env python3
-"""Deployed host paths whose content embeds a credential, derived from the tree.
+"""Deployed host paths whose content holds a credential, derived from the host package specs.
 
 WHY THIS EXISTS. `grep-on-a-script-prints-the-secret-it-embeds` records three occurrences, every
 one ending in a rotation. The leak is an *inspection*, not an execution: a `grep -nE
-"rotate|--commit|sops set|push"` on `/usr/local/bin/secret-rotation-audit.sh` matched the
-wrapper's own export of a push URL, token included, and printed the token into the
-terminal and the transcript. M6 batch B2's Cutover-2 removed that line with the audit's push.
+"rotate|--commit|sops set|push"` on a deployed wrapper matched its own export of a push URL,
+token included, and printed the token into the terminal and the transcript.
 
 WHY A DERIVATION RATHER THAN A LIST. `block-dangerous-bash.sh` guards reads by matching a fixed
-alternation of conventional secret paths — `.env`, `.ssh/`, `id_rsa`. A deployed wrapper script
-is not on that list and cannot be: its name is whatever the role called it. The set is knowable
+alternation of conventional secret paths — `.env`, `.ssh/`, `id_rsa`. A deployed secret file's
+name is whatever its component called it, so it cannot be on that list. The set is knowable
 from the tree, though, so it is measured rather than enumerated.
 
-WHAT IT MEASURES. A task that deploys a file to a host bin directory (`template:`/`copy:` with a
-`src` and a `dest` under /usr/local/bin or /opt/homelab) whose SOURCE references a secret name
-from `ansible/secret_rotation.yml`. The registry is plaintext by design — names, dates and tiers,
-never values — so this needs no SOPS key and runs anywhere.
+WHAT IT MEASURES. Host mode renders no secret into a component's `files:` entries: the renderer
+withholds every secret key and refuses a template that reads one
+(`renderer/renderer_lib/host.py`). A credential reaches a host file only through the two routes
+`homelab-secrets` writes:
 
-WHAT IT DOES NOT MEASURE. A script that SOURCES a token from a separate env file
-holds no secret itself and is correctly absent; the env file it reads is already covered
-by `block-dangerous-bash.sh`'s own `.env` arm. A secret reaching a host path by any route other
-than a src/dest task — a shell `lineinfile`, a Job writing at runtime — is invisible here. This
-narrows the class; it does not close it.
+- an `outputs:` entry, whose `keys:` list names exactly the secrets the file holds. It renders
+  under `host_outputs.OUTPUT_ROOTS`, and its `path` is where the consumer reads it;
+- a `credentials:` entry, which lands at `/run/credstore/<key>`.
+
+Both are read from every `hosts/components/*/component.yml` and `hosts/*/package.yml`. A key the
+rotation registry tiers `ignore` (an address, a bucket name) holds no credential and is left
+out. The specs and the registry are plaintext by design, so this needs no SOPS key and runs
+anywhere.
+
+WHAT IT DOES NOT MEASURE. A secret a process writes at runtime, outside `homelab-secrets`, is
+invisible here. This narrows the class; it does not close it.
 
 Run: uv run python scripts/secrets_mgmt/secret_bearing_host_paths.py
 """
 
-from collections.abc import Sequence
-import re
+from collections.abc import Iterator, Sequence
 import sys as _sys
 from pathlib import Path as _Path
-
-import yaml
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.cli_help import answer_help
 
-from lib.repo_paths import ANSIBLE
+from lib.repo_paths import ANSIBLE, REPO
+from renderer.renderer_lib.host_outputs import OUTPUT_ROOTS
 
 REGISTRY = ANSIBLE / "secret_rotation.yml"
+CREDSTORE = "/run/credstore"
 
-# The trees a host script is deployed into. Deliberately two literal prefixes rather than "any
-# absolute dest": a dest under /etc or a container's config directory is a data file, not
-# something a session greps while deciding whether a script is safe to run, and widening this
-# turns the guard into one that fires on ordinary config inspection.
-HOST_BIN_PREFIXES = ("/usr/local/bin", "/opt/homelab")
-
-# Names too generic to match on — a substring hit would flag every file mentioning the word.
-# Empty today; kept as the documented escape hatch so a future generic name is handled here
-# rather than by weakening the regex.
-#
-# DECIDED: `email` was the first candidate for this set (#1183) and went to the registry's
-# `ignore` tier instead, because it is an address rather than a credential — it renders as an
-# ACME contact, a git commit author, an Authelia user's email and an SMTP username, and the
-# value that authenticates that SMTP session is `smtp_notify_app_password`, tracked
-# separately. That is the precedent NON_SECRET_TIERS below states: when the registry can
-# say a name is not a credential, it says it, and this derivation reads it.
-# GENERIC_NAMES stays for the case the registry CANNOT express — a name that really is a
-# credential but whose word is too common to match on. A registry comment could not have
-# carried this: `rotation_tools.save_registry` rewrites the file with `yaml.safe_dump`, so the
-# weekly rotate cron drops any comment added there.
-GENERIC_NAMES = frozenset()
+# Every path this module returns starts with one of these. The hook short-circuits on the same
+# literal before it imports anything, so a path outside them would be invisible to it.
+SECRET_PATH_ROOTS = ("/etc/", "/run/", "/var/lib/", "/usr/lib/homelab/")
 
 # The registry's own word for "tracked, but not a value anyone rotates". `email`, `r2_bucket`
-# and the `*_username` keys carry it. Reading the tier is what keeps this derivation honest:
-# `domain` carried it until it left the store on 2026-10-15, and matching on it had flagged
-# host scripts (disk-health, etcd-snapshot-offbox, registry-gc, fake-remux-health) that embed
-# no credential at all. A guard that fires on those is one that gets switched off. Derived from
-# the registry rather than hand-listed in GENERIC_NAMES, because the registry already states
-# the fact.
+# and the `*_username` keys carry it. A file whose only declared keys carry it holds no
+# credential, and a guard that fires on such files is one that gets switched off.
 NON_SECRET_TIERS = frozenset({"ignore"})
 
 
-def secret_names(registry: _Path = REGISTRY) -> list[str]:
-    """Every tracked secret name, from the plaintext rotation registry.
-
-    Excludes the `ignore` tier: those entries are tracked for completeness, not because they
-    hold a value whose exposure forces a rotation.
-    """
+def non_secret_names(registry: _Path = REGISTRY) -> frozenset[str]:
+    """The registry names tiered `ignore`: tracked for completeness, holding no credential."""
     data = yaml_fast.safe_load(registry.read_text()) or {}
-    tracked = {
+    return frozenset(
         name
         for name, meta in (data.get("entries") or {}).items()
-        if (meta or {}).get("tier") not in NON_SECRET_TIERS
-    }
-    return sorted(tracked - GENERIC_NAMES)
+        if (meta or {}).get("tier") in NON_SECRET_TIERS
+    )
 
 
-def references_a_secret(text: str, names: list[str]) -> list[str]:
-    """The secret names `text` references, as whole words.
-
-    Whole-word, not substring: `authelia_secret` must not be found inside a comment about
-    `authelia_secret_rotation`, and a short name must not match a longer unrelated identifier
-    that happens to contain it.
-    """
-    return sorted(n for n in names if re.search(rf"\b{re.escape(n)}\b", text))
-
-
-def _walk(node):
-    """Yield every dict nested anywhere in a parsed task file."""
-    if isinstance(node, dict):
-        yield node
-        for value in node.values():
-            yield from _walk(value)
-    elif isinstance(node, list):
-        for value in node:
-            yield from _walk(value)
+def _specs(repo: _Path) -> Iterator[tuple[_Path, dict]]:
+    """Each host package spec and component spec in `repo`, parsed."""
+    hosts = repo / "hosts"
+    for spec in sorted(
+        [*hosts.glob("*/package.yml"), *hosts.glob("components/*/component.yml")]
+    ):
+        yield spec, yaml_fast.safe_load(spec.read_text()) or {}
 
 
-def _src_text(task_file: _Path, src: str) -> str:
-    """The source file's text, resolved the way Ansible resolves a role-relative src.
-
-    A `template:` src resolves against the role's templates/, a `copy:` src against its files/.
-    Both are tried because the task's module name is not always adjacent to the dict this walk
-    yields. An absolute or unresolvable src reads as empty, which is the fail-open direction:
-    a source this cannot read is not evidence that it holds a secret.
-    """
-    role_dir = task_file.parent.parent
-    for sub in ("templates", "files"):
-        candidate = role_dir / sub / src
-        if candidate.is_file():
-            try:
-                return candidate.read_text(errors="replace")
-            except OSError:
-                return ""
-    return ""
+def _output_paths(output: dict) -> list[str]:
+    """Where an output's rendered content can be read: its rendered file and its `path`."""
+    path = str(output["path"])
+    destination = str(output.get("destination", path.lstrip("/")))
+    rendered = f"{OUTPUT_ROOTS[bool(output.get('persist', False))]}/{destination}"
+    return sorted({rendered, path})
 
 
 def secret_bearing_host_paths(
-    ansible: _Path = ANSIBLE, registry: _Path = REGISTRY
+    repo: _Path = REPO, registry: _Path = REGISTRY
 ) -> dict[str, list[str]]:
-    """Deployed host path -> the secret names its source renders.
+    """Deployed host path -> the secret names its content holds.
 
-    Walks every role task file, not just k8s: the `setup/` plane (`nut_host` among them) deploys host
-    scripts too, and `setup/fake_remux` is the consumer `deploy.sh` structurally cannot reach.
     Args:
-      ansible: the Ansible tree to walk.
-      registry: the rotation registry the tracked secret names come from. Both are parameters
-        so a test can hand this a tree it built, rather than patching module globals — the
-        repo's monkeypatch ratchet asks for a seam here instead.
+      repo: the checkout whose `hosts/` specs are read.
+      registry: the rotation registry whose `ignore` tier is left out. Both are parameters so
+        a test can hand this a tree it built, rather than patching module globals.
     """
-    names = secret_names(registry)
-    found: dict[str, list[str]] = {}
-    for task_file in sorted(ansible.glob("roles/**/tasks/*.yml")):
-        try:
-            doc = yaml_fast.safe_load(task_file.read_text(errors="replace"))
-        except yaml.YAMLError:
-            # A task file this cannot parse is not evidence of absence, but a census cannot
-            # act on it either. Skipping one file beats failing the whole derivation.
-            continue
-        for node in _walk(doc):
-            src, dest = node.get("src"), node.get("dest")
-            if not isinstance(src, str) or not isinstance(dest, str):
+    ignored = non_secret_names(registry)
+    found: dict[str, set[str]] = {}
+    for _, spec in _specs(repo):
+        for key in spec.get("credentials") or []:
+            if str(key) not in ignored:
+                found.setdefault(f"{CREDSTORE}/{key}", set()).add(str(key))
+        for output in spec.get("outputs") or []:
+            names = {str(k) for k in output.get("keys") or []} - ignored
+            if not names:
                 continue
-            if not dest.startswith(HOST_BIN_PREFIXES):
-                continue
-            referenced = references_a_secret(_src_text(task_file, src), names)
-            if referenced:
-                found[dest] = referenced
-    return found
+            for path in _output_paths(output):
+                found.setdefault(path, set()).update(names)
+    return {path: sorted(names) for path, names in sorted(found.items())}
 
 
 def readable_beyond_owner_and_group(mode) -> bool:
-    """True when `mode` grants anything to `other`, or is absent (the module's default is 0644)."""
+    """True when `mode` grants anything to `other`, or is absent."""
     if mode is None:
         return True
     return int(str(mode), 8) & 0o007 != 0
 
 
-def world_readable_secret_bearing_tasks(
-    ansible: _Path = ANSIBLE, registry: _Path = REGISTRY
-) -> list[tuple[str, str, str | None]]:
-    """(task file, dest, mode) for every secret-bearing host path deployed with `other` bits.
-
-    The census above says WHICH paths embed a credential; this says which of them any local
-    user can read. Four roles carry a `DECIDED: 0700` marker for the same reason, and until
-    this existed the other twelve were checked by hand or not at all.
-    """
-    secret_paths = secret_bearing_host_paths(ansible, registry)
-    offenders = []
-    for task_file in sorted(ansible.glob("roles/**/tasks/*.yml")):
-        try:
-            doc = yaml_fast.safe_load(task_file.read_text(errors="replace"))
-        except yaml.YAMLError:
-            continue
-        for node in _walk(doc):
-            dest = node.get("dest")
-            if (
-                not isinstance(dest, str)
-                or dest not in secret_paths
-                or "src" not in node
-            ):
-                continue
-            if readable_beyond_owner_and_group(node.get("mode")):
-                mode = node.get("mode")
-                offenders.append(
-                    (
-                        str(task_file.relative_to(ansible)),
-                        dest,
-                        None if mode is None else str(mode),
-                    )
-                )
-    return offenders
+def world_readable_outputs(repo: _Path = REPO) -> list[tuple[str, str, str | None]]:
+    """(spec, path, mode) for every declared secret output whose mode grants `other` bits."""
+    return [
+        (
+            str(spec.relative_to(repo)),
+            str(output["path"]),
+            None if output.get("mode") is None else str(output["mode"]),
+        )
+        for spec, data in _specs(repo)
+        for output in data.get("outputs") or []
+        if readable_beyond_owner_and_group(output.get("mode"))
+    ]
 
 
 def main(argv: Sequence[str] = ()) -> int:
@@ -212,7 +135,7 @@ def main(argv: Sequence[str] = ()) -> int:
     for dest, names in sorted(paths.items()):
         print(f"{dest}\t{','.join(names)}")
     print(
-        f"\n{len(paths)} deployed host paths embed a tracked secret.", file=_sys.stderr
+        f"\n{len(paths)} deployed host paths hold a tracked secret.", file=_sys.stderr
     )
     return 0
 

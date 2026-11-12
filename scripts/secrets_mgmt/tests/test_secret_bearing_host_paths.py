@@ -2,20 +2,13 @@
 
 `.claude/hooks/block-protected-bash.py` denies a content-printing read of every path this
 module returns. A derivation that quietly narrows therefore unblocks a read that prints a
-credential into the terminal and the transcript, and nothing else in the tree notices — the
-module had no test at all until this file.
+credential into the terminal and the transcript, and nothing else in the tree notices.
 
-Every derivation test runs over a synthetic tree: one input the derivation must flag and one it
-must not, so a rule that stopped matching altogether fails here rather than reading green.
+The real-tree tests name members the census must find, so an empty walk fails here. The
+synthetic cases give each rule one input it must flag and one it must not.
 
-No test pins a script of the real tree. `MUST_FIND` did, with registry-gc.sh as its one member,
-and M6 batch B6c's Cutover-2 retired it when that script's push, and its inline token, went: the
-real census is empty, and a pin on a subject that no longer exists can only fail. A script that
-embeds a credential again is covered by the synthetic cases, and the hook's own tests run over a
-fixture checkout.
-
-Nothing in this file prints the content of a secret-bearing source. The assertions are over
-dest paths and secret NAMES, which is exactly what the module returns and what the hook's deny
+Nothing in this file prints the content of a secret-bearing file. The assertions are over
+paths and secret NAMES, which is exactly what the module returns and what the hook's deny
 message already says out loud.
 
 Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_bearing_host_paths.py
@@ -27,14 +20,13 @@ import pytest
 
 from lib.repo_paths import REPO
 from secrets_mgmt.secret_bearing_host_paths import (
-    HOST_BIN_PREFIXES,
-    references_a_secret,
+    SECRET_PATH_ROOTS,
+    non_secret_names,
     secret_bearing_host_paths,
-    secret_names,
 )
 
-# The hook's own copy of the prefix list. It short-circuits on this before importing anything,
-# so a prefix added here and not there makes the guard stop firing for the new tree.
+# The hook's own copy of the root list. It short-circuits on this before importing anything,
+# so a root added here and not there makes the guard stop firing for the new tree.
 HOOK = REPO / ".claude" / "hooks" / "block-protected-bash.py"
 
 
@@ -43,13 +35,21 @@ def real_census():
     return secret_bearing_host_paths()
 
 
-# ── the real tree: whatever it returns is visible to the hook ────────────────────────────
-def test_every_returned_dest_is_under_a_host_bin_prefix(real_census):
-    stray = [d for d in real_census if not d.startswith(HOST_BIN_PREFIXES)]
-    assert not stray, f"{stray} would be invisible to the hook's cheap prefix gate"
+# ── the real tree ────────────────────────────────────────────────────────────────────────
+def test_the_census_finds_a_declared_output_and_a_credential(real_census):
+    """Named members: k3s-host-checks' etcd S3 env file and the packages' ping-key credential."""
+    assert "r2_secret_access_key" in real_census["/etc/rancher/k3s/etcd-s3.env"]
+    assert real_census["/run/credstore/healthchecks_ping_key"] == [
+        "healthchecks_ping_key"
+    ]
 
 
-def test_the_hooks_prefix_gate_matches_the_modules():
+def test_every_returned_path_is_under_a_secret_root(real_census):
+    stray = [p for p in real_census if not p.startswith(SECRET_PATH_ROOTS)]
+    assert not stray, f"{stray} would be invisible to the hook's cheap gate"
+
+
+def test_the_hooks_gate_matches_the_modules():
     """Read the hook's literal rather than importing it — it reads stdin at import time."""
     tree = ast.parse(HOOK.read_text(), filename=str(HOOK))
     literals = [
@@ -57,125 +57,82 @@ def test_the_hooks_prefix_gate_matches_the_modules():
         for node in ast.walk(tree)
         if isinstance(node, ast.Assign)
         and any(
-            isinstance(t, ast.Name) and t.id == "_HOST_BIN_PREFIXES"
+            isinstance(t, ast.Name) and t.id == "_SECRET_PATH_ROOTS"
             for t in node.targets
         )
     ]
-    assert literals, f"_HOST_BIN_PREFIXES not found in {HOOK}"
-    assert ast.literal_eval(literals[0]) == HOST_BIN_PREFIXES
+    assert literals, f"_SECRET_PATH_ROOTS not found in {HOOK}"
+    assert ast.literal_eval(literals[0]) == SECRET_PATH_ROOTS
 
 
-def test_the_ignore_tier_is_excluded_from_the_tracked_names():
-    """`r2_bucket` is one of the registry's tracked-but-not-a-credential entries (tier: ignore).
-
-    `domain` held that place until it left the store on 2026-10-15 (R2 domain PR 3); matching
-    on it had flagged five host scripts that embed no credential at all, which is how a guard
-    gets switched off. `r2_bucket` is a name no `*_user` rule excludes, so only its tier keeps
-    it out. Pinned by name so a tier change to `r2_bucket` fails here.
-    """
-    assert "r2_bucket" not in secret_names()
-    assert "radarr_api_key" in secret_names()
-
-
-def test_the_generic_address_name_is_not_tracked_but_its_password_is():
-    """`email` is an address, so it is tiered `ignore` rather than listed in GENERIC_NAMES.
-
-    The pair is the point. `email` word-matches in any script mentioning an address —
-    it reached the secret-rotation script through a `git -c user.email=` line that
-    embeds no credential — so a census that tracks it teaches sessions the guard is noise.
-    `smtp_notify_app_password` is the value that actually authenticates that SMTP session and
-    must stay tracked, so a sweep that tiered the whole SMTP family `ignore` fails here.
-    """
-    names = secret_names()
-    assert "email" not in names
-    assert "smtp_notify_app_password" in names
+def test_the_ignore_tier_names_an_address_and_not_a_password():
+    """`email` and `r2_bucket` are tracked but hold no credential; their passwords do."""
+    ignored = non_secret_names()
+    assert {"email", "r2_bucket"} <= ignored
+    assert not {"smtp_notify_app_password", "r2_secret_access_key"} & ignored
 
 
 # ── the synthetic tree: one input it must flag, one it must not ──────────────────────────
-def _tree(tmp_path, dest, src_text, *, role="demo", task_dir="tasks"):
-    role_dir = tmp_path / "roles" / role
-    (role_dir / task_dir).mkdir(parents=True)
-    (role_dir / "templates").mkdir(parents=True, exist_ok=True)
-    (role_dir / "templates" / "thing.sh.j2").write_text(src_text)
-    (role_dir / task_dir / "main.yml").write_text(
-        "- name: Install thing\n"
-        "  ansible.builtin.template:\n"
-        "    src: thing.sh.j2\n"
-        f"    dest: {dest}\n"
-    )
+def _tree(tmp_path, spec_text, *, spec="hosts/components/demo/component.yml"):
+    path = tmp_path / spec
+    path.parent.mkdir(parents=True)
+    path.write_text(spec_text)
     (tmp_path / "secret_rotation.yml").write_text(
         "entries:\n"
         "  demo_push_token:\n"
         "    tier: auto\n"
-        "    last_rotated: '2026-01-01'\n"
-        "  demo_ignored_name:\n"
+        "  demo_bucket:\n"
         "    tier: ignore\n"
-        "    last_rotated: '2026-01-01'\n"
     )
     return tmp_path
 
 
 def _census(tree):
-    """The census over a synthetic tree, with its own registry.
-
-    Both paths are parameters on the production function, so these cases neither read the real
-    registry nor patch a module global — the repo's monkeypatch ratchet asks for the seam.
-    """
     return secret_bearing_host_paths(tree, tree / "secret_rotation.yml")
 
 
-def test_a_host_bin_script_rendering_a_secret_is_flagged(tmp_path):
+def _output(keys, **extra):
+    fields = ", ".join(f"{k}: {v}" for k, v in extra.items())
+    return (
+        "outputs:\n  - {src: templates/demo.conf.j2, path: /etc/demo/demo.conf,"
+        f' owner: root, group: root, mode: "0600", keys: [{keys}]'
+        + (f", {fields}" if fields else "")
+        + "}\n"
+    )
+
+
+def test_an_output_is_flagged_at_its_path_and_its_rendered_file(tmp_path):
+    tree = _tree(tmp_path, _output("demo_push_token"))
+    assert _census(tree) == {
+        "/etc/demo/demo.conf": ["demo_push_token"],
+        "/run/homelab-secrets/etc/demo/demo.conf": ["demo_push_token"],
+    }
+
+
+def test_a_persisted_output_renders_under_var_lib(tmp_path):
+    tree = _tree(
+        tmp_path, _output("demo_push_token", persist="true", destination="demo/x")
+    )
+    assert "/var/lib/homelab-secrets/demo/x" in _census(tree)
+
+
+def test_an_output_holding_only_an_ignore_tier_name_is_clean(tmp_path):
+    tree = _tree(tmp_path, _output("demo_bucket"))
+    assert _census(tree) == {}
+
+
+def test_a_package_credential_is_flagged_in_the_credstore(tmp_path):
     tree = _tree(
         tmp_path,
-        "/usr/local/bin/demo.sh",
-        "export PUSH={{ demo_push_token }}\n",
+        "credentials:\n  - demo_push_token\n  - demo_bucket\n",
+        spec="hosts/demo-host/package.yml",
     )
-    assert _census(tree) == {"/usr/local/bin/demo.sh": ["demo_push_token"]}
+    assert _census(tree) == {"/run/credstore/demo_push_token": ["demo_push_token"]}
 
 
-def test_a_host_bin_script_rendering_no_secret_is_clean(tmp_path):
-    tree = _tree(tmp_path, "/usr/local/bin/demo.sh", "echo hello\n")
-    assert _census(tree) == {}
-
-
-def test_a_host_bin_script_rendering_only_an_ignore_tier_name_is_clean(tmp_path):
-    """The `ignore` tier is tracked for completeness, not because it holds a credential.
-
-    Matching on one flagged five host scripts that embed no secret at all, and a guard that
-    fires on those is one that gets switched off.
-    """
-    tree = _tree(tmp_path, "/usr/local/bin/demo.sh", "echo {{ demo_ignored_name }}\n")
-    assert _census(tree) == {}
-
-
-def test_a_secret_bearing_file_outside_the_host_bin_trees_is_clean(tmp_path):
-    """The prefix filter is what keeps the guard off ordinary config inspection.
-
-    Same source, same secret — only the dest moves. Widening the prefixes would make this
-    fire on every /etc config file a session reads while orienting.
-    """
-    tree = _tree(tmp_path, "/etc/demo/demo.conf", "export PUSH={{ demo_push_token }}\n")
-    assert _census(tree) == {}
-
-
-def test_an_unparseable_task_file_does_not_sink_the_whole_census(tmp_path):
+def test_a_component_with_no_output_or_credential_is_clean(tmp_path):
     tree = _tree(
         tmp_path,
-        "/usr/local/bin/demo.sh",
-        "export PUSH={{ demo_push_token }}\n",
+        "files:\n  - {src: templates/x.sh.j2, dst: /usr/lib/homelab/x, mode: '0755'}\n",
     )
-    (tree / "roles" / "broken").mkdir(parents=True)
-    (tree / "roles" / "broken" / "tasks").mkdir()
-    (tree / "roles" / "broken" / "tasks" / "main.yml").write_text("- : [unbalanced\n")
-    assert _census(tree) == {"/usr/local/bin/demo.sh": ["demo_push_token"]}
-
-
-# ── the whole-word rule ──────────────────────────────────────────────────────────────────
-def test_a_secret_name_matches_as_a_whole_word():
-    assert references_a_secret("PUSH={{ demo_push_token }}", ["demo_push_token"]) == [
-        "demo_push_token"
-    ]
-
-
-def test_a_longer_identifier_containing_the_name_is_clean():
-    assert references_a_secret("demo_push_token_backup", ["demo_push_token"]) == []
+    assert _census(tree) == {}
