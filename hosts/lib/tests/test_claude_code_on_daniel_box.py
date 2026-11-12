@@ -18,7 +18,6 @@ from lib.estate import Inventory
 from lib.repo_paths import HOST_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 
-ROLE = REPO / "ansible" / "roles" / "setup" / "claude_code"
 COMPONENT = REPO / "hosts" / "components" / "claude-code" / "component.yml"
 UNITS = "/usr/lib/systemd/system"
 # A member of each subject the slice moves, so an emptied component cannot pass.

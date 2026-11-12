@@ -14,8 +14,7 @@ guard built on this keys on field names, never on credential-shaped values.
 A template is addressed by its (plane, role, name) triple rather than a role name: shell
 templates live on all three planes and `k8s/crowdsec` ships four of them, so a bare role name
 is ambiguous. A host component's template takes `components` as its plane and the component's
-name as its role, which is where its path puts them: `hosts/components/<name>/templates/`. `ansible/tests/repo/test_secret_rendering_host_scripts_have_no_log.py` already
-names them that way.
+name as its role, which is where its path puts them: `hosts/components/<name>/templates/`.
 """
 
 import re

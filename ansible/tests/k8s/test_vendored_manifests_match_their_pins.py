@@ -46,7 +46,7 @@ def _vendored_role(tmp_path, version="v1.0.0"):
 
 def test_the_real_tree_holds_every_pin():
     # A broken ROLES path or glob would make check_tree pass over no role at all.
-    assert {"flux", "k3s"} <= {role.name for role in roles_in()}
+    assert {"flux", "longhorn"} <= {role.name for role in roles_in()}
     assert check_tree() == []
 
 

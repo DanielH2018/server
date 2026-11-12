@@ -16,7 +16,7 @@ server_ip: 10.0.0.x
 # Where sshd's config actually lives on this OS image — check with
 # `sudo sshd -T | grep -i '^include'` or `ls /etc/ssh/sshd_config.d/`. Cloud-init images
 # (the Pi) drop a file under sshd_config.d/; a stock Ubuntu install uses the bare path.
-# The SSH-hardening tasks have no `create:` fallback, so a wrong value fails the run.
+# The sshd and integrity-scans components read this path.
 ssh_config_path: /etc/ssh/sshd_config
 
 # A Docker host keeps this key, empty: preflight.yml asserts it there. A k3s node deletes it,

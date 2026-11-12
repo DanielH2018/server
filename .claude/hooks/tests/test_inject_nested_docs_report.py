@@ -242,6 +242,7 @@ def test_report_with_no_claude_md_raises(tmp_path):
 
 def test_report_on_the_live_tree_finds_its_named_members():
     rows = _rows(base._REPO)
-    assert sum(doc.endswith("/CLAUDE.md") for doc in rows) >= 80
+    # 77 nested docs once H7.55 deleted the setup roles' CLAUDE.md files.
+    assert sum(doc.endswith("/CLAUDE.md") for doc in rows) >= 75
     assert "ansible/roles/k8s/traefik/CLAUDE.md" in rows
     assert ".claude/rules/python-layout.md" in rows

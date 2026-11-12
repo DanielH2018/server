@@ -415,7 +415,6 @@
  "ansible/tests/repo/test_root_entries_are_tracked_or_expected.py": 0.0,
  "ansible/tests/repo/test_row_table.py": 0.0,
  "ansible/tests/repo/test_scripts_suite_collects_on_its_own.py": 8.89,
- "ansible/tests/repo/test_secret_rendering_host_scripts_have_no_log.py": 0.18,
  "ansible/tests/repo/test_setup_action_uv_cache.py": 0.0,
  "ansible/tests/repo/test_shared_render_accessors.py": 0.41,
  "ansible/tests/repo/test_shell_entry_points_answer_help.py": 0.0,

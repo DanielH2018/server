@@ -191,8 +191,8 @@ A role's templates render with these variables, resolved for daniel-box:
 - `hostvars` for every host in `ansible/inventory/hosts.ini`. daniel-box's entry is the
   rendered context, so `hostvars[k8s_primary_node].containers_list` is that same list.
   Another host's entry holds its `hosts.ini` inline variables under its own host_vars,
-  resolved against that host's own variables. daniel-pi's `ansible_host`, the Jinja
-  `{{ server_ip }}`, therefore resolves to daniel-pi's address, not daniel-box's.
+  resolved against that host's own variables. `group_vars`' `k8s_pi_client_ip` reads
+  `hostvars['daniel-pi'].server_ip`, so it is daniel-pi's address, not daniel-box's.
 
 The render is strict. A name that no layer supplies stops the render with an error naming it.
 The render guards under `scripts/validate/` print `STUB` instead, and lay stub values such as

@@ -23,11 +23,9 @@ from test_pi_initial_setup_part2 import (
 
 from lib.estate import REPO_INVENTORY
 from lib.render_context import render_context
-from lib.repo_paths import ANSIBLE
 from renderer.renderer_lib import host as host_mode
 
 HOST = "daniel-box"
-ROLE = ANSIBLE / "roles" / "setup" / "initial_setup"
 FIRMWARE = "homelab-firmware-update.timer"
 # daniel-box has fwupd, so its firmware cron becomes a timer here and nowhere else.
 BOX_TIMERS = TIMERS | {"Weekly firmware update": FIRMWARE}
@@ -45,7 +43,7 @@ def manifest(package) -> dict:
 
 @pytest.fixture(scope="module")
 def context() -> dict:
-    return render_context(ROLE, HOST, inventory=REPO_INVENTORY)
+    return render_context(None, HOST, inventory=REPO_INVENTORY)
 
 
 def test_each_cron_the_role_once_wrote_here_is_retired_and_a_timer_replaces_it(

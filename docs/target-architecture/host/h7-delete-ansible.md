@@ -3293,10 +3293,10 @@ the `manual_plane` clearing, and *Rollback*'s
       H7.18d stops pi-peer-backup reading them, but every play run with
       `-e target=daniel-pi`, including a rollback re-apply of restored tasks, reaches the Pi
       through them until the playbooks go. The `hosts.ini` comment above the Pi's line and
-      the `daniel-pi.yml` comment above `ansible_host` go with them. Two renderer tests assert
-      the keys and go too:
-      `scripts/renderer/tests/test_renderer_context.py::test_hostvars_of_the_pi_take_ansible_user_from_hosts_ini`
-      and `::test_hostvars_of_the_pi_resolve_ansible_host_to_its_own_server_ip`. No coverage
+      the `daniel-pi.yml` comment above `ansible_host` go with them. The two renderer tests
+      that asserted the Pi's `ansible_user` and `ansible_host` go too, and
+      `scripts/renderer/tests/test_renderer_context.py::test_the_pi_client_ip_is_the_pis_own_server_ip`
+      takes their place: it resolves the one surviving Pi-host read. No coverage
       leaves with them: `scripts/renderer/tests/test_renderer_dialect.py::test_the_variable_layers_render_the_literal`
       still resolves another host's templated inline variable against that host, over the
       fixture in `_dialect_tree.py`. Four passages use the Pi's `ansible_host` as their

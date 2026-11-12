@@ -120,12 +120,12 @@ def test_the_revision_backend_finds_this_repos_docs():
     """The backend half of the notice's non-vacuity floor, read from this repository's HEAD.
 
     A reader that listed no docs would make every later notice empty and green. HEAD held 87
-    `CLAUDE.md` files on 2026-10-11; a slice that deletes role trees lowers this floor in the
-    same PR.
+    `CLAUDE.md` files on 2026-10-11 and 78 once H7.55 deleted the setup roles; a slice that deletes
+    role trees lowers this floor in the same PR.
     """
     with Tree(REPO, "HEAD") as tree:
         docs = tree.docs()
-        assert len(docs) >= 80
+        assert len(docs) >= 75
         assert {"CLAUDE.md", "ansible/roles/k8s/home-assistant/CLAUDE.md"} <= set(docs)
         assert tree.sections("CLAUDE.md")
 

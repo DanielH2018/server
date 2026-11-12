@@ -1,7 +1,7 @@
 """The packaged branch of the UPS watchdog, rendered the way a host package renders it (H4.3b3).
 
 Since H4.3c, daniel-server's `nut-secondary` component sets `nut_host_watchdog_packaged` and
-renders the role's template in host mode, where no secret exists. These tests render the template
+renders its template in host mode, where no secret exists. These tests render the template
 that way for daniel-server directly, so the branch is known to render, to read no secret and to
 be valid shell, whatever the component's file entry does with it.
 
@@ -13,11 +13,11 @@ import subprocess
 import pytest
 
 from lib import yaml_fast
-from lib.repo_paths import ANSIBLE
+from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.environment import RenderError, renderer_env
 
-ROLE = ANSIBLE / "roles" / "setup" / "nut_host"
+COMPONENT = REPO / "hosts" / "components" / "nut-secondary"
 WATCHDOG = "ups-secondary-health.sh.j2"
 HOST = "daniel-server"
 # A SOPS key the packaged render must not reach.
@@ -25,9 +25,9 @@ SECRET = "ups_secondary_push_token"
 
 
 def defaults() -> dict:
-    """The role's defaults with the flag set as the component's `defaults:` map sets it."""
-    role = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
-    return {**role, "nut_host_watchdog_packaged": True}
+    """The component's defaults with the flag set as its `defaults:` map sets it."""
+    own = yaml_fast.safe_load((COMPONENT / "defaults" / "main.yml").read_text())
+    return {**own, "nut_host_watchdog_packaged": True}
 
 
 def render(directory, name: str = WATCHDOG) -> str:
@@ -44,7 +44,7 @@ def code_lines(script: str) -> list[str]:
 
 
 def test_the_packaged_render_succeeds_with_every_secret_stripped():
-    script = render(ROLE / "templates")
+    script = render(COMPONENT / "templates")
     body = "\n".join(code_lines(script))
     assert "UPSMON_CONF=/var/lib/homelab-secrets/etc/nut/upsmon.conf" in body
     # Nothing of the Ansible-era branch survives in code, and since M6 batch B4's Cutover-2
@@ -61,7 +61,7 @@ def test_the_packaged_render_succeeds_with_every_secret_stripped():
 
 def test_the_packaged_render_is_valid_shell(tmp_path):
     path = tmp_path / "ups-secondary-health.sh"
-    path.write_text(render(ROLE / "templates"))
+    path.write_text(render(COMPONENT / "templates"))
     result = subprocess.run(
         ["bash", "-n", str(path)], capture_output=True, text=True, timeout=60
     )

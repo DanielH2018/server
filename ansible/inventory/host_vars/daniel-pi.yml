@@ -32,8 +32,8 @@ has_docker: true
 has_rsyslog: false
 # Disk-backed swap for the 512 MB Zero 2 W. The RAM-resident zram (hosts/components/pi-tuning/) can't add
 # real capacity, so heavy one-shot apt/dpkg steps (apt-show-versions cache build, `upgrade: dist`,
-# AIDE init) OOM-kill mid-transaction and corrupt the package DB. Created by the initial_setup
-# role BEFORE its apt tasks run. See ansible/roles/setup/initial_setup/tasks/main.yml.
+# AIDE init) OOM-kill mid-transaction and corrupt the package DB. Created by
+# hosts/bootstrap-host.sh BEFORE its apt steps run.
 pi_swapfile_path: /swapfile
 pi_swapfile_size: 1G
 # Slow healthcheck cadence on the Zero 2 W: every probe is 2 runc invocations (multi-
