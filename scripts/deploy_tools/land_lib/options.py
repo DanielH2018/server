@@ -41,8 +41,9 @@ DEADLINE_ENV = "LAND_DEADLINE"
 WINDOW_GRACE_ENV = "LAND_WINDOW_GRACE"
 # The unfinished master CI runs at which `pace.hold` holds a green merge; 0 turns pacing off.
 PACE_ENV = "LAND_PACE_MASTER_RUNS"
-# DECIDED: hold the merge while two master runs are unfinished. A full sweep is about 18 jobs
-# against a 20-job runner cap, so a second unfinished sweep already queues (#5526). A cap of 1
+# DECIDED: hold the merge while two master runs are unfinished. A full sweep runs 25 jobs, up to
+# 18 at once, against a 20-job runner cap, so a second unfinished sweep already queues (#5526,
+# #8143). A cap of 1
 # was tried from 2026-10-25 (#6308), on the theory that a re-tested PR merged into an idle
 # master more often merges the tree it tested, so `prove` skips the push sweep. It did not
 # raise that share (#6309). Before the change, 74 of 155 master push runs ran only `prove` and

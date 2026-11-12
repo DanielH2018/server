@@ -1,7 +1,8 @@
 """Merge pacing: hold a green PR's merge while master CI already has a backlog (#5526).
 
-Every merge to master starts a full `ci.yml` sweep of about 17 jobs, unless the `prove` job
-finds the pushed tree already tested. The account runs at most 20 GitHub-hosted jobs at once.
+Every merge to master starts a `ci.yml` sweep. A full sweep runs 25 jobs, up to 18 of them at
+once, unless the `prove` job finds the pushed tree already tested and only 2 run (82 runs
+measured 2026-11-12, #8143). The account runs at most 20 GitHub-hosted jobs at once.
 With eight concurrent landings on 2026-10-24, six master runs sat unfinished together, their
 jobs waited 8-17 minutes for a runner, and a master run took 29-61 minutes from creation to
 verdict. Every landing waits on that verdict, so merging faster than master CI clears only
