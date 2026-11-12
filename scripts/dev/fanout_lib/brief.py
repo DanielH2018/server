@@ -214,6 +214,7 @@ Run it in the foreground with the Bash tool's `timeout: 600000`, do not redirect
 end your turn on it: `cc-wait` prints the landing's `VERDICT:` line and exits with the landing's
 own code. It waits at most 570s. Exit 75 means the landing is still running: re-run ONLY
 `cc-wait land <n> --log-dir "{log_dir}"`, never `land.sh`, which would start a second landing.
+`land.sh` itself exiting 75 with `land: N landings are already live` printed no log: wait a few minutes and re-run the whole command.
 State `gave-up` (exit 3) is land.sh's own give-up, a resume point: re-run the whole command.
 State `deferred` (exit 4) is not: the PR landed, and a host's updater applies its package.
 `deploy.sh` exit 75 is a resume point to retry, not a failure to report.
