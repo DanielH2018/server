@@ -1,15 +1,22 @@
 """Each test lints a scratch tree holding the real setup action and one caller workflow.
 
-The tests run the real actionlint binary, which the `lint` dependency group puts on PATH under
-`uv run`.
+Two tests run the real actionlint binary, which only the `lint` dependency group installs. CI's
+pytest shards skip that group, so the `actionlint-red-proof` prek hook runs this module in the
+hooks job instead.
 
 Run: uv run pytest scripts/validate/tests/test_validate_actionlint_dollar_refs.py
 """
 
 import shutil
 
+import pytest
 from lib.repo_paths import REPO
 from validate import actionlint_dollar_refs
+
+needs_actionlint = pytest.mark.skipif(
+    shutil.which("actionlint") is None,
+    reason="actionlint is in the lint group; the actionlint-red-proof prek hook runs this",
+)
 
 CALLER = """\
 on: push
@@ -35,11 +42,13 @@ def _tree(tmp_path, ref: str = "$", extra: str = "") -> str:
     return ".github/workflows/caller.yml"
 
 
+@needs_actionlint
 def test_a_dollar_caller_with_known_inputs_is_clean(tmp_path, capfd):
     path = _tree(tmp_path)
     assert actionlint_dollar_refs.lint([path], tmp_path) == 0, capfd.readouterr()
 
 
+@needs_actionlint
 def test_a_dollar_caller_with_an_undefined_input_is_flagged(tmp_path, capfd):
     path = _tree(tmp_path, extra="          no-such-input: x\n")
     assert actionlint_dollar_refs.lint([path], tmp_path) != 0

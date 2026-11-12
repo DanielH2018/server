@@ -393,6 +393,17 @@ language = "system"
 files = "^(\\.github/(workflows/[^/]+\\.ya?ml|actions/.*|actionlint\\.yaml)|scripts/validate/actionlint_dollar_refs\\.py|scripts/lib/(cli_help|exit_codes|git|repo_paths)\\.py)$"
 pass_filenames = false
 
+# The wrapper's red proof runs the real actionlint binary, which only the `lint` group installs.
+# CI's pytest shards skip that group and so skip the two tests; this hook runs them in the hooks
+# job, which has it.
+[[repos.hooks]]
+id = "actionlint-red-proof"
+name = "The actionlint wrapper still flags an undefined input on a $/ caller"
+entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/test_validate_actionlint_dollar_refs.py"
+language = "system"
+pass_filenames = false
+files = "^(\\.github/actions/.*|scripts/validate/(tests/test_validate_)?actionlint_dollar_refs\\.py|scripts/lib/(cli_help|exit_codes|git|repo_paths)\\.py|uv\\.lock)$"
+
 # The security half of workflow linting, which actionlint does not do: a checkout that leaves
 # the token on disk, a `${{ }}` expression injected into a `run:` shell, an unpinned action, a
 # `pull_request_target` reading the PR head. Offline audits
