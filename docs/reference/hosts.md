@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/hosts.py
-generated_at: 2026-11-10 06:17 UTC
-generated_sha: e27d5c427
+generated_at: 2026-11-12 15:10 UTC
+generated_sha: 0d7821e53
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,14 +17,13 @@ generated_sha: e27d5c427
 
 ## daniel-box
 
-k3s server / control-plane node. Ansible runs here, and so do the GitOps timer, the docs build and most workloads.
+k3s server / control-plane node. The host-package builder, the docs build, landings and most workloads run here.
 
 | Fact | Value |
 |---|---|
 | LAN address | `10.0.0.215` |
 | Host package | `homelab-daniel-box` (41 components) |
-| Services declared | 66 |
-| Runs the GitOps timer | yes |
+| Services declared | 67 |
 | Has Docker | no |
 
 ## daniel-pi
@@ -36,7 +35,6 @@ Raspberry Pi, and the only remaining Docker host. LAN-only utilities.
 | LAN address | `10.0.0.139` |
 | Host package | `homelab-daniel-pi` (24 components) |
 | Services declared | 0 |
-| Runs the GitOps timer | no |
 | Has Docker | yes |
 
 ## daniel-server
@@ -48,7 +46,6 @@ k3s agent node. Intel iGPU for transcoding, LVM storage, and the UPS hardware be
 | LAN address | `10.0.0.161` |
 | Host package | `homelab-daniel-server` (27 components) |
 | Services declared | 0 |
-| Runs the GitOps timer | no |
 | Has Docker | no |
 
 ## Running a playbook against a host
