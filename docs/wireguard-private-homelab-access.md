@@ -250,7 +250,7 @@ limit that decides `unhealthy` under that stall. 60s is what the other Pi probes
 ## The Pi's wg-easy in the host package (H5.9)
 
 Since H5.9 the Pi's wg-easy is one service of the `homelab-daniel-pi` package's Compose
-project, not an Ansible role. `deploy.sh` deploys nothing on the Pi. The Pi's updater installs
+project, not an Ansible role. The Pi's updater installs
 the package, and `homelab-compose.service` runs the project.
 
 - **Where it lives.** The service file is

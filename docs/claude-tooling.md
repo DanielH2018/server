@@ -238,7 +238,7 @@ the deploy notifier skips.
 ### `landing [--json]`
 
 `landing` answers CLAUDE.md's *When to wait* list from a running session. It prints three
-things: what would stop a landing now, the `land.sh` and `deploy.sh` runs in flight, and the
+things: what would stop a landing now, the `land.sh` runs in flight, and the
 worktrees with the issues each has claimed. While something blocks, the text view lists the
 worktrees holding a claim and counts the rest; otherwise it prints only the count. Exit 1 means something blocks. `--json` prints one
 document, which the [deck mod](#the-deck-mod-claudepluginsdeck) reads every minute.
@@ -300,9 +300,9 @@ so fetch first.
 The `auto-mode-bridge` hook points at this probe when a `git push` fails with `Repository rule
 violations found`. On a push that printed `Bypassed rule violations`, it says the push landed.
 
-### Host reads: `lander`, `builder`, `applied <role>`
+### Host reads: `lander`, `builder`
 
-These three read state that lives on one host, through `probe_lib/host_reader.py`. It runs one
+These two read state that lives on one host, through `probe_lib/host_reader.py`. It runs one
 stdlib reader there with `python3 -I -`: as a local process on that host, and otherwise as one
 ssh call, so a probe never trips `ufw limit ssh`. Every read reports absent and unreadable
 apart. A journal that `journalctl` hides from a user outside `adm` and `systemd-journal`
@@ -325,52 +325,6 @@ of the last fetch, every version `homelab_repo.prom` says the repository serves,
 builds, and the failures in the window. A failure is a builder line at priority err, or
 systemd's one `Failed with result` line per failed run. It exits 1 when the reason is not `ok`
 or `canary`, or when the last fetch is older than two timer periods plus `TimeoutStartSec`.
-
-`applied <role> [--host H]` checks that a setup role's files landed (#6326,
-`probe_lib/applied.py`). It renders the role's files from the working tree, so commit or
-stash first to check `HEAD`. It reads every host the role's playbook entry admits and prints
-one row per path:
-
-- `ok` means present with the declared mode, owner and group, and with the render's content
-  hash.
-- `ok-meta` means the same, except that the content was not compared. The row names why: a
-  render holding a secret leaves a `STUB`, or the file is a credential file, whose row says
-  `content not compared: credential file`. `rootq stat` still answers mode and owner for a
-  credential file on its allowlist (#6369), so `applied` compares those with the render.
-- `DRIFT` means missing, present where an absent arm removes it, or different. A credential
-  file counts too.
-- `UNCHECKED` means a credential file `rootq` refused even to stat, because it is not on
-  `rootq`'s allowlist. Nothing about it was verified, so the run exits 75 (#6372).
-- `unread` means this user cannot stat the path and `rootq` did not answer for it: the path is
-  not on `rootq`'s `PATHS`, or the host has no `rootq`.
-
-A path this user cannot stat or open is asked of `rootq` on its host, in the same host read
-(#6357). It asks `rootq stat` for mode and owner, and `rootq matches PATH HEX` with the
-render's hash. Those two tier 1 verbs print no file content, and `applied` calls no other. A
-row whose metadata came from `rootq` says `(rootq)`, such as anything under daniel-box's 0700
-`/etc/cron.d`.
-
-`probe_lib/applied_tasks.py` names the modules it reads (`template`, `copy`, `file`, `cron`
-with a `cron_file`). It follows every task import, including the shared
-`{{ role_path }}/../common/tasks/` files with the import's `vars:`, and an import loop once per
-item. A file-writing task's own `vars:` render its path and content, as k3s's
-`/etc/resolv.conf` task passes the shared template its nameservers (#6918). A task var that
-does not evaluate, such as one reading a `register` or `item`, renders as `STUB` even where an inventory var shares its name, so the
-row reads `ok-meta`. A `copy` with `remote_src` is compared by metadata only, because its source is on the
-host. It evaluates each `when:` as Jinja against the host's merged inventory vars, with
-Jinja-valued vars resolved and an import's `vars:` on top. A gate that reads a value only the
-run sets, such as a `set_fact`, a `register` or an `ansible_*` fact, cannot be read. The
-gate's names decide this, so a test or filter such as `is defined` or `default()` around a
-run-time name leaves it unreadable. A name with a default that the role also sets at run time
-counts as run-time. It lists
-the tasks it skips with the reason: a `when:` it cannot read for the host, a loop over a list
-that is not literal, a path that does not render, or an `include_role`. A task file it cannot
-read prints as `UNCHECKED`, naming the importing file and the reason, because none of the
-tasks in it were read. That is an import whose path does not render to a file in the tree, or
-whose `when:` or loop it cannot read (#6356). An import whose `when:` is false for the host
-prints as skipped. It exits 1 on any `DRIFT`. It exits 75 when a path was `unread`, a task
-file was `UNCHECKED` or nothing was compared, and stderr says coverage was partial for an
-`UNCHECKED` task file. It exits 0 otherwise.
 
 ### `ha …`
 
@@ -899,7 +853,7 @@ proof of health.
 
 The dirty checkout and the park stop every deploy in the fleet. A worktree session cannot
 inspect either, because the isolation guard refuses a git command targeting the shared
-checkout, and `deploy.sh` exit 4 names the session's own tree. The banner is the only place
+checkout, and `land.sh` exit 4 names the session's own tree. The banner is the only place
 that cause reaches the session that pays for it.
 
 The banner ends with a triage line of whole `probe.py` commands joined by `or`. It names
@@ -971,14 +925,10 @@ The places auto mode and this repo have to talk (`PostToolUseFailure` and, for a
 `PostToolUse`, both Bash).
 
 It grants no retry on a classifier **denial**. The one retry branch was removed on 2026-11-07,
-after a week with no retry ledger in any session.
+after a week with no retry ledger in any session. On a **failure** it decodes only a
+ruleset-refused `git push`, as the `push-rules` section describes.
 
-On a **failure**, it names a `deploy.sh` exit a refusal rather than a playbook failure, and
-points at the wrapper's own last two lines for what it was. `deploy_lib/run.py:report` prints the name, the meaning and the remedy from
-`scripts/lib/exit_codes.py` on every non-zero exit. The hook holds only the split -- `_REFUSALS` against `_PLAYBOOK_FAILED`, two integers with no
-prose, pinned to that module by `test_auto_mode_bridge.py`.
-
-It does **not** use `classifierContext`: that field is PostToolUse-only, so a failed deploy can't
+It does **not** use `classifierContext`: that field is PostToolUse-only, so a failed command can't
 carry one, and the standing facts (public repo, read-only kubectl SA) already live in
 `autoMode.environment` and `autoMode.allow`, where the classifier reads them as configuration
 rather than as unverified application context.

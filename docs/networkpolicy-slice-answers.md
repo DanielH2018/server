@@ -214,17 +214,17 @@ Deployed 2026-08-19 in two stages, as designed: `observability` first to add the
   roll. A NetworkPolicy change restarts nothing, so arming the fence is observable only in the
   probe and the callers.
 - **Stage A deployed stale templates, and that is the session's most reusable finding.** The
-  worktree was 48 commits behind master, and `scripts/deploy.sh` renders from whatever tree it
-  runs in, so stage A reverted `observability` to its state at the branch point. Live for roughly
+  worktree was 48 commits behind master. **HISTORY —** `scripts/deploy.sh`, the deploy path then,
+  rendered from whatever tree it ran in, so stage A reverted `observability` to its state at the branch point. Live for roughly
   nine minutes (22:14–22:23): the longhorn scrape lost the endpoint-based service discovery that
   scrapes both `longhorn-manager` pods, falling back to a single Service target, and
   `telemetry-health.sh` was reverted alongside it. Rebasing onto master and redeploying restored
   both. Nothing about this is specific to NetworkPolicies — **any** worktree-isolated session that
   is behind master silently reverts live config for the roles it deploys, and every repo-side
   check reads green because the tree it renders from is internally consistent. It surfaced here
-  only because a scrape-target count moved and got chased rather than waved through. The durable
-  fix is a check in `deploy.sh` — refuse, or at least warn, when `HEAD` is behind
-  `origin/master` — not a paragraph in a design doc.
+  only because a scrape-target count moved and got chased rather than waved through.
+  **HISTORY —** the durable fix proposed then was a check in `deploy.sh`. H7.53 deleted the
+  script, and `promote` publishes only a master commit, so no worktree renders what deploys.
 - **The probe is the proof, not the witnesses.** `netpol-baseline-probe-slice3` reported its control
   target reachable (`traefik:80`) and both fenced services unreachable from an unlisted caller. The
   scrape-target count returning to 25 shows the admitted callers still work; only the inverted

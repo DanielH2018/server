@@ -15,10 +15,9 @@ This page says which path applies a change.
   `gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>`.
 - **A Pi Compose service or anything under `hosts/`:** the builder publishes the package and the
   host's updater installs it ([Host packages](host-packages.md)). `land.sh` waits for that host.
-- **A setup role or a bring-up playbook:** nothing applies it on its own. Every role a host still
-  runs is emptied or moving into a host package (H7), so a change here is either dead or belongs
-  in the component that replaced the role. A bring-up playbook runs by hand, and the playbook and
-  tag the `Applied by:` line of a role's `CLAUDE.md` names apply that role by hand.
+- **A host's setup or a new host's bring-up:** H7.55 deleted the setup roles and the bring-up
+  playbooks. A host's setup ships in its host package, as the bullet above says, and
+  `hosts/bootstrap-host.sh` brings up a new host.
 
 ### Who holds the tree lock
 
