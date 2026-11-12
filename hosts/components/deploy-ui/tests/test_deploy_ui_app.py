@@ -31,12 +31,12 @@ class FakeRun:
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
 
-# A landing holding the tree lock, and a playbook run queued on it.
+# A landing holding the tree lock, and a process that is not a landing queued on it.
 PS = """\
  4321     1   125 /x/python3 scripts/deploy_tools/land.py --pr 1543 --since 72c1a41
- 5000     1    30 /x/python3 /x/ansible-playbook ansible/deploy.yml --tags n8n
+ 5000     1    30 /x/python3 /opt/homelab/other_holder.py
 """
-# fuser with stderr merged: `<path>: <pids>` for each OPEN file. The queued run (5000)
+# fuser with stderr merged: `<path>: <pids>` for each OPEN file. The queued process (5000)
 # has the tree lock open too. The argv names the lock path, so the prefix is the command
 # alone; the path is filled in by the fixture, which knows the tmp dir.
 FUSER = """\
@@ -177,7 +177,7 @@ def test_inflight_lists_the_tree_lock_holder_and_waiter_is_clean(app):
     assert rows[4321]["kind"] == "land" and rows[4321]["pr"] == "1543"
     assert rows[4321]["locks"] == [TREE_LOCK_NAME]
     # 5000 has the tree lock open like the holder does; /proc/locks says it is blocked on it.
-    assert rows[5000]["kind"] == "deploy" and rows[5000]["tag"] == "n8n"
+    assert rows[5000]["kind"] == "lock"
     assert rows[5000]["locks"] == []
     assert rows[5000]["waiting_on"] == [TREE_LOCK_NAME]
     assert b["locks_watched"] == [TREE_LOCK_NAME]
@@ -307,8 +307,8 @@ def test_land_duplicate_is_refused_is_flagged(app):
     assert status == 409 and "1543" in text
 
 
-def test_cancel_deploy_row_is_flagged(app):
-    """A deploy is listed in flight but is not cancellable: SIGTERM mid-play is exit 20."""
+def test_cancel_lock_row_is_flagged(app):
+    """A lock row is listed in flight but is not cancellable: only a landing is."""
     status, text = app.post("/api/cancel", HDRS, json.dumps({"pid": 5000}))
     assert status == 409 and "5000" in text
 

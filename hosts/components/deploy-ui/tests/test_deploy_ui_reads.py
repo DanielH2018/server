@@ -13,6 +13,7 @@ PS = """\
  4322  4321    60 git fetch origin
  4400     1    12 uv run python scripts/deploy_tools/land.py --pr 1550 --since abc
  4401  4400    11 /x/python3 scripts/deploy_tools/land.py --pr 1550 --since abc
+ 4500     1    40 /x/python3 scripts/deploy_tools/land.py --tags homepage
  5000     1    90 uv run ansible-playbook ansible/deploy.yml --tags homepage
  5001  5000    88 /x/python3 /x/ansible-playbook ansible/deploy.yml --tags homepage
  7000     1     3 grep land.py
@@ -31,12 +32,12 @@ def _rows():
 def test_parse_ps_keys_every_process_by_pid_is_clean():
     procs = reads.parse_ps(PS)
     assert procs[5001].ppid == 5000 and procs[5001].elapsed_s == 88
-    assert len(procs) == 8
+    assert len(procs) == 9
 
 
 def test_runs_fold_each_family_to_its_root_is_clean():
-    """One row per landing and per playbook run, whatever the wrapper depth."""
-    assert set(_rows()) == {4321, 4400, 5000}
+    """One row per landing, whatever the wrapper depth."""
+    assert set(_rows()) == {4321, 4400, 4500}
 
 
 def test_runs_landing_holds_the_tree_lock_its_child_has_open_is_clean():
@@ -45,9 +46,13 @@ def test_runs_landing_holds_the_tree_lock_its_child_has_open_is_clean():
     assert r.locks == (TREE_LOCK_NAME,)
 
 
-def test_runs_playbook_row_reads_its_tag_is_clean():
-    r = _rows()[5000]
-    assert r.kind == "deploy" and r.tag == "homepage" and r.pr == ""
+def test_runs_landing_by_tags_reads_its_tag_is_clean():
+    r = _rows()[4500]
+    assert r.kind == "land" and r.tag == "homepage" and r.pr == ""
+
+
+def test_runs_playbook_holding_no_lock_is_not_a_row_is_flagged():
+    assert not {5000, 5001} & set(_rows())
 
 
 def test_runs_queued_landing_is_waiting_not_holding_is_flagged():

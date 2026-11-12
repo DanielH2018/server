@@ -15,7 +15,7 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
 
 ## The mental model
 - **CI:** `.github/workflows/ci.yml` runs `prek run --all-files` (config `prek.toml`) on PRs + push
-  to master — YAML lint, ansible-lint, gitleaks, pytest, the compose-template validator, ruff. uv
+  to master — YAML lint, gitleaks, pytest, the compose-template validator, ruff. uv
   must be on PATH. The test set is `pyproject.toml` `[tool.pytest.ini_options].testpaths` (single
   source; excludes vendored `ansible/collections/**`).
 - **GitOps:** the GitOps deployer is gone (H7.53). Each host's package applies its host plane,

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # gen-hooks: library
 #   reason: the PreToolUse:Bash rewrite arm, run by bash-pretool.py in its own process
-r"""The `bash-pretool.py` arm that routes bare python/pytest/ansible through `uv run`.
+r"""The `bash-pretool.py` arm that routes bare python/pytest through `uv run`.
 
 WHY THE REWRITE EXISTS. This repo is 3.14-only (`requires-python = ">=3.14"`) and uses PEP
 758 syntax — unparenthesized `except OSError, yaml.YAMLError:` — in 8 files, among them
@@ -57,20 +57,12 @@ the offsets.
 """
 
 import re
-import shutil
-
-# The ansible CLIs. They belong in _PROGS for the same reason python does — the uv-tool shim
-# lacks the `requests`/`docker` deps the repo pins — and they are named separately because the
-# stdio fixup below keys on them too.
-_ANSIBLE_PROGS = (
-    r"ansible(?:-playbook|-vault|-galaxy|-console|-doc|-config|-inventory|-pull)?"
-)
 
 # The programs that must not run on the system interpreter. `*.py` covers a script invoked by
 # its shebang (`./scripts/diagnostics/probe.py`), which names no interpreter at all and so would
 # otherwise slip past every python-named pattern here. The path excludes `=`: a word like
 # `P=x.py` is a shell assignment, and wrapping it made `uv run P=x.py`.
-_PROGS = rf"(?:python3?|pytest|py\.test|{_ANSIBLE_PROGS}|[^\s=]*\.py)"
+_PROGS = r"(?:python3?|pytest|py\.test|[^\s=]*\.py)"
 
 # A program can end at the thing that ends its segment — `$(cd x; pytest)` ends at `)`, not at a
 # space — so the terminator class is wider than whitespace.
@@ -80,16 +72,10 @@ _TERMINATOR = r"(?:[\s;&|)]|$)"
 # no alternative in _PROGS matches, so it falls through untouched.
 _SEGMENT_PROG = re.compile(rf"^(\s*){_PROGS}{_TERMINATOR}")
 
-# Matched past an optional `uv run` with its own flags, so it fires whether or not the rewrite
-# added one and whether or not the session typed `--frozen`.
-_SEGMENT_ANSIBLE = re.compile(
-    rf"^\s*(?:uv\s+run\s+(?:--\S+\s+)*)?{_ANSIBLE_PROGS}{_TERMINATOR}"
-)
-
 # Fast reject before any scanning. Measured on this repo's traffic the overwhelming majority of
 # Bash calls name none of these, and they should pay a single regex rather than the character
 # walk below.
-_INTERESTING = re.compile(r"python|pytest|py\.test|ansible|\.py")
+_INTERESTING = re.compile(r"python|pytest|py\.test|\.py")
 
 # What must follow `<<` for it to open a heredoc: an optional `-`, optional blanks, then a
 # character a delimiter word can start with. It is checked before the delimiter parse because the
@@ -100,35 +86,6 @@ _INTERESTING = re.compile(r"python|pytest|py\.test|ansible|\.py")
 _HEREDOC_OPENER = re.compile(r"^-?[ \t]*[^ \t\n;&|<>()]")
 
 _DELIMITER_END = frozenset(";&|<>()")
-
-# The prefix an ansible command carries when `stdio-blocking` is not on PATH. Every ansible CLI
-# refuses to start on a non-blocking stdout or stderr: `ansible/cli/__init__.py` calls
-# `check_blocking_io()` at import time and exits with "ERROR: Ansible requires blocking IO on
-# stdin/stdout/stderr". Claude Code's Bash tool hands its child a regular file with O_NONBLOCK
-# set (verified: st_mode 0o100660, O_NONBLOCK on fds 1 and 2), so every ansible run from a
-# session died on that check while the same command from a terminal worked. O_NONBLOCK has no
-# effect on writes to a regular file, so clearing it changes nothing about how the output is
-# captured.
-#
-# The flag is cleared in the shell itself rather than by reopening the fds, because O_NONBLOCK
-# lives on the open file description that fork/exec shares — one clear fixes the shell and every
-# later child, and leaves a single description so nothing has to reason about interleaved
-# appends. `3>&2` routes the real stderr through fd 3 so `2>/dev/null` can quiet the fixup's own
-# output without clearing the flag on /dev/null instead.
-FIXUP_FALLBACK = "python3 -c 'import os; [os.set_blocking(f, True) for f in (0, 1, 3)]' 3>&2 2>/dev/null; "
-
-# `stdio-blocking` (the dotfiles repo, `home/dot_local/bin/executable_stdio-blocking`) is the
-# same fix as a standalone binary, added so this prefix stops matching the `Bash(python3 -c:*)`
-# ask rule there — that rule is right for arbitrary `python3 -c`, but this fixup runs ahead of
-# EVERY ansible invocation, so the ask rule prompted for the whole compound chain regardless of
-# what followed it. Preferred when it is on PATH; the inline form is the fallback for a machine
-# the dotfiles have not deployed to yet.
-FIXUP_STDIO_BLOCKING = "stdio-blocking; "
-
-
-def stdio_fixup(which=shutil.which):
-    """The prefix an ansible command gets, preferring the deployed binary over the inline form."""
-    return FIXUP_STDIO_BLOCKING if which("stdio-blocking") else FIXUP_FALLBACK
 
 
 def _parse_heredoc_delimiter(cmd, i):
@@ -275,7 +232,7 @@ def command_starts(cmd):
     return starts
 
 
-def rewrite_command(cmd, which=shutil.which):
+def rewrite_command(cmd):
     """`cmd` with `uv run` spliced in front of every program that needs it, or None.
 
     None means "leave the command alone", which covers both a command that needs nothing and
@@ -294,26 +251,14 @@ def rewrite_command(cmd, which=shutil.which):
             continue
         at = start + len(match.group(1))
         updated = updated[:at] + "uv run " + updated[at:]
-    # The fixup goes in front of the whole command rather than each segment: the flag it clears
-    # is shared, so one clear at the front covers everything after it.
-    #
-    # Only the ansible CLIs get it, rather than everything this arm routes. The fixup is harmless
-    # anywhere, but it changes the command text the auto-mode classifier reads, and an ansible
-    # command already prompts where a `pytest` does not.
-    #
-    # Matched against `cmd`, whose offsets the walk computed and the splices above invalidated.
-    if any(_SEGMENT_ANSIBLE.match(cmd[start:]) for start in starts) and (
-        "os.set_blocking" not in updated and "stdio-blocking" not in updated
-    ):
-        updated = stdio_fixup(which) + updated
     return updated if updated != cmd else None
 
 
-def rewrite(payload, which=shutil.which):
+def rewrite(payload):
     """The rewritten Bash command for `payload`, or None to leave the call as typed."""
     if payload.get("tool_name") != "Bash":
         return None
     cmd = (payload.get("tool_input") or {}).get("command") or ""
     if not cmd:
         return None
-    return rewrite_command(cmd, which=which)
+    return rewrite_command(cmd)
