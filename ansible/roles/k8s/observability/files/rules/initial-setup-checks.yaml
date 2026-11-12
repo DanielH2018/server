@@ -15,7 +15,7 @@
 #
 # Each deadline is the DEADLINE_S its producer renders, which equalled the interval of the
 # tile it replaced. Both literals of a NotReporting rule are pinned to it by
-# ansible/tests/services/test_initial_setup_check_rule_literals.py (M1 convention 1).
+# ansible/tests/services/test_not_reporting_rule_deadlines.py (M1 convention 1).
 #
 # The weekly reboot (about 07:35 to 07:50) leaves every writer's gap inside its deadline: the
 # hourly witness writes at 07:23 and 08:23, and the daily and weekly checks run outside the

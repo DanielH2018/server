@@ -65,7 +65,7 @@ component and step 4 of `hosts/bootstrap-host.sh`, and deleted the tasks.
   Ubuntu `Include` line is read first, so the `10-` drop-in wins there too. Those lines stay
   there as harmless duplicates. The `Match` file sorts last so its block cannot reach another
   drop-in. `reload:ssh.service` runs `sshd -t` first, and
-  `hosts/lib/tests/test_pi_initial_setup_part1.py` runs `sshd -T` over both drop-ins for the
+  `hosts/lib/tests/test_pi_sshd_apt_and_tuning.py` runs `sshd -T` over both drop-ins for the
   operator account and for another user. rkhunter still reads only the main `sshd_config`, so the Pi's
   `PermitRootLogin` read is unchanged by the move. H7's last host PR deleted the role's sshd tasks.
 - **The UFW LAN allow must sort above the SSH limit rule**, which is why the `ssh-firewall`

@@ -1,12 +1,12 @@
 """daniel-box's host baseline moves into its package, and the role's tasks for it go (H7.60).
 
-`test_pi_initial_setup_part3.py` holds the `host-hardening` component's content against the bytes
+`test_pi_host_hardening.py` holds the `host-hardening` component's content against the bytes
 the role wrote. These tests hold what is specific to the last host: daniel-box ships the same
 bytes, takes no i915 option, and retires what the role's absent arms removed. H7.48's tests hold
 every host's package to the crons `crons.yml`'s absent arms removed, and each cluster node's to
 `docker_install`'s teardown.
 
-Run: uv run pytest hosts/lib/tests/test_box_initial_setup_part3.py
+Run: uv run pytest hosts/lib/tests/test_box_host_hardening.py
 """
 
 import json
@@ -16,7 +16,7 @@ from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
 from lib.render_context import render_context
 from lib.repo_paths import REPO
-from test_pi_initial_setup_part3 import BLACKLIST, BLACKLIST_WRITTEN, WRITTEN
+from test_pi_host_hardening import BLACKLIST, BLACKLIST_WRITTEN, WRITTEN
 
 from renderer.renderer_lib import host as host_mode
 

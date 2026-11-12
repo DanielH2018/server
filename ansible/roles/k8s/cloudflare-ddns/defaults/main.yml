@@ -4,8 +4,8 @@
 cloudflare_ddns_k8s_image: favonia/cloudflare-ddns:latest@sha256:345b41895a8846d74c62d30bd27e61101a754f8ab8da10c68115823883803afb
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "unprobeable, not merely probe-less — favonia/cloudflare-ddns is a scratch image running an outbound update loop with no HTTP server, no listener and no shell, so no httpGet, tcpSocket or exec readinessProbe can exist. Under Flux the Kustomization's wait reads each Deployment Ready as soon as its container starts, which proves the pod runs and nothing about whether an update loop succeeds; the `homelab-logs.yaml` update-silent rules are the only liveness signal."  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "unprobeable, not merely probe-less — favonia/cloudflare-ddns is a scratch image running an outbound update loop with no HTTP server, no listener and no shell, so no httpGet, tcpSocket or exec readinessProbe can exist. Under Flux the Kustomization's wait reads each Deployment Ready as soon as its container starts, which proves the pod runs and nothing about whether an update loop succeeds; the `homelab-logs.yaml` update-silent rules are the only liveness signal."
 # Blast-radius caps, per container.
 cloudflare_ddns_k8s_cpu_limit: "250m"
 cloudflare_ddns_k8s_mem_limit: 64Mi
@@ -14,12 +14,12 @@ cloudflare_ddns_k8s_mem_request: 16Mi
 
 # This role ships two Deployments and neither is named after the service, so the shared
 # wait cannot find one.
-manifests_rollout: ""  # noqa var-naming[no-role-prefix]
+manifests_rollout: ""
 
 # `manifests_rollout: ""` above opts out of the shared WAIT, and the shared rollout-RESTART
 # is gated on that same variable being non-empty, so emptying it silently drops the restart
 # with it. Naming both Deployments here restores the restart: the extra-rollouts task
 # carries no such gate.
-manifests_extra_rollouts:  # noqa var-naming[no-role-prefix]
+manifests_extra_rollouts:
   - name: cloudflare-ddns-direct
   - name: cloudflare-ddns-proxied

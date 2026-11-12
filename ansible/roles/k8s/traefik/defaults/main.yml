@@ -16,8 +16,8 @@ traefik_k8s_image: traefik:v3.7.16@sha256:1336e85aaed293bd63d005086e0dd013b04078
 # etp-local-vips-blackout-on-node-join shows host probes stay green straight through that kind
 # of outage. Also Recreate + a PVC (the acme.json cert store) on its own state, which compounds
 # the risk but isn't the primary reason.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "platform — ingress edge; a failed deploy removes the ability to reach or fix anything else, and host probes stay green through that kind of outage. COUPLING NOTE for a future promotion: the traefik-acme PVC holds the ACME account key and issued certs; reverting past a real rotation reinstates stale cert state"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "platform — ingress edge; a failed deploy removes the ability to reach or fix anything else, and host probes stay green through that kind of outage. COUPLING NOTE for a future promotion: the traefik-acme PVC holds the ACME account key and issued certs; reverting past a real rotation reinstates stale cert state"
 
 # Unprivileged ports inside the pod; the Service maps 80 -> http and 443 -> https. Binding
 # :80/:443 in the container would need NET_BIND_SERVICE and a root-ish user for no gain.
@@ -126,7 +126,7 @@ traefik_k8s_acme_storage_class: longhorn
 # `{...}` literal: the offline renders (scripts/lib/k8s_context.py:_PURE_TEMPLATE) evaluate a
 # whole-value expression to its own type only when it holds no brace, and otherwise hand on the
 # list's text.
-k8s_claims: >-  # noqa var-naming[no-role-prefix]
+k8s_claims: >-
   {{ [dict(name='traefik-acme', storage_class=traefik_k8s_acme_storage_class, size=traefik_k8s_acme_storage)] if traefik_k8s_manage_acme | bool else [] }}
 
 # "1", not "1.0" — Kubernetes canonicalises quantities, so a manifest saying 1.0 produces a live
@@ -193,14 +193,14 @@ traefik_k8s_access_log_keep: 2
 # The ACME Secret is concatenated rather than listed, because dropping its name is the only
 # way traefik_k8s_manage_acme reaches it — the manifest has no template branch to gate. The
 # ACME claim is `k8s_claims` in this file, gated on the same flag.
-manifests_files: >-  # noqa var-naming[no-role-prefix]
+manifests_files: >-
   {{ ['rbac.yaml', 'rbac-binding.yaml', 'static-config.yaml', 'dynamic.yaml',
       'deployment.yaml', 'service.yaml', 'metrics-service.yaml',
       'dashboard-ingressroute.yaml']
      + (['edge-selfcheck-ingressroute.yaml'] if traefik_k8s_manage_crowdsec | bool else [])
      + (['cloudflare-realip-plugin.yaml'] if traefik_k8s_manage_crowdsec | bool else []) }}
 
-manifests_secret_files: >-  # noqa var-naming[no-role-prefix]
+manifests_secret_files: >-
   {{ ['origin-pull-secret.yaml']
      + (['cf-token-secret.yaml'] if traefik_k8s_manage_acme | bool else [])
      + (['crowdsec-secret.yaml'] if traefik_k8s_manage_crowdsec | bool else [])

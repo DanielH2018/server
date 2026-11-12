@@ -19,8 +19,8 @@ wg_easy_k8s_image: ghcr.io/wg-easy/wg-easy:15@sha256:071f79a639e9361123a5e577331
 # migrate that volume before the gate observes a fault, same class as sonarr/prowlarr. Either
 # reason alone would justify the denylist entry. That volume is a SQLite DB the app
 # owns, so a migration is one-way and the Longhorn backup is the only revert.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "platform — sole remote-access path; a failed deploy can cut off remote recovery. ALSO Recreate + RWO Longhorn PVC (migrating-state shape, same class as sonarr/prowlarr) — two independent reasons. COUPLING NOTE for a future promotion: the PVC holds the server keypair and peer list, but each peer's own key lives on a client device outside it — a revert can un-revoke a removed peer or orphan an added one"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "platform — sole remote-access path; a failed deploy can cut off remote recovery. ALSO Recreate + RWO Longhorn PVC (migrating-state shape, same class as sonarr/prowlarr) — two independent reasons. COUPLING NOTE for a future promotion: the PVC holds the server keypair and peer list, but each peer's own key lives on a client device outside it — a revert can un-revoke a removed peer or orphan an added one"
 
 wg_easy_k8s_claim: wg-easy-config
 # `longhorn`, NOT nobackup: /etc/wireguard holds the server keypair and every client
@@ -31,7 +31,7 @@ wg_easy_k8s_storage_class: longhorn
 wg_easy_k8s_size: 1Gi
 
 # The claim the renderer emits for this role, which the wg-easy Kustomization applies (#3387).
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: "{{ wg_easy_k8s_claim }}"
     storage_class: "{{ wg_easy_k8s_storage_class }}"
     size: "{{ wg_easy_k8s_size }}"
@@ -42,4 +42,4 @@ wg_easy_k8s_mem_limit: 256Mi
 wg_easy_k8s_cpu_request: 50m
 wg_easy_k8s_mem_request: 32Mi
 
-manifests_rollout: wg-easy  # noqa var-naming[no-role-prefix]
+manifests_rollout: wg-easy

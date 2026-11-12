@@ -112,7 +112,7 @@ def _coverage_rows():
     rows[1].update(
         status="clean",
         agent="homelab-cicd-reviewer",
-        reviewed=["ansible/roles/setup/gitops_deploy"],
+        reviewed=["hosts/components/github-checks"],
     )
     rows[2].update(
         status="hole",

@@ -15,19 +15,19 @@ qbittorrent_k8s_verify_egress_url: https://api.ipify.org
 # A revert rewinds in-flight torrent bookkeeping while the data volume does not move, so the
 # two disagree about what is on disk. The WireGuard kill-switch surviving a container restart
 # is a separate live trap that a revert does not clear either; see this role's CLAUDE.md.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "state coupled outside the volume — reverting qbittorrent-config to a snapshot rewinds in-flight torrent bookkeeping while the media-data volume it references does not move; the snapshot Job and the operator revert work fine and are not the blocker"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "state coupled outside the volume — reverting qbittorrent-config to a snapshot rewinds in-flight torrent bookkeeping while the media-data volume it references does not move; the snapshot Job and the operator revert work fine and are not the blocker"
 # The claim snapshotted before each revision applies. Under Flux the renderer turns this
 # list into the qbittorrent-snapshot Kustomization, whose Job snapshots it before qbittorrent applies
 # (D5.2a). Declared regardless of k8s_autodeploy.
-k8s_autodeploy_snapshot_pvcs: [qbittorrent-config]  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_snapshot_pvcs: [qbittorrent-config]
 
 # The gate Job Flux runs in `qbittorrent-verify`, copied from the drift check's jobTemplate
 # (scripts/renderer/renderer_lib/cronjob_gate.py). It replaced the k8s/cronjob-gate run in
 # tasks/main.yml at qbittorrent's flip. The check reads the preferences and logs a verdict, and
 # exits 0 on a match and on drift alike, so it is a verify: a run that starts and reaches the
 # WebUI proves the check's image, Secret and fence peer.
-flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
+flux_cronjob_gates:
   qbittorrent-prefs-check:
     kind: verify
 
@@ -37,7 +37,7 @@ flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
 # applies it like any other secret file. `sops-manifest-entries` in
 # scripts/renderer/renderer_lib/sops_entries.py holds the entry to one Secret of
 # `SOPS_MANIFEST_KEYS` keys.
-render_sops_manifests: [mullvad-account-secret.yaml]  # noqa var-naming[no-role-prefix]
+render_sops_manifests: [mullvad-account-secret.yaml]
 
 # One config volume, two containers: wireguard and qbittorrent both mount it at /config. It
 # looks like a mistake and is not — they write different subtrees, and splitting them would
@@ -129,7 +129,7 @@ qbittorrent_k8s_prefs_check_mem_request: 32Mi
 # The claim the renderer emits for this role. The qbittorrent Kustomization applies it after the
 # qbittorrent-snapshot Job.
 # media-data is not here: it is the shared media claim, mounted by this role and owned elsewhere.
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: "{{ qbittorrent_k8s_claim }}"
     storage_class: "{{ qbittorrent_k8s_storage_class }}"
     size: "{{ qbittorrent_k8s_size }}"

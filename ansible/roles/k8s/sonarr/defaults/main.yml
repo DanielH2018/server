@@ -12,16 +12,16 @@ sonarr_k8s_image: lscr.io/linuxserver/sonarr:4.0.20.3014-ls329@sha256:44b06045a9
 # reverts the claim through docs/volume-snapshot-drills.md, so a bad swap can be
 # reverted instead of leaving the library database and root-folder paths unreadable by the old
 # image.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the sonarr-snapshot Job before each revision and an operator revert to it after a failed one; -lsNN versioning still hides a breaking bump. WEIGHED: sonarr also mounts media-data (shared RWX, not reverted); a revert rewinds import/rename history while the files stay where they were left, so it desyncs into duplicate-import attempts or a missed-file state, recoverable by a library rescan"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the sonarr-snapshot Job before each revision and an operator revert to it after a failed one; -lsNN versioning still hides a breaking bump. WEIGHED: sonarr also mounts media-data (shared RWX, not reverted); a revert rewinds import/rename history while the files stay where they were left, so it desyncs into duplicate-import attempts or a missed-file state, recoverable by a library rescan"
 # The claim snapshotted before each revision applies. Under Flux the renderer turns this
 # list into the sonarr-snapshot Kustomization, whose Job snapshots it before sonarr applies
 # (D5.2a). The snapshot is the recovery point this role's auto-deploy depends on.
-k8s_autodeploy_snapshot_pvcs: [sonarr-config]  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_snapshot_pvcs: [sonarr-config]
 # Claims this role MOUNTS but does not revert — the WEIGHED clause in the reason above, stated
 # where a test can read it. media-data is rendered by k8s/media-volume, so no guard that reads
 # what this role creates can see the coupling.
-k8s_autodeploy_unreverted_claims: [media-data]  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_unreverted_claims: [media-data]
 
 # The rollout budget, declared once. Read as Flux's health-check `timeout` and by
 # `progressDeadlineSeconds` in templates/deployment.yaml.j2, so the two cannot drift.
@@ -33,7 +33,7 @@ k8s_autodeploy_unreverted_claims: [media-data]  # noqa var-naming[no-role-prefix
 # The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
 # Kustomization `timeout` only from a literal role default (`role_fields` in
 # scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default (#5464).
-manifests_rollout_timeout: 660s  # noqa var-naming[no-role-prefix]
+manifests_rollout_timeout: 660s
 sonarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 
 # ── the config database ─────────────────────────────────────────────────────────────────────
@@ -87,7 +87,7 @@ sonarr_k8s_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0@sha256:af535d94061c
 
 # The claim the renderer emits for this role. The sonarr Kustomization applies it after the
 # sonarr-snapshot Job.
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: "{{ sonarr_k8s_claim }}"
     storage_class: "{{ sonarr_k8s_storage_class }}"
     size: "{{ sonarr_k8s_size }}"
@@ -125,7 +125,7 @@ sonarr_k8s_air_date_guard_apply: true
 
 # The renderer copies this CronJob's jobTemplate into `sonarr-verify` as
 # `sonarr-air-date-guard-deploy-gate-<spec digest8>`, a real pass once per revision.
-flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
+flux_cronjob_gates:
   sonarr-air-date-guard:
     kind: mutation
     rerun_safe: ansible/roles/k8s/sonarr/tests/test_sonarr_air_date_guard.py::test_a_second_run_removes_nothing

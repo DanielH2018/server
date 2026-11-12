@@ -10,8 +10,8 @@ littlelink_k8s_image: ghcr.io/techno-tim/littlelink-server:latest@sha256:e84ea9d
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Stateless RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, digest-pinned image"
 
 littlelink_k8s_cpu_limit: "500m"
 littlelink_k8s_mem_limit: 128Mi

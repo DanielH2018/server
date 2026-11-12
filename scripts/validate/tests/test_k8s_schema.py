@@ -226,8 +226,8 @@ def test_matching_pins_and_schemas_are_clean():
     assert schema_tag_problem("k3s_version: v1.36.4+k3s1\n", "v1.36.4", "1.36") is None
 
 
-def test_a_trailing_noqa_comment_after_the_pin_is_read():
-    pinned = "k3s_version: v1.36.4+k3s1  # noqa var-naming[no-role-prefix]\n"
+def test_a_trailing_comment_after_the_pin_is_read():
+    pinned = "k3s_version: v1.36.4+k3s1  # pinned to the server's release\n"
     assert schema_tag_problem(pinned, "v1.36.4", "1.36") is None
 
 

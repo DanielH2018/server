@@ -7,8 +7,8 @@
 # a bump changes the interpreter and not the script, and a wrong label is one merge patch to
 # undo. The alternative, `false`, would need a manual rule in renovate.json for the shared
 # python digest, as the denied roles carry. Contradict this with a measured interpreter break.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in longhorn-reconcile-verify, which proves the new image RUNS the reconcile and fails the revision on a read or a write that errors; the gate Job has no ownerReference, so concurrencyPolicy Forbid cannot keep a scheduled run off it, but a patch to a label or a target already set is a no-op, so running the same plan twice is harmless"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in longhorn-reconcile-verify, which proves the new image RUNS the reconcile and fails the revision on a read or a write that errors; the gate Job has no ownerReference, so concurrencyPolicy Forbid cannot keep a scheduled run off it, but a patch to a label or a target already set is a no-op, so running the same plan twice is harmless"
 
 # The python image the CronJob runs, the same digest as the other stdlib-only k8s jobs
 # (crowdsec_k8s_jobs_image, configarr_k8s_health_image). It needs no kubectl: the script calls the
@@ -65,7 +65,7 @@ longhorn_reconcile_k8s_mem_request: 32Mi
 # Derived, not listed: every `backup_claims` volume of every `home-critical` containers_list
 # entry (tier `home-edge` or `home-automation`; filter_plugins/service_tier.py, #3389). To
 # change the set, edit the entry.
-k3s_longhorn_r2_volumes: "{{ containers_list | tier_backup_claims('home-critical', k8s_namespace) }}"  # noqa var-naming[no-role-prefix]
+k3s_longhorn_r2_volumes: "{{ containers_list | tier_backup_claims('home-critical', k8s_namespace) }}"
 
 # The weekly B2 tier, as `{namespace/pvcName: shard}`. A volume's backup weekday is its shard
 # (0=Sunday), so no weekday stacks two heavy volumes under B2's daily transaction cap.
@@ -77,7 +77,7 @@ k3s_longhorn_r2_volumes: "{{ containers_list | tier_backup_claims('home-critical
 # This job swaps each volume's recurring-job group label, so a PVC recreated from the `longhorn`
 # StorageClass reverts to daily until its next hourly run: drift in the over-backed-up
 # direction, caught by the next run.
-k3s_longhorn_weekly_volumes: "{{ containers_list | longhorn_weekly_claims(k8s_namespace) }}"  # noqa var-naming[no-role-prefix]
+k3s_longhorn_weekly_volumes: "{{ containers_list | longhorn_weekly_claims(k8s_namespace) }}"
 
 # Bound volumes forced OUT of the backup set, as `namespace/pvcName` — an override for volumes
 # whose StorageClass says `longhorn` (back me up) but which should not be. Needed as a separate
@@ -93,7 +93,7 @@ k3s_longhorn_weekly_volumes: "{{ containers_list | longhorn_weekly_claims(k8s_na
 #
 # Derived, not listed: every `no_backup_claims` entry of every containers_list entry, where
 # each claim carries the reason it is excluded (filter_plugins/longhorn_groups.py, #4207).
-k3s_longhorn_nobackup_volumes: "{{ containers_list | longhorn_nobackup_claims(k8s_namespace) }}"  # noqa var-naming[no-role-prefix]
+k3s_longhorn_nobackup_volumes: "{{ containers_list | longhorn_nobackup_claims(k8s_namespace) }}"
 
 # The CronJob's one-off run per role revision, `longhorn-reconcile-deploy-gate-<spec digest8>` in
 # `longhorn-reconcile-verify`. It is a post-apply mutation: the run holds the tier labels and
@@ -101,9 +101,9 @@ k3s_longhorn_nobackup_volumes: "{{ containers_list | longhorn_nobackup_claims(k8
 # the named test proves. The Job keeps no ownerReference to the CronJob, so `concurrencyPolicy:
 # Forbid` does not keep a scheduled firing off a gate run. An overlap computes the same plan
 # from the same lists, and a patch to a label already set is a no-op.
-flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
+flux_cronjob_gates:
   longhorn-reconcile:
     kind: mutation
     rerun_safe: ansible/roles/k8s/longhorn-reconcile/tests/test_longhorn_reconcile.py::test_a_second_run_changes_nothing
 
-manifests_rollout: ''  # noqa var-naming[no-role-prefix]
+manifests_rollout: ''

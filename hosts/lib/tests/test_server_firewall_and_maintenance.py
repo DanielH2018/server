@@ -1,21 +1,21 @@
 """daniel-server ships the same last three `initial_setup` subjects as the Pi (H7.31).
 
-The components are host-neutral and `test_pi_initial_setup_part2.py` holds their content. These
+The components are host-neutral and `test_pi_firewall_and_maintenance.py` holds their content. These
 tests hold what is specific to this host: the crons the role once wrote here are retired and
 replaced by timers without the Pi's Docker prune, the scans
 read this host's own tokens, and reconcile adopts the two SSH rules while it leaves the k3s
 agent's rules and the hand-added rule alone. Reconcile also removes the `eval-run` textfile a test
 run leaked here, which no daniel-server component writes (#6735).
 
-Run: uv run pytest hosts/lib/tests/test_server_initial_setup_part2.py
+Run: uv run pytest hosts/lib/tests/test_server_firewall_and_maintenance.py
 """
 
 import json
 
 import pytest
 from _reconcile_arms import live_unit
-from test_pi_initial_setup_part1 import seeded_pi
-from test_pi_initial_setup_part2 import (
+from test_pi_sshd_apt_and_tuning import seeded_pi
+from test_pi_firewall_and_maintenance import (
     LAN,
     TIMERS,
     _reboot,

@@ -26,30 +26,30 @@ KINDS = {
 # The fragments each retired task stamped, read from `stamp_render_name` and
 # `stamp_deployed_name` in the task file at the parent of the commit that moved it.
 RECORDED = {
-    # 94d0fb13a^:ansible/roles/setup/homelab_builder/tasks/builder.yml
+    # 94d0fb13a^, the homelab_builder role's tasks/builder.yml
     "builder": {("deployed", "homelab-builder"), ("render", "homelab-builder")},
-    # 3b3e4abb1:ansible/roles/setup/renovate_notify/tasks/{service,code}.yml
+    # 3b3e4abb1, the renovate_notify role's tasks/{service,code}.yml
     "renovate-notify": {("render", "renovate-notify"), ("deployed", "renovate-notify")},
-    # 3b3e4abb1:ansible/roles/setup/renovate_agent/tasks/{service,code}.yml
+    # 3b3e4abb1, the renovate_agent role's tasks/{service,code}.yml
     "renovate-agent": {("render", "renovate-agent"), ("deployed", "renovate-agent")},
-    # 3b3e4abb1:ansible/roles/setup/fake_remux/tasks/main.yml
+    # 3b3e4abb1, the fake_remux role's tasks/main.yml
     "fake-remux": {("render", "fake-remux"), ("deployed", "fake-remux")},
-    # 3b3e4abb1:ansible/roles/setup/gitops_deploy/tasks/github_checks.yml
+    # 3b3e4abb1, the gitops_deploy role's tasks/github_checks.yml
     "github-checks": {("render", "gitops-deploy-github-checks")},
-    # 57f107926:ansible/roles/setup/deploy_ui/tasks/{service,code}.yml
+    # 57f107926, the deploy_ui role's tasks/{service,code}.yml
     "deploy-ui": {("render", "deploy-ui"), ("deployed", "deploy-ui")},
-    # cb61ae0d94:ansible/roles/setup/initial_setup/tasks/crons.yml
+    # cb61ae0d94, the initial_setup role's tasks/crons.yml
     "worktree-holders": {("deployed", "worktree-holders")},
-    # cb61ae0d9:ansible/roles/setup/initial_setup/tasks/crons.yml
+    # cb61ae0d9, the initial_setup role's tasks/crons.yml
     "loki-route-witness": {
         ("render", "loki-route-witness"),
         ("deployed", "loki-route-health"),
     },
-    # 39f4bd5c4^:ansible/roles/setup/initial_setup/tasks/crons.yml
+    # 39f4bd5c4^, the initial_setup role's tasks/crons.yml
     "docs-refresh": {("render", "docs-refresh")},
     "eval-sweep": {("render", "eval-run")},
     "secret-rotation": {("render", "secret-rotation")},
-    # c1d338364:ansible/roles/setup/k3s/tasks/health-crons.yml, and #2978 retired the reap one.
+    # c1d338364, the k3s role's tasks/health-crons.yml, and #2978 retired the reap one.
     "k3s-host-checks": {
         ("render", "k3s-backup-health"),
         ("render", "k3s-disk-health"),
@@ -57,11 +57,11 @@ RECORDED = {
         ("deployed", "k3s-longhorn-backup-health-reader"),
         ("deployed", "k3s-longhorn-reap"),
     },
-    # a2bed5696^:ansible/roles/setup/nut_host/tasks/main.yml
+    # a2bed5696^, the nut_host role's tasks/main.yml
     "nut-secondary": {("render", "nut-host")},
-    # 84bb0bbf0a:ansible/roles/setup/initial_setup/tasks/integrity.yml
+    # 84bb0bbf0a, the initial_setup role's tasks/integrity.yml
     "integrity-scans": {("render", "rkhunter-check"), ("render", "aide-check")},
-    # 85d2bf9f7:ansible/roles/setup/claude_code/tasks/main.yml, before the role's render stamp
+    # 85d2bf9f7, the claude_code role's tasks/main.yml, before the role's render stamp
     # took the name claude-code-ansible. H7.40's third slice moved triage, whose templates were
     # all claude-code-ansible still listed, so it retires that render stamp and the triage one.
     # H7.40's fourth slice moved the artifacts node's crons, whose task stamped

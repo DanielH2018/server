@@ -10,7 +10,7 @@ longhorn_backup_health_logic.py and in longhorn-backup-health.sh.j2's header.
 The I/O layer is pinned by real subprocess runs in `test_longhorn_backup_health_reader.py` and
 `test_longhorn_backup_grace_cron.py`, which share `_longhorn_reader_stubs.py`.
 
-Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_backup_health.py
+Run: uv run pytest scripts/lib/tests/test_longhorn_backup_health.py
 """
 
 from longhorn_lib import longhorn_backup_health_logic as logic

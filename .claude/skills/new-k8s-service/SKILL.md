@@ -97,8 +97,8 @@ stance reviewable. The scaffolder writes `true` unless you pass `--no-autodeploy
 a TODO in place of the reason:
 
 ```yaml
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "deploys no workload of its own — …"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "deploys no workload of its own — …"
 ```
 
 A `false` declaration also needs the extra command in step 4.

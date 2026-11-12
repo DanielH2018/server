@@ -28,7 +28,7 @@
 # - Next-run review: a `down` verdict names its cause on the summary line. An overdue secret is
 #   rotated by the runbook in docs/secret-rotation.md, and the verdict clears within 30 minutes.
 #
-# ENFORCED: ansible/tests/setup/test_initial_setup_check_textfiles.py (the audit's behaviour
+# ENFORCED: ansible/tests/setup/test_host_check_textfiles.py (the audit's behaviour
 # against stubs), ansible/tests/setup/test_cron_scripts_publish_via_pr.py and
 # hosts/lib/tests/test_secret_rotation_component.py (the units and the legacy entries).
 files:

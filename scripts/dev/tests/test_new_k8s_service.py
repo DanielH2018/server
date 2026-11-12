@@ -106,6 +106,7 @@ def test_the_generated_deployment_renders_and_pins_a_uid(args, tmp_path):
         args.name, args.image, args.autodeploy, args.autodeploy_reason, args.uid
     )
     assert "Renovate stance" in text and "gitops_deploy" not in text
+    assert "noqa" not in text, "no linter reads a noqa comment in role defaults"
 
     text = scaffold.deployment_template(args.name, args.strategy, args.priority_class)
     doc = next(

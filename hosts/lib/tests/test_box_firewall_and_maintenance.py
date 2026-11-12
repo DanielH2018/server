@@ -1,20 +1,20 @@
 """daniel-box ships the same last three `initial_setup` subjects as the Pi and daniel-server (H7.32).
 
-The components are host-neutral and `test_pi_initial_setup_part2.py` holds their content. These
+The components are host-neutral and `test_pi_firewall_and_maintenance.py` holds their content. These
 tests hold what is specific to this host, the last one to move: the
 crons the role once wrote here are retired and replaced by timers, the firmware update ships
 only where fwupd is, the scans read this host's own tokens, and
 reconcile adopts the two SSH rules and the k3s rules, and leaves the rules it already labels alone.
 
-Run: uv run pytest hosts/lib/tests/test_box_initial_setup_part2.py
+Run: uv run pytest hosts/lib/tests/test_box_firewall_and_maintenance.py
 """
 
 import json
 
 import pytest
 from _reconcile_arms import live_unit
-from test_pi_initial_setup_part1 import seeded_pi
-from test_pi_initial_setup_part2 import (
+from test_pi_sshd_apt_and_tuning import seeded_pi
+from test_pi_firewall_and_maintenance import (
     LAN,
     TIMERS,
     _reboot,

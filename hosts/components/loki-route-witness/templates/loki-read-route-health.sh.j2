@@ -52,7 +52,7 @@ fi
 
 # The longest legitimate gap between two textfile writes: the timer fires at minute 23 of every
 # hour (3600s), and a run skipped by the boot grace may take one slot, so 7200s.
-# ansible/tests/services/test_initial_setup_check_rule_literals.py pins the rules' literals to it.
+# ansible/tests/services/test_not_reporting_rule_deadlines.py pins the rules' literals to it.
 DEADLINE_S=7200
 
 REPO_DIR=/home/{{ sys_user }}/server

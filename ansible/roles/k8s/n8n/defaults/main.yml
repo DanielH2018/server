@@ -22,8 +22,8 @@ n8n_k8s_runners_image: "{{ k8s_registry_pull_host }}/n8n-runners:{{ k8s_built_im
 # and holds the credential-encryption key + SQLite database co-located (see the DR note in
 # CLAUDE.md) — a bad image swap can migrate it before the gate observes a fault. n8n-files
 # (n8n_k8s_files_claim) is a SEPARATE, unseeded claim for the /files mount.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "two reasons: (1) probe-less n8n-runners sub-deployment; (2) migrating state — Recreate + RWO PVC (n8n-data) holding the encryption key + credentials DB. COUPLING NOTE for a future promotion: n8n declares TWO claims, n8n-data and n8n-files — a revert of one without the other desyncs which workflow-referenced /files paths actually exist against the credentials/workflow state in n8n-data"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "two reasons: (1) probe-less n8n-runners sub-deployment; (2) migrating state — Recreate + RWO PVC (n8n-data) holding the encryption key + credentials DB. COUPLING NOTE for a future promotion: n8n declares TWO claims, n8n-data and n8n-files — a revert of one without the other desyncs which workflow-referenced /files paths actually exist against the credentials/workflow state in n8n-data"
 
 # One set of blast-radius caps for both workloads.
 n8n_k8s_cpu_limit: "2"
@@ -53,7 +53,7 @@ n8n_k8s_files_storage_class: longhorn
 n8n_k8s_files_size: 1Gi
 
 # The claims the renderer emits for this role, which the n8n Kustomization applies (#3387).
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: "{{ n8n_k8s_claim }}"
     storage_class: "{{ n8n_k8s_storage_class }}"
     size: "{{ n8n_k8s_size }}"
@@ -78,13 +78,13 @@ n8n_k8s_broker_port: 5679
 # verdict, the Job keeps pulling, and Flux applies n8n on a later retry. Only Flux reads it:
 # the renderer adds the Kustomization for a published tag alone, so an Ansible deploy
 # ignores it.
-flux_prepull_timeout: 3600s  # noqa var-naming[no-role-prefix]
+flux_prepull_timeout: 3600s
 
 # The runners' readiness gate (see deployment-runners.yaml.j2). alpine because busybox `nc -z`
 # is all it needs and the image is already the fleet's small-utility choice.
 n8n_k8s_wait_image: alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 
-image_builder_builds:  # noqa var-naming[no-role-prefix]
+image_builder_builds:
   - image_builder_name: n8n
     image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/n8n/templates/Dockerfile.j2"
   - image_builder_name: n8n-runners
@@ -97,6 +97,6 @@ image_builder_builds:  # noqa var-naming[no-role-prefix]
 # deployment-runners.yaml is a second Deployment running a second built image. Without this
 # nothing rolls it: the rebuilt-image trigger keys on manifests_service (`n8n`) while
 # image-builder records `n8n-runners`, and the rollout targets one name regardless.
-manifests_extra_rollouts:  # noqa var-naming[no-role-prefix]
+manifests_extra_rollouts:
   - name: n8n-runners
     image: n8n-runners

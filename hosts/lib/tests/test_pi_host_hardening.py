@@ -5,7 +5,7 @@ and the package tasks of host-basics on daniel-pi. H7.60 deleted those tasks, so
 constants beside it carry what they wrote. These tests hold the shipped bytes to them, and the
 line-arm edits that adopt them.
 
-Run: uv run pytest hosts/lib/tests/test_pi_initial_setup_part3.py
+Run: uv run pytest hosts/lib/tests/test_pi_host_hardening.py
 """
 
 import shutil
@@ -25,10 +25,11 @@ BANNER = (
     "All connections are monitored and recorded.\n"
     "Disconnect immediately if you are not an authorized user.\n"
 )
-# The bytes initial_setup's tasks wrote to each path before H7.60 deleted them.
+# The bytes initial_setup's tasks wrote to each path before H7.60 deleted them. The sudoers
+# header names the component that ships it since #8072.
 WRITTEN = {
     SUDOERS: (
-        "# Managed by Ansible (roles/setup/initial_setup) — edits here are overwritten.\n"
+        "# Shipped by the host-hardening host component — edits here are overwritten.\n"
         "Defaults timestamp_type=global, timestamp_timeout=60\n"
     ),
     "/etc/audit/rules.d/hardening.rules": (

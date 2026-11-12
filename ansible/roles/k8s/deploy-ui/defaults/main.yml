@@ -6,7 +6,7 @@
 # on. But the page behind this route starts landings and clears the deployer's hold, so a bad
 # route change (auth accidentally dropped, the EndpointSlice pointed elsewhere) hands that to
 # whoever reaches it — the deploy plane itself, with no workload here to roll back.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "renders no Deployment — route-only (Service + EndpointSlice + IngressRoute) in front of deploy-ui.service on daniel-box; a bad route change exposes a page that starts landings and clears the deployer's hold"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "renders no Deployment — route-only (Service + EndpointSlice + IngressRoute) in front of deploy-ui.service on daniel-box; a bad route change exposes a page that starts landings and clears the deployer's hold"
 
-manifests_rollout: ''  # noqa var-naming[no-role-prefix]
+manifests_rollout: ''

@@ -3,11 +3,11 @@
 node_exporter_k8s_image: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
 
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
-k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "stateless DaemonSet, read-only hostPath mounts (including / via rootfs) and no PVC, readinessProbe gates the rollout, version-pinned image; runs hostNetwork+hostPID by design, for node-level metrics"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: true
+k8s_autodeploy_reason: "stateless DaemonSet, read-only hostPath mounts (including / via rootfs) and no PVC, readinessProbe gates the rollout, version-pinned image; runs hostNetwork+hostPID by design, for node-level metrics"
 
 # The stabilisation gate compares ready against desired for this DaemonSet (2 nodes). If
 # daniel-server goes NotReady mid-window, desired stays 2 while ready drops to 1 and the
 # gate rolls back — for a cause unrelated to this change. Accepted: it fails safe, and a
 # node going NotReady during a deploy is worth a rollback on its own.
-manifests_rollout: node-exporter  # noqa var-naming[no-role-prefix]
+manifests_rollout: node-exporter

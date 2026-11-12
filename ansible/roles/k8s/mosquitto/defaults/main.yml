@@ -7,8 +7,8 @@ mosquitto_k8s_image: eclipse-mosquitto:2.1.2-alpine@sha256:860aeb5d63ce509508f6d
 # device state down with it. ALSO Recreate + its own PVC (persisted retained
 # messages/session state) — a failed image swap can also migrate its own broker state before
 # the gate observes a fault, compounding the dependency-edge risk.
-k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "dependency edges — MQTT broker for zigbee2mqtt/home-assistant; no intra-tick ordering. ALSO Recreate + its own PVC — two independent reasons"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy: false
+k8s_autodeploy_reason: "dependency edges — MQTT broker for zigbee2mqtt/home-assistant; no intra-tick ordering. ALSO Recreate + its own PVC — two independent reasons"
 
 mosquitto_k8s_cpu_limit: "250m"
 mosquitto_k8s_mem_limit: 64Mi
@@ -29,7 +29,7 @@ mosquitto_k8s_size: 1Gi
 # The claim the renderer emits for this role, which the mosquitto Kustomization applies (#3387).
 # Not seeded from the Docker copy: the broker's persistence file is retained/queued state the
 # clients rebuild on their first reconnect, so a fresh store is correct.
-k8s_claims:  # noqa var-naming[no-role-prefix]
+k8s_claims:
   - name: "{{ mosquitto_k8s_claim }}"
     storage_class: "{{ mosquitto_k8s_storage_class }}"
     size: "{{ mosquitto_k8s_size }}"
