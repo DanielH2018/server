@@ -19,5 +19,6 @@ before the change put the file in `homelab-daniel-box` and not in `homelab-danie
 **Order** and C-1a's precondition once said "both hosts". They now say daniel-box, because
 daniel-server has no poller to read the scrape job that C-1a deletes.
 
-C-1a's precondition stays open until `land.sh` reports daniel-box applied and the journal of
-`homelab-claude-triage-poll` on daniel-box shows a poll with no `uptime-kuma` query.
+C-1a's precondition asked for daniel-box applied and a journal of `homelab-claude-triage-poll`
+on daniel-box with no `uptime-kuma` query. It held before C-1a merged: *PR C-1a and C-1b*
+records 667 `query=` lines after 2026-11-03 00:50:25Z and no `uptime-kuma` line.
