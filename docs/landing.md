@@ -292,6 +292,11 @@ through the same `hosts/lib/ci_verdict.py:ci_verdict` as `homelab-checkout-sync`
 builder, so their verdicts agree by construction. Hand-polling cost 835
 polls across 213 wait episodes before it existed.
 
+An empty or incomplete check-run list is pending, never green. A bare
+`gh run list --branch master --limit 1` is the wrong gate: GitHub creates the run for a freshly
+pushed merge commit a moment after the push, so that query returns the *previous* master run,
+green, and the wait returns at once having watched the wrong commit.
+
 `cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
 SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `hosts/lib/ci_verdict.py` is the list, and a commit whose
 merge was immediately followed by another reads `cancelled` permanently. The rule covers the
