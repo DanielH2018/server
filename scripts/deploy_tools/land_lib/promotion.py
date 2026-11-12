@@ -44,15 +44,12 @@ from deploy_tools.land_lib.outcome import (
     host_not_waited_note,
     say,
 )
-from lib.repo_paths import GITOPS_DEPLOY_FILES
-
-_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from deployer_lib.deploy_changes import _is_test_only_path, is_doc
+from lib.path_kinds import is_doc, is_test_only_path
 
 
 def _reaches_no_render(path: str) -> bool:
     """A document or a test, which no render reads; a `.md` a role ships under `files/` may."""
-    if _is_test_only_path(path):
+    if is_test_only_path(path):
         return True
     return is_doc(path) and not (
         path.startswith("ansible/roles/") and "/files/" in path

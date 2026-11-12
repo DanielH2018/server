@@ -202,3 +202,14 @@ def test_the_runner_fetch_refuses_fewer_runs_than_asked():
     )
     with pytest.raises(RuntimeError, match="logs in 1 of the newest 2 green master"):
         pytest_shard.fetch_runner_logs(2, gh)
+
+
+def test_a_shard_holding_a_census_file_is_charged_the_census_pass(tmp_path):
+    (tmp_path / "test_plain.py").write_text("def test_x(): pass\n")
+    census = "scripts/tests/test_census_rows_test_renders.py"
+    (tmp_path / census).parent.mkdir(parents=True)
+    (tmp_path / census).write_text("def test_x(): pass\n")
+    k8s = pytest_shard.K8S_RENDER_WALL_SECONDS
+    assert pytest_shard.prebuild_seconds(["test_plain.py", census], tmp_path) == (
+        (k8s + pytest_shard.CENSUS_PASS_WALL_SECONDS) * pytest_shard.CI_WORKERS
+    )

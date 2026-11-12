@@ -17,13 +17,14 @@ THE PHASES, each one `claude -p` in the batch's worktree:
    transcript. Edit and Write are denied to it, and it returns findings as structured output.
    Before it, this repo's batch runs `base_check`, and the reviewer is told which of the PR's
    new tests pass with its code changes taken out.
-3. fix — only when a finding passes `actionable`. It resumes the implementer session. A red
+3. fix — only when a finding passes `actionable`; `fix_round` runs it. It resumes the implementer session. A red
    batch whose PR fails `red_gate.green_gate` gets that failure as one more finding, and the
    gate runs again after the fix; a batch still failing it is not landed. A batch passing it
    has each fix hunk reverted on its own under the red tests (`hunk_check`), for the record.
 4. delta review — a fresh reviewer reads the fix's commits inside the whole change. A finding
    it reports is left only if it quotes a line the fix head's file has (`delta_confirm`,
-   #6547); the rest are carried unverified and hold nothing.
+   #6547); the rest are carried unverified and hold nothing. A finding of medium severity or
+   worse left by it earns one more fix and delta review, and no more (#7687).
 4b. ready — `review_ci.ready_gate` marks a draft PR ready and waits for its CI run (#5563).
 5. land — on the deploy host, the pipeline runs `land.sh` itself (`review_land`) and resumes
    the implementer only for a verdict that needs a decision, as the `apply` phase. Before the
@@ -101,15 +102,12 @@ from fanout_lib.review.held_hooks import (
 )
 from fanout_lib.review.review_prompts import (
     FINDINGS_SCHEMA,
-    delta_prompt,
     file_prompt,
-    fix_prompt,
     is_held,
     apply_prompt,
     review_prompt,
 )
 from fanout_lib.review.red_gate import (
-    GREEN_FILE,
     RED_SCHEMA,
     Gate,
     Gates,
@@ -120,8 +118,7 @@ from fanout_lib.review.red_gate import (
     red_section,
     labelled_skip_reason,
 )
-from fanout_lib.review.delta_confirm import split_confirmed
-from fanout_lib.review.green_contest import contested, settle
+from fanout_lib.review.fix_round import fix_rounds
 from fanout_lib.review.hardened_runs import ResetFailed
 from fanout_lib.review.red_tests import issue_subjects
 from fanout_lib.review.worktree_reset import reset_worktree
@@ -143,13 +140,12 @@ from fanout_lib.review.review_record import (
     issues_section,
 )
 from fanout_lib.launch import (
-    BUDGET_USD,
     REVIEW_RUNTIME_MAX_S,
     SYSTEM_PROMPT_FILE,
     stop_hook_settings,
 )
 from fanout_lib.prompt_tool import prompt_tool_args
-from fanout_lib.status import PR_URL
+from fanout_lib.sizing import REVIEWER
 from fanout_lib.target import Target
 
 PROMPT_FILE = Path(__file__).resolve().parent / "review_system_prompt.md"
@@ -161,7 +157,6 @@ HEADLESS_PROMPT_FILE = SOURCE_ROOT / SYSTEM_PROMPT_FILE
 # `.claude/settings.json` registers too, stands down while the file exists, so one Stop spends
 # the block cap once. `.claude/hooks/fanout-stop.py` mirrors the path.
 OWN_COPY = Path(".fanout") / "stop-hook"
-REVIEW_BUDGET_USD = 15
 # A finding the fix round acts on. The reviewer reports everything, as the user-level
 # `## Code review` rule asks; this is the separate filtering pass.
 # `land.sh` waits up to about an hour for CI and the promotion. A landing started with less than
@@ -341,17 +336,18 @@ class Pipeline:
     ) -> list[str]:
         return [
             *(prefix or self._stop_hook()),
-            "-p", "--model", "opus", "--permission-mode", "auto", *prompt_tool_args(),
-            "--output-format", "json", "--max-budget-usd", str(BUDGET_USD),
-            "--append-system-prompt", self.headless_prompt + prompt, "--effort", "medium",
+            "-p", "--model", self.record.implementer.model, "--permission-mode", "auto",
+            *prompt_tool_args(), "--output-format", "json", "--max-budget-usd",
+            str(self.record.implementer.budget_usd), "--append-system-prompt",
+            self.headless_prompt + prompt, "--effort", self.record.implementer.effort,
         ]  # fmt: skip
 
     def _red_author(self) -> list[str]:
         return [
             *self._stop_hook(),
-            "-p", "--model", "opus", "--permission-mode", "auto", *prompt_tool_args(),
-            "--output-format", "json", "--max-budget-usd", str(REVIEW_BUDGET_USD),
-            "--json-schema", json.dumps(RED_SCHEMA), "--effort", "medium",
+            "-p", "--model", REVIEWER.model, "--permission-mode", "auto", *prompt_tool_args(),
+            "--output-format", "json", "--max-budget-usd", str(REVIEWER.budget_usd),
+            "--json-schema", json.dumps(RED_SCHEMA), "--effort", REVIEWER.effort,
         ]  # fmt: skip
 
     def _resume(self) -> list[str]:
@@ -373,8 +369,8 @@ class Pipeline:
         prompt += self._rules()
         return [
             *self._held_settings(),
-            "-p", "--model", "opus", "--permission-mode", "auto", *prompt_tool_args(),
-            "--output-format", "json", "--max-budget-usd", str(REVIEW_BUDGET_USD),
+            "-p", "--model", REVIEWER.model, "--permission-mode", "auto", *prompt_tool_args(),
+            "--output-format", "json", "--max-budget-usd", str(REVIEWER.budget_usd),
             "--append-system-prompt", prompt,
             "--disallowedTools", "Edit,Write,NotebookEdit", "--effort", self.record.review_effort,
             "--json-schema", json.dumps(FINDINGS_SCHEMA),
@@ -594,52 +590,7 @@ class Pipeline:
         self.record.actionable = actionable(self.record.findings)
         last = impl
         if self.record.actionable and self.session:
-            fix = self._claude(
-                "fix",
-                self._resume(),
-                fix_prompt(
-                    self.record.actionable, self.record.pr, red[0] if red else ""
-                ),
-            )
-            last = fix if PR_URL.search(fix.text) else impl
-            after = self.record.head = self._git("rev-parse", "HEAD")
-            # A contest of a correct fix commits nothing, and still needs its fresh reader.
-            if after == head and not contested(
-                green, fix.text, red[1] if red else None
-            ):
-                self.record.remaining = list(self.record.actionable)
-            else:
-                delta = self._claude(
-                    "review-delta",
-                    self._reviewer(),
-                    delta_prompt(
-                        issues, base, head, after, self.record.actionable, fix.text
-                    ),
-                )
-                left, delta_error = findings_of(delta)
-                # A failed delta review proves nothing was resolved.
-                if left is None:
-                    self.record.remaining = list(self.record.actionable)
-                else:
-                    # A reported finding is left only if the fix head's file holds the line
-                    # it quotes (#6547); the rest are carried unverified and hold nothing.
-                    held, unverified = split_confirmed(
-                        actionable(left), lambda path: self._read_at(after, path)
-                    )
-                    self.record.remaining = held
-                    self.record.unverified = unverified
-                if delta_error:
-                    self.record.review_error = f"delta review: {delta_error}"
-            # The fix may touch the red tests even when the first run passed, so the PR that
-            # ships is the one the gate reads.
-            if red is not None:
-                green = self._green(red)
-                if not green:
-                    self.record.remaining = [
-                        f for f in self.record.remaining if f.get("file") != GREEN_FILE
-                    ]
-                else:
-                    green = settle(self.record, green, fix.text, red[1])
+            last, green = fix_rounds(self, issues, base, head, red, green, last)
 
         # Reverting hunks under red tests that fail anyway, after a contest, measures nothing.
         if red is not None and not green and not self.record.green_contest:

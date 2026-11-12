@@ -43,9 +43,23 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
 ## Notable
 - Bundles FreshRSS extensions shipped in `files/`: Karakeep button, Wallabag button,
   ToggleSidebar.
-- The nginx sidecar (`files/nginx-feed-cache.conf`) caches a **single hard-coded upstream**
-  (`rachelbythebay.com`) — it's a targeted cache for that one feed, NOT a general
-  outbound-feed proxy. Adding another cached feed means editing the nginx conf.
+- The nginx sidecar (`files/nginx-feed-cache.conf`) proxies a **fixed set of upstreams**, one
+  `location` each. It is not a general outbound-feed proxy, so adding a feed means editing the
+  nginx conf.
+  - `/` caches `rachelbythebay.com` for 24h, because that site blocks readers that poll often.
+  - `/restofworld/` rewrites the unescaped `&dpr=` and `&crop=` in Rest of World's media URLs
+    to `&amp;`. Without it FreshRSS rejects the feed as invalid XML. The rewrite stops working
+    if the publisher changes those query parameters.
+- **FreshRSS reaches the cache only through two settings in its own database.** Since FreshRSS
+  1.30.0 an SSRF guard refuses private addresses, so the feed-cache is reachable only through
+  these settings:
+  - **Subscription URLs** use the FQDN `http://feed-cache.homelab.svc.cluster.local/...`. The
+    guard resolves hosts with `dns_get_record`, which on this musl image ignores the pod's
+    search domains, so the short name `feed-cache` fails as `Failed to resolve domain`.
+  - **System configuration → internal host allowlist** holds that FQDN with the port, as
+    `host:80`. Don't move it to the `INTERNAL_HOST_ALLOWLIST`
+    env var. php-fpm runs with `clear_env` on, so the variable reaches the cron refresh but not
+    a manual refresh. A non-empty env var also overrides the UI field.
 - A site with no feed is subscribed through FreshRSS's own XPath scraping, not a new service.
   The `web-to-rss` skill finds the source, writes the rules and checks them with
   `scripts/freshrss/scrape_feed.py`. The rules live only in FreshRSS's config volume.

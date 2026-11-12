@@ -562,8 +562,9 @@ and every host slice applies it.
 ### The updater
 
 `/usr/lib/homelab/homelab-updater` is a POSIX shell script, run as root by
-`homelab-updater.service` (`Type=oneshot`, `Nice=10`, `IOSchedulingClass=idle`,
-`TimeoutStartSec=50min`). The limit is derived from reconcile's: reconcile's 30 minutes, step
+`homelab-updater.service` (`Type=oneshot`, `Nice=10`, `IOSchedulingClass=best-effort` at
+priority 7, `TimeoutStartSec=50min`). The IO class sits above the idle class the integrity
+scans run at, so an AIDE scan on the Pi's SD card yields to the install (#7941). The limit is derived from reconcile's: reconcile's 30 minutes, step
 5's 10-minute lock wait, and 10 minutes for the fetch and the unpack. A test in
 `hosts/lib/tests/` reads both rendered units and fails when the updater's limit does not
 exceed reconcile's limit plus the lock timeout.
