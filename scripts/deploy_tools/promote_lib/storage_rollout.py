@@ -8,10 +8,11 @@ Kustomization holding a claim that reconciles in that window fails its dry run a
 `failure`, then recovers on its next retry.
 
 So while STORAGE_TAG is expected, a `failure` or `error` on ANY other expected name is
-provisional, not only on a name that holds a claim. DECIDED: every name, because the failure
-spreads past the claim holders: `crowdsec`'s failed claim holds `traefik` not-Ready, and
-`traefik` every routed tag. Telling a claim holder from the rest would need each name's
-`dependsOn` closure over T's claims, for a gain of at most the window below.
+provisional, not only on a name that holds a claim.
+DECIDED: every name, because the failure spreads past the claim holders: `crowdsec`'s failed
+claim holds `traefik` not-Ready, and `traefik` every routed tag. Telling a claim holder from
+the rest would need each name's `dependsOn` closure over T's claims, for a gain of at most the
+window below.
 
 A provisional failure ends the wait in one of two ways:
   - once `flux/longhorn` has read `success` for `storage_grace_s`: two of the bundle's largest
