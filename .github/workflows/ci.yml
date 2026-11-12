@@ -1819,8 +1819,13 @@ jobs:
   # still took 329-385 s against 208-215 s for `upgrade_path`, so `run` submits the three builds
   # first and the host items fill in behind them (#7866). That took it to 264-298 s against
   # 207-212 s (run 42697086899), each build still 244-271 s beside the other two. So each release
-  # runs three shards, one offline build in each (#7879). Keep the shard count equal to the
-  # number of offline builds `bootstrap_plan.plan` lists; `test_bootstrap_case.py` holds it.
+  # runs three shards, one offline build in each (#7879). The split left each build at 224-244 s
+  # with a runner to itself (runs 43146660058 and 43148777838), so a build is slow on its own, and
+  # these legs still end 28-80 s after the `host_packages` legs. A local run copies the kit's uv
+  # cache in under a second and builds the venv from it in less, so each item prints each phase of
+  # the script's local build under its `[DONE]` line to find the rest (#7982). Keep the shard
+  # count equal to the number of offline builds `bootstrap_plan.plan` lists;
+  # `test_bootstrap_case.py` holds it.
   # The `name:` leaves the shard out, so a release's three shards share the check-run name
   # `hosts/lib/ci_verdict.py` lists. An installed host package holds that list, and a renamed
   # leg would read as pending to every copy installed before the rename.
