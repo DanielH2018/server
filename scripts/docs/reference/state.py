@@ -26,17 +26,11 @@ this generator cannot derive reads `ok` as long as it has ever run, because "lat
 an interval we cannot state" is not a claim this page makes.
 
 CADENCE comes from a loop's packaged timer (`package_timers.cadence_minutes`), or from
-crons.cadence_minutes() wherever the loop is an `ansible.builtin.cron`
-task (matched by job name against crons.build_rows()) or its own systemd timer interval
-(renovate-agent, renovate-notify -- neither of which is a cron job, so they
-carry a hardcoded value read once from the role that defines the timer, cited in a comment
-at each constant). Two crons -- the Longhorn and etcd restore drills -- build their schedule
-with `.split()[N]` off one compound var, so crons.py's own schedule column prints unresolved
-Jinja on 3-5 of the five fields and the structural read above cannot tell a genuinely
-restricted field from a templated one that happens to resolve to `*`. Reading that one
-compound default directly and feeding the REAL resolved string to cadence_minutes() is not a
-second parser -- it is the one parser, given honest input for the one shape it cannot read
-through Jinja.
+crons.cadence_minutes() over a schedule this module reads itself, or from a hardcoded value
+read once from the role that defines the timer (renovate-agent, renovate-notify), cited in a
+comment at each constant. The Longhorn and etcd restore drills build their schedule with
+`.split()[N]` off one compound var, so this reads that compound default directly and feeds the
+resolved string to cadence_minutes().
 
 Usage::
 

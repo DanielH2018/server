@@ -325,8 +325,7 @@ hook state is then unknown, which is exactly when a batch must not be placed on 
 there is bounded already, and the tick takes `/var/lock/server-git-tree.lock` for its own
 `--ff-only` merge. A launch does not take that lock. The tick holds it for its whole unit run,
 which can outlast `LAUNCH_TIMEOUT_S` (120 seconds), so taking it would turn a bounded stale-hook
-window into a failed launch. A hand `deploy.sh` holds the same lock only for its snapshot
-([ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)).
+window into a failed launch.
 
 That check compares each candidate host's `user.signingkey` against the account's live list,
 read with `gh api /users/<login>/ssh_signing_keys`. `launch` exits 6 when no candidate host
@@ -346,10 +345,10 @@ Three facts from that protocol shape the skill:
 - **Every issue of a batch is claimed before that batch's agent starts.** `launch` takes the
   claims itself, under the orchestrator's worktree name, because a subagent's worktree name is
   unknown until it starts and a claim naming a worktree that does not exist yet reads as stale.
-- **A landing queues on per-service locks, not on the tree lock.** `deploy.sh` holds
-  `/var/lock/server-git-tree.lock` only for its snapshot
-  ([ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)), so two agents landing
-  disjoint services proceed together. A `deploy.sh` exit 75 is a resume point to retry, not a
+- **A landing takes no tree lock.** No local script applies a k8s workload: `promote` and Flux
+  do, and `land.sh` only waits on them
+  ([ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)). So two agents landing
+  disjoint services proceed together. A `land.sh` exit 75 is a resume point to retry, not a
   failure to report.
 - **Width follows memory headroom, not a count.** `scripts/dev/fanout.py place` reads the
   `user.slice` and `user-1000.slice` caps and places each batch on the host with the most left.

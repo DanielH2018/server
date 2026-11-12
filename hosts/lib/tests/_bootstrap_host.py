@@ -1,6 +1,6 @@
 """A fake host for `hosts/bootstrap-host.sh`: stub commands, a HOMELAB_ROOT and an offline kit.
 
-The script runs under stub `hostname`, `apt-get`, `dpkg`, `dpkg-query`, `systemctl`,
+The script runs under stub `hostname`, `apt-get`, `dpkg`, `dpkg-deb`, `dpkg-query`, `systemctl`,
 `systemd-sysusers`, `systemd-tmpfiles`, `fallocate`, `mkswap`, `swapon`, `id`, `getent`,
 `groupadd`, `usermod`, `snap`, `rkhunter`, `aideinit` and `curl`, and the real `gpg`,
 `age-keygen`, `git`, `tar` and coreutils. Its pins name production digests, so `pin` rewrites a
@@ -122,9 +122,16 @@ class FakeHost:
         self.kit = tmp_path / "kit"
         self.kit.mkdir()
         self.log = tmp_path / "commands.log"
+        self.deb_tree = tmp_path / "deb-tree"
+        self.deb_tree.mkdir()
         self._stub("hostname", f"echo {hostname}")
-        self._stub("apt-get", f'echo "$*" >> {self.calls}')
+        self.apt_stub()
         self._stub("dpkg", "echo amd64")
+        # Every .deb unpacks to deb_tree, whatever its name.
+        self._stub(
+            "dpkg-deb",
+            f'echo "dpkg-deb $*" >> {self.log}; cp -R {self.deb_tree}/. "$3"',
+        )
         self._stub("dpkg-query", "exit 1")
         self._stub("systemctl", f'echo "systemctl $*" >> {self.log}')
         self._stub("systemd-sysusers", f'echo "sysusers $*" >> {self.log}')
@@ -153,6 +160,21 @@ class FakeHost:
 
     def _stub(self, name: str, body: str) -> None:
         write_exec(self.bin / name, f"{body}\n")
+
+    def apt_stub(self, extra: str = "") -> None:
+        """Stub `apt-get` to log its call and write the .deb a download names, then run `extra`."""
+        self._stub(
+            "apt-get",
+            f'echo "$*" >> {self.calls}; echo "apt-get $*" >> {self.log}\n'
+            'if [ "$1" = download ]; then : > "$2_0_amd64.deb"; fi\n'
+            f"{extra}",
+        )
+
+    def declare_users(self, conf: str) -> None:
+        """Make every .deb carry `conf` as its sysusers.d file."""
+        path = self.deb_tree / "usr/lib/sysusers.d/homelab.conf"
+        path.parent.mkdir(parents=True)
+        path.write_text(conf)
 
     def pin(self, old: str, new: str) -> None:
         """Replace the production digest `old` with `new` in the scratch copy of the script."""

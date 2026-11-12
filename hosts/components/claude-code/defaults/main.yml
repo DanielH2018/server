@@ -322,11 +322,15 @@ claude_code_agent_operator_read: true
 claude_code_agent_memory_dir: >-
   {{ claude_code_agent_user_home }}/.claude/projects/{{
   claude_code_agent_user_clone_dir | replace('/', '-') }}/memory
-# Whether the first apply with claude_code_user set to the agent copies the operator's memory
-# store into the agent's (tasks/agent_memory_seed.yml). The copy runs only while the agent's
-# MEMORY.md does not exist, so a later apply never overwrites what the agent wrote. False skips
-# it and removes nothing already copied.
+# Whether claude-agent-home copies the operator's memory store into the agent's. With
+# claude_code_user set to the agent, the copy runs while the agent's MEMORY.md does not exist, and
+# on the first run after the host ran as the operator if the stores differ (#8074). Once the host
+# runs as the agent, a later run never overwrites what the agent wrote. False skips it and removes
+# nothing already copied.
 claude_code_agent_memory_seed: true
+# The flag each run as the operator sets, outside the agent's home so the agent cannot clear it.
+# It tells the next run as the agent that the agent's store fell behind the operator's.
+claude_code_agent_memory_seed_stale: /var/lib/homelab/claude-agent-memory-stale
 # The prefix the copy strips from the copied .md files, so `/home/ubuntu/server/docs/x.md`
 # becomes the repo-relative `docs/x.md`, which resolves in any clone on any host.
 claude_code_agent_memory_seed_strip: "{{ claude_code_operator_checkout }}/"

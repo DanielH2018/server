@@ -556,7 +556,7 @@ optimize_pi_host: daniel-pi
 # The one host that runs the repo-level ops crons gated to a single host: the worktree sweep,
 # the infrastructure-map refresh, the generated-docs refresh and the weekly eval sweep. They
 # need the primary checkout, uv, gh and a local kubectl, which daniel-box is the only host to
-# carry together. The worktree-sweep component and scripts/docs/reference/crons.py read it.
+# carry together. The worktree-sweep component reads it.
 ops_cron_host: daniel-box
 # ── weekly reboot ──────────────────────────────────────────────────────────────────────────
 # When every host in the play restarts itself. The host-maintenance component renders

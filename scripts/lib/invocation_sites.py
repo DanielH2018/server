@@ -4,10 +4,10 @@
 library, adhoc) so the generated reference page can say so. `scripts/test_invoker_paths_resolve.py`
 asserts every `scripts/...` token an invoker names still resolves to a real file, so a rename
 that misses one of these sites fails a test instead of a 3am cron. Both walk the same places —
-`prek.toml`, the GitHub Actions workflows, an `ansible.builtin.cron` `job:`, the `initial_setup`
-shell templates, `.claude/hooks` wrappers, `.claude/settings*.json` permissions — and until now
-each carried its own copy of "which files, which field", which is exactly the kind of fact that
-drifts when only one copy gets updated after a reorg.
+`prek.toml`, the GitHub Actions workflows, systemd units, `.claude/hooks` wrappers and
+`.claude/settings*.json` permissions — and until now each carried its own copy of "which
+files, which field", which is exactly the kind of fact that drifts when only one copy gets
+updated after a reorg.
 
 WHAT LIVES HERE VS. WHAT DOESN'T. This module owns file discovery and field extraction — WHICH
 files count as an invocation site, and WHICH field of each one is the text that actually runs.
@@ -26,15 +26,13 @@ Import it through the same bootstrap as any other cross-directory `lib` import (
 `.claude/rules/python-layout.md`)::
 
     _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-    from lib.invocation_sites import cron_jobs  # noqa: E402
+    from lib.invocation_sites import workflow_files  # noqa: E402
 """
 
 import json
 import tomllib
-from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -82,61 +80,6 @@ def workflow_run_steps(repo: Path = REPO) -> list[tuple[str, str]]:
                     loc = f"{wf.relative_to(repo)} job {job_name!r} step {i}"
                     out.append((loc, run))
     return out
-
-
-# --- ansible.builtin.cron ------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class CronJob:
-    """One `ansible.builtin.cron` task found in the tree.
-
-    Attributes:
-        job: the task's `job:` command text, as written.
-    """
-
-    path: Path
-    name: str
-    job: str
-
-
-def cron_jobs(repo: Path = REPO) -> list[CronJob]:
-    """Every present `ansible.builtin.cron` task in the tree, wherever it lives.
-
-    Tree-wide by design: cron tasks are not confined to `initial_setup` (traefik,
-    observability, qbittorrent and eight other roles each carry their own), so a reader
-    scoped to one file misses the rest.
-    """
-    jobs = []
-    for path in sorted((repo / "ansible").rglob("tasks/*.yml")):
-        try:
-            loaded = yaml_fast.safe_load(path.read_text())
-        except OSError, yaml.YAMLError:
-            continue
-        if not isinstance(loaded, list):
-            continue
-        for task in loaded:
-            if not isinstance(task, dict) or "ansible.builtin.cron" not in task:
-                continue
-            spec = task["ansible.builtin.cron"] or {}
-            if str(spec.get("state", "present")) == "absent":
-                continue
-            job = str(spec.get("job", ""))
-            if job:
-                jobs.append(CronJob(path, str(spec.get("name", "unnamed")), job))
-    return jobs
-
-
-# --- shell-wrapper templates ---------------------------------------------------------------
-
-
-def sh_j2_templates(repo: Path = REPO) -> list[Path]:
-    """Every `*.sh.j2` template in the tree.
-
-    A cron's `job:` can name one by basename, and `initial_setup`'s templates are
-    themselves a stale-path invocation site.
-    """
-    return sorted(p for p in (repo / "ansible").rglob("templates/*.sh.j2"))
 
 
 # --- .claude/hooks wrappers ------------------------------------------------------------------

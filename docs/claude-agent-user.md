@@ -146,8 +146,8 @@ authorized key.
 - **`~/.claude` is `drwx------ claude:ubuntu`.** The role sets that mode on every apply, in
   `tasks/agent_github.yml`, because the directory holds the session's login. Slice 4 widens it
   for the operator's group.
-- **A detached deploy logs per user.** The log directory is `/tmp/homelab-deploy-logs-<user>`, so
-  one user's directory never blocks the other's `deploy.sh --detach`.
+- **A detached landing logs per user.** The log directory is `/tmp/homelab-landings-<user>`, so
+  one user's directory never blocks the other's `land.sh --detach`.
 - **The Claude Code installer runs with `CLAUDE_INSTALL_ALLOW_SUDO=1`**, because the installer
   refuses to run under a sudo guard otherwise.
 
@@ -325,9 +325,14 @@ daniel-box sets it to the agent. The variable routes the unit's `User=`, `Group=
   the older copied subset off, and `tasks/agent_operator_config.yml` has its mechanics. The
   agent's telemetry carries the resource attribute `process.owner=claude`, so its metrics carry
   the label `process_owner="claude"` and the operator's carry none.
-- **The memory store is copied once.** `tasks/agent_memory_seed.yml` runs as root while the
-  agent's `MEMORY.md` does not exist, so a later apply never overwrites what the agent wrote. It
-  gives the files to the agent with group `ubuntu` and mode `0640`, and it strips
+- **The memory store is re-copied after every stint as the operator.** `claude-agent-home`
+  copies the operator's store into the agent's while the agent's `MEMORY.md` does not exist. It
+  also copies it on the first run as the agent after a run as the operator, if the two stores
+  differ. A run as the operator sets the flag `claude_code_agent_memory_seed_stale` outside the
+  agent's home, and the copy clears it. That copy replaces the agent's store, so a flip of
+  `claude_code_user` back to the agent never makes a stale store the `claude-memory-sync` source
+  (#8074). Once the host runs as the agent, a later run never overwrites what the agent wrote.
+  The copy gives the files to the agent with group `ubuntu` and mode `0640`, and it strips
   `/home/ubuntu/server/` from every copied `.md` so a link reads `docs/x.md` and resolves in any
   clone. The `ubuntu` store is not touched.
 - **`claude-memory-sync` reads the agent's store** and writes the operator's store on
@@ -533,8 +538,8 @@ out](#what-this-page-leaves-out) has where it lives.
 
 ## Slice 7: a pre-merge dry run without secrets (optional)
 
-**Build:** add a `deploy.sh --dry-run` mode that renders with placeholder secret values and
-applies with a dry-run-only ServiceAccount. A ValidatingAdmissionPolicy denies that
+**Build:** add a pre-merge dry run that renders with placeholder secret values and applies
+with a dry-run-only ServiceAccount. A ValidatingAdmissionPolicy denies that
 ServiceAccount every request whose `request.dryRun` is false.
 
 **Unverified:** whether this k3s version's admission CEL exposes `request.dryRun`, and whether
@@ -797,7 +802,7 @@ operator can log in as `claude`, so only the operator can run the checks that st
 
 | Capability | Why | Where it goes instead |
 |---|---|---|
-| `deploy.sh`, `--check` and `--dry-run` before a merge | All three decrypt SOPS, and the agent has no age key | Merged work deploys through the lander (slice 3). A pre-merge dry run returns with slice 7. |
+| A dry run against the cluster before a merge | It needs decrypted SOPS values, and the agent has no age key | Merged work deploys through the lander (slice 3). A pre-merge dry run returns with slice 7. |
 | `sudo` | No sudo rights and no `SUDO_ASKPASS` helper | The operator, or the deployer after a merge |
 | Adding or rotating a secret | `sops` needs the data key to write a value | The operator. Key names stay readable, because SOPS encrypts values only. |
 | ssh as `ubuntu` to the peers | That shell has sudo | The operator. The agent reaches daniel-server as its own `claude` agent user, for fan-out only (slice 5). The Pi has no agent login, because the one `probe.py` ssh path needs its `docker` group. |

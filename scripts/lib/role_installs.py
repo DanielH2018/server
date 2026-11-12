@@ -1,9 +1,9 @@
 """Where a host installs each role script, and which of them a host runs `--no-project`.
 
-A role script runs from the path its role's `copy` task installs it to, so its `sys.path` is
-the install directory, not its tree path (#4455). `install_map()` maps each installed path to
-its tree source, `stage()` copies the sources to that layout under a temporary root, and
-`role_entries()` reads each command a role's tasks and templates run `--no-project` and
+A role script runs from the path a host component's `files` entry installs it to, so its
+`sys.path` is the install directory, not its tree path (#4455). `install_map()` maps each
+installed path to its tree source, `stage()` copies the sources to that layout under a temporary root, and
+`role_entries()` reads each command a role's or component's files run `--no-project` and
 returns the staged copy it runs. `lib.stdlib_only` walks those entries from the stage.
 
 Run: uv run pytest scripts/lib/tests/test_stdlib_only.py
@@ -15,7 +15,6 @@ import re
 import shutil
 import sys
 import tempfile
-from collections.abc import Iterator
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -58,8 +57,8 @@ def _defaults(role: Path) -> dict[str, str]:
     }
 
 
-def _render(text: str, role: Path, item: str | None = None) -> str:
-    """`text` with the loop item, `role_path`, `playbook_dir` and the role's defaults filled in.
+def _render(text: str, role: Path) -> str:
+    """`text` with `role_path`, `playbook_dir` and the role's defaults filled in.
 
     Anything else stays as written, so a caller tells a resolved path by the absence of `{{`.
     """
@@ -68,8 +67,6 @@ def _render(text: str, role: Path, item: str | None = None) -> str:
         "role_path": str(role),
         "playbook_dir": str(ANSIBLE),
     }
-    if item is not None:
-        values |= {"item": item, "item | basename": Path(item).name}
 
     def fill(match: re.Match) -> str:
         return values.get(match.group(1), match.group(0))
@@ -77,67 +74,23 @@ def _render(text: str, role: Path, item: str | None = None) -> str:
     return _JINJA.sub(fill, text)
 
 
-def _yaml_dicts(node) -> Iterator[dict]:
-    if isinstance(node, dict):
-        yield node
-        for value in node.values():
-            yield from _yaml_dicts(value)
-    elif isinstance(node, list):
-        for value in node:
-            yield from _yaml_dicts(value)
-
-
-def _task_files() -> list[Path]:
-    return sorted(ROLES.glob("*/*/tasks/**/*.yml"))
-
-
 @functools.cache
 def install_map() -> dict[str, tuple[Path, Path]]:
-    """Each installed `.py` path -> (its source in the tree, the task file that installs it).
+    """Each installed `.py` path -> (its source in the tree, the `component.yml` that installs it).
 
-    Two declarations name an installed path: a `copy` task's `src`/`dest`, per loop item, and a
-    `stamp_deployed_pairs` entry, which is how a role records the copies a shared include such
-    as `install_host_lib.yml` makes for it. A `dest` the role's defaults cannot fill keeps its
-    `{{ var }}`, so `role_entry` can still match it by name. Two sources for one path raise.
+    Two sources for one path raise.
     """
     found: dict[str, tuple[Path, Path]] = {}
 
-    def add(live: str, src: Path, task_file: Path) -> None:
+    def add(live: str, src: Path, declared_in: Path) -> None:
         if not live.endswith(".py") or not src.is_file():
             return
         if live in found and found[live][0] != src.resolve():
             raise ValueError(
                 f"{live} is installed from both {found[live][0]} and {src.resolve()}"
             )
-        found.setdefault(live, (src.resolve(), task_file))
+        found.setdefault(live, (src.resolve(), declared_in))
 
-    for task_file in _task_files():
-        role = _role_of(task_file)
-        for node in _yaml_dicts(
-            yaml_fast.safe_load(task_file.read_text(encoding="utf-8"))
-        ):
-            copy = node.get("ansible.builtin.copy") or node.get("copy")
-            if isinstance(copy, dict) and "src" in copy and "dest" in copy:
-                loop = node.get("loop")
-                for item in loop if isinstance(loop, list) else [None]:
-                    if item is not None and not isinstance(item, str):
-                        continue
-                    src = _render(str(copy["src"]), role, item)
-                    if "{{" in src:
-                        continue
-                    path = (
-                        Path(src) if Path(src).is_absolute() else role / "files" / src
-                    )
-                    add(_render(str(copy["dest"]), role, item), path, task_file)
-            node_vars = node.get("vars")
-            if isinstance(node_vars, dict):
-                for pair in node_vars.get("stamp_deployed_pairs") or []:
-                    if isinstance(pair, dict) and pair.get("live") and pair.get("src"):
-                        add(
-                            _render(str(pair["live"]), role),
-                            REPO / pair["src"],
-                            task_file,
-                        )
     # A host component installs a script by a `src:` or `role-file:` entry, and a shared
     # module beside it by a `lib:` or `shared:` entry.
     for component in sorted(COMPONENTS.glob("*/component.yml")):
@@ -190,8 +143,8 @@ def tree_source(path: Path) -> Path:
 def role_entry(spelled: str, holder: Path) -> Path:
     """The file a role command runs: a tree path, or the staged copy of an installed one.
 
-    A path the copy task does not spell resolves by name among the copies the same file
-    makes, such as a copy under a per-SHA directory run through a `current` link. Fails closed: a command that maps to no file raises.
+    A path no `files` entry spells resolves by name among the files the same `component.yml`
+    installs. Fails closed: a command that maps to no file raises.
     """
     role = _role_of(holder)
     path = _render(spelled, role)
@@ -208,26 +161,9 @@ def role_entry(spelled: str, holder: Path) -> Path:
     if len(same_file) == 1:
         return staged_path(same_file[0])
     raise ValueError(
-        f"{holder.relative_to(REPO)} runs {spelled} --no-project, and no copy task or "
-        f"stamp_deployed_pairs entry installs it"
+        f"{holder.relative_to(REPO)} runs {spelled} --no-project, and no component "
+        f"`files` entry installs it"
     )
-
-
-@functools.cache
-def runs_on_no_host(role: Path) -> bool:
-    """Whether the role's first task is a `meta: end_role` with no `when:`, as an emptied role's is.
-
-    Such a role installs nothing, so a template it keeps runs on no host.
-    """
-    main = role / "tasks" / "main.yml"
-    if not main.is_file():
-        return False
-    tasks = yaml_fast.parse_yaml(main.read_text())
-    if not isinstance(tasks, list) or not tasks or not isinstance(tasks[0], dict):
-        return False
-    first = tasks[0]
-    ends = any(first.get(m) == "end_role" for m in ("meta", "ansible.builtin.meta"))
-    return ends and "when" not in first
 
 
 def role_entries() -> list[tuple[Path, tuple[str, ...]]]:
@@ -242,7 +178,6 @@ def role_entries() -> list[tuple[Path, tuple[str, ...]]]:
             path.suffix not in {".yml", ".yaml", ".j2"}
             or "tests" in path.parts
             or not path.is_file()
-            or runs_on_no_host(_role_of(path))
         ):
             continue
         found += [

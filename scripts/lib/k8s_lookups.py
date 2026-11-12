@@ -29,7 +29,7 @@ def k8s_lookup_map(repo_root) -> dict[str, set[str]]:
     if not k8s.is_dir():
         return found
     for role in sorted(k8s.iterdir()):
-        for src in [*role.glob("templates/**/*.j2"), *role.glob("tasks/*.yml")]:
+        for src in role.glob("templates/**/*.j2"):
             try:
                 text = src.read_text(errors="ignore")
             except OSError:

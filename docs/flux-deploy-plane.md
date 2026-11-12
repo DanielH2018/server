@@ -16,7 +16,8 @@ recovered by *Recovering Flux by hand*.
   controllers are not installed, because nothing here uses them.
 - **Flux applies them**, from `ansible/roles/k8s/flux/`'s render under the tag `flux`
   (`platform: k8s`). The Kustomization `flux` applies the components at `prune: false`, and
-  `flux-deferred` applies the sync objects at `prune: true`. `deploy.sh --tags flux` exits 5.
+  `flux-deferred` applies the sync objects at `prune: true`. No local script applies the
+  tag.
 - **The install is vendored.** `files/gotk-components.yaml` is the output of `flux install
   --export`, filtered and pinned by digest. Its first line is the pipeline that produced it,
   so a regeneration reviews as that pipeline plus upstream's change. The role's `CLAUDE.md`
@@ -357,7 +358,8 @@ Three things hold the ruling on the tree:
   ```
 
 - **No ownership flag.** Every `platform: k8s` entry is Flux's, so no key marks one (H1.9).
-- **No Ansible path.** `deploy.sh --tags <tag>` exits 5 for every k8s entry, and the GitOps deployer has applied no k8s role since D6.12.
+- **No Ansible path.** No local script applies a k8s entry: `promote` and Flux do, and
+  `land.sh` gates the tags a PR changed.
 
 D6's plan,
 [*The deletion policy, and the end of the handback*](target-architecture/deploy/d6-delete-old-path.md#the-deletion-policy-and-the-end-of-the-handback),
@@ -598,7 +600,7 @@ without `--field-manager=homelab-operator`, on a server-side apply without
 ## Bootstrapping Flux on a rebuilt cluster
 
 This section is the single owner of the bring-up and DR order. No Ansible path installs Flux,
-because the flux tag is flux-owned and `deploy.sh --tags flux` exits 5 (D5 step 29).
+because no local script applies the flux tag (D5 step 29).
 `docs/longhorn-disaster-recovery.md`, `docs/break-glass.md` and `docs/k3s-etcd-restore.md` link
 here rather than keep an order of their own. Every step is **operator-only**. The bootstrap
 drill, `.github/workflows/bootstrap-drill.yml`, rehearses this order on a throwaway kind

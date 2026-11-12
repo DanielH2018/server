@@ -26,7 +26,8 @@ Measured 2026-09-10 on `traefik:v3.7.12`, with `traefik_k8s_bouncer_plugin_versi
 (nonexistent) and `failureThreshold: 6` deployed for four minutes:
 
 - The pod never became Ready and the container restarted every ~30s, reaching restart 4 in
-  2m10s. `deploy.sh --tags traefik` failed at the rollout wait rather than reporting green.
+  2m10s. **HISTORY —** `deploy.sh --tags traefik`, the deploy path on that date, failed at
+  the rollout wait rather than reporting green.
 - `https://<podIP>:8443/.well-known/traefik-edge-selfcheck` returned 404 throughout, and every
   app router on the `https` entrypoint logged `invalid middleware
   "homelab-crowdsec@kubernetescrd" configuration: invalid middleware type or middleware does
