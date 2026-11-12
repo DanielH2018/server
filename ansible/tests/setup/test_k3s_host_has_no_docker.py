@@ -57,7 +57,7 @@ def test_has_docker_defaults_false_fleet_wide():
 
 
 def test_daniel_pi_opts_in_to_docker():
-    """The one host the containers_list plane still runs on says so itself."""
+    """The one host whose `compose_services` still run on Docker says so itself."""
     host_vars = _load(HOST_VARS / "daniel-pi.yml")
     assert host_vars.get("has_docker") is True, (
         "daniel-pi runs every remaining Compose service and must set `has_docker: true` "
@@ -73,34 +73,3 @@ def test_k3s_host_opts_out_of_docker(host):
         f"{host} runs k3s and must set `has_docker: false`. k3s brings its own "
         "containerd; Docker's iptables rules must not land alongside it."
     )
-
-
-def _docker_entries(containers_list) -> list[str]:
-    """The names of the entries a Docker play would deploy: `platform: docker`, or no
-    platform at all, since the deploy play's platform filter treats an absent key as Docker."""
-    return [
-        str(entry.get("name"))
-        for entry in containers_list or []
-        if isinstance(entry, dict) and entry.get("platform", "docker") != "k8s"
-    ]
-
-
-@pytest.mark.parametrize("host", K3S_HOSTS)
-def test_k3s_host_declares_no_docker_service(host):
-    """A `platform: docker` entry on a k3s node names a service the Docker play would try to
-    deploy on a host with no Docker."""
-    containers_list = _load(HOST_VARS / f"{host}.yml").get("containers_list")
-    assert _docker_entries(containers_list) == [], (
-        f"{host} has no Docker; move these entries to daniel-pi or to platform: k8s"
-    )
-
-
-def test_docker_entry_detector_flags_a_docker_platform_and_an_absent_one():
-    """Red-proof: the two shapes the deploy play sends to the Docker plane are both caught."""
-    assert _docker_entries(
-        [
-            {"name": "a", "platform": "docker"},
-            {"name": "b"},
-            {"name": "c", "platform": "k8s"},
-        ]
-    ) == ["a", "b"]

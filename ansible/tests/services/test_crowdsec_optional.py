@@ -34,6 +34,7 @@ from validate.k8s_manifests import (
 )
 
 from _k8s_render import host_context, render_role_template, traefik_static_config
+from lib.render_guard import containers_entries
 from lib.repo_paths import HOST_VARS
 
 _FLAGS = {
@@ -323,12 +324,16 @@ def _host_render(host: str, template: str, overrides: dict | None = None) -> str
 
 
 def _hosts_running_traefik() -> list[str]:
-    out = []
-    for host_vars in sorted(HOST_VARS.glob("*.yml")):
-        entries = load_yaml(host_vars).get("containers_list") or []
-        if any(c.get("name") == "traefik" for c in entries):
-            out.append(host_vars.stem)
-    return out
+    return [
+        path.stem
+        for path in sorted(HOST_VARS.glob("*.yml"))
+        if any(c.get("name") == "traefik" for c in containers_entries(path))
+    ]
+
+
+def test_the_edge_census_finds_daniel_box() -> None:
+    """An empty census turns the pairing test below into a skip, not a failure."""
+    assert "daniel-box" in _hosts_running_traefik()
 
 
 def has_bouncer(host: str, overrides: dict | None = None) -> bool:
