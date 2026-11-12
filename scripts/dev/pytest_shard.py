@@ -49,10 +49,10 @@ after its weight was recorded measured 45.67s against 0.48s, and the split packe
 
 A CACHE SHARED ACROSS MODULES IS A PER-WORKER COST, NOT A MODULE'S. Under xdist every worker
 builds `_k8s_render`'s render once and charges it to whichever module asks first, so its weight
-would vary from run to run. `ansible/tests/conftest.py` builds it when collection finishes,
-outside every test's timed phases, and its `# DECIDED:` comment has the numbers. `render_share`
-builds the fleet render there too, and `scripts/tests/conftest.py` the two census files' shared
-pass. `--summary` charges all three per shard, as `prebuild_seconds`.
+would vary from run to run. `ansible/tests/render_share.py` builds it when collection
+finishes, outside every test's timed phases, with the fleet render beside it, and its
+`# DECIDED:` has the numbers. `scripts/tests/conftest.py` runs the two census files' shared
+pass the same way. `--summary` charges all three per shard, as `prebuild_seconds`.
 
 The docs-refresh cron runs `--record-missing` itself, so gaps in the table fill without a human.
 
@@ -157,12 +157,13 @@ _PER_FILE_SECONDS = 0.028
 # 5-7s for the fleet render alone, and the rest about 17s for both. `--summary` adds them per
 # shard and `assign` does not: the fleet render is the only part a shard's membership changes,
 # and at 24 of about 660 runner seconds per shard it is below what the packing can resolve.
+# `render_share.build_each` runs the two on different workers, so a leg waits the longer one.
 K8S_RENDER_WALL_SECONDS = 11.0
 FLEET_RENDER_WALL_SECONDS = 6.0
 # The census rows' pass `scripts/tests/conftest.py` runs: CI's 16.0s on #7950's shard 6.
 CENSUS_PASS_WALL_SECONDS = 16.0
 CENSUS_FILE_PREFIX = "scripts/tests/test_census_rows_test_"
-# The xdist workers on each leg's runner, every one of which waits out both prebuilds.
+# The xdist workers on each leg's runner, every one of which waits out the prebuilds.
 CI_WORKERS = 4
 
 # The docs-refresh cron runs at 06:17 and 18:17. Two runs 12 hours apart always fall in
@@ -526,9 +527,10 @@ def fetch_runner_logs(runs: int, gh=gh_mod.gh) -> list[str]:
 def prebuild_seconds(members: list[str], repo: Path = REPO) -> float:
     """The runner seconds a shard of `members` spends in render prebuilds before its first test.
 
-    Every worker of a leg waits out each prebuild, so a render costs its wall time once per
-    worker. Every shard pays the k8s render, since each holds a few dozen of its readers. A
-    `render_share` consumer adds the fleet render, and a census file adds the census pass.
+    Every worker of a leg waits until the prebuilds finish, so they cost their wall time once
+    per worker. Every shard pays the k8s render, since each holds a few dozen of its readers. A
+    shard holding a `render_share` consumer renders the fleet on another worker meanwhile, so
+    it waits the longer of the two. A census file adds the census pass.
     """
     if not members:
         return 0.0
@@ -536,7 +538,7 @@ def prebuild_seconds(members: list[str], repo: Path = REPO) -> float:
 
     wall = K8S_RENDER_WALL_SECONDS
     if any(render_share.is_consumer(repo / f) for f in members):
-        wall += FLEET_RENDER_WALL_SECONDS
+        wall = max(wall, FLEET_RENDER_WALL_SECONDS)
     if any(f.startswith(CENSUS_FILE_PREFIX) for f in members):
         wall += CENSUS_PASS_WALL_SECONDS
     return wall * CI_WORKERS

@@ -17,6 +17,7 @@ import jinja2
 from lib import yaml_fast
 from _role_census import role_dirs
 from lib.render_context import render_context
+from render_share import shared_value
 from renderer.renderer_lib.bundle import KUSTOMIZATION
 from renderer.renderer_lib.cluster import play_context, render_tag, role_context
 from renderer.renderer_lib.environment import RenderError, render_file, renderer_env
@@ -68,16 +69,26 @@ _CACHE: tuple | None = None
 # second pass over the tree would double it. Only reachable through rendered_texts(), which
 # forces the render first.
 _TEXTS: list[tuple[str, str, str]] = []
+# The `render_share` key of the whole render. The tree is its only input.
+SHARE_KEY = ["k8s_rendered_docs"]
+
+
+def render() -> tuple[tuple, tuple]:
+    """The parsed docs and the texts `rendered_docs()` and `rendered_texts()` serve, rendered now."""
+    _TEXTS.clear()
+    docs = tuple(_render_all())
+    return docs, tuple(_TEXTS)
 
 
 def rendered_docs():
-    """The rendered manifests, rendering the tree at most once per process.
+    """The rendered manifests, rendering the tree at most once per run.
 
     A full render costs ~6s, so each call site paying it separately would add tens of
     seconds to the suite. The render is a pure function of the
-    repo tree, which no test writes to, so one result serves the whole session.
-    `ansible/tests/conftest.py` builds it through `prebuild()` when collection finishes, so
-    the cost lands outside every test's timed phases.
+    repo tree, which no test writes to, so one result serves the whole session. Under xdist
+    one worker renders and the rest read its pickle through `render_share`. The
+    `render_share` plugin builds it when collection finishes, so the cost lands outside every
+    test's timed phases.
 
     # DECIDED: shared docs, not deep copies. Every call site iterates and asserts; none mutates
     # a doc, and copying 323 dicts per call would spend a slice of what the cache saves. A test
@@ -86,8 +97,9 @@ def rendered_docs():
     """
     global _CACHE
     if _CACHE is None:
-        _TEXTS.clear()
-        _CACHE = tuple(_render_all())
+        docs, texts = shared_value(SHARE_KEY, render)
+        _TEXTS[:] = texts
+        _CACHE = docs
     return iter(_CACHE)
 
 

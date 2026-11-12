@@ -43,10 +43,30 @@ def _computed(counter: Path) -> int:
     return len(counter.read_text().splitlines()) if counter.exists() else 0
 
 
-def _run_pair(tmp_path: Path, env_extra: dict[str, str]) -> int:
-    """How many times two overlapping children computed the same key."""
+# Two keys, each slow enough that two children started together overlap on the first one.
+_BUILD_EACH_CHILD = """
+import os, sys, time
+sys.path.insert(0, sys.argv[1])
+import render_share
+
+def compute(name):
+    def run():
+        with open(sys.argv[2], "a") as counter:
+            counter.write(f"{name} {os.getpid()}\\n")
+        time.sleep(2)
+        return name
+    return run
+
+render_share.build_each([(["a"], compute("a")), (["b"], compute("b"))])
+assert render_share.shared_value(["a"], compute("a")) == "a"
+assert render_share.shared_value(["b"], compute("b")) == "b"
+"""
+
+
+def _run_pair(tmp_path: Path, env_extra: dict[str, str], source: str = _CHILD) -> int:
+    """How many times two overlapping children computed, over every key."""
     script = tmp_path / "child.py"
-    script.write_text(_CHILD)
+    script.write_text(source)
     counter = tmp_path / "counter"
     env = {k: v for k, v in os.environ.items() if k != render_share.RUN_ID_ENV}
     env.update(TMPDIR=str(tmp_path), **env_extra)
@@ -68,6 +88,27 @@ def test_two_processes_sharing_one_run_id_compute_once(tmp_path):
 
 def test_two_processes_with_no_run_id_each_compute_their_own(tmp_path):
     assert _run_pair(tmp_path, {}) == 2
+
+
+def test_two_processes_building_two_keys_each_build_one(tmp_path):
+    assert (
+        _run_pair(tmp_path, {render_share.RUN_ID_ENV: "one-run"}, _BUILD_EACH_CHILD)
+        == 2
+    )
+    builders = dict(
+        line.split() for line in (tmp_path / "counter").read_text().splitlines()
+    )
+    assert sorted(builders) == ["a", "b"]
+    assert builders["a"] != builders["b"]
+
+
+def test_a_build_that_raises_publishes_nothing_and_does_not_escape(tmp_path):
+    def broken():
+        raise AssertionError("widget/deployment.yaml.j2 failed to render: boom")
+
+    render_share.build_each([(["broken"], broken), (["k"], lambda: 1)], root=tmp_path)
+    assert len(list(tmp_path.glob("*.pickle"))) == 1
+    assert render_share.shared_value(["k"], lambda: 2, root=tmp_path) == 1
 
 
 def test_different_keys_compute_separately(tmp_path):
@@ -175,24 +216,34 @@ def test_the_consumer_census_finds_every_known_reader_of_the_fleet_render():
     assert found == KNOWN_CONSUMERS
 
 
-def test_a_run_that_collected_a_consumer_builds_the_render(tmp_path):
+_FLEET = (["fleet"], lambda: "fleet")
+
+
+def test_a_run_that_collected_a_consumer_builds_the_fleet_render(tmp_path):
     consumer = tmp_path / "test_reads.py"
     # Built from the constant: the literal here would make this module a consumer too.
     consumer.write_text(f"{render_share.CONSUMER_IMPORT} placeholder_renderer\n")
     other = tmp_path / "test_other.py"
     other.write_text("import render_share\n")
-    built = []
-    assert render_share.build_if_consumed({other, consumer}, lambda: built.append(1))
-    assert built == [1]
+    assert render_share.prebuilds({other, consumer}, {}, lambda: _FLEET) == [_FLEET]
 
 
-def test_a_run_that_collected_no_consumer_builds_nothing(tmp_path):
+def test_a_run_that_collected_no_reader_builds_nothing(tmp_path):
     other = tmp_path / "test_other.py"
     other.write_text("import render_share\n")
-    built = []
     missing = tmp_path / "test_gone.py"
-    assert not render_share.build_if_consumed({other, missing}, lambda: built.append(1))
-    assert built == []
+    assert render_share.prebuilds({other, missing}, {}, lambda: _FLEET) == []
+
+
+def test_a_run_that_imported_the_k8s_render_builds_it_first(tmp_path):
+    k8s_render = SimpleNamespace(SHARE_KEY=["k8s"], render=lambda: "k8s")
+    modules = {"_k8s_render": k8s_render}
+    consumer = tmp_path / "test_reads.py"
+    consumer.write_text(f"{render_share.CONSUMER_IMPORT} placeholder_renderer\n")
+    assert render_share.prebuilds({consumer}, modules, lambda: _FLEET) == [
+        (["k8s"], k8s_render.render),
+        _FLEET,
+    ]
 
 
 _WITH_XDIST = SimpleNamespace(hasplugin=lambda name: True)
