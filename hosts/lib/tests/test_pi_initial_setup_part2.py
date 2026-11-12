@@ -30,8 +30,8 @@ TIMERS = {
     "Clean unused Docker images": "homelab-docker-prune.timer",
     "Weekly rkhunter malware scan": "homelab-rkhunter-check.timer",
 }
-# Retired with no replacement: the Pi's AIDE scan outgrew its memory and reset the board
-# (integrity_scans_aide_unscheduled_hosts).
+# Retired with no replacement: the Pi's AIDE scan outgrew its memory and reset the board, so its
+# package lists no aide-scan (#8084).
 UNSCHEDULED = {"Weekly AIDE file integrity check": "homelab-aide-check.timer"}
 LAN = "allow from {lan} to any port 22 proto tcp"
 
@@ -68,25 +68,18 @@ def test_each_cron_the_role_once_wrote_is_retired_and_a_timer_replaces_it(
         assert f"/usr/lib/systemd/system/{timer}" in package.files
     for timer in UNSCHEDULED.values():
         assert timer not in manifest["enable_links"]
+        assert f"/usr/lib/systemd/system/{timer}" not in package.files
 
 
-def test_the_unscheduled_aide_scan_leaves_no_stale_verdict(manifest):
-    """A leftover textfile keeps its deadline, so HostCheckOverdue would page a week later."""
-    stale = "/var/lib/node-exporter-textfile/aide-check.prom"
-    assert stale in {e.get("path") for e in manifest["legacy"]}
+def test_the_package_ships_rkhunter_and_no_aide(package):
+    """The package lists no aide-scan, so apt autoremove removes aide and aide-common."""
+    assert "rkhunter" in package.depends
+    assert {"aide", "aide-common"}.isdisjoint(package.depends)
 
 
-def test_the_scan_packages_install_with_their_config_under_no_install_recommends(
-    package,
-):
-    # The updater installs with --no-install-recommends, and aide only Recommends aide-common,
-    # which ships aide.conf, the aide.conf.d directory the exclusions land in, and aideinit.
-    assert {"rkhunter", "aide", "aide-common"} <= set(package.depends)
-
-
-def test_the_scans_source_the_check_library_and_load_no_credential(package):
+def test_the_scan_sources_the_check_library_and_loads_no_credential(package):
     # M6 batch B9's Cutover-2 dropped the pushes and its token PR retired the keys.
-    for scan in ("rkhunter", "aide"):
+    for scan in ("rkhunter",):
         script = _text(package, f"/usr/lib/homelab/{scan}-check")
         assert "source /usr/lib/homelab/homelab-check-lib.sh ||" in script
         assert "kuma-push-lib.sh" not in script

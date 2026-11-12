@@ -1,4 +1,4 @@
-# Shipped by the host package's integrity-scans component with its enable link. Monday 03:00, the
+# Shipped by the host package's aide-scan component with its enable link. Monday 03:00, the
 # cron's slot. Persistent runs a slot missed while the timer was stopped, as a package upgrade
 # stops it, at the next start.
 [Unit]

@@ -1,46 +1,38 @@
-# The weekly rkhunter scan and AIDE check (H7.7a, docs/target-architecture/host/h7-delete-ansible.md).
-# initial_setup installed both scanners, wrote their config and scripts, and ran each from a root
-# cron. The package ships the same files and runs each script from a timer at the cron's slot.
+# The weekly rkhunter scan (H7.7a, docs/target-architecture/host/h7-delete-ansible.md).
+# initial_setup installed rkhunter and AIDE, wrote their config and scripts, and ran each from a
+# root cron. This component ships rkhunter's files and runs its script from a timer at the cron's
+# slot. AIDE is the aide-scan component, which a host package lists only where the scan fits.
+# The legacy entries below retire both Ansible-era crons on every host, AIDE's included.
 #
-# No unit loads a credential: each scan writes a textfile, and that is its only verdict.
+# No unit loads a credential: the scan writes a textfile, and that is its only verdict.
 #
-# What the component leaves to bootstrap: hosts/bootstrap-host.sh step 7 runs these once on a
-# host whose package ships the two timers, and the live hosts already hold all three.
-#
-# - The first baselines: `rkhunter --propupd` and `aideinit`, each guarded by the file it
-#   creates. DECIDED: bootstrap, never a `ConditionPathExists=!` oneshot in this package (#6674).
-#   A oneshot would rebaseline any host whose database went missing, so a deleted aide.db would
-#   turn into a fresh, trusted one instead of a DOWN push. Bootstrap refuses the same case: a
-#   missing database on a host whose rkhunter or aideinit log survives needs `--rebaseline`,
-#   unless bootstrap's own `.pending` marker shows the log is its unfinished first init.
-# - The mask on the aide package's dailyaidecheck.timer, which would run a second, nightly full
-#   scan. A mask is a symlink in /etc/systemd/system, outside what a package owns.
+# What the component leaves to bootstrap: hosts/bootstrap-host.sh step 7 runs the first baseline,
+# `rkhunter --propupd`, once on a host whose package ships the timer, guarded by the file it
+# creates. DECIDED: bootstrap, never a `ConditionPathExists=!` oneshot in this package (#6674).
+# Bootstrap refuses a missing database on a host whose rkhunter log survives, unless its own
+# `.pending` marker shows the log is its unfinished first init; that case needs `--rebaseline`.
 #
 # DECIDED: no `rkhunter --update` (#6964). The package keeps Debian's no-download posture:
 # the distribution's /etc/rkhunter.conf sets `UPDATE_MIRRORS=0`, `MIRRORS_MODE=1` and
 # `WEB_CMD="/bin/false"`, which rkhunter 1.4.6 rejects as a relative pathname, so an update can
 # only fail. Setting a working `WEB_CMD` would let rkhunter fetch as root on every host.
 #
-# Autonomous-role contract (each scan runs weekly with no human in the loop, and the rkhunter
-# baseline refresh runs after every dpkg run). Both scans read the filesystem and report; the AIDE
-# check also advances its own baseline. The refresh advances rkhunter's baseline, outside apt's
-# lock, by the same `rkhunter --propupd` that rkhunter's APT_AUTOGEN hook ran inside it (#7680).
+# Autonomous-role contract (the scan runs weekly with no human in the loop, and the baseline
+# refresh runs after every dpkg run). The scan reads the filesystem and reports. The refresh
+# advances rkhunter's baseline, outside apt's lock, by the same `rkhunter --propupd` that
+# rkhunter's APT_AUTOGEN hook ran inside it (#7680).
 #
-# - Scope / exclusions: `rkhunter --check`, `aide --update` and `rkhunter --propupd` at idle CPU
-#   and IO priority, and
-#   the `rkhunter-check` and `aide-check` textfiles in node_exporter's textfile directory. The AIDE check moves `aide.db.new` over `aide.db` after
-#   a run whose every difference a package explains (#4599). It never advances on a DOWN, and
-#   never creates an `aide.db` that is missing. Nothing reaches another host.
-# - Mode (explicit and reversible): each timer's enable link arms it. Dropping the component from a
-#   host package stops both timers on the install that drops it, and a host in
-#   `integrity_scans_aide_unscheduled_hosts` gets no AIDE enable link at all. A DOWN on an unexplained change stays DOWN until an operator reviews it and
-#   runs `/usr/lib/homelab/aide-check --accept`.
-# - Authoritative sources: AIDE's own exit code and report, dpkg's file lists and digests, and
-#   rkhunter's log summary; each script's header has why the exit code alone cannot say.
-# - Abort valves: a DOWN advances no baseline, and a missing `aide.db` stays missing.
-# - Required evidence, every run: an `aide-check` or `rkhunter-check` line in the journal and the
-#   textfile the `host-checks` rule group reads (#6168). Each refresh logs a
-#   `rkhunter baseline refreshed` line under the `rkhunter-propupd` tag.
+# - Scope / exclusions: `rkhunter --check` and `rkhunter --propupd` at idle CPU and IO priority,
+#   and the `rkhunter-check` textfile in node_exporter's textfile directory. Nothing reaches
+#   another host.
+# - Mode (explicit and reversible): the timer's enable link arms it. Dropping the component from a
+#   host package stops the timer on the install that drops it.
+# - Authoritative sources: rkhunter's log summary; the script's header has why the exit code
+#   alone cannot say.
+# - Abort valves: the scan advances no baseline.
+# - Required evidence, every run: an `rkhunter-check` line in the journal and the textfile the
+#   `host-checks` rule group reads (#6168). Each refresh logs a `rkhunter baseline refreshed`
+#   line under the `rkhunter-propupd` tag.
 defaults:
   integrity_scans_host_lib_dir: /usr/lib/homelab
   # rkhunter reads PermitRootLogin from the main sshd_config only and never follows its Include.
@@ -50,33 +42,14 @@ defaults:
   # the Pi's does not, and its live rkhunter.conf.local reads `unset` (2026-10-30).
   integrity_scans_sshd_main_file_sets_root_login: [daniel-box, daniel-server]
   integrity_scans_rkhunter_allow_ssh_root_user: "{{ 'no' if inventory_hostname in integrity_scans_sshd_main_file_sets_root_login else 'unset' }}"
-  # The hosts whose AIDE scan must fit in little memory: sha256 only, and no /usr/src
-  # (98_aide_local.conf.j2 has the measurement).
-  integrity_scans_aide_lean_hosts: [daniel-pi]
-  integrity_scans_aide_lean: "{{ inventory_hostname in integrity_scans_aide_lean_hosts }}"
-  # The hosts whose weekly AIDE scan stays unscheduled. daniel-pi's lean scan still outgrew its
-  # 456 MB: swap reached 614 MB and the watchdog reset the board 54 minutes in (2026-11-12).
-  # The unit and script still ship, so an operator can run one by hand.
-  integrity_scans_aide_unscheduled_hosts: [daniel-pi]
 depends:
   - rkhunter
-  - aide
-  # aide only Recommends it, and the updater installs with --no-install-recommends. It ships
-  # /etc/aide/aide.conf, the aide.conf.d directory the exclusions land in, and aideinit.
-  - aide-common
-  # The AIDE check reads homelab-secrets' manifest for the secret links it accepts.
-  - jq
 files:
   # A regular file, not a link: rkhunter skips a symlinked .local file.
   - {src: templates/rkhunter.conf.local.j2, dst: /etc/rkhunter.conf.local}
-  # No dot in the name: aide.conf includes conf.d names matching ^[a-zA-Z0-9_-]+$ only (#5785).
-  - {src: templates/98_aide_local.conf.j2, dst: /etc/aide/aide.conf.d/98_aide_local}
   - {src: templates/rkhunter-check.sh.j2, dst: /usr/lib/homelab/rkhunter-check, mode: "0755"}
-  - {src: templates/aide-check.sh.j2, dst: /usr/lib/homelab/aide-check, mode: "0755"}
   - {src: units/homelab-rkhunter-check.service.j2, dst: /usr/lib/systemd/system/homelab-rkhunter-check.service}
   - {src: units/homelab-rkhunter-check.timer, dst: /usr/lib/systemd/system/homelab-rkhunter-check.timer}
-  - {src: units/homelab-aide-check.service.j2, dst: /usr/lib/systemd/system/homelab-aide-check.service}
-  - {src: units/homelab-aide-check.timer, dst: /usr/lib/systemd/system/homelab-aide-check.timer}
   # The baseline refresh after every package change (#7680). The hook starts the unit without
   # blocking. The unit needs no enable link, because only the hook starts it.
   - {src: templates/91homelab-rkhunter-propupd, dst: /etc/apt/apt.conf.d/91homelab-rkhunter-propupd}
@@ -84,7 +57,6 @@ files:
   - {src: units/homelab-rkhunter-propupd.service, dst: /usr/lib/systemd/system/homelab-rkhunter-propupd.service}
 enable:
   homelab-rkhunter-check.timer: timers.target
-  homelab-aide-check.timer: {target: timers.target, when: "inventory_hostname not in integrity_scans_aide_unscheduled_hosts"}
 lines:
   # The weekly scan flags only changes no package event explains, because the refresh unit above
   # rebaselines after every dpkg run. rkhunter's own 90rkhunter hook ran that refresh inside apt
@@ -98,6 +70,3 @@ legacy:
   - {path: /usr/local/bin/aide-check.sh}
   - {path: /var/lib/homelab/setup-render-manifest.d/rkhunter-check}
   - {path: /var/lib/homelab/setup-render-manifest.d/aide-check}
-  # An unscheduled host's last verdict, which HostCheckOverdue would otherwise page once its
-  # deadline passed.
-  - {path: /var/lib/node-exporter-textfile/aide-check.prom, when: "inventory_hostname in integrity_scans_aide_unscheduled_hosts"}

@@ -18,7 +18,7 @@
 # and login hardening. No file needs a credential.
 #
 # Since H7.32 it ships the rest of initial_setup's subjects, the same components as daniel-pi and
-# daniel-server: the fail2ban group (fail2ban, integrity-scans for rkhunter and AIDE, postfix and
+# daniel-server: the fail2ban group (fail2ban, integrity-scans for rkhunter and aide-scan for AIDE, postfix and
 # accounting), the maintenance timers (host-maintenance: the weekly reboot, apt autoremove, dpkg
 # purge and, as `has_fwupd` is true only here, the firmware update; this host has no Docker) and
 # ufw (ssh-firewall). The scans and the reboot read one more credential,
@@ -73,6 +73,7 @@ components:
   - check-lib
   - fail2ban
   - integrity-scans
+  - aide-scan
   - postfix
   - accounting
   - host-maintenance

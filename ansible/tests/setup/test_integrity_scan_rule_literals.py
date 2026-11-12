@@ -2,8 +2,8 @@
 
 `files/rules/host-checks.yaml` is plain YAML, so each NotReporting rule carries its deadline as a
 literal twice: the `>` of the stale-file arm and the `[<n>s]` window of the absent_over_time arm.
-One DEADLINE_S pins the rule of every host whose package schedules that scan; daniel-pi
-schedules no AIDE scan, and a rule paging for it is flagged. A timer moved without its
+One DEADLINE_S pins the rule of every host whose package ships that scan's timer; daniel-pi's
+lists no aide-scan, and a rule paging for a host with no timer is flagged. A timer moved without its
 rules fails here rather than paging on every healthy week (M1 convention 1). The DEADLINE_S
 equalled the interval of the Kuma tile the rules shadowed until M6 batch B9's Cutover-1a deleted
 the tiles.
@@ -15,6 +15,7 @@ import re
 
 import pytest
 from _helpers import K8S_ROLES
+from _host_packages import package
 from _shell_render import render_shell_script
 from lib import yaml_fast
 
@@ -23,31 +24,37 @@ HOSTS = ["daniel-box", "daniel-server", "daniel-pi"]
 # A bare `>` comparison: `>=` and `==` are not the stale-file arm.
 STALE_ARM = re.compile(r"(?<![<>=!])>(?!=)\s*(\d+)")
 WINDOW = re.compile(r"absent_over_time\([^)]*\[(\d+)s\]\)")
-# Alert prefix -> (template, the `check` label its textfile carries).
+# Alert prefix -> (component, template, the `check` label its textfile carries, its timer).
 PRODUCERS = {
-    "AideCheck": ("aide-check.sh.j2", "aide-check"),
-    "RkhunterScan": ("rkhunter-check.sh.j2", "rkhunter-check"),
+    "AideCheck": (
+        "aide-scan",
+        "aide-check.sh.j2",
+        "aide-check",
+        "homelab-aide-check.timer",
+    ),
+    "RkhunterScan": (
+        "integrity-scans",
+        "rkhunter-check.sh.j2",
+        "rkhunter-check",
+        "homelab-rkhunter-check.timer",
+    ),
 }
 
 
-COMPONENT = (
-    K8S_ROLES.parents[2] / "hosts" / "components" / "integrity-scans" / "component.yml"
-)
-
-
 def scheduled_hosts() -> dict[str, list[str]]:
-    """Alert prefix -> the hosts whose package schedules that scan, so carry its rules."""
-    defaults = yaml_fast.safe_load(COMPONENT.read_text())["defaults"]
-    unscheduled = set(defaults["integrity_scans_aide_unscheduled_hosts"])
+    """Alert prefix -> the hosts whose package ships that scan's timer, so carry its rules."""
     return {
-        "AideCheck": [h for h in HOSTS if h not in unscheduled],
-        "RkhunterScan": list(HOSTS),
+        prefix: [
+            h for h in HOSTS if f"/usr/lib/systemd/system/{spec[3]}" in package(h).files
+        ]
+        for prefix, spec in PRODUCERS.items()
     }
 
 
-def rendered_deadline(template: str) -> int:
-    """DEADLINE_S as the scan script renders it."""
-    body = render_shell_script("components", "integrity-scans", template)
+def rendered_deadline(prefix: str) -> int:
+    """DEADLINE_S as the scan's script renders it."""
+    component, template = PRODUCERS[prefix][:2]
+    body = render_shell_script("components", component, template)
     [deadline] = re.findall(r"^\s*DEADLINE_S=(\d+)$", body, re.M)
     return int(deadline)
 
@@ -69,7 +76,7 @@ def literal_problems(rules: dict[tuple[str, str], str], deadlines: dict[str, int
     """Why a rule's deadline literals differ from its scan's DEADLINE_S, or nothing."""
     problems = []
     scheduled = scheduled_hosts()
-    for prefix, (_, check) in PRODUCERS.items():
+    for prefix, (_, _, check, _) in PRODUCERS.items():
         for host in HOSTS:
             expr = rules.get((prefix, host))
             if host not in scheduled[prefix]:
@@ -100,7 +107,7 @@ def literal_problems(rules: dict[tuple[str, str], str], deadlines: dict[str, int
 
 
 def shipped_deadlines() -> dict[str, int]:
-    return {prefix: rendered_deadline(spec[0]) for prefix, spec in PRODUCERS.items()}
+    return {prefix: rendered_deadline(prefix) for prefix in PRODUCERS}
 
 
 def test_literal_problems_is_clean_on_the_shipped_rules():
@@ -139,8 +146,8 @@ def test_literal_problems_is_flagged_when_a_deadline_moves_without_its_rules():
 
 @pytest.mark.parametrize("prefix", sorted(PRODUCERS))
 def test_each_scan_writes_the_check_its_rules_read_with_its_deadline(prefix):
-    template, check = PRODUCERS[prefix]
-    body = render_shell_script("components", "integrity-scans", template)
+    component, template, check, _ = PRODUCERS[prefix]
+    body = render_shell_script("components", component, template)
     assert re.search(
         rf'write_check_textfile {re.escape(check)} ".*" "\$DEADLINE_S"', body
     ), f"{template} does not write the {check} textfile its rules read"

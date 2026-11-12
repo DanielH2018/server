@@ -158,7 +158,7 @@ def test_no_host_package_ships_a_kuma_push_library(host):
 
 
 @pytest.mark.parametrize(
-    "script", ["pi-sd-health", "pi-recovery-health", "aide-check", "rkhunter-check"]
+    "script", ["pi-sd-health", "pi-recovery-health", "rkhunter-check"]
 )
 def test_no_pi_script_sources_the_retired_push_library(package, script):
     assert "kuma-push-lib.sh" not in _text(package, f"{LIB}/{script}")
