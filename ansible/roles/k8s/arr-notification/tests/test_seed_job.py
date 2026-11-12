@@ -253,13 +253,19 @@ def test_a_second_run_changes_nothing(flipped, tmp_path, app, start):
     try:
         first = _run(flipped[app], tmp_path, arr)
         assert first.returncode == 0, first.stderr
-        assert first.stdout.splitlines()[-1] == "SEED_CHANGED: 1"
+        (decision,) = first.stdout.splitlines()
+        assert decision.startswith(
+            f"{app}: {DEFAULTS['arr_notification_name']!r} "
+            + ("created" if start == "no-row" else "updated")
+        )
         assert arr.writes == ["POST" if start == "no-row" else "PUT"]
         second = _run(flipped[app], tmp_path, arr)
     finally:
         arr.close()
     assert second.returncode == 0, second.stderr
-    assert second.stdout.splitlines()[-1] == "SEED_CHANGED: 0"
+    assert second.stdout.splitlines() == [
+        f"{app}: {DEFAULTS['arr_notification_name']!r} already declares this spec — no change"
+    ]
     assert len(arr.writes) == 1
     (row,) = arr.rows
     assert sorted(k for k in row if k.startswith("on") and row[k]) == sorted(
