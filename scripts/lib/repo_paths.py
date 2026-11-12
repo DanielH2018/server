@@ -8,7 +8,7 @@ module imports nothing, so there is no reason left to inline the arithmetic.
 
 Every path is absolute and resolved, so a script run from any cwd -- a cron, a prek hook,
 a worktree under ``.claude/worktrees/`` -- reads the checkout it lives in, never the one
-the shell happens to be in. That is the property ``deploy.sh`` relies on when it renders
+the shell happens to be in. That is the property a landing relies on when it runs
 from the worktree it was invoked from.
 
 Import it through the same bootstrap as any other ``lib`` module::

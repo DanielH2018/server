@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-11-12 15:10 UTC
-generated_sha: 0d7821e53
+generated_at: 2026-11-12 18:17 UTC
+generated_sha: 3febc5ec5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 0d7821e53
 
 # Secrets
 
-109 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+111 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -63,6 +63,9 @@ needs a human to mint the new value in the app, then `sops set` it.
 | `code_server_sudo_password` | 2026-08-30 | 2027-08-14 | 275 |
 | `crowdsec_k8s_agent_password` | 2026-05-23 | 2027-05-14 | 183 |
 | `crowdsec_k8s_bouncer_api_key` | 2025-12-14 | 2026-11-19 | 7 |
+| `flux_github_app_id` | 2026-10-28 | 2027-10-24 | 346 |
+| `flux_github_app_installation_id` | 2026-04-06 | 2027-03-08 | 116 |
+| `flux_github_app_private_key` | 2026-05-21 | 2027-05-18 | 187 |
 | `freshrss_password` | 2026-06-01 | 2027-05-03 | 172 |
 | `google_assistant_project_id` | 2026-06-25 | 2027-05-31 | 200 |
 | `google_assistant_service_account` | 2025-12-31 | 2026-12-08 | 26 |
@@ -125,7 +128,6 @@ lives in a third-party system; rotate there first.
 | `coinmarket_api_key` | 2026-08-30 | 2027-08-29 | 290 |
 | `crowdsec_discord_webhook_url` | 2026-03-17 | 2027-03-14 | 122 |
 | `crowdsec_mapquest_api_key` | 2026-04-05 | 2027-03-28 | 136 |
-| `flux_github_status_token` | 2026-10-12 | 2027-09-16 | 308 |
 | `gitops_deploy_discord_webhook` | 2026-10-04 | 2027-09-07 | 299 |
 | `healthchecks_discord_webhook_url` | 2026-04-17 | 2027-04-05 | 144 |
 | `homelab_builder_github_token` | 2026-05-31 | 2027-05-21 | 190 |

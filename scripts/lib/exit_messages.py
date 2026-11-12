@@ -10,7 +10,7 @@ Typical usage example:
 
     from lib.exit_messages import die
 
-    die("scripts/deploy.sh", DEPLOY_STALE, "the checkout is behind origin")
+    die("scripts/deploy_tools/land.sh", LAND_FAILED, "the PR was closed unmerged")
 """
 
 import sys as _sys
@@ -30,14 +30,13 @@ from lib.exit_codes import contract
 # `land.sh` prints `VERDICT: <verdict> (<detail>)` as its last line. `fanout_status.py` and the
 # `land-after-merge` wait both find a landing's outcome by grepping `^VERDICT:`.
 #
-# DECIDED: deploy.sh and probe.py print that same shape under their OWN
-# prefix rather than under `VERDICT:`. A landing's logfile can carry their lines ABOVE its
-# verdict -- and `grep -m1 '^VERDICT:'` takes the FIRST match, which would report theirs as the
+# DECIDED: probe.py prints that same shape under its OWN
+# prefix rather than under `VERDICT:`. A landing's logfile can carry its lines ABOVE its
+# verdict -- and `grep -m1 '^VERDICT:'` takes the FIRST match, which would report its line as the
 # landing's on every landing, with nothing failing. One format, a prefix per entry point, one renderer.
 # Issue #2853 asked for a bare `VERDICT:` from all three; the PR that closed it carries the
 # measurement.
 VERDICT_PREFIXES = {
-    "scripts/deploy.sh": "DEPLOY-VERDICT",
     "scripts/deploy_tools/land.sh": "VERDICT",
     # A landing runs `probe.py health` and its stdout can reach the landing's log, so the probe
     # takes its own prefix for the reason the DECIDED note above gives.
@@ -49,7 +48,7 @@ def verdict_line(entry_point: str, rc: int, detail: str) -> str | None:
     """`<PREFIX>: <verdict> (<detail>)` for `rc`, or None when the code names no verdict.
 
     The outermost tool an operator ran is the one whose prefix is bare `VERDICT`; see the
-    DECIDED note above for why the inner two are not.
+    DECIDED note above for why the inner one is not.
     """
     prefix = VERDICT_PREFIXES.get(entry_point)
     for code in contract(entry_point):

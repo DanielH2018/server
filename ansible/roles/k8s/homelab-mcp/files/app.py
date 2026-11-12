@@ -140,7 +140,7 @@ def _prom_rows(promql: str) -> list[dict]:
     """A Prometheus instant query as {metric labels, value} rows.
 
     Every Prometheus and Loki read here goes through obs_api, the client probe.py shares
-    (`scripts/diagnostics/probe_lib/obs_api.py`, shipped into this image by tasks/main.yml).
+    (`scripts/diagnostics/probe_lib/obs_api.py`, shipped into this image by defaults/main.yml).
     """
     return safe_reads.parse_metric(
         obs_api.get_json(obs_api.prom_query_url(PROMETHEUS, promql))

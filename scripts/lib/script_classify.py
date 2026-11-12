@@ -148,7 +148,7 @@ def _argv_references(nodes: list[ast.AST]) -> set[str]:
     itself, and a `See scripts/diagnostics/probe.py` in a docstring is a mention.
 
     The string must be a bare path and nothing else. `session-health.py` carries the
-    sentence "…the staleness gate (scripts/deploy_tools/deploy_lib/staleness.py, exit 4)…" in a
+    sentence "…the staleness gate (scripts/deploy_tools/land_lib/classify.py, exit 4)…" in a
     string it prints, and reading that as an invocation would put a deploy gate behind a session hook.
 
     A dict key is skipped too. It names a file as data, never as an argv element: the
@@ -331,16 +331,10 @@ def _invocation_sites(repo: Path) -> list[tuple[Path, str, str]]:
     for path in _claude_hook_files(repo):
         sites.append((path, "gate", f"Claude hook: {path.name}"))
 
-    # deploy.sh is the interactive deploy path: what it runs, every deploy runs.
-    deploy = repo / "scripts" / "deploy.sh"
-    if deploy.is_file():
-        sites.append((deploy, "gate", "every deploy (deploy.sh)"))
-
     ansible = repo / "ansible"
     # `files/*/*` reaches a package a role ships from a subdirectory, such as gitops_deploy's
     # `files/deployer_lib/` (#4355).
     patterns = (
-        "roles/**/tasks/*.yml",
         "roles/**/templates/*",
         "roles/**/files/*",
         "roles/**/files/*/*",
@@ -353,10 +347,6 @@ def _invocation_sites(repo: Path) -> list[tuple[Path, str, str]]:
                 continue
             rel = path.relative_to(repo).as_posix()
             sites.append((path, "gate", f"deploy: {rel}"))
-
-    # A top-level playbook or bring-up script is something a person runs on purpose.
-    for path in sorted(ansible.glob("*.yml")) + sorted(ansible.glob("*.sh")):
-        sites.append((path, "adhoc", f"playbook: {path.relative_to(repo).as_posix()}"))
 
     return sites
 
@@ -429,30 +419,17 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     catalogue = candidates(scripts)
     by_path = {p.name: p for p in catalogue}
     invoked = functools.cache(lambda path: _invoked_by(path, by_path))
-    roles = repo / "ansible" / "roles"
     for path, kind, evidence in _invocation_sites(repo):
         for script in invoked(path):
-            # A role's tasks naming a Python module with no `__main__` guard carry it into an
-            # image rather than run it: homelab-mcp's ship `obs_api.py` as a library.
-            # A hook, or a role's own `files/` runner, naming one still runs it.
-            if (
-                path.is_relative_to(roles)
-                and path.parent.name == "tasks"
-                and script.endswith(".py")
-                and not shape(by_path[script])[0]
-            ):
-                record(script, "library", f"no `__main__` guard; carried by {evidence}")
-                continue
             record(script, kind, evidence)
 
     imported = importers(scripts)
     for stem, callers in imported.items():
         record(f"{stem}.py", "library", f"imported by {', '.join(sorted(callers))}")
 
-    # A SCRIPT another one imports and calls in process -- `deploy_lib/run.py` running
-    # `staleness.main` on every deploy -- runs as often as that caller does, exactly as
-    # it did when the caller spawned it. Only a module with its own `__main__` guard counts:
-    # a plain library module has no run of its own to inherit.
+    # A SCRIPT another one imports and calls in process runs as often as that caller does,
+    # exactly as it did when the caller spawned it. Only a module with its own `__main__`
+    # guard counts: a plain library module has no run of its own to inherit.
     entry_points = {
         stem
         for stem in imported
@@ -463,10 +440,8 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
         for caller in imported[stem]:
             runs_in_process.setdefault(caller, set()).add(f"{stem}.py")
 
-    # A dispatcher's target -- `deploy_cli.py` calling `deploy_lib/run.py`'s `main` -- has a
-    # module-level `main` and no guard. It stays a library itself, since no person runs it,
-    # but what it runs is credited to its importer, so `staleness.py` and the
-    # `detach_notify.py` it spawns still run on every deploy (#4347).
+    # A dispatcher's target has a module-level `main` and no guard. It stays a library itself,
+    # since no person runs it, but what it runs is credited to its importer (#4347).
     for stem, stem_callers in imported.items():
         path = by_path.get(f"{stem}.py")
         # A dispatch target: a module-level `main` and no `__main__` guard.

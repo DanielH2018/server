@@ -35,8 +35,8 @@ files:
   - {src: units/worktree-holders@.service, dst: /usr/lib/systemd/system/worktree-holders@.service, when: has_claude_code}
 enable:
   worktree-holders.socket: {target: sockets.target, when: has_claude_code}
-# What initial_setup installed. The role's old sudoers rule stays its own task until the absent
-# arms of tasks/crons.yml move (H7.58 to H7.60).
+# What initial_setup installed. Each host package's legacy list retires the old sudoers rule
+# (H7.60).
 legacy:
   - {path: /etc/systemd/system/worktree-holders.socket}
   - {path: /etc/systemd/system/worktree-holders@.service}

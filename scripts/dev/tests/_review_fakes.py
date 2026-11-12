@@ -12,8 +12,6 @@ from fanout_lib.target import SERVER_TARGET
 
 PR = "https://github.com/DanielH2018/server/pull/4000"
 BRANCH = "worktree-batch-1345"
-# What `secret_bearing_host_paths.py` prints: `dest<TAB>name,name` per line.
-SECRET_LISTING = "/usr/local/bin/a.sh\tone_token,two_token\n"
 ISSUES = [Issue(1345, "Traefik startupProbe has no red-proof", "body one")]
 
 
@@ -174,9 +172,6 @@ class FakeRunner:
             return subprocess.CompletedProcess(argv, 0, "", "")
         if argv[0] == "bash":
             return self._landing(argv)
-        if argv[0] == "uv":
-            self.derived = argv
-            return subprocess.CompletedProcess(argv, 0, SECRET_LISTING, "")
         phase = (self.worktree / ".fanout" / "phase").read_text().strip()
         self.claude.append((argv, stdin, phase))
         return subprocess.CompletedProcess(argv, 0, json.dumps(self.reports.pop(0)), "")

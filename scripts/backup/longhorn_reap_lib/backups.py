@@ -10,9 +10,7 @@ shipped inoperative the first time.
 THREE MODES, ONE SELECTION LAYER. Every Backup CR deletion in this repo selects in
 longhorn_reap_lib/logic.py (the strays mode) or longhorn_reap_lib/selection.py (the other two), where
 each selection is a plain function over parsed JSON and each floor is provable against a
-fixture. The two operator-driven modes selected in kubectl and Jinja under
-`ansible/prune_backups.yml` until #3279; that playbook now carries only its b2-drain mode, which
-deletes B2 objects through the B2 API rather than Backup CRs through Longhorn.
+fixture.
 
   --mode strays          (the default) backups some job made that no job will prune now, because
                          the volume changed tier. FLOOR 1 keeps a volume's last recovery point,
@@ -316,10 +314,9 @@ def _print_dry_run(args: Args, buckets: list[tuple[str, list, bool]]) -> None:
     """Say what an --apply would delete, what it would cost, and the next step, in three lines.
 
     The cost paragraph is the reason this prints at all: the reapable list reads as cheap
-    because it is short, while the spend is per stored block. It is the prose the retired
-    `prune_backups.yml` header carried for the two operator modes, which is why the deletion
-    cost now has to survive someone reading only this output. The flag table it once
-    carried is in `--help`; a 20-line banner on every dry run buried the count (#4448). ENFORCED:
+    because it is short, while the spend is per stored block, so the deletion cost has to
+    survive someone reading only this output. The flag table is in `--help`; a 20-line
+    banner on every dry run buried the count (#4448). ENFORCED:
     scripts/backup/tests/test_longhorn_reap_backups_cli.py
     ::test_every_modes_dry_run_prints_the_per_block_cost
     """

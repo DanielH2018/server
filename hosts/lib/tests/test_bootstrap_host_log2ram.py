@@ -34,10 +34,7 @@ def test_an_unreachable_azlux_warns_and_an_offline_pi_still_starts_the_engine(
     tmp_path, failing
 ):
     host = FakeHost(tmp_path)
-    host._stub(
-        "apt-get",
-        f'echo "$*" >> {host.calls}\ncase "$*" in {failing}) exit 100 ;; esac',
-    )
+    host.apt_stub(f'case "$*" in {failing}) exit 100 ;; esac')
 
     result = host.run("daniel-pi", "--until", "6", "--offline", str(host.kit))
 

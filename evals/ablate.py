@@ -71,9 +71,9 @@ ENGINE = CHEZMOI / "evals" / "run-evals.mjs"
 # a name with one there would be graded without the doc and every arm would read identical.
 CHEZMOI_AGENTS = CHEZMOI / "home" / "private_dot_claude" / "agents"
 
-# The weekly sweep's day, as Python's date.weekday() numbers it (Monday is 0). The cron in
-# ansible/roles/setup/initial_setup/tasks/crons.yml says weekday "0", cron's Sunday; a test
-# holds the two together. An ablation run must not share a day with the sweep, because both
+# The weekly sweep's day, as Python's date.weekday() numbers it (Monday is 0). The timer
+# hosts/components/eval-sweep/units/homelab-eval-sweep.timer runs on Sun; a test holds the two
+# together. An ablation run must not share a day with the sweep, because both
 # spend the same monthly credit.
 SWEEP_WEEKDAY = 6
 

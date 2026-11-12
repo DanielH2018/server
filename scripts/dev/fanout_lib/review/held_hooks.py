@@ -29,10 +29,6 @@ ignored `.claude/settings.local.json`, a hook edit hidden with `--skip-worktree`
 `.pyc` is outside that range (#3846). That implement phase therefore runs on the held settings
 and gets the start-time `CLAUDE.md` as text, and so does every phase that resumes it. Like the reviewer, it loses the project skills and
 rules.
-
-`block-protected-bash` derives its secret-bearing host paths from the session's cwd, which is
-the worktree. The pipeline derives the set at start and ships it beside the held hooks as
-`HELD_SECRET_PATHS`, which that guard reads in place of the derivation.
 """
 
 import importlib.util
@@ -40,8 +36,7 @@ import json
 import os
 import shlex
 import shutil
-import subprocess
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
 
 HOOKS_DIR = Path(".claude") / "hooks"
@@ -54,10 +49,6 @@ GLOB_PARSER = "_inline_budget.py"
 UNSNAPSHOTTED = frozenset({"tests", "__pycache__"})
 # How this repo's `.claude/settings.json` names its hooks directory in every hook command.
 PROJECT_HOOKS = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'
-# The derivation `block-protected-bash` runs, and the file beside the held hooks that it reads
-# in its place. `.claude/hooks/block-protected-bash.py` mirrors the file name.
-SECRET_PATHS_SCRIPT = "scripts/secrets_mgmt/secret_bearing_host_paths.py"
-HELD_SECRET_PATHS = "secret_bearing_host_paths.json"
 # Hook events a held phase does not register. `session-health` reports on the checkout its own
 # file sits in: it imports `lib` from that tree's `scripts/` and runs git and `probe.py` there.
 # The held copy is a hooks directory with no tree around it, so every held phase's banner read
@@ -84,8 +75,6 @@ HELD_TREES = (
 # memory, so its batches run at 2; daniel-box has 16 and keeps 4. Interactive sessions keep
 # the host's `claude_code_rc_pytest_workers`, which this does not read.
 PYTEST_WORKERS_ENV = "PYTEST_XDIST_AUTO_NUM_WORKERS"
-
-Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 
 
 def pytest_workers(cores: int | None) -> int:
@@ -211,23 +200,3 @@ def pointed_settings(settings: str, root: Path) -> dict:
             for hook in group.get("hooks", []):
                 hook["command"] = hook["command"].replace(PROJECT_HOOKS, hooks)
     return with_batch_env(held)
-
-
-def held_secret_paths(run: Runner, root: Path) -> dict[str, bytes]:
-    """The `HELD_SECRET_PATHS` file to ship beside the held hooks, derived from `root` now.
-
-    Returns:
-        The file name and its JSON bytes, or nothing when the derivation failed. The guard
-        then falls back to deriving the set itself.
-    """
-    proc = run(
-        ["uv", "run", "--directory", str(root), "python", SECRET_PATHS_SCRIPT], None
-    )
-    if proc.returncode:
-        return {}
-    paths = {}
-    for line in proc.stdout.splitlines():
-        dest, sep, names = line.partition("\t")
-        if sep:
-            paths[dest] = names.split(",")
-    return {(HOOKS_DIR / HELD_SECRET_PATHS).as_posix(): json.dumps(paths).encode()}

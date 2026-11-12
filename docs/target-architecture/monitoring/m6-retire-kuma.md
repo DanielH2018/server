@@ -1,6 +1,29 @@
 # M6 — Switch the readers and retire Kuma
 
-Status: IN PROGRESS
+Status: DONE. C-4b merged as [#7841](https://github.com/DanielH2018/server/pull/7841) on
+2026-11-09, after the other Phase C PRs. All five exit criteria hold. Exits 1, 2, 3 and 5 were
+read on 2026-11-12 at `061b0146e`. Exit 4's fixtures passed that day, and its live drill, which
+is operator-only, ran at B-1d on 2026-10-17:
+
+1. `ansible/roles/k8s/uptime-kuma/` does not exist. `probe.py metric 'up{job="uptime-kuma"}'`
+   printed `No data`. `kubectl get svc,ingressroute,cm,cronjob,deploy -n homelab -l
+   homelab/role=uptime-kuma` printed `No resources found in homelab namespace.` The same
+   label across every namespace, with `pvc` and `pv`, printed `No resources found`. No PVC or
+   PV name contains `kuma`, among 45 of each. None of the 44 Longhorn volumes carries a
+   `kuma` namespace or PVC name, and every volume carries a PVC name. The 45th PV,
+   `media-data`, is a local volume. The operator's delete after C-2b has therefore happened.
+2. `grep -c '_push_token:'` printed 0 for `ansible/secret_rotation.yml` and for
+   `ansible/vars/secrets.yml`. `secret_rotation.py audit --check` exited 0.
+   [#7178](https://github.com/DanielH2018/server/issues/7178) closed on 2026-11-06.
+3. C-4b landed after D6, closing [#7835](https://github.com/DanielH2018/server/issues/7835).
+   The census row in `ansible/tests/repo/test_census_rows_text.py` holds the allowlist.
+4. `test_a_critical_alert_active_after_the_apply_that_still_fires_is_flagged` and
+   `test_a_warning_alert_labelled_verify_active_after_the_apply_is_flagged`, in
+   `scripts/diagnostics/tests/test_probe_health_alerts.py`, passed. At the B-1d drill,
+   `probe.py health littlelink` exited 1 and named `HealthGateDrill{severity=critical}`
+   (*PR B-1, with B-1d and B-1e*).
+5. `probe.py --help` printed no `kuma` line. `probe.py monitors` printed
+   `0 paging alert(s) firing` and exited 0.
 
 Each batch's results are in *Status by batch*, below the introduction.
 

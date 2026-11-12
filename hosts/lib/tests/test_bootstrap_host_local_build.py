@@ -42,6 +42,30 @@ def test_the_local_build_installs_three_packages_in_one_call_and_leaves_the_clon
     assert status.stdout == ""
 
 
+def test_the_local_build_creates_the_users_the_host_deb_declares_before_the_install(
+    tmp_path,
+):
+    host = FakeHost(tmp_path, hostname="daniel-box")
+    host.stock_kit()
+    host.declare_users('u claude 996 "Claude agent" /var/lib/claude /bin/bash\n')
+
+    result = host.run(
+        "daniel-box",
+        "--local-build",
+        str(host.clone(tmp_path)),
+        "--offline",
+        str(host.kit),
+    )
+
+    assert result.returncode == 0, result.stderr
+    commands = host.commands()
+    [extract] = [c for c in commands if c.startswith("dpkg-deb -x ")]
+    assert extract.split()[2].rsplit("/", 1)[1].startswith("homelab-daniel-box_")
+    [early] = [c for c in commands if c.endswith("/usr/lib/sysusers.d/homelab.conf")]
+    install = next(c for c in commands if c.startswith("apt-get install -y /"))
+    assert commands.index(early) < commands.index(install)
+
+
 def test_the_offline_local_build_times_each_phase_on_stderr(tmp_path):
     host = FakeHost(tmp_path, hostname="daniel-box")
     host.stock_kit()

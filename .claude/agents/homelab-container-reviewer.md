@@ -15,7 +15,7 @@ highest-signal findings.
 
 ## The mental model
 - **k3s is the primary surface.** Source of truth is `ansible/roles/k8s/<svc>/templates/*.yaml.j2`
-  (Deployment / Service / IngressRoute / PVC / Secret) + `tasks/main.yml`. House conventions to
+  (Deployment / Service / IngressRoute / PVC / Secret) + `defaults/main.yml`. House conventions to
   audit there: `resources:` requests+limits, `readinessProbe` + `livenessProbe`, a
   `securityContext`, pinned image tags via a `<svc>_k8s_image` default, PVCs on Longhorn with a
   backup tier that matches `docs/longhorn-backup-tiering.md`, and a `checksum/config` pod
