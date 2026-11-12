@@ -19,8 +19,11 @@ See repo-root `CLAUDE.md` for shared conventions.
   through the Karma pod, because a browser cannot reach the in-cluster URI.
   `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-alertmanager.yaml.j2` admits it.
 - **The route is LAN-only and needs `admins` at `two_factor`.** Karma can silence every page.
-  `templates/ingressroute.yaml.j2` ignores `k8s_public_route`, and the authelia role's
-  hand-written `karma.local` rule pair admits `group:admins` and denies everyone else.
+  `templates/ingressroute.yaml.j2` passes `public=false`, so no public name renders whatever
+  `k8s_public_route` says. The authelia role's hand-written `karma.local` rule pair admits
+  `group:admins` from RFC1918 and denies everyone else. The route carries no `ClientIP` fence,
+  because blackbox-exporter's ingress probe arrives from a pod address and a fence answers it
+  404.
   `ansible/tests/k8s/test_alertmanager_read_route.py::test_karma_is_behind_authelia_and_lan_only_even_with_public_routes_on`
   holds the route, and
   `ansible/tests/services/test_authelia_access_tiers.py::test_a_user_outside_admins_is_denied_a_silence_ui`
