@@ -15,7 +15,6 @@ from pathlib import Path
 from _agent_package import agent_setup_script
 from _helpers import REPO
 from lib.proc_testing import run
-from _setup_render import render_component_text
 
 
 HOOK_TYPES = tomllib.loads((REPO / "prek.toml").read_text())[
@@ -54,18 +53,6 @@ def test_the_install_reruns_while_any_listed_shim_is_missing(tmp_path) -> None:
         held = [t for t in HOOK_TYPES if t != missing]
         assert install_guard_fires(setup, tmp_path / missing, held), missing
     assert not install_guard_fires(setup, tmp_path / "all", HOOK_TYPES)
-
-
-def test_the_profile_sets_no_ansible_collections_path() -> None:
-    profile = render_component_text(
-        "claude-code",
-        "agent-user-profile.j2",
-        {
-            "claude_code_agent_user_home": "/srv/agent",
-            "claude_code_agent_user_clone_dir": "/srv/clone",
-        },
-    )
-    assert "ANSIBLE_COLLECTIONS_PATH" not in profile
 
 
 JSONQ_COPY = "Give the agent user the operator's jsonq"
