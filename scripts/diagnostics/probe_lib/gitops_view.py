@@ -58,7 +58,6 @@ from gitops_markers import (
     PLAYBOOK_CMD,
     by_hand,
     STATE_DIR,
-    maximal_apply_warning,
     owed_clear_cmd,
     parse_behind,
     parse_contention,
@@ -94,7 +93,6 @@ def _owed_rows(owed: str | None, now: float) -> dict[str, list[dict]]:
     for e in entries:
         selected = narrow.get(e.role) or frozenset({e.role})
         hand = by_hand(e.playbook)
-        warning = maximal_apply_warning(e.role, selected)
         apply = hand or on_hosts(
             f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(selected))}",
             e.apply_hosts(),
@@ -104,7 +102,7 @@ def _owed_rows(owed: str | None, now: float) -> dict[str, list[dict]]:
                 "subject": e.role,
                 "origin": e.origin,
                 "age_s": int(now - e.at),
-                "do": apply + (f" (WARNING: {warning})" if warning else ""),
+                "do": apply,
                 "clear": owed_clear_cmd(OWED_MANUAL_PLANE, e.role, selected),
             }
         )

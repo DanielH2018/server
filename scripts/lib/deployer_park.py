@@ -60,7 +60,6 @@ from gitops_markers import (
     STATE_DIR,
     parse_contention,
     by_hand,
-    maximal_apply_warning,
     owed_clear_cmd,
     on_hosts,
 )
@@ -186,7 +185,6 @@ class ManualPlaneRemedy:
         apply: the command that applies the role, or "" for a role no printed playbook
             applies.
         by_hand: what to do instead of `apply` for such a role, else "".
-        warning: what `apply` arms beyond the change, or "".
         clear: the `clear-owed` command to run once the role is applied.
         tags: the tags every command above selects: the line's narrowed row, or the role's own
             tag for a whole-role line. `gitops_state.py run-owed` clears exactly these.
@@ -196,7 +194,6 @@ class ManualPlaneRemedy:
     age: str
     apply: str
     by_hand: str
-    warning: str
     clear: str
     tags: frozenset[str] = frozenset()
 
@@ -208,12 +205,6 @@ def manual_plane_remedies(owed, now) -> list[ManualPlaneRemedy]:
     narrowest tags the change needs rather than the whole-role tag (#2307). It is READ, not
     re-derived: an isolated worktree cannot ask git about the primary checkout. A role with no
     tags reads as the role tag.
-
-    The command carries `maximal_apply_warning` where it arms something gated (#2345). The
-    journal line, the Discord alert and `land.sh` all warn through `deploy_remediation`, which
-    this module cannot import — the SessionStart hook loads it with only `scripts/` on
-    `sys.path`. So the warning that both surfaces key on is data in `gitops_markers`, and the
-    banner was the one place printing `--tags k3s` with nothing beside it.
     """
     remedies = []
     entries, narrow = manual_plane_entries(owed)
@@ -234,7 +225,6 @@ def manual_plane_remedies(owed, now) -> list[ManualPlaneRemedy]:
                 age=_age_phrase(now - e.at),
                 apply=apply,
                 by_hand=hand,
-                warning=maximal_apply_warning(e.role, selected) if apply else "",
                 clear=owed_clear_cmd(OWED_MANUAL_PLANE, e.role, selected),
                 tags=frozenset(selected),
             )
@@ -262,9 +252,7 @@ def manual_plane_lines(owed, now):
     """
     lines = []
     for r in manual_plane_remedies(owed, now):
-        how = r.by_hand or f"apply `{r.apply}` by hand" + (
-            f" (WARNING: {r.warning})" if r.warning else ""
-        )
+        how = r.by_hand or f"apply `{r.apply}` by hand"
         lines.append(
             f"  ✗ the GitOps deployer merged a change to the `{r.role}` setup role "
             f"{r.age} ago and cannot apply it itself — {how}, then `{r.clear}`"

@@ -77,7 +77,7 @@ from deployer_lib.deploy_locks import TREE_LOCK, take
 from deployer_lib.deploy_state import STATE_DIR, DeployerState, ManualPlaneEntry
 from gitops_hold import HOLD_PLANE_SEP, Hold
 from gitops_ledger import OWED_MANUAL_PLANE
-from gitops_markers import MARKERS, maximal_apply_warning, owed_clear_cmd
+from gitops_markers import MARKERS, owed_clear_cmd
 
 # Seconds to wait for it. Every other waiter on this lock waits 3000 (the census in the
 # deployer's test_gitops_deploy_timeout_budgets.py), because those are unattended jobs that
@@ -278,15 +278,11 @@ def clear_manual_plane(
     if remaining == frozenset({key}):
         # The row is empty or missing, so the WHOLE role is pending: a later range's
         # derivation refused after this command was printed. No narrowed apply covers that.
-        # The whole-role apply this sends the operator to is the one `maximal_apply_warning`
-        # exists for, and every other surface printing that command carries the warning.
-        warning = maximal_apply_warning(key, frozenset({key}))
         print(
             f"kept {role} in {state.path('owed')}: its line names no narrow tags, "
             "so the whole role is "
-            f"pending, not just {','.join(sorted(applied))}. Apply the whole role"
-            + (f" (WARNING: {warning})" if warning else "")
-            + f", then clear it without --applied: `{owed_clear_cmd(OWED_MANUAL_PLANE, key)}`",
+            f"pending, not just {','.join(sorted(applied))}. Apply the whole role, "
+            f"then clear it without --applied: `{owed_clear_cmd(OWED_MANUAL_PLANE, key)}`",
             file=sys.stderr,
         )
         return 1

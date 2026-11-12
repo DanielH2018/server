@@ -170,29 +170,6 @@ def test_a_role_with_no_narrowing_still_names_the_role_tag():
         assert "ansible/k3s-bringup.yml --tags k3s" in line
 
 
-# ── the banner warns about a command that arms the control plane ─────────────────
-
-
-def test_the_emptied_k3s_roles_whole_role_apply_carries_no_warning():
-    """`--tags k3s` runs only the `end_role` stub since H7.44, so it arms nothing to warn of."""
-    (line,) = _problems(manual=_K3S)
-    assert "--tags k3s`" in line
-    assert "rotate-keys" not in line
-
-
-def test_a_narrowed_apply_reaching_nothing_gated_carries_no_warning():
-    """The rejecting half: a warning printed beside every command is one nobody reads."""
-    (line,) = _problems(manual=_k3s(["kubeconfig"]))
-    assert "--tags kubeconfig" in line
-    assert "WARNING" not in line and "rotate-keys" not in line
-
-
-def test_a_role_with_no_gated_tasks_carries_no_warning():
-    """`common` is applied by no playbook, and nothing about it takes the cluster down."""
-    (line,) = _problems(manual=_COMMON)
-    assert "WARNING" not in line
-
-
 def _owed_elsewhere(hosts):
     """A role the tick applied on its own host, still owed on `hosts` (#6510)."""
     line = json.loads(

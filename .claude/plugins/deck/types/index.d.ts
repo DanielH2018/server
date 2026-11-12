@@ -16,7 +16,6 @@ export type DeckManualPlane = {
   age: string
   apply: string
   by_hand: string
-  warning: string
   clear: string
 }
 

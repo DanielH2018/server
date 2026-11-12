@@ -236,7 +236,6 @@ def manual_plane_rows(owed: str | None, now: float) -> list[dict]:
             "age": r.age,
             "apply": r.apply,
             "by_hand": r.by_hand,
-            "warning": r.warning,
             "clear": r.clear,
         }
         for r, line in zip(remedies, lines, strict=True)
@@ -479,15 +478,13 @@ def owed_lines(row: dict) -> list[str]:
     """One owed manual plane as lines for a terminal, each command alone on its line.
 
     A command line holds nothing but the command, so a triple-click copies a line that runs
-    as pasted. A warning goes above the apply it is about, so it is read before the paste.
+    as pasted.
     """
     lines = [
         f"Owed: the `{row['role']}` setup role, merged {row['age']} ago. "
         "The GitOps deployer cannot apply it itself."
     ]
     if row["apply"]:
-        if row["warning"]:
-            lines.append(f"  WARNING: {row['warning']}")
         lines += ["  Apply it by hand:", f"    {row['apply']}"]
     else:
         lines.append(f"  {row['by_hand'][:1].upper()}{row['by_hand'][1:]}.")

@@ -394,30 +394,3 @@ def test_a_non_empty_applied_still_clears_its_tags(tmp_path, run):
         == 0
     )
     assert pending(tmp_path) == {"k3s": frozenset({"coredns"})}
-
-
-def test_the_kept_message_warns_of_nothing_for_the_emptied_k3s_role(
-    tmp_path, run, capsys
-):
-    """`--tags k3s` runs only the `end_role` stub since H7.44, so it arms nothing to warn of."""
-    (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
-    assert (
-        run(tmp_path, "clear-owed", "manual_plane", "k3s", "--applied", "kubeconfig")
-        == 1
-    )
-    err = capsys.readouterr().err
-    assert "Apply the whole role" in err
-    assert "WARNING" not in err
-
-
-def test_the_kept_message_for_a_role_with_no_gated_tasks_carries_no_warning(
-    tmp_path, run, capsys
-):
-    """The rejecting half: `common` arms nothing, so it gets no warning to ignore."""
-    (tmp_path / "owed.jsonl").write_text(f"{COMMON}\n")
-    assert (
-        run(tmp_path, "clear-owed", "manual_plane", "common", "--applied", "something")
-        == 1
-    )
-    err = capsys.readouterr().err
-    assert "kept common" in err and "WARNING" not in err

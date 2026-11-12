@@ -5,8 +5,8 @@ It runs exactly the commands every surface prints for the line (`manual_plane_re
 primary checkout, which must be at origin/master, whichever checkout invokes it. A playbook run
 from a session worktree installs collections into that worktree, where the deployer never loads
 them. It refuses a line it cannot trust or that needs the operator: a
-field no role, tag or host spells, a playbook or host outside the routing and the inventory, a
-role applied by hand, and an apply that arms more than the change (#6881). The clear is
+field no role, tag or host spells, a playbook or host outside the routing and the inventory, and
+a role applied by hand. The clear is
 `gitops_state.clear_manual_plane`, so the journal line and the tree lock are the same ones a
 hand `clear-owed` takes.
 
@@ -68,8 +68,6 @@ def _line_refusal(entry, remedy: ManualPlaneRemedy) -> str | None:
         return f"its playbook {entry.playbook!r} is not one the routing records"
     if unknown := sorted(hosts - set(host_names())):
         return f"it names hosts the inventory does not: {unknown}"
-    if remedy.warning:
-        return f"the apply arms more than the change, so the operator runs it: {remedy.warning}"
     return None
 
 
