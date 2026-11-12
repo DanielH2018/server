@@ -63,9 +63,12 @@ The operator's own Claude Code install is the dotfiles repo's (H7.38).
   `claude-agent-setup` calls `claude-agent-home`, which writes the signing key, the
   `allowed_signers` file, the peer key on `claude_agent_ssh_key_host`, and the memory seed, all
   as the agent. The seed is the one step that reads as root: root copies the operator's store
-  into a private staging directory, and the agent copies it from there. It runs once, while the
-  agent has no `MEMORY.md`, where `claude_code_user` is the agent. Root still has to set the
-  operator's group and the setgid bit on the agent's directories and to place a few files, so
+  into a private staging directory, and the agent copies it from there. Where `claude_code_user`
+  is the agent, it runs while the agent has no `MEMORY.md`, and on the first run after a run as
+  the operator if the stores differ; that copy replaces the agent's store (#8074). A run as the
+  operator sets `claude_code_agent_memory_seed_stale`, a root-owned flag outside the home. Root
+  still has to set the operator's group and the setgid bit on the agent's directories and to
+  place a few files, so
   `claude-agent-setup` opens each directory first (`pin`) and refuses unless the opened directory
   is the one its path names. It creates, owns, modes and writes through that open handle, and a
   link on any of those paths fails the run. `install -T` places each file, which replaces a link
