@@ -19,6 +19,7 @@ from pathlib import PurePosixPath
 
 import pytest
 from _helpers import REPO
+from _deployer_import_row import DEPLOYER_IMPORTS
 from _printed_json_row import PRINTED_JSON_IS_COMPACT
 from _row_table import (
     Census,
@@ -421,6 +422,7 @@ ROWS = (
             )
         },
     ),
+    DEPLOYER_IMPORTS,
     Census(
         name="git-and-gh-go-through-lib",
         reason=(

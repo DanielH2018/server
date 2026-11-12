@@ -220,3 +220,21 @@ def test_the_shim_runs_the_probe_and_prints_one_json_state(tmp_path):
         "state": "landed",
         "detail": "VERDICT: settled (PR #939)",
     }
+
+
+@pytest.mark.parametrize(
+    "note",
+    [outcome.UNREADABLE_GATE_NOTE, outcome.STALE_GATE_NOTE],
+    ids=["unreadable", "stale"],
+)
+def test_a_gate_note_beside_a_causeless_result_line_stays_a_plain_deferral(
+    tmp_path, note
+):
+    """#7911: the cause on `LAND-RESULT:` decides a gate give-up; the note's text does not."""
+    log = landing(
+        tmp_path,
+        "LAND-RESULT: verdict=deferred cause=- exit=75 pr=939 sha=- tags=1\n"
+        f"{note}\nVERDICT: deferred (PR #939 — landed, not yet applied)\n",
+        rc=75,
+    )
+    assert land_probe.read(log)["state"] == "deferred"

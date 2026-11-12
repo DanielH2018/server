@@ -7,9 +7,14 @@ Run: uv run pytest ansible/tests/repo/test_promote_workflow_retry.py
 """
 
 import copy
+import os
 import re
+import shutil
 
+import forge
 import pytest
+from lib.proc_testing import fake_bin
+from lib.proc_testing import run as proc_run
 from test_promote_workflow import WORKFLOW, _load, _steps
 
 UNRETRIED = re.compile(r"(?<!retry )(?<![\w./-])gh [a-z]+|docker login")
@@ -139,3 +144,125 @@ def test_a_bare_call_in_a_step_with_a_colliding_name_is_flagged(workflow, added)
         line.startswith("tag: ") and "runs gh variable outside retry" in line
         for line in retry_problems(broken)
     ), retry_problems(broken)
+
+
+# GHCR refused a second signature on an already-signed digest with `write_package` (run
+# 42710237024), so a second publish of one commit must find the signature and not sign again.
+SIGN = "retry sign_unless_signed"
+PUBLISH_GROUP = "publish-${{ needs.render.outputs.sha }}"
+
+
+def _push(wf: dict) -> dict:
+    publish = (wf.get("jobs") or {}).get("publish", {})
+    return next((s for s in _steps(publish) if s.get("id") == "push"), {})
+
+
+def resign_problems(wf: dict) -> list[str]:
+    """Every way a second publish of one commit could sign its digest again."""
+    publish = (wf.get("jobs") or {}).get("publish", {})
+    push = _push(wf)
+    env, script = push.get("env") or {}, str(push.get("run", ""))
+    found = []
+    if SIGN not in script:
+        found.append(f"publish: the signed push does not run {SIGN}")
+    verify, sign = script.find("cosign verify"), script.find("cosign sign")
+    if verify < 0 or sign < verify:
+        found.append("publish: the signed push signs without verifying first")
+    if (env.get("IDENTITY"), env.get("ISSUER")) != (
+        forge.SIGNER_IDENTITY,
+        forge.SIGNER_ISSUER,
+    ):
+        found.append(
+            "publish: the signed push verifies under an identity forge.py lacks"
+        )
+    concurrency = publish.get("concurrency") or {}
+    if (concurrency.get("group"), concurrency.get("cancel-in-progress")) != (
+        PUBLISH_GROUP,
+        False,
+    ):
+        found.append(f"publish: has no concurrency group {PUBLISH_GROUP}")
+    return found
+
+
+def test_a_second_publish_does_not_sign_again_is_clean(workflow):
+    assert resign_problems(workflow) == []
+
+
+def _drop_verify(wf):
+    push = _push(wf)
+    push["run"] = re.sub(
+        r"if cosign verify.*?\n\s*fi\n", "", push["run"], flags=re.DOTALL
+    )
+
+
+def _drifted_identity(wf):
+    _push(wf)["env"]["IDENTITY"] = forge.SIGNER_IDENTITY.replace("promote", "ci")
+
+
+def _drop_group(wf):
+    del wf["jobs"]["publish"]["concurrency"]
+
+
+def _bare_sign(wf):
+    push = _push(wf)
+    push["run"] = push["run"].replace(SIGN, "sign_unless_signed")
+
+
+RESIGN_RED = {
+    "a sign with no verify before it": (_drop_verify, "signs without verifying"),
+    "a verify under a drifted identity": (_drifted_identity, "an identity forge.py"),
+    "a publish job with no group": (_drop_group, "no concurrency group"),
+    "a sign outside retry": (_bare_sign, f"does not run {SIGN}"),
+}
+
+
+@pytest.mark.parametrize("case", RESIGN_RED, ids=list(RESIGN_RED))
+def test_a_publish_that_could_sign_again_is_flagged(workflow, case):
+    mutate, expected = RESIGN_RED[case]
+    broken = copy.deepcopy(workflow)
+    mutate(broken)
+    assert any(expected in line for line in resign_problems(broken)), resign_problems(
+        broken
+    )
+
+
+DIGEST = "sha256:" + "5b" * 32
+FAKE_FLUX = f"""#!/usr/bin/env bash
+echo '{{"digest":"{DIGEST}"}}'
+"""
+FAKE_COSIGN = """#!/usr/bin/env bash
+case "$1" in
+  verify) exit "${FAKE_VERIFY_RC:-1}" ;;
+  sign) echo "$*" >> "$SIGN_LOG"; exit 0 ;;
+esac
+"""
+
+
+@pytest.mark.parametrize(
+    ("verify_rc", "signs"),
+    [("0", 0), ("1", 1)],
+    ids=["an-already-signed-digest", "an-unsigned-digest"],
+)
+def test_the_push_signs_only_a_digest_that_does_not_verify(
+    workflow, tmp_path, verify_rc, signs
+):
+    assert shutil.which("jq"), "the step reads flux's digest with jq"
+    log = tmp_path / "signs.log"
+    env = {
+        **os.environ,
+        "RETRY_FUNCTIONS": workflow["env"]["RETRY_FUNCTIONS"],
+        **{k: str(v) for k, v in _push(workflow)["env"].items()},
+        "SHA": "ab" * 20,
+        "GITHUB_REPOSITORY": "owner/repo",
+        "GH_ACTOR": "actor",
+        "GITHUB_TOKEN": "fake",
+        "FAKE_VERIFY_RC": verify_rc,
+        "SIGN_LOG": str(log),
+    }
+    stubs = fake_bin(
+        tmp_path / "bin", flux=FAKE_FLUX, cosign=FAKE_COSIGN, docker="exit 0\n"
+    )
+    result = proc_run(["bash", "-c", _push(workflow)["run"]], env=env, stub_bin=stubs)
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = log.read_text().splitlines() if log.exists() else []
+    assert len(calls) == signs, calls

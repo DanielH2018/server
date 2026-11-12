@@ -85,7 +85,6 @@ outlive H7.
 | `tojson` | Jinja | Sorts keys and escapes `<`, `>`, `&` and `'` for HTML. |
 | `trim` | Jinja | See the spec case. |
 | `unique` | Jinja | See the spec case. |
-| `updater_lag_grace_s` | `ansible/filter_plugins/` | See the spec case. |
 | `upper` | Jinja | See the spec case. |
 | `urlencode` | Jinja | See the spec case. |
 | `weekly_backup_group` | `ansible/filter_plugins/` | See the spec case. |

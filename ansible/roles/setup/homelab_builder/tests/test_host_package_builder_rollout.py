@@ -151,7 +151,6 @@ def test_two_changed_host_packages_stage_the_canary_and_the_shared_one(opened):
 
 
 def test_the_canary_series_names_the_gate_s_host(opened):
-    # monitor-bridge gives a Pi canary the Pi's day-long grace and every other host the floor.
     state = opened[3]
     assert (
         f'homelab_builder_unbuilt_since_timestamp_seconds{{reason="canary",sha="{opened[2][:12]}",host="daniel-server"}}'
@@ -294,15 +293,15 @@ def test_a_newer_canary_version_moves_the_gate(opened):
         ),
         (
             ["hosts/daniel-box", "hosts/daniel-pi"],
-            ["hosts/daniel-pi"],
-            ["hosts/daniel-box"],
+            ["hosts/daniel-box", "hosts/daniel-pi"],
+            [],
         ),
         (
             ["hosts/daniel-box", "hosts/daniel-server"],
             ["hosts/daniel-server"],
             ["hosts/daniel-box"],
         ),
-        (["hosts/new", "hosts/daniel-box"], ["hosts/daniel-box"], ["hosts/new"]),
+        (["hosts/new", "hosts/daniel-box"], ["hosts/new", "hosts/daniel-box"], []),
         (
             ["packages/homelab-tools", "hosts/daniel-box"],
             ["packages/homelab-tools", "hosts/daniel-box"],
@@ -315,14 +314,33 @@ def test_the_canary_order_and_the_shared_packages(changed, staged_now, deferred)
     assert (got[0], got[1]) == (staged_now, deferred)
 
 
-def test_daniel_server_leads_the_pi_on_its_daily_schedule(lab):
-    """H3.13: the Pi fires once a day, so daniel-server is the canary when both packages change."""
+def test_after_daniel_server_reports_the_pi_and_box_stage_together(lab):
+    """One canary per commit: the Pi is never a second canary that holds daniel-box."""
     origin, state, _, _ = lab
     edit(origin, "daniel-pi", "pi 1")
     edit(origin, "daniel-server", "server 1")
     published = edit(origin, "daniel-box", "box 1")
-    run(lab, Prom())
+    prom = Prom()
+    run(lab, prom)
+    sign(state)
     saved = json.loads((state / "state.json").read_text())
     assert saved["gate"] == {"host": "daniel-server", "sha": published}
     assert saved["deferred"] == ["hosts/daniel-box", "hosts/daniel-pi"]
-    assert debs(state) == ["homelab-daniel-server", "homelab-updater"]
+    prom.applied["daniel-server"], prom.reconcile["daniel-server"] = published[:12], 1
+    run(lab, prom)
+    assert debs(state) == ["homelab-daniel-box", "homelab-daniel-pi"]
+    assert not json.loads((state / "state.json").read_text())["gate"]
+
+
+def test_a_gate_whose_host_is_no_longer_a_canary_closes_without_asking_prometheus(
+    opened,
+):
+    lab, prom, v, state, _ = opened
+    path = state / "state.json"
+    saved = json.loads(path.read_text())
+    saved["gate"] = {"host": "daniel-pi", "sha": v}
+    path.write_text(json.dumps(saved))
+    prom.refuse.update(URLS.split())
+    run(lab, prom)
+    assert debs(state) == ["homelab-daniel-pi"]
+    assert not json.loads(path.read_text())["gate"]

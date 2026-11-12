@@ -651,7 +651,7 @@ jobs:
     # not `main`: tracking the branch would turn this job red on an unrelated dotfiles commit.
     # The `git-refs` custom manager in renovate.json proposes each bump as its own PR.
     env:
-      DOTFILES_SHA: b1c55d0cc65d22270fc0116ec7b4eacde6ee2871
+      DOTFILES_SHA: ca0e04fc942c7d1ee4f4b3de5a138c115d4944ef
       # Skips pyproject.toml's `lint` group, which no step here runs (test_ci_lint_group.py).
       UV_NO_GROUP: lint
     steps:
@@ -1313,6 +1313,7 @@ jobs:
       cases: ${{ steps.render.outputs.cases }}
       upgrade: ${{ steps.render.outputs.upgrade }}
       tools-key: ${{ steps.tools-key.outputs.key }}
+      arm64-tools: ${{ steps.arm64.outputs.built }}
     env:
       # The custom manager in renovate.json reads this annotation and moves the version and the
       # digest in one PR. The digest is the sha256 of nfpm_<version>_Linux_x86_64.tar.gz, which
@@ -1605,16 +1606,24 @@ jobs:
               dpkg-deb --contents "$deb"
             done
 
+      # `host_tools_arm64` downloads only when this says a build exists, so a failed download
+      # fails that job instead of reading as "nothing was built".
+      - name: Say whether an arm64 homelab-tools build exists
+        id: arm64
+        run: |
+          shopt -s nullglob
+          debs=("$RUNNER_TEMP"/debs/head/homelab-tools_*_arm64.deb)
+          if [ "${#debs[@]}" -gt 0 ]; then built=true; else built=false; fi
+          echo "built=$built" >> "$GITHUB_OUTPUT"
+
       # The `host_tools_arm64` job installs this build on a real arm64 runner.
       - name: Hand the arm64 homelab-tools build to the arm64 job
-        if: >-
-          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
-          || steps.render.outputs.cases == 'true'
+        if: steps.arm64.outputs.built == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: homelab-tools-arm64
           path: ${{ runner.temp }}/debs/head/homelab-tools_*_arm64.deb
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 1
 
       - name: Run the type-config and maintainer-script lints over both renders and builds
@@ -2033,8 +2042,7 @@ jobs:
           persist-credentials: false  # nothing here pushes or fetches
 
       - name: Download the arm64 homelab-tools build
-        id: download
-        continue-on-error: true  # no artifact when host_packages_build built nothing
+        if: needs.host_packages_build.outputs.arm64-tools == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: homelab-tools-arm64
@@ -2042,6 +2050,7 @@ jobs:
 
       - name: Install the build in the test image and run each tool
         env:
+          BUILT: ${{ needs.host_packages_build.outputs.arm64-tools }}
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ github.token }}
         run: |
@@ -2049,6 +2058,10 @@ jobs:
           shopt -s nullglob
           debs=("$RUNNER_TEMP"/debs/homelab-tools_*_arm64.deb)
           if [ "${#debs[@]}" -eq 0 ]; then
+            if [ "$BUILT" = true ]; then
+              echo "::error::host_packages_build built the arm64 homelab-tools, but the download delivered no .deb"
+              exit 1
+            fi
             echo "::notice::host_packages_build built no homelab-tools, so there is nothing to install."
             exit 0
           fi

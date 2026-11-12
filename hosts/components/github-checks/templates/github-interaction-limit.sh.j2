@@ -11,8 +11,7 @@
 # github-interaction-limit tag and to $TEXTFILE_DIR/github-interaction-limit.prom for
 # node_exporter's textfile collector (default /var/lib/node-exporter-textfile; a test points it
 # elsewhere). Prometheus's GitHubInteractionLimitNotArmed and GitHubInteractionLimitNotReporting
-# rules page from that file. Until M6 batch B3's Cutover-2 the verdict also went to a Kuma push
-# monitor.
+# rules page from that file.
 #
 # The interaction limit is the only lever GitHub offers that keeps a PUBLIC repo closed to
 # everyone but its collaborators: with `collaborators_only` set, nobody else can comment, react,
@@ -67,9 +66,8 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 DEADLINE_S=90000
 
 # Records the verdict: the journal line first, so `journalctl -t github-interaction-limit` reads the
-# outcome the way it does for github-ruleset-drift (the Kuma push library logged only a failed push), then the
-# textfile. A failed write logs and the run goes on to its exit.
-# The function keeps the name `push` from when it also sent the Kuma beat.
+# outcome the way it does for github-ruleset-drift, then the textfile. A failed write logs and
+# the run goes on to its exit.
 push() { # up|down msg
   logger -t github-interaction-limit "status=$1 $2"
   write_check_textfile github-interaction-limit "$([[ "$1" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \

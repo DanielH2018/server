@@ -14,7 +14,6 @@
 # github-ruleset-drift tag and to $TEXTFILE_DIR/github-ruleset-drift.prom for node_exporter's
 # textfile collector (default /var/lib/node-exporter-textfile; a test points it elsewhere).
 # Prometheus's GitHubRulesetDrift and GitHubRulesetDriftNotReporting rules page from that file.
-# Until M6 batch B3's Cutover-2 the verdict also went to a Kuma push monitor.
 #
 # The ruleset is what stops an un-CI'd commit reaching master, and the deployer trusts that: a
 # tick reads the check runs for the origin SHA and deploys on a green verdict. Nothing in the
@@ -80,7 +79,7 @@ DEADLINE_S=90000
 
 # Records the verdict: the journal line comes first, on every run, so `journalctl -t
 # github-ruleset-drift` reads the outcome of every run, a passing one included (#1781). The textfile write follows. A failed write logs and the run goes on
-# to its exit. The function keeps the name `push` from when it also sent the Kuma beat.
+# to its exit.
 push() { # up|down msg
   logger -t github-ruleset-drift "status=$1 $2"
   write_check_textfile github-ruleset-drift "$([[ "$1" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \

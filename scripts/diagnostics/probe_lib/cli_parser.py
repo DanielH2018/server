@@ -141,7 +141,7 @@ def _build_parser():
         "targets",
         **_verdict_help(
             "Prometheus scrape-target health: each down target, then the up count",
-            "every target is up",
+            "every target is up, or down with its Deployment scaled to 0",
             "a target is down",
         ),
     )
