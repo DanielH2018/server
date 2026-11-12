@@ -24,6 +24,8 @@ WAIT = 0.5
 SLOW = 1.5
 DONE = r"^\[DONE\] {label} in (\d+(?:\.\d+)?)s$"
 PREFIX = "homelab-host-test-bootstrap-"
+# A green run's stderr: one line of bootstrap-host.sh's `phase`, and one line of other output.
+GREEN_STDERR = "bootstrap-host: the apt-get update took 7s\nReading package lists...\n"
 
 
 class Overlap:
@@ -128,7 +130,7 @@ class FakeContainer:
             return subprocess.CompletedProcess(script, 0, "", "")
         if item.refusal is None:
             stdout, self.calls = _green_output(item)
-            return subprocess.CompletedProcess(script, 0, stdout, "")
+            return subprocess.CompletedProcess(script, 0, stdout, GREEN_STDERR)
         if item.apt_says is not None:
             self.calls = "install -y /tmp/w/debs/homelab-daniel-box_0.1_all.deb\n"
         return subprocess.CompletedProcess(script, 1, item.apt_says or "", item.refusal)
@@ -242,6 +244,17 @@ def test_an_item_s_duration_is_its_own_run_not_the_wait_for_earlier_items(
     }
     assert len(seconds[first]) == 1 and seconds[first][0] >= SLOW - 0.5, err
     assert len(seconds[last]) == 1 and seconds[last][0] < SLOW - 0.5, err
+
+
+def test_each_item_s_phase_timings_print_under_its_duration_and_nothing_else_does(
+    monkeypatch, tmp_path, capsys
+):
+    _run(monkeypatch, tmp_path)
+
+    err = capsys.readouterr().err
+    under = re.findall(r"^\[DONE\] offline in .*\n((?:    .*\n)*)", err, re.MULTILINE)
+    assert under == ["    bootstrap-host: the apt-get update took 7s\n"], err
+    assert "Reading package lists" not in err
 
 
 def test_the_offline_builds_start_before_the_host_items(monkeypatch, tmp_path):

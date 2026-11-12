@@ -797,6 +797,7 @@
  "hosts/lib/tests/test_bootstrap_host.py": 0.15,
  "hosts/lib/tests/test_bootstrap_host_baseline.py": 0.29,
  "hosts/lib/tests/test_bootstrap_host_k3s.py": 0.3,
+ "hosts/lib/tests/test_bootstrap_host_local_build.py": 0.27,
  "hosts/lib/tests/test_bootstrap_host_log2ram.py": 0.12,
  "hosts/lib/tests/test_bootstrap_host_pins.py": 0.0,
  "hosts/lib/tests/test_bootstrap_host_seed.py": 0.15,
