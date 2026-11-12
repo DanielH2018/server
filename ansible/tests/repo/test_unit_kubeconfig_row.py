@@ -13,6 +13,7 @@ Run: uv run pytest ansible/tests/repo/test_unit_kubeconfig_row.py
 """
 
 import importlib
+import importlib.util
 import re
 
 from _helpers import REPO
@@ -32,7 +33,7 @@ B2_DELETIONS = (
 CLAUDE_RC = "hosts/components/claude-code/templates/claude-rc.service.j2"
 BG_RESUME = "hosts/components/claude-code/templates/claude-bg-resume.service.j2"
 TRIAGE = "hosts/components/claude-code/templates/claude-triage@.service.j2"
-CHECKOUT_SYNC = "hosts/components/checkout-sync/units/homelab-checkout-sync.service.j2"
+MEMORY_SYNC = "hosts/components/claude-code/templates/claude-memory-sync.service.j2"
 
 KUBECONFIG_UNITS = (
     INFRA_MAP,
@@ -46,6 +47,9 @@ KUBECONFIG_UNITS = (
 
 
 def _row() -> Census:
+    assert importlib.util.find_spec(ROW_MODULE), (
+        f"no {ROW_MODULE}: the #8155 row does not exist"
+    )
     return getattr(importlib.import_module(ROW_MODULE), ROW_NAME)
 
 
@@ -109,6 +113,6 @@ def test_a_unit_running_as_root_needs_no_kubeconfig():
 
 
 def test_a_non_root_unit_that_never_reaches_the_cluster_is_not_flagged():
-    unit = _text(CHECKOUT_SYNC)
+    unit = _text(MEMORY_SYNC)
     assert re.search(r"^User=\{\{", unit, re.M) and "KUBECONFIG" not in unit
-    assert not _row().offence(Subject(CHECKOUT_SYNC, unit))
+    assert not _row().offence(Subject(MEMORY_SYNC, unit))
