@@ -40,6 +40,28 @@ GH_LOGIN = "/run/homelab-secrets/var/lib/claude/.config/gh/hosts.yml"
 RUNUSER = '#!/bin/sh\n[ "$1" = -u ] && shift 2\n[ "$1" = -- ] && shift\nexec "$@"\n'
 
 
+def render_host(root, paths, claude_code_user: str):
+    """daniel-box's package with the agent's paths under root, and sessions run as claude_code_user."""
+    host_vars = root / "host_vars"
+    shutil.rmtree(host_vars, ignore_errors=True)
+    shutil.copytree(HOST_VARS, host_vars)
+    path = host_vars / "daniel-box.yml"
+    overrides = {
+        "claude_code_agent_user": getpass.getuser(),
+        "claude_code_user": claude_code_user,
+        "sys_user": getpass.getuser(),
+        "claude_code_agent_user_home": str(paths["home"]),
+        "claude_code_agent_signing_key": str(paths["signing"]),
+        "claude_agent_ssh_key_path": str(paths["peer"]),
+        "claude_code_agent_memory_dir": str(paths["agent_memory"]),
+        "claude_code_operator_memory_dir": str(paths["operator_memory"]),
+        "claude_code_agent_memory_seed_strip": STRIP,
+        "claude_code_agent_memory_seed_stale": str(paths["stale"]),
+    }
+    path.write_text(yaml.safe_dump({**yaml.safe_load(path.read_text()), **overrides}))
+    return host_mode.render_host("daniel-box", inventory=Inventory(host_vars=host_vars))
+
+
 @pytest.fixture(scope="module")
 def rendered(tmp_path_factory):
     """The script and the paths it renders for, shared by every test in the module."""
@@ -53,25 +75,9 @@ def rendered(tmp_path_factory):
         "peer": home / ".ssh" / "peers_ed25519",
         "agent_memory": home / ".claude" / "projects" / "-srv-clone" / "memory",
         "operator_memory": root / "operator" / "memory",
+        "stale": root / "state" / "claude-agent-memory-stale",
     }
-    host_vars = root / "host_vars"
-    shutil.copytree(HOST_VARS, host_vars)
-    path = host_vars / "daniel-box.yml"
-    overrides = {
-        "claude_code_agent_user": getpass.getuser(),
-        "claude_code_user": getpass.getuser(),
-        "sys_user": getpass.getuser(),
-        "claude_code_agent_user_home": str(home),
-        "claude_code_agent_signing_key": str(paths["signing"]),
-        "claude_agent_ssh_key_path": str(paths["peer"]),
-        "claude_code_agent_memory_dir": str(paths["agent_memory"]),
-        "claude_code_operator_memory_dir": str(paths["operator_memory"]),
-        "claude_code_agent_memory_seed_strip": STRIP,
-    }
-    path.write_text(yaml.safe_dump({**yaml.safe_load(path.read_text()), **overrides}))
-    package = host_mode.render_host(
-        "daniel-box", inventory=Inventory(host_vars=host_vars)
-    )
+    package = render_host(root, paths, getpass.getuser())
     script = write_exec(root / "claude-agent-home", package.files[SCRIPT][0].decode())
     paths["raw"] = {name: package.files[name][0].decode() for name in (SETUP, SCRIPT)}
     # The packaged chezmoi exists only on a host, so the script copies a stand-in from the root.
@@ -99,7 +105,7 @@ def rendered(tmp_path_factory):
 def home(rendered):
     """A fresh home with the directories claude-agent-setup creates before it runs the script."""
     _, _, paths = rendered
-    for path in (paths["home"], paths["operator_memory"].parent):
+    for path in (paths["home"], paths["operator_memory"].parent, paths["stale"].parent):
         shutil.rmtree(path, ignore_errors=True)
     for directory in (".ssh", ".config/git", ".local/bin"):
         (paths["home"] / directory).mkdir(parents=True)
@@ -155,10 +161,57 @@ def test_the_seed_copies_the_store_and_strips_the_prefix_as_a_literal(rendered, 
     assert STRIP in (home["operator_memory"] / "note.md").read_text()
 
 
-def test_an_agent_with_its_own_index_gets_no_copy(rendered, home):
+def test_a_run_as_the_agent_after_one_as_the_agent_keeps_what_it_wrote(rendered, home):
     (home["operator_memory"] / "MEMORY.md").write_text("the operator's\n")
+    (home["agent_memory"] / "MEMORY.md").write_text("stale\n")
+    home["stale"].parent.mkdir()
+    home["stale"].touch()
+    run(rendered)
+    assert not home["stale"].exists()
     (home["agent_memory"] / "MEMORY.md").write_text("the agent's\n")
     run(rendered)
+    assert (home["agent_memory"] / "MEMORY.md").read_text() == "the agent's\n"
+
+
+def test_after_a_run_as_the_operator_the_seed_replaces_a_store_that_differs(
+    rendered, home
+):
+    (home["operator_memory"] / "MEMORY.md").write_text(
+        f"- [a]({STRIP}a.md)\n- [b](b.md)\n"
+    )
+    (home["operator_memory"] / "b.md").write_text("the operator's b\n")
+    (home["agent_memory"] / "MEMORY.md").write_text("- [a](a.md)\n")
+    (home["agent_memory"] / "only-the-agent.md").write_text("stale\n")
+    home["stale"].parent.mkdir()
+    home["stale"].touch()
+    run(rendered)
+    assert sorted(p.name for p in home["agent_memory"].iterdir()) == [
+        "MEMORY.md",
+        "b.md",
+    ]
+    assert (
+        home["agent_memory"] / "MEMORY.md"
+    ).read_text() == "- [a](a.md)\n- [b](b.md)\n"
+    assert not home["stale"].exists()
+
+
+def test_a_run_as_the_operator_marks_the_agents_store_stale_and_leaves_it(
+    rendered, home
+):
+    _, stubs, paths = rendered
+    package = render_host(paths["home"].parent, paths, "an-operator")
+    script = write_exec(
+        paths["home"].parent / "claude-agent-home-as-operator",
+        package.files[SCRIPT][0].decode(),
+    )
+    (home["operator_memory"] / "MEMORY.md").write_text("the operator's\n")
+    (home["agent_memory"] / "MEMORY.md").write_text("the agent's\n")
+    env = {"PATH": f"{stubs}:/usr/local/bin:/usr/bin:/bin"}
+    result = subprocess.run(
+        ["bash", str(script)], env=env, capture_output=True, text=True, timeout=60
+    )
+    assert result.returncode == 0, result.stderr
+    assert home["stale"].exists()
     assert (home["agent_memory"] / "MEMORY.md").read_text() == "the agent's\n"
 
 
