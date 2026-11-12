@@ -1,7 +1,7 @@
 # H7 — Remaining roles, then delete Ansible
 
-Status: IN PROGRESS. Partial landings through 2026-11-01, named by PR: [#6081](https://github.com/DanielH2018/server/pull/6081), [#6087](https://github.com/DanielH2018/server/pull/6087), [#6084](https://github.com/DanielH2018/server/pull/6084), [#6138](https://github.com/DanielH2018/server/pull/6138), [#6169](https://github.com/DanielH2018/server/pull/6169), [#6190](https://github.com/DanielH2018/server/pull/6190), [#6201](https://github.com/DanielH2018/server/pull/6201), [#6224](https://github.com/DanielH2018/server/pull/6224), [#6242](https://github.com/DanielH2018/server/pull/6242), [#6248](https://github.com/DanielH2018/server/pull/6248), [#6264](https://github.com/DanielH2018/server/pull/6264), [#6230](https://github.com/DanielH2018/server/pull/6230), [#6339](https://github.com/DanielH2018/server/pull/6339), [#6593](https://github.com/DanielH2018/server/pull/6593), [#6600](https://github.com/DanielH2018/server/pull/6600), [#6637](https://github.com/DanielH2018/server/pull/6637), [#6683](https://github.com/DanielH2018/server/pull/6683), [#6701](https://github.com/DanielH2018/server/pull/6701), [#6717](https://github.com/DanielH2018/server/pull/6717), [#6719](https://github.com/DanielH2018/server/pull/6719), [#6782](https://github.com/DanielH2018/server/pull/6782), [#6788](https://github.com/DanielH2018/server/pull/6788), [#6806](https://github.com/DanielH2018/server/pull/6806), [#6856](https://github.com/DanielH2018/server/pull/6856), [#6871](https://github.com/DanielH2018/server/pull/6871), [#7222](https://github.com/DanielH2018/server/pull/7222), [#7524](https://github.com/DanielH2018/server/pull/7524), [#7642](https://github.com/DanielH2018/server/pull/7642), [#7756](https://github.com/DanielH2018/server/pull/7756). Which numbered steps are complete is not recorded. Exit observations 3 and 5 do not
-hold yet: *Exit readings, 2026-11-12* records all seven.
+Status: IN PROGRESS. Partial landings through 2026-11-01, named by PR: [#6081](https://github.com/DanielH2018/server/pull/6081), [#6087](https://github.com/DanielH2018/server/pull/6087), [#6084](https://github.com/DanielH2018/server/pull/6084), [#6138](https://github.com/DanielH2018/server/pull/6138), [#6169](https://github.com/DanielH2018/server/pull/6169), [#6190](https://github.com/DanielH2018/server/pull/6190), [#6201](https://github.com/DanielH2018/server/pull/6201), [#6224](https://github.com/DanielH2018/server/pull/6224), [#6242](https://github.com/DanielH2018/server/pull/6242), [#6248](https://github.com/DanielH2018/server/pull/6248), [#6264](https://github.com/DanielH2018/server/pull/6264), [#6230](https://github.com/DanielH2018/server/pull/6230), [#6339](https://github.com/DanielH2018/server/pull/6339), [#6593](https://github.com/DanielH2018/server/pull/6593), [#6600](https://github.com/DanielH2018/server/pull/6600), [#6637](https://github.com/DanielH2018/server/pull/6637), [#6683](https://github.com/DanielH2018/server/pull/6683), [#6701](https://github.com/DanielH2018/server/pull/6701), [#6717](https://github.com/DanielH2018/server/pull/6717), [#6719](https://github.com/DanielH2018/server/pull/6719), [#6782](https://github.com/DanielH2018/server/pull/6782), [#6788](https://github.com/DanielH2018/server/pull/6788), [#6806](https://github.com/DanielH2018/server/pull/6806), [#6856](https://github.com/DanielH2018/server/pull/6856), [#6871](https://github.com/DanielH2018/server/pull/6871), [#7222](https://github.com/DanielH2018/server/pull/7222), [#7524](https://github.com/DanielH2018/server/pull/7524), [#7642](https://github.com/DanielH2018/server/pull/7642), [#7756](https://github.com/DanielH2018/server/pull/7756). Which numbered steps are complete is not recorded. Exit observations 3, 4 and 5 do
+not hold yet: *Exit readings, 2026-11-12* records all seven.
 Depends on: H2, H5, H6, R4, per PR (the *Waits on* column of *Steps, as PRs*)
 Unblocks: none (it closes Area 3)
 
@@ -108,7 +108,7 @@ The exit criterion is seven observations:
 
 ## Exit readings, 2026-11-12
 
-Taken at `34ab03eed` (#8114). Two observations do not hold yet, so the status stays IN
+Taken at `34ab03eed` (#8114). Three observations do not hold yet, so the status stays IN
 PROGRESS. Each reading uses the commands its observation names.
 
 1. **Holds.** `git ls-files ':(glob)ansible/*.yml' ':(glob)ansible/*.sh'` prints only
@@ -124,7 +124,8 @@ PROGRESS. Each reading uses the commands its observation names.
    drill green on 2026-11-07, run `20261107T213915Z`, from a hand `systemctl start`. That
    run read `k3s version v1.37.2+k3s1` and `fence=hold`. The agent's installer env file,
    which the drill reads the join token from, is present, owned by root and mode `0600`.
-4. **Holds, with the Flux half read on a later PR.**
+4. **The host half holds. The Flux half was not observed as worded**
+   ([#8136](https://github.com/DanielH2018/server/issues/8136)).
     - *The host half.* `etcd-restore-drill-vm --rehearse-bootstrap`, run
       `20261112T165424Z` at `2be52fcf6`, an ancestor of `origin/master`, logged
       `status=up ... bootstrap drill passed`. Its verdict reads `install ok installed`
@@ -136,9 +137,11 @@ PROGRESS. Each reading uses the commands its observation names.
       `K3S_VERSION` in `hosts/bootstrap-host.sh`.
     - *The Flux half.* `bootstrap-drill.yml` did not run on
       [#7700](https://github.com/DanielH2018/server/pull/7700), the PR that wrote the
-      cluster-node procedure, because its path filter excludes `docs/`. The workflow ran
-      green on 2026-11-12 at a head after #7700 merged
+      cluster-node procedure, because its path filter excludes `docs/`. #7700 has merged,
+      so the reading as worded can no longer be taken. The workflow ran green on
+      2026-11-12 at a head after #7700 merged
       ([run 43259067232](https://github.com/DanielH2018/server/actions/runs/43259067232)).
+      Whether that run counts is the operator's ruling.
 5. **Fails**
    ([#8128](https://github.com/DanielH2018/server/issues/8128)).
    On daniel-box, `/opt/gitops-deploy` is present, and so are `/etc/gitops-deploy` and
