@@ -57,9 +57,9 @@ Environment=LAND_DEADLINE=41460
 # VERIFY_CAP_S plus weekly_reboot_mute_recovery_minutes, and
 # ansible/tests/setup/test_lander_deadlines_cover_the_soak.py derives it from the schedule (#5457).
 Environment=LAND_WINDOW_GRACE=22200
-# One of the agent's landings at a time, so a second waits for the first's deploy rather than
-# racing it for the same tick. Interactive sessions and renovate-agent's lander do not take
-# this lock; deploy.sh's own locks order the deploys themselves.
+# One of the agent's landings at a time, so a second waits for the first's landing rather than
+# racing it. Interactive sessions and renovate-agent's lander do not take
+# this lock.
 ExecStart=/usr/bin/flock -w 1800 /var/lock/claude-land.lock \
   {{ pins.checkout }}/scripts/deploy_tools/land.sh --pr %i --arm-merge \
   --await-merge --verdict-file /var/lib/{{ pins.unit }}/%i.verdict

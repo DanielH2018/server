@@ -234,7 +234,7 @@ def declared_tags_at(ref: str, primary: Path) -> set[str] | None:
 
     AN EMPTY READ IS DAMAGE, NEVER EVIDENCE. `set()` says no service exists anywhere, which
     would make every changed role read as unregistered and every landing print
-    `needs-manual-apply` with a full-`deploy.yml` remedy — fleet-wide, silently, and green in
+    `needs-manual-apply` — fleet-wide, silently, and green in
     the suite. It is `None` here, so the fallback to this checkout takes over.
     """
     try:

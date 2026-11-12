@@ -7,14 +7,14 @@ curl, and reaches both stores by their in-cluster Service names. Before this mod
 built its own query strings and its own Loki window.
 
 STDLIB ONLY, AND NO FIRST-PARTY IMPORT. homelab-mcp's image carries this file flat at
-`/app/obs_api.py` (`ansible/roles/k8s/homelab-mcp/tasks/main.yml`), where neither `scripts/`
+`/app/obs_api.py` (`ansible/roles/k8s/homelab-mcp/defaults/main.yml`), where neither `scripts/`
 nor any `sys.path` bootstrap exists. A first-party import here breaks that pod at import time,
 which no host-side test notices. `test_obs_api.py` imports this file with `scripts/` off
 `sys.path` to catch exactly that.
 
 This file is part of homelab-mcp's image build context. homelab-mcp is flux-owned, so a merged
 edit here alone moves its content tag, and the next promotion builds the image and rolls the
-pod. No deploy.sh run is needed: `deploy.sh` refuses the homelab-mcp tag with exit 5.
+pod. No separate deploy step applies it.
 """
 
 import json

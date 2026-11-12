@@ -16,7 +16,7 @@ Exit codes:
   2   the gate could not be armed (no required contexts) -- nothing was checked
   4   no verdict can arrive: GitHub never ran CI for the SHA, and no later master commit
       stands in for it -- the line names the tip and the way out (#4641, #4649)
-  75  the wait budget elapsed with no verdict (matches deploy.sh's use of 75)
+  75  the wait budget elapsed with no verdict (land.sh also uses 75 for a wait that gave up)
 
 A SHA GitHub never ran CI for at all reads green through its nearest green descendant on
 master; `descendant_verdict` has the rule and why it is safe (#4621).

@@ -1,8 +1,7 @@
-"""Step 5's wait: a k8s tag lands through `promote`, never through deploy.sh.
+"""Step 5's wait: a k8s tag lands through `promote` and Flux.
 
-Flux applies every k8s `containers_list` entry once `promote` moves `prod`, and deploy.sh refuses
-such a tag with exit 5 (`deploy_lib/owners.py`). `split_k8s` therefore takes every such tag out of
-`resolved_tags`. A tag `--tags` named is kept for the
+Flux applies every k8s `containers_list` entry once `promote` moves `prod`. `split_k8s` therefore
+takes every such tag out of `resolved_tags`. A tag `--tags` named is kept for the
 wait, and a tag this PR's paths named is dropped: every landing whose PR `moves_the_bundle` waits
 on the promotion, and land-wait's changed set, read from the two `digests.json` files, names the
 tags the health gate and the `source=promote` marker read (`WaitResult.tags`). A PR that moves no
@@ -110,7 +109,7 @@ def split_k8s(ln: Landing) -> None:
     if ln.opts.tags:
         ln.flux_tags = k8s
         for tag in k8s:
-            say(f"{tag}: a k8s entry, so it lands through promote, not deploy.sh")
+            say(f"{tag}: a k8s entry, so it lands through promote and Flux")
         return
     say(
         f"{','.join(k8s)}: named by this PR's paths; the promotion's changed set names the "
