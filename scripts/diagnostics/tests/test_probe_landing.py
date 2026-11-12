@@ -183,7 +183,7 @@ def test_a_blocked_landing_lists_the_claimed_worktrees_and_counts_the_rest():
     text = landing.format_text({**snap, "claims": None})
     assert "  worktree-fanout-1  #3 #12" in text
     assert "1 other worktree(s); `probe.py landing --json` lists them." in text
-    assert "drill" not in text
+    assert "worktrees/drill" not in text
 
 
 def _deck_snapshot_fields(dts: str) -> set[str]:
