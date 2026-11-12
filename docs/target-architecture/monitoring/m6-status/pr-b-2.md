@@ -1,8 +1,9 @@
 ### PR B-2
 
 PR B-2, `probe.py monitors` and `probe.py alerts` on `ALERTS`, postflight's Kuma checks, and
-`kuma-drift` deleted: [#6829](https://github.com/DanielH2018/server/pull/6829). The merge
-commit and the post-merge reads follow once it lands.
+`kuma-drift` deleted: [#6829](https://github.com/DanielH2018/server/pull/6829). It merged on
+2026-11-01 at `05ede55db`. On 2026-11-12 `probe.py --help` printed no `kuma-drift` line, and
+`probe.py monitors` printed `0 paging alert(s) firing` and exited 0.
 
 - **`monitors`** rolls up `ALERTS{alertstate="firing"}` by severity and `service`, then lists
   active silences. A missing Watchdog exits 75. Shadow alerts print under their own heading and

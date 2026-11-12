@@ -1,9 +1,10 @@
 ### PR B-10
 
-PR B-10, triage's poller drops its Kuma source: [#6997](https://github.com/DanielH2018/server/pull/6997), drafted, not merged. It merges only after A6's
-Cutover-1b is live, so that every Kuma pager has an `ALERTS` rule and the `ALERTS` path sees each
-fall the Kuma path saw. [#6876](https://github.com/DanielH2018/server/pull/6876) named the poller
-as a Kuma consumer.
+PR B-10, triage's poller drops its Kuma source:
+[#6997](https://github.com/DanielH2018/server/pull/6997). It merged on 2026-11-02 at `589c932c8`.
+It was held until A6's Cutover-1b was live, so that every Kuma pager had an `ALERTS` rule and the
+`ALERTS` path saw each fall the Kuma path saw. [#6876](https://github.com/DanielH2018/server/pull/6876)
+named the poller as a Kuma consumer.
 
 The PR removes `KUMA_QUERY`, `KUMA_UP_QUERY`, `kuma_up_keys`, the `kuma` arm of `unknown_sources`
 and of `down_keys`, and the `kuma_up` argument of `step` from
