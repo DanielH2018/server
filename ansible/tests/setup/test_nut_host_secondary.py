@@ -226,11 +226,10 @@ def test_the_extractor_is_empty_when_no_monitor_line_exists():
 
 
 def test_the_watchdog_reads_the_deployed_conf_not_an_ansible_var():
-    """A re-templated var would resolve fresh at render time.
+    """A templated address could differ from the file upsmon actually reads.
 
-    A tag-scoped run that touched only this cron would then bake a CURRENT ClusterIP into the
-    check while upsmon kept using the stale one, so the check would pass against an address
-    upsmon does not use — reproducing the blindness it exists to remove.
+    The check would then pass against an address upsmon does not use, reproducing the
+    blindness it exists to remove.
     """
     assert "/etc/nut/upsmon.conf" in WATCHDOG
     assert "nut_host_upsd_host" not in WATCHDOG
