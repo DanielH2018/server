@@ -182,3 +182,13 @@ def test_a_rate_limited_backlog_read_does_not_merge_without_pacing(landing, caps
     ln, _calls = _landing(landing, 1, [limited, BACKLOG])
     assert pace.hold(ln, 0, 0) != ""
     assert "merging without pacing" not in capsys.readouterr().out
+
+
+def test_a_backlog_read_refused_through_every_rate_limit_wait_holds_the_poll(landing):
+    limited = subprocess.CalledProcessError(
+        1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
+    )
+    ln, _calls = _landing(landing, 1, [limited])
+    assert pace.hold(ln, 0, 0).startswith(
+        "pacing the merge: could not count unfinished master CI runs"
+    )

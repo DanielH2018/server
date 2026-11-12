@@ -3,8 +3,11 @@
 Run: uv run pytest scripts/lib/tests/test_gh_rate_limit.py
 """
 
+import email.message
+import io
 import json
 import subprocess
+import urllib.error
 
 import pytest
 
@@ -77,3 +80,29 @@ def test_a_graphql_refusal_waits_for_the_graphql_reset():
 
     why = "GraphQL: API rate limit exceeded for user ID 41801780."
     assert gh_rate_limit.wait_s(why, run, lambda: NOW) == 102
+
+
+def _http_403(**headers):
+    """A REST 403 carrying `headers`; a context manager, which closes its body."""
+    message = email.message.Message()
+    for name, value in headers.items():
+        message[name.replace("_", "-")] = value
+    return urllib.error.HTTPError(
+        "https://api.github.com/x", 403, "Forbidden", message, io.BytesIO(b"")
+    )
+
+
+def test_a_rest_403_with_the_quota_spent_waits_until_its_reset():
+    reset = str(int(NOW) + 600)
+    with _http_403(X_RateLimit_Remaining="0", X_RateLimit_Reset=reset) as error:
+        assert gh_rate_limit.http_wait_s(error, lambda: NOW) == 602
+
+
+def test_a_rest_403_with_retry_after_waits_that_long():
+    with _http_403(Retry_After="45") as error:
+        assert gh_rate_limit.http_wait_s(error, lambda: NOW) == 45
+
+
+def test_a_rest_403_with_quota_left_is_not_a_rate_limit():
+    with _http_403(X_RateLimit_Remaining="4999") as error:
+        assert gh_rate_limit.http_wait_s(error, lambda: NOW) is None

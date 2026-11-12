@@ -90,7 +90,7 @@ ALLOWED = {
         "stuck_checks",
     },
     # The master CI backlog read that holds --await-merge's direct merge (#5526).
-    "pace": {"landing", "outcome"},
+    "pace": {"gh_read", "landing", "outcome"},
     # The read that ends --await-merge on a check GitHub never finishes (#7996).
     "stuck_checks": {"landing", "gh_read"},
     # The pin gate runs inside --await-merge's direct merge, and `land.py --regate` alone.

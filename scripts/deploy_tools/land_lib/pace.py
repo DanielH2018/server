@@ -19,11 +19,14 @@ Instead, the cap rises by one for each `RAISE_CAP_EVERY_S` the landing has been 
 the whole wait, held and unheld, reaches `merge_timeout`, the landing merges without pacing. A
 failed read merges too: pacing is a throughput control, not a safety gate.
 
+A rate-limit refusal is the exception. The quota runs out only when many landers are live, so
+merging on it would release every held landing at once. The read waits out the quota through
+`gh_read`, and a read still refused after those waits holds the poll (#8139).
+
 `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off. A PR armed by hand with
 `gh pr merge --auto` merges without passing through here.
 """
 
-import subprocess
 from datetime import datetime
 
 import sys as _sys
@@ -31,8 +34,10 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.json_types import as_list, as_object
+from deploy_tools.land_lib import gh_read
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import say
+from lib import gh_rate_limit
 
 # DECIDED: an unfinished run created more than 2 hours ago is not counted. On 2026-10-24 the
 # slowest master run took 61 minutes from creation to finish, so a run still unfinished at
@@ -58,17 +63,20 @@ def unfinished_master_runs(ln: Landing) -> int:
     """How many master push runs of `ci.yml` are not completed and not wedged.
 
     Raises:
-        subprocess.CalledProcessError: gh failed.
-        subprocess.TimeoutExpired: gh timed out.
+        gh_read.GhReadFailed: gh failed, after `gh_read`'s retries and rate-limit waits.
         ValueError: gh's answer did not parse.
     """
     # Every status but `completed` counts. The API's `status=` filter takes one value, and a run
     # whose last job is waiting reads `queued` even after most of its jobs finished.
-    got = ln.tools.gh_json(
-        "api",
-        _RUNS_URL,
-        "--jq",
-        "[.workflow_runs[] | {status, created_at}]",
+    got = gh_read.read(
+        lambda: ln.tools.gh_json(
+            "api",
+            _RUNS_URL,
+            "--jq",
+            "[.workflow_runs[] | {status, created_at}]",
+        ),
+        ln.tools.sleep,
+        "gh api ci.yml runs",
     )
     now = ln.tools.wall_clock()
     count = 0
@@ -108,15 +116,13 @@ def hold(ln: Landing, held_s: int, waited_s: int) -> str:
     cap = base + raised
     try:
         backlog = unfinished_master_runs(ln)
-    except (
-        subprocess.CalledProcessError,
-        subprocess.TimeoutExpired,
-        ValueError,
-    ) as exc:
-        why = getattr(exc, "stderr", None) or str(exc)
-        say(
-            f"could not count unfinished master CI runs ({why.strip()}); merging without pacing"
-        )
+    except (gh_read.GhReadFailed, ValueError) as exc:
+        unread = f"could not count unfinished master CI runs ({exc})"
+        if isinstance(exc, gh_read.GhReadFailed) and gh_rate_limit.is_rate_limited(
+            exc.why
+        ):
+            return f"pacing the merge: {unread}"
+        say(f"{unread}; merging without pacing")
         return ""
     if backlog < cap:
         return ""
