@@ -101,7 +101,6 @@ def test_a_pi_rerun_with_the_masks_in_place_writes_nothing(tmp_path):
 def test_resolved_stays_up_until_the_last_apt_call_of_step_5(tmp_path):
     host = FakeHost(tmp_path)
     _pi_with_units(host, "enabled", 0)
-    host._stub("apt-get", f'echo "apt-get $*" >> {host.log}')
 
     result = host.run("daniel-pi", "--until", "6")
 
