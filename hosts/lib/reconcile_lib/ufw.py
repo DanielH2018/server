@@ -228,7 +228,9 @@ def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, dict | Non
     return ok, record, drift
 
 
-def remove_legacy(rules: list[dict], legacy: list[dict], current: list) -> bool:
+def remove_legacy(
+    rules: list[dict], legacy: list[dict], current: list, delete=delete
+) -> bool:
     """Step 4. A spec a declaration shares is the adopted rule itself, so it is never deleted."""
     declared = {r["spec"] for r in rules}
     ok = True

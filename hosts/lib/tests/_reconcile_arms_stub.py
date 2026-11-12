@@ -1,6 +1,6 @@
 """The stub commands of reconcile's users, libvirt and lines arms.
 
-They are getent, usermod, ps, systemd-sysusers and virsh.
+They are getent, usermod, ps, find, systemd-sysusers and virsh.
 
 `_reconcile_stub.py` merges `HANDLERS` into its own and documents the rest of the state. These
 keys are the ones the three arms read:
@@ -9,8 +9,10 @@ keys are the ones the three arms read:
     sysusers: {"creates": {name: uid}, "fail": bool}. What `systemd-sysusers` adds, when it does
         not fail. A name already in `users` keeps its uid, as sysusers leaves an existing user alone.
     expired: names `usermod --expiredate 1` was run for. "fail_usermod": true makes it exit 1.
-        `usermod -u <uid> <name>` sets the uid in `users`.
+        `usermod -u <uid> <name>` sets the uid in `users`, and exits 8 for a name in "busy".
     processes: {name: [unit, ...]}. The units `ps -o unit= -u <name>` prints, one per process.
+    outside: {path: uid}. Files `find <roots> -uid <old> -exec chown -h <new>` re-owns when the
+        path sits under one of the roots it is given. "fail_find": true makes it exit 1.
     libvirt: {"networks": {name: {"active": bool, "autostart": bool}}, "nwfilters": {name: {}},
         "refuse": [name, ...], "fail": ["net-define", ...]}. `refuse` names the objects libvirt
         will not undefine, as for a filter a running guest references. `fail` names the verbs that
@@ -41,9 +43,28 @@ def usermod(state: dict, args: list[str]) -> int:
         print("usermod: stub refuses", file=sys.stderr)
         return 1
     if args[0] == "-u":
+        if args[2] in state.get("busy", []):
+            print(
+                f"usermod: user {args[2]} is currently used by process 4242",
+                file=sys.stderr,
+            )
+            return 8
         state["users"][args[2]] = int(args[1])
         return 0
     state.setdefault("expired", []).append(args[-1])
+    return 0
+
+
+def find(state: dict, args: list[str]) -> int:
+    if state.get("fail_find"):
+        print("find: stub fails", file=sys.stderr)
+        return 1
+    roots = args[: args.index("-xdev")]
+    old, new = int(args[args.index("-uid") + 1]), int(args[args.index("-h") + 1])
+    outside = state.get("outside", {})
+    for path, uid in outside.items():
+        if uid == old and any(path.startswith(root + "/") for root in roots):
+            outside[path] = new
     return 0
 
 
@@ -111,6 +132,7 @@ HANDLERS = {
     "getent": getent,
     "usermod": usermod,
     "ps": ps,
+    "find": find,
     "systemd-sysusers": systemd_sysusers,
     "virsh": virsh,
 }

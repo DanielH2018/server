@@ -14,9 +14,12 @@ and holds the host. A user still missing after sysusers is a fault too.
 
 An entry may carry `moved_from`, the uid the user held before the package renumbered it. A live
 uid equal to `moved_from` is a declared move, not a fault. The arm stops the `.service` units
-running as the user, such as a lingering `user@<old>.service`, runs `usermod -u`, which re-owns
-the files under the home directory, and starts the units again. The user's primary group keeps
-its gid. A failed move starts the stopped units again under the old uid and faults.
+running as the user, such as a lingering `user@<old>.service`, and runs `usermod -u`, which
+re-owns the files under the home directory. It re-owns the old uid's files in /tmp, /var/tmp
+and the crontab spool, then starts the units again. The user's primary group keeps its gid. A
+failed move starts the stopped units again under the old uid and faults. A login session
+running as the user makes usermod refuse, so the arm then stops nothing and counts the move as
+drift, which the next run retries.
 
 The arm never deletes a user. A user that leaves the list is expired with `usermod --expiredate
 1`, and removing its home is an operator step. The arm expires only a name its own record
@@ -33,6 +36,8 @@ SYSUSERS = Path("/usr/lib/sysusers.d/homelab.conf")
 NAME = re.compile(r"[a-z_][a-z0-9_-]{0,31}")
 KEYS = {"name", "uid", "home", "shell", "comment"}
 MOVE_KEYS = KEYS | {"moved_from"}
+# The shared paths where a moved user's files can sit; usermod re-owns its mail spool itself.
+OUTSIDE_HOME = ("/tmp", "/var/tmp", "/var/spool/cron/crontabs")
 
 
 def valid(section: object) -> bool:
@@ -88,22 +93,58 @@ def check(user: dict) -> str:
     return "live"
 
 
-def holders(name: str) -> list[str]:
-    """The `.service` units with a process running as `name`.
+def holders(name: str) -> tuple[list[str], list[str]]:
+    """The `.service` units and the login `session-*.scope` units running a process as `name`.
 
-    A container that runs as the same uid sits in a `.scope`, and usermod ignores it because its
-    root differs, so the arm leaves scopes alone.
+    A container that runs as the same uid sits in another `.scope`, and usermod ignores it because
+    its root differs, so the arm leaves it alone.
     """
     found = run("ps", "-o", "unit=", "-u", name)
-    units = {unit.strip() for unit in found.stdout.splitlines()}
-    return sorted(unit for unit in units if unit.endswith(".service"))
+    units = sorted({unit.strip() for unit in found.stdout.splitlines()})
+    sessions = [u for u in units if u.startswith("session-") and u.endswith(".scope")]
+    return [u for u in units if u.endswith(".service")], sessions
 
 
-def move(user: dict) -> bool:
-    """Renumber `user` from its `moved_from` uid to its declared uid; False after a failure."""
+def rehome(old: int, new: int) -> bool:
+    """Re-own the files outside the home that still carry `old`; usermod re-owns only the home."""
+    roots = [str(under_root(Path(p))) for p in OUTSIDE_HOME]
+    roots = [root for root in roots if Path(root).is_dir()]
+    if not roots:
+        return True
+    found = run(
+        "find",
+        *roots,
+        "-xdev",
+        "-uid",
+        str(old),
+        "-exec",
+        "chown",
+        "-h",
+        str(new),
+        "{}",
+        "+",
+    )
+    if found.returncode != 0:
+        log(
+            f"cannot re-own the files uid {old} holds outside its home: {found.stderr.strip()}",
+            ERR,
+        )
+    return found.returncode == 0
+
+
+def move(user: dict) -> str:
+    """Renumber `user` from its `moved_from` uid to its declared uid.
+
+    Returns:
+        `moved`; `waiting` when a login session runs as the user, which usermod refuses and the
+        next run retries; or `failed`, after which the stopped units run again under the old uid.
+    """
     name, old, new = user["name"], user["moved_from"], user["uid"]
+    units, sessions = holders(name)
+    if sessions:
+        log(f"{name} stays at uid {old} while {', '.join(sessions)} runs as it")
+        return "waiting"
     # DECIDED: the arm stops a user's units only for a move the package declares (#8100).
-    units = holders(name)
     stopped = [unit for unit in units if run("systemctl", "stop", unit).returncode == 0]
     moved = len(stopped) == len(units)
     if not moved:
@@ -113,6 +154,7 @@ def move(user: dict) -> bool:
         moved = result.returncode == 0
         if not moved:
             log(f"usermod -u {new} {name} failed: {result.stderr.strip()}", ERR)
+    rehomed = moved and rehome(old, new)
     for unit in stopped:
         if moved and unit == f"user@{old}.service":
             unit = f"user@{new}.service"
@@ -121,7 +163,7 @@ def move(user: dict) -> bool:
             moved = False
     if moved:
         log(f"moved {name} from uid {old} to {new}")
-    return moved and check(user) == "live"
+    return "moved" if rehomed and moved and check(user) == "live" else "failed"
 
 
 def expire(name: str) -> bool:
@@ -139,8 +181,8 @@ def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, dict | Non
     users = section["users"] if section else []
     verdicts = {user["name"]: check(user) for user in users}
     ok = "fault" not in verdicts.values()
-    if ok:
-        ok = all([move(user) for user in users if verdicts[user["name"]] == "move"])
+    moves = [move(u) for u in users if ok and verdicts[u["name"]] == "move"]
+    ok = ok and "failed" not in moves
     missing = [u for u in users if verdicts[u["name"]] == "absent"]
     if ok and missing:
         created = run("systemd-sysusers", str(under_root(SYSUSERS))).returncode == 0
@@ -149,7 +191,7 @@ def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, dict | Non
             log("systemd-sysusers did not leave every declared user in place", ERR)
     names = {user["name"] for user in users}
     stale = sorted(set((prev or {}).get("names") or []) - names)
-    drift = 0
+    drift = moves.count("waiting")
     for name in stale:
         if not users:
             names.add(name)

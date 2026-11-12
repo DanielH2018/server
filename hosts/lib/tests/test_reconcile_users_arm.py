@@ -147,6 +147,11 @@ def at_the_old_uid(node: Node) -> None:
             "active": "active" if unit == "user@995.service" else "inactive",
             "enabled": "static",
         }
+    (node.root / "tmp").mkdir()
+    node.state["outside"] = {
+        f"{node.root}/tmp/uv-claude.lock": 995,
+        f"{node.root}/tmp/uv-other.lock": 990,
+    }
 
 
 def unit_changes(node: Node) -> list[str]:
@@ -168,8 +173,38 @@ def test_a_user_at_its_moved_from_uid_is_renumbered_and_its_manager_restarted(no
     assert [c["argv"] for c in node.calls("usermod")] == [
         ["usermod", "-u", "1001", "claude"]
     ]
+    assert node.state["outside"] == {
+        f"{node.root}/tmp/uv-claude.lock": 1001,
+        f"{node.root}/tmp/uv-other.lock": 990,
+    }
     assert node.run().returncode == 0
     assert node.calls("usermod") == [], "the second run finds the user moved"
+
+
+def test_a_login_session_defers_the_move_as_drift_and_stops_nothing(node):
+    at_the_old_uid(node)
+    node.state["processes"]["claude"].append("session-7.scope")
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert "claude stays at uid 995 while session-7.scope runs as it" in result.stderr
+    assert unit_changes(node) == [] and node.calls("usermod") == []
+    assert f"{DRIFT} 1" in metrics(node)
+    node.state["processes"]["claude"].remove("session-7.scope")
+    assert node.run().returncode == 0
+    assert node.state["users"] == {"claude": 1001}, "the next run moves it"
+
+
+def test_files_outside_the_home_that_cannot_be_re_owned_fail_the_run(node):
+    at_the_old_uid(node)
+    node.state["fail_find"] = True
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert "cannot re-own the files uid 995 holds outside its home" in result.stderr
+    assert unit_changes(node) == ["stop user@995.service", "start user@1001.service"]
 
 
 def test_a_uid_that_is_neither_declared_nor_moved_from_faults_and_stops_nothing(node):
@@ -185,11 +220,12 @@ def test_a_uid_that_is_neither_declared_nor_moved_from_faults_and_stops_nothing(
 
 def failed_move_restarts_the_units(node: Node) -> None:
     at_the_old_uid(node)
-    node.state["fail_usermod"] = True
+    node.state["busy"] = ["claude"]
 
     result = node.run()
 
     assert result.returncode == 1
+    assert "user claude is currently used by process 4242" in result.stderr
     assert node.state["users"] == {"claude": 995}
     assert unit_changes(node) == ["stop user@995.service", "start user@995.service"]
 

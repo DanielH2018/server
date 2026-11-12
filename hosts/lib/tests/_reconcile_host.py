@@ -30,6 +30,7 @@ COMMANDS = (
     "getent",
     "usermod",
     "ps",
+    "find",
     "systemd-sysusers",
     "virsh",
     "udevadm",

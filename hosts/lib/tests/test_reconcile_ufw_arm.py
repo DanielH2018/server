@@ -12,6 +12,7 @@ Run: uv run pytest hosts/lib/tests/test_reconcile_ufw_arm.py
 import pytest
 from _reconcile_arms import base, metrics, red
 from _reconcile_host import V1, Node
+from reconcile_lib import ufw as ufw_arm
 
 ARM = "reconcile_lib/ufw.py"
 LAN = "allow from 192.0.2.0/24 to any port 22 proto tcp"
@@ -263,16 +264,20 @@ def test_a_legacy_entry_naming_an_adopted_spec_never_deletes_the_keep_rule(node)
     adopted_spec_survives(node)
 
 
-def test_red_a_legacy_step_that_deletes_the_adopted_spec_removes_the_keep_rule(
-    tmp_path,
-):
-    red(
-        tmp_path,
-        adopted_spec_survives,
-        ARM,
-        'if entry["spec"] in declared or (',
-        "if (",
+def test_the_legacy_step_skips_a_spec_a_declaration_shares_even_before_the_relabel():
+    # A full run relabels the rule before step 4 reads `current`, so only a direct call reaches
+    # the guard with the unlabelled spec still listed beside the keep rule.
+    deleted = []
+    legacy = {"spec": "limit 22/tcp", "comment": "", "replaced_by": "ssh-limit"}
+    current = [("limit 22/tcp", ""), ("limit 22/tcp", "homelab:keep:ssh-limit")]
+
+    assert ufw_arm.remove_legacy(
+        [SSH_LIMIT],
+        [legacy],
+        current,
+        delete=lambda *rule: deleted.append(rule) or True,
     )
+    assert deleted == [], "a delete with no comment matches the keep rule too"
 
 
 def test_an_uncommented_rule_no_legacy_entry_names_is_left_alone(node):

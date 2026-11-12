@@ -110,6 +110,7 @@ from validate.validate_lib.host_container import (
     CaseFailed,
     Container,
     expect,
+    expect_declared_uids,
     expect_tools_run,
     list_problems,
     release_fetched,
@@ -504,6 +505,8 @@ class Cases:
             # Joins the start the postinst queued, and returns once that reconcile ends.
             c.ok("systemctl start homelab-reconcile.service")
             self.expect_reconciled(c, "updater-head", "pi-head")
+            # The image holds node_exporter at its moved_from uid, so reconcile moved it.
+            expect_declared_uids(c)
             state = c.active(timer)
             expect(state == "active", f"{timer} is {state} after the install")
             if self.tools:

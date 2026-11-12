@@ -133,14 +133,20 @@ def test_users_reach_the_manifest_and_a_sysusers_file_and_reconcile_accepts_them
         pytest.param([{**CLAUDE, "extra": 1}], id="unknown-key"),
         pytest.param([CLAUDE, {**CLAUDE, "name": "other"}], id="duplicate-uid"),
         pytest.param([CLAUDE, {**CLAUDE, "uid": 1002}], id="duplicate-name"),
-        pytest.param([{**CLAUDE, "moved_from": 1001}], id="moved-from-itself"),
-        pytest.param([{**CLAUDE, "moved_from": "995"}], id="string-moved-from"),
-        pytest.param([{**CLAUDE, "moved_from": 0}], id="root-moved-from"),
     ],
 )
 def test_a_user_the_arm_would_refuse_fails_the_render(hosts, users):
     with pytest.raises(RenderRefused):
         _render(hosts, {"users": users})
+
+
+@pytest.mark.parametrize("moved_from", [1001, "995", 0, True])
+def test_the_arm_refuses_a_moved_from_the_renderer_refuses(hosts, moved_from):
+    users = [{**CLAUDE, "moved_from": moved_from}]
+
+    with pytest.raises(RenderRefused):
+        _render(hosts, {"users": users})
+    assert not _reconcile().users.valid({"users": users})
 
 
 def test_a_moved_from_uid_reaches_the_manifest_and_not_the_sysusers_file(hosts):
