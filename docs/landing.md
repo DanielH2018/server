@@ -165,6 +165,22 @@ cancelled, so `ci.yml`'s concurrency group did not cause it.
   draft, because a draft PR never merges. The remedy is then a push, or the same two commands
   by hand.
 
+**A check left pending under a completed workflow run ends the wait at `merge-timeout`.**
+GitHub can leave a job `queued` with no runner after its workflow run reads `completed`. PR
+#7975's required `pull + boot changed images` check did this on 2026-11-11. GitHub refused
+every direct merge, and the landing waited about 75 minutes towards `merge-timeout` (#7996).
+
+- `gh run rerun` refuses a completed run, and a `workflow_dispatch` run does not replace the
+  PR's check. Only a new head commit gives the PR a fresh set of checks.
+- Once the wait has sat on one head for `stuck_checks.AFTER_S` (600s), the merge wait reads
+  that head's check runs and check suites on a poll where `await_ci` reads it green, and
+  again every 600s after. A head that is not green is never read this way.
+- A check still pending in a completed suite ends the wait at `merge-timeout`, exit 75. The
+  message names the check and the remedy: push an empty commit to the PR branch, then re-run
+  `land.sh`.
+- A pending check in a suite still running is ordinary CI and keeps the wait. A failed read
+  names nothing, so the wait goes on to its budget.
+
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
 `renovate-agent-land@.service` sets it to `app/renovate`, so the unattended agent can only merge
 Renovate's PRs (issue #2170). `--any-author` lifts it for a session that is allowed to merge the
@@ -624,9 +640,10 @@ middleware before the backend is reached, and 19 dead Grafana panels sat behind 
 `land.sh` completes it: no promotion covered the merge commit in time (cause `promote-timeout`),
 a host's package is not yet applied, or the health gate could not read its store (cause
 `gate-unreadable`) or found its tree older than `origin/master` (cause `gate-stale`; see *The
-health gate*). `cc-wait land` ends the wait as `gave-up`, exit 3, for each of those three
-causes, read from the `LAND-RESULT:` line rather than the note beside it, and for an
-unreadable owed ledger. It ends the wait as `deferred`, exit 4, for any other.
+health gate*), or the owed ledger could not be read (cause `ledger-unreadable`).
+`cc-wait land` ends the wait as `gave-up`, exit 3, for each of those four causes, read from
+the `LAND-RESULT:` line rather than the note beside it. It ends the wait as `deferred`, exit
+4, for any other.
 
 `nothing-to-deploy` also covers a PR that reaches only a setup role the deployer applies.
 `land.sh` starts no tick and reads none of the deployer's state, so it reports neither the
@@ -653,8 +670,8 @@ role's files therefore ends `settled` or `nothing-to-deploy` (#7885). A PR that 
 file and keeps another keeps the role, so the ledger still decides whether a hand owes it (#7906).
 
 **An unreadable ledger ends `deferred`.** When `owed.jsonl` exists but cannot be read and the PR
-changes a setup role the tick does not apply, the landing ends `deferred` (exit 75) and names the
-read error. Re-run `land.sh` once the ledger reads. A PR that nominates no such role never reads
+changes a setup role the tick does not apply, the landing ends `deferred` (exit 75), cause
+`ledger-unreadable`, and names the read error. Re-run `land.sh` once the ledger reads. A PR that nominates no such role never reads
 the ledger, so a broken one cannot defer it.
 
 **Read every remediation line, not the first one.** One PR can reach two of these at once, for
