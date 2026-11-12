@@ -312,10 +312,8 @@ snapd_rule_verdict() {
 # Prints the absolute path of each tmpfs output the host package's secrets manifest declares, one
 # per line, or nothing when the manifest is missing or unreadable, so every such link pages.
 secret_links() {
-  python3 -I -c 'import json, sys
-for out in json.load(open(sys.argv[1]))["outputs"]:
-    if not out.get("persist"):
-        print("/" + out["destination"])' "$FS_ROOT$SECRETS_MANIFEST" 2>/dev/null | tr '\n' ' '
+  jq -r '.outputs[] | select(.persist != true) | "/" + .destination' \
+    "$FS_ROOT$SECRETS_MANIFEST" 2>/dev/null | tr '\n' ' '
 }
 
 # Prints "path (reason)" for each paged entry no package explains. Reads the files as they are
