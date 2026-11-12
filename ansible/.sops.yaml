@@ -28,23 +28,21 @@
 #                         host keys only. The cluster key is never a recipient here, so the
 #                         cluster cannot decrypt secrets.yml (ADR-0022).
 # The first, second and fourth rules list the same host keys, so any host that decrypts
-# secrets.yml can also regenerate the cluster files. Adding or removing a host therefore edits
-# all three of their `age:` strings. A file that does not exist yet needs no command; SOPS uses
-# the rule when it is first written.
+# secrets.yml can also regenerate the cluster files. Adding or removing a key that decrypts
+# secrets.yml therefore edits all three of their `age:` strings. A file that does not exist yet
+# needs no command; SOPS uses the rule when it is first written.
 #
-# Add a host:
+# Add a host. Its package key decrypts only its own per-host file, so it never joins the cluster
+# rules or the generic rule (ADR 0029, #6643):
 #   1. On that host:  hosts/bootstrap-host.sh <host>
-#      (step 3 generates the host's own age key, prints its PUBLIC key — no secret needed).
-#   2. Append the printed pubkey to the comma-separated `age:` string of ALL THREE rules
-#      below. Each is ONE quoted scalar, not a YAML list, so a per-key trailing comment is
-#      impossible; extend the position->host note above the generic rule instead.
-#   3. On a host that can already decrypt (daniel-box), from ansible/, once per file.
-#      Each command shows the recipient change and asks before writing:
-#        sops updatekeys vars/secrets.yml
-#        sops updatekeys vars/cluster-vars.sops.env
-#        sops updatekeys vars/cluster-manifests/<name>.sops.yaml   (each manifest)
-#      then commit the re-encrypted files + this file, and `git pull` on the host.
-# Remove a host's access: delete its key from all three rules, then from ansible/, once per
+#      (step 3 creates the package's age key and prints its PUBLIC key — no secret needed).
+#   2. Copy the daniel-server per-host rule below, ahead of the generic rule, with the path
+#      vars/hosts/<host>\.sops\.yaml$, and replace its first key with the printed pubkey.
+#      The `age:` string is ONE quoted scalar: the host, daniel-box, recovery.
+#   3. Where the host's tree names credentials, write its file on daniel-box (operator-only):
+#        uv run python scripts/secrets_mgmt/host_secrets.py sync <host>
+#      then commit the file and this file.
+# Remove a key from the shared rules: delete it from all three, then from ansible/, once per
 # file:
 #   sops rotate -i --rm-age <key> vars/secrets.yml
 #   sops rotate -i --rm-age <key> vars/cluster-vars.sops.env
