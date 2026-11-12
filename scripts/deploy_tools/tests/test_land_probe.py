@@ -235,21 +235,29 @@ def test_the_shim_runs_the_probe_and_prints_one_json_state(tmp_path):
 
 @pytest.mark.parametrize(
     "note",
-    [
-        outcome.UNREADABLE_GATE_NOTE,
-        outcome.STALE_GATE_NOTE,
-        outcome.UNREADABLE_LEDGER_NOTE,
-    ],
-    ids=["gate-unreadable", "gate-stale", "ledger-unreadable"],
+    [outcome.UNREADABLE_GATE_NOTE, outcome.STALE_GATE_NOTE],
+    ids=["unreadable", "stale"],
 )
-def test_a_give_up_note_beside_a_causeless_result_line_stays_a_plain_deferral(
+def test_a_gate_note_beside_a_causeless_result_line_stays_a_plain_deferral(
     tmp_path, note
 ):
-    """#7911, #7969: the cause on `LAND-RESULT:` decides a give-up; the note's text does not."""
+    """#7911: the cause on `LAND-RESULT:` decides a gate give-up; the note's text does not."""
     log = landing(
         tmp_path,
         "LAND-RESULT: verdict=deferred cause=- exit=75 pr=939 sha=- tags=1\n"
         f"{note}\nVERDICT: deferred (PR #939 — landed, not yet applied)\n",
+        rc=75,
+    )
+    assert land_probe.read(log)["state"] == "deferred"
+
+
+def test_a_ledger_note_beside_a_causeless_result_line_stays_a_plain_deferral(tmp_path):
+    """#7969: the cause on `LAND-RESULT:` decides a ledger give-up; the note's text does not."""
+    log = landing(
+        tmp_path,
+        "LAND-RESULT: verdict=deferred cause=- exit=75 pr=939 sha=- tags=1\n"
+        f"{outcome.UNREADABLE_LEDGER_NOTE}\n"
+        "VERDICT: deferred (PR #939 — landed, not yet applied)\n",
         rc=75,
     )
     assert land_probe.read(log)["state"] == "deferred"
