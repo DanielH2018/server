@@ -9,158 +9,104 @@ paths:
 
 # Python layout — where a module and its tests go
 
-The long form, with the measurements and the options not taken, is
-`docs/python-code-organization.md`. This file is the part you need while placing a file, plus
-the three rules every new check meets and the one that retires it (the last four sections).
-They stay here because this file loads where a new check lands (#2811).
+This file is what you need while placing a file, plus the rules every new check meets. The
+long form, with the measurements and the incidents behind each rule, is
+`docs/python-code-organization.md`.
 
 ## Cross-directory imports need a `sys.path` bootstrap
 
-A script imports across `scripts/` subdirectories with `from <dir> import <mod>`, and only
-after a `sys.path` bootstrap. A directly-invoked script gets its OWN directory on `sys.path`
-and nothing else — `pythonpath` in `pyproject.toml` is a pytest setting, so a cross-directory
-import that pytest resolves still raises `ModuleNotFoundError` under the cron or prek hook that
-actually runs it. Every module reaching outside its own directory therefore carries its own
-aliased insert (`_sys.path.insert(0, _Path(__file__).resolve().parents[1])`); copy that from a
-sibling. It goes on the module that needs it, never on a shared one — a single bootstrap in an
-imported module only works for whoever imports it first.
+A directly-invoked script gets its OWN directory on `sys.path` and nothing else.
+`pythonpath` in `pyproject.toml` is a pytest setting, so a cross-directory import that pytest
+resolves still raises `ModuleNotFoundError` under the cron or prek hook that runs it. Every
+module reaching outside its own directory carries its own aliased insert
+(`_sys.path.insert(0, _Path(__file__).resolve().parents[1])`); copy it from a sibling. It goes
+on the module that needs it, never on a shared one.
 
-A module under a `tests/` directory carries none of this — a `test_*.py`, a `conftest.py` or a
-`_*.py` fixture module a test imports: pytest is its only invoker, and `pythonpath` lists
-`scripts/` and every subdirectory but `validate` and `diagnostics`. A test under those two
-inserts its own package directory; any other insert `pythonpath` already supplies is dead
-weight, and `scripts/tests/test_test_module_bootstraps_present.py` refuses it.
+A module under a `tests/` directory carries none of this: pytest is its only invoker, and
+`pythonpath` lists `scripts/` and every subdirectory but `validate` and `diagnostics`. A test
+under those two inserts its own package directory. Any other insert is dead weight, and
+`scripts/tests/test_test_module_bootstraps_present.py` refuses it.
 
-The subdirectories have **no `__init__.py`** on purpose: they resolve as PEP 420 namespace
-packages, and adding one would change how pytest names the test modules under them.
+The subdirectories have **no `__init__.py`**: they are PEP 420 namespace packages, and adding
+one changes how pytest names the test modules under them.
 
-Three or more flat siblings whose filenames share a first or last `_`-word, one of them an
-entrypoint, go in a `<prefix>_lib/` package beside that entrypoint, as `land_lib/` does.
-`docs/python-code-organization.md` has the rule and its exemptions. The
-`module-families-live-in-a-package` row of `ansible/tests/repo/test_census_rows_layout.py`
-enforces it.
+Three or more flat siblings sharing a first or last `_`-word, one of them an entrypoint, go in a
+`<prefix>_lib/` package beside it, as `land_lib/` does. The `module-families-live-in-a-package`
+row of `ansible/tests/repo/test_census_rows_layout.py` enforces it.
 
 Verify a moved or new entry point by RUNNING it (`uv run python scripts/<dir>/<name>.py
---help`), not by running the suite — the suite is exactly the thing that cannot see this.
+--help`). The suite cannot see a missing bootstrap.
 
 ## Tests sit in a sibling `tests/`, never beside the code
 
-`testpaths` in `pyproject.toml` names every suite, with a comment saying what each covers. Four
-shapes recur: repo-wide guards in `ansible/tests/` (deploy ordering, the auto-deploy gates, the
-documented-path and macro checks), a role's own cluster-side logic under
-`ansible/roles/<plane>/<role>/tests/` (the code it covers stays in `files/`, which is what the
-role ships), the Bash classifier in `.claude/hooks/tests/`, and `scripts/<dir>/tests/`.
+`testpaths` in `pyproject.toml` names every suite. The shapes: repo-wide guards in
+`ansible/tests/`, a role's own logic under `ansible/roles/<plane>/<role>/tests/` (the code stays
+in `files/`, which the role ships), the Bash classifier in `.claude/hooks/tests/`, and
+`scripts/<dir>/tests/`. `ansible/tests/repo/test_testpaths_covers_every_test_file.py` enforces
+it.
 
-A `tests/` sibling keeps a test out of every `files/` ship list and lets the deployer's
-test-only path rule stay a directory check (ENFORCED by
-`ansible/tests/repo/test_testpaths_covers_every_test_file.py`). A test under
-`<plane>/<role>/tests/` imports its own role's `files/` modules by bare name with no insert:
-`ansible/roles/conftest.py` puts that one directory on `sys.path` when pytest collects the
-test (#3746). It never adds another role's `files/`, because a role ships only its own. A
-module shared across roles goes on `pythonpath` instead.
-`scripts/tests/test_test_module_bootstraps_present.py` refuses an insert the conftest already
-supplies. Every such path lands in the one session a full run shares, so a top-level `files/*.py` needs a basename no other role's
-`files/` or `pythonpath` root uses. Two roles' `app.py` failed six tests only in a full run
-(#2608). A `scripts/<dir>` holding a `tests/` counts as a root too, because its tests may
-insert it: the uid validator, then `scripts/validate/grafana_dashboards.py`, hid the filter plugin from
-`pytest scripts` (#5956). The `no-two-import-roots-share-a-module-basename` row of
-`ansible/tests/repo/test_census_rows_python.py` enforces it. A role that ships a `files/*.py`
-with logic gets a `tests/` directory, which the `ansible/roles/*/*/tests` glob in `testpaths` collects.
+A role test imports its own role's `files/` modules by bare name: `ansible/roles/conftest.py`
+puts that one directory on `sys.path`. A module shared across roles goes on `pythonpath`. A
+role that ships a `files/*.py` with logic gets a `tests/` directory. A top-level `files/*.py`
+needs a basename no other role's `files/` or `pythonpath` root uses, because a full run shares
+one session; the `no-two-import-roots-share-a-module-basename` row of
+`ansible/tests/repo/test_census_rows_python.py` enforces it.
 
-`ansible/tests/` is grouped by what a guard reads: `deploy/` (the deploy play, gitops_deploy
-and the rollout gates), `k8s/` (manifest render and workload hygiene across roles),
-`longhorn/` (backup, snapshot, revert), `setup/` (the host plane: k3s install, crons, DNS,
-UPS, the Pi), `staging/`, `services/` (one role each) and `repo/` (CI, docs and the suite's
-own guards). The modules guards share — `_helpers.py`, `_k8s_render.py`,
-`_role_census.py` — and `conftest.py` stay at the root, reachable from every subdirectory
-because `pyproject.toml` puts `ansible/tests` on `pythonpath`. A new guard goes in the directory
-whose name answers "what does it read", and keeps a unique basename — there are no
-`__init__.py` files, so pytest names modules by basename alone.
+`ansible/tests/` is grouped by what a guard reads: `deploy/`, `k8s/`, `longhorn/`, `setup/`,
+`staging/`, `services/` (one role each) and `repo/` (CI, docs and the suite's own guards). The
+shared modules (`_helpers.py`, `_k8s_render.py`, `_role_census.py`) and `conftest.py` stay at
+the root. A new guard keeps a unique basename, since pytest names modules by basename alone.
 
-A property of the rendered k8s manifests that is one selector and one predicate goes in as a
-row of `ansible/tests/k8s/test_rendered_properties.py`, not as a new file. The row carries its
-floor, its named members and its red/green fixtures, and a row whose selector stops matching
-fails with `subject gone: delete this row`. A property needing a second render context, a
-cross-document join or a long exemption list keeps its own file. A predicate with several
-ways to fail is still one row: its extra reject and accept cases go in `more_red` and
-`more_green`. The test file runs every row; once it nears the test-module line cap, a row
-goes in `_config_property_rows.py`, `_workload_property_rows.py`, `_image_property_rows.py`,
-`_scrape_property_rows.py`, `_edge_property_rows.py` or `_port_property_rows.py` beside it.
-
-A textual census of the tracked tree follows the same rule. It is one `git ls-files` selector
-and one per-file predicate, and it goes in as a `Census` row of
-`ansible/tests/repo/test_census_rows_python.py` or `test_census_rows_text.py`, of
-`test_census_rows_roles.py` when it reads a role's tasks or templates, of
-`test_census_rows_layout.py` when it judges which siblings a module sits beside, or of
-`test_census_rows_suite.py` when it polices the suite's own guards. A rule over the test
-modules themselves goes in `scripts/tests/test_census_rows_test_modules.py` or
-`test_census_rows_test_renders.py`. A row whose subject is a match inside a file sets `count`.
-A row whose subject is a group of files has its selector return `Subject`s rather than paths.
-`ansible/tests/_row_table.py` is the harness both tables share.
+**A one-selector, one-predicate check is a row, not a file.**
+- A property of the rendered k8s manifests goes in `ansible/tests/k8s/test_rendered_properties.py`,
+  or in one of the `_*_property_rows.py` files beside it once that file nears the line cap.
+  Extra reject and accept cases go in `more_red` and `more_green`.
+- A textual census of the tracked tree goes in a `Census` row of
+  `ansible/tests/repo/test_census_rows_python.py`, `test_census_rows_text.py`,
+  `test_census_rows_roles.py`, `test_census_rows_layout.py` or `test_census_rows_suite.py`.
+  A rule over the test modules goes in `scripts/tests/test_census_rows_test_modules.py` or
+  `test_census_rows_test_renders.py`.
+- `ansible/tests/_row_table.py` is the harness the tables share. A property needing a second
+  render context, a cross-document join or a long exemption list keeps its own file.
 
 ## No tests under `ansible/filter_plugins/`
 
-Ansible's plugin loader imports every `.py` there at deploy time and would choke on the
-`pytest` import. `test_every_suite_file_sits_in_a_tests_directory` (in
-`ansible/tests/repo/test_testpaths_covers_every_test_file.py`) refuses a test file beside the
-plugin. A `filter_plugins/tests/` subdirectory would pass it and still load, because
-`PluginLoader._get_paths_with_context` globs two levels of subdirectories.
+Ansible's plugin loader imports every `.py` there, two directory levels deep, at deploy time,
+and would choke on the `pytest` import. `test_every_suite_file_sits_in_a_tests_directory`
+refuses a test file beside the plugin, but a `filter_plugins/tests/` subdirectory would pass it
+and still load.
 
 ## A new check ships with a proof it can go red
 
-Any validator, guard, health check or probe lands with a paired test: one input it must accept,
-and one input it must reject. A check is only ever observed passing, so without the rejecting
-half there is no evidence it can fail. `volume-claim`'s short-circuit shipped behind 16 passing
-tests and a mutation test, then fired for 0 of 25 claims across two full deploys. `image-smoke`'s
-bare-boot rule never caught a real image problem across 11 failures. Both read green throughout.
-`scripts/validate/tests/test_validate_compose_templates.py` is the worked example: every rule
-there is a `..._is_clean` / `..._is_flagged` pair, so a rule that silently stopped matching fails
-its own test. Name the pair that way.
+Any validator, guard, health check or probe lands with a paired test: one input it must
+accept, one it must reject. Without the rejecting half there is no evidence it can fail.
+`scripts/validate/tests/test_validate_compose_templates.py` is the worked example: name the
+pair `..._is_clean` / `..._is_flagged`.
 
 ## A check that finds its subject by pattern names a member it must find
 
-A guard that globs for the files it checks (`validate_*.py`, a `gen_reference_` prefix, a
-one-level `DIR.glob("*.py")`) returns an EMPTY set the moment those files are renamed or move one
-directory down, and an `all(...)` over nothing passes. The red-proof pair cannot see this: both
-halves still fire on the inputs the test hands them. Assert non-vacuity against something
-concrete — `assert len(found) >= <n>`, or better a frozenset of names the census must contain,
-so the failure names the member that went missing. `KNOWN_CONSUMERS` in
-`scripts/diagnostics/tests/test_probe_boundaries.py` is the worked example. Nine guards broke this
-way in six consecutive PRs (#838, #846, #852, two in #858, four in the monitor-bridge package
-move), and the non-vacuity assertion alone caught every one.
+A guard that globs for its files returns an EMPTY set once they are renamed or moved, and an
+`all(...)` over nothing passes. Assert non-vacuity against a frozenset of names the census must
+contain, so the failure names the member that went missing. `KNOWN_CONSUMERS` in
+`scripts/diagnostics/tests/test_probe_boundaries.py` is the worked example.
 
 ## A check that reaches over a network measures its transport first
 
-The paired test proves the *verdict* can go red. It says nothing about whether the fetch that
-feeds the verdict returns in time, and a check whose source is slow fails open on every slow
-cycle behind a green monitor. Time each endpoint against the live source, more than once. The
-Pi-detached arm (PR #482) polled glances' `/api/4/containers`, which took 4.43s on an idle Pi and
-then timed out at the 10s `HTTP_TIMEOUT` on the next call, where the sibling endpoints answer in
-0.03-0.06s. PR #484 reshaped it so the cheap signal decides and the expensive one only explains.
-**A slow source is a design input:** make it conditional on the cheap signal having already
-fired, and make its failure downgrade the diagnosis rather than the verdict.
+Time each endpoint against the live source, more than once. A slow source is a design input:
+make the slow fetch conditional on a cheap signal having fired, and make its failure downgrade
+the diagnosis rather than the verdict.
 
 ## A check retires when its subject does
 
-The three rules above price a new check. Nothing priced deleting one, so checks only
-accumulated: in the 90 days to 2026-09-28 the repo added 889 test files and deleted 62, a ratio
-of 14 to 1, while the service count held near 50. Delete a check in the PR that obsoletes it,
-on either of two conditions.
+Delete a check in the PR that obsoletes it, when either holds:
 
-- **Its subject is gone.** The code path, rule or failure shape it watches no longer exists. A
-  check over a missing subject still passes — the census comes back empty and the `all(...)`
-  over nothing is true — so a green run is not evidence it is still worth keeping.
-- **A census or schema check already covers it.** `ansible/tests/_k8s_render.py`'s
-  role censuses and `scripts/validate/k8s_manifests.py`'s strict OpenAPI validation are the two
-  that usually swallow a single-shape guard. Name the covering check in the PR body and say
-  which inputs it accepts that the deleted one rejected.
+- **Its subject is gone.** A check over a missing subject still passes, so green is no
+  evidence it is worth keeping.
+- **A census or schema check covers it.** `ansible/tests/_k8s_render.py`'s role censuses and
+  `scripts/validate/k8s_manifests.py`'s OpenAPI validation usually swallow a single-shape
+  guard. Name the covering check in the PR body.
 
-Drop the check's `ENFORCED` citation from the prose in the same PR.
+A check that pins a skill's restatement of a tool's enum retires in the PR that makes the tool
+print its own contract. Drop the check's `ENFORCED` citation in the same PR:
 `ansible/tests/repo/test_documented_paths_exist.py::test_every_cited_test_exists` fails on a
-node id that no longer resolves, so a deletion that leaves the citation behind arrives as a
-docs failure rather than as the deliberate retirement it was.
-
-A check that pins a skill's restatement of a tool's enum is a third case. It retires in the
-same PR that makes the tool print its own contract, together with the prose it pinned. #3023
-retired the two tests that pinned the deploy and land skills' copies this way, once `deploy.sh`
-and `land.sh` printed their exit codes and verdicts themselves.
+node id that no longer resolves.

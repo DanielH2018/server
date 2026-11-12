@@ -69,6 +69,55 @@ The rules below shaped those memberships.
 - Thresholds are env-tunable in `templates/config/env.yaml.j2`, the only place each value is
   written: `bridge/config*.py` reads a rendered key with no default (#3659). A failed query makes that check `down` with an explanatory message.
 
+## The two exporters
+
+The role `CLAUDE.md` keeps the rules; this is the wiring.
+
+- **The check exporter.** `files/verdict_export.py` serves each row's verdict
+  (`docs/target-architecture/monitoring/m6-retire-kuma.md`, *The bridge as an exporter*). It
+  runs on the `metrics` item of the role's `containers_list` entry, and observability's
+  `monitor-bridge` scrape job collects it. `homelab_check_success`,
+  `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` carry
+  `check="<row>"`. `homelab_check_rows` counts the enabled rows of `CHECKS`, gate rows
+  included, so it is not `registry.build_checks`' length, which drops every gate row.
+  `BridgeCheckStale` compares the exported row count against it.
+- **The deploy-pipeline family.** `files/deploy_pipeline.py` reads `promote`'s state after
+  every check has run and serves its gauges on `monitor_bridge_deploy_pipeline_port` through
+  `templates/service.yaml.j2`. observability's `deploy-pipeline` scrape job collects them and
+  its `deploy-pipeline` rule group pages on them; `docs/flux-deploy-plane.md` says what each
+  alert means. The token comes from the SOPS key `monitor_bridge_deploy_pipeline_github_token`.
+  An empty token serves no series, which `DeployPipelineExporterAbsent` pages. Each cycle logs
+  one `deploy-pipeline:` line with the values and any failed read.
+- **The reboot-window gauge reads no remote state.** It derives from the `WEEKLY_REBOOT_*` env
+  keys, which `templates/config/env.yaml.j2` renders from the `weekly_reboot_*` group vars, so
+  PromotionStalled stays quiet while `promote` defers across the weekly reboot (#5458).
+- **The deploy-pipeline scrape port is a literal in `prometheus.yaml.j2`.**
+  `ansible/tests/services/test_deploy_pipeline_scrape.py` holds it to the role's default.
+- **The gates' labels.** B2 and WAN Reachable skip the rows naming them. The `prometheus` gate
+  value suppresses no row in the bridge: it labels the rows `EXPORTER_DEPENDENT` holds and the
+  rules that carry the exporter inhibit. `registry.build_checks` hands each row's `gate` to
+  `check.run_once`.
+
+## Module mounting
+
+- **One ConfigMap per module.** `templates/script-configmap.yaml.j2` renders each
+  `monitor_bridge_modules` entry as its own ConfigMap, and the Deployment's projected volume
+  mounts every one back at its path under `/app`. The shared role's client-side apply caps each
+  object near 256 KiB, and the modules total about 700 KB.
+- **`longhorn_robustness.py` stays off the list.** Only the runbook gates import it, from the
+  checkout, so it sits in `test_monitor_bridge_modules.py`'s `CHECKOUT_ONLY`, and the test
+  fails if a shipped module imports it. The mount-layout sibling test catches a module the
+  layout misses.
+- **A module edit rolls the pod.** Under Flux the restart annotation that the renderer stamps
+  (`RESTART_ANNOTATION` in `scripts/renderer/renderer_lib/restart.py`) hashes every ConfigMap
+  the volume names. `scripts/renderer/tests/test_renderer_monitor_bridge_script.py` holds the
+  embed, the size and the checksum.
+- **Flux applies the role** since #5594. Its `containers_list` entry is `platform: k8s`, and the
+  Kustomization's `wait` replaces the rollout wait.
+- **Config in tests.** A test states the registry, gate rows first, and its I/O as a
+  `FakeSources` passed as `src`. A default argument cannot read the config, because it
+  evaluates at import.
+
 ## Operator prerequisites
 
 1. No push token. The bridge reads none since A6's Cutover-2.
