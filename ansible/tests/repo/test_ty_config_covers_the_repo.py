@@ -180,7 +180,7 @@ def test_a_file_outside_every_root_is_flagged():
 
 
 def test_an_excluded_file_is_not_flagged():
-    assert _unchecked(["site/x.py"], ["site"], ["site"]) == []
+    assert _unchecked(["site/x.py"], ["scripts"], ["site"]) == []
 
 
 def test_a_covered_pythonpath_is_clean():
