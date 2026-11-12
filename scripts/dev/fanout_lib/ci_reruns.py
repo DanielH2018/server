@@ -2,27 +2,29 @@
 
 The CI gate re-runs a PR's failed jobs after a resume that pushed nothing, and records
 `ci_rerun` (#7674). `ci_gate` then reads `passed ...`, `failed ...: <jobs>` or `no verdict ...`,
-so the re-run's outcome is that leading word. The record names the failed jobs only when the
-re-run did not clear them, so a flake that passed has no job names. A record written before
-`ci_rerun` existed has no key and reads as no re-run.
+so the re-run's outcome is that leading word. `ci_rerun_jobs` holds the jobs the first attempt
+failed (#7884), so a flake that passed still has names. A record written before that field
+existed falls back to the jobs `ci_gate` names, which only a `failed` gate carries. A record
+written before `ci_rerun` existed has no key and reads as no re-run.
 """
 
 NO_RERUN = {"ci_rerun": False, "ci_rerun_outcome": "", "ci_rerun_jobs": []}
 
 
 def rerun_fields(record: dict) -> dict:
-    """Whether the gate re-ran the failed jobs, how that ended, and the jobs still red."""
+    """Whether the gate re-ran the failed jobs, how that ended, and the jobs that failed."""
     if not record.get("ci_rerun"):
         return NO_RERUN
     gate = str(record.get("ci_gate") or "")
     outcome = next(
         (w for w in ("passed", "failed") if gate.startswith(w)), "no verdict"
     )
-    jobs = gate.partition(": ")[2] if outcome == "failed" else ""
+    parsed = gate.partition(": ")[2] if outcome == "failed" else ""
     return {
         "ci_rerun": True,
         "ci_rerun_outcome": outcome,
-        "ci_rerun_jobs": jobs.split(", ") if jobs else [],
+        "ci_rerun_jobs": record.get("ci_rerun_jobs")
+        or (parsed.split(", ") if parsed else []),
     }
 
 
