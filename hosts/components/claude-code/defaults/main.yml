@@ -225,13 +225,11 @@ claude_code_login_caps_enabled: true
 # which names the agent's uid on a host whose rollback sets claude_code_user back to sys_user.
 claude_code_login_uid: 1000
 
-# Every uid whose login-session slice gets the caps, and whose home gets the pytest fan-out file.
-# The default is the one uid above, so a host without the agent user is unchanged. On a host with
-# claude_code_agent_user_enabled the agent's uid is added at run time (tasks/login_caps.yml), from
-# the passwd database and never from a number written here: since 2026-10-09 new interactive
-# sessions start as the agent through `claude-agents`, so they land in the agent's own
-# user-<uid>.slice. A uid that leaves this list has its drop-in and environment.d file removed on
-# the next apply. Drop claude_code_login_uid from it only once the operator says no session still
+# Every uid whose login-session slice gets the caps. The default is the one uid above. The
+# agent's uid is not in it: each host's package.yml ships the agent's user-<uid>.slice.d cap with
+# the uid it declares, because since 2026-10-09 new interactive sessions start as the agent
+# through `claude-agents` and land in the agent's own user-<uid>.slice. Dropping 1000 from this
+# list drops the operator's drop-in from the next package version. Drop claude_code_login_uid from it only once the operator says no session still
 # runs as {{ sys_user }}; docs/claude-agent-user.md, slice 6.
 claude_code_login_uids: "{{ [claude_code_login_uid] }}"
 
@@ -315,7 +313,7 @@ claude_code_agent_clone_sync_interval: 15min
 claude_code_agent_journal_access: true
 # Whether the operator reads the agent's artifacts and memory store. claude-memory-sync runs as
 # sys_user, and the artifact browser and the operator's own sessions read both once the phone
-# host runs as the agent (slice 4). tasks/agent_access.yml has how; false closes the agent's
+# host runs as the agent (slice 4). claude-agent-setup applies it; false closes the agent's
 # ~/.claude to its own user again and removes the ACLs.
 claude_code_agent_operator_read: true
 # The agent's own memory store: Claude Code keys it by the project directory, the agent's clone.
@@ -339,27 +337,27 @@ claude_code_agent_memory_seed_strip: "{{ claude_code_operator_checkout }}/"
 # CLAUDE.md, rules/, output-styles/ and skills/, and the operator's `outputStyle`. It gets no
 # hooks. The operator decided on 2026-10-09 to copy the subset from the deployed
 # /home/{{ sys_user }}/.claude rather than from chezmoi's source (docs/claude-agent-user.md,
-# slice 4); tasks/agent_operator_config.yml has how, and the limit of the root ownership. False
-# removes the copied trees, the import line in the agent's CLAUDE.md, and the `outputStyle` it
-# set.
+# slice 4). The component ships no copy of the subset (component.yml's header): this flag gates
+# only the operator import line in templates/agent-user-claude-md.j2.
 claude_code_agent_operator_config: true
 claude_code_agent_operator_config_src: /home/{{ sys_user }}/.claude
 
 # Whether the agent user takes the operator's dotfiles through chezmoi, with the dotfiles
-# repo's `agent` flag on, in place of the subset above (tasks/agent_dotfiles.yml). The operator
-# chose it on 2026-10-10 (#4193-#4195): the agent then runs the operator's guard hooks, agents,
-# commands and CLIs. True in daniel-box's and daniel-server's host_vars. It needs homelab-tools' chezmoi
-# and a dotfiles source with the flag; a source without it is refused, and the
-# agent keeps what it had. False stops the sync and puts the subset back.
+# repo's `agent` flag on, in place of the subset above. claude-agent-setup clones the source,
+# and claude-dotfiles-sync.sh applies it. The operator chose it on 2026-10-10 (#4193-#4195):
+# the agent then runs the operator's guard hooks, agents, commands and CLIs. True in
+# daniel-box's and daniel-server's host_vars. It needs homelab-tools' chezmoi and a dotfiles
+# source with the flag; a source without it is refused, and the agent keeps what it had. False drops the sync from the next package version.
 claude_code_agent_dotfiles: false
 claude_code_agent_dotfiles_repo: https://github.com/DanielH2018/dotfiles.git
 # The dotfiles' `profile` answer: `server`, as the operator's own config on these hosts holds.
 claude_code_agent_dotfiles_profile: server
-# How often <name>-dotfiles-sync.timer pulls the source and applies it. A dotfiles merge applies
-# no role here, so this bounds how long the agent runs the old hooks.
+# How often homelab-claude-dotfiles-sync.timer pulls the source and applies it. A dotfiles merge
+# ships no host package version here, so this bounds how long the agent runs the old hooks.
 claude_code_agent_dotfiles_sync_interval: 15min
 
-# The agent user's GitHub machine account, created 2026-10-05 (tasks/agent_github.yml). It is a
+# The agent user's GitHub machine account, created 2026-10-05. homelab-secrets renders its gh
+# login under /run, and claude-agent-setup links ~/.config/gh/hosts.yml to it. It is a
 # write collaborator and a bypass actor on no ruleset. "agent branch fence" lets it create,
 # update and delete only refs/heads/worktree-claude+**, the branch EnterWorktree gives a
 # `claude/<slug>` worktree, plus master through a merged PR. Since 2026-10-11 it may merge or
@@ -385,7 +383,8 @@ claude_code_agent_git_email: >-
 # agent pushes over HTTPS with the token, so the key can sign and cannot push.
 claude_code_agent_signing_key: "{{ claude_code_agent_user_home }}/.ssh/git_signing_ed25519"
 
-# The agent's login for the homelab-ui MCP server (tasks/agent_homelab_ui.yml). The username is
+# The agent's login for the homelab-ui MCP server, an output of daniel-box's package.yml that
+# claude-agent-setup links into the agent's home. The username is
 # the Authelia account the authelia role creates (`authelia_k8s_agent_user`), mirrored here
 # because the two roles cannot read each other's defaults; a test holds the two equal. The
 # password is `authelia_agent_password` in SOPS, which the apply decrypts as {{ sys_user }}.
@@ -450,7 +449,7 @@ claude_code_lander_enabled: false
 # claude_code_triage_claude_oauth_token in secrets.yml. False on either removes the rule, the
 # units, the code and the config; the state directory and its records stay.
 claude_code_triage_enabled: false
-# Pinned again as block vars in tasks/triage.yml, which wins over any inventory override; the
+# Pinned again in templates/claude-triage-pins.j2, which wins over any inventory override; the
 # values here are what the validator renders with. Literals, for the reason the lander's are.
 claude_code_triage_agent_user: claude
 claude_code_triage_agent_home: /var/lib/claude
@@ -611,8 +610,8 @@ claude_code_rootq_shim: /usr/local/bin/rootq
 # the agent: claude-rc.service runs with NoNewPrivileges=yes. homelab-rootq.socket (0660, the
 # group below) starts a root helper per connection, and the helper runs the script above, so
 # the allowlist and the redaction are the same. True in daniel-box.yml and daniel-server.yml.
-# False removes the socket, its units, the helper, the client and the group, and agent_access.yml
-# takes the agent out of the group. It does nothing while claude_code_rootq_enabled is false,
+# False removes the socket, its units, the helper, the client and the group, and
+# claude-agent-setup takes the agent out of the group. It does nothing while claude_code_rootq_enabled is false,
 # because a socket must not outlive the script it runs. CLAUDE.md, "The root inspector".
 claude_code_rootq_socket_enabled: false
 claude_code_rootq_socket_armed: "{{ claude_code_rootq_enabled and claude_code_rootq_socket_enabled }}"

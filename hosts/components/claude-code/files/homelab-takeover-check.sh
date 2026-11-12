@@ -1,6 +1,7 @@
 #!/usr/bin/bash
 # /usr/local/sbin/homelab-takeover-check: the D5 flip PR's pre-merge dry-run checks, run as root
-# through one NOPASSWD sudoers line (issue #5494). Installed by tasks/takeover_check.yml.
+# through one NOPASSWD sudoers line (issue #5494). Shipped by the homelab host package
+# (hosts/components/claude-code).
 #
 # Usage: homelab-takeover-check --label L --render DIR --src DIR --tags a,b[,...]
 #

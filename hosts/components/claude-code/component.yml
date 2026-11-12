@@ -1,6 +1,6 @@
 # The Claude Code host of daniel-server (H7.39) and daniel-box (H7.40,
-# docs/target-architecture/host/h7-delete-ansible.md). The claude_code role ends on every host
-# (`meta: end_role` in its tasks/main.yml), so this component is the one writer.
+# docs/target-architecture/host/h7-delete-ansible.md). H7.55 deleted the claude_code setup role,
+# so this component is the one writer.
 #
 # What it ships, by subject:
 #   - the agent user: homelab-claude-agent.service gives it its groups, home, identity and clone.
@@ -24,8 +24,8 @@
 #     agent's peer key and ssh config on claude_agent_ssh_key_host and its one-time memory seed,
 #     both in claude-agent-setup; its homelab-ui login; and its homelab-ui browser oneshot,
 #     which ships wherever the agent exists so that switching homelab-ui off takes it back. The
-#     operator config subset is not shipped: the role runs it only where
-#     claude_code_agent_dotfiles is false, which no host sets.
+#     operator config subset is not shipped: the deleted role copied it only where
+#     claude_code_agent_dotfiles was false, which no host sets.
 #
 # The templates, scripts and defaults the claude_code role used to install sit beside this file
 # (#6773): `templates/`, `files/` and `defaults/main.yml`, which the renderer loads beneath the
