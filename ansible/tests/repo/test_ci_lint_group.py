@@ -64,7 +64,7 @@ def pyproject_problems(config: dict) -> list[str]:
 
 def _uses_uv(job: dict) -> bool:
     for step in job.get("steps") or []:
-        if str(step.get("uses", "")) == "./.github/actions/setup":
+        if str(step.get("uses", "")) == "$/.github/actions/setup":
             return (step.get("with") or {}).get("uv", "true") != "false"
     return False
 

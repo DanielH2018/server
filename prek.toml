@@ -379,12 +379,19 @@ files = "^(scripts/renderer/renderer_lib/jinja_filters\\.py|scripts/validate/val
 #
 # It reads `.github/actionlint.yaml`, which declares the one hosted runner label actionlint's
 # own hard-coded list does not carry yet. That file says which, and when to delete it.
+#
+# The entry is a wrapper, not actionlint itself: actionlint 1.7.12 rejects the
+# `uses: $/.github/actions/setup` callers and skips their input checks, so the wrapper lints a
+# copy rewritten to `./`. The `# DECIDED:` marker in .github/actions/setup/action.yml says when
+# to call actionlint directly again. A change to the action or to the wrapper's own modules
+# re-lints every workflow, so the hook passes no filenames.
 [[repos.hooks]]
 id = "actionlint"
 name = "Lint GitHub Actions workflows"
-entry = "uv run --frozen actionlint"
+entry = "uv run --frozen python scripts/validate/actionlint_dollar_refs.py"
 language = "system"
-files = "^\\.github/workflows/[^/]+\\.ya?ml$"
+files = "^(\\.github/(workflows/[^/]+\\.ya?ml|actions/.*|actionlint\\.yaml)|scripts/validate/actionlint_dollar_refs\\.py|scripts/lib/(git|repo_paths)\\.py)$"
+pass_filenames = false
 
 # The security half of workflow linting, which actionlint does not do: a checkout that leaves
 # the token on disk, a `${{ }}` expression injected into a `run:` shell, an unpinned action, a

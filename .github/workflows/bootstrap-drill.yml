@@ -64,7 +64,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
 
       # The same FLUX_* pin and fetch as ci.yml's flux_roundtrip job. It pushes the fixture artifact.
       - name: Cache the flux CLI release

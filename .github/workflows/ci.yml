@@ -238,7 +238,7 @@ jobs:
 
       # Python, uv and prek, with their caches. The pins and the reasoning behind each cache
       # live in the action. No Galaxy cache: see the DECIDED block above.
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
         with:
           prek-cache-key: prek
 
@@ -511,7 +511,7 @@ jobs:
 
       # Python and uv only. Neither gate runs prek or reads a Galaxy collection; both ran in
       # `hooks` before this job existed, where neither cache was restored for them.
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
         if: github.event_name == 'pull_request'
 
       # The render-diff gates (D4.4, renamed from the cross-plane gate in D6.12, which deleted
@@ -566,7 +566,7 @@ jobs:
 
       # Its own prek cache prefix rather than the `hooks` job's. The two jobs build disjoint hook
       # environments, and one shared key would have them overwrite each other's entry every run.
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
         with:
           prek-cache-key: prek-lint
           galaxy: "true"
@@ -661,7 +661,7 @@ jobs:
           persist-credentials: false
       # Several ansible/tests read the Galaxy collections, so they must be on disk. The action's
       # Galaxy cache key is the one the `ansible_lint` job uses, so the two share one entry.
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
         with:
           galaxy: "true"
       - name: Install Ansible collections
@@ -929,7 +929,7 @@ jobs:
           persist-credentials: false
 
       # The renderer imports no Galaxy collection, so no Galaxy cache.
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
 
       # The same FLUX_* pin as promote.yml's, so the CLI that checks the round trip is the CLI
       # that publishes and the controllers' release. scripts/tests/test_renovate_flux_cli.py
@@ -1073,7 +1073,7 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
 
       # The flux_roundtrip job's pin and fetch. The CLI pushes the fixture artifact.
@@ -1332,7 +1332,7 @@ jobs:
           persist-credentials: false  # nothing here pushes or fetches
 
       # The renderer imports no Galaxy collection, so no Galaxy cache.
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
 
       # 12 retries 30s apart outlast a release-host outage, as TOOL_RETRY_WINDOW_S does for the
       # pins below. A persistent outage fails at the first download, inside the job's timeout.
@@ -1722,7 +1722,7 @@ jobs:
         with:
           persist-credentials: false  # nothing here pushes or fetches
 
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
 
       - name: Download the hand-off from the build job
         if: >-
@@ -1843,7 +1843,7 @@ jobs:
         with:
           persist-credentials: false  # nothing here pushes or fetches
 
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
 
       - name: Download the hand-off from the build job
         if: >-
@@ -1944,7 +1944,7 @@ jobs:
         with:
           persist-credentials: false  # nothing here pushes or fetches
 
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
 
       - name: Download the hand-off from the build job
         if: >-
@@ -2183,7 +2183,7 @@ jobs:
           fetch-depth: 0  # the merge-base diff below needs history
           persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
 
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
         with:
           python: "false"
           uv: "false"
