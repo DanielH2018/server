@@ -52,6 +52,9 @@
 # the multipath drop-in, the inotify key and the address pin, whose wifi half reads `wifi_ssid` and
 # `wifi_password`) and the `hypervisor` component, the monthly etcd restore drill and its libvirt
 # state (`r2_*`, `host_secrets.py sync daniel-server`, operator-only).
+#
+# #8261 adds the read-only kubeconfig to `k3s-agent`, which reads `k3s_readonly_token`
+# (`host_secrets.py sync daniel-server`, operator-only).
 description: daniel-server's homelab host package
 # The claude-code component's agent user. Its uid differs per host, so the users entry and the
 # agent's login-slice cap sit here; `component: claude-code` reaches only these files (H7.40).

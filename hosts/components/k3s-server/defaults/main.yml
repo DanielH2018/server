@@ -113,6 +113,9 @@
 k3s_readonly_sa_name: homelab-readonly
 k3s_readonly_sa_namespace: kube-system
 k3s_readonly_kubeconfig_server: https://127.0.0.1:6443
+# The file that carries the CA signing that endpoint's certificate: a kubeconfig or a PEM
+# certificate. The kubeconfig oneshot reads it, and does not start until it exists.
+k3s_readonly_kubeconfig_ca_source: /etc/rancher/k3s/k3s.yaml
 
 # The link that carries server_ip, which the package's netplan file pins statically so k3s can
 # start while the gateway's DHCP server is down (#3882, #3891 for the agent). Empty removes
