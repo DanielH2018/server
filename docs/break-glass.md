@@ -591,7 +591,7 @@ suspended before it is scaled and resumed rather than redeployed.
       `stateful=` roles, is worked by `docs/flux-deploy-plane.md`'s *Verification* instead,
       then resume as below.
     - **The hold still reads step 2's reason.** Resume each suspended tag with the same patch
-      and `false`, rather than waiting on a promotion:
+      and `false`:
 
         ```bash
         sudo k3s kubectl -n flux-system patch kustomization <tag> --type merge \
