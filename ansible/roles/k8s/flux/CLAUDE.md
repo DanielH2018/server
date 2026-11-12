@@ -235,9 +235,7 @@ OCIRepository `homelab`. `FluxNotReady` stayed quiet for the same reason, and
   as `flux_github_app_private_key`, run `uv run python
   scripts/secrets_mgmt/secret_rotation.py sync`, and write the cluster file and the SOPS
   manifest with `cluster_vars.py write`, then commit. notification-controller reads the
-  Secret on each event, so no controller restarts. The SOPS key `flux_github_status_token`,
-  the operator's former fine-grained token, stays until a follow-up removes it, and no
-  template reads it.
+  Secret on each event, so no controller restarts.
 
 ## The break-glass source form
 
