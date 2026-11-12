@@ -26,9 +26,9 @@ WHERE THE SECRETS COME FROM. The process environment — `ARR_API_KEY` and
 `ARR_DISCORD_WEBHOOK_URL`, set by the seed Job in sonarr's and radarr's `templates/verify/`
 from two Secrets, or by the operator's shell for a hand run (the role's `CLAUDE.md`,
 *Verifying it by hand*). Never argv, and nothing here prints a field value: the output is
-the decision (created / updated / no-op) and the `SEED_CHANGED: <n>` marker. `probe.py arr <app> notification` prints the
-webhook URL in full, which is why verifying this by hand needs a filter and this script does
-not need one.
+one line naming the decision (created / updated / no change), which is all the Job log says.
+`probe.py arr <app> notification` prints the webhook URL in full, which is why verifying this
+by hand needs a filter and this script does not need one.
 
 ONE TRANSPORT, TWO CALLERS. Every request goes through `flux_job_connect.open_url`, the
 helper the Job census requires of a script Flux runs, so the script imports only modules that
@@ -57,10 +57,6 @@ ARR_PORTS = {"sonarr": 8989, "radarr": 7878}
 API_VERSION = "v3"
 
 IMPLEMENTATION = "Discord"
-
-# The last line of stdout: the count of rows written, so a no-op run says zero rather than
-# printing nothing.
-CHANGED_PREFIX = "SEED_CHANGED:"
 
 HTTP_TIMEOUT = 30
 
@@ -261,18 +257,15 @@ def main(argv: list[str] | None = None) -> int:
         # The app dials Discord itself with this spec and 2xx's only if the message landed.
         request(base_url, api_key, "notification/test", method="POST", body=desired)
         print(f"{app}: test message accepted by the app for {name!r}")
-        print(f"{CHANGED_PREFIX} 0")
         return 0
 
     if existing is not None and not needs_update(existing, desired):
         print(f"{app}: {name!r} already declares this spec — no change")
-        print(f"{CHANGED_PREFIX} 0")
         return 0
 
     request(base_url, api_key, path, method=verb, body=desired)
     on = sorted(key for key in trigger_keys(desired) if desired[key])
     print(f"{app}: {name!r} {action} — triggers {on}")
-    print(f"{CHANGED_PREFIX} 1")
     return 0
 
 
