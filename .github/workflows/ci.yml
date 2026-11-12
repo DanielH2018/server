@@ -1724,6 +1724,9 @@ jobs:
 
       - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
 
+      # DECIDED: no download-artifact step in ci.yml or promote.yml retries, unlike their curl and
+      # gh calls. Over 2026-10-13..11-12, `scripts/dev/ci_failures.py` found no download failure
+      # that a rerun cleared; every red one followed a build that never uploaded (#8005).
       - name: Download the hand-off from the build job
         if: >-
           github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
