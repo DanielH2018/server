@@ -140,6 +140,8 @@ authorized key.
 - **The agent has commit hooks.** The agent's setup installs a pinned `prek` and `uvx` beside
   `uv`. The `claude_code` role runs `prek install` in the clone, which covers
   every worktree made from it, so the agent's commits run gitleaks and the commit-time ratchets.
+  It re-runs the install while any shim `prek.toml`'s `default_install_hook_types` names is
+  missing, so a clone made before `commit-msg` joined the list gains that shim.
   The role installs the pinned Ansible collections into the clone, and the `.profile` sets
   `ANSIBLE_COLLECTIONS_PATH` so a worktree falls back to them. `renovate-agent` gets the binary
   but no hooks.

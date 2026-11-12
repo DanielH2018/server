@@ -9,7 +9,10 @@ test pins one leg of the fix, with a reject case beside it.
 Run: uv run pytest ansible/tests/setup/test_agent_user_dev_tools.py
 """
 
+import tomllib
+
 from _agent_package import agent_setup_script
+from _helpers import REPO
 from _setup_render import CLAUDE_CODE, render_component_text
 
 CLONE_SYNC = CLAUDE_CODE / "files" / "claude-clone-sync.sh"
@@ -17,11 +20,17 @@ CLONE_SYNC = CLAUDE_CODE / "files" / "claude-clone-sync.sh"
 
 def test_the_agents_clone_gets_hooks_from_its_own_prek(tmp_path) -> None:
     setup = agent_setup_script(tmp_path)
-    # The install runs once, as the agent, from the clone, with the agent's own prek.
-    assert (
-        'if [ ! -e "$clone/.git/hooks/pre-commit" ] && [ -x "$home/.local/bin/prek" ]; then\n'
-        '  (cd "$clone" && as_agent "$home/.local/bin/prek" install)\n'
-    ) in setup
+    # The install runs as the agent, from the clone, with the agent's own prek.
+    assert '  (cd "$clone" && as_agent "$home/.local/bin/prek" install)\n' in setup
+    # It re-runs while any shim prek.toml installs is missing, so a clone made before a
+    # hook type joined the list gets it (#7989).
+    guard = setup.split('  (cd "$clone" && as_agent', 1)[0].rsplit("\nif ", 1)[1]
+    types = tomllib.loads((REPO / "prek.toml").read_text())[
+        "default_install_hook_types"
+    ]
+    assert "commit-msg" in types
+    for hook_type in types:
+        assert f'[ ! -e "$clone/.git/hooks/{hook_type}" ]' in guard
     # renovate_agent imports the shared file; only claude_code's agent gets the hooks.
 
 
