@@ -216,10 +216,10 @@ def main(
         landing = functools.partial(tools.fresh_landing, opts.primary, child)
     else:
         landing = functools.partial(_land, opts, tools, classifier)
-    admission = live_limit.admission(opts.pr, live_limit.github_reads(tools.gh_json))
+    reads = live_limit.github_reads(tools.gh_json)
     if opts.detach:
-        return _detached(opts, landing, admission)
-    with detach.holding_slot(admission.kind):
+        return _detached(opts, landing, live_limit.admission(opts.pr, reads))
+    with detach.holding_slot(live_limit.pr_kind(opts.pr, reads)):
         return landing()
 
 

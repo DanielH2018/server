@@ -120,11 +120,10 @@ def github_reads(gh_json: Callable[..., JsonValue]) -> Reads:
 
 def base() -> tuple[int, str]:
     """`LAND_MAX_LIVE` when it is a positive integer, else `DEFAULT_LIMIT`; and which it was."""
+    raw = os.environ.get(MAX_LIVE_ENV, "")
     try:
-        return max(
-            1, int(os.environ[MAX_LIVE_ENV])
-        ), f"{MAX_LIVE_ENV}={os.environ[MAX_LIVE_ENV]}"
-    except KeyError, ValueError:
+        return max(1, int(raw)), f"{MAX_LIVE_ENV}={raw}"
+    except ValueError:
         return DEFAULT_LIMIT, f"the default of {DEFAULT_LIMIT}"
 
 
@@ -138,70 +137,77 @@ def _read[T](read: Callable[[], T]) -> T | None:
 
 @dataclass(frozen=True)
 class Admission:
-    """The PR a new landing carries, and the limit it is admitted under.
+    """The PR a new landing carries, and what its reads found.
 
     Attributes:
         kind: what its slot records, from `kind`; "" when the file list could not be read.
-        reads: the boundaries `limit` reads.
+        drops: each `(limit, reason)` a read lowered the limit to.
     """
 
     kind: str
-    reads: Reads
+    drops: tuple[tuple[int, str], ...]
 
     def limit(self, live_kinds: list[str]) -> tuple[int, str]:
-        """The limit beside the kinds of the landings already live, and what set it."""
-        cap, why = base()
-        for lowered, reason in self._drops(live_kinds):
-            if lowered < cap:
-                cap, why = lowered, reason
-        return cap, why
+        """The limit beside the kinds of the landings already live, and what set it.
 
-    def _drops(self, live_kinds: list[str]) -> list[tuple[int, str]]:
-        reads, now = self.reads, self.reads.now()
-        drops = []
-        quota = _read(reads.core_quota)
-        if quota:
-            remaining, reset = quota
-            resets_in = reset - int(now.timestamp())
-            if remaining < QUOTA_FLOOR and resets_in > QUOTA_RESET_FAR_S:
-                drops.append(
-                    (
-                        1,
-                        f"the core quota has {remaining} calls left and resets in {resets_in // 60}m",
-                    )
-                )
-        runs = _read(reads.master_runs)
-        slow = _read(
-            lambda: pace.count_unfinished(runs, now.timestamp(), SLOW_RUN_AGE_S)
-        )
-        if slow is not None and slow >= SLOW_RUNS:
-            drops.append(
-                (
-                    SLOW_RUNS_LIMIT,
-                    f"{slow} master CI runs unfinished for over {SLOW_RUN_AGE_S // 60}m",
-                )
-            )
-        if self.kind:
-            hold = _read(lambda: pin_gate.hold_problem(reads.hold()))
-            if hold:
-                drops.append((0, f"{hold}, and this PR changes a k8s role"))
-            if _read(lambda: reads.in_window(now)):
-                drops.append(
-                    (
-                        1,
-                        "inside the weekly reboot's no-promotion window, for a k8s change",
-                    )
-                )
+        Reads nothing, so `detach.fork` calls it inside the registry's lock.
+        """
+        drops = list(self.drops)
         if self.kind == SERIAL:
             drops.append(
                 (1, "this PR changes a forward-only pin, flux or cluster-vars")
             )
         elif SERIAL in live_kinds:
             drops.append((1, "a landing of a pin, flux or cluster-vars change is live"))
-        return drops
+        cap, why = base()
+        for lowered, reason in drops:
+            if lowered < cap:
+                cap, why = lowered, reason
+        return cap, why
+
+
+def pr_kind(pr: str, reads: Reads) -> str:
+    """`kind` of `pr`'s file list; "" when the list cannot be read."""
+    paths = _read(lambda: reads.pr_paths(pr))
+    return kind(paths) if paths else ""
 
 
 def admission(pr: str, reads: Reads) -> Admission:
-    """`pr`'s admission, reading its file list once."""
-    paths = _read(lambda: reads.pr_paths(pr))
-    return Admission(kind(paths) if paths else "", reads)
+    """`pr`'s admission: its kind, and every drop the reads find.
+
+    The reads run here, before `detach.fork` takes the registry's lock, because the
+    DEPLOY_HOLD read waits out a rate limit, and a wait under the lock would stall every
+    other `--detach` of the group.
+    """
+    pr_type = pr_kind(pr, reads)
+    now = reads.now()
+    drops = []
+    quota = _read(reads.core_quota)
+    if quota:
+        remaining, reset = quota
+        resets_in = reset - int(now.timestamp())
+        if remaining < QUOTA_FLOOR and resets_in > QUOTA_RESET_FAR_S:
+            drops.append(
+                (
+                    1,
+                    f"the core quota has {remaining} calls left and resets in {resets_in // 60}m",
+                )
+            )
+    runs = _read(reads.master_runs)
+    slow = _read(lambda: pace.count_unfinished(runs, now.timestamp(), SLOW_RUN_AGE_S))
+    if slow is not None and slow >= SLOW_RUNS:
+        drops.append(
+            (
+                SLOW_RUNS_LIMIT,
+                f"{slow} master CI runs unfinished for over {SLOW_RUN_AGE_S // 60}m",
+            )
+        )
+    if pr_type:
+        hold = _read(lambda: pin_gate.hold_problem(reads.hold()))
+        if hold:
+            drops.append((0, f"{hold}, and this PR changes a k8s role"))
+        if _read(lambda: reads.in_window(now)):
+            drops.append(
+                (1, "inside the weekly reboot's no-promotion window, for a k8s change")
+            )
+    return Admission(pr_type, tuple(drops))

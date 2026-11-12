@@ -100,7 +100,9 @@ registry of live landings it is compared with.
   cluster-vars file.
 
 **A read that fails lowers nothing.** The limit is a throughput control, as merge pacing is.
-A landing still meets `DEPLOY_HOLD` at the pin gate and at the promotion.
+A landing still meets `DEPLOY_HOLD` at the pin gate and at the promotion. The PR's file
+list comes from `gh pr view --json files`, which returns at most 100 files, so a serial path
+past the hundredth goes unseen.
 
 ### Exit codes and verdicts
 

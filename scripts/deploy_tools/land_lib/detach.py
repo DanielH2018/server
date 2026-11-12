@@ -260,9 +260,14 @@ def fork(
         live = _live_kinds(slots)
         cap, why = admission.limit(live)
         if len(live) >= cap:
+            retry = (
+                "Re-run this command once that clears"
+                if cap == 0
+                else "Wait for one to end, then re-run this command"
+            )
             raise TooManyLandings(
                 f"{len(live)} landings are already live for orchestrator {slots.name!r}, "
-                f"and the limit is {cap}: {why}. Wait for one to end, then re-run this command."
+                f"and the limit is {cap}: {why}. {retry}."
             )
         log.touch()
         sys.stdout.flush()

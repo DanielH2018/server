@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from deploy_tools.land_lib import detach, live_limit
+from lib.repo_paths import REPO
 
 NOW = datetime(2026, 11, 12, 12, 0, tzinfo=UTC)
 K8S_PATH = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
@@ -132,3 +133,25 @@ def test_a_detach_under_a_low_quota_is_refused_naming_the_quota(monkeypatch, tmp
 
     with pytest.raises(detach.TooManyLandings, match="core quota has 900 calls left"):
         detach.fork(tmp_path / "land939.log", lambda: 0, admission)
+
+
+def test_a_detach_under_deploy_hold_names_the_hold_not_a_landing_as_the_retry(
+    monkeypatch, tmp_path
+):
+    """At a limit of 0 no landing ending makes room, so the retry waits on the hold."""
+    monkeypatch.setenv(detach.LIVE_DIR_ENV, str(tmp_path))
+    reads = _reads(pr_paths=lambda pr: [K8S_PATH], hold=lambda: "abc123")
+
+    with pytest.raises(detach.TooManyLandings) as refused:
+        detach.fork(
+            tmp_path / "land939.log", lambda: 0, live_limit.admission("939", reads)
+        )
+    assert "the limit is 0" in str(refused.value)
+    assert "once that clears" in str(refused.value)
+
+
+def test_every_serial_role_is_a_k8s_role_directory():
+    """`SERIAL_ROLES` is derived from pin names, so a pin moved to another role must fail here."""
+    assert {"longhorn", "metallb", "flux"} <= live_limit.SERIAL_ROLES
+    for role in live_limit.SERIAL_ROLES:
+        assert (REPO / "ansible" / "roles" / "k8s" / role).is_dir(), role
