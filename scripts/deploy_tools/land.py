@@ -140,7 +140,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/
-from lib.exit_codes import LAND_BAD_ARGS
+from lib.exit_codes import LAND_BAD_ARGS, LAND_GAVE_UP
 from lib.git import git
 from deploy_tools.land_lib import detach, fresh, handoff, pin_gate, pipeline
 from deploy_tools.land_lib.landing import Landing
@@ -295,7 +295,12 @@ def _resolve_since(opts: Options) -> Options:
 def _detached(opts: Options, landing: Callable[[], int]) -> int:
     """Fork `landing` into its own logfile and name the `cc-wait` command that waits on it."""
     log = detach.log_path(opts.pr, Path(opts.log_dir) if opts.log_dir else None)
-    pid = detach.fork(log, landing, f"land{opts.pr}")
+    try:
+        pid = detach.fork(log, landing, f"land{opts.pr}")
+    except detach.TooManyLandings as full:
+        log.unlink(missing_ok=True)
+        print(f"land: {full}", file=sys.stderr)
+        return LAND_GAVE_UP
     detach.announce(pid, log, opts.pr)
     return 0
 

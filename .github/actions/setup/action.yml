@@ -14,14 +14,16 @@ description: >-
 # from whatever the runner image's toolcache holds that day, while a three-part one moves only
 # through Renovate.
 #
-# The caller checks the repository out first. A local action is a file in the checkout, so it
-# cannot run before one, and each job's checkout differs anyway (fetch-depth).
+# The caller checks the repository out first. The steps below read the checkout (uv.lock,
+# prek.toml, ansible/requirements.yml), and each job's checkout differs anyway (fetch-depth).
 #
-# DECIDED: callers write `uses: ./.github/actions/setup` with a `zizmor: ignore[self-repository]`
-# comment, not GitHub's `$/.github/actions/setup` form (added 2026-07-30). zizmor 1.30.1 asks for
-# `$/`, but the pinned actionlint rejects it as "ref is missing", and actionlint is the hook that
-# validates each caller's `with:` keys against the inputs below. Measured 2026-10-09. Switch to
-# `$/` and drop the ignores once a Renovate bump gives actionlint the syntax.
+# DECIDED: callers write `uses: $/.github/actions/setup`, which pins this action to the
+# workflow's own commit, and the `actionlint` prek hook runs through
+# scripts/validate/actionlint_dollar_refs.py (2026-11-12). actionlint 1.7.12 rejects `$/` as
+# "ref is missing" and then skips checking the caller's `with:` keys against the inputs below
+# (rhysd/actionlint#711). The wrapper lints a copy rewritten to `./`. Once an actionlint release
+# accepts `$/`, point the hook back at `uv run --frozen actionlint` and delete the wrapper and
+# its test.
 
 inputs:
   python:

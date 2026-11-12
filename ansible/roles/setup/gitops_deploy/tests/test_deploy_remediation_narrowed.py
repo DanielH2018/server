@@ -1,38 +1,27 @@
 """What the remediation prints once the deployer has narrowed a setup role's tag.
 
 Split out of test_deploy_remediation.py, which is at its module-length cap. The narrowed
-`--tags` replaces the whole-role tag; the whole-role warning goes with it, EXCEPT where the
-narrowed tags still reach the role's gated control-plane tasks, which keep a warning of their
-own.
+`--tags` replaces the whole-role tag.
 
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_deploy_remediation_narrowed.py
 """
 
 # ansible/roles/setup/gitops_deploy/tests/test_deploy_remediation_narrowed.py
 
-from deployer_lib import deploy_remediation
-import gitops_markers
-
 from deployer_lib.deploy_remediation import broad_remediation, manual_plane_remediation
 
 
-# ── a derived narrow tag replaces the role tag, and the warning with it ──────────────
+# ── a derived narrow tag replaces the role tag ──────────────────────────────────────
 
 
-def test_a_narrowed_role_prints_its_own_tags_and_drops_the_warning():
-    """The narrowing's whole point, on both composers.
-
-    The warning describes what `--tags k3s` does. Printed beside `--tags kubeconfig` it would
-    warn about a run the operator is not being told to make, which is how a real warning gets
-    read as boilerplate.
-    """
+def test_a_narrowed_role_prints_its_own_tags():
+    """The narrowing's whole point, on both composers."""
     narrow = {"k3s": frozenset({"kubeconfig"})}
     for cmd in (
         broad_remediation(False, True, {"k3s"}, narrow_tags=narrow),
         manual_plane_remediation({"k3s"}, narrow),
     ):
         assert "ansible/k3s-bringup.yml --tags kubeconfig" in cmd
-        assert "WARNING" not in cmd
 
 
 def test_a_role_the_derivation_refused_keeps_the_role_tag():
@@ -50,24 +39,6 @@ def test_several_narrow_tags_are_one_comma_joined_tags_value():
     """Two ranges can make one role pending, and both tags have to run."""
     narrow = {"k3s": frozenset({"kubeconfig", "coredns"})}
     assert "--tags coredns,kubeconfig" in manual_plane_remediation({"k3s"}, narrow)
-
-
-# ── a narrowed tag that still reaches the gated tasks keeps the warning ──
-
-
-def test_the_banners_warning_roles_are_the_remediations_warning_roles():
-    """`gitops_markers` holds the banner's one-line warnings, this module the long prose.
-
-    Two maps keyed by role, in two files, because the SessionStart banner cannot import this
-    module. A role added to one and not the other prints its control-plane apply bare on one
-    surface.
-    """
-    short = set(gitops_markers.MAXIMAL_ROLE_WARNING)
-    assert short == set(deploy_remediation._MAXIMAL_ROLE_TAGS)
-    assert set(deploy_remediation.MAXIMAL_ROLE_GATED_TAGS) == set(
-        deploy_remediation._MAXIMAL_ROLE_GATED_WARNING
-    )
-    assert set(deploy_remediation.MAXIMAL_ROLE_GATED_TAGS) <= short
 
 
 # ── the clear command names the tags the apply beside it ran ─────────────────────

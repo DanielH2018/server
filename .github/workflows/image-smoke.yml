@@ -48,7 +48,7 @@ jobs:
       # The pinned Python, from the action every CI job shares, so this job's interpreter moves
       # with the rest of CI in one Renovate bump. smoke_extract.py runs under the bare `python`
       # this puts on PATH.
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
         with:
           uv: "false"
 

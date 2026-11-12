@@ -188,6 +188,8 @@ def test_an_unreadable_ledger_ends_deferred_naming_the_read_error(land):
     assert rc == 75
     assert "PermissionError: owed.jsonl: denied" in out
     assert "k3s" in out
+    # #7969: `land_probe` reads the give-up from this field, not from the note's wording.
+    assert "LAND-RESULT: verdict=deferred cause=ledger-unreadable " in out
 
 
 def test_an_unreadable_ledger_defers_no_pr_that_touches_no_setup_role(land):
