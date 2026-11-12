@@ -36,8 +36,9 @@
 #   writes that kind of file (a kernel package for the initrd, a GRUB or kernel package for
 #   grub.cfg, the package that owns the source for a .pyc). The top-level usr-merge links
 #   (/bin and the rest) are judged on their target alone. A package-owned symlink must still
-#   resolve to a package file, with two exceptions: a `homelab-*` package's /etc link (outside
-#   PERSIST) into /run/homelab-secrets/, and a link into a system tree whose target is missing, such as the
+#   resolve to a package file, with two exceptions: a `homelab-*` package's link (outside
+#   PERSIST) at a tmpfs output its secrets manifest declares, pointing at that output in
+#   /run/homelab-secrets/, and a link into a system tree whose target is missing, such as the
 #   kernel headers' rust link to a package that is not installed, in a window its owner ran.
 # - /etc: a package-owned path whose content differs from the package's copy, or that is gone.
 #   Ansible writes unpackaged /etc files on every merge, so those are logged, not paged.
@@ -95,6 +96,8 @@ AIDE_DIR=/var/lib/aide
 DPKG_DIR=/var/lib/dpkg
 # Prefixed to a report path before the file is read; empty everywhere but the tests.
 FS_ROOT=""
+# homelab-secrets' manifest, read under FS_ROOT for the outputs the host package links.
+SECRETS_MANIFEST=/usr/lib/homelab/secrets.json
 
 # Regexes over the absolute path, in awk's dialect. Kept to what mawk accepts: no intervals. They reach
 # awk through ENVIRON, because -v would read each backslash as an escape.
@@ -306,6 +309,15 @@ snapd_rule_verdict() {
     END { print (bad ? "active" : "inert") }' "$1"
 }
 
+# Prints the absolute path of each tmpfs output the host package's secrets manifest declares, one
+# per line, or nothing when the manifest is missing or unreadable, so every such link pages.
+secret_links() {
+  python3 -I -c 'import json, sys
+for out in json.load(open(sys.argv[1]))["outputs"]:
+    if not out.get("persist"):
+        print("/" + out["destination"])' "$FS_ROOT$SECRETS_MANIFEST" 2>/dev/null | tr '\n' ' '
+}
+
 # Prints "path (reason)" for each paged entry no package explains. Reads the files as they are
 # now: AIDE has just hashed them, and a change in between is next week's report.
 unexplained_entries() {
@@ -332,7 +344,7 @@ unexplained_entries() {
     DERIVED_GRUB="$DERIVED_GRUB" DERIVED_EFI="$DERIVED_EFI" DERIVED_FIRMWARE="$DERIVED_FIRMWARE" \
     DERIVED_PYCACHE="$DERIVED_PYCACHE" PKGS_KERNEL="$PKGS_KERNEL" PKGS_GRUB="$PKGS_GRUB" \
     PKGS_EFI="$PKGS_EFI" PKGS_FIRMWARE="$PKGS_FIRMWARE" PKGS_PYTHON="$PKGS_PYTHON" \
-    SYSTEM="$SYSTEM" awk -F '\t' '
+    SECRET_LINKS=" $(secret_links) " SYSTEM="$SYSTEM" awk -F '\t' '
     # dpkg records merged-/usr paths under either name, so compare both without the /usr.
     function norm(p) { return p ~ /^\/usr\/(bin|sbin|lib|lib32|lib64|libx32)\// ? substr(p, 5) : p }
     function touched_any(re,    k) { for (k in touched) if (k ~ re) return 1; return 0 }
@@ -396,8 +408,9 @@ unexplained_entries() {
       # A unit the roles write is a fair target only for a link under /etc/systemd/system, where
       # `systemctl enable` makes it.
       link_ok = $7 != "-" && ($7 == "/dev/null" || (norm($7) in owned) || (path ~ /^\/etc\/systemd\/system\// && $7 ~ ENVIRON["ROLE_WRITTEN"]))
-      # The host package links each secret file into the tmpfs its secrets unit fills.
-      if (scope == "etc" && $7 ~ /^\/run\/homelab-secrets\// && owner_matches(p, "^homelab-")) link_ok = 1
+      # The host package links each output its secrets manifest declares into the tmpfs its
+      # secrets unit fills, at the same relative path.
+      if (scope != "persist" && index(ENVIRON["SECRET_LINKS"], " " path " ") && $7 == "/run/homelab-secrets" path && owner_matches(p, "^homelab-")) link_ok = 1
       # A distro link into a package that is not installed. Only a system-tree target, because a
       # file created there later pages on its own as unowned.
       if ($8 == "dangling" && $7 ~ ENVIRON["SYSTEM"] && $7 !~ /^\/usr\/local(\/|$)/ && owner_ran(p, touched)) link_ok = 1
