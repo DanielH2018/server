@@ -26,7 +26,7 @@ The fifth arm, `auto-approve-readonly`, moved into the dotfiles `claude_guard` p
 provably read-only command in every trusted checkout. No arm here returns `allow` since.
 
 Two arms rewrite rather than judge, and they run LAST, so every decision arm reads the command
-the session typed. `uv-python` (#3286) routes bare python/pytest/ansible through `uv run`, which
+the session typed. `uv-python` (#3286) routes bare python/pytest through `uv run`, which
 is what the two separate hooks did, `bash-pretool.sh` at order 10 and `uv-python.sh` at order 20.
 Its own docstring owns the rewrite rules and what the harness does with an `updatedInput` that
 arrives beside a `deny` or an `ask`. `strip-cd-cwd` (#3957) runs before it and drops a leading
