@@ -5,9 +5,10 @@ THE PROBLEM. After a merge a session must know whether master CI went green befo
 deploys: PR CI is scoped to changed files, so a whole-tree failure can appear only after
 the merge.
 
-`deploy_logic.ci_verdict` is the right logic and the deployer's own gate reads it; it reads the gate's jobs when the gate has not run (#5507).
-This is a CLI over that same function against that same endpoint, so a session's verdict
-and a tick's agree by construction rather than by convention.
+`hosts/lib/ci_verdict.py:ci_verdict` is the right logic, and `checkout-sync` and the builder
+grade by the same rules; it reads the gate's jobs when the gate has not run (#5507). This is a
+CLI over that function, so a session's verdict and a host's agree by construction rather than
+by convention.
 
 Exit codes:
   0   the SHA is green
@@ -35,15 +36,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import CI_DISARMED, CI_RED, CI_UNPROVEN
 from lib.git import git, git_stdout
-from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
+from lib.repo_paths import HOST_LIB_FILES
 
-# The deployer's verdict logic, and host_lib for the GitHub request it shares with the tick's
-# gate. deploy_logic itself stays host_lib-free, so this tool names both directories.
-sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+# The host-side verdict logic and GitHub request, which checkout-sync and the builder ship.
 sys.path.insert(0, str(HOST_LIB_FILES))
 
-from deployer_lib.deploy_git import read_check_pages
-from deployer_lib.deploy_logic import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict
+from builder_ci_grade import read_check_pages
+from ci_verdict import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict
 from host_lib import github_get, github_token
 
 CI_REPO = "DanielH2018/server"
@@ -93,9 +92,8 @@ DRAFT_SKIPPED = "every CI run on it skipped the gate because the PR was a draft"
 class DisarmedGateError(RuntimeError):
     """Raised when the required-context set is empty.
 
-    `ci_verdict` returns `pass` for an empty set (deploy_logic.py:366). That is the
-    deployer's deliberate disarm switch, reachable only by an operator emptying
-    CI_CONTEXTS. Inheriting it here would turn a wait-for-green into an unconditional
+    `ci_verdict` returns `pass` for an empty set for the disarmed gate. That is a deliberate
+    disarm switch, reachable only by an operator emptying the required contexts. Inheriting it here would turn a wait-for-green into an unconditional
     green, so this refuses instead of returning a verdict it did not check.
     """
 
@@ -153,7 +151,7 @@ def poll_interval(requested: int, authenticated: bool, timeout_s: int) -> int:
 
 
 def _github_pages(path: str, key: str) -> list[dict]:
-    """Every page of a listing, as the deployer's gate reads it (#5977); short reads raise."""
+    """Every page of a listing, as checkout-sync reads it (#5977); short reads raise."""
     token = lookup_token()
     url = f"repos/{CI_REPO}/{path}"
     return read_check_pages(

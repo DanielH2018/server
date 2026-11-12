@@ -1,23 +1,21 @@
 #!/usr/bin/env python3
-"""Print the items the setup roles still own on each host, and where each must go (H7.2f).
+"""Print the items the setup roles still own on each host, and fail while any is left (H7.2f).
 
 `setup_census_items.py` derives the items from the tree. This module resolves each one against
 the host packages and prints what is left. Run it for the list of record:
 
-    uv run python scripts/deploy_tools/setup_lib/setup_census.py            # report, exit 0
+    uv run python scripts/deploy_tools/setup_lib/setup_census.py            # exit 1 if any is left
     uv run python scripts/deploy_tools/setup_lib/setup_census.py --host daniel-pi
-    uv run python scripts/deploy_tools/setup_lib/setup_census.py --strict   # exit 1 if any is left
 
-Report mode prints the count per host and one line per item left. Strict mode fails while any
-setup role still has an item that applies to a host (H7.19c turns it on). The report is also
-the list of record for the rows `k8s_host_files` held when H7 started, and H7.48 took it
-again after every row had moved.
+It prints the count per host and one line per item left, and exits 1 while any setup role still
+has an item that applies to a host (H7.19c made it strict). The report is also the list of
+record for the rows `k8s_host_files` held when H7 started, and H7.48 took it again after every
+row had moved.
 
 An item resolves to a package path or a legacy entry its host's packages carry, a unit or a
 `Depends` entry for the modules that name one, or an entry of `ALLOWLIST`, which names each
 deleted item with its reason. A line-arm edit carries its path, and a `modules-load.d` file
-carries its module. The arms that take the other modules (ufw, libvirt and users) are other PRs.
-Until they land, an item for such a module stays in the report.
+carries its module.
 """
 
 import sys as _sys
@@ -165,19 +163,19 @@ def strict_exit(left: dict[str, list[Item]]) -> int:
     return 1 if any(left.values()) else 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    census: Callable[[tuple[str, ...]], dict[str, list[Item]]] = items_left,
+) -> int:
     parser = ArgumentParser(
         description=__doc__.split("\n\n")[0], prog="setup_census.py"
     )
-    parser.add_argument("--host", help="print one host only")
-    parser.add_argument(
-        "--strict", action="store_true", help="exit 1 while any item is left"
-    )
+    parser.add_argument("--host", help="print and judge one host only")
     args = parser.parse_args(argv)
     hosts = (args.host,) if args.host else HOSTS
-    left = items_left(hosts)
+    left = census(hosts)
     print(render_report(left))
-    return strict_exit(left) if args.strict else 0
+    return strict_exit(left)
 
 
 if __name__ == "__main__":
