@@ -1,6 +1,6 @@
 ---
 name: ha-edit-automation
-description: Author or edit a Home Assistant automation, scene, script, or template sensor the repo's way. Use when adding or changing HA automation/lighting/fan/notification/alert logic in this homelab. Enforces copy-not-template, math-in-a-tested-Jinja-macro, ConfigMap wiring and the state model, then validate → deploy → confirm-loaded. Also use when debugging why an automation didn't fire or when you need ground-truth live HA state — it carries the live-API commands and the alias-slug and recorder-DB traps.
+description: "Use when adding, changing or debugging a Home Assistant automation, scene, script or template sensor in this homelab, or when you need live HA state. Carries the repo's conventions, the validate → deploy → confirm-loaded steps and the live-API commands."
 allowed-tools: Read, Edit, Write, Bash, Glob
 ---
 

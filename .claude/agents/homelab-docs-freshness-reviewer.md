@@ -1,6 +1,6 @@
 ---
 name: homelab-docs-freshness-reviewer
-description: Reviews whether this homelab's CLAUDE.md sections, docs/**/*.md pages and .claude/rules/*.md files still hold at HEAD. It takes a narrow, ordered input set (sections `fact_status.py lint` flags, then CLAUDE.md sections whose cited files changed most in the last 30 days, then docs and rules sections ranked by the same churn) and asks one question per sentence, "does the code at HEAD contradict this?". Report-only by instruction. It returns each confirmed contradiction with the quoted contradicting line and a confidence, and never edits.
+description: "Report-only. Checks whether CLAUDE.md sections, docs pages and .claude/rules files still hold at HEAD, starting from what `fact_status.py lint` flags and the most-changed citations. Returns each confirmed contradiction with the quoted line."
 model: sonnet
 tools: Read, Grep, Glob, Bash
 read_only: true
