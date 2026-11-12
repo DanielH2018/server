@@ -141,7 +141,7 @@ def deadman_crons(
     pi_peer: dict,
     registry: dict,
     group_vars: dict,
-    initial_setup: dict,
+    host_timers: dict,
     has_docker: dict[str, bool],
     observability: dict,
     sweep_hosts: list[str],
@@ -151,7 +151,7 @@ def deadman_crons(
     Shared with ansible/tests/services/test_monitor_bridge_healthchecks_expected.py, which holds
     monitor-bridge's console expectations to these same crons.
 
-    `has_docker` is `{host: bool}` over every host initial_setup runs on. The weekly reboot
+    `has_docker` is `{host: bool}` over every host. The weekly reboot
     pings a slug per host, and the Docker prune pings one per host that installs it (#2806).
     `sweep_hosts` names each host whose package lists the `worktree-sweep` component; each
     pings its own `<host>-worktree-sweep` slug (#4482, #6815).
@@ -208,29 +208,28 @@ def deadman_crons(
         for host in has_docker
     ]
     prune = (
-        f"{initial_setup['initial_setup_docker_prune_cron_minute']} "
-        f"{initial_setup['initial_setup_docker_prune_cron_hour']} * * *"
+        f"{host_timers['host_maintenance_docker_prune_cron_minute']} "
+        f"{host_timers['host_maintenance_docker_prune_cron_hour']} * * *"
     )
     rows += [
         (
             f"{host}-docker-prune",
             prune,
-            f"`initial_setup_docker_prune_cron_hour` / `_minute`, on {host}",
+            f"`host_maintenance_docker_prune_cron_hour` / `_minute`, on {host}",
         )
         for host, docker in has_docker.items()
         if docker
     ]
     sweep = (
-        f"{initial_setup['initial_setup_worktree_sweep_cron_minute']} "
-        f"{initial_setup['initial_setup_worktree_sweep_cron_hour']} * * "
-        f"{initial_setup['initial_setup_worktree_sweep_cron_weekday']}"
+        f"{host_timers['worktree_sweep_cron_minute']} "
+        f"{host_timers['worktree_sweep_cron_hour']} * * "
+        f"{host_timers['worktree_sweep_cron_weekday']}"
     )
     rows += [
         (
             f"{host}-worktree-sweep",
             sweep,
-            "`initial_setup_worktree_sweep_cron_weekday` / `_hour` / `_minute`, on "
-            f"{host}",
+            f"`worktree_sweep_cron_weekday` / `_hour` / `_minute`, on {host}",
         )
         for host in sweep_hosts
     ]
@@ -242,7 +241,7 @@ def render_deadman_cadences(
     pi_peer: dict,
     registry: dict,
     group_vars: dict,
-    initial_setup: dict,
+    host_timers: dict,
     has_docker: dict[str, bool],
     observability: dict,
     sweep_hosts: list[str],
@@ -253,7 +252,7 @@ def render_deadman_cadences(
         pi_peer,
         registry,
         group_vars,
-        initial_setup,
+        host_timers,
         has_docker,
         observability,
         sweep_hosts,

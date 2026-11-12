@@ -41,14 +41,14 @@
 #   textfile the `host-checks` rule group reads (#6168). Each refresh logs a
 #   `rkhunter baseline refreshed` line under the `rkhunter-propupd` tag.
 defaults:
-  initial_setup_host_lib_dir: /usr/lib/homelab
+  integrity_scans_host_lib_dir: /usr/lib/homelab
   # rkhunter reads PermitRootLogin from the main sshd_config only and never follows its Include.
   # The role read the file on every apply; a package renders before it reaches the host, so the
   # hosts whose main file carries the line are listed instead. daniel-server's sshd hardening sat
   # in /etc/ssh/sshd_config itself (`ssh_config_path`) and daniel-box's main file carries the line;
   # the Pi's does not, and its live rkhunter.conf.local reads `unset` (2026-10-30).
   integrity_scans_sshd_main_file_sets_root_login: [daniel-box, daniel-server]
-  initial_setup_rkhunter_allow_ssh_root_user: "{{ 'no' if inventory_hostname in integrity_scans_sshd_main_file_sets_root_login else 'unset' }}"
+  integrity_scans_rkhunter_allow_ssh_root_user: "{{ 'no' if inventory_hostname in integrity_scans_sshd_main_file_sets_root_login else 'unset' }}"
   # The hosts whose AIDE scan must fit in little memory: sha256 only, and no /usr/src
   # (98_aide_local.conf.j2 has the measurement).
   integrity_scans_aide_lean_hosts: [daniel-pi]

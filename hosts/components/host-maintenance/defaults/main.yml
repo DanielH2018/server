@@ -3,5 +3,5 @@
 # rather than a literal in `units/homelab-docker-prune.timer.j2`, so that the healthchecks.io
 # deadman-cadences fragment reads the schedule from the same place the timer does (#2806). Only
 # `has_docker` hosts ship the timer.
-initial_setup_docker_prune_cron_minute: 30
-initial_setup_docker_prune_cron_hour: 6
+host_maintenance_docker_prune_cron_minute: 30
+host_maintenance_docker_prune_cron_hour: 6

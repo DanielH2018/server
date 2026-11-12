@@ -17,13 +17,13 @@ import shutil
 import pytest
 from _helpers import registry_secret_names
 from lib import yaml_fast
-from lib.repo_paths import REPO
+from lib.repo_paths import K3S_SERVER, REPO
 from longhorn_lib import longhorn_etcd_s3_logic as etcd_s3
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.environment import RenderError
 
 HOSTS = REPO / "hosts"
-COMPONENT = HOSTS / "components" / "k3s-server"
+COMPONENT = K3S_SERVER
 UNIT = "k3s.service"
 ACTION = f"manual:{UNIT}"
 DROPIN = "/usr/lib/systemd/system/k3s.service.d/50-homelab.conf"

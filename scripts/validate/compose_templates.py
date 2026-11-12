@@ -69,7 +69,7 @@ def find_dollar_escape_bugs(docs) -> list[tuple[str, str, str]]:
     / `${VAR}` / `$(...)` at parse time, so a shell `$` meant for the container must be
     written `$$`; otherwise the value is silently blanked or substituted. Restricted to these
     shell-bearing keys so the deliberate `${GID-...}` interpolation that some services use in
-    `environment:` is not flagged. The plain-YAML validator and ansible-lint both miss this.
+    `environment:` is not flagged. The plain-YAML validator misses this.
     """
     bugs: list[tuple[str, str, str]] = []
     for doc in docs:
@@ -96,7 +96,7 @@ def find_watchtower_label_bugs(docs) -> list[tuple[str, str]]:
     Docker splits a list-item label on the first ``=`` only, so a ``:``-separated watchtower
     label (e.g. ``...depends-on:docker-proxy``) parses as a key with an EMPTY value — the
     directive (``enable`` / ``depends-on``) silently becomes a no-op. The plain-YAML validator
-    and ansible-lint both miss this because the document still renders and parses cleanly.
+    misses this because the document still renders and parses cleanly.
     Mapping-form labels are inherently ``key: value`` so they need no ``=`` and are skipped.
     """
     bugs: list[tuple[str, str]] = []

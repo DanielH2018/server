@@ -108,9 +108,10 @@ _SENTENCE_END_RE = re.compile(r"\.(?:\s|$)")
 
 _PLANES: list[tuple[str, str]] = [
     ("ansible/roles/k8s/", "roles/k8s"),
-    ("ansible/roles/setup/", "roles/setup"),
     # The Pi's Compose services (H5); H5.12 deleted the `roles/containers` tree they came from.
+    # Before the host components, because the first matching prefix names the plane.
     ("hosts/components/pi-compose/services/", "pi-compose"),
+    ("hosts/components/", "host components"),
     ("scripts/", "scripts"),
     ("docs/", "docs"),
 ]

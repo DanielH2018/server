@@ -127,10 +127,12 @@ def test_first_sentence_used_for_the_short_field(tmp_path):
 def test_planes_are_grouped_by_path_prefix(tmp_path):
     _write(tmp_path, "ansible/roles/k8s/foo/tasks/main.yml", "# DECIDED: k8s thing.\n")
     _write(tmp_path, "scripts/bar.py", "# DECIDED: scripts thing.\n")
+    _write(tmp_path, "hosts/components/baz/component.yml", "# DECIDED: host thing.\n")
     _write(tmp_path, "README.md", "A `DECIDED:` marker lives elsewhere.\n")
     rows = {r["path"]: r["plane"] for r in _rows(tmp_path)}
     assert rows["ansible/roles/k8s/foo/tasks/main.yml"] == "roles/k8s"
     assert rows["scripts/bar.py"] == "scripts"
+    assert rows["hosts/components/baz/component.yml"] == "host components"
     assert rows["README.md"] == "other"
 
 
@@ -309,12 +311,12 @@ def test_live_tree_excludes_its_own_generator_and_test_file():
 
 
 def test_this_roles_claude_md_pointer_is_flagged_when_the_file_is_missing(tmp_path):
-    """The shape issue #1857 was filed on: setup/k3s markers said "this role's CLAUDE.md"
-    while `ansible/roles/setup/k3s/CLAUDE.md` did not exist.
+    """The shape issue #1857 was filed on: a role's markers said "this role's CLAUDE.md"
+    while the role had no `CLAUDE.md`.
     """
     _write(
         tmp_path,
-        "ansible/roles/setup/widget/templates/check.sh.j2",
+        "ansible/roles/k8s/widget/templates/check.sh.j2",
         "# DECIDED: cron, not a server flag.\n# Full account in this role's CLAUDE.md.\n",
     )
     rows = _rows(tmp_path)
@@ -327,10 +329,10 @@ def test_this_roles_claude_md_pointer_resolves_when_the_file_exists(tmp_path):
     """The red-proof pair to the flag above: same marker, the role doc present."""
     _write(
         tmp_path,
-        "ansible/roles/setup/widget/templates/check.sh.j2",
+        "ansible/roles/k8s/widget/templates/check.sh.j2",
         "# DECIDED: cron, not a server flag.\n# Full account in this role's CLAUDE.md.\n",
     )
-    _write(tmp_path, "ansible/roles/setup/widget/CLAUDE.md", "# widget\n")
+    _write(tmp_path, "ansible/roles/k8s/widget/CLAUDE.md", "# widget\n")
     assert g.find_unresolved_pointers(_rows(tmp_path), tmp_path) == []
 
 
@@ -381,12 +383,12 @@ def test_repo_path_pointer_resolves_relative_to_the_markers_own_directory(tmp_pa
     """`templates/foo.j2` written from inside a role names the sibling, not a root path."""
     _write(
         tmp_path,
-        "ansible/roles/setup/widget/defaults/main.yml",
+        "ansible/roles/k8s/widget/defaults/main.yml",
         "# DECIDED: daily. See templates/check.sh.j2 for the cron body.\n",
     )
     _write(
         tmp_path,
-        "ansible/roles/setup/widget/defaults/templates/check.sh.j2",
+        "ansible/roles/k8s/widget/defaults/templates/check.sh.j2",
         "#!/bin/sh\n",
     )
     assert g.find_unresolved_pointers(_rows(tmp_path), tmp_path) == []
@@ -397,9 +399,9 @@ def test_a_double_extension_path_is_taken_whole(tmp_path):
     _write(
         tmp_path,
         "scripts/foo.py",
-        "# DECIDED: see ansible/roles/setup/widget/templates/check.sh.j2 for the rest.\n",
+        "# DECIDED: see ansible/roles/k8s/widget/templates/check.sh.j2 for the rest.\n",
     )
-    _write(tmp_path, "ansible/roles/setup/widget/templates/check.sh.j2", "#!/bin/sh\n")
+    _write(tmp_path, "ansible/roles/k8s/widget/templates/check.sh.j2", "#!/bin/sh\n")
     assert g.find_unresolved_pointers(_rows(tmp_path), tmp_path) == []
 
 

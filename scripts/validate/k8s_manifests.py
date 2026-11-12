@@ -3,7 +3,7 @@
 
 The compose templates have the same guard (``validate/compose_templates.py``), and the k8s
 manifests need it for the same reason. A Jinja indentation bug is exactly the class
-``check-yaml`` and ``ansible-lint`` miss — neither renders ``.j2`` — so it passes CI and first
+``check-yaml`` misses — it does not render ``.j2`` — so it passes CI and first
 appears as ``error validating data`` partway through an apply, with some objects already applied
 and some not.
 

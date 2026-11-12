@@ -16,7 +16,7 @@ from test_pi_initial_setup_part1 import seeded_pi
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
 from lib.render_context import render_context
-from lib.repo_paths import ANSIBLE, REPO
+from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 HOST = "daniel-box"
@@ -39,9 +39,7 @@ def manifest(package) -> dict:
 
 @pytest.fixture(scope="module")
 def context() -> dict:
-    return render_context(
-        ANSIBLE / "roles/setup/initial_setup", HOST, inventory=REPO_INVENTORY
-    )
+    return render_context(None, HOST, inventory=REPO_INVENTORY)
 
 
 def _port_rules(manifest) -> list[dict]:

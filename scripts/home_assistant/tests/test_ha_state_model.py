@@ -253,8 +253,7 @@ def test_render_derived_yaml_roundtrips():
     assert y.safe_load(text)["writes"]["light.bedroom_lights"] == ["automation.x"]
 
 
-def test_dump_yaml_indents_sequences_for_ansible_lint():
-    # ansible-lint/yamllint `indent-sequences`: list items indented UNDER their key.
+def test_dump_yaml_indents_sequences_under_their_key():
     out = hsm._dump_yaml({"writes": {"light.x": ["automation.a", "automation.b"]}})
     assert "\n    - automation.a" in out
 

@@ -17,7 +17,7 @@ Run: uv run pytest ansible/tests/setup/test_etcd_quota_and_its_monitor_agree.py
 import re
 
 from lib import yaml_fast
-from lib.repo_paths import REPO
+from lib.repo_paths import K3S_SERVER
 
 from _helpers import K8S_ROLES
 
@@ -26,7 +26,7 @@ from _helpers import K8S_ROLES
 ETCD_DEFAULT_QUOTA = 2 * 1024**3
 OVERRIDE_FLAG = "quota-backend-bytes"
 # The server's flags, `k3s_server_config`, since H6.4b.
-K3S_SERVER_COMPONENT = REPO / "hosts" / "components" / "k3s-server" / "component.yml"
+K3S_SERVER_COMPONENT = K3S_SERVER / "component.yml"
 STORAGE_RULES = K8S_ROLES / "observability" / "files" / "rules" / "storage.yaml"
 # `100 * max(apiserver_storage_size_bytes) / <quota> >= <percent>`
 QUOTA_IN_EXPR = re.compile(r"/ (\d+) >= \d+\s*$")

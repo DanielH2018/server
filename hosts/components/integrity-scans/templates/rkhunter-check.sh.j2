@@ -29,7 +29,7 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source {{ initial_setup_host_lib_dir }}/homelab-check-lib.sh || {
+source {{ integrity_scans_host_lib_dir }}/homelab-check-lib.sh || {
   logger -t rkhunter-check "homelab-check-lib.sh missing — install the host package"
   exit 1
 }

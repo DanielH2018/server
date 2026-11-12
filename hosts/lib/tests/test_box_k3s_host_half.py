@@ -20,7 +20,7 @@ from lib import yaml_fast
 from lib.estate import REPO_INVENTORY, role_defaults
 from lib.proc_testing import run, write_exec
 from lib.render_context import render_context
-from lib.repo_paths import K3S_DEFAULTS, K8S_ROLES, REPO
+from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, K8S_ROLES, REPO
 from renderer.renderer_lib import host as host_mode
 
 HOST = "daniel-box"
@@ -318,7 +318,7 @@ def _run_wifi_copy(tmp_path, generate_rc: int):
     generate = tmp_path / "generate"
     write_exec(generate, f"#!/bin/sh\nexit {generate_rc}\n")
     return run(
-        [str(COMPONENTS / "k3s-server" / "files" / "homelab-netplan-wifi")],
+        [str(K3S_SERVER / "files" / "homelab-netplan-wifi")],
         env={
             **os.environ,
             "HOMELAB_ROOT": str(tmp_path),

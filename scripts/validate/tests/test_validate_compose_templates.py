@@ -3,7 +3,7 @@
 
 Docker Compose interpolates `$VAR` / `${VAR}` / `$(...)` in string values at parse
 time, so a shell `$` meant for the container must be written `$$` in the template.
-`recreate: auto` and `ansible-lint` both miss this; a lone `$` either gets blanked
+`recreate: auto` and `check-yaml` both miss this; a lone `$` either gets blanked
 (missing env) or interpolated, silently breaking a healthcheck/command. The check
 is context-aware: it only inspects command/entrypoint/healthcheck.test, so the
 intentional `${GID-...}` interpolation some services use in `environment:` is not

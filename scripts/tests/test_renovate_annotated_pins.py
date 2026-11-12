@@ -58,7 +58,6 @@ UNTRACKED_BY_DECISION: dict[str, str] = {
 
 _ANNOTATION_LINE = re.compile(r"^\s*#\s*renovate:", re.MULTILINE)
 
-K3S_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
 TRAEFIK_DEFAULTS = "ansible/roles/k8s/traefik/defaults/main.yml"
 PI_TOOL_PINS = "hosts/packages/homelab-tools/package.yml"
 NODE_EXPORTER_DEFAULTS = "ansible/roles/k8s/node-exporter/defaults/main.yml"
@@ -201,9 +200,12 @@ def test_a_pin_version_no_manager_matches_is_flagged():
 
 
 def test_an_annotated_pin_is_a_manual_pr_naming_the_refresh_command():
+    # A dep no per-package rule names, at a path the annotation manager reads, so only the
+    # depType rule can decide it.
+    path = "hosts/components/k3s-server/component.yml"
     group = _resolve_group_name(
-        "coredns/coredns",
-        K3S_DEFAULTS,
+        "vendor/tool",
+        path,
         "minor",
         "github-releases",
         dep_type=DEP_TYPE,
@@ -211,8 +213,8 @@ def test_an_annotated_pin_is_a_manual_pr_naming_the_refresh_command():
     assert group is not None and "asset_pins.py --refresh {{depName}}" in group, group
     automerge = _resolve_setting(
         "automerge",
-        "coredns/coredns",
-        K3S_DEFAULTS,
+        "vendor/tool",
+        path,
         "minor",
         "github-releases",
         dep_type=DEP_TYPE,

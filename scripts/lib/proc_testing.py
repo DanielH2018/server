@@ -64,8 +64,7 @@ __all__ = [
 # --durations=5` on daniel-server: slowest case 0.39s), so it leaves room for a
 # loaded CI runner without any caller needing to raise it. It is also far below pytest's own
 # patience, which is the point — a child that wedges fails its own test rather than parking the
-# run. A caller whose subject is genuinely slow passes its own `timeout=`; the `ansible-lint`
-# hook test passes 120.
+# run. A caller whose subject is genuinely slow passes its own `timeout=`.
 DEFAULT_TIMEOUT = 60
 
 # The interpreter line `write_exec` supplies when the text does not carry one. `sh` rather than

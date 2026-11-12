@@ -138,8 +138,6 @@ class Boundaries:
         local_records: daniel-box's own recent review records, for the waiting gauge.
         clock: the epoch second now.
         testpaths_only: whether the PR at this head changes `pyproject.toml` only in `testpaths`.
-        role_docs_only: whether the PR's files under `DOC_ONLY_ROLES` are all `CLAUDE.md` files
-            it adds or modifies, with no rename or removal.
     """
 
     tools: Tools = field(default_factory=Tools)
@@ -162,13 +160,10 @@ class Boundaries:
     testpaths_only: Callable[[str], bool] = lambda head: (
         own_surface.live_testpaths_only(head)
     )
-    role_docs_only: Callable[[int], bool] = lambda pr: own_surface.live_role_docs_only(
-        pr
-    )
 
     def judge(self, rec: dict, pr: dict) -> str:
-        """`problems` with this boundary's two diff reads."""
-        return problems(rec, pr, self.testpaths_only, self.role_docs_only)
+        """`problems` with this boundary's diff read."""
+        return problems(rec, pr, self.testpaths_only)
 
 
 class CheckoutFailed(Exception):
@@ -240,13 +235,12 @@ def problems(
     rec: dict,
     pr: dict,
     pyproject_ok: Callable[[str], bool] = never,
-    docs_ok: Callable[[int], bool] = never,
 ) -> str:
     """Why this PR may not land unattended, or "" when it may. First reason wins.
 
     `rec` is the batch's review record, `pr` the PR as GitHub reads it now. `pyproject_ok`
-    answers `Boundaries.testpaths_only` and `docs_ok` answers `Boundaries.role_docs_only`. The
-    defaults hold every PR that touches `pyproject.toml` or a role's `CLAUDE.md`.
+    answers `Boundaries.testpaths_only`. The default holds every PR that touches
+    `pyproject.toml`.
     """
     if rec.get("outcome") != "pr":
         return f"the batch ended '{rec.get('outcome')}', not 'pr'"
@@ -273,13 +267,7 @@ def problems(
     files = [str(f.get("path") or "") for f in pr.get("files") or []]
     if len(files) >= FILE_CAP:
         return f"it changes {len(files)} files, at the listing cap"
-    own = [
-        f
-        for f in files
-        if own_surface.holds(
-            f, lambda: pyproject_ok(head), lambda: docs_ok(int(pr.get("number") or 0))
-        )
-    ]
+    own = [f for f in files if own_surface.holds(f, lambda: pyproject_ok(head))]
     if own:
         return f"it changes the lander's own surface: {', '.join(own[:3])}"
     return operator_step_in(str(pr.get("body") or ""))

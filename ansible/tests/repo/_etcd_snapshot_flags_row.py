@@ -3,11 +3,12 @@
 import re
 from functools import cache
 
-from _helpers import REPO
+
+from lib.repo_paths import K3S_SERVER
 from _row_table import Census, Subject, tracked
 from lib import yaml_fast
 
-_COMPONENT = REPO / "hosts" / "components" / "k3s-server" / "component.yml"
+_COMPONENT = K3S_SERVER / "component.yml"
 
 # The command and its arguments, across a `\` continuation or a prose wrap onto an indented line.
 # A closing backtick, a pipe or a closing parenthesis ends the call.

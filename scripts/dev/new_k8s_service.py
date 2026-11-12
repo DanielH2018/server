@@ -72,11 +72,7 @@ PRIORITY_CLASSES = (
 
 
 def var_prefix(name: str) -> str:
-    """The role's Ansible variable prefix: `bento-pdf` owns `bento_pdf_k8s_*`.
-
-    ansible-lint's `var-naming[no-role-prefix]` rule derives the same string, so a default
-    spelled any other way needs a per-line noqa.
-    """
+    """The role's variable prefix: `bento-pdf` owns `bento_pdf_k8s_*`."""
     return name.replace("-", "_")
 
 

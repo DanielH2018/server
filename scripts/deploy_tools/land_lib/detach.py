@@ -7,18 +7,15 @@ exact shape the `land-after-merge` skill spelled out: `git rev-parse origin/mast
 is `cc-wait land <pr>`, whose source is `land_probe.py`: one wait loop for every repo, defined in
 the dotfiles `cc-wait` package rather than once per waiter.
 
-THE REDIRECT IS THE POINT, NOT AN ASIDE. Ansible refuses to start on a non-blocking stdout or
-stderr ("Ansible requires blocking IO on stdin/stdout/stderr"), and a backgrounded Bash call
-hands its child exactly that. `land.py:main` and `deploy_lib/run.py` both clear O_NONBLOCK on their
-own fds, but the flag lives on the open file description, so a handle that some other process
-also holds can have it set again. A file opened here, by this process, cannot: that is why the
-whole fix has always been "redirect to a file", and why doing it inside the script is safer
-than asking a caller to remember.
+THE REDIRECT IS THE POINT, NOT AN ASIDE. A backgrounded Bash call hands its child a
+non-blocking stdout and stderr, and a Python write to a full non-blocking pipe raises
+`BlockingIOError`. `land.py:main` clears O_NONBLOCK on its own fds, but the flag lives on the
+open file description, so a handle that some other process also holds can have it set again. A
+file opened here, by this process, cannot: that is why the whole fix has always been "redirect
+to a file", and why doing it inside the script is safer than asking a caller to remember.
 
-WHAT IS SHARED WITH `deploy_lib/detach_run.py`. The fork itself: `lib/detach_fork.py` owns the double
-fork and the move out of a fan-out unit's cgroup, and both detach modes call it. The rest stays
-here. `deploy_detach.run` takes the tree lock, makes a snapshot and hands its child lock
-descriptors to keep, and its child posts a health verdict; a landing does none of that.
+WHAT IS SHARED. The fork itself: `lib/detach_fork.py` owns the double fork and the move out of a
+fan-out unit's cgroup. The rest stays here.
 
 THE LANDING IS A GRANDCHILD, SO A KILL OF THE CALLER CANNOT REACH IT (issue #3158). A harness that
 times out a Bash call kills the call's whole descendant tree, found by walking parent pids, not

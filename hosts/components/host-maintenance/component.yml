@@ -18,7 +18,7 @@
 #
 # The schedules render from the variables the old crons read: `weekly_reboot_*` in group_vars,
 # which Alertmanager's reboot mute also reads, and this component's
-# `initial_setup_docker_prune_cron_*` (defaults/main.yml), which the Healthchecks.io cadences fragment and
+# `host_maintenance_docker_prune_cron_*` (defaults/main.yml), which the Healthchecks.io cadences fragment and
 # monitor-bridge read. The Healthchecks.io key arrives as the credential `healthchecks_ping_key`,
 # so each host package lists that key.
 #

@@ -16,10 +16,10 @@ Run: uv run pytest ansible/tests/k8s/test_cluster_base_mirrors_the_k3s_identity.
 
 import pytest
 from lib import yaml_fast
-from lib.repo_paths import K3S_DEFAULTS, K8S_ROLES, REPO
+from lib.repo_paths import K3S_DEFAULTS, K3S_SERVER, K8S_ROLES
 
 CLUSTER_BASE_DEFAULTS = K8S_ROLES / "cluster-base" / "defaults" / "main.yml"
-K3S_SERVER_COMPONENT = REPO / "hosts" / "components" / "k3s-server" / "component.yml"
+K3S_SERVER_COMPONENT = K3S_SERVER / "component.yml"
 
 # (the key in setup/k3s's defaults, its twin in cluster-base's defaults)
 MIRRORED_PAIRS = (
