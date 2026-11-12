@@ -171,3 +171,14 @@ def test_a_held_poll_sleeps_longer_than_an_unheld_one(landing):
     merge.await_merge(ln)
     sleeps = [args[0] for name, args, _ in calls if name == "sleep"]
     assert sleeps[0] == 5 * merge.HELD_POLL_FACTOR
+
+
+def test_a_rate_limited_backlog_read_does_not_merge_without_pacing(landing, capsys):
+    """The quota runs out only when many landers are live, so a 403 must not release them (#8139)."""
+    # A secondary limit's wait needs no `gh api rate_limit` read, so no real gh runs.
+    limited = subprocess.CalledProcessError(
+        1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
+    )
+    ln, _calls = _landing(landing, 1, [limited, BACKLOG])
+    assert pace.hold(ln, 0, 0) != ""
+    assert "merging without pacing" not in capsys.readouterr().out
