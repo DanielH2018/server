@@ -1929,7 +1929,7 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.54 The test env leaves ansible-core | H7.19d | landed as [#7856](https://github.com/DanielH2018/server/pull/7856) (item 30) | H7.46, H7.48, H7.52 |
 | H7.55 Delete the playbooks and the role directories | H7.20a | no: it deletes what H7.53 leaves | H7.53 live on daniel-box, H7.43 (done: its rebuild half was waived), H7.44, H7.45 |
 | H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | landed as [#8050](https://github.com/DanielH2018/server/pull/8050) (item 32) | H7.54, H7.55, H5 |
-| H7.57 The ADR | H7.20c | landed: [#8054](https://github.com/DanielH2018/server/pull/8054) proposed ADR-0029 (item 33) | H7.55 |
+| H7.57 The ADR | H7.20c | landed: [#8054](https://github.com/DanielH2018/server/pull/8054) proposed ADR-0029 and [#8058](https://github.com/DanielH2018/server/pull/8058) accepted it (item 33) | H7.55 |
 | H7.58 Pi: `initial_setup`, part 3 | new | yes | H7.26, H7.30, H7.42 |
 | H7.59 daniel-server: `initial_setup`, part 3, and its Loki witness | new | landed in [`a7a9110e8`](https://github.com/DanielH2018/server/commit/a7a9110e8) and [`0ecdbe8b4`](https://github.com/DanielH2018/server/commit/0ecdbe8b4) | H7.58 live, H7.31, H7.61 live, H4 |
 | H7.60 daniel-box: `initial_setup`, part 3 | new | yes, with H7.58 | H7.59 live, H7.32, H6.2 |
@@ -2431,7 +2431,7 @@ the `manual_plane` clearing, and *Rollback*'s
     ADR-0011 and ADR-0017 need an amendment. Landed:
     [#8054](https://github.com/DanielH2018/server/pull/8054) proposed ADR-0029. The operator
     accepted it on 2026-11-12 and ruled that ADR-0001, ADR-0003, ADR-0011, ADR-0013 and
-    ADR-0017 each carry an "Amended by ADR-0029" note. PRNUM_PLACEHOLDER recorded the
+    ADR-0017 each carry an "Amended by ADR-0029" note. [#8058](https://github.com/DanielH2018/server/pull/8058) recorded the
     acceptance and the five notes.
 34. **H7.58 to H7.60 land one host baseline in canary order.** H7.58 and H7.59 add their host
     to `initial_setup_packaged_hosts`, and H7.60 deletes the subjects' tasks. A new
