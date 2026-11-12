@@ -37,6 +37,19 @@ The exit criterion is one measured pair of promote runs on production:
 - `land.sh` read `settled` for both PRs, and T's landing settled earlier than P's
   `settle` plus T's own verification would have allowed.
 
+The slice was closed against a narrower bar. Issue #8115 asked for DONE on one natural pair
+in which P printed `superseded` and T printed `good`. The 2026-11-12 pair meets the first two
+bullets in full. It meets the third and fourth only in part, because T changed no service:
+
+- **Third bullet.** T printed `good` and moved `last-good`, but T's expected set held only
+  P's names. The 2026-10-29 red proof is the run whose T expected names from both commits,
+  and that T failed on purpose.
+- **Fourth bullet.** `land.sh` read `settled` for P and `nothing-to-deploy` for T. With no
+  verification of T's own, the timing comparison was not measured.
+
+No run has yet shown a superseding T with its own change that both verifies the union and
+settles `good`; #8208 tracks that run.
+
 ## Baseline at `53fe3f196`
 
 Each fact below is what the design rests on, with its evidence.
