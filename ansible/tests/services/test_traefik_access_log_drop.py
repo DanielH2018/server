@@ -78,7 +78,11 @@ def alloy_config() -> str:
 def _drop_expression(config: str) -> str:
     """Pull the drop stage's expression out of the rendered Alloy config."""
     matches = list(_MATCH_BLOCK.finditer(config))
-    scoped = [m for m in matches if _SCOPED_CONTAINER in m["selector"]]
+    scoped = [
+        m
+        for m in matches
+        if _SCOPED_CONTAINER in m["selector"] and "stage.drop" in m["body"]
+    ]
     assert scoped, f"no stage.match block is scoped to container={_SCOPED_CONTAINER!r}"
     assert len(scoped) == 1, "more than one drop stage claims the access-log sidecar"
 

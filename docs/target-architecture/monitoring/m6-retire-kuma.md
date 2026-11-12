@@ -16,7 +16,9 @@ is operator-only, ran at B-1d on 2026-10-17:
    `ansible/vars/secrets.yml`. `secret_rotation.py audit --check` exited 0.
    [#7178](https://github.com/DanielH2018/server/issues/7178) closed on 2026-11-06.
 3. C-4b landed after D6, closing [#7835](https://github.com/DanielH2018/server/issues/7835).
-   The census row in `ansible/tests/repo/test_census_rows_text.py` holds the allowlist.
+   The census row in `ansible/tests/repo/test_census_rows_text.py` held the allowlist until
+   the operator retired it on 2026-11-12
+   ([#8177](https://github.com/DanielH2018/server/issues/8177)).
 4. `test_a_critical_alert_active_after_the_apply_that_still_fires_is_flagged` and
    `test_a_warning_alert_labelled_verify_active_after_the_apply_is_flagged`, in
    `scripts/diagnostics/tests/test_probe_health_alerts.py`, passed. At the B-1d drill,
@@ -157,11 +159,12 @@ push-token secret remains.
       `netpol-probe-job.yaml.j2` reads the entry's port through `entry_port(t.service)`. The
       named-member case C-1 adds to `ansible/tests/k8s/test_netpol_probe_targets.py` holds
       that read instead.
-    - A ratchet census row in `ansible/tests/repo/test_census_rows_text.py`, defined in
-      `ansible/tests/repo/_kuma_census_row.py` beside it, holds every other
-      mention of `kuma` in those trees to a frozen allowlist. Each allowlist entry names its
-      file and its reason. The list only shrinks, and a file outside it that mentions `kuma`
-      fails CI.
+    - A ratchet census row in `ansible/tests/repo/test_census_rows_text.py` held every other
+      mention of `kuma` in those trees to a frozen allowlist. Each allowlist entry named its
+      file and its reason, and a file outside it that mentioned `kuma` failed CI. The
+      operator retired the identifier row and this row on 2026-11-12
+      ([#8177](https://github.com/DanielH2018/server/issues/8177)), because Kuma no longer
+      exists for either to guard. The bullets below record what they held.
     - Before it matches `kuma`, the census row strips every citation of this plan: the
       filename `m6-retire-kuma`, and any path that starts
       `docs/target-architecture/monitoring/m6-`. A citation of the plan stays true after Kuma

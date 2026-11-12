@@ -36,35 +36,6 @@ from lib.repo_paths import REPO
 
 DEFAULT_WEEKS = 8
 
-# `--drop-candidates` asks the CI failure survey which of these failed within its window.
-GUARDS = (
-    # The first set (#5077).
-    "ansible/tests/repo",
-    "scripts/docs/tests",
-    "scripts/tests/test_census_rows_test_modules.py",
-    "scripts/tests/test_census_rows_test_renders.py",
-    "scripts/lib/tests/test_exit_codes.py",
-    # The files the `static-ratchet-tests-*` prek hooks run (#5481).
-    "scripts/tests/test_scripts_import_direction.py",
-    "scripts/tests/test_prek_files_cover_entry_imports.py",
-    "ansible/tests/setup/test_lander_deadlines_cover_the_soak.py",
-    "ansible/tests/k8s/test_checksum_annotations_documented.py",
-    "ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py",
-    "ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py",
-    "evals/tests/test_eval_cases.py",
-    "ansible/tests/deploy/test_landing_annotations.py",
-    "scripts/validate/tests/test_validate_alert_rules.py::test_the_tree_rules_meet_every_convention_is_clean",
-    "scripts/validate/tests/test_validate_unit_templates.py::test_discover_templates_finds_the_known_set",
-    # The census and structure tests behind 15 failed runs in the week to 2026-11-06 (#7438).
-    "scripts/lib/tests/test_entry_points_answer_help.py",
-    "scripts/lib/tests/test_script_classify_package_imports.py",
-    "scripts/tests/test_script_bootstraps_present.py",
-    "scripts/validate/tests/test_validate_shell_templates.py",
-    "hosts/lib/tests/test_k3s_restart_window.py",
-    "scripts/renderer/tests/test_renderer_task_inputs.py",
-    "scripts/deploy_tools/tests/test_land_imports.py",
-)
-
 
 def hook_files(repo: Path = REPO) -> list[str]:
     """The test files and nodes the `static-ratchet-tests*` prek hooks run at commit time."""
@@ -82,6 +53,32 @@ def covers(guard: str, module: str) -> bool:
     """Whether a failing test module falls under the guard's file, node or directory."""
     path = guard.split("::", 1)[0].rstrip("/")
     return module == path or module.startswith(f"{path}/")
+
+
+# The guards no hook runs; `guards()` adds every hook file a listed directory does not hold.
+LISTED = (
+    # The first set (#5077).
+    "ansible/tests/repo",
+    "scripts/docs/tests",
+    # The census and structure tests behind 15 failed runs in the week to 2026-11-06 (#7438).
+    "scripts/lib/tests/test_entry_points_answer_help.py",
+    "scripts/lib/tests/test_script_classify_package_imports.py",
+    "scripts/tests/test_script_bootstraps_present.py",
+    "scripts/validate/tests/test_validate_shell_templates.py",
+    "hosts/lib/tests/test_k3s_restart_window.py",
+    "scripts/renderer/tests/test_renderer_task_inputs.py",
+    "scripts/deploy_tools/tests/test_land_imports.py",
+)
+
+
+def guards(repo: Path = REPO) -> tuple[str, ...]:
+    """`LISTED` plus each file the ratchet hooks run that no listed directory holds."""
+    hooks = [f for f in hook_files(repo) if not any(covers(g, f) for g in LISTED)]
+    return LISTED + tuple(dict.fromkeys(hooks))
+
+
+# `--drop-candidates` asks the CI failure survey which of these failed within its window.
+GUARDS = guards()
 
 
 def drop_candidates(

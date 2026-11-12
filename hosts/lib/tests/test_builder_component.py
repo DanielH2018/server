@@ -249,9 +249,9 @@ def test_the_alert_template_pages_with_the_instance_name_and_a_credential(packag
     unit = text(package, ALERT)
     got = directives(unit)
     assert got["LoadCredential"] == [
-        "discord_webhook:/run/credstore/gitops_deploy_discord_webhook"
+        "discord_webhook:/run/credstore/discord_alert_webhook"
     ]
-    assert "gitops_deploy_discord_webhook" in package.credentials
+    assert "discord_alert_webhook" in package.credentials
     [start] = got["ExecStart"][:1]
     assert "'instance=%i'" in unit and "{{instance:json}}" in unit
     assert "--expand-url '{{webhook:trim}}'" in unit

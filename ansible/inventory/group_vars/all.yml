@@ -75,8 +75,6 @@ pgid: 1000
 unattended_upgrades_origins_patterns:
   - "origin=${distro_id},archive=${distro_codename}-updates"
   - "origin=gh,codename=stable"
-# Docker
-docker_network: proxy
 # Intel iGPU/QuickSync passthrough (jellyfin/tdarr hardware transcode via /dev/dri).
 # False by default — override to true in a host's host_vars if the machine has one.
 has_igpu: false

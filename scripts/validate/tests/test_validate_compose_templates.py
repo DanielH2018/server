@@ -130,12 +130,11 @@ def test_non_watchtower_label_without_equals_is_ignored():
 
 # The synthetic tests above only exercise the two detector functions. This is the
 # ONLY pytest coverage of the *real* render path (every service in the Pi's
-# compose_services, through ALL the shared macros: networks/resources/healthcheck/
-# traefik/expose). It mirrors the sibling validators' live-config guards
+# compose_services). It mirrors the sibling validators' live-config guards
 # (validate_ha_config.test_validate_real_config_is_clean, validate_grafana
-# .test_real_role_passes). Without it, a Jinja-indent regression in a macro that
-# the prek `validate-compose-templates` hook's file filter doesn't match (e.g.
-# networks.yml.j2) would slip past CI entirely.
+# .test_real_role_passes). Without it, a Jinja-indent regression in a template that
+# the prek `validate-compose-templates` hook's file filter doesn't match would slip
+# past CI entirely.
 
 
 def test_real_templates_render_clean(capsys):

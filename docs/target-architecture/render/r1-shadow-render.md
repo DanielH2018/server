@@ -625,7 +625,7 @@ channels, and R1 records each one rather than rendering it:
 homelab_render.py cluster --out DIR --secret-stubs FILE
 └─ renderer_lib.cluster.render_cluster(host="daniel-box", tags, out, stubs)
    ├─ render_targets.render_targets(host)                     at baseline
-   ├─ renderer_lib.context.play_context(role, host, stubs)
+   ├─ renderer_lib.context.template_context(role, host, stubs)
    │   ├─ render_context.render_context(role_dir, host, overrides)    at baseline
    │   ├─ toposort.build_k8s_dep_map, toposort_containers             at baseline
    │   └─ secret_stubs.homelab_stub_keys, homelab_secret_stub
