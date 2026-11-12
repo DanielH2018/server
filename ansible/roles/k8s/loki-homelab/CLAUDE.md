@@ -20,14 +20,12 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
 - **The monitors that read from here:** the ruler's own rules and monitor-bridge's remaining
   LogQL checks. A broken apply blinds the LogQL checks without paging. The host crons'
   `status=` lines land here too, as the local record of each verdict.
-- **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is
-  `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged
-  change reaches the cluster when `promote` publishes and verifies the next bundle. Its
-  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. traefik stays
-  Ansible-owned, so the Kustomization
-  records it in its `homelab/ansible-owned-deps` annotation, not in `dependsOn`. The Loki
-  Deployment is `Recreate`, so a change that rolls it takes log queries, pushes and the ruler
-  down briefly.
+- **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is `platform:
+  k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote`
+  publishes and verifies the next bundle. Its image-bump PRs therefore draw no `land-wait` and no
+  `probe.py health` run. traefik is flux-owned too, so the Kustomization lists it in `dependsOn`,
+  and Flux applies this tag only after its Kustomization is Ready. The Loki Deployment is
+  `Recreate`, so a change that rolls it takes log queries, pushes and the ruler down briefly.
 - **Where the task went.** Its default `manifests_rollout:
   loki-homelab`
   and the `alloy` entry in `manifests_extra_rollouts` name the two workloads for the
@@ -50,15 +48,11 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   `group_vars/all.yml`, shared with the Pi's Alloy and with every selector that reads them
   (#3740). `ansible/tests/services/test_loki_stream_labels.py` fails when an emitted value
   and the consumers' values drift apart.
-- **Three `stage.replace` stages redact credentials on the way in:** Home Assistant's cast
-  `refresh_token`, which HA logs on a failed cast (issue #3015), Prowlarr's `apikey=` in the
-  *arr Torznab error URLs (#6276), and the Uptime Kuma push token in any `/api/push/<token>`
-  path (#6749). The push-token stage is scoped by a `|= "/api/push/"` line filter, not by
-  container, because any container may log a push URL. Each substitutes the capture group
-  only, so the rest of the record survives.
-  `ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py`,
-  `ansible/tests/k8s/test_alloy_redacts_arr_apikey.py` and
-  `ansible/tests/k8s/test_alloy_redacts_kuma_push_token.py` fail on either half. Each stage is
+- **Two `stage.replace` stages redact credentials on the way in:** Home Assistant's cast
+  `refresh_token`, which HA logs on a failed cast (issue #3015), and Prowlarr's `apikey=` in
+  the *arr Torznab error URLs (#6276). Each substitutes the capture group only, so the rest of
+  the record survives. `ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py` and
+  `ansible/tests/k8s/test_alloy_redacts_arr_apikey.py` fail on either half. Each stage is
   prospective: a record shipped before it still carries the token for the 744h retention window.
 - **Host lines carry a `program` label, and the line itself is untouched.** The
   `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).

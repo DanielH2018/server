@@ -11,8 +11,6 @@ Run: uv run pytest ansible/tests/repo/test_census_rows_roles.py
 import re
 
 import pytest
-from _drill_keys_row import DRILL_KEYS
-from _flux_born_keys_row import FLUX_BORN_KEYS
 from _flux_ownership_row import K8S_ROLES_ARE_REACHABLE
 from _host_script_row import HOST_SCRIPT_WRITES
 from _retired_cron_row import RETIRED_CRON_ARMS
@@ -112,7 +110,7 @@ ROWS = (
             "a file they drop is also one no host or ConfigMap receives. Rename the shipped "
             "file, or narrow those predicates."
         ),
-        files=lambda: _role_files("tasks", "templates", "handlers"),
+        files=lambda: _role_files("templates"),
         offence=lambda s: [
             f"line {n} ships {name}"
             for n, name in _shipped_py(s)
@@ -152,7 +150,7 @@ ROWS = (
             "and the comment above SHIPPED_MD names the glob shapes it cannot see."
         ),
         # `defaults/` and `vars/` too: a list of basenames there ships files no task names.
-        files=lambda: _role_files("tasks", "templates", "handlers", "defaults", "vars"),
+        files=lambda: _role_files("templates", "defaults", "vars"),
         offence=lambda s: [
             f"line {n} ships {name}" for n, name in _shipped(SHIPPED_MD, s)
         ],
@@ -354,8 +352,6 @@ ROWS = (
     ),
     HOST_SCRIPT_WRITES,
     K8S_ROLES_ARE_REACHABLE,
-    FLUX_BORN_KEYS,
-    DRILL_KEYS,
     RETIRED_CRON_ARMS,
 )
 
@@ -364,8 +360,6 @@ _IDS = [row.name for row in ROWS]
 
 @pytest.mark.parametrize("row", ROWS, ids=_IDS)
 def test_census_row_holds_on_the_tree(row: Census):
-    # fact: ansible/roles/k8s/longhorn-backup/CLAUDE.md#At a glance
-    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
     problems = check(row)
     assert not problems, "\n".join(problems)
 

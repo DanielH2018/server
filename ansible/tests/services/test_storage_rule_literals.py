@@ -13,7 +13,6 @@ Run: uv run pytest ansible/tests/services/test_storage_rule_literals.py
 import re
 
 from _helpers import K8S_ROLES
-from _role_census import task_files
 from lib import yaml_fast
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "storage.yaml"
@@ -224,7 +223,7 @@ def roles_that_cap_a_volume() -> dict[str, str]:
 
     A role caps a volume by writing `spec.snapshotMaxSize` (the Job in
     roles/k8s/jellyfin/templates/verify/cap.yaml.j2 is the only one). The census matches the
-    FIELD NAME anywhere under a k8s role's tasks or verify Jobs, minus the roles that only READ
+    FIELD NAME anywhere in a k8s role's verify Jobs, minus the roles that only READ
     it, rather than jellyfin's patch payload: a future role capping a volume through
     `kubernetes.core.k8s` or `--type=json` writes the same field with different syntax, and a
     payload-shaped pattern would miss it and pass. The claim comes from the role's own
@@ -235,12 +234,7 @@ def roles_that_cap_a_volume() -> dict[str, str]:
     # writing, because every entry narrows what this guard can see.
     readers = {"volume-snapshot", "volume-revert"}
     census = {}
-    writers = sorted(
-        [
-            *task_files(K8S_ROLES),
-            *K8S_ROLES.glob("*/templates/verify/*.j2"),
-        ]
-    )
+    writers = sorted(K8S_ROLES.glob("*/templates/verify/*.j2"))
     for source in writers:
         role_dir = next(p for p in source.parents if p.parent == K8S_ROLES)
         if "snapshotMaxSize" not in source.read_text() or role_dir.name in readers:

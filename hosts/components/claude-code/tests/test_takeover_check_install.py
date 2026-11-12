@@ -30,6 +30,17 @@ def test_the_sudoers_template_grants_one_command_per_user() -> None:
     assert rendered.count(WRAPPER) == 2
 
 
+def test_the_sudoers_header_names_the_package_that_ships_it() -> None:
+    rendered = render_component_text(
+        "claude-code",
+        "claude-takeover-check.sudoers.j2",
+        {"claude_code_takeover_check_users": ["ubuntu"]},
+    )
+    assert rendered.splitlines()[0] == (
+        "# Shipped by the homelab host package (hosts/components/claude-code). Do not edit."
+    )
+
+
 @pytest.mark.skipif(shutil.which("visudo") is None, reason="visudo is not installed")
 def test_the_rendered_sudoers_file_passes_visudo(tmp_path) -> None:
     rendered = render_component_text(

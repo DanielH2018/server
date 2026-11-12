@@ -16,7 +16,7 @@ from _autodeploy import (
     _deployment_templates,
     _template_texts,
 )
-from _autodeploy_batch import _batch_gated_names, _owners
+from _autodeploy_batch import _owners
 
 
 def _sets_empty_rollout(role: Path) -> bool:
@@ -48,8 +48,8 @@ def _rollout_gate_offender(role: Path) -> bool:
 
     That single rule covers three shapes:
 
-    - A batch-only role (no Deployment/DaemonSet at all) whose rendered Jobs/CronJobs are all
-      credited by `_batch_gated_names`.
+    - A role rendering a Job or CronJob. Only a flux-owned role can gate one, through
+      `flux_cronjob_gates`, and a flux-owned role returns before this point.
     - A role that skips the PRIMARY rollout but gates its Deployment through
       `manifests_extra_rollouts` instead. Extras roll and soak independently of the primary, so `_ungated_deployments(role) == []` is
       already proof this Deployment IS gated, and an unconditional "renders a Deployment ⇒
@@ -61,7 +61,7 @@ def _rollout_gate_offender(role: Path) -> bool:
       Deployment is, without a separate "renders any Deployment at all" check.
 
     The condition on ALL of that is `manifests_rollout: ''`, written literally in the role's
-    tasks. A role that does not write it returns False at the top and is never judged here,
+    defaults. A role that does not write it returns False at the top and is never judged here,
     including a role that renders no workload at all. A flux-owned role returns False as well:
     no Ansible apply runs for it, and the batch guard judges its CronJobs instead.
 
@@ -83,18 +83,14 @@ def _rollout_gate_offender(role: Path) -> bool:
         return False
     if _ungated_deployments(role):
         return True
-    batch = _batch_templates(role)
-    total_workloads = len(_deployment_templates(role)) + len(batch)
-    if not total_workloads:
-        return True
-    gated = _batch_gated_names(role)
-    return any(not name or name not in gated for _, name in batch)
+    # Only a flux-owned role can gate a batch workload, so any batch workload here is ungated.
+    return bool(_batch_templates(role)) or not _deployment_templates(role)
 
 
 def _render_metadata_text(role: Path) -> str:
-    """`role`'s defaults/main.yml and tasks/main.yml, the two files a render key can sit in."""
-    files = (role / "defaults/main.yml", role / "tasks/main.yml")
-    return "\n".join(path.read_text() for path in files if path.is_file())
+    """`role`'s defaults/main.yml, the file a render key sits in, or "" for a role with none."""
+    defaults = role / "defaults/main.yml"
+    return defaults.read_text() if defaults.is_file() else ""
 
 
 _EXTRA_ROLLOUTS_BLOCK = re.compile(
@@ -134,8 +130,7 @@ def _primary_rollout_name(role: Path) -> str:
     Reads `manifests_rollout | default(manifests_service)`. `manifests_service` defaults to the role directory's
     name (#4053), a caller that overrides it writes a literal string, and every
     `manifests_rollout` override is likewise a literal (checked repo-wide), so a regex match is
-    safe here. A role with `tasks/` that sets neither key renders nothing and resolves to '', which
-    matches no real Deployment name. A role with no `tasks/` renders under its own name.
+    safe here. A role that sets neither key renders under its own name.
 
     Tolerates a trailing comment after the value, as `_sets_empty_rollout` does. Without it,
     `manifests_rollout: ''  # nothing to roll` would disagree between the two matchers reading
@@ -154,7 +149,7 @@ def _primary_rollout_name(role: Path) -> str:
     service = re.search(r"^\s*manifests_service:\s*(\S+)\s*$", text, re.MULTILINE)
     if service:
         return service.group(1)
-    return "" if (role / "tasks").is_dir() else role.name
+    return role.name
 
 
 def _primary_rollout_kind(role: Path) -> str:

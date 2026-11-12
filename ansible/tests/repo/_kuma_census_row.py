@@ -43,12 +43,7 @@ def _is_encrypted(rel: str) -> bool:
     return rel == _SECRETS_FILE or ".sops." in rel.rsplit("/", 1)[-1]
 
 
-_REDACTION = "`/api/push/` is an output redaction rule, not a Kuma read (#7195)."
-
 _IDENTIFIER_HOLDERS = {
-    "ansible/roles/k8s/loki-homelab/CLAUDE.md": _REDACTION,
-    "ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2": _REDACTION,
-    "scripts/diagnostics/probe_lib/core.py": _REDACTION,
     "hosts/components/claude-code/files/homelab_rootq.py": (
         "`/api/push/` is an output redaction rule, not a Kuma read."
     ),

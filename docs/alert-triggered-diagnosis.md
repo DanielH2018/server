@@ -153,7 +153,8 @@ day.
 **Gates before a session starts:**
 
 - `wan_reachable` is up.
-- The deployer's `hold_sha` is empty, and no tick or `deploy.sh` holds the deploy lock.
+- No `DeployHoldActive` alert is firing, so `DEPLOY_HOLD` is not holding promotion
+  (`claude_triage_poll.py`'s `HOLD_ALERT`).
 - The incident has lasted at least two cycles, which removes the 560 one-cycle episodes.
 - The host has been up past monitor-bridge's startup grace, which removes the recovery burst.
 

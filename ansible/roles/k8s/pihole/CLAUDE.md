@@ -59,7 +59,7 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
 ## Flux applies it
 
 - **Flux applies pihole, not Ansible** (D5, pihole's own window). Its `containers_list` entry
-  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Where the tasks went.** `defaults/main.yml` keeps `manifests_self_rollouts` because the renderer reads it to
   stamp the restart annotation on both instances.

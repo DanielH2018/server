@@ -2,11 +2,9 @@
 # Fast-forward the claude agent user's clone to origin's master, when it is a clean master.
 #
 # The hook shim and the homelab-ui MCP launcher run from the clone's main working tree, so a
-# clone left behind runs old hooks and an old launcher (#4067, #4099). The claude_code role runs
-# this on each apply, and claude-clone-sync.timer runs it between applies: a merge that touches
-# only scripts/diagnostics/ or .claude/hooks/ applies no role, so the apply alone never moved
-# the clone for it (#4162). One script for both, so the two never disagree on what is safe to
-# move.
+# clone left behind runs old hooks and an old launcher (#4067, #4099).
+# homelab-claude-clone-sync.timer runs it, because a merge that touches only scripts/diagnostics/
+# or .claude/hooks/ ships no host package version, so nothing else moves the clone for it (#4162).
 #
 # Runs as the agent user, with HOME set to its home. Prints one line on stdout:
 #   skipped: <reason>   the clone is off master or has uncommitted changes: the agent's work

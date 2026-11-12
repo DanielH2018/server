@@ -66,7 +66,7 @@ PrivateTmp=yes
 # claude-memory-sync timer, the artifact browser and the operator's own sessions. 0027 pins
 # that group read bit against a change of the systemd default, and it removes the other
 # bits on everything a session creates, which the agent's home and the ACL'd directories
-# (tasks/agent_access.yml) never needed to grant. A umask only clears bits, so a file Claude
+# (claude-agent-setup) never needed to grant. A umask only clears bits, so a file Claude
 # Code creates with an explicit 0600 stays 0600. The slice 4 check therefore reads a
 # session-written memory file as the operator rather than trusting this line.
 UMask=0027

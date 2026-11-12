@@ -7,7 +7,7 @@ metadata:
   annotations:
     # The annotation, not spec.loadBalancerIP — that field is deprecated upstream and MetalLB
     # reads this. This is the only way to claim an address out of the autoAssign: false
-    # ingress-pool (roles/setup/k3s/templates/metallb-pool.yaml.j2).
+    # ingress-pool (roles/k8s/metallb/templates/metallb-pool.yaml.j2).
     #
     # metallb.io/, NOT metallb.universe.tf/. The prefix flipped: MetalLB v0.15 introduced
     # metallb.io/ for Service annotations and deprecated metallb.universe.tf/, and this
@@ -18,8 +18,9 @@ metadata:
     # Kubernetes accepts any annotation key, and MetalLB ignores ones it does not recognise,
     # so a wrong prefix is silent: the Service is created, an address is assigned from the
     # auto-assign pool instead of the reserved VIP, and nothing anywhere reports a problem.
-    # That is why the assert in tasks/main.yml checks the landed address rather than
-    # trusting the annotation. Every pinned-address Service here has that assert.
+    # That is why observability's TraefikIngressAddressNotPinned alert checks the landed
+    # address rather than trusting the annotation. Every pinned-address Service has such an
+    # alert (observability's files/rules/k8s-services.yaml).
     metallb.io/loadBalancerIPs: {{ k3s_metallb_ingress_vip }}
 spec:
   type: LoadBalancer

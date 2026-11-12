@@ -34,7 +34,7 @@ the pin is physical and never unwinds.
   adds nothing to the restart checksum the renderer stamps on nut, and adding it rolled
   nothing.
 - **Flux applies it, not Ansible** (D5.17, Wave C's UPS PR, which went alone). Its
-  `containers_list` entry is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is `platform: k8s`, so nothing applies it by hand. A merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. The Deployment is `Recreate`, so every roll stops upsd for the container
   start, plus a pull
   when the content tag moved. That gap is time without power-cut shutdown coverage. The flip

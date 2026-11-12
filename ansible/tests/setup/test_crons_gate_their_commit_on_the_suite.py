@@ -11,7 +11,6 @@ Run: uv run pytest ansible/tests/setup/test_crons_gate_their_commit_on_the_suite
 import pytest
 from _helpers import REPO
 
-TEMPLATES = REPO / "ansible/roles/setup/initial_setup/templates"
 # The crons that reach publish_pr.py, each of which must gate its own commit on the suite.
 GATED_CRONS = ("docs-refresh.sh.j2", "eval-run.sh.j2")
 
@@ -19,9 +18,12 @@ SUITE_RUN = "python -m pytest"
 
 
 def _path(name: str):
-    """The script's file, in its host component when H7.36 moved it there."""
-    moved = sorted((REPO / "hosts/components").glob(f"*/templates/{name}"))
-    return moved[0] if moved else TEMPLATES / name
+    """The script's template in its host component."""
+    found = sorted((REPO / "hosts/components").glob(f"*/templates/{name}"))
+    assert len(found) == 1, (
+        f"{name}: expected one host component template, found {found}"
+    )
+    return found[0]
 
 
 def _lines(name: str) -> list[str]:

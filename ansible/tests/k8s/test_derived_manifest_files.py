@@ -6,7 +6,6 @@ containers_list entry (#3662). The validator, the render corpus and the prune gu
 Run: uv run pytest ansible/tests/k8s/test_derived_manifest_files.py
 """
 
-import re
 from pathlib import Path
 
 import pytest
@@ -18,7 +17,6 @@ from lib.k8s_roles import (
 )
 from lib import yaml_fast
 from _helpers import ANSIBLE
-from _role_census import role_task_files
 from _k8s_render import rendered_texts
 
 
@@ -28,15 +26,11 @@ from _k8s_render import rendered_texts
 JINJA_LIST_ROLES = frozenset({"authelia", "navidrome", "traefik"})
 
 
-_TASK_SRC = re.compile(r"^\s*src:\s*[\"']?([\w.-]+\.yaml\.j2)", re.MULTILINE)
-
-
 def unlisted_templates(role: str, k8s_roles: Path | None = None) -> set[str]:
     """`role`'s top-level manifest templates that nothing in the role renders.
 
     A role that passes a list gets that list whole, so a template neither list names is never
-    rendered, unless the role's own tasks render it as a `src:`, as traefik does with
-    rbac.yaml.j2 for the objects it places in other namespaces. `resolved_manifest_files`
+    rendered. `resolved_manifest_files`
     counts every basename in a Jinja value, a conditional branch included, which is the right
     reading here: the question is whether a template is named anywhere. A role's lever is held
     by a templar test in its own services test.
@@ -47,12 +41,7 @@ def unlisted_templates(role: str, k8s_roles: Path | None = None) -> set[str]:
         for p in (roles_dir / role / "templates").glob(MANIFEST_TEMPLATE_GLOB)
     }
     files, secret = resolved_manifest_files(role, roles_dir, {})
-    rendered_by_task = {
-        name.removesuffix(".j2")
-        for tasks in role_task_files(roles_dir / role)
-        for name in _TASK_SRC.findall(tasks.read_text())
-    }
-    return own - files - secret - rendered_by_task
+    return own - files - secret
 
 
 def test_every_template_of_a_jinja_list_role_is_listed_is_clean():

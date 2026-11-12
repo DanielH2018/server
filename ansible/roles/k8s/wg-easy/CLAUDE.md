@@ -28,7 +28,7 @@ LAN-only **Docker** wg-easy, on an older version with a different auth model.
   deliberate PR; the digest keeps it immutable within v15.x.
 - **`udp_port: 51820`** on the `containers_list` entry.
 - **Flux applies it, not Ansible** (D5.12, an own-window flip with the operator on the LAN). Its
-  `containers_list` entry is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. The Deployment is `Recreate` and the role declares no snapshot claim, so
   the tag renders no
   `-snapshot` Job. A change that rolls the pod cuts every WireGuard peer until the new pod is

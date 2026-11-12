@@ -702,8 +702,8 @@ timer periods plus the unit's `TimeoutStartSec`. Past that deadline the reason s
 Decided from the PR's file list right after the merge, before any CI wait: a PR that reaches no
 service tag, no plane a hand applies, no host package and no path outside documents and tests has
 nothing to wait on. A PR that reaches a setup role is a path outside both, so it waits for master CI
-and for a promotion of `homelab` alone, then ends `nothing-to-deploy` in step 4: the deployer's
-own timer applies the role, and `land.sh` does not watch the apply. The one exception to the early
+and for a promotion of `homelab` alone, then ends `nothing-to-deploy` in step 4: the host package
+applies the role, and the host wait covers a change to a host's package. The one exception to the early
 decision is a file list GitHub truncated, which is derived from the diff in step 4.
 
 **A document under a role is not a manual apply.** A `.md` — a role's `CLAUDE.md`, a
@@ -714,9 +714,11 @@ CLAUDE.md, and asked for a full `ansible/deploy.yml` (issue #1701). `lib/role_pa
 
 **A role the PR itself registers is not one either.** Which tags exist is read at the MERGE
 COMMIT (`land_tags.service_tags_at`), not from a checkout — a `containers_list` entry added by
-the same PR is absent from every tree until the tick fast-forwards, and `land.sh` used to report
-the new role as unregistered and ask for a full `ansible/deploy.yml`. PR #1539 landed that way
-and `./scripts/deploy.sh --tags pihole-exporter` deployed it a minute later (issue #1544).
+the same PR is absent from every tree until the tick fast-forwards.
+
+**HISTORY —** `land.sh` used to report the new role as unregistered and ask for a full
+`ansible/deploy.yml`. PR #1539 landed that way and `./scripts/deploy.sh --tags pihole-exporter`
+deployed it a minute later (issue #1544).
 
 ## The annotation, and the Landings board
 

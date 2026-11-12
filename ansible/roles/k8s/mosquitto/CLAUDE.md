@@ -13,7 +13,7 @@ web UI, no route — infra role.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5.20, a Wave D PR with sonarr and radarr). Its
-  `containers_list` entry is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. zigbee2mqtt is Flux-owned too and depends on it. The Deployment is
   `Recreate`, so a change
   that rolls it drops every MQTT client briefly. `mosquitto-data` is on `longhorn-nobackup`,

@@ -206,10 +206,13 @@ machinery and the `OVER_CEILING` exemptions that
 `ansible/tests/_doc_size.py:recorded_count_problems` checks. Added: a diff-to-sections step of
 about 100 lines, and a one-time rewrite of the 87 `CLAUDE.md` files.
 
-**Remains:** G3, restated or uncited prose that the lock never saw. The most-read sections cite
+**Remains:** restated or uncited prose that the lock never saw. The most-read sections cite
 nothing: monitor-bridge's `CLAUDE.md` at 216 reads and root `CLAUDE.md` at 166
 ([#4250](https://github.com/DanielH2018/server/issues/4250)). G5's rewrite addresses it, and the
-notice is advisory, so a moved atom can still go unread.
+notice is advisory, so a moved atom can still go unread. G3 would have put the notice in front
+of the session that opens the PR. The operator declined G3 on 2026-11-12
+([#7232](https://github.com/DanielH2018/server/issues/7232)), because sessions still edited the
+prose for 16 of 30 moved atoms after G2.
 
 ## Combined end state
 
@@ -237,7 +240,7 @@ each slice's *Complexity delta*. It counts owned code only, and leaves out tests
 | Alert rules and exporters | about 1,100, with 12 items unsized | about 40 | M1's series budget, 2,000 samples a second |
 | monitor-bridge | D2's deploy-pipeline family, about 150 | about 5,700 to 6,700 (M2, M5, M6) | residual about 6,500, capped at 7,000 (M6) |
 | Uptime Kuma | — | about 3,700 lines and 82 push-token secrets | deleted by M6 |
-| Docs guard | about 700 (G1, G3, G4) | about 925 lines plus the 1,471-line generated lock (G2, G4) | — |
+| Docs guard | about 570 (G1, G4; G3 declined) | about 925 lines plus the 1,471-line generated lock (G2, G4) | — |
 
 The deleted side still outweighs the added side by a wide margin, so the direction holds.
 The added side is several times what this page claimed before the fold. A promote workflow
@@ -335,7 +338,7 @@ The dependency table in [contracts.md](contracts.md) is authoritative, including
 sub-edges. This sketch follows its slice-level edges:
 
 ```text
-G1 ──▶ G2 ──▶ G5          G2 ──▶ G3 (optional)          G4 (independent)
+G1 ──▶ G2 ──▶ G5          G2 ──▶ G3 (declined)          G4 (independent)
 R1 ──▶ R2, R3
 M1 ──▶ M2, M3, M4, M5 ──▶ M6          M6's B-1e ──▶ D5's last stateless-leaf flip
 D1 + R1 + R2's PRs 1–2 ──▶ D2 ──▶ D3 (+ all of R2), D4 ──▶ D5 (+ R3, M1, M2) ──▶ D6 ──▶ R4
@@ -390,7 +393,7 @@ a tag that is not flux-owned (M6 Open question 4), so that flip waits on the dri
 | H7 | [Remaining roles, then delete Ansible](host/h7-delete-ansible.md) | A fresh Pi rebuilds from `bootstrap-host.sh` alone |
 | G1 | [Diff notice alongside the lock](docs-guard/g1-diff-notice.md) | 30 days of notices, counted against the prose edits they caused |
 | G2 | [Retire the lock](docs-guard/g2-retire-lock.md) | A PR that moves a cited symbol goes green and carries the notice |
-| G3 | [Notice dispatches the freshness reviewer](docs-guard/g3-freshness-reviewer.md) | (optional) The notice dispatches a reviewer and stays the check |
+| G3 | [Notice dispatches the freshness reviewer](docs-guard/g3-freshness-reviewer.md) | Declined on 2026-11-12: the post-G2 yield did not fall far enough to build it |
 | G4 | [Drop the CI size test](docs-guard/g4-drop-size-test.md) | Size is one read-time budget plus a report |
 | G5 | [Shrink root CLAUDE.md](docs-guard/g5-shrink-root-claude-md.md) | Mechanism prose sits in `.claude/rules/`, and tool output in `--help` |
 

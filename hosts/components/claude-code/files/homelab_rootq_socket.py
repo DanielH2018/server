@@ -1,7 +1,8 @@
 #!/usr/bin/python3 -I
 """homelab-rootq-socket: answer one `rootq` request on a unix socket, as root (#6350).
 
-Installed root-owned at /usr/local/libexec/homelab-rootq-socket by tasks/rootq.yml and run by
+Shipped root-owned at /usr/local/libexec/homelab-rootq-socket by the homelab host package
+(hosts/components/claude-code) and run by
 `homelab-rootq@.service`, one instance per connection to `homelab-rootq.socket`
 (`Accept=yes`), with the connection on stdin. The socket's group decides who may connect. A
 socket needs no setuid, so the agent user, whose `claude-rc.service` runs with

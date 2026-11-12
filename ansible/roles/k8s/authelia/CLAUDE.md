@@ -137,7 +137,7 @@ the container in `templates/deployment.yaml.j2`. ENFORCED:
   only when the placeholder render places it, which
   `ansible/tests/services/test_authelia_claude_ui_user.py` holds to the manage flags.
 - **Flux applies authelia, not Ansible** (D5, authelia's own window). Its `containers_list`
-  entry is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and
+  entry is `platform: k8s`, so nothing applies it by hand, and
   a merged change reaches the cluster when `promote` publishes and verifies the next bundle.
   A rotation
   lands without `--tags`, as

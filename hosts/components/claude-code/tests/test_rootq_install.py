@@ -35,6 +35,19 @@ def test_the_sudoers_template_grants_one_command_per_user() -> None:
     ]
 
 
+def test_the_sudoers_header_names_the_package_that_ships_it() -> None:
+    assert render_sudoers(["ubuntu"]).splitlines()[0] == (
+        "# Shipped by the homelab host package (hosts/components/claude-code). Do not edit."
+    )
+
+
+def test_the_shim_help_names_the_package_that_ships_it() -> None:
+    result = run_proc(["sh", str(ROLE / "files" / "rootq.sh"), "--help"])
+    assert result.returncode == 0, result.stderr
+    assert "hosts/components/claude-code" in result.stdout
+    assert "tasks/" not in result.stdout
+
+
 @pytest.mark.skipif(shutil.which("visudo") is None, reason="visudo is not installed")
 def test_the_rendered_sudoers_file_passes_visudo(tmp_path) -> None:
     path = tmp_path / "claude-rootq"
@@ -84,7 +97,7 @@ def test_matches_hands_root_only_the_hash_of_the_repo_file(shim) -> None:
 
 
 def test_matches_hands_root_a_hash_given_in_place_of_the_repo_file(shim) -> None:
-    """`probe.py applied` asks this way on a host with no checkout (#6357)."""
+    """A caller on a host with no checkout asks this way (#6357)."""
     digest = "ab" * 32
     result, argv = shim("matches", "/etc/netplan/a.yaml", digest)
     assert result.returncode == 0, result.stderr

@@ -36,10 +36,9 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-{# `| bool`, matching the `when:` in tasks/main.yml. Without it the two disagree for a STRING:
-   `-e netpol_baseline_obs_enforced=false` is truthy to Jinja (this branch renders, fencing
-   applied) and False to Ansible's `when:` (every probe task skipped) — enforcement with no
-   probe, from the exact override an operator reaches for mid-incident. #}
+{# `| bool`, matching `netpol_baseline_probe_active` in defaults/main.yml. Without it the two disagree for a
+   STRING: `'false'` is truthy to Jinja (this branch renders, fencing applied) and False to
+   that list (the verify Job dials no leg) — enforcement with no probe. #}
 {% if netpol_baseline_obs_enforced | bool %}
     - from:
         # Traefik lives in {{ k8s_namespace }}, so unlike the homelab baseline this needs a

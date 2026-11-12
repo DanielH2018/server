@@ -17,7 +17,7 @@ conventions.
   manager.
 - **Secret** (a SOPS key, not a value): `cloudflare_dns_token`.
 - **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
-  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Both
   Deployments are `RollingUpdate`
   with one replica and no readinessProbe, so the Kustomization's `wait` reads a pod Ready as

@@ -1,9 +1,9 @@
 #!/usr/bin/python3 -I
 """rootq-socket: read root-only host state through homelab-rootq.socket (#6350).
 
-Installed as /usr/local/bin/rootq-socket by tasks/rootq.yml, for a user in the socket's group
-that has no sudo, such as the agent user. The operator's `rootq` takes the same verbs through
-sudo.
+Shipped as /usr/local/bin/rootq-socket by the homelab host package (hosts/components/claude-code),
+for a user in the socket's group that has no sudo, such as the agent user. The operator's
+`rootq` takes the same verbs through sudo.
 
 Usage: rootq-socket stat PATH | sha256 PATH | matches PATH REPO_FILE|HEX   (tier 1, no content)
        rootq-socket nft | ufw | sshd | crontab | cat PATH                  (tier 2, redacted)

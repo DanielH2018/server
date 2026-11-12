@@ -17,19 +17,13 @@ PR 7 moved it out of authelia-config. Three things have to agree for the portal 
 from typing import cast
 
 import pytest
-from _helpers import ROLES, load_defaults, load_tasks
+from _helpers import ROLES, load_defaults
 from _k8s_render import render_role_template
 from renderer.renderer_lib.environment import evaluate, renderer_env
 
 ROLE_DIR = ROLES / "k8s" / "authelia"
-TASKS = ROLE_DIR / "tasks" / "main.yml"
 LEVER = "authelia_k8s_manage_oidc"
 JWK_SECRET = "oidc-jwk-secret.yaml"
-INCLUDE_TASK = "Deploy Authelia to the cluster"
-
-
-def _tasks() -> dict[str, tuple[int, dict]]:
-    return {t["name"]: (i, t) for i, t in enumerate(load_tasks(TASKS)) if "name" in t}
 
 
 def _lists(lever: bool) -> tuple[list[str], list[str]]:

@@ -23,7 +23,7 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
 ## Flux applies it
 
 - **Flux applies traefik, not Ansible** (D5, traefik's own window, #5707). Its
-  `containers_list` entry is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle.
 - **Where the tasks went.** The CRD install and its "established" wait became the `traefik-crds`
   tag, which traefik's Kustomization depends on. The RBAC staging under `/etc/rancher/k3s`
