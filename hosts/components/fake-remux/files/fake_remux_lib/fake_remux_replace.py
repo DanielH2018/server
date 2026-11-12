@@ -8,7 +8,7 @@ survives across ticks so a crash mid-flight just resumes on the next run.
 
 All decisions (which candidate to grab, when a probe proves a file genuine, what state an episode
 moves to) live in the pure fake_remux_replace_logic.py core (see test_fake_remux_replace_logic.py).
-This file only talks to Sonarr/jellyfin/Discord and feeds their results in. `FAKE_REMUX_REPLACE_MODE`
+This file only talks to Sonarr/ffprobe/Discord and feeds their results in. `FAKE_REMUX_REPLACE_MODE`
 gates blast radius: `off` skips entirely, `shadow` previews searches/grabs into outcomes.jsonl with
 zero Sonarr mutations, `live` executes grabs/deletes/imports/blocklists.
 
@@ -94,17 +94,8 @@ class Sonarr(scan.Sonarr):
 
 
 def _make_sonarr(cfg):
-    # Same rule as the scan: SONARR_URL wins when set, resolve_ip is the fallback. This was the
-    # reconciler's LAST Docker coupling — everything else it does already runs on the host, because
-    # it has always had to ffprobe downloads jellyfin does not mount.
-    base = cfg.get("SONARR_URL", "").rstrip("/")
-    if not base:
-        base = "http://%s:%s" % (
-            scan.resolve_ip(cfg.get("SONARR_CONTAINER", "sonarr")),
-            cfg.get("SONARR_PORT", "8989"),
-        )
     timeout = int(cfg.get("HTTP_TIMEOUT", "15"))
-    s = Sonarr(base, cfg.get("SONARR_API_KEY", ""), timeout)
+    s = Sonarr(cfg["SONARR_URL"], cfg.get("SONARR_API_KEY", ""), timeout)
     s.search_timeout = int(cfg.get("SEARCH_TIMEOUT_S", "180"))
     return s
 
@@ -180,16 +171,10 @@ def _try_grab(sonarr, cand):
         raise
 
 
-# Moved to fake_remux_logic.host_path (2026-08-08) so the scan can use the same mapping: it stopped
-# probing via `docker exec jellyfin` when it moved to daniel-box, which runs no Docker.
-_host_path = frl.host_path
-
-
 def _host_ffprobe(ffprobe_bin, path, args, timeout):
     """Run ffprobe directly on the host.
 
-    The reconciler runs here, and unlike the library the download dir (/data/torrents) is NOT
-    mounted in jellyfin. Returns stdout, or "" on any failure (a probe glitch / missing file /
+    Returns stdout, or "" on any failure (a probe glitch / missing file /
     missing binary must SKIP the file, never wrongly flag it).
     """
     try:
@@ -262,9 +247,7 @@ def _probe_completed(cfg, ledger, q_by_episode, policy):
         if not path:
             # No outputPath on the queue record yet — skip; the entry holds after the stall timeout.
             continue
-        # Downloads land in /data/torrents, which jellyfin does NOT mount — ffprobe on the host
-        # (where the reconciler runs), translating Sonarr's /data view to the host path.
-        host = _host_path(path, host_data_root)
+        host = frl.host_path(path, host_data_root)
         host = _resolve_video(
             host
         )  # a folder download -> the largest video inside; a file -> itself
@@ -446,6 +429,8 @@ def reconcile_once(cfg, sonarr=None):
     mode = cfg.get("FAKE_REMUX_REPLACE_MODE", "shadow").strip().lower()
     if mode == "off":
         return True, "replacer off"
+    if sonarr is None and not cfg.get("SONARR_URL"):
+        return True, "disabled (no SONARR_URL)"
 
     policy = _load_policy(cfg)
     ledger = _load_json(cfg["LEDGER_FILE"], default={})

@@ -1,4 +1,5 @@
 from fake_remux_lib import fake_remux_logic as frl
+from lib.proc_testing import write_exec
 
 MARKERS = frl.DEFAULT_RE_ENCODER_MARKERS
 # The real NTRX file: a "Bluray-1080p Remux" that is actually a 10.4 s-GOP hevc_qsv encode.
@@ -264,3 +265,22 @@ def test_the_scan_logs_bare_lines_for_journald_to_stamp(tmp_path, capsys, monkey
         "fake-remux scan starting",
         "DOWN fake-remux scan error: boom",
     ]
+
+
+def test_a_missing_sonarr_url_disables_the_scan_before_any_lookup():
+    from fake_remux_lib import fake_remux_scan as scan
+
+    assert scan.scan({"SONARR_API_KEY": "k"}) == (True, "disabled (no SONARR_URL)")
+
+
+def test_the_scan_probes_the_mapped_host_path_with_the_host_ffprobe(tmp_path):
+    from fake_remux_lib import fake_remux_scan as scan
+
+    calls = tmp_path / "calls"
+    stub = write_exec(
+        tmp_path / "ffprobe", 'echo "$@" >> %s\necho \'{"streams": []}\'\n' % calls
+    )
+    cand = {"path": "/data/media/tv/E.mkv"}
+    assert scan.probe_candidate(cand, str(stub), 40, 60, "/srv/media") is not None
+    lines = calls.read_text().splitlines()
+    assert lines and all(line.endswith(" /srv/media/media/tv/E.mkv") for line in lines)

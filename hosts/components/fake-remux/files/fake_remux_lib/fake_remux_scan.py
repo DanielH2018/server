@@ -2,8 +2,8 @@
 
 The autofix-bridge sidecar is deliberately zero-privilege (stdlib only, cap_drop ALL, no docker), so
 it can't run ffprobe. This host-plane script — a daily cron beside the disk-autoprune one, running as
-the sys_user (in the docker group) — does the part the sidecar can't: it reads Sonarr's library, runs
-jellyfin's ffprobe against each REMUX-quality file, and flags any that are actually re-encodes (long
+the sys_user — does the part the sidecar can't: it reads Sonarr's library, runs the host's
+ffprobe against each REMUX-quality file, and flags any that are actually re-encodes (long
 GOP or a consumer re-encoder ENCODER tag — see fake_remux_logic.py for the signal). Each newly found
 fake is enriched with its episodeId and seeded into a persistent ledger (LEDGER_FILE, keyed by
 episodeId) that fake_remux_replace.py — the reconciler — reads to search for, grab, verify, and swap
@@ -13,9 +13,9 @@ turns into the fake-remux-scan textfile verdict, plus a per-fake Discord line.
 
 Runs via `uv run --no-project --python <pin>` (host_python_version in
 ansible/inventory/group_vars/all.yml). Config comes from /etc/autofix-fake-remux/config.env
-(0600, embeds SONARR_API_KEY + the Discord webhook). ffprobe uses jellyfin because it mounts the media
-read-only at /data/media, so Sonarr's absolute path resolves unchanged (no translation) and a probe
-can't write.
+(0600, embeds SONARR_API_KEY + the Discord webhook). Sonarr reports its own `/data` view, which
+HOST_DATA_ROOT maps to the host path ffprobe opens. An empty SONARR_API_KEY or SONARR_URL disables
+the scan, and the state file names which one.
 
 Usage: fake_remux.py scan   (takes no arguments; -h/--help prints its help)
 
@@ -81,33 +81,6 @@ def load_config(path: str = CONFIG_PATH) -> dict:
     return cfg
 
 
-def resolve_ip(container: str) -> str:
-    """Return the first bridge IP of a container via docker inspect.
-
-    Resolved at run time — it changes on recreate. Mirrors scripts/diagnostics/probe.py's
-    resolve_ip; the host can reach any of a container's IPs.
-    """
-    out = subprocess.run(
-        [
-            "docker",
-            "inspect",
-            "-f",
-            "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}",
-            container,
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if out.returncode != 0:
-        raise RuntimeError(
-            "docker inspect %s failed: %s" % (container, out.stderr.strip())
-        )
-    for tok in out.stdout.split():
-        if tok:
-            return tok
-    raise RuntimeError("%s has no container IP (is it running?)" % container)
-
-
 class Sonarr:
     """Thin client for the parts of Sonarr's v3 API the fake-remux scan needs.
 
@@ -154,31 +127,18 @@ class Sonarr:
         )
 
 
-def ffprobe(jellyfin: str, ffprobe_bin: str, path: str, args, timeout: int) -> str:
-    """Probe a library file.
+def ffprobe(ffprobe_bin: str, path: str, args, timeout: int) -> str:
+    """Probe a library file with the host's ffprobe.
+
+    `path` is a host path: the caller has already mapped Sonarr's `/data` view through
+    `frl.host_path`.
 
     Returns stdout, or "" on any failure — a probe glitch, a missing binary, or a wrong path SKIPS
     the file, never flags it. That asymmetry is the whole safety property: this scan seeds a ledger
     the LIVE reconciler acts on, so a false negative costs one missed fake and a false positive
     costs a real file.
-
-    Two modes, selected by `jellyfin` being set:
-
-      - **host** (jellyfin empty): run `ffprobe_bin` directly against the translated path. This is
-        the daniel-box mode and the one that will remain — that node runs no Docker, so there is no
-        container to exec into, and the library is a plain local directory there.
-      - **docker exec** (jellyfin set): the original daniel-server path, kept so the old host can
-        still run this unchanged during the coexistence window.
-
-    In host mode the caller has already mapped Sonarr's `/data` view through `frl.host_path`; under
-    `docker exec` the path was used verbatim, because jellyfin mounted the library at the same
-    `/data/media` Sonarr reports.
     """
-    argv = (
-        [ffprobe_bin, "-v", "error", *args, path]
-        if not jellyfin
-        else ["docker", "exec", jellyfin, ffprobe_bin, "-v", "error", *args, path]
-    )
+    argv = [ffprobe_bin, "-v", "error", *args, path]
     try:
         out = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.TimeoutExpired) as e:
@@ -190,21 +150,16 @@ def ffprobe(jellyfin: str, ffprobe_bin: str, path: str, args, timeout: int) -> s
     return out.stdout
 
 
-def probe_candidate(cand, jellyfin, ffprobe_bin, window_s, timeout, host_data_root=""):
+def probe_candidate(cand, ffprobe_bin, window_s, timeout, host_data_root=""):
     """Enrich one remux candidate with its ENCODER tag + keyframe times.
 
     Returns None when the file couldn't be probed (skipped, not flagged).
 
-    `cand["path"]` is Sonarr's own `/data/...` view. Under `docker exec jellyfin` that resolved
-    unchanged, because jellyfin mounted the library at the same path. Probing on the host does not:
-    host_data_root maps it (an empty value leaves it alone, so the probe simply finds nothing and
-    the file is skipped).
+    `cand["path"]` is Sonarr's own `/data/...` view; host_data_root maps it to the host path (an
+    empty value leaves it alone, so the probe simply finds nothing and the file is skipped).
     """
-    probe_path = (
-        frl.host_path(cand["path"], host_data_root) if not jellyfin else cand["path"]
-    )
+    probe_path = frl.host_path(cand["path"], host_data_root)
     stream_json = ffprobe(
-        jellyfin,
         ffprobe_bin,
         probe_path,
         [
@@ -224,7 +179,6 @@ def probe_candidate(cand, jellyfin, ffprobe_bin, window_s, timeout, host_data_ro
     # Encoder tag alone is decisive; only pay for the keyframe read when the tag didn't already flag it.
     if not frl.encoder_is_reencoder(encoder, frl.DEFAULT_RE_ENCODER_MARKERS):
         kf_csv = ffprobe(
-            jellyfin,
             ffprobe_bin,
             probe_path,
             [
@@ -261,33 +215,21 @@ def scan(cfg):
     api_key = cfg.get("SONARR_API_KEY", "")
     if not api_key:
         return True, "disabled (no Sonarr API key)"
+    base = cfg.get("SONARR_URL", "")
+    if not base:
+        return True, "disabled (no SONARR_URL)"
 
     gop_max_s = float(cfg.get("GOP_MAX_S", "5"))
     window_s = int(cfg.get("PROBE_WINDOW_S", "40"))
     max_per_scan = int(cfg.get("MAX_PER_SCAN", "5"))
     timeout = int(cfg.get("PROBE_TIMEOUT_S", "60"))
-    # Empty JELLYFIN_CONTAINER selects host-ffprobe mode (daniel-box: no Docker, library is local).
-    # Non-empty keeps the original `docker exec jellyfin` path for daniel-server.
-    jellyfin = cfg.get("JELLYFIN_CONTAINER", "jellyfin")
-    ffprobe_bin = cfg.get(
-        "FFPROBE_BIN", "ffprobe" if not jellyfin else "/usr/lib/jellyfin-ffmpeg/ffprobe"
-    )
+    ffprobe_bin = cfg.get("FFPROBE_BIN", "ffprobe")
     host_data_root = cfg.get("HOST_DATA_ROOT", "")
     webhook = cfg.get("ARR_DISCORD_WEBHOOK_URL", "")
     ledger_file = cfg.get(
         "LEDGER_FILE", "/var/lib/autofix-fake-remux/replacements.json"
     )
 
-    # SONARR_URL wins when set. On daniel-box there is no Docker to inspect, so the address comes
-    # from the cluster Service — resolved at deploy time into this config rather than hardcoded,
-    # because a ClusterIP is stable for the Service's life but not across a delete. resolve_ip
-    # stays as the fallback so daniel-server is unchanged.
-    base = cfg.get("SONARR_URL", "").rstrip("/")
-    if not base:
-        base = "http://%s:%s" % (
-            resolve_ip(cfg.get("SONARR_CONTAINER", "sonarr")),
-            cfg.get("SONARR_PORT", "8989"),
-        )
     sonarr = Sonarr(base, api_key, int(cfg.get("HTTP_TIMEOUT", "15")))
 
     candidates = []
@@ -301,9 +243,7 @@ def scan(cfg):
 
     probed, skipped = [], 0
     for cand in candidates:
-        p = probe_candidate(
-            cand, jellyfin, ffprobe_bin, window_s, timeout, host_data_root
-        )
+        p = probe_candidate(cand, ffprobe_bin, window_s, timeout, host_data_root)
         if p is None:
             skipped += 1
         else:

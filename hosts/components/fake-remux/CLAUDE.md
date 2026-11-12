@@ -38,7 +38,9 @@ what is specific to the host timers: the schedule, the lock, and the contract be
   daily scan and the 20-minute reconcile never race on the ledger — they wait rather than
   skip, because a skipped tick is invisible); an empty Sonarr API key disables the scan
   outright (exit 0, monitor green — the failure mode of a wrong config path is silence, see
-  `defaults/main.yml`).
+  `defaults/main.yml`). An empty `SONARR_URL` disables both the scan and the reconcile the
+  same way, with `disabled (no SONARR_URL)` in the state file. The scripts have no Docker
+  fallback: daniel-box runs no Docker.
 - **Required evidence:** every action lands in the ledger and `outcomes.jsonl`; a live
   replacement is Discord-alerted. A post the host could not deliver waits in
   `/var/lib/autofix-fake-remux/discord-spool/` and goes out, marked as delayed, at the end of
