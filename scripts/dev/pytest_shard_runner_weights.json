@@ -1098,8 +1098,6 @@
  "scripts/secrets_mgmt/tests/test_cluster_vars_write_refusals.py": 2.11,
  "scripts/secrets_mgmt/tests/test_departed_secrets_are_accounted_for.py": 1.52,
  "scripts/secrets_mgmt/tests/test_host_secrets.py": 5.9,
- "scripts/secrets_mgmt/tests/test_secret_bearing_host_paths.py": 0.07,
- "scripts/secrets_mgmt/tests/test_secret_bearing_host_scripts_are_not_world_readable.py": 0.09,
  "scripts/secrets_mgmt/tests/test_secret_consumers.py": 0.04,
  "scripts/secrets_mgmt/tests/test_secret_consumers_by_secret_name.py": 0.16,
  "scripts/secrets_mgmt/tests/test_secret_git_dates.py": 0.01,
