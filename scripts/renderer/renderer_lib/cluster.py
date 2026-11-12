@@ -54,13 +54,11 @@ from lib.k8s_roles import (
     MANIFESTS_PRUNE_DEFAULT,
     SHARED_MANIFEST_DEFAULTS,
     resolved_manifest_files,
-    k8s_tags,
     role_fields,
 )
 from lib.k8s_context import resolve_vars
 from lib.render_guard import SHARED_TPL, StrictChainableUndefined, containers_entries
 from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, HOST_VARS, JOB_FILES, K8S_ROLES
-from lib.repo_paths import K8S_SERVICES
 from renderer.renderer_lib.bundle import (
     KUSTOMIZATION,
     SHARED_KINDS,
@@ -213,15 +211,6 @@ def select_tags(
     if unknown:
         raise RenderRefused(f"{unknown} are not k8s render targets of {host}")
     return tags
-
-
-def flux_owned_tags(services: Path = K8S_SERVICES) -> set[str]:
-    """The deploy tags of the k8s entries in `services`, each one Flux applies (C4).
-
-    `k8s_tags` reads them, the reader `promote.py published-tags` uses too, so the tags this
-    refusal checks are the tags the bundle publishes.
-    """
-    return k8s_tags(services)
 
 
 def bundle_ordering(

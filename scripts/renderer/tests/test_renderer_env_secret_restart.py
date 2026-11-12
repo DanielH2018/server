@@ -101,7 +101,7 @@ def _unstamped(out: Path, tags: Iterable[str]) -> list[tuple[str, str]]:
 
 @pytest.fixture(scope="module")
 def flux_tags() -> set[str]:
-    return homelab_render.flux_owned_tags()
+    return homelab_render.k8s_tags()
 
 
 @pytest.fixture(scope="module")

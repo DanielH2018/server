@@ -589,14 +589,14 @@ files = "^((scripts|ansible/roles|\\.claude/hooks|evals|hosts/components|hosts/l
 # Cost, measured on daniel-server on 2026-10-17, one module at a time with `-n0`, each
 # including its ~0.4s interpreter start: lander deadlines 5.4s, the Renovate pair 3.5-4.0s
 # each, import direction 3.6s, checksum annotations 3.5s, tracked Python hazards 3.1s, prek
-# files 1.9s, exit codes 1.5s, shell `--help` 1.3s, the owner census 0.8s, probe health 0.4s.
+# files 1.9s, exit codes 1.5s, shell `--help` 1.3s, the owner census 0.8s (deleted since), probe health 0.4s.
 # That is 19s together, well above the issue's 7.5s estimate from recorded weights, because
 # each module's fixtures render or walk the tree. As hooks under `prek run <id> --all-files`,
 # at load average 3.3: `-python` 4.6s, `-owners` 0.9s, `-lander` 5.2s, `-checksum` 3.5s,
 # `-shell` 1.3s, `-renovate` 3.9s, against 27.6s for the hook above in the same run. The
 # gates keep a typical commit near budget: a `.py` commit outside scripts/lib/,
 # deploy_tools/ and renderer/, outside ansible/tests/_*.py and outside the k8s roles runs
-# `-python` and `-owners` alone, about 5.5s on 2026-10-17. Those `-python` figures predate
+# `-python` and the since-deleted `-owners` alone, about 5.5s on 2026-10-17. Those `-python` figures predate
 # xdist_width (below); on 2026-10-22 at load average 3.6-3.9, `-python` took 5.9-6.3s.
 #
 # `-n0` on the one-module hooks: pyproject.toml's `-n auto` spent longer bringing up xdist
@@ -623,15 +623,6 @@ entry = "uv run --frozen pytest -q -n 4 -p no:cacheprovider scripts/tests/test_s
 language = "system"
 pass_filenames = false
 files = "(\\.py$|^scripts/.*\\.sh$|^(prek\\.toml|pyproject\\.toml|uv\\.lock)$)"
-
-# D2's owner table, and the entry points it names: the Python that reads which tags Flux owns.
-[[repos.hooks]]
-id = "static-ratchet-tests-owners"
-name = "D2 owner table matches the entry points that read tag ownership"
-entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/repo/test_owner_entry_points_census.py"
-language = "system"
-pass_filenames = false
-files = "(\\.py$|^docs/target-architecture/deploy/d2-first-leaf\\.md$|^(pyproject\\.toml|uv\\.lock)$)"
 
 # The lander deadlines: promote.yml's job timeouts, the land units' TimeoutStartSec in the
 # claude-code and renovate-agent host components (with their defaults and
@@ -755,8 +746,7 @@ pass_filenames = false
 files = "^(\\.claude/hooks/[^/]+\\.(sh|py)|\\.claude/settings\\.json|scripts/dev/gen_hook_settings\\.py|scripts/lib/(cli_help|exit_codes|repo_paths)\\.py)$"
 
 # Lint first-party Python for real bugs only — pyflakes (unused imports/undefined names),
-# syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]; vendored
-# collections excluded there). ruff is pinned in uv.lock (lint group) so the gate is
+# syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]). ruff is pinned in uv.lock (lint group) so the gate is
 # reproducible and lockFileMaintenance refreshes it weekly. Runs once when any .py is staged.
 #
 # `files` names pyproject.toml and uv.lock as well as the code, the way the `ty` hook below
@@ -780,7 +770,7 @@ pass_filenames = false
 files = "(\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 
 # Enforce `ruff format` on first-party Python (config in pyproject.toml [tool.ruff], same
-# extend-exclude as the linter so vendored collections are untouched). --check fails the commit
+# extend-exclude as the linter). --check fails the commit
 # on an unformatted file instead of rewriting it, so a stray editor save can't sneak past CI.
 # `files` covers pyproject.toml and uv.lock for the reasons given on `ruff` above — the
 # formatter's output moves with the pinned version just as the linter's ruleset does.

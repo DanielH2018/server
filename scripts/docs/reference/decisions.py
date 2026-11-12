@@ -156,8 +156,7 @@ def _tracked_files(root: Path) -> list[str] | None:
     DECIDED: `git ls-files`, not a walk plus a hand-maintained skip list — the same
     reasoning `ansible/tests/repo/test_documented_paths_exist.py` gives for the same
     choice. A walk sees whatever happens to be on disk, and this repo grows untracked
-    trees during ordinary work: `.venv`, `ansible/collections/` (vendored per worktree),
-    `__pycache__`, and — the concrete miss that motivated this — `.mkdocs-strict-check/`,
+    trees during ordinary work: `.venv`, `__pycache__`, and — the concrete miss that motivated this — `.mkdocs-strict-check/`,
     the prek hook's own build output, which is not one of those named exceptions and
     is not going to be the last one nobody thought to skip. `git ls-files` already knows
     what the repo considers real, via `.gitignore`, without a second list to keep in sync.
