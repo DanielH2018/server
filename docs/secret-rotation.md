@@ -89,6 +89,23 @@ peanut, and a setup role or host package can read it too. Every step that handle
    `cluster-vars` Kustomization and on every Kustomization that depends on it.
 5. Run any setup-role or host-package command from step 3.
 
+### Changing secrets.yml's recipients
+
+A recipient change to `secrets.yml` rolls every pod and re-runs every verify Job, even when
+no value changes. Schedule it, and land it alone while the hosts are idle.
+
+`sops rotate` mints a new data key, so every `ENC[…]` string in `secrets.yml` changes while
+every plaintext stays the same. Each `.source` line digests that ciphertext, so CI's `check`
+refuses the PR until `cluster_vars.py write` (**operator-only**) rewrites every line. `write`
+leaves the cluster files byte-identical, and server-side apply reports every Secret
+`unchanged`. The verify Job names and the `checksum/restart` annotations digest the `.source`
+lines, though, so Flux restarts every workload. #7905 dropped one age recipient this way and
+restarted about 60 services at once.
+
+The operator chose this cost over a keyed hash of the plaintext (#8061). The `# DECIDED:`
+marker in `scripts/secrets_mgmt/cluster_vars.py`, at the line that builds the `.source`
+lines, records it.
+
 ### Rotating the cluster key
 
 The cluster keypair decrypts only the cluster files. It is the one key in this setup that
