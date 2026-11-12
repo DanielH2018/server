@@ -23,7 +23,7 @@ def test_role_of_names_nothing_outside_a_role():
     "path",
     [
         "ansible/roles/k8s/volume-revert/CLAUDE.md",
-        "ansible/roles/setup/k3s/defaults/main.yml",
+        "hosts/components/k3s-server/defaults/main.yml",
     ],
     ids=["a-document", "a-setup-role"],
 )

@@ -499,20 +499,16 @@ def entry_owner(entry: dict[str, Any]) -> str | None:
 def autodeploy_eligibility(
     entry: dict[str, Any],
     platform: str,
-    host_data: dict[str, Any],
 ) -> str:
     """Say what applies `entry`'s changes, for the catalogue's last column.
 
     Args:
         entry: The service's `containers_list` entry.
         platform: "k8s" or "docker". Flux applies every k8s entry.
-        host_data: The host's parsed `host_vars`, read for `has_gitops` off k8s.
 
     Returns:
-        "n/a: applied by" `owner_stance` for a k8s entry, or an `UNKNOWN`/"n/a" explanation.
+        "n/a: applied by" `owner_stance` for a k8s entry, or the host package for a Docker one.
     """
     if platform == "k8s":
         return f"n/a: applied by {owner_stance()}"
-    if host_data.get("has_gitops") is False:
-        return "n/a (host has no GitOps auto-deploy path)"
-    return UNKNOWN + " (docker host's has_gitops not declared)"
+    return "n/a: applied by the host package"

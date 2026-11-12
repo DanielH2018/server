@@ -72,8 +72,6 @@ Subcommands:
                              started with their VERDICT, the PRs it named [--since 6h]
     builder [-n N]           daniel-box's host-package builder: reason, published versions,
                              newest builds, failures [--since 24h]
-    applied <role>           a setup role's files on each of its hosts against the tree's
-                             render: existence, mode, owner, content hash [--host H]
 
 Exit codes: every verdict subcommand exits 0 or 1 for what it observed, and 75 when it could
 not read its source, with the failed read on stderr. `health` exits 3 when the tag names nothing
@@ -116,7 +114,6 @@ sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 # a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST
-
 from diagnostics.probe_lib.cli_parser import ENTRY_POINT, _build_parser
 from diagnostics.probe_lib.curl_pipeline import output_redaction, plan, stream_pipeline
 from diagnostics.probe_lib.health import (

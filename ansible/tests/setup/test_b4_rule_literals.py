@@ -35,7 +35,7 @@ OVERRIDES = {
     "sys_user": "ubuntu",
 }
 SHELL = {
-    "ups": ("nut_host", "ups-secondary-health.sh.j2"),
+    "ups": ("nut-secondary", "ups-secondary-health.sh.j2"),
     "fake-remux": ("fake-remux", "fake-remux-health.sh.j2"),
     "drill": ("hypervisor", "etcd-restore-drill-vm.sh.j2"),
 }
@@ -87,8 +87,7 @@ def not_reporting_rules(text: str) -> dict[tuple[str, str], str]:
 def producer_text(producer: str) -> str:
     if producer in SHELL:
         role, template = SHELL[producer]
-        plane = "components" if role in {"fake-remux", "hypervisor"} else "setup"
-        return render_shell_script(plane, role, template, OVERRIDES)
+        return render_shell_script("components", role, template, OVERRIDES)
     role, template, overrides = UNITS[producer]
     return render_component_text(role, template, overrides)
 
@@ -143,8 +142,8 @@ def test_a_threshold_that_drifted_is_flagged():
 def test_the_ups_deadline_follows_its_cron():
     # The UPS watchdog and the heartbeats render 2 x period + 300 from their cron variables.
     moved = render_shell_script(
-        "setup",
-        "nut_host",
+        "components",
+        "nut-secondary",
         "ups-secondary-health.sh.j2",
         {**OVERRIDES, "nut_host_watchdog_interval_minutes": 30},
     )

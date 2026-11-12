@@ -33,7 +33,6 @@ from lib.repo_paths import (
     ROLES,
 )
 
-SETUP_ROLES = ROLES / "setup"
 CONTAINER_ROLES = ROLES / "containers"
 DEPLOY_PLAYBOOK = ANSIBLE / "deploy.yml"
 
@@ -73,7 +72,7 @@ def load_tasks(path: Path) -> list[dict]:
 def load_defaults(role: Path) -> dict:
     """The parsed `defaults/main.yml` of a role directory, empty for a role with none.
 
-    Takes the directory (`K8S_ROLES / "jellyfin"`, `SETUP_ROLES / "k3s"`) rather than a name:
+    Takes the directory (`K8S_ROLES / "jellyfin"`, `K8S_ROLES / "nut"`) rather than a name:
     callers already hold the path, and a name would force a plane lookup that buys nothing.
     This is the RAW file. `lib.render_context` lays the defaults under the inventory and
     resolves them, which is what a render needs and what a guard on the literal text of a

@@ -22,12 +22,11 @@ Run: uv run pytest ansible/tests/setup/test_k3s_control_plane_hardening.py
 
 import functools
 
-from lib import yaml_fast
-from _helpers import ALL_VARS
-from _helpers import load_yaml, load_defaults
+from _helpers import ALL_VARS, load_defaults, load_yaml
 from _k8s_render import render_role_template, rendered_k8s_text
 from _setup_render import role_context
-from lib.repo_paths import K3S_ROLE
+from lib import yaml_fast
+from lib.repo_paths import K3S_SERVER
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.bundle import homelab_namespace_files
 from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE
@@ -207,7 +206,7 @@ def test_alloy_tails_the_audit_log():
     # Resolved, not raw: `k3s_audit_log_path` is itself a template over `k3s_audit_log_dir`,
     # so group_vars holds `{{ k3s_audit_log_dir }}/audit.log` and only the render context
     # expands it.
-    resolved = role_context(K3S_ROLE)
+    resolved = role_context(K3S_SERVER)
     path, directory = resolved["k3s_audit_log_path"], resolved["k3s_audit_log_dir"]
     # The Alloy config sits in a nested `templates/config/` directory, which the whole-tree
     # render does not glob; `render_role_template` addresses it by its loader-relative name.
@@ -227,7 +226,7 @@ def test_alloy_tails_the_audit_log():
 
 def test_audit_log_vars_are_visible_to_both_roles():
     """A role default cannot be read by another role's template."""
-    shared, role = _all_vars(), load_defaults(K3S_ROLE)
+    shared, role = _all_vars(), load_defaults(K3S_SERVER)
     for name in ("k3s_audit_log_enabled", "k3s_audit_log_dir", "k3s_audit_log_path"):
         assert name in shared, (
             f"{name} must live in group_vars/all.yml. setup/k3s writes the log and "

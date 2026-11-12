@@ -33,10 +33,7 @@ work already executed.
 
 ```
 ansible/          # Playbooks, roles, inventory, templates   ← EDIT HERE
-  k3s-bringup.yml     # Cluster foundation (k3s, Longhorn, Traefik CRDs, …)
-  initial_setup.yml   # Host hardening / bootstrap
   roles/k8s/          # One role per k8s workload (manifests rendered from templates)
-  roles/setup/        # One role per host-setup concern (k3s, Docker engine, crons, …)
 hosts/            # Host packages; the Pi's Docker services are hosts/components/pi-compose/
   filter_plugins/     # Custom dependency-resolution filters (toposort.py)
   inventory/          # hosts.ini, group_vars/all.yml, host_vars/<host>.yml
@@ -112,20 +109,10 @@ workload by hand.
   ordering, docker-proxy before autoheal and alloy, is each service file's `depends_on`, and
   `ansible/tests/deploy/test_platform_filter_real_inventory.py` pins it.
 
-Ansible plays run against the host named by `-e target=` — but `daniel-server` and `daniel-box`
-are `ansible_connection=local` in `hosts.ini`, so `-e target=` only selects whose *variables*
-to use while tasks still execute locally. A pre-task refuses that case outright. Only
-`daniel-pi` is genuinely remote, so the setup plays' `-e target=daniel-pi` works as it reads.
-
-```bash
-uv run ansible-playbook ansible/k3s-bringup.yml                        # cluster foundation
-uv run ansible-playbook ansible/initial_setup.yml                      # host bootstrap/hardening
-```
-
-First-host bring-up (uv → SOPS onboarding → `initial_setup.yml`) is ordered in
-[`ansible/README.md`](ansible/README.md); [`ansible/bring-up.sh`](ansible/bring-up.sh) drives
-those steps (`--scaffold` for inventory, no flag for uv + SOPS, `--continue` for the
-playbooks). The manual post-deploy setup Ansible can't do is verified by
+No playbook brings a host up. `hosts/bootstrap-host.sh` does, and `docs/host-packages.md`
+(*Rebuilding daniel-box*, *Rebuilding daniel-server*) and `docs/break-glass.md` (the Pi runbook)
+order the steps. A host's setup plane ships in its host package. The manual post-deploy setup
+that no package can do is verified by
 `uv run python scripts/diagnostics/postflight.py`.
 
 ## Cross-cutting systems

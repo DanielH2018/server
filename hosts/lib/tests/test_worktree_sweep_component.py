@@ -2,8 +2,8 @@
 
 Until H7.36 `initial_setup` installed the sweep as the `Weekly git object-store repair` cron in
 `/etc/cron.d/git-object-store-repair`. These tests hold what the move carries: the unit that runs
-the script as `sys_user`, the timer's slot, which equals the `initial_setup_worktree_sweep_cron_*`
-defaults the deadman fragment and monitor-bridge still read, the Healthchecks.io key credential
+the script as `sys_user`, the timer's slot, which equals the component's
+`initial_setup_worktree_sweep_cron_*` defaults the deadman fragment reads, the Healthchecks.io key credential
 every package shipping the sweep lists (#6815), and the legacy entry. The script's exit-code ping is run in
 `ansible/tests/setup/test_worktree_sweep_cron_reports_its_exit.py`.
 
@@ -22,7 +22,7 @@ from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 PING_KEY = "healthchecks_ping_key"
-INITIAL_SETUP_DEFAULTS = REPO / "ansible/roles/setup/initial_setup/defaults/main.yml"
+SWEEP_DEFAULTS = REPO / "hosts/components/worktree-sweep/defaults/main.yml"
 UNITS = "/usr/lib/systemd/system"
 SCRIPT = "/usr/lib/homelab/worktree-sweep"
 DAYS = {"Sun": 0, "Mon": 1, "Tue": 2, "Wed": 3, "Thu": 4, "Fri": 5, "Sat": 6}
@@ -116,13 +116,13 @@ def test_a_package_shipping_the_sweep_without_its_ping_key_is_flagged():
 
 
 def test_the_timer_slot_equals_the_defaults_the_deadman_fragment_reads(package):
-    defaults = yaml_fast.safe_load(INITIAL_SETUP_DEFAULTS.read_text())
+    defaults = yaml_fast.safe_load(SWEEP_DEFAULTS.read_text())
     timer = _text(package, f"{UNITS}/homelab-worktree-sweep.timer")
     assert slot_problems(timer, defaults) == []
 
 
 def test_a_timer_moved_off_the_defaults_slot_is_flagged(package):
-    defaults = yaml_fast.safe_load(INITIAL_SETUP_DEFAULTS.read_text())
+    defaults = yaml_fast.safe_load(SWEEP_DEFAULTS.read_text())
     timer = _text(package, f"{UNITS}/homelab-worktree-sweep.timer").replace(
         "04:20:00", "05:20:00"
     )

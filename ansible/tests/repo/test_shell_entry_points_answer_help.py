@@ -29,7 +29,7 @@ from _shell_render import rendered_shell_texts
 # Sourced, never executed. A sourced file's `$@` is its caller's argv, so a help check there
 # would answer the caller's own `--help` with the library's comment and exit the caller.
 EXEMPT = {
-    "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
+    "hosts/components/check-lib/files/homelab-check-lib.sh",
     # Sourced by login shells, never executed.
     "hosts/components/pi-tuning/templates/homelab-profile.sh",
 }

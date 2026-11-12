@@ -31,15 +31,15 @@ guard checks a file with `{{ ... }}` still in it (#3202).
 
 import re
 
-from _helpers import ROLES as _ROLES
-from _setup_render import rendered_setup_text, role_context
+from _setup_render import rendered_component_text, role_context
+from validate.setup_templates import COMPONENTS
 from lib.repo_paths import K3S_HOST_DNS
 from renderer.renderer_lib import host as host_mode
 
 _TEMPLATE = "resolv.conf.j2"
 
 # Every host that resolves DIRECTLY from the shared template, read from the file its host
-# package ships. daniel-pi's `pi-resolver` component renders the template through `role: common`
+# package ships. daniel-pi's `pi-resolver` component owns the template, which `k3s-host-dns` borrows through `component: pi-resolver`
 # (H7.25). All are checked: the template is shared, so a correct file plus one bad caller is
 # still a host resolving through Cloudflare.
 #
@@ -57,7 +57,7 @@ def _vip() -> str:
     Pinning 10.0.0.243 here would pass while group_vars moved the VIP, and asserting the Jinja
     reference `{{ dns_k8s_vip }}` only holds while nobody renders the file (#3202).
     """
-    return role_context(_ROLES / "setup" / "common")["dns_k8s_vip"]
+    return role_context(COMPONENTS / "pi-resolver")["dns_k8s_vip"]
 
 
 _COMMENT = re.compile(r"^\s*#")
@@ -186,7 +186,7 @@ def forward_problems(upstreams: list[str], corefile: str, vip: str) -> list[str]
 
 
 def test_the_live_corefile_keeps_pihole_first() -> None:
-    rendered = rendered_setup_text("k3s-host-dns", _COREFILE)
+    rendered = rendered_component_text("k3s-host-dns", _COREFILE)
     problems = forward_problems(forward_upstreams(rendered), rendered, _vip())
     assert not problems, (
         "daniel-box's forward order is the whole failover mechanism (see "

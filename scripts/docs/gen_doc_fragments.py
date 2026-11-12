@@ -78,8 +78,8 @@ from fragment_renderers import (
     render_etcd_offbox_retention,
     render_fail2ban_jails,
     render_lan_addresses,
-    render_record_keys,
     render_longhorn_tiers,
+    render_record_keys,
     render_secret_tiers,
     render_traefik_ports,
 )
@@ -102,12 +102,11 @@ from lib.estate import Estate
 from lib.repo_paths import (
     ALL_VARS,
     K3S_HOST_CHECKS,
-    K3S_ROLE,
+    K3S_SERVER,
     K8S_ROLES,
     K8S_SERVICES,
     LONGHORN_BACKUP_ROLE,
     REPO,
-    ROLES,
 )
 from lib.service_tiers import resolved_tier_lists
 
@@ -119,8 +118,16 @@ SECRET_REGISTRY = REPO / "ansible/secret_rotation.yml"
 PI_PEER_ROLE = K8S_ROLES / "pi-peer-backup"
 REGISTRY_ROLE = K8S_ROLES / "registry"
 OBSERVABILITY_ROLE = K8S_ROLES / "observability"
-INITIAL_SETUP_ROLE = ROLES / "setup" / "initial_setup"
-FAIL2BAN_CONF = INITIAL_SETUP_ROLE / "templates" / "fail2ban_homelab.conf.j2"
+HOST_MAINTENANCE = REPO / "hosts" / "components" / "host-maintenance"
+WORKTREE_SWEEP = REPO / "hosts" / "components" / "worktree-sweep"
+FAIL2BAN_CONF = (
+    REPO
+    / "hosts"
+    / "components"
+    / "fail2ban"
+    / "templates"
+    / "fail2ban_homelab.conf.j2"
+)
 TRAEFIK_ROLE = K8S_ROLES / "traefik"
 K3S_SERVER_COMPONENT = REPO / "hosts" / "components" / "k3s-server" / "component.yml"
 
@@ -141,7 +148,7 @@ def _longhorn() -> tuple[str, list[str]]:
     # The arm flags and schedules are `longhorn-backup`'s since H1.7b, the host check keys
     # the k3s-host-checks component's.
     merged = {
-        **estate.role_vars(K3S_ROLE),
+        **estate.role_vars(K3S_SERVER),
         **estate.role_vars(K3S_HOST_CHECKS),
         **estate.role_vars(LONGHORN_BACKUP_ROLE),
     }
@@ -198,7 +205,7 @@ def deadman_inputs(
         estate.role_vars(PI_PEER_ROLE),
         estate.role_vars(REGISTRY_ROLE),
         estate.group_vars,
-        estate.role_vars(INITIAL_SETUP_ROLE),
+        {**estate.role_vars(HOST_MAINTENANCE), **estate.role_vars(WORKTREE_SWEEP)},
         host_has_docker(estate),
         estate.role_vars(OBSERVABILITY_ROLE),
         hosts_listing_component("worktree-sweep"),
@@ -211,7 +218,8 @@ def _deadman() -> tuple[str, list[str]]:
         "ansible/roles/k8s/pi-peer-backup/defaults/main.yml",
         "ansible/roles/k8s/registry/defaults/main.yml",
         "ansible/roles/k8s/observability/defaults/main.yml",
-        "ansible/roles/setup/initial_setup/defaults/main.yml",
+        "hosts/components/host-maintenance/defaults/main.yml",
+        "hosts/components/worktree-sweep/defaults/main.yml",
         "ansible/inventory/group_vars/all.yml",
         "ansible/inventory/hosts.ini",
         "ansible/inventory/host_vars/",
@@ -221,7 +229,7 @@ def _deadman() -> tuple[str, list[str]]:
 
 def _fail2ban() -> tuple[str, list[str]]:
     return render_fail2ban_jails(parse_jails(FAIL2BAN_CONF.read_text())), [
-        "ansible/roles/setup/initial_setup/templates/fail2ban_homelab.conf.j2"
+        "hosts/components/fail2ban/templates/fail2ban_homelab.conf.j2"
     ]
 
 

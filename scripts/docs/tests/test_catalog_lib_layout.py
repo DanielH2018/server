@@ -25,7 +25,6 @@ LIBRARIES = (
     "catalog_facts",
     "catalog_model",
     "catalog_render",
-    "glance_facts",
     "route_facts",
 )
 # Each generator, and the libraries it must load from catalog_lib (named members, not a glob).
@@ -41,7 +40,6 @@ GENERATORS = {
         "catalog_backup",
         "catalog_facts",
         "catalog_model",
-        "glance_facts",
     ),
     f"{DOCS}/reference/networking.py": ("route_facts",),
     f"{DOCS}/reference/crons.py": ("package_timers",),

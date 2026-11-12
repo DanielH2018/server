@@ -23,7 +23,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.estate import Estate, role_defaults
-from lib.repo_paths import K3S_ROLE, K8S_ROLES
+from lib.repo_paths import K3S_SERVER, K8S_ROLES
 from lib.service_tiers import resolved_tier_lists
 
 SNAPSHOT_KEY = "k8s_autodeploy_snapshot_pvcs"
@@ -126,7 +126,7 @@ def render_volume_shards(
 
 def _volume_shards() -> tuple[str, list[str]]:
     estate = Estate()
-    tiers = resolved_tier_lists(estate.role_vars(K3S_ROLE))
+    tiers = resolved_tier_lists(estate.role_vars(K3S_SERVER))
     return render_volume_shards(
         tiers["k3s_longhorn_r2_volumes"],
         tiers["k3s_longhorn_weekly_volumes"],

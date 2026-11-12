@@ -13,12 +13,12 @@ import os
 import shutil
 
 import pytest
-from _helpers import load_tasks, load_yaml
+from _helpers import load_yaml
 from _wifi_fallback import WIFI_FILE, WIFI_RENDERED, installed_wifi_file
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
 from lib.proc_testing import run, write_exec
-from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE, REPO
+from lib.repo_paths import K3S_DEFAULTS, REPO
 from renderer.renderer_lib import host as host_mode
 
 COMPONENT = REPO / "hosts" / "components" / "k3s-agent"
@@ -224,11 +224,6 @@ def test_a_wifi_copy_edited_on_one_node_is_flagged(tmp_path):
     assert wifi_copies_that_differ(tmp_path / "server", tmp_path / "agent") == [
         WIFI_COPIES[1]
     ]
-
-
-def test_the_join_task_file_refuses_and_names_the_bootstrap():
-    (task,) = load_tasks(K3S_ROLE / "tasks" / "agent.yml")
-    assert "bootstrap-host.sh" in task["ansible.builtin.fail"]["msg"]
 
 
 @pytest.mark.parametrize("password", ['pa"ss', "ab\\tc", "plain"])

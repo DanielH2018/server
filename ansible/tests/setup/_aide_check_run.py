@@ -10,16 +10,18 @@ import json
 import os
 import time
 
-from lib.proc_testing import fake_bin, run, write_exec
-from _helpers import ROLES
+from _helpers import REPO
 from _shell_render import render_shell_script
+from lib.proc_testing import fake_bin, run, write_exec
 
-SCRIPT = ("setup", "initial_setup", "aide-check.sh.j2")
+SCRIPT = ("components", "integrity-scans", "aide-check.sh.j2")
 
 # The real library, so the scan writes its textfile under TEXTFILE_DIR rather than the host's
 # own directory, which node_exporter scrapes.
 REAL_CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
-CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
+CHECK_LIB = (
+    REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
+)
 REAL_AIDE = "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide"
 REAL_CAP = "REPORT_MAX_LINES=2000"
 REAL_LOCK = "LOCK_FILE=/run/lock/aide-check.lock"

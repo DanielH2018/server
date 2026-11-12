@@ -48,7 +48,6 @@ VERDICT_SUBCOMMANDS = (
     ("landing",),
     ("lander",),
     ("builder",),
-    ("applied",),
     ("ha", "verify-automations"),
     ("ha", "verify-entities"),
 )

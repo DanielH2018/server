@@ -19,10 +19,8 @@ from test_pi_initial_setup_part1 import seeded_pi
 from lib.estate import REPO_INVENTORY
 from lib.proc_testing import fake_bin, run, write_exec
 from lib.render_context import render_context
-from lib.repo_paths import ANSIBLE
 from renderer.renderer_lib import host as host_mode
 
-ROLE = ANSIBLE / "roles" / "setup" / "initial_setup"
 # Each cron the role once installed on the Pi, and the packaged timer that replaces it. The Pi has
 # no fwupd, so the role never installed "Weekly firmware update" there.
 TIMERS = {
@@ -48,7 +46,7 @@ def manifest(package) -> dict:
 
 @pytest.fixture(scope="module")
 def context() -> dict:
-    return render_context(ROLE, "daniel-pi", inventory=REPO_INVENTORY)
+    return render_context(None, "daniel-pi", inventory=REPO_INVENTORY)
 
 
 def _text(package: host_mode.Package, dst: str) -> str:

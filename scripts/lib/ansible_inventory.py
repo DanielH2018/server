@@ -36,8 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.repo_paths import HOST_VARS, HOSTS_INI
 
-# The one host whose host_vars set `has_gitops: true`: it runs the GitOps deployer and
-# `land.sh`. group_vars defaults the key to false, so a host is armed only by saying so.
+# The host that runs `land.sh`, the fan-out and the host-package builder.
 GITOPS_HOST = "daniel-box"
 # The one host whose host_vars set `has_docker: true`, driven over ssh with `-e target=`.
 PI_HOST = "daniel-pi"
@@ -111,11 +110,6 @@ class Host:
     name: str
     groups: tuple[str, ...]
     settings: dict[str, str]
-
-    @property
-    def connection(self) -> str:
-        """``ansible_connection``, defaulting to ``ssh`` as Ansible does."""
-        return self.settings.get("ansible_connection", "ssh")
 
 
 def _refuse_a_value_ansible_evaluates(

@@ -19,7 +19,6 @@ What's specific to this unit, and what this file guards:
 
 import re
 
-from _helpers import ANSIBLE
 from _shell_render import render_shell_script, rendered_shell_text
 from lib import yaml_fast
 from lib.proc_testing import fake_bin, run
@@ -27,7 +26,7 @@ from lib.repo_paths import REPO
 
 _CHECK_LIB_PATH = "/usr/lib/homelab/homelab-check-lib.sh"
 _CHECK_LIB = (
-    ANSIBLE / "roles" / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
+    REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
 )
 
 COMPONENT = REPO / "hosts/components/eval-sweep"

@@ -1,7 +1,7 @@
 """Tests for `lib.worktrees.privileged_holders` and `holder_root`: asking the root helper.
 
 The helper itself, `/usr/lib/homelab/worktree-holders`, is tested in
-`ansible/roles/setup/initial_setup/tests/test_worktree_holders.py`, which also drives this
+`hosts/components/worktree-holders/tests/test_worktree_holders.py`, which also drives this
 caller over a real socket. These tests cover when the caller asks, which root it asks about,
 how a failed connection is read, and how it reads the answer (#4170, #4021, #4297).
 

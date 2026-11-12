@@ -56,9 +56,8 @@ stub instead, which the filter `homelab_secret_stub` builds:
 - A key `K` becomes `stub-` plus `K` with underscores turned to hyphens, such as
   `stub-email`. That shape is a valid DNS label, so a stubbed host name still passes
   `kubectl apply --dry-run=server`.
-- `become_password` never takes a stub. It is the one name in `NEVER_STUB`, because
-  `ansible/pre_tasks/load_secrets.yml` hands it to privilege escalation and no template
-  reads it.
+- `become_password` never takes a stub. It is the one name in `NEVER_STUB`, because no
+  template reads it.
 - `domain` takes no stub and no placeholder, because it is not in `ansible/vars/secrets.yml`.
   The operator ruled on 2026-10-14 that it is a variable, not a secret, and deleted it from
   the store on 2026-10-15. Every render reads its value from
@@ -192,8 +191,8 @@ A role's templates render with these variables, resolved for daniel-box:
 - `hostvars` for every host in `ansible/inventory/hosts.ini`. daniel-box's entry is the
   rendered context, so `hostvars[k8s_primary_node].containers_list` is that same list.
   Another host's entry holds its `hosts.ini` inline variables under its own host_vars,
-  resolved against that host's own variables. daniel-pi's `ansible_host`, the Jinja
-  `{{ server_ip }}`, therefore resolves to daniel-pi's address, not daniel-box's.
+  resolved against that host's own variables. `group_vars`' `k8s_pi_client_ip` reads
+  `hostvars['daniel-pi'].server_ip`, so it is daniel-pi's address, not daniel-box's.
 
 The render is strict. A name that no layer supplies stops the render with an error naming it.
 The render guards under `scripts/validate/` print `STUB` instead, and lay stub values such as
@@ -710,24 +709,6 @@ renderer, never to a run that applies anything.
 
 A stub file goes stale when a secret key is added or removed, so write a fresh one for each
 commit you render.
-
-## A stub file stops outside a k8s dry run
-
-`ansible/pre_tasks/load_secrets.yml` refuses a misplaced or incomplete stub file. Every
-playbook that reads a secret imports that file, and its two asserts run ahead of the SOPS
-load and before any role. A run counts as a stub run when the sentinel
-`homelab_secret_stubs` is true, or when any secret key already holds its stub. The second
-half catches a stub file whose sentinel was stripped. A run without a stub file defines no
-key before the load, so neither assert fires.
-
-- "Refuse a secret stub file outside a k8s dry run" requires `k8s_dry_run`, the play
-  variable `load_secrets_stubs_allowed` and the sentinel. A stub file stripped of its sentinel
-  is refused even in an allowed dry run. No playbook sets that variable since H7.55 deleted
-  `deploy.yml`, so a stub file passed to any playbook stops at its preamble, dry run or not.
-- "Refuse a stub file that does not stub every key" reads the key names from the ciphertext
-  `secrets.yml` and names each key that does not hold exactly its stub. A stub file written
-  before a secret was added fails here and names the new key. To fix it, write a fresh stub
-  file from the same tree.
 
 ## Hash a render tree
 

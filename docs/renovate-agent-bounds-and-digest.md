@@ -113,7 +113,7 @@ the `gh` census and the return path:
 
 ```bash
 RENOVATE_AGENT_CONFIG=/tmp/agent-test.env \
-  PYTHONPATH=hosts/lib:ansible/roles/setup/gitops_deploy/files \
+  PYTHONPATH=hosts/lib \
   uv run python hosts/components/renovate-agent/files/renovate_agent.py
 ```
 

@@ -109,8 +109,7 @@ ls -d /sys/fs/cgroup/user.slice/claude-rc.service
 systemd serves unit content over the system bus. `systemctl show claude-rc-alert -p ExecStart`
 prints an interpolated Discord webhook to any local user with no sudo, while `cat` on the file is
 `Permission denied`, so a `0600` mode protects nothing. The alert unit therefore reads the webhook
-through an `EnvironmentFile=`. `ansible/roles/setup/gitops_deploy/tests/test_systemd_unit_secrets.py`
-walks every `*.service.j2` in the repo, so a new unit cannot take the unsafe shape.
+through an `EnvironmentFile=`.
 
 ## Each alert `curl` retries
 

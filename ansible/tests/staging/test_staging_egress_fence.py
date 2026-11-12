@@ -46,7 +46,7 @@ from _fence_probe import (
 from _helpers import ALL_VARS, HOST_VARS, REPO
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib import host as host_mode
-from _setup_render import rendered_setup_text
+from _setup_render import rendered_component_text
 
 COREDNS_DEFAULTS = K8S_ROLES / "coredns" / "defaults" / "main.yml"
 
@@ -86,7 +86,7 @@ def _rendered_filter():
     `validate/setup_templates.py` renders this role with, so a value that moves between
     `group_vars/all.yml` and the role's defaults cannot change what this guard sees.
     """
-    rendered = rendered_setup_text("hypervisor", "staging-nwfilter.xml.j2")
+    rendered = rendered_component_text("hypervisor", "staging-nwfilter.xml.j2")
     try:
         return ET.fromstring(rendered)
     except ET.ParseError as exc:  # pragma: no cover - only on a broken template
@@ -248,7 +248,9 @@ def test_fencing_the_clusters_own_ranges_still_assumes_one_node_on_this_bridge()
 
     The network declaring exactly one DHCP reservation is what says that has not happened.
     """
-    network = ET.fromstring(rendered_setup_text("hypervisor", "staging-network.xml.j2"))
+    network = ET.fromstring(
+        rendered_component_text("hypervisor", "staging-network.xml.j2")
+    )
     reservations = network.findall("./ip/dhcp/host")
     assert len(reservations) == 1, (
         f"{NETWORK_TEMPLATE} declares {len(reservations)} DHCP reservations, so more than one "
@@ -280,7 +282,9 @@ def test_the_guest_interface_references_the_fence():
     handed — the same string `_rendered_filter` reads. A guard on the template's text asserts
     only that the variable NAME appears, which stays true when the variable itself drifts.
     """
-    domain = ET.fromstring(rendered_setup_text("hypervisor", "etcd-drill-vm.xml.j2"))
+    domain = ET.fromstring(
+        rendered_component_text("hypervisor", "etcd-drill-vm.xml.j2")
+    )
     interfaces = domain.findall("./devices/interface")
     assert interfaces, f"no <interface> found in {DOMAIN_TEMPLATE}."
     for iface in interfaces:

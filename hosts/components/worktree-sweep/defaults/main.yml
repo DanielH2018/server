@@ -1,0 +1,7 @@
+---
+# When the weekly worktree sweep runs, in UTC. `units/homelab-worktree-sweep.timer` holds the
+# same slot as a literal. The healthchecks.io deadman-cadences fragment reads these values, and
+# the `<host>-worktree-sweep` check's console schedule follows them (#4482).
+initial_setup_worktree_sweep_cron_minute: 20
+initial_setup_worktree_sweep_cron_hour: 4
+initial_setup_worktree_sweep_cron_weekday: 0  # Sunday

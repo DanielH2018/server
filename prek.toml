@@ -168,14 +168,6 @@ rev = "v0.11.0.1"
 [[repos.hooks]]
 id = "shellcheck"
 stages = ["pre-commit"]
-# .bashrc is a SOURCED dotfile (no shebang by design — `shell(1)` sources it, never execs it) and
-# is the stock Debian/Ubuntu skeleton .bashrc plus one guarded nvm block, not a script this gate
-# is meant to police. Excluded rather than annotated so the near-stock file stays diffable against
-# upstream. The findings it trips are all expected for that class of file: SC2148 (no shebang —
-# correct, it's sourced), SC1090/SC1091 (can't follow `~/.bash_aliases` / nvm's dynamic path —
-# intentionally conditional/per-host), SC2015 (`test ... && eval || eval` fallback idiom, not
-# if/then/else — deliberate here).
-exclude = "^ansible/roles/setup/config_files/files/\\.bashrc$"
 
 # Render container docker-compose.yml.j2 templates with stubbed vars and assert
 # the output is valid YAML — catches broken indentation / label-macro edits that
@@ -312,7 +304,7 @@ pass_filenames = false
 # alternative. Every file under hosts/ and the host renderer's modules are in scope because the
 # validator renders every host package through that renderer (H3.2c); a package unit may be a
 # static file, so no suffix narrows the hosts/ alternative.
-files = "^(hosts/.*|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/.*\\.(service|timer|socket|rules)\\.j2|ansible/roles/setup/.*/defaults/main\\.yml|ansible/inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
+files = "^(hosts/.*|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/.*\\.(service|timer|socket|rules)\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
 
 # Flag bash's `${#var}` length expansion in a Jinja template, before anything renders it. `{#`
 # opens a Jinja comment, so a shell script inside a `.j2` that writes `${#var}` either fails the
@@ -343,27 +335,24 @@ language = "system"
 pass_filenames = false
 always_run = true
 
-# Render every setup-plane template and fail on a variable nothing defines. The guards above
-# stop at their own trees — containers, k8s, *.sh.j2, *.service.j2 — so a setup template with
-# an undefined variable, a Jinja syntax error, or a rename its consumer missed passes the whole
-# gate green. The setup plane is hand-applied by construction, so no
-# routine deploy catches it either: the first run of a bad template is a bring-up someone
-# reaches for during an incident. A name may be undefined only when it is Ansible-supplied, a
-# SOPS secret in the plaintext rotation registry, supplied at runtime by a setup-plane task, or
-# defined in the inventory — the last two derived from the tree, so a producer renamed without
-# its consumer is exactly what stops matching. The YAML templates are additionally parsed.
+# Render every host component template and fail on a variable nothing defines. The guards above
+# stop at their own trees — containers, k8s, *.sh.j2, *.service.j2 — so a component template
+# with an undefined variable, a Jinja syntax error, or a rename its consumer missed would pass
+# the whole gate green. A name may be undefined only when it is Ansible-supplied, a SOPS secret
+# in the plaintext rotation registry, supplied by a component spec, or defined in the inventory
+# — derived from the tree, so a producer renamed without its consumer is exactly what stops
+# matching. The YAML templates are additionally parsed.
 [[repos.hooks]]
 id = "validate-setup-templates"
-name = "Render setup-plane templates and check every variable resolves"
+name = "Render host component templates and check every variable resolves"
 entry = "uv run --frozen python scripts/validate/setup_templates.py"
 language = "system"
 pass_filenames = false
-# The setup roles' tasks are in scope, not just their templates: the runtime-supplied names
-# come from the `set_fact` / `vars:` / `register:` keys those tasks carry, so a rename there
-# changes the verdict for a template the same commit may not touch. secret_rotation.yml is in
-# scope for the same reason — it is the plaintext census of SOPS names (never values), and a
+# The component specs are in scope, not just their templates: a spec's `defaults:` supplies
+# names, so a rename there changes the verdict for a template the same commit may not touch.
+# secret_rotation.yml is in scope for the same reason — it is the plaintext census of SOPS names (never values), and a
 # secret renamed there without its template is the shape this guard exists to catch.
-files = "^(scripts/renderer/renderer_lib/jinja_filters\\.py|scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/setup/.*\\.(j2|yml)|ansible/inventory/(group_vars/all|host_vars/[^/]+)\\.yml|ansible/secret_rotation\\.yml|scripts/validate/setup_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
+files = "^(scripts/renderer/renderer_lib/jinja_filters\\.py|scripts/validate/validate_lib/ok_lines\\.py|hosts/components/.*\\.(j2|yml)|ansible/inventory/(group_vars/all|host_vars/[^/]+)\\.yml|ansible/secret_rotation\\.yml|scripts/validate/setup_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
 
 # Lint the GitHub Actions workflows themselves. `check-yaml` above only proves they PARSE —
 # nothing until now checked that a job's `needs:` names a job that exists, that a `${{ }}`
@@ -481,14 +470,13 @@ files = "^(pyproject\\.toml|uv\\.lock)$"
 # The test stays as the backstop for a commit that skipped prek.
 #
 # `files` is every input the generator reads: the roles, the inventory, the shared templates
-# whose macros declare claims, the bring-up playbooks at ansible/ (`glance_facts.
-# SETUP_PLAYBOOKS`), the filter plugin it imports, and the Python under scripts/docs and
+# whose macros declare claims, the filter plugin it imports, and the Python under scripts/docs and
 # scripts/lib. A role CLAUDE.md matches too, so a hand edit inside the
 # markers is reverted in the same commit. None of the docs-refresh cron's three staged paths
 # match, so that cron's commit never writes under ansible/roles/. Renovate edits defaults
 # without prek, but only an image tag or digest, which the block does not print.
 #
-# Cost, measured: 0.5s wall for a full run over all three planes.
+# Cost, measured: 0.5s wall for a full run.
 [[repos.hooks]]
 id = "regen-role-glance"
 name = "Role At a glance blocks match their sources"
@@ -709,15 +697,14 @@ language = "system"
 pass_filenames = false
 files = "(\\.py$|^scripts/.*\\.sh$|^(prek\\.toml|pyproject\\.toml|uv\\.lock)$)"
 
-# D2's owner table, and the entry points it names: Python, `ansible/deploy.yml`, and the
-# setup-role templates and files that read which tags Flux owns.
+# D2's owner table, and the entry points it names: the Python that reads which tags Flux owns.
 [[repos.hooks]]
 id = "static-ratchet-tests-owners"
 name = "D2 owner table matches the entry points that read tag ownership"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/repo/test_owner_entry_points_census.py"
 language = "system"
 pass_filenames = false
-files = "(\\.py$|^docs/target-architecture/deploy/d2-first-leaf\\.md$|^ansible/deploy\\.yml$|^ansible/roles/setup/[^/]+/(templates|files)/|^(pyproject\\.toml|uv\\.lock)$)"
+files = "(\\.py$|^docs/target-architecture/deploy/d2-first-leaf\\.md$|^ansible/deploy\\.yml$|^(pyproject\\.toml|uv\\.lock)$)"
 
 # The lander deadlines: promote.yml's job timeouts, the land units' TimeoutStartSec in the
 # setup roles, the inventory's flux-owned tags, the k8s roles, and the land and render code
@@ -734,7 +721,7 @@ name = "Lander deadlines cover the soak"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/setup/test_lander_deadlines_cover_the_soak.py"
 language = "system"
 pass_filenames = false
-files = "^(cluster/services\\.yml|\\.github/workflows/promote\\.yml|ansible/inventory/.*|ansible/roles/setup/[^/]+/(templates|defaults)/.*|ansible/roles/k8s/[^/]+/(tasks|templates|defaults|files)/.*|hosts/lib/.*\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/(deploy_tools|renderer|lib|secrets_mgmt|validate)/.*\\.py|scripts/diagnostics/probe_lib/(releases[^/]*|core|host_reader|obs_api|health_checkout)\\.py|ansible/tests/(_[^/]+|setup/[^/]+)\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(cluster/services\\.yml|\\.github/workflows/promote\\.yml|ansible/inventory/.*|ansible/roles/k8s/[^/]+/(tasks|templates|defaults|files)/.*|hosts/lib/.*\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/(deploy_tools|renderer|lib|secrets_mgmt|validate)/.*\\.py|scripts/diagnostics/probe_lib/(releases[^/]*|core|host_reader|obs_api|health_checkout)\\.py|ansible/tests/(_[^/]+|setup/[^/]+)\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Every `checksum/<name>` a CLAUDE.md names, against the k8s roles' rendered manifests. The
 # render reaches scripts/validate/k8s_manifests.py and its validate_lib through pytest's

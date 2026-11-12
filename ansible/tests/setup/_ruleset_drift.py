@@ -12,17 +12,15 @@ import os
 import re
 import subprocess
 
+from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, path_with, write_exec
 from lib.repo_paths import REPO as REPO_ROOT
-from _shell_render import render_shell_script
 
 TEMPLATE = ("components", "github-checks", "github-ruleset-drift.sh.j2")
 CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 # The role's copy of the check library, so a runner that never ran initial_setup still sources it
 # and the textfile the script writes lands in TEXTFILE_DIR under tmp_path, never on the host.
-REAL_CHECK_LIB = (
-    REPO_ROOT / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
-)
+REAL_CHECK_LIB = REPO_ROOT / "hosts/components/check-lib/files/homelab-check-lib.sh"
 CRON_PATH_LINE = "export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 # The declared set the script bakes in. Kept here as a literal rather than read from defaults:

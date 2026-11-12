@@ -23,8 +23,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
    2026-10-03, because the Pi is driven over ssh and never decrypts. The recovery key decrypts
    the SOPS-encrypted secrets file; nothing else in this list works without it if every
    cluster host's own key is also gone.
-   Source: `ansible/.sops.yaml` (recipient comments above the `age:` line) and
-   `ansible/roles/setup/sops_setup/CLAUDE.md` ("Notable" section).
+   Source: `ansible/.sops.yaml` (recipient comments above the `age:` line).
 
 2. **The k3s cluster token.** A copy taken out-of-band on 2026-08-23, matching
    `/var/lib/rancher/k3s/server/token` on daniel-box at the time of copy. Since
@@ -78,11 +77,10 @@ otherwise; none of the values below are secrets themselves, only names and locat
    not forwarded.
    Source: `docs/wireguard-private-homelab-access.md` ("Server-side networking").
 
-7. **The way in on a host with no age key yet.** No playbook creates the operator's key. The
-   operator runs `age-keygen` by hand, or places the recovery private key (item 1) at
+7. **The way in on a host with no age key yet.** The operator runs `age-keygen` by hand, or places the recovery private key (item 1) at
    `~/.config/sops/age/keys.txt` instead. The host package supplies `sops` and `age`. After
-   that, `initial_setup.yml` and `deploy.yml`'s secret-load pre-tasks work normally, and
-   *The age keys* below says which hosts hold a key.
+   that, the host can decrypt `ansible/vars/secrets.yml`, and *The age keys* below says which
+   hosts hold a key.
    Source: `ansible/README.md` (§5) and the `add-secret` skill's
    *Onboarding a host that cannot decrypt yet* section
    (`.claude/skills/add-secret/SKILL.md`).
@@ -272,7 +270,7 @@ The decision recorded with H7.24b on 2026-10-30:
 - **daniel-server's user-home key is removed only after the operator confirms that nothing on
   daniel-server reads it.** H4.2 left it there as a duplicate. Its public key stays a
   recipient in `ansible/.sops.yaml` until the removal, and the removal deletes it from all
-  three rules (`ansible/roles/setup/sops_setup/CLAUDE.md`, *Notable*). Both steps are
+  three rules. Both steps are
   **operator-only**.
 - **daniel-pi holds no user-home key**, since 2026-10-03.
 - **No playbook creates a user-home key.** The retired `sops_setup` role did. A new host that
@@ -343,8 +341,7 @@ Steps:
    `docs/host-packages.md`. `homelab-daniel-server` ships the agent's firewall rules, its Longhorn
    prerequisites and the static LAN address, and *Rebuilding daniel-server* reboots before it starts
    the agent so that the address is live. The Ubuntu installer creates the node's one LVM volume,
-   and *Preparing the installer on either node* grows it. Do not run `k3s-bringup.yml`'s agent
-   join: its agent task refuses since H7.34. No drill has run this procedure on hardware. Once
+   and *Preparing the installer on either node* grows it. No drill has run this procedure on hardware. Once
    daniel-server is back, Longhorn rebuilds its replicas from daniel-box. Bring back each shed
    service by the shed scenario's step 4, below: it reads `DEPLOY_HOLD` first, then resumes
    each flux-owned service. The rescheduled pods stay on daniel-box until their next rollout.

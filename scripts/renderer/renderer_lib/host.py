@@ -6,23 +6,21 @@
 `nfpm.yaml`, its spec. `write_packages` writes them under `--out`.
 
 A package lists its components, and may carry files and defaults of its own, laid out as a
-component's are. A package's `role:` reaches only the package's own files, such as a file whose
-path differs per host. A component directory under `hosts/components/` holds a `component.yml`::
+component's are. A component directory under `hosts/components/` holds a `component.yml`::
 
     defaults: {name: value}         # beneath group_vars/all.yml (H3, *Component variables*)
-    role: nut_host                  # its defaults sit below `defaults`; `role:<t>.j2` is its template
+    component: k3s-server           # its defaults sit below `defaults`; `component:<path>` loads from it
     files:
       - {src: templates/x.sh.j2, dst: /usr/lib/homelab/x, mode: "0755"}
       - {lib: homelab-updater, dst: /usr/lib/homelab/homelab-updater, mode: "0755"}
       - {key: homelab-archive-keyring, dst: /usr/share/keyrings/homelab-archive-keyring.gpg}
 
 A `src` ending `.j2` renders through the renderer's strict environment, and a `src` of
-`role:<name>` loads from the component's role templates, and `role-file:<name>` copies the role's
-`files/<name>`. Any other `src` is copied byte for byte,
+`component:<path>` loads from the borrowed component. Any other `src` is copied byte for byte,
 as are the three sources outside the component a file entry may name: a `lib` entry
 (`hosts/lib/<name>`, a script several packages ship), a `key` entry (`hosts/keys/<name>.gpg`, a
-public keyring hosts trust) and a `shared` entry (one of the `SHARED_FILES`, a file an Ansible role
-still installs). A file or output entry may carry `when: <expression>`, evaluated like an enable
+public keyring hosts trust) and a `shared` entry (one of the `SHARED_FILES`, a file two components
+ship). A file or output entry may carry `when: <expression>`, evaluated like an enable
 link's, and ships only when it is true; an inventory toggle that turned a subject off keeps doing so. A `units:`
 entry may carry `when:` too, so a unit the toggle drops takes its restart policy with it, and so
 may a `legacy:` entry, so a toggle that drops a timer can retire the textfile it wrote.
@@ -75,7 +73,7 @@ from renderer.renderer_lib.host_sources import (
     confined_env,
     file_mode,
     lib_source,
-    role_sources,
+    component_sources,
     template_source,
 )
 from renderer.renderer_lib import host_compose
@@ -127,7 +125,6 @@ PACKAGE_KEYS = frozenset(
         "legacy",
         "maintainer_scripts",
         "outputs",
-        "role",
         "tools",
         "units",
         *ARM_KEYS,
@@ -135,6 +132,7 @@ PACKAGE_KEYS = frozenset(
 )
 COMPONENT_KEYS = frozenset(
     {
+        "component",
         "compose",
         "credentials",
         "defaults",
@@ -143,7 +141,6 @@ COMPONENT_KEYS = frozenset(
         "files",
         "legacy",
         "outputs",
-        "role",
         "units",
         *ARM_KEYS,
     }
@@ -345,7 +342,7 @@ def _render_unit(
     legacy = spec.get("legacy") or []
     outputs = spec.get("outputs") or []
     arms = {key: spec[key] for key in ARM_KEYS if spec.get(key)}
-    role, defaults = role_sources(spec, directory)
+    borrowed, defaults = component_sources(spec, directory)
     compose = spec.get("compose")
     units = spec.get("units") or {}
     if not (files or legacy or enable or outputs or arms or compose or units):
@@ -405,7 +402,7 @@ def _render_unit(
 
     def secret_text(src: str, keys: frozenset[str]) -> str:
         """`src` with the secrets in `keys` read as sentinels, for `host_outputs.py`."""
-        return secret_render(*template_source(role, src, directory), keys, {})
+        return secret_render(*template_source(borrowed, src, directory), keys, {})
 
     referenced = None
     if compose:
@@ -479,7 +476,7 @@ def _render_unit(
             source = lib.parent.parent / SHARED_FILES[name]
             package.files[dst] = (source.read_bytes(), mode)
             continue
-        base, src = template_source(role, str(entry["src"]), directory)
+        base, src = template_source(borrowed, str(entry["src"]), directory)
         source = confined(base, src)
         if src.endswith(".j2"):
             tenv = confined_env(base)

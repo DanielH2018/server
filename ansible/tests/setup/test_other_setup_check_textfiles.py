@@ -24,13 +24,13 @@ import re
 import shlex
 
 import pytest
-from _helpers import ANSIBLE
+from _helpers import REPO
 from _setup_render import render_component_text
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, path_with, run, write_exec
 
 CHECK_LIB = (
-    ANSIBLE / "roles" / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
+    REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
 )
 CHECK_LIB_PATH = "/usr/lib/homelab/homelab-check-lib.sh"
 EPOCH = 1760000000
@@ -51,7 +51,7 @@ KUMA_PUSH_MARKERS = (
 # Every B4 shell producer, as (role, template), with the textfile call its render carries.
 PRODUCERS = {
     (
-        "nut_host",
+        "nut-secondary",
         "ups-secondary-health.sh.j2",
     ): "write_check_textfile ups-secondary-health ",
     ("fake-remux", "fake-remux-health.sh.j2"): 'write_check_textfile "${CHECKS[$i]}" ',
@@ -68,8 +68,7 @@ def kuma_push_markers(body: str) -> list[str]:
 def test_no_b4_producer_pushes_to_kuma(producer):
     # RED if a push, its library, its token or its env file returns: the tiles are gone, so a
     # push would be refused (`by=kuma`) every run.
-    plane = "components" if producer[0] in {"fake-remux", "hypervisor"} else "setup"
-    body = render_shell_script(plane, *producer, OVERRIDES)
+    body = render_shell_script("components", *producer, OVERRIDES)
     # Non-vacuity: the render is the real script, which still records its verdict.
     assert PRODUCERS[producer] in body
     assert kuma_push_markers(body) == []
@@ -121,18 +120,21 @@ def _env(tmp_path, check, stubs=None):
 # --- ups-secondary-health.sh -----------------------------------------------------------------
 
 
+PACKAGED_UPSMON = "/var/lib/homelab-secrets/etc/nut/upsmon.conf"
+
+
 def _run_ups(tmp_path, unit_state="active"):
     body = render_shell_script(
-        "setup", "nut_host", "ups-secondary-health.sh.j2", OVERRIDES
+        "components", "nut-secondary", "ups-secondary-health.sh.j2", OVERRIDES
     )
     upsmon = tmp_path / "upsmon.conf"
     upsmon.write_text("MONITOR ups@10.43.0.9 1 user pw secondary\n")
-    for literal in (CHECK_LIB_PATH, "/etc/nut/upsmon.conf"):
+    for literal in (CHECK_LIB_PATH, PACKAGED_UPSMON):
         assert literal in body, (
             f"ups-secondary-health.sh no longer references {literal}"
         )
     body = body.replace(CHECK_LIB_PATH, str(CHECK_LIB)).replace(
-        "/etc/nut/upsmon.conf", str(upsmon)
+        PACKAGED_UPSMON, str(upsmon)
     )
     textfile_dir, env = _env(
         tmp_path,

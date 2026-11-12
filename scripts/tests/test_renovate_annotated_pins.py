@@ -124,7 +124,7 @@ def test_every_annotation_comment_in_role_defaults_is_read():
         for p in (_REPO / "ansible/roles").glob("*/*/defaults/main.yml")
     )
     scanned = [rel for rel in defaults if any(p.search(rel) for p in patterns)]
-    assert K3S_DEFAULTS in scanned and TRAEFIK_DEFAULTS in scanned
+    assert TRAEFIK_DEFAULTS in scanned
     unread = [rel for rel in scanned if unread_annotations(_read(rel))]
     assert not unread, (
         "a `# renovate:` comment the annotation manager does not read: its keys must be "

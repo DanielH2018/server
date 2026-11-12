@@ -420,7 +420,7 @@ The exit criterion has three parts:
   it is not forward-only (H1, *Six Flux-born tags*). `longhorn-backup` substitutes the `r2_*`
   keys for its credential Secret.
 - **The reapers are never scheduled.**
-  `ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py::test_no_setup_role_schedules_a_reaper`
+  `ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py::test_no_host_component_schedules_a_reaper`
   scans setup roles only. `test_census_finds_the_scheduled_drill` in the same file requires
   `longhorn-restore-drill.sh` among the setup texts as its named member.
 - **CronJob timezones.** monitor-bridge's defaults say every Healthchecks.io slug but

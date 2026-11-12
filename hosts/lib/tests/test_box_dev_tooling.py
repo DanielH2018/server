@@ -10,13 +10,10 @@ import subprocess
 
 import pytest
 
-from lib import yaml_fast
-from lib.repo_paths import ANSIBLE, REPO
+from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 HOST = "daniel-box"
-ROLES = ANSIBLE / "roles" / "setup"
-ROLE = ROLES / "initial_setup"
 # What the dotfiles' install-cli-tools script cannot install itself.
 DISTRO_PACKAGES = {
     "bat",
@@ -75,11 +72,6 @@ def test_the_package_depends_on_what_the_roles_installed(box):
     assert DISTRO_PACKAGES <= set(box.depends)
     assert "gh" in box.depends
     assert "gh" in host_mode.render_host("daniel-server").depends
-
-
-def test_the_uv_pin_left_with_the_tasks_that_read_it():
-    defaults = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
-    assert "initial_setup_uv_version" not in defaults
 
 
 def test_the_agent_takes_chezmoi_from_homelab_tools(box):

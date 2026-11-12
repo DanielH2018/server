@@ -169,8 +169,8 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
 - **Three checks find the templates by their role path.**
   `scripts/validate/shell_templates.py:discover_templates` globs `*.sh.j2` under
   `ansible/roles/`. `ansible/tests/setup/test_cron_scripts_publish_via_pr.py:push_corpus` and
-  `ansible/tests/repo/test_secret_rendering_host_scripts_have_no_log.py:KNOWN_SECRET_SCRIPTS`
-  name the two token scripts by role path.
+  `test_secret_rendering_host_scripts_have_no_log.py`'s `KNOWN_SECRET_SCRIPTS` (deleted by
+  H7.55) name the two token scripts by role path.
 - **The two template validators read `ansible/roles/` only.**
   `scripts/validate/unit_templates.py:discover_templates` globs `*.service.j2`, `*.timer.j2`
   and `*.socket.j2` under `ansible/roles/`. Its module docstring says it exists because a
@@ -2493,8 +2493,8 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       retarget the rendered component and its `defaults:` map instead of the role;
     - `ansible/tests/setup/test_cron_scripts_publish_via_pr.py:push_corpus` names the two
       scripts at their component path;
-    - `ansible/tests/repo/test_secret_rendering_host_scripts_have_no_log.py:KNOWN_SECRET_SCRIPTS`
-      drops both, because neither renders a secret any more;
+    - `test_secret_rendering_host_scripts_have_no_log.py`'s `KNOWN_SECRET_SCRIPTS` (deleted by
+      H7.55) drops both, because neither renders a secret any more;
     - `scripts/validate/shell_templates.py:discover_templates` also globs
       `hosts/components/*/templates/`, and its test names `pi-sd-health.sh.j2` there as a
       member;

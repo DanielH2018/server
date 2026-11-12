@@ -18,14 +18,13 @@ import subprocess
 from functools import partial
 from pathlib import Path
 
-import pytest
-
 import leakguard
+import pytest
 from _helpers import REPO
 from lib.proc_testing import fake_bin
 from test_leakguard import _run_child
 
-_CHECK_LIB = REPO / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
+_CHECK_LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
 
 # A child handed a PATH built from scratch, the shape of a test that pins `/usr/bin:/bin` for
 # its child (#6418). The pytest PATH prefix never reaches it, so only the `Popen` wrapper can.

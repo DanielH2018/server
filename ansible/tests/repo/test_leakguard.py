@@ -16,9 +16,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 import leakguard
+import pytest
 from _helpers import REPO
 
 
@@ -421,7 +420,7 @@ def test_strip_env_removes_only_the_hook_variables() -> None:
 # (#6191). A child without the plugin is the red half: the exported path reaches it, and the
 # child's first assert fails before the writer runs, so the red half writes nothing there.
 _REAL_TEXTFILE_DIR = "/var/lib/node-exporter-textfile"
-_CHECK_LIB = REPO / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
+_CHECK_LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
 
 _WRITES_A_TEXTFILE = f"""
 import os

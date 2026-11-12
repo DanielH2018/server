@@ -165,7 +165,7 @@ mqtt_k8s_vip: 10.0.0.242
 # daniel-box's pihole-dns Service claims it, and wg-easy's WG_DEFAULT_DNS points here.
 dns_k8s_vip: 10.0.0.243
 # The same Service's ClusterIP, pinned. Global because two roles need it and neither owns
-# the other: roles/k8s/pihole claims it on the Service, and roles/setup/k3s names it in the
+# the other: roles/k8s/pihole claims it on the Service, and the k3s-server component names it in the
 # CoreDNS Corefile so cluster DNS forwards to Pi-hole first. Cluster DNS uses this rather
 # than the VIP above because kube-proxy reaches either Pi-hole pod through a ClusterIP,
 # where the LoadBalancer's externalTrafficPolicy: Local blackholes traffic the MetalLB
@@ -245,21 +245,6 @@ k8s_namespace: homelab
 # announcement, hostPath locality, registry loopback) and are recorded at each pin. This
 # variable only answers "which node is the primary one here".
 k8s_primary_node: daniel-box
-
-# Hosts k3s-bringup.yml will install a k3s SERVER on. One entry: daniel-box is prod's control
-# plane. daniel-server is deliberately absent —
-# it is an agent in prod's cluster, and installing a server there would give one node two
-# control planes.
-#
-# An allowlist rather than a denylist, so a host nobody thought about is refused rather than
-# admitted. ENFORCED by ansible/tests/setup/test_k3s_server_hosts.py.
-k3s_server_hosts:
-  - daniel-box
-
-# The k3s agent nodes. Each one's host package owns its agent half (H7.34), and
-# k3s-bringup.yml's join plays name it until H7.20a retires them.
-k3s_agent_hosts:
-  - daniel-server
 
 # The label values loki-homelab's streams carry, one entry per stream role (#3740). Both Alloy
 # configs stamp their streams from this map: roles/k8s/loki-homelab for the cluster nodes and
@@ -374,9 +359,9 @@ k8s_default_limitrange:
     cpu: "2"
     memory: 2Gi
 
-# apiserver audit log. Here rather than in roles/setup/k3s/defaults because TWO roles read
-# these: setup/k3s arms the flags and writes the policy, and loki-homelab's promtail tails
-# the file so the log is readable in Grafana instead of only by root on daniel-box.
+# apiserver audit log. Here rather than in the k3s-server component's defaults because TWO
+# readers need these: k3s-server arms the flags and writes the policy, and loki-homelab's
+# promtail tails the file so the log is readable in Grafana instead of only by root on daniel-box.
 #
 # Only daniel-box writes a log — the path is under the k3s SERVER data directory and the
 # agent node runs no apiserver. Promtail declares the job on both nodes anyway, because a
@@ -387,10 +372,10 @@ k8s_default_limitrange:
 k3s_audit_log_enabled: true
 k3s_audit_log_dir: /var/lib/rancher/k3s/server/logs
 k3s_audit_log_path: "{{ k3s_audit_log_dir }}/audit.log"
-# Embedded etcd's metrics endpoint. Here, not in roles/setup/k3s/defaults, for the same reason
-# as the audit log above: TWO roles read it. setup/k3s puts --etcd-expose-metrics in the server
-# args, and observability's prometheus.yaml.j2 gates its `etcd` scrape job on the same value, so
-# the port and its only consumer cannot drift apart.
+# Embedded etcd's metrics endpoint. Here, not in the k3s-server component's defaults, for the same
+# reason as the audit log above: TWO readers need it. k3s-server puts --etcd-expose-metrics in
+# the server args, and observability's prometheus.yaml.j2 gates its `etcd` scrape job on the
+# same value, so the port and its only consumer cannot drift apart.
 #
 # k3s serves etcd metrics on 2381 either way. The flag moves the bind from 127.0.0.1 to
 # 0.0.0.0, which is the whole point: Prometheus scrapes from the pod network and a
@@ -399,11 +384,11 @@ k3s_audit_log_path: "{{ k3s_audit_log_dir }}/audit.log"
 # host's default-deny UFW policy rather than by transport auth. The endpoint exposes counters
 # and latencies, never key material or object data.
 #
-# Arming it needs a k3s-bringup.yml run: the installer rewrites the unit and RESTARTS k3s. The
+# Arming it needs a k3s reinstall: the installer rewrites the unit and RESTARTS k3s. The
 # API server is briefly unavailable; running workloads keep running.
 #
 # DECIDED: off, and the DB-size risk is covered by a proxy instead. The restart above also
-# re-encrypts every Secret (#2294), k3s-bringup.yml is manual-plane by construction, and the
+# re-encrypts every Secret (#2294), the reinstall is manual-plane by construction, and the
 # flag opens an unauthenticated :2381 — more cost than the gap is worth on a single voter,
 # where leader changes and WAL fsync latency carry little signal anyway. The one series that
 # does matter, the DB size against its 2 GiB quota, is readable WITHOUT the flag:
@@ -434,7 +419,7 @@ k8s_rollout_batch_width: 5
 # list it under the CRD provider's watched namespaces — Traefik ignores IngressRoutes in
 # namespaces it is not told to watch, silently, with the route reporting no error at all.
 k8s_observability_namespace: observability
-# Longhorn's own namespace, fixed by the upstream manifest roles/setup/k3s applies. Named
+# Longhorn's own namespace, fixed by the upstream Longhorn manifest. Named
 # here because TWO roles need it: longhorn-ui puts its route and middleware copies there,
 # and the traefik role must list it under the CRD provider's watched namespaces.
 k8s_longhorn_namespace: longhorn-system
@@ -510,7 +495,7 @@ k8s_node_dns_metrics_port: 9253
 #   PULL  — containerd reaches it at k8s_registry_pull_host, through a loopback hostPort.
 #           containerd is a host process with no route to a ClusterIP by name.
 #
-# Here rather than in the registry role's defaults because roles/setup/k3s also needs them,
+# Here rather than in the registry role's defaults because the k3s-server component also needs them,
 # to write the containerd trust config — a role cannot read another role's defaults.
 k8s_registry_port: 5000
 # Loopback for the same reason observability's OTLP receiver is: this registry has no auth and
@@ -549,13 +534,11 @@ k8s_registry_node: "{{ k8s_primary_node }}"
 # and a wrong namespace here surfaces inside the pod as a DNS failure that reads like a
 # network fault rather than a config one.
 k8s_registry_push_host: "registry.{{ k8s_namespace }}.svc.cluster.local:{{ k8s_registry_port }}"
-# The UPS's USB host: gates the nut_host role (host-side secondary upsmon + udev rule) in
-# initial_setup.yml, paired with the k8s/nut pod's nodeSelector.
+# The UPS's USB host: the nut-secondary component reads it, paired with the k8s/nut pod's
+# nodeSelector.
 ups_host: daniel-server
 # Whether a host that is NOT ups_host also runs the host-side secondary upsmon — the process
-# that actually powers a machine off when the pod's primary raises FSD. Read in a play-level
-# `when:` in initial_setup.yml, which is why it lives here rather than in the role's defaults
-# alongside the other `_armed` switches.
+# that actually powers a machine off when the pod's primary raises FSD. No reader is left (#8038).
 #
 # daniel-box DOES draw from the same UPS, measured by sampling `upsc
 # apc-ups@127.0.0.1` every 3s while modulating a 16-core burn on daniel-box (daniel-server
@@ -583,22 +566,14 @@ renovate_notify_host: daniel-box
 # Arming the timer is a separate switch, renovate_agent_enabled in the role's defaults.
 renovate_agent_host: daniel-box
 # Which host runs the fake-remux detector + reconciler — daniel-box, where the media stack
-# lives. Here rather than in the role's defaults because initial_setup.yml's `when:` on the
-# role entry is evaluated before that role's defaults are in scope, the same reason
-# renovate_notify_host is.
+# lives. The fake-remux component's defaults read it.
 fake_remux_host: daniel-box
-# The Raspberry Pi the emptied optimize_pi role gates on; hosts/components/pi-tuning/ ships its tuning.
-# Here rather than in the role's defaults for the reason fake_remux_host gives above.
+# The Raspberry Pi; hosts/components/pi-tuning/ ships its tuning.
 optimize_pi_host: daniel-pi
-# The one host that runs the repo-level ops crons `initial_setup/tasks/crons.yml` gates to a
-# single host: the worktree sweep, the infrastructure-map refresh, the generated-docs refresh
-# and the weekly eval sweep. They need the primary checkout, uv, gh
-# and a local kubectl, which daniel-box is the only host to carry together.
-#
-# Here rather than in the role's defaults for the reason fake_remux_host gives above, plus one
-# the reader in scripts/deploy_tools/land_lib/land_reach.py adds: `_eval_when` resolves a gate
-# against group_vars + host_vars only, and a name it cannot resolve reads as "every host", which
-# is an over-broad verdict.
+# The one host that runs the repo-level ops crons gated to a single host: the worktree sweep,
+# the infrastructure-map refresh, the generated-docs refresh and the weekly eval sweep. They
+# need the primary checkout, uv, gh and a local kubectl, which daniel-box is the only host to
+# carry together. The worktree-sweep component and scripts/docs/reference/crons.py read it.
 ops_cron_host: daniel-box
 # ── weekly reboot ──────────────────────────────────────────────────────────────────────────
 # When every host in the play restarts itself. The host-maintenance component renders
@@ -637,11 +612,6 @@ weekly_reboot_mute_lead_minutes: 5
 # 08:15 at the committed schedule. observability's alertmanager-secret.yaml.j2 does that sum;
 # nothing here repeats it.
 weekly_reboot_mute_recovery_minutes: 40
-# Whether this host runs its own gitops_deploy pull-based auto-deployer. FALSE by default:
-# daniel-box is the one deployer, and a host nobody has thought about yet gets the teardown arm
-# rather than a timer that deploys to production on its own. Arming a host is `has_gitops: true` in its host_vars plus
-# `initial_setup.yml --tags gitops_deploy`; see gitops_deploy CLAUDE.md.
-has_gitops: false
 # Whether this host runs Docker. FALSE by default: daniel-pi is the only Docker host, both
 # cluster nodes run k3s's own containerd, and the k3s role fails closed on a node that already
 # runs Docker. A host nobody thought about gets the teardown arm rather than a second container
@@ -671,21 +641,14 @@ docker_engine_packages:
 # `rsyslog-filter` component (hosts/components/rsyslog-filter/). ENFORCED by
 # ansible/tests/setup/test_journald_syslog_forwarding.py.
 has_rsyslog: true
-# Whether this host holds a checkout of THIS repository at ~/server. True by default — every
-# host built by initial_setup.yml has had one, which is why a handful of tasks reach for
-# `{{ playbook_dir }}` or `~/server/...` with no gate at all. No host overrides it false; the
-# gate stays because those tasks would fail outright on a host that is driven over ssh and
-# never checks the repo out.
-#
-# NOT derivable from ansible_connection. daniel-pi is `connection=ssh` and DOES hold a
-# checkout (/home/ubuntu/server/ansible exists there), so deriving this
-# from the connection type would skip three tasks that work on the Pi today.
+# Whether this host holds a checkout of THIS repository at ~/server. True by default, and no
+# host overrides it.
 has_repo_checkout: true
 
 # The libvirt NAT network the hypervisor host builds, as a CIDR. The monthly etcd restore
 # drill's throwaway guest attaches to it. Here
 # rather than in the hypervisor role's defaults because two roles need one source of truth: the
-# hypervisor role builds the network from a gateway plus a netmask, while `initial_setup`
+# hypervisor role builds the network from a gateway plus a netmask, while the host plane
 # fences that network off the production LAN and needs the prefix form. A fence keyed to the
 # wrong network is not a weaker fence, it is no fence at all — so
 # ansible/tests/staging/test_staging_egress_fence.py asserts this prefix contains the role's
@@ -707,8 +670,7 @@ etcd_drill_full_cron: "20 11 1 * *"
 # ENFORCED by ansible/tests/staging/test_etcd_drill_vm.py, which pins it between the cron's
 # period and twice it.
 etcd_drill_full_kuma_interval_s: 3024000
-# Read by the playbook lines of the emptied github_cli and chezmoi_setup roles, which stay until
-# H7.20a, and by has_claude_code's component `when:`s. Each defaults OFF and is opted into per host.
+# has_claude_code gates the claude-code and worktree-holders components. Each defaults OFF and is opted into per host.
 has_github_cli: false
 has_chezmoi: false
 has_claude_code: false
@@ -738,17 +700,16 @@ claude_agent_ssh_key_path: /var/lib/claude/.ssh/peers_ed25519
 # consumed by the hosted Mend app when it opens PRs, a plane no deploy path touches. Blocking the
 # gate on it would park every later image bump behind a dependency-management fault.
 #
-# Four readers outlive the deployer, so the list lives here and not in `gitops_deploy`'s role
-# defaults, which H7.20a deletes: `scripts/deploy_tools/promote.py decide`, the host packages'
-# builder, `homelab-checkout-sync` and `ansible/tests/repo/test_ci_contexts_match_workflows.py`.
-# `decide` reads this file by path, not through Ansible, and refuses anything but a non-empty
-# list of strings, so this key stays a literal list. The deployer's role default is a reference
-# to it until H7.19a, and `scripts/deploy_tools/await_ci.py` names it in a comment.
+# Four readers share the list, so it lives here: `scripts/deploy_tools/promote.py decide`, the
+# host packages' builder, `homelab-checkout-sync` and
+# `ansible/tests/repo/test_ci_contexts_match_workflows.py`. `decide` reads this file by path, not
+# through Ansible, and refuses anything but a non-empty list of strings, so this key stays a
+# literal list. `scripts/deploy_tools/await_ci.py` names it in a comment.
 #
-# A change to this key or to `ci_ancestor_walk_max` is a deploy-plane change, so the GitOps tick
-# re-renders neither the deployer's settings file nor the builder's. After one, the operator runs
-# `uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy,homelab_builder` on
-# daniel-box (**operator-only**); until then a renamed CI job leaves both waiting on the old name.
+# A change to this key or to `ci_ancestor_walk_max` reaches daniel-box only through its host
+# package: the builder and checkout-sync components render both into `homelab-daniel-box`, so
+# they take effect when daniel-box installs the package version carrying them. Until then a
+# renamed CI job leaves both waiting on the old name.
 ci_required_contexts:
   - prek (lint + validate + tests + secrets)
 
@@ -764,13 +725,12 @@ ci_required_contexts:
 # lock is held. A range longer than ten commits behind a red tail is a state for the
 # behind-origin watchdog to page on, not one to keep spending requests on.
 #
-# Worst case, authenticated: ten GETs on one run against 5000/hour per token. ANONYMOUS the walk
-# does not run at all in the deployer: `deploy_phases._newest_green_ancestor` asks
-# `tools.github_authenticated()` first and logs one line saying it skipped. The anonymous limit
-# is 60/hour per source IP, shared with every landing's await_ci.py poll (45 per 900s wait), so
-# a ten-request burst per run would exhaust it and every reader on the host would then read
-# `HTTP Error 403`, which the gate maps to `pending`. 0 (or any value below it) disarms the walk
-# on every host.
+# Worst case: ten GETs on one run against 5000/hour per token. Neither walker reads GitHub
+# anonymously: the builder and `hosts/lib/checkout_sync.py` refuse to run without their
+# `github_token` credential. The anonymous limit is 60/hour per source IP, shared with every
+# landing's await_ci.py poll (45 per 900s wait), so a ten-request burst per run would exhaust it.
+# A value that is not a positive integer stops both readers (reason `ci`); it does not disarm
+# the walk.
 ci_ancestor_walk_max: 10
 
 # Physical location, feeds the homepage weather widget.

@@ -57,11 +57,11 @@ def test_land_exit_codes_include_every_code_land_sh_can_exit_with():
 
 def _lock_tree(root: Path, *, cron_body: str, unit_exec: str) -> Path:
     """A minimal tree: one cron template and one unit template."""
-    templates = root / fd.INITIAL_SETUP_TEMPLATES
+    templates = root / fd.HOST_COMPONENTS / "nightly" / "templates"
     templates.mkdir(parents=True)
     (templates / "nightly.sh.j2").write_text(cron_body)
     (templates / "bystander.sh.j2").write_text("echo no lock here\n")
-    unit_dir = root / fd.SETUP_ROLES / "deployer" / "templates"
+    unit_dir = root / fd.HOST_COMPONENTS / "deployer" / "units"
     unit_dir.mkdir(parents=True)
     (unit_dir / "tick.service.j2").write_text(unit_exec)
     return root

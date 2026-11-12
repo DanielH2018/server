@@ -2,11 +2,10 @@
 # docs/target-architecture/host/h4-secrets-unit.md, *NUT on daniel-server*; daniel-box since H7.33).
 # The package owns the host half: nut-monitor reads the rendered upsmon.conf through a drop-in, a
 # timer runs the UPS watchdog, and the APC udev rule installs from the package. The udev rule
-# is harmless on daniel-box, which has no UPS on USB. The `nut_host` role is emptied
-# and ends on every host (H7.33).
+# is harmless on daniel-box, which has no UPS on USB. The Ansible `nut_host` role
+# that wrote it before H7.33 is gone.
 #
-# `role: nut_host` renders the role's own templates, which stay in the role directory until
-# H7.20a moves them. The role's defaults sit beneath this map, so `nut_host_upsd_host` resolves to
+# defaults/main.yml sits beneath the `defaults:` map, so `nut_host_upsd_host` resolves to
 # 127.0.0.1 on daniel-server (inventory_hostname == ups_host) and to `nut_host_upsd_clusterip` on
 # daniel-box. The `defaults:` map below sets the one flag that switches ups-secondary-health.sh.j2
 # to its packaged branch (H4.3b3).
@@ -29,7 +28,6 @@
 #   signal.
 # - The unit loads no credential. It keeps its homelab-secrets.service ordering, because it
 #   reads the upsmon.conf output that unit renders.
-role: nut_host
 defaults:
   nut_host_watchdog_packaged: true
   # The nut Service's pinned ClusterIP, which any host but ups_host (daniel-box) names in its
@@ -39,7 +37,7 @@ defaults:
 depends:
   - nut-client
 outputs:
-  - src: "role:host-upsmon.conf.j2"
+  - src: templates/host-upsmon.conf.j2
     path: /etc/nut/upsmon.conf
     owner: root
     group: nut
@@ -56,7 +54,7 @@ files:
   - {src: rules/99-homelab-nut-apc.rules, dst: /usr/lib/udev/rules.d/99-homelab-nut-apc.rules}
   # A plain file, not a declared output: the script holds many shell `${...}` expansions and
   # reads no secret in its packaged branch.
-  - {src: "role:ups-secondary-health.sh.j2", dst: /usr/lib/homelab/ups-secondary-health, mode: "0755"}
+  - {src: templates/ups-secondary-health.sh.j2, dst: /usr/lib/homelab/ups-secondary-health, mode: "0755"}
   - {src: units/homelab-ups-watchdog.service.j2, dst: /usr/lib/systemd/system/homelab-ups-watchdog.service}
   - {src: units/homelab-ups-watchdog.timer.j2, dst: /usr/lib/systemd/system/homelab-ups-watchdog.timer}
 enable:

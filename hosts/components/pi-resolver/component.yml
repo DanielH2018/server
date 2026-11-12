@@ -1,8 +1,8 @@
 # The Pi's resolver and its own hostname (H7.25, old step H7.4; docs/target-architecture/host/
 # h7-delete-ansible.md). Both replace optimize_pi's `pi-dns` tasks.
 #
-# - /etc/resolv.conf is the shared setup/common template, the file daniel-box renders through the
-#   k3s role. `role: common` loads it in place, so the two hosts cannot fork. The nameserver
+# - /etc/resolv.conf is templates/resolv.conf.j2, which daniel-box's k3s-host-dns renders too
+#   through `component: pi-resolver`, so the two hosts cannot fork. The nameserver
 #   ORDER is the whole failover mechanism: Pi-hole first, a public resolver behind it, and
 #   `rotate` stays unset. This is the break-glass host, and its wg-easy tunnel is the documented
 #   way in when the cluster's own is unreachable, so it must never depend on the cluster for DNS.
@@ -21,7 +21,6 @@
 # file leaves running containers on the old ones until they restart. The Ansible role restarted
 # every container after a change. The package does not, so the operator restarts the containers
 # by hand after such a change (docs/pi-host-tuning-record.md has the 2026-09-01 incident).
-role: common
 defaults:
   common_resolver_nameservers:
     - "{{ dns_k8s_vip }}"
@@ -29,6 +28,6 @@ defaults:
   common_resolver_timeout: 2
   common_resolver_options: "timeout:2 attempts:1"
 files:
-  - {src: "role:resolv.conf.j2", dst: /etc/resolv.conf}
+  - {src: templates/resolv.conf.j2, dst: /etc/resolv.conf}
 lines:
   - {path: /etc/hosts, line: "127.0.1.1 {{ inventory_hostname }}", regexp: '^127\.0\.1\.1\s', mode: "0644"}

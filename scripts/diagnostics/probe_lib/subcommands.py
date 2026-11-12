@@ -27,7 +27,6 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.alerts import run_alerts
-from diagnostics.probe_lib.applied import run_applied
 from diagnostics.probe_lib.arr import run_arr
 from diagnostics.probe_lib.b2_ledger import (
     run_b2_deletions,
@@ -194,13 +193,6 @@ SUBCOMMANDS = [
         "builder",
         run_builder,
     ),
-    (
-        "applied",
-        "whether a setup role's files on each of its hosts match the tree's render: "
-        "existence, mode, owner and content (exit 1 on drift)",
-        "applied",
-        run_applied,
-    ),
 ]
 
 # The subcommands with a callable that `main()` routes by hand instead of through `handlers`,
@@ -231,7 +223,6 @@ VERDICT_SUBCOMMANDS = frozenset(
         "push-rules",
         "lander",
         "builder",
-        "applied",
     }
 )
 VERDICT_HA_SUBCOMMANDS = frozenset({"verify-automations", "verify-entities"})

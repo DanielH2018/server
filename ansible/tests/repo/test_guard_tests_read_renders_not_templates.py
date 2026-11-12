@@ -114,11 +114,6 @@ TEMPLATE_SOURCE_READERS = {
         "the ABSENCE of a retired variable name (`bridge_hostname`) across every template, "
         "which a render cannot show — an undefined name renders as nothing"
     ),
-    "repo/test_secret_rendering_host_scripts_have_no_log.py": (
-        "which VARIABLE NAMES a `*.sh.j2` references, to decide whether its template task "
-        "needs `no_log`; a render replaces every secret with the same `STUB` and drops the "
-        "name that identified it"
-    ),
     "deploy/_autodeploy.py": (
         "the fallback for a role no render reaches: the synthetic `widget_role` trees under "
         "`tmp_path` the derivation's unit tests build, and the caller-rendered roles "
@@ -225,7 +220,6 @@ KNOWN_MEMBERS = frozenset(
         "repo/test_census_rows_roles.py",
         "repo/test_render_gate.py",
         "repo/test_guard_tests_read_renders_not_templates.py",
-        "repo/test_secret_rendering_host_scripts_have_no_log.py",
         "repo/test_testpaths_covers_every_test_file.py",
         "deploy/_autodeploy.py",
         "deploy/_autodeploy_claims.py",

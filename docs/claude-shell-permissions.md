@@ -84,7 +84,7 @@ mechanism.
 
 **The cluster credential is the ceiling for `kubectl`, and it is lower than any of this.** Plain `kubectl`
 authenticates as `system:serviceaccount:kube-system:homelab-readonly`, which holds `get list watch`
-and nothing else (`k3s_readonly_sa_name` in `ansible/roles/setup/k3s/defaults/main.yml`). Every write
+and nothing else (`k3s_readonly_sa_name` in `hosts/components/k3s-server/defaults/main.yml`). Every write
 verb is refused by RBAC. `kubectl auth can-i` answers **no** for `delete pods`, `delete pvc` and
 `pods/exec`, and `kubectl exec` returns *"cannot create resource pods/exec"* rather than a
 permission prompt.
@@ -98,8 +98,8 @@ cluster.**
 holds. Remote Control sessions and new interactive sessions run as the `claude` user, which holds
 neither the age key that decrypts the become password nor the repo owner's `gh` token
 (`docs/claude-agent-user.md`, *What the `claude` user cannot do*). A session that still runs as
-`sys_user` holds both, and that user can read everything under its home. With the age key, such a session can run `deploy.sh` and
-`initial_setup.yml` as root on every host. With the token, it can merge its own PR through the
+`sys_user` holds both, and that user can read everything under its home. With the age key, such a session can decrypt every
+secret in `ansible/vars/secrets.yml`. With the token, it can merge its own PR through the
 REST endpoint, which is how `land.sh` merges every landing, or arm GitHub's auto-merge on it.
 The master CI gate's `pull_request` rule refuses a direct push to master from any token, so
 every change reaches master as a PR. The GitOps deployer then applies master with `become`. So

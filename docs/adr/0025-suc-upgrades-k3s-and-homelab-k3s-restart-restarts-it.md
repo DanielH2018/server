@@ -18,7 +18,7 @@ required before it could merge.
 
 Ansible applies every k3s change by hand. `ansible/k3s-bringup.yml` is one of the bring-up
 playbooks that the deployer never runs, and the comment above `k3s_server_args` in
-`ansible/roles/setup/k3s/defaults/main.yml` says why: "precisely so nothing automated ever
+`hosts/components/k3s-server/defaults/main.yml` says why: "precisely so nothing automated ever
 applies it." A restart of the control plane takes down Pi-hole and Traefik, which sit behind
 the server, so the rule was deliberate.
 

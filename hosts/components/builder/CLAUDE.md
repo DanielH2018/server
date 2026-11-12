@@ -147,7 +147,7 @@ publish-on-change compares the pins.
 
 The code is `hosts/lib/homelab_tool_fetch.py:install_tools`.
 CI's `host_packages_build` job calls the same function through `host_packages.py fetch-tools`.
-`ansible/roles/setup/homelab_builder/tests/test_host_package_builder_tools.py::test_a_binary_whose_digest_differs_from_its_pin_builds_nothing_and_reads_tools`
+`hosts/lib/tests/test_host_package_builder_tools.py::test_a_binary_whose_digest_differs_from_its_pin_builds_nothing_and_reads_tools`
 holds the refusal.
 
 ## The rollout gate (H3.12)
@@ -223,7 +223,7 @@ start waits for a signer still running and never rewrites `staged/` under it.
 - **The interpreter.** The unit runs the host's `/usr/bin/python3`, because the signer cannot
   read the builder's pinned interpreter under its 0700 state directory. The script is
   stdlib-only, and `pyproject.toml` formats it for 3.12.
-  `ansible/roles/setup/homelab_builder/tests/test_repo_signer.py::test_the_signer_parses_with_the_3_12_grammar`
+  `hosts/lib/tests/test_repo_signer.py::test_the_signer_parses_with_the_3_12_grammar`
   holds it to that grammar. The signer takes its `log` and its atomic write from the `host_lib.py`
   installed beside it, so that file is formatted for 3.12 too, and
   `hosts/lib/tests/test_host_lib.py::test_host_lib_parses_with_the_3_12_grammar` holds it to that

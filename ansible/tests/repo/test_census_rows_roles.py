@@ -171,15 +171,10 @@ ROWS = (
         # 501 files under those directories before H7.52 deleted gitops_deploy's four task files
         # and its handlers, 493 before H7.63 deleted initial_setup's and common's, 484 before
         # H7.44 deleted three of k3s's and its handlers, 469 before H7.55 deleted the emptied
-        # setup roles and the runbook roles.
-        min_matches=455,
-        # The `*_files` lists the bare-entry alternative exists for, and the deployer's own role.
-        must_find=frozenset(
-            {
-                "ansible/roles/k8s/home-assistant/defaults/main.yml",
-                "ansible/roles/setup/k3s/tasks/main.yml",
-            }
-        ),
+        # setup roles and the runbook roles, 455 before H7.55's second PR deleted the rest.
+        min_matches=435,
+        # The `*_files` lists the bare-entry alternative exists for.
+        must_find=frozenset({"ansible/roles/k8s/home-assistant/defaults/main.yml"}),
     ),
     Census(
         name="bespoke-netpol-says-why-it-is-not-a-callers-fence",

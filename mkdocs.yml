@@ -195,7 +195,7 @@ nav:
           # how the baseline selects pods — live content, not archive material.
           - "NetworkPolicy — what each slice settled": networkpolicy-slice-answers.md
           - "Argo and Flux evaluation (ADR-0010)": archive/gitops-argo-flux-evaluation.md
-          # The measurement #3734 needs before initial_setup.yml loops over a setup_roles list.
+          # The measurement #3734 took before initial_setup.yml looped over a setup_roles list.
           - "Looped include_role measurement (#3734)": setup-role-loop-measurement.md
   # Six groups, ordered day-to-day first and recovery last. An upgrade is both a driving and
   # a recovery procedure, so the upgrades sit with recovery, where a reader looking for "how do

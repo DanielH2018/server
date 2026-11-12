@@ -14,7 +14,6 @@ This page holds the procedures an operator runs when the pipeline stops or must 
 - rolling a host back;
 - rotating the archive key, or recovering from a revoked one;
 - rebuilding a cluster node, adding a host, and upgrading a host's Ubuntu release;
-- clearing a deployer park that the role's `initial_setup.yml` entry caused;
 - the signer's pages, and the five builder pages.
 
 ## How a package reaches a host
@@ -1164,25 +1163,6 @@ is a
 rebuild on the previous release with `bootstrap-host.sh`. A cluster node follows *Rebuilding a
 cluster node*, and the Pi takes `sudo ./bootstrap-host.sh daniel-pi`.
 
-## Clearing a park caused by the role's `initial_setup.yml` entry
-
-This applies to the `gitops_deploy` entry, and to a `homelab_builder` entry restored by a revert
-of H7.41b. `initial_setup.yml` is a bring-up playbook, so adding or removing its `homelab_builder` entry
-parks the GitOps deployer. The clear is **operator-only**, because the play's `load_secrets`
-`pre_task` decrypts. On daniel-box, in the primary checkout:
-
-1. Check the range the park holds:
-
-    ```bash
-    git log --oneline HEAD..origin/master
-    git diff --name-only HEAD..origin/master
-    ```
-
-    Go on only when the range holds the entry's PR alone. Otherwise list each other change
-    with the apply it owes, and run each after the last step.
-1. `git merge --ff-only origin/master`.
-1. `uv run ansible-playbook ansible/initial_setup.yml --tags homelab_builder`.
-
 ## The signer's page
 
 `homelab-repo-sign.service` pages once per new failure through
@@ -1275,13 +1255,8 @@ The builder grades each commit over `CI_CONTEXTS`, which the role renders from
 `ci_required_contexts`. When a CI job is renamed, no commit carries the old context, so no
 commit is ever green. Change `ci_required_contexts` in `ansible/inventory/group_vars/all.yml` to
 the new name, spelled exactly as `ci.yml`'s `name:`, and merge that. The key is a deploy-plane
-change, so the tick re-renders neither settings file. Re-apply the deployer by hand on
-daniel-box (**operator-only**), and let the host package carry the builder's copy, which the
-updater installs once the builder builds `homelab-daniel-box` with the new list:
-
-```bash
-cd /home/ubuntu/server && uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy
-```
+change, so the tick re-renders neither settings file. The updater installs the
+builder's copy once the builder builds `homelab-daniel-box` with the new list.
 
 ### `reason="keyring"`
 
@@ -1301,19 +1276,12 @@ procedure above. The first builder run after the fix builds.
 
 The builder refuses to grade anything, because `CI_CONTEXTS` is empty or
 `CI_ANCESTOR_WALK_MAX` is not a positive integer. Restore `ci_required_contexts` or
-`ci_ancestor_walk_max` in `ansible/inventory/group_vars/all.yml`, merge it, and re-apply the
-role by hand, because the tick re-renders no settings file for that file
-(**operator-only**):
-
-```bash
-cd /home/ubuntu/server && uv run ansible-playbook ansible/initial_setup.yml --tags homelab_builder
-```
+`ci_ancestor_walk_max` in `ansible/inventory/group_vars/all.yml` and merge it.
 
 ### `reason="token"` and `reason="build"`
 
 `token` means the settings carry no `GITHUB_TOKEN`, or the check-runs API refused the token with
-401 or 403. Replace `homelab_builder_github_token` with the `add-secret` skill and re-apply the
-role. `build` is a render or an `nfpm` run that failed at the chosen commit. Its journal line
+401 or 403. Replace `homelab_builder_github_token` with the `add-secret` skill. `build` is a render or an `nfpm` run that failed at the chosen commit. Its journal line
 names the package, and the fix lands on master.
 
 ### `reason="tools"`: a `homelab-tools` pin did not verify

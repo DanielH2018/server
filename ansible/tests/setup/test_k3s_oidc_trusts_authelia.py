@@ -15,7 +15,7 @@ why two of the checks below are about the flags NOT being there.
 The document is the component's own template rendered with the component's own defaults, the
 inputs host mode gives it. Before H6.4a it came from `_setup_render`, the harness
 `validate/setup_templates.py` renders the setup plane with, and the keys lived in
-`roles/setup/k3s/defaults/main.yml` (#3202).
+`hosts/components/k3s-server/defaults/main.yml` (#3202).
 
 See `hosts/components/k3s-server/component.yml` and `templates/authentication-config.yaml.j2`
 for why each value is what it is.
@@ -24,13 +24,12 @@ for why each value is what it is.
 import functools
 
 import jinja2
+from _helpers import ANSIBLE, load_defaults
+from _k8s_render import rendered_docs
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
-
-from _helpers import ANSIBLE, load_defaults
 from lib.repo_paths import ALL_VARS, REPO
 from renderer.renderer_lib import host as host_mode
-from _k8s_render import rendered_docs
 
 HEADLAMP = ANSIBLE / "roles" / "k8s" / "headlamp"
 DOMAIN = yaml_fast.safe_load(ALL_VARS.read_text())["domain"]

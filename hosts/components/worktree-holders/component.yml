@@ -4,8 +4,8 @@
 # (lib.worktrees.privileged_holders, fanout_lib.clean.live_process_scan). The sweep runs as
 # sys_user, and /proc refuses that uid another user's cwd and environ, so root does the scan.
 #
-# daniel-server lists it since H7.61 and daniel-box since H7.62. The helper stays in the role's
-# `files/` until H7.20a, and `role: initial_setup` copies it in place.
+# daniel-server lists it since H7.61 and daniel-box since H7.62. The helper is
+# files/worktree_holders.py, which scripts/lib/worktrees.py also imports.
 #
 # The helper is root-owned and outside the checkout, because sys_user and every agent can write
 # the repo, and a root unit naming a file there is root for whoever edits it. fanout_lib.clean
@@ -16,7 +16,6 @@
 #
 # The units keep their Ansible-era names, so reconcile's shadow handoff removes the /etc copies,
 # reloads once and restarts the socket. /run/worktree-holders.sock does not change.
-role: initial_setup
 depends:
   - netcat-openbsd
 defaults:
@@ -30,7 +29,7 @@ defaults:
     daniel-server:
       - {name: claude, clone_dir: /var/lib/claude/server}
 files:
-  - {src: "role-file:worktree_holders.py", dst: /usr/lib/homelab/worktree-holders, mode: "0700", when: has_claude_code}
+  - {src: files/worktree_holders.py, dst: /usr/lib/homelab/worktree-holders, mode: "0700", when: has_claude_code}
   - {src: templates/worktree-holders.json.j2, dst: /etc/worktree-holders.json, when: has_claude_code}
   - {src: units/worktree-holders.socket.j2, dst: /usr/lib/systemd/system/worktree-holders.socket, when: has_claude_code}
   - {src: units/worktree-holders@.service, dst: /usr/lib/systemd/system/worktree-holders@.service, when: has_claude_code}

@@ -9,7 +9,7 @@ precedence. Three things in the play differ from those files, and this module su
 - `hostvars` holds every inventory host. The rendered host's entry is the rendered context
   itself, so `hostvars[k8s_primary_node].containers_list` is the play's view. Every other host
   carries its `hosts.ini` inline variables and its own host_vars, resolved against that host's
-  own variables, so daniel-pi's `ansible_host: "{{ server_ip }}"` is daniel-pi's address.
+  own variables, so a daniel-pi value that reads `server_ip` is daniel-pi's address.
 - The stub file's variables go over every layer, as `-e @FILE` extra vars do.
 
 Typical usage example:

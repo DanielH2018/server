@@ -61,7 +61,6 @@ def test_package_entry_points_finds_run_and_main_modules():
     # Non-vacuity: the known module set, not just "found something".
     assert names == [
         "alerts",
-        "applied",
         "arr",
         "b2_ledger",
         "builder",

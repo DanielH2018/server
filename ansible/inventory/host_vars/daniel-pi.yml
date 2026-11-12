@@ -1,8 +1,6 @@
 ---
 server_ip: 10.0.0.139
-# The Pi's one address literal (#3719). Ansible SSHes to it, and group_vars' k8s_pi_client_ip
-# reads it through hostvars, so hosts.ini carries no ansible_host for this host.
-ansible_host: "{{ server_ip }}"
+# The Pi's one address literal (#3719). group_vars' k8s_pi_client_ip reads it through hostvars.
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # `domain` is inherited from group_vars/all.yml (daniel-hunter.com), exactly like every other
 # host — the Pi carries no host-specific override. It is a plain variable, not a secret
@@ -24,14 +22,6 @@ ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # per-host spelling of `[defaults] timeout`; there is no become-specific timeout var in the
 # pinned core. A retry loop is the wrong shape: the wait is the whole cost.
 ansible_ssh_timeout: 30
-# No Ansible GitOps auto-deploy path to the Pi (accepted) — memory-constrained, and its Ansible-era
-# services are driven manually over SSH. The package path (homelab-updater, H3 and H5) deploys the
-# services in compose_services without this key. See gitops_deploy CLAUDE.md.
-# Kept explicit even though group_vars/all.yml defaults it false: the deployer's own refusal
-# (`deploy_inventory.declares_no_gitops`) greps THIS file's text for a top-level
-# `has_gitops: false` and fails open when the key is absent, so deleting the line would disarm
-# the code-side half of the gate.
-has_gitops: false
 # The only Docker host, so this is the one host that
 # opts IN to the engine (group_vars/all.yml defaults it false). Every service in
 # containers_list and compose_services below runs on it.
@@ -42,8 +32,8 @@ has_docker: true
 has_rsyslog: false
 # Disk-backed swap for the 512 MB Zero 2 W. The RAM-resident zram (hosts/components/pi-tuning/) can't add
 # real capacity, so heavy one-shot apt/dpkg steps (apt-show-versions cache build, `upgrade: dist`,
-# AIDE init) OOM-kill mid-transaction and corrupt the package DB. Created by the initial_setup
-# role BEFORE its apt tasks run. See ansible/roles/setup/initial_setup/tasks/main.yml.
+# AIDE init) OOM-kill mid-transaction and corrupt the package DB. Created by
+# hosts/bootstrap-host.sh BEFORE its apt steps run.
 pi_swapfile_path: /swapfile
 pi_swapfile_size: 1G
 # Slow healthcheck cadence on the Zero 2 W: every probe is 2 runc invocations (multi-

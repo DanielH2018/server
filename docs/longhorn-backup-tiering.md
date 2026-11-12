@@ -131,7 +131,7 @@ weekdays moves only the claims it names.
 > cut block count per volume roughly 8.6x (sonarr 200 → 23, prowlarr 216 → 25), and the cost basis
 > here is per block. The worst projected shard is now **~220 Class C against a 2,100 budget** (the
 > 2,500 cap less a 400 reserve), where d2 alone used to be 1,359. The live numbers are
-> `k3s_longhorn_daily_backup_budget` in `ansible/roles/setup/k3s/defaults/main.yml` and
+> `k3s_longhorn_daily_backup_budget` in `hosts/components/k3s-server/defaults/main.yml` and
 > `uv run python scripts/diagnostics/probe.py b2-budget`, which prices every shard against the current store.
 > The reasoning below is still correct; only the magnitudes moved.
 
@@ -204,7 +204,7 @@ A completed `b2-deletions` run ends with one line of a fixed shape —
 `b2-deletions: charged N, skipped N, unpriced N`, or `b2-deletions: declined: <reason>` when the
 BackupTarget carries no URL. Check 10 of `longhorn-backup-health.sh` reads that line to tell a
 run that finished from one that died part-way, so a reword changes the check's regexes in the
-same edit (`ansible/roles/setup/k3s/CLAUDE.md`, *Required evidence*).
+same edit (`docs/k3s-node-plane-crons-and-incidents.md`).
 
 Deletions against the `r2` BackupTarget are skipped. R2's caps are monthly and vast, and charging
 one against B2's 2,500/day Class C cap would inflate the ledger against a cap that does not
