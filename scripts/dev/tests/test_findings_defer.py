@@ -228,11 +228,29 @@ def test_next_withholds_a_deferred_issue_and_names_it(capsys, make_tools):
             worktree_facts=facts(),
         )
     )
-    assert findings.main(["next"], tools) == 0
+    assert findings.main(["next", "--waiting"], tools) == 0
     out = capsys.readouterr().out
     assert "#1140" in out
     assert "deferred: #1288 until 2099-01-01  needs seven days of metric" in out
     assert out.index("#1140") < out.index("deferred:")
+
+
+def test_next_counts_the_waiting_issues_and_names_the_flag_that_lists_them(
+    capsys, make_tools
+):
+    tools, _ = make_tools(
+        Fakes(
+            issues=[
+                make_issue(1288, labels=[FUTURE], title="needs seven days of metric"),
+                make_issue(1140, title="free"),
+            ],
+            worktree_facts=facts(),
+        )
+    )
+    assert findings.main(["next"], tools) == 0
+    out = capsys.readouterr().out
+    assert "1 waiting (1 deferred); --waiting to list" in out
+    assert "#1288" not in out
 
 
 def test_next_offers_an_issue_whose_date_has_passed(capsys, make_tools):
@@ -255,7 +273,7 @@ def test_next_json_keeps_the_array_free_and_notes_the_deferral_on_stderr(
             worktree_facts=facts(),
         )
     )
-    assert findings.main(["next", "--json"], tools) == 0
+    assert findings.main(["next", "--json", "--waiting"], tools) == 0
     captured = capsys.readouterr()
     assert [r["number"] for r in json.loads(captured.out)] == [1140]
     assert "deferred: #1288 until 2099-01-01" in captured.err

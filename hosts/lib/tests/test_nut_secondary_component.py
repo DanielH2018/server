@@ -2,8 +2,7 @@
 
 H4.3a added the declared `upsmon.conf` output, and H4.3c added its consumers. These tests hold
 the output's mode, owner, `persist` flag and dependent, the absence of a symlink onto the
-nut-client conffile, the upsd endpoint and the placeholder in the MONITOR line, and the `role:`
-key that lets a component render the `nut_host` role's templates and defaults in place. They also
+nut-client conffile, and the upsd endpoint and the placeholder in the MONITOR line. They also
 hold the nut-monitor drop-in and its boot order, the watchdog unit (which loads no credential
 since M6 batch B4's Cutover-2 dropped its Kuma push), the udev rule, the legacy entries and the
 manifest rows reconcile reads.
@@ -18,7 +17,6 @@ import yaml
 
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
-from renderer.renderer_lib.cluster import RenderRefused
 
 COMPONENT = REPO / "hosts" / "components" / "nut-secondary" / "component.yml"
 TEMPLATE = "/usr/lib/homelab/secret-templates/etc/nut/upsmon.conf"
@@ -56,41 +54,6 @@ def test_the_monitor_line_names_the_loopback_upsd_and_a_placeholder(package):
 def test_the_package_lists_the_component():
     spec = yaml.safe_load((REPO / "hosts/daniel-server/package.yml").read_text())
     assert "nut-secondary" in spec["components"]
-    assert yaml.safe_load(COMPONENT.read_text())["role"] == "nut_host"
-
-
-def render_with(tmp_path, component: dict):
-    """daniel-server rendered from a fixture `hosts/` tree holding only `component`."""
-    root = tmp_path / "hosts"
-    (root / "lib").mkdir(parents=True)
-    (root / "components" / "fixture").mkdir(parents=True)
-    (root / "components" / "fixture" / "component.yml").write_text(
-        yaml.safe_dump(component)
-    )
-    (root / "daniel-server").mkdir()
-    (root / "daniel-server" / "package.yml").write_text(
-        yaml.safe_dump({"components": ["fixture"]})
-    )
-    return host_mode.render_host("daniel-server", root)
-
-
-def test_a_role_outside_the_allowlist_is_refused(tmp_path):
-    with pytest.raises(RenderRefused, match="role 'render_records' is not one of"):
-        render_with(tmp_path, {"role": "render_records", "files": []})
-
-
-def test_a_role_template_with_no_role_is_refused(tmp_path):
-    output = {
-        "src": "role:host-upsmon.conf.j2",
-        "path": CONF,
-        "owner": "root",
-        "group": "nut",
-        "mode": "0640",
-        "keys": ["nut_monitor_password"],
-    }
-    component = {"outputs": [output]}
-    with pytest.raises(RenderRefused, match="names a role, and it lists none"):
-        render_with(tmp_path, component)
 
 
 UNITS = "/usr/lib/systemd/system"
@@ -197,6 +160,7 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
     ]
     assert ours == [
         {"path": "/etc/apt/sources.list.d/github-cli.list"},
+        {"path": "/etc/systemd/system/sockets.target.wants/homelab-rootq.socket"},
         {"path": "/usr/local/bin/sops"},
         {"path": "/usr/local/bin/vale"},
         {"path": "/usr/local/bin/uv"},
@@ -261,9 +225,3 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
         {"path": "/var/lib/homelab/setup-render-manifest.d/nut-host"},
     ]
     assert "nut-client" in package.depends
-
-
-def test_a_role_script_with_no_role_is_refused(tmp_path):
-    files = [{"src": "role:ups-secondary-health.sh.j2", "dst": "/usr/lib/homelab/x"}]
-    with pytest.raises(RenderRefused, match="names a role, and it lists none"):
-        render_with(tmp_path, {"files": files})

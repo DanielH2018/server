@@ -70,10 +70,8 @@ def test_an_ansible_only_filter_stays_as_written(tree):
     assert resolve(text, role, inventory) == text
 
 
-def test_the_real_tree_resolves_gitops_deploys_tick_interval():
+def test_the_real_tree_resolves_the_ruleset_drift_hour():
     """Non-vacuity against the live inventory."""
     jinja_defaults._inventory_values.cache_clear()
-    role = jinja_defaults.INVENTORY.parent / "roles" / "setup" / "gitops_deploy"
-    assert "{{" not in resolve(
-        "OnUnitActiveSec={{ gitops_deploy_tick_interval }}", role
-    )
+    component = jinja_defaults.INVENTORY.parents[1] / "hosts/components/github-checks"
+    assert "{{" not in resolve("{{ github_ruleset_drift_cron_hour }}", component)

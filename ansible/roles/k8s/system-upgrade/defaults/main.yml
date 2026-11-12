@@ -3,7 +3,7 @@
 # applies this role. The Plans select the nodes in `system_upgrade_nodes`: daniel-box since H6.3c, daniel-server since H6.3d.
 #
 # THE K3S PIN LIVES HERE. `k3s_version`, `k3s_install_script_url` and `k3s_install_script_sha256`
-# moved from roles/setup/k3s/defaults/main.yml, so a pin change routes to this Flux-owned tag and
+# moved from hosts/components/k3s-server/defaults/main.yml, so a pin change routes to this Flux-owned tag and
 # the deployer writes no `manual_plane` line for it. roles/setup/k3s reads this file with
 # `include_vars` for the fresh-host install. The Renovate annotation, the comments and the
 # manual sha256 finish moved with the keys.

@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from lib import kubectl as kubectl_lib
+from lib.ansible_inventory import host_names
 from lib.repo_paths import HOSTS_INI, REPO
 
 PROD_NODES = {
@@ -352,12 +353,7 @@ def test_every_named_node_is_a_host_in_the_inventory():
     `CLUSTER_NODES` is a constant because probe.py cannot parse Ansible at runtime. Nothing
     but this test notices it drifting from the inventory the names came from.
     """
-    hosts = HOSTS_INI.read_text()
-    declared = {
-        line.split()[0]
-        for line in hosts.splitlines()
-        if re.match(r"^[a-z0-9][a-z0-9-]*\s", line)
-    }
+    declared = set(host_names(HOSTS_INI))
     named = set().union(*kubectl_lib.CLUSTER_NODES.values())
     assert named, "CLUSTER_NODES is empty — every cluster check would pass vacuously"
     retired = kubectl_lib.RETIRED_CLUSTER_NODES

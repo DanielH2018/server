@@ -54,19 +54,17 @@ class Ps:
 
 
 @pytest.fixture
-def app(tmp_path, state_dir):
+def app(tmp_path):
     for d in ("logs", "cli", "locks"):
         (tmp_path / d).mkdir()
     (tmp_path / "proc_locks").write_text("")
     (tmp_path / "cli" / CLI_NAME).write_text(LOG_7827)
     cfg = deploy_ui.Config(
         repo=tmp_path,
-        state_dir=state_dir,
         log_dir=tmp_path / "logs",
         bind="127.0.0.1",
         port=0,
         tree_lock=tmp_path / "locks" / "tree.lock",
-        lock_dir=tmp_path / "locks",
         proc_locks=tmp_path / "proc_locks",
         cli_log_dir=tmp_path / "cli",
     )

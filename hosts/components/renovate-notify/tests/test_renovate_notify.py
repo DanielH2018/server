@@ -5,7 +5,7 @@ import urllib.request
 import notify_logic
 import pytest
 import renovate_notify as rn
-from deployer_lib import deploy_git
+import builder_ci_grade
 
 
 class _FakeResp:
@@ -155,12 +155,12 @@ def test_a_check_runs_read_short_of_total_count_is_not_read_as_green(monkeypatch
     try:
         pr = rn.build_pr("o/r", _OPEN_PR)
     except ValueError:
-        return  # a refused read, the way deploy_git.read_check_pages refuses one
+        return  # a refused read, the way builder_ci_grade.read_check_pages refuses one
     assert pr.ci != "success"
 
 
-# The notifier cannot import deployer_lib, so notify_logic carries a copy of the page walk.
-# These hold the copy equal to deploy_git's, as the builder's copy is held (#5991).
+# The notifier cannot import the builder's module, so notify_logic carries a copy of the page
+# walk. These hold the copy equal to `builder_ci_grade`'s (#5991).
 
 
 def _listing(runs: int, total: int | None = None):
@@ -178,10 +178,10 @@ def _listing(runs: int, total: int | None = None):
     return fetch_page
 
 
-def test_the_page_size_and_cap_match_the_deployers():
+def test_the_page_size_and_cap_match_the_builders():
     assert (notify_logic.CHECK_PAGE_SIZE, notify_logic.CHECK_PAGES_MAX) == (
-        deploy_git.CHECK_PAGE_SIZE,
-        deploy_git.CHECK_PAGES_MAX,
+        builder_ci_grade._CHECK_PAGE_SIZE,
+        builder_ci_grade._CHECK_PAGES_MAX,
     )
 
 
@@ -210,7 +210,7 @@ def test_the_page_size_and_cap_match_the_deployers():
         "not-a-dict",
     ],
 )
-def test_the_page_walk_matches_the_deployers(fetch_page):
+def test_the_page_walk_matches_the_builders(fetch_page):
     def outcome(read):
         try:
             return read(fetch_page, "check_runs")
@@ -218,7 +218,7 @@ def test_the_page_walk_matches_the_deployers(fetch_page):
             return "ValueError: %s" % exc
 
     assert outcome(notify_logic.read_check_pages) == outcome(
-        deploy_git.read_check_pages
+        builder_ci_grade.read_check_pages
     )
 
 

@@ -210,7 +210,7 @@ def run_alerts(ns, now=None):
     gap_s = None if ns.gap_min is None else ns.gap_min * 60
     episodes = alert_episodes(result, step_s, gap_s)
     if ns.json:
-        print(json.dumps(episodes, indent=2))
+        print(json.dumps(episodes))
     else:
         print(format_alert_episodes(episodes, ns.days, step_s))
     return 0

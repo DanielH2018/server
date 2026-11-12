@@ -181,11 +181,11 @@ def test_a_policy_refusal_prints_a_verdict_line_and_records_it(
             "headRefOid": {"headRefOid": HEAD},
         }
     )
-    rc, out, err, *_ = land_run(
+    rc, out, *_ = land_run(
         ["--arm-merge", "--await-merge", "--verdict-file", str(verdict_file)], fakes
     )
     assert rc == 1
-    assert "refused by the landing policy" in err
+    assert "refused by the landing policy" in out
     printed = _VERDICT_LINE.findall(out)
     assert len(printed) == 1 and printed[0] in VERDICTS, out
     (recorded,) = verdict_file.read_text().splitlines()
@@ -193,8 +193,8 @@ def test_a_policy_refusal_prints_a_verdict_line_and_records_it(
 
 
 def test_a_missing_primary_checkout_prints_a_verdict_line(land_run):
-    rc, out, err, *_ = land_run([], primary=Path("/nonexistent"))
+    rc, out, *_ = land_run([], primary=Path("/nonexistent"))
     assert rc == 1
-    assert "cannot cd to /nonexistent" in err
+    assert "cannot cd to /nonexistent" in out
     printed = _VERDICT_LINE.findall(out)
     assert len(printed) == 1 and printed[0] in VERDICTS, out

@@ -123,7 +123,7 @@ registry's one hit as "a static Service field, not a caller" — which closed th
 the variable to its host consumer.
 
 For slices 3–5, grep for the variables too (`_cluster_ip`, `_clusterip`), and check
-`roles/setup/**` as well as `roles/k8s/**` — a host caller is more likely to live in host setup than
+`hosts/components/**` as well as `roles/k8s/**` — a host caller is more likely to live in host setup than
 in a workload role.
 
 **Slice 3 found two more gaps in the same census, worth folding into the method for slices 4–5.**

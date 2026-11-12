@@ -169,8 +169,8 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
 - **Three checks find the templates by their role path.**
   `scripts/validate/shell_templates.py:discover_templates` globs `*.sh.j2` under
   `ansible/roles/`. `ansible/tests/setup/test_cron_scripts_publish_via_pr.py:push_corpus` and
-  `ansible/tests/repo/test_secret_rendering_host_scripts_have_no_log.py:KNOWN_SECRET_SCRIPTS`
-  name the two token scripts by role path.
+  `test_secret_rendering_host_scripts_have_no_log.py`'s `KNOWN_SECRET_SCRIPTS` (deleted by
+  H7.55) name the two token scripts by role path.
 - **The two template validators read `ansible/roles/` only.**
   `scripts/validate/unit_templates.py:discover_templates` globs `*.service.j2`, `*.timer.j2`
   and `*.socket.j2` under `ansible/roles/`. Its module docstring says it exists because a
@@ -280,7 +280,7 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   `deploy_cross_role.py:SETUP_FILES_SHIPPED_BY_OTHER_ROLES` maps `alert_unit.yml` to
   `_ALERT_UNIT` and `install_host_lib.yml` to `_HOST_LIB`. `_STAMPED`, the importers of
   `stamp_deployed.yml` and `stamp_render.yml`, is `_HOST_LIB` plus three roles.
-  `ansible/tests/setup/test_setup_cross_role_files.py:test_the_deployers_table_equals_the_trees_cross_role_files`
+  the cross-role files census (deleted by H7.53):test_the_deployers_table_equals_the_trees_cross_role_files`
   asserts that the table equals the tree's imports.
 - **monitor-bridge already reads the Pi through Prometheus.** The `pi_pressure` row of
   `ansible/roles/k8s/monitor-bridge/files/check_table.py:CHECKS` carries `gate="prometheus"`
@@ -520,7 +520,9 @@ and every host slice applies it.
       the named user's crontab;
     - a `cron_file` under `/etc/cron.d/`;
     - an Ansible-era unit, which is disabled and stopped, then its file is removed.
-   Reconcile never removes a path that a package owns (`dpkg -S` finds it).
+   Reconcile never removes a path that a package owns (`dpkg -S` finds it). When reconcile
+   removes an `/etc/systemd/system` copy of a unit the package ships, it also removes each
+   `*.wants/` or `*.requires/` link in `/etc/systemd/system` that points at that copy.
 
 ### Package rules (C5, made checkable)
 
@@ -560,8 +562,9 @@ and every host slice applies it.
 ### The updater
 
 `/usr/lib/homelab/homelab-updater` is a POSIX shell script, run as root by
-`homelab-updater.service` (`Type=oneshot`, `Nice=10`, `IOSchedulingClass=idle`,
-`TimeoutStartSec=50min`). The limit is derived from reconcile's: reconcile's 30 minutes, step
+`homelab-updater.service` (`Type=oneshot`, `Nice=10`, `IOSchedulingClass=best-effort` at
+priority 7, `TimeoutStartSec=50min`). The IO class sits above the idle class the integrity
+scans run at, so an AIDE scan on the Pi's SD card yields to the install (#7941). The limit is derived from reconcile's: reconcile's 30 minutes, step
 5's 10-minute lock wait, and 10 minutes for the fetch and the unpack. A test in
 `hosts/lib/tests/` reads both rendered units and fails when the updater's limit does not
 exceed reconcile's limit plus the lock timeout.
@@ -792,8 +795,7 @@ Two alert paths report the host plane, so a hold or a stall is never silent:
       `monitor_bridge_builder_max_fetch_age_s`, 1800 seconds by default, or absent. That
       covers a dead builder timer, a missing token and a fetch that keeps failing;
     - `homelab_builder_unbuilt_since_timestamp_seconds` is non-zero and older than
-      `monitor_bridge_builder_max_lag_s`, 2 hours by default, raised to the Pi's schedule
-      need for a gate whose canary is daniel-pi (*Staged rollout*, the Pi canary bullet). That covers a trust refusal,
+      `monitor_bridge_builder_max_lag_s`, 2 hours by default. That covers a trust refusal,
       a keyring refusal, a tools refusal, a rewritten master, an empty CI context list, a
       CI context that no longer matches, a builder hold, a rollout gate the canary never
       closes, and a master that stays red for 2 hours. In each of these the builder runs
@@ -838,7 +840,7 @@ Each run does these steps:
       `ansible/roles/setup/gitops_deploy/defaults/main.yml` naming `homelab_builder` to
       `deploy_cross_role.py:SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, as the `claude_code` and
       `k3s` defaults rows do. The defaults-read census in
-      `ansible/tests/setup/test_setup_cross_role_files.py` fails the PR without that row.
+      the cross-role files census (deleted by H7.53) fails the PR without that row.
       With it, a change to either key re-applies the builder's config. That route ends when
       H7.2e moves both keys into inventory, and H7.2e owes its replacement (*What H7
       inherits from this slice*).
@@ -977,9 +979,10 @@ publishes a second host package.
       it costs off-LAN access until a LAN session repairs it (*Risks*). It is also the
       pilot, and the hostname every container case runs under.
 
-  The order is daniel-server, daniel-pi, daniel-box. When the server's package is not in a
-  run's changed set, the first host in that order whose package changed is that run's
-  canary. The Pi led this order until H3.13 put it on the daily fallback schedule.
+  daniel-server is the only canary. When its package is not in a run's changed set, the run
+  opens no gate and stages every host package at once. The Pi led the order until H3.13 put
+  it on the daily fallback schedule, and stayed eligible until 2026-11-12 (*The Pi is never a
+  canary*, below).
 - **The gate.** A run that stages the canary's package at version V records V's SHA as an
   open gate in the builder's state. While a gate is open, the builder builds the canary's
   package as usual, and moves the gate to each newer canary version. It builds no other
@@ -994,29 +997,21 @@ publishes a second host package.
   descendant, closes the gate at once. The operator removes the file after use.
 - **An open gate pages.** While a gate is open, the unbuilt-since series carries
   `reason="canary"`, its `sha` names V's commit, and its value is that commit's committer
-  time. H3.5c's lag arm fires once the gate stays open past its grace, which is derived from
-  the Pi's schedule and is 90060 seconds (*The Pi canary holds the gate
-  until its daily fire*, below). A held canary fires `HostReconcileFailed` first. An unreachable Prometheus keeps the gate open, which fails
+  time. H3.5c's lag arm fires once the gate stays open past 7200 seconds,
+  the floor every reason shares. A held canary fires `HostReconcileFailed` first. An unreachable Prometheus keeps the gate open, which fails
   closed.
 - **Shared packages are outside the gate.** `homelab-updater` and `homelab-tools` publish
   in the run that builds them, and every host installs them at its next fire (*Open
   questions* 10).
-- **The Pi canary holds the gate until its daily fire.** Under the 15-minute schedule the Pi
-  led the order at all hours, and its two 2h15m gaps held the other hosts' packages past the
-  2-hour lag arm (#6524). The operator ruled on 2026-10-29 to keep the Pi as canary and accept
-  that delay (#6530). H3.13 put the Pi on a daily schedule, under which a Pi canary would hold
-  every other host for up to a day, so `CANARY_ORDER` puts daniel-server first (#6911). A run
-  that changes only the Pi's and daniel-box's packages still makes the Pi the canary. The lag
-  arm's grace for that gate therefore still follows the Pi's schedule, and every other reason
-  keeps the 7200 s floor (#6919). The builder names the gate's host in the series' `host` label,
-  and `ansible/filter_plugins/updater_lag_grace.py` renders the larger of
-  `monitor_bridge_builder_max_lag_s` and the Pi's longest gap between fires (86400 s), plus the
-  timer's `RandomizedDelaySec` (60 s), the updater's `TimeoutStartSec` (3000 s) and 600 s of
-  slack. That is 90060 s. Moving the Pi's drop-in moves the grace with it.
-  On 2026-11-03 the operator kept the Pi eligible and chose a trigger over a reorder (#7047).
-  `hosts/components/pi-updater-poll/` polls the repository every 15 minutes and starts the
-  updater once per newer `homelab-daniel-pi` (#7065). The daily fire stays the fallback for a
-  poll that skips or a run that fails, so the grace keeps following the drop-in.
+- **The Pi is never a canary.** The Pi led the order until H3.13 put it on a daily schedule,
+  then daniel-server led and a run changing only the Pi's and daniel-box's packages still made
+  the Pi the canary (#6530, #6911, #7047). After the builder released daniel-server, then the
+  Pi, then daniel-box, a Pi canary held daniel-box's package a median 18 minutes and up to 8
+  hours. The operator ruled on 2026-11-12 that the Pi gets no work daniel-box or daniel-server
+  could do. daniel-server is the only canary in `CANARY_ORDER`, and `NEVER_CANARY` names the
+  Pi and daniel-box. The Pi-specific lag grace and its `updater_lag_grace_s` filter went with
+  it. `hosts/components/pi-updater-poll/` still starts the Pi's updater within about 15
+  minutes of a newer `homelab-daniel-pi` publish (#7065).
 
 ### CI (builds, never signs)
 
@@ -1127,8 +1122,8 @@ The `host_packages` job has no `name:` key. GitHub names each matrix leg after t
 the leg's values, such as `host_packages (24.04, 3.12)`. The gate census in
 `ansible/tests/repo/test_every_ci_job_is_gated.py` falls back to the job id, and the gate's
 `needs.host_packages.result` fails when either leg fails. The bootstrap cases run in
-`host_packages_bootstrap`, one leg per release in the same matrix, so the prefix filter below
-selects its legs too (#7819). The build job's `name:` does not start with `host_packages`, so
+`host_packages_bootstrap`, three legs per release, one per offline build, named by release
+alone, so the prefix filter below selects its legs too (#7819, #7879). The build job's `name:` does not start with `host_packages`, so
 the filter selects the case legs alone. Later
 host slices extend these jobs and add no workflow of their own. They read each leg's result from the `ci.yml` runs,
 filtered by the job name's prefix:
@@ -1484,7 +1479,7 @@ says otherwise.
       `CI_CONTEXTS` and the walk bound (builder step 4).
     - Add the row `ansible/roles/setup/gitops_deploy/defaults/main.yml` naming
       `homelab_builder` to `deploy_cross_role.py:SETUP_FILES_SHIPPED_BY_OTHER_ROLES`. The
-      defaults-read census in `ansible/tests/setup/test_setup_cross_role_files.py` requires
+      defaults-read census in the cross-role files census (deleted by H7.53) requires
       it once the role's template reads `gitops_deploy_ci_contexts`.
     - Give `homelab-builder.service` its sandboxing directives (*The builder and the
       repository*, Sandboxing), with the test that holds them.
@@ -1843,7 +1838,7 @@ says otherwise.
     - Render the Prometheus loopback address and `observability_prometheus_cluster_ip`
       into `config.env`. The builder reads both from there, never from its clone. The PR
       adds whatever row the defaults-read census in
-      `ansible/tests/setup/test_setup_cross_role_files.py` requires for that read.
+      the cross-role files census (deleted by H7.53) requires for that read.
     - Add the root-owned `release` override and its runbook step.
 15. **H3.13 The daily fallback, only if the Pi's memory peaks call for it.** The trigger
     is the threshold in *Risks*, apt memory. **Verdict, 2026-11-02: the fallback applies.**
@@ -2439,7 +2434,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
   writes.
 - **H3.4b to H3.5c:**
     - the role `CLAUDE.md`, including its autonomous-role contract (H3.5a);
-    - a row in `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py`'s census
+    - a row in `test_setup_cron_roles_have_a_contract.py` (deleted, #8027)'s census
       if that census does not derive the role on its own;
     - the `KNOWN_ALERTS` entries in `test_alert_unit.py`, the builder's (H3.5a) and the
       signer's (H3.5b);
@@ -2447,7 +2442,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       `test_host_lib_sibling_copies.py`, which compares with `==` (H3.5a);
     - `homelab_builder` in `_ALERT_UNIT` and `_HOST_LIB` of
       `deploy_cross_role.py:SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, which
-      `ansible/tests/setup/test_setup_cross_role_files.py` holds equal to the tree, and the
+      the cross-role files census (deleted by H7.53) holds equal to the tree, and the
       stamp imports that `_STAMPED` then requires (H3.5a);
     - the `gitops_deploy/defaults/main.yml` row naming `homelab_builder` in the same table,
       which that file's defaults-read census requires, and the `config.env` render test
@@ -2498,8 +2493,8 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       retarget the rendered component and its `defaults:` map instead of the role;
     - `ansible/tests/setup/test_cron_scripts_publish_via_pr.py:push_corpus` names the two
       scripts at their component path;
-    - `ansible/tests/repo/test_secret_rendering_host_scripts_have_no_log.py:KNOWN_SECRET_SCRIPTS`
-      drops both, because neither renders a secret any more;
+    - `test_secret_rendering_host_scripts_have_no_log.py`'s `KNOWN_SECRET_SCRIPTS` (deleted by
+      H7.55) drops both, because neither renders a secret any more;
     - `scripts/validate/shell_templates.py:discover_templates` also globs
       `hosts/components/*/templates/`, and its test names `pi-sd-health.sh.j2` there as a
       member;
@@ -3108,7 +3103,7 @@ round's cross-slice notes.
       own pattern, and it is not a path read of the old file.
     - A role that reads another role's default is a row of
       `deploy_cross_role.py:SETUP_FILES_SHIPPED_BY_OTHER_ROLES`. The docstring of
-      `ansible/tests/setup/test_setup_cross_role_files.py` says its own census holds those
+      the cross-role files census (deleted by H7.53) says its own census holds those
       rows (#4303, #4357), and the `claude_code` and `k3s` defaults rows are the
       precedent. H3.5a adds the `gitops_deploy` defaults row naming `homelab_builder`, so a
       change to either key re-applies the builder's config.

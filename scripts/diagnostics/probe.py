@@ -66,20 +66,17 @@ Subcommands:
     landing [--json]         What would stop a landing now, runs in flight, worktrees + claims
     landing-verdicts [<pr>]  Newest recorded VERDICT line per landed PR [--json --limit N]
                              (exit 1 when <pr> has none; this user, this host)
-    gitops-state [--json]    Every deployer marker + owed-ledger line with its clear command
-                             [--why adds the failure lines of the tick that wrote hold_sha]
     push-rules <branch>      Which ruleset rule a push to the branch meets and whether the gh
                              login bypasses it [--rev HEAD] [--remote origin]
     lander [--pr N]          daniel-box's server-batch lander: newest pass, the landings it
                              started with their VERDICT, the PRs it named [--since 6h]
     builder [-n N]           daniel-box's host-package builder: reason, published versions,
                              newest builds, failures [--since 24h]
-    applied <role>           a setup role's files on each of its hosts against the tree's
-                             render: existence, mode, owner, content hash [--host H]
 
 Exit codes: every verdict subcommand exits 0 or 1 for what it observed, and 75 when it could
-not read its source, with the failed read on stderr. Its last stdout line is
-`PROBE-VERDICT: <ok|fail|unreadable> (<detail>)`, except under `--json` or `--dry-run`.
+not read its source, with the failed read on stderr. `health` exits 3 when the tag names nothing
+it can check. The last stdout line is `PROBE-VERDICT: <ok|fail|skip|unreadable> (<detail>)`,
+except under `--json` or `--dry-run`.
 `lib/exit_codes.py`'s `CONTRACTS` holds the codes, and `--help` renders them.
 
 `metric` and `loki-query` print a formatted view by default (one `<labels> = <value>`
@@ -117,7 +114,6 @@ sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 # a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST
-
 from diagnostics.probe_lib.cli_parser import ENTRY_POINT, _build_parser
 from diagnostics.probe_lib.curl_pipeline import output_redaction, plan, stream_pipeline
 from diagnostics.probe_lib.health import (
@@ -152,7 +148,7 @@ def verdict_path(ns):
     if "verdict" not in REGISTRY.get(ns.cmd).flags:
         return None
     if ns.cmd == "targets":
-        return "targets --pi" if ns.pi else None
+        return "targets --pi" if ns.pi else "targets"
     if ns.cmd == "ha":
         return f"ha {ns.ha_cmd}" if ns.ha_cmd in VERDICT_HA_SUBCOMMANDS else None
     return ns.cmd
@@ -161,7 +157,7 @@ def verdict_path(ns):
 def main(argv=None, *, plan=plan):
     """Parse argv, run the matching subcommand, and return its exit code.
 
-    A verdict subcommand's output ends with one `PROBE-VERDICT: <ok|fail|unreadable> (...)`
+    A verdict subcommand's output ends with one `PROBE-VERDICT: <ok|fail|skip|unreadable> (...)`
     line, rendered from the exit code by `lib.exit_messages.verdict_line` so every subcommand
     shares one vocabulary (#4454). A source the subcommand could not read raises
     `core.Unreadable`, which exits `PROBE_UNREADABLE` (75) with the failure on stderr (#4444).
@@ -212,8 +208,8 @@ def _dispatch(ns, argv, plan):
     `health` and the handler-table subcommands answer directly from an API or from
     `docker inspect`/kubectl. `metric`/`loki-query` without `--json`/`--dry-run` use the
     formatted view; every other subcommand falls through to the streaming `curl` pipeline
-    built by `plan()`. `targets --pi` is checked ahead of that fallback, because plain
-    `targets` still streams.
+    built by `plan()`. `targets` is checked ahead of that fallback, because `targets --json`
+    still streams.
 
     `plan` is injectable so a test can see which invocations reach the streaming path without
     SOPS or the network.
@@ -243,7 +239,7 @@ def _dispatch(ns, argv, plan):
             return 0
         run_health = REGISTRY.get("health").func
         return run_health(ns.container, docker=ns.docker, cluster=ns.cluster)
-    if ns.cmd == "targets" and ns.pi:
+    if ns.cmd == "targets" and (ns.pi or not (ns.json or ns.dry_run)):
         return REGISTRY.get("targets").func(ns)
     # Subcommands that answer from an API rather than streaming a shell pipeline. Each one is
     # `run_X(ns) -> int`, so the table is the whole dispatch: adding one is a row in

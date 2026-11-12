@@ -8,8 +8,8 @@ ServiceAccount and the RBAC. The CronJob shipped `suspend: true` at H2.3d, and H
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
-  `--tags=longhorn-restore-drill` with exit 5
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh
+  --tags=longhorn-restore-drill` gates the rollout
 - **Images:** `alpine/k8s` (`longhorn_restore_drill_runner_image`), `busybox`
   (`k3s_longhorn_restore_drill_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
@@ -24,7 +24,7 @@ ServiceAccount and the RBAC. The CronJob shipped `suspend: true` at H2.3d, and H
   `ansible/tests/k8s/test_step6_tags_render_into_created_namespaces.py` holds that. The
   generated `homelab-namespace` kind gives this tag its `dependsOn`, so it waits for `homelab`.
 - **The tag renders no Namespace.** A Namespace object here would be a second writer of
-  `homelab` beside `ansible/deploy.yml`, which C4 forbids.
+  `homelab` beside the generated `homelab-namespace` kind, which C4 forbids.
 - **The stamp ConfigMap carries two annotations.** `kustomize.toolkit.fluxcd.io/ssa: IfNotPresent`
   makes Flux create it once and never revert the drill's writes to its data.
   `kustomize.toolkit.fluxcd.io/prune: disabled` keeps it when a render drops it, because the

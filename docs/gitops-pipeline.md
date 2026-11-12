@@ -4,8 +4,7 @@ How a merged change reaches the hosts and the cluster.
 
 H7.52 retired `gitops-deploy.timer` and its service. The deployer's record, its rules and the
 incidents behind them are archived in [The GitOps deployer](archive/gitops-deployer.md) and
-[the archived role page](archive/gitops-deploy-role.md). Its code stays under
-`ansible/roles/setup/gitops_deploy/files/` until H7.53 deletes it.
+[the archived role page](archive/gitops-deploy-role.md). H7.53 deleted its code.
 
 !!! warning "A merge is not a deploy"
     `promote` and Flux apply every k8s change after master CI, an image-pin bump and a

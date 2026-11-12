@@ -113,7 +113,7 @@ def node_citations(text: str) -> list[tuple[str, str]]:
 #
 # DECIDED: no repo-root prefix is required. Requiring one ("ansible/...", "scripts/...")
 # matched 4 citations in the whole tree, because the docs overwhelmingly cite from context --
-# `roles/k8s/volume-revert/tasks/main.yml:112`, `deploy_logic.py:458`. A guard that checks four
+# `roles/k8s/volume-snapshot/defaults/main.yml:12`, `land_tags.py:40`. A guard that checks four
 # things is a guard that passes vacuously, which is why the guard asserts a citation count.
 # The extension must begin with a letter, which is what keeps `127.0.0.1:3100` and
 # `10.0.0.240:51820` from parsing as a file called `127.0.0.` with extension `1`. Four role

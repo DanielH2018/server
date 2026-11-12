@@ -32,9 +32,20 @@ landing has loaded from its checkout, and every module those import, function bo
 With `--arm-merge --await-merge`, the landing first compares them with `origin/master` before
 it merges anything (#7830), and ends `refused` with nothing merged. After resolving the merge
 commit, step 1 compares them with the merge commit's first parent. It ends `refused` when master
-changed one the checkout lacks, and names the checkout to re-run from: the primary when it
-carries that parent, else a detached worktree at the merge.
+changed one the checkout lacks.
 `land_lib/classify.py:refuse_stale_code` has the rule.
+
+**Both refusals name `--fresh` as the re-run** (#7933). With `--fresh`, `land.sh` fetches
+`origin/master` in the primary and adds a detached worktree of it under `/tmp`. It runs that
+checkout's `land.sh` with the same arguments, then removes the worktree. A checkout made by
+hand went stale again within minutes when master moved, and the `git -C <primary> worktree
+add` that made it is a command a worktree-isolated session's guard refuses. The landing
+still refuses rather than re-running on its own, so `land.sh` keeps running the release it
+ships with unless the caller asks. With `--detach`, the fork runs the fresh checkout, so the
+checkout lives until the landing ends. `land_lib/fresh.py` has the mechanics. A lander
+unit's caller cannot pass `--fresh`, because the unit runs a fixed command line. Under a unit,
+both refusals therefore name the re-run that caller can make: the same command, once
+`homelab-checkout-sync` has fast-forwarded the primary, which it does every 10 minutes.
 
 **Without `--detach`, redirect stdout and stderr to a file yourself.** A backgrounded Bash call
 hands the script a non-blocking pipe, and Ansible refuses to start on one:
@@ -154,6 +165,22 @@ cancelled, so `ci.yml`'s concurrency group did not cause it.
   draft, because a draft PR never merges. The remedy is then a push, or the same two commands
   by hand.
 
+**A check left pending under a completed workflow run ends the wait at `merge-timeout`.**
+GitHub can leave a job `queued` with no runner after its workflow run reads `completed`. PR
+#7975's required `pull + boot changed images` check did this on 2026-11-11. GitHub refused
+every direct merge, and the landing waited about 75 minutes towards `merge-timeout` (#7996).
+
+- `gh run rerun` refuses a completed run, and a `workflow_dispatch` run does not replace the
+  PR's check. Only a new head commit gives the PR a fresh set of checks.
+- Once the wait has sat on one head for `stuck_checks.AFTER_S` (600s), the merge wait reads
+  that head's check runs and check suites on a poll where `await_ci` reads it green, and
+  again every 600s after. A head that is not green is never read this way.
+- A check still pending in a completed suite ends the wait at `merge-timeout`, exit 75. The
+  message names the check and the remedy: push an empty commit to the PR branch, then re-run
+  `land.sh`.
+- A pending check in a suite still running is ordinary CI and keeps the wait. A failed read
+  names nothing, so the wait goes on to its budget.
+
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
 `renovate-agent-land@.service` sets it to `app/renovate`, so the unattended agent can only merge
 Renovate's PRs (issue #2170). `--any-author` lifts it for a session that is allowed to merge the
@@ -174,12 +201,11 @@ another root.
 Such code can enter `land.py`'s imports through a later approved PR whose diff never shows it.
 `land_lib/policy.py:shape_hits` reads these from the file listing and from the tree at the pinned
 head. `LAND_APPROVER` names a GitHub login whose latest
-review, if it approves the head SHA, lifts that refusal. With either of the first two set, a non-empty `hold_sha` also refuses,
-and every merge path is pinned to the head SHA the checks read. A push after the checks fails
+review, if it approves the head SHA, lifts that refusal. With either of the first two set, every merge path is pinned to the head SHA the checks read. A push after the checks fails
 the landing, and a re-run checks the new head. `--verdict-file <path>` writes `PENDING`, then
 the landing's one result line, for a unit to hand on to the agent that started it. A landing
 that sets neither setting is unchanged, and `--any-author` lifts neither.
-`homelab-claude-land@<n>.service` (`roles/setup/claude_code`'s template, shipped in daniel-box's
+`homelab-claude-land@<n>.service` (the `claude-code` component's template, shipped in daniel-box's
 host package) sets all four for the `claude` agent user's PRs, and a polkit rule lets that user
 start it and do nothing else. That user's profile sets `LAND_HANDOFF_UNIT=homelab-claude-land`,
 so its own `land.sh` starts the unit and reports the
@@ -316,42 +342,33 @@ gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<master ti
   either. To give the tip a verdict, run `gh workflow run ci.yml --ref master`, then re-run
   land.sh. A green tip then ends the landing on the shape above.
 
-**It waits on your merge commit rather than on the tip**, because the deployer's timer fast-forwards to the
-newest GREEN commit in its range rather than only to a green tip. A later merge whose CI is
+**It waits on your merge commit rather than on the tip**, because `promote` publishes the
+newest GREEN commit rather than only a green tip. A later merge whose CI is
 still running no longer holds your PR. Waiting on the tip cost six landings in the 14 days to
 2026-09-11 400-614s each, chasing a tip that moved again.
 
 ## The promotion wait
 
-**No landing runs `deploy.sh`.** Every `containers_list` entry is `platform: k8s`, so `promote`
+Every `containers_list` entry is `platform: k8s`, so `promote`
 and Flux apply every tag, and a change to a host's package waits for that host
 (`scripts/deploy_tools/land_lib/host_wait.py:wait_for_hosts`). A `--tags` value that names no k8s
 entry at the merge commit ends the landing `deploy-failed` with the cause `tag-miss`, because
 nothing would apply it.
 
-**`land.sh` starts no GitOps tick and reads none of the deployer's markers** (H7.49a). The
-deployer's own 10-minute timer still fast-forwards the primary checkout and applies a setup
-role, and `land.sh` neither starts, awaits nor grades that. A landing waits on the promotion
-for a PR's k8s tags, on the host wait for a host package, and on the health gate, and nothing
-else.
-
-**A PR that reaches only a setup role the deployer applies waits for master CI and the
-promotion, then ends `nothing-to-deploy`.** Its author reads the outcome on the host: the changed
-state itself, or a `manual_plane` line in
-`owed.jsonl` for a role the deployer cannot apply (`k3s`). `probe.py gitops-state` prints every
-marker, read-only. A change to a plane nobody applies on its own, which `plane` names, still
-ends `needs-manual-apply` with the command that applies it.
+A landing waits on the promotion for a PR's k8s tags, on the host wait for a host package,
+and on the health gate, and nothing else. H7.53 deleted its setup and Pi arms with the GitOps
+deployer: **a PR that reaches only a setup role waits for master CI and the promotion, then ends
+`nothing-to-deploy`**, because nothing applies a setup role on its own.
 
 **It scopes the derivation to the PR's own file list rather than a SHA range**, so another session's
 merged work is not swept in. `gh` paginates that list at 100 files, so it falls back to
-`--changed <since>` when the count disagrees — the only reason `--since` exists. That fallback
-refuses a range wholesale as soon as one path is broad. Since D6.12 such a range derives no tag
-and waits on the promotion, whose changed set names the k8s tags; a Pi Compose service it
-reaches ships in the `homelab-daniel-pi` package. `--tags` overrides the scope entirely.
+the diff from `--since` to the merge commit when the count disagrees — the only reason `--since`
+exists. That range is wider than the PR, which is the safe direction, and the promotion's changed
+set still names the k8s tags it gates. `--tags` overrides the scope entirely.
 
 ### Every landing waits on promotion
 
-**A k8s tag never reaches `deploy.sh`.** Step 4 reads the k8s entries at the merge commit
+**Every derived tag is a k8s tag.** Step 4 reads the k8s entries at the merge commit
 (`land_lib/promotion.py:split_k8s`) and takes every such tag out of the list.
 
 **The changed set names the k8s tags, not the PR's paths.** `split_k8s` drops a path-derived
@@ -468,17 +485,8 @@ Instead it reads the cluster every 30 seconds:
   Renovate lander needs it too: its unit runs on after the session ends, so a landing started
   late on a Saturday can still be waiting on Sunday's window (#5457).
 
-Two holds coexist, and `probe.py landing` prints both on every run, each naming its source and
-what it holds:
-
-```text
-hold_sha (GitOps deployer, setup plane): none
-DEPLOY_HOLD (promote workflow, Flux-owned tags): 0123abcd... failed=bento-pdf
-prod: 3cf44936 sha256:4e55da43005e   last-good: 9f1e2d3c sha256:0b7a51c2e9d4
-```
-
-`hold_sha` stops the deployer's setup-plane applies, and `land.sh` refuses to merge while one is
-set. `DEPLOY_HOLD` stops every promotion, so it ends `land-wait` for a flux-owned tag.
+`DEPLOY_HOLD` is the one hold. It stops every promotion, so it ends `land-wait` for a
+flux-owned tag.
 
 `land-wait` reads the Kustomizations with the read-only `kubectl`, ancestry with
 `git merge-base --is-ancestor` in the primary checkout, `DEPLOY_HOLD` with
@@ -589,7 +597,8 @@ available server` while Prometheus rolls. The workload was not graded, healthy o
 other tag reads unhealthy, `land.sh` asks the gate again every 30 seconds for up to 5
 minutes (`health_verdict.UNREADABLE_RETRY_S`). The PRs that hit this roll the store
 themselves, and the store's roll takes about 30s. Only a store still unreadable after that
-ends the landing `deferred`, exit 75, with `outcome.UNREADABLE_GATE_NOTE`. No tick gates
+ends the landing `deferred`, exit 75, cause `gate-unreadable`, with
+`outcome.UNREADABLE_GATE_NOTE`. No tick gates
 health, so `cc-wait land` reports this deferral as `gave-up`: re-run `land.sh` to grade the
 deploy. PR #5533's landing read `unhealthy` this way on 2026-10-18 while its pod was `1/1
 Running` (#5543). Before the retry, 29 landings in the 14 days to 2026-11-09 deferred on an
@@ -601,8 +610,8 @@ its tree's HEAD, so a gate pinned to the merge commit deferred on every re-run o
 commit touched a landed role (#7816). The tip can carry a role change `promote` has not applied
 yet. The gate then grades the live workload against that newer definition, which the probe
 would otherwise refuse to grade at all. When master moves while the gate runs, the probe still
-refuses, and the landing ends `deferred` with `outcome.STALE_GATE_NOTE` rather than the store
-wording. `cc-wait land` reports that deferral as `gave-up` too: re-run `land.sh`.
+refuses, and the landing ends `deferred`, cause `gate-stale`, with `outcome.STALE_GATE_NOTE`
+rather than the store wording. `cc-wait land` reports that deferral as `gave-up` too: re-run `land.sh`.
 
 **Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the 180s
 restart window. It cannot see whether *your change* took effect: an Authelia 302 fires in the
@@ -612,47 +621,24 @@ middleware before the backend is reached, and 19 dead Grafana panels sat behind 
 
 `deferred` (`LAND_GAVE_UP`, exit 75) means the landing gave up waiting and a re-run of
 `land.sh` completes it: no promotion covered the merge commit in time (cause `promote-timeout`),
-a host's package is not yet applied, or the health gate could not read its store or found
-its tree older than `origin/master` (see *The health gate*). `cc-wait land` ends the wait as `gave-up`, exit 3, for each of those that
-prints a note naming the re-run, and as `deferred`, exit 4, for any other.
-
-`nothing-to-deploy` also covers a PR that reaches only a setup role the deployer applies.
-`land.sh` starts no tick and reads none of the deployer's state, so it reports neither the
-apply nor a failure of it, and it names no other host the role reaches. Read the host: the
-changed state itself, or `probe.py gitops-state`, which prints `last_run`, `hold_sha` and
-`owed.jsonl`. The deployer records a `manual_plane` line for a role it cannot apply, and for a
-role it applied on daniel-box whose change reaches another host (#6510). No check pages on a
-`hold_sha`. A failed apply shows in the deployer's Discord post, in the SessionStart banner and
-as `deploy-failed` from every later `land.sh` run.
+a host's package is not yet applied, or the health gate could not read its store (cause
+`gate-unreadable`) or found its tree older than `origin/master` (cause `gate-stale`; see *The
+health gate*). `cc-wait land` ends the wait as `gave-up`, exit 3, for each of those three
+causes, read from the `LAND-RESULT:` line rather than the note beside it. It ends the wait as
+`deferred`, exit 4, for any other.
 
 **Read every remediation line, not the first one.** One PR can reach two of these at once, for
-example a plane a hand applies and a host package, and the verdict then prints one line per
-half.
+example a rotated secret and a host package, and the verdict then prints one line per half.
 
-Two things sit in the position of needing a hand:
+`nothing-to-deploy` also covers a PR that reaches only a setup role: nothing applies it on its
+own (*The promotion wait*).
 
-- **A setup role `initial_setup.yml` does not include** (`k3s` is in `k3s-bringup.yml`; `common`
-  is include-only, so the note names each consumer's playbook and tag), or a bring-up playbook.
-  The deployer applies every other setup role itself, and `deploy.yml` is a `containers_list`
-  loop.
+One thing sits in the position of needing a hand:
+
 - **A rotated secret** has no path to match: a secret's value lives in no role's template, so
   `ansible/vars/secrets.yml` derives zero tags however many roles consume it. Run
   `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a
   stale copy and the repair command per plane.
-
-**A setup role the deployer cannot apply also needs its marker cleared.** For `k3s` and `common`
-the tick fast-forwards the range and records a `manual_plane` line in the `owed` ledger.
-`scripts/deploy_tools/owed_run.py <role>` runs the printed apply commands and the clear in one
-step, and `--dry-run` shows them first. It refuses a line whose apply arms more than the change, a role
-applied by hand, and a primary checkout behind `origin/master`, so run those as printed, including any
-`--applied <tags>` on the clear. A bring-up
-playbook gets no such line, because the tick parks on those and writes no marker. A landing does
-not read the line, so it ends `nothing-to-deploy` beside a recorded role. A role the tick DID apply
-on daniel-box gets a line too when its change reaches another host (#6510): the line's `hosts`
-key names the hosts the "also reaches" note names, and the banner and monitor-bridge print the
-apply for each. Apply it there, then `clear-owed manual_plane <role>`. The clear, `--applied` and
-the six-hour page are in
-[A role only a hand can apply is recorded, not parked](archive/gitops-deployer.md#a-role-only-a-hand-can-apply-is-recorded-not-parked).
 
 ## Waiting for a host to apply its package
 
@@ -725,7 +711,7 @@ decision is a file list GitHub truncated, which is derived from the diff in step
 **A document under a role is not a manual apply.** A `.md` — a role's `CLAUDE.md`, a
 `README.md`, one under `files/` — maps to no role and to no plane, because no playbook applies
 prose. Landing PR #1696 ended `needs-manual-apply` for a role whose only changed file was its
-CLAUDE.md, and asked for a full `ansible/deploy.yml` (issue #1701). `land_tags.role_for` now agrees with the deployer's own mapper, and
+CLAUDE.md, and asked for a full `ansible/deploy.yml` (issue #1701). `lib/role_paths.py:role_for` maps no `.md` to a role, and
 `land_tags.quiet_paths` drops a `.md` under the setup plane before any diff is read.
 
 **A role the PR itself registers is not one either.** Which tags exist is read at the MERGE

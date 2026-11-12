@@ -16,10 +16,8 @@ Usage: deploy_ui.py   (takes no arguments; -h/--help prints this text)
 Configuration comes from the environment, which deploy-ui.service sets:
   DEPLOY_UI_TREE_LOCK  path of the git-tree lock file (required, no default)
   DEPLOY_UI_REPO       primary checkout (default /home/ubuntu/server)
-  DEPLOY_UI_STATE      gitops-deploy state dir (default gitops_markers.STATE_DIR)
   DEPLOY_UI_LOGS       log dir (default ~/.local/state/deploy-ui)
   DEPLOY_UI_CLI_LOGS   where `land.sh --detach` logs (default /tmp/homelab-landings-<user>)
-  DEPLOY_UI_LOCKS      dir holding the server-deploy-*.lock files (default /var/lock)
   DEPLOY_UI_BIND       listen address (default 127.0.0.1)
   DEPLOY_UI_PORT       listen port (default 8790)
 """
@@ -42,27 +40,20 @@ from typing import ClassVar
 
 from deploy_ui_lib import deploy_ui_reads as reads
 from deploy_ui_lib import deploy_ui_writes as writes
-from gitops_markers import STATE_DIR
 from host_lib import logfmt
 
-# The locks the in-flight panel reads. The tree lock is held for the snapshot only (ADR-0017),
-# so for nearly all of a deploy the running thing is a `server-deploy-<tag>.lock` holder --
-# or `server-deploy-all.lock`, taken shared by every tagged run and exclusive by a full one.
 # The tree lock's path is not named here: the unit passes `server_git_tree_lock` in as
 # DEPLOY_UI_TREE_LOCK, so the one definition stays in group_vars (#3276).
-SERVICE_LOCK_GLOB = "server-deploy-*.lock"
 PAGE = Path(__file__).with_name("deploy_ui.html")
 
 
 @dataclass(frozen=True)
 class Config:
     repo: Path
-    state_dir: Path
     log_dir: Path
     bind: str
     port: int
     tree_lock: Path
-    lock_dir: Path = Path("/var/lock")
     proc_locks: Path = Path("/proc/locks")
     pr_cache_s: int = 60
     # Where `land.sh --detach` writes when no session dir is set (`land_lib/detach.py`).
@@ -76,7 +67,6 @@ class Config:
             # The unit always sets DEPLOY_UI_REPO; the default is the operator's checkout,
             # because this file ships to the host and has no repo to derive one from.
             repo=Path(e("DEPLOY_UI_REPO", "/home/ubuntu/server")),
-            state_dir=Path(e("DEPLOY_UI_STATE", STATE_DIR)),
             log_dir=Path(
                 e("DEPLOY_UI_LOGS", str(Path.home() / ".local/state/deploy-ui"))
             ),
@@ -85,7 +75,6 @@ class Config:
             # No default: a guessed path would leave the panel reading `free` over a file
             # nobody locks.
             tree_lock=Path(os.environ["DEPLOY_UI_TREE_LOCK"]),
-            lock_dir=Path(e("DEPLOY_UI_LOCKS", "/var/lock")),
             cli_log_dir=Path(
                 e("DEPLOY_UI_CLI_LOGS", f"/tmp/homelab-landings-{getpass.getuser()}")
             ),
@@ -142,18 +131,15 @@ class App:
 
     # ---- reads ----
     def _lock_paths(self) -> list[str]:
-        """The tree lock plus every service lock file that exists, absolute, sorted."""
-        paths = sorted(self.cfg.lock_dir.glob(SERVICE_LOCK_GLOB))
-        if self.cfg.tree_lock.exists():
-            paths.insert(0, self.cfg.tree_lock)
-        return [str(p) for p in paths]
+        """The tree lock's path when the file exists, else an empty list."""
+        return [str(self.cfg.tree_lock)] if self.cfg.tree_lock.exists() else []
 
     def inflight(self) -> dict:
         """Every landing, deploy and lock holder as one row each, with its locks.
 
         Two sources, because neither alone answers "who holds what": fuser names the
-        processes with each lock file OPEN (a queued deploy has it open too), and
-        `/proc/locks` says which files are granted and which pids are blocked on them.
+        processes with the tree lock OPEN (a waiter has it open too), and `/proc/locks`
+        says whether it is granted and which pids are blocked on it.
         `locks_watched` names the files asked about. An empty list is its own state on the
         page: `free` over no files would be the empty-panel trap this module's docstring
         names. A holder this user cannot see in `/proc` is a limit of fuser, not of the
@@ -203,12 +189,6 @@ class App:
             if out.strip():
                 self._pr_titles[pr] = out.strip()
         return self._pr_titles.get(pr, "")
-
-    def state(self) -> dict:
-        try:
-            return reads.read_state(self.cfg.state_dir)
-        except OSError as exc:
-            raise Unavailable(f"state: {exc}") from exc
 
     def prs(self) -> dict:
         with self._prs_lock:
@@ -318,7 +298,6 @@ class App:
                 {},
                 {},
             ),
-            self.state()["hold_sha"],
         )
         if refusal:
             return 409, refusal
@@ -338,7 +317,7 @@ class App:
         except TypeError, ValueError:
             return 400, "pid must be an integer"
         # Only a landing is cancellable from the page. SIGTERM to a deploy mid-play leaves
-        # whatever applied before it live (deploy.sh exit 20), which is not a cancel.
+        # whatever applied before it live, which is not a cancel.
         listed = {r["pid"] for r in self.inflight()["runs"] if r["kind"] == "land"}
         refusal = writes.guard_cancel(pid, listed)
         if refusal:
@@ -347,33 +326,15 @@ class App:
         writes.audit(f"action=cancel pid={pid}")
         return 200, f"sent SIGTERM to {pid}"
 
-    def hold_clear(self, body: dict) -> tuple[int, str]:
-        # Read the entries BEFORE the clear removes them: the operator asked to drop a hold,
-        # and what they are dropping with it is one unapplied plane per entry (#2453).
-        dropped = self.state()["hold_plane_entries"]
-        refusal = writes.clear_hold(
-            self.cfg.state_dir, str(body.get("expected_sha", "")), self.cfg.tree_lock
-        )
-        if refusal:
-            return 409, refusal
-        # A count, not the entries: an entry is `<playbook> <tags>` and the space would break
-        # the logfmt line Alloy ships to Loki. The reply below names them.
-        writes.audit(
-            f"action=hold-clear sha={body.get('expected_sha')} planes={len(dropped)}"
-        )
-        return 200, writes.hold_cleared_message(dropped)
-
     # ---- routing ----
     READS: ClassVar[dict[str, str]] = {
         "/api/inflight": "inflight",
-        "/api/state": "state",
         "/api/prs": "prs",
         "/api/landings": "landings",
     }
     WRITES: ClassVar[dict[str, str]] = {
         "/api/land": "land",
         "/api/cancel": "cancel",
-        "/api/hold/clear": "hold_clear",
     }
 
     def get(self, path: str) -> tuple[int, str]:
@@ -431,24 +392,27 @@ def content_length(headers) -> int | None:
     return n if n >= 0 else None
 
 
-def request_line(method: str, path: str, status: int, user: str) -> str:
+def request_line(
+    method: str, path: str, status: int, user: str, event: str = "request"
+) -> str:
     """One logfmt line for one request, as journald keeps it for the usage count (#2864).
 
     Every request gets one, the 10-second panel polls included, so the line carries the
     path: `path=/` is a page load and a POST is a write, and those two are what show a
     person used the page. A poll only shows a tab was open. The query string is dropped,
     and `user` is Authelia's `Remote-User`, `-` for a caller that came around it.
+    `event` is the line's first word; the usage count matches only `request`.
     """
     # `user` is narrowed before logfmt sees it: logfmt quotes a newline but does not escape
     # it, so a hostile `Remote-User` would still split the journal line and forge a second one.
     who = re.sub(r"[^\w.@-]", "_", user) or "-"
     url = urllib.parse.urlsplit(path).path or "-"
     fields = {"method": method, "path": url, "status": int(status), "user": who}
-    return f"request {logfmt(fields)}"
+    return f"{event} {logfmt(fields)}"
 
 
-def serve(config: Config) -> None:
-    app = App(config)
+def make_handler(app: App) -> type[BaseHTTPRequestHandler]:
+    """The request handler class that serves `app`'s page and API."""
 
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status: int, text: str, ctype: str) -> None:
@@ -457,8 +421,14 @@ def serve(config: Config) -> None:
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(data)
+            try:
+                self.end_headers()
+                self.wfile.write(data)
+            except BrokenPipeError, ConnectionResetError:
+                # A client that closed mid-response is not a server error; uncaught, it
+                # logs a traceback that HostLogErrors counts.
+                self.close_connection = True
+                self._log(status, "client-disconnected")
 
         def do_GET(self) -> None:
             status, text = app.get(self.path)
@@ -486,6 +456,9 @@ def serve(config: Config) -> None:
             )
 
         def log_request(self, code="-", size="-") -> None:
+            self._log(code if isinstance(code, int) else 0, "request")
+
+        def _log(self, status: int, event: str) -> None:
             # A request line that failed to parse leaves `command`, `path` and `headers`
             # unset, and send_error still logs it, so each is read with a default.
             headers = getattr(self, "headers", None)
@@ -493,14 +466,21 @@ def serve(config: Config) -> None:
                 request_line(
                     getattr(self, "command", None) or "-",
                     getattr(self, "path", ""),
-                    code if isinstance(code, int) else 0,
+                    status,
                     headers.get("Remote-User", "") if headers else "",
+                    event=event,
                 ),
                 file=sys.stderr,
                 flush=True,
             )
 
-    ThreadingHTTPServer((config.bind, config.port), Handler).serve_forever()
+    return Handler
+
+
+def serve(config: Config) -> None:
+    ThreadingHTTPServer(
+        (config.bind, config.port), make_handler(App(config))
+    ).serve_forever()
 
 
 if __name__ == "__main__":

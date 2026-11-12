@@ -31,11 +31,14 @@ systemd loads that unit:
 
 `run` prepares the clones, the kit and the seed once, then runs the cases concurrently, at
 most one per CPU (#7785). It submits the offline builds first, because they are the longest
-items and the host items fill in behind them (#7866). Each case boots its own container and mounts its clone and seed
+items and the host items fill in behind them (#7866). Under `--bootstrap-shard K/N` it runs only
+`bootstrap_plan.shard`'s K-th share, so CI can give each offline build a runner of its own
+(#7879). Each case boots its own container and mounts its clone and seed
 read-only. The script copies out of a kit, and uv runs the kit's `uv-python` interpreter in
 place, taking at most a file lock there. The verdicts print in plan order, each followed by
 `[DONE] <label> in Ns`, the seconds that item's own run took; the prepare prints its seconds
-the same way (#7811). A container's own
+the same way (#7811). Under each `[DONE]` come the script's own `took Ns` lines, one per phase of
+its local build, so a CI log says where a slow build spent its time (#7982). A container's own
 diagnostics print as they happen, outside the group's block.
 
 The cases read `systemctl show` after the run: the installer leaves the node's k3s unit disabled
@@ -93,6 +96,7 @@ from validate.validate_lib.bootstrap_plan import (
     red_kit as red_kit,
     script_value,
     selected,
+    shard,
     submission_order,
 )
 from validate.validate_lib.host_container import CaseFailed, Container, expect
@@ -118,6 +122,8 @@ TOOLS_SEED = "/srv/tools-seed"
 # A join address and token for the agent, which the installer writes and nothing contacts.
 AGENT_ENV = "K3S_URL=https://192.0.2.10:6443 K3S_TOKEN=bootstrap-case-token"
 UNITS = {"daniel-box": "k3s.service", "daniel-server": "k3s-agent.service"}
+# The lines bootstrap-host.sh's `phase` prints to stderr.
+PHASE = re.compile(r"^bootstrap-host: .+ took \d+s$", re.MULTILINE)
 
 
 def split_log2ram(host: str, calls: str) -> tuple[str, list[str]]:
@@ -336,6 +342,7 @@ class Bootstrap:
             mounts += (f"{kits}:{kits}",)
         self.cases, self.host, self.clone, self.kit = cases, host, clone, kit
         self.seed = seed
+        self.phases: list[str] = []
         self.container = Container(
             cases.image,
             f"homelab-host-test-bootstrap-{label}",
@@ -362,7 +369,9 @@ class Bootstrap:
             flags += f" --offline {self.kit}"
         if self.seed is not None:
             flags += f" --tools-seed {TOOLS_SEED}"
-        return c.sh(f"{env} sh {COPY}/bootstrap-host.sh {self.host} {flags}", 1800)
+        result = c.sh(f"{env} sh {COPY}/bootstrap-host.sh {self.host} {flags}", 1800)
+        self.phases = PHASE.findall(result.stderr)
+        return result
 
     def unit_problems(self) -> list[str]:
         """What is wrong with the k3s units the installer left, as systemd loads them.
@@ -499,9 +508,8 @@ def bootstrap_for(cases, item: Planned, clones: dict[str, Path]) -> Bootstrap:
     )
 
 
-def body_for(cases, item: Planned, clones: dict[str, Path]) -> Callable[[], None]:
-    """The run `item` plans, as a call that raises CaseFailed when its verdict fails."""
-    bootstrap = bootstrap_for(cases, item, clones)
+def body_for(item: Planned, bootstrap: Bootstrap) -> Callable[[], None]:
+    """`bootstrap`, the run `item` plans, as a call that raises CaseFailed when its verdict fails."""
     if item.refusal is not None:
         return functools.partial(
             _expect_refused, bootstrap, item.refusal, item.apt_says
@@ -528,6 +536,8 @@ def run(cases) -> None:
         stock_kit(cases, clone, green)
         stock_seed(green, cases.work / SEED_DIR)
         planned = selected(plan(cases.work, green), cases.k3s_download)
+        if cases.shard is not None:
+            planned = shard(planned, *cases.shard)
     except (CaseFailed, OSError, subprocess.SubprocessError, StopIteration) as exc:
         cases.failed.append("prepare the bootstrap cases")
         print(f"[FAIL] prepare the bootstrap cases: {exc}", file=sys.stderr)
@@ -536,7 +546,10 @@ def run(cases) -> None:
         f"[DONE] prepare the bootstrap cases in {time.monotonic() - start:.1f}s",
         file=sys.stderr,
     )
-    bodies = [body_for(cases, item, clones) for item in planned]
+    runs = [bootstrap_for(cases, item, clones) for item in planned]
+    bodies = [
+        body_for(item, bootstrap) for item, bootstrap in zip(planned, runs, strict=True)
+    ]
     workers = min(len(bodies), max(2, os.cpu_count() or 2))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures: dict[int, Future] = {
@@ -551,3 +564,5 @@ def run(cases) -> None:
                 cases.failed.append(item.name)
                 print(f"[FAIL] {item.label}: {item.name}: {failure}", file=sys.stderr)
             print(f"[DONE] {item.label} in {seconds:.1f}s", file=sys.stderr)
+            for line in runs[i].phases:
+                print(f"    {line}", file=sys.stderr)

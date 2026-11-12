@@ -109,14 +109,14 @@ PINS=$(
   uv:
     amd64:
       # renovate: datasource=github-release-attachments depName=astral-sh/uv
-      version: 0.13.6
-      sha256: f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645
+      version: 0.13.7
+      sha256: c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83
       url: https://github.com/astral-sh/uv/releases/download/{version}/uv-x86_64-unknown-linux-gnu.tar.gz
       member: uv-x86_64-unknown-linux-gnu/uv
     arm64:
       # renovate: datasource=github-release-attachments depName=astral-sh/uv
-      version: 0.13.6
-      sha256: 229e194255c7958d86d56e8790d969a6f74736592133f0dfd0076f754c642c1d
+      version: 0.13.7
+      sha256: 71279f8d3c67241e807b9d8db872d1bf541579fb9f08b7d1eb1682196d1e57dc
       url: https://github.com/astral-sh/uv/releases/download/{version}/uv-aarch64-unknown-linux-gnu.tar.gz
       member: uv-aarch64-unknown-linux-gnu/uv
 EOF
@@ -155,6 +155,14 @@ trap cleanup EXIT
 die() {
     echo "bootstrap-host: $*" >&2
     exit 1
+}
+
+# phase <what>: print to stderr the seconds since the previous phase ended, or since the local
+# build started. bootstrap_case.py prints these lines under each case's verdict.
+phase() {
+    phase_end=$(date +%s)
+    echo "bootstrap-host: $1 took $((phase_end - phase_start))s" >&2
+    phase_start=$phase_end
 }
 
 usage() {
@@ -555,6 +563,7 @@ if [ -z "$clone" ]; then
     apt-get install -y homelab-updater "homelab-$host" ||
         die "apt-get install homelab-updater homelab-$host failed"
 else
+    phase_start=$(date +%s)
     work=$(mktemp -d)
     CLEAN="$CLEAN $work"
     mkdir -p "$work/bin" "$work/tree" "$work/debs" "$work/uv-cache" "$work/tools-cache"
@@ -570,6 +579,7 @@ else
         member=$(pin "$tool" "$arch" member)
         install -m 0755 "$work/$member" "$work/bin/$tool"
     done
+    phase "the nfpm and uv fetch"
 
     # git archive reads the clone and writes nothing into it.
     sha=$(git -C "$clone" rev-parse HEAD) || die "cannot read HEAD of $clone"
@@ -577,6 +587,7 @@ else
     python_version=$(sed -n 's/^host_python_version: "\(.*\)"$/\1/p' \
         "$work/tree/ansible/inventory/group_vars/all.yml")
     [ -n "$python_version" ] || die "cannot read host_python_version from the clone"
+    phase "the git archive of the clone"
 
     UV_CACHE_DIR=$work/uv-cache
     export UV_CACHE_DIR
@@ -593,6 +604,7 @@ else
         export UV_OFFLINE
         uv_run="$uv_run --no-python-downloads --offline"
         echo "bootstrap-host: --offline: the clone at $sha is unchecked; the operator who chose it is its trust root"
+        phase "the copy of the kit's caches"
     else
         # build_repo_venv builds the repo venv, and PyYAML ships no wheel for every
         # interpreter host_python_version can name. pyproject.toml forces its libyaml
@@ -613,14 +625,18 @@ else
         # shellcheck disable=SC2086
         (cd "$work/tree" && $uv_run python hosts/lib/bootstrap_anchor.py "$clone" "$sha" \
             --repo "$GITHUB_REPO") || die "the clone's HEAD $sha is not a green first-parent commit of master"
+        phase "the repo venv build and the anchor check"
     fi
 
     # shellcheck disable=SC2086
     (cd "$work/tree" && $uv_run python scripts/validate/host_packages.py render --tree . \
         --out "$work/render") || die "the host package render failed"
+    # Offline, this phase also builds the repo venv from the kit.
+    phase "the host package render"
     # shellcheck disable=SC2086
     (cd "$work/tree" && $uv_run python scripts/validate/host_packages.py fetch-tools \
         "$work/render" --cache "$work/tools-cache") || die "a homelab-tools pin did not verify"
+    phase "the homelab-tools fetch"
 
     count=$(git -C "$clone" rev-list --count --first-parent HEAD)
     HOMELAB_VERSION="0.$count+g$(printf '%s' "$sha" | cut -c1-12)"
@@ -632,14 +648,17 @@ else
         (cd "$dir" && "$work/bin/nfpm" package --config nfpm.yaml --packager deb \
             --target "$work/debs/") || die "nfpm failed for $dir"
     done
+    phase "the three nfpm builds"
 
     # The whole sources.list.d is read, so apt resolves the packages' Depends against Ubuntu's
     # archive.
     update_all_sources || die "apt-get update failed; the .deb Depends need Ubuntu's archive"
+    phase "the apt-get update"
     # One install, so apt resolves the three packages' Depends among themselves.
     set -- "$work"/debs/homelab-tools_*.deb "$work"/debs/homelab-updater_*.deb \
         "$work/debs/homelab-$host"_*.deb
     apt-get install -y "$@" || die "apt-get install of the local build failed"
+    phase "the apt-get install"
 fi
 systemd-tmpfiles --create || die "systemd-tmpfiles --create failed"
 echo "bootstrap-host: installed homelab-tools, homelab-updater and homelab-$host"

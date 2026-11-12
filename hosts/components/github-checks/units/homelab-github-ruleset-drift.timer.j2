@@ -5,7 +5,7 @@
 Description=GitHub ruleset drift check (timer)
 
 [Timer]
-OnCalendar=*-*-* {{ '%02d' | format(gitops_deploy_ruleset_drift_cron_hour | int) }}:{{ '%02d' | format(gitops_deploy_ruleset_drift_cron_minute | int) }}:00
+OnCalendar=*-*-* {{ '%02d' | format(github_ruleset_drift_cron_hour | int) }}:{{ '%02d' | format(github_ruleset_drift_cron_minute | int) }}:00
 # A slot that fell inside an outage runs once at boot. A check that went red before a reboot already
 # fired its slot, so homelab-github-ruleset-drift-boot.service reruns it (#4495).
 Persistent=true

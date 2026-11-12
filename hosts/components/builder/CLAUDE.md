@@ -147,34 +147,28 @@ publish-on-change compares the pins.
 
 The code is `hosts/lib/homelab_tool_fetch.py:install_tools`.
 CI's `host_packages_build` job calls the same function through `host_packages.py fetch-tools`.
-`ansible/roles/setup/homelab_builder/tests/test_host_package_builder_tools.py::test_a_binary_whose_digest_differs_from_its_pin_builds_nothing_and_reads_tools`
+`hosts/lib/tests/test_host_package_builder_tools.py::test_a_binary_whose_digest_differs_from_its_pin_builds_nothing_and_reads_tools`
 holds the refusal.
 
 ## The rollout gate (H3.12)
 
-A run whose changed set holds more than one host package (`hosts/<host>/`) stages only the
-canary's and defers the rest. The canary is the first of daniel-server, daniel-pi and daniel-box
-whose package changed. daniel-server leads because daniel-pi's drop-in fires the updater once a
-day (H3.13, #6911). A run that changes only the Pi's and daniel-box's packages still makes the Pi
-the canary (`# DECIDED:` at `CANARY_ORDER`).
+daniel-server is the only canary. A run whose changed set holds daniel-server's package and
+another host's (`hosts/<host>/`) stages daniel-server's alone and defers the rest. Once the gate
+closes, the next run stages every deferred package together. A run that leaves daniel-server's
+package unchanged opens no gate. The Pi and daniel-box are in `NEVER_CANARY`: the Pi gets no work
+daniel-box or daniel-server could do, and daniel-box runs this builder (`# DECIDED:` at
+`CANARY_ORDER`).
 
-The Pi does not wait for its daily fire. Its `homelab-updater-poll.timer`
-(`hosts/components/pi-updater-poll/`, #7065) reads this repository's `Packages.gz` every 15
-minutes. It starts `homelab-updater.service` once per published `homelab-daniel-pi` version newer
-than the installed one. A Pi canary therefore holds the other hosts for about 15 minutes plus one
-updater run. The poll skips while the Pi's updater timer is masked or a dpkg user is active, and it
-never retriggers a version it already started. A failed or held run therefore waits for the daily
-03:05 fire, and the operator can still run `sudo systemctl start homelab-updater.service` on the Pi.
-
-While a gate is open the series also carries `host`, the canary's host. monitor-bridge gives a
-`host="daniel-pi"` gate a grace derived from the Pi's daily gap, the worst case when the poll
-skips. Every other reason gets the 7200 s floor (#6919). The shared packages under `packages/` never wait. The run records the gate
+While a gate is open the series also carries `host`, the canary's host. monitor-bridge pages a
+gate that stays open past the 7200 s floor every reason shares (#6919). The shared packages under `packages/` never wait. The run records the gate
 `{host, sha}` and the deferred directories in `state.json`, and moves the gate to each newer
 canary version it stages. While the gate is open the builder builds no other host package, and
 the unbuilt-since series reads `reason="canary"` with the gate's commit as `sha`. A hold or a
 failure keeps its own reason.
 
-The gate closes at the start of a run, after the hold check, in one of two ways. The operator's
+The gate closes at the start of a run, after the hold check. A gate whose host is not in
+`CANARY_ORDER`, such as one an older builder opened, closes at once. Otherwise it closes in one
+of two ways. The operator's
 root-owned `/etc/homelab-builder/release` can name the gate's commit or a descendant, and then
 Prometheus is not asked. Otherwise the builder reads `homelab_host_applied_info` and
 `homelab_host_reconcile_ok` for the canary from the settings file's `PROMETHEUS_URLS`, which
@@ -229,7 +223,7 @@ start waits for a signer still running and never rewrites `staged/` under it.
 - **The interpreter.** The unit runs the host's `/usr/bin/python3`, because the signer cannot
   read the builder's pinned interpreter under its 0700 state directory. The script is
   stdlib-only, and `pyproject.toml` formats it for 3.12.
-  `ansible/roles/setup/homelab_builder/tests/test_repo_signer.py::test_the_signer_parses_with_the_3_12_grammar`
+  `hosts/lib/tests/test_repo_signer.py::test_the_signer_parses_with_the_3_12_grammar`
   holds it to that grammar. The signer takes its `log` and its atomic write from the `host_lib.py`
   installed beside it, so that file is formatted for 3.12 too, and
   `hosts/lib/tests/test_host_lib.py::test_host_lib_parses_with_the_3_12_grammar` holds it to that

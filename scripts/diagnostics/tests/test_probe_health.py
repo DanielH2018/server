@@ -17,6 +17,7 @@ from _probe_health_fixtures import NOW, pods
 
 from diagnostics.probe_lib import health, health_docker, health_rollout
 from diagnostics.probe_lib import health_kubectl
+from lib.exit_codes import PROBE_NOT_APPLICABLE
 
 
 def _inspect(state, restarts=0):
@@ -109,7 +110,7 @@ def test_health_exited_exits_one():
 def test_health_absent_and_undeclared_is_clean():
     """An undeclared name is a block tag or a typo — the one absence the notifier may skip."""
     text, code = health_docker.format_health([], "nope", declared=False)
-    assert code == 1
+    assert code == PROBE_NOT_APPLICABLE
     assert "not a declared service on any host" in text
 
 
@@ -132,7 +133,7 @@ def test_health_absent_but_declared_is_flagged():
 # reads the fail-closed branch by passing one, rather than by patching a module global.
 
 
-def test_declared_on_pi_reads_the_pis_containers_list():
+def test_declared_on_pi_reads_the_pis_compose_services():
     assert health_docker.declared_on_pi("wg-easy") is True
     assert health_docker.declared_on_pi("definitely-not-a-service") is False
 
@@ -143,18 +144,18 @@ def _pi_inventory(tmp_path, text):
     return path
 
 
-def test_declared_on_pi_reads_a_service_that_moved_to_compose_services(tmp_path):
-    """ACCEPT: a name in the second key is declared, and a name in neither is not (H5.1)."""
+def test_declared_on_pi_reads_compose_services_alone(tmp_path):
+    """ACCEPT: a `compose_services` name is declared, and a `containers_list` name is not."""
     path = _pi_inventory(
         tmp_path,
         "containers_list:\n  - name: autoheal\ncompose_services:\n  - name: alloy\n",
     )
     assert health_docker.declared_on_pi("alloy", path) is True
-    assert health_docker.declared_on_pi("autoheal", path) is True
+    assert health_docker.declared_on_pi("autoheal", path) is False
     assert health_docker.declared_on_pi("wg-easy", path) is False
 
 
-def test_declared_on_pi_raises_when_either_service_key_is_missing(tmp_path):
+def test_declared_on_pi_raises_when_compose_services_is_missing(tmp_path):
     """REJECT: a file without `compose_services` is not read as a list that omits the name."""
     path = _pi_inventory(tmp_path, "containers_list:\n  - name: alloy\n")
     with pytest.raises(ValueError, match="compose_services"):
@@ -435,9 +436,22 @@ def test_role_health_all_present_is_clean():
         ],
         NOW,
     )
-    assert code == 0
-    assert "all 2 workloads healthy" in text
-    assert "observability/grafana" in text
+    assert (code, text) == (0, "observability: all 2 workloads healthy")
+
+
+def test_role_health_prints_a_row_only_for_the_failed_workload():
+    """A healthy workload is in the count, not a row of its own (#7896)."""
+    text, code = health.format_role_health(
+        "observability",
+        [
+            _target("observability", "Deployment", "grafana", _deploy(), pods()),
+            _target("observability", "Deployment", "loki", None, None),
+        ],
+        NOW,
+    )
+    assert code == 1
+    assert "observability/loki: MISSING" in text
+    assert "observability/grafana" not in text
 
 
 def test_role_health_absent_workload_is_flagged():

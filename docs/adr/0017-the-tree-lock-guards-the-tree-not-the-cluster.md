@@ -3,10 +3,7 @@ id: "0017"
 title: The tree lock guards the tree, and per-service locks guard the cluster
 status: Accepted
 date: 2026-09-11
-governs:
-  - "scripts/deploy_tools/deploy_lib/under_locks.py#the lock order is"
-  - "scripts/deploy_tools/deploy_lib/under_locks.py#ownership is this lock"
-  - "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py#the lock order is"
+governs: []
 ---
 
 # ADR-0017: The tree lock guards the tree, and per-service locks guard the cluster

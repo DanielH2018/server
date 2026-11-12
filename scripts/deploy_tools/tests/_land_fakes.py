@@ -1,7 +1,7 @@
 """Fakes for every land_lib boundary; the two fixtures that use them live in conftest.py.
 
 Every fake appends `(name, args, kwargs)` to a shared `calls` list, which is how ordering
-tests prove "blockers before the CI wait" without reading source.
+tests prove "classify before the CI wait" without reading source.
 
 `build_classifier` is separate from `build_tools` because the two answer different kinds of
 question: `Tools` is the process boundaries, `Classifier` is pure path-list logic. A test
@@ -15,11 +15,10 @@ import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from collections.abc import Mapping
 from deploy_tools.promote_lib.wait import WaitResult
 from typing import Any
 
-from deploy_tools.deploy_lib.detach_notify import GateResult
+from deploy_tools.land_lib.health_gate import GateResult
 from deploy_tools.land_lib import landing as landing_mod
 from _land_host_fakes import host_fakes
 from deploy_tools.land_lib.options import Options
@@ -55,7 +54,6 @@ _PRIMARY_TMP = tempfile.TemporaryDirectory(
 )
 atexit.register(_PRIMARY_TMP.cleanup)
 PRIMARY = Path(_PRIMARY_TMP.name)
-STATE = Path("/state")
 
 
 def _cp(rc: int = 0, out: str = "") -> subprocess.CompletedProcess[str]:
@@ -75,7 +73,7 @@ class Fakes:
     pull_ref_rc: int = 0
     tip: str = MERGE_SHA
     await_ci: list[tuple[int, str]] = field(default_factory=lambda: [(0, "CI green")])
-    blockers: list[int] = field(default_factory=lambda: [0])
+    # `git diff --name-only <since>..<merge>`: its exit code and the paths it prints.
     changed: str = ""
     changed_rc: int = 0
     gate: tuple[bool, list[str]] = field(
@@ -100,12 +98,6 @@ class Fakes:
     merge_applied_rc: int = 1
     # `tools.stale_code`: the landing's own modules that lag master; None is git failing.
     stale_code: list[str] | None = field(default_factory=list)
-    # A marker's value; None is a read that failed, which `Landing.state` passes on as None.
-    # Mapping, not dict: a dict is invariant in its values, so the many `dict[str, str]`
-    # callers would no longer type-check.
-    state: Mapping[str, str | None] = field(default_factory=dict)
-    # What `tools.own_narrowing` answers on the fast path: role tag -> this PR's derivation.
-    own_narrowing: dict[str, frozenset[str]] = field(default_factory=dict)
     # `git show <ref>:<path>` text by ref. An absent ref answers as a missing file.
     show_at: dict[str, str] = field(default_factory=dict)
     hostname: str = "daniel-box"
@@ -158,6 +150,11 @@ class Fakes:
             {"id": 1, "status": "completed", "conclusion": "skipped"}
         ]
     )
+    # What the PR head's check-runs and check-suites listings answer on every call, as
+    # `stuck_checks.find` reads them: `{name, suite}` per pending run, and the completed suite
+    # ids. An exception is raised in place of an answer.
+    pending_checks: Any = field(default_factory=list)
+    completed_suites: Any = field(default_factory=list)
     # `tools.k8s_tags_at`: every tag of a k8s entry at a ref, by ref. A ref absent here keeps
     # an entry for every tag the landing derived, so a test retires a tag only by saying so.
     # An exception is raised in place of a set.
@@ -199,7 +196,7 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
     ordering record as a boundary call.
     """
     return Classifier(
-        plane_note=lambda paths, quiet=(), narrow_tags=None: f.plane,
+        plane_note=lambda paths: f.plane,
         derive=lambda files, changed_files, declared=None, quiet=(): Derivation(
             list(f.derived[0]), DeriveSource(f.derived[1])
         ),
@@ -253,6 +250,15 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             if isinstance(f.head_runs, Exception):
                 raise f.head_runs
             return f.head_runs
+        for route, answer in (
+            ("/check-runs?", f.pending_checks),
+            ("/check-suites?", f.completed_suites),
+        ):
+            if args[0] == "api" and route in args[1]:
+                calls.append((f"gh:{route[1:-1]}", args, kwargs))
+                if isinstance(answer, Exception):
+                    raise answer
+                return answer
         if args[0] == "api" and "/workflows/ci.yml/runs?branch=" in args[1]:
             answer = runs_seq(*args, **kwargs)
             if isinstance(answer, Exception):
@@ -296,21 +302,13 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return _cp(f.is_ancestor_of.get(args[-1], f.is_ancestor_rc))
         if args[0] == "merge-base":
             return _cp(0, "prbase\n")
+        if args[0] == "diff":
+            return _cp(f.changed_rc, f.changed)
         if args[0] == "rev-list":
             return _cp(0, "".join(f"{sha}\n" for sha in f.walk))
         if args == ("rev-parse", f"origin/{landing_mod.BRANCH}"):
             return _cp(0, f.tip + "\n")
         return _cp()
-
-    blockers = _seq(f.blockers, [], "")
-
-    def deploy_tags(primary: Path, args: list[str]):
-        calls.append(("deploy_tags", tuple(args), {"cwd": primary}))
-        if args[0] == "blockers":
-            return _cp(blockers())
-        if args[0] == "changed":
-            return _cp(f.changed_rc, f.changed)
-        raise AssertionError(args)
 
     def gate(tags, cwd=None):
         calls.append(("gate", (tags,), {"cwd": cwd}))
@@ -330,10 +328,6 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
 
     def await_ci(sha, timeout):
         return CiVerdict(*await_ci_seq(sha, timeout))
-
-    def own_narrowing(paths, pr_range, primary):
-        calls.append(("own_narrowing", (pr_range,), {}))
-        return f.own_narrowing
 
     def k8s_tags_at(primary, ref):
         calls.append(("k8s_tags_at", (ref,), {"cwd": primary}))
@@ -382,13 +376,10 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         git=git_run,
         await_ci=await_ci,
         tested_base=lambda head: f.tested_base.get(head),
-        deploy_tags=deploy_tags,
         gate=gate,
         snapshot=snapshot,
         declared_at=lambda ref, primary: f.declared_at,
-        read_state=lambda root, name: f.state.get(name, ""),
         flux=FluxReads(land_wait, pins, k8s_tags_at),
-        own_narrowing=own_narrowing,
         stale_code=lambda base: f.stale_code,
         **host_fakes(f, calls),
         hostname=lambda: f.hostname,
@@ -406,5 +397,5 @@ def make_landing(
     """A Landing over fakes, for driving one phase directly."""
     f = fakes or Fakes()
     tools, calls = build_tools(f)
-    o = Options(pr="999", primary=PRIMARY, deployer_state=STATE, **opts)
+    o = Options(pr="999", primary=PRIMARY, **opts)
     return landing_mod.Landing(o, tools, build_classifier(f, calls)), calls

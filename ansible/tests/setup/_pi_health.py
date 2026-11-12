@@ -18,10 +18,10 @@ The scripts are the `pi-heartbeats` host component's (H3.8b), and `COMPONENT_DEF
 
 import re
 
+from _helpers import HOST_VARS, REPO, load_yaml
+from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, path_with, write_exec
 from lib.proc_testing import run as launch
-from _helpers import HOST_VARS, SETUP_ROLES, load_yaml
-from _shell_render import render_shell_script
 from validate.shell_templates import COMPONENTS
 
 
@@ -31,7 +31,9 @@ COMPONENT_DEFAULTS = load_yaml(COMPONENT / "component.yml")["defaults"]
 # path; the test sources the role's file, so it needs neither the package nor a host that has
 # installed the library.
 REAL_CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
-ROLE_CHECK_LIB = SETUP_ROLES / "initial_setup" / "files" / "homelab-check-lib.sh"
+ROLE_CHECK_LIB = (
+    REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
+)
 REAL_LOG = "/var/log/pi-health/health.log"
 # Enough of the docker CLI for pi-recovery-health: the `ps -q` liveness probe, `inspect`,
 # and `start`. Running containers live in $STATE_FILE, one name per line; $UNSTARTABLE names
@@ -115,8 +117,8 @@ SD_COUNTER = "/sys/fs/ext4/mmcblk0p2/errors_count"
 GZ_STATE_VAR = "optimize_pi_gz_integrity_state_file"
 
 
-# The Pi's own containers_list and compose_services, so the recovery heartbeat's watch set is the
-# one the host deploys.
+# The Pi's own compose_services, so the recovery heartbeat's watch set is the one the host
+# deploys.
 PI_HOST_VARS = load_yaml(HOST_VARS / "daniel-pi.yml")
 
 
@@ -124,16 +126,14 @@ def render(name, tmp_path, jinja_vars=None):
     """The real template, rendered through `_shell_render`, with its absolute paths repointed
     at temp files.
 
-    `containers_list` and `compose_services` are the Pi's own (host_vars/daniel-pi.yml) rather
-    than a group default, so the accessor's inventory context does not carry them -- they go in
-    as overrides. Everything
+    `compose_services` is the Pi's own (host_vars/daniel-pi.yml) rather than a group default, so
+    the accessor's inventory context does not carry it -- it goes in as an override. Everything
     else the templates read (domain, the ingress VIP, the gz-integrity defaults) comes from
     that same context, the one `validate/shell_templates.py` lints
     against. `jinja_vars` is laid on top, for a caller overriding any key by name -- the
     gz-integrity state-file path, most often.
     """
     overrides = {
-        "containers_list": PI_HOST_VARS["containers_list"],
         "compose_services": PI_HOST_VARS["compose_services"],
         **(jinja_vars or {}),
     }

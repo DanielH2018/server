@@ -12,9 +12,6 @@ import pytest
 
 import checks.host_packages
 from _fake_sources import FakeSources
-from lib.repo_paths import REPO
-from lib.systemd_timer import longest_gap_s, timeout_start_s
-from updater_lag_grace import SLACK_S
 
 NOW = 1_780_000_000.0
 SHA = "0123456789ab"
@@ -31,52 +28,8 @@ def _run(cfg, fetch_age_s, unbuilt):
     return checks.host_packages.check_host_packages(cfg, src, now=NOW)
 
 
-UNITS = REPO / "hosts/packages/homelab-updater/units"
-PI_DROPIN = (REPO / "hosts/daniel-pi/units/homelab-updater.timer.conf").read_text()
-# The longest the Pi's updater can leave a published canary package unapplied: its longest gap
-# between fires (a day, on H3.13's daily drop-in), the timer's randomized delay (60 s) and a run
-# that takes all of TimeoutStartSec (3000 s).
-PI_WAIT_S = longest_gap_s(
-    (UNITS / "homelab-updater.timer").read_text(), [PI_DROPIN]
-) + timeout_start_s((UNITS / "homelab-updater.service").read_text())
-
-
-def test_the_pi_canary_bound_is_derived_from_the_updater_timer(cfg):
-    # The Pi's schedule raises the canary bound above the 7200 s floor (#6530, #6919).
-    assert cfg.BUILDER_PI_CANARY_MAX_LAG_S == PI_WAIT_S + SLACK_S
-
-
 def _canary(since, **host):
     return ({"reason": "canary", "sha": SHA, **host}, float(since))
-
-
-@pytest.mark.parametrize(
-    "series",
-    [
-        pytest.param(_canary(NOW - PI_WAIT_S, host="daniel-pi"), id="pi_canary"),
-        # A builder older than the `host` label writes none, so the bridge reads it as the Pi.
-        pytest.param(_canary(NOW - PI_WAIT_S), id="canary_without_a_host_label"),
-    ],
-)
-def test_a_wait_through_the_pi_s_longest_gap_is_clean(cfg, series):
-    # The Pi's gap alone outlasts the 7200 s floor, and a Pi canary holds the gate that long.
-    assert PI_WAIT_S > 7200
-    ok, msg = _run(cfg, 60, [series])
-    assert ok, msg
-
-
-@pytest.mark.parametrize(
-    "host",
-    [
-        pytest.param({"host": "daniel-pi"}, id="pi_canary"),
-        pytest.param({}, id="no_host"),
-    ],
-)
-def test_a_pi_canary_pages_past_the_pi_s_grace(cfg, host):
-    # A Pi that never applies the canary package still pages, one minute past its grace.
-    stuck = _canary(NOW - cfg.BUILDER_PI_CANARY_MAX_LAG_S - 60, **host)
-    ok, msg = _run(cfg, 60, [stuck])
-    assert not ok and "master unbuilt" in msg, msg
 
 
 def test_a_daniel_server_canary_pages_past_the_floor(cfg):

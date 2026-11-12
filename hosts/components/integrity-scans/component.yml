@@ -1,9 +1,6 @@
 # The weekly rkhunter scan and AIDE check (H7.7a, docs/target-architecture/host/h7-delete-ansible.md).
 # initial_setup installed both scanners, wrote their config and scripts, and ran each from a root
 # cron. The package ships the same files and runs each script from a timer at the cron's slot.
-# The scripts, rkhunter.conf.local and the AIDE exclusions are the role's own templates, rendered
-# in place through `role: initial_setup` until the last host PR moves them, so the hosts that still
-# apply the role cannot fork them.
 #
 # No unit loads a credential: each scan writes a textfile, and that is its only verdict.
 #
@@ -43,7 +40,6 @@
 # - Required evidence, every run: an `aide-check` or `rkhunter-check` line in the journal and the
 #   textfile the `host-checks` rule group reads (#6168). Each refresh logs a
 #   `rkhunter baseline refreshed` line under the `rkhunter-propupd` tag.
-role: initial_setup
 defaults:
   initial_setup_host_lib_dir: /usr/lib/homelab
   # rkhunter reads PermitRootLogin from the main sshd_config only and never follows its Include.
@@ -59,13 +55,15 @@ depends:
   # aide only Recommends it, and the updater installs with --no-install-recommends. It ships
   # /etc/aide/aide.conf, the aide.conf.d directory the exclusions land in, and aideinit.
   - aide-common
+  # The AIDE check reads homelab-secrets' manifest for the secret links it accepts.
+  - jq
 files:
   # A regular file, not a link: rkhunter skips a symlinked .local file.
-  - {src: "role:rkhunter.conf.local.j2", dst: /etc/rkhunter.conf.local}
+  - {src: templates/rkhunter.conf.local.j2, dst: /etc/rkhunter.conf.local}
   # No dot in the name: aide.conf includes conf.d names matching ^[a-zA-Z0-9_-]+$ only (#5785).
-  - {src: "role:98_aide_local.conf.j2", dst: /etc/aide/aide.conf.d/98_aide_local}
-  - {src: "role:rkhunter-check.sh.j2", dst: /usr/lib/homelab/rkhunter-check, mode: "0755"}
-  - {src: "role:aide-check.sh.j2", dst: /usr/lib/homelab/aide-check, mode: "0755"}
+  - {src: templates/98_aide_local.conf.j2, dst: /etc/aide/aide.conf.d/98_aide_local}
+  - {src: templates/rkhunter-check.sh.j2, dst: /usr/lib/homelab/rkhunter-check, mode: "0755"}
+  - {src: templates/aide-check.sh.j2, dst: /usr/lib/homelab/aide-check, mode: "0755"}
   - {src: units/homelab-rkhunter-check.service.j2, dst: /usr/lib/systemd/system/homelab-rkhunter-check.service}
   - {src: units/homelab-rkhunter-check.timer, dst: /usr/lib/systemd/system/homelab-rkhunter-check.timer}
   - {src: units/homelab-aide-check.service.j2, dst: /usr/lib/systemd/system/homelab-aide-check.service}

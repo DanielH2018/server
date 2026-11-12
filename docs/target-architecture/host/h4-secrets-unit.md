@@ -919,7 +919,7 @@ meaning.
           checkout. `Setup Plane Drift (agent hosts)` therefore reads DOWN from its first run
           that sees the edited template until the apply.
         - The landing note names this apply already:
-          `scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py::test_the_landing_owes_daniel_server_no_run`
+          a landing test H7.53 deleted with the setup arm
           pins it at `70591c307`.
         - **Operator-only**, after merge, on daniel-server, from its own checkout at the merge
           commit or later: `uv run ansible-playbook ansible/initial_setup.yml --tags nut_host -e target=daniel-server`.
@@ -1947,7 +1947,7 @@ How each was handled, with the evidence:
   reports drift until the role is re-applied. H4.3b3 keeps its scope and adds the
   **operator-only** `--tags nut_host` apply on daniel-server, which the landing note
   already names
-  (`scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py::test_the_landing_owes_daniel_server_no_run`).
+  (a landing test H7.53 deleted with the setup arm).
   The tile `Setup Plane Drift (agent hosts)` reads DOWN until then. The template branch did
   not move into H4.3c, which would undo R10-15's split. The Rollback mirrors the apply.
 - **C1-04.** `nut_host/tasks/main.yml` writes the rule with `MODE="0666"`, and H4.3c retires

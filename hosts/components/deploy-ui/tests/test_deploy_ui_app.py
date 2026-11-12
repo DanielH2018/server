@@ -1,5 +1,7 @@
 """The app's routing over an injected runner: every read degrades, every write is guarded."""
 
+import dataclasses
+import io
 import json
 import pathlib
 import subprocess
@@ -8,7 +10,7 @@ import pytest
 
 import deploy_ui
 from deploy_ui_lib import deploy_ui_reads as reads
-from deployer_lib.deploy_locks import TREE_LOCK
+from lib.tree_lock import TREE_LOCK
 
 TREE_LOCK_NAME = pathlib.PurePath(TREE_LOCK).name
 
@@ -29,21 +31,16 @@ class FakeRun:
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
 
-# A landing, a terminal deploy (deploy.sh and the playbook it runs, holding its two
-# service locks), and a second deploy of the same service queued on that lock.
+# A landing holding the tree lock, and a playbook run queued on it.
 PS = """\
  4321     1   125 /x/python3 scripts/deploy_tools/land.py --pr 1543 --since 72c1a41
- 5000     1    90 bash ./scripts/deploy.sh --tags n8n
- 5001  5000    88 /x/python3 /x/ansible-playbook ansible/deploy.yml --tags n8n
- 5100     1    30 bash ./scripts/deploy.sh --tags n8n
+ 5000     1    30 /x/python3 /x/ansible-playbook ansible/deploy.yml --tags n8n
 """
-# fuser with stderr merged: `<path>: <pids>` for each OPEN file. The queued deploy
-# (5100) has the n8n lock open too: deploy.sh opens the descriptor, then blocks on it.
-# The argv names every lock file under the App's lock_dir, so the prefix is the command
-# alone; the paths are filled in by the fixture, which knows the tmp dir.
+# fuser with stderr merged: `<path>: <pids>` for each OPEN file. The queued run (5000)
+# has the tree lock open too. The argv names the lock path, so the prefix is the command
+# alone; the path is filled in by the fixture, which knows the tmp dir.
 FUSER = """\
-{d}/server-deploy-all.lock: 5000 5001
-{d}/server-deploy-n8n.lock: 5000 5001 5100
+{d}/{name}: 4321 5000
 """
 TABLE: dict[tuple[str, ...], tuple[str, int | str]] = {
     ("ps", "-eo", "pid=,ppid=,etimes=,args="): (PS, 0),
@@ -64,35 +61,28 @@ def _proc_locks_line(path, waiter=None):
 
 @pytest.fixture
 def lock_dir(tmp_path):
-    """Three lock files, and a /proc/locks in which all.lock and n8n.lock are granted
-    and 5100 is blocked on n8n.lock. Keys are the files' real (dev, inode)."""
+    """The tree lock, and a /proc/locks in which it is granted and 5000 is blocked on it.
+    The key is the file's real (dev, inode)."""
     d = tmp_path / "lock"
     d.mkdir()
-    for name in (
-        TREE_LOCK_NAME,
-        "server-deploy-all.lock",
-        "server-deploy-n8n.lock",
-    ):
-        (d / name).touch()
+    (d / TREE_LOCK_NAME).touch()
     (tmp_path / "proc_locks").write_text(
-        _proc_locks_line(d / "server-deploy-all.lock")
-        + _proc_locks_line(d / "server-deploy-n8n.lock")
-        + _proc_locks_line(d / "server-deploy-n8n.lock", waiter=5100)
+        _proc_locks_line(d / TREE_LOCK_NAME)
+        + _proc_locks_line(d / TREE_LOCK_NAME, waiter=5000)
     )
     return d
 
 
 def _table(lock_dir):
     t = dict(TABLE)
-    t[("fuser",)] = (FUSER.format(d=lock_dir), 0)
+    t[("fuser",)] = (FUSER.format(d=lock_dir, name=TREE_LOCK_NAME), 0)
     return t
 
 
-def _bare_config(tmp_path, state_dir):
+def _bare_config(tmp_path):
     """A Config with no lock files and the default /proc/locks."""
     return deploy_ui.Config(
         repo=tmp_path,
-        state_dir=state_dir,
         log_dir=tmp_path,
         bind="",
         port=0,
@@ -101,15 +91,13 @@ def _bare_config(tmp_path, state_dir):
 
 
 @pytest.fixture
-def app(tmp_path, state_dir, lock_dir):
+def app(tmp_path, lock_dir):
     cfg = deploy_ui.Config(
         repo=tmp_path,
-        state_dir=state_dir,
         log_dir=tmp_path / "logs",
         bind="127.0.0.1",
         port=0,
         tree_lock=lock_dir / TREE_LOCK_NAME,
-        lock_dir=lock_dir,
         proc_locks=tmp_path / "proc_locks",
     )
     return deploy_ui.App(cfg, run=FakeRun(_table(lock_dir)))
@@ -126,7 +114,7 @@ def test_index_serves_the_page(app):
 
 def test_page_offers_land_and_no_deploy_control_is_clean(app):
     _, html = app.get("/")
-    assert "/api/land" in html and "/api/cancel" in html and "/api/hold/clear" in html
+    assert "/api/land" in html and "/api/cancel" in html
     assert "/api/deploy" not in html and ">deploy<" not in html
 
 
@@ -182,54 +170,53 @@ def test_stale_route_is_gone_and_runs_nothing_is_flagged(app):
     assert status == 404 and not any(c[0] == "uv" for c in app.run.calls)
 
 
-def test_inflight_lists_landing_deploy_and_queued_deploy_is_clean(app):
+def test_inflight_lists_the_tree_lock_holder_and_waiter_is_clean(app):
     b = body(app.get("/api/inflight"))
     rows = {r["pid"]: r for r in b["runs"]}
+    assert set(rows) == {4321, 5000}
     assert rows[4321]["kind"] == "land" and rows[4321]["pr"] == "1543"
-    # The playbook (5001) folds into the deploy.sh that spawned it; the row carries the
-    # locks the family holds, and the tree lock is one of the files fuser was asked about.
-    assert set(rows) == {4321, 5000, 5100}
+    assert rows[4321]["locks"] == [TREE_LOCK_NAME]
+    # 5000 has the tree lock open like the holder does; /proc/locks says it is blocked on it.
     assert rows[5000]["kind"] == "deploy" and rows[5000]["tag"] == "n8n"
-    assert rows[5000]["locks"] == ["server-deploy-all.lock", "server-deploy-n8n.lock"]
-    # 5100 has n8n.lock open like the holder does; /proc/locks says it is blocked on it.
-    assert rows[5100]["locks"] == []
-    assert rows[5100]["waiting_on"] == ["server-deploy-n8n.lock"]
-    assert b["locks_watched"] == [
-        TREE_LOCK_NAME,
-        "server-deploy-all.lock",
-        "server-deploy-n8n.lock",
-    ]
+    assert rows[5000]["locks"] == []
+    assert rows[5000]["waiting_on"] == [TREE_LOCK_NAME]
+    assert b["locks_watched"] == [TREE_LOCK_NAME]
 
 
-def test_inflight_asks_fuser_about_every_lock_file_is_clean(app, lock_dir):
+def test_inflight_asks_fuser_about_the_tree_lock_is_clean(app, lock_dir):
     app.get("/api/inflight")
     fuser = next(c for c in app.run.calls if c[0] == "fuser")
-    assert fuser == [
-        "fuser",
-        *(
-            str(lock_dir / n)
-            for n in (
-                TREE_LOCK_NAME,
-                "server-deploy-all.lock",
-                "server-deploy-n8n.lock",
-            )
-        ),
-    ]
+    assert fuser == ["fuser", str(lock_dir / TREE_LOCK_NAME)]
 
 
-def test_inflight_with_no_lock_files_says_so_is_flagged(tmp_path, state_dir):
+def test_inflight_ignores_other_lock_files_in_the_tree_locks_directory_is_flagged(
+    tmp_path, lock_dir, monkeypatch
+):
+    """A stale unit may still export DEPLOY_UI_LOCKS; nothing reads it."""
+    (lock_dir / "server-deploy-x.lock").touch()
+    monkeypatch.setenv("DEPLOY_UI_TREE_LOCK", str(lock_dir / TREE_LOCK_NAME))
+    monkeypatch.setenv("DEPLOY_UI_LOCKS", str(lock_dir))
+    cfg = dataclasses.replace(
+        deploy_ui.Config.from_env(), proc_locks=tmp_path / "proc_locks"
+    )
+    run = FakeRun(_table(lock_dir))
+    b = body(deploy_ui.App(cfg, run=run).get("/api/inflight"))
+    assert b["locks_watched"] == [TREE_LOCK_NAME]
+    fuser = next(c for c in run.calls if c[0] == "fuser")
+    assert fuser == ["fuser", str(lock_dir / TREE_LOCK_NAME)]
+
+
+def test_inflight_with_no_lock_files_says_so_is_flagged(tmp_path):
     """`free` over no files is the empty-panel trap; the page needs the count to tell."""
     empty = tmp_path / "nolocks"
     empty.mkdir()
     (tmp_path / "proc_locks").write_text("")
     cfg = deploy_ui.Config(
         repo=tmp_path,
-        state_dir=state_dir,
         log_dir=tmp_path,
         bind="",
         port=0,
         tree_lock=empty / TREE_LOCK_NAME,
-        lock_dir=empty,
         proc_locks=tmp_path / "proc_locks",
     )
     run = FakeRun(dict(TABLE))
@@ -238,49 +225,26 @@ def test_inflight_with_no_lock_files_says_so_is_flagged(tmp_path, state_dir):
     assert not any(c[0] == "fuser" for c in run.calls)
 
 
-def test_inflight_unreadable_proc_locks_is_unavailable_is_flagged(
-    tmp_path, state_dir, lock_dir
-):
+def test_inflight_unreadable_proc_locks_is_unavailable_is_flagged(tmp_path, lock_dir):
     """A lock read that errors must never render `free`."""
     cfg = deploy_ui.Config(
         repo=tmp_path,
-        state_dir=state_dir,
         log_dir=tmp_path,
         bind="",
         port=0,
         tree_lock=lock_dir / TREE_LOCK_NAME,
-        lock_dir=lock_dir,
         proc_locks=tmp_path / "missing",
     )
     b = body(deploy_ui.App(cfg, run=FakeRun(_table(lock_dir))).get("/api/inflight"))
     assert "missing" in b["unavailable"]
 
 
-def test_inflight_degrades_when_ps_fails_is_flagged(tmp_path, state_dir):
+def test_inflight_degrades_when_ps_fails_is_flagged(tmp_path):
     t = dict(TABLE)
     t[("ps", "-eo", "pid=,ppid=,etimes=,args=")] = ("", "raise")
-    cfg = _bare_config(tmp_path, state_dir)
+    cfg = _bare_config(tmp_path)
     b = body(deploy_ui.App(cfg, run=FakeRun(t)).get("/api/inflight"))
     assert b["unavailable"].startswith("ps")
-
-
-def test_state_reads_markers_is_clean(app, state_dir):
-    (state_dir / "hold_sha").write_text("deadbeef")
-    assert body(app.get("/api/state"))["hold_sha"] == "deadbeef"
-
-
-def test_state_unreadable_marker_is_unavailable_and_land_refuses(app, state_dir):
-    marker = state_dir / "hold_sha"
-    marker.write_text("deadbeef")
-    marker.chmod(0o000)
-    try:
-        assert "unavailable" in body(app.get("/api/state"))
-        status, _ = app.post(
-            "/api/land", HDRS, json.dumps({"pr": "9999", "since": "72c1a41"})
-        )
-        assert status == 503
-    finally:
-        marker.chmod(0o644)
 
 
 def test_prs_are_cached_is_clean(app):
@@ -289,9 +253,9 @@ def test_prs_are_cached_is_clean(app):
     assert sum(1 for c in app.run.calls if c[:2] == ["gh", "pr"]) == 1
 
 
-def test_prs_first_call_after_boot_runs_gh_is_clean(tmp_path, state_dir, monkeypatch):
+def test_prs_first_call_after_boot_runs_gh_is_clean(tmp_path, monkeypatch):
     """A fresh App's cache sentinel must not read as fresher than an early-boot clock."""
-    cfg = _bare_config(tmp_path, state_dir)
+    cfg = _bare_config(tmp_path)
     run = FakeRun(dict(TABLE))
     app = deploy_ui.App(cfg, run=run)
     monkeypatch.setattr(deploy_ui.time, "monotonic", lambda: 5.0)
@@ -343,24 +307,6 @@ def test_land_duplicate_is_refused_is_flagged(app):
     assert status == 409 and "1543" in text
 
 
-def test_hold_clear_pair_is_clean(app, state_dir, monkeypatch):
-    """`hold_sha` and every held plane go, and the reply names each plane that went.
-
-    A Clear drops each `hold_plane` entry whatever is still unapplied, so the reply is the
-    last place that can name them: nothing records those planes afterwards.
-    """
-    monkeypatch.setattr(deploy_ui.writes, "audit", lambda line: None)
-    (state_dir / "hold_sha").write_text("deadbeef")
-    line = '{"class": "hold_plane", "subject": "%s", "origin": "a", "at": 1}\n'
-    (state_dir / "owed.jsonl").write_text(line % "k3s" + line % "deploy.yml sonarr")
-    status, text = app.post(
-        "/api/hold/clear", HDRS, json.dumps({"expected_sha": "deadbeef"})
-    )
-    assert status == 200 and not (state_dir / "owed.jsonl").exists()
-    assert not (state_dir / "hold_sha").exists()
-    assert "k3s" in text and "deploy.yml sonarr" in text
-
-
 def test_cancel_deploy_row_is_flagged(app):
     """A deploy is listed in flight but is not cancellable: SIGTERM mid-play is exit 20."""
     status, text = app.post("/api/cancel", HDRS, json.dumps({"pid": 5000}))
@@ -384,13 +330,11 @@ def test_land_non_hex_since_is_flagged(app):
     assert status == 400 and "hex" in text
 
 
-def test_read_raising_an_unexpected_error_is_unavailable_is_flagged(
-    tmp_path, state_dir
-):
+def test_read_raising_an_unexpected_error_is_unavailable_is_flagged(tmp_path):
     """A gh payload missing a field must reach the page as red text, not a traceback."""
     t = dict(TABLE)
     t[("gh", "pr", "list")] = ('[{"title":"no number here"}]', 0)
-    cfg = _bare_config(tmp_path, state_dir)
+    cfg = _bare_config(tmp_path)
     b = body(deploy_ui.App(cfg, run=FakeRun(t)).get("/api/prs"))
     assert "prs" not in b
     assert b["unavailable"].startswith("KeyError")
@@ -431,28 +375,28 @@ def test_request_line_quotes_a_path_logfmt_would_split_is_flagged():
     )
 
 
-def test_lock_names_agree_with_deploy_locks_is_clean(monkeypatch):
-    """The daemon runs outside the venv and cannot import the lock names, so this is
-    the literal-agreement guard: the service-lock shape the page watches is the one
-    `deploy_locks.py` names -- the one module that names them, for the deployer and for
-    deploy.sh, which imports it (issues #2054, #2412). The tree lock's path reaches the
-    daemon from its unit instead (#3276)."""
-    from deployer_lib import deploy_locks
+class _ClosedSocket(io.BufferedIOBase):
+    def __init__(self, error):
+        self.error = error
 
-    monkeypatch.delenv("HOMELAB_DEPLOY_LOCK_DIR", raising=False)
-    lock_dir = deploy_ui.Config.__dataclass_fields__["lock_dir"].default
-    assert str(lock_dir) == deploy_locks.lock_dir() == "/var/lock"
-    for name in (deploy_locks.SERVICE_LOCK_ALL, "sonarr", "pi-peer-backup"):
-        path = pathlib.PurePath(deploy_locks.lock_path(name))
-        assert path.parent == lock_dir
-        assert path.match(deploy_ui.SERVICE_LOCK_GLOB), (name, path)
+    def write(self, data):
+        raise self.error
 
 
-def test_the_service_lock_glob_does_not_match_the_tree_lock_is_flagged():
-    """The reject half: a glob loose enough to take the tree lock for a service lock would
-    show the tick as a deploy of a service called `git-tree`."""
-    from deployer_lib import deploy_locks
-
-    assert not pathlib.PurePath(deploy_locks.TREE_LOCK).match(
-        deploy_ui.SERVICE_LOCK_GLOB
-    )
+@pytest.mark.parametrize("error", [BrokenPipeError, ConnectionResetError])
+def test_client_closing_mid_response_logs_one_line_no_traceback_is_flagged(
+    app, capsys, error
+):
+    """A disconnect raised out of the handler, and socketserver printed its traceback,
+    which HostLogErrors counts (#7921)."""
+    handler = object.__new__(deploy_ui.make_handler(app))
+    handler.rfile = io.BytesIO(b"GET / HTTP/1.1\r\nRemote-User: daniel\r\n\r\n")
+    handler.wfile = _ClosedSocket(error())
+    handler.client_address = ("10.42.0.113", 40000)
+    handler.close_connection = False
+    handler.handle_one_request()
+    assert handler.close_connection
+    assert capsys.readouterr().err.splitlines() == [
+        "request method=GET path=/ status=200 user=daniel",
+        "client-disconnected method=GET path=/ status=200 user=daniel",
+    ]

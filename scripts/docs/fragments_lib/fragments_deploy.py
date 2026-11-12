@@ -30,11 +30,7 @@ LAND_ENTRY_POINT = "scripts/deploy_tools/land.sh"
 LAND_OUTCOME = "scripts/deploy_tools/land_lib/outcome.py"
 EXIT_CODES = "scripts/lib/exit_codes.py"
 
-INITIAL_SETUP_TEMPLATES = "ansible/roles/setup/initial_setup/templates"
-# H7.10 moved the checkout timers' scripts into host components; they take the lock there.
 HOST_COMPONENTS = "hosts/components"
-SETUP_ROLES = "ansible/roles/setup"
-DEPLOY_UNDER_LOCKS = "scripts/deploy_tools/deploy_lib/under_locks.py"
 
 ISSUE_MODEL = "scripts/dev/findings_lib/issue_model.py"
 FINDINGS_LIB = "scripts/dev/findings_lib"
@@ -126,8 +122,8 @@ def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
     """Every job that takes the git-tree lock, derived from the templates that do.
 
     A holder is a systemd unit whose `ExecStart` wraps `flock` around `server_git_tree_lock`, a
-    cron script that imports the `take_git_tree_lock` macro from `git-tree-lock.j2`, or
-    `deploy.sh` through `deploy_lib/under_locks.py`. The unit and the cron scripts are found by
+    or a cron script that imports the `take_git_tree_lock` macro from `git-tree-lock.j2`. Both
+    are found by
     pattern, so a new one joins the list without an edit here.
 
     Args:
@@ -135,18 +131,13 @@ def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
 
     Returns:
         One dict per holder with `job`, `how` and `source` (a path relative to `repo`), units
-        first, then crons by name, then `deploy.sh`.
+        first, then crons by name.
 
     Raises:
-        ValueError: when a template imports the macro and never calls it with a job name, or
-            when `deploy_lib/under_locks.py` no longer reads the lock path.
+        ValueError: when a template imports the macro and never calls it with a job name.
     """
     holders = []
-    units = [
-        *sorted((repo / SETUP_ROLES).glob("*/templates/*.service.j2")),
-        *sorted((repo / HOST_COMPONENTS).glob("*/units/*.service.j2")),
-    ]
-    for unit in units:
+    for unit in sorted((repo / HOST_COMPONENTS).glob("*/units/*.service.j2")):
         if _UNIT_LOCK.search(unit.read_text()):
             holders.append(
                 {
@@ -155,11 +146,7 @@ def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
                     "source": unit.relative_to(repo).as_posix(),
                 }
             )
-    cron_scripts = [
-        *sorted((repo / INITIAL_SETUP_TEMPLATES).glob("*.j2")),
-        *sorted((repo / HOST_COMPONENTS).glob("*/templates/*.j2")),
-    ]
-    for template in cron_scripts:
+    for template in sorted((repo / HOST_COMPONENTS).glob("*/templates/*.j2")):
         text = template.read_text()
         if not _LOCK_IMPORT.search(text):
             continue
@@ -176,16 +163,6 @@ def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
                     "source": template.relative_to(repo).as_posix(),
                 }
             )
-    wrapper = repo / DEPLOY_UNDER_LOCKS
-    if "tree_lock_path()" not in wrapper.read_text():
-        raise ValueError(f"{DEPLOY_UNDER_LOCKS} no longer takes the tree lock")
-    holders.append(
-        {
-            "job": "deploy.sh",
-            "how": "`deploy_lib/under_locks.py`, held only while it snapshots `HEAD`",
-            "source": DEPLOY_UNDER_LOCKS,
-        }
-    )
     return holders
 
 
@@ -265,9 +242,9 @@ def findings_labels(path: _Path) -> list[tuple[str, str, str]]:
         )
     assign = loop.body[0]
     assert isinstance(assign, ast.Assign) and isinstance(assign.value, ast.Tuple)
-    name_node = assign.targets[0].slice  # ty: ignore[unresolved-attribute]
+    name_node = assign.targets[0].slice  # ty: ignore[missing-attribute]
     colour_node, description_node = assign.value.elts
-    var = loop.target.id  # ty: ignore[unresolved-attribute]
+    var = loop.target.id  # ty: ignore[missing-attribute]
     for domain in domains:
         env = {var: domain}
         labels.append(

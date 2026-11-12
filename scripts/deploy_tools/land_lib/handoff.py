@@ -55,6 +55,7 @@ def refused_flags(opts: Options) -> list[str]:
             ("--tags", opts.tags),
             ("--since", opts.since),
             ("--subject", opts.subject),
+            ("--fresh", opts.fresh),
         )
         if value
     ]
@@ -186,7 +187,9 @@ def land_through_unit(
 
 
 def _stopped(pr: str, rc: int, msg: str, verdict: str | None = None) -> tuple[int, str]:
-    """Print `land: <msg>` and the VERDICT line `Outcome` gives `rc`, as `Landing.die` does."""
-    outcome = Outcome(rc, f"PR #{pr} — {msg}", verdict, error=msg)
+    """Print the line `Outcome` gives `rc` for `msg`, as `Landing.die` does."""
+    # A STOPPED line from the unit names the PR already.
+    detail = msg if msg.startswith(f"PR #{pr} ") else f"PR #{pr} — {msg}"
+    outcome = Outcome(rc, detail, verdict, error=msg)
     outcome.emit()
     return rc, outcome.file_line()

@@ -113,12 +113,12 @@ which only the operator can write. Step 6 tells you which case you are in.
 
 ## Onboarding a host that cannot decrypt yet
 
-A host with no age key of its own fails `initial_setup.yml` and `deploy.yml` at their
-secret-load `pre_task`, which reads as a playbook bug rather than a missing key. No playbook
-creates that key, so the first step is by hand; `ansible/README.md` §5 has the full flow.
+A host with no age key of its own cannot decrypt `ansible/vars/secrets.yml`. `hosts/bootstrap-host.sh`
+creates the host's key at its step 3 and prints the **public** key; `ansible/README.md` has the
+full flow.
 
-1. On the new host, as the operator, run `age-keygen -o ~/.config/sops/age/keys.txt` after
-   creating the directory 0700. It prints the **public** key.
+1. On the new host, as the operator, run `hosts/bootstrap-host.sh <hostname> --until 3`. It
+   prints the **public** key.
 2. Add that public key to `ansible/.sops.yaml` — tracked, and public keys only.
 3. On a host that can already decrypt: `sops updatekeys ansible/vars/secrets.yml`.
 4. Commit and push, then `git pull` on the new host.

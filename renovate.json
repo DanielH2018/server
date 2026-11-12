@@ -40,15 +40,11 @@
     ]
   },
   "lockFileMaintenance": {
-    "description": "pyproject.toml uses unbounded ranges (pytest>=8, jinja2>=3, mkdocs-material>=9.5 etc.; ansible-core is pinned exactly since #2148), so Renovate sees nothing to bump while uv.lock keeps exact pins frozen forever \u2014 silence \u2260 up-to-date. A daily lock refresh PR rides the same CI gate (one PR at a time — Renovate reuses the open one rather than opening a second, so the daily window costs no extra CI while it sits unmerged). NO automerge: >= ranges mean a refresh can contain major jumps (ansible-core 3.x one day); those deserve a deliberate look.",
+    "description": "pyproject.toml uses unbounded ranges (pytest>=8, jinja2>=3, mkdocs-material>=9.5 etc.), so Renovate sees nothing to bump while uv.lock keeps exact pins frozen forever \u2014 silence \u2260 up-to-date. A daily lock refresh PR rides the same CI gate (one PR at a time — Renovate reuses the open one rather than opening a second, so the daily window costs no extra CI while it sits unmerged). NO automerge: >= ranges mean a refresh can contain major jumps; those deserve a deliberate look.",
     "enabled": true,
     "schedule": [
       "before 6am"
     ]
-  },
-  "ansible-galaxy": {
-    "description": "Disabled: it matches ansible/requirements.yml, which the custom regex manager below already owns. With both enabled, community.general 13.3.0 opened twice (#204 built-in, #257 grouped) and the built-in copy sat outside the manual-lockstep group's `automerge: false`, which is keyed on matchManagers: custom.regex. Disabled as a MANAGER OBJECT rather than via enabledManagers: that key is an allowlist, and this repo depends on the built-in dockerfile, github-actions, pep621 and pyenv managers.",
-    "enabled": false
   },
   "customManagers": [
     {
@@ -65,7 +61,7 @@
     },
     {
       "customType": "regex",
-      "description": "Pinned hook revisions in prek.toml. Renovate's built-in pre-commit manager only scans .pre-commit-config.yaml, not prek.toml, so these (pre-commit-hooks, ansible-lint, gitleaks) would age silently. Match each GitHub repo URL with its adjacent rev tag.",
+      "description": "Pinned hook revisions in prek.toml. Renovate's built-in pre-commit manager only scans .pre-commit-config.yaml, not prek.toml, so these (pre-commit-hooks, gitleaks) would age silently. Match each GitHub repo URL with its adjacent rev tag.",
       "managerFilePatterns": [
         "/(^|/)prek\\.toml$/"
       ],
@@ -73,17 +69,6 @@
         "repo\\s*=\\s*\"https://github\\.com/(?<depName>[^\"]+?)(?:\\.git)?\"\\s+rev\\s*=\\s*\"(?<currentValue>[^\"]+)\""
       ],
       "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
-      "description": "Ansible Galaxy collection pins in ansible/requirements.yml. The built-in ansible-galaxy manager IS disabled at the top level (see the `ansible-galaxy` key): it matches this same file, so leaving both on produced two PRs for every bump \u2014 and the built-in one landed outside the manual-lockstep group below, escaping its deliberate `automerge: false`. This custom manager is the single owner. Collections must not age silently (silence != up-to-date, the same failure mode as the lockFileMaintenance note). Each name/version pair maps to the galaxy-collection datasource.",
-      "managerFilePatterns": [
-        "/(^|/)ansible/requirements\\.yml$/"
-      ],
-      "matchStrings": [
-        "name:\\s*(?<depName>[\\w.]+)\\s+version:\\s*(?<currentValue>[\\d.]+)"
-      ],
-      "datasourceTemplate": "galaxy-collection"
     },
     {
       "customType": "regex",
@@ -684,7 +669,6 @@
         "ansible/roles/k8s/livesync/defaults/main.yml",
         "ansible/roles/k8s/loki-homelab/defaults/main.yml",
         "ansible/roles/k8s/longhorn/defaults/main.yml",
-        "ansible/roles/k8s/longhorn-api/defaults/main.yml",
         "ansible/roles/k8s/longhorn-backup/defaults/main.yml",
         "ansible/roles/k8s/longhorn-restore-drill/defaults/main.yml",
         "ansible/roles/k8s/longhorn-ui/defaults/main.yml",
@@ -704,7 +688,6 @@
         "ansible/roles/k8s/traefik/defaults/main.yml",
         "ansible/roles/k8s/traefik-crds/defaults/main.yml",
         "ansible/roles/k8s/valheim/defaults/main.yml",
-        "ansible/roles/k8s/volume-revert/defaults/main.yml",
         "ansible/roles/k8s/volume-snapshot/defaults/main.yml",
         "ansible/roles/k8s/wg-easy/defaults/main.yml",
         "ansible/roles/k8s/zigbee2mqtt/defaults/main.yml",
@@ -808,19 +791,6 @@
       "groupName": "shellcheck-py (lockstep: prek.toml + pyproject.toml)"
     },
     {
-      "description": "ansible-core is pinned once, in pyproject.toml `ansible-core==` (pep621, the env `uv run ansible-playbook` and the tests resolve). NO automerge: the galaxy collections group above is manual for its lockstep with ansible-core, so a bump that automerged alone would break that lockstep.",
-      "matchPackageNames": [
-        "ansible-core"
-      ],
-      "groupName": "ansible-core (no automerge — lockstep with the galaxy collections)",
-      "rebaseWhen": "conflicted",
-      "schedule": [
-        "before 6am on monday"
-      ],
-      "updateNotScheduled": false,
-      "automerge": false
-    },
-    {
       "description": "Every `# renovate:` annotated pin (depTypeTemplate of the annotation manager). Most pair the version with a sha256 or md5 that Renovate cannot compute, so NO automerge, and the group name names the command that finishes it: `asset_pins.py --refresh <depName>` fetches every pin whose URL renders from the annotated version and rewrites its digest. This one rule replaced the per-package uv, sops, chezmoi and coredns rules (#3732), which differed only in which pin name their title quoted. groupSingleUpdates puts the work order in a single-dependency PR's title. A pin needing more than a digest (k3s, the Pi's docker engine, the crowdsec bouncer plugin, code-server's node) keeps its own rule LATER in this list, which overrides this groupName; that ordering is what keeps `k8s_autodeploy: false` in the crowdsec title, and scripts/tests/test_renovate_annotated_pins.py asserts it.",
       "matchManagers": [
         "custom.regex"
@@ -886,22 +856,6 @@
         "minor"
       ],
       "enabled": false
-    },
-    {
-      "description": "Ansible Galaxy collections (requirements.yml). The in-file comment requires bumping them in lockstep with ansible-core, so these need a deliberate look \u2014 own group, no automerge (overrides the custom.regex non-major automerge rule above).",
-      "matchManagers": [
-        "custom.regex"
-      ],
-      "matchDatasources": [
-        "galaxy-collection"
-      ],
-      "groupName": "ansible galaxy collections (manual \u2014 lockstep with ansible-core)",
-      "rebaseWhen": "conflicted",
-      "schedule": [
-        "before 6am on monday"
-      ],
-      "updateNotScheduled": false,
-      "automerge": false
     },
     {
       "description": "CrowdSec bouncer Traefik plugin \u2014 a WAF-enforcement component whose bump requires a deliberate traefik redeploy (CI can't prove the plugin loads). Own group, no automerge, so it overrides the custom.regex non-major automerge rule above and gets an operator review. The `k8s_autodeploy: false` in the groupName is not decoration: traefik is a denied role, and that phrase in the PR title is what keeps the unattended renovate_agent from landing the redeploy (issue #1963).",

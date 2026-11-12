@@ -1,6 +1,6 @@
 # k3s node plane: the backup crons' derivations and the measured incidents
 
-Working-out moved off `ansible/roles/setup/k3s/CLAUDE.md` (#2997), which a session reads on every
+Working-out moved off the k3s setup role's `CLAUDE.md` (#2997, deleted by H7.55b), which a session read on every
 touch of the node plane. The role doc keeps the autonomous-role contract, the actuator scope and
 the `ENFORCED:` citations; this page keeps the restore drill's two waivers and its retry bound,
 the cron-evidence checks that make a `logger` line evidence at all, and the four incidents behind
@@ -99,7 +99,7 @@ manager that is not ready runs no trim at all, and check 10 then sees the missed
 
 **The B2 accounting is a host cron, so its evidence is the journal.** Check 9 reports `down` on an
 `UNPRICED` line from `b2-deletions` anywhere in
-`ansible/roles/setup/k3s/defaults/main.yml:k3s_longhorn_cron_evidence_window_hours`. Check 10
+`hosts/components/k3s-server/defaults/main.yml:k3s_longhorn_cron_evidence_window_hours`. Check 10
 reports `down` when the window holds no line a completed run writes: its `/etc/cron.d` entry
 removed, the crontab lost, or the run itself dying part-way. It judges on the summary line
 `probe.py b2-deletions` ends every completed run with (#2545); before that it took any line at

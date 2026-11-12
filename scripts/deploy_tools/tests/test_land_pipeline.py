@@ -28,22 +28,20 @@ def test_nothing_to_deploy_is_decided_before_the_ci_wait(land_run):
     assert "verdict=nothing-to-deploy cause= exit=0" in logline
 
 
-def test_preflight_runs_before_the_ci_wait(land_run):
-    _, _, _, calls, _ = land_run([], Fakes(await_ci=[(1, "red")]))
-    blockers = next(
-        i
-        for i, c in enumerate(calls)
-        if c[0] == "deploy_tags" and c[1][0] == "blockers"
-    )
-    assert blockers < _names(calls).index("await_ci")
-
-
 def test_the_annotation_is_written_on_a_verdict(land_run):
     _, _, _, _, logline = land_run([], Fakes(await_ci=[(75, "no verdict")]))
     assert (
         "event=landing pr=999" in logline
         and "verdict=ci-timeout cause= exit=75" in logline
     )
+
+
+def test_the_result_line_sits_just_above_the_verdict(land_run):
+    """A reader takes the verdict and cause from one machine line, not the prose (#7895)."""
+    _, out, _, _, _ = land_run([], Fakes(await_ci=[(75, "no verdict")]))
+    result, verdict = out.rstrip().splitlines()[-2:]
+    assert result.startswith("LAND-RESULT: verdict=ci-timeout cause=- exit=75 pr=999 ")
+    assert verdict.startswith("VERDICT: ci-timeout")
 
 
 def test_an_unexpected_exception_annotates_as_aborted_and_propagates(monkeypatch):
@@ -300,8 +298,8 @@ def test_the_diff_fallback_derives_between_the_ci_wait_and_the_promotion_wait(la
     _, _, _, calls, _ = land_run(
         ["--since", "abc"], Fakes(derived=([], "fallback"), changed="sonarr")
     )
-    names = [c[1][0] if c[0] == "deploy_tags" else c[0] for c in calls]
-    assert names.index("await_ci") < names.index("changed") < names.index("land_wait")
+    names = [c[1][0] if c[0] == "git" else c[0] for c in calls]
+    assert names.index("await_ci") < names.index("diff") < names.index("land_wait")
 
 
 def test_a_missing_primary_checkout_is_named_before_any_phase_runs(land_run):
@@ -312,9 +310,9 @@ def test_a_missing_primary_checkout_is_named_before_any_phase_runs(land_run):
     """
     from pathlib import Path
 
-    rc, _, err, calls, logline = land_run([], primary=Path("/nonexistent"))
+    rc, out, _, calls, logline = land_run([], primary=Path("/nonexistent"))
     assert rc == 1
-    assert "cannot cd to /nonexistent" in err
+    assert "cannot cd to /nonexistent" in out
     assert "gh" not in _names(calls)
     assert "verdict=refused cause= exit=1" in logline
 

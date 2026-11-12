@@ -465,6 +465,8 @@ def ci_gate(pipe: "Pipeline", last: Phase) -> tuple[Phase, dict | None]:
             record.ci_rerun = rerun_failed(
                 pipe.run, repo, before, pipe.clock, pipe.sleep
             )
+            if record.ci_rerun:
+                record.ci_rerun_jobs = [f.name for f in result.failures]
         result = wait()
     again = " after one resume" if record.ci_resumed else ""
     again += " and a re-run of the failed jobs" if record.ci_rerun else ""

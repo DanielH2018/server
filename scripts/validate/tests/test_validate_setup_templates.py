@@ -1,4 +1,4 @@
-"""Tests for validate.setup_templates — the setup-plane render guard.
+"""Tests for validate.setup_templates — the host component render guard.
 
 Every rule here is an accept/reject pair, the convention
 `scripts/validate/tests/test_validate_compose_templates.py` sets: a guard that fires on
@@ -15,51 +15,55 @@ from validate import setup_templates as v
 
 # Named members the glob must find. Renaming or moving one of these should fail HERE, with the
 # member named, rather than silently shrinking the set every other test runs over. One per
-# shape the guard covers: a YAML manifest, a Corefile, an env file, a unit, a template
-# outside the k3s role, and a template a role-shaped host component holds.
+# shape the guard covers: a YAML manifest, a Corefile, an env file, a unit, a libvirt filter, a
+# sudoers drop-in, and templates of components with no `defaults/main.yml`.
 MUST_FIND = frozenset(
     {
         "hosts/components/k3s-host-dns/templates/netplan-dns.yaml.j2",
         "hosts/components/k3s-host-dns/templates/host-corefile.j2",
-        "roles/setup/gitops_deploy/templates/config.env.j2",
-        "roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
-        "roles/setup/common/templates/resolv.conf.j2",
-        "roles/setup/nut_host/templates/host-upsmon.conf.j2",
+        "hosts/components/claude-code/templates/claude-triage-config.env.j2",
+        "hosts/components/claude-code/templates/claude-clone-sync.service.j2",
+        "hosts/components/pi-resolver/templates/resolv.conf.j2",
+        "hosts/components/nut-secondary/templates/host-upsmon.conf.j2",
         "hosts/components/hypervisor/templates/staging-nwfilter.xml.j2",
         "hosts/components/claude-code/templates/claude-rootq.sudoers.j2",
+        "hosts/components/fail2ban/templates/fail2ban_homelab.conf.j2",
+        "hosts/components/integrity-scans/templates/rkhunter.conf.local.j2",
     }
 )
 
 
 @pytest.fixture(scope="module")
 def known():
-    return v.secret_names() | v.runtime_vars() | v.inventory_names()
+    return v.secret_names() | v.inventory_names()
 
 
 @pytest.fixture(scope="module")
 def ctx():
-    return v.render_context(v.SETUP / "common", overrides=v.ANSIBLE_RUNTIME_CONTEXT)
+    return v.render_context(
+        v.COMPONENTS / "pi-resolver", overrides=v.ANSIBLE_RUNTIME_CONTEXT
+    )
 
 
 def _rel(path):
     return v.repo_relative(path)
 
 
-def test_the_census_finds_the_named_setup_templates():
+def test_the_census_finds_the_named_component_templates():
     """Non-vacuity: the glob must return these by name, not merely return something."""
     found = {_rel(p) for p in v.discover_templates()}
     assert MUST_FIND <= found, f"discovery lost: {sorted(MUST_FIND - found)}"
-    assert len(found) >= 98
+    assert len(found) >= 106
 
 
 def test_every_real_setup_template_renders_with_no_unresolved_variable(known):
-    """The regression guard: the whole setup plane renders clean against the real tree."""
+    """The regression guard: every component template renders clean against the real tree."""
     bad = {}
     for tpl in v.discover_templates():
         problems = v.check_role_template(tpl, known)
         if problems:
             bad[_rel(tpl)] = problems
-    assert not bad, f"setup templates failed to render clean: {bad}"
+    assert not bad, f"component templates failed to render clean: {bad}"
 
 
 def test_an_undefined_variable_is_flagged(tmp_path, ctx, known):
@@ -73,12 +77,11 @@ def test_an_undefined_variable_is_flagged(tmp_path, ctx, known):
 
 
 def test_a_defined_variable_is_clean(tmp_path, ctx, known):
-    """The accepting half, over each of the four sources a name may legitimately come from."""
+    """The accepting half, over each source the tree supplies a name from."""
     tpl = tmp_path / "role" / "templates" / "creds.yaml.j2"
     tpl.parent.mkdir(parents=True)
     tpl.write_text(
         'secret: "{{ longhorn_b2_key_id }}"\n'  # SOPS registry
-        'runtime: "{{ k3s_node_ip }}"\n'  # register in a setup-plane task
         'inventory: "{{ domain }}"\n'  # group_vars/all.yml
         'magic: "{{ inventory_hostname }}"\n'  # Ansible-supplied
         'required: "{{ nut_monitor_password | mandatory }}"\n'  # the Ansible filter
@@ -87,12 +90,12 @@ def test_a_defined_variable_is_clean(tmp_path, ctx, known):
 
 
 def test_a_default_that_will_not_expand_still_counts_as_defined(tmp_path, known):
-    """Both halves: the role's own default is clean, a name nothing defines is still flagged.
+    """Both halves: the component's own default is clean, a name nothing defines is flagged.
 
     `render_context` leaves out a default whose value names a filter the light environment
-    lacks, so the render reads it as undefined while the role defines it.
+    lacks, so the render reads it as undefined while the component defines it.
     """
-    role = tmp_path / "roles" / "setup" / "fixture"
+    role = tmp_path / "components" / "fixture"
     (role / "defaults").mkdir(parents=True)
     (role / "templates").mkdir()
     (role / "defaults" / "main.yml").write_text(
@@ -131,25 +134,6 @@ def test_a_jinja_syntax_error_is_flagged(tmp_path, ctx, known):
     assert "render error" in problems[0]
 
 
-def test_runtime_vars_reads_both_set_fact_spellings(tmp_path):
-    """`ansible.builtin.set_fact` is what this repo writes; matching the bare name found none."""
-    tasks = tmp_path / "role" / "tasks" / "main.yml"
-    tasks.parent.mkdir(parents=True)
-    tasks.write_text(
-        "- ansible.builtin.set_fact: {long_spelling: 1}\n- set_fact: {short_spelling: 1}\n"
-    )
-    assert v.runtime_vars(tmp_path) == {"long_spelling", "short_spelling"}
-
-
-def test_runtime_vars_reads_the_setup_tree():
-    """A named member in the assertion: this is a derivation replacing no list, so the way it fails
-    is by returning a set narrower than the tree, which only a named member catches.
-    """
-    names = v.runtime_vars()
-    assert "k3s_node_ip" in names  # register
-    assert len(names) >= 17
-
-
 def test_an_ansible_magic_var_is_allowed_and_an_unknown_name_is_not():
     known = frozenset({"defined_somewhere"})
     assert v.is_allowed_undefined("ansible_facts.hostname", known)
@@ -165,21 +149,19 @@ def test_the_secret_registry_is_read_by_name_only():
     assert len(names) >= 50
 
 
-def test_a_component_supplies_its_defaults_and_secret_values_to_its_roles_templates(
-    tmp_path,
-):
-    """Both halves: the component's role gets the names, another role does not."""
+def test_a_borrowing_component_supplies_its_defaults_and_secret_values(tmp_path):
+    """Both halves: the borrowed component gets the names, another component does not."""
     component = tmp_path / "widget"
     component.mkdir()
     (component / "component.yml").write_text(
-        "role: widget_role\n"
+        "component: widget-owner\n"
         "defaults: {widget_agents_present: [a]}\n"
         "outputs:\n"
         "  - {src: templates/x.j2, keys: [widget_token]}\n"
     )
-    supplied = v.component_supplied("widget_role", tmp_path)
+    supplied = v.component_supplied("widget-owner", tmp_path)
     assert supplied == {"widget_agents_present", "widget_token_value"}
-    assert v.component_supplied("other_role", tmp_path) == frozenset()
+    assert v.component_supplied("other", tmp_path) == frozenset()
 
 
 def test_the_claude_code_templates_get_the_names_its_component_supplies():
@@ -199,15 +181,13 @@ def _component_template(root, text: str, defaults: str):
     return tpl
 
 
-def test_a_role_shaped_components_template_is_discovered_and_a_bare_one_is_not(
-    tmp_path,
-):
+def test_a_components_template_is_discovered_and_its_shell_template_is_not(tmp_path):
     tpl = _component_template(tmp_path, "x\n", "widget_on: true\n")
-    (tmp_path / "bare" / "templates").mkdir(parents=True)
-    (tmp_path / "bare" / "templates" / "y.j2").write_text("y\n")
-    found = v.discover_templates(tmp_path / "no-setup", tmp_path)
+    shell = tpl.parent / "run.sh.j2"
+    shell.write_text("echo\n")
+    found = v.discover_templates(tmp_path)
     assert tpl in found
-    assert tmp_path / "bare" / "templates" / "y.j2" not in found
+    assert shell not in found
 
 
 def test_a_component_template_reading_its_defaults_and_imports_is_clean(

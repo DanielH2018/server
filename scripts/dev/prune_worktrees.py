@@ -77,6 +77,7 @@ from lib.worktree_label import with_label
 # The worktree library: the readers, `is_merged` and `classify`. This file is only the CLI
 # over it, and nothing else imports this file -- every other consumer imports `lib.worktrees`.
 from lib.worktrees import (
+    IN_USE,
     REMOVABLE,
     Worktree,
     classify,
@@ -243,6 +244,30 @@ def survey(repo: str) -> list[tuple[str, Worktree, str]]:
     return out
 
 
+def survey_report(
+    surveyed: list[tuple[str, Worktree, str]], show_all: bool
+) -> tuple[list[str], list[Worktree], int]:
+    """The long report's worktree lines, the removable trees and the vanished count.
+
+    A kept worktree is counted, not listed, because it asks nothing of the reader (#7897).
+    `show_all` lists it as well.
+    """
+    lines, removable, vanished, kept = [], [], 0, 0
+    for verdict, tree, reason in surveyed:
+        if verdict in (REMOVABLE, VANISHED) or show_all:
+            lines.append(
+                f"[{verdict:9}] {with_label(tree.path, tree.path)}\n            {reason}"
+            )
+        else:
+            kept += 1
+        if verdict == REMOVABLE:
+            removable.append(tree)
+        vanished += verdict == VANISHED
+    if kept:
+        lines.append(f"{kept} worktree(s) kept; --all lists them")
+    return lines, removable, vanished
+
+
 def reap_claims(repo: str) -> list[str]:
     """Run the checkout's own `findings.py reap` and return the lines to print.
 
@@ -295,8 +320,10 @@ def prune_all(
     a test of `main` that replaces this module's `remove` still reaches it.
 
     Returns:
-      How many of `trees` were left in place. A tree a live process still uses counts too:
-      the survey called it removable, so keeping it is a removal that did not happen.
+      How many of `trees` failed to be removed. A tree a live process still uses is named on
+      stderr but not counted: one session running at the weekly run's hour would otherwise
+      keep its Healthchecks.io check down for a week, and the next run removes the tree once
+      its holder exits (#7949).
     """
     remover = remove if remover is None else remover
     removed = failed = 0
@@ -306,7 +333,8 @@ def prune_all(
             removed += 1
             print(f"removed {tree.path}")
         else:
-            failed += 1
+            if not error.startswith(IN_USE):
+                failed += 1
             print(f"could not remove {tree.path}: {error}", file=sys.stderr)
             for line in advise(tree.path):
                 print(line, file=sys.stderr)
@@ -321,8 +349,9 @@ def prune_all(
 def brief(prune: bool = False, reap: bool = True) -> int:
     """One line per removable worktree; silent when there is nothing to remove.
 
-    Returns 0, or with `prune` 1 when any removal or branch deletion failed. `reap` False
-    removes without running `findings.py reap` afterwards.
+    Returns 0, or with `prune` 1 when any removal or branch deletion failed. A worktree a
+    live process holds is a skip, not a failure. `reap` False removes without running
+    `findings.py reap` afterwards.
 
     This exists for the SessionStart banner, which prints nothing on a healthy day and has to
     stay cheap to read. Claude Code's own worktree keeper already lists every branch whose
@@ -440,6 +469,11 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--all",
+        action="store_true",
+        help="in the long report, list the kept worktrees too, two lines each",
+    )
+    parser.add_argument(
         "--no-reap",
         action="store_true",
         help=(
@@ -503,13 +537,9 @@ def main(argv: list[str] | None = None) -> int:
             f"[{STALE:9}] {branch}\n            no worktree, content already on origin/master"
         )
 
-    removable = []
-    vanished = 0
-    for verdict, tree, reason in survey(repo):
-        print(f"[{verdict:9}] {with_label(tree.path, tree.path)}\n            {reason}")
-        if verdict == REMOVABLE:
-            removable.append(tree)
-        vanished += verdict == VANISHED
+    report, removable, vanished = survey_report(survey(repo), args.all)
+    for line in report:
+        print(line)
 
     # A vanished registration alone is still work: prune_all's repair_object_store runs the
     # `git worktree prune` that drops it, which VANISHED's reason promises `--prune` does.

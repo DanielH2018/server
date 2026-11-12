@@ -5,7 +5,13 @@
 # every key this tree names, and `host_secrets.py sync daniel-box` rewrites it (operator-only).
 #
 # H7.33 adds the UPS secondary (hosts/components/nut-secondary): its upsmon.conf output reads
-# `nut_monitor_password` from the same SOPS file.
+# `nut_monitor_password` from the same SOPS file. Listing the component is what arms this host.
+# daniel-box draws from daniel-server's UPS: a 16-core burn here moved `upsc` ups.load by ~5
+# points (~45 W). Without the secondary, a power cut hard-cuts etcd, Longhorn's primary
+# replicas, Traefik, Prometheus and LAN DNS at battery end. Arming a further host is not a lone
+# edit: it needs an ONBATT delay that rides out a blip (nut_onbatt_shutdown_delay in
+# roles/k8s/nut/defaults/main.yml) and the console-attended `upsmon -c fsd` drill from
+# roles/k8s/nut/CLAUDE.md, because a broken chain looks like a working one while mains is up.
 #
 # Since H7.29 it ships the first three subjects of initial_setup, the same components as daniel-pi
 # and daniel-server: apt's unattended upgrades, the sshd drop-ins and the kernel, journald, limits
@@ -169,6 +175,9 @@ legacy:
   # The hypervisor role's teardown half kept this host free of the network source directory until
   # H7.34 emptied the role. Nothing recreates it, so the entry stays a no-op on a clean host.
   - {path: /etc/libvirt/declared-networks}
+  # #7919: the Ansible-era enable link, left dangling when its unit file went. The package's own
+  # link is in /usr/lib/systemd/system/sockets.target.wants.
+  - {path: /etc/systemd/system/sockets.target.wants/homelab-rootq.socket}
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
   # H7.32: the maintenance wrapper the crons ran, and the firmware cron, which host-maintenance's
@@ -224,9 +233,9 @@ legacy:
   - {path: /etc/systemd/system/containerd.service.d}
   # H7.52: the GitOps deployer's timer and the units, rule and records its role installed. The
   # timer goes first, and reconcile keeps the service's entry while a tick is still running.
-  # /opt/gitops-deploy, /etc/gitops-deploy and /var/lib/gitops-deploy stay: land.sh, the banner
-  # and deploy-ui read hold_sha until H7.53, which names the state directory as the operator's
-  # cleanup.
+  # H7.53 deleted every reader of /opt/gitops-deploy, /etc/gitops-deploy and
+  # /var/lib/gitops-deploy. They are the operator's cleanup, not entries here: reconcile removes
+  # only an empty directory, and each holds files and interpreter caches no list names.
   - {unit: gitops-deploy.timer}
   - {unit: gitops-deploy.service}
   - {unit: gitops-deploy-alert.service}

@@ -6,11 +6,7 @@ ups.load by ~5 points ≈ 45 W, three transitions phase-locked across two cycles
 secondary upsmon it has no orderly shutdown at all: no /etc/nut, no nut-monitor, no cron,
 no HA automation with a power-off action.
 
-Three properties are load-bearing here, and each one fails in a way that looks like success:
-
-DISARMED BY DEFAULT. A secondary upsmon exists to power the machine off. Arming one on the
-control-plane node without the console-attended drill risks an unplanned cluster shutdown, and
-nothing about a wrong configuration is visible while mains power is up.
+Two properties are load-bearing here, and each one fails in a way that looks like success:
 
 THE HOST HALF IS PACKAGE-OWNED. Since H4.3c the homelab-daniel-server package installs the udev
 rule, and since H7.33 both cluster nodes' packages install the secondary upsmon. The role is one
@@ -24,18 +20,14 @@ Run: uv run pytest ansible/tests/setup/test_nut_host_secondary.py
 """
 
 from lib import yaml_fast
-from _helpers import ALL_VARS, ANSIBLE, HOST_VARS
+from _helpers import ALL_VARS, ANSIBLE
 
 from _shell_render import rendered_shell_text
-from deploy_tools.setup_lib import setup_gates
 from lib.proc_testing import run
 from lib.repo_paths import REPO
 
 
-ROLE = ANSIBLE / "roles" / "setup" / "nut_host"
-TASKS = (ROLE / "tasks" / "main.yml").read_text()
 ALL_VARS_TEXT = ALL_VARS.read_text()
-SETUP = (ANSIBLE / "initial_setup.yml").read_text()
 NUT_DEFAULTS = ANSIBLE / "roles" / "k8s" / "nut" / "defaults" / "main.yml"
 NUT_SERVICE = ANSIBLE / "roles" / "k8s" / "nut" / "templates" / "service.yaml.j2"
 NUT_COMPONENT = REPO / "hosts" / "components" / "nut-secondary" / "component.yml"
@@ -52,33 +44,6 @@ SHUTDOWN_RESERVE_S = 300
 # mostly shorter than this, and stopping inside that window trades a clean shutdown for a full
 # cluster restart on every flicker — a worse deal than the hard cut arming was meant to fix.
 BLIP_RIDE_OUT_S = 300
-
-
-def test_secondary_is_disarmed_by_default():
-    """Arming powers a machine off; it must be an explicit, per-host decision."""
-    assert "nut_host_secondary_armed: false" in ALL_VARS_TEXT, (
-        "the cross-node secondary must default to disarmed — a wrong SHUTDOWNCMD or an "
-        "unreachable upsd looks exactly like a working one until mains power fails"
-    )
-
-
-def test_the_play_gate_reads_the_arm_flag():
-    """ups_host runs unconditionally; any other host needs the flag."""
-    assert "nut_host_secondary_armed | bool" in SETUP, (
-        "initial_setup.yml must gate the non-ups_host case on the arm flag, or deploying the "
-        "role installs a shutdown chain on every host that runs the play"
-    )
-
-
-def test_the_role_is_one_unconditional_end_role():
-    """H7.33 emptied the role: both cluster nodes' secondary is package-owned.
-
-    A guard that names a host would let the tick write the old files again on that host, and a
-    second task would give the role work the packages do not own.
-    """
-    assert setup_gates.role_end_guard(ROLE) == "True"
-    [task] = yaml_fast.safe_load(TASKS)
-    assert task["ansible.builtin.meta"] == "end_role"
 
 
 def daniel_box_package(tmp_path):
@@ -158,17 +123,19 @@ def onbatt_delay_verdict(delay: int, armed_beyond_ups_host: bool) -> str | None:
 
 
 def _armed_hosts_beyond_ups_host() -> list[str]:
+    """Hosts other than ups_host whose package lists the nut-secondary component."""
     ups_host = yaml_fast.safe_load(ALL_VARS_TEXT)["ups_host"]
-    armed = []
-    for path in sorted(HOST_VARS.glob("*.yml")):
-        host = path.stem
-        if host == ups_host:
-            continue
-        if (yaml_fast.safe_load(path.read_text()) or {}).get(
-            "nut_host_secondary_armed"
-        ):
-            armed.append(host)
-    return armed
+    return [
+        path.parent.name
+        for path in sorted((REPO / "hosts").glob("*/package.yml"))
+        if path.parent.name != ups_host
+        and "nut-secondary" in yaml_fast.safe_load(path.read_text())["components"]
+    ]
+
+
+def test_daniel_box_counts_as_armed_beyond_ups_host():
+    """The census must find the one armed host it exists to find, or the band check is vacuous."""
+    assert _armed_hosts_beyond_ups_host() == ["daniel-box"]
 
 
 def test_the_repos_onbatt_delay_suits_its_arming():
@@ -204,8 +171,12 @@ def test_the_band_binds_only_once_a_second_host_is_armed():
 # watchdog reading the wrong address, or one leaking the credential that sits on the line it
 # reads, both look exactly like a working one.
 
-WATCHDOG = rendered_shell_text("setup", "nut_host", "ups-secondary-health.sh.j2")
-NUT_HOST_DEFAULTS = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
+WATCHDOG = rendered_shell_text(
+    "components", "nut-secondary", "ups-secondary-health.sh.j2"
+)
+NUT_HOST_DEFAULTS = yaml_fast.safe_load(
+    (NUT_COMPONENT.parent / "defaults" / "main.yml").read_text()
+)
 
 # A MONITOR line in the shape host-upsmon.conf.j2 renders. The fifth field is a fake stand-in
 # for the credential that sits there in the real file; it exists only to be searched for in the
@@ -255,13 +226,12 @@ def test_the_extractor_is_empty_when_no_monitor_line_exists():
 
 
 def test_the_watchdog_reads_the_deployed_conf_not_an_ansible_var():
-    """A re-templated var would resolve fresh at render time.
+    """A templated address could differ from the file upsmon actually reads.
 
-    A tag-scoped run that touched only this cron would then bake a CURRENT ClusterIP into the
-    check while upsmon kept using the stale one, so the check would pass against an address
-    upsmon does not use — reproducing the blindness it exists to remove.
+    The check would then pass against an address upsmon does not use, reproducing the
+    blindness it exists to remove.
     """
-    assert "/etc/nut/upsmon.conf" in WATCHDOG
+    assert "UPSMON_CONF=/var/lib/homelab-secrets/etc/nut/upsmon.conf" in WATCHDOG
     assert "nut_host_upsd_host" not in WATCHDOG
 
 

@@ -17,7 +17,7 @@ compares the full tag. `test_renovate_k3s_cap_follows_the_schema` holds the cap 
 the schema.
 
 The pin is `k3s_version` in `ansible/roles/k8s/system-upgrade/defaults/main.yml`, moved there from
-`ansible/roles/setup/k3s/defaults/main.yml` by H6.1b. The `setup/k3s` tasks read it with `include_vars`.
+`hosts/components/k3s-server/defaults/main.yml` by H6.1b. The `setup/k3s` tasks read it with `include_vars`.
 It covers both nodes.
 The system-upgrade-controller (SUC) writes both nodes' versions. Its `k3s-server` Plan selects
 daniel-box since H6.3c, and its `k3s-agent` Plan selects daniel-server since H6.3d. Each Plan
@@ -39,7 +39,7 @@ Merging does not park the deployer: see *After merging the pin* below.
 1. Pass the gates.
 2. Record pre-upgrade state.
 3. Merge the pin. SUC upgrades daniel-box, then daniel-server. The pin writes no `manual_plane`
-   line (H6.1b), so only a change elsewhere under `ansible/roles/setup/k3s/` leaves one to clear.
+   line (H6.1b).
 4. Verify the server by its node label and version.
 5. Verify the agent by its node label and version.
 
@@ -62,10 +62,9 @@ also means a deployer marker exists and could not be read, which is not a hold.
    replica goes. `detached`/`unknown` is normal for an idle volume; `degraded` (or `faulted`)
    is not.
 2. **No Longhorn backup mid-flight.** A restart aborts it and the retry storm follows.
-3. **The GitOps deployer holds no SHA.** A non-empty `hold_sha` means a previous deploy already
-   failed its health gate, and this upgrade would land on top of that. The marker lives on
-   daniel-box, so this gate fails on any other host rather than reading an absent directory as
-   a cleared hold.
+3. **`DEPLOY_HOLD` reads `none`.** A hold means a previous promotion already failed its health
+   gate, and this upgrade would land on top of that. The gate reads the repository variable, so
+   a missing or empty value fails it rather than reading as no hold.
 4. **Both nodes Ready.**
 
 ## Read the release notes for what this cluster actually runs
@@ -118,9 +117,7 @@ the upgrade container replaces the binary. No Ansible command is part of the upg
 The apiserver, Traefik's ingress path and Pi-hole DNS go away for the length of the restart,
 because they all sit behind this node.
 
-Do not run `k3s-bringup.yml --tags k3s_server` to upgrade. Its install guard has no version
-clause since H6.3c, and no argument clause since H6.4b, so it runs only for a missing binary. The
-server's flags are daniel-box's package's: they live in
+The server's flags are daniel-box's package's: they live in
 `hosts/components/k3s-server/component.yml`, and `homelab-k3s-restart` applies a change inside
 its window.
 
@@ -251,25 +248,9 @@ A pin change no longer reaches the deployer's setup plane. The pin lives in the 
 waits on through promotion, and the deployer writes no `manual_plane` line for `k3s`. The
 `k3s-server` Plan selects daniel-box since H6.3c and the `k3s-agent` Plan selects daniel-server
 since H6.3d, so merging the pin upgrades both nodes through SUC and no hand apply is owed for
-either. Another change under
-`ansible/roles/setup/k3s/` still takes the setup plane's path. `k3s` is routed to
-`k3s-bringup.yml`, not to `initial_setup.yml` (`deploy_setup_roles.py:roles_outside_initial_setup_in`),
-so `tick_applies_setup_role` returns false for it. `handle_broad` (`deploy_handlers.py`) then
-fast-forwards the primary checkout and writes a `manual_plane` line for `k3s` to
-`/var/lib/gitops-deploy/owed.jsonl`. Only the bring-up playbooks in `_BROAD_MANUAL_PREFIXES`
-(`deploy_changes.py`) still park the tick. Before 2026-09-11 a `k3s` change did park the tick
-(issue #1467).
+either.
 
-A recorded line stays in the SessionStart banner until something clears it. When the cluster is already upgraded by step 4, the hand-apply the line asks for is a
-verification run, not a change. After the merge, run the apply the deployer printed if you want
-that verification, then clear the line:
-
-```bash
-uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s
-```
-
-[A role only a hand can apply is recorded, not parked](archive/gitops-deployer.md#a-role-only-a-hand-can-apply-is-recorded-not-parked)
-owns the ledger, the narrowed `--applied` form of the clear, and the page. The primary
+The primary
 checkout needs no hand `git pull --ff-only`: `homelab-checkout-sync.timer` fast-forwards it to
 the newest green master commit every 10 minutes, and the retired deployer's `local..origin`
 range no longer exists to cancel.
@@ -295,6 +276,5 @@ a minor bump rather than assuming it: `sudo k3s etcd-snapshot ls`, which needs a
 
 ## What this procedure does not serialize
 
-`k3s-bringup.yml` does not take `/var/lock/server-git-tree.lock`; only `deploy.sh` does. Another
-session's deploy can therefore run straight through the control-plane restart. Check the SessionStart
+Check the SessionStart
 banner for live sessions before starting, and prefer a quiet window.

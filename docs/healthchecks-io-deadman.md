@@ -19,7 +19,7 @@ it is a second destination for the handful of jobs whose silence actually matter
 | `pi-peer-backup` | `roles/k8s/pi-peer-backup/files/pull-pi-peers.sh` | rsync failed, or fewer than 2 peer files landed |
 | `registry-gc` | `hosts/components/registry-gc/templates/registry-gc.sh.j2` | a mirror's GC job exceeded its deadline, a mirror pod would not terminate, the job manifest failed to apply, the Deployment did not come back afterwards, the keep set could not be built, or another run held the lock |
 | `alertmanager-watchdog` | the `healthchecks` receiver in `roles/k8s/observability/templates/alertmanager-secret.yaml.j2`, fed by the `Watchdog` rule in `roles/k8s/observability/files/rules/alerting-meta.yaml` | never: Alertmanager sends no resolved notification, and silence is the failure — see *Alertmanager's watcher* below |
-| `weekly-reboot-<host>` | the `Weekly system restart` cron in `roles/setup/initial_setup/tasks/crons.yml`, one slug per host | never: it pings before the reboot, and silence means the cron did not run |
+| `weekly-reboot-<host>` | the `Weekly system restart` cron in `hosts/components/host-maintenance/component.yml`, one slug per host | never: it pings before the reboot, and silence means the cron did not run |
 | `<host>-docker-prune` | the `Clean unused Docker images` cron in the same file, on each `has_docker` host (`daniel-pi`) | never: it pings only after the prune succeeds, and silence is the failure |
 | `<host>-worktree-sweep` | `homelab-worktree-sweep.timer` (the `worktree-sweep` component), one slug per host whose package lists it: daniel-box and daniel-server | `prune_worktrees.py --prune` exits non-zero: it pings the exit-status endpoint `/<rc>`, so a failed removal or branch deletion fails the check |
 
@@ -195,9 +195,6 @@ these steps, and no new secret, because one project ping key covers every check.
    `monitor_bridge_healthchecks_expected` in the same PR**, as *The console drifts* below says.
 5. **Point the check at Discord**, the same webhook the rest of the homelab alerts to.
 
-The three k3s-setup host heartbeats live in the k3s setup role, which `k3s-bringup.yml` runs.
-`scripts/deploy.sh` is hardcoded to `deploy.yml` and does not reach them, so take the git-tree
-lock by hand for that playbook.
 
 ## What it recorded on 2026-09-09
 

@@ -11,8 +11,8 @@ One kubectl read lists every Kustomization and OCIRepository in `flux-system`. E
 - whether `spec.suspend` is set.
 
 `flux <tag>` prints the tag, each per-tag Kustomization it has (`<tag>-deferred`, `-snapshot`,
-`-prepull`, `-precheck`, `-verify`) and the shared `soak`. With no tag it prints every
-Kustomization. It exits 1 when a printed row is not Ready, is suspended or applied a commit
+`-prepull`, `-precheck`, `-verify`) and the shared `soak`. With no tag it prints only the
+rows that are not settled, then a count; `--all` prints every Kustomization. It exits 1 when a printed row is not Ready, is suspended or applied a commit
 other than the one its source serves, and when a named tag has no Kustomization.
 
 A row that is not Ready for a reason in `NOT_YET_REASONS` is mid-reconcile, not failed
@@ -62,7 +62,8 @@ FLUX_HELP = (
     "each Flux Kustomization in flux-system: Ready with its reason, the commit "
     "lastAppliedOriginRevision names against the commit its OCIRepository serves, and "
     "whether it is suspended. A tag brings its -deferred/-snapshot/-prepull/-precheck/"
-    "-verify Kustomizations and the shared soak; no tag lists every one. "
+    "-verify Kustomizations and the shared soak; no tag lists the unsettled ones, and --all "
+    "lists every one. "
     "`cc-wait flux <name>` waits on one",
     "every row is Ready at its source's commit",
     "one is not Ready and not reconciling, is suspended, lags its source while Ready or a "
@@ -296,22 +297,38 @@ def _root_failure(rows: dict[str, Row], dep: str) -> Row:
     return rows[dep]
 
 
-def format_flux(items: list[dict], tags: list[str]) -> tuple[str, int]:
-    """The table and the verdict for `flux <tags>`, as (text, exit code)."""
+# What a `suspended` row names as the way out; the doc's two sections say which applies.
+RESUME_HINT = (
+    "resume: drop `flux_suspend` from the role's defaults, or the operator's hand resume "
+    "(docs/flux-deploy-plane.md, Stopping one service / Recovering Flux by hand)"
+)
+
+
+def format_flux(
+    items: list[dict], tags: list[str], show_all: bool = False
+) -> tuple[str, int]:
+    """The table and the verdict for `flux <tags>`, as (text, exit code).
+
+    The table lists only the unsettled rows, unless `show_all` is set or `tags` names rows.
+    """
     kustomizations, sources = split(items)
     rows = {r.name: r for r in (row(k, sources) for k in kustomizations)}
     chosen, missing = select(list(rows), tags)
-    width = max((len(n) for n in chosen), default=4)
-    lines = [
-        f"  {'NAME':<{width}}  READY    {'REASON':<26} APPLIED   SOURCE    SUSPENDED"
-    ]
-    for name in chosen:
+    shown = [n for n in chosen if show_all or tags or not rows[n].settled]
+    width = max((len(n) for n in shown), default=4)
+    lines = []
+    if shown:
+        lines.append(
+            f"  {'NAME':<{width}}  READY    {'REASON':<26} APPLIED   SOURCE    SUSPENDED"
+        )
+    for name in shown:
         r = rows[name]
         lines.append(
             f"  {name:<{width}}  {r.ready:<8} {r.reason[:26]:<26} {_short(r.applied):<9} "
             f"{_short(r.served):<9} {'yes' if r.suspended else 'no'}"
         )
-    lines.append("")
+    if shown:
+        lines.append("")
     problems = [f"{t}: no Kustomization (not Flux-owned?)" for t in missing]
     pending = []
     for name in chosen:
@@ -319,7 +336,7 @@ def format_flux(items: list[dict], tags: list[str]) -> tuple[str, int]:
         if r.settled:
             continue
         if r.suspended:
-            problems.append(f"{name}: suspended")
+            problems.append(f"{name}: suspended — {RESUME_HINT}")
         elif r.reason == "DependencyNotReady" and (
             dep := failed_dependency(rows, name)
         ):
@@ -341,6 +358,8 @@ def format_flux(items: list[dict], tags: list[str]) -> tuple[str, int]:
     if problems:
         lines.append("FAIL:")
         lines.extend(f"  {p}" for p in problems)
+        settled = sum(rows[n].settled for n in chosen)
+        lines.append(f"{settled} of {len(chosen)} Kustomizations settled.")
         return "\n".join(lines), 1
     if pending:
         lines.append(
@@ -482,6 +501,8 @@ def run_flux(ns, read=kubectl_json) -> int:
     except FluxUnreadable as exc:
         print(f"flux: {exc}", file=_sys.stderr)
         return PROBE_UNREADABLE
-    text, code = format_flux(items, list(getattr(ns, "tags", None) or []))
+    text, code = format_flux(
+        items, list(getattr(ns, "tags", None) or []), getattr(ns, "all", False)
+    )
     print(text)
     return code

@@ -54,13 +54,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.git import git, git_stdout
-from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
-
-# The deployer's library is imported by file path, not as a package.
-if str(GITOPS_DEPLOY_FILES) not in _sys.path:
-    _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-
-from deployer_lib.deploy_changes import is_doc
+from lib.path_kinds import is_doc
+from lib.repo_paths import REPO
 
 CLEAN, REFUSED, UNJUDGED = 0, 1, 2
 

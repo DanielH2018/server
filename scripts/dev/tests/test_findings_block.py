@@ -150,7 +150,7 @@ def test_next_withholds_a_blocked_issue_and_names_its_blocker(capsys, make_tools
             worktree_facts=facts(),
         )
     )
-    assert findings.main(["next", "--json"], tools) == 0
+    assert findings.main(["next", "--json", "--waiting"], tools) == 0
     captured = capsys.readouterr()
     assert [r["number"] for r in json.loads(captured.out)] == [1140]
     assert "blocked: #7195 by #7178  retire the redaction" in captured.err

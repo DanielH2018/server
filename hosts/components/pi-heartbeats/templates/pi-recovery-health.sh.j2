@@ -35,10 +35,8 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
   exit 1
 }
 
-{# The watch set is DERIVED, not listed: every entry in the Pi's two lists, sorted by name. The
-    package deploys compose_services. containers_list is empty, because
-    scripts/validate/compose_templates.py:undeployed_docker_entries refuses a non-k8s entry.
-    Neither key has a default, so a missing one fails the render. The set also holds the
+{# The watch set is DERIVED, not listed: every compose_services entry, sorted by name. The key
+    has no default, so a missing one fails the render. The set also holds the
     sub-proxies the docker-proxy service file
     (hosts/components/pi-compose/services/docker-proxy) declares beside its list entry
     (docker-proxy-lifecycle always; docker-proxy-codeserver only under has_code_server, the
@@ -48,7 +46,7 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
     this. Until #1910 the set was hardcoded to autoheal + docker-proxy, so glances, wg-easy
     and docker-proxy-lifecycle sat Exited/RestartCount 0 after a failed start until a human
     noticed. #}
-{% set _names = (containers_list + compose_services) | map(attribute='name') | sort | list %}
+{% set _names = compose_services | map(attribute='name') | sort | list %}
 {% if 'docker-proxy' in _names %}
 {%   set _names = _names + ['docker-proxy-lifecycle'] %}
 {%   if has_code_server | default(false) %}
@@ -190,7 +188,7 @@ write_check_textfile pi-recovery-health "$([ "$STATUS" = up ] && echo 1 || echo 
 #
 # The textfile keeps only the CURRENT verdict, so a DOWN that clears is gone. The server's health
 # crons survive that by logging their own verdict unconditionally (longhorn-backup-health,
-# setup-drift-check), and `probe_lib/alerts.py` reconstructs episodes from those lines. This
+# loki-read-route-health), and `probe_lib/alerts.py` reconstructs episodes from those lines. This
 # cron recorded nothing for a successful DOWN until it wrote this file, which is why the real
 # 2026-08-29 autoheal outage read as "no DOWN alerts in the last 7d" while the monitor was
 # live-DOWN.

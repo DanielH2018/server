@@ -57,7 +57,7 @@ The rules below shaped those memberships.
   `is_gate`, `critical` and `runbook`: A6-8 deleted `token`, `kuma_id`, `display`, `description`
   and `status_group` with the tiles they fed. `tests/test_bridge_size_cap.py` holds the bridge's
   `files/` under 8,000 lines.
-- **A table change deploys monitor-bridge alone.** `deploy_cross_role.k8s_lookup_map` finds
+- **A table change deploys monitor-bridge alone.** `scripts/lib/k8s_lookups.py:k8s_lookup_map` finds
   every k8s role that `lookup()`s another role's file, and uptime-kuma stopped being one for the
   table when its bridge tiles went.
 - **Fold an arm into an existing check** when it answers that check's existing question
@@ -105,7 +105,6 @@ The rules below shaped those memberships.
 | `check.py` | `run_once(cfg, src, checks, only, export)` — the run loop, with `GATE_SKIP` (the two gate rows and the message a skipped dependent logs), `EXPORTER_DEPENDENT`, `check_enabled`, `down_exporters` and `_evaluate` |
 | `check_table.py` | `CHECKS`, one `PushCheck` per check and gate: its body, gate, `critical` flag and runbook slug |
 | `registry.py` | `build_checks()`, a `Check` for every row of `CHECKS`, the two gate rows first, each with its row's `gate` |
-| `gitops_markers.py`, `gitops_ledger.py`, `gitops_hold.py` | generated verbatim copies of the deployer's marker parsers, written by `scripts/dev/gen_gitops_markers.py` (edit the source under `roles/setup/gitops_deploy/files/`, never the copy). No check reads them; H7.19b deletes them with `gen_gitops_markers.py` |
 | `deploy_pipeline.py` | the deploy-pipeline exporter: `collect(cfg, src, now)` reads `promote`'s state with three `api.github.com` GETs and two `ghcr.io` GETs into four `homelab_deploy_*` gauges, adds `homelab_deploy_reboot_window_active` from the `WEEKLY_REBOOT_*` schedule, and `Exposition` serves them on `DEPLOY_PIPELINE_PORT` from a daemon thread. `cli.main()` starts the listener and calls `refresh` after each cycle |
 | `verdict_export.py` | the check exporter: `CheckExposition` (a `deploy_pipeline.Exposition` on its own port, `CHECK_EXPORTER_PORT`) serves `homelab_check_success`, `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` per row and `homelab_check_rows` for the table. `check.run_once` records each row's verdict through `export`; `cli.main()` sets the row count from `check_table.CHECKS` |
 | `longhorn_robustness.py` | `SAFE_ROBUSTNESS` and `unsafe_volumes` — which Longhorn robustness states are lost redundancy. Checkout-only: it does not ship in the pod, and `scripts/deploy_tools/runbook_gates_lib/gate_runner.py` imports it from the checkout to judge the CRs (#3668) |

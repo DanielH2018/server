@@ -12,10 +12,11 @@ dependencies = [
 [tool.uv]
 package = false                      # virtual project: manage deps/lock, do not build the repo
 default-groups = ["dev", "lint"]     # `uv run` installs both; UV_NO_DEV drops only `dev`
-# DECIDED: compile at sync, as the syncing user, so a root importer finds fresh bytecode and
-# writes no root-owned __pycache__ a session cannot delete. Costs ~0.4s per cold sync on 16
-# cores and ~1.2s on 2 (measured in #6984).
-compile-bytecode = true
+# DECIDED: no `compile-bytecode` here. uv applies it to the sync inside every `uv run`, which
+# then recompiles the venv and prints `Bytecode compiled N files` on each call. The explicit
+# syncs pass `--compile-bytecode` instead (checkout_sync.py, claude-clone-sync.sh, CI's setup
+# action), so a root importer of daniel-box's checkout or the agent clone still finds bytecode
+# the syncing user wrote (#6984). A session worktree's venv goes uncompiled.
 
 # PyYAML ships no wheel for some interpreters, and a source build without libyaml's headers
 # silently falls back to the pure-Python parser, which rejects input the C loader accepts.
@@ -26,10 +27,7 @@ pyyaml = { PYYAML_FORCE_LIBYAML = "1" }
 [dependency-groups]
 dev = [                              # `dev` is uv's default group for `uv run`/`uv sync`
   "pytest>=8",
-  "ansible-core==2.22.0",           # test_toposort imports ansible.errors; also runs deploys via `uv run ansible-playbook`.
-  # Pinned exactly, not `>=`: this is the one place the deploy-side ansible version is chosen.
-  "requests",                       # community.docker modules
-  "docker",                         # community.docker SDK-backed modules
+  "requests",                       # ical-proxy ical_proxy.py imports requests (test_app.py)
   "flask",                          # ical-proxy ical_proxy.py imports flask at module top (test_app.py)
   "shellcheck-py==0.11.0.1",        # validate.shell_templates; pinned to match prek.toml's shellcheck-py rev
   "pytest-xdist",                   # -n auto in addopts below; pytest was 13.5s of CI's hook budget
@@ -39,6 +37,8 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "mkdocs",                         # test_mkdocs_repo_links renders with mkdocs.yml's extensions
   "pymdown-extensions",             # through the hook module, which imports mkdocs.utils.
   "pygments",
+  "lxml",                           # scripts/freshrss/scrape_feed.py runs XPath 1.0 with functions
+  "lxml-stubs",                     # lxml.etree is a C extension; ty resolves it only from these
 ]
 # Tools only prek hooks and hand-run commands call, never a test. The CI jobs that run no lint
 # hook set UV_NO_GROUP=lint, so a lint tool's install (actionlint-py downloads its binary from
@@ -49,7 +49,7 @@ lint = [
   "actionlint-py",                  # workflow lint gate (prek hook); its build fetches the actionlint binary
   "mkdocs-material>=9.5",           # the docs site; `uv run mkdocs build` renders docs/ into site/
   "zizmor>=1.0",
-  "ty==0.0.99",                     # first-party Python type gate (prek hook). Pinned exactly, not
+  "ty==0.0.101",                     # first-party Python type gate (prek hook). Pinned exactly, not
   # `>=`, because ty is pre-1.0: a 0.0.x bump can add a rule or
   # change an inference and turn master red on an unrelated PR.
   # Renovate raises the bump as its own PR, which is where the
@@ -140,8 +140,7 @@ markers = [
 # shared module (deployed INTO each setup script's /opt dir as a sibling) — on pythonpath so the
 # import-tested renovate_notify.py + test_host_lib.py resolve it in CI. scripts: the k8s manifest
 # tests import the render guards from there — _k8s_render.py did it with a sys.path insert, which
-# only worked for modules importing _k8s_render first. gitops_deploy/files: lets a test import
-# the deployer's modules by bare name, as the installed copy does.
+# only worked for modules importing _k8s_render first.
 # monitor-bridge/files: bridge/common.py is the same cross-role pattern as host_lib.py, staged
 # into autofix-bridge's ConfigMap rather than duplicated — without this, `uv run pytest
 # ansible/roles/k8s/autofix-bridge/files` alone can't resolve `from bridge.common import ...`
@@ -156,7 +155,6 @@ pythonpath = [
   "ansible/filter_plugins",
   "hosts/lib",
   "ansible/roles/k8s/game-stats/files",
-  "ansible/roles/setup/gitops_deploy/files",
   "hosts/components/deploy-ui/files",
   "ansible/roles/k8s/monitor-bridge/files",
   # crowdsec/files: jobs_metrics.py is the same cross-role pattern, staged into autofix-bridge's
@@ -169,11 +167,13 @@ pythonpath = [
   # The claude-code host component's scripts, which its tests import by bare name the way a
   # role's tests import its `files/` through ansible/roles/conftest.py.
   "hosts/components/claude-code/files",
-  # The same for the renovate-agent, renovate-notify, fake-remux and hypervisor components.
+  # The same for the renovate-agent, renovate-notify, fake-remux, hypervisor and
+  # worktree-holders components.
   "hosts/components/renovate-agent/files",
   "hosts/components/renovate-notify/files",
   "hosts/components/fake-remux/files",
   "hosts/components/hypervisor/files",
+  "hosts/components/worktree-holders/files",
   # `scripts` resolves the cross-directory `from lib.docs_provenance import ...` form (a PEP 420
   # namespace package — the subdirectories deliberately have no __init__.py, which would change
   # how pytest names the test modules under them). Each remaining subdirectory is listed as well
@@ -196,6 +196,7 @@ pythonpath = [
   "scripts/docs",
   # its tests share _catalog_fixtures.py, as scripts/deploy_tools/tests share _land_fakes.py
   "scripts/docs/tests",
+  "scripts/freshrss",
   "scripts/grafana",
   "scripts/home_assistant",
   "scripts/infra_map",
@@ -222,7 +223,7 @@ extend-exclude = [
 # repo's newer target writes 3.14-only syntax, `except A, B:` among it.
 # hosts/lib/tests/test_reconcile_component.py parses the file with the 3.12 grammar. The
 # repository signer runs under daniel-box's /usr/bin/python3 for the same reason, and
-# ansible/roles/setup/homelab_builder/tests/test_repo_signer.py holds it to the same grammar.
+# hosts/lib/tests/test_repo_signer.py holds it to the same grammar.
 # The signer imports host_lib.py, so that is py312 too, and
 # hosts/lib/tests/test_host_lib.py parses it with the 3.12 grammar (#6202).
 # rootq's root script runs under /usr/bin/python3 too, because uv's interpreter sits under a
@@ -350,9 +351,8 @@ python-version = "3.15"
 extra-paths = [
   "ansible/tests",
   "ansible/filter_plugins",
-  "ansible/roles/setup/initial_setup/files",
+  "hosts/components/worktree-holders/files",
   "hosts/lib",
-  "ansible/roles/setup/gitops_deploy/files",
   "hosts/components/deploy-ui/files",
   "ansible/roles/k8s/monitor-bridge/files",
   "ansible/roles/k8s/game-stats/files",
@@ -364,6 +364,7 @@ extra-paths = [
   "scripts/deploy_tools",
   "scripts/dev",
   "scripts/docs",
+  "scripts/freshrss",
   "scripts/grafana",
   "scripts/home_assistant",
   "scripts/infra_map",
@@ -430,7 +431,7 @@ include = [
 exclude = ["ansible/collections", "site", ".claude/worktrees"]
 
 [tool.ty.rules]
-# unresolved-attribute, invalid-assignment and unsupported-operator are errors since
+# missing-attribute, invalid-assignment and unsupported-operator are errors since
 # 2026-10-08. They were off from 2026-09-02, counted at 32, 10 and 14. While off they grew to 87,
 # 18 and 76, because a rule that is off does not stop new code adding to it. Each of the 181 was
 # fixed at its cause, not exempted. The causes, most common first:
@@ -461,7 +462,8 @@ exclude = ["ansible/collections", "site", ".claude/worktrees"]
 # without making anything safer; each is a place a real type would be better if the shape were
 # ever pinned down.
 invalid-argument-type = "error"
-unresolved-attribute = "error"
+missing-attribute = "error"
+missing-union-attribute = "error"
 invalid-assignment = "error"
 unsupported-operator = "error"
 # Warning by default; an error here. `import urllib` alone then reaching `urllib.error` resolves
@@ -496,13 +498,13 @@ import-not-found = "ignore"
 
 [[tool.ty.overrides]]
 # The vendored karakeep script is byte-pinned (ruff's per-file-ignores above has why), so a fix
-# for its four `unresolved-attribute` diagnostics cannot land here. `__init__` sets
+# for its four `missing-union-attribute` diagnostics cannot land here. `__init__` sets
 # `self.karakeep = None` and a later method assigns the client before any caller reads it, an
 # ordering ty cannot follow. The
 # override covers that one rule in that one file; ty checks every other rule there.
 include = ["ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py"]
 [tool.ty.overrides.rules]
-unresolved-attribute = "ignore"
+missing-union-attribute = "ignore"
 
 [[tool.ty.overrides]]
 # `claude_guard` is a different kind of external import from the block above: not a container

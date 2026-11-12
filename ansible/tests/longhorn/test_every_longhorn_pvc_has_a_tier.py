@@ -2,7 +2,7 @@
 """Guards that every `storageClassName: longhorn` PVC is routed to a backup tier.
 
 A `longhorn`-class PVC in none of the three routing lists in
-`ansible/roles/setup/k3s/defaults/main.yml` is labelled by the `longhorn-reconcile` role's
+`hosts/components/k3s-server/defaults/main.yml` is labelled by the `longhorn-reconcile` role's
 `files/longhorn_reconcile.py` into recurring group `default` — daily backups to B2, retain 14 — against the weekly-only policy in
 `docs/longhorn-backup-tiering.md:27-31`. This guard asserts that every bound `longhorn`-class
 PVC appears in one of the three lists;
@@ -22,7 +22,6 @@ Run: uv run pytest ansible/tests/longhorn/test_every_longhorn_pvc_has_a_tier.py
 """
 
 from lib.service_tiers import resolved_tier_lists
-
 from _helpers import load_defaults
 from _k8s_render import rendered_docs
 from lib.repo_paths import LONGHORN_RECONCILE_ROLE

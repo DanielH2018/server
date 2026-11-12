@@ -31,7 +31,7 @@ PRODUCERS = {
 
 def rendered_deadline(template: str) -> int:
     """DEADLINE_S as the scan script renders it."""
-    body = render_shell_script("setup", "initial_setup", template)
+    body = render_shell_script("components", "integrity-scans", template)
     [deadline] = re.findall(r"^\s*DEADLINE_S=(\d+)$", body, re.M)
     return int(deadline)
 
@@ -107,7 +107,7 @@ def test_literal_problems_is_flagged_when_a_deadline_moves_without_its_rules():
 @pytest.mark.parametrize("prefix", sorted(PRODUCERS))
 def test_each_scan_writes_the_check_its_rules_read_with_its_deadline(prefix):
     template, check = PRODUCERS[prefix]
-    body = render_shell_script("setup", "initial_setup", template)
+    body = render_shell_script("components", "integrity-scans", template)
     assert re.search(
         rf'write_check_textfile {re.escape(check)} ".*" "\$DEADLINE_S"', body
     ), f"{template} does not write the {check} textfile its rules read"

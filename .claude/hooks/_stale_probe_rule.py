@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # gen-hooks: library
-#   reason: imported by block-footguns.py for its ninth rule
+#   reason: imported by block-footguns.py for its eighth rule
 """The `block-footguns` rule that keeps a post-merge probe gate off a stale worktree.
 
 `probe.py health <tag>` reads every repo-derived input from the checkout its own file sits

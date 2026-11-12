@@ -310,17 +310,6 @@ CASES = (
     ),
     Case("filter", "trim", "{{ '  a  ' | trim }}", {}, "a"),
     Case("filter", "unique", "{{ [1, 2, 1] | unique | list | to_json }}", {}, "[1, 2]"),
-    Case(
-        "filter",
-        "updater_lag_grace_s",
-        "{{ timer | updater_lag_grace_s(service, dropin, 60) }}",
-        {
-            "timer": "[Timer]\nOnCalendar=*-*-* 04:00:00\nRandomizedDelaySec=600\n",
-            "service": "[Service]\nTimeoutStartSec=1800\n",
-            "dropin": "[Timer]\nOnCalendar=\nOnCalendar=*-*-* 02:00:00\n",
-        },
-        "89400",
-    ),
     Case("filter", "upper", "{{ 'aB' | upper }}", {}, "AB"),
     Case("filter", "urlencode", "{{ 'a b/c' | urlencode }}", {}, "a%20b/c"),
     Case(

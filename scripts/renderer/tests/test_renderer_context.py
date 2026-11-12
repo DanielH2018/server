@@ -7,11 +7,10 @@ import jinja2
 import pytest
 import yaml
 
-from lib.ansible_inventory import inventory_hosts
 from lib.ansible_jinja_env import template_env
 from lib.estate import Inventory
 from lib.render_guard import StrictChainableUndefined, host_files, host_layer, load_yaml
-from lib.repo_paths import ANSIBLE, HOST_VARS, HOSTS_INI, K8S_ROLES, K8S_SERVICES
+from lib.repo_paths import ANSIBLE, HOST_VARS, K8S_ROLES, K8S_SERVICES
 from renderer import shadow_diff
 from renderer.renderer_lib.context import play_containers_list, play_context
 from toposort import build_k8s_dep_map, filter_by_platform, toposort_containers
@@ -56,16 +55,10 @@ def test_hostvars_of_the_primary_node_hold_the_play_view(ctx):
     assert "hostvars" not in primary
 
 
-def test_hostvars_of_the_pi_take_ansible_user_from_hosts_ini(ctx):
-    (pi,) = [h for h in inventory_hosts(HOSTS_INI) if h.name == "daniel-pi"]
-    assert "ansible_user" not in load_yaml(HOST_VARS / "daniel-pi.yml")
-    assert ctx["hostvars"]["daniel-pi"]["ansible_user"] == pi.settings["ansible_user"]
-
-
-def test_hostvars_of_the_pi_resolve_ansible_host_to_its_own_server_ip(ctx):
+def test_the_pi_client_ip_is_the_pis_own_server_ip(ctx):
     pi_ip = load_yaml(HOST_VARS / "daniel-pi.yml")["server_ip"]
-    assert ctx["hostvars"]["daniel-pi"]["ansible_host"] == pi_ip
-    # Resolved against daniel-box's context, it would still be an address, just the wrong one.
+    assert _render(ctx, "{{ k8s_pi_client_ip }}") == pi_ip
+    # Read from daniel-box's own layer, it would still be an address, just the wrong one.
     assert pi_ip != ctx["server_ip"]
 
 
@@ -83,11 +76,6 @@ def test_a_name_no_layer_supplies_is_flagged(ctx):
     # The render guards' BASE_CONTEXT stubs this name, and the renderer's context must not.
     with pytest.raises(jinja2.UndefinedError, match="k8s_built_image_tags"):
         _render(ctx, "{{ k8s_built_image_tags }}")
-
-
-def test_k8s_no_mutate_is_false_in_a_render(ctx):
-    # `ansible_check_mode` is false in a render, and group_vars leaves `k8s_dry_run` false.
-    assert ctx.get("k8s_no_mutate") is False
 
 
 def _inventory(tmp_path, **edits):
@@ -129,10 +117,11 @@ def test_a_value_naming_an_undefined_variable_is_flagged(tmp_path):
             _render(ctx, f"{{{{ {name} }}}}")
 
 
-def test_a_pi_host_without_its_server_ip_is_flagged(tmp_path):
+def test_a_pi_host_without_its_server_ip_stops_the_render_that_reads_it(tmp_path):
     def drop(layer):
         return {k: v for k, v in layer.items() if k != "server_ip"}
 
     inventory = _inventory(tmp_path, daniel_pi=drop)
-    with pytest.raises(ValueError, match=r"daniel-pi.*server_ip"):
-        play_context(ROLE, shadow_diff.stub_vars(), inventory=inventory)
+    ctx = play_context(ROLE, shadow_diff.stub_vars(), inventory=inventory)
+    with pytest.raises(jinja2.UndefinedError, match="k8s_pi_client_ip"):
+        _render(ctx, "{{ k8s_pi_client_ip }}")

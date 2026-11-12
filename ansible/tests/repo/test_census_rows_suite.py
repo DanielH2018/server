@@ -96,11 +96,9 @@ ROLE_DIRS_CALLERS = frozenset(
         "k8s/test_configmap_keys_not_absorbed.py",
         "deploy/test_cronjob_only_roles_include_the_gate.py",
         "deploy/test_k8s_autodeploy_guard.py",
-        "deploy/test_k8s_dry_run.py",
         "deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py",
         "repo/test_role_claude_md.py",
         "services/test_bridge_patch_boundary.py",
-        "setup/test_setup_cron_roles_have_a_contract.py",
     )
 )
 
@@ -204,14 +202,7 @@ ROWS = (
         ),
         allow={
             SELF: "the red fixtures above hold the offending spelling as text",
-            "ansible/tests/longhorn/test_prune_backups.py": (
-                "reads ansible/prune_backups/tasks/, a playbook's task directory, not a role's"
-            ),
             "ansible/tests/_role_census.py": "is role_task_files, the walk every guard calls",
-            "ansible/tests/_check_mode.py": (
-                "importer_guards reads the files beside one task file, in whatever directory "
-                "its caller passes, tmp_path fixtures included; it is not a role census"
-            ),
         },
     ),
     Census(

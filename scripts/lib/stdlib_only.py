@@ -32,9 +32,6 @@ keys a staged member by its tree source; `members()` keeps each staged copy with
 install's directories, because `host_lib.py` ships to a dozen of them and a union of their
 directories would resolve an import through a sibling only another install carries.
 
-The deployer's subprocess helpers (`narrow_setup.py`, `setup_routing.py`) are not callers: they run `uv run --frozen`, in
-the venv, and `test_the_deployers_subprocess_helpers_run_in_the_venv` pins that.
-
 Run: uv run pytest scripts/lib/tests/test_stdlib_only.py
 """
 
@@ -224,7 +221,7 @@ def _eval(
     """A `sys.path` insert's argument, for the idioms the tree uses; None when unknown.
 
     `script_imports._path_expr` reads only `Path(__file__)`-rooted spellings and skips a named
-    constant by design. Here a named constant is the point (`GITOPS_DEPLOY_FILES` is how a
+    constant by design. Here a named constant is the point (`MONITOR_BRIDGE_FILES` is how a
     role directory reaches the path), and session-health spells its inserts with `os.path`.
     """
     match node:
@@ -449,7 +446,7 @@ def _role_module(top: str, dirs: list[Path]) -> bool:
     """Whether `top` resolves to exactly one of `dirs`, and the map lists it for that one.
 
     Exactly one, because the static walk does not model `sys.path` order: with both
-    MONITOR_BRIDGE_FILES and GITOPS_DEPLOY_FILES on the path, which `gitops_hold` loads is
+    two role directories on the path, which one loads a shared basename is
     the question the map exists to answer, so two holders are refused rather than guessed.
     """
     holders = [d for d in dirs if (d / f"{top}.py").is_file() or (d / top).is_dir()]

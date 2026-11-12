@@ -1,0 +1,191 @@
+---
+# Pinned upstream versions. Bump deliberately — Longhorn has version-to-version
+# upgrade constraints and does not support arbitrary version skips.
+#
+# The k3s pin (`k3s_version`, `k3s_install_script_url`, `k3s_install_script_sha256`) is the
+# `system-upgrade` role's (roles/k8s/system-upgrade/defaults/main.yml, H6.1b), because that role
+# drives the SUC Plans that upgrade k3s.
+# The Longhorn pin, k3s_longhorn_version, is the `longhorn` role's (roles/k8s/longhorn/defaults/main.yml).
+
+# The k3s server's flags are `k3s_server_config` in hosts/components/k3s-server/component.yml
+# since H6.4b, with the reason for each flag, the peer-URL trap among them. The package renders
+# them into /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, and homelab-k3s-restart restarts k3s
+# once inside its window when they change. bootstrap-host.sh passes the installer a bare `server`.
+
+# ── the API server trusts Authelia as an OIDC provider ─────────────────────────────────
+# One flag pointing at a FILE, and the file is the point. They exist so Headlamp can log a
+# person in instead of browsing the cluster as its own ServiceAccount: Headlamp forwards the
+# browser's `id_token` and the API SERVER is what accepts or rejects it, so the trust has to
+# be configured here rather than in the workload's role.
+#
+# WHY A FILE RATHER THAN `--oidc-*` FLAGS. Authelia derives `iss` from the host the
+# authorization request arrived on, and `--oidc-issuer-url` takes exactly one value. The flag
+# path could therefore trust `auth.local.<domain>` or `auth.<domain>`, never both, and
+# Headlamp's login would work on only one of its two hostnames: a public-route login comes
+# back from Authelia with `iss: https://auth.<domain>` and the API server refuses it.
+# `AuthenticationConfiguration.jwt` is a list of issuers, which is the only mechanism
+# kube-apiserver offers for more than one.
+#
+# THE TWO ARE MUTUALLY EXCLUSIVE: "This flag is mutually exclusive
+# with the --oidc-* flags if the file configures the JWT Token authenticator"
+# (kube-apiserver flag reference). Passing both makes the API server refuse to start, which
+# on this Type=notify unit is an indefinite hang (the node-ip note in the component), not an error.
+#
+# CHANGING THE FLAG OR THE FILE RESTARTS THE CONTROL PLANE. Both are daniel-box's package's
+# (hosts/components/k3s-server), and homelab-k3s-restart restarts k3s once inside its window
+# when either changes. That is a routine event on this host, but it is not a no-op.
+#
+# A WRONG ISSUER VALUE DOES NOT LOCK YOU OUT, and the failure mode is worth stating exactly
+# because it is easy to over-fear. An unreachable or misspelled issuer leaves the API server
+# up and serving, with OIDC logins failing and nothing else affected. The root kubeconfig
+# authenticates by CLIENT CERTIFICATE, which this never touches; so do every ServiceAccount
+# and every in-cluster controller.
+#
+# A MALFORMED FILE IS A DIFFERENT MATTER, and this is the one way the config file is riskier
+# than the flags would be. The API server VALIDATES this file at startup and refuses to
+# start when it fails validation, so a schema error wedges the node: the k3s unit is
+# Type=notify with TimeoutStartSec=0, so `systemctl restart k3s` hangs indefinitely rather
+# than failing — the same hang the component's node-ip note describes. The validation is
+# stricter than it looks; `prefix` alone has two rules the flag path did not have (see the
+# template). `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py` renders and shape-checks
+# the component's template for that reason. Read `/var/log/k3s.log` (not `journalctl -u k3s`, which keeps none of
+# k3s's own lines, see the k3s-server component's 50-homelab.conf) before walking away.
+#
+
+# The `k3s_oidc_*` keys (both Authelia issuers, the client id, the two claims and the groups
+# prefix) moved to hosts/components/k3s-server/component.yml in H6.4a, with the template that
+# was their only reader. The long account of the 421 trap and the recovery is there too. The
+# file's path, `k3s_authentication_config_path`, moved there in H6.4b with the flag naming it.
+
+# ── apiserver audit logging (G2/G3) ─────────────────────────────────────────────────────
+# k3s writes no audit log by default, so there is no record of API writes at all. This
+# cluster auto-approves `kubectl exec`, `cp` and `port-forward` for agent sessions, and
+# several of those containers mount Longhorn PVCs — the controls that make that acceptable
+# are all preventive, with nothing underneath them to answer "which session did this".
+#
+# The apiserver reads the policy file at STARTUP and refuses to come up if it is missing. The
+# policy, its log directory, the audit flags and their rotation keys are all daniel-box's
+# package's (hosts/components/k3s-server) since H6.4b, so one install brings them together.
+#
+# k3s_audit_log_enabled, k3s_audit_log_dir and k3s_audit_log_path live in
+# inventory/group_vars/all.yml, NOT here: loki-homelab's promtail config reads them to tail
+# the file, and a role default is invisible to another role's templates. Same reason
+# k3s_metallb_ingress_vip sits there.
+
+# ── why two unsafe sysctls are allow-listed ─────────────────────────────────────────────
+# net.ipv4.ip_forward (wg-easy): the wg-easy SERVER routes
+# between wg0 and eth0 inside its pod netns, and /proc/sys is ro in a pod even with
+# NET_ADMIN (measured — see below), so forwarding can only arrive via the pod spec's
+# securityContext.sysctls, which kubelet refuses unless allow-listed. Namespaced, so this
+# enables forwarding for pods that ASK, not for the node.
+#
+# net.ipv4.conf.all.src_valid_mark (qbittorrent):
+# qbittorrent runs inside a WireGuard/Mullvad netns, and wg-quick refuses to bring the tunnel
+# up without net.ipv4.conf.all.src_valid_mark=1. Measured on this node: /proc/sys is mounted
+# `ro` in a pod even with NET_ADMIN, so the container cannot set it itself; and wg-quick's
+# line 240 only ATTEMPTS the write when the value is not already 1, so pre-setting it from the
+# pod spec makes wg-quick skip the write and proceed.
+#
+# Narrow on purpose. This sysctl is NAMESPACED — a pod setting it affects its own network
+# namespace and nothing else, so allow-listing it grants no reach over the node or its
+# neighbours. "Unsafe" is kubelet's conservative default list, not a risk ranking. The two
+# net.ipv6.conf.*.disable_ipv6 sysctls the Compose file also sets are deliberately NOT here:
+# a pod's only v6 addresses are ::1 and a link-local, with no route off-link, so there is no
+# leak path for them to close.
+#
+# A privileged init container is the rejected alternative: privilege is concentrated in exactly
+# one component (roles/k8s/dri-device-plugin) and qbittorrent — which handles arbitrary torrent
+# payloads — is the worst place to add a second.
+#
+# The flag is `kubelet-arg` in `k3s_server_config` (hosts/components/k3s-server/component.yml).
+
+# Read-only cluster access for {{ sys_user }}. The admin kubeconfig k3s writes is root:root
+# 0640, so every `kubectl` otherwise goes through sudo — which is passworded on this host and
+# therefore needs a TTY, blocking anything unattended (diagnostics, health checks, an agent
+# reading pod logs). This ServiceAccount closes that gap without handing out cluster-admin:
+# it can read, and only read. Writes keep going through Ansible, which escalates properly.
+#
+# The identity's objects are the cluster-base role's (H1.2), and its template reads the mirrored
+# pair cluster_base_readonly_sa_name and cluster_base_readonly_sa_namespace. The two keys here
+# stay for the host files, which write the kubeconfig and the audit policy.
+# ansible/tests/k8s/test_cluster_base_mirrors_the_k3s_identity.py holds each pair equal, so a
+# rename changes both sides in one PR.
+k3s_readonly_sa_name: homelab-readonly
+k3s_readonly_sa_namespace: kube-system
+k3s_readonly_kubeconfig_server: https://127.0.0.1:6443
+
+# The link that carries server_ip, which the package's netplan file pins statically so k3s can
+# start while the gateway's DHCP server is down (#3882, #3891 for the agent). Empty removes
+# the pin at the next package install. Set it in host_vars only once the gateway keeps server_ip
+# out of its DHCP pool.
+k3s_node_static_link: ""
+
+# The WiFi link that the package's netplan file joins to the home network as a fallback uplink,
+# using the SOPS keys `wifi_ssid` and `wifi_password`. Its routes sit at metric 600, behind
+# the pinned link's 100, so it carries traffic only while the pinned link has no carrier.
+# Empty removes the file at the next package install.
+k3s_node_wifi_link: ""
+
+# ── Agent join ─────────────────────────────────────────────────────────────
+# daniel-server joins as an AGENT, not a second server (a two-member etcd halves
+# availability rather than doubling it). hosts/bootstrap-host.sh joins it, with K3S_URL and
+# K3S_TOKEN from the operator; docs/host-packages.md's *Rebuilding daniel-server* has the steps.
+# daniel-box's package holds the join firewall rules (`sudo ufw status | grep k3s-join`).
+
+# The agent's flags are `k3s_agent_config` in hosts/components/k3s-agent/component.yml since
+# H6.5b. The package renders them into /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, and they
+# take effect at the agent's next start. bootstrap-host.sh passes the installer a bare `agent`.
+
+# Node-to-node traffic UFW must admit (both hosts default-deny INPUT, and unlike every
+# service port this traffic terminates in host processes, not Docker/kube NAT):
+#   6443/tcp  agent -> server   apiserver registration + watch
+#   8472/udp  both directions   flannel VXLAN (pod-to-pod)
+#   10250/tcp both directions   kubelet API (logs/exec/metrics-server)
+#   9100/tcp  both directions   node-exporter scrape (see the two rules below)
+# The two lists below are mirrors apart from 6443, which is server-only because agents dial the
+# API and the server never dials theirs. ansible/tests/setup/test_k3s_join_port_symmetry.py enforces
+# that.
+#
+# NOT a complete inventory of what this cluster needs open. A port missing from BOTH lists is
+# symmetric by construction, so the test is blind to it — MetalLB's memberlist 7946 sat in that
+# blind spot, blocked on both nodes with the
+# speakers never converging. Completeness is not a property any check here can establish; the
+# only evidence is a live probe from the node that needs the port.
+k3s_join_server_ports:  # allowed FROM each agent, ON the server
+  - { port: "6443", proto: tcp }
+  - { port: "8472", proto: udp }
+  - { port: "10250", proto: tcp }
+  # The mirror of the agent-side 9100 rule below, and it must stay symmetric. Prometheus is a
+  # single-replica Deployment with NO nodeSelector and no affinity, so it lands wherever the
+  # scheduler puts it after a reboot; whichever node it is NOT on has to admit the scrape. The
+  # agent-side rule alone would assume "prometheus runs on the server", but a reboot can move it
+  # to daniel-server — daniel-box's node target then sits down,
+  # dropping its host disk and memory coverage entirely (HostDiskFull and HostMemoryHigh have no
+  # daniel-box series to read; ScrapeTargetDown and HostCoverageShortfall in observability's
+  # hosts.yaml are what page). Fix the firewall, not the placement: pinning
+  # prometheus back to daniel-box would re-break this the first time the pin is lifted.
+  - { port: "9100", proto: tcp }
+  # MetalLB memberlist gossip. Without this rule both nodes block it and the speakers never
+  # converge. INERT: L2Advertisement homelab-l2 pins every pool to
+  # daniel-box, so one speaker owns every VIP and has nobody to gossip with. It stops being
+  # inert the moment that pin is lifted, at which point two speakers each believe they own the
+  # address. Symmetric on both lists, which is why the symmetry test could never have caught
+  # it — a port missing from both sides is symmetric by construction.
+  - { port: "7946", proto: tcp }
+  - { port: "7946", proto: udp }
+k3s_join_agent_ports:  # allowed FROM the server, ON the agent
+  - { port: "8472", proto: udp }
+  - { port: "10250", proto: tcp }
+  # node-exporter DS is hostNetwork, so prometheus (on the server node) scrapes the
+  # agent's 9100 on its LAN address, masqueraded from the server's LAN IP — a path the
+  # vxlan/kubelet allows above never covered. Without it the daniel-server node target sits
+  # down; pod-IP scrapes (promtail) ride 8472 and mask the gap.
+  - { port: "9100", proto: tcp }
+  # The mirror of the server-side MetalLB memberlist rule above — see it for why this is
+  # inert and why it must land before the L2Advertisement node pin is lifted.
+  - { port: "7946", proto: tcp }
+  - { port: "7946", proto: udp }
+
+# Agent node IPs the server-side firewall admits. Set in daniel-box host_vars once an
+# agent exists; empty means the allow tasks are no-ops.
+k3s_agent_node_ips: []

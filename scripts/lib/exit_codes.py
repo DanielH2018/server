@@ -16,8 +16,8 @@ happened, try again later", 0 and 1 are the verdicts. Each family defines its ow
 terms of them rather than restating the integer.
 
 THE FAMILIES ARE STILL DISJOINT VOCABULARIES OVER THE SAME SMALL INTEGERS, outside the spine.
-2 means "a tag matched no service" to deploy.sh and "the branch is on origin with no PR" to
-publish_pr.py; 3 means "the change is broad" to deploy.sh and "the branch has no PR" to
+2 means "the CI gate is disarmed" to await_ci.py and "the branch is on origin with no PR" to
+publish_pr.py; 3 means "the probe does not apply" to probe.py and "the branch has no PR" to
 publish_pr.py's unlanded group. The prefixes are what let a reader tell which contract a value belongs to, so they are
 not decoration: `publish_pr.py` in particular defines two groups of its own that both start
 at 0 with different meanings, and they are `PUBLISH_*` and `UNLANDED_*` here for that reason.
@@ -30,9 +30,9 @@ that exits.
 
 Typical usage example:
 
-    from lib.exit_codes import DEPLOY_LOCK_BUSY, DEPLOY_SH_NO_VERDICT
+    from lib.exit_codes import LAND_GAVE_UP
 
-    if rc == DEPLOY_LOCK_BUSY:
+    if rc == LAND_GAVE_UP:
         ...
 """
 
@@ -45,60 +45,6 @@ OK = 0
 FAILED = 1
 USAGE_ERROR = 64
 TEMP_FAIL = 75
-
-# -- scripts/deploy.sh ------------------------------------------------------------------ The
-# wrapper's own contract: 2, 3, 4, 5 and 64 are refused by its front half `deploy_lib/run.py`, 20 and
-# 75-79 by its locked half `deploy_lib/under_locks.py` (and `deploy_lib/detach_run.py`).
-# `DEPLOY_SH_NO_VERDICT` below is the set that means NOTHING was deployed, and every member is a
-# resume point. Read the frozenset rather than a list in prose. 20 is the inverse -- the
-# playbook RAN and a task failed, so whatever applied before it is live. ansible-playbook's own
-# 2/3/4 are collapsed onto 20 by the wrapper for exactly that reason;
-# `tests/test_deploy_exit_codes.py` pins the disjointness. One case never reaches 20:
-# ansible-playbook exits 2 on a USAGE error too, and `deploy_flags.check_passthrough` asks its
-# parser before the lock and refuses with 64, because there no play ran and nothing is live.
-DEPLOY_OK = OK
-DEPLOY_TAG_MISS = 2
-DEPLOY_BROAD = 3
-DEPLOY_STALE = 4
-DEPLOY_FLUX_OWNED = 5
-DEPLOY_PLAYBOOK_FAILED = 20
-DEPLOY_BAD_FLAGS = USAGE_ERROR
-DEPLOY_LOCK_BUSY = TEMP_FAIL
-# flock failed for a reason that is not contention: a bad descriptor, a lock file the deploy
-# user cannot open. Nothing was deployed either way, so it is a refusal — but retrying clears
-# 75 and never clears this one, which is why it is its own code.
-DEPLOY_LOCK_UNAVAILABLE = 76
-# The snapshot worktree could not be created, so the wrapper had no tree to render from. Its
-# own code rather than 76's: 76 points at the lock file, this points at the snapshot root or
-# the git object store, and the two are fixed in different places (ADR-0017).
-DEPLOY_SNAPSHOT_FAILED = 77
-# The playbook reached PLAY RECAP naming no host. ansible exits 0 for that -- no play matched,
-# so no task failed -- and the wrapper reads the recap to tell it apart from a deploy. Nothing
-# was deployed, and unlike 77 the fault is in the inventory or the host pattern, not the
-# snapshot.
-DEPLOY_NO_HOSTS = 78
-# `deploy_locks.py plan` did not print the service locks -- it exited non-zero, timed out, or
-# printed nothing -- so the wrapper had nothing to take and deployed nothing. It refuses rather
-# than fall back to a lock order of its own: the plan is the ONE implementation of the lock
-# names and their order, and a second one is what a deadlock between a hand deploy and a tick
-# is made of. Its own code because the remedy is the helper itself.
-DEPLOY_LOCK_PLAN_FAILED = 79
-
-# The subset that means staging (or a landing) never formed an opinion, because deploy.sh
-# refused before it applied anything.
-DEPLOY_SH_NO_VERDICT = frozenset(
-    {
-        DEPLOY_TAG_MISS,
-        DEPLOY_BROAD,
-        DEPLOY_STALE,
-        DEPLOY_FLUX_OWNED,
-        DEPLOY_LOCK_BUSY,
-        DEPLOY_LOCK_UNAVAILABLE,
-        DEPLOY_SNAPSHOT_FAILED,
-        DEPLOY_NO_HOSTS,
-        DEPLOY_LOCK_PLAN_FAILED,
-    }
-)
 
 # -- scripts/deploy_tools/await_ci.py ---------------------------------------------------
 # `land_lib.tools.await_ci_verdict` maps await_ci's own CLI contract onto these.
@@ -133,25 +79,16 @@ UNLANDED_PR_OPEN = 2
 UNLANDED_NO_PR = 3
 UNLANDED_PR_RED = 4
 
-# -- scripts/deploy_tools/narrow_setup.py -----------------------------------------------
-# Which `--tags` value a setup-role range needs. 0 prints the tags; 1 is a refusal, after which
-# the caller keeps the whole-role tag. `NARROW_SETUP_NOTHING` says the role needs no tag at all,
-# printed beside `narrowed-to-nothing` on stdout. It is 5, not 3, because `DEPLOY_BROAD` (3) is the
-# opposite answer, "cannot narrow" (#4453), and not 2, because
-# argparse exits 2 on a bad command line. The deployer's copy of the value is
-# `deployer_lib/deploy_narrow.py:NARROW_SETUP_NOTHING_EXIT`, which cannot import this module.
-NARROW_SETUP_NARROWED = OK
-NARROW_SETUP_REFUSED = FAILED
-NARROW_SETUP_NOTHING = 5
-
 # -- scripts/diagnostics/probe.py -------------------------------------------------------
 # Every verdict subcommand: 0 and 1 are what the probe observed, and 75 means it observed
 # nothing because it could not read its source (a curl, an ssh or a kubectl read that failed,
 # or a read that came back empty). A caller retries on 75 and investigates on 1 (#4444). 64 is
 # an argument the probe cannot act on, such as `--since 3x`: no retry can succeed, and nothing
-# was observed, so it names no verdict (#4471).
+# was observed, so it names no verdict (#4471). 3 is `health` reporting that the tag names
+# nothing it can check, so a deploy gate skips the tag rather than grading it (#7895).
 PROBE_OK = OK
 PROBE_FAILED = FAILED
+PROBE_NOT_APPLICABLE = 3
 PROBE_USAGE_ERROR = USAGE_ERROR
 PROBE_UNREADABLE = TEMP_FAIL
 
@@ -278,112 +215,6 @@ def _c(
 # Keyed by the entry point's path relative to the repo root — the name every doc, skill and
 # caller uses. Ordered by code so the rendered table reads in one direction.
 CONTRACTS: dict[str, tuple[Code, ...]] = {
-    "scripts/deploy.sh": (
-        _c(
-            DEPLOY_OK,
-            "DEPLOY_OK",
-            "deployed, and the play reached PLAY RECAP naming a host.",
-            verdict="deployed",
-        ),
-        _c(
-            DEPLOY_TAG_MISS,
-            "DEPLOY_TAG_MISS",
-            "a --tags value matched no service in containers_list, so NOTHING was deployed.",
-            "--list-services prints every valid value.",
-            verdict="tag-miss",
-        ),
-        _c(
-            DEPLOY_BROAD,
-            "DEPLOY_BROAD",
-            "the change is broad (shared templates, inventory, the setup plane) and maps to no "
-            "single service, so NOTHING was deployed.",
-            "--changed refuses it by design. `promote` and Flux apply the cluster half, and "
-            "the refusal names any setup or bring-up command a hand owes.",
-            verdict="broad",
-        ),
-        _c(
-            DEPLOY_STALE,
-            "DEPLOY_STALE",
-            "the tree is behind origin/master, so NOTHING was deployed.",
-            "A stale tree renders stale templates and reverts live config while every "
-            "repo-side check still reads green. Pull first; never --skip-staleness-check. "
-            "Staleness is decided before --tags is validated, so a stale tree carrying a tag "
-            "it does not know yet (a new role's first landing) reports this, not a tag miss.",
-            verdict="stale",
-        ),
-        _c(
-            DEPLOY_FLUX_OWNED,
-            "DEPLOY_FLUX_OWNED",
-            "the tag is applied by Flux through `promote`, so NOTHING was deployed.",
-            "Its containers_list entry is `platform: k8s`, so no Ansible path may apply it. "
-            "Merge the change and let `promote` publish it; drop the tag to deploy the rest.",
-            verdict="flux-owned",
-        ),
-        _c(
-            DEPLOY_PLAYBOOK_FAILED,
-            "DEPLOY_PLAYBOOK_FAILED",
-            "the playbook RAN and a task failed, so this is the one deploy exit where changes "
-            "ARE live — everything applied before the failing task took effect.",
-            "Read the PLAY RECAP and the failing TASK. Do not treat it as a tag, staleness or "
-            "lock refusal, and do not assume a re-run is safe.",
-            verdict="playbook-failed",
-        ),
-        _c(
-            DEPLOY_BAD_FLAGS,
-            "DEPLOY_BAD_FLAGS",
-            "the command line is wrong, so NOTHING was deployed and a retry changes nothing.",
-            "Read the usage above; fix the flags rather than re-running.",
-            verdict="bad-flags",
-        ),
-        _c(
-            DEPLOY_LOCK_BUSY,
-            "DEPLOY_LOCK_BUSY",
-            "a deploy lock stayed busy, so NOTHING was deployed — either "
-            "the git-tree lock (deploy_locks.TREE_LOCK) or one of this run's own "
-            "/var/lock/server-deploy-<tag>.lock files.",
-            "The GitOps timer or another session holds it. This is a resume point, not a "
-            "playbook failure — re-run the same command shortly.",
-            verdict="lock-busy",
-        ),
-        _c(
-            DEPLOY_LOCK_UNAVAILABLE,
-            "DEPLOY_LOCK_UNAVAILABLE",
-            "flock failed on the lock file ITSELF, so NOTHING was deployed. This is not "
-            "contention — no deploy holds the lock.",
-            "Check that the git-tree lock file (deploy_locks.TREE_LOCK) exists and is writable "
-            "by this user; "
-            "retrying alone changes nothing.",
-            verdict="lock-unavailable",
-        ),
-        _c(
-            DEPLOY_SNAPSHOT_FAILED,
-            "DEPLOY_SNAPSHOT_FAILED",
-            "the snapshot worktree could not be created, so NOTHING was deployed.",
-            "The playbook renders from a detached worktree of HEAD under "
-            "/tmp/homelab-deploy-snapshots; the message above carries the failing command's "
-            "own stderr (the `fatal:` line), so fix what it names — retrying changes nothing.",
-            verdict="snapshot-failed",
-        ),
-        _c(
-            DEPLOY_NO_HOSTS,
-            "DEPLOY_NO_HOSTS",
-            "the playbook matched NO host, so NOTHING was deployed.",
-            "ansible exits 0 for a run where no play matched, so the wrapper reads the PLAY "
-            "RECAP itself. Read the [WARNING] lines above — an inventory that failed to "
-            "parse, or a host pattern that matched nothing — fix that, then re-run.",
-            verdict="no-hosts",
-        ),
-        _c(
-            DEPLOY_LOCK_PLAN_FAILED,
-            "DEPLOY_LOCK_PLAN_FAILED",
-            "`deploy_locks.py plan` did not print this run's service locks, so the wrapper had "
-            "nothing to take and NOTHING was deployed.",
-            "It never falls back to a lock order of its own. Run `uv run python "
-            "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py plan <tag>` by hand to "
-            "see why, fix that, then re-run; nothing was held while it ran.",
-            verdict="lock-plan-failed",
-        ),
-    ),
     "scripts/deploy_tools/land.sh": (
         _c(
             LAND_SETTLED,
@@ -432,25 +263,6 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(UNLANDED_NO_PR, "UNLANDED_NO_PR", "`unlanded`: a branch with no PR."),
         _c(UNLANDED_PR_RED, "UNLANDED_PR_RED", "`unlanded`: a red or conflicting PR."),
     ),
-    "scripts/deploy_tools/narrow_setup.py": (
-        _c(
-            NARROW_SETUP_NARROWED,
-            "NARROW_SETUP_NARROWED",
-            "printed the comma-separated tags the range needs from the role.",
-        ),
-        _c(
-            NARROW_SETUP_REFUSED,
-            "NARROW_SETUP_REFUSED",
-            "refused to narrow, so the caller applies the whole role tag.",
-            "stderr names the path or tag that made the derivation uncertain.",
-        ),
-        _c(
-            NARROW_SETUP_NOTHING,
-            "NARROW_SETUP_NOTHING",
-            "the range reaches no host through the role, so the role needs no tag at all; "
-            "stdout is `narrowed-to-nothing`.",
-        ),
-    ),
     "scripts/diagnostics/probe.py": (
         _c(
             PROBE_OK,
@@ -464,6 +276,12 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "the probe read its source and observed a bad verdict.",
             "The lines above the verdict name what failed.",
             verdict="fail",
+        ),
+        _c(
+            PROBE_NOT_APPLICABLE,
+            "PROBE_NOT_APPLICABLE",
+            "`health`: the tag names nothing to check, so a deploy gate skips it.",
+            verdict="skip",
         ),
         _c(
             PROBE_USAGE_ERROR,

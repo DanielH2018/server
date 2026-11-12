@@ -1,9 +1,7 @@
 """Readers behind the three panels of the deploy UI. Pure parsers, stdlib only.
 
 The daemon runs under `uv run --no-project` on the host interpreter, outside the repo venv,
-so nothing here imports from `scripts/` or `/opt/gitops-deploy` — `gitops_markers`, the
-deployer's own marker table, and `gitops_ledger`, its JSON-lines reader, are installed beside
-this file from the deployer's `files/`. `ps`, `fuser` and `gh` are reached as subprocesses
+so nothing here imports from `scripts/`. `ps`, `fuser` and `gh` are reached as subprocesses
 by `deploy_ui.App`; this module turns their text into rows.
 """
 
@@ -14,22 +12,11 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
-import gitops_ledger
-import gitops_markers
-from gitops_hold import DeployerSnapshot
-
-# `deploy_cli.py`: the `deploy.sh` shim execs `uv run … deploy_cli.py`, and that `uv` process
-# stays the family root while the locked half runs under it (#2412), so no process says
-# `deploy.sh` at all. `deploy_run.py` is what the shim execed before #4347, and a deploy from
-# an older checkout still runs it.
-_RUN_RE = re.compile(
-    r"\b(land\.py|deploy\.sh|deploy_cli\.py|deploy_run\.py|ansible-playbook)\b"
-)
+_RUN_RE = re.compile(r"\b(land\.py|ansible-playbook)\b")
 _PR_RE = re.compile(r"--pr\s+(\d+)")
 _TAGS_RE = re.compile(r"--tags[= ]+(\S+)")
-# `deploy.sh --list-services` is a read, and `grep` is whoever is looking for a run. Neither
-# is a run.
-_NOT_A_RUN = re.compile(r"^grep\b|--list-services\b")
+# `grep` is whoever is looking for a run, not a run.
+_NOT_A_RUN = re.compile(r"^grep\b")
 
 
 @dataclass(frozen=True)
@@ -45,11 +32,9 @@ class Run:
     """One process family in flight: a landing, a deploy, or a bare lock holder.
 
     `locks` names the lock files the family holds and `waiting_on` the ones it is queued
-    on, both by basename. `deploy.sh` opens a service lock's descriptor and then blocks
-    on it, so a queued second deploy of the same service has the file OPEN for the whole
+    on, both by basename. A process blocked on a lock has the file OPEN for the whole
     wait and fuser lists it like the holder; only the kernel's lock table (`/proc/locks`)
-    tells the two apart. A `deploy` row with a `waiting_on` is the queue that was
-    silent before #1844.
+    tells the two apart.
     """
 
     pid: int
@@ -73,9 +58,8 @@ class FileLock:
 
 # `56: FLOCK  ADVISORY  WRITE 1930784 fc:00:6564011 0 EOF` is a granted flock;
 # `56: -> FLOCK …` under it is a process blocked on the same lock. The pid on a granted
-# line can be dead: `deploy.sh` takes its locks with a `flock` CHILD on an inherited
-# descriptor, and the lock outlives the child. The pid on a `->` line is alive by
-# construction, blocked inside flock(2).
+# line can be dead: a lock taken by a `flock` CHILD on an inherited descriptor outlives the
+# child. The pid on a `->` line is alive by construction, blocked inside flock(2).
 _PROC_LOCK_RE = re.compile(
     r"^\d+:\s*(->\s*)?FLOCK\s+\S+\s+(?:READ|WRITE)\s+(\d+)\s+"
     r"([0-9a-f]+):([0-9a-f]+):(\d+)\s"
@@ -151,9 +135,9 @@ def runs(
     """Fold processes into one row per family.
 
     The topmost run or lock holder on a pid's ancestor chain owns every run and holder
-    below it. A landing is `uv run … land.py`, its python child, and the `deploy.sh` and
-    `ansible-playbook` it spawns: one row, kind `land`. A terminal deploy is
-    `deploy.sh`, `uv run ansible-playbook` and its child: one row, kind `deploy`. A lock
+    below it. A landing is `uv run … land.py`, its python child, and any
+    `ansible-playbook` it spawns: one row, kind `land`. A terminal playbook run is
+    `uv run ansible-playbook` and its child: one row, kind `deploy`. A lock
     holder that is neither — the GitOps tick on the tree lock — is a row of kind `lock`,
     so a held lock is never invisible because its holder matched no pattern. fuser lists
     every process with the file open, children included, which is why the fold has to
@@ -222,50 +206,6 @@ def log_path_of(pid: int) -> str:
         return ""
 
 
-def read_state(state_dir: Path) -> dict[str, str | list]:
-    """Read the three markers the panels show, plus the held planes.
-
-    The keys are the markers' basenames from `gitops_markers.MARKERS`, the deployer's own
-    table copied into this `files/`, which is what the page reads. A missing marker is ''. The `hold_plane_entries` key is every plane the hold waits on,
-    the `owed` ledger's `hold_plane` class read through `gitops_ledger.held_planes` (#3392).
-    It is what the page lists, one entry per failed apply, because a Clear drops all of them
-    at once (#2453). The
-    `manual_plane_owed` key is that class's raw ledger lines, served for `probe.py landing` on
-    a host that cannot read the state directory itself (#3676), which words them with the
-    banner's own renderer. The ledger's other classes are not served.
-
-    `hold_sha`, `behind_since` and the ledger come from `gitops_hold.DeployerSnapshot`
-    (#3972), which drops a ledger line that does not decode, so one torn byte cannot fail the
-    whole read (#2371). `last_run` is not deployer state the snapshot carries, so it is read
-    on its own.
-
-    Raises:
-        OSError: a marker exists but can't be read (e.g. permission denied). Only a
-            missing marker is a clear state; anything else that stops the read must not
-            be mistaken for one.
-    """
-    snap = DeployerSnapshot.load(state_dir)
-    last_run = state_dir / gitops_markers.MARKERS["last_run"]
-    try:
-        last_run_text = last_run.read_text().strip()
-    except FileNotFoundError:
-        last_run_text = ""
-    st: dict[str, str | list] = {
-        gitops_markers.MARKERS[field]: getattr(snap, field) or ""
-        for field in ("hold", "behind")
-    }
-    st[last_run.name] = last_run_text
-    owed = snap.owed
-    st["hold_plane_entries"] = gitops_ledger.held_planes(owed)
-    st["manual_plane_owed"] = "\n".join(
-        line
-        for line in (owed or "").splitlines()
-        if (gitops_ledger.owed_line_key(line) or ("",))[0]
-        == gitops_ledger.OWED_MANUAL_PLANE
-    )
-    return st
-
-
 def _ci_of(rollup: list[dict]) -> str:
     if not rollup:
         return "none"
@@ -326,11 +266,6 @@ VERDICT_HINTS: dict[str, tuple[str, str]] = {
         "bad",
         "The deploy failed. Cause promote-held is the operator's DEPLOY_HOLD to clear. "
         "Every other cause re-runs safely, except a playbook task that failed after applying.",
-    ),
-    "blocked": (
-        "warn",
-        "Not this PR's failure: something else in the incoming range needs an operator. "
-        "Nothing was deployed.",
     ),
     "needs-manual-apply": (
         "warn",

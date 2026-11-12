@@ -5,11 +5,6 @@ Each test here encodes a way one of them fails while every surface still reads g
 flags are `k3s_server_config` in `hosts/components/k3s-server/component.yml` since H6.4b, so
 the tests read the config drop-in daniel-box's package ships, which is what k3s reads.
 
-  * Two sources for one switch. `k3s_secrets_encryption` stays in setup/k3s for server.yml's
-    status and rotate-keys tasks until H7, and the flag itself is in the component. A flag
-    turned off with the role key left on makes those tasks assert against a cluster that no
-    longer encrypts.
-
   * The audit policy written AFTER the installer. The apiserver reads the policy at startup
     and refuses to start without it, and the installer restarts k3s itself. Get the order
     wrong and the arming run wedges the control plane.
@@ -27,19 +22,17 @@ Run: uv run pytest ansible/tests/setup/test_k3s_control_plane_hardening.py
 
 import functools
 
-from lib import yaml_fast
-from _helpers import ALL_VARS
-from _helpers import load_yaml, load_defaults
+from _helpers import ALL_VARS, load_defaults, load_yaml
 from _k8s_render import render_role_template, rendered_k8s_text
 from _setup_render import role_context
-from lib.repo_paths import K3S_ROLE, REPO
+from lib import yaml_fast
+from lib.repo_paths import K3S_SERVER
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.bundle import homelab_namespace_files
 from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE
 
 AUDIT_POLICY = "/var/lib/rancher/k3s/server/audit.yaml"
 SERVER_CONFIG = "/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
-COMPONENT = REPO / "hosts" / "components" / "k3s-server" / "component.yml"
 
 
 def _all_vars() -> dict:
@@ -60,23 +53,6 @@ def _apiserver_arg_names() -> set[str]:
     return {arg.split("=", 1)[0] for arg in _server_config()["kube-apiserver-arg"]}
 
 
-def secrets_encryption_drift(component: dict, role: dict) -> bool:
-    """True when the component's flag and setup/k3s's switch disagree."""
-    flag = component["k3s_server_config"].get("secrets-encryption", False)
-    return flag is not role["k3s_secrets_encryption"]
-
-
-def _server_tasks() -> list[dict]:
-    return yaml_fast.safe_load((K3S_ROLE / "tasks" / "server.yml").read_text()) or []
-
-
-def _task_index(predicate) -> int:
-    for i, task in enumerate(_server_tasks()):
-        if predicate(task):
-            return i
-    return -1
-
-
 @functools.cache
 def _audit_policy() -> dict:
     """The audit policy daniel-box's package ships, as host mode renders it (H6.4a).
@@ -95,39 +71,6 @@ def test_secrets_encryption_is_armed():
     assert _server_config().get("secrets-encryption") is True, (
         "k3s_server_config must set secrets-encryption. Without it every Secret is stored "
         "in etcd as plaintext, and k3s's snapshot schedule ships a copy of that to R2."
-    )
-
-
-def test_secrets_encryption_equals_the_role_switch():
-    """server.yml's status and rotate-keys tasks read the role key; k3s reads the flag."""
-    component = yaml_fast.safe_load(COMPONENT.read_text())["defaults"]
-    role = load_defaults(K3S_ROLE)
-    assert not secrets_encryption_drift(component, role), (
-        "secrets-encryption in k3s_server_config must equal setup/k3s's "
-        "k3s_secrets_encryption. Change both in one PR."
-    )
-    flipped = {"k3s_server_config": {"secrets-encryption": False}}
-    assert secrets_encryption_drift(flipped, role), "the drift check cannot go red"
-
-
-def test_existing_secrets_are_reencrypted():
-    """Arming the flag encrypts WRITES only; without this the old plaintext stays."""
-    text = (K3S_ROLE / "tasks" / "server.yml").read_text()
-    assert "secrets-encrypt rotate-keys" in text, (
-        "The role must run `k3s secrets-encrypt rotate-keys` after arming the flag. "
-        "Encryption applies to writes, so Secrets already in etcd stay plaintext — and every "
-        "check reads green, because encryption really is enabled."
-    )
-    assert "secrets-encrypt reencrypt" not in text, (
-        "Use `rotate-keys`, not bare `reencrypt`. On k3s v1.30+ rotate-keys is the whole "
-        "procedure; `reencrypt` belongs to the legacy prepare -> rotate -> reencrypt sequence "
-        "and is invalid from the `start` stage a freshly armed cluster is in. It fails AFTER "
-        "the control-plane restart, leaving encryption enabled over untouched plaintext."
-    )
-    assert "reencrypt_finished" in text, (
-        "The re-encryption must be guarded on the rotation stage reaching reencrypt_finished, "
-        "or it either reruns on every play (~5 Secrets/s of etcd churn) or is never verified "
-        "to have completed."
     )
 
 
@@ -263,7 +206,7 @@ def test_alloy_tails_the_audit_log():
     # Resolved, not raw: `k3s_audit_log_path` is itself a template over `k3s_audit_log_dir`,
     # so group_vars holds `{{ k3s_audit_log_dir }}/audit.log` and only the render context
     # expands it.
-    resolved = role_context(K3S_ROLE)
+    resolved = role_context(K3S_SERVER)
     path, directory = resolved["k3s_audit_log_path"], resolved["k3s_audit_log_dir"]
     # The Alloy config sits in a nested `templates/config/` directory, which the whole-tree
     # render does not glob; `render_role_template` addresses it by its loader-relative name.
@@ -283,7 +226,7 @@ def test_alloy_tails_the_audit_log():
 
 def test_audit_log_vars_are_visible_to_both_roles():
     """A role default cannot be read by another role's template."""
-    shared, role = _all_vars(), load_defaults(K3S_ROLE)
+    shared, role = _all_vars(), load_defaults(K3S_SERVER)
     for name in ("k3s_audit_log_enabled", "k3s_audit_log_dir", "k3s_audit_log_path"):
         assert name in shared, (
             f"{name} must live in group_vars/all.yml. setup/k3s writes the log and "

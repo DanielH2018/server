@@ -18,13 +18,13 @@ also the number `GRACE_S` is compared against above.
 
 import re
 
-from lib import yaml_fast
-from _helpers import ANSIBLE
-from lib.repo_paths import K3S_HOST_CHECKS_DEFAULTS
+from _helpers import REPO
 from _shell_render import rendered_names_for, rendered_shell_text
+from lib import yaml_fast
 from lib.proc_testing import run
+from lib.repo_paths import K3S_HOST_CHECKS_DEFAULTS
 
-LIB = ANSIBLE / "roles/setup/initial_setup/files/homelab-check-lib.sh"
+LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
 K3S_DEFAULT_VALUES = yaml_fast.safe_load(K3S_HOST_CHECKS_DEFAULTS.read_text())
 
 GRACE_S = K3S_DEFAULT_VALUES["k3s_health_cron_boot_grace_s"]

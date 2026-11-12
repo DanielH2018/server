@@ -10,14 +10,10 @@ import subprocess
 
 import pytest
 
-from deploy_tools.setup_lib.setup_census import items_left
-from lib import yaml_fast
-from lib.repo_paths import ANSIBLE, REPO
+from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 HOST = "daniel-box"
-ROLES = ANSIBLE / "roles" / "setup"
-ROLE = ROLES / "initial_setup"
 # What the dotfiles' install-cli-tools script cannot install itself.
 DISTRO_PACKAGES = {
     "bat",
@@ -34,7 +30,6 @@ DISTRO_PACKAGES = {
 OLD_UV = "/usr/local/bin/uv"
 # Readers the census must have moved, so a narrowed grep cannot pass over nothing.
 MOVED_UV_READERS = (
-    "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
     "hosts/components/k3s-host-checks/templates/longhorn-backup-health.sh.j2",
 )
 
@@ -77,43 +72,6 @@ def test_the_package_depends_on_what_the_roles_installed(box):
     assert DISTRO_PACKAGES <= set(box.depends)
     assert "gh" in box.depends
     assert "gh" in host_mode.render_host("daniel-server").depends
-
-
-@pytest.mark.parametrize("role", ["chezmoi_setup", "github_cli"])
-def test_the_role_applies_as_a_no_op(role):
-    tasks = yaml_fast.safe_load((ROLES / role / "tasks" / "main.yml").read_text())
-    assert tasks == [
-        {
-            "name": "End the role, whose work the host packages and the dotfiles repo own",
-            "ansible.builtin.meta": "end_role",
-        }
-    ]
-
-
-def test_the_census_holds_no_item_of_the_moved_subjects():
-    items = items_left((HOST,))[HOST]
-    left = [
-        str(item)
-        for item in items
-        if item.role in {"chezmoi_setup", "github_cli"}
-        or any(
-            word in str(item)
-            for word in (
-                "Install Git hooks",
-                "Install prek",
-                "Vale",
-                "/usr/local/libexec",
-                "worktree-holders.json",
-            )
-        )
-    ]
-    assert items, "the census found nothing on daniel-box"
-    assert left == []
-
-
-def test_the_uv_pin_left_with_the_tasks_that_read_it():
-    defaults = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
-    assert "initial_setup_uv_version" not in defaults
 
 
 def test_the_agent_takes_chezmoi_from_homelab_tools(box):

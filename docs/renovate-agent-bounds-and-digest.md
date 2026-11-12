@@ -85,12 +85,8 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
 - **The run lock moved into the agent's home.** `fs.protected_regular=2` refuses an `O_CREAT`
   open of another user's file in sticky `/run/lock`, and the old lock there belongs to the
   operator.
-- **Deployer holds.** An ACL gives the agent read on `/var/lib/gitops-deploy`, where the wrapper
-  reads the hold markers through `gitops_hold.DeployerSnapshot`. A marker it cannot read fails
-  the run with `EXIT_STATE_UNREADABLE` (3) and a Discord post naming the ACL, because an
-  unreadable hold is not "no hold" (#3703). Until then `agent_toolbox.read_file` returned `""`
-  on a read error, so a lost ACL read as no hold at all. `land.sh`, run by the lander as the
-  operator, still refuses on a hold.
+- **Deployer holds.** The wrapper reads no hold. `land.sh`, run by the lander as the operator,
+  refuses a landing under `DEPLOY_HOLD`.
 
 ENFORCED: `ansible/tests/setup/test_renovate_agent_identity.py`, which also runs the prompt's
 `systemctl` commands through the repo's own PreToolUse:Bash dispatcher.
@@ -117,7 +113,7 @@ the `gh` census and the return path:
 
 ```bash
 RENOVATE_AGENT_CONFIG=/tmp/agent-test.env \
-  PYTHONPATH=hosts/lib:ansible/roles/setup/gitops_deploy/files \
+  PYTHONPATH=hosts/lib \
   uv run python hosts/components/renovate-agent/files/renovate_agent.py
 ```
 
@@ -283,10 +279,8 @@ token PR retired its push token a week later.
 `return 0` path would be overwritten by the `up` that follows it. That skip returns
 `EXIT_WORKTREE_BLOCKED` instead: no verdict, `OnFailure` pages, and `RenovateAgentNotReporting`
 fires by deadman if nobody clears the tree. Until 2026-09-18 that path returned 0, and the
-monitor stayed green through five daily skips (#2014). A deployer state the agent cannot read
-exits `EXIT_STATE_UNREADABLE` for the same reason (#3703). The two other skips still exit 0: the
-quiet no-open-PRs skip is the healthy steady state, and the GitOps-hold skip is alarmed by the
-deployer's own Discord post, which this one need not duplicate.
+monitor stayed green through five daily skips (#2014). The other skip, with no open PRs,
+still exits 0, because it is the healthy steady state.
 `test_agent_logic.py::TestSkipExitCodes` pins the blocked and the quiet case.
 
 **A crash records its own reason** (`report_crash`, called from the `__main__` guard). Silence

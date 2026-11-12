@@ -1,6 +1,6 @@
 ---
 name: issue-fanout
-description: Dispatch parallel Opus agents at a batch of open GitHub issues, one worktree and one PR each, claiming every issue before any agent starts. Use when asked to work through the backlog, clear the open findings, or fan out on issues. A single issue nobody needs to steer can launch as a batch of one, which gets the independent reviewer and red gate a solo session lacks; claim and work an issue directly only when you will steer it.
+description: Dispatch parallel agents, each sized to its batch's work, at a batch of open GitHub issues, one worktree and one PR each, claiming every issue before any agent starts. Use when asked to work through the backlog, clear the open findings, or fan out on issues. A single issue nobody needs to steer can launch as a batch of one, which gets the independent reviewer and red gate a solo session lacks; claim and work an issue directly only when you will steer it.
 allowed-tools: Bash, Read, Grep, Glob, Agent
 ---
 
@@ -31,15 +31,17 @@ whose claim is stale is offered, marked `[stale claim by ...]`; `claim` reaps th
 on the way past, so a refusal from `claim` means the claim is live and another session is
 really working it.
 
-A deferred issue is named under a `deferred: #<n> until <date>` line (on stderr with
-`--json`, so the array stays the free set) and is not in the batch. Do not dispatch an agent
+`next` counts the issues it withholds for a date or a blocker on one line,
+`N waiting (deferred/blocked); --waiting to list`, on stderr with `--json` so the array stays
+the free set. `next --waiting` lists them, one line each, as described below. A deferred issue
+is named under a `deferred: #<n> until <date>` line and is not in the batch. Do not dispatch an agent
 at it, and do not clear the date to get at it: the date is the issue's own precondition — a
 metric window, a cron that has not fired — and #1288 cost six dispatches reaching that
 conclusion before `next` could say it (#1739). When an agent finds an issue is date-gated,
 `findings.py defer <n> --until <date>` records it, and `next` offers the issue again on that
 date with nothing to clear.
 
-A blocked issue is named under a `blocked: #<n> by #<m>` line in the same place, and the same
+A blocked issue is named under a `blocked: #<n> by #<m>` line in the same listing, and the same
 rule holds. When an agent finds an issue waits on other work rather than a date, it runs
 `findings.py block <n> --on <m>`, naming the issue that work closes. `next` offers the issue
 again the moment `#<m>` closes. Never guess a date for work that waits on another issue: the
@@ -84,14 +86,39 @@ Both were measured on the 2026-09-10 fan-outs:
   hand-resolvable; the second lander has to take master's file wholesale and re-mint its own
   value on top. Two of eight wave-1 agents hit exactly that (PRs #1556 and #1567), and one
   stalled six hours on it. Hold the second secret issue for the next wave.
-- **A batch that adds a `containers_list` entry, or otherwise touches a `_BROAD_*` path, runs
-  alone.** A broad change makes the tick apply the whole plane, so one crashlooping service
-  anywhere fails that apply and writes `hold_sha`, which reports `deploy-failed` to every other
-  batch's landing. Wave 2's new `gpu-exporter` role did this while another session's Authelia
-  change was mid-rollout (issue #1602), and the hold outlived the outage by twenty minutes.
+- **A batch that adds a `containers_list` entry, or otherwise touches a path every tag
+  renders, runs alone.** `promote` publishes the whole bundle, so one crashlooping service
+  anywhere fails that promotion and sets `DEPLOY_HOLD`, which reports `deploy-failed` to every
+  other batch's landing. Wave 2's new `gpu-exporter` role did this while another session's
+  Authelia change was mid-rollout (issue #1602), and the hold outlived the outage by twenty
+  minutes.
 
-**Stop here for approval.** Present the grouping — which issues, which batch, why they're
-split this way — and wait. Spawning several Opus agents is not a routine action.
+**Size each batch.** Pick the rung its implementer runs at, from your reading of the issue
+bodies. `scripts/dev/fanout_lib/sizing.py:LADDER` holds the rungs, in order. The starting
+points below come from Anthropic's model guide
+([Which Claude model should you build with?](https://claude.dev/blog/which-claude-model-should-you-build-with/),
+2026-11-09). The operator ruled on 2026-11-11 that sizing may pick Fable and reach `xhigh`,
+and `xhigh` should be rare.
+
+- `sonnet-medium`: a well-scoped fix the issue fully specifies, such as one script, one
+  template value or a doc correction, where the tests show whether it worked.
+- `opus-medium`: the default. Use it for ordinary engineering and debugging, and whenever
+  you are unsure.
+- `opus-high`: a fix that needs real diagnosis, or that spans several roles or modules.
+- `fable-medium`: a migration, a large refactor, or a performance change, even one with a
+  clear spec.
+- `fable-high`: a major migration or architectural change across many files.
+- `fable-xhigh`: rare. Use it only for work `fable-high` already fell short on.
+
+A batch carrying `review-leftover` runs at no less than `opus-high`, whatever you pick.
+`place launch` raises it, and its launch line names the rung each batch runs at. To escalate a batch, move up one rung; past `high`,
+move to the next model up rather than raise effort. Each review record names the
+implementer's rung (`implementer_rung`), so a choice can be checked against what the batch
+cost and what the reviewer found.
+
+**Stop here for approval.** Present the grouping and each batch's rung — which issues, which
+batch, why they're split this way, and why a batch sits off `opus-medium` — and wait.
+Spawning several agents is not a routine action.
 
 Done when: every issue `next` returned is in exactly one batch or named as
 held for the next wave, no two batches share a role, no two batches share a cited file, at
@@ -126,7 +153,8 @@ launched. `launch` then exits 7, because the other batches started; it exits 3 o
 claim was refused and nothing launched. Name every dropped issue out loud. A batch whose launch fails releases the claims it took.
 
 Done when: `launch` printed `claims held under <branch>`, and every `dropped` line is named
-in the report.
+in the report. That line also carries the run id and each batch's host, as
+`run <run-id>: <batch> -> <host>, …`.
 
 ## 3. Spawn
 
@@ -134,8 +162,14 @@ One batch per `--batch`, every batch in ONE call so the placement can spend a re
 batch across both hosts:
 
 ```bash
-uv run python scripts/dev/fanout.py place launch --batch 1345,1386 --batch 1288
+uv run python scripts/dev/fanout.py place launch --batch 1345,1386 --batch 1288 \
+    --size 1288=sonnet-medium
 ```
+
+`--size BATCH=RUNG` sets one batch's rung, and a batch it does not name runs at
+`opus-medium`. The rung sets the implementer's model, effort and spend cap, and the fix and
+CI-fix phases that resume its session. The red-test author and the reviewer stay on Opus at
+`medium`. The launch line prints each batch's rung, and the run manifest records it.
 
 `scripts/dev/fanout.py` is the fan-out tooling's one entry point: `place`, `probe`, `review`
 and `stats`. The paths `fanout_place.py`, `fanout_probe.py`, `fanout_review.py` and
@@ -147,7 +181,7 @@ that name a role or host the batch's issues cite, the rest as a count, and, for 
 deploy tag and the test files the cited paths imply, which `findings.py show <n> --brief`
 prints for a solo session, plus the shard-weight repair and the call to `scripts/dev/repo_guards.py`, which runs the
 repo-wide guards no test beside a change reaches) and starts a headless
-Opus agent as a transient user service in a fresh worktree on whichever host has the
+agent at its rung as a transient user service in a fresh worktree on whichever host has the
 most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means nothing
 was placed: every claim was refused (step 2), or one of three placement refusals fired, which
 claim nothing. Exit 7 is a launch that started batches but dropped a refused claim. The
@@ -274,9 +308,15 @@ nothing.
 To recover a run-id lost to compaction or a resumed session, run `fanout.py place runs
 --orchestrator <branch>`. It lists every run manifest on the host with its batches, hosts,
 branches, issues and whether each was cleaned; `--json` prints the manifests themselves.
+By default it opens on a count (`2 standing, 9 cleaned`) and lists only the runs that still
+have a standing batch, each with its standing batches. `--all` lists every run and every
+batch, cleaned ones included.
 
-For a batch's detail, run `uv run python scripts/dev/fanout.py place status <run-id>`. It prints
-one line per batch, `<batch> on <host>: <state> …`, where state is `running`, `done <PR URL>`, `landed
+For a batch's detail, run `uv run python scripts/dev/fanout.py place status <run-id>`. It opens on
+a count line (`3 running, 2 done, 1 needs-input`), then prints one line per batch that is not
+`landed` or `cleaned`, `<batch> on <host>: <state> …`. A `done` batch prints as `<batch> on
+<host>: done <PR URL>` without the agent's final text. `--all` prints a line for every batch,
+`landed` and `cleaned` ones included, with the final text. State is `running`, `done <PR URL>`, `landed
 <PR URL>`, `needs-input`, `no-pr`, `no-verdict`, `no-report`, or `failed`
 (`permission_denials=N` is
 appended when the agent hit classifier denials). `done` requires a PR URL in the agent's final
@@ -392,19 +432,21 @@ Done when: `launch` printed a host per batch and a run-id, and `status` shows ev
 
 ### When the dispatcher is unavailable
 
-A session with no ssh reach to daniel-server can still fan out locally: one Opus agent per
-batch, spawned with `isolation: "worktree"` and `model: "opus"` on the `Agent` call.
+A session with no ssh reach to daniel-server can still fan out locally: one agent per
+batch, spawned with `isolation: "worktree"` and the batch's rung on the `Agent` call. Split
+the rung's name into `model` and `effort`: `fable-high` is `model: "fable"`,
+`effort: "high"`.
 
 ```
-Agent(subagent_type: "general-purpose", model: "opus", isolation: "worktree", prompt: <the brief below>)
+Agent(subagent_type: "general-purpose", model: "opus", effort: "medium", isolation: "worktree", prompt: <the brief below>)
 ```
 
-**Both parameters are load-bearing, and neither is a default.** An `Agent` call without
+**Every parameter there is load-bearing, and none is a default.** An `Agent` call without
 `isolation` runs in the orchestrator's own checkout, so N agents edit one working tree at
 once and each commits over the others — the hazard `CLAUDE.md`'s parallel-sessions section
 exists to prevent, and the one thing the claim protocol assumes is not happening. Without
-`model`, the agent inherits whatever the default subagent model is, which is not necessarily
-the Opus this skill's description promises.
+`model` and `effort`, the agent inherits the session's defaults, which are not the rung the
+batch was sized at.
 
 The worktree is auto-named `agent-<hash>` and cannot be named otherwise — see *Measured: a
 subagent cannot own a named worktree* in `docs/issue-claiming-and-fanout.md`. That is why the
@@ -467,17 +509,9 @@ Each agent starts with none of this conversation's context, so its brief must ca
 
   Why the wait has to be in-turn, and what the hand-written `tail -f | grep` wait it replaced
   cost (#1291), is in `docs/landing.md`.
-- That `deploy.sh` exit 75 is a **resume point to retry**, not a failure to report.
-- **What to do with a verdict that leaves a host apply owed.** `needs-manual-apply` and
-  `blocked` mean the PR merged and an apply is still owed on a host — a `manual_plane` role, a
-  non-empty `hold_sha`, a bring-up playbook in the range, or a daniel-server or daniel-pi
-  change. `land.sh` prints the exact command for each; nothing else records that it is owed.
-  Tell the agent to read the deployer's markers after the verdict:
-
-  ```bash
-  cat /var/lib/gitops-deploy/hold_sha /var/lib/gitops-deploy/owed.jsonl
-  ```
-
+- **What to do with a verdict that leaves a host apply owed.** `needs-manual-apply` means the
+  PR merged and an apply is still owed by hand, such as a rotated secret. `land.sh` prints the
+  exact command; nothing else records that it is owed.
   Then exactly one of two things, never neither: apply and verify the change where CLAUDE.md
   *When to wait* leaves it to this session, or file it with `findings.py open` carrying the
   host, the role and `land.sh`'s own command verbatim, and list that issue number under a
@@ -515,16 +549,15 @@ fleet cap on daniel-box with a 10G per-plane sub-bound (`claude_code_fleet_memor
 fan-out stalls in reclaim instead of failing loudly. Keep batches to what the triage step
 actually produced; don't split further just to add width.
 
-Done when: every batch has a spawned agent carrying both `isolation: "worktree"` and
-`model: "opus"`, and every brief names the claim already held, the comment it must post first,
+Done when: every batch has a spawned agent carrying `isolation: "worktree"` and its rung's
+`model` and `effort`, and every brief names the claim already held, the comment it must post first,
 the `cd <worktree> &&` prefix, the landing path, the blocking-wait command, the close restriction, and what to do with a
 verdict that leaves a host apply owed.
 
 ## 4. Land
 
-Each agent goes through to a verified deploy, per `land-after-merge`. Every agent's `land.sh`
-queues on the same git-tree lock, so `deploy.sh` exit 75 is expected under
-width and is a retry, never a report.
+Each agent goes through to a verified deploy, per `land-after-merge`. A `land.sh` exit 75
+means its wait ran out of budget with the landing still open; it is a retry, never a report.
 
 Done when: every agent has either landed (a `VERDICT:` line) or is still queued on the lock, and
 none has been reported failed on a resume-point exit.
@@ -534,9 +567,10 @@ none has been reported failed on a resume-point exit.
 A table of issue → worktree → PR → verdict, one row per issue the fan-out touched.
 
 **Release what you don't finish.** To see what this fan-out still holds, run
-`claims --worktree` with the orchestrator's branch. It lists the claims that branch holds and
-the claims of every batch branch its `launch` runs started, and counts the rest rather than
-listing them:
+`claims --worktree` with the orchestrator's branch. It lists every claim, live or stale, that
+branch holds and the claims of every batch branch its `launch` runs started, and counts the rest
+rather than listing them. Without `--worktree`, `claims` counts the live claims and lists only
+the stale ones; `--all` lists every claim:
 
 ```bash
 uv run python scripts/dev/findings.py claims --worktree <orchestrator-branch>

@@ -13,20 +13,20 @@ import re
 import subprocess
 
 import pytest
-from lib.proc_testing import fake_bin, path_with, write_exec
-from lib.repo_paths import REPO
 from _helpers import ANSIBLE, load_defaults
 from _ruleset_drift import textfile_series
 from _shell_render import render_shell_script
+from lib.proc_testing import fake_bin, path_with, write_exec
+from lib.repo_paths import REPO
 
 ROLE = ANSIBLE.parent / "hosts" / "components" / "github-checks"
 TEMPLATE = ("components", "github-checks", "github-interaction-limit.sh.j2")
 CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 # The role's copy of the check library, so a runner that never ran initial_setup still sources it
 # and the textfile the script writes lands in TEXTFILE_DIR under tmp_path, never on the host.
-REAL_CHECK_LIB = REPO / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
+REAL_CHECK_LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
 CRON_PATH_LINE = "export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-GITHUB_REPO = load_defaults(ROLE)["gitops_deploy_github_repo"]
+GITHUB_REPO = load_defaults(ROLE)["github_repo"]
 
 
 def _limit_body(limit, expires_at="2027-03-06T06:50:00Z"):
@@ -43,9 +43,7 @@ def _run(
     # `limit` is the one value this harness has to vary across calls; every other var the
     # template reads comes from the inventory/role defaults the shared accessor already
     # resolves, so it is not re-declared here (#3178).
-    body = render_shell_script(
-        *TEMPLATE, overrides={"gitops_deploy_interaction_limit": limit}
-    )
+    body = render_shell_script(*TEMPLATE, overrides={"github_interaction_limit": limit})
 
     assert CHECK_LIB in body, "the script no longer sources homelab-check-lib.sh"
     body = body.replace(CHECK_LIB, str(REAL_CHECK_LIB))
@@ -212,7 +210,7 @@ def test_a_failed_delete_is_unverified(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "key", ["gitops_deploy_interaction_limit", "gitops_deploy_interaction_limit_expiry"]
+    "key", ["github_interaction_limit", "github_interaction_limit_expiry"]
 )
 def test_the_declared_values_are_ones_the_api_accepts(key):
     """The defaults are what the cron sends daily; a typo there is a daily 422 and a red tile."""
@@ -220,13 +218,13 @@ def test_the_declared_values_are_ones_the_api_accepts(key):
 
     defaults = yaml_fast.safe_load((ROLE / "defaults/main.yml").read_text())
     accepted = {
-        "gitops_deploy_interaction_limit": {
+        "github_interaction_limit": {
             "none",
             "existing_users",
             "contributors_only",
             "collaborators_only",
         },
-        "gitops_deploy_interaction_limit_expiry": {
+        "github_interaction_limit_expiry": {
             "one_day",
             "three_days",
             "one_week",

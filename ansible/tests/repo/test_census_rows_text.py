@@ -16,11 +16,9 @@ from _workflow_rows import WORKFLOW_ROWS
 from _shimmed_path_row import PREPENDED_PATHS, RESET_PATHS, SHIMMED_PATHS
 from _test_script_bodies_row import TEST_SCRIPT_BODIES
 from _component_contract_row import COMPONENT_TIMERS_CARRY_A_CONTRACT
+from _agent_tools_key_row import AGENTS_LIMIT_TOOLS_WITH_THE_TOOLS_KEY
 from _etcd_snapshot_flags_row import ETCD_SNAPSHOT_LONG_FLAGS
 from _kuma_census_row import KUMA_IDENTIFIERS, KUMA_MENTIONS
-from _deploy_sh_callers_row import (
-    DEPLOY_SH_CALLERS,
-)
 from _helpers import REPO, discover_docs
 from deploy_tools.land_lib import policy
 from lib.facts.citations import macro_citations
@@ -180,7 +178,7 @@ ROWS = (
         green=(Subject("a.md", '- Deploy: `./scripts/deploy.sh --tags "sonarr"`'),),
         must_find=frozenset(
             f"ansible/roles/{role}/CLAUDE.md"
-            for role in ("k8s/sonarr", "k8s/traefik", "k8s/authelia", "setup/k3s")
+            for role in ("k8s/sonarr", "k8s/traefik", "k8s/authelia")
         ),
     ),
     Census(
@@ -281,7 +279,6 @@ ROWS = (
         min_matches=500,
         must_find=frozenset({"scripts/lib/yaml_fast.py", "ansible/tests/_helpers.py"}),
     ),
-    DEPLOY_SH_CALLERS,
     Census(
         name="host-package-units-are-named-homelab",
         reason=(
@@ -417,6 +414,7 @@ ROWS += (
     RESET_PATHS,
     TEST_SCRIPT_BODIES,
     ETCD_SNAPSHOT_LONG_FLAGS,
+    AGENTS_LIMIT_TOOLS_WITH_THE_TOOLS_KEY,
     KUMA_IDENTIFIERS,
     KUMA_MENTIONS,
     COMPONENT_TIMERS_CARRY_A_CONTRACT,

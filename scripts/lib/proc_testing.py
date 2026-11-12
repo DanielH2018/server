@@ -84,8 +84,7 @@ def write_exec(path: Path, text: str) -> Path:
 
     The exec bit is set for everyone (`0o755`) rather than for the owner alone: a test that
     runs its stub through `sudo` or as another user under `become` needs the group and other
-    bits. Two callers do — `ansible/tests/longhorn/test_volume_revert_input_guard.py` and
-    `test_volume_snapshot_register.py` both hand a `fake_become` stub to a real playbook run.
+    bits.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text if text.startswith("#!") else SHEBANG + text)

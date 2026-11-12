@@ -7,8 +7,8 @@ redis incident, the notifier's history and the OIDC derivations are in
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
-  `--tags=authelia` with exit 5
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=authelia` gates
+  the rollout
 - **Images:** `authelia/authelia` (`authelia_k8s_image`), `redis` (`authelia_k8s_redis_image`)
 - **Route:** `auth.<domain>` · `auth.local.<domain>`, no Authelia
 - **Claim:** `authelia-config` (daily -> R2)
@@ -45,7 +45,7 @@ the wildcard by omission. ENFORCED:
 Three relying parties, in `templates/config-secret.yaml.j2` behind `authelia_k8s_manage_oidc`:
 `jellyfin`, `grafana` and `headlamp`. **Grafana must stay `one_factor`** — `two_factor` stalls the
 headless `-m ui` browser on a TOTP prompt no test can answer. **Headlamp's relying party is the KUBERNETES API SERVER**, not the app, so its
-`claims_policy` serves the API server's mappings in `roles/setup/k3s` and both of this portal's
+`claims_policy` serves the API server's mappings in `hosts/components/k3s-server/templates/authentication-config.yaml.j2` and both of this portal's
 issuers must be trusted there. Each client's secret is stored hashed, so one that needs the
 plaintext too takes two SOPS keys that rotate together.
 

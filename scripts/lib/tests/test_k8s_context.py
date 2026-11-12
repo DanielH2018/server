@@ -96,7 +96,7 @@ def test_resolve_vars_a_partial_value_still_renders_to_a_string():
 
 # --- resolve_vars: the `bool` filter a variable value reaches for ---
 #
-# `k8s_no_mutate` in group_vars is `"{{ ... | bool }}"`; a bare Jinja env has no `bool`, so
+# A group_vars value may read `"{{ ... | bool }}"`; a bare Jinja env has no `bool`, so
 # expansion registers a shim. The shim is the one every render guard in scripts/lib shares.
 # This pair checks the string/boolean divergence the filter exists for.
 

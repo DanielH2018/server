@@ -60,8 +60,6 @@ _UNCOVERED_ROLES = {
     "image-builder",
     # No manifest templates — each resolves a fact or drives kubectl/the Longhorn API directly.
     "volume-snapshot",
-    "longhorn-api",
-    "volume-revert",
     # Declares sonarr's/radarr's Discord Connect notification over the app's own API. The thing
     # it writes is a row in the app's database, so it renders no manifest and starts no
     # container — there is nothing here for a securityContext to be wrong about.

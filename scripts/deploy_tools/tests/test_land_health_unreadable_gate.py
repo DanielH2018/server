@@ -2,7 +2,7 @@
 
 PR #5533's landing read `VERDICT: unhealthy` because Prometheus was rolling and Traefik
 answered `no available server`, while the workload was `1/1 Running` and a re-run a minute
-later read healthy. Only the probe subprocess is faked here: `detach_notify.gate` and
+later read healthy. Only the probe subprocess is faked here: `health_gate.gate` and
 `check_one` run as land.sh runs them, so these grade what the landing does with an unreadable
 gate rather than a GateResult this file made up.
 
@@ -10,14 +10,15 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_health_unreadable_gate.p
 """
 
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from _land_fakes import MERGE_SHA
-from deploy_tools.deploy_lib import detach_notify
+from deploy_tools.land_lib import health_gate
 from deploy_tools.land_lib import outcome
-from deploy_tools.land_lib import health_verdict
+from deploy_tools.land_lib import health_verdict, land_probe, ledger
 from deploy_tools.land_lib.landing import Classification
 from deploy_tools.land_lib.outcome import Outcome
 from diagnostics.probe_lib import health_checkout
@@ -37,14 +38,10 @@ def _unreadable_landing(landing, stderr="no available server\n"):
             stderr=stderr,
         )
 
-    tools = detach_notify.NotifyTools(
-        run=run, tag_platforms=lambda tag, host_vars: {"k8s"}
-    )
+    tools = health_gate.GateTools(run=run, tag_platforms=lambda tag, host_vars: {"k8s"})
     ln.tools = replace(
         ln.tools,
-        gate=lambda tags, cwd=None: detach_notify.gate(
-            tags, True, tools=tools, cwd=cwd
-        ),
+        gate=lambda tags, cwd=None: health_gate.gate(tags, tools=tools, cwd=cwd),
     )
     return ln
 
@@ -90,3 +87,44 @@ def test_a_stale_gate_tree_defers_without_blaming_the_store(landing, capsys):
     assert "could not read its store" not in exc.value.detail + out
     assert outcome.STALE_GATE_NOTE in out
     assert outcome.UNREADABLE_GATE_NOTE not in out
+
+
+_STALE_STDERR = (
+    f"homelab-mcp: {health_checkout.STALE_CHECKOUT}: origin/master changed the k8s role "
+    "'homelab-mcp' at 4f2204fdb1, after this checkout's HEAD\n"
+)
+
+
+def _gate_give_up_cause(landing, stderr: str, logs: Path) -> tuple[str, Path]:
+    """The ledger cause the gate deferral records, and a log of it carrying no note."""
+    ln = _unreadable_landing(landing, stderr=stderr)
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    logs.mkdir()
+    log = logs / "land999-20261111-120000.log"
+    log.write_text(
+        f"{ledger.result_line(ln.ledger, exc.value)}\nVERDICT: deferred ({exc.value.detail})\n"
+    )
+    log.with_suffix(".rc").write_text(f"{exc.value.rc}\n")
+    return ln.ledger.cause, log
+
+
+@pytest.mark.parametrize(
+    "stderr", ["no available server\n", _STALE_STDERR], ids=["unreadable", "stale"]
+)
+def test_a_gate_deferral_records_a_cause_that_reads_gave_up_without_its_note(
+    landing, stderr, tmp_path
+):
+    """#7911: a reworded note must not turn a gate give-up into a plain deferral."""
+    cause, log = _gate_give_up_cause(landing, stderr, tmp_path / "logs")
+    assert cause in outcome.CAUSES and cause != outcome.Cause.INVALID
+    assert land_probe.read(log)["state"] == "gave-up"
+
+
+def test_an_unreadable_gate_and_a_stale_gate_record_different_causes(landing, tmp_path):
+    """The Landings board groups `by (cause)`, so the two give-ups need two bars."""
+    unreadable, _ = _gate_give_up_cause(
+        landing, "no available server\n", tmp_path / "unreadable"
+    )
+    stale, _ = _gate_give_up_cause(landing, _STALE_STDERR, tmp_path / "stale")
+    assert unreadable and stale and unreadable != stale

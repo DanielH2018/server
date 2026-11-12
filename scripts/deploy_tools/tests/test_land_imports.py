@@ -16,6 +16,7 @@ MODULES = frozenset(
         "landing",
         "merge",
         "pace",
+        "stuck_checks",
         "policy",
         "classify",
         "closing_refs",
@@ -24,6 +25,7 @@ MODULES = frozenset(
         "promotion",
         "health_verdict",
         "own_checkout",
+        "fresh",
         "pipeline",
         "detach",
         "handoff",
@@ -35,11 +37,8 @@ MODULES = frozenset(
         "gh_read",
         "land_flux",
         "land_probe",
-        "land_reach",
-        "key_readers",
-        "land_shared",
         "land_tags",
-        "land_tags_cli",
+        "health_gate",
         "land_tested_base",
         "pin_gate",
         "pin_reads",
@@ -55,11 +54,12 @@ ALLOWED = {
     "tools": {
         "land_flux",
         "own_checkout",
-        "land_reach",
+        # `Tools.fresh_landing`, the checkout `--fresh` lands from (#7933).
+        "fresh",
         "land_tags",
         "land_tested_base",
-        # The moved-key readers `Classifier.key_readers` derives (#6968).
-        "key_readers",
+        # `Tools.gate`, the health gate the landing ends with.
+        "health_gate",
         # The per-user verdict record `Tools.record_verdict` writes by default.
         "verdict_log",
     },
@@ -87,15 +87,26 @@ ALLOWED = {
         "policy",
         "pr_json",
         "gh_read",
+        "stuck_checks",
     },
     # The master CI backlog read that holds --await-merge's direct merge (#5526).
     "pace": {"landing", "outcome"},
+    # The read that ends --await-merge on a check GitHub never finishes (#7996).
+    "stuck_checks": {"landing", "gh_read"},
     # The pin gate runs inside --await-merge's direct merge, and `land.py --regate` alone.
     "pin_gate": {"landing", "outcome", "pin_reads"},
     # Its boundaries. It imports `promote.py`'s `last-good` reader, outside land_lib.
     "pin_reads": set(),
     "policy": {"landing", "outcome", "pr_json", "gh_read"},
-    "classify": {"landing", "outcome", "land_tags", "own_checkout", "promotion"},
+    "classify": {
+        "landing",
+        "outcome",
+        "land_tags",
+        "own_checkout",
+        "promotion",
+        # The stale-code refusals name `--fresh` as their remedy.
+        "fresh",
+    },
     "closing_refs": {"gh_read", "landing", "outcome"},
     "ci": {"landing", "outcome"},
     "deploy": {
@@ -105,8 +116,10 @@ ALLOWED = {
     },
     # The split of a landing's tags and the wait on promotion, step 5's work (D2.3).
     "promotion": {"landing", "outcome"},
-    "health_verdict": {"landing", "outcome", "promotion"},
+    "health_verdict": {"landing", "outcome", "promotion", "health_gate"},
     "own_checkout": set(),
+    # Makes a checkout and runs a child land.sh; it imports no phase.
+    "fresh": set(),
     # The fork, the logfile and the verdict wait. It imports no phase: `land.py` hands it a
     # callable and it never knows what a landing is.
     "detach": set(),
@@ -114,9 +127,9 @@ ALLOWED = {
     # stops through Outcome so they carry the verdict a landing's would.
     "handoff": {"options", "outcome"},
     # The tag derivation and what it reads. None of them knows what a landing is.
-    "land_tags": {"land_shared"},
-    # The CLI over the tag derivation, which sits above what it reads (#4945).
-    "land_tags_cli": {"land_tags", "land_reach", "key_readers"},
+    "land_tags": set(),
+    # `probe.py health` per tag; it imports no phase.
+    "health_gate": set(),
     # H3.9a: the wait on the hosts a merge reaches. It takes `gate_snapshot` from `tools`.
     "host_wait": {
         "landing",
@@ -126,13 +139,9 @@ ALLOWED = {
         "host_published",
         "host_schedule",
     },
-    # The setup files reading a moved key, which the reach adds to a range's own paths (#6968).
-    "land_reach": {"key_readers"},
-    "key_readers": set(),
     # The boundaries for a tag Flux applies. It imports promote_lib.wait, outside land_lib.
     # It also holds the pin gate's reads, `pin_reads.PinReads`.
     "land_flux": {"pin_reads"},
-    "land_shared": set(),
     "land_tested_base": set(),
     # cc-wait's `land` source runs under `uv run --no-project`, so it reads only the
     # stdlib-only fork record and the verdict words.

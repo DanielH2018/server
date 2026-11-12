@@ -4,9 +4,10 @@ This is the only record of where a landing's time goes: how long the merge took 
 how long master CI took after it, the deploy.
 
 `cause` is a one-token reason beside a `deploy-failed` verdict. One exit-75 verdict carries one
-too: `deferred` with `promote-timeout`, the wait on a promotion that no promotion covered in
-time. Every other verdict leaves it empty. The Landings board's cause panel selects `cause!=""`,
-so it counts that one beside the `deploy-failed` causes (#4998). The verdict alone cannot tell
+too: `deferred`, with `promote-timeout` for a promotion wait that no promotion covered in time,
+or with `gate-unreadable` or `gate-stale` for a health gate that graded nothing (#7911). Every
+other verdict leaves it empty. The Landings board's cause panel selects `cause!=""`, so it
+counts those beside the `deploy-failed` causes (#4998). The verdict alone cannot tell
 a tag nothing applies from a held promotion, so `cause` lets the board split
 them. Its vocabulary is `outcome.Cause` and it is checked HERE, on assignment,
 because the board groups by the field: a value invented at one of the writing sites
@@ -20,7 +21,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from deploy_tools.land_lib.outcome import CAUSES, Cause
+from deploy_tools.land_lib.outcome import CAUSES, Cause, Outcome
 from lib.repo_paths import HOST_LIB_FILES
 
 _sys.path.insert(0, str(HOST_LIB_FILES))
@@ -55,6 +56,27 @@ class Ledger:
             )
             value = Cause.INVALID
         super().__setattr__(name, value)
+
+
+# The machine line land.sh prints just above its `VERDICT:` line. `detach.result_in` reads it.
+RESULT_PREFIX = "LAND-RESULT:"
+
+
+def result_line(ledger: Ledger, outcome: Outcome) -> str:
+    """`LAND-RESULT: verdict=.. cause=.. exit=.. pr=.. sha=.. tags=<count>`, for a reader.
+
+    A field the landing never reached reads `-`, so every value is one bare token.
+    """
+    tags = [t for t in ledger.tags_label.split(",") if t]
+    fields = {
+        "verdict": outcome.verdict or "-",
+        "cause": ledger.cause or "-",
+        "exit": outcome.rc,
+        "pr": ledger.pr or "-",
+        "sha": ledger.merge_sha[:8] or "-",
+        "tags": len(tags),
+    }
+    return f"{RESULT_PREFIX} {logfmt(fields)}"
 
 
 def _phase(a: float | None, b: float | None) -> str:

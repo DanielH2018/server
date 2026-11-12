@@ -60,13 +60,15 @@ def red_by_absence(output: str, nodes: list[str]) -> list[str]:
 # A type-checker suppression inside one comment, with the rules its brackets name. ty honours
 # mypy's `type: ignore` spelling as well as its own.
 _SUPPRESSION = re.compile(r"\b(?:ty|type):\s*ignore\b(?:\[([^\]]*)\])?")
-# ty's rules for a name that is not there yet, as `ty explain rule` lists them in 0.0.97. A fix
-# that adds the name leaves a suppression of any of them unused. `unresolved-import` is the older
-# name of `import-not-found`, and ty still honours a suppression that spells it.
+# ty's rules for a name that is not there yet, as `ty explain rule` lists them in 0.0.101. A fix
+# that adds the name leaves a suppression of any of them unused. `unresolved-import` and
+# `unresolved-attribute` are the older names of `import-not-found` and `missing-attribute`, and
+# ty still honours a suppression that spells them.
 ABSENCE_RULES = frozenset(
     {
         "import-not-found",
         "unresolved-import",
+        "missing-attribute",
         "unresolved-attribute",
         "unresolved-reference",
         "possibly-missing-import",

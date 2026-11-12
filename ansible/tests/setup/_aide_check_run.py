@@ -6,19 +6,22 @@ aide, and runs it against a fake dpkg database and filesystem that `_fake_host` 
 
 import fcntl
 import hashlib
+import json
 import os
 import time
 
-from lib.proc_testing import fake_bin, run, write_exec
-from _helpers import ROLES
+from _helpers import REPO
 from _shell_render import render_shell_script
+from lib.proc_testing import fake_bin, run, write_exec
 
-SCRIPT = ("setup", "initial_setup", "aide-check.sh.j2")
+SCRIPT = ("components", "integrity-scans", "aide-check.sh.j2")
 
 # The real library, so the scan writes its textfile under TEXTFILE_DIR rather than the host's
 # own directory, which node_exporter scrapes.
 REAL_CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
-CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
+CHECK_LIB = (
+    REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
+)
 REAL_AIDE = "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide"
 REAL_CAP = "REPORT_MAX_LINES=2000"
 REAL_LOCK = "LOCK_FILE=/run/lock/aide-check.lock"
@@ -64,6 +67,8 @@ CHANGED_CONTENT = "f =.... mc..H.. . "
 CHANGED_MODE = "f =.p.. mc..H.. . "
 LINK_ADDED = "l+++++++++++++++++"
 LINK_CHANGED = "l =.... mc.. .. . "
+# A regular file replaced by a link: its type, so its permissions, changed.
+LINK_CHANGED_MODE = "l =.p.. mc.. .. . "
 # When aide.db was last advanced. The script opens its dpkg.log window there.
 BASELINE_EPOCH = 1_792_000_000
 DAY_S = 86_400
@@ -77,8 +82,21 @@ PACKAGE = {
     "/usr/lib/systemd/system/tool.service": ("[Unit]\n", "md5sums"),
     "/usr/lib/python3/dist-packages/toolpkg/mod.py": ("x = 1\n", "md5sums"),
 }
-# Package-owned symlinks, which dpkg lists with no digest, and where each points.
-PACKAGE_LINKS = {"/usr/bin/tool-link": "tool"}
+# Package-owned symlinks, which dpkg lists with no digest, and where each points. The headers
+# link points into a package that is not installed, as the kernel headers' rust link does.
+PACKAGE_LINKS = {
+    "/usr/bin/tool-link": "tool",
+    "/usr/src/tool-headers/rust": "../tool-lib-rust/rust",
+}
+# The host package's links to secrets in the tmpfs its secrets unit fills, which its secrets
+# manifest declares: one under /etc, and one under /usr/lib as the Pi's Compose env file sits.
+SECRET_LINK = "/etc/svc/config.env"
+SECRET_TARGET = "/run/homelab-secrets/etc/svc/config.env"
+SYSTEM_SECRET_LINK = "/usr/lib/homelab/compose/compose.env"
+SYSTEM_SECRET_TARGET = "/run/homelab-secrets/usr/lib/homelab/compose/compose.env"
+SECRETS_MANIFEST = "/usr/lib/homelab/secrets.json"
+# The host package's apt hook and a script root runs, which dpkg lists with no digest here.
+HOMELAB_FILES = ("/etc/apt/apt.conf.d/91homelab-hook", "/usr/lib/homelab/check")
 
 
 def _dpkg_name(path: str) -> str:
@@ -92,7 +110,8 @@ def _fake_host(root):
     Returns (dpkg dir, filesystem root). dpkg also records one diversion of the package's README,
     and the filesystem also holds an alternatives link to the package's binary, a unit masked by
     a maintainer script, the usr-merge links, the boot links and GRUB files, a compiled module,
-    a unit with its enable link, and one file in each tree nothing packages.
+    a unit with its enable link, and one file in each tree nothing packages. A `homelab-host`
+    package owns SECRET_LINK and SYSTEM_SECRET_LINK, which SECRETS_MANIFEST declares.
     """
     dpkg, fs = root / "dpkg", root / "fs"
     (dpkg / "info").mkdir(parents=True)
@@ -107,7 +126,22 @@ def _fake_host(root):
         else:
             conffiles.append(f" {path} {digest}")
     for link, target in PACKAGE_LINKS.items():
+        (fs / link.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
         (fs / link.lstrip("/")).symlink_to(target)
+    for link, target in (
+        (SECRET_LINK, SECRET_TARGET),
+        (SYSTEM_SECRET_LINK, SYSTEM_SECRET_TARGET),
+    ):
+        (fs / link.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
+        (fs / link.lstrip("/")).symlink_to(target)
+    outputs = [
+        {"destination": link.lstrip("/"), "persist": False}
+        for link in (SECRET_LINK, SYSTEM_SECRET_LINK)
+    ]
+    (fs / SECRETS_MANIFEST.lstrip("/")).write_text(json.dumps({"outputs": outputs}))
+    (dpkg / "info" / "homelab-host.list").write_text(
+        "".join(f"{p}\n" for p in (SECRET_LINK, SYSTEM_SECRET_LINK, *HOMELAB_FILES))
+    )
     (dpkg / "info" / "tool.list").write_text(
         "".join(f"{_dpkg_name(p)}\n" for p in [*PACKAGE, *PACKAGE_LINKS])
     )
@@ -149,13 +183,11 @@ def _fake_host(root):
     pycache = fs / "usr/lib/python3/dist-packages/toolpkg/__pycache__"
     pycache.mkdir()
     (pycache / "mod.cpython-312.pyc").write_bytes(b"pyc")
-    # A role-installed unit, and the link `systemctl enable` makes to it and to a package's.
+    # The k3s installer's unit, and the link `systemctl enable` makes to it and to a package's.
     system = fs / "etc/systemd/system"
     (system / "multi-user.target.wants").mkdir(parents=True)
-    (system / "coredns-host.service").write_text("[Service]\n")
-    (system / "multi-user.target.wants" / "coredns-host.service").symlink_to(
-        "../coredns-host.service"
-    )
+    (system / "k3s.service").write_text("[Service]\n")
+    (system / "multi-user.target.wants" / "k3s.service").symlink_to("../k3s.service")
     (system / "multi-user.target.wants" / "tool.service").symlink_to(
         "../../../../usr/lib/systemd/system/tool.service"
     )
@@ -214,16 +246,22 @@ def verdict_of(logged: list[str], tag: str) -> list[str] | None:
     return None
 
 
-def _dpkg_log_lines(packages: tuple[str, ...], epoch: int) -> str:
+def _dpkg_log_lines(
+    packages: tuple[str, ...], epoch: int, upgraded: tuple[str, ...] = ()
+) -> str:
     """dpkg.log as a package run writes it, stamped in local time as dpkg does.
 
     Each package gets a `configure` line, and one `status installed` line that the script must
-    not read as an event of its own.
+    not read as an event of its own. Each `upgraded` package gets an `upgrade` line first.
     """
     stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(epoch))
-    return f"{stamp} startup packages configure\n" + "".join(
-        f"{stamp} configure {pkg}:amd64 1.0 1.0\n{stamp} status installed {pkg}:amd64 1.0\n"
-        for pkg in packages
+    return (
+        f"{stamp} startup packages configure\n"
+        + "".join(f"{stamp} upgrade {pkg}:amd64 0.9 1.0\n" for pkg in upgraded)
+        + "".join(
+            f"{stamp} configure {pkg}:amd64 1.0 1.0\n{stamp} status installed {pkg}:amd64 1.0\n"
+            for pkg in packages
+        )
     )
 
 
@@ -237,8 +275,10 @@ def _run_check(
     baseline: bool = True,
     rewrite: dict[str, str] | None = None,
     relink: dict[str, str] | None = None,
+    unreadable: tuple[str, ...] = (),
     packages_ran: tuple[str, ...] = ("tool",),
     packages_ran_before: tuple[str, ...] = (),
+    packages_upgraded: tuple[str, ...] = (),
     pending: bool = False,
     stubs: dict[str, str] | None = None,
     ignore_sigpipe: bool = False,
@@ -250,9 +290,11 @@ def _run_check(
     process for the run, as a scan still running from the previous week would. The aide stub
     writes aide.db.new as `--update` does; `baseline` says whether aide.db exists beforehand.
     `rewrite` replaces a path on the fake host with a regular file holding the given content, and
-    `relink` with a symlink to the given target, before the run. `dpkg_ran` dates dpkg's status
+    `relink` with a symlink to the given target, before the run. `unreadable` sets each named
+    path to mode 000. `dpkg_ran` dates dpkg's status
     log after the baseline, one `configure` line per `packages_ran` entry, as a package run does,
     and `packages_ran_before` writes the same lines a month before it, in the rotated log.
+    `packages_upgraded` adds an `upgrade` line after the baseline for each package it names.
     `pending` leaves an aide.db.new from an earlier run. `stubs` adds fake binaries in front of PATH.
     `ignore_sigpipe` starts the script with SIGPIPE ignored, as systemd starts a service.
     The script's stderr lands in `tmp_path / "stderr"`. Returns (exit code, the verdict as a
@@ -281,6 +323,8 @@ def _run_check(
         (fs / path.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
         (fs / path.lstrip("/")).unlink(missing_ok=True)
         (fs / path.lstrip("/")).write_text(content)
+    for path in unreadable:
+        (fs / path.lstrip("/")).chmod(0)
     for path, target in (relink or {}).items():
         (fs / path.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
         (fs / path.lstrip("/")).unlink(missing_ok=True)
@@ -297,7 +341,9 @@ def _run_check(
     (tmp_path / "dpkg.log.1").write_text(
         _dpkg_log_lines(packages_ran_before, baseline_time - 30 * DAY_S)
     )
-    dpkg_log.write_text(_dpkg_log_lines(packages_ran, baseline_time + 60))
+    dpkg_log.write_text(
+        _dpkg_log_lines(packages_ran, baseline_time + 60, packages_upgraded)
+    )
     if pending:
         (aide_dir / "aide.db.new").write_text("reviewed\n")
 

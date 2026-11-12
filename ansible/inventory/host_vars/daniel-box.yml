@@ -13,8 +13,8 @@ k3s_node_wifi_link: wlp4s0
 k3s_agent_node_ips:
   - "{{ hostvars['daniel-server'].server_ip }}"
 # Cloud-init (subiquity) image: sshd's real config is the drop-in, not the bare
-# /etc/ssh/sshd_config. The SSH-hardening tasks have no `create:` fallback, so a wrong
-# value here fails initial_setup.yml outright.
+# /etc/ssh/sshd_config. The sshd and integrity-scans components read this path, so a wrong
+# value points them at a file sshd never loads.
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # fwupd is installed here (`dpkg -l fwupd`, 2026-10-31), so the host-maintenance component ships
 # the weekly firmware update. group_vars/all.yml defaults this false.
@@ -42,17 +42,11 @@ autofix_fake_remux_policy:
   max_attempts: 3
   history_retention_days: 14
 
-# False until this host's first manual initial_setup.yml + deploy.yml run finishes green
-# (README §4): the gitops_deploy handler shells a full deploy at the end of
-# initial_setup.yml and fails the play with it, so one bad service would take down the
-# whole OS-hardening run.
-has_gitops: true
 # This is the k3s node — it must NOT have Docker. k3s brings its own containerd and its
-# flannel/kube-proxy iptables rules, and the k3s role's fail-closed guard blocks
-# k3s-bringup.yml on a node that runs Docker. Keep this false.
+# flannel/kube-proxy iptables rules, which Docker's own iptables rules break. Keep this false.
 has_docker: false
 # Developer environment, opted in (both default false in group_vars/all.yml). Claude Code
-# still needs one interactive `claude login` here afterwards — the role installs the binary
+# still needs one interactive `claude login` here afterwards — the package installs the binary
 # but cannot mint the OAuth credential.
 has_github_cli: true
 has_chezmoi: true
@@ -127,24 +121,6 @@ claude_code_watch_uids: ["{{ claude_code_login_uid }}"]
 # the symptom of a wrong value is EACCES on open — distinct from the EPERM that means the
 # cgroup filter refused.
 render_gid: 993
-# Run the host-side secondary upsmon here, so a UPS shutdown powers this node off cleanly
-# instead of letting it run to battery end and lose power mid-write. This node holds etcd,
-# Longhorn's primary replicas, Traefik, Prometheus and LAN DNS, so the unclean cut was the
-# most expensive one in the fleet. It draws from the same UPS as daniel-server (measured,
-# see group_vars/all.yml).
-#
-# NOT A LONE EDIT. Arming at a 120 s ONBATT delay would stop the control plane two minutes into
-# any blip — worse availability than the hard cut it replaces, since most outages never reach
-# two minutes. The delay is 300 in roles/k8s/nut/defaults/main.yml, and that ordering is what
-# the role's own comment prescribes.
-#
-# DEPLOY ORDER, and it is not optional: run the console-attended `upsmon -c fsd` drill from
-# roles/k8s/nut/CLAUDE.md before this reaches the host. Setting it true installs a chain whose
-# only job is to power this machine off, and a broken chain is indistinguishable from a working
-# one while mains power is up. The role asserts upsd is reachable at deploy time, which catches
-# a stale ClusterIP snapshot then; `nut_host_watchdog_armed` (roles/nut_host/defaults/main.yml)
-# is what re-checks it afterwards, every 10 minutes via ups-secondary-health.sh.
-nut_host_secondary_armed: true
 
 # The unattended Renovate agent (hosts/components/renovate-agent). The timer fires at 06:00
 # America/Chicago daily and spends one headless session over the open Renovate PRs, landing up

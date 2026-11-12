@@ -3,9 +3,9 @@
 Reads memory.current against MemoryHigh for BOTH cgroups an agent lives in — user.slice (the
 fleet) and the running user's user-<uid>.slice (the login plane) — on daniel-box and daniel-server, scores each host
 on the tighter of the two, picks the host with the most headroom per batch, creates a fresh
-worktree there, and starts a headless
-Opus agent as a transient user service. daniel-box agents land their PR; daniel-server agents
-stop at `gh pr create`. It shipped in commit bd8e62bf8.
+worktree there, and starts a headless agent, at the rung `--size` names
+(`fanout_lib.sizing`), as a transient user service. daniel-box agents land their PR;
+daniel-server agents stop at `gh pr create`. It shipped in commit bd8e62bf8.
 `launch` runs `fanout.py review` unless given `--no-review`: a review between each batch's PR
 and its landing, and a red phase before a `red-green` batch's implementer. `fanout_lib/review/review.py` has the phases.
 
@@ -78,7 +78,9 @@ from fanout_lib.abandon import cmd_abandon, cmd_stop
 from fanout_lib import launch as launch_mod
 from fanout_lib import manifest as manifest_mod
 from fanout_lib import signing as signing_mod
+from fanout_lib import sizing
 from fanout_lib import status as status_mod
+from fanout_lib.status_view import one_line, runs_lines, status_lines
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
 from findings_lib.tracked_paths import tracked_files
 from fanout_lib.review.api import review_flags
@@ -102,25 +104,17 @@ from lib.exit_codes import (
     FANOUT_PLACE_PARTLY_LAUNCHED,
 )
 from lib.git import git
+from fanout_lib.session_banner import health_lines
 from fanout_lib.placement import HostReading, NoHeadroom, place
 from fanout_lib.target import SERVER, for_launch, registered_repos, resolve
 from fanout_lib.transport import (
     HOSTS,
-    REPO,
     Tools,
     this_host,
     error_text,
     read_host,
     registered_keys,
     verified_hosts,
-)
-
-# The SessionStart hook reads `payload["source"]` from stdin, so it needs a JSON payload
-# rather than `</dev/null`; --no-python-downloads/--python match the version run-hook.sh
-# pins for session-health so this reading is taken by the same interpreter a real session would use.
-HEALTH_CMD = (
-    f'cd {REPO} && printf \'{{"source":"startup"}}\' | '
-    "uv run --no-project --no-python-downloads --python 3.15.2 .claude/hooks/session-health.py"
 )
 
 
@@ -263,6 +257,10 @@ def cmd_launch(args, tools: Tools) -> int:
     batches = claims_mod.parse_batches(args.batch)
     if batches is None:
         return FANOUT_PLACE_BAD_ARGS
+    sizes = sizing.parse_sizes(args.size, batches)
+    if isinstance(sizes, str):
+        error(sizes)
+        return FANOUT_PLACE_BAD_ARGS
     try:
         target, args.host = for_launch(
             args.repo, args.host, this_host(), tools.default_ref
@@ -305,7 +303,7 @@ def cmd_launch(args, tools: Tools) -> int:
     health = [
         ln
         for host in sorted({host for _, host in placed})
-        for ln in _health_lines(tools, host)
+        for ln in health_lines(tools, host)
     ]
     # After every gate, like the claims: a refused launch writes nothing to the register.
     claims_mod.reap_register(tools, target)
@@ -313,6 +311,7 @@ def cmd_launch(args, tools: Tools) -> int:
     refused = False
     for batch, host in placed:
         numbers = batches[batch]
+        chosen = sizes.get(batch)
         if target.is_server:
             # Claimed here, after every gate, so a refusal above leaves nothing claimed,
             # and per batch, so a failed launch below leaves no later batch claimed.
@@ -324,10 +323,11 @@ def cmd_launch(args, tools: Tools) -> int:
                 continue
         issues = [fetched[n] for n in numbers]
         flags = review_flags(batch, issues, args.review, target.is_server)
+        rung = sizing.size([label for i in issues for label in i.labels], chosen)
         brief = render_brief(issues, host, batch, holder, health, target, args.review)
         try:
             launched = launch_mod.launch(
-                tools, host, batch, brief, numbers, target, *flags
+                tools, host, batch, brief, numbers, target, *flags, rung=rung
             )
             run.batches.append(launched)
             # Saved per batch, not once after the loop: a launch killed between batches
@@ -355,72 +355,44 @@ def cmd_launch(args, tools: Tools) -> int:
             launched = ", ".join(b.batch for b in run.batches)
             error(f"launched before this failure: {launched} (run {run.run_id})")
             return FANOUT_PLACE_FAILED
-        print(f"{batch} -> {host} ({launch_mod.unit_name(batch, target)})")
         claims_mod.post_worked_by(tools, numbers, launched.branch, target)
     if not run.batches:
         error("launched nothing: every issue's claim was refused")
         return FANOUT_PLACE_NOTHING_PLACED
-    path = manifest_mod.save(run, root=args.manifest_root)
-    print(f"run {run.run_id} recorded at {path}")
-    if target.is_server:
-        # `findings.py release` names the holder, so print it where the orchestrator reads.
-        print(f"claims held under `{holder}`")
+    manifest_mod.save(run, root=args.manifest_root)
+    pairs = ", ".join(f"{b.batch} -> {b.host} ({b.rung})" for b in run.batches)
+    # `findings.py release` names the holder, so print it where the orchestrator reads.
+    held = f"; claims held under `{holder}`" if target.is_server else ""
+    print(f"run {run.run_id}: {pairs}{held}")
     # Not 3, which says nothing was placed: these batches are running (#4452).
     return FANOUT_PLACE_PARTLY_LAUNCHED if refused else FANOUT_PLACE_OK
 
 
-def _health_lines(tools: Tools, host: str) -> list[str]:
-    # A failed or timed-out read must not read as "clean" in the launched brief: it's the
-    # signal the SessionStart banner exists to surface.
-    try:
-        proc = tools.run(host, HEALTH_CMD, 40.0, None)
-    except subprocess.TimeoutExpired:
-        return [
-            f"[{host}] session-health read failed (timed out) — banner state unknown"
-        ]
-    if proc.returncode != 0:
-        return [
-            f"[{host}] session-health read failed (exit {proc.returncode}) — banner state unknown"
-        ]
-    return [f"[{host}] {ln}" for ln in proc.stdout.splitlines() if ln.strip()]
-
-
-def _one_line(text: str, limit: int = 300) -> str:
-    # Collapse the whitespace before truncating: a cut that lands mid-line would put a
-    # newline inside a status line that is meant to be one line per batch.
-    return " ".join(text.split())[:limit]
-
-
 def cmd_status(args, tools: Tools) -> int:
     run = manifest_mod.load(args.run_id, root=args.manifest_root)
-    rows, worst = status_mod.collect(run, tools, _one_line)
+    rows, worst = status_mod.collect(run, tools, one_line)
     if args.json:
-        print(json.dumps(rows, indent=2))
+        print(json.dumps(rows))
     else:
-        for row in rows:
-            print(row["line"])
+        print("\n".join(status_lines(rows, args.all)))
     return worst
 
 
 def cmd_runs(args, tools: Tools) -> int:
-    """List every run manifest on this host, so a lost run-id is recoverable (#3923)."""
+    """List the run manifests on this host, so a lost run-id is recoverable (#3923)."""
     runs = [
         r
         for r in manifest_mod.all_runs(args.manifest_root)
         if not args.orchestrator or r.orchestrator_branch == args.orchestrator
     ]
     if args.json:
-        print(json.dumps([dataclasses.asdict(r) for r in runs], indent=2))
+        print(json.dumps([dataclasses.asdict(r) for r in runs]))
         return 0
-    for r in runs:
-        print(f"{r.run_id}  orchestrator {r.orchestrator_branch}")
-        for b in r.batches:
-            state = f"cleaned {b.removed_at}" if b.removed_at else "standing"
-            issues = ",".join(f"#{n}" for n in b.issues)
-            print(f"  {b.batch} on {b.host}: {b.branch} {issues} {state}")
     if not runs:
         whose = f" for {args.orchestrator}" if args.orchestrator else ""
         print(f"no fan-out runs{whose} under {args.manifest_root}")
+        return 0
+    print("\n".join(runs_lines(runs, args.all)))
     return 0
 
 
@@ -601,6 +573,13 @@ def main(argv=None, tools: Tools | None = None) -> int:
         help="review each batch's PR in a separate session before it lands (the default; "
         "--no-review skips it)",
     )
+    launch_parser.add_argument(
+        "--size",
+        action="append",
+        default=[],
+        metavar="BATCH=RUNG",
+        help=sizing.SIZE_HELP,
+    )
     _add_manifest_root(launch_parser)
     launch_parser.set_defaults(fn=cmd_launch)
     claim_parser = sub.add_parser("claim")
@@ -625,11 +604,22 @@ def main(argv=None, tools: Tools | None = None) -> int:
     runs_parser = sub.add_parser("runs")
     runs_parser.add_argument("--json", action="store_true")
     runs_parser.add_argument("--orchestrator", metavar="BRANCH")
+    runs_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="every run and batch, cleaned ones included; the default lists standing batches",
+    )
     _add_manifest_root(runs_parser)
     runs_parser.set_defaults(fn=cmd_runs)
     run_parsers["stop"].add_argument("batch", nargs="?")
     run_parsers["status"].add_argument(
         "--json", action="store_true", help="one object per batch, for fanout.py probe"
+    )
+    run_parsers["status"].add_argument(
+        "--all",
+        action="store_true",
+        help="one full line per batch; the default counts landed and cleaned batches and "
+        "shortens a done batch to its PR URL",
     )
     run_parsers["abandon"].add_argument("batch")
     # No `help=` here, matching every other subparser above: argparse only lists a

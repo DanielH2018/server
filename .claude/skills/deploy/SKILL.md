@@ -1,20 +1,18 @@
 ---
 name: deploy
-description: Apply a change through the path that owns it — `land.sh`, `promote` and Flux for a k3s workload, the GitOps deployer or `initial_setup.yml` for a setup role, the host package for the Pi. `scripts/deploy.sh` deploys none of these. Use when the user wants to deploy or redeploy a service, when `deploy.sh` exits 5, or to check a k8s manifest change before it merges (`prek` vs the renderer vs the render-diff gates).
+description: Apply a change through the path that owns it — `land.sh`, `promote` and Flux for a k3s workload, a host package for anything under `hosts/` and the Pi, and `hosts/bootstrap-host.sh` for a host bring-up. No script deploys a workload by hand. Use when the user wants to deploy or redeploy a service, asks for `deploy.sh`, or to check a k8s manifest change before it merges (`prek` vs the renderer vs the render-diff gates).
 allowed-tools: Bash, Glob
 ---
 
 Apply a change through the path that owns it.
 
-**`scripts/deploy.sh` deploys no workload.** Every `cluster/services.yml` entry is `platform: k8s`,
-which Flux applies, and daniel-pi's and daniel-server's lists are empty. *What `deploy.sh` still
-does* below has the rest.
+**No script deploys a workload by hand.** Every `cluster/services.yml` entry is `platform: k8s`,
+which Flux applies. H7.53 deleted `scripts/deploy.sh` with the GitOps deployer.
 
 **First, determine what the change touches:**
 
 - Role under `ansible/roles/k8s/<service>/`, an inventory value or a shared template → **k3s
   workload** (this is nearly everything). It lands through `land.sh`, `promote` and Flux.
-- Role under `ansible/roles/setup/<name>/` → **setup role**. The GitOps deployer applies it.
 - Entry in `compose_services` in `host_vars/daniel-pi.yml`, or anything under `hosts/` → **host
   package**. For the Pi's docker-proxy, wg-easy, alloy and autoheal, the `homelab-daniel-pi`
   package renders them from `hosts/components/pi-compose/services/<name>/`, and the Pi's updater
@@ -34,9 +32,6 @@ reaches production.
 | `uv run python scripts/renderer/homelab_render.py cluster --out <dir> --role <tag>` | nothing — it reads the git tree alone | what Flux would receive for the tag, the secret rules and the renderer's refusals; read the files under `<dir>/cluster/<tag>/` |
 | `uv run python scripts/validate/render_diff_gates.py --base origin/master`, which CI's `pr_gates` job runs, and CI's flux round trip job | nothing — the gates compare commits, so **commit first**: an uncommitted edit is invisible to them | a removed object with no `Removes-Object:` line, and a render `flux build` cannot build |
 | `takeover-check` on daniel-box (operator's account) | the **live API server**, through a server-side dry run | CRD schemas, admission rejections and field conflicts, for the tags it names |
-
-`deploy.sh --check` and `--dry-run` are not on this list. Neither runs a role, so neither shows a
-manifest to anything, and a k8s tag in `--tags` exits 5 under both.
 
 No check here covers scheduling, PVC binding, probe or rollout behaviour. Those show only after
 Flux applies the tag.
@@ -83,81 +78,14 @@ full 40-hex SHA. `promote` refuses a commit without green CI:
 gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>
 ```
 
-## Applying a setup role
+## Bringing up a host
 
-The GitOps deployer applies a setup role on its own 10-minute timer after the merge. `land.sh`
-neither starts nor watches that tick. A role the deployer cannot apply becomes a
-`manual_plane` line in `owed.jsonl`.
-
-A playbook goes through `uv run`, because bare `ansible-playbook` (the uv-tool shim) lacks the
-module deps and fails. A setup play aimed at the Pi takes `-e target=daniel-pi`, because the
-playbooks default `hosts:` to the local hostname and `--limit` alone matches nothing.
-
-To apply one setup role by hand, read the playbook and tag from the `Applied by:` line of the
-role's `CLAUDE.md`. Neither follows from the role's name: `chezmoi_setup` takes the tag `chezmoi`,
-and `k3s` applies through `k3s-bringup.yml`, where the same page names narrower tags than the
-maximal `k3s`. Ansible exits 0 on a tag that matches nothing, so a wrong guess reads as a green
-recap.
+`hosts/bootstrap-host.sh` brings a host up. `docs/host-packages.md` (*Rebuilding daniel-box*,
+*Rebuilding daniel-server*) and `docs/break-glass.md` (the Pi runbook) order the steps. A host's
+setup plane ships in its host package, so no playbook applies it and `land.sh` ends a PR that
+changes nothing else `nothing-to-deploy`.
 
 ```bash
-# Clear the owed line your own merged PR created
-uv run python scripts/deploy_tools/owed_run.py <role>
-
-# Apply one setup role by hand, with the playbook and tag its Applied by: line names
-uv run ansible-playbook ansible/<playbook> --tags <tag>
-
-# Initial server setup. The first-host bring-up ORDER (uv -> SOPS onboarding -> this) is in
-# ansible/README.md
-uv run ansible-playbook ansible/initial_setup.yml
-
 # Edit encrypted secrets
 sops ansible/vars/secrets.yml
 ```
-
-## What `deploy.sh` still does
-
-The wrapper runs `ansible/deploy.yml` and no other playbook, and that playbook runs no role.
-Run it from the root of the checkout you mean to act on, because it reads the checkout containing
-your working directory. Its arguments other than its own flags pass through to `ansible-playbook`.
-A bare `uv run ansible-playbook ansible/deploy.yml` has none of the locks, the snapshot, the tag
-check or the staleness check.
-
-```bash
-# What a branch owes by hand. A broad range exits 3 and prints the setup or bring-up command.
-# Any other range derives no tag and ends with the verdict nothing-to-deploy.
-./scripts/deploy.sh --changed
-
-# Every valid tag, with each k8s tag named on stderr
-./scripts/deploy.sh --list-services
-
-# The locks and the snapshot, and no role.
-# It refuses any commit behind origin/master.
-./scripts/deploy.sh
-```
-
-- **The other flags still parse, and none of them reaches a role.** `--at <sha>` cuts the snapshot
-  from that commit, and `--at` with `--changed` is a bad command line. `--detach` backgrounds the
-  playbook and prints a `wait:` line that waits for its health gate; exit 75 from that line means
-  the run is still going, so re-run only the wait. `--check` and `--dry-run` run unlocked, from
-  the working tree. `-e target=daniel-pi` runs the secrets preamble against the Pi and deploys
-  nothing.
-- **A k8s tag is never yours to deploy.** When its `containers_list` entry is `platform: k8s`, a
-  `--tags` list naming it exits 5 as a whole, and no flag bypasses that. Its change lands through
-  `promote` once it merges. `--changed` leaves such a tag out and names it, and a shared role's
-  name is a tag miss.
-- **A commit behind origin/master refuses as stale.** `--tags` narrows the question to those tags,
-  so a tail that touches only other roles prints one line and proceeds, while a broad path
-  (shared templates, `ansible/inventory/`, the setup plane) still refuses. Under `--at <sha>` the
-  question is what `<sha>..origin/master` carries.
-
-[docs/deploying.md](../../../docs/deploying.md#the-gates-and-locks-of-a-run) has the locks and the
-snapshot, including
-[the tree lock's holders](../../../docs/deploying.md#who-holds-the-tree-lock).
-
-## When a run fails, read its last two lines
-
-`deploy.sh` prints what its exit code means on every non-zero exit, as its last two lines; act
-on those rather than on the number. What the codes mean as a group is
-[docs/deploying.md's *Exit codes are resume points*](../../../docs/deploying.md#exit-codes-are-resume-points),
-and a fact an operator needs at a failed run belongs in `CONTRACTS` in `scripts/lib/exit_codes.py`,
-not in this skill: a copy here drifted once already (#2853).

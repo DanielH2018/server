@@ -82,8 +82,7 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 }
 
 # The longest legitimate gap between two textfile writes: the weekly timer plus two hours for the
-# worst run, the interval the deleted Kuma `Registry GC` tile had. RegistryGcNotReporting in
-# observability's rules/registry.yaml reads it, and
+# worst run. RegistryGcNotReporting in observability's rules/registry.yaml reads it, and
 # ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py pins all three.
 DEADLINE_S=612000
 
@@ -320,13 +319,52 @@ dockerhub_refs() {
     | grep -E '^[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?$' | sort -u
 }
 
-# Waits for the mirror Job and records its result in MIRROR_MSG. Returns 1 when the Job did not
-# complete, or when the keep set was skipped.
+# Prints the mirror Job's terminal condition, Complete or Failed, once it has one. Returns 1 when
+# it has neither by the deadline. A failed Job never completes, so waiting on Complete alone
+# holds the mirror down for the whole deadline over a Job that died in seconds.
+wait_mirror_job() {
+  local deadline=$((SECONDS + {{ registry_k8s_gc_deadline_s }})) types
+  while ((SECONDS < deadline)); do
+    types=$($KUBECTL get job "$MIRROR_JOB" \
+              -o jsonpath='{.status.conditions[?(@.status=="True")].type}' 2>/dev/null)
+    case " $types " in
+      *" Complete "*) echo Complete; return 0 ;;
+      *" Failed "*) echo Failed; return 0 ;;
+    esac
+    sleep 10
+  done
+  return 1
+}
+
+# Journals each of the mirror Job's terminated containers as `<name> exit=<code> reason=<reason>`
+# and the gc container's log tail, then prints the container lines. The pod goes with the Job's
+# TTL, and with it the only record of why the Job failed.
+journal_mirror_failure() {
+  local states logs
+  states=$($KUBECTL get pods -l "job-name=${MIRROR_JOB}" -o json 2>/dev/null \
+             | jq -r '.items[].status
+                      | (.initContainerStatuses // []) + (.containerStatuses // []) | .[]
+                      | select(.state.terminated)
+                      | "\(.name) exit=\(.state.terminated.exitCode) reason=\(.state.terminated.reason // "none")"' \
+               2>/dev/null)
+  logs=$($KUBECTL logs "job/${MIRROR_JOB}" -c gc --tail=20 2>/dev/null)
+  [[ -n "$states" ]] || states="no terminated container found"
+  logger -t registry-gc <<<"${MIRROR_JOB} failed: ${states//$'\n'/; }"
+  [[ -z "$logs" ]] || logger -t registry-gc <<<"${MIRROR_JOB} gc: ${logs//$'\n'/$'\n'${MIRROR_JOB} gc: }"
+  printf '%s\n' "$states"
+}
+
+# Waits for the mirror Job and records its result in MIRROR_MSG. Returns 1 when the Job failed or
+# did not finish, or when the keep set was skipped.
 report_mirror_job() {
-  local pruned blobs
-  if ! $KUBECTL wait --for=condition=complete "job/${MIRROR_JOB}" \
-         --timeout={{ registry_k8s_gc_deadline_s }}s >/dev/null 2>&1; then
-    MIRROR_MSG="${MIRROR_DEPLOY} job did not complete — see: kubectl -n ${NS} logs job/${MIRROR_JOB} -c prune"
+  local pruned blobs result states
+  if ! result=$(wait_mirror_job); then
+    MIRROR_MSG="${MIRROR_DEPLOY} job did not finish within {{ registry_k8s_gc_deadline_s }}s — see: kubectl -n ${NS} logs job/${MIRROR_JOB} -c prune; -c gc"
+    return 1
+  fi
+  if [[ "$result" == Failed ]]; then
+    states=$(journal_mirror_failure)
+    MIRROR_MSG="${MIRROR_DEPLOY} job failed (${states//$'\n'/; }) — see: journalctl -t registry-gc"
     return 1
   fi
   MIRROR_DONE=1

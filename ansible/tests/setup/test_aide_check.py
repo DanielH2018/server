@@ -34,7 +34,7 @@ from _aide_check_run import (
     _run_check,
 )
 from _host_packages import HOSTS, package, shipped_text
-from _setup_render import render_setup_text
+from _setup_render import render_component_text
 from _shell_render import render_shell_script
 
 TIMER = "/usr/lib/systemd/system/homelab-aide-check.timer"
@@ -147,11 +147,50 @@ def _excluded(path: str, conf: str) -> bool:
 
 
 def test_worktrees_and_caches_are_excluded_and_their_neighbours_are_not():
-    conf = render_setup_text(
-        "initial_setup", "98_aide_local.conf.j2", {"sys_user": "ubuntu"}
+    conf = render_component_text(
+        "integrity-scans", "98_aide_local.conf.j2", {"sys_user": "ubuntu"}
     )
     assert [p for p in EXCLUDED if not _excluded(p, conf)] == []
     assert [p for p in CHECKED if _excluded(p, conf)] == []
+
+
+def _inode_skipped(path: str, conf: str) -> bool:
+    """Whether a selection line in `conf` that matches `path` gives it a rule ending in `-i`."""
+    for line in conf.splitlines():
+        if not line.startswith("/"):
+            continue
+        regex, *_, rule = line.split()
+        if re.match(regex, path) and rule.endswith("-i"):
+            return True
+    return False
+
+
+# Live paths whose only change was a vfat inode number: daniel-box's ESP on 2026-11-09 and
+# daniel-pi's firmware partition on 2026-11-10.
+VFAT_PATHS = (
+    "/boot/efi/EFI/ubuntu",
+    "/boot/efi/EFI/ubuntu/grubx64.efi",
+    "/boot/firmware",
+    "/boot/firmware/README",
+    "/boot/firmware/overlays/pwm.dtbo",
+    "/boot/firmware/System Volume Information/WPSettings.dat",
+)
+# ext4 neighbours whose inode number stays a real signal.
+INODE_CHECKED = ("/boot/vmlinuz", "/boot/firmware-old", "/boot/initrd.img")
+
+
+def test_every_vfat_path_skips_its_inode_and_its_ext4_neighbours_do_not():
+    conf = render_component_text(
+        "integrity-scans", "98_aide_local.conf.j2", {"sys_user": "ubuntu"}
+    )
+    assert [p for p in VFAT_PATHS if not _inode_skipped(p, conf)] == []
+    assert [p for p in INODE_CHECKED if _inode_skipped(p, conf)] == []
+
+
+def test_a_firmware_path_without_its_rule_is_flagged():
+    efi_only = "/boot/efi/EFI/(ubuntu|BOOT)/[^/]+$ f Full-i\n"
+    assert _inode_skipped("/boot/efi/EFI/ubuntu/grubx64.efi", efi_only)
+    assert not _inode_skipped("/boot/firmware/README", efi_only)
 
 
 # Debian's /etc/aide/aide.conf: `@@x_include /etc/aide/aide.conf.d ^[a-zA-Z0-9_-]+$`. A
@@ -228,6 +267,12 @@ def test_a_report_longer_than_a_pipe_buffer_logs_no_broken_pipe(tmp_path):
     assert "Broken pipe" not in (tmp_path / "stderr").read_text()
 
 
+def test_the_timer_runs_a_slot_it_missed():
+    """daniel-pi's timer was stopped over the 2026-11-09 03:00 slot and never ran it (#7920)."""
+    for host in HOSTS:
+        assert re.search(r"^Persistent=true$", shipped_text(host, TIMER), re.M), host
+
+
 def test_the_push_deadline_covers_one_week_and_not_two():
     """The producer is homelab-aide-check.timer (integrity-scans component), weekly on Monday."""
     for host in HOSTS:
@@ -237,7 +282,7 @@ def test_the_push_deadline_covers_one_week_and_not_two():
         ), (
             f"{host}: this test reads the timer as weekly; give it the new period if that changes"
         )
-    body = render_shell_script("setup", "initial_setup", "aide-check.sh.j2")
+    body = render_shell_script("components", "integrity-scans", "aide-check.sh.j2")
     [deadline] = re.findall(r"^\s*DEADLINE_S=(\d+)$", body, re.M)
     assert WEEK_S < int(deadline) < 2 * WEEK_S, (
         f"DEADLINE_S {deadline}s must exceed the timer's weekly period, and stay "

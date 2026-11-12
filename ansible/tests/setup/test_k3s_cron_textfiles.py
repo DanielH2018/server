@@ -21,7 +21,7 @@ from lib.proc_testing import fake_bin, run, write_exec
 from lib.repo_paths import REPO
 
 CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
-REAL_CHECK_LIB = REPO / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
+REAL_CHECK_LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
 HC_ENV = "/etc/healthchecks/ping.env"
 UV = "/usr/bin/uv"
 SHELL_PRODUCERS = {

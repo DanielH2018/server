@@ -182,7 +182,6 @@ def test_a_pr_that_is_not_the_batchs_own_clean_pr_never_lands(tmp_path, over):
         ".github/workflows/ci.yml",
         ".claude/settings.json",
         "hosts/components/claude-code/component.yml",
-        "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_git.py",
         "ansible/vars/secrets.yml",
         "uv.lock",
     ],

@@ -48,6 +48,7 @@ no log, or an earlier landing's log for the same PR, and report that landing's v
 """
 
 import contextlib
+import fcntl
 import os
 import pwd
 import re
@@ -80,7 +81,56 @@ from lib.detach_fork import (  # noqa: F401 -- the record readers are this modul
 LOG_DIR_ENV = "CLAUDE_JOB_DIR"
 FALLBACK_LOG_DIR = Path("/tmp/homelab-landings")
 
+# THE CAP ON LIVE LANDINGS (issue #8018). Every landing polls GitHub, and on 2026-11-11 thirteen
+# at once spent about 148 core calls a minute and drained the shared 5000-an-hour quota. Landings
+# are grandchildren with separate log directories, so the count lives in one registry: a file per
+# live landing under `<live dir>/<orchestrator>/`. `LAND_ORCHESTRATOR` names the group; unset, all
+# of one user's landings share one group, which is the stricter reading. `LAND_MAX_LIVE` changes
+# the cap, and `LAND_LIVE_DIR` moves the registry (tests).
+MAX_LIVE_ENV = "LAND_MAX_LIVE"
+ORCHESTRATOR_ENV = "LAND_ORCHESTRATOR"
+LIVE_DIR_ENV = "LAND_LIVE_DIR"
+DEFAULT_MAX_LIVE = 4
+
+
+class TooManyLandings(Exception):
+    """The orchestrator already has its cap of landings live; the message names the retry."""
+
+
+def _slot_dir() -> Path:
+    base = os.environ.get(LIVE_DIR_ENV)
+    user = pwd.getpwuid(os.geteuid()).pw_name
+    root = Path(base) if base else Path(f"/tmp/homelab-landings-live-{user}")
+    group = os.environ.get(ORCHESTRATOR_ENV) or "default"
+    return root / re.sub(r"[^A-Za-z0-9_.-]", "_", group)
+
+
+def max_live() -> int:
+    """The cap: `LAND_MAX_LIVE` when it is a positive integer, else `DEFAULT_MAX_LIVE`."""
+    try:
+        return max(1, int(os.environ[MAX_LIVE_ENV]))
+    except KeyError, ValueError:
+        return DEFAULT_MAX_LIVE
+
+
+def _live_slots(slots: Path) -> list[Path]:
+    """The slot files whose landing still runs. A slot of a dead pid is deleted on the way."""
+    live = []
+    for slot in slots.glob("*.slot"):
+        if slot.stem.isdigit() and alive(int(slot.stem)):
+            live.append(slot)
+        else:
+            slot.unlink(missing_ok=True)
+    return live
+
+
+def _release_slot(pid: int) -> None:
+    with contextlib.suppress(Exception):
+        (_slot_dir() / f"{pid}.slot").unlink(missing_ok=True)
+
+
 _VERDICT_LINE = re.compile(r"^VERDICT:.*$", re.MULTILINE)
+_RESULT_LINE = re.compile(r"^LAND-RESULT: (.*)$", re.MULTILINE)
 # `Landing.die` without a verdict (bad arguments, 64) writes only this stderr message.
 _ERROR_LINE = re.compile(r"^land: ", re.MULTILINE)
 # A line that cannot belong to a `land:` message: the next phase header or a verdict.
@@ -115,6 +165,21 @@ def verdict_in(log: Path) -> str | None:
     except OSError:
         return None
     return match.group(0) if match else None
+
+
+def result_in(log: Path) -> dict[str, str] | None:
+    """The fields of the landing's `LAND-RESULT:` line in `log`, or None when it has none.
+
+    A log written before land.sh printed the line has none, so a reader falls back to the
+    `VERDICT:` line.
+    """
+    try:
+        match = _RESULT_LINE.search(log.read_text(errors="replace"))
+    except OSError:
+        return None
+    if not match:
+        return None
+    return dict(pair.split("=", 1) for pair in match.group(1).split() if "=" in pair)
 
 
 def error_in(log: Path) -> str | None:
@@ -159,10 +224,22 @@ def fork(log: Path, landing: Callable[[], int], scope_prefix: str = "land") -> i
     Returns:
       The landing's pid. Only the parent ever returns from this function.
     """
-    log.touch()
-    sys.stdout.flush()
-    sys.stderr.flush()
-    pid = fork_detached(lambda: _run_landing(log, landing, scope_prefix))
+    slots = _slot_dir()
+    slots.mkdir(parents=True, exist_ok=True)
+    # The lock spans the count and the fork, so two simultaneous detaches cannot both see room.
+    with open(slots / ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        cap = max_live()
+        if len(_live_slots(slots)) >= cap:
+            raise TooManyLandings(
+                f"{cap} landings are already live for orchestrator {slots.name!r} "
+                f"({MAX_LIVE_ENV}={cap}). Wait for one to end, then re-run this command."
+            )
+        log.touch()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        pid = fork_detached(lambda: _run_landing(log, landing, scope_prefix))
+        (slots / f"{pid}.slot").write_text("")
     pid_path(log).write_text(f"{pid}\n")
     return pid
 
@@ -194,6 +271,7 @@ def _run_landing(log: Path, landing: Callable[[], int], scope_prefix: str) -> No
             sys.stderr.flush()
         # After the flush, so a reader that sees the code also sees the last log line.
         record_code(log, code)
+        _release_slot(os.getpid())
         os._exit(code)
 
 

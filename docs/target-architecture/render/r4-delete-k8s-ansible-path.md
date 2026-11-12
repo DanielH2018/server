@@ -202,7 +202,7 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
   `scripts/secrets_mgmt/consumers.py`.
     - `deploy_cross_role.py:_CHECK_TIMER` names `render_records` among the roles that ship
       the shared kuma-check timer files.
-      `ansible/tests/setup/test_setup_cross_role_files.py:test_the_deployers_table_equals_the_trees_cross_role_files`
+      the cross-role files census (deleted by H7.53):test_the_deployers_table_equals_the_trees_cross_role_files`
       holds that table equal to the tree, so the role's deletion edits this deployer module
       in the same commit.
     - `consumers.py:CROSS_HOST_PUSH_TOKENS` lists `render_records_push_token`.
@@ -1911,7 +1911,7 @@ daniel-box. The operator produces them, because each needs the host:
 - PR 6: `docs/k8s-manifest-cycle-record.md`, *The hourly render-record producer*, marked as
   history; `docs/gitops-pipeline.md`, which names `render_targets.py`;
   `docs/claude-tooling.md` if it lists `probe.py releases`;
-  `ansible/tests/setup/test_setup_cross_role_files.py`'s table equality, which holds the
+  the cross-role files census (deleted by H7.53)'s table equality, which holds the
   edited `_CHECK_TIMER`; the deleted tests listed under PR 6.
   `ansible/secret_rotation.yml`, `consumers.py`, `git_dates.py`, the `secret-tiers` fragment
   and the tests that name the key or require an `auto` row change in the operator's secrets

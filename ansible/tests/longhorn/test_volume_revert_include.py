@@ -2,13 +2,13 @@
 
 from lib import yaml_fast
 from _k8s_render import rendered_docs
-from _volume_revert import _REPO
+from lib.repo_paths import REPO
 
 
 def _snapshot_roles() -> dict[str, list[str]]:
     """Every role that opts into a pre-deploy snapshot, and the claims it declares."""
     roles = {}
-    for defaults in sorted((_REPO / "ansible/roles/k8s").glob("*/defaults/main.yml")):
+    for defaults in sorted((REPO / "ansible/roles/k8s").glob("*/defaults/main.yml")):
         declared = (yaml_fast.safe_load(defaults.read_text()) or {}).get(
             "k8s_autodeploy_snapshot_pvcs"
         )
@@ -18,7 +18,7 @@ def _snapshot_roles() -> dict[str, list[str]]:
 
 
 def test_every_snapshot_role_restores_its_own_replicas() -> None:
-    """`volume-revert` scales to zero and never scales back.
+    """`scripts/backup/volume_revert.py` scales to zero and never scales back.
 
     That is only correct because the apply which follows restores the workload, and it restores it
     only if the role renders a Deployment **named for the service** with an **explicit replica
@@ -50,7 +50,7 @@ def test_every_snapshot_role_restores_its_own_replicas() -> None:
         ]
         assert named, (
             f"{role} declares k8s_autodeploy_snapshot_pvcs but renders no Deployment named "
-            f"{role!r}. k8s/volume-revert scales `deployment/{role}` to zero and does not scale "
+            f"{role!r}. scripts/backup/volume_revert.py scales `deployment/{role}` to zero and does not scale "
             f"it back, so this service would stay down after a rollback."
         )
         for doc in named:

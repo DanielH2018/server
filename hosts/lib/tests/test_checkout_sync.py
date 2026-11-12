@@ -80,6 +80,13 @@ class Lab:
             "CREDENTIALS_DIRECTORY": str(root / "creds"),
         }
         self.ci: dict[str, list[dict]] = {}
+        self.uv_log = root / "uv.log"
+        self.uv = (
+            fake_bin(
+                root / "bin", uv=f'printf "%s\\n" "$PWD" "$@" >> "{self.uv_log}"\n'
+            )
+            / "uv"
+        )
 
     def push(self, name: str) -> str:
         (self.writer / name).write_text(name)
@@ -98,7 +105,11 @@ class Lab:
             state_dir=self.state,
             textfile_dir=self.textfiles,
             opener=self.github,
+            uv=str(self.uv),
         )
+
+    def uv_calls(self) -> list[str]:
+        return self.uv_log.read_text().splitlines() if self.uv_log.exists() else []
 
     def github(self, request, timeout=None):
         sha = request.full_url.split("/commits/")[1].split("/")[0]
@@ -174,6 +185,33 @@ def test_an_untracked_file_is_refused(lab):
     assert lab.head() == lab.base
     assert lab.metric("homelab_checkout_dirty") == "1"
     assert lab.metric('homelab_check_success{check="checkout-sync"}') == "0"
+    assert lab.uv_calls() == [], "a refused run syncs no venv"
+
+
+def test_an_up_to_date_run_still_syncs_the_venv_exactly(lab):
+    """A venv left holding a package uv.lock dropped recompiles on every `uv run`."""
+    assert lab.sync().main() == 0
+    assert lab.uv_calls() == [
+        str(lab.checkout),
+        "sync",
+        "--frozen",
+        "--compile-bytecode",
+        "--quiet",
+    ]
+
+
+def test_a_failed_venv_sync_leaves_the_verdict_up(lab):
+    fake_bin(lab.uv.parent, uv="echo 'lock mismatch' >&2\nexit 2\n")
+    assert lab.sync().main() == 0
+    assert lab.metric('homelab_check_success{check="checkout-sync"}') == "1"
+
+
+def test_no_venv_sync_starts_past_its_budget(lab):
+    clock = iter([0.0, cs.VENV_SYNC_BUDGET_S + 1.0, cs.VENV_SYNC_BUDGET_S + 2.0])
+    sync = lab.sync()
+    sync.now = lambda: next(clock)
+    assert sync.main() == 0
+    assert lab.uv_calls() == []
 
 
 def test_another_branch_is_refused(lab):
@@ -243,7 +281,15 @@ def test_a_walk_past_its_budget_stops_grading(lab):
     green = lab.push("a")
     tip = lab.push("b")
     lab.ci.update({green: GREEN, tip: RED})
-    clock = iter([0.0, 0.0, cs.WALK_BUDGET_S + 1.0, cs.WALK_BUDGET_S + 2.0])
+    clock = iter(
+        [
+            0.0,
+            0.0,
+            cs.WALK_BUDGET_S + 1.0,
+            cs.WALK_BUDGET_S + 2.0,
+            cs.WALK_BUDGET_S + 3.0,
+        ]
+    )
     sync = lab.sync()
     sync.now = lambda: next(clock)
     assert sync.main() == 0

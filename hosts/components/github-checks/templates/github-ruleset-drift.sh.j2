@@ -7,14 +7,13 @@
 # Usage: github-ruleset-drift [-h|--help]
 # Takes no arguments and changes nothing on GitHub. systemd timer
 # homelab-github-ruleset-drift.timer runs it as root once a day
-# (gitops_deploy_ruleset_drift_cron_hour and _minute), and again every 30 minutes while the last
+# (github_ruleset_drift_cron_hour and _minute), and again every 30 minutes while the last
 # run failed. It reads the live rulesets with the deploy user's gh login (anonymous when there is
 # none), compares them with the values rendered into this file, and records the verdict. Exit 0 =
 # no drift; exit 1 = drift or an unverifiable read. Each verdict goes to the journal under the
 # github-ruleset-drift tag and to $TEXTFILE_DIR/github-ruleset-drift.prom for node_exporter's
 # textfile collector (default /var/lib/node-exporter-textfile; a test points it elsewhere).
 # Prometheus's GitHubRulesetDrift and GitHubRulesetDriftNotReporting rules page from that file.
-# Until M6 batch B3's Cutover-2 the verdict also went to a Kuma push monitor.
 #
 # The ruleset is what stops an un-CI'd commit reaching master, and the deployer trusts that: a
 # tick reads the check runs for the origin SHA and deploys on a green verdict. Nothing in the
@@ -79,9 +78,8 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 DEADLINE_S=90000
 
 # Records the verdict: the journal line comes first, on every run, so `journalctl -t
-# github-ruleset-drift` reads the outcome the way it does for setup-drift-check and the other
-# daily drift checks (#1781). The textfile write follows. A failed write logs and the run goes on
-# to its exit. The function keeps the name `push` from when it also sent the Kuma beat.
+# github-ruleset-drift` reads the outcome of every run, a passing one included (#1781). The textfile write follows. A failed write logs and the run goes on
+# to its exit.
 push() { # up|down msg
   logger -t github-ruleset-drift "status=$1 $2"
   write_check_textfile github-ruleset-drift "$([[ "$1" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
@@ -129,12 +127,12 @@ check_bypass() {
   if [ "$live" != "$expected" ]; then
     added=$(comm -23 <(printf '%s\n' "$live") <(printf '%s\n' "$expected") | grep . | tr '\n' ' ')
     removed=$(comm -13 <(printf '%s\n' "$live") <(printf '%s\n' "$expected") | grep . | tr '\n' ' ')
-    push down "ruleset ${id} bypass actors DRIFTED — newly-allowed:[${added}] no-longer-allowed:[${removed}] — an added actor merges past this ruleset; reconcile roles/setup/gitops_deploy/defaults/main.yml only if the change was deliberate"
+    push down "ruleset ${id} bypass actors DRIFTED — newly-allowed:[${added}] no-longer-allowed:[${removed}] — an added actor merges past this ruleset; reconcile hosts/components/github-checks/defaults/main.yml only if the change was deliberate"
     exit 1
   fi
 }
 
-RULESET_URL="https://api.github.com/repos/{{ gitops_deploy_github_repo }}/rulesets/{{ gitops_deploy_ruleset_id }}"
+RULESET_URL="https://api.github.com/repos/{{ github_repo }}/rulesets/{{ github_ruleset_id }}"
 
 # The expected set, baked in at template time from defaults/main.yml. Quoted heredoc so nothing
 # in a context name is shell-expanded — they contain spaces, parentheses and `+`.
@@ -144,7 +142,7 @@ RULESET_URL="https://api.github.com/repos/{{ gitops_deploy_github_repo }}/rulese
 # cannot differ from the one a test renders.
 EXPECTED=$(
   sed '/^[[:space:]]*$/d' <<'CONTEXTS' | sort
-{% for ctx in gitops_deploy_expected_ruleset_contexts %}
+{% for ctx in github_expected_ruleset_contexts %}
 {{ ctx }}
 {% endfor %}
 CONTEXTS
@@ -152,14 +150,14 @@ CONTEXTS
 # Each ruleset's declared bypass list, baked in the same way. An empty list renders to "".
 EXPECTED_CI_BYPASS=$(
   sed '/^[[:space:]]*$/d' <<'ACTORS' | sort
-{% for actor in gitops_deploy_ruleset_bypass_actors %}
+{% for actor in github_ruleset_bypass_actors %}
 {{ actor }}
 {% endfor %}
 ACTORS
 )
 EXPECTED_FENCE_BYPASS=$(
   sed '/^[[:space:]]*$/d' <<'ACTORS' | sort
-{% for actor in gitops_deploy_fence_ruleset_bypass_actors %}
+{% for actor in github_fence_ruleset_bypass_actors %}
 {{ actor }}
 {% endfor %}
 ACTORS
@@ -186,24 +184,24 @@ fi
 #
 # No `-f` on this one fetch: the 404 body is the evidence, and `-f` would discard it. curl still
 # exits non-zero on a transport failure, which is the reachout case.
-REPO_URL="https://api.github.com/repos/{{ gitops_deploy_github_repo }}"
+REPO_URL="https://api.github.com/repos/{{ github_repo }}"
 if ! REPO_BODY=$(curl -s --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
   -H "Accept: application/vnd.github+json" "$REPO_URL"); then
-  push_reachout "failed to fetch repo {{ gitops_deploy_github_repo }} — visibility and every ruleset UNVERIFIED"
+  push_reachout "failed to fetch repo {{ github_repo }} — visibility and every ruleset UNVERIFIED"
   exit 1
 fi
 VISIBILITY=$(printf '%s' "$REPO_BODY" | jq -r '.visibility // empty' 2>/dev/null)
 REPO_ERROR=$(printf '%s' "$REPO_BODY" | jq -r '.message // empty' 2>/dev/null)
 if [ -n "$VISIBILITY" ] && [ "$VISIBILITY" != "public" ]; then
-  push down "repo is ${VISIBILITY}: rulesets are not enforced on the free plan, the CI merge gate is open — make {{ gitops_deploy_github_repo }} public again"
+  push down "repo is ${VISIBILITY}: rulesets are not enforced on the free plan, the CI merge gate is open — make {{ github_repo }} public again"
   exit 1
 fi
 if [ -z "$VISIBILITY" ] && [ "$REPO_ERROR" = "Not Found" ]; then
-  push down "repo {{ gitops_deploy_github_repo }} answers Not Found — most likely private, and rulesets are not enforced on a private repo on the free plan, so the CI merge gate is open"
+  push down "repo {{ github_repo }} answers Not Found — most likely private, and rulesets are not enforced on a private repo on the free plan, so the CI merge gate is open"
   exit 1
 fi
 if [ -z "$VISIBILITY" ]; then
-  push down "repo {{ gitops_deploy_github_repo }} response had no .visibility (${REPO_ERROR:-no message}) — bad fetch, UNVERIFIED"
+  push down "repo {{ github_repo }} response had no .visibility (${REPO_ERROR:-no message}) — bad fetch, UNVERIFIED"
   exit 1
 fi
 
@@ -215,7 +213,7 @@ if ! BODY=$(curl -sf --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
   -H "Accept: application/vnd.github+json" "$RULESET_URL"); then
   # Unreachable is NOT "no drift". A check whose source is down must say it could not look,
   # or it is a deadman reporting a pass.
-  push_reachout "failed to fetch ruleset {{ gitops_deploy_ruleset_id }} — branch protection UNVERIFIED"
+  push_reachout "failed to fetch ruleset {{ github_ruleset_id }} — branch protection UNVERIFIED"
   exit 1
 fi
 
@@ -223,7 +221,7 @@ ENFORCEMENT=$(printf '%s' "$BODY" | jq -r '.enforcement // empty')
 if [ -z "$ENFORCEMENT" ]; then
   # A 200 carrying something that is not a ruleset — an error object, an HTML interstitial, a
   # truncated body. Reported as a bad fetch, never as "the contexts are gone".
-  push down "ruleset {{ gitops_deploy_ruleset_id }} response had no .enforcement — bad fetch, UNVERIFIED"
+  push down "ruleset {{ github_ruleset_id }} response had no .enforcement — bad fetch, UNVERIFIED"
   exit 1
 fi
 
@@ -236,12 +234,12 @@ LIVE_COUNT=$(printf '%s\n' "$LIVE" | grep -c .)
 # Those need different responses, and only one of them is an emergency — but both are wrong, so
 # both are reported. The count is stated so the message distinguishes them by eye.
 if [ "$LIVE_COUNT" -eq 0 ]; then
-  push down "ruleset {{ gitops_deploy_ruleset_id }} requires NO status checks (enforcement=${ENFORCEMENT}) — every merge gate is open, or the response shape changed"
+  push down "ruleset {{ github_ruleset_id }} requires NO status checks (enforcement=${ENFORCEMENT}) — every merge gate is open, or the response shape changed"
   exit 1
 fi
 
 if [ "$ENFORCEMENT" != "active" ]; then
-  push down "ruleset {{ gitops_deploy_ruleset_id }} enforcement is '${ENFORCEMENT}', not active — required checks are advisory"
+  push down "ruleset {{ github_ruleset_id }} enforcement is '${ENFORCEMENT}', not active — required checks are advisory"
   exit 1
 fi
 
@@ -251,7 +249,7 @@ if [ "$LIVE" != "$EXPECTED" ]; then
   # declared here, which usually means someone added a check and this list needs updating.
   REMOVED=$(comm -13 <(printf '%s\n' "$LIVE") <(printf '%s\n' "$EXPECTED") | tr '\n' ' ')
   ADDED=$(comm -23 <(printf '%s\n' "$LIVE") <(printf '%s\n' "$EXPECTED") | tr '\n' ' ')
-  push down "ruleset {{ gitops_deploy_ruleset_id }} DRIFTED — no-longer-required:[${REMOVED}] newly-required:[${ADDED}] — reconcile gitops_deploy_expected_ruleset_contexts in roles/setup/gitops_deploy/defaults/main.yml"
+  push down "ruleset {{ github_ruleset_id }} DRIFTED — no-longer-required:[${REMOVED}] newly-required:[${ADDED}] — reconcile github_expected_ruleset_contexts in hosts/components/github-checks/defaults/main.yml"
   exit 1
 fi
 
@@ -263,13 +261,13 @@ fi
 PR_RULE=$(printf '%s' "$BODY" \
   | jq -c 'first(.rules[]? | select(.type == "pull_request") | .parameters) // empty')
 if [ -z "$PR_RULE" ]; then
-  push down "ruleset {{ gitops_deploy_ruleset_id }} has no pull_request rule — a token that can update master pushes to it without a PR"
+  push down "ruleset {{ github_ruleset_id }} has no pull_request rule — a token that can update master pushes to it without a PR"
   exit 1
 fi
 # `tostring`, not `// empty`: jq's `//` treats a missing value and false alike.
 APPROVALS=$(printf '%s' "$PR_RULE" | jq -r '.required_approving_review_count | tostring')
-if [ "$APPROVALS" != "{{ gitops_deploy_ruleset_required_approvals }}" ]; then
-  push down "ruleset {{ gitops_deploy_ruleset_id }} requires ${APPROVALS} approving reviews (declared {{ gitops_deploy_ruleset_required_approvals }}) — an auto-merged PR waits for a review nobody is asked to give; reconcile gitops_deploy_ruleset_required_approvals only if the change was deliberate"
+if [ "$APPROVALS" != "{{ github_ruleset_required_approvals }}" ]; then
+  push down "ruleset {{ github_ruleset_id }} requires ${APPROVALS} approving reviews (declared {{ github_ruleset_required_approvals }}) — an auto-merged PR waits for a review nobody is asked to give; reconcile github_ruleset_required_approvals only if the change was deliberate"
   exit 1
 fi
 
@@ -283,22 +281,22 @@ fi
 # automerges an empty squash before CI can run (#1741, #1743; issues #1755, #1759, #1565).
 # The exclusion below is what lets the app delete and rebase under `renovate/`; this arm alerts
 # when it is missing. Same rule as above: reconcile the ruleset, never this default.
-BRANCH_RULESET_URL="https://api.github.com/repos/{{ gitops_deploy_github_repo }}/rulesets/{{ gitops_deploy_branch_ruleset_id }}"
+BRANCH_RULESET_URL="https://api.github.com/repos/{{ github_repo }}/rulesets/{{ github_branch_ruleset_id }}"
 if ! BRANCH_BODY=$(curl -sf --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
   -H "Accept: application/vnd.github+json" "$BRANCH_RULESET_URL"); then
-  push_reachout "failed to fetch ruleset {{ gitops_deploy_branch_ruleset_id }} — renovate branch exclusion UNVERIFIED"
+  push_reachout "failed to fetch ruleset {{ github_branch_ruleset_id }} — renovate branch exclusion UNVERIFIED"
   exit 1
 fi
 
 if [ -z "$(printf '%s' "$BRANCH_BODY" | jq -r '.enforcement // empty')" ]; then
-  push down "ruleset {{ gitops_deploy_branch_ruleset_id }} response had no .enforcement — bad fetch, UNVERIFIED"
+  push down "ruleset {{ github_branch_ruleset_id }} response had no .enforcement — bad fetch, UNVERIFIED"
   exit 1
 fi
 
 # -x -F: the whole line, literally. `**` is a glob in the pattern, not in the comparison.
 if ! printf '%s' "$BRANCH_BODY" | jq -r '.conditions.ref_name.exclude[]? // empty' \
-  | grep -qxF '{{ gitops_deploy_branch_ruleset_renovate_exclude }}'; then
-  push down "ruleset {{ gitops_deploy_branch_ruleset_id }} does not exclude {{ gitops_deploy_branch_ruleset_renovate_exclude }} — Renovate cannot delete or rebase its branches, and a merged branch's stale green automerges the next PR empty (#1759)"
+  | grep -qxF '{{ github_branch_ruleset_renovate_exclude }}'; then
+  push down "ruleset {{ github_branch_ruleset_id }} does not exclude {{ github_branch_ruleset_renovate_exclude }} — Renovate cannot delete or rebase its branches, and a merged branch's stale green automerges the next PR empty (#1759)"
   exit 1
 fi
 
@@ -309,31 +307,31 @@ fi
 # push onto a branch an operator session opened, and the next landing of that branch, pinned to
 # whatever head GitHub reports, would carry its commit to master. An added exclusion is a branch the agent
 # can push to, so the list is compared exactly rather than for one member.
-FENCE_RULESET_URL="https://api.github.com/repos/{{ gitops_deploy_github_repo }}/rulesets/{{ gitops_deploy_fence_ruleset_id }}"
+FENCE_RULESET_URL="https://api.github.com/repos/{{ github_repo }}/rulesets/{{ github_fence_ruleset_id }}"
 if ! FENCE_BODY=$(curl -sf --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
   -H "Accept: application/vnd.github+json" "$FENCE_RULESET_URL"); then
-  push_reachout "failed to fetch ruleset {{ gitops_deploy_fence_ruleset_id }} — agent push fence UNVERIFIED"
+  push_reachout "failed to fetch ruleset {{ github_fence_ruleset_id }} — agent push fence UNVERIFIED"
   exit 1
 fi
 
 FENCE_ENFORCEMENT=$(printf '%s' "$FENCE_BODY" | jq -r '.enforcement // empty')
 if [ -z "$FENCE_ENFORCEMENT" ]; then
-  push down "ruleset {{ gitops_deploy_fence_ruleset_id }} response had no .enforcement — bad fetch, UNVERIFIED"
+  push down "ruleset {{ github_fence_ruleset_id }} response had no .enforcement — bad fetch, UNVERIFIED"
   exit 1
 fi
 if [ "$FENCE_ENFORCEMENT" != "active" ]; then
-  push down "ruleset {{ gitops_deploy_fence_ruleset_id }} enforcement is '${FENCE_ENFORCEMENT}', not active — the agent can push to any branch"
+  push down "ruleset {{ github_fence_ruleset_id }} enforcement is '${FENCE_ENFORCEMENT}', not active — the agent can push to any branch"
   exit 1
 fi
 
 if ! printf '%s' "$FENCE_BODY" | jq -r '.conditions.ref_name.include[]? // empty' | grep -qxF '~ALL'; then
-  push down "ruleset {{ gitops_deploy_fence_ruleset_id }} no longer covers ~ALL — the agent can push to the branches it dropped"
+  push down "ruleset {{ github_fence_ruleset_id }} no longer covers ~ALL — the agent can push to the branches it dropped"
   exit 1
 fi
 
 EXPECTED_FENCE_EXCLUDE=$(
   sed '/^[[:space:]]*$/d' <<'REFS' | sort
-{% for ref in gitops_deploy_fence_ruleset_exclude %}
+{% for ref in github_fence_ruleset_exclude %}
 {{ ref }}
 {% endfor %}
 REFS
@@ -342,7 +340,7 @@ FENCE_EXCLUDE=$(printf '%s' "$FENCE_BODY" | jq -r '.conditions.ref_name.exclude[
 if [ "$FENCE_EXCLUDE" != "$EXPECTED_FENCE_EXCLUDE" ]; then
   OPENED=$(comm -23 <(printf '%s\n' "$FENCE_EXCLUDE") <(printf '%s\n' "$EXPECTED_FENCE_EXCLUDE") | grep . | tr '\n' ' ')
   CLOSED=$(comm -13 <(printf '%s\n' "$FENCE_EXCLUDE") <(printf '%s\n' "$EXPECTED_FENCE_EXCLUDE") | grep . | tr '\n' ' ')
-  push down "ruleset {{ gitops_deploy_fence_ruleset_id }} exclusions DRIFTED — newly-open-to-the-agent:[${OPENED}] no-longer-excluded:[${CLOSED}]; reconcile gitops_deploy_fence_ruleset_exclude only if the change was deliberate"
+  push down "ruleset {{ github_fence_ruleset_id }} exclusions DRIFTED — newly-open-to-the-agent:[${OPENED}] no-longer-excluded:[${CLOSED}]; reconcile github_fence_ruleset_exclude only if the change was deliberate"
   exit 1
 fi
 
@@ -353,14 +351,14 @@ for rule in creation update deletion; do
   fi
 done
 if [ -n "$UNRESTRICTED" ]; then
-  push down "ruleset {{ gitops_deploy_fence_ruleset_id }} no longer restricts [${UNRESTRICTED}] — the agent can do that on any branch"
+  push down "ruleset {{ github_fence_ruleset_id }} no longer restricts [${UNRESTRICTED}] — the agent can do that on any branch"
   exit 1
 fi
 
 # Last, because only these need an admin token: an anonymous run has judged every other property
 # above before it stops here.
-check_bypass {{ gitops_deploy_ruleset_id }} "$BODY" "$EXPECTED_CI_BYPASS"
-check_bypass {{ gitops_deploy_fence_ruleset_id }} "$FENCE_BODY" "$EXPECTED_FENCE_BYPASS"
+check_bypass {{ github_ruleset_id }} "$BODY" "$EXPECTED_CI_BYPASS"
+check_bypass {{ github_fence_ruleset_id }} "$FENCE_BODY" "$EXPECTED_FENCE_BYPASS"
 
-push up "repo public; ruleset {{ gitops_deploy_ruleset_id }} active, ${LIVE_COUNT} required contexts, matches the declared set; ruleset {{ gitops_deploy_branch_ruleset_id }} excludes {{ gitops_deploy_branch_ruleset_renovate_exclude }}; ruleset {{ gitops_deploy_ruleset_id }} requires a PR with {{ gitops_deploy_ruleset_required_approvals }} approving reviews; ruleset {{ gitops_deploy_fence_ruleset_id }} restricts every branch except {{ gitops_deploy_fence_ruleset_exclude | join(', ') }}; all bypass lists as declared"
+push up "repo public; ruleset {{ github_ruleset_id }} active, ${LIVE_COUNT} required contexts, matches the declared set; ruleset {{ github_branch_ruleset_id }} excludes {{ github_branch_ruleset_renovate_exclude }}; ruleset {{ github_ruleset_id }} requires a PR with {{ github_ruleset_required_approvals }} approving reviews; ruleset {{ github_fence_ruleset_id }} restricts every branch except {{ github_fence_ruleset_exclude | join(', ') }}; all bypass lists as declared"
 exit 0

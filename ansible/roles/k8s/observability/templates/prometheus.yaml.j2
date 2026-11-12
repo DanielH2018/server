@@ -387,7 +387,7 @@ data:
         scrape_timeout: 30s
         metrics_path: /probe
         static_configs:
-{% for published in (((hostvars['daniel-pi'].containers_list | published_ports) + (hostvars['daniel-pi'].compose_services | published_ports)) | sort) %}
+{% for published in ((hostvars['daniel-pi'].compose_services | published_ports) | sort) %}
           - targets: ['{{ hostvars['daniel-pi'].server_ip }}:{{ published.split(':')[1] }}']
             labels: {service: {{ published.split(':')[0] }}, module: tcp_connect}
 {% endfor %}
@@ -562,7 +562,7 @@ data:
         scrape_interval: 1m
         scrape_timeout: 30s
         static_configs:
-          - targets: ['{{ k8s_pi_client_ip }}:{{ (hostvars['daniel-pi'].containers_list + hostvars['daniel-pi'].compose_services) | entry_port('alloy') }}']
+          - targets: ['{{ k8s_pi_client_ip }}:{{ hostvars['daniel-pi'].compose_services | entry_port('alloy') }}']
             labels:
               origin: daniel-pi
               instance: daniel-pi

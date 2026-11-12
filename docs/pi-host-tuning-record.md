@@ -301,7 +301,7 @@ dead autoheal stops recovering Pi containers, and a dead docker-proxy stops this
 container logs reaching Loki while Alloy keeps running with zero targets.
 
 `pi-recovery-health.sh.j2` (`homelab-pi-recovery.timer`, every 5 minutes) watches **every container the
-host deploys** — each `containers_list` entry, plus `docker-proxy-lifecycle` and, under
+host deploys** — each `compose_services` entry, plus `docker-proxy-lifecycle` and, under
 `has_code_server`, `docker-proxy-codeserver`, which are services inside the docker-proxy
 role's compose file rather than list entries. It reads `docker ps` against the real socket
 through the docker group, so it still reports docker-proxy's own death, and writes its verdict
@@ -342,7 +342,7 @@ records the RSS measurement behind that.
 
 ### Why the watch set is the deploy list
 
-The set is derived from `containers_list`, never hardcoded, so a new Pi service joins it on the
+The set is derived from `compose_services`, never hardcoded, so a new Pi service joins it on the
 next deploy. It is the deploy list rather than `docker ps -a --filter status=exited`, which is
 what keeps the heartbeat from resurrecting a deliberate `docker stop` every 5 minutes. One
 `docker start` per watched container per cycle is the whole action: never `docker restart`,
@@ -402,7 +402,7 @@ together, or the fresh `NotReporting` rule pages until the first heartbeat lands
 ## Resolver
 
 A static `/etc/resolv.conf`, rendered from the SHARED
-`roles/setup/common/templates/resolv.conf.j2` that daniel-box also uses, lists the cluster
+`hosts/components/pi-resolver/templates/resolv.conf.j2` that daniel-box also uses, lists the cluster
 Pi-hole first and a public resolver behind it, and systemd-resolved is disabled. Before this
 the DHCP lease's ISP resolvers answered everything, including every internal
 `*.local.<domain>` name — those resolve publicly via the Cloudflare wildcard, so the private
@@ -549,6 +549,5 @@ The first live publish confirmed the trigger on 2026-11-03. The poll logged
 ## See also
 
 - `hosts/components/pi-heartbeats/component.yml` — the container-recovery contract.
-- `ansible/roles/setup/optimize_pi/CLAUDE.md` — where each step of the emptied role went.
 - [Security tools](security-tools.md) — the triage rows for `sar`, `lastcomm` and `ausearch`,
   whose retention the log RAM budget caps.

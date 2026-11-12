@@ -278,8 +278,9 @@ claude_code_memory_sync_target_dir: "{{ claude_code_operator_memory_dir }}"
 claude_code_memory_sync_interval: 15min
 
 # ── The agent user ──────────────────────────────────────────────────────────────────────
-# A dedicated Unix user for the operator's Claude sessions, built by the same shared task file
-# as renovate-agent's (roles/setup/common/tasks/agent_user.yml). A session running as
+# A dedicated Unix user for the operator's Claude sessions. Each host's package.yml declares it
+# to the users arm, as renovate-agent's component.yml declares that agent's user, and
+# claude-agent-setup builds its home. A session running as
 # {{ sys_user }} reads everything that user can: the age key, which decrypts the become
 # password, the operator's gh token, ssh keys, and the deployer's primary checkout. This user
 # reaches none of them. claude-rc.service runs as {{ sys_user }} unless a host's host_vars set
@@ -317,11 +318,6 @@ claude_code_agent_journal_access: true
 # host runs as the agent (slice 4). tasks/agent_access.yml has how; false closes the agent's
 # ~/.claude to its own user again and removes the ACLs.
 claude_code_agent_operator_read: true
-# Whether the agent reads the GitOps deployer's state directory on the deployer host, so it can
-# check hold_sha and owed.jsonl before it lands (CLAUDE.md, When to wait). Read-only, by ACL,
-# as renovate_agent is granted; nothing there is a secret (the webhook lives in
-# /etc/gitops-deploy/config.env). claude-agent-setup sets it; false removes both entries.
-claude_code_agent_gitops_read: true
 # The agent's own memory store: Claude Code keys it by the project directory, the agent's clone.
 claude_code_agent_memory_dir: >-
   {{ claude_code_agent_user_home }}/.claude/projects/{{

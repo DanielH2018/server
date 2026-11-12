@@ -126,12 +126,8 @@ checks each gate suppresses.
   rewritten master, an empty CI context list, a CI context that no longer matches, a builder hold,
   a rollout gate the canary never closes and a master that stays red. In each lag case the builder
   runs and exits 0 while no host receives a change, so no unit failure reports it. The bound
-  exceeds the ~103 s master CI run many times over. One case gets a longer bound: a gate whose
-  canary is daniel-pi, which the series marks `reason="canary"` and `host="daniel-pi"`, waits
-  `BUILDER_PI_CANARY_MAX_LAG_S` (90060 s: the larger of the floor and the Pi's longest gap between
-  updater fires plus the timer's delay, the run timeout and 600 s of slack, which
-  `filter_plugins/updater_lag_grace.py` derives from the unit files, #6530, #6919). A canary series
-  with no `host` label gets it too, because a builder older than that label writes none. An absent unbuilt-since series pages too, and
+  exceeds the ~103 s master CI run many times over, and every reason shares it: the only canary
+  is daniel-server, whose updater fires every 5 minutes. An absent unbuilt-since series pages too, and
   the oldest non-zero series is judged when a label change leaves two. Every message names the
   series' `reason` and `sha` labels, and `docs/host-packages.md`, *The builder's pages*, has the
   fix for each reason. The query carries no `origin` matcher: `origin_sel()` pins daniel-server,
@@ -349,7 +345,7 @@ checks each gate suppresses.
   it into the cluster. Its `crowdsec-home-ips` CronJob, on daniel-box's host network, probes
   the same endpoints in `home_ips_discover.py` and marks a failed lookup `WAN unreachable`.
   The CrowdSec sidecar's job reports that as an `up` skip. Each host cron consults `wan_reachable`
-  in `ansible/roles/setup/initial_setup/files/homelab-check-lib.sh` on the failure path that reached
+  in `hosts/components/check-lib/files/homelab-check-lib.sh` on the failure path that reached
   the internet, and reports `skipped: WAN unreachable` as an `up` when neither provider answers.
   The probe classifies, not the error text: parsing curl exit codes and git stderr across
   heterogeneous crons is the "green and inert" shape that library's header records paying for

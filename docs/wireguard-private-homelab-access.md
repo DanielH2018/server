@@ -29,7 +29,7 @@ desktop, so your real ISP IP is never exposed to anything.
 | wg-easy admin UI | `https://wg-easy.daniel-hunter.com` (behind Authelia) |
 | Service URLs | `https://<name>.local.daniel-hunter.com` → the k3s ingress VIP above |
 | `.local` auth portal | `https://auth.local.daniel-hunter.com` (one_factor) |
-| New-client DNS default | The Pi-hole DNS VIP in the first table (`default_dns: {{ dns_k8s_vip }}` on wg-easy's `containers_list` entry) |
+| New-client DNS default | The Pi-hole DNS VIP in the first table (`default_dns: {{ dns_k8s_vip }}` on wg-easy's `compose_services` entry) |
 
 ### One ingress IP
 

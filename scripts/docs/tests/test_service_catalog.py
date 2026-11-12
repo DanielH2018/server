@@ -116,10 +116,10 @@ def test_docker_route_is_lan_direct(tmp_path):
     assert row.route == "LAN-direct (no Traefik route)"
 
 
-def test_autodeploy_docker_is_na_when_host_has_no_gitops(tmp_path):
+def test_autodeploy_docker_is_applied_by_the_host_package(tmp_path):
     paths = make_repo(tmp_path)
     row = next(r for r in service_catalog.build_rows(**paths) if r.name == "dozzle")
-    assert row.autodeploy == "n/a (host has no GitOps auto-deploy path)"
+    assert row.autodeploy == "n/a: applied by the host package"
 
 
 def _jellyfin_row(tmp_path):
@@ -132,10 +132,10 @@ def _jellyfin_row(tmp_path):
 
 
 def test_autodeploy_of_a_k8s_entry_names_flux(tmp_path):
-    """The cell names Flux and `deploy.sh`'s exit 5, with no `owner` key on the entry (H1.9)."""
+    """The cell names Flux and the `land.sh` gate, with no `owner` key on the entry (H1.9)."""
     row = _jellyfin_row(tmp_path)
     assert row.autodeploy.startswith("n/a: applied by Flux, through `promote`")
-    assert "exit 5" in row.autodeploy
+    assert "`land.sh`" in row.autodeploy
 
 
 def test_underscore_prefixed_host_vars_files_are_excluded(tmp_path):

@@ -1,5 +1,5 @@
 <!--
-Merging is not shipping here. The GitOps deployer applies a setup-role change on its own.
+Merging is not shipping here. The host packages apply the host plane.
 `promote` and Flux apply every k8s change after master CI, image pins and deploy-plane paths
 included. `land.sh` waits on that promotion and gates the tags its changed set names. The
 boxes below are the follow-through, not paperwork.
@@ -34,11 +34,7 @@ pod. Say what you exercised.
 
 ## Blast radius
 
-- [ ] This is a **broad** change (`ansible/roles/setup/`, `ansible/inventory/`, `ansible/templates/`,
-      `ansible.cfg`, or a bring-up playbook). The GitOps deployer applies a setup-plane change as
-      `initial_setup.yml --tags <role>`, and `promote` applies a deploy-plane change, so do not
-      hand-run those. Only a bring-up playbook (`bootstrap.yml`, `k3s-bringup.yml`,
-      `initial_setup.yml`) parks the tick for every session and needs its playbook run by hand.
-      A setup role whose tag the deployer cannot derive merges and lands in `manual_plane`;
-      `land.sh` prints the command to apply it.
+- [ ] This is a **broad** change (`ansible/inventory/`, `ansible/templates/` or a shared
+      template). `promote` applies it to every tag that renders it, so do not hand-run anything.
+      A host's setup plane ships in its host package, so a change there belongs under `hosts/`.
 - [ ] New check, guard, or probe — ships with a paired test: one input it must accept, one it must reject.

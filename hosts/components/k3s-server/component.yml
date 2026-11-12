@@ -20,8 +20,8 @@
 #
 # The rest of the server's host half (H7.35, docs/target-architecture/host/h7-delete-ansible.md):
 # Longhorn's packages and multipath drop-in, the read-only kubeconfig, the inotify key, the join
-# rules and the address pin. The pin's templates stay in setup/k3s, which daniel-server's pin play
-# still applies, so they render in place through `role: k3s`. `k3s-host-dns` holds the resolver.
+# rules and the address pin. k3s-agent renders this component's defaults and the pin's
+# template through `component: k3s-server`. `k3s-host-dns` holds the resolver.
 #
 # DECIDED: the wifi fallback reaches /etc/netplan through a copy, never an output's symlink.
 # `netplan generate` fails on a dangling link in that directory, so a missing SOPS key would take
@@ -39,7 +39,6 @@
 #
 # ENFORCED: ansible/tests/setup/test_k3s_server_component.py and
 # hosts/lib/tests/test_box_k3s_host_half.py.
-role: k3s
 depends:
   - open-iscsi
   - nfs-common
@@ -105,10 +104,10 @@ defaults:
   #   kubelet-arg        the two unsafe sysctls wg-easy needs; setup/k3s's defaults say why.
   #                      image-gc-high-threshold=85 is the kubelet's default value, so it
   #                      changes no behaviour: H6.7 added it to prove the windowed restart.
-  #   secrets-encryption the apiserver encrypts Secrets on write. setup/k3s keeps
-  #                      `k3s_secrets_encryption` for server.yml's status and rotate-keys tasks
-  #                      until H7, and a test holds the two equal. setup/k3s's defaults explain
-  #                      why arming the flag is only half the job.
+  #   secrets-encryption the apiserver encrypts Secrets on write, so k3s's snapshots carry no
+  #                      plaintext Secret to R2. Secrets written before the flag stay plaintext
+  #                      until `k3s secrets-encrypt rotate-keys` rewrites them: docs/host-packages.md,
+  #                      *Rebuilding daniel-box*, has that check.
   #   etcd-expose-metrics  gated on the single switch in group_vars/all.yml, which the
   #                      Prometheus etcd scrape job also reads.
   #   kube-apiserver-arg the audit flags above, then the authentication config. That file
@@ -197,7 +196,7 @@ files:
   # falling back to ~/.kube/config, so the shells name the fallback. Guarded on the file existing,
   # which root has none of, so root keeps the admin config.
   - {src: templates/k3s-kubeconfig-profile, dst: /etc/profile.d/k3s-kubeconfig.sh}
-  - {src: "role:netplan-static-address.yaml.j2", dst: /etc/netplan/90-homelab-static-address.yaml, mode: "0600", activate: "manual:systemd-networkd.service", when: "k3s_node_static_link | length > 0"}
+  - {src: templates/netplan-static-address.yaml.j2, dst: /etc/netplan/90-homelab-static-address.yaml, mode: "0600", activate: "manual:systemd-networkd.service", when: "k3s_node_static_link | length > 0"}
   - {src: templates/static-link-sysctl.conf.j2, dst: /etc/sysctl.d/90-homelab-static-link.conf, activate: sysctl, when: "k3s_node_static_link | length > 0"}
   - {src: files/homelab-netplan-wifi, dst: /usr/lib/homelab/homelab-netplan-wifi, mode: "0755", when: "k3s_node_wifi_link | length > 0"}
   - {src: units/homelab-netplan-wifi.service, dst: /usr/lib/systemd/system/homelab-netplan-wifi.service, when: "k3s_node_wifi_link | length > 0"}

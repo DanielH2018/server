@@ -23,7 +23,7 @@ The three keys are asserted per LINK, not per file, so adding a second interface
 
 import re
 
-from _setup_render import rendered_setup_text
+from _setup_render import rendered_component_text
 
 _TEMPLATE = "netplan-dns.yaml.j2"
 
@@ -67,7 +67,7 @@ def overrides_missing_use_dns_false(text: str) -> list[str]:
 
 def test_the_live_template_suppresses_all_three_resolver_sources() -> None:
     missing = overrides_missing_use_dns_false(
-        rendered_setup_text("k3s-host-dns", _TEMPLATE)
+        rendered_component_text("k3s-host-dns", _TEMPLATE)
     )
     assert not missing, (
         f"{_TEMPLATE} must set `use-dns: false` under every override that can feed a "

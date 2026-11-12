@@ -2,7 +2,7 @@
 
 Each run is a real pytest subprocess over a scratch tree, with a bare `pytest.ini` so the
 repo's own `addopts` stay out. The scratch module sleeps at import, and its conftest sleeps in
-`pytest_collection_finish` as `conftest.py`'s prebuild does, so the report has a known
+`pytest_collection_finish` as `render_share`'s prebuild does, so the report has a known
 collection and prebuild to attribute.
 
 Run: uv run pytest ansible/tests/repo/test_phase_timing.py

@@ -16,6 +16,7 @@ import shlex
 import tomllib
 
 import pytest
+import pytest_shard
 import xdist_width
 from _helpers import REPO
 
@@ -63,9 +64,8 @@ ADDED_BY_5481 = {
 ADDED_2026_10_25 = {
     "evals/tests/test_eval_cases.py": "CLAUDE.md",
     "ansible/tests/deploy/test_landing_annotations.py": "scripts/deploy_tools/land_lib/ledger.py",
-    "ansible/tests/deploy/test_gitops_deploy_imports.py": "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_handlers.py",
     "scripts/validate/tests/test_validate_alert_rules.py": "ansible/roles/k8s/observability/files/rules/ingress-probes.yaml",
-    "scripts/validate/tests/test_validate_unit_templates.py": "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
+    "scripts/validate/tests/test_validate_unit_templates.py": "hosts/components/claude-code/templates/claude-clone-sync.service.j2",
 }
 
 NUMBER_WORDS = {
@@ -177,13 +177,11 @@ def test_the_gate_skips_a_path_no_test_reads(path):
 
 
 def _sweeps(workflow: str) -> list[str]:
-    """Every `prek run` line in a workflow except the ansible-lint job's own runs."""
+    """Every `prek run` line in a workflow."""
     return [
         line.strip()
         for line in workflow.splitlines()
-        if "prek run" in line
-        and not line.lstrip().startswith("#")
-        and "prek run ansible-lint" not in line
+        if "prek run" in line and not line.lstrip().startswith("#")
     ]
 
 
@@ -199,9 +197,9 @@ def test_every_ci_prek_sweep_skipping_the_hook_is_clean():
 
 
 def test_a_ci_prek_sweep_without_the_skip_is_flagged():
-    workflow = "        run: prek run --all-files --skip ansible-lint --color always\n"
+    workflow = "        run: prek run --all-files --skip validate-k8s-manifests --color always\n"
     assert _unskipped(_sweeps(workflow)) == [
-        "run: prek run --all-files --skip ansible-lint --color always"
+        "run: prek run --all-files --skip validate-k8s-manifests --color always"
     ]
 
 
@@ -411,7 +409,8 @@ def test_the_module_that_bounded_the_main_hook_no_longer_runs_in_it():
 
     `--dist loadscope` keeps each module on one worker, so the slowest module bounds the hook.
     The oracle is CI's recorded weights, not the cost comment. If a module left in the hook
-    grows past the moved census, the split no longer buys what the comment says it does.
+    grows past the moved census, the split no longer buys what the comment says it does. The
+    census's shared pass runs before its tests, so no weight carries it and it is added here.
     """
     weights = xdist_width.load_weights(REPO)
     assert weights, "scripts/dev/pytest_shard_weights.json did not load"
@@ -420,9 +419,10 @@ def test_the_module_that_bounded_the_main_hook_no_longer_runs_in_it():
     moved = xdist_width.module_seconds(
         [REPO / m for m in sorted(_census_modules())], REPO, weights
     )
+    census = max(moved) + pytest_shard.CENSUS_PASS_WALL_SECONDS
     slowest = max(zip(seconds, main, strict=True))
-    assert slowest[0] < max(moved), (
-        f"{slowest[1]} records {slowest[0]}s, at least the moved census's {max(moved)}s"
+    assert slowest[0] < census, (
+        f"{slowest[1]} records {slowest[0]}s, at least the moved census's {census}s"
     )
 
 

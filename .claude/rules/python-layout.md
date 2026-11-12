@@ -71,7 +71,7 @@ with logic gets a `tests/` directory, which the `ansible/roles/*/*/tests` glob i
 and the rollout gates), `k8s/` (manifest render and workload hygiene across roles),
 `longhorn/` (backup, snapshot, revert), `setup/` (the host plane: k3s install, crons, DNS,
 UPS, the Pi), `staging/`, `services/` (one role each) and `repo/` (CI, docs and the suite's
-own guards). The modules guards share — `_helpers.py`, `_k8s_render.py`, `_check_mode.py`,
+own guards). The modules guards share — `_helpers.py`, `_k8s_render.py`,
 `_role_census.py` — and `conftest.py` stay at the root, reachable from every subdirectory
 because `pyproject.toml` puts `ansible/tests` on `pythonpath`. A new guard goes in the directory
 whose name answers "what does it read", and keeps a unique basename — there are no

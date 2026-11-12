@@ -1,8 +1,8 @@
 # Host baseline record
 
-The traps, derivations and measured incidents behind the `initial_setup` role — the host
-baseline every machine in the homelab runs. `ansible/roles/setup/initial_setup/CLAUDE.md`
-carries the rules and the tag inventory; this page is the working-out, read when you edit the
+The traps, derivations and measured incidents behind the host baseline every machine in
+the homelab runs, which the host packages ship; the `initial_setup` role that applied it
+was deleted by H7.55b. This page is the working-out, read when you edit the
 block it covers.
 
 `tasks/` is the role's own inventory: one file per block tag, named for its subject. Read the
@@ -41,12 +41,9 @@ component and step 4 of `hosts/bootstrap-host.sh`, and deleted the tasks.
 - **This play becomes root, so `~` is `/root` — SSH paths are absolute only** (#2413). The
   `role-tasks-write-no-home-relative-path` row of `ansible/tests/repo/test_census_rows_roles.py`
   ratchets the class. The home-dir resolver task
-  exists for the same reason. The role doc's fact-dependency rule says a `register:` carries
-  every consumer's tag. That rule is a
-  check rather than prose since the GitOps deployer began deriving and applying narrow setup
-  tags (#3120). ENFORCED:
-  `ansible/tests/setup/test_register_producers_carry_consumer_tags.py::test_every_register_producer_carries_its_consumers_tags`,
-  over every setup role rather than this one.
+  exists for the same reason. The role doc's fact-dependency rule said a `register:` carries
+  every consumer's tag. A check held it over every setup role until H7.44 emptied the last
+  role with a `register:`.
 - **`become` vs HOME:** `ansible_facts.env.HOME` is root's under the play's `become: true`. The
   `Resolve the deploy user's home directory` task registers the deploy user's home, and no task
   reads it since H7.62. H7.63 deletes it.
@@ -391,7 +388,5 @@ future AMD or NVIDIA host with `has_igpu: true` needs its own flag before it lis
 
 ## See also
 
-- `ansible/roles/setup/initial_setup/CLAUDE.md` — the rules, the granular tag inventory and the
-  two autonomous-role contracts.
 - [Pi host tuning record](pi-host-tuning-record.md) — the Pi's own tuning, including the
   `has_rsyslog: false` mask that keeps the `rsyslog-filter` component off the Pi.

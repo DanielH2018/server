@@ -25,10 +25,18 @@ import re
 from pathlib import Path
 
 from lib import yaml_fast
-from lib.narrow_git import CannotNarrow
 from lib.repo_paths import K8S_ROLES, REPO
 
-__all__ = ["role_callers"]
+__all__ = ["CannotNarrow", "role_callers"]
+
+
+class CannotNarrow(Exception):
+    """A role's task file does not load, so the caller graph may be missing an edge.
+
+    Import it as `lib.k8s_role_callers`, never bare: a module imported under two names is two
+    classes, and an `except CannotNarrow` written against one does not catch the other.
+    """
+
 
 # How one k8s role reaches another's tasks: `include_role`/`import_role` naming it as
 # `k8s/<role>`. Whoever deploys the caller runs the callee's tasks.
@@ -48,8 +56,8 @@ _ROLE_NAME = re.compile(r"^k8s/([^/\s]+)$")
 # owner's bytes render into the reader's manifests. sonarr's and radarr's
 # `templates/verify/notification.yaml.j2` read arr-notification's script and defaults this way,
 # and since their includes went (#5561) that lookup is the only edge arr-notification has.
-# The same shape as the deployer's `deploy_cross_role._K8S_LOOKUP_RE`, which answers the
-# per-file question for a changed path; `scripts/lib` imports nothing from `deployer_lib`.
+# The same shape as `k8s_lookups.K8S_LOOKUP_RE`, which captures the whole file path rather
+# than the owning role.
 _ROLE_LOOKUP = re.compile(
     r"lookup\(\s*'(?:ansible\.builtin\.)?(?:file|template)'\s*,\s*playbook_dir\s*[+~]\s*"
     r"'/roles/k8s/([^/']+)/[^']+'\s*(?:,[^)]*)?\)"

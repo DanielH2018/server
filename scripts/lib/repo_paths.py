@@ -58,14 +58,10 @@ ROLES = ANSIBLE / "roles"
 K8S_ROLES = ROLES / "k8s"
 JOB_FILES = SCRIPTS / "renderer" / "job_files"
 FILTER_PLUGINS = ANSIBLE / "filter_plugins"
-# deploy_logic.py lives in the role that deploys it, so a script that has to agree with the
-# deployer imports it from here rather than carrying a second derivation.
-GITOPS_DEPLOY_FILES = ROLES / "setup" / "gitops_deploy" / "files"
 # `longhorn_robustness.py`'s one copy lives in monitor-bridge's `files/` without shipping in its
 # pod; the runbook gates import it from here (#3668).
 MONITOR_BRIDGE_FILES = K8S_ROLES / "monitor-bridge" / "files"
-# `host_lib.py` and `ci_verdict.py`, the modules the host packages and the setup
-# roles ship beside a host script (H7.2e moved them out of `setup/common/files/`). A tool that
+# `host_lib.py` and `ci_verdict.py`, the modules the host packages ship beside a host script (H7.2e moved them out of `setup/common/files/`). A tool that
 # imports one of the deployer's IMPURE modules (`deploy_state`, `deploy_config`) puts this on
 # `sys.path` for `host_lib`. A tool that imports `deploy_logic` puts it there for `ci_verdict`,
 # which `deploy_git` imports. `deploy_logic` itself must not load `host_lib`, which
@@ -79,16 +75,17 @@ ALL_VARS = INVENTORY / "group_vars" / "all.yml"
 HOST_VARS = INVENTORY / "host_vars"
 # The k3s service list, read as the k8s host's `containers_list` (render_guard.host_layer).
 K8S_SERVICES = REPO / "cluster" / "services.yml"
-# The k3s role's defaults hold what its install tasks and daniel-server's join read. The Longhorn
-# backup schedule and arm flags are `LONGHORN_BACKUP_ROLE`'s.
-K3S_ROLE = ROLES / "setup" / "k3s"
+# The k3s server component's defaults hold the node keys both k3s components render: the join
+# ports, the read-only ServiceAccount, the address pin. The Longhorn backup schedule and arm flags
+# are `LONGHORN_BACKUP_ROLE`'s.
+K3S_SERVER = REPO / "hosts" / "components" / "k3s-server"
 # The three Longhorn tier lists, `k3s_longhorn_{r2,weekly,nobackup}_volumes`, live in this
 # role's defaults since H1.7a. Python readers resolve them through `lib.service_tiers`.
 LONGHORN_RECONCILE_ROLE = K8S_ROLES / "longhorn-reconcile"
 # The Longhorn arm flags, backup schedules, retain counts and targets' prefixes live in this role's
 # defaults since H1.7b.
 LONGHORN_BACKUP_ROLE = K8S_ROLES / "longhorn-backup"
-K3S_DEFAULTS = K3S_ROLE / "defaults" / "main.yml"
+K3S_DEFAULTS = K3S_SERVER / "defaults" / "main.yml"
 # The k3s pin (`k3s_version`, `k3s_install_script_url`, `k3s_install_script_sha256`) lives in the
 # Flux-owned `system-upgrade` role's defaults since H6.1b, so a pin change routes to that tag.
 # `K3S_DEFAULTS` keeps every other key, which did not move.
@@ -104,11 +101,8 @@ K3S_FILES = K3S_HOST_CHECKS / "files"
 ANSIBLE_TESTS = ANSIBLE / "tests"
 
 # The bare module names a script outside the roles imports from each role directory, by the
-# directory constant. A bare name is not decidable from `sys.path` alone: `gitops_hold`,
-# `gitops_markers` and `gitops_ledger` ship in both GITOPS_DEPLOY_FILES and
-# MONITOR_BRIDGE_FILES with different content. `lib/stdlib_only.py`'s walk refuses an import
-# from a role directory, or of a basename two of them share, that this map does not list.
+# directory constant. `lib/stdlib_only.py`'s walk refuses an import from a role directory, or
+# of a basename two of them share, that this map does not list.
 ROLE_MODULES = {
-    GITOPS_DEPLOY_FILES: ["gitops_hold", "gitops_ledger", "gitops_markers"],
     MONITOR_BRIDGE_FILES: ["longhorn_robustness"],
 }

@@ -120,96 +120,6 @@ def test_an_ordinary_role_is_not_widened():
     assert tags == ["sonarr"]
 
 
-def test_a_setup_plane_pr_is_not_nothing_to_deploy():
-    """A setup-plane PR is not nothing-to-deploy.
-
-    It carried no k8s or containers role, so zero deploy tags — but it changed the deployer and
-    land.sh reported `nothing-to-deploy` and exited 0. The deployer applies its own role itself, so
-    the note is empty and the landing is instead verified against the deployer's state
-    (`self_applied` below); what still needs a hand is a setup role initial_setup.yml does not
-    include.
-    """
-    files = [
-        "ansible/roles/setup/k3s/defaults/main.yml",
-        "scripts/deploy_tools/land.sh",
-        "mkdocs.yml",
-    ]
-    tags, _ = land_tags.derive(files, changed_files=3)
-    assert tags == [], "no service tag should be derived from these paths"
-    assert "k3s-bringup.yml" in land_tags.plane_note(files)
-    # No setup role the tick applies reads k3s's defaults since H7.50 moved deploy_ui's firewall.
-    assert land_tags.self_applied_command(files) == ""
-
-
-def test_a_self_applied_setup_role_is_not_owed_to_a_hand():
-    """gitops_deploy and renovate_notify are both applied by the tick, so land.sh must not
-    exit 1 with `needs-manual-apply` naming the two playbook runs the next tick is about
-    to perform itself."""
-    files = [
-        "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py",
-        "ansible/roles/setup/renovate_notify/files/renovate_notify.py",
-    ]
-    assert land_tags.plane_note(files) == ""
-    assert land_tags.self_applied(files) is True
-
-
-def test_a_deploy_plane_change_is_promotes_to_apply():
-    """The tick runs no `ansible/deploy.yml` since D6.12, so no hand and no tick owes it."""
-    files = ["ansible/templates/resources.yml.j2"]
-    assert land_tags.plane_note(files) == ""
-    assert land_tags.self_applied(files) is False
-
-
-def test_a_bringup_playbook_is_still_owed_to_a_hand():
-    """The reject half of `self_applied`: a bringup playbook is still owed to a hand.
-
-    The tick parks on these outright, so the deployer's state can never say they were applied.
-    """
-    files = ["ansible/bootstrap.yml"]
-    assert land_tags.plane_note(files) != ""
-    assert land_tags.self_applied(files) is False
-
-
-def test_docs_and_ordinary_services_are_not_self_applied():
-    for files in (
-        ["docs/gitops-pipeline.md"],
-        ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"],
-        ["ansible/roles/setup/k3s/tasks/node.yml"],
-    ):
-        assert land_tags.self_applied(files) is False, files
-
-
-def test_an_ordinary_service_pr_needs_no_manual_apply():
-    """The reject half.
-
-    A classifier that always returned a remediation would make every landing report
-    needs-manual-apply and train the operator to ignore it.
-    """
-    assert (
-        land_tags.plane_note(["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"])
-        == ""
-    )
-
-
-def test_a_mixed_pr_reports_both_a_tag_and_a_manual_apply():
-    """The harder silence: a tag-carrying PR must still surface the half a hand owes.
-
-    The deploy genuinely succeeds and half the change is unapplied.
-    """
-    files = [
-        "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
-        "ansible/roles/setup/k3s/defaults/main.yml",
-    ]
-    tags, _ = land_tags.derive(files, changed_files=2)
-    assert tags == ["sonarr"]
-    assert land_tags.plane_note(files) != ""
-
-
-# A real PR's file list, read from `gh pr view <n> --json files`. 22 of its role directories
-# have a containers_list entry; `manifests` and `volume-claim` do not, and naming either in
-# --tags makes deploy.sh refuse the whole list. Its `volume-claim/defaults/main.yml` path is
-# dropped: jellyfin, that role's last caller, moved to `k8s_claims` (#3387), so the role now has
-# no caller to deploy it through and rightly lands in the plane note.
 _PR_617_FILES = [
     "ansible/roles/k8s/artifacts/defaults/main.yml",
     "ansible/roles/k8s/autofix-bridge/defaults/main.yml",
@@ -248,9 +158,9 @@ _PR_617_FILES = [
 def test_pr_617_derives_its_services_and_not_the_shared_roles():
     """The measured failure.
 
-    `manifests` and `volume-claim` have no containers_list entry, so including them made deploy.sh
-    exit 2 and refuse the 22 valid services beside them -- land.sh printed nothing-to-deploy and 22
-    digest pins sat undeployed.
+    `manifests` and `volume-claim` have no containers_list entry, so including them refused the 22
+    valid services beside them -- land.sh printed nothing-to-deploy and 22 digest pins sat
+    undeployed.
     """
     tags, source = land_tags.derive(_PR_617_FILES, changed_files=len(_PR_617_FILES))
     assert source == "pr"
@@ -258,21 +168,6 @@ def test_pr_617_derives_its_services_and_not_the_shared_roles():
     assert "volume-claim" not in tags
     assert len(tags) == 22
     assert {"sonarr", "jellyfin", "traefik", "n8n"} <= set(tags)
-
-
-def test_pr_617_reports_only_the_setup_plane():
-    """Dropped from the tags, the shared roles are `promote`'s to apply.
-
-    Dropped from the report along with the setup plane would be the silence again.
-    """
-    note = land_tags.plane_note(_PR_617_FILES)
-    assert "manifests" not in note and "ansible/deploy.yml" not in note
-    # `k3s-bringup.yml`, NOT `initial_setup.yml`. The k3s role appears only in the bring-up
-    # playbook, so `initial_setup.yml` is a command that exits 0 having matched no task — see
-    # `setup_routing`.
-    assert "ansible/k3s-bringup.yml --tags k3s" in note, (
-        "roles/setup/k3s is in this PR too"
-    )
 
 
 def test_a_shared_role_with_callers_derives_no_tag_of_its_own():
@@ -370,105 +265,70 @@ def test_a_secrets_rotation_beside_a_service_is_flagged():
     assert land_tags.plane_note(files) != ""
 
 
-# --- a broad path whose change is comments only --------------------------------
-#
-# A PR that changes three comments in `roles/setup/k3s/defaults/main.yml` must not print
-# `needs-manual-apply`, naming `k3s-bringup.yml --tags k3s` for a file whose rendered content
-# has not moved. The operator either runs a bring-up playbook for three comments or learns to
-# second-guess the verdict, and the second is the expensive one: `needs-manual-apply` is
-# load-bearing for the changes that genuinely need it.
-#
-# The path is not in `_BROAD_MANUAL_PREFIXES` -- those are the three bring-up playbooks -- so
-# the comment-only read for those cannot reach it. It is an UNROUTABLE setup role: k3s lives
-# in k3s-bringup.yml rather than initial_setup.yml.
-#
-# `quiet` is the set `deploy_tags.comment_only_paths` returns from the PR's own diff. These
-# tests pass it directly; the diff read itself is covered by the deployer's own suite
-# (`test_deploy_changes_planes.py`), which is where the YAML content reader lives.
-
-_PR_843 = [
-    "ansible/roles/setup/k3s/defaults/main.yml",
-    "ansible/tests/setup/test_etcd_restore_drill_cron.py",
-    "scripts/backup/etcd_restore_drill.sh",
-]
-_K3S_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
-_GITOPS_DEFAULTS = "ansible/roles/setup/gitops_deploy/defaults/main.yml"
-
-
-def test_a_comment_only_setup_role_edit_is_owed_to_nobody():
-    """A file list with one broad path read as comments only.
-
-    The PR's drill script is self-applied since #6411 (hypervisor copies it). A quiet path's own
-    contribution is read alone: loud, the tick applies its role; quiet, nothing.
-    """
-    assert land_tags.plane_note(_PR_843, quiet={_K3S_DEFAULTS}) == ""
-    assert land_tags.self_applied([_GITOPS_DEFAULTS]) is True
-    assert land_tags.self_applied([_GITOPS_DEFAULTS], quiet={_GITOPS_DEFAULTS}) is False
-
-
-def test_the_same_pr_with_a_real_edit_still_names_the_playbook():
-    """The reject half: the identical file list, nothing quiet.
-
-    Without this pair, a filter that emptied the note unconditionally would look the same
-    from the passing side.
-    """
-    assert "k3s-bringup.yml --tags k3s" in land_tags.plane_note(_PR_843)
-
-
-def test_a_quiet_path_does_not_excuse_the_loud_one_beside_it():
-    """One dropped path must not take the rest of the broad half with it."""
-    files = [*_PR_843, "ansible/bootstrap.yml"]
-    note = land_tags.plane_note(files, quiet={_K3S_DEFAULTS})
-    assert "`uv run ansible-playbook ansible/bootstrap.yml`" in note
-
-
-def test_a_quiet_path_never_mutes_a_secrets_rotation():
-    """The secrets half reads the UNFILTERED list.
-
-    `comment_only_broad_changes` cannot return `ansible/vars/secrets.yml` today, and keeping
-    the two reads separate means a later widening there cannot silently drop a rotation --
-    the one note whose absence leaves a live credential stale in a consumer.
-    """
-    files = ["ansible/vars/secrets.yml", _K3S_DEFAULTS]
-    note = land_tags.plane_note(
-        files, quiet={_K3S_DEFAULTS, "ansible/vars/secrets.yml"}
+def test_a_check_table_change_lands_with_its_own_role_alone():
+    tags, source = land_tags.derive(
+        ["ansible/roles/k8s/monitor-bridge/files/check_table.py"], changed_files=1
     )
-    assert "secrets.yml" in note
+    assert source == "pr"
+    assert tags == ["monitor-bridge"]
 
 
-def test_an_unusable_range_reads_nothing_as_quiet():
-    """No range, or a malformed one, keeps every broad path loud.
+# --- a k8s role's defaults whose change is comments only -------------------------
+#
+# A comment-only edit to a k8s role's `defaults/` renders the same manifests (#4460), so the
+# landing derives no tag for it and gates no workload that did not change.
 
-    A wrong answer here has to fall on the side of asking for the manual apply, so a range
-    this cannot use must never widen what gets dropped.
-    """
+_SONARR_DEFAULTS = "ansible/roles/k8s/sonarr/defaults/main.yml"
+
+
+def _show(texts):
+    return lambda ref, path: texts[ref]
+
+
+def test_a_comment_only_defaults_edit_is_quiet():
+    show = _show({"old": "a: 1\n# one\n", "new": "a: 1\n# two\n"})
+    quiet = land_tags.comment_only_k8s_defaults([_SONARR_DEFAULTS], "old", "new", show)
+    assert quiet == {_SONARR_DEFAULTS}
+    assert land_tags.derive([_SONARR_DEFAULTS], 1, quiet=quiet).tags == []
+
+
+def test_a_real_defaults_edit_is_flagged():
+    show = _show({"old": "a: 1\n", "new": "a: 2\n"})
+    assert (
+        land_tags.comment_only_k8s_defaults([_SONARR_DEFAULTS], "old", "new", show)
+        == set()
+    )
+    assert land_tags.derive([_SONARR_DEFAULTS], 1).tags == ["sonarr"]
+
+
+def test_a_comment_line_inside_a_block_scalar_is_content():
+    show = _show({"old": "a: |\n  # x\n", "new": "a: |\n  # y\n"})
+    assert (
+        land_tags.comment_only_k8s_defaults([_SONARR_DEFAULTS], "old", "new", show)
+        == set()
+    )
+
+
+def test_an_unusable_range_reads_only_docs_as_quiet():
+    """No range, or a malformed one, keeps every defaults path loud."""
+    files = [_SONARR_DEFAULTS, "ansible/roles/k8s/sonarr/CLAUDE.md"]
     for range_ in ("", "..", "abc", "..def", "ghi.."):
-        assert land_tags.quiet_paths(_PR_843, range_) == set(), range_
+        assert land_tags.quiet_paths(files, range_) == {files[1]}, range_
 
 
 def test_a_range_narrower_than_the_file_list_reads_nothing_as_quiet(monkeypatch):
-    """A valid range that covers only part of the PR is the unsafe failure.
-
-    A broad path changed OUTSIDE the range reads as identical on both sides, comes back
-    quiet, and its manual apply is skipped. The accept half is the test below.
-    """
+    """A path changed OUTSIDE the range reads as identical on both sides, so it would come
+    back quiet and its tag would be skipped. The accept half is the test below."""
+    monkeypatch.setattr(land_tags, "git_stdout", lambda *a, **k: "a.yml")
     monkeypatch.setattr(
-        land_tags.deploy_tags, "range_paths", lambda old, new: ["a.yml"]
-    )
-    monkeypatch.setattr(
-        land_tags.deploy_tags,
-        "comment_only_paths",
-        lambda paths, old, new: set(paths),
+        land_tags, "comment_only_k8s_defaults", lambda paths, old, new: set(paths)
     )
     assert land_tags.quiet_paths(["a.yml", "b.yml"], "old..new") == set()
 
 
 def test_a_range_covering_the_file_list_is_read(monkeypatch):
-    """The accept half: a range wide enough is used."""
+    monkeypatch.setattr(land_tags, "git_stdout", lambda *a, **k: "a.yml\nb.yml")
     monkeypatch.setattr(
-        land_tags.deploy_tags, "range_paths", lambda old, new: ["a.yml", "b.yml"]
-    )
-    monkeypatch.setattr(
-        land_tags.deploy_tags, "comment_only_paths", lambda paths, old, new: {"a.yml"}
+        land_tags, "comment_only_k8s_defaults", lambda paths, old, new: {"a.yml"}
     )
     assert land_tags.quiet_paths(["a.yml", "b.yml"], "old..new") == {"a.yml"}

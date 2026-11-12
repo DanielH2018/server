@@ -1,4 +1,5 @@
-"""The runner-seconds table the CI shards are packed on: `--record-runner` and `--refresh-runner`.
+"""The runner-seconds table the CI shards are packed on: `--record-runner`, `--refresh-runner`
+and the `--leg-spread` reading of one run's legs.
 
 The logs are inline strings and `gh` is a stand-in, so these read no committed table except
 where a test names it, and make no network call.
@@ -12,7 +13,6 @@ import subprocess
 import pytest
 import pytest_shard
 import shard_weight_gate
-import render_share
 
 FILES = [f"scripts/x/tests/test_{name}.py" for name in "abcdefgh"]
 
@@ -68,19 +68,6 @@ def test_the_committed_runner_table_is_populated():
     a PR deleting a test module need not touch the table (#5989 is the same trap on the
     weight table)."""
     assert len(shard_weight_gate.load_runner_weights()) >= 100
-
-
-def test_a_shard_holding_a_fleet_render_consumer_is_charged_both_prebuilds(tmp_path):
-    # Built from the constant: the literal here would make this module a consumer too.
-    (tmp_path / "test_reader.py").write_text(
-        f"{render_share.CONSUMER_IMPORT} shared_value\n"
-    )
-    (tmp_path / "test_plain.py").write_text("def test_x(): pass\n")
-    both = pytest_shard.K8S_RENDER_WALL_SECONDS + pytest_shard.FLEET_RENDER_WALL_SECONDS
-    assert (
-        pytest_shard.prebuild_seconds(["test_plain.py", "test_reader.py"], tmp_path)
-        == both * pytest_shard.CI_WORKERS
-    )
 
 
 def test_a_shard_with_no_fleet_render_consumer_is_charged_the_k8s_render_alone(
@@ -153,6 +140,36 @@ def test_a_leg_whose_only_compile_was_warm_is_read_as_measured():
     assert shard_weight_gate.runner_weights([log]) == {a: 4.0}
 
 
+def _summary(wall: float) -> str:
+    return f"2026-11-09T00:41:10.0Z \x1b[32m==== \x1b[1m12 passed\x1b[0m in {wall}s (0:03:20) ====\n"
+
+
+def test_the_leg_spread_takes_the_hardware_out_of_each_legs_wall():
+    """Twice the compile seconds and twice the wall is the same split on slower hardware."""
+    a = FILES[0]
+    spread = shard_weight_gate.leg_spread(
+        {
+            "pytest (shard 2 of 3)": _leg_log(2.4, {a: 1.0}) + _summary(200.0),
+            "pytest (shard 1 of 3)": _leg_log(1.2, {a: 1.0}) + _summary(100.0),
+            "pytest (shard 3 of 3)": _leg_log(1.2, {a: 1.0}) + _summary(120.0),
+        }
+    )
+    assert spread.splitlines() == [
+        "3 pytest legs: normalised gap 28.3s, raw gap 100.0s",
+        "pytest (shard 1 of 3): 100.00s wall, leg_speed 0.706, 141.67s normalised",
+        "pytest (shard 2 of 3): 200.00s wall, leg_speed 1.412, 141.67s normalised",
+        "pytest (shard 3 of 3): 120.00s wall, leg_speed 0.706, 170.00s normalised",
+    ]
+
+
+def test_the_leg_spread_refuses_a_leg_with_no_pytest_summary():
+    """A leg cut off before its summary has no wall; reading 0s would invent the fastest leg."""
+    with pytest.raises(ValueError, match=r"pytest \(shard 1 of 2\): no pytest summary"):
+        shard_weight_gate.leg_spread({"pytest (shard 1 of 2)": _leg_log(1.2, {})})
+    with pytest.raises(ValueError, match="no green pytest leg"):
+        shard_weight_gate.leg_spread({})
+
+
 def _fake_gh(runs: dict[int, list[tuple[str, str]]]):
     """A `lib.gh.gh` stand-in: `runs` maps a run id to its jobs' (name, conclusion)."""
     calls = []
@@ -195,7 +212,7 @@ def test_the_runner_fetch_reads_green_pytest_legs_of_the_newest_runs_that_ran_th
             9: [("pytest (shard 1 of 2)", "success")],
         }
     )
-    assert pytest_shard.fetch_runner_logs(2, gh) == [
+    assert shard_weight_gate.fetch_runner_logs(2, gh) == [
         "log of repos/{owner}/{repo}/actions/jobs/70/logs",
         "log of repos/{owner}/{repo}/actions/jobs/80/logs",
     ]
@@ -215,4 +232,15 @@ def test_the_runner_fetch_refuses_fewer_runs_than_asked():
         {7: [("pytest (shard 1 of 2)", "success")], 8: [("prek", "success")]}
     )
     with pytest.raises(RuntimeError, match="logs in 1 of the newest 2 green master"):
-        pytest_shard.fetch_runner_logs(2, gh)
+        shard_weight_gate.fetch_runner_logs(2, gh)
+
+
+def test_a_shard_holding_a_census_file_is_charged_the_census_pass(tmp_path):
+    (tmp_path / "test_plain.py").write_text("def test_x(): pass\n")
+    census = "scripts/tests/test_census_rows_test_renders.py"
+    (tmp_path / census).parent.mkdir(parents=True)
+    (tmp_path / census).write_text("def test_x(): pass\n")
+    k8s = pytest_shard.K8S_RENDER_WALL_SECONDS
+    assert pytest_shard.prebuild_seconds(["test_plain.py", census], tmp_path) == (
+        (k8s + pytest_shard.CENSUS_PASS_WALL_SECONDS) * pytest_shard.CI_WORKERS
+    )

@@ -75,7 +75,7 @@ volumes into them.
 
 ### Since 2026-08-20, a snapshot alone cannot give you the Secrets back — the CLUSTER TOKEN is what must survive
 
-`--secrets-encryption` is armed (`k3s_secrets_encryption` in the k3s role), so Secrets are stored
+`--secrets-encryption` is armed (`k3s_server_config` in `hosts/components/k3s-server/component.yml`), so Secrets are stored
 in etcd encrypted with a key held at `/var/lib/rancher/k3s/server/cred/encryption-config.json` on
 daniel-box.
 
@@ -92,8 +92,7 @@ datastore image, so it carries that blob.
 **The artifact that has to survive daniel-box is therefore `/var/lib/rancher/k3s/server/token`,
 not `encryption-config.json`.** Without the token nothing in the blob decrypts — CA certs, service
 key and encryption config alike — so a rebuilt host restores *nothing*, not merely Secrets. It is
-not in this repo: `grep -ci k3s ansible/vars/secrets.yml` returns 0, and `k3s-bringup.yml` slurps
-it off daniel-box's own disk at join time.
+not in this repo: `grep -ci k3s ansible/vars/secrets.yml` returns 0.
 
 **Out-of-band copy taken 2026-08-23** — the operator's password manager. That is the whole fix for
 the failure mode, and it is deliberately not machine-checkable: no automated check asserts the
@@ -365,7 +364,6 @@ If it does not rejoin, check the agent's env file on daniel-server,
 `K3S_TOKEN` matches the server token in `docs/break-glass.md` item 2. Correct either value with
 `sudoedit`, then restart `k3s-agent`. A rerun of `hosts/bootstrap-host.sh` does not help here: it
 skips the installer on a node where k3s is installed, so it never rewrites that file.
-`k3s-bringup.yml`'s agent join does not help either: its agent task refuses since H7.34.
 
 [Rebuilding a cluster node](host-packages.md#rebuilding-a-cluster-node) in
 `docs/host-packages.md` covers a replacement host on the package path, either node.

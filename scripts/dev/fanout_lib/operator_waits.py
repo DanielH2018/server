@@ -8,8 +8,8 @@ the lander held four of them about 10h each for touching its own surface (#5659)
 WHERE IT RUNS. `fanout.py land-server` already reads daniel-server's review records over one
 ssh call and the open PRs in one `gh` call, and `autoland.problems` already says why each PR
 is held. A timer of its own would repeat both reads against the `ufw limit ssh` budget. So
-the pass writes the gauge after it has judged every PR, from what it already read, plus two
-local reads: daniel-box's own review records and the deployer's `owed.jsonl`.
+the pass writes the gauge after it has judged every PR, from what it already read, plus one
+local read: daniel-box's own review records.
 
 WHAT COUNTS. Only a reason that a person must clear:
 
@@ -17,7 +17,6 @@ WHAT COUNTS. Only a reason that a person must clear:
 - `operator-step`: an unchecked operator box, or "needs input" or "do not merge" text.
 - `findings-remain`: findings left after the fix round, which hold the batch.
 - `needs-input`: the batch ended `needs-input`.
-- `manual-plane`: a setup role in `owed.jsonl` that the deployer cannot apply.
 
 A transient reason, such as a head that moved since the review or a draft, waits on the
 pipeline and is not counted. A PR-based wait ends when its PR closes or merges, so a record
@@ -32,8 +31,7 @@ Each pass also stamps every counted PR wait into `operator-waits.json` beside th
 logs (#5682): `{"pr", "reason", "since"}` when a pass first sees the PR held for that reason,
 and `until` when a later pass sees it held for another reason or not at all. The gauge says
 how many waits are open; the stamps say which PR's wait ended when, and
-`scripts/dev/pipeline_timeline.py` joins them into `waited_h`. A `manual-plane` wait names a
-role, not a PR, so it has no stamp. A stamp has the pass's resolution (10 minutes).
+`scripts/dev/pipeline_timeline.py` joins them into `waited_h`. A stamp has the pass's resolution (10 minutes).
 
 A pass that could not read daniel-server or GitHub writes nothing. The file then ages, and
 node-exporter's `node_textfile_mtime_seconds` shows that, where a write of zeros would
@@ -59,13 +57,11 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from findings_lib.issue_model import is_blocked, is_deferred
 
 TEXTFILE = Path("/var/lib/node-exporter-textfile/fanout_operator_waits.prom")
-OWED = Path("/var/lib/gitops-deploy/owed.jsonl")
 REASONS = (
     "lander-surface",
     "operator-step",
     "findings-remain",
     "needs-input",
-    "manual-plane",
 )
 # Each pattern matches the text `autoland.problems` returns for that reason. The test that
 # pins this table feeds `problems` a record for every reason, so a rewording fails there.
@@ -116,31 +112,15 @@ def saved_at(rec: Mapping) -> float | None:
     )
 
 
-def owed_manual_planes(text: str) -> list[float]:
-    """The `at` second of each `manual_plane` line of `owed.jsonl`; a torn line is skipped."""
-    out = []
-    for line in text.splitlines():
-        try:
-            obj = json.loads(line)
-        except ValueError:
-            continue
-        at = obj.get("at") if isinstance(obj, dict) else None
-        if obj.get("class") == "manual_plane" and isinstance(at, (int, float)):
-            out.append(float(at))
-    return out
-
-
 def waits(
     judged: Iterable[tuple[str, Mapping]],
     box: Iterable[tuple[str, Mapping]],
-    manual_planes: Iterable[float],
 ) -> dict[str, list[float]]:
     """Each reason's wait start times.
 
     Args:
         judged: (problem text, record) for each daniel-server PR still open.
         box: (problem text, record) for each daniel-box PR still open.
-        manual_planes: the start second of each owed manual-plane apply.
     """
     out: dict[str, list[float]] = {r: [] for r in REASONS}
     for host, pairs in (("server", judged), ("box", box)):
@@ -151,7 +131,6 @@ def waits(
             start = saved_at(rec)
             if start is not None:
                 out[reason].append(start)
-    out["manual-plane"].extend(manual_planes)
     return out
 
 
@@ -296,14 +275,6 @@ def write(path: Path, body: str) -> bool:
         Path(tmp).unlink(missing_ok=True)
         raise
     return True
-
-
-def read_owed(path: Path = OWED) -> str:
-    """The deployer's owed ledger, or "" when it is absent or unreadable."""
-    try:
-        return path.read_text()
-    except OSError:
-        return ""
 
 
 def read_local_records(reader: str) -> list[dict]:

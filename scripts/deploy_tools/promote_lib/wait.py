@@ -72,6 +72,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 # `forge`, `changed_set` and `flux_host` import bare, from scripts/deploy_tools.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib.exit_codes import FAILED, LAND_GAVE_UP, OK
+from lib.progress import OnChange
+from lib.summary import grouped
 from lib.repo_paths import HOST_LIB_FILES
 
 _sys.path.insert(0, str(HOST_LIB_FILES))
@@ -318,29 +320,29 @@ class _Expected:
 
 def _pending(
     reads: WaitReads, merge: str, items: list[dict], expected: set[str] | frozenset[str]
-) -> tuple[list[str], str]:
+) -> tuple[list[tuple[str, str]], str]:
     """Each expected name not yet settled with why, and R, `homelab`'s commit, when none is."""
     by_name = {_name(item): item for item in items}
-    pending: list[str] = []
+    pending: list[tuple[str, str]] = []
     revision = ""
     for name in sorted(expected):
         item = by_name.get(name)
         if item is None:
-            pending.append(f"{name} (absent)")
+            pending.append((name, "absent"))
             continue
         commit = origin_commit(item)
         if commit is None:
-            pending.append(f"{name} (no master@sha1 origin revision)")
+            pending.append((name, "no master@sha1 origin revision"))
             continue
         if not is_ready(item):
-            pending.append(f"{name} (not Ready)")
+            pending.append((name, "not Ready"))
             continue
         covered = reads.is_ancestor(merge, commit)
         if covered is None:
-            pending.append(f"{name} (origin {commit[:8]} not fetched yet)")
+            pending.append((name, f"origin {commit[:8]} not fetched yet"))
             continue
         if not covered:
-            pending.append(f"{name} (at {commit[:8]}, before this merge)")
+            pending.append((name, f"at {commit[:8]}, before this merge"))
             continue
         if name == ROOT:
             revision = commit
@@ -379,7 +381,10 @@ def land_wait(
     # The earlier commit last read in flight, and when it was first read so.
     earlier, earlier_since = "", 0.0
     expected = _Expected(reads, merge)
-    last = widened = ""
+    widened = ""
+    progress = OnChange(
+        lambda line: print(f"  promote.py land-wait: {line}", flush=True)
+    )
     paused, all_paused = [], False
     tags = own = sorted(set(services))
     while True:
@@ -403,6 +408,7 @@ def land_wait(
                 n for n in cs.names if split_kind(n)[0] not in paused and n != SOAK
             } | {ROOT}
             pending, revision = _pending(reads, merge, items, names)
+            waiting = grouped(pending, noun="Kustomization")
             if SOAK in cs.names:
                 deadline = max(deadline, started + soak_deadline_s(items))
             if not pending and not all_paused and SOAK in cs.names:
@@ -411,10 +417,10 @@ def land_wait(
                     _moved_past(reads, revision) if soak in SOAK_FAILED_STATES else ""
                 )
                 if moved:
-                    pending = [
+                    waiting = (
                         f"{SOAK_CONTEXT} on {revision[:8]} ({soak}, superseded by "
                         f"{moved[:8]})"
-                    ]
+                    )
                 elif soak in SOAK_FAILED_STATES:
                     return WaitResult(
                         "deploy-failed",
@@ -425,9 +431,9 @@ def land_wait(
                         widened=widened,
                         tags=tuple(tags),
                     )
-                if soak != "success":
-                    pending = [f"{SOAK_CONTEXT} on {revision[:8]} ({soak})"]
-            if not pending and not all_paused:
+                elif soak != "success":
+                    waiting = f"{SOAK_CONTEXT} on {revision[:8]} ({soak})"
+            if not waiting and not all_paused:
                 # A PR that moved no bundle tag deployed nothing, so it marks no dashboard.
                 if tags:
                     annotate_promotion(reads.annotate, tags, revision)
@@ -439,7 +445,7 @@ def land_wait(
                     suspended=tuple(paused),
                     tags=tuple(tags),
                 )
-            line = f"waiting on {', '.join(pending)}"
+            line = f"waiting on {waiting}"
             if widened:
                 line += f" (every name: {widened})"
         try:
@@ -480,9 +486,7 @@ def land_wait(
                 cap_end += min(left, window_grace_s)
             window_seen = True
         line += note + window_note
-        if line != last:
-            print(f"  promote.py land-wait: {line}", flush=True)
-            last = line
+        progress(line)
         if now >= deadline or (cap_end is not None and now >= cap_end):
             return WaitResult(
                 "gave-up",

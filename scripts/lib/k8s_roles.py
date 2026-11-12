@@ -188,8 +188,6 @@ def k8s_autodeploy_denylist(ansible_dir: Path | str) -> list[str]:
 # stale exemption rather than left as a name nobody can justify.
 NO_MANIFEST_ROLES = {
     "volume-snapshot",
-    "longhorn-api",  # resolves a fact only, same as volume-snapshot
-    "volume-revert",  # reverts a volume through kubectl and the Longhorn API
     # declares sonarr's/radarr's Discord Connect notification over the app's own API — a row in
     # the app's database, which no manifest can express
     "arr-notification",
@@ -678,3 +676,31 @@ def role_fields(
         if fields:
             found[tag] = fields
     return found, problems
+
+
+def k8s_tags_in(repo_root: Path, at: str = "") -> set[str]:
+    """Every k8s entry's deploy tag, in `repo_root`'s tree or, given `at`, at that commit.
+
+    A commit from before the list moved holds it in the k8s host's host_vars file, under
+    the same `containers_list` key, so that file is read at such a commit.
+
+    Raises:
+        subprocess.CalledProcessError: `at` holds neither file.
+    """
+    import tempfile
+
+    from lib.ansible_inventory import K8S_HOST, host_vars_file
+    from lib.git import git
+    from lib.repo_paths import REPO
+
+    rel = K8S_SERVICES.relative_to(REPO)
+    if not at:
+        return k8s_tags(repo_root / rel)
+    shown = git("show", f"{at}:{rel.as_posix()}", cwd=repo_root, check=False)
+    if shown.returncode != 0:
+        old = host_vars_file(K8S_HOST).relative_to(REPO).as_posix()
+        shown = git("show", f"{at}:{old}", cwd=repo_root)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / rel.name
+        path.write_text(shown.stdout)
+        return k8s_tags(path)

@@ -20,7 +20,7 @@ Run: uv run pytest ansible/tests/setup/test_loki_route_witness.py
 import os
 
 from lib.proc_testing import fake_bin, path_with, run, write_exec
-from _helpers import ALL_VARS, ANSIBLE
+from _helpers import ALL_VARS, REPO
 from _shell_render import render_shell_script, rendered_shell_text
 from lib import yaml_fast
 
@@ -34,7 +34,7 @@ HOURLY_S = 3600
 CHECK_LIB_PATH = "/usr/lib/homelab/homelab-check-lib.sh"
 UV_PATH = "/usr/bin/uv"
 CHECK_LIB = (
-    ANSIBLE / "roles" / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
+    REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
 )
 # What a render carries while it still pushes to Kuma: the library, its call, a push URL, or the
 # credential and env file that fed the token.

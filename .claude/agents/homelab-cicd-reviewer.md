@@ -18,14 +18,11 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
   to master — YAML lint, ansible-lint, gitleaks, pytest, the compose-template validator, ruff. uv
   must be on PATH. The test set is `pyproject.toml` `[tool.pytest.ini_options].testpaths` (single
   source; excludes vendored `ansible/collections/**`).
-- **GitOps:** `ansible/roles/setup/gitops_deploy/` installs a 10-min systemd timer that fetches
-  origin/master, waits for a green CI verdict on the tip, maps each changed path to a service or a
-  plane, ff-merges, and applies what it may. Pure decision logic is in
-  `files/deployer_lib/deploy_logic.py` (unit-tested in `tests/test_deploy_*.py`). The tick applies
-  the host plane only: a setup-plane change applies as `initial_setup.yml`, a failed apply writes
-  `hold_sha` and leaves the tree fast-forwarded, and the bring-up playbooks park for a manual run.
+- **GitOps:** the GitOps deployer is gone (H7.53). Each host's package applies its host plane,
+  and `homelab-checkout-sync` fast-forwards the primary checkout on daniel-box to the newest
+  green-CI ancestor of origin/master.
   **`promote` and Flux apply every k8s change**, an image-pin bump and a deploy-plane path (shared
-  templates / inventory / deploy.yml) included, and `land.sh` waits on that promotion. So an
+  templates / inventory) included, and `land.sh` waits on that promotion. So an
   automerged image PR does not sit undeployed on master. `k8s_autodeploy` says only whether
   Renovate may automerge an image bump: a denylisted role's PR opens as `manual —`.
 - **Updates:** Renovate (`renovate.json`) manages version-pinned images + custom regex managers

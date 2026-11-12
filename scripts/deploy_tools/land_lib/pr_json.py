@@ -40,6 +40,8 @@ class CommitMessage(TypedDict, total=False):
 
 class ChangedFile(TypedDict, total=False):
     path: str
+    # `ADDED`, `MODIFIED`, `DELETED`, ...; absent when `gh` gave none.
+    changeType: str
 
 
 class PrView(TypedDict, total=False):
@@ -91,6 +93,14 @@ def _str(value: JsonValue, what: str) -> str:
     return value
 
 
+def _changed_file(value: JsonValue, i: int) -> ChangedFile:
+    obj = as_object(value, f"files[{i}]")
+    out: ChangedFile = {"path": _str(obj.get("path"), f"files[{i}].path")}
+    if "changeType" in obj:
+        out["changeType"] = _str(obj.get("changeType"), f"files[{i}].changeType")
+    return out
+
+
 def _login(value: JsonValue, what: str) -> Login | None:
     if value is None:
         return None
@@ -131,7 +141,7 @@ def parse_view(obj: JsonObject) -> PrView:
         ]
     if "files" in obj:
         view["files"] = [
-            {"path": _str(f.get("path"), f"files[{i}].path")}
+            _changed_file(f, i)
             for i, f in enumerate(as_object_list(obj["files"], "files"))
         ]
     if "isCrossRepository" in obj:

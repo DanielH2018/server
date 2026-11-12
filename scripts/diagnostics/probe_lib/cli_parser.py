@@ -20,7 +20,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.arr import ARR_PORTS
 from diagnostics.probe_lib.core import LOKI_STORE_HELP, LOKI_STORES
-from diagnostics.probe_lib import applied, builder, gitops_why, lander
+from diagnostics.probe_lib import builder, lander
 from diagnostics.probe_lib.flux import FLUX_HELP, FLUX_TAGS_HELP
 from diagnostics.probe_lib.landing_verdicts import VERDICTS_HELP, add_verdicts_args
 from lib.cli_help import ArgumentParser
@@ -72,7 +72,7 @@ def _epilog():
     )
     return (
         f"Exit codes of every verdict subcommand: {codes}. A verdict subcommand's last line "
-        "is `PROBE-VERDICT: <ok|fail|unreadable> (<detail>)`, except under --json or "
+        "is `PROBE-VERDICT: <ok|fail|skip|unreadable> (<detail>)`, except under --json or "
         "--dry-run."
     )
 
@@ -137,7 +137,15 @@ def _build_parser():
     m = sub.add_parser("metric", help="Prometheus instant query")
     m.add_argument("promql")
     _flag(m, "--json", "print raw JSON instead of the formatted view")
-    tg = sub.add_parser("targets", help="Prometheus scrape-target health")
+    tg = sub.add_parser(
+        "targets",
+        **_verdict_help(
+            "Prometheus scrape-target health: each down target, then the up count",
+            "every target is up, or down with its Deployment scaled to 0",
+            "a target is down",
+        ),
+    )
+    _flag(tg, "--json", "print the raw /api/v1/targets JSON instead, with no verdict")
     tg.add_argument(
         "--pi",
         action="store_true",
@@ -330,6 +338,7 @@ def _build_parser():
     _dry_run(vp, "print the kubectl calls without making them")
     fx = sub.add_parser("flux", **_verdict_help(*FLUX_HELP))
     fx.add_argument("tags", nargs="*", help=FLUX_TAGS_HELP)
+    _flag(fx, "--all", "list every Kustomization, not only the unsettled ones")
     _dry_run(fx, "print the kubectl call without making it")
     sub.add_parser(
         "shed-set",
@@ -372,7 +381,9 @@ def _build_parser():
     hl = sub.add_parser(
         "health",
         **_verdict_help(
-            "k8s rollout + restart rollup", "healthy", "unhealthy or missing"
+            "k8s rollout + restart rollup; exit 3 when the tag names nothing to check",
+            "healthy",
+            "unhealthy or missing",
         ),
     )
     hl.add_argument("container", help="service name, e.g. jellyfin")
@@ -473,6 +484,6 @@ def _build_parser():
         default="origin",
         help="the GitHub remote pushed to (default origin)",
     )
-    for module in (gitops_why, lander, builder, applied):
+    for module in (lander, builder):
         module.add_parser(sub, _verdict_help)
     return p

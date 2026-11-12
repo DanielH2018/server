@@ -13,7 +13,7 @@ Run: uv run pytest scripts/lib/tests/test_k8s_role_callers.py
 import pytest
 
 from lib.k8s_roles import k8s_entries, role_callers
-from lib.narrow_git import CannotNarrow
+from lib.k8s_role_callers import CannotNarrow
 
 # The helper roles: every role under ansible/roles/k8s/ that another role reaches and that has
 # no containers_list entry of its own. Named, not counted -- a rename or a moved tasks file
@@ -23,7 +23,6 @@ _HELPERS = frozenset(
     {
         "arr-notification",
         "image-builder",
-        "longhorn-api",
         "volume-snapshot",
     }
 )
@@ -38,10 +37,6 @@ def test_every_named_helper_has_at_least_one_caller(callers):
     """Non-vacuity. A helper with no caller derived means a task form the walk misses."""
     missing = sorted(h for h in _HELPERS if not callers.get(h))
     assert not missing, f"no caller derived for {missing} -- the include form changed?"
-
-
-def test_the_include_role_form_resolves(callers):
-    assert callers["longhorn-api"] == {"volume-revert"}
 
 
 def test_the_defaults_form_resolves(callers):

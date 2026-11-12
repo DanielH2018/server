@@ -22,7 +22,6 @@ from _land_fakes import MERGE_SHA, PRIMARY, Fakes, build_classifier, build_tools
 from _land_wait_fakes import M, P, Sim, at, digests
 from deploy_tools.land_lib import land_tags
 from deploy_tools.promote_lib import wait as promote_wait
-from lib.exit_codes import DEPLOY_BROAD
 
 FLUX = ("authelia", "bento-pdf", "texbrain")
 
@@ -159,8 +158,8 @@ def test_a_templates_only_pr_reaches_land_wait_and_gates_the_changed_set(
 def test_a_range_over_the_file_page_with_a_template_settles_on_the_changed_set(
     land_run_main,
 ):
-    """`gh` lists 100 of 137 files, and `changed` refuses the range for its template. Nobody can
-    deploy that range by hand, so the verdict rests on land-wait alone."""
+    """`gh` lists 100 of 137 files, and the diff since `--since` derives no tag for its
+    template, so the verdict rests on land-wait alone."""
     sim = Sim(
         polls=[at(M, "bento-pdf")],
         published={
@@ -173,7 +172,6 @@ def test_a_range_over_the_file_page_with_a_template_settles_on_the_changed_set(
         ["ansible/templates/claim-default.yaml.j2"],
         sim,
         changed_files=137,
-        changed_rc=DEPLOY_BROAD,
     )
     assert "VERDICT: settled" in out, out
     assert "needs-manual-apply" not in out and "target=daniel-pi" not in out

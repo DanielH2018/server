@@ -2,7 +2,7 @@
 
 `_ratchet.py` and `_ratchet_patches.py` hold the pure half — the caps, the allowlist parser,
 the two comparisons and the patch counter. This module is the impure half that reads the working tree: the
-code-line counts, the monkeypatch counts and the conftest-fixture census. It sits beside the
+code-line counts and the monkeypatch counts. It sits beside the
 pure module rather than inside the test module so the `--tighten` writer
 (`scripts/dev/tighten_ratchets.py`) imports the SAME census the ratchet asserts on.
 Importing a `test_*.py` from a script would work under pytest and nowhere else.
@@ -12,16 +12,11 @@ The reads of the merge base with `origin/master`, and the tests for all of this,
 """
 
 import subprocess
-from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from _helpers import REPO, is_test_file
 from _ratchet import Ratchet, cap_for, code_lines
-from _ratchet_patches import (
-    count_module_patches,
-    first_party_module_names,
-    module_fixture_names,
-)
+from _ratchet_patches import count_module_patches, first_party_module_names
 from lib.proc_testing import run
 
 HERE = REPO / "ansible" / "tests" / "repo"
@@ -108,33 +103,6 @@ def code_line_counts() -> dict[str, int]:
     return counts
 
 
-def module_fixtures_by_dir(tracked: Iterable[str]) -> dict[str, frozenset[str]]:
-    """Directory (repo-relative, posix; "" is the repo root) -> its conftest's module fixtures."""
-    return {
-        rel.rpartition("/")[0]: module_fixture_names((REPO / rel).read_text())
-        for rel in tracked
-        if rel.rpartition("/")[2] == "conftest.py"
-    }
-
-
-def module_fixtures_for(
-    rel: str, by_dir: Mapping[str, frozenset[str]]
-) -> frozenset[str]:
-    """The module fixtures visible to `rel`, unioned over its directory chain.
-
-    pytest resolves a fixture from the test's own directory upwards, so a conftest anywhere
-    above the test contributes. Shadowing does not matter here: both definitions would have to
-    return a module for the name to count at all.
-    """
-    parts = rel.split("/")[:-1]
-    return frozenset().union(
-        *(
-            by_dir.get("/".join(parts[:depth]), frozenset())
-            for depth in range(len(parts) + 1)
-        )
-    )
-
-
 def monkeypatch_counts() -> dict[str, int]:
     """Repo-relative test-module path -> its module-patch count, zeros included.
 
@@ -143,13 +111,8 @@ def monkeypatch_counts() -> dict[str, int]:
     """
     tracked = tracked_python_files()
     first_party = first_party_module_names(tracked)
-    by_dir = module_fixtures_by_dir(tracked)
     return {
-        rel: count_module_patches(
-            (REPO / rel).read_text(errors="replace"),
-            first_party,
-            module_fixtures_for(rel, by_dir),
-        )
+        rel: count_module_patches((REPO / rel).read_text(errors="replace"), first_party)
         for rel in tracked
         if is_test_file(Path(rel))
     }

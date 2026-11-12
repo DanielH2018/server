@@ -7,8 +7,8 @@ Registered as a plugin from `addopts` in pyproject.toml, beside `xdist_width` an
 
 A CI leg's wall exceeded its `--durations` total divided by its four workers by 40-120s on the
 master runs of 2026-11-08 and 2026-11-09 (#7710). `--durations` times only a test's setup, call
-and teardown. Startup, collection, the render prebuilds that `conftest.py` and `render_share`
-run in `pytest_collection_finish`, and the idle tail `--dist loadscope` leaves on a worker whose
+and teardown. Startup, collection, the render prebuilds that `render_share` runs
+in `pytest_collection_finish`, and the idle tail `--dist loadscope` leaves on a worker whose
 modules ran out early all fall outside it. The leg's log cannot show them either: the CI step
 pipes pytest through `tee`, so stdout is block-buffered and its timestamps are flush times.
 

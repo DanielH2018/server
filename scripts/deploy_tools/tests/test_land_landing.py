@@ -9,7 +9,6 @@ import subprocess
 import pytest
 
 from _land_fakes import PRIMARY, Fakes
-from deploy_tools.land_lib import tools as tools_mod
 from deploy_tools.land_lib.outcome import Outcome
 
 
@@ -72,36 +71,6 @@ def test_git_runs_in_the_primary_checkout_without_raising(landing):
     ln, calls = landing(Fakes(fetch_rc=1))
     assert ln.git("fetch", "-q", "origin", "master").returncode == 1
     assert calls[-1] == ("git", ("fetch", "-q", "origin", "master"), {"cwd": PRIMARY})
-
-
-def test_read_state_answers_empty_for_an_absent_marker(tmp_path):
-    """The accept half: an absent marker is the ordinary state on every healthy tick."""
-    assert tools_mod.read_state(tmp_path, "hold_sha") == ""
-    assert tools_mod.read_state(tmp_path / "no-such-dir", "hold_sha") == ""
-
-
-def test_read_state_strips_the_marker_it_finds(tmp_path):
-    (tmp_path / "hold_sha").write_text("abc123\n")
-    assert tools_mod.read_state(tmp_path, "hold_sha") == "abc123"
-
-
-def test_read_state_answers_none_for_a_marker_it_cannot_read(tmp_path):
-    """The rejecting half. A directory where a file is expected raises IsADirectoryError,
-    which is an OSError that is NOT FileNotFoundError -- the exact split the fix turns on.
-    """
-    (tmp_path / "hold_sha").mkdir()
-    assert tools_mod.read_state(tmp_path, "hold_sha") is None
-
-
-def test_read_state_answers_none_for_an_unreadable_directory(tmp_path):
-    root = tmp_path / "state"
-    root.mkdir()
-    (root / "hold_sha").write_text("abc")
-    root.chmod(0o000)
-    try:
-        assert tools_mod.read_state(root, "hold_sha") is None
-    finally:
-        root.chmod(0o755)
 
 
 def test_fakes_defaults_are_fresh_per_instance():

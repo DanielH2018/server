@@ -20,17 +20,15 @@ import jinja2
 
 from lib.ansible_jinja_env import SHARED_TPL
 from lib.estate import role_defaults
-from lib.repo_paths import ANSIBLE
 from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.environment import strict_env
 
-# Each file a `shared` entry may name, by its repo path. The file stays single at its Ansible
-# path, because a role still installs it there: initial_setup installs homelab-check-lib.sh on
-# every host, and the Pi heartbeats' package copies read the same bytes (M6 B5). A named
+# Each file a `shared` entry may name, by its repo path. A file two components ship stays
+# single here: check-lib and pi-heartbeats both ship homelab-check-lib.sh (M6 B5). A named
 # allowlist rather than a path, so a component cannot copy any other file of the repo.
 _LONGHORN_LIB = "scripts/lib/longhorn_lib"
 SHARED_FILES = {
-    "homelab-check-lib.sh": "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
+    "homelab-check-lib.sh": "hosts/components/check-lib/files/homelab-check-lib.sh",
     # daniel-box's weekly list-only timer runs it from the checkout (H7.35).
     "etcd_restore_drill.sh": "scripts/backup/etcd_restore_drill.sh",
     # What the backup-health reader imports. The reapers, `probe.py` and the runbook gates import
@@ -42,98 +40,63 @@ SHARED_FILES = {
     "longhorn_etcd_s3_logic.py": f"{_LONGHORN_LIB}/longhorn_etcd_s3_logic.py",
     "longhorn_restore_drill_stamps.py": f"{_LONGHORN_LIB}/longhorn_restore_drill_stamps.py",
     "longhorn_skipped_volumes_logic.py": f"{_LONGHORN_LIB}/longhorn_skipped_volumes_logic.py",
-    # The deployer's state modules, which the renovate-agent and deploy-ui components read until H7.19b.
-    "gitops_markers.py": "ansible/roles/setup/gitops_deploy/files/gitops_markers.py",
-    "gitops_ledger.py": "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py",
-    "gitops_hold.py": "ansible/roles/setup/gitops_deploy/files/gitops_hold.py",
 }
 
-# The setup roles whose defaults and templates a component may render with `role:` (H4, *NUT on
-# daniel-server*). The role keeps owning the file until H7.8 moves daniel-box, so a package
-# renders it in place and a copy under `hosts/` would fork it. A named allowlist, like
-# SHARED_FILES, so a component cannot read any other role. `initial_setup` joined in H7.30, which
-# moved the Pi's fail2ban group, maintenance jobs and ufw. H7.31 moved daniel-server's and H7.32
-# daniel-box's; the role still applies its other subjects on daniel-box. `k3s` joined in H7.34
-# and H7.35: both nodes' packages render the address pin's templates in place, because
-# `tasks/static-address.yml` still names them until H7.20a.
-ROLE_SOURCES = frozenset({"common", "initial_setup", "k3s", "nut_host"})
-# The components a host's package.yml may borrow sources from with `component:`. claude-code's
-# agent user and its per-uid slice cap sit in each host's package.yml, because the uid differs
-# per host, and they render the component's defaults and templates (#6773). A named allowlist,
-# like ROLE_SOURCES.
-COMPONENT_SOURCES = frozenset({"claude-code"})
-# A `src` with this prefix names a template of the component's `role:`, not of the component.
-ROLE_SRC = "role:"
-# A `src` with this prefix names a static file under the role's `files/`, copied as it stands.
-ROLE_FILE_SRC = "role-file:"
+# The components whose defaults and templates another component or a host's package.yml may
+# borrow with `component:`. Each file stays single in its owner, so two renderers cannot fork
+# it. claude-code's agent user and its per-uid slice cap sit in each host's package.yml, because
+# the uid differs per host (#6773). k3s-agent renders k3s-server's defaults and address-pin
+# template, and k3s-host-dns renders pi-resolver's resolv.conf. A named allowlist, so a spec
+# cannot read any other component.
+COMPONENT_SOURCES = frozenset({"claude-code", "k3s-server", "pi-resolver"})
 # A `src` with this prefix names a path inside the spec's `component:`, such as
 # `component:templates/x.j2`, which loads from that component as its own `src` would.
 COMPONENT_SRC = "component:"
 
 
-def role_sources(spec: dict, directory: Path) -> tuple[dict[str, Path], dict]:
+def component_sources(spec: dict, directory: Path) -> tuple[dict[str, Path], dict]:
     """The directory each source prefix of `spec` loads from, and the defaults it renders with.
 
-    The first value maps `role:`/`role-file:` to the role's `templates/`/`files/`, or
-    `component:` to the borrowed component's directory. The defaults are, lowest first: the
-    spec's own `defaults/main.yml`, the `role:` or `component:` directory's `defaults/main.yml`,
-    then the spec's `defaults:`. Inventory still sits above all of them, so a `host_vars` value
-    wins (H3's *Component variables*).
+    The first value maps `component:` to the borrowed component's directory. The defaults are,
+    lowest first: the spec's own `defaults/main.yml`, the `component:` directory's
+    `defaults/main.yml`, then the spec's `defaults:`. Inventory still sits above all of them, so
+    a `host_vars` value wins (H3's *Component variables*).
 
     Raises:
-        RenderRefused: The role is not one of `ROLE_SOURCES`, the component is not one of
-            `COMPONENT_SOURCES`, or the spec names both.
+        RenderRefused: The component is not one of `COMPONENT_SOURCES`.
     """
     defaults = spec.get("defaults") or {}
     own = role_defaults(directory)
-    role = spec.get("role")
     component = spec.get("component")
-    if role is not None and component is not None:
+    if component is None:
+        return {}, {**own, **defaults}
+    if component not in COMPONENT_SOURCES:
         raise RenderRefused(
-            f"{directory}: names both role {role!r} and component {component!r}"
+            f"{directory}: component {component!r} is not one of {sorted(COMPONENT_SOURCES)}"
         )
-    if role is not None:
-        if role not in ROLE_SOURCES:
-            raise RenderRefused(
-                f"{directory}: role {role!r} is not one of {sorted(ROLE_SOURCES)}"
-            )
-        role_dir = ANSIBLE / "roles" / "setup" / str(role)
-        dirs = {ROLE_SRC: role_dir / "templates", ROLE_FILE_SRC: role_dir / "files"}
-        return dirs, {**own, **role_defaults(role_dir), **defaults}
-    if component is not None:
-        if component not in COMPONENT_SOURCES:
-            raise RenderRefused(
-                f"{directory}: component {component!r} is not one of {sorted(COMPONENT_SOURCES)}"
-            )
-        # A package.yml sits in hosts/<host>/, beside hosts/components/.
-        source = directory.parent / "components" / str(component)
-        return {COMPONENT_SRC: source}, {**own, **role_defaults(source), **defaults}
-    return {}, {**own, **defaults}
+    # A component sits in hosts/components/, and a package.yml in hosts/<host>/ beside it.
+    parent = directory.parent
+    source = (
+        parent if parent.name == "components" else parent / "components"
+    ) / component
+    return {COMPONENT_SRC: source}, {**own, **role_defaults(source), **defaults}
 
 
 def template_source(
     dirs: dict[str, Path], src: str, directory: Path
 ) -> tuple[Path, str]:
-    """The directory and name `src` loads from: the component, or the role or component it borrows.
+    """The directory and name `src` loads from: the component, or the component it borrows.
 
     Raises:
-        RenderRefused: `src` names a role or a component the spec does not list, or a
-            `role-file:` src names a template.
+        RenderRefused: `src` names a borrowed component and the spec lists none.
     """
-    prefix = next(
-        (p for p in (ROLE_SRC, ROLE_FILE_SRC, COMPONENT_SRC) if src.startswith(p)), None
-    )
-    if prefix is None:
+    if not src.startswith(COMPONENT_SRC):
         return directory, src
-    if prefix not in dirs:
-        kind = "component" if prefix == COMPONENT_SRC else "role"
+    if COMPONENT_SRC not in dirs:
         raise RenderRefused(
-            f"{directory}: src {src!r} names a {kind}, and it lists none"
+            f"{directory}: src {src!r} names a component, and it lists none"
         )
-    name = src[len(prefix) :]
-    if prefix == ROLE_FILE_SRC and name.endswith(".j2"):
-        raise RenderRefused(f"{directory}: src {src!r} is a template; name it role:")
-    return dirs[prefix], name
+    return dirs[COMPONENT_SRC], src[len(COMPONENT_SRC) :]
 
 
 def confined_env(directory: Path) -> jinja2.Environment:

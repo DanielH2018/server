@@ -12,6 +12,7 @@ import sys as _sys
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from fanout_lib.sizing import DEFAULT
 from fanout_lib.target import SERVER
 
 MANIFEST_DIR = Path.home() / ".claude" / "fanout"
@@ -39,6 +40,8 @@ class Batch:
         repo: the GitHub repo whose issues the batch works and whose checkout holds its
             worktree. Absent from manifests written before `--repo` existed, every one of
             which launched in this repo, hence the default.
+        rung: the `fanout_lib.sizing` rung its implementer ran at. Absent from manifests
+            written before sizing existed, every one of which ran at the default.
     """
 
     batch: str
@@ -50,6 +53,7 @@ class Batch:
     launched_at: str
     removed_at: str | None = None
     repo: str = SERVER
+    rung: str = DEFAULT.name
 
 
 @dataclass(frozen=True)

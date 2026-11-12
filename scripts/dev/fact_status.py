@@ -47,16 +47,17 @@ def cmd_lint(args: argparse.Namespace) -> int:
     findings = lint_sections(repo, keys, since=args.changed_since)
     for f in findings:
         print(f"{'warn ' if f.warn else 'ERROR'} {f.rule:<20} {f.unit}: {f.detail}")
-    if findings:
+    errors = any(not f.warn for f in findings)
+    if errors:
         print(FIX_LINT)
-    return 1 if any(not f.warn for f in findings) else 0
+    return 1 if errors else 0
 
 
 def cmd_report(args: argparse.Namespace) -> int:
     repo = Path(args.repo)
     log = Path(args.log) if args.log else default_log(repo)
     report = build(repo, repo_citations(repo), args.days, log)
-    print(json.dumps(report, indent=2) if args.json else render(report, args.top))
+    print(json.dumps(report) if args.json else render(report, args.top))
     return 0
 
 

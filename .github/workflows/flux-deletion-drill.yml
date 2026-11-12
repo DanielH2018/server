@@ -101,7 +101,7 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
 
       # The same FLUX_* pin and fetch as the bootstrap drill. It pushes each artifact.

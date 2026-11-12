@@ -23,9 +23,8 @@ from _helpers import ANSIBLE
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, path_with, run, write_exec
 
-ROLE = ANSIBLE / "roles" / "setup" / "initial_setup"
 COMPONENTS = ANSIBLE.parent / "hosts" / "components"
-CHECK_LIB = ROLE / "files" / "homelab-check-lib.sh"
+CHECK_LIB = COMPONENTS / "check-lib" / "files" / "homelab-check-lib.sh"
 EPOCH = 1760000000
 OVERRIDES = {
     "domain": "example.test",

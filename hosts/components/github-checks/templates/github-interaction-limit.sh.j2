@@ -3,16 +3,15 @@
 #
 # Usage: github-interaction-limit [-h|--help]
 # Takes no arguments. systemd timer homelab-github-interaction-limit.timer runs it as root once
-# a day (gitops_deploy_interaction_limit_cron_hour and _minute), and again every 30 minutes while
+# a day (github_interaction_limit_cron_hour and _minute), and again every 30 minutes while
 # the last run failed. Running it by hand re-applies the limit for real. It needs a gh login for
-# the deploy user, reads gitops_deploy_interaction_limit and its expiry from the values rendered
+# the deploy user, reads github_interaction_limit and its expiry from the values rendered
 # into this file. Exit 0 = limit re-armed (or disarmed, when the declared limit is none); exit 1 =
 # it was not, and the verdict says down. Each verdict goes to the journal under the
 # github-interaction-limit tag and to $TEXTFILE_DIR/github-interaction-limit.prom for
 # node_exporter's textfile collector (default /var/lib/node-exporter-textfile; a test points it
 # elsewhere). Prometheus's GitHubInteractionLimitNotArmed and GitHubInteractionLimitNotReporting
-# rules page from that file. Until M6 batch B3's Cutover-2 the verdict also went to a Kuma push
-# monitor.
+# rules page from that file.
 #
 # The interaction limit is the only lever GitHub offers that keeps a PUBLIC repo closed to
 # everyone but its collaborators: with `collaborators_only` set, nobody else can comment, react,
@@ -29,7 +28,7 @@
 # ruleset is a setting a human changes on purpose, and reconciling it would undo that change with
 # no signal. The limit is not: the only way it changes without a human is by expiring, and
 # re-applying an expired setting is restoring the declared state, not overriding a decision. A
-# human who wants it off changes `gitops_deploy_interaction_limit` in defaults/main.yml — this
+# human who wants it off changes `github_interaction_limit` in defaults/main.yml — this
 # script applies whatever that declares, and `none` disarms it by way of a DELETE.
 #
 # Authenticated through the deploy user's `gh auth token`, which carries the `repo` scope this
@@ -67,18 +66,17 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 DEADLINE_S=90000
 
 # Records the verdict: the journal line first, so `journalctl -t github-interaction-limit` reads the
-# outcome the way it does for github-ruleset-drift (the Kuma push library logged only a failed push), then the
-# textfile. A failed write logs and the run goes on to its exit.
-# The function keeps the name `push` from when it also sent the Kuma beat.
+# outcome the way it does for github-ruleset-drift, then the textfile. A failed write logs and
+# the run goes on to its exit.
 push() { # up|down msg
   logger -t github-interaction-limit "status=$1 $2"
   write_check_textfile github-interaction-limit "$([[ "$1" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
     || logger -t github-interaction-limit "textfile write failed (status=$1)"
 }
 
-LIMIT_URL="https://api.github.com/repos/{{ gitops_deploy_github_repo }}/interaction-limits"
-WANT_LIMIT="{{ gitops_deploy_interaction_limit }}"
-WANT_EXPIRY="{{ gitops_deploy_interaction_limit_expiry }}"
+LIMIT_URL="https://api.github.com/repos/{{ github_repo }}/interaction-limits"
+WANT_LIMIT="{{ github_interaction_limit }}"
+WANT_EXPIRY="{{ github_interaction_limit_expiry }}"
 
 # This cron runs as root; the gh login belongs to the deploy user, so the lookup drops to that
 # user. `-H` matters: gh finds its login under $HOME, and a plain runuser/sudo keeps root's.

@@ -91,9 +91,16 @@ def test_every_file_the_role_installed_is_handed_to_the_package(package, manifes
         if dst.startswith(DEFAULTS["deploy_ui_dir"] + "/")
     ]
     assert {"/etc/systemd/system/deploy-ui.service"} <= retired
+    no_longer_shipped = {
+        f"/opt/deploy-ui/{name}"
+        for name in ("gitops_hold.py", "gitops_ledger.py", "gitops_markers.py")
+    }
     assert sorted(f"/opt/deploy-ui{rel}" for rel in shipped if rel) == sorted(
-        p for p in retired if p.startswith("/opt/deploy-ui/")
+        p
+        for p in retired
+        if p.startswith("/opt/deploy-ui/") and p not in no_longer_shipped
     )
+    assert no_longer_shipped <= retired
 
 
 def test_reconcile_relabels_the_live_allows_rather_than_deleting_them(

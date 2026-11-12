@@ -8,8 +8,7 @@ Docker + k3s homelab managed with Ansible and deployed across three hosts via in
 - `daniel-server` — k3s agent node (Intel XE graphics, LVM storage, UPS hardware + the
   `nut_host` shutdown chain)
 - `daniel-pi` — Raspberry Pi, the **only** remaining Docker host (LAN-only: wg-easy, alloy,
-  autoheal, docker-proxy). Its containers ship in its `homelab-daniel-pi` package; Ansible's
-  setup plays still reach it over SSH with `-e target=daniel-pi`.
+  autoheal, docker-proxy). Its containers ship in its `homelab-daniel-pi` package.
 
 ## Directory Structure
 ```
@@ -44,7 +43,7 @@ covers routes through the skill listing rather than this table.
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. `scripts/renderer/renderer_lib/restart.py` stamps the restart annotation on each restart target's pod template, and `ansible/roles/k8s/monitor-bridge/templates/script-configmap.yaml.j2` is the worked example. Content that reaches the cluster another way needs its own `checksum/<thing>` pod annotation from `ansible/templates/checksum-annotation.yml.j2`. |
 | A config edit won't recreate the container (Docker, the Pi) | The `new-container` skill · `hosts/components/pi-compose/services/alloy/compose.yaml.j2` is the worked example |
 | Starting Claude Code sessions from a phone | `hosts/components/claude-code/CLAUDE.md`, *The two Remote Control modes are different features* |
-| Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract*. A host component's timer owes one too. `ansible/tests/repo/test_role_claude_md.py`, `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py` and `ansible/tests/repo/_component_contract_row.py` enforce it |
+| Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract*. A host component's timer owes one too. `ansible/tests/repo/_component_contract_row.py` enforces it for host components |
 | Recording a finding, fix or improvement you will not do this session | `findings.py open` (flags: `findings.py open --help`). `findings.py list` is the open register; `docs/reference/backlog.md` renders it. Never `gh issue create` by hand — `.claude/hooks/block-footguns.py:issue_create_by_hand_problem` denies it and names the wrapper. |
 
 ## Adding a New Service
@@ -61,19 +60,13 @@ entries (`ansible/filter_plugins/toposort.py`) into the bundle's `dependsOn` edg
 no template carries goes in `depends_on:` on the entry, never in its list position.
 
 ## Common Commands
-Run ansible through `uv run` so it uses the repo's pinned env
-(`docs/python-code-organization.md`). Bare `ansible-playbook` lacks the module deps, and deploys
-fail.
-**A k8s service deploys through `promote`, never through Ansible.** `deploy.sh` exits 5 for a
-k8s tag, `--check` and `--dry-run` included. The merge is the deploy, and `land.sh` follows it.
-**No setup role applies on its own since H7.52 retired the GitOps deployer's timer, and the
-Pi's services ship in its host package.** `./scripts/deploy.sh` runs `ansible/deploy.yml`, which applies no role.
-`docs/deploying.md` says which path applies a change and what the wrapper still does, owns the
-lock rules and lists the holders.
-
-**A failing wrapper run says what its exit code means in its last two lines.** `docs/deploying.md`'s
-*Exit codes are resume points* owns the rest. The `deploy` skill has config-only runs and
-initial setup.
+Run the repo's Python tools through `uv run` so they use the pinned env
+(`docs/python-code-organization.md`). No playbook remains under `ansible/` to run.
+**A k8s service deploys through `promote` and Flux, never through Ansible.** The merge is the
+deploy, and `land.sh` follows it. **A host's setup plane ships in its host package**, which the
+builder publishes and each host's updater installs; no setup role applies on its own, and
+H7.53 deleted `deploy.sh` with the GitOps deployer. `docs/deploying.md` says which path applies
+a change. The `deploy` skill has the commands.
 
 ### Checking a k8s change without deploying it
 `prek run --all-files` and CI's render-diff gates check a k8s change before it merges.
@@ -122,26 +115,10 @@ if you override with `--tags`, keep it to your own services.
 
 ### When to wait
 
-Say which of these applies, then stop. `probe.py landing` reads the hold, master CI and owed-line
-conditions.
+Say which of these applies, then stop. `probe.py landing` reads `DEPLOY_HOLD` and master CI.
 
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
-- The host holds a non-empty `hold_sha`: a setup-plane apply failed. `hold_plane` names each
-  failed playbook.
-- A change in one of the bring-up playbooks sits in the `local..origin` range, and it is another
-  session's: `bootstrap.yml`, `k3s-bringup.yml`, `initial_setup.yml`, the list
-  `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:_BROAD_MANUAL_PREFIXES`
-  holds. The deployer never applies these. Clearing it means applying their change; name it and
-  stop.
-- A `manual_plane` line in the host's `owed.jsonl` ledger names a setup role the deployer cannot
-  apply, and another session's PR created it. That line is theirs to clear. When your own merged
-  PR created the line, do not stop: run `uv run python scripts/deploy_tools/owed_run.py <role>`
-  from any checkout. It refuses a line that needs you. The operator granted that standing
-  clearance on 2026-10-24.
-- `deploy.sh --changed` exits 3 and prints a setup or bring-up command: the range holds a broad
-  path only that command applies. `deploy.sh` exits 5 for a k8s tag, and that is no reason to
-  wait: `promote` and Flux apply the change.
-- The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.
+- The change is docs- or tests-only: nothing renders it, so `land.sh` ends `nothing-to-deploy`.
 - The `DEPLOY_HOLD` repository variable reads anything but `none`: `promote` holds the cluster.
   `land.sh` ends `deploy-failed` with cause `promote-held`, and clearing the hold is the
   operator's decision (`docs/landing.md`).
@@ -207,9 +184,10 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
     trailing `&` or a `<(…)`. Make one call per item, or run a script file that holds the loop.
   - **A here-document:** `cat > f <<'EOF'` or `python3 - <<'EOF'`. Write file content with
     the Write tool.
-- **The SessionStart banner lists the other live sessions** and the paths each has changed
-  vs `origin/master`. Check it before editing a file several sessions are near (`CLAUDE.md`,
-  `group_vars/`, a shared role).
+- **The SessionStart banner names the other live sessions whose changed paths overlap
+  yours**, and counts the rest. Before editing a file several sessions are near (`CLAUDE.md`,
+  `group_vars/`, a shared role), run `uv run python .claude/hooks/session-health.py
+  --sessions`, which lists every live session and its changed paths.
 - **Never pass `discard_changes` to `ExitWorktree`** when it refuses a merged worktree. That is
   how unlanded work is lost. Retiring a worktree is the `worktree-cleanup` skill.
 
@@ -236,21 +214,26 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
 - **The cluster file is generated, never hand-edited.** Only `cluster_vars.py write` writes
   `cluster-vars.sops.env`. It decrypts, so an agent never runs it. `docs/secret-rotation.md` owns
   the mechanics.
-- **A host that can't decrypt yet** fails `initial_setup.yml`/`deploy.yml` at their
-  secret-load `pre_task`, which reads as a playbook bug rather than a missing key. The
-  **`add-secret` skill** has the onboarding through `ansible/bootstrap.yml`.
+- **A host that can't decrypt yet** has no age key of its own. `hosts/bootstrap-host.sh` creates
+  the key at its step 3, and the **`add-secret` skill** has the onboarding.
 
 ## Pre-commit Hooks
 The repo uses [prek](https://prek.j178.dev). `prek.toml` holds the config and each hook's history.
 Run `prek run --all-files` to check before committing. **That does not run the suite.** No
 hook runs it, neither at commit nor at push. The one exception is `static-ratchet-tests` and
-its `static-ratchet-tests-*` siblings: at commit time it runs twenty-seven static ratchet, lint
+its `static-ratchet-tests-*` siblings: at commit time it runs twenty-six static ratchet, lint
 and census test files. CI's `pytest` job runs the suite whole on every PR. To see a red test
 before CI does, run `uv run pytest` yourself. A fan-out batch names test paths instead, and
 `.claude/hooks/block-batch-full-suite.py` refuses its whole-suite run. To catch the repo-wide
 census tests that no test beside a change reaches, run `uv run python scripts/dev/repo_guards.py`
 once before `gh pr create`.
-`.gitignore`'s root deny is load-bearing — one untracked file parks the deployer.
+`.gitignore`'s root deny is load-bearing — one untracked file parks `homelab-checkout-sync`.
+
+**One hook runs at the `commit-msg` stage, and only where its shim exists.** `reject-robot-emoji`
+rejects a commit message holding U+1F916. `prek install` writes the shim, and a checkout
+installed before `prek.toml` listed `commit-msg` in `default_install_hook_types` lacks it. To
+arm the hook there, run `prek install` once in that checkout; `ls .git/hooks` then lists
+`commit-msg`.
 
 ## Python & Tests
 `uv run pytest` runs every suite `testpaths` in `pyproject.toml` names, and `uv run pytest

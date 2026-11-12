@@ -25,14 +25,8 @@ def test_the_checkout_holds_a_non_empty_list_naming_the_ci_job_is_clean():
     assert NAMED_CONTEXT in contexts
 
 
-def test_the_deployers_role_default_is_a_reference_and_is_flagged():
-    old = REPO / "ansible/roles/setup/gitops_deploy/defaults/main.yml"
-    with pytest.raises(promote.ReadError, match="non-empty list of non-empty strings"):
-        promote.read_ci_contexts(old)
-
-
 def test_a_jinja_reference_in_place_of_the_list_is_flagged(tmp_path):
     moved = tmp_path / "main.yml"
-    moved.write_text('ci_required_contexts: "{{ gitops_deploy_ci_contexts }}"\n')
+    moved.write_text('ci_required_contexts: "{{ other_contexts }}"\n')
     with pytest.raises(promote.ReadError, match="non-empty list of non-empty strings"):
         promote.read_ci_contexts(moved)

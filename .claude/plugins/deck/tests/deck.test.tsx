@@ -9,8 +9,6 @@ const SURFACES = ['terminal', 'desktop'] as const
 const CLEAR: DeckSnapshot = {
   host: 'daniel-server',
   read_at: 1_791_500_000,
-  hold: { sha: '', planes: [] },
-  manual_planes: null,
   ci: { state: 'green', sha: 'abcdef12', url: 'https://ci/1' },
   runs: [{ kind: 'land', pr: '3700', tag: '', elapsed_s: 42, verdict: null }],
   last_verdict: null,
@@ -28,8 +26,8 @@ const CLEAR: DeckSnapshot = {
 
 const HELD: DeckSnapshot = {
   ...CLEAR,
-  hold: { sha: 'deadbeefcafe', planes: ['setup:k3s'] },
-  blockers: ['hold_sha is set (deadbeef), waiting on setup:k3s'],
+  promote: { deploy_hold: 'deadbeef failed=bento-pdf', prod: null, last_good: null },
+  blockers: ['DEPLOY_HOLD is set; `probe.py landing` names it'],
 }
 
 const BAND = {
@@ -126,12 +124,12 @@ test('a hold shows in the band and the system prompt, and both go once it clears
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ plugin: 'deck', surface, ...BAND })
-    expect((await ui.find({ type: 'Text', text: /Landing blocked/ }))?.text).toContain('hold_sha is set (deadbeef)')
+    expect((await ui.find({ type: 'Text', text: /Landing blocked/ }))?.text).toContain('DEPLOY_HOLD is set')
     await ui.unmount()
   }
   const held = await $.prompt.compose(COMPOSE)
   expect(held.sections.map(s => s.id)).toEqual(['base', 'deck:landing-blocked'])
-  expect(held.sections[1]?.text).toContain('setup:k3s')
+  expect(held.sections[1]?.text).toContain('DEPLOY_HOLD is set')
 
   // The timer alone must clear it: no /deck refresh here.
   answer.snap = CLEAR
@@ -182,7 +180,7 @@ test('the pane lists runs and worktrees, and says what it could not read', async
     const ui = await $.ui.mount({ plugin: 'deck', surface, ...PANE })
     expect(await ui.find({ type: 'Text', text: /land PR 3700 42s/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /worktree-fanout-1 #3676/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /manual planes: unknown here/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /DEPLOY_HOLD: none/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /#3500 worktree-on-the-box/ })).toBeDefined()
     await ui.unmount()
   }

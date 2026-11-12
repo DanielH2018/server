@@ -285,7 +285,7 @@ def test_a_bare_datetime_time_constructor_is_clean():
 # Non-vacuity floor. The census finds its subjects by pattern, so it must be shown to contain
 # something concrete — a renamed module or a moved directory would otherwise empty it and let
 # the guard pass over nothing.
-KNOWN_ARGV_READERS = frozenset({"postflight", "tags"})
+KNOWN_ARGV_READERS = frozenset({"postflight"})
 
 
 def _mentions_sys_argv(node: ast.AST) -> bool:

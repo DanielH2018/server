@@ -15,9 +15,6 @@ A row carries what differs between planes and nothing else:
 Role-doc size has no check here. The `DECIDED` block above `_doc_problems` records why, and
 `.claude/hooks/inject-nested-docs.py --report` prints each doc's margin under the hook's budget.
 
-The cron-contract half of the setup plane is a different property and stays in
-`ansible/tests/setup/test_setup_cron_roles_have_a_contract.py`.
-
 Run: uv run pytest ansible/tests/repo/test_role_claude_md.py
 """
 
@@ -25,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from _helpers import K8S_ROLES, REPO, SETUP_ROLES, run
+from _helpers import K8S_ROLES, REPO, run
 from _role_census import role_dirs
 
 MIN_NON_BLANK_LINES = 8
@@ -50,12 +47,6 @@ PLANES = [
         floor=60,
         members=frozenset({"pihole", "traefik", "flux"}),
         deploy_tag=True,
-    ),
-    Plane(
-        "setup",
-        SETUP_ROLES,
-        floor=12,
-        members=frozenset({"gitops_deploy", "k3s", "common", "nut_host"}),
     ),
 ]
 PLANE_IDS = [p.name for p in PLANES]

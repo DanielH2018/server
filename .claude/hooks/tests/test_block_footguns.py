@@ -355,10 +355,6 @@ def test_the_words_as_a_search_argument_are_clean():
     assert _mod.problem("gh issue list --search 'gh issue create'") is None
 
 
-# --- 9. deploy.sh --skip-staleness-check: test_block_footguns_skip_staleness.py (this file
-# reached its line cap).
-
-
 # --- 10. a leading shell keyword must not slip any rule ---------------------------------------
 #
 # Each of the four commands below must be denied exactly as its bare form is.

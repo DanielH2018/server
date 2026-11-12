@@ -90,11 +90,6 @@ TEMPLATE_SOURCE_READERS = {
         "whether a tiered role's `pod_shell(...)` call passes a literal class or the derived "
         "one — both render the same `priorityClassName`, so only the source tells them apart"
     ),
-    "setup/test_pi_service_lists_census.py": (
-        "the red proof copies monitor-bridge's env template with the Pi's second key removed, "
-        "to show the census flags a reader that reads `containers_list` alone; a render has "
-        "no source to edit"
-    ),
     "services/test_n8n_build_is_pinned.py": (
         "Renovate's `matchString` runs against `Dockerfile.j2` on disk, braces intact; a "
         "render is not what Renovate sees"
@@ -114,21 +109,11 @@ TEMPLATE_SOURCE_READERS = {
         "the ABSENCE of a retired variable name (`bridge_hostname`) across every template, "
         "which a render cannot show — an undefined name renders as nothing"
     ),
-    "repo/test_secret_rendering_host_scripts_have_no_log.py": (
-        "which VARIABLE NAMES a `*.sh.j2` references, to decide whether its template task "
-        "needs `no_log`; a render replaces every secret with the same `STUB` and drops the "
-        "name that identified it"
-    ),
     "deploy/_autodeploy.py": (
         "the fallback for a role no render reaches: the synthetic `widget_role` trees under "
         "`tmp_path` the derivation's unit tests build, and the caller-rendered roles "
         "`_k8s_render` skips, all denylisted. Every role the render reaches reads its render, "
         "and `test_the_render_reaches_every_auto_deployable_role` holds the denylisted half"
-    ),
-    "setup/test_setup_crons_write_a_textfile.py": (
-        "a census over every setup role's timer and service templates, asking whether one "
-        "calls write_check_textfile or imports the macro that does. A render needs each "
-        "role's host context and a guess at loop items, and the call is the same text either way"
     ),
     "deploy/test_tree_lock_single_definition.py": (
         "whether a host cron CALLS git-tree-lock.j2's macro or writes the `exec 9>` idiom out "
@@ -169,9 +154,9 @@ TEMPLATE_SOURCE_READERS = {
         "`test_container_security_context.py`"
     ),
     "longhorn/test_longhorn_reap_never_scheduled.py": (
-        "the fallback for a unit template no render reaches: the synthetic `.service.j2` and "
-        "`.timer.j2` under `tmp_path` the red proofs write. Every real setup unit reads its "
-        "render, and `test_the_render_reaches_every_setup_unit_template` holds that"
+        "the host components' unit templates, which no render covers, and the synthetic "
+        "`.service.j2` and `.timer.j2` under `tmp_path` the red proofs write. A schedule is "
+        "forbidden by name, so the source is the subject"
     ),
     "k8s/test_root_security_context_is_written_out_in_full.py": (
         "whether a template builds a root securityContext through "
@@ -210,11 +195,6 @@ TEMPLATE_SOURCE_READERS = {
         "undefined token fails the play or renders empty. A render resolves every secret to "
         "`STUB`, so no render distinguishes `mandatory` from `default('')`"
     ),
-    "setup/test_setup_cross_role_files.py": (
-        "which roles' TASK files name another role's file by path, the edge the GitOps "
-        "deployer routes on. It reads no template; a task file's `src:` and `import_tasks:` "
-        "paths are the subject, and the `{{ item }}` in one is what it expands"
-    ),
 }
 
 # Modules the census must reach. An empty or partial scan means the walk stopped matching
@@ -231,16 +211,13 @@ KNOWN_MEMBERS = frozenset(
         "longhorn/test_daily_group_membership_is_the_r2_list.py",
         "longhorn/test_longhorn_reap_never_scheduled.py",
         "longhorn/test_longhorn_restore_drill_byte_floor.py",
-        "longhorn/test_prune_backups.py",
         "repo/_render_gate.py",
         "repo/test_census_rows_roles.py",
         "repo/test_render_gate.py",
         "repo/test_guard_tests_read_renders_not_templates.py",
-        "repo/test_secret_rendering_host_scripts_have_no_log.py",
         "repo/test_testpaths_covers_every_test_file.py",
         "deploy/_autodeploy.py",
         "deploy/_autodeploy_claims.py",
-        "deploy/test_gitops_manual_trigger.py",
         "deploy/test_k8s_autodeploy_rollout_gates.py",
         "k8s/_manifest_guards.py",
         "k8s/test_arr_deployments_share_one_macro.py",

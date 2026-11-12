@@ -1,6 +1,6 @@
 ---
 name: land-after-merge
-description: Merge a PR and follow it through to a verified deploy with `land.sh`. Use when a PR is ready to merge, has just merged, or when you need the exact merge → CI-wait → tick → deploy → verify sequence. Covers what `land.sh` does, its VERDICT line, and why hand-polling CI and hand-merging are wrong here.
+description: Merge a PR and follow it through to a verified deploy with `land.sh`. Use when a PR is ready to merge, has just merged, or when you need the exact merge → CI-wait → promotion → verify sequence. Covers what `land.sh` does, its VERDICT line, and why hand-polling CI and hand-merging are wrong here.
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
@@ -112,21 +112,23 @@ pre-squash commits, so the follow-up PR opens CONFLICTING and GitHub runs no che
 
 ## Reading the verdict
 
-The `VERDICT:` line is the last line of the log. `land.sh --help` lists the closed vocabulary;
+The `VERDICT:` line is the last line of the log. The line above it,
+`LAND-RESULT: verdict=… cause=… exit=… pr=… sha=… tags=<count>`, carries the same
+outcome as logfmt for a script to read. `land.sh --help` lists the closed vocabulary;
 `land_lib/outcome.py:Verdict` is where it is defined. Seven of them need a decision from you:
 
 | Verdict | What to do |
 |---|---|
 | `settled` | Exercise the thing you actually changed. The gate sees the workload, not your change. |
 | `needs-manual-apply` | **Read every remediation line, not the first.** One PR can reach two, and each prints its own. |
-| `deferred` | The landing gave up waiting. With cause `promote-timeout`, no promotion covered a flux-owned tag in time: read the `promote` workflow's failed `publish` jobs first, then re-run. If the line says the health gate could not read its store, or that its tree was older than origin/master, the deploy went ungraded: re-run `land.sh`. |
+| `deferred` | The landing gave up waiting. With cause `promote-timeout`, no promotion covered a flux-owned tag in time: read the `promote` workflow's failed `publish` jobs first, then re-run. With cause `gate-unreadable` or `gate-stale`, the health gate could not read its store or its tree was older than origin/master, so the deploy went ungraded: re-run `land.sh`. |
 | `deferred`, for a host | A PR that changes a host's package waits for that host to apply it. When the line names the updater's start command, the host's timer is not armed yet, or its next fire is more than 45 minutes away. Start the updater on that host, then re-run the same `land.sh` command: its first query finds the host settled. |
-| `refused` | The landing stopped before it deployed anything, and the detail says why: the landing policy, a closed PR, changes requested, a read that failed. Fix what it names, then re-run. |
+| `refused` | The landing stopped before it deployed anything, and the detail says why: the landing policy, a closed PR, changes requested, a read that failed. Fix what it names, then re-run. When it names landing code older than master's, re-run the same command with `--fresh`. |
 | `ci-unproven` | GitHub never ran CI for the merge commit, and no later master commit can stand in for it, so a re-run alone never converges. The detail names the tip and the way out. When no commit has run CI, dispatch it with `gh workflow run ci.yml --ref master`, dispatch `promote` for the tip once CI is green, and re-run. When a red commit sits between the merge commit and a green one, dispatch `promote` for the tip with the `gh workflow run promote.yml` command it prints. `promote` refuses a commit without green CI, so no route skips CI. |
 | `unbuilt` | A host the landing would defer on has no package published at or after the merge, and the builder reports a failing reason, so no updater fire can apply it. Read `uv run python scripts/diagnostics/probe.py builder`, fix the builder, then re-run the same `land.sh` command. |
 | `handoff-timeout` | The lander unit outlived land.sh's wait and may still be running. Re-run the same command; it waits on the unit again rather than starting a second landing. |
 
-**A k8s tag never reaches `deploy.sh`.** `land.sh`
+**`land.sh` deploys nothing itself.** It
 waits until a promotion covers the merge commit (`promote.py land-wait`) and then gates the
 k8s tags. A `deploy-failed` with cause `promote-held` means `DEPLOY_HOLD` holds
 promotion, and clearing it is **operator-only**: stop and name the hold. Cause
@@ -138,17 +140,13 @@ PR that also owes a plane ends `needs-manual-apply`, and one that changes a host
 on to the host wait.
 
 **A `nothing-to-deploy` for a PR that changes a setup role does not say the role applied.**
-`land.sh` starts no tick and reads none of the deployer's markers. The deployer's own 10-minute
-timer applies the role, so read the host for the outcome: the changed state itself, or
-`uv run python scripts/diagnostics/probe.py gitops-state` for `hold_sha` and `owed.jsonl`. A role
-the deployer cannot apply (`k3s`) leaves a `manual_plane` line there, and a role whose change
-reaches another host leaves one too. CLAUDE.md *When to wait* says who clears it.
+Nothing applies a setup role on its own since H7.53; a change that has to reach a host belongs
+in the host component that replaced the role.
 A PR that changes `cluster-vars.sops.env` or `cluster-vars.source` waits on promotion too,
 for the `cluster-vars` Kustomization and every Kustomization that depends on it
 (`docs/landing.md`, *A tag Flux applies waits on promotion*).
 
-`deploy-failed` has one variant that is **not** a resume point — `a playbook task failed AFTER
-applying; some changes are live`. Every other `deploy-failed`, and every give-up
+Every `deploy-failed`, and every give-up
 (`merge-timeout`, `ci-red`, `ci-timeout`, `merge-conflict`, `pr-ci-red`), deployed
 nothing and re-runs safely.
 

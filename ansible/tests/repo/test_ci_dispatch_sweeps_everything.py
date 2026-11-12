@@ -29,7 +29,6 @@ CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 SWEEP_STEPS = frozenset(
     {
         "Run hooks (full sweep)",
-        "Lint the whole tree",
         "Build both renders with the pinned nfpm",
         "Build the test image for this release",
         "Run the updater cases in systemd containers",
@@ -52,7 +51,6 @@ KNOWN_JOBS = frozenset(
     {
         "hooks",
         "pr_gates",
-        "ansible_lint",
         "pytest",
         "deck_mod",
         "sops_manifest_type_proof",

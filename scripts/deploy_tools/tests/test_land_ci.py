@@ -1,36 +1,14 @@
-"""Pre-flight (can the tick cross what is incoming?) and the master CI wait.
+"""The master CI wait.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_ci.py
 """
 
 import pytest
 
-from _land_fakes import PRIMARY, Fakes
+from _land_fakes import Fakes
 from deploy_tools.land_lib import ci
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.tools import CiVerdict
-
-
-def test_preflight_passes_when_nothing_is_incoming(landing, capsys):
-    ln, calls = landing()
-    ci.preflight(ln)
-    assert "nothing in the way" in capsys.readouterr().out
-    assert calls[-1] == ("deploy_tags", ("blockers", "origin/master"), {"cwd": PRIMARY})
-
-
-def test_blocked_when_an_incoming_change_needs_a_hand(landing):
-    ln, _ = landing(Fakes(blockers=[3]))
-    with pytest.raises(Outcome) as exc:
-        ci.preflight(ln)
-    assert (exc.value.rc, exc.value.verdict) == (1, "blocked")
-
-
-def test_a_broken_preflight_is_a_plain_failure(landing):
-    """Not `blocked`: nothing in the range was judged, so it takes the exit-1 catch-all."""
-    ln, _ = landing(Fakes(blockers=[1]))
-    with pytest.raises(Outcome) as exc:
-        ci.preflight(ln)
-    assert exc.value.rc == 1 and exc.value.verdict == "refused"
 
 
 @pytest.mark.parametrize(

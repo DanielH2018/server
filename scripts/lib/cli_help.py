@@ -79,11 +79,21 @@ def answer_help(doc: str | None, argv: list[str] | None = None) -> None:
 
 
 class ArgumentParser(argparse.ArgumentParser):
-    """argparse's parser, except that a usage error exits `USAGE_ERROR` (64) rather than 2."""
+    """argparse's parser, except that a usage error exits `USAGE_ERROR` (64) rather than 2.
+
+    Args:
+        example: one complete invocation. A usage error prints it after the message, so an
+            agent that mistyped a flag sees the fix without a second call for `--help`.
+    """
+
+    def __init__(self, *args, example: str | None = None, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.example = example
 
     def error(self, message: str) -> NoReturn:
         self.print_usage(sys.stderr)
-        self.exit(USAGE_ERROR, f"{self.prog}: error: {message}\n")
+        hint = f"example: {self.example}\n" if self.example else ""
+        self.exit(USAGE_ERROR, f"{self.prog}: error: {message}\n{hint}")
 
 
 def refuse_help_under_describe(

@@ -2259,7 +2259,7 @@ one task file per source role, in a conversion PR before that role flips:
       several tasks puts the copies in one `block:`'s `vars:`. The copy never goes in
       `k8s_host_files`' defaults: role defaults are play-wide in `initial_setup.yml`, so a
       defaults copy of a key another setup role names is a cross-role read, which
-      `ansible/tests/setup/test_setup_cross_role_reads.py` refuses without a deployer table
+      the cross-role reads census (deleted by H7.53) refuses without a deployer table
       row (#5472). A change then edits
       both, and each half routes to its own plane: the copy to the setup plane, which the tick
       applies. A shared key in `group_vars/all.yml` would route to the deploy plane only
@@ -2285,7 +2285,7 @@ one task file per source role, in a conversion PR before that role flips:
   it.
 - Its `CLAUDE.md` carries the Autonomous-role contract, because it installs a timer and
   removes crons. `ansible/tests/repo/test_role_claude_md.py` and
-  `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py` hold that.
+  `test_setup_cron_roles_have_a_contract.py` (deleted, #8027) hold that.
 - The role's playbook entry runs on daniel-box. `setup_routing.py` places a role whose gate
   admits only another host as a hand apply, so a Pi-gated role would never run from the tick.
   pi-peer-backup's two writes on daniel-pi therefore keep `delegate_to: daniel-pi` inside
@@ -2428,8 +2428,8 @@ sizes its batch of roles against that projection.
   /usr/local/sbin/homelab-takeover-check --label <pr> --render <dir> --src <dir> --tags <a,b>`
   does the `flux diff`, or the server-side `kubectl diff` stand-in, and the census for each
   tag, and prints object names, field paths and exit codes only. The operator no longer runs
-  a script per flip batch. The wrapper's limits are in the `setup/claude_code` role's
-  `CLAUDE.md`, *The takeover check*.
+  a script per flip batch. The wrapper's limits are in
+  `docs/claude-code-root-helpers.md`, *The takeover check*.
 - **To pipe or redirect the output, run `takeover-check` with the same flags.** claude-guard
   allows the sudo line only alone on its line, so `… 2>&1 | tail` or a `$PWD/<dir>` argument
   is refused. The dotfiles shim `takeover-check` (dotfiles #1007) runs exactly that line, takes

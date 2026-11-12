@@ -34,12 +34,10 @@ _CONTAINER_CONTEXT = re.compile(
     r"Dockerfile|docker-compose|deployment\.yaml|healthcheck"
 )
 
-# The deploy pipeline's invocations, which deliberately keep uv's self-healing download. See the
-# comment above each ExecStart: hard-failing either on a missing interpreter blocks every landing,
-# including the one that would ship the fix.
-_DOWNLOADS_EXEMPT = frozenset(
-    {"gitops-deploy.service.j2", "homelab-checkout-sync.service.j2"}
-)
+# The checkout sync keeps uv's self-healing download on purpose. See the comment above its
+# ExecStart: hard-failing on a missing interpreter blocks every landing, including the one that
+# would ship the fix.
+_DOWNLOADS_EXEMPT = frozenset({"homelab-checkout-sync.service.j2"})
 
 
 def _candidate_files():
@@ -147,8 +145,9 @@ def test_no_host_invocation_names_an_interpreter_directly():
 
 def test_pinned_uv_invocations_disable_project_discovery():
     """`uv run` searches upward for a project from its working directory, and systemd and cron
-    have arbitrary ones. gitops-deploy's WorkingDirectory is itself a uv project. --no-project
-    stops uv resolving and syncing that project from a unit that holds the git-tree lock.
+    have arbitrary ones, and a WorkingDirectory inside the checkout is itself a uv project.
+    --no-project stops uv resolving and syncing that project from a unit that holds the git-tree
+    lock.
 
     Measured, so do not overstate what this defends: with an explicit --python the
     version is honoured either way, and --no-project does not even suppress `.venv` activation
@@ -168,13 +167,12 @@ def test_pinned_uv_invocations_disable_project_discovery():
 def test_the_pin_is_enforced_everywhere_except_the_deploy_pipeline():
     """uv's python-downloads default is `automatic`, so `--python 3.14.6` against a host lacking
     that build fetches one rather than failing — making the pin a request, not enforcement.
-    `--no-python-downloads` closes that, and every host invocation carries it except the deploy
-    pipeline's.
+    `--no-python-downloads` closes that, and every host invocation carries it except the checkout
+    sync's.
 
-    gitops-deploy and homelab-checkout-sync are exempt on purpose. The deployer applies changes,
-    and checkout-sync fast-forwards the primary checkout that owed_run.py, probe.py and land.sh
-    refuse to work from when stale. A hard failure in either blocks every landing, including the
-    one that ships the correction. This test pins BOTH halves, so neither the rule nor its
+    homelab-checkout-sync is exempt on purpose. It fast-forwards the primary checkout that
+    probe.py and land.sh refuse to work from when stale, so a hard failure there blocks every
+    landing, including the one that ships the correction. This test pins BOTH halves, so neither the rule nor its
     exceptions can drift silently.
     """
     missing = [

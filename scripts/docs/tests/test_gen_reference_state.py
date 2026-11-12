@@ -62,45 +62,6 @@ def test_unknown_cadence_reads_ok_when_it_has_ever_run():
     assert g.status_for(run, cadence=None, now=NOW) == "ok"
 
 
-# --- gitops_deploy_run(): the hold_sha/hold_plane warning path -----------------------------
-
-
-def test_gitops_deploy_with_no_hold_is_a_plain_tick(tmp_path):
-    (tmp_path / "last_run").write_text(str(NOW.timestamp()))
-    run = g.gitops_deploy_run(tmp_path)
-    assert run.outcome == "ticked, no hold"
-    assert "HOLD" not in run.outcome
-
-
-def test_gitops_deploy_with_a_hold_surfaces_the_sha_and_the_ledgers_plane(tmp_path):
-    """The planes are the `owed` ledger's `hold_plane` class (#3392)."""
-    (tmp_path / "last_run").write_text(str(NOW.timestamp()))
-    (tmp_path / "hold_sha").write_text("deadbeefcafe1234\n")
-    (tmp_path / "owed.jsonl").write_text(
-        '{"class": "hold_plane", "subject": "ansible/deploy.yml sonarr", '
-        '"origin": "abc", "at": 1}\n'
-    )
-    run = g.gitops_deploy_run(tmp_path)
-    assert "HOLD" in run.outcome
-    assert "deadbeef" in run.outcome
-    assert "(ansible/deploy.yml sonarr)" in run.outcome
-
-
-def test_gitops_deploy_with_an_empty_hold_marker_is_a_plain_tick(tmp_path):
-    """An empty `hold_sha` is how the deployer clears a hold, not a HOLD at `unknown`."""
-    (tmp_path / "last_run").write_text(str(NOW.timestamp()))
-    (tmp_path / "hold_sha").write_text("\n")
-    assert g.gitops_deploy_run(tmp_path).outcome == "ticked, no hold"
-
-
-def test_gitops_deploy_with_an_unreadable_marker_is_unreadable_not_clear(tmp_path):
-    (tmp_path / "last_run").write_text(str(NOW.timestamp()))
-    (tmp_path / "owed.jsonl").mkdir()
-    run = g.gitops_deploy_run(tmp_path)
-    assert run.unreadable
-    assert "not readable" in run.outcome
-
-
 # --- renovate_notify_run(): notified vs. checked-and-quiet ----------------------------------
 
 
@@ -262,12 +223,11 @@ def test_live_defaults_still_carry_the_drill_cron_vars():
     assert g._k3s_default_var("k3s_etcd_restore_drill_cron") is not None
 
 
-def test_build_rows_on_the_live_tree_yields_at_least_six_named_loops():
+def test_build_rows_on_the_live_tree_yields_at_least_five_named_loops():
     rows = g.build_rows(tools=_NO_KUBECTL)
     names = {r["name"] for r in rows}
-    assert len(rows) >= 6
+    assert len(rows) >= 5
     assert names == {
-        "gitops-deploy",
         "renovate-agent",
         "renovate-notify",
         "docs-refresh",

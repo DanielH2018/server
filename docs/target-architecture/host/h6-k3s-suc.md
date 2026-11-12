@@ -78,9 +78,9 @@ and H6.7, not H6.6 (step H6.7 says what running it first asks of H6.6's record):
       in `setup/k3s`. Two of them are `ansible/tests/k8s/_manifest_guards.py`
       (`K3S_DEFAULT_VALUES`) and `ansible/tests/k8s/test_k8s_manifests_metallb.py`
       (`k3s_metallb_pool`);
-    - `ansible/tests/setup/test_k3s_node_ip_pinned.py::test_k3s_version_is_pinned`, which
+    - the version-pin test in `test_k3s_node_ip_pinned.py` (H7.44 deleted it), which
       reads the pin through `load_defaults(K3S_ROLE)`, not through the constant;
-    - `ansible/tests/setup/test_k3s_version_guard.py`;
+    - `test_k3s_version_guard.py`;
     - `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py:_K3S_CONTROL_PLANE_GATES`;
     - `scripts/validate/asset_pins.py`, which renders the installer URL from keys in the same
       file;
@@ -1876,10 +1876,10 @@ The results:
     - the pin-routing test, in `ansible/tests/deploy/`;
     - `K3sUpgradeJobFailed` in `k3s-upgrade.yaml` with its promtool test, and the render
       test holding `jobs` in kube-state-metrics' flag and ClusterRole together;
-    - `ansible/tests/setup/test_k3s_node_ip_pinned.py`,
+    - `test_k3s_node_ip_pinned.py`,
       `scripts/validate/tests/test_k8s_schema.py` and H1's CoreDNS image test read the new
       pin home through the new `repo_paths` constant;
-    - `ansible/tests/setup/test_setup_cross_role_files.py` admits the `include_vars`;
+    - the cross-role files census (deleted by H7.53) admits the `include_vars`;
     - `docs/k3s-upgrade.md` (pin path, stale symbol);
     - `ansible/roles/setup/k3s/CLAUDE.md`, whose `## At a glance` block regenerates;
     - the digest and default-deny render tests, each with its red fixture.
@@ -1903,7 +1903,7 @@ The results:
     - `docs/secret-rotation.md` registers `k3s_readonly_token` as `assisted`;
     - `docs/k3s-etcd-restore.md` gains the mask and unmask steps.
 - **H6.3c:**
-    - `ansible/tests/setup/test_k3s_version_guard.py` asserts the version clause is gone and
+    - `test_k3s_version_guard.py` asserts the version clause is gone and
       the args branch sets `INSTALL_K3S_SKIP_DOWNLOAD`;
     - `ansible/roles/setup/gitops_deploy/tests/test_deploy_remediation.py` follows
       `_K3S_CONTROL_PLANE_GATES`;
@@ -1934,7 +1934,7 @@ The results:
     - `_K3S_GATED_TASKS` in `deploy_remediation.py` drops the log restart.
 - **H6.4b:**
     - `ansible/tests/setup/test_k3s_control_plane_hardening.py` and
-      `ansible/tests/setup/test_k3s_node_ip_pinned.py` read the rendered drop-in;
+      `test_k3s_node_ip_pinned.py` read the rendered drop-in;
     - the migration test and its fixtures;
     - the test holding `secrets-encryption` equal to `k3s_secrets_encryption`;
     - `_K3S_CONTROL_PLANE_GATES` drops `k3s_server_args`;

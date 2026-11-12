@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-06 18:17 UTC
-generated_sha: bb59748cd0
+generated_at: 2026-11-10 18:17 UTC
+generated_sha: 8eebbf42f
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,41 +17,41 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
 | [#5126](https://github.com/DanielH2018/server/issues/5126) | high | gap | security | The DanielClaudeBot account reads as nonexistent on GitHub, so agent PRs are invisible and cannot land | 2026-10-15 | 0 | - | - |
-| [#7414](https://github.com/DanielH2018/server/issues/7414) | medium | improvement | cicd | Delete the drift checks' code and the releases family | 2026-11-06 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
-| [#7435](https://github.com/DanielH2018/server/issues/7435) | medium | gap | cicd | R4.7 deletes the manifests role whole while the renderer reads four of its files | 2026-11-06 | 0 | - | ✓ |
-| [#7454](https://github.com/DanielH2018/server/issues/7454) | medium | improvement | cicd | Move the setup plane's readers out of narrow_lib/broad.py and delete the rest of reach and narrowing | 2026-11-06 | 0 | - | ✓ |
-| [#7455](https://github.com/DanielH2018/server/issues/7455) | medium | improvement | cicd | Stop the renderer reading any role task file | 2026-11-06 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
+| [#7490](https://github.com/DanielH2018/server/issues/7490) | medium | gap | cicd | The Pi's reconcile reaches its 30-minute timeout and holds its updates | 2026-11-06 | 0 | - | ✓ |
+| [#7623](https://github.com/DanielH2018/server/issues/7623) | medium | gap | cicd | The test that ran the real k3s binary was never identified, and three launch routes stay outside the leak guard | 2026-11-08 | 0 | - | ✓ |
+| [#7628](https://github.com/DanielH2018/server/issues/7628) | medium | gap | backup-observability | Set the hosts' firmware to power on when AC returns, so they recover from a UPS shutdown unattended | 2026-11-08 | 0 | - | ✓ |
+| [#7688](https://github.com/DanielH2018/server/issues/7688) | medium | gap | cicd | Fix the pytest shard 5 and host_tools_arm64 CI flakes | 2026-11-08 | 0 | - | ✓ |
+| [#7710](https://github.com/DanielH2018/server/issues/7710) | medium | improvement | cicd | Cut the 40-120s each pytest leg spends outside every test's timed phases | 2026-11-08 | 0 | - | ✓ |
+| [#7718](https://github.com/DanielH2018/server/issues/7718) | medium | gap | cicd | Measure the pytest shard spread on a real CI run of the rebalanced runner table | 2026-11-09 | 0 | - | ✓ |
+| [#7886](https://github.com/DanielH2018/server/issues/7886) | medium | improvement | cicd | H7.53: re-home and delete the GitOps deployer, and turn the setup census strict | 2026-11-09 | 0 | - | ✓ |
+| [#7933](https://github.com/DanielH2018/server/issues/7933) | medium | improvement | cicd | Let land.sh land from a fresh master checkout instead of refusing on its own stale landing code | 2026-11-09 | 0 | - | ✓ |
+| [#7941](https://github.com/DanielH2018/server/issues/7941) | medium | gap | cicd | Keep the Pi's AIDE scan from starving its package updater and holding the canary | 2026-11-10 | 0 | - | ✓ |
 | [#4435](https://github.com/DanielH2018/server/issues/4435) | low | improvement | cicd | Decide whether to move scripts/ into an installable homelab package | 2026-10-11 | 0 | - | ✓ |
 | [#6292](https://github.com/DanielH2018/server/issues/6292) | low | improvement | container | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule | 2026-10-25 | 0 | - | ✓ |
 | [#6643](https://github.com/DanielH2018/server/issues/6643) | low | improvement | security | Retire daniel-server's user-home age key once no Ansible apply runs there | 2026-10-30 | 0 | - | ✓ |
-| [#6762](https://github.com/DanielH2018/server/issues/6762) | low | improvement | cicd | Cap one fan-out batch's CPU on daniel-server if its bursts slow its siblings | 2026-10-31 | 0 | - | ✓ |
-| [#6763](https://github.com/DanielH2018/server/issues/6763) | low | improvement | cicd | Re-read the fan-out live-batch caps after per-batch MemoryHigh lands | 2026-10-31 | 0 | - | ✓ |
-| [#6769](https://github.com/DanielH2018/server/issues/6769) | low | improvement | cicd | Judge the per-batch fan-out MemoryHigh against the 2026-10-29 baseline after a week | 2026-10-31 | 0 | - | ✓ |
-| [#7106](https://github.com/DanielH2018/server/issues/7106) | low | gap | docs | The runbook's stopped-k3s snapshot listing has not run literally against R2 | 2026-11-04 | 0 | - | ✓ |
 | [#7175](https://github.com/DanielH2018/server/issues/7175) | low | gap | backup-observability | H2.8c: read whether native etcd retention prunes the retired cron's S3 objects | 2026-11-05 | 0 | - | ✓ |
-| [#7178](https://github.com/DanielH2018/server/issues/7178) | low | gap | cicd | M6 exit criterion 2 waits for R4 to retire render_records_push_token | 2026-11-05 | 0 | - | ✓ |
-| [#7194](https://github.com/DanielH2018/server/issues/7194) | low | improvement | docs | Reword the Kuma history that M6's census row holds on its allowlist | 2026-11-05 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
+| [#7194](https://github.com/DanielH2018/server/issues/7194) | low | improvement | docs | Reword the Kuma history that M6's census row holds on its allowlist | 2026-11-05 | 0 | - | ✓ |
 | [#7195](https://github.com/DanielH2018/server/issues/7195) | low | improvement | security | Retire the Alloy and probe.py push-URL redaction once R4 retires the last push token | 2026-11-05 | 0 | - | ✓ |
 | [#7220](https://github.com/DanielH2018/server/issues/7220) | low | improvement | docs | Delete the lock-retired lint rule once no branch predates the G2 flip | 2026-11-05 | 0 | - | ✓ |
 | [#7232](https://github.com/DanielH2018/server/issues/7232) | low | improvement | docs | Read the G3 freshness measurement and bring the operator the decision | 2026-11-05 | 0 | - | ✓ |
-| [#7320](https://github.com/DanielH2018/server/issues/7320) | low | improvement | docs | Test comments and role tests still describe Kuma as live | 2026-11-05 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
-| [#7323](https://github.com/DanielH2018/server/issues/7323) | low | improvement | docs | Rewrite the k3s role comments that name the deleted alert_deferred | 2026-11-05 | 0 | - | ✓ |
-| [#7411](https://github.com/DanielH2018/server/issues/7411) | low | gap | cicd | A stamp in a file main.yml imports can also run from a tasks_from play under tags the render walk cannot read | 2026-11-06 | 0 | - | ✓ |
-| [#7415](https://github.com/DanielH2018/server/issues/7415) | low | gap | backup-observability | Run the UPS forced-shutdown drill on 2026-11-10 | 2026-11-06 | 0 | - | ✓ |
-| [#7416](https://github.com/DanielH2018/server/issues/7416) | low | improvement | cicd | A check-timer template change names gitops_deploy on hosts whose teardown renders nothing from it | 2026-11-06 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
-| [#7417](https://github.com/DanielH2018/server/issues/7417) | low | improvement | cicd | No render group lists check-timer-boot.service.j2, so a change to it always names initial_setup | 2026-11-06 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
-| [#7419](https://github.com/DanielH2018/server/issues/7419) | low | gap | docs | Decide whether H7 keeps the deploy UI's in-flight panel now the daemon no longer starts deploy.sh | 2026-11-06 | 0 | - | ✓ |
-| [#7422](https://github.com/DanielH2018/server/issues/7422) | low | improvement | docs | Rewrite the setup-role comments that still name the disarmed drift checks | 2026-11-06 | 0 | - | ✓ |
-| [#7425](https://github.com/DanielH2018/server/issues/7425) | low | improvement | docs | Align R4's case 5 wording and the render-diff docstring with the proof runs | 2026-11-06 | 0 | - | ✓ |
-| [#7432](https://github.com/DanielH2018/server/issues/7432) | low | gap | cicd | A landing from daniel-server names gitops_deploy on daniel-box for a check-timer change after any apply | 2026-11-06 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
-| [#7436](https://github.com/DanielH2018/server/issues/7436) | low | gap | docs | Write the Flux handback procedure the role docs cite, with the render-metadata step | 2026-11-06 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
-| [#7441](https://github.com/DanielH2018/server/issues/7441) | low | addition | cicd | Add a CI failure survey tool that reads every attempt | 2026-11-06 | 0 | worktree-ci-failures-orchestrator | ✓ |
-| [#7443](https://github.com/DanielH2018/server/issues/7443) | low | gap | cicd | The renderer's inventory reader keeps the quotes of a hosts.ini inline value | 2026-11-06 | 0 | - | ✓ |
-| [#7445](https://github.com/DanielH2018/server/issues/7445) | low | improvement | cicd | Feed the guard drop candidates from the CI failure survey | 2026-11-06 | 0 | - | ✓ |
-| [#7449](https://github.com/DanielH2018/server/issues/7449) | low | improvement | cicd | Cache the homelab-tools pins on the host packages build job | 2026-11-06 | 0 | - | ✓ |
-| [#7452](https://github.com/DanielH2018/server/issues/7452) | low | improvement | cicd | A landing from daniel-server names render_records on daniel-box for a check-timer change after any apply | 2026-11-06 | 0 | - | ✓ |
-| [#7457](https://github.com/DanielH2018/server/issues/7457) | low | gap | docs | Remove the handback procedure and its citations when R4 deletes the Ansible path | 2026-11-06 | 0 | - | ✓ |
-| [#7459](https://github.com/DanielH2018/server/issues/7459) | low | improvement | docs | Rewrite the comments that still name probe.py releases and NOT ROLLED | 2026-11-06 | 0 | - | ✓ |
+| [#7320](https://github.com/DanielH2018/server/issues/7320) | low | improvement | docs | Test comments and role tests still describe Kuma as live | 2026-11-05 | 0 | - | ✓ |
+| [#7508](https://github.com/DanielH2018/server/issues/7508) | low | improvement | docs | Write the cluster-node, add-a-host and release-upgrade procedures for the package path | 2026-11-07 | 0 | - | ✓ |
+| [#7620](https://github.com/DanielH2018/server/issues/7620) | low | gap | cicd | Snapshot and prepull objects orphaned by tags retired before #7485 are still live | 2026-11-08 | 0 | - | ✓ |
+| [#7645](https://github.com/DanielH2018/server/issues/7645) | low | gap | security | Record what sudo-rs does with the timestamp drop-in at the first 26.04 host upgrade | 2026-11-08 | 0 | - | ✓ |
+| [#7687](https://github.com/DanielH2018/server/issues/7687) | low | improvement | cicd | Give a fan-out batch a second fix round when a real review finding survives the first | 2026-11-08 | 0 | - | ✓ |
+| [#7868](https://github.com/DanielH2018/server/issues/7868) | low | improvement | docs | Remove the setup-drift and retired-unit references H7.63 left in comments, ROLE_WRITTEN and deployed_copies | 2026-11-09 | 0 | - | ✓ |
+| [#7877](https://github.com/DanielH2018/server/issues/7877) | low | gap | cicd | A last-good move by promote's reconcile job leaves the triggering commit unpromoted until the next merge | 2026-11-09 | 0 | - | ✓ |
+| [#7879](https://github.com/DanielH2018/server/issues/7879) | low | improvement | cicd | Measure bootstrap_case after the build-first pool order, and split the builds if it still exceeds upgrade_path | 2026-11-09 | 0 | - | ✓ |
+| [#7884](https://github.com/DanielH2018/server/issues/7884) | low | gap | cicd | The fan-out review record drops a flaked job's name once its CI re-run passes | 2026-11-09 | 0 | - | ✓ |
+| [#7911](https://github.com/DanielH2018/server/issues/7911) | low | improvement | cicd | Read the unreadable- and stale-gate deferrals from LAND-RESULT's cause, not note text | 2026-11-09 | 0 | - | ✓ |
+| [#7912](https://github.com/DanielH2018/server/issues/7912) | low | gap | backup-observability | Exempt scaled-to-zero Deployments from probe.py targets' fail verdict | 2026-11-09 | 0 | - | ✓ |
+| [#7915](https://github.com/DanielH2018/server/issues/7915) | low | improvement | docs | Guards and templates left with no subject once the last setup role emptied | 2026-11-09 | 0 | - | ✓ |
+| [#7927](https://github.com/DanielH2018/server/issues/7927) | low | improvement | cicd | The maximal-tag warning mechanism has no member once every setup role is emptied | 2026-11-09 | 0 | - | ✓ |
+| [#7929](https://github.com/DanielH2018/server/issues/7929) | low | gap | security | Decide how the AIDE check judges snapd's generated udev rules | 2026-11-09 | 0 | - | ✓ |
+| [#7930](https://github.com/DanielH2018/server/issues/7930) | low | gap | cicd | Remove the enable links of an /etc unit that reconcile hands off to its package | 2026-11-09 | 0 | - | ✓ |
+| [#7932](https://github.com/DanielH2018/server/issues/7932) | low | improvement | cicd | Warning-role parity test and its no-warning halves compare empty maps | 2026-11-09 | 0 | - | ✓ |
+| [#7934](https://github.com/DanielH2018/server/issues/7934) | low | improvement | cicd | Stop findings paths counting files an issue only quotes as example output | 2026-11-09 | 0 | - | ✓ |
+| [#7949](https://github.com/DanielH2018/server/issues/7949) | low | improvement | cicd | Stop a worktree held by a live process from failing the weekly worktree sweep | 2026-11-10 | 0 | - | ✓ |
 
 ## Deferred, by date
 
@@ -59,19 +59,23 @@ Open findings carrying a `not-before:` label, soonest first. `findings.py next` 
 
 | Not before | State | # | Finding |
 |---|---|---|---|
-| 2026-11-07 | withheld | [#6769](https://github.com/DanielH2018/server/issues/6769) | Judge the per-batch fan-out MemoryHigh against the 2026-10-29 baseline after a week |
-| 2026-11-07 | withheld | [#7425](https://github.com/DanielH2018/server/issues/7425) | Align R4's case 5 wording and the render-diff docstring with the proof runs |
-| 2026-11-07 | withheld | [#7454](https://github.com/DanielH2018/server/issues/7454) | Move the setup plane's readers out of narrow_lib/broad.py and delete the rest of reach and narrowing |
-| 2026-11-08 | withheld | [#6762](https://github.com/DanielH2018/server/issues/6762) | Cap one fan-out batch's CPU on daniel-server if its bursts slow its siblings |
-| 2026-11-08 | withheld | [#6763](https://github.com/DanielH2018/server/issues/6763) | Re-read the fan-out live-batch caps after per-batch MemoryHigh lands |
-| 2026-11-10 | withheld | [#7415](https://github.com/DanielH2018/server/issues/7415) | Run the UPS forced-shutdown drill on 2026-11-10 |
-| 2026-11-20 | withheld | [#7178](https://github.com/DanielH2018/server/issues/7178) | M6 exit criterion 2 waits for R4 to retire render_records_push_token |
+| 2026-11-10 | date passed | [#7879](https://github.com/DanielH2018/server/issues/7879) | Measure bootstrap_case after the build-first pool order, and split the builds if it still exceeds upgrade_path |
+| 2026-11-16 | withheld | [#7688](https://github.com/DanielH2018/server/issues/7688) | Fix the pytest shard 5 and host_tools_arm64 CI flakes |
 | 2026-11-20 | withheld | [#7195](https://github.com/DanielH2018/server/issues/7195) | Retire the Alloy and probe.py push-URL redaction once R4 retires the last push token |
 | 2026-11-21 | withheld | [#7175](https://github.com/DanielH2018/server/issues/7175) | H2.8c: read whether native etcd retention prunes the retired cron's S3 objects |
+| 2026-11-22 | withheld | [#7490](https://github.com/DanielH2018/server/issues/7490) | The Pi's reconcile reaches its 30-minute timeout and holds its updates |
 | 2026-12-05 | withheld | [#7232](https://github.com/DanielH2018/server/issues/7232) | Read the G3 freshness measurement and bring the operator the decision |
 | 2026-12-15 | withheld | [#4435](https://github.com/DanielH2018/server/issues/4435) | Decide whether to move scripts/ into an installable homelab package |
 | 2027-01-04 | withheld | [#7220](https://github.com/DanielH2018/server/issues/7220) | Delete the lock-retired lint rule once no branch predates the G2 flip |
 | 2027-02-01 | withheld | [#6292](https://github.com/DanielH2018/server/issues/6292) | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule |
+
+## Blocked on other issues
+
+Open findings with an open "blocked by" issue. `findings.py next` withholds each one until its last blocker closes, with nothing to clear. Add a blocker with `findings.py block <n> --on <issue>`.
+
+| # | Blocked by | Finding |
+|---|---|---|
+| [#7718](https://github.com/DanielH2018/server/issues/7718) | #7710 | Measure the pytest shard spread on a real CI run of the rebalanced runner table |
 
 ## Settled findings — do not re-flag
 
@@ -144,6 +148,8 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#5965](https://github.com/DanielH2018/server/issues/5965) | accepted | Restore the three PENDING_RETIREMENT push tokens that the H1.7b cluster_vars write unset | The revert window ended 2026-10-29 when the tokens retired; restoring them is moot |
 | [#6267](https://github.com/DanielH2018/server/issues/6267) | accepted | Run the suite under a shifted clock to find date-dependent tests the textual guard misses | One-off probe run on 2026-10-25 instead of a standing workflow. Real clock: 23617 passed, 0 failed. In-process clock shifted +31 days with time-machine: 6 failed, all artefacts of a partial shift (apt's own clock x2, file mtimes x2, a subprocess hook's log stamps, a commit timestamp), none a date bomb. The one real date bomb is removed in the follow-up to PR 6265, and the live-clock guard now catches its bare today() form. |
 | [#6580](https://github.com/DanielH2018/server/issues/6580) | refuted | place clean keeps squash-merged batches with is_merged's reason although compare says their tip is contained | The code was right: master's place clean runs the primary checkout's clean-one with landed (#6552, #6574). The keep came from an orchestrator worktree 15 commits behind #6574, which still ran each batch worktree's pre-#6552 script. After fast-forwarding the orchestrator to master, place clean removed fanout-6055 and fanout-6257. |
+| [#6762](https://github.com/DanielH2018/server/issues/6762) | accepted | Cap one fan-out batch's CPU on daniel-server if its bursts slow its siblings | The condition did not hold in the week after MemoryHigh landed (2026-11-01 to 2026-11-08, 166 batches on daniel-server against 125 the week before). daniel-server's host CPU PSI fell from 6.3% to 5.0% of the week, and its worst hour fell from 12.9% to 12.3%. The fleet slice ran at 6 or more of the 8 cores for 1.2% of minutes, with p95 3.5 and p99 6.2 cores. The median per-batch p95 was 2.13 cores (2.04 the week before). The largest single-batch burst read 8.43 cores; anything above 8 on an 8-core host is a 30s-sampling artefact of rate() over a 2m window, so read it as one batch briefly taking the whole node. Nothing in the week shows a burst slowing its siblings, so a CPUQuota would only cost a lone batch speed on an idle host. Median batch wall time on daniel-server did rise 25 to 40 min; #6769 records why neither CPU contention nor MemoryHigh accounts for it. Queries: probe.py metric over claude_fanout_batch_cpu_usage_usec_total, claude_cgroup_cpu_usage_usec_total{cgroup=fleet} and node_pressure_cpu_waiting_seconds_total, [7d] @ 2026-11-08T20:00Z against @ 2026-10-29T00:00Z. |
+| [#7834](https://github.com/DanielH2018/server/issues/7834) | accepted | Start the host_packages legs before the build job packs the homelab-tools debs they never read | - |
 
 ### container
 
@@ -166,6 +172,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#3244](https://github.com/DanielH2018/server/issues/3244) | accepted | inject-nested-docs head form left facts.md out of 4 of 132 payloads with no later delivery | Operator decision 2026-10-02: 4 facts.md misses in 132 head-form payloads is an acceptable residual; the editing-rule gating works as designed. |
 | [#3964](https://github.com/DanielH2018/server/issues/3964) | refuted | Cut the issue-fanout skill's Agent() fallback to one paragraph | Its precondition failed: the Agent() fallback ran on 2026-10-09 (session 4bc48d84, worktree issue-fanout-2026-10-09-wave1, 14 Agent worktrees), so the fallback is in use and cannot be retired. Evidence is in the issue thread. |
 | [#7164](https://github.com/DanielH2018/server/issues/7164) | accepted | H6.7's PR reordered the plan's exit criterion with no operator ruling | Operator ruled 2026-11-05: H6.7 may land before H6.6. PR 7156's rewrite of the exit criterion stands; record H6.6's pre-upgrade state after H6.7's restart so it cannot falsely satisfy Exit 2. |
+| [#7505](https://github.com/DanielH2018/server/issues/7505) | accepted | Write the Pi rebuild runbook now every Pi package step is live | The operator ruled on 2026-11-08 not to run the Pi rebuild drill. The runbook in docs/break-glass.md (#7518) stays undrilled, and that page's drill table already marks it No. |
 
 ### network
 

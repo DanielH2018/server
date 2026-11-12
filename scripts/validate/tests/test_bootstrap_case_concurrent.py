@@ -24,6 +24,8 @@ WAIT = 0.5
 SLOW = 1.5
 DONE = r"^\[DONE\] {label} in (\d+(?:\.\d+)?)s$"
 PREFIX = "homelab-host-test-bootstrap-"
+# A green run's stderr: one line of bootstrap-host.sh's `phase`, and one line of other output.
+GREEN_STDERR = "bootstrap-host: the apt-get update took 7s\nReading package lists...\n"
 
 
 class Overlap:
@@ -128,7 +130,7 @@ class FakeContainer:
             return subprocess.CompletedProcess(script, 0, "", "")
         if item.refusal is None:
             stdout, self.calls = _green_output(item)
-            return subprocess.CompletedProcess(script, 0, stdout, "")
+            return subprocess.CompletedProcess(script, 0, stdout, GREEN_STDERR)
         if item.apt_says is not None:
             self.calls = "install -y /tmp/w/debs/homelab-daniel-box_0.1_all.deb\n"
         return subprocess.CompletedProcess(script, 1, item.apt_says or "", item.refusal)
@@ -149,6 +151,7 @@ def _run(
     slow: str | None = None,
     prepare_seconds: float = 0.0,
     quorum: int = 0,
+    shard: tuple[int, int] | None = None,
 ):
     """Run every bootstrap case on fake containers; returns the cases and the overlap.
 
@@ -183,6 +186,7 @@ def _run(
         failed=[],
         tools_cache=None,
         k3s_download=False,
+        shard=shard,
     )
     case.run(cases)
     return cases, planned, overlap
@@ -242,11 +246,32 @@ def test_an_item_s_duration_is_its_own_run_not_the_wait_for_earlier_items(
     assert len(seconds[last]) == 1 and seconds[last][0] < SLOW - 0.5, err
 
 
+def test_each_item_s_phase_timings_print_under_its_duration_and_nothing_else_does(
+    monkeypatch, tmp_path, capsys
+):
+    _run(monkeypatch, tmp_path)
+
+    err = capsys.readouterr().err
+    under = re.findall(r"^\[DONE\] offline in .*\n((?:    .*\n)*)", err, re.MULTILINE)
+    assert under == ["    bootstrap-host: the apt-get update took 7s\n"], err
+    assert "Reading package lists" not in err
+
+
 def test_the_offline_builds_start_before_the_host_items(monkeypatch, tmp_path):
     monkeypatch.setattr(os, "cpu_count", lambda: 3)
     _, _, overlap = _run(monkeypatch, tmp_path, quorum=3)
 
     assert set(overlap.started[:3]) == {"offline", "red-depends", "fixture-host"}
+
+
+def test_a_shard_runs_only_its_share_of_the_items(monkeypatch, tmp_path, capsys):
+    _, planned, _ = _run(monkeypatch, tmp_path, shard=(2, 3))
+
+    share = case.shard(list(planned.values()), 2, 3)
+    ran = re.findall(r"^\[DONE\] (\S+) in ", capsys.readouterr().err, re.MULTILINE)
+    assert sorted(ran) == sorted(p.label for p in share)
+    assert [p.label for p in share if p.builds_offline] == ["red-depends"]
+    assert len(share) < len(planned)
 
 
 def test_the_prepare_prints_how_long_it_took(monkeypatch, tmp_path, capsys):

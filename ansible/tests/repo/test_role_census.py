@@ -5,7 +5,6 @@ alike — so its two edges, debris is skipped and an empty directory is not, nee
 coverage rather than each caller's.
 """
 
-from _helpers import SETUP_ROLES
 from _role_census import role_dirs, task_files, task_files_by_role
 
 
@@ -54,9 +53,4 @@ def test_a_nested_task_file_is_credited_to_its_role(tmp_path):
 def test_the_default_census_finds_the_real_k8s_roles():
     """Non-vacuity against the real tree, and the default argument every guard relies on."""
     names = {p.name for p in role_dirs()}
-    assert {"volume-revert", "image-builder", "volume-snapshot"} <= names
-
-
-def test_the_census_finds_the_real_setup_roles():
-    """Non-vacuity for the setup tree, named by two roles."""
-    assert {"common", "gitops_deploy"} <= {p.name for p in role_dirs(SETUP_ROLES)}
+    assert {"arr-notification", "image-builder", "volume-snapshot"} <= names

@@ -25,7 +25,7 @@ def _probes(**overrides):
         "read_payload": lambda: {"source": "startup"},
         "target_problems": lambda: [],
         "master_moved_problems": lambda: [],
-        "parked_deployer_problems": lambda: [],
+        "dirty_primary_problems": lambda: [],
         "other_live_sessions": lambda cwd: [],
         "unlabelled_worktree_lines": lambda cwd: [],
         "stale_worktree_lines": lambda: [],
@@ -93,6 +93,8 @@ def test_a_hung_worktree_costs_its_own_session_line_only():
             out = porcelain
         elif "/repo/.claude/worktrees/slow" in cmd:
             never.wait()
+            out = ""
+        elif "status" in cmd:
             out = ""
         else:
             out = "file.py\n"

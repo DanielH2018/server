@@ -28,7 +28,6 @@ def _make_inventory(tmp_path):
         textwrap.dedent("""\
         server_ip: 10.0.0.161
         has_docker: false
-        has_gitops: false
         containers_list:
           - name: a
           - name: b
@@ -37,7 +36,6 @@ def _make_inventory(tmp_path):
     (host_vars / "daniel-pi.yml").write_text(
         textwrap.dedent("""\
         server_ip: 10.0.0.139
-        has_gitops: false
         containers_list:
           - name: c
         """)

@@ -47,12 +47,11 @@ SCRIPT = "pi-recovery-health"
 UNIT_DIR = "/usr/lib/systemd/system"
 LINK = f"{UNIT_DIR}/timers.target.wants/{RECOVERY_TIMER}"
 
-# The watch set the rendered script must carry: every containers_list and compose_services name
-# on daniel-pi, plus the sub-proxy the docker-proxy service file declares beside its entry. Named rather than counted so the failure says which container the script stopped
+# The watch set the rendered script must carry: every compose_services name on daniel-pi, plus the sub-proxy the docker-proxy service file declares beside its entry. Named rather than counted so the failure says which container the script stopped
 # watching.
 PI_CONTAINERS = [entry["name"] for entry in pi_entries_in(PI_HOST_VARS)]
 EXPECTED_WATCH_SET = {*PI_CONTAINERS, "docker-proxy-lifecycle"}
-# A compose sub-service, not a containers_list entry, so iterating the list alone would miss it.
+# A compose sub-service, not a compose_services entry, so iterating the list alone would miss it.
 MUST_WATCH = frozenset(
     {"autoheal", "docker-proxy", "docker-proxy-lifecycle", "wg-easy"}
 )
@@ -83,46 +82,10 @@ def _watch_set(tmp_path, jinja_vars) -> set[str]:
     return set(line[len("CONTAINERS=(") : -1].split())
 
 
-def test_a_container_moved_to_compose_services_is_still_watched(tmp_path):
-    """ACCEPT and REJECT: autoheal in the second key stays watched (H5.1).
-
-    The fixture is what makes a derivation over `containers_list` alone fail: that derivation
-    would name every container but autoheal here, the REJECT half of this case.
-    """
-    kept = [c for c in PI_HOST_VARS["containers_list"] if c["name"] != "autoheal"]
-    moved = [c for c in PI_HOST_VARS["containers_list"] if c["name"] == "autoheal"]
-    jinja_vars = {
-        "containers_list": kept,
-        "compose_services": [*PI_HOST_VARS["compose_services"], *moved],
-    }
-
-    assert "autoheal" not in {c["name"] for c in kept}
+def test_a_containers_list_entry_is_not_watched(tmp_path):
+    """REJECT: the Pi deploys only compose_services, so a stray containers_list entry is ignored."""
+    jinja_vars = {"containers_list": [{"name": "ghost"}]}
     assert _watch_set(tmp_path, jinja_vars) == EXPECTED_WATCH_SET
-
-
-def test_the_watch_set_is_independent_of_which_key_holds_an_entry(tmp_path):
-    """The rendered script is byte-identical across a move, so the package does not churn."""
-    whole = tmp_path / "whole"
-    split = tmp_path / "split"
-    whole.mkdir()
-    split.mkdir()
-    pi = PI_HOST_VARS["containers_list"]
-    run(SCRIPT, whole, running=ALL)
-    run(
-        SCRIPT,
-        split,
-        running=ALL,
-        jinja_vars={
-            "containers_list": pi[:2],
-            "compose_services": [*pi[2:], *PI_HOST_VARS["compose_services"]],
-        },
-    )
-    # The harness repoints two absolute paths into the run's own directory; the rest is the render.
-    rendered = [
-        (d / f"{SCRIPT}.sh").read_text().replace(str(d), "<run>")
-        for d in (whole, split)
-    ]
-    assert rendered[0] == rendered[1]
 
 
 def test_a_healthy_cycle_pushes_up(tmp_path):
@@ -134,7 +97,7 @@ def test_a_healthy_cycle_pushes_up(tmp_path):
 
 
 def test_a_dead_sub_proxy_is_not_the_all_clear(tmp_path):
-    """REJECT: docker-proxy-lifecycle is not a containers_list entry -- it still counts."""
+    """REJECT: docker-proxy-lifecycle is not a compose_services entry -- it still counts."""
     running = [c for c in ALL if c != "docker-proxy-lifecycle"]
     status, msg, still_running, _ = run(SCRIPT, tmp_path, running=running)
 

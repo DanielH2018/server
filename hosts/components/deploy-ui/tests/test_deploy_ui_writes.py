@@ -1,7 +1,5 @@
-"""Every guard has an accept case and a reject case; the hold clears as a pair."""
+"""Every guard has an accept case and a reject case."""
 
-import fcntl
-import json
 import time
 
 from deploy_ui_lib import deploy_ui_writes as w
@@ -39,15 +37,11 @@ def test_write_allowed_form_body_is_flagged():
 
 
 def test_guard_land_new_pr_is_clean():
-    assert w.guard_land("1550", [L], "") is None
+    assert w.guard_land("1550", [L]) is None
 
 
 def test_guard_land_duplicate_pr_is_flagged():
-    assert "1543" in refused(w.guard_land("1543", [L], ""))
-
-
-def test_guard_land_under_hold_is_flagged():
-    assert "hold" in refused(w.guard_land("1550", [], "deadbeef"))
+    assert "1543" in refused(w.guard_land("1543", [L]))
 
 
 def test_guard_cancel_listed_pid_is_clean():
@@ -56,78 +50,6 @@ def test_guard_cancel_listed_pid_is_clean():
 
 def test_guard_cancel_unlisted_pid_is_flagged():
     assert "4321" in refused(w.guard_cancel(4321, {9}))
-
-
-def _owed_line(cls: str, subject: str) -> str:
-    return json.dumps({"class": cls, "subject": subject, "origin": "abc", "at": 1})
-
-
-def test_clear_hold_matching_sha_with_no_plane_held_removes_the_sha_is_clean(
-    state_dir, tmp_path
-):
-    (state_dir / "hold_sha").write_text("deadbeef\n")
-    assert w.clear_hold(state_dir, "deadbeef", tmp_path / "tree.lock") is None
-    assert not (state_dir / "hold_sha").exists()
-
-
-def test_clear_hold_mismatch_touches_nothing_is_flagged(state_dir, tmp_path):
-    (state_dir / "hold_sha").write_text("deadbeef\n")
-    owed = _owed_line("hold_plane", "k3s")
-    (state_dir / "owed.jsonl").write_text(owed)
-    assert "deadbeef" in refused(
-        w.clear_hold(state_dir, "cafef00d", tmp_path / "tree.lock")
-    )
-    assert (state_dir / "owed.jsonl").read_text() == owed
-    assert (state_dir / "hold_sha").exists()
-
-
-def test_clear_hold_drops_the_ledgers_hold_plane_lines_and_keeps_the_rest_is_clean(
-    state_dir, tmp_path
-):
-    """A Clear that left the ledger class behind would replay it into the next hold (#3392).
-
-    The torn byte on the `manual_plane` line survives the rewrite unchanged.
-    """
-    (state_dir / "hold_sha").write_text("deadbeef\n")
-    keep = _owed_line("manual_plane", "k3s").encode().replace(b"k3s", b"k3\xffs")
-    (state_dir / "owed.jsonl").write_bytes(
-        _owed_line("hold_plane", "ansible/deploy.yml sonarr").encode() + b"\n" + keep
-    )
-    assert w.clear_hold(state_dir, "deadbeef", tmp_path / "tree.lock") is None
-    assert (state_dir / "owed.jsonl").read_bytes() == keep
-    assert not (state_dir / "hold_sha").exists()
-
-
-def test_clear_hold_under_a_held_tree_lock_refuses_and_keeps_the_hold_is_flagged(
-    state_dir, tmp_path
-):
-    """The tick rewrites the ledger under the tree lock; an unlocked rewrite would lose that."""
-    (state_dir / "hold_sha").write_text("deadbeef\n")
-    owed = _owed_line("hold_plane", "ansible/deploy.yml sonarr")
-    (state_dir / "owed.jsonl").write_text(owed)
-    lock = tmp_path / "tree.lock"
-    with open(lock, "a") as held:
-        fcntl.flock(held, fcntl.LOCK_EX)
-        assert "git-tree lock" in refused(
-            w.clear_hold(state_dir, "deadbeef", lock, wait_s=0.0)
-        )
-    assert (state_dir / "hold_sha").exists()
-    assert (state_dir / "owed.jsonl").read_text() == owed
-
-
-def test_hold_cleared_message_names_every_dropped_plane_is_clean():
-    """A Clear drops every entry at once, and each is a plane nobody has applied."""
-    message = w.hold_cleared_message(
-        ["ansible/initial_setup.yml k3s", "ansible/deploy.yml sonarr"]
-    )
-    assert "ansible/initial_setup.yml k3s" in message
-    assert "ansible/deploy.yml sonarr" in message
-    assert "by hand" in message
-
-
-def test_hold_cleared_message_with_no_plane_says_only_that_is_flagged():
-    """The rejecting half: a hold with no plane entry must not warn about applying nothing."""
-    assert w.hold_cleared_message([]) == "hold cleared (hold_sha and hold_plane)"
 
 
 def test_spawn_logged_writes_output_and_returns_log(tmp_path):

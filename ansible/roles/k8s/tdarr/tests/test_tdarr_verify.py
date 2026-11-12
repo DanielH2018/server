@@ -140,8 +140,8 @@ def test_the_staged_job_reads_no_other_roles_file():
 
     The Job takes `flux_job_image` from the renderer rather than from the flux defaults, so a
     Renovate bump of that pin does not redeploy tdarr. This reads every role path the staged
-    templates name, in any form, rather than only the lookup shapes the deployer's scan
-    (`deploy_cross_role._K8S_LOOKUP_RE`) matches.
+    templates name, in any form, rather than only the lookup shapes the secret census's scan
+    (`k8s_lookups.K8S_LOOKUP_RE`) matches.
     """
     staged = sorted((K8S_ROLES / TAG / "templates" / "verify").glob("*.j2"))
     assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]

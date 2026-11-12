@@ -9,13 +9,22 @@ hands over the committed table and turns the complaints into an exit code.
 
 Split out of `pytest_shard.py` when the margin band (#4010) took that module past the
 600-line cap. The runner-seconds table that `pytest_shard.py` packs the shards on lives here
-too, at the end, for the same reason (#6149).
+too, at the end, for the same reason (#6149), with the fetch of CI's pytest leg logs that both
+the table and `leg_spread` read.
 """
+
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import json
 import re
 import statistics
 from pathlib import Path
+
+from lib import gh as gh_mod
+from lib.repo_paths import REPO
 
 # A line of pytest's durations report: seconds, phase, then a nodeid whose leading segment,
 # up to the first pair of colons, is the test file this weight belongs to.
@@ -288,7 +297,7 @@ def _under_complaint(
         f"recorded weight, so the shard split packs it as nearly free: {listed}. "
         f"Repair (seconds): {RECORD_FILES_HINT}. If it records near 0s again, the time is a "
         "per-process cache its first test built: build that cache outside the timed phases, "
-        "as ansible/tests/conftest.py does for the k8s render"
+        "as ansible/tests/render_share.py does for the k8s and fleet renders"
     )
 
 
@@ -575,6 +584,51 @@ def leg_speed(text: str) -> float:
     return cold / REFERENCE_COMPILE_SECONDS_PER_FILE
 
 
+# pytest's closing line, `==== 3720 passed, 71 skipped in 261.46s (0:04:21) ====`.
+_SUMMARY_WALL = re.compile(r"^=+ .*\bin ([0-9.]+)s\b.*=+$", re.M)
+
+
+def leg_spread(legs: dict[str, str]) -> str:
+    """Each pytest leg's wall in one CI run, raw and divided by its `leg_speed`.
+
+    Args:
+        legs: each leg's job name mapped to its raw log, as `green_pytest_legs` returns them.
+
+    Returns:
+        A first line holding both slowest-minus-fastest gaps, then one line per leg. Dividing
+        by `leg_speed` takes out the hardware a leg drew, so the normalised gap is what the
+        split itself left unbalanced (#7718).
+
+    Raises:
+        ValueError: `legs` is empty, or a leg's log holds no pytest summary line to read.
+    """
+    if not legs:
+        raise ValueError(
+            "no green pytest leg in this run, so there is no spread to read"
+        )
+    rows = []
+    for name, text in sorted(legs.items()):
+        clean = _LOG_NOISE.sub("", text)
+        walls = _SUMMARY_WALL.findall(clean)
+        if not walls:
+            raise ValueError(f"{name}: no pytest summary line, so the leg has no wall")
+        wall, speed = float(walls[-1]), leg_speed(clean)
+        rows.append((name, wall, speed, wall / speed))
+    raw = [r[1] for r in rows]
+    normalised = [r[3] for r in rows]
+    head = (
+        f"{len(rows)} pytest legs: normalised gap {max(normalised) - min(normalised):.1f}s, "
+        f"raw gap {max(raw) - min(raw):.1f}s"
+    )
+    return "\n".join(
+        [head]
+        + [
+            f"{name}: {wall:.2f}s wall, leg_speed {speed:.3f}, {norm:.2f}s normalised"
+            for name, wall, speed, norm in rows
+        ]
+    )
+
+
 def runner_weights(reports: list[str]) -> dict[str, float]:
     """Each module's median seconds across CI `--durations` reports, one report per shard log.
 
@@ -686,3 +740,79 @@ def packing_weights(
 def packing_table(recorded: dict[str, float]) -> dict[str, float]:
     """`packing_weights` over the committed runner table."""
     return packing_weights(recorded, load_runner_weights())
+
+
+# Where `--refresh-runner` reads its logs: the green runs of CI's workflow on pushes to master.
+# A pull request's run also measures modules that may never land, and a merge-queue run repeats
+# a commit master runs again, so only the push runs count.
+CI_WORKFLOW = "ci.yml"
+CI_BRANCH = "master"
+# Every pytest leg is named `pytest (shard N of M)` in ci.yml. A prefix rather than a count, so
+# changing the matrix needs no edit here.
+PYTEST_JOB_PREFIX = "pytest (shard "
+# How many green master runs `fetch_runner_logs` reads through to find the ones that ran pytest.
+# A push whose paths the matrix does not cover skips every leg: two of the newest three green
+# runs on 2026-10-28 did. The listing is one call whatever its length, and each run read costs
+# one more.
+RUN_WINDOW = 30
+
+
+def green_pytest_legs(run_id: int, gh=gh_mod.gh) -> dict[str, str]:
+    """The raw log of every green pytest leg in CI run `run_id`, keyed by its job name.
+
+    Each call goes through `lib.gh`, the invoking user's authenticated CLI with a 60s bound.
+    A run that skipped its matrix returns an empty dict.
+
+    Raises:
+        subprocess.CalledProcessError: any `gh` call failed. A missing log fails the whole
+            read rather than leaving one shard's modules unmeasured.
+    """
+    view = gh("run", "view", str(run_id), "--json", "jobs", cwd=REPO)
+    legs = {
+        job["name"]: job["databaseId"]
+        for job in json.loads(view.stdout)["jobs"]
+        if job["name"].startswith(PYTEST_JOB_PREFIX) and job["conclusion"] == "success"
+    }
+    # The flag because ci.yml runs pytest with `--color yes`, and `gh api` refuses a body
+    # carrying escape sequences without it. `_LOG_NOISE` strips the colours.
+    return {
+        name: gh(
+            "api",
+            "--allow-escape-sequences",
+            f"repos/{{owner}}/{{repo}}/actions/jobs/{leg}/logs",
+            cwd=REPO,
+        ).stdout
+        for name, leg in legs.items()
+    }
+
+
+def fetch_runner_logs(runs: int, gh=gh_mod.gh) -> list[str]:
+    """The raw log of every pytest leg in the newest `runs` green master runs that ran them.
+
+    The docs-refresh cron holds the git-tree lock while this runs. Three runs of six legs is at
+    most 1 + `RUN_WINDOW` + 18 calls, against the authenticated 5000 an hour.
+
+    Raises:
+        RuntimeError: fewer than `runs` of the newest `RUN_WINDOW` green runs carried a pytest
+            log. A median over fewer
+            runs is one noisy reading per module (#3604), so nothing is written from it.
+        subprocess.CalledProcessError: any `gh` call failed.
+    """
+    list_args = (
+        f"run list --workflow {CI_WORKFLOW} --branch {CI_BRANCH} --event push"
+        f" --status success --limit {RUN_WINDOW} --json databaseId"
+    ).split()
+    listed = json.loads(gh(*list_args, cwd=REPO).stdout or "[]")
+    reports, measured_runs = [], 0
+    for run in listed:
+        if measured_runs == runs:
+            break
+        legs = green_pytest_legs(run["databaseId"], gh)
+        measured_runs += bool(legs)
+        reports += legs.values()
+    if measured_runs < runs:
+        raise RuntimeError(
+            f"found pytest logs in {measured_runs} of the newest {len(listed)} green "
+            f"{CI_BRANCH} run(s) of {CI_WORKFLOW}, not the {runs} asked for"
+        )
+    return reports

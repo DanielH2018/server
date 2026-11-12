@@ -40,7 +40,6 @@ button.link{background:none;color:var(--blue);font-size:12px;font-weight:500;pad
 <section id="viewer" hidden><h2>Landing log <span class="mute" style="font-size:12px;font-weight:400">[ and ] switch</span></h2><div id="vtabs" class="tabs"></div><div id="vhead" class="vhead"></div><div id="vsteps" class="steps"></div>
 <div id="logbody"></div><div id="vverdict"></div><div id="vbar" class="bar"></div></section>
 <h2>Recently finished landings <button id="finToggle" class="link" onclick="setFin({hidden:!fin.hidden})"></button></h2><div id="landings"></div>
-<h2>Deployer state</h2><div id="state"></div>
 <h2>Open pull requests</h2><div id="prs"></div>
 <script>
 const H={'X-Deploy-UI':'1','Content-Type':'application/json'};
@@ -75,16 +74,6 @@ function landings(b){lastLandings=b;const done=b.landings.filter(l=>!running.has
   const shown=fin.all?done:done.slice(0,FIN_SHOWN);
   const more=done.length>FIN_SHOWN?`<tr><td colspan="4"><button class="link" onclick="setFin({all:${!fin.all}})">${fin.all?'show the latest '+FIN_SHOWN:'show all '+done.length}</button></td></tr>`:'';
   return '<table><tr><th>PR</th><th>ended</th><th>verdict</th><th></th></tr>'+shown.map(l=>`<tr><td>${l.pr?prLink(l.pr):'<span class="mute">no PR</span>'}${l.title?`<br><span class="mute">${esc(l.title)}</span>`:''}</td><td>${ago(l.mtime)}</td><td>${l.verdict?`<span class="chip tone-${esc(l.verdict.tone)}">${esc(l.verdict.verdict)}</span>`:'<span class="mute">ended without a verdict</span>'}</td><td><button onclick="openLog('${esc(l.name)}')">log</button></td></tr>`).join('')+more+'</table>';}
-// A Clear drops every hold_plane entry at once, and each entry is a plane nobody has applied.
-// The prompt names them, because after the Clear nothing records them at all.
-let holdWarn='Type the held SHA to clear it';
-function clearHold(){const s=prompt(holdWarn);if(s)post('/api/hold/clear',{expected_sha:s});}
-function state(b){const row=(k,v,extra='')=>`<tr><td>${k}</td><td>${v?`<code>${esc(v)}</code>`:'<span class="clear">clear</span>'}</td><td>${extra}</td></tr>`;
-  const planes=b.hold_plane_entries||[];
-  holdWarn=planes.length?`Clearing drops ${planes.length} plane(s) still recorded as UNAPPLIED:\n\n${planes.join('\n')}\n\nEach still needs applying by hand, and nothing records them after this.\n\nType the held SHA to clear it:`:'Type the held SHA to clear it';
-  const hold=b.hold_sha?'<button class="warn" onclick="clearHold()">clear hold</button>':'';
-  const planeCell=planes.length?planes.map(p=>`<code>${esc(p)}</code>`).join('<br>'):'<span class="clear">clear</span>';
-  return '<table>'+row('hold_sha',b.hold_sha,hold)+`<tr><td>hold_plane</td><td>${planeCell}</td><td></td></tr>`+row('last_run',b.last_run)+row('behind_since',b.behind_since)+'</table>';}
 function prs(b){if(!b.prs.length)return '<p class="mute">no open PRs</p>';
   return '<table><tr><th>#</th><th>title</th><th>CI</th><th></th></tr>'+b.prs.map(p=>`<tr><td>${prLink(p.number)}</td><td>${esc(p.title)}${p.draft?' <span class="mute">draft</span>':''}<br><span class="mute">${esc(p.branch)}</span></td><td>${p.ci}</td><td><button onclick="{const s=prompt('--since SHA (master before the merge)');if(s)post('/api/land',{pr:'${p.number}',since:s})}">land</button></td></tr>`).join('')+'</table>';}
 
@@ -147,7 +136,7 @@ function renderLog(){const d=view.data,body=document.getElementById('logbody');
     live?(view.follow?'<button class="plain" onclick="view.follow=false;renderLog()">following</button>':'<button onclick="view.follow=true;const b=document.getElementById(\'logbody\');b.scrollTop=b.scrollHeight;renderLog()">jump to live</button>'):''].filter(Boolean).join(' ');}
 document.getElementById('logbody').addEventListener('scroll',e=>{const b=e.target;const bottom=b.scrollTop+b.clientHeight>=b.scrollHeight-24;
   if(view.follow!==bottom&&view.data){view.follow=bottom;}});
-function refresh(){panel('inflight','/api/inflight',inflight).then(()=>{if(!fin.hidden)panel('landings','/api/landings',landings);});panel('state','/api/state',state);panel('prs','/api/prs',prs);}
+function refresh(){panel('inflight','/api/inflight',inflight).then(()=>{if(!fin.hidden)panel('landings','/api/landings',landings);});panel('prs','/api/prs',prs);}
 document.getElementById('finToggle').textContent=fin.hidden?'show':'hide';document.getElementById('landings').hidden=fin.hidden;
 function fromHash(){const m=location.hash.match(/^#log\/(.+)$/);if(m&&decodeURIComponent(m[1])!==view.name)openLog(decodeURIComponent(m[1]));}
 window.addEventListener('hashchange',fromHash);fromHash();

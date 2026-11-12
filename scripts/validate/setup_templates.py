@@ -1,39 +1,29 @@
 #!/usr/bin/env python3
-"""Render every setup-plane Jinja template and fail on a variable nothing defines.
+"""Render every host component template and fail on a variable nothing defines.
 
-The other render guards stop short of `ansible/roles/setup/`: `compose_templates.py` reads
-the Pi's `pi-compose` services, `k8s_manifests.py` reads `roles/k8s`, `shell_templates.py` covers `*.sh.j2`
-anywhere and `unit_templates.py` covers `*.service.j2` / `*.timer.j2`. Nothing rendered a
-setup-plane `*.yaml.j2`, `*.env.j2`, `*.conf.j2` or Corefile, and `ansible-lint` lints the task
-that calls `lookup('template', ...)`, never the template's own render. A setup template with an
-undefined variable, a Jinja syntax error, or a rename its consumer missed therefore passes the
-whole gate green.
-
-The setup plane is hand-applied by construction, which makes the gap worse rather than better:
-no routine deploy exercises it, so the first run of a bad template is a bring-up someone reaches
-for during an incident. `roles/setup/k3s/templates/longhorn-b2-secret.yaml.j2` is the worked
-example — it renders Longhorn's B2 credential, and an undefined variable there produces an empty
-`AWS_ACCESS_KEY_ID` rather than an error, surfacing as backups silently not working.
+The other render guards cover other files: `compose_templates.py` reads the Pi's `pi-compose`
+services, `k8s_manifests.py` reads `roles/k8s`, `shell_templates.py` covers `*.sh.j2` anywhere
+and `unit_templates.py` covers `*.service.j2` / `*.timer.j2`. Nothing else renders a component's
+`*.yaml.j2`, `*.env.j2`, `*.conf.j2` or Corefile. A template with an undefined variable, a Jinja
+syntax error, or a rename its consumer missed would otherwise first fail in a package build.
 
 WHAT COUNTS AS UNDEFINED. Rendering with a bare `StrictUndefined` would fail on every SOPS
-secret and every fact a task supplies at runtime, so this guard renders with a tracking
+secret and every key a host component supplies, so this guard renders with a tracking
 Undefined and then judges each name it collected. A name is allowed to be undefined when it is:
 
   - Ansible-supplied — `ansible_*`, `inventory_hostname`, `hostvars`, `groups`, `item`
     (`ANSIBLE_SUPPLIED` / `ANSIBLE_SUPPLIED_PREFIXES`);
   - a SOPS secret, by name, from the plaintext registry `ansible/secret_rotation.yml`;
-  - runtime-supplied by a setup-plane task — a `set_fact` key, a task-level `vars:` key, or a
-    `register:` name, derived from the tasks themselves (`runtime_vars`), never listed;
   - defined anywhere in the inventory — `group_vars/all.yml` or any host's `host_vars` file;
-  - declared in the template's own role defaults. `lib.render_context` leaves out a default
-    whose value will not expand (it names a filter the light environment lacks), so the key
-    reads as undefined in the render while the role still defines it;
-  - supplied by a host component that renders the template through `role:` — a key of its
-    `defaults:`, or `<key>_value` for a secret key one of its `outputs:` declares.
+  - declared in the component's own `defaults/main.yml`. `lib.render_context` leaves out a
+    default whose value will not expand (it names a filter the light environment lacks), so the
+    key reads as undefined in the render while the component still defines it;
+  - supplied by the component, or by a component that borrows it with `component:` — a key of
+    its `defaults:`, or `<key>_value` for a secret key one of its `outputs:` declares.
 
 Everything else is a failure naming the template and the variable. That is the shape a rename
 takes: the producer moves and the consumer keeps the old name, which then matches none of the
-four sources above.
+sources above.
 
 The YAML templates (`*.yaml.j2` / `*.yml.j2`) are additionally parsed, the same structural check
 the other three guards make. The rest are rendered only — a `.env`, a Corefile and libvirt XML
@@ -71,9 +61,8 @@ from lib.render_guard import (
     load_yaml,
     render_or_error,
 )
-from lib.repo_paths import REPO, ROLES
+from lib.repo_paths import REPO
 
-SETUP = ROLES / "setup"
 COMPONENTS = REPO / "hosts" / "components"
 SECRET_REGISTRY = ANSIBLE / "secret_rotation.yml"
 
@@ -89,8 +78,6 @@ ANSIBLE_SUPPLIED = frozenset(
     }
 )
 ANSIBLE_SUPPLIED_PREFIXES = ("ansible_",)
-
-SET_FACT_KEYS = frozenset({"set_fact", "ansible.builtin.set_fact"})
 
 # Ansible-supplied values given a plausible rendering rather than a stub: the `comment` filter
 # raises on an Undefined, so `{{ ansible_managed | comment }}` cannot render without one.
@@ -146,44 +133,6 @@ def secret_names(registry: Path = SECRET_REGISTRY) -> frozenset[str]:
     return frozenset(load_yaml(registry).get("entries") or {})
 
 
-def _walk(node, out: set[str]) -> None:
-    if isinstance(node, dict):
-        for key, value in node.items():
-            # Both spellings: this repo writes `ansible.builtin.set_fact`, and matching the
-            # bare name alone silently missed every one of them — the whole derivation
-            # returned only the handful written short.
-            if key in SET_FACT_KEYS and isinstance(value, dict):
-                out.update(k for k in value if k != "cacheable")
-            elif key == "vars" and isinstance(value, dict):
-                out.update(value)
-            elif key == "register" and isinstance(value, str):
-                out.add(value)
-            _walk(value, out)
-    elif isinstance(node, list):
-        for entry in node:
-            _walk(entry, out)
-
-
-def runtime_vars(setup: Path = SETUP) -> frozenset[str]:
-    """Variable names the setup-plane tasks supply at runtime.
-
-    A `set_fact` key, a task-level `vars:` key, or a `register:` name. Derived from every
-    `tasks/**/*.yml` under the setup roles rather than listed, so renaming the producer without
-    the consumer is exactly what stops matching. Deliberately plane-wide rather than per-role:
-    `roles/setup/common/templates/resolv.conf.j2` reads `common_resolver_nameservers`, which the
-    k3s role sets before including it.
-    """
-    out: set[str] = set()
-    for tasks in sorted(setup.glob("*/tasks/**/*.yml")):
-        try:
-            _walk(yaml_fast.safe_load(tasks.read_text()), out)
-        except yaml.YAMLError:
-            # A task file that does not parse is `check-yaml`'s and ansible-lint's problem, not
-            # this guard's. Skipping it can only widen the failure list, never narrow it.
-            continue
-    return frozenset(out)
-
-
 def inventory_names() -> frozenset[str]:
     """Every variable name the plaintext inventory defines, group_vars plus every host."""
     names = set(load_yaml(ALL_VARS))
@@ -195,7 +144,7 @@ def inventory_names() -> frozenset[str]:
 def is_allowed_undefined(name: str, known: frozenset[str]) -> bool:
     """Whether an undefined variable is one this guard tolerates.
 
-    `known` is the union of the secret registry, the runtime-supplied names and the inventory;
+    `known` is the union of the secret registry and the inventory;
     Ansible's own magic vars are matched here rather than folded into it, because they come from
     the runtime rather than from any file this repo could census.
     """
@@ -205,20 +154,16 @@ def is_allowed_undefined(name: str, known: frozenset[str]) -> bool:
     return root in known
 
 
-def discover_templates(
-    setup: Path = SETUP, components: Path = COMPONENTS
-) -> list[Path]:
-    """Every setup-plane template, one level under a role's `templates/`.
+def discover_templates(components: Path = COMPONENTS) -> list[Path]:
+    """Every host component template under its `templates/`, shell templates excepted.
 
-    A host component that keeps a role's shape, `templates/` beside a `defaults/main.yml`, is
-    counted with them: claude-code holds the claude_code role's templates (#6773).
+    `shell_templates.py` renders each `*.sh.j2` with the host context it needs.
     """
-    shaped = [
+    return sorted(
         tpl
         for tpl in components.glob("*/templates/*.j2")
-        if (tpl.parents[1] / "defaults" / "main.yml").is_file()
-    ]
-    return sorted(setup.glob("*/templates/*.j2")) + sorted(shaped)
+        if not tpl.name.endswith(".sh.j2")
+    )
 
 
 def template_loader(tpl: Path) -> tuple[Path, str]:
@@ -259,8 +204,8 @@ def check_template(tpl: Path, ctx: dict, known: frozenset[str]) -> list[str]:
         return [err or "render error"]
 
     problems = [
-        f"undefined variable {name!r} — nothing in the inventory, the role defaults, the "
-        f"secret registry or a setup-plane task defines it"
+        f"undefined variable {name!r} — nothing in the inventory, the component defaults, the "
+        f"secret registry or a component spec defines it"
         for name in sorted(seen[rel])
         if not is_allowed_undefined(name, known)
     ]
@@ -275,18 +220,17 @@ def check_template(tpl: Path, ctx: dict, known: frozenset[str]) -> list[str]:
     return problems
 
 
-def component_supplied(role: str, components: Path = COMPONENTS) -> frozenset[str]:
-    """Variable names the host components rendering `role` supply to its templates.
+def component_supplied(name: str, components: Path = COMPONENTS) -> frozenset[str]:
+    """Variable names the host components rendering component `name`'s templates supply.
 
-    A component that names the role in `role:` renders the role's templates with its own
-    `defaults:` and, for each secret key an output declares, `<key>_value`. The role's tasks no
-    longer supply these, so they are read from the component rather than from `runtime_vars`.
-    `role` may also name a component, whose own templates get the same names from its spec.
+    The component itself, and each component that borrows it with `component:`, render its
+    templates with their own `defaults:` and, for each secret key an output declares,
+    `<key>_value`.
     """
     out: set[str] = set()
     for path in sorted(components.glob("*/component.yml")):
         spec = yaml_fast.safe_load(path.read_text()) or {}
-        if role not in (spec.get("role"), path.parent.name):
+        if name not in (spec.get("component"), path.parent.name):
             continue
         out.update(spec.get("defaults") or {})
         for output in spec.get("outputs") or []:
@@ -294,25 +238,41 @@ def component_supplied(role: str, components: Path = COMPONENTS) -> frozenset[st
     return frozenset(out)
 
 
+def component_context(directory: Path, overrides: dict) -> dict:
+    """The context `directory`'s templates render with.
+
+    Its `defaults/main.yml` under the inventory, `overrides` on top, and its `component.yml`
+    `defaults:` filling any name still unset.
+    """
+    ctx = render_context(directory, overrides=overrides)
+    spec = directory / "component.yml"
+    if spec.is_file():
+        for key, value in (load_yaml(spec).get("defaults") or {}).items():
+            ctx.setdefault(key, value)
+    return ctx
+
+
 def check_role_template(
     tpl: Path, known: frozenset[str], components: Path = COMPONENTS
 ) -> list[str]:
     """`check_template` under the context a deploy renders `tpl` with.
 
-    The owning role's or component's defaults under the inventory, as Ansible layers them,
-    minus the secrets and runtime facts `known` covers. The default names join `known`, because
-    a default whose value will not expand is left out of the context and still counts as
-    defined. `components` is where `component_supplied` looks, a parameter for the tests.
+    The owning component's `defaults/main.yml` under the inventory, with its `component.yml`
+    `defaults:` filling any name the inventory leaves unset, minus the secrets and inventory names
+    `known` covers. The default names join `known`, because a default whose value will not expand
+    is left out of the context and still counts as defined. `components` is where
+    `component_supplied` looks, a parameter for the tests.
     """
-    ctx = render_context(tpl, overrides=ANSIBLE_RUNTIME_CONTEXT)
-    defaults = frozenset(load_yaml(tpl.parents[1] / "defaults" / "main.yml"))
+    ctx = component_context(tpl.parents[1], ANSIBLE_RUNTIME_CONTEXT)
+    own = tpl.parents[1] / "defaults" / "main.yml"
+    defaults = frozenset(load_yaml(own) if own.is_file() else ())
     return check_template(
         tpl, ctx, known | defaults | component_supplied(tpl.parents[1].name, components)
     )
 
 
 def main(argv: Sequence[str] = ()) -> int:
-    """Render every setup-plane template and report unresolved variables and bad YAML.
+    """Render every host component template and report unresolved variables and bad YAML.
 
     Args:
         argv: The command-line arguments. `-v` or `--verbose` also lists each clean
@@ -323,7 +283,7 @@ def main(argv: Sequence[str] = ()) -> int:
     """
     answer_help(__doc__, list(argv))
     ok = ok_printer(argv)
-    known = secret_names() | runtime_vars() | inventory_names()
+    known = secret_names() | inventory_names()
     templates = discover_templates()
     failures = 0
     for tpl in templates:
@@ -335,7 +295,7 @@ def main(argv: Sequence[str] = ()) -> int:
                 print(f"  [FAIL] {rel}: {problem}", file=sys.stderr)
         else:
             ok(f"  [ok]   {rel}")
-    print(f"\n{len(templates)} setup template(s) checked, {failures} failure(s).")
+    print(f"\n{len(templates)} component template(s) checked, {failures} failure(s).")
     return 1 if failures else 0
 
 

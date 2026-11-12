@@ -1,8 +1,10 @@
-# Deploying by hand
+# Deploying a change
 
-`scripts/deploy.sh` deploys no workload. `promote` and Flux apply every k8s change, the host
-packages apply the host plane, and the Pi's services ship in its host package. The
-[GitOps pipeline](gitops-pipeline.md) says what runs in the retired deployer's place. This page says which path applies a change, and what the wrapper still does.
+No script here deploys a workload by hand. `promote` and Flux apply every k8s change, and the
+host packages apply the host plane, the Pi's services included. H7.53
+([#7962](https://github.com/DanielH2018/server/issues/7962)) deleted `scripts/deploy.sh` with the
+GitOps deployer. The [GitOps pipeline](gitops-pipeline.md) says what runs in the deployer's place.
+This page says which path applies a change.
 
 ## Which path applies a change
 
@@ -11,66 +13,12 @@ packages apply the host plane, and the Pi's services ship in its host package. T
   `land-after-merge` skill has the commands, and [Landing](landing.md) has the verdicts. To apply
   a green master commit that no promotion followed, dispatch `promote` with its full 40-hex SHA:
   `gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>`.
-- **A setup role:** the GitOps deployer applies it on the tick after the merge. A role the tick
-  cannot apply becomes a `manual_plane` line in `owed.jsonl`, and
-  `uv run python scripts/deploy_tools/owed_run.py <role>` clears it. By hand, run the playbook
-  and tag that the `Applied by:` line of the role's `CLAUDE.md` names. Neither follows from the
-  role's name: `chezmoi_setup` takes the tag `chezmoi`, and `k3s` applies through
-  `k3s-bringup.yml`, where the same page names narrower tags than the maximal `k3s`. Ansible
-  exits 0 on a tag that matches nothing.
-- **A bring-up playbook:** the deployer never applies these, so run the playbook by hand.
 - **A Pi Compose service or anything under `hosts/`:** the builder publishes the package and the
-  host's updater installs it ([Host packages](host-packages.md)).
-
-## What the wrapper still does
-
-The wrapper runs `ansible/deploy.yml` and no other playbook. That playbook holds one play, which
-runs no role on any host, because no `containers_list` entry is `platform: docker`. What each form
-does follows from that:
-
-- **A k8s tag in `--tags`:** exit 5, under `--check` and `--dry-run` too
-  (`scripts/deploy_tools/deploy_lib/owners.py:refuse_k8s_tags`).
-- **`--changed [<ref>]`:** a read of what a branch owes by hand. A broad range exits 3 and prints
-  the setup or bring-up command. Any other range derives no tag and ends with the verdict
-  `nothing-to-deploy`.
-- **No `--tags`:** takes the locks, cuts the snapshot and runs `deploy.yml`, which runs no role.
-- **`-e target=daniel-pi`:** runs the secrets preamble against the Pi and no role, so it deploys
-  nothing. `wg-easy` passes the tag check because daniel-box's list carries it too, and any other
-  Pi service name is a tag miss (exit 2).
-- **`--check` and `--dry-run`:** unlocked, from the working tree, and with no role to render, so
-  neither shows a manifest to anything. *Checking a k8s change before it merges* below has what
-  does.
-- **`--list-services`:** prints every valid tag, and names each k8s tag on stderr.
-
-## The gates and locks of a run
-
-A run of the wrapper does four things a bare `ansible-playbook` does not:
-
-- Takes `/var/lock/server-git-tree.lock` to snapshot `HEAD`, then one
-  `/var/lock/server-deploy-<tag>.lock` per service for the playbook, so the run cannot
-  interleave with any [tree-lock holder](#who-holds-the-tree-lock) on the tree, nor with
-  another run on the same service
-  ([ADR-0011](adr/0011-one-lock-serialises-every-deploy-path.md),
-  [ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)).
-- Runs from a detached worktree of `HEAD` under `/tmp/homelab-deploy-snapshots/`, not from
-  the working tree. **An uncommitted edit is not read.** `--check` and `--dry-run` are the
-  exceptions and still read the working tree. `--at <sha>` snapshots that commit instead of
-  `HEAD`, and asks the tag check and the staleness gate about it too.
-- Checks the tags against `containers_list` first, because Ansible itself exits 0 on a tag
-  that matches nothing.
-- Refuses a tree that is behind `origin/master` on something the run reads. With `--tags` the
-  question is narrowed to those tags: a commit behind that touches only other roles prints a
-  note and proceeds, while one reaching a named tag or a broad path (shared templates,
-  `ansible/inventory/`, the setup plane) refuses and names the commits. An unscoped run refuses
-  on any commit behind.
-
-Once its gates pass, the wrapper also clears the temp directories that dead Ansible runs left
-under `~/.ansible/tmp`. A controller killed mid-task leaves an `ansible-tmp-*` directory. Any
-exit that skips Python's `atexit` handlers leaves an `ansible-local-*` directory. The wrapper
-removes the first kind after a day. It removes the second kind after a day only when the
-directory is empty and its process is gone. `journalctl -t deploy-ansible-tmp-sweep` lists
-each removal, so a run that keeps leaking stays visible after the sweep
-(`scripts/deploy_tools/deploy_lib/ansible_tmp.py`).
+  host's updater installs it ([Host packages](host-packages.md)). `land.sh` waits for that host.
+- **A setup role or a bring-up playbook:** nothing applies it on its own. Every role a host still
+  runs is emptied or moving into a host package (H7), so a change here is either dead or belongs
+  in the component that replaced the role. A bring-up playbook runs by hand, and the playbook and
+  tag the `Applied by:` line of a role's `CLAUDE.md` names apply that role by hand.
 
 ### Who holds the tree lock
 
@@ -81,54 +29,13 @@ take the lock, so a new holder appears in it without an edit. Cadences are in
 
 --8<-- "assets/generated/fragments/tree-lock-holders.md"
 
-`ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py` pins the wait of
-each holder against the deployer's worst-case hold. Its census names the waiters by hand, so a
-new waiter has to join it. `deploy_lib/under_locks.py:TREE_LOCK_HOLDERS` is the message a deploy
-prints when it could not take the lock, and
-`scripts/docs/tests/test_fragments_deploy.py` fails when that message omits a holder in the table.
-
-The three crons take the lock through one Jinja macro,
-`ansible/templates/git-tree-lock.j2`, which owns the wait and the
-alert a skip raises.
-
-## Exit codes are resume points
-
-Each non-zero exit in `DEPLOY_SH_NO_VERDICT` means **nothing was deployed**. None is a
-playbook failure, and each is a resume point.
-
-**The wrapper says which, on its own last two lines.** A failing run ends with
-`deploy.sh: <NAME> (<code>): <meaning> <what to do>` and then
-`DEPLOY-VERDICT: <verdict> (<the arguments>)`, both read from
-`scripts/lib/exit_codes.py`. The per-code table is rendered from that module into
-[Scripts](reference/scripts.md#scriptsdeploysh), so there is one copy and it is the one the
-script exits with. This page carried a hand-kept copy until 2026-09-30 and had lost 76 by the
-time a test was written for it (#2853).
-
-`DEPLOY_PLAYBOOK_FAILED` is the exception the set excludes: the playbook ran and a task
-failed, so whatever applied before it is live.
-
-`DEPLOY_BAD_FLAGS` (64) is outside the set for a different reason: nothing was deployed, and
-re-running the same command line changes nothing. It covers a flag this wrapper refuses and a
-pass-through argument ansible-playbook's own parser refuses, which the wrapper asks about
-before it takes the lock. `land.sh` exits 64 on a bad argument too, so one number means "you
-typed it wrong" for both entry points (#3024).
-
-`DEPLOY_FLUX_OWNED` (5) means the tag is not Ansible's to deploy at all. Its `containers_list`
-entry is `platform: k8s`, so Flux applies it through `promote` and no Ansible path may. The
-wrapper refuses the whole `--tags` list, before any lock, under `--check` and `--dry-run` too,
-and `--skip-tag-check` does not bypass it. Merge the change and let `promote` publish it.
-`--changed` leaves such a tag out and names it instead of refusing. A list that leaves empty
-deploys nothing and exits 0, and its verdict line reads `nothing-to-deploy` rather than
-`deployed`. A shared k8s role typed into `--tags` is a tag miss. `--list-services` names each
-k8s tag on stderr.
-
-Being *ahead* of master is normal branch work and is never refused.
+The crons take the lock through one Jinja macro, `ansible/templates/git-tree-lock.j2`, which
+owns the wait and the alert a skip raises.
 
 ## Checking a k8s change before it merges
 
 The `deploy` skill (`.claude/skills/deploy/SKILL.md`) owns the table of what `prek run --all-files`,
-the renderer and CI's render-diff gates each catch. `deploy.sh --check` and `--dry-run` catch no
-manifest fault, because neither runs a role.
+the renderer and CI's render-diff gates each catch.
 
 ## Verify twice
 
@@ -155,20 +62,8 @@ So exercise the thing you actually changed as well.
 
 ## Working alongside other sessions
 
-- Runs on the same service serialize; the tree lock is held for the snapshot only (ADR-0017).
-  Neither lock queues fairly. Exit 75 means a lock was busy and nothing ran, so retry. The
-  queued path reports it only after the full `LOCK_WAIT`; `--detach` probes the tree lock with
-  `flock -n` and reports it at once, so 75 from a `--detach` run says nothing about how long the
-  holder has held it.
 - Scope a landing to your own PR. A shared SHA range covers other sessions' work too, and
   landing another session's half-finished work is not yours to do.
-- **`--detach` returning is not a finished run.** It backgrounds the playbook and the notifier's
-  health gate. To wait for the gate, run the `wait:` line `--detach` prints, which exits 0 only
-  when the run settled (#3934).
-- A `--detach` run holds its service locks until its notifier's health gate has posted (#3817).
-- A `--detach` verdict the host could not post to Discord is not lost. The notifier queues it
-  in `/var/lib/gitops-deploy/detach_spool`, and the next GitOps deployer tick sends it with a
-  `(delayed: first attempt <UTC time>)` line (#3987). The detach log holds the verdict either way.
 
 ## Retiring a k8s service
 
@@ -203,10 +98,8 @@ healthchecks-config retirement (#3499) left its B2 backups behind this way (#351
 
 ## The deploy queue page
 
-`deploy.local.<domain>` (Authelia two-factor) shows the three things "the queue" means here:
-landings and deploys in flight with the locks each holds, the deployer's markers, and open PRs.
-Each button runs the command you would type: land runs `land.sh --pr <n> --since <sha>`, cancel
-SIGTERMs a listed landing, clear hold removes `hold_sha` and its `hold_plane` ledger lines together against a
-SHA you type. Output goes to
+`deploy.local.<domain>` (Authelia two-factor) shows landings in flight with the locks each
+holds, recently finished landings, and open PRs. Each button runs the command you would type:
+land runs `land.sh --pr <n> --since <sha>`, and cancel SIGTERMs a listed landing. Output goes to
 `~/.local/state/deploy-ui/` on daniel-box and one audit line per action reaches Loki under
 `deploy-ui`. The daemon is `hosts/components/deploy-ui/`; the route is `roles/k8s/deploy-ui`.

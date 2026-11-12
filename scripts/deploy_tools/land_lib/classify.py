@@ -1,27 +1,25 @@
 """Steps 1 and 1½: the merge commit, and what this PR reaches -- read BEFORE any wait.
 
-A PR that reaches no service tag, no plane a hand applies, no host package and no path that may
+A PR that reaches no service tag, no rotated secret, no host package and no path that may
 move the bundle has nothing to wait for, and CI on the merge commit is not this landing's gate.
-The deployer's timer applies a setup role on its own; this landing does not watch it.
+A host package applies a setup-plane change, and `host_wait` waits for that host.
 """
 
+import shlex
 import sys as _sys
 from collections.abc import Callable
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import BRANCH, Classification, Landing
+from deploy_tools.land_lib.fresh import FRESH_FLAG
 from deploy_tools.land_lib.own_checkout import OWN_CHECKOUT
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 from deploy_tools.land_lib.land_tags import DeriveSource
 from deploy_tools.land_lib.promotion import moves_the_bundle
 from lib.exit_codes import LAND_BAD_ARGS
-from lib.narrow_git import CannotNarrow
-from lib.repo_paths import GITOPS_DEPLOY_FILES
+from lib.k8s_role_callers import CannotNarrow
 from renderer.renderer_lib.host_inputs import HOST_INPUTS
-
-_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from deployer_lib import deploy_cross_role
 
 
 def _classified[**P, R](
@@ -79,11 +77,13 @@ def refuse_stale_code_before_merge(ln: Landing) -> None:
     what = _stale_code_reason(ln, base)
     if not what:
         return
-    snap = f"/tmp/land-{ln.opts.pr}"
+    rerun = (
+        f"re-run the same land.sh command with `{FRESH_FLAG}`, which lands from a checkout "
+        f"of {base} it makes and removes itself"
+    )
     ln.die(
-        f"this landing runs from {OWN_CHECKOUT}, and {what}. Nothing is merged; re-run it "
-        f"from a checkout at {base}: `git -C {ln.opts.primary} worktree add --detach {snap} "
-        f"{base}`, then `{snap}/scripts/deploy_tools/land.sh` with the same arguments",
+        f"this landing runs from {OWN_CHECKOUT}, and {what}. Nothing is merged; "
+        f"{_unit_rerun(ln) or rerun}",
         1,
     )
 
@@ -97,26 +97,41 @@ def refuse_stale_code(ln: Landing) -> None:
     the primary. Against the merge itself, every PR editing landing code would refuse there.
     The cost: such a PR that also moves a layout is not caught landing from an older checkout.
     DECIDED: refuse rather than re-exec from a fresh checkout, so `land.sh` keeps running the
-    release it ships with (#7820). A rebase merge of a PR that edits landing code puts its
-    earlier commits in the base and refuses too; land.sh squash-merges.
+    release it ships with (#7820). The refusal names `--fresh`, the caller's opt-in to that
+    re-run (#7933), so no hand makes a checkout. A rebase merge of a PR that edits landing
+    code puts its earlier commits in the base and refuses too; land.sh squash-merges.
     """
     base = f"{ln.merge_sha}^1"
     what = _stale_code_reason(ln, base)
     if not what:
         return
-    rerun = f"land.sh --pr {ln.opts.pr} --since {ln.opts.since or base}"
-    if ln.git("merge-base", "--is-ancestor", base, "HEAD").returncode == 0:
-        where = f"re-run it from {ln.opts.primary}: `{ln.opts.primary}/scripts/deploy_tools/{rerun}`"
-    else:
-        snap = f"/tmp/land-{ln.opts.pr}"
-        where = (
-            f"re-run it from a checkout at the merge: `git -C {ln.opts.primary} worktree add "
-            f"--detach {snap} {ln.merge_sha}`, then `{snap}/scripts/deploy_tools/{rerun}`"
-        )
+    # Quoted: zsh's extendedglob reads the `^` in `<sha>^1` as a glob and refuses the line.
+    since = shlex.quote(ln.opts.since or base)
+    rerun = f"land.sh --pr {ln.opts.pr} --since {since} {FRESH_FLAG}"
     ln.die(
         f"this landing runs from {OWN_CHECKOUT}, and {what}. PR #{ln.opts.pr} is merged, "
-        f"and this landing graded nothing; {where}",
+        "and this landing graded nothing; "
+        + (
+            _unit_rerun(ln)
+            or f"re-run it as `{rerun}`, which lands from a checkout of origin/{BRANCH} it "
+            "makes and removes itself"
+        ),
         1,
+    )
+
+
+def _unit_rerun(ln: Landing) -> str:
+    """The re-run a lander unit's caller can make, or "" outside a unit.
+
+    The unit runs a fixed command line and its caller's `land.sh` refuses `--fresh`
+    (`handoff.refused_flags`), so the remedy is the next run of the checkout-sync timer.
+    """
+    if not ln.opts.policy_active:
+        return ""
+    return (
+        f"a lander unit cannot take `{FRESH_FLAG}`, so re-run the same land.sh command once "
+        f"{OWN_CHECKOUT} carries origin/{BRANCH}; homelab-checkout-sync fast-forwards the "
+        "primary checkout every 10 minutes"
     )
 
 
@@ -126,7 +141,7 @@ def pr_range(ln: Landing) -> str:
     `--since` covers every other session's merged work, and `MERGE_SHA^` is wrong for a
     rebase merge of a multi-commit PR. The pull ref's merge base
     with the merge commit is the branch point under every merge method. Any step failing
-    leaves the range empty, which classifies every broad path as loud -- the direction a
+    leaves the range empty, which keeps every comment-only edit loud -- the direction a
     wrong answer must fall.
     """
     if ln.git("fetch", "-q", "origin", f"refs/pull/{ln.opts.pr}/head").returncode == 0:
@@ -136,7 +151,7 @@ def pr_range(ln: Landing) -> str:
             if base.returncode == 0 and base.stdout.strip():
                 return f"{base.stdout.strip()}..{head.stdout.strip()}"
     say(
-        f"could not read PR #{ln.opts.pr}'s own range — every broad path stays owed to a hand"
+        f"could not read PR #{ln.opts.pr}'s own range — no comment-only edit is read as quiet"
     )
     return ""
 
@@ -145,7 +160,7 @@ def _declared_at_merge(ln: Landing) -> set[str] | None:
     """The tags `containers_list` declares at the merge commit, or None when the read failed.
 
     Asked of the MERGE COMMIT, not of a checkout: a PR that adds a role and its
-    `containers_list` entry together is absent from every tree until the tick fast-forwards.
+    `containers_list` entry together is absent from every tree until checkout-sync fast-forwards.
     Every reader falls back to its own tree on None.
     """
     declared = _classified(
@@ -159,49 +174,22 @@ def _declared_at_merge(ln: Landing) -> set[str] | None:
     return declared
 
 
-def adopt_cross_role_tables(ln: Landing) -> None:
-    """Classify with the merge commit's cross-role tables, not this checkout's (#3976).
-
-    `land_tags` is imported from beside `land.py`, so the tables it reads are whatever that
-    checkout holds. PR #3890 added the alert-unit rows and their files together, and a
-    landing that read the older copy found no shippers for the files, recorded `common`, and
-    printed the resolv.conf remediation for roles the change never reached. The deployer
-    reads origin's copy for the same reason (#3512, `deploy_phases`).
-
-    A read or parse failure keeps this checkout's tables and says so. `tables_in` parses
-    the copy rather than running it, because this runs before master CI has passed.
-    """
-    path = deploy_cross_role.CROSS_ROLE_FILE
-    shown = ln.git("show", f"{ln.merge_sha}:{path}")
-    try:
-        if shown.returncode != 0:
-            raise OSError(shown.stderr.strip() or f"git show exited {shown.returncode}")
-        deploy_cross_role.use_tables(deploy_cross_role.tables_in(shown.stdout))
-    except Exception as exc:
-        say(
-            f"could not read {path} at {ln.merge_sha[:8]} ({exc}) — "
-            "classifying with this checkout's cross-role tables"
-        )
-
-
 def classify(ln: Landing) -> None:
-    """Tags and the plane a hand must apply."""
+    """Tags and the note a hand must act on."""
     c = ln.classifier
-    adopt_cross_role_tables(ln)
     view = ln.view("files,changedFiles")
-    paths = [f["path"] for f in view.get("files", [])]
+    files = view.get("files", [])
+    paths = [f["path"] for f in files]
     recorded = pr_range(ln)
     quiet = c.quiet_paths(paths, recorded)
-    # `--tags` named the services, so the plane is left unread: the operator's list wins over
+    # `--tags` named the services, so the note is left unread: the operator's list wins over
     # a derivation, and `plane` is what a HAND applies rather than an input to any wait this
-    # landing takes. Leaving it unread keeps the override's meaning -- deploy exactly these
-    # services -- and the broad half a `--tags` landing must not skip is caught earlier, by
-    # `ci.preflight`'s blockers read over the incoming range.
+    # landing takes.
     declared = None if ln.resolved_tags else _declared_at_merge(ln)
     plane = (
         ""
         if ln.resolved_tags
-        else _classified(ln, "plane classification", c.plane_note, paths, quiet=quiet)
+        else _classified(ln, "plane classification", c.plane_note, paths)
     )
     ln.classification = Classification(
         pr_paths=tuple(paths),
@@ -236,41 +224,12 @@ def classify(ln: Landing) -> None:
         )
 
 
-def narrow_plane(ln: Landing) -> None:
-    """Render the plane note again with the narrow tags this PR's setup-role change needs.
-
-    Step 1 renders the note with the whole-role tag. The narrow tags come from the PR's own
-    derivation, passed in explicitly: every other input is the frozen `Classification`, so
-    both renders read the same paths, declared tags and quiet paths.
-
-    Every failure leaves `narrowed_plane` None, so `Landing.plane` stays step 1's note with
-    the whole-role tag: no PR range, a derivation that refuses or raises. The render is
-    INSIDE the try because a raise here would end `land.py` in a traceback instead of a
-    verdict, which is a worse answer than the role tag.
-    """
-    cl = ln.classification
-    if not cl.plane or not cl.pr_range:
-        return
-    try:
-        narrow = ln.tools.own_narrowing(list(cl.pr_paths), cl.pr_range, ln.opts.primary)
-        if narrow:
-            ln.narrowed_plane = ln.classifier.plane_note(
-                list(cl.pr_paths),
-                quiet=cl.quiet,
-                narrow_tags=narrow,
-            )
-    except Exception as exc:
-        say(f"narrowing not read ({type(exc).__name__}) — keeping the role tag")
-        return
-
-
 def reaches_host_inputs(ln: Landing) -> bool:
     """Whether a changed path falls under a member of `HOST_INPUTS`: the PR MAY reach a host.
 
-    It runs no renderer. Resolve reads the merge commit before master CI, and
-    `deploy_cross_role.tables_in` records, in `DECIDED parse the copy rather than exec it`, why
-    nothing at that point may run the merge commit's code. `host_wait.host_targets` renders
-    after CI and says which hosts differ.
+    It runs no renderer: resolve reads the merge commit before master CI, and nothing at that
+    point may run the merge commit's code. `host_wait.host_targets` renders after CI and says
+    which hosts differ.
 
     A file list `gh` truncated (`needs_diff`) cannot rule a host input out, so it counts as a
     candidate and the render after CI decides.

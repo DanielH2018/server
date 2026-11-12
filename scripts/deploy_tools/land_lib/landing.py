@@ -44,8 +44,7 @@ class Classification:
         quiet: the broad paths whose diff carries no content change.
         declared: the tags declared at the merge commit; None when that read failed, and
             every reader then falls back to its own tree.
-        plane: what a hand must apply, as step 1 renders it with whole-role tags; "" for
-            nothing. `Landing.plane` is the note to print.
+        plane: what a hand must apply, "" for nothing: the note a rotated secret prints.
     """
 
     pr_paths: tuple[str, ...] = ()
@@ -72,9 +71,6 @@ class Landing:
         self.merge_sha = ""
         self.resolved_tags = [t for t in opts.tags.split(",") if t]
         self.classification = Classification()
-        # The plane note rendered again with the narrow tags the deployer recorded for this
-        # PR's range, by `classify.narrow_plane`; None until then, or when nothing narrowed.
-        self.narrowed_plane: str | None = None
         self.warnings: list[str] = []  # `warn` fills it; `pipeline.run` reports it
         self.needs_diff = False
         self.host_candidate = False  # a path is under HOST_INPUTS
@@ -83,6 +79,9 @@ class Landing:
             str
         ] = []  # the k8s tags a promotion applies and step 6 gates
         self.suspended_tags: list[str] = []  # suspended at M; the gate skips them
+        self.named_k8s_tags: list[
+            str
+        ] = []  # the k8s tags the PR's paths or --tags named
         # The merge commit, set once step 4 starts: the primary checkout may not carry it
         # yet. The health verdict reads it to gate from a tree holding this PR.
         self.deployed_at = ""
@@ -100,10 +99,8 @@ class Landing:
 
     @property
     def plane(self) -> str:
-        """What a hand must apply, or "": the narrowed note once there is one, else step 1's."""
-        if self.narrowed_plane is None:
-            return self.classification.plane
-        return self.narrowed_plane
+        """What a hand must apply, or ""."""
+        return self.classification.plane
 
     @property
     def tags_csv(self) -> str:
@@ -120,7 +117,7 @@ class Landing:
         self.warnings.append(line)
 
     def die(self, msg: str, rc: int, verdict: str | None = None) -> NoReturn:
-        """Stop with `land: <msg>` on stderr, and a VERDICT line on stdout.
+        """Stop with a VERDICT line naming `msg` on stdout, or `land: <msg>` on stderr without one.
 
         `rc` has no default: one of 2 collided with three other meanings of 2 (#4451), so
         every caller names a code land.sh documents. An exit-1 stop with no `verdict` prints
@@ -128,9 +125,11 @@ class Landing:
         """
         raise Outcome(rc, f"PR #{self.opts.pr} — {msg}", verdict, error=msg)
 
-    def finish(self, verdict: str, rc: int, detail: str) -> NoReturn:
-        """Stop with a VERDICT line and nothing on stderr."""
-        raise Outcome(rc, detail, verdict)
+    def finish(
+        self, verdict: str, rc: int, detail: str, recorded: str = ""
+    ) -> NoReturn:
+        """Stop with a VERDICT line and nothing on stderr; `recorded` is `Outcome`'s."""
+        raise Outcome(rc, detail, verdict, recorded=recorded)
 
     # -- shared reads -------------------------------------------------------------------
 
@@ -167,7 +166,3 @@ class Landing:
     def fetch_branch(self) -> None:
         if self.git("fetch", "-q", "origin", BRANCH).returncode != 0:
             self.die(f"could not fetch origin/{BRANCH}", 1)
-
-    def state(self, name: str) -> str | None:
-        """The deployer's `<name>` marker; "" when absent, None when it could not be read."""
-        return self.tools.read_state(self.opts.deployer_state, name)

@@ -33,17 +33,9 @@ roles:
   tier here is read from the claim's StorageClass and the k3s role's `k3s_longhorn_*_volumes`
   lists, never typed, and a claim named by a shell variable has none). For every k8s entry
   (`catalog_backup.entry_owner`), an **Applied by** line replaces the deploy tag: it names Flux and `promote`,
-  and says `deploy.sh` refuses `--tags=<tag>` with exit 5;
-- a setup role (`roles/setup/<name>/`, every directory but the include-only `common`): the
-  playbook and tag that apply it, with the `when:` that restricts it to a host, read from the
-  `roles:` lists and `include_role` tasks of the bring-up playbooks; every cron it installs,
-  with its schedule; every systemd timer it ships, with its `[Timer]` cadence keys; and each
-  timer of a host component naming it as `role:`, with the hosts that receive it;
-
-A doc with no `## At a glance` heading is refused on the k8s plane (all of them carry it,
-and `test_service_role_claude_md_has_at_a_glance.py` requires it) and given one on the setup plane: the
-setup docs never had the heading, so the generator inserts it before the doc's first
-level-2 heading, or at the end of a doc that has none.
+  and says `land.sh --tags=<tag>` gates the rollout;
+A doc with no `## At a glance` heading is refused (all of them carry it, and
+`test_service_role_claude_md_has_at_a_glance.py` requires it).
 
 THE IMAGE LINE NAMES THE REPOSITORY, NEVER THE TAG OR DIGEST. Renovate automerges a
 non-major or digest bump to an eligible role's `_image:` pin (`renovate.json`, the
@@ -86,6 +78,7 @@ import sys as _sys
 import textwrap
 from collections.abc import Callable
 from pathlib import Path as _Path
+import re
 
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -105,16 +98,11 @@ from docs.catalog_lib.catalog_backup import (
 )
 from docs.catalog_lib.catalog_facts import auth_tier, k8s_route
 from docs.catalog_lib.catalog_model import K3S_DEFAULTS, K8S_ROLES
-from docs.catalog_lib.glance_facts import (
-    SETUP_ROLES,
-    image_repository,
-    setup_glance_lines,
-    setup_role_dirs,
-)
 from lib.cli_help import ArgumentParser
 from lib.estate import Estate, role_defaults
+from lib.k8s_roles import role_dirs
 from lib.render_guard import ALL_VARS, entry_tags
-from lib.repo_paths import ANSIBLE, REPO
+from lib.repo_paths import REPO
 from renderer.renderer_lib.task_inputs import image_builder_sites
 
 SELF = "scripts/docs/gen_role_glance.py"
@@ -136,9 +124,6 @@ BEGIN = begin_marker(
     "defaults, templates or containers_list entry, or the Longhorn tier lists in "
     "ansible/roles/k8s/longhorn-reconcile/defaults/main.yml"
 )
-BEGIN_SETUP = begin_marker(
-    "tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml"
-)
 END = "<!-- /generated_from -->"
 # Where promote's `images` job pushes each built image. `renderer_lib/images.py` holds the same
 # prefix, and importing it would pull the whole renderer into this hook's `files` closure, so
@@ -151,7 +136,24 @@ class MissingHeading(ValueError):
     """The doc has no `## At a glance` heading to put the block under."""
 
 
-# --- k8s-plane facts (the setup readers are in glance_facts.py) ---- ---------------------
+_DIGEST_RE = re.compile(r"@sha256:[0-9a-f]+$")
+_JINJA_VAR_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+
+
+def image_repository(ref: str) -> str:
+    """`lscr.io/linuxserver/sonarr:4.0.19@sha256:…` -> `lscr.io/linuxserver/sonarr`.
+
+    A Jinja variable in the ref is kept as `<name>`: `{{ k8s_registry_pull_host }}/n8n:latest`
+    is an in-cluster build, and `<k8s_registry_pull_host>/n8n` says so without pretending to
+    know the host.
+    """
+    ref = _DIGEST_RE.sub("", ref.strip())
+    ref = _JINJA_VAR_RE.sub(lambda m: f"<{m.group(1)}>", ref)
+    head, sep, tail = ref.rpartition(":")
+    # A `:` after the last `/` is a tag; before it, a registry port.
+    if sep and "/" not in tail:
+        return head
+    return ref
 
 
 def image_vars(
@@ -183,8 +185,7 @@ def built_image_names(k8s_roles: Path = K8S_ROLES) -> frozenset[str]:
     """Every image a role in `k8s_roles` builds, by its `image_builder_name`."""
     return frozenset(
         str(site.vars["image_builder_name"])
-        for role in k8s_roles.iterdir()
-        if role.is_dir()
+        for role in role_dirs(k8s_roles)
         for site in image_builder_sites(role)
         if "image_builder_name" in site.vars
     )
@@ -308,52 +309,19 @@ def render_block(lines: list[str], begin: str = BEGIN) -> str:
 # --- the in-place writer -------------------------------------------------------------------
 
 
-def _insert_heading(lines: list[str]) -> list[str]:
-    """`lines` with the heading added where the k8s docs keep it: after the intro prose.
-
-    That is before the doc's first level-2 heading. A doc with no level-2 heading gets it
-    after the first paragraph under the title, and a doc with neither gets it appended.
-    """
-    try:
-        at = next(i for i, line in enumerate(lines) if line.startswith("## "))
-    except StopIteration:
-        title = next((i for i, line in enumerate(lines) if line.startswith("# ")), None)
-        if title is None:
-            trailing = lines[-1:] == [""]
-            return [
-                *lines[: len(lines) - trailing],
-                "",
-                HEADING,
-                "",
-                *lines[len(lines) - trailing :],
-            ]
-        at = (
-            next(
-                (i for i in range(title + 2, len(lines)) if lines[i].strip() == ""),
-                len(lines),
-            )
-            + 1
-        )
-        return [*lines[:at], HEADING, "", *lines[at:]]
-    return [*lines[:at], HEADING, "", *lines[at:]]
-
-
-def render_doc(text: str, block: str, *, create_heading: bool = False) -> str:
+def render_doc(text: str, block: str) -> str:
     """`text` with `block` as the first thing under the heading, replacing an older block.
 
     Only the region between the markers is generated. A doc that has the heading but no
     markers yet gets the block inserted directly under the heading, above whatever bullets
     were there — nothing hand-written is removed by this function, ever. A doc with no
-    heading is refused unless `create_heading` asks for one (`_insert_heading` says where).
+    heading is refused.
     """
     lines = text.split("\n")
     try:
         at = next(i for i, line in enumerate(lines) if line.rstrip() == HEADING)
     except StopIteration:
-        if not create_heading:
-            raise MissingHeading(f"no `{HEADING}` heading") from None
-        lines = _insert_heading(lines)
-        at = lines.index(HEADING)
+        raise MissingHeading(f"no `{HEADING}` heading") from None
     head = lines[: at + 1]
     rest = lines[at + 1 :]
     if rest and rest[0].startswith(BEGIN_PREFIX):
@@ -370,13 +338,11 @@ def render_doc(text: str, block: str, *, create_heading: bool = False) -> str:
     return "\n".join(head) + "\n" + block + "\n" + "\n".join(rest)
 
 
-def _refresh(
-    doc: Path, block: str, *, write: bool, create_heading: bool = False
-) -> bool:
+def _refresh(doc: Path, block: str, *, write: bool) -> bool:
     """True when `doc`'s committed block differs from `block`; rewrites the doc if asked."""
     text = doc.read_text() if doc.is_file() else ""
     try:
-        fresh = render_doc(text, block, create_heading=create_heading)
+        fresh = render_doc(text, block)
     except MissingHeading as exc:
         raise MissingHeading(
             f"{doc.relative_to(REPO) if doc.is_relative_to(REPO) else doc}: {exc}"
@@ -429,27 +395,10 @@ def stale_k8s_docs(
     return stale
 
 
-def stale_setup_docs(
-    *,
-    write: bool,
-    setup_roles: Path = SETUP_ROLES,
-    playbooks_dir: Path = ANSIBLE,
-) -> list[str]:
-    """`setup/<name>` for every setup role whose block differs from a fresh render."""
-    stale: list[str] = []
-    for role_dir in setup_role_dirs(setup_roles):
-        block = render_block(
-            setup_glance_lines(role_dir, playbooks_dir=playbooks_dir), BEGIN_SETUP
-        )
-        if _refresh(role_dir / "CLAUDE.md", block, write=write, create_heading=True):
-            stale.append(f"setup/{role_dir.name}")
-    return stale
-
-
 def stale_docs(*, write: bool) -> list[str]:
     """Every plane's stale docs, `<plane>/<role>`; writes them if asked."""
     estate = Estate()
-    return stale_k8s_docs(write=write, estate=estate) + stale_setup_docs(write=write)
+    return stale_k8s_docs(write=write, estate=estate)
 
 
 def report(stale: list[str], *, check: bool, fix: bool) -> int:

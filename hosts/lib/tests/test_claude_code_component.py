@@ -19,12 +19,9 @@ from lib.repo_paths import HOST_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.cluster import RenderRefused
 from secrets_mgmt import host_secrets
-from setup_lib import setup_gates
 
-ROLE = REPO / "ansible" / "roles" / "setup" / "claude_code"
 COMPONENT = REPO / "hosts" / "components" / "claude-code"
 # A role a component may name with `role:` that still ships a `files/` script.
-FILES_ROLE = REPO / "ansible" / "roles" / "setup" / "initial_setup"
 UNITS = "/usr/lib/systemd/system"
 # Every unit the role installed on daniel-server, read from `systemctl list-unit-files 'claude*'`
 # there on 2026-10-29.
@@ -75,11 +72,6 @@ def test_the_agent_user_is_declared_with_its_live_uid(package, manifest):
     assert text(package, "/usr/lib/sysusers.d/homelab.conf") == (
         'u claude 995 "Claude agent" /var/lib/claude /bin/bash\n'
     )
-
-
-def test_the_role_ends_on_every_host():
-    hosts = ["daniel-box", "daniel-server", "daniel-pi"]
-    assert setup_gates.role_end_hosts(ROLE, hosts) == frozenset(hosts)
 
 
 def test_the_remote_control_host_ships_disabled_and_restarts_only_by_hand(
@@ -146,19 +138,17 @@ def render_with(tmp_path, component: dict, package: dict | None = None):
     return host_mode.render_host("daniel-server", root)
 
 
-def test_a_role_file_is_copied_from_the_roles_files(tmp_path):
-    files = [{"src": "role-file:host-maintenance.sh", "dst": "/usr/lib/homelab/x"}]
-    package = render_with(tmp_path, {"role": "initial_setup", "files": files})
-    assert (
-        package.files["/usr/lib/homelab/x"][0]
-        == (FILES_ROLE / "files" / "host-maintenance.sh").read_bytes()
-    )
-
-
-def test_a_role_file_that_names_a_template_is_refused(tmp_path):
-    files = [{"src": "role-file:claude-rc.service.j2", "dst": "/usr/lib/homelab/x"}]
-    with pytest.raises(RenderRefused, match="is a template; name it role:"):
-        render_with(tmp_path, {"role": "initial_setup", "files": files})
+def test_a_component_renders_a_sibling_components_template_over_its_defaults(tmp_path):
+    files = [
+        {
+            "src": "component:templates/login-slice-caps.conf.j2",
+            "dst": "/usr/lib/systemd/system/user-995.slice.d/x.conf",
+            "when": "claude_code_login_caps_enabled",
+        }
+    ]
+    package = render_with(tmp_path, {"component": "claude-code", "files": files})
+    text = package.files["/usr/lib/systemd/system/user-995.slice.d/x.conf"][0].decode()
+    assert "MemoryHigh=" in text
 
 
 def test_a_file_whose_when_is_false_is_left_out(tmp_path):
@@ -217,12 +207,6 @@ def test_a_component_template_without_the_component_key_is_refused(tmp_path):
 def test_a_component_outside_the_allowlist_is_refused(tmp_path):
     with pytest.raises(RenderRefused, match="component 'fixture' is not one of"):
         render_with(tmp_path, {}, {"component": "fixture", "files": []})
-
-
-def test_a_package_naming_both_a_role_and_a_component_is_refused(tmp_path):
-    spec = {"role": "initial_setup", "component": "claude-code", "files": []}
-    with pytest.raises(RenderRefused, match="names both role"):
-        render_with(tmp_path, {}, spec)
 
 
 def test_a_borrowed_path_out_of_the_component_is_refused(tmp_path):

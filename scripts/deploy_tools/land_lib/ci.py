@@ -1,8 +1,4 @@
-"""Step 2, pre-flight, and step 3, the master CI wait -- in that order, on purpose.
-
-A _BROAD_MANUAL_PREFIXES change anywhere in the incoming range stops the tick
-fast-forwarding however green CI turns out.
-"""
+"""Step 2, the master CI wait on the merge commit."""
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -14,32 +10,9 @@ from lib.exit_codes import (
     CI_PENDING,
     CI_RED,
     CI_UNPROVEN,
-    DEPLOY_BROAD,
 )
-from deploy_tools.land_lib.landing import BRANCH, Landing
-from deploy_tools.land_lib.outcome import Verdict, disarmed, say
-
-
-def blockers(ln: Landing) -> int:
-    """deploy_tags.py blockers, in the primary checkout; 0 clear, 3 blocked, else broken."""
-    return ln.tools.deploy_tags(
-        ln.opts.primary, ["blockers", f"origin/{BRANCH}"]
-    ).returncode
-
-
-def preflight(ln: Landing) -> None:
-    """Step 2: can the tick cross what is incoming? Before waiting on anything."""
-    rc = blockers(ln)
-    if rc == 0:
-        say("nothing in the way")
-        return
-    if rc == DEPLOY_BROAD:
-        ln.finish(
-            Verdict.BLOCKED,
-            1,
-            f"PR #{ln.opts.pr} — an incoming change needs a hand; see above",
-        )
-    ln.die(f"pre-flight failed (exit {rc}) — land.sh deployed nothing itself", 1)
+from deploy_tools.land_lib.landing import Landing
+from deploy_tools.land_lib.outcome import Verdict, disarmed
 
 
 def wait_master_ci(ln: Landing, sha: str) -> None:

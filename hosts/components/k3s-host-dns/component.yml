@@ -2,8 +2,8 @@
 # docs/target-architecture/host/h7-delete-ansible.md). Until H7.35 setup/k3s's node.yml wrote them.
 #
 # /etc/resolv.conf names 127.0.0.1 and nothing else, so a dead forwarder takes the node's DNS with
-# it, and the seconds of a restart are seconds with no DNS. The file is the shared setup/common
-# template, the one pi-resolver renders: `role: common` loads it in place.
+# it, and the seconds of a restart are seconds with no DNS. The file is pi-resolver's template,
+# loaded through `component: pi-resolver` so the two hosts cannot fork it.
 #
 # A rebuilt host starts with the systemd-resolved stub symlink. dpkg replaces the link with the file
 # in step 5 of hosts/bootstrap-host.sh, the unit starts in the same step, and step 6 refuses to stop
@@ -21,9 +21,9 @@
 #
 # ENFORCED: hosts/lib/tests/test_box_k3s_host_half.py, ansible/tests/setup/test_node_resolv_order.py
 # and ansible/tests/setup/test_netplan_dns_overrides.py.
-role: common
+component: pi-resolver
 files:
-  - {src: "role:resolv.conf.j2", dst: /etc/resolv.conf}
+  - {src: "component:templates/resolv.conf.j2", dst: /etc/resolv.conf}
   - {src: templates/host-corefile.j2, dst: /etc/coredns/Corefile, activate: "reload:coredns-host.service"}
   - {src: units/coredns-host.service.j2, dst: /usr/lib/systemd/system/coredns-host.service}
   - {src: templates/netplan-dns.yaml.j2, dst: /etc/netplan/99-homelab-dns.yaml, mode: "0600", activate: "manual:systemd-networkd.service"}

@@ -16,8 +16,9 @@ to change. `gh pr merge` refuses it at its own pre-flight as well (cli/cli#13388
 --await-merge polls the PR's state until merged, and merges it through the REST endpoint once
 await_ci reads the head green, pinned to that head SHA. The master CI gate still refuses that
 call until its own checks pass. A refusal is reported and the wait goes on, so a merge GitHub
-keeps refusing reaches merge-timeout rather than a merge. --arm-merge without --await-merge
-therefore dies: nothing in that run would merge the PR.
+keeps refusing reaches merge-timeout rather than a merge. A check GitHub will never finish ends
+the wait early instead, with its remedy (`stuck_checks`). --arm-merge without --await-merge
+dies: nothing in that run would merge the PR.
 
 A head that bumps a forward-only pin (`k3s_longhorn_version`, `k3s_metallb_version`) merges
 only after `pin_gate.gate_before_merge` passes it: on daniel-box, with DEPLOY_HOLD at `none`, no
@@ -68,6 +69,7 @@ remedy instead.
 
 import re
 import subprocess
+from collections.abc import Callable
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -75,9 +77,10 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonObject, as_list, as_object, as_object_list
+from lib.progress import OnChange
 from lib import removes_object
 from deploy_tools import await_ci
-from deploy_tools.land_lib import gh_read, pace, pin_gate, policy
+from deploy_tools.land_lib import gh_read, pace, pin_gate, policy, stuck_checks
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Verdict, disarmed, say
 from deploy_tools.land_lib.pr_json import CommitMessage, parse_file
@@ -105,6 +108,9 @@ _COMPARE_PATHS = "[.files[]? | .filename, (.previous_filename // empty)]"
 # read for its draft state (#6077). GitHub registered PR #6069's ready run 3s after the flip
 # at 02:09:58 on 2026-10-24, and the push-delivery grace await_ci already allows is far wider.
 DRAFT_SKIPPED_GRACE_S = await_ci.DROPPED_PUSH_GRACE_S
+# A poll that pacing holds sleeps this many merge polls. On 2026-11-11 thirteen landers polling
+# every 30s spent the hourly quota, and a held lander cannot merge sooner for polling sooner.
+HELD_POLL_FACTOR = 4
 
 
 def _reference_is_deliberate(prefix: str) -> bool:
@@ -197,10 +203,7 @@ def _leave_for_a_direct_merge(ln: Landing, subject: str) -> None:
             1,
         )
     ln.direct_merge_subject = subject
-    say(
-        f"PR #{pr}: not arming auto-merge — merging directly once CI is green, at the head "
-        "CI checked"
-    )
+    say(f"PR #{pr}: merging directly once CI is green, at the head CI checked")
 
 
 def squash_body(commits: list[CommitMessage]) -> str:
@@ -222,6 +225,21 @@ def squash_body(commits: list[CommitMessage]) -> str:
         return ""
     trailers = "\n".join(f"{removes_object.KEY}: {line}" for line in sorted(lines))
     return "\n\n".join([*messages, trailers]) + "\n"
+
+
+# gh's header line and HTTP status around a rule-violation refusal, which name no reason.
+_REFUSAL_NOISE = re.compile(r"^gh: Repository rule violations found$|\s*\(HTTP \d+\)$")
+_REQUIRED_CHECK = re.compile(r'^Required status check "([^"]+)" is (.+?)\.?$')
+
+
+def refusal_reason(stderr: str) -> str:
+    """gh's merge refusal as one line, e.g. `required check prek in progress`."""
+    reasons = []
+    for line in stderr.splitlines():
+        line = _REFUSAL_NOISE.sub("", line.strip()).strip()
+        if line:
+            reasons.append(_REQUIRED_CHECK.sub(r"required check \1 \2", line))
+    return "; ".join(reasons)
 
 
 def _merge_directly(ln: Landing, head: str) -> str:
@@ -248,7 +266,7 @@ def _merge_directly(ln: Landing, head: str) -> str:
             *(arg for field in fields for arg in ("-f", field)),
         )
     except subprocess.CalledProcessError as exc:
-        return (exc.stderr or "").strip() or f"gh exited {exc.returncode}"
+        return refusal_reason(exc.stderr or "") or f"gh exited {exc.returncode}"
     except subprocess.TimeoutExpired:
         return "gh timed out"
     say(f"merged directly at the checked head: {ln.direct_merge_subject}")
@@ -314,8 +332,13 @@ def _pr_paths(ln: Landing) -> set[str] | None:
     return {p for pair in names for p in pair if p}
 
 
-def _stale_paths(ln: Landing, head: str, conflicting: bool) -> list[str]:
+def _stale_paths(
+    ln: Landing, head: str, conflicting: bool, note: Callable[[str], None]
+) -> list[str]:
     """The paths that make `head` stale enough to update; [] to merge it as it stands.
+
+    `note` takes the line that says master moved only on paths the PR leaves alone; the wait
+    passes an `OnChange`, so a merge attempt repeated on the same master does not repeat it.
 
     `head` is stale when master changed a path the PR changes since its tested base, or when
     `conflicting` says GitHub reads the PR as conflicting with master. Dies instead when `head`
@@ -332,7 +355,7 @@ def _stale_paths(ln: Landing, head: str, conflicting: bool) -> list[str]:
         if pr_paths is not None:
             overlap = sorted(set(moved) & pr_paths)
             if not overlap:
-                say(
+                note(
                     f"{BRANCH} changed {len(moved)} path(s) since PR #{ln.opts.pr}'s base, "
                     "none of them one the PR changes; merging without a branch update"
                 )
@@ -574,11 +597,17 @@ def await_merge(ln: Landing) -> None:
     to draft and back once for that head (`_retrigger_ready_run`) and the grace starts again.
     If the head is still skipped after it, the wait ends (`_draft_skipped_dead_end`). Neither
     happens while a ready `ci.yml` run exists on the head (`_ready_run_on`); the grace restarts.
+
+    A head the wait has sat on for `stuck_checks.AFTER_S` has its checks read on a poll where
+    await_ci reads it green, and again each `AFTER_S` after. A check left pending under a completed workflow run
+    ends the wait `merge-timeout` with the empty-commit remedy, because no poll ever clears it
+    (#7996).
     """
     o, t = ln.opts, ln.tools
     waited = 0
     conflicting = 0
-    last_refusal = ""
+    refused = OnChange(say)
+    no_overlap = OnChange(say)
     # await_ci's last answer when it was `pending`, for the merge-timeout message; else empty.
     ci_pending = ""
     # The pacing hold the last green poll printed (`pace.py`), for the merge-timeout message.
@@ -600,6 +629,9 @@ def await_merge(ln: Landing) -> None:
     # The head this landing converted to draft and back, once (#6546); a second draft-skip on
     # it ends the wait, because another conversion would loop.
     retriggered_head = ""
+    # The head whose checks `stuck_checks` reads, and the `waited + held` of its next read.
+    stuck_head = ""
+    stuck_read_at = 0
     while True:
         # This poll's pacing hold; a held poll never ends the wait at merge-timeout.
         hold = ""
@@ -680,7 +712,11 @@ def await_merge(ln: Landing) -> None:
             paced = hold
             if rc == CI_GREEN and ln.direct_merge_subject and not hold:
                 conflicts = view.get("mergeable") == "CONFLICTING"
-                moved = [] if updated_from else _stale_paths(ln, head, conflicts)
+                moved = (
+                    []
+                    if updated_from
+                    else _stale_paths(ln, head, conflicts, no_overlap)
+                )
                 if moved:
                     _update_branch(ln, head, moved)
                     updated_from = head
@@ -694,12 +730,18 @@ def await_merge(ln: Landing) -> None:
                     refusal = _merge_directly(ln, head)
                     if not refusal:
                         continue
-                    if refusal != last_refusal:
-                        say(
-                            f"GitHub refused the direct merge at {head[:8]}; waiting: "
-                            f"{refusal}"
-                        )
-                        last_refusal = refusal
+                    refused(f"merge refused at {head[:8]}: {refusal}; waiting")
+            if head != stuck_head:
+                stuck_head, stuck_read_at = head, waited + held + stuck_checks.AFTER_S
+            elif rc == CI_GREEN and waited + held >= stuck_read_at:
+                stuck_read_at = waited + held + stuck_checks.AFTER_S
+                stuck = stuck_checks.find(ln, head)
+                if stuck:
+                    ln.die(
+                        stuck_checks.dead_end(o.pr, head, stuck),
+                        75,
+                        Verdict.MERGE_TIMEOUT,
+                    )
         if not hold and waited + held >= wait_ends_at:
             # A run cancelled on the head never supplies a verdict on its own (#5931). A run
             # skipped as a draft names its own remedy in await_ci's line, because a re-run of
@@ -718,10 +760,12 @@ def await_merge(ln: Landing) -> None:
                 75,
                 Verdict.MERGE_TIMEOUT,
             )
-        t.sleep(o.merge_poll)
+        # A held lander adds no throughput, so it polls slower and spends less quota (#7993).
+        step = o.merge_poll * HELD_POLL_FACTOR if hold else o.merge_poll
+        t.sleep(step)
         if hold:
-            held += o.merge_poll
+            held += step
         else:
-            waited += o.merge_poll
+            waited += step
     paced_note = f", {held}s of it held by pacing" if held else ""
     say(f"merged after {waited + held}s{paced_note}")

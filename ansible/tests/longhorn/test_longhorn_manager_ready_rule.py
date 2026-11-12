@@ -1,6 +1,6 @@
 """`ready_manager_ip` picks this node's ready longhorn-manager pod (#3736).
 
-`k8s/longhorn-api` and the snapshot reaper call `filter_plugins/longhorn_manager.py`. This runs
+`scripts/backup/volume_revert.py` and the snapshot reaper call `filter_plugins/longhorn_manager.py`. This runs
 the function over pod lists and asserts it picks the IP typed out here.
 """
 

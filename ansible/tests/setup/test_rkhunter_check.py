@@ -24,15 +24,14 @@ Run: uv run pytest ansible/tests/setup/test_rkhunter_check.py
 import os
 import re
 
-
-from lib.proc_testing import fake_bin, run, write_exec
-from _helpers import ROLES
+from _aide_check_run import LOGGER_STUB, verdict_of
+from _helpers import REPO
 from _host_packages import HOSTS, shipped_text
 from _shell_render import render_shell_script
-from _aide_check_run import LOGGER_STUB, verdict_of
+from lib.proc_testing import fake_bin, run, write_exec
 from test_aide_check import _textfile, push_markers
 
-SCRIPT = ("setup", "initial_setup", "rkhunter-check.sh.j2")
+SCRIPT = ("components", "integrity-scans", "rkhunter-check.sh.j2")
 TIMER = "/usr/lib/systemd/system/homelab-rkhunter-check.timer"
 WEEK_S = 7 * 24 * 3600
 # 2026-09-30 02:02:01 UTC, the run the stale log below records.
@@ -41,7 +40,9 @@ LAST_WEEK = 1790733721
 # The real library, so the scan writes its textfile under TEXTFILE_DIR rather than the host's
 # own directory, which node_exporter scrapes.
 REAL_CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
-CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
+CHECK_LIB = (
+    REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
+)
 REAL_LOG = "RKHUNTER_LOG=/var/log/rkhunter.log"
 REAL_RKHUNTER = "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/rkhunter"
 
@@ -247,6 +248,12 @@ def test_the_scan_logs_its_verdict_and_still_runs_without_a_credential(tmp_path)
     _, verdict, _, ran = _run_check(tmp_path, "", rc=0, log=_log())
     assert ran, "rkhunter did not run"
     assert verdict is not None and verdict[0] == "up", verdict
+
+
+def test_the_timer_runs_a_slot_it_missed():
+    """A weekly slot missed while the timer is stopped would otherwise wait a week (#7920)."""
+    for host in HOSTS:
+        assert re.search(r"^Persistent=true$", shipped_text(host, TIMER), re.M), host
 
 
 def test_the_push_deadline_covers_one_week_and_not_two():

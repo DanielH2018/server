@@ -620,10 +620,9 @@ def main(argv: list[str] | None = None) -> int:
     with snapshot.open("a") as fh:
         fh.writelines(json.dumps(r, sort_keys=True) + "\n" for r in rows)
     if args.json:
-        print(json.dumps(rows, indent=2))
+        print(json.dumps(rows))
     else:
         print("\n".join([summarize(rows), *stop_lines(stops)]))
-    print(f"appended {len(rows)} rows to {snapshot}", file=_sys.stderr)
     return 0
 
 

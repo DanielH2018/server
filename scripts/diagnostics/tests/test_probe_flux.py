@@ -173,6 +173,28 @@ def test_a_suspended_row_is_flagged():
     assert "sonarr: suspended" in text
 
 
+def test_a_suspended_row_names_its_resume_path():
+    text, _ = flux.format_flux([_source(), _ks("sonarr", suspend=True)], ["sonarr"])
+    assert "sonarr: suspended — resume: drop `flux_suspend`" in text
+
+
+def test_no_tag_lists_only_the_unsettled_rows_and_a_count():
+    """A healthy cluster printed every row; the default view is the exceptions (#7896)."""
+    items = [_source(), _ks("sonarr"), _ks("radarr", suspend=True)]
+    text, code = flux.format_flux(items, [])
+    assert code == 1
+    assert "radarr" in text and "sonarr" not in text
+    assert "1 of 2 Kustomizations settled." in text
+
+
+def test_all_lists_every_row():
+    items = [_source(), _ks("sonarr"), _ks("radarr")]
+    quiet, _ = flux.format_flux(items, [])
+    full, _ = flux.format_flux(items, [], show_all=True)
+    assert "NAME" not in quiet and "sonarr" not in quiet
+    assert "sonarr" in full and "radarr" in full
+
+
 def test_a_tag_with_no_kustomization_is_flagged():
     text, code = flux.format_flux([_source(), _ks("sonarr")], ["immich"])
     assert code == 1

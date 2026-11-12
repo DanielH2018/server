@@ -3,7 +3,7 @@
 setup-uv keys its cache on `uv.lock` and the Python version, and actions/cache saves only on a
 miss, so the first job to finish on a new lockfile writes the entry every later job restores.
 On 2026-11-08 promote's `render` job (UV_NO_DEV, three packages) wrote an 8 MB entry, and
-ci.yml's `ansible-lint` job (no `uv` call at all) wrote a 1 KB one. Every CI job then
+ci.yml's since-deleted `ansible-lint` job (no `uv` call at all) wrote a 1 KB one. Every CI job then
 re-downloaded the dev group and rebuilt actionlint-py from a GitHub release on every run.
 
 Two properties close it. The cache key carries the install profile, so a runtime-only or
@@ -22,7 +22,7 @@ from lib import yaml_fast
 
 ACTION = REPO / ".github" / "actions" / "setup" / "action.yml"
 SETUP_UV = "astral-sh/setup-uv"
-SYNC = re.compile(r"^uv sync --frozen$")
+SYNC = re.compile(r"^uv sync --frozen( --compile-bytecode)?$")
 
 
 def _steps(action: dict) -> list[dict]:

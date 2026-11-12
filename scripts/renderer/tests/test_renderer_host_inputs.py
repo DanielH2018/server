@@ -69,7 +69,6 @@ def render(tmp_path_factory) -> dict:
             **os.environ,
             "PYTHONPATH": str(SCRIPTS),
             "PYTHONPYCACHEPREFIX": str(tmp / "pycache"),
-            "ANSIBLE_LOCAL_TEMP": str(tmp / "ansible"),
         },
         timeout=120,
     )
@@ -114,9 +113,8 @@ def test_an_imported_module_under_no_member_is_flagged(render, tracked):
     )
 
 
-def test_host_inputs_names_the_secrets_file_and_the_shared_check_lib():
+def test_host_inputs_names_the_secrets_file_and_covers_every_shared_file():
     assert "ansible/vars/secrets.yml" in HOST_INPUTS
-    assert "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh" in HOST_INPUTS
     # A directory member ends `/` and covers what sits under it, as `scripts/lib/` covers the
     # backup-health reader's libraries.
     directories = tuple(i for i in HOST_INPUTS if i.endswith("/"))

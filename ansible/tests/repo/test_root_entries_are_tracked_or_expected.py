@@ -11,6 +11,7 @@ Run: uv run pytest ansible/tests/repo/test_root_entries_are_tracked_or_expected.
 
 from _helpers import REPO
 from lib.proc_testing import run
+from lib.worktree_label import write_label
 
 # Root entries the ignore rule is expected to hide. Each is a tool's own working state.
 EXPECTED_IGNORED = frozenset(
@@ -31,6 +32,7 @@ EXPECTED_IGNORED = frozenset(
         ".mkdocs-strict-check",
         ".mypy_cache",
         ".superpowers",  # SDD task specification directories
+        ".claim",  # scripts/dev/label_worktree.py names a generated worktree here
     }
 )
 
@@ -52,6 +54,13 @@ def test_every_root_entry_is_tracked_or_expected():
         "root entries git neither tracks nor this guard expects — add the file to "
         "`.gitignore`'s allow-list and commit it, or name it in EXPECTED_IGNORED with a reason"
     )
+
+
+def test_a_worktree_label_is_an_expected_root_entry(tmp_path):
+    write_label(tmp_path, "Tune the hallway lights")
+    on_disk = {p.name for p in tmp_path.iterdir()}
+    assert on_disk
+    assert unexpected(on_disk | {"ansible"}, {"ansible"}) == []
 
 
 def test_a_stray_root_entry_is_flagged():

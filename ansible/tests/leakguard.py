@@ -38,7 +38,7 @@ cluster. Shimming a binary the host lacks would make `which` find it, turn the s
 run, and fail CI. So the shim set is intersected with what is actually installed.
 
 **An allowlisted test runs with the real PATH.** The tests in `_LIVE_API_TESTS` exist to
-run the role's own argv against a live API server; handing them a stub would leave them
+run a real systemd unit or a real container; handing them a stub would leave them
 passing while proving nothing, which is the failure mode this whole guard is about.
 
 **A `ui`-marked test runs with the real PATH too.** `scripts/diagnostics/tests/test_ui_smoke.py`
@@ -91,24 +91,6 @@ row refuses it (#7623). A script that replaces `PATH` outright drops the stub di
 the `scripts-keep-the-inherited-path-or-say-why` row refuses that unless an `allow` entry says
 how each test that runs the script keeps its stubs first.
 
-## Ansible's local temp directory points at a temp directory
-
-Importing ansible-core's constants creates `ansible-local-<pid><8 chars>` under
-`~/.ansible/tmp` and registers only an atexit handler to remove it. A pytest run killed by a
-signal runs no atexit handler, so it leaves one empty directory per process that imported
-ansible: one per xdist worker, within a fraction of a second, with consecutive pids. That is
-the shape found on daniel-box after #4893 (#5904). A harness that kills a background
-`git commit` when its session ends kills prek's pytest hooks with it, and a timed-out Bash
-call kills a run the same way.
-
-At import, before any conftest can import ansible and before xdist spawns its workers, this
-plugin sets `ANSIBLE_LOCAL_TEMP` to `ANSIBLE_LOCAL_TEMP_DIR`, overriding any exported value.
-That directory sits under the system temp directory and carries the uid in its name, so two
-users' runs never share it. Each process that loads the plugin also removes every
-`ansible-local-<pid>*` there whose process is gone, so a killed run's directories last only
-until the next run starts. The dead-pid test is what makes the sweep safe while other
-sessions' runs are live in the same directory.
-
 ## What is deliberately NOT shimmed
 
 `git` — too central to intercept safely. Every write verb targets a `tmp_path` repo through `git -C`, no child environment
@@ -137,10 +119,6 @@ identity, and `GIT_CONFIG_GLOBAL` pointed at the null device so this host's glob
 signing stays out. `lib.git_testing` is that helper, and the
 `tests-take-the-git-scrub-from-git-testing` row of
 `scripts/tests/test_census_rows_test_modules.py` refuses a hand-rolled one.
-
-`ansible-playbook` — six tests in `ansible/tests/longhorn/` deliberately run a real play
-against `localhost`, and a stub returning a fixed exit code fails all six. The shared fact
-cache those harnesses once fenced off is gone: ansible.cfg keeps none since #3274.
 """
 
 import os
@@ -180,18 +158,15 @@ SHIMMED_BINARIES = (
     "wget",
 )
 
-# Tests that run the role's own argv against a live API server on purpose. Each is documented
-# in its module docstring and already guarded by `skipif(shutil.which("kubectl") is None)`
-# plus a "no reachable cluster" skip, so they skip rather than fail where there is no cluster.
-# They run with the real PATH: a stub would leave them green while checking nothing.
+# Tests that reach real infrastructure on purpose. Each is documented in its module docstring
+# and skips where that infrastructure is missing. They run with the real PATH: a stub would
+# leave them green while checking nothing.
 _LIVE_API_TESTS = frozenset(
     {
-        "ansible/tests/longhorn/test_longhorn_api.py::test_the_resolve_returns_a_pod_ip_on_this_node",
-        "ansible/tests/longhorn/test_volume_revert.py::test_the_listing_jsonpath_parses",
-        # Not a cluster read: it starts and stops a real systemd user unit, because issue #3160
-        # is about what that stop kills. Skipped where no user manager answers.
+        # It starts and stops a real systemd user unit, because issue #3160 is about what that
+        # stop kills. Skipped where no user manager answers.
         "scripts/deploy_tools/tests/test_land_detach.py::test_stopping_the_callers_unit_leaves_the_landing_running_to_its_verdict",
-        # Not a cluster read either: they `docker run` crowdsec's sidecar modules in the pinned
+        # They `docker run` crowdsec's sidecar modules in the pinned
         # images, which is the linkage the operator's ruling on #5655 asked to check. They
         # skip where docker is missing and CI is unset.
         "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py::test_the_appsec_verify_runs_in_the_jobs_image_against_a_stub_cscli",
@@ -293,47 +268,9 @@ def _in_real_dir(found: str) -> str:
     )
 
 
-ANSIBLE_LOCAL_TEMP_DIR = (
-    Path(tempfile.gettempdir()) / f"pytest-ansible-local-{os.getuid()}"
-)
-
-# `tempfile.mkdtemp(prefix="ansible-local-%s" % os.getpid())` appends 8 random characters.
-_ANSIBLE_LOCAL = re.compile(r"ansible-local-(\d+)[a-z0-9_]{8}")
-
-
-def sweep_dead_ansible_local(parent: Path) -> list[str]:
-    """Remove each `ansible-local-<pid>*` in `parent` whose process is gone.
-
-    Returns the names removed, sorted. Any other entry, and the directory of a live process,
-    is left alone. Never raises: a test run must not fail over housekeeping.
-    """
-    removed = []
-    try:
-        entries = sorted(parent.iterdir())
-    except OSError:
-        return removed
-    for entry in entries:
-        match = _ANSIBLE_LOCAL.fullmatch(entry.name)
-        if match is None or Path(f"/proc/{match.group(1)}").exists():
-            continue
-        shutil.rmtree(entry, ignore_errors=True)
-        if not entry.exists():
-            removed.append(entry.name)
-    return removed
-
-
-def use_ansible_local_temp(environ, parent: Path) -> None:
-    """Point ansible-core's local temp directory at `parent`, after sweeping it."""
-    parent.mkdir(mode=0o700, exist_ok=True)
-    sweep_dead_ansible_local(parent)
-    environ["ANSIBLE_LOCAL_TEMP"] = str(parent)
-
-
 # At import rather than in a hook: the controller strips before xdist spawns its workers, each
-# worker strips again as it loads the plugin, and no session fixture runs first. The same
-# holds for ansible's temp directory, which a conftest's ansible import would create.
+# worker strips again as it loads the plugin, and no session fixture runs first.
 strip_env(os.environ, GIT_HOOK_VARS | AGENT_PROFILE_VARS)
-use_ansible_local_temp(os.environ, ANSIBLE_LOCAL_TEMP_DIR)
 
 
 def _is_exempt() -> bool:

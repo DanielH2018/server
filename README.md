@@ -33,11 +33,7 @@ work already executed.
 
 ```
 ansible/          # Playbooks, roles, inventory, templates   ← EDIT HERE
-  deploy.yml          # A Docker play with no entries, so it runs no role
-  k3s-bringup.yml     # Cluster foundation (k3s, Longhorn, Traefik CRDs, …)
-  initial_setup.yml   # Host hardening / bootstrap
   roles/k8s/          # One role per k8s workload (manifests rendered from templates)
-  roles/setup/        # One role per host-setup concern (k3s, Docker engine, crons, …)
 hosts/            # Host packages; the Pi's Docker services are hosts/components/pi-compose/
   filter_plugins/     # Custom dependency-resolution filters (toposort.py)
   inventory/          # hosts.ini, group_vars/all.yml, host_vars/<host>.yml
@@ -95,8 +91,8 @@ namespace. Where policies do exist, **ingress** rules are enforced; **egress** r
 
 ## How deploys work
 
-A k3s workload deploys through `promote` and Flux once its PR merges. `./scripts/deploy.sh`
-exits 5 for a k8s tag.
+A k3s workload deploys through `promote` and Flux once its PR merges. No script deploys a
+workload by hand.
 
 - **The render** — `homelab_render.py` orders `roles/k8s/<name>` with `build_k8s_dep_map` /
   `toposort_containers` (`ansible/filter_plugins/toposort.py`, unit-tested in
@@ -107,27 +103,16 @@ exits 5 for a k8s tag.
   traefik, for the LAPI machine credential) is declared as `depends_on:` on the entry instead.
   List order in `cluster/services.yml` is only the sort's tiebreak.
 
-- **`deploy.yml`** — runs a Docker play that deploys nothing, because no host lists a Docker
-  entry: `scripts/validate/compose_templates.py:undeployed_docker_entries` refuses one. The Pi's
-  containers are `compose_services` entries that its `homelab-daniel-pi` package deploys, so
-  `deploy.yml` never starts them. The Pi's ordering, docker-proxy before autoheal and alloy, is
-  each service file's `depends_on`, and
+- **The Pi's containers** are `compose_services` entries that its `homelab-daniel-pi` package
+  deploys. No host lists a Docker `containers_list` entry:
+  `scripts/validate/compose_templates.py:undeployed_docker_entries` refuses one. The Pi's
+  ordering, docker-proxy before autoheal and alloy, is each service file's `depends_on`, and
   `ansible/tests/deploy/test_platform_filter_real_inventory.py` pins it.
 
-Ansible plays run against the host named by `-e target=` — but `daniel-server` and `daniel-box`
-are `ansible_connection=local` in `hosts.ini`, so `-e target=` only selects whose *variables*
-to use while tasks still execute locally. A pre-task refuses that case outright. Only
-`daniel-pi` is genuinely remote, so the setup plays' `-e target=daniel-pi` works as it reads.
-
-```bash
-uv run ansible-playbook ansible/k3s-bringup.yml                        # cluster foundation
-uv run ansible-playbook ansible/initial_setup.yml                      # host bootstrap/hardening
-```
-
-First-host bring-up (uv → SOPS onboarding → `initial_setup.yml`) is ordered in
-[`ansible/README.md`](ansible/README.md); [`ansible/bring-up.sh`](ansible/bring-up.sh) drives
-those steps (`--scaffold` for inventory, no flag for uv + SOPS, `--continue` for the
-playbooks). The manual post-deploy setup Ansible can't do is verified by
+No playbook brings a host up. `hosts/bootstrap-host.sh` does, and `docs/host-packages.md`
+(*Rebuilding daniel-box*, *Rebuilding daniel-server*) and `docs/break-glass.md` (the Pi runbook)
+order the steps. A host's setup plane ships in its host package. The manual post-deploy setup
+that no package can do is verified by
 `uv run python scripts/diagnostics/postflight.py`.
 
 ## Cross-cutting systems
@@ -163,7 +148,7 @@ playbooks). The manual post-deploy setup Ansible can't do is verified by
 
 ## Quality gates (pre-commit)
 
-The repo uses [`prek`](https://prek.j178.dev) (`prek.toml`): YAML/JSON lint, `ansible-lint`,
+The repo uses [`prek`](https://prek.j178.dev) (`prek.toml`): YAML/JSON lint,
 `gitleaks`, rendered-template validation (compose + config + Home Assistant + Grafana),
 secret-rotation-registry sync, `ruff` (lint + format), and the `pytest` suite.
 

@@ -104,7 +104,7 @@ def fence_lets_push(branch: str) -> bool:
             ANSIBLE.parent / "hosts/components/github-checks/defaults/main.yml"
         ).read_text()
     )
-    globs = defaults["gitops_deploy_fence_ruleset_exclude"]
+    globs = defaults["github_fence_ruleset_exclude"]
     assert globs, "the fence declares no exclusions"
     return any(
         re.fullmatch(re.escape(g).replace(r"\*\*", ".*"), f"refs/heads/{branch}")

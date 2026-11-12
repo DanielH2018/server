@@ -14,11 +14,7 @@ from pathlib import Path
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.cli_help import ArgumentParser
-from lib.repo_paths import GITOPS_DEPLOY_FILES, PRIMARY_CHECKOUT
-
-# The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
-_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from gitops_markers import STATE_DIR
+from lib.repo_paths import PRIMARY_CHECKOUT
 
 MERGE_POLL_S = 30
 # The master CI wait: ci.yml's longest `timeout-minutes` chain into the `prek` gate, 82 min
@@ -130,7 +126,6 @@ class Options:
     merge_poll: int = MERGE_POLL_S
     pace_master_runs: int = PACE_MASTER_RUNS
     primary: Path = PRIMARY_CHECKOUT
-    deployer_state: Path = Path(STATE_DIR)
     # `--detach` forks the landing into a logfile this script names and returns; `cc-wait land
     # <pr>` is the wait. It defaults off, so an invocation that omits it reaches the same code
     # path as a plain landing.
@@ -141,6 +136,8 @@ class Options:
     log_dir: str = ""
     # `--regate <pr>`: re-run a merged pin bump's gates and re-post its status, no landing.
     regate: bool = False
+    # `--fresh`: land from a checkout of origin/master made for this run (`land_lib/fresh.py`).
+    fresh: bool = False
 
     @property
     def policy_active(self) -> bool:
@@ -202,6 +199,12 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         action="store_true",
         help="fork the landing into a logfile this script names, and return",
     )
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="land from a detached checkout of origin/master this run makes and removes, "
+        "for a checkout whose landing code master has changed",
+    )
     # Retired, and kept only so a caller still passing it hears what replaced it rather than
     # argparse's bare "unrecognized arguments".
     parser.add_argument("--await-verdict", action="store_true", help=argparse.SUPPRESS)
@@ -216,10 +219,12 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         help="write PENDING here, then the landing's one-line result",
     )
     ns = parser.parse_args(argv)
-    if ns.regate and (ns.arm_merge or ns.await_merge or ns.tags or ns.detach):
+    if ns.regate and (
+        ns.arm_merge or ns.await_merge or ns.tags or ns.detach or ns.fresh
+    ):
         parser.error(
             "--regate re-runs the gates for a merged PR and nothing else; drop "
-            "--arm-merge, --await-merge, --tags and --detach"
+            "--arm-merge, --await-merge, --tags, --detach and --fresh"
         )
     if ns.await_verdict:
         parser.error(
@@ -248,4 +253,5 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         primary=_primary_from_env(),
         detach=ns.detach,
         log_dir=ns.log_dir,
+        fresh=ns.fresh,
     )

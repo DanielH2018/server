@@ -16,9 +16,9 @@
 # file to Ansible with the attended procedure in the H6 plan's *Rollback*.
 #
 # The rest of the agent's host half (H7.34): the Longhorn packages, the multipath drop-in, the
-# inotify key, the join rules and the address pin. The join itself is bootstrap-host.sh's. No
-# host-half path lives only in setup/k3s on daniel-server, whose role is still daniel-box's until
-# H7.35, so the pin's templates render in place through `role: k3s`.
+# inotify key, the join rules and the address pin. The join itself is bootstrap-host.sh's. The
+# k3s defaults and the pin's template are k3s-server's, loaded through `component: k3s-server`, so
+# the two nodes cannot fork them.
 #
 # DECIDED: the wifi fallback reaches /etc/netplan through a copy, never an output's symlink.
 # `netplan generate` fails on a dangling link in that directory (measured 2026-11-07), so a
@@ -37,7 +37,7 @@
 # the next reboot (operator-only); the revert restores that play's tasks.
 #
 # ENFORCED: ansible/tests/setup/test_k3s_agent_component.py.
-role: k3s
+component: k3s-server
 depends:
   - open-iscsi
   - nfs-common
@@ -71,7 +71,7 @@ files:
   # Longhorn's devices must stay out of multipathd's reach, or mounts fail. The block Ansible wrote
   # in the owned /etc/multipath.conf stays as a harmless duplicate.
   - {src: templates/multipath-longhorn.conf, dst: /etc/multipath/conf.d/50-homelab-longhorn.conf, activate: "reload:multipathd.service"}
-  - {src: "role:netplan-static-address.yaml.j2", dst: /etc/netplan/90-homelab-static-address.yaml, mode: "0600", activate: "manual:systemd-networkd.service", when: "k3s_node_static_link | length > 0"}
+  - {src: "component:templates/netplan-static-address.yaml.j2", dst: /etc/netplan/90-homelab-static-address.yaml, mode: "0600", activate: "manual:systemd-networkd.service", when: "k3s_node_static_link | length > 0"}
   - {src: templates/static-link-sysctl.conf.j2, dst: /etc/sysctl.d/90-homelab-static-link.conf, activate: sysctl, when: "k3s_node_static_link | length > 0"}
   - {src: files/homelab-netplan-wifi, dst: /usr/lib/homelab/homelab-netplan-wifi, mode: "0755", when: "k3s_node_wifi_link | length > 0"}
   - {src: units/homelab-netplan-wifi.service, dst: /usr/lib/systemd/system/homelab-netplan-wifi.service, when: "k3s_node_wifi_link | length > 0"}

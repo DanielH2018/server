@@ -184,8 +184,8 @@ The exit criterion is seven observations:
       (`test_toposort.py`, `test_k8s_autodeploy_denylist.py` and
       `test_k8s_retired_services.py` in `deploy`, `test_authelia_access_tiers.py` in
       `services`, and `test_claude_agent_profiles.py` in `setup`);
-    - `ansible/tests/setup/test_pi_escalation_timeout.py`, which imports the ssh connection
-      plugin;
+    - `test_pi_escalation_timeout.py` in `setup` (deleted by H7.55), which imported the ssh
+      connection plugin;
     - `scripts/deploy_tools/deploy_lib/flags.py` (`PlaybookCLI`), and
       `scripts/lib/ansible_jinja_env.py` with its test in `scripts/lib/tests/`;
     - the five filter plugins below.
@@ -441,7 +441,7 @@ The exit criterion is seven observations:
   The other three are the absent half of a cron still live on another host, such as
   `Remove the firmware cron on hosts without fwupd`.
 - **Contract checks derive from setup tasks.**
-  `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py` derives the cron-installing set from `tasks/`, and `ansible/tests/repo/test_role_claude_md.py`
+  `test_setup_cron_roles_have_a_contract.py` (deleted, #8027) derives the cron-installing set from `tasks/`, and `ansible/tests/repo/test_role_claude_md.py`
   requires a `CLAUDE.md` per setup role. Both pass vacuously once the roles are gone.
   `ansible/tests/setup/` holds 114 tracked files.
 - **Docs that name the playbooks.** `git grep -l 'ansible-playbook' -- ':!docs/archive'`
@@ -518,17 +518,14 @@ tasks count against daniel-pi.
 
 Each item must resolve to a package path, a legacy entry, a ufw or libvirt declaration, or
 an entry in the census's short allowlist of deleted items. The allowlist names each item
-with a reason, for example `Clear ansible log file`. The census runs in report mode from
-H7.2f, which prints the items left per host. H7.19c turns it strict, so it fails while any
-setup role still has a task that applies to a host. Its named members are
-`Weekly apt autoremove`, `claude-land@.service.j2`, `k3s/tasks/static-address.yml`,
-`/usr/local/bin/sops`, the `systemd_service` task `Enable and start the host upsmon
-service`, the `ansible.posix.sysctl` setting `net.core.bpf_jit_harden` and the ufw task
-`Enable UFW firewall`. The emptied role's `meta: end_role` stub is a control module, so
-strict mode never flags it.
-Until H7.4 moves it, the report must also list pi-peer-backup's forced-command wrapper in
-`k8s_host_files` under daniel-pi. That report is also the list of record for the rows
-`k8s_host_files` holds when H7 starts.
+with a reason, for example `Clear ansible log file`. The census is strict: it prints the
+items left per host and fails while any setup role still has a task that applies to a host.
+Every setup role is emptied, so `test_the_real_tree_leaves_no_item_on_any_host` holds every
+host at zero. The census's named members therefore sat on a fixture role in
+`test_setup_census.py`, deleted with the census by H7.55, which held the shapes the last setup role held:
+the `template` task that pins the node's LAN address in netplan, and an
+`ansible.posix.sysctl` looped over both address families. An emptied role's
+`meta: end_role` stub is a control module, so the census never flags it.
 
 ### Roles are emptied before H7.20a, never deleted
 
@@ -1002,7 +999,7 @@ excluded. Each lands in one of four groups.
   above. The in-flight panel and the land and cancel controls stay.
 - **H7.19b re-homes or switches them, because they survive:**
     - `land_lib/tools.py` imports `deploy_locks.TREE_LOCK`. `TREE_LOCK` moves to
-      `scripts/lib/tree_lock.py`, and `test_tree_lock_single_definition.py` holds that
+      `scripts/lib/tree_lock.py`, and `scripts/lib/tests/test_tree_lock.py` holds that
       constant equal to `server_git_tree_lock` from then on.
     - `scripts/secrets_mgmt/consumers.py:_census_corpus` calls
       `deploy_cross_role.k8s_lookup_map`. That function imports only `ast`, `re` and `Path`.
@@ -1028,6 +1025,12 @@ excluded. Each lands in one of four groups.
       `gitops_hold` and `gitops_markers`. renovate_agent survives, because H7.11 packages
       it and its lander runs `land.sh`, so its reads switch to `DEPLOY_HOLD` or are
       dropped.
+
+[#7961](https://github.com/DanielH2018/server/issues/7961) landed the hold and ledger half of
+this list: it removed each of those readers from the census row's `allow`. The k3s and MetalLB
+runbook gates, `probe.py landing` and the deck mod now read `DEPLOY_HOLD`. deploy-ui, the
+renovate-agent wrapper, the fan-out waiting gauge and `docs/reference/state.md` read no hold,
+because `land.sh` refuses a landing under `DEPLOY_HOLD` itself.
 
 **Path readers.** An import census cannot see a module that reads a deployer file by path.
 H7.2e runs a fifth derivation grep, `git grep -n -E
@@ -1657,7 +1660,8 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
   of the tick's markers.
 - **Removed in H7.19b:** setup narrowing except `setup_gates.py`, with all seven
   `narrow_lib` modules D6 hands over; the rest of `land.sh`'s setup arm and its Pi arms,
-  `land_reach.py`, the rest of `reach.py` and `land_lib/classify.py`'s setup arm; the
+  `land_reach.py` with `setup_lib/deployed_copies.py` (H7.63 stopped writing the stamp
+  fragments it reads), the rest of `reach.py` and `land_lib/classify.py`'s setup arm; the
   deployer's service, code, config and polkit rule as legacy entries; `scripts/deploy.sh`
   with `deploy_cli.py` and `deploy_lib/`, `gitops_state.py`,
   `scripts/lib/deployer_park.py`, the deployer readers in `probe_lib`, `runbook_gates_lib`,
@@ -1921,13 +1925,13 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.50 deploy_ui re-homes with its in-flight panel | H7.19a's second PR | yes | H7.37, H7.41, D6 |
 | H7.51 `homelab-checkout-sync` beside the deployer | H7.19a's fourth PR | yes | H7.41, H7.47, D6, the H6 PR that lands the window test |
 | H7.52 The deployer's timer retires | H7.19a's fifth PR | written as [#7828](https://github.com/DanielH2018/server/pull/7828), to merge right after #7806; it deletes H6's seven deployer-coupled items, so it started once they merged | H7.49a, H7.49b live, H7.51 live, H7.24a, H7.24b, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H7.60, H7.62, H6 |
-| H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.24a to H7.41, H7.24b, H7.44, H7.45, H7.48, H7.50, H7.58 to H7.64 |
+| H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | landed: its third PR ([#7962](https://github.com/DanielH2018/server/issues/7962)) deleted the deployer's code (item 29) | H7.52 live on daniel-box, H7.24a to H7.41, H7.24b, H7.44, H7.45, H7.48, H7.50, H7.58 to H7.64 |
 | H7.54 The test env leaves ansible-core | H7.19d | landed as [#7856](https://github.com/DanielH2018/server/pull/7856) (item 30) | H7.46, H7.48, H7.52 |
 | H7.55 Delete the playbooks and the role directories | H7.20a | no: it deletes what H7.53 leaves | H7.53 live on daniel-box, H7.43 (done: its rebuild half was waived), H7.44, H7.45 |
-| H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | no: its two census greps run at its base | H7.54, H7.55, H5 |
+| H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | landed as [#8050](https://github.com/DanielH2018/server/pull/8050) (item 32) | H7.54, H7.55, H5 |
 | H7.57 The ADR | H7.20c | yes | H7.55 |
 | H7.58 Pi: `initial_setup`, part 3 | new | yes | H7.26, H7.30, H7.42 |
-| H7.59 daniel-server: `initial_setup`, part 3, and its Loki witness | new | yes, with H7.58 | H7.58 live, H7.31, H7.61 live, H4 |
+| H7.59 daniel-server: `initial_setup`, part 3, and its Loki witness | new | landed in [`a7a9110e8`](https://github.com/DanielH2018/server/commit/a7a9110e8) and [`0ecdbe8b4`](https://github.com/DanielH2018/server/commit/0ecdbe8b4) | H7.58 live, H7.31, H7.61 live, H4 |
 | H7.60 daniel-box: `initial_setup`, part 3 | new | yes, with H7.58 | H7.59 live, H7.32, H6.2 |
 | H7.61 daniel-server: dev tooling and the worktree holder scan; `/usr/bin/uv` on both cluster hosts | new | yes | H7.38, H7.39, H7.41a |
 | H7.62 daniel-box: dev tooling, the worktree holder scan, `chezmoi_setup` and `github_cli` | new | yes, with H7.61 | H7.61 live, H7.40, H6.2 |
@@ -2336,6 +2340,36 @@ the `manual_plane` clearing, and *Rollback*'s
     carries the deployer-import census and the legacy entries, and names
     `/var/lib/gitops-deploy/` as the operator's cleanup. Exit observation 5 holds once its
     version is live on daniel-box.
+    **Split in two on 2026-11-09, the re-home first.** The first PR moves `TREE_LOCK` to
+    `scripts/lib/tree_lock.py` and `k8s_lookup_map` to `scripts/lib/k8s_lookups.py`.
+    `deploy_locks.py` keeps its own `TREE_LOCK` until H7.20a, and
+    `scripts/lib/tests/test_tree_lock.py` holds the two equal. Those equality checks left
+    `test_tree_lock_single_definition.py`, whose macro checks read templates and stay in
+    `ansible/tests/deploy/`. The `role_paths.py` grep moves to the deleting PR, because
+    `land_tags.py` imports `land_shared` and only the setup arm's deletion shows whether that
+    import survives. The
+    deleting PR and the strict census wait on
+    [#7888](https://github.com/DanielH2018/server/issues/7888): `k3s/tasks/` still holds
+    `server.yml` and `coredns.yml` (H7.44's code half), `storage_smoke.yml` (H7.45) and the
+    guarded `static-address.yml` (H7.34, H7.35), and the census lists each of them.
+    #7888 emptied them, and the census read zero on both cluster nodes.
+    **The deleting half split again on 2026-11-11,** because it touched more than 200
+    files. The first of its three PRs moves every survivor that calls a deployer
+    function off the deployer's code: `await_ci.py` reads `hosts/lib`'s `ci_verdict` and
+    `read_check_pages`, and `promotion.py` and `cluster_pins.py` read `is_doc` and
+    `is_test_only_path` from `scripts/lib/path_kinds.py`. It lands the deployer-import
+    census, whose `allow` names each module the next two PRs delete or switch, and it
+    makes strict the setup census's only mode (H7.19c). The second PR
+    ([#7961](https://github.com/DanielH2018/server/issues/7961)) drops the reads of the
+    deployer's hold, markers and ledger. The third
+    ([#7962](https://github.com/DanielH2018/server/issues/7962)) deletes `deploy.sh`,
+    setup narrowing, `land.sh`'s setup and Pi arms and the deployer's code and tests,
+    empties the census's `allow`, and marks H7.53 landed.
+    **Landed with [#7962](https://github.com/DanielH2018/server/issues/7962).** The census's
+    `allow` holds only its own red fixtures, and `ansible/roles/setup/gitops_deploy/` holds only
+    its `end_role` stub, its defaults and its `CLAUDE.md`. Exit observation 5 holds once this
+    version is live on daniel-box. `/var/lib/gitops-deploy/`, `/opt/gitops-deploy/` and
+    `/etc/gitops-deploy/` on daniel-box are the operator's cleanup.
 30. **H7.54** stays alone. Its parity proof covers 361 modules.
     **Landed as [#7856](https://github.com/DanielH2018/server/pull/7856).**
     The test env moved to `ansible/tests/_jinja_env.py` and registers
@@ -2345,8 +2379,8 @@ the `manual_plane` clearing, and *Rollback*'s
     census's named member moved to `test_pi_escalation_timeout.py`. Part two of the parity
     proof is H7.46's filter census, unchanged. No module retired. The volume-revert role's
     selection and input check use `regex_escape`, `regex_search`, `split` and `match`, which
-    no rendered template uses, so `ansible/tests/longhorn/_volume_revert.py` registers local
-    stand-ins until H7.55 deletes those tasks. ansible-core stays in the `dev` group until
+    no rendered template uses, so the longhorn tests' `_volume_revert.py` registered local
+    stand-ins until H7.55 deleted those tasks. ansible-core stays in the `dev` group until
     H7.56, because three allowlisted files still import it and the playbooks still run.
 31. **H7.55** stays alone. It merges only after daniel-box shows H7.53's version and lists no
     `gitops-deploy` unit file. It carries the two-part proof, exit observation 1's listings
@@ -2354,11 +2388,44 @@ the `manual_plane` clearing, and *Rollback*'s
     Deleting `test_pi_escalation_timeout.py` removes the deletion census's named member, so
     H7.55 repoints or drops the two named-member asserts in
     `ansible/tests/repo/test_ansible_core_census.py`. It also deletes the volume-revert role's
-    tasks, and with them the stand-ins in `ansible/tests/longhorn/_volume_revert.py`.
+    tasks, and with them the longhorn tests' `_volume_revert.py` stand-ins.
+    **Split in two on 2026-11-12,** because one PR would have touched well over 100 files.
+    The first PR deletes everything no reader of the setup tree reads: `deploy.yml`,
+    `prune_backups.yml` with `ansible/prune_backups/`, `seed_volume_backup.yml`,
+    `volume-revert.yml`, the thirteen emptied setup roles that no remaining playbook needs,
+    both runbook roles (`k8s/volume-revert` and `k8s/longhorn-api`, directories and all), and
+    the tests whose subject went with them. Those tests include the skipped-register,
+    retried-command and dual-tag censuses and the k8s dry-run guard, because no setup role's
+    tasks hold a `register:` or a `retries:` and no k8s role holds a task. The second PR
+    ([#8035](https://github.com/DanielH2018/server/issues/8035)) deletes what is left, which
+    is one graph whose parts read each other: `initial_setup.yml`, `k3s-bringup.yml`,
+    `bootstrap.yml`, `preflight.yml`, `bring-up.sh`, `pre_tasks/`, the `common`,
+    `initial_setup`, `k3s`, `nut_host`, `homelab_builder` and `sops_setup` roles, the sources
+    the host renderer still reads in place through `role:`, `setup_lib/` with its censuses,
+    `probe.py applied`, and `test_pi_escalation_timeout.py` with the census's named member.
+    The second PR marks H7.55 landed.
+    **Landed as [#8037](https://github.com/DanielH2018/server/pull/8037) and H7.55b
+    ([#8035](https://github.com/DanielH2018/server/issues/8035)).** Each component that
+    rendered a role source through `role:` owns it. A file two components render stays single:
+    `pi-resolver` owns `resolv.conf.j2`, which `k3s-host-dns` borrows through
+    `component: pi-resolver`, and `k3s-server` owns the k3s defaults and the address-pin
+    template, which `k3s-agent` borrows. `homelab-check-lib.sh` sits in `check-lib`'s
+    `files/`, and `SHARED_FILES` names it there. Every host and package render matched its
+    base under `diff -r`. `has_gitops`, `k3s_server_hosts` and `k3s_agent_hosts` went with the
+    playbooks that read them.
 32. **H7.56.** Both steps follow H7.55 and remove the last Ansible inputs: ansible-core with its
     config, its hook and leakguard's temp-dir sweep, and the Pi's empty key. *Removed in
     H7.20* names the sweep's parts. Neither moves a rendered byte. It carries exit
     observation 1's two counts, the Pi service-list proof and the two render pairs.
+    **Landed as [#8050](https://github.com/DanielH2018/server/pull/8050).** Both render pairs
+    matched their base under `diff -r`, and the two counts read 0. The daniel-box and
+    daniel-server packages did move, by three readers the step list did not name.
+    `hosts/lib/ci_verdict.py` drops the deleted `ansible-lint` check-run, because
+    checkout-sync ships it. The claude-code component's clone sync drops its
+    `ansible-galaxy` step, which would have called a binary the same pull's `uv sync`
+    removed. The agent profile drops `ANSIBLE_COLLECTIONS_PATH`. Two rendered comments still
+    name both Pi keys, so that the renders stay byte-identical
+    ([#8047](https://github.com/DanielH2018/server/issues/8047)).
 33. **H7.57** stays alone, so the deletions land while the operator reviews it. Approving the
     ADR is **operator-only** (exit observation 6), and so is deciding whether ADR-0001,
     ADR-0011 and ADR-0017 need an amendment.
@@ -2640,8 +2707,8 @@ the `manual_plane` clearing, and *Rollback*'s
       empty `diff -r` of the cluster render. The fourth grep's output is the list of
       record for H7.19b.
     - **H7.2f** The setup census, in report mode. It lives in
-      `scripts/deploy_tools/setup_lib/setup_census.py` (`--host`, `--strict`), and the
-      test is `ansible/tests/setup/test_setup_census.py`. The census does not evaluate a
+      `scripts/deploy_tools/setup_lib/setup_census.py` (`--host`; strict since H7.19c), and the
+      test was `test_setup_census.py` in `setup`, both deleted by H7.55. The census does not evaluate a
       task's `when:`, so a `<role>_packaged_hosts` guard cannot hide an item: the item stays
       in the report, marked `[per-host guard: ...]`, until the host's package carries it.
     - H7.2a also adds the reconcile-size census with its ceiling constant, and measures B
@@ -3158,7 +3225,8 @@ the `manual_plane` clearing, and *Rollback*'s
           outlives land.sh's setup and Pi arms.
         - Delete setup narrowing except `setup_gates.py`, which the censuses read until
           H7.20a, with all seven `narrow_lib` modules. Delete the rest of `land.sh`'s
-          setup arm and its Pi arms, `land_reach.py`, the rest of `reach.py` and
+          setup arm and its Pi arms, `land_reach.py` with `setup_lib/deployed_copies.py`
+          and `test_land_deployed_copies.py`, the rest of `reach.py` and
           `classify.py`'s setup arm, which D6 hands over. Delete `deploy.sh` and its
           library, `gitops_state.py`, `deployer_park.py`, monitor-bridge's copies of the
           state modules, `gen_gitops_markers.py`, `gen_doc_fragments.py`'s gitops
@@ -3234,10 +3302,10 @@ the `manual_plane` clearing, and *Rollback*'s
       H7.18d stops pi-peer-backup reading them, but every play run with
       `-e target=daniel-pi`, including a rollback re-apply of restored tasks, reaches the Pi
       through them until the playbooks go. The `hosts.ini` comment above the Pi's line and
-      the `daniel-pi.yml` comment above `ansible_host` go with them. Two renderer tests assert
-      the keys and go too:
-      `scripts/renderer/tests/test_renderer_context.py::test_hostvars_of_the_pi_take_ansible_user_from_hosts_ini`
-      and `::test_hostvars_of_the_pi_resolve_ansible_host_to_its_own_server_ip`. No coverage
+      the `daniel-pi.yml` comment above `ansible_host` go with them. The two renderer tests
+      that asserted the Pi's `ansible_user` and `ansible_host` go too, and
+      `scripts/renderer/tests/test_renderer_context.py::test_the_pi_client_ip_is_the_pis_own_server_ip`
+      takes their place: it resolves the one surviving Pi-host read. No coverage
       leaves with them: `scripts/renderer/tests/test_renderer_dialect.py::test_the_variable_layers_render_the_literal`
       still resolves another host's templated inline variable against that host, over the
       fixture in `_dialect_tree.py`. Four passages use the Pi's `ansible_host` as their
@@ -3553,9 +3621,9 @@ progress.
 - *The deletion census.* Two rows, each with a named member:
     - in `ansible/tests/repo/test_ansible_core_census.py`, landed by H7.17: a subprocess
       collects the whole suite with `sys.modules['ansible'] = None`, and any import error
-      outside the allowlist fails it. Since H7.54 the named member is
-      `ansible/tests/setup/test_pi_escalation_timeout.py`, which the collection must import,
-      and a fixture module holding `import ansible.errors` is flagged. The allowlist is
+      outside the allowlist fails it. H7.54's named member was
+      `test_pi_escalation_timeout.py`, which H7.55 deleted, so the grep half's named member is
+      `ansible/tests/repo/test_leakguard.py`, and a fixture module holding `import ansible.errors` is flagged. The allowlist is
       empty before H7.20b merges;
     - in `ansible/tests/repo/test_census_rows_text.py`, no tracked file names
       `ansible-playbook`, except under `docs/archive/`, `docs/adr/`,
@@ -3567,7 +3635,7 @@ progress.
   that ships a timer marked `changes_state: true`. Its named members are docs-refresh,
   secret-rotation, compose-adopt, checkout-sync and claude-memory-sync. A fixture component
   with such a timer and no heading is flagged.
-  `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py` and the setup half of
+  `test_setup_cron_roles_have_a_contract.py` (deleted, #8027) and the setup half of
   `ansible/tests/repo/test_role_claude_md.py` retire in H7.20c, when their subject does.
   Amended 2026-11-05, on H7.47's PR. No component marks a timer `changes_state: true`, and
   `COMPONENT_KEYS` refuses a new key, so the census's subject is every component that ships a
@@ -3722,7 +3790,7 @@ progress.
   success.
 - From H7.19b until H7.20a, `deploy_locks.py` keeps its own `TREE_LOCK`, although no
   running code imports it after H7.19a. Until H7.20a deletes it,
-  `test_tree_lock_single_definition.py` holds both constants equal to
+  `scripts/lib/tests/test_tree_lock.py` holds both constants equal to
   `server_git_tree_lock`, so the two copies cannot drift apart.
 
 ## Risks

@@ -168,18 +168,16 @@ def _issue_block(issue: Issue) -> str:
 # review batch's implementer with.
 APPLY_OWED = """### A verdict that leaves a host apply owed
 `needs-manual-apply` and `blocked` mean the PR merged and an apply is still owed on a host.
-`land.sh` has already printed the exact command — the playbook line and any
-`gitops_state.py clear-owed manual_plane <role>`. `land.sh` starts no GitOps tick
+`land.sh` has already printed the exact command — the playbook line. `land.sh` starts no GitOps tick
 and reads no deployer marker, so a PR that changes a setup role ends `nothing-to-deploy` whether
 or not the deployer applied it. Read what is still pending:
 ```bash
 uv run python scripts/diagnostics/probe.py landing
 ```
-A `DEPLOY_HOLD` other than `none`, a held setup apply, or a `manual_plane` line naming your role
-is CLAUDE.md *When to wait*. A host package the landing deferred on is the host wait's `deferred`
+A `DEPLOY_HOLD` other than `none` is CLAUDE.md *When to wait*. A host package the landing deferred on is the host wait's `deferred`
 (exit 4): the host's updater applies it, and re-running `land.sh` checks it.
 Do exactly one of these two things, never neither:
-- Apply the change and verify it, where *When to wait* leaves it to you — the marker is this
+- Apply the change and verify it, where *When to wait* leaves it to you — the apply is this
   PR's own work, no bring-up playbook sits in the range, and no other session owns it.
 - Otherwise file it with `findings.py open`, carrying the host, the role and the exact command
   `land.sh` printed, verbatim. Then list that issue number under a `MANUAL APPLY PENDING`
@@ -216,6 +214,7 @@ Run it in the foreground with the Bash tool's `timeout: 600000`, do not redirect
 end your turn on it: `cc-wait` prints the landing's `VERDICT:` line and exits with the landing's
 own code. It waits at most 570s. Exit 75 means the landing is still running: re-run ONLY
 `cc-wait land <n> --log-dir "{log_dir}"`, never `land.sh`, which would start a second landing.
+`land.sh` itself exiting 75 with `land: N landings are already live` printed no log: wait a few minutes and re-run the whole command.
 State `gave-up` (exit 3) is land.sh's own give-up, a resume point: re-run the whole command.
 State `deferred` (exit 4) is not: the PR landed, and a host's updater applies its package.
 `deploy.sh` exit 75 is a resume point to retry, not a failure to report.
@@ -407,7 +406,7 @@ def render_brief(
         )
     return f"""# Fan-out batch {batch} on {host}
 
-You are a headless Opus agent in the worktree `{branch}` of {target.checkout}, checked out
+You are a headless agent in the worktree `{branch}` of {target.checkout}, checked out
 fresh from {target.base}. Work the issues below to a PR.
 
 ## Claim

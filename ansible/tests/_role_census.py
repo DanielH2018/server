@@ -4,8 +4,7 @@
 guard that asks either question sees the same set as every other guard asking it (#3717,
 #3726).
 
-Covers both trees, `roles/k8s/` and `roles/setup/`. A retired role ghosts the same way in
-each, so they read through one predicate.
+Covers every plane under `ansible/roles/`, which since H7.55 holds `roles/k8s/` alone.
 
 Lives in its own module rather than in `_helpers.py`, which was at its line cap.
 The `role-tree-walks-use-role-dirs` and `role-task-walks-use-task-files` rows of
@@ -30,9 +29,8 @@ def role_dirs(roles_dir: Path = K8S_ROLES, *, skip_dotted: bool = False) -> list
     `tasks/` raise `FileNotFoundError`, and the rest credit or census a role that no longer
     exists in git. CI reads a fresh checkout, so neither shows up there.
 
-    The three trees fail differently and all fail. A k8s guard miscensuses; the Pi's
-    `containers_list` guard and the setup-playbook routing guard assert set equality against a
-    declaration, so the shell reads as an undeclared role and they fail outright.
+    A k8s guard that censuses such a shell miscounts, and one that asserts set equality against
+    a declaration reads the shell as an undeclared role and fails outright.
 
     `lib.k8s_roles.role_dirs` is the walk, the one `scripts/` reads too, and its predicate is
     the deployer's own. It skips only a directory with NO non-`.pyc` file; an empty
@@ -49,7 +47,7 @@ def role_dirs(roles_dir: Path = K8S_ROLES, *, skip_dotted: bool = False) -> list
 
 
 def every_plane_role_dirs(roles_root: Path = ROLES) -> list[Path]:
-    """Every role in every plane under `roles_root` (`k8s/`, `setup/`), sorted.
+    """Every role in every plane under `roles_root`, sorted.
 
     `roles_root` is a parameter so a guard's red proof can build a synthetic plane tree in
     `tmp_path`.

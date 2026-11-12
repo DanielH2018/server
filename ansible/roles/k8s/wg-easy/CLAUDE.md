@@ -17,8 +17,8 @@ LAN-only **Docker** wg-easy, on an older version with a different auth model.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
-  `--tags=wg-easy` with exit 5
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=wg-easy` gates the
+  rollout
 - **Image:** `ghcr.io/wg-easy/wg-easy` (`wg_easy_k8s_image`)
 - **Route:** `wg-easy.<domain>` · `wg-easy.local.<domain>`, Authelia one_factor
 - **Claim:** `wg-easy-config` (weekly -> B2 (default target))

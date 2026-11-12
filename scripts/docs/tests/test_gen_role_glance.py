@@ -13,14 +13,10 @@ import pytest
 import yaml
 
 import gen_role_glance as g
-from docs.catalog_lib import glance_facts as f
 from lib.estate import Inventory
 
 KNOWN_SERVICES = frozenset(
     {"sonarr", "traefik", "authelia", "home-assistant", "pihole"}
-)
-KNOWN_SETUP_ROLES = frozenset(
-    {"gitops_deploy", "k3s", "renovate_agent", "initial_setup"}
 )
 # H5.9 moved wg-easy, the last Pi service, into the host package, so no Pi role takes a block.
 
@@ -57,32 +53,6 @@ def test_image_vars_reads_the_role_defaults_then_a_hoisted_group_var():
     ]
 
 
-# --- setup-plane facts -------------------------------------------------------------------
-
-
-def _write(path: Path, text: str) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    return path
-
-
-PLAYBOOK = """\
-- name: Setup
-  hosts: all
-  roles:
-    - { role: widget, tags: ["widget_tag"], when: has_widget }
-    - config_files
-- name: Join
-  hosts: all
-  tasks:
-    - name: Join through the role
-      ansible.builtin.include_role:
-        name: widget
-        tasks_from: agent
-      tags: [widget_agent]
-"""
-
-
 @pytest.mark.parametrize(
     ("owner", "name", "repository"),
     [
@@ -102,91 +72,6 @@ def test_the_ghcr_prefix_matches_the_renderers():
     from renderer.renderer_lib import images
 
     assert g.GHCR == images.GHCR
-
-
-def test_setup_appliers_reads_role_entries_and_include_role_tasks(tmp_path):
-    _write(tmp_path / "initial_setup.yml", PLAYBOOK)
-    assert f.setup_appliers("widget", tmp_path, ("initial_setup.yml",)) == [
-        ("initial_setup.yml", "widget_agent", ""),
-        ("initial_setup.yml", "widget_tag", "has_widget"),
-    ]
-    # A bare role name is applied whenever the playbook runs: no tag, no condition.
-    assert f.setup_appliers("config_files", tmp_path, ("initial_setup.yml",)) == [
-        ("initial_setup.yml", "", "")
-    ]
-    assert f.setup_appliers("absent", tmp_path, ("initial_setup.yml",)) == []
-
-
-CRON_TASKS = """\
-- name: Install the hourly job
-  ansible.builtin.cron:
-    name: hourly job
-    minute: "5"
-    job: /bin/true
-- name: Teardown arm
-  ansible.builtin.cron:
-    name: gone job
-    state: absent
-- name: Armed only when enabled
-  block:
-    - name: Nested
-      ansible.builtin.cron:
-        name: nested job
-        special_time: weekly
-        state: "{{ 'present' if armed else 'absent' }}"
-"""
-
-
-def test_cron_jobs_descend_into_blocks_and_skip_a_literal_absent(tmp_path):
-    role = tmp_path / "widget"
-    _write(role / "tasks" / "main.yml", CRON_TASKS)
-    assert f.cron_jobs(role) == [("hourly job", "5 * * * *"), ("nested job", "@weekly")]
-
-
-def test_timer_units_reads_the_cadence_keys_in_a_fixed_order(tmp_path):
-    role = tmp_path / "widget"
-    _write(
-        role / "templates" / "widget.timer.j2",
-        "[Timer]\nOnUnitActiveSec={{ tick }}\nRandomizedDelaySec=2min\nOnBootSec=10min\n",
-    )
-    assert f.timer_units(role) == [
-        ("widget.timer", ["OnBootSec=10min", "OnUnitActiveSec={{ tick }}"])
-    ]
-
-
-def test_setup_glance_lines_names_every_source_when_a_role_has_none(tmp_path):
-    role = tmp_path / "widget"
-    _write(role / "tasks" / "main.yml", "- name: Nothing\n  ansible.builtin.debug:\n")
-    lines = f.setup_glance_lines(role, playbooks_dir=tmp_path)
-    assert lines[0].startswith("- **Applied by:** no bring-up playbook entry")
-    assert lines[1].startswith("- **Crons / timers:** none")
-
-
-def test_setup_glance_lines_lists_no_timer_for_a_role_that_ends_everywhere(tmp_path):
-    role = tmp_path / "widget"
-    _write(
-        role / "tasks" / "main.yml", "- name: End\n  ansible.builtin.meta: end_role\n"
-    )
-    _write(role / "templates" / "widget.timer.j2", "[Timer]\nOnBootSec=5min\n")
-    lines = f.setup_glance_lines(role, playbooks_dir=tmp_path)
-    assert lines[0].endswith("ends on hosts where `True` (leading `meta: end_role`)")
-    assert lines[1:] == [
-        "- **Crons / timers:** none (the role ends on every host before its first task)"
-    ]
-
-
-def test_setup_glance_lines_lists_the_timers_of_a_role_that_ends_on_some_hosts(
-    tmp_path,
-):
-    role = tmp_path / "widget"
-    _write(
-        role / "tasks" / "main.yml",
-        "- name: End\n  ansible.builtin.meta: end_role\n"
-        "  when: inventory_hostname == 'daniel-server'\n",
-    )
-    _write(role / "templates" / "widget.timer.j2", "[Timer]\nOnBootSec=5min\n")
-    lines = f.setup_glance_lines(role, playbooks_dir=tmp_path)
-    assert lines[1] == "- **Timer:** `widget.timer` (`OnBootSec=5min`)"
 
 
 # --- the in-place writer -----------------------------------------------------------------
@@ -215,24 +100,6 @@ def test_render_doc_replaces_a_stale_block_and_is_idempotent():
 def test_render_doc_refuses_a_doc_without_the_heading():
     with pytest.raises(g.MissingHeading):
         g.render_doc("# x\n\n## Traps\n", BLOCK)
-
-
-def test_render_doc_creates_the_heading_before_the_first_section_when_asked():
-    doc = "# x\n\nIntro.\n\n## Traps\n- t\n"
-    out = g.render_doc(doc, BLOCK, create_heading=True)
-    assert out == "# x\n\nIntro.\n\n## At a glance\n" + BLOCK + "\n## Traps\n- t\n"
-    assert g.render_doc(out, BLOCK, create_heading=True) == out
-
-
-def test_render_doc_creates_the_heading_after_the_intro_when_the_doc_has_no_section():
-    doc = "# x\n\nIntro line one.\nIntro line two.\n\n- a bullet\n"
-    out = g.render_doc(doc, BLOCK, create_heading=True)
-    assert out == (
-        "# x\n\nIntro line one.\nIntro line two.\n\n## At a glance\n"
-        + BLOCK
-        + "\n- a bullet\n"
-    )
-    assert g.render_doc(out, BLOCK, create_heading=True) == out
 
 
 def test_render_doc_refuses_an_unterminated_block():
@@ -265,38 +132,6 @@ def test_the_gate_covers_the_known_services():
     # matching would make the gate above pass on nothing.
     names = {e["name"] for e in g.Estate().k8s_entries().values()}
     assert KNOWN_SERVICES <= names, sorted(KNOWN_SERVICES - names)
-
-
-def test_the_gate_covers_the_known_setup_roles():
-    setup = {d.name for d in g.setup_role_dirs()}
-    assert KNOWN_SETUP_ROLES <= setup, sorted(KNOWN_SETUP_ROLES - setup)
-    assert "common" not in setup
-
-
-def test_setup_role_dirs_drops_a_pycache_only_shell(tmp_path):
-    """A retired setup role's `__pycache__`-only directory is not a role.
-
-    Without the filter the generator would write a block for a role that no longer exists in
-    git, and the staleness gate above would raise on its missing `CLAUDE.md`.
-    """
-    (tmp_path / "retired" / "__pycache__").mkdir(parents=True)
-    (tmp_path / "retired" / "__pycache__" / "x.cpython-314.pyc").write_bytes(b"\x00")
-    (tmp_path / "real" / "tasks").mkdir(parents=True)
-    (tmp_path / "real" / "tasks" / "main.yml").write_text("---\n")
-    assert [d.name for d in g.setup_role_dirs(tmp_path)] == ["real"]
-
-
-def test_every_setup_doc_carries_the_marker_under_the_heading():
-    """The heading, then the marker directly under it, on every doc."""
-    docs = [d / "CLAUDE.md" for d in g.setup_role_dirs()]
-    missing = []
-    for doc in docs:
-        lines = doc.read_text().splitlines()
-        if g.HEADING not in lines or not lines[lines.index(g.HEADING) + 1].startswith(
-            g.BEGIN_PREFIX
-        ):
-            missing.append(doc.relative_to(g.REPO).as_posix())
-    assert missing == []
 
 
 def _copy_role(name: str, roles: Path) -> Path:
@@ -333,39 +168,13 @@ def test_a_hand_edited_block_is_flagged(tmp_path):
     assert g.stale_k8s_docs(write=False, estate=estate, k8s_roles=roles) == []
 
     doc = (dst / "CLAUDE.md").read_text()
-    assert "`--tags=sonarr`" in doc
-    (dst / "CLAUDE.md").write_text(doc.replace("`--tags=sonarr`", "`--tags=sonar`", 1))
+    assert "`land.sh --tags=sonarr`" in doc
+    (dst / "CLAUDE.md").write_text(
+        doc.replace("`land.sh --tags=sonarr`", "`land.sh --tags=sonar`", 1)
+    )
     assert g.stale_k8s_docs(write=False, estate=estate, k8s_roles=roles) == [
         "k8s/sonarr"
     ]
-
-
-def test_a_hand_edited_setup_block_is_flagged(tmp_path):
-    """The setup shape's rejecting half: a fixture role renders clean, one moved cron makes it stale."""
-    playbooks = tmp_path / "ansible"
-    _write(playbooks / "initial_setup.yml", PLAYBOOK)
-    roles = playbooks / "roles" / "setup"
-    role = roles / "widget"
-    _write(role / "tasks" / "main.yml", CRON_TASKS)
-    _write(role / "CLAUDE.md", "# widget\n\nIntro.\n\n## Traps\n- t\n")
-    assert g.stale_setup_docs(
-        write=False, setup_roles=roles, playbooks_dir=playbooks
-    ) == ["setup/widget"]
-    assert g.stale_setup_docs(
-        write=True, setup_roles=roles, playbooks_dir=playbooks
-    ) == ["setup/widget"]
-    assert (
-        g.stale_setup_docs(write=False, setup_roles=roles, playbooks_dir=playbooks)
-        == []
-    )
-    doc = (role / "CLAUDE.md").read_text()
-    assert "- t\n" in doc and "## Traps" in doc
-    _write(
-        role / "tasks" / "main.yml", CRON_TASKS.replace('minute: "5"', 'minute: "6"')
-    )
-    assert g.stale_setup_docs(
-        write=False, setup_roles=roles, playbooks_dir=playbooks
-    ) == ["setup/widget"]
 
 
 # An entry that carries `owner` is not Ansible's to deploy (D2.4b): the deploy tag and the
@@ -389,19 +198,7 @@ def test_a_k8s_role_glance_names_flux_in_place_of_the_deploy_tag(tmp_path):
     """No `owner` key marks the entry: `platform: k8s` alone makes it Flux's (H1.9)."""
     block = _littlelink_block(tmp_path)
     assert "- **Applied by:** Flux, through `promote`" in block
-    # The block is wrapped, so match the refusal across a line break.
+    # The block is wrapped, so match the gate across a line break.
     unwrapped = " ".join(block.split())
-    assert "`deploy.sh` refuses `--tags=littlelink` with exit 5" in unwrapped
+    assert "`land.sh --tags=littlelink` gates the rollout" in unwrapped
     assert "Deploy tag" not in block and "Auto-deploy" not in block
-
-
-def test_a_role_lists_the_timers_its_component_ships_in_the_host_packages():
-    """Named member: an emptied role's timer now lives in a component that names the role."""
-    cells = f.packaged_timer_cells("nut_host")
-    assert cells == [
-        "`homelab-ups-watchdog.timer` (`OnCalendar=*:0/10`) on daniel-box, daniel-server"
-    ]
-
-
-def test_a_role_no_component_names_lists_no_packaged_timer():
-    assert f.packaged_timer_cells("widget") == []

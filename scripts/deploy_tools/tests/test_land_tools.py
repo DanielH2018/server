@@ -12,7 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from _deploy_sh_fakes import git_free_env
+from lib.git_testing import scrubbed_env
 from lib.git_testing import commit, init_repo
 from lib.proc_testing import run
 from deploy_tools.land_lib import tools
@@ -53,36 +53,12 @@ def _capture(monkeypatch):
     return seen
 
 
-def test_deploy_tags_is_the_relative_path_in_the_primary_checkout(monkeypatch):
-    """Its question IS the primary checkout: `blockers` reads HEAD..origin/master there."""
-    seen = _capture(monkeypatch)
-    tools.run_deploy_tags(Path("/primary"), ["blockers", "origin/master"])
-    assert seen["argv"][3] == "scripts/deploy_tools/deploy_tags.py"
-    assert seen["cwd"] == Path("/primary")
-
-
 def test_helpers_whose_code_must_match_are_imported_from_beside_land_py():
     """A helper this script passes new flags to must be the same release."""
     assert Path(tools.await_ci.__file__).resolve().parent == tools.HERE
     assert Path(tools.land_tags.__file__).resolve().parent == tools.HERE / "land_lib"
     gate_file = sys.modules[tools.health_gate.__module__].__file__
-    assert gate_file and Path(gate_file).resolve().parent == tools.HERE / "deploy_lib"
-
-
-def test_read_state_is_empty_for_a_missing_or_blank_marker(tmp_path):
-    assert tools.read_state(tmp_path, "hold_sha") == ""
-    (tmp_path / "hold_sha").write_text("  \n")
-    assert tools.read_state(tmp_path, "hold_sha") == ""
-    (tmp_path / "hold_sha").write_text("abc\n")
-    assert tools.read_state(tmp_path, "hold_sha") == "abc"
-
-
-def test_a_readable_hold_survives_a_torn_behind_marker(tmp_path):
-    """A readable hold stays readable whatever `behind_since` holds."""
-    (tmp_path / "hold_sha").write_text("abc\n")
-    (tmp_path / "behind_since").write_bytes(b"\xff\n")
-    assert tools.read_state(tmp_path, "hold_sha") == "abc"
-    assert tools.read_state(tmp_path, "behind_since") is None
+    assert gate_file and Path(gate_file).resolve().parent == tools.HERE / "land_lib"
 
 
 def test_the_syslog_tag_is_the_one_the_board_expects(monkeypatch):
@@ -116,7 +92,7 @@ def test_the_gate_snapshot_is_a_worktree_of_the_named_commit(tmp_path):
         head = run(
             ["git", "rev-parse", "HEAD"],
             cwd=snap,
-            env=git_free_env(),
+            env=scrubbed_env(),
             check=True,
         ).stdout.strip()
         assert head == first and head != second
@@ -128,7 +104,7 @@ def test_the_gate_snapshot_is_a_worktree_of_the_named_commit(tmp_path):
     listed = run(
         ["git", "worktree", "list"],
         cwd=repo,
-        env=git_free_env(),
+        env=scrubbed_env(),
         check=True,
     ).stdout
     assert str(snap) not in listed
@@ -187,7 +163,7 @@ def test_a_sigterm_during_the_gate_still_removes_the_worktree(tmp_path):
     listed = run(
         ["git", "worktree", "list"],
         cwd=repo,
-        env=git_free_env(),
+        env=scrubbed_env(),
         check=True,
     ).stdout
     assert str(kept[0]) not in listed

@@ -14,14 +14,16 @@ description: >-
 # from whatever the runner image's toolcache holds that day, while a three-part one moves only
 # through Renovate.
 #
-# The caller checks the repository out first. A local action is a file in the checkout, so it
-# cannot run before one, and each job's checkout differs anyway (fetch-depth).
+# The caller checks the repository out first. The steps below read the checkout (uv.lock,
+# prek.toml), and each job's checkout differs anyway (fetch-depth).
 #
-# DECIDED: callers write `uses: ./.github/actions/setup` with a `zizmor: ignore[self-repository]`
-# comment, not GitHub's `$/.github/actions/setup` form (added 2026-07-30). zizmor 1.30.1 asks for
-# `$/`, but the pinned actionlint rejects it as "ref is missing", and actionlint is the hook that
-# validates each caller's `with:` keys against the inputs below. Measured 2026-10-09. Switch to
-# `$/` and drop the ignores once a Renovate bump gives actionlint the syntax.
+# DECIDED: callers write `uses: $/.github/actions/setup`, which pins this action to the
+# workflow's own commit, and the `actionlint` prek hook runs through
+# scripts/validate/actionlint_dollar_refs.py (2026-11-12). actionlint 1.7.12 rejects `$/` as
+# "ref is missing" and then skips checking the caller's `with:` keys against the inputs below
+# (rhysd/actionlint#711). The wrapper lints a copy rewritten to `./`. Once an actionlint release
+# accepts `$/`, point the hook back at `uv run --frozen actionlint` and delete the wrapper and
+# its test.
 
 inputs:
   python:
@@ -30,9 +32,6 @@ inputs:
   uv:
     description: Install uv with its download cache keyed on uv.lock. Needs `python`.
     default: "true"
-  galaxy:
-    description: Restore and save the Ansible collections cache (ansible/collections).
-    default: "false"
   prek-cache-key:
     description: >-
       Install the pinned prek and cache its hook environments under this key prefix. Empty
@@ -46,6 +45,16 @@ inputs:
 runs:
   using: composite
   steps:
+    # apt reads every pocket through mirror+file:/etc/apt/apt-mirrors.txt and tries each listed
+    # host in turn. All of them are ubuntu.com names, so one DNS outage fails them all (#7957).
+    - name: Add a non-ubuntu.com apt mirror as the last fallback
+      shell: bash
+      run: |
+        mirrors=/etc/apt/apt-mirrors.txt
+        if [[ -f "$mirrors" ]] && ! grep -q mirrors.edge.kernel.org "$mirrors"; then
+          sudo sed -i '$a https://mirrors.edge.kernel.org/ubuntu/' "$mirrors"
+        fi
+
     - if: inputs.python == 'true'
       uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
       with:
@@ -56,7 +65,7 @@ runs:
       uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3  # no floating major tag is published; pin the exact release
       with:
         # Most prek hooks shell out to `uv run`, which resolves the `dev` and `lint` groups
-        # (ansible-core, pytest, docker, flask, ruff, ty, shellcheck-py) before the first one
+        # (pytest, flask, ruff, ty, shellcheck-py) before the first one
         # executes. Without this the download is repaid on every run. Keyed on uv.lock by
         # the action itself, so a lock change invalidates it exactly.
         enable-cache: true
@@ -73,20 +82,11 @@ runs:
 
     # Whichever job finishes first writes the cache entry, so every job syncs the whole
     # profile here, even one that never runs `uv`. UV_NO_DEV and UV_NO_GROUP still narrow it.
+    # `--compile-bytecode` prints the cold compile line shard_weight_gate.py:leg_speed reads.
     - name: Sync the uv environment
       if: inputs.uv == 'true'
       shell: bash
-      run: uv sync --frozen
-
-    # Several ansible/tests read the Galaxy collections, and the ansible-lint hook's own entry
-    # runs `ansible-galaxy collection install` before linting — warm that is a 0.4s no-op, cold
-    # a ~40 MB download. One key for every job that asks, so they share one entry.
-    - name: Cache Ansible collections
-      if: inputs.galaxy == 'true'
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: ansible/collections
-        key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
+      run: uv sync --frozen --compile-bytecode
 
     # prek bootstraps one isolated environment per remote hook repo whenever its cache is
     # cold — uncached, that is every CI run. Worth ~14s in the `hooks` job (the step measured
@@ -123,7 +123,7 @@ runs:
     - name: Install prek
       if: inputs.prek-cache-key != ''
       shell: bash
-      run: pip install prek==0.5.9  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
+      run: pip install prek==0.5.10  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
 
     - if: inputs.node == 'true'
       uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7

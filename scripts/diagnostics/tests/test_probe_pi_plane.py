@@ -6,8 +6,16 @@ equivalent.
 """
 
 import json
+import os
+import sys
 
+# `probe.py` sits in `scripts/diagnostics`, which `pythonpath` leaves out, so this test module
+# puts its own parent directory on `sys.path`.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import probe
 from diagnostics.probe_lib import core, pi_plane
+from lib.kubectl import WrongCluster
 
 
 PROMETHEUS_TEMPLATE_TEXT = pi_plane.PROMETHEUS_TEMPLATE_PATH.read_text()
@@ -172,3 +180,93 @@ def test_run_pi_targets_end_to_end_reports_a_missing_job(monkeypatch, capsys):
     assert pi_plane.run_pi_targets(Ns()) == 1
     out = capsys.readouterr().out
     assert "alloy-pi: MISSING" in out
+
+
+def test_format_targets_all_up_is_clean():
+    text, code = pi_plane.format_targets([_target("node"), _target("loki")])
+    assert (code, text) == (0, "2/2 targets up")
+
+
+def test_format_targets_flags_only_the_down_target():
+    """The healthy target prints no row: the view is the exceptions and a count (#7896)."""
+    active = [_target("node"), _target("loki", health="down", last_error="refused")]
+    active[1]["labels"]["job"] = "loki"
+    text, code = pi_plane.format_targets(active)
+    assert code == 1
+    assert text.splitlines() == ["  ✗ loki [daniel-pi] refused", "1/2 targets up"]
+
+
+def test_run_targets_prints_the_count(capsys):
+    payload = {"data": {"activeTargets": [_target("node")]}}
+
+    class Ns:
+        pi = False
+
+    code = pi_plane.run_targets(
+        Ns(), fetch_json=lambda url, resolve=None: (payload, None)
+    )
+    assert code == 0
+    assert capsys.readouterr().out == "1/1 targets up\n"
+
+
+def _run_targets_one_down(scaled):
+    """Run plain `targets` on one down `terraria-stats` target; `scaled` is the lookup's answer."""
+    target = _target("terraria-stats", health="down", last_error="refused")
+    target["labels"]["job"] = "terraria-stats"
+    payload = {"data": {"activeTargets": [_target("node"), target]}}
+
+    class Ns:
+        pi = False
+
+    return pi_plane.run_targets(
+        Ns(),
+        fetch_json=lambda url, resolve=None: (payload, None),
+        scaled_lookup=lambda cluster: scaled,
+    )
+
+
+def test_run_targets_passes_a_down_target_whose_deployment_is_scaled_to_zero(capsys):
+    """An idle on-demand game server's exporter is down by design, not a failure (#7912)."""
+    assert _run_targets_one_down({"terraria-stats"}) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "  - terraria-stats [daniel-pi] scaled to 0",
+        "1/2 targets up, 1 scaled to 0",
+    ]
+
+
+def test_run_targets_fails_a_down_target_whose_deployment_runs(capsys):
+    assert _run_targets_one_down(set()) == 1
+    assert capsys.readouterr().out.splitlines() == [
+        "  ✗ terraria-stats [daniel-pi] refused",
+        "1/2 targets up",
+    ]
+
+
+def _deployment(name, replicas):
+    return {"metadata": {"name": name}, "spec": {"replicas": replicas}}
+
+
+def test_scaled_to_zero_deployments_names_only_the_zero_replica_ones():
+    items = [_deployment("terraria-stats", 0), _deployment("grafana", 1)]
+    names = pi_plane.scaled_to_zero_deployments(
+        "prod", read=lambda *args: {"items": items}
+    )
+    assert names == {"terraria-stats"}
+
+
+def test_scaled_to_zero_deployments_is_empty_when_the_read_fails():
+    """A failed read exempts nothing, so the down target stays red, never a traceback."""
+
+    def refuse(*args):
+        raise WrongCluster("serves staging")
+
+    assert pi_plane.scaled_to_zero_deployments("prod", read=refuse) == set()
+
+
+def test_plain_targets_names_a_verdict_and_json_names_none():
+    """Plain `targets` judges; `--json` is the raw document the SessionStart hook parses."""
+    from diagnostics.probe_lib.cli_parser import _build_parser
+
+    parse = _build_parser().parse_args
+    assert probe.verdict_path(parse(["targets"])) == "targets"
+    assert probe.verdict_path(parse(["targets", "--json"])) is None

@@ -34,30 +34,22 @@ a gate the repo requires, so nothing downstream notices either way.
      (#2160). `findings.py` itself calls `gh` from Python, which never reaches this hook, so
      there is no exemption to write.
 
-  5. `deploy.sh --skip-staleness-check` typed by a session. deploy.sh refuses a tree behind
-     `origin/master` (exit 4, nothing deployed) because a stale tree renders stale templates
-     and reverts live config while every repo-side check reads green — and the flag makes that
-     deploy succeed with a green recap. The deploy skill and `docs/deploying.md` said "never";
-     `auto-mode-bridge.py` nudged in prose; nothing denied it. There is no correct use
-     left: the one exemption was inside the staging gate's runner, whose tree was pinned behind
-     master by construction, and that runner went with the daniel-stage guest.
-
-  6. `gh workflow run ci.yml` with no `--ref`. gh resolves an empty ref to the default branch,
-     so the dispatch sweeps master's HEAD — and `deploy_git.ci_verdict` applies worst-wins over
+  5. `gh workflow run ci.yml` with no `--ref`. gh resolves an empty ref to the default branch,
+     so the dispatch sweeps master's HEAD — and `hosts/lib/ci_verdict.py:ci_verdict` applies worst-wins over
      every required check-run on a SHA with no event filter, while GitHub's `filter=latest`
      does not merge same-named runs across check suites. So one red dispatch run sits beside
-     the green push run and pins that master SHA's verdict to fail, which stops the GitOps
-     deployer's walk at it. The dispatch itself reports nothing wrong.
+     the green push run and pins that master SHA's verdict to fail, which stops the checkout
+     sync's and the host-package builder's walk at it. The dispatch itself reports nothing wrong.
 
-  7. `gh pr create` or `gh pr edit` with a body that skips a `## ` heading of
+  6. `gh pr create` or `gh pr edit` with a body that skips a `## ` heading of
      `.github/pull_request_template.md`. Nothing fails: the PR opens, and the agent reads the
      template afterwards and rewrites the body to fit it, which was 40 of the PR body edits
      read for #3963. Denying the create moves the fit to before the PR exists.
 
-  8. An OCI tag move is denied, and a write that clears `DEPLOY_HOLD` or writes `PROD_DIGEST`
+  7. An OCI tag move is denied, and a write that clears `DEPLOY_HOLD` or writes `PROD_DIGEST`
      asks the operator. Setting a hold passes; `_deploy_plane_rule.py` has the rule.
 
-  9. A `probe.py` gate from a worktree behind `origin/master` (#5912); `_stale_probe_rule.py`.
+  8. A `probe.py` gate from a worktree behind `origin/master` (#5912); `_stale_probe_rule.py`.
 
 Rules that key on a host tool or on GitHub rather than on this repo live in
 `claude_guard.footguns`, which every repo's PreToolUse hook runs.
@@ -255,38 +247,6 @@ def issue_create_by_hand_problem(stage: list[str]) -> str | None:
     )
 
 
-_STALENESS_FLAG = "--skip-staleness-check"
-
-
-def skip_staleness_problem(stage: list[str]) -> str | None:
-    """`deploy.sh --skip-staleness-check` typed as a command.
-
-    Keyed on the command word's basename so `./scripts/deploy.sh`, `scripts/deploy.sh` and
-    the absolute path all match, and so a `grep`/`sed` naming the flag as an argument stays
-    clean.
-    """
-    words = strip_shell_keywords(stage)
-    names = [word.rsplit("/", 1)[-1] for word in words]
-    # The shim execs `deploy_cli.py`, so an interpreter handed that module is the same
-    # deploy by another door. `deploy_run.py` is what the shim execed before #4347, and an
-    # older checkout still carries it. Keyed on the interpreter as the command word, so a
-    # `grep` that names the module and the flag as arguments stays clean.
-    runs_the_module = (
-        names[:1]
-        and names[0] in ("uv", "python", "python3")
-        and ("deploy_cli.py" in names or "deploy_run.py" in names)
-    )
-    if not names or (names[0] != "deploy.sh" and not runs_the_module):
-        return None
-    if _STALENESS_FLAG not in words[1:]:
-        return None
-    return (
-        f"`deploy.sh {_STALENESS_FLAG}` deploys a tree behind origin/master: stale templates "
-        "render and live config reverts while every check reads green. Pull first (a landing "
-        "goes through `land.sh --at <sha>`), then deploy without the flag."
-    )
-
-
 # The CI workflow, by every name `gh workflow run` accepts for it: the file, either extension,
 # and the `name:` in it. NOT the numeric workflow id — gh accepts that too, and a literal here
 # would drift the first time the workflow is recreated. Stated as a limit in the rule's
@@ -341,9 +301,10 @@ def ci_dispatch_on_master_problem(stage: list[str]) -> str | None:
     return (
         "A `gh workflow run ci.yml` with no --ref sweeps master's HEAD, and gh resolves an "
         "empty ref to the default branch. The dispatch run lands as a second check suite on "
-        "that SHA, deploy_git.ci_verdict takes the worst conclusion over every required "
+        "that SHA, hosts/lib/ci_verdict.py takes the worst conclusion over every required "
         "check-run with no event filter, and one red dispatch beside the green push run pins "
-        "the SHA to fail — which stops the GitOps deployer's walk there. Dispatch the BRANCH: "
+        "the SHA to fail — which stops the checkout sync's and the builder's walk there. "
+        "Dispatch the BRANCH: "
         "`gh workflow run ci.yml --ref <your-branch>`."
     )
 
@@ -455,7 +416,6 @@ _RULES = (
     burst_public_hostname_problem,
     issue_create_by_hand_problem,
     tag_move_problem,
-    skip_staleness_problem,
     ci_dispatch_on_master_problem,
 )
 
@@ -473,12 +433,8 @@ _RULE_BINARY_RE = re.compile(
 
 
 def could_fire(command: str) -> bool:
-    """True if `command` names a binary one of `_RULES` keys on, read off the raw text.
-
-    Rule 5 keys on a flag rather than a binary: `deploy.sh` is almost always typed behind a
-    `./scripts/` path, which the regex's lookbehind refuses, so the flag literal is the gate.
-    """
-    return _RULE_BINARY_RE.search(command) is not None or _STALENESS_FLAG in command
+    """True if `command` names a binary one of `_RULES` keys on, read off the raw text."""
+    return _RULE_BINARY_RE.search(command) is not None
 
 
 def problem(command: str) -> str | None:

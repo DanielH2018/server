@@ -38,11 +38,11 @@ WITH ``LAND_HANDOFF_UNIT`` SET, THIS SCRIPT LANDS NOTHING ITSELF. The ``claude``
 profile sets it: that user cannot deploy, so land.sh starts ``<unit>@<pr>.service``,
 which lands the PR as the operator under the landing policy, and reports that landing's verdict
 and exit code as its own. ``--detach && cc-wait land <pr>`` works unchanged; ``--tags``,
-``--since`` and ``--subject`` are refused. The mechanics are ``land_lib/handoff.py``.
+``--since``, ``--subject`` and ``--fresh`` are refused. The mechanics are ``land_lib/handoff.py``.
 
 WHAT THIS SCRIPT DOES NOT DO. It holds no check of its own: no health logic, no deploy
-staleness logic, and it runs no deploy.sh and no GitOps tick. promote and Flux apply every tag,
-deploy_detach_notify.gate owns the health verdict, await_ci.wait owns the CI wait. A check
+staleness logic. promote and Flux apply every tag, `land_lib/health_gate.gate` owns the health
+verdict, await_ci.wait owns the CI wait. A check
 appearing in here is a bug, not a feature -- it would be a second implementation that drifts from the first. Which checkout each helper comes from, and why
 it is not one answer, is the docstring of ``land_lib/tools.py``.
 
@@ -56,6 +56,9 @@ Usage::
                                              # the one-command form: own logfile, shared wait
     land.sh --pr 574 --detach --log-dir .fanout && cc-wait land 574 --log-dir .fanout
                                              # put the log somewhere else
+    land.sh --pr 574 --arm-merge --await-merge --fresh
+                                             # land from a checkout of origin/master this
+                                             # run makes and removes (`land_lib/fresh.py`)
     land.sh --regate 574                     # re-run a merged pin bump's gates and
                                              # re-post homelab/upgrade-gates; never merges
 
@@ -73,7 +76,7 @@ exits 0 when it posted and 1 when it refused. `land_lib/pin_gate.py` has the rul
 
 Exit codes:
   0   deployed and settled, or there was nothing to deploy
-  1   CI red or unproven, blocked by a change needing a hand, a tag matching no k8s entry, a
+  1   CI red or unproven, a tag matching no k8s entry, a
       held or failed promotion, the health gate failed, or the PR was closed
       unmerged, conflicts with master, or its own CI is red
   64  bad arguments
@@ -82,22 +85,20 @@ Exit codes:
       published a host package that contains the merge
 
 Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
-blocked | needs-manual-apply | deferred | merge-conflict | pr-ci-red | merge-timeout |
+needs-manual-apply | deferred | merge-conflict | pr-ci-red | merge-timeout |
 ci-red | ci-timeout | ci-unproven | refused | handoff-timeout | unbuilt.
 
-`blocked` is not a failure of this PR -- something else in the incoming range needs an
-operator, and nothing was deployed. `needs-manual-apply` means this PR reaches something
-neither a deploy tag nor a host package covers, so it is landed but not live.
-`nothing-to-deploy` also covers a PR that reaches only a setup role: the deployer's timer
-applies it, and this landing does not watch that apply, so read the host (or `owed.jsonl`)
-for the outcome.
+`needs-manual-apply` means this PR rotates a secret, whose consumers neither a deploy tag nor a
+host package covers, so it is landed but not live. `nothing-to-deploy` also covers a PR that
+reaches only a setup role, which no landing applies.
 `deferred` means this landing gave up waiting and a re-run completes it: no promotion covered
 the merge in time, the builder has not published the host package, or the health gate could
-not read its store (exit 75), so the deploy went ungraded. Re-run land.sh to grade it.
+not read its store or found its tree older than origin/master (exit 75), so the deploy went
+ungraded. Re-run land.sh to grade it.
 `refused` is every other exit-1 stop: the landing policy, a PR closed unmerged or with
 changes requested, a read or a fetch that failed, or a checkout whose landing code master
 has changed since (`classify.refuse_stale_code`, and before `--arm-merge` merges anything,
-`classify.refuse_stale_code_before_merge`). The `land:` line on stderr, repeated in the
+`classify.refuse_stale_code_before_merge`); re-run that one with `--fresh`. The `land:` line on stderr, repeated in the
 verdict's detail, says which. `handoff-timeout` is land.sh giving up on a lander unit that is
 still running (`LAND_HANDOFF_UNIT` below); a re-run waits on it again. `unbuilt` replaces a
 host's `deferred` when the builder reports a failing reason and has published no package of
@@ -129,16 +130,17 @@ import contextlib
 import io
 from collections.abc import Callable
 import dataclasses
+import functools
 import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/
-from lib.exit_codes import LAND_BAD_ARGS
+from lib.exit_codes import LAND_BAD_ARGS, LAND_GAVE_UP
 from lib.git import git
-from deploy_tools.land_lib import detach, handoff, pin_gate, pipeline
+from deploy_tools.land_lib import detach, fresh, handoff, pin_gate, pipeline
 from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.ledger import annotation_line
+from deploy_tools.land_lib.ledger import annotation_line, result_line
 from deploy_tools.land_lib.options import HANDOFF_ENV, Options, parse_args
 from deploy_tools.land_lib.outcome import Outcome, write_verdict_file
 from deploy_tools.land_lib.tools import Classifier, Tools
@@ -206,8 +208,12 @@ def main(
         return _hand_off(opts, unit, tools)
     if opts.detach:
         opts = _resolve_since(opts)
-        return _detached(opts, lambda: _land(opts, tools, classifier))
-    return _land(opts, tools, classifier)
+    if opts.fresh:
+        child = fresh.child_argv(sys.argv[1:] if argv is None else argv, opts.since)
+        landing = functools.partial(tools.fresh_landing, opts.primary, child)
+    else:
+        landing = functools.partial(_land, opts, tools, classifier)
+    return _detached(opts, landing) if opts.detach else landing()
 
 
 def _regate(opts: Options, tools: Tools) -> int:
@@ -285,7 +291,12 @@ def _resolve_since(opts: Options) -> Options:
 def _detached(opts: Options, landing: Callable[[], int]) -> int:
     """Fork `landing` into its own logfile and name the `cc-wait` command that waits on it."""
     log = detach.log_path(opts.pr, Path(opts.log_dir) if opts.log_dir else None)
-    pid = detach.fork(log, landing, f"land{opts.pr}")
+    try:
+        pid = detach.fork(log, landing, f"land{opts.pr}")
+    except detach.TooManyLandings as full:
+        log.unlink(missing_ok=True)
+        print(f"land: {full}", file=sys.stderr)
+        return LAND_GAVE_UP
     detach.announce(pid, log, opts.pr)
     return 0
 
@@ -306,6 +317,7 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
     try:
         outcome = pipeline.run(ln)
         rc = outcome.rc
+        print(result_line(ln.ledger, outcome))
         outcome.emit()
         line = outcome.file_line()
     except Exception as exc:
@@ -315,6 +327,7 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
         # refusal.
         reason = " ".join(f"{type(exc).__name__}: {exc}".split())
         crashed = Outcome(1, f"PR #{opts.pr} — the landing raised {reason}")
+        print(result_line(ln.ledger, crashed))
         crashed.emit()
         line = crashed.file_line()
         raise

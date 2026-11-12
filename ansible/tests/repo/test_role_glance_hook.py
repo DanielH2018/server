@@ -17,12 +17,11 @@ import tomllib
 from collections.abc import Callable
 from pathlib import Path
 
+import gen_role_glance as g
 import pytest
 import yaml
 from _helpers import REPO
-
-import gen_role_glance as g
-from docs.catalog_lib import catalog_backup, catalog_facts, catalog_model, glance_facts
+from docs.catalog_lib import catalog_backup, catalog_facts, catalog_model
 from lib.estate import Inventory
 
 HOOK_ID = "regen-role-glance"
@@ -50,17 +49,14 @@ def test_the_hook_runs_the_generator_in_fix_mode():
         "ansible/roles/k8s/sonarr/defaults/main.yml",
         "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
         "ansible/roles/k8s/sonarr/CLAUDE.md",
-        "ansible/roles/setup/gitops_deploy/tasks/main.yml",
-        "ansible/roles/setup/k3s/defaults/main.yml",
         "ansible/inventory/host_vars/daniel-box.yml",
         "ansible/inventory/host_vars/daniel-pi.yml",
         "ansible/inventory/group_vars/all.yml",
-        "ansible/initial_setup.yml",
         # Where the libraries the generator imports live now, read from the modules
         # themselves, so a move to a directory outside the gate goes red here.
         *(
             Path(m.__file__).resolve().relative_to(REPO).as_posix()
-            for m in (catalog_backup, catalog_facts, catalog_model, glance_facts)
+            for m in (catalog_backup, catalog_facts, catalog_model)
         ),
         "scripts/lib/render_guard.py",
     ],
@@ -98,8 +94,8 @@ def _stale_sonarr_fixture(tmp_path: Path) -> tuple[Path, Callable[..., list[str]
     estate = g.Estate(Inventory(host_vars=tmp_path))
     doc = roles / "sonarr" / "CLAUDE.md"
     text = doc.read_text()
-    assert "`--tags=sonarr`" in text
-    doc.write_text(text.replace("`--tags=sonarr`", "`--tags=sonar`", 1))
+    assert "`land.sh --tags=sonarr`" in text
+    doc.write_text(text.replace("`land.sh --tags=sonarr`", "`land.sh --tags=sonar`", 1))
     return doc, functools.partial(g.stale_k8s_docs, estate=estate, k8s_roles=roles)
 
 
@@ -107,7 +103,7 @@ def test_fix_mode_rewrites_a_stale_doc_and_fails(tmp_path, capsys):
     doc, find_stale = _stale_sonarr_fixture(tmp_path)
     assert g.main(["--fix"], find_stale=find_stale) == 1
     assert "k8s/sonarr" in capsys.readouterr().out
-    assert "`--tags=sonarr`" in doc.read_text()
+    assert "`land.sh --tags=sonarr`" in doc.read_text()
     assert find_stale(write=False) == []
 
 

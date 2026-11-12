@@ -8,8 +8,7 @@
 # $TEXTFILE_DIR/<fake-remux-scan|fake-remux-replace|mkv-attachment-repair>.prom for
 # node_exporter's textfile collector, which the FakeRemux* and MkvAttachmentRepair* rules in
 # other-setup-checks.yaml read (M6 batch B4). It logs to syslog under the tag fake-remux-health.
-# Exit 1 means /usr/lib/homelab/homelab-check-lib.sh is missing. B4's Cutover-2 removed its three
-# Kuma pushes.
+# Exit 1 means /usr/lib/homelab/homelab-check-lib.sh is missing.
 #
 # Thin on purpose — the verdict logic is in state_push.py, a plain file with unit tests and a 3.12
 # floor check. Same shape as longhorn-backup-health.sh.

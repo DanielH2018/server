@@ -45,8 +45,8 @@ names, tiers and dates, never values — with a daily cron pushing a monitor.
 
 ## Consequences
 
-**A host that cannot decrypt fails at the secret-load pre-task**, so onboarding is its own
-procedure: run `bootstrap.yml` on the new host to generate its key, add the public key to
+**A host that cannot decrypt has no age key**, so onboarding is its own
+procedure: run `hosts/bootstrap-host.sh` on the new host to generate its key, add the public key to
 `.sops.yaml`, `sops updatekeys` from a host that can already decrypt, commit, pull.
 
 **`git diff ansible/vars/secrets.yml` prints plaintext credentials.** `.gitattributes` sets

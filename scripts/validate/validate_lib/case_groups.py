@@ -5,7 +5,7 @@ and each case module's `run`. Every group boots its own containers, and their na
 the serial runner had every container mount the one `<work>/repo` and `<work>/debs`, and every
 group republishes that repository. So `isolate` gives each group a shallow copy of `Cases` whose
 `work` is `<work>/groups/<name>`, with its own `repo/`, `build/` and a copy of each prepared
-`.deb`, and its own `debs`, `versions` and `failed`. `secrets_case.seal_pi` rewrites `debs`
+`.deb`, and its own `debs`, `versions`, `failed` and `no_verdict`. `secrets_case.seal_pi` rewrites `debs`
 labels such as `pi-head`, so a group never sees another group's sealed build.
 
 Groups run on threads, not processes, so a group looked up at call time is the one that runs.
@@ -98,7 +98,7 @@ def groups(cases_class) -> list[tuple[str, Callable]]:
 
 
 def isolate(cases, name: str):
-    """A copy of `cases` whose scratch directory, debs, versions and failures are its own."""
+    """A copy of `cases` whose scratch directory, debs, versions and verdicts are its own."""
     group = copy.copy(cases)
     group.work = cases.work / "groups" / name
     shutil.rmtree(group.work, ignore_errors=True)
@@ -113,12 +113,13 @@ def isolate(cases, name: str):
         group.debs[label] = target
     group.versions = dict(cases.versions)
     group.failed = []
+    group.no_verdict = []
     return group
 
 
 def _run_one(
     cases, name: str, run: Callable, stderr: StderrByThread
-) -> tuple[list[str], float]:
+) -> tuple[list[str], list[str], float]:
     stderr.hold()
     start = time.monotonic()
     try:
@@ -129,20 +130,20 @@ def _run_one(
             group.failed.append(f"{name}: raised {type(exc).__name__}")
             print(f"[FAIL] {name}: raised outside a case: {exc}", file=sys.stderr)
             print(traceback.format_exc(), file=sys.stderr, end="")
-        failed = group.failed
+        failed, no_verdict = group.failed, group.no_verdict
     except Exception as exc:
-        failed = [f"{name}: could not isolate"]
+        failed, no_verdict = [f"{name}: could not isolate"], []
         print(f"[FAIL] {name}: its scratch directory: {exc}", file=sys.stderr)
     seconds = time.monotonic() - start
     print(f"[DONE] {name} in {seconds:.0f}s", file=sys.stderr)
     stderr.release()
-    return failed, seconds
+    return failed, no_verdict, seconds
 
 
 def run_groups(
     cases, groups: Sequence[tuple[str, Callable]], jobs: int
 ) -> dict[str, float]:
-    """Run each group on a pool of `jobs` threads, and record every failure on `cases.failed`.
+    """Run each group on a pool of `jobs` threads, and record its verdicts on `cases`.
 
     Args:
         cases: The prepared `Cases`. Each group gets an `isolate` copy of it.
@@ -152,7 +153,8 @@ def run_groups(
 
     Returns:
         Each group's wall time in seconds, by name. `cases.failed` gains every group's
-        failures in `groups` order, and a group that raised is one of them.
+        failures in `groups` order, and a group that raised is one of them. `cases.no_verdict`
+        gains every case that could not reach a verdict, the same way.
     """
     stderr = StderrByThread(sys.stderr)
     sys.stderr = stderr
@@ -167,7 +169,21 @@ def run_groups(
         sys.stderr = stderr.real
     for name, _ in groups:
         cases.failed.extend(results[name][0])
-    slowest = sorted(results.items(), key=lambda item: -item[1][1])
-    times = ", ".join(f"{name} {seconds:.0f}s" for name, (_, seconds) in slowest)
+        cases.no_verdict.extend(results[name][1])
+    slowest = sorted(results.items(), key=lambda item: -item[1][2])
+    times = ", ".join(f"{name} {seconds:.0f}s" for name, (_, _, seconds) in slowest)
     print(f"group wall times: {times}", file=sys.stderr)
-    return {name: seconds for name, (_, seconds) in results.items()}
+    return {name: seconds for name, (_, _, seconds) in results.items()}
+
+
+def verdict(cases) -> tuple[str, int]:
+    """The run's last line and exit status: 1 when a case failed, else 0, even with no verdicts."""
+    if cases.failed:
+        return f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", 1
+    if cases.no_verdict:
+        return (
+            f"[NO VERDICT] {len(cases.no_verdict)} cases gave no verdict, and every other"
+            f" case passed: {cases.no_verdict}",
+            0,
+        )
+    return "every case passed", 0

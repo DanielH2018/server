@@ -9,13 +9,15 @@ stubbed to record the journal line, and `timeout` stubbed on PATH to answer the 
 neither the runner's network nor its clock decides a case.
 """
 
-from _helpers import ROLES
+from _helpers import REPO
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, run, write_exec
 
 TEMPLATE = ("components", "claude-code", "claude-otel-health.sh.j2")
 CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
-REAL_CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
+REAL_CHECK_LIB = (
+    REPO / "hosts" / "components" / "check-lib" / "files" / "homelab-check-lib.sh"
+)
 PROM = "claude-otel-health.prom"
 
 

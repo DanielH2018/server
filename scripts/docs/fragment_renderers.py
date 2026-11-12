@@ -47,32 +47,6 @@ def render_longhorn_tiers(d: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_gitops_prefixes(setup: tuple, deploy: tuple, manual: tuple) -> str:
-    """Renders the GitOps broad-change prefix classification table fragment.
-
-    Args:
-        setup: prefixes the deployer fast-forwards then applies via `initial_setup.yml`,
-            scoped by `deploy_narrow.narrowed_setup_tags`.
-        deploy: prefixes the deployer fast-forwards then applies via a full `deploy.yml`.
-        manual: prefixes the deployer never applies automatically.
-    """
-    rows = [
-        ("Setup, scoped", setup, "_BROAD_SETUP_PREFIXES",
-         "fast-forwards, then runs `initial_setup.yml` scoped to the role's own block tags, "
-         "or `--tags <name>` when that cannot be derived"),
-        ("Deploy plane", deploy, "_BROAD_DEPLOY_PREFIXES",
-         "fast-forwards, then runs a full `ansible/deploy.yml`"),
-        ("Never applied here", manual, "_BROAD_MANUAL_PREFIXES",
-         "alerts and returns **without fast-forwarding**"),
-    ]  # fmt: skip
-    lines = ["| Class | Prefixes | What the deployer does |", "|---|---|---|"]
-    for label, prefixes, constant, action in rows:
-        lines.append(
-            f"| {label} | {_code_list(list(prefixes))} (`{constant}`) | {action} |"
-        )
-    return "\n".join(lines) + "\n"
-
-
 def render_autodeploy_coverage(
     eligible: list[str], denied: list[str], not_declaring: list[str]
 ) -> str:

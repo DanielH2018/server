@@ -22,9 +22,7 @@ from lib.proc_testing import run
 # Roles the census must find. A `git ls-files` pattern that stops matching returns an empty
 # set, and every assertion below passes over one — naming members turns that into a failure
 # that says which role went missing.
-_KNOWN_SHIPPERS = frozenset(
-    {"k8s/monitor-bridge", "setup/gitops_deploy", "k8s/karakeep", "k8s/ical-proxy"}
-)
+_KNOWN_SHIPPERS = frozenset({"k8s/monitor-bridge", "k8s/karakeep", "k8s/ical-proxy"})
 
 
 def _tracked(pattern: str) -> list[str]:

@@ -68,7 +68,9 @@ def has_own_creation_rule(rules: list[dict], host: str) -> bool:
 def census_problems(tree: Path) -> list[str]:
     """One line per host and set that lacks it, naming the set."""
     named = _python_tuple(tree / ROOTS, "NAMED")
-    canary = _python_tuple(tree / GATE, "CANARY_ORDER")
+    canary = _python_tuple(tree / GATE, "CANARY_ORDER") | _python_tuple(
+        tree / GATE, "NEVER_CANARY"
+    )
     script = _script_hosts(tree / SCRIPT)
     rules = yaml_fast.safe_load((tree / SOPS).read_text())["creation_rules"]
     problems = []
@@ -76,7 +78,9 @@ def census_problems(tree: Path) -> list[str]:
         if f"homelab-{host}" not in named:
             problems.append(f"{host}: homelab-{host} is missing from NAMED in {ROOTS}")
         if host not in canary:
-            problems.append(f"{host}: missing from CANARY_ORDER in {GATE}")
+            problems.append(
+                f"{host}: missing from CANARY_ORDER and NEVER_CANARY in {GATE}"
+            )
         if host not in script:
             problems.append(f"{host}: missing from HOSTS in {SCRIPT}")
         if not has_own_creation_rule(rules, host):

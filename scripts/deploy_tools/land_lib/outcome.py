@@ -18,22 +18,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import LAND_FAILED, LAND_GAVE_UP
-from lib.repo_paths import GITOPS_DEPLOY_FILES
-
-sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from gitops_markers import HOLD_CLEAR_CMD
-
-
-def hold_clear_hint(sha: str | None) -> str:
-    """How a hand clears the deployer's hold on `sha` once every held plane is applied.
-
-    `gitops_state.py clear-hold` takes the FULL held SHA and refuses any other, so `sha` is
-    never sliced here (#4015, #4081).
-    """
-    return (
-        "Once every held plane is applied, clear the hold with Clear in the deploy UI "
-        f"or `{HOLD_CLEAR_CMD} {sha}` (CLAUDE.md, When to wait)"
-    )
 
 
 class Verdict(StrEnum):
@@ -43,7 +27,6 @@ class Verdict(StrEnum):
     UNHEALTHY = "unhealthy"
     DEPLOY_FAILED = "deploy-failed"
     NOTHING_TO_DEPLOY = "nothing-to-deploy"
-    BLOCKED = "blocked"
     NEEDS_MANUAL_APPLY = "needs-manual-apply"
     DEFERRED = "deferred"
     MERGE_CONFLICT = "merge-conflict"
@@ -85,11 +68,18 @@ class Cause(StrEnum):
     `promote-timeout` is the wait reaching its deadline: twice the promote timeout, counted
     again from each poll that reads an earlier commit's verification in flight. It rides beside
     `deferred`: the promotion applies this PR itself, and a later one may still cover it.
+
+    GATE_* NAME A HEALTH GATE THAT GRADED NOTHING, beside `deferred` from step 6 (#7911).
+    `gate-unreadable` is a gate that could not read its store, and `gate-stale` a gate whose
+    tree was older than `origin/master`. Nothing gates health again after either, so
+    `land_probe` reads them as a give-up rather than a plain deferral.
     """
 
     TAG_MISS = "tag-miss"
     PROMOTE_HELD = "promote-held"
     PROMOTE_TIMEOUT = "promote-timeout"
+    GATE_UNREADABLE = "gate-unreadable"
+    GATE_STALE = "gate-stale"
     SOAK_FAILED = "soak-failed"
     INVALID = "invalid-cause"
 
@@ -105,13 +95,21 @@ class Outcome(Exception):
     `refused`, so every exit-1 end prints a `VERDICT:` line too (#4451). Exit 64, a usage
     error, prints none.
 
-    `error` is the `land: <error>` stderr line, and "" means there is none: `Landing.finish`
-    raises without one. It is a `str` rather than `str | None` so a caller that reads it
-    needs no narrowing.
+    `recorded` is the detail `--verdict-file` records when it differs from the printed one,
+    such as a broad landing's full tag list where the VERDICT line prints a count.
+
+    `error` is the `land: <error>` stderr line, printed only when no VERDICT line carries it.
+    "" means there is none: `Landing.finish` raises without one. It is a `str` rather than
+    `str | None` so a caller that reads it needs no narrowing.
     """
 
     def __init__(
-        self, rc: int, detail: str, verdict: str | None = None, error: str = ""
+        self,
+        rc: int,
+        detail: str,
+        verdict: str | None = None,
+        error: str = "",
+        recorded: str = "",
     ) -> None:
         if verdict is not None and verdict not in VERDICTS:
             raise ValueError(f"unknown verdict {verdict!r}")
@@ -124,19 +122,28 @@ class Outcome(Exception):
         self.detail = detail
         self.verdict = verdict
         self.error = error
+        self.recorded = recorded or detail
 
     def emit(self) -> None:
-        """Print `land: <error>` (stderr) and `VERDICT: <verdict> (<detail>)` (stdout), as present."""
-        if self.error:
+        """Print `VERDICT: <verdict> (<detail>)` on stdout, else `land: <error>` on stderr.
+
+        The VERDICT detail already carries the error, so a stop prints the sentence once.
+        """
+        if self.error and not self.verdict:
             print(f"land: {self.error}", file=sys.stderr)
         if self.verdict:
             print(f"VERDICT: {self.verdict} ({self.detail})")
 
+    def add_notes(self, notes: list[str]) -> None:
+        """Append `notes` to the detail, both the printed and the recorded one."""
+        self.detail = "; ".join((self.detail, *notes))
+        self.recorded = "; ".join((self.recorded, *notes))
+
     def file_line(self) -> str:
         """The one line `--verdict-file` records: the VERDICT line, or why it stopped without one."""
         if self.verdict:
-            return f"VERDICT: {self.verdict} ({self.detail})"
-        return f"STOPPED: rc={self.rc} {self.detail}"
+            return f"VERDICT: {self.verdict} ({self.recorded})"
+        return f"STOPPED: rc={self.rc} {self.recorded}"
 
 
 def write_verdict_file(path: str, line: str) -> None:
@@ -168,8 +175,8 @@ PROMOTE_TIMEOUT_NOTE = (
 
 # What a `deferred` from step 6 means, printed by `health_verdict.health` when `probe.py health`
 # could not read its store for a tag and found no other tag unhealthy (#5543). Nothing re-gates
-# health, so this deferral never ends on its own: `land_probe` reads the note and reports the
-# landing as `gave-up`, a resume point, as it does for PROMOTE_TIMEOUT_NOTE.
+# health, so this deferral never ends on its own. The landing records `Cause.GATE_UNREADABLE`,
+# and `land_probe` reports it as `gave-up`, a resume point, as it does for `promote-timeout`.
 UNREADABLE_GATE_NOTE = (
     "  The health gate could not read its store, so the deployed workloads were not graded. "
     "This is NOT the ordinary deferral: nothing gates health again.\n"
@@ -180,8 +187,8 @@ UNREADABLE_GATE_NOTE = (
 
 # What a `deferred` from step 6 means when the probe refused the gate's tree as older than
 # `origin/master` (#7816). The gate advances its tree to `origin/master`, so this is a master
-# that moved while the gate ran, and a re-run reads the newer tip. `land_probe` reports it as
-# `gave-up`, a resume point, as it does for UNREADABLE_GATE_NOTE.
+# that moved while the gate ran, and a re-run reads the newer tip. The landing records
+# `Cause.GATE_STALE`, and `land_probe` reports it as `gave-up`, a resume point.
 STALE_GATE_NOTE = (
     "  The health gate's tree held an older role definition than origin/master, so those "
     "workloads were not graded. This is NOT the ordinary deferral: nothing gates health again.\n"
