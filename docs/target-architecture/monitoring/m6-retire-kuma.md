@@ -165,10 +165,6 @@ push-token secret remains.
           `org.homelab.kuma-docker-monitor` labels (see *Open questions*, item 7).
         - `hosts/components/claude-code/files/homelab_rootq.py`: its `/api/push/` pattern is
           an output redaction rule, not a Kuma read.
-        - The other output redaction rules, which hold `/api/push/` until #7195 retires them:
-          `ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2`, its
-          `ansible/roles/k8s/loki-homelab/CLAUDE.md` bullet and
-          `scripts/diagnostics/probe_lib/core.py`.
         - Any file the B-7 and C-6 PRs could not reword, with its reason. At C-6 these are
           the 167 files of `_PROSE_HOLDERS`, none of which may hold an identifier above. C-6
           measured 553 lines in 208 files against its budget of about 100, so it reworded the
