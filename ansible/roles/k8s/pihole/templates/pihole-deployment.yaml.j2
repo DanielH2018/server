@@ -37,7 +37,7 @@ spec:
         app: pihole
         netpol-baseline: enforced
         # Pod-only label — do NOT add to spec.selector.matchLabels above, which is
-        # `apps/v1` immutable. It's how tasks/main.yml and roll_one.yml address a specific
+        # `apps/v1` immutable. It's how the sibling guard and a hand `kubectl` address a specific
         # instance's pod: `kubectl exec deploy/<name>` resolves through the Deployment's
         # selector, which is `app: pihole` on both Deployments, so it always lands on
         # whichever pod that selector happens to pick — never guaranteed to be this one.

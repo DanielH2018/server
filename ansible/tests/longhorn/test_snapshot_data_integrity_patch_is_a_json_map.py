@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Guards the shape of the rendered `snapshot-data-integrity` Settings.
+"""Guards the shape of the rendered DataEngineSpecific Settings.
 
-`snapshot-data-integrity` is `DataEngineSpecific: true`, which makes its `value` a JSON MAP
+`default-replica-count` and both `snapshot-data-integrity` Settings are
+`DataEngineSpecific: true`, which makes their `value` a JSON MAP
 SERIALISED AS A STRING -- `{"v1":"enabled","v2":"enabled"}` -- and not the bare string every
 other Longhorn setting the `longhorn` role renders takes. The failure mode is quiet: a Setting
 copying a sibling's `value: enabled` shape is accepted by the API, stored, and ignored by
@@ -27,9 +28,9 @@ from lib.repo_paths import K8S_ROLES
 
 LONGHORN_DEFAULTS = K8S_ROLES / "longhorn" / "defaults" / "main.yml"
 
-# Both settings are DataEngineSpecific, so both must carry the map shape.
 # Setting name -> the defaults key its value renders from.
 MAP_SETTINGS = {
+    "default-replica-count": "k3s_longhorn_replica_count",
     "snapshot-data-integrity": "k3s_longhorn_snapshot_data_integrity",
     "snapshot-data-integrity-cronjob": "k3s_longhorn_snapshot_data_integrity_cronjob",
 }
@@ -44,9 +45,7 @@ def _rendered_value(name: str) -> object:
             and doc["metadata"]["name"] == name
         ):
             return doc["value"]
-    raise AssertionError(
-        f"the longhorn render holds no Setting {name!r}; it is what arms bit-rot detection"
-    )
+    raise AssertionError(f"the longhorn render holds no Setting {name!r}")
 
 
 def _is_map_of(value: object, expected: str) -> bool:
@@ -64,7 +63,7 @@ def _is_map_of(value: object, expected: str) -> bool:
 def test_a_rendered_setting_carries_its_default_as_a_json_map_string(name: str) -> None:
     """The shape Longhorn actually reads, built from the value the defaults hold."""
     # fact: ansible/roles/k8s/longhorn/CLAUDE.md#At a glance
-    default = load_yaml(LONGHORN_DEFAULTS)[MAP_SETTINGS[name]]
+    default = str(load_yaml(LONGHORN_DEFAULTS)[MAP_SETTINGS[name]])
     assert _is_map_of(_rendered_value(name), default), (
         f"{name} must render as a string holding {{'v1': {default!r}, 'v2': {default!r}}}; "
         f"got {_rendered_value(name)!r}"
@@ -76,6 +75,7 @@ def test_a_bare_string_value_is_flagged() -> None:
     # fact: ansible/roles/k8s/longhorn/CLAUDE.md#At a glance
     assert _is_map_of('{"v1":"enabled","v2":"enabled"}', "enabled")
     assert not _is_map_of("enabled", "enabled")
+    assert not _is_map_of("2", "2")
     assert not _is_map_of({"v1": "enabled", "v2": "enabled"}, "enabled")
 
 

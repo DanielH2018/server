@@ -25,7 +25,7 @@ render instead of writing a label no RecurringJob selects. `FilterModule` regist
 filter through `_as_filter`, which re-raises the `ValueError` as
 `FilterError("<filter>: ...")` (#4505).
 
-No Ansible import at load time, so the tests call the same functions the playbook runs.
+No Ansible import at load time, so the tests call the same functions the renderer runs.
 """
 
 import sys as _sys

@@ -14,7 +14,7 @@ without the key, so a widget URL and its edge cannot disagree.
 `homepage_href` builds a tile's link from the entry's `hostname`, so a renamed route moves the
 tile with it.
 
-No Ansible import, so the tests call the same functions the playbook runs. `FilterModule`
+No Ansible import, so the tests call the same functions the renderer runs. `FilterModule`
 re-raises a function's `ValueError` as `FilterError` prefixed with the filter's name,
 which fails the render task before any apply.
 """

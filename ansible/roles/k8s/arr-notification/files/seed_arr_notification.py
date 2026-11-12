@@ -24,19 +24,20 @@ from `GET /api/v3/notification/schema`, which is where the app's own defaults li
 
 WHERE THE SECRETS COME FROM. The process environment — `ARR_API_KEY` and
 `ARR_DISCORD_WEBHOOK_URL`, set by the seed Job in sonarr's and radarr's `templates/verify/`
-from two Secrets, or by hand. Never argv, and nothing here prints a field value: the output is
+from two Secrets, or by the operator's shell for a hand run (the role's `CLAUDE.md`,
+*Verifying it by hand*). Never argv, and nothing here prints a field value: the output is
 one line naming the decision (created / updated / no change), which is all the Job log says.
 `probe.py arr <app> notification` prints the webhook URL in full, which is why verifying this
 by hand needs a filter and this script does not need one.
 
-ONE TRANSPORT. Every request goes through `flux_job_connect.open_url`, the helper the Job
-census requires of a script Flux runs, so the script imports only modules that census admits.
-The Job's ConfigMap carries the helper beside the script. A run by hand sets `PYTHONPATH` to
-the directory where the helper lives, rather than this file keeping a second transport. A
-refused connect therefore retries for 60 seconds either way.
+ONE TRANSPORT, TWO CALLERS. Every request goes through `flux_job_connect.open_url`, the
+helper the Job census requires of a script Flux runs, so the script imports only modules that
+census admits. The Job's ConfigMap carries the helper beside the script. A hand run sets
+`PYTHONPATH` at the directory where the helper lives, rather than this file keeping a second
+transport. A refused connect therefore retries for 60 seconds on both paths.
 
-RUN IT: the seed Job invokes it with no arguments to seed. `--test` makes the app POST a real
-Discord message through the resolved spec and changes nothing. `ARR_PORT` overrides the app's
+RUN IT: the seed Job invokes it with no arguments to seed. A hand run passes `--test` to make
+the app POST a real Discord message through the resolved spec. `ARR_PORT` overrides the app's
 port, for a fixture server. Nothing runs at import, so the tests exercise the decision without
 a cluster.
 """

@@ -17,7 +17,7 @@ the File System Access API. See repo-root `CLAUDE.md` for shared conventions.
 - **Host:** daniel-box or daniel-server (k8s), preference only — added 2026-08-26
 - **State:** none. No Secret, no PVC, no backup job — the pod serves files and holds nothing
 - **Flux applies it, not Ansible** (D4.5). Its `containers_list` entry is `platform: k8s`,
-  so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged change reaches
+  so nothing applies it by hand, and a merged change reaches
   the cluster when `promote` publishes and verifies the next bundle. Its digest-bump PRs
   therefore draw no `land-wait` and no `probe.py health` run.
 ## The image comes from a fork, and why

@@ -19,7 +19,7 @@ repo's first Traefik→host route. Two facts follow:
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5.6, the second Wave A PR). Its `containers_list` entry
-  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Where the task went.** Its `manifests_rollout: ''` default has
   nothing

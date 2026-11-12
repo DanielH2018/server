@@ -7,7 +7,7 @@ the commits that shipped each feature; this guide arrived in `81232dca7`.
 
 Everything is Ansible-managed — **git is the source of truth; HA UI edits are overwritten on
 deploy.** Flux applies the role (`platform: k8s`), so merge the change and `promote` applies it.
-`deploy.sh --tags "home-assistant"` refuses the tag with exit 5.
+Nothing applies it by hand.
 
 ---
 

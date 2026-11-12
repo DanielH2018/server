@@ -28,7 +28,7 @@ the volume-name guard (`volume_blocks` in `ansible/tests/k8s/test_volume_names_d
 reads that form too since #4733. Dropping the dumper would change the flux render's whitespace
 and nothing else.
 
-No Ansible import at load time, so the tests call the function the playbook runs.
+No Ansible import at load time, so the tests call the function the renderer runs.
 """
 
 import copy

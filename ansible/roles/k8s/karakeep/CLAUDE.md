@@ -17,7 +17,7 @@ loop to auto-tag bookmarks.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (#5652, Wave C). Its `containers_list` entry is
-  `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged change
+  `platform: k8s`, so nothing applies it by hand. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy: false`
   still stops Renovate's
   automerge of a pin bump.

@@ -21,18 +21,17 @@ spec:
    carries the reasoning the other six point back to.
 
    `netpol_baseline_enforced` is the documented undo for slice 4, and it only works if each
-   bespoke policy renders allow-all when the flag is false. `kubectl apply` never prunes, so a
-   `when:` on the include in tasks/main.yml would undo nothing: the policies already applied
-   stay live and keep fencing, minus the traefik/prometheus grants the flag also switches off --
+   bespoke policy renders allow-all when the flag is false. Under the Ansible plane, where
+   `kubectl apply` never pruned, a `when:` on the include would have undone nothing: the
+   policies already applied stayed live and kept fencing, minus the traefik/prometheus grants the flag also switches off --
    strictly worse than not rolling back at all. Real deletion is not available either;
    `kubectl delete networkpolicy` is deny-listed for agents and refused by the readonly SA.
    The observability policies (networkpolicy-observability.yaml.j2) use the same
    render-allow-all pattern.
 
-   `| bool` matches the `when:` in tasks/main.yml. Without it the two disagree for a STRING:
-   `-e netpol_baseline_enforced=false` is truthy to Jinja (this branch renders, fencing
-   applied) and False to Ansible's `when:` (every probe task skipped) -- enforcement with no
-   probe, from the exact override an operator reaches for mid-incident. #}
+   `| bool` matches `netpol_baseline_probe_active` in defaults/main.yml. Without it the two disagree for a
+   STRING: `'false'` is truthy to Jinja (this branch renders, fencing applied) and False to
+   that list (the verify Job dials no leg) -- enforcement with no probe. #}
 {% if netpol_baseline_enforced | bool %}
     # The front door, in two rules because the two ports admit different sources.
     #
