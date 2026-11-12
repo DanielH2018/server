@@ -67,6 +67,8 @@ def http_wait_s(
 
     A spent quota answers 403 or 429 with `X-RateLimit-Remaining: 0` and waits until
     `X-RateLimit-Reset`. A secondary limit waits its `Retry-After`, or `SECONDARY_WAIT_S`.
+    A 403 that matches neither header is a rate limit only when its body says so, so this
+    reads the body, and a caller cannot read it again.
     """
     if error.code not in (403, 429):
         return None
@@ -77,9 +79,17 @@ def http_wait_s(
     if headers.get("X-RateLimit-Remaining") == "0":
         reset = headers.get("X-RateLimit-Reset", "")
         return _until(int(reset), now()) if reset.isdigit() else UNKNOWN_RESET_WAIT_S
-    if is_rate_limited(str(error.reason)):
+    if error.code == 429 or is_rate_limited(_body(error)):
         return SECONDARY_WAIT_S
     return None
+
+
+def _body(error: urllib.error.HTTPError) -> str:
+    """The error's response body, which carries GitHub's message; '' if unreadable."""
+    try:
+        return error.read().decode("utf-8", "replace")
+    except OSError, ValueError:
+        return ""
 
 
 def _until(reset: int, now: float) -> int:

@@ -80,3 +80,11 @@ def test_a_rate_limit_403_is_not_read_as_a_pending_verdict(rate_limited):
     except Exception:
         return
     assert got != "pending"
+
+
+def test_verdict_for_raises_the_rate_limit_that_wait_sleeps_on(rate_limited):
+    def fetch(_sha):
+        raise rate_limited
+
+    with pytest.raises(await_ci.RateLimitedError):
+        await_ci.verdict_for("abc", fetch, await_ci.required_contexts())
