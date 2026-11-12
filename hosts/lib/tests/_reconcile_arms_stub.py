@@ -12,7 +12,7 @@ keys are the ones the three arms read:
         `usermod -u <uid> <name>` sets the uid in `users`, and exits 8 for a name in "busy".
     processes: {name: [unit, ...]}. The units `ps -o unit= -u <name>` prints, one per process.
     outside: {path: uid}. Files `find <roots> -uid <old> -exec chown -h <new>` re-owns when the
-        path sits under one of the roots it is given. "fail_find": true makes it exit 1.
+        path sits under one of the roots it is given. "fail_find": N makes the next N calls exit 1.
     libvirt: {"networks": {name: {"active": bool, "autostart": bool}}, "nwfilters": {name: {}},
         "refuse": [name, ...], "fail": ["net-define", ...]}. `refuse` names the objects libvirt
         will not undefine, as for a filter a running guest references. `fail` names the verbs that
@@ -57,7 +57,8 @@ def usermod(state: dict, args: list[str]) -> int:
 
 def find(state: dict, args: list[str]) -> int:
     if state.get("fail_find"):
-        print("find: stub fails", file=sys.stderr)
+        state["fail_find"] -= 1
+        print("find: '/tmp/x': No such file or directory", file=sys.stderr)
         return 1
     roots = args[: args.index("-xdev")]
     old, new = int(args[args.index("-uid") + 1]), int(args[args.index("-h") + 1])

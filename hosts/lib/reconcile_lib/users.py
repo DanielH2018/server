@@ -15,9 +15,11 @@ and holds the host. A user still missing after sysusers is a fault too.
 An entry may carry `moved_from`, the uid the user held before the package renumbered it. A live
 uid equal to `moved_from` is a declared move, not a fault. The arm stops the `.service` units
 running as the user, such as a lingering `user@<old>.service`, and runs `usermod -u`, which
-re-owns the files under the home directory. It re-owns the old uid's files in /tmp, /var/tmp
-and the crontab spool, then starts the units again. The user's primary group keeps its gid. A
-failed move starts the stopped units again under the old uid and faults. A login session
+re-owns the files under the home directory, and starts the units again. It then re-owns the old
+uid's files in /tmp, /var/tmp and the crontab spool. A re-own that fails, as find does when a
+file it listed vanishes before chown runs, is drift: the record keeps the old uid, and each later
+run retries the re-own until it succeeds. The user's primary group keeps its gid. A failed move
+starts the stopped units again under the old uid and faults. A login session
 running as the user makes usermod refuse, so the arm then stops nothing and counts the move as
 drift, which the next run retries.
 
@@ -30,7 +32,7 @@ declares no users leaves them alone. Each name the floor kept is drift.
 import re
 from pathlib import Path
 
-from reconcile_lib.common import ERR, run, log, under_root
+from reconcile_lib.common import ERR, WARNING, run, log, under_root
 
 SYSUSERS = Path("/usr/lib/sysusers.d/homelab.conf")
 NAME = re.compile(r"[a-z_][a-z0-9_-]{0,31}")
@@ -126,8 +128,8 @@ def rehome(old: int, new: int) -> bool:
     )
     if found.returncode != 0:
         log(
-            f"cannot re-own the files uid {old} holds outside its home: {found.stderr.strip()}",
-            ERR,
+            f"cannot re-own the files uid {old} holds outside its home yet: {found.stderr.strip()}",
+            WARNING,
         )
     return found.returncode == 0
 
@@ -154,7 +156,6 @@ def move(user: dict) -> str:
         moved = result.returncode == 0
         if not moved:
             log(f"usermod -u {new} {name} failed: {result.stderr.strip()}", ERR)
-    rehomed = moved and rehome(old, new)
     for unit in stopped:
         if moved and unit == f"user@{old}.service":
             unit = f"user@{new}.service"
@@ -163,7 +164,7 @@ def move(user: dict) -> str:
             moved = False
     if moved:
         log(f"moved {name} from uid {old} to {new}")
-    return "moved" if rehomed and moved and check(user) == "live" else "failed"
+    return "moved" if moved and check(user) == "live" else "failed"
 
 
 def expire(name: str) -> bool:
@@ -181,8 +182,20 @@ def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, dict | Non
     users = section["users"] if section else []
     verdicts = {user["name"]: check(user) for user in users}
     ok = "fault" not in verdicts.values()
-    moves = [move(u) for u in users if ok and verdicts[u["name"]] == "move"]
-    ok = ok and "failed" not in moves
+    moving = [u for u in users if ok and verdicts[u["name"]] == "move"]
+    moves = {u["name"]: move(u) for u in moving}
+    ok = ok and "failed" not in moves.values()
+    # A re-own that failed stays in the record, so each run retries it until it succeeds.
+    pending = {
+        u["name"]: u["moved_from"] for u in moving if moves[u["name"]] == "moved"
+    }
+    for name, old in ((prev or {}).get("rehome") or {}).items():
+        if verdicts.get(name) == "live" and name not in pending:
+            pending[name] = old
+    uids = {u["name"]: u["uid"] for u in users}
+    rehome_left = {
+        n: old for n, old in sorted(pending.items()) if not rehome(old, uids[n])
+    }
     missing = [u for u in users if verdicts[u["name"]] == "absent"]
     if ok and missing:
         created = run("systemd-sysusers", str(under_root(SYSUSERS))).returncode == 0
@@ -191,7 +204,7 @@ def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, dict | Non
             log("systemd-sysusers did not leave every declared user in place", ERR)
     names = {user["name"] for user in users}
     stale = sorted(set((prev or {}).get("names") or []) - names)
-    drift = moves.count("waiting")
+    drift = list(moves.values()).count("waiting") + len(rehome_left)
     for name in stale:
         if not users:
             names.add(name)
@@ -199,4 +212,5 @@ def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, dict | Non
         elif not expire(name):
             names.add(name)
             ok = False
-    return ok, {"names": sorted(names)}, drift
+    record = {"names": sorted(names)} | ({"rehome": rehome_left} if rehome_left else {})
+    return ok, record, drift

@@ -196,15 +196,26 @@ def test_a_login_session_defers_the_move_as_drift_and_stops_nothing(node):
     assert node.state["users"] == {"claude": 1001}, "the next run moves it"
 
 
-def test_files_outside_the_home_that_cannot_be_re_owned_fail_the_run(node):
+def test_a_re_own_that_fails_once_is_drift_and_the_next_run_retries_it(node):
     at_the_old_uid(node)
-    node.state["fail_find"] = True
+    node.state["fail_find"] = 1
+    lock = f"{node.root}/tmp/uv-claude.lock"
 
-    result = node.run()
+    first = node.run()
 
-    assert result.returncode == 1
-    assert "cannot re-own the files uid 995 holds outside its home" in result.stderr
-    assert unit_changes(node) == ["stop user@995.service", "start user@1001.service"]
+    assert first.returncode == 0, first.stderr
+    assert "cannot re-own the files uid 995 holds outside its home yet" in first.stderr
+    assert node.state["users"] == {"claude": 1001}
+    assert node.state["outside"][lock] == 995
+    assert node.applied()["users"] == {"names": ["claude"], "rehome": {"claude": 995}}
+    assert f"{DRIFT} 1" in metrics(node)
+    second = node.run()
+    assert second.returncode == 0, second.stderr
+    assert node.state["outside"][lock] == 1001, (
+        "the user reads live, and the re-own still runs"
+    )
+    assert node.applied()["users"] == {"names": ["claude"]}
+    assert f"{DRIFT} 0" in metrics(node)
 
 
 def test_a_uid_that_is_neither_declared_nor_moved_from_faults_and_stops_nothing(node):
