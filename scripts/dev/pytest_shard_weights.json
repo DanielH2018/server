@@ -1349,7 +1349,6 @@
  "scripts/validate/tests/test_repos_case.py": 0.0,
  "scripts/validate/tests/test_rule_test_parts.py": 0.03,
  "scripts/validate/tests/test_secrets_case.py": 1.56,
- "scripts/validate/tests/test_shell_template_cron_rules.py": 0.78,
  "scripts/validate/tests/test_skip_roles_classes_hold.py": 0.01,
  "scripts/validate/tests/test_vale_sync_guard.py": 2.64,
  "scripts/validate/tests/test_validate_actionlint_dollar_refs.py": 0.02,

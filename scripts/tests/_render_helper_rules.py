@@ -125,8 +125,8 @@ _GLOB_METHODS = frozenset({"glob", "rglob"})
 
 # Functions that hand back template PATHS off the real tree, by their terminal name. A read
 # through one is a source read even though no `*.sh.j2` literal appears anywhere in the module
-# (#3200). The terminal name is what matches, so `ct.iter_cron_targets`, a bare
-# `iter_cron_targets` and any alias of either are the same hit.
+# (#3200). The terminal name is what matches, so `sv.discover_templates`, a bare
+# `discover_templates` and any alias of either are the same hit.
 #
 # `discover_templates` is three different functions — `validate.shell_templates`,
 # `validate.setup_templates` and `validate.unit_templates` each define one over a different
@@ -137,9 +137,7 @@ _GLOB_METHODS = frozenset({"glob", "rglob"})
 # `validate.jinja_bash_collisions.templates` is deliberately NOT here. It resolves every `*.j2`
 # in the tree, and the collision it looks for (`${#x}` meeting Jinja) is a property of the
 # source that a render cannot answer, so declaring that read beats flagging it.
-_TEMPLATE_RESOLVERS = frozenset(
-    {"iter_cron_targets", "cron_job_scripts", "discover_templates"}
-)
+_TEMPLATE_RESOLVERS = frozenset({"discover_templates"})
 _KEY_METHODS = frozenset({"items", "keys"})
 
 
@@ -163,7 +161,7 @@ def _resolver_returning_fixtures(tree: ast.Module) -> dict[str, str]:
     """The pytest fixtures in `tree` that hand back a template resolver's result, by name.
 
     A fixture's name is the name its consumers take the value under, so binding the name here
-    puts a consumer's `for tpl in cron_map:` within reach of the loop clause below (#3206).
+    puts a consumer's `for tpl in templates:` within reach of the loop clause below (#3206).
     Both fixture shapes count: a `return` and the `yield` a fixture with teardown uses.
 
     A decorator counts when its text mentions `fixture`, which covers `@pytest.fixture`,
@@ -187,17 +185,14 @@ def _resolver_fed_names(tree: ast.Module) -> dict[str, str]:
     """The names `tree` binds to a template path by looping over a resolver's result.
 
     Two shapes, both from #3200: a loop straight over the resolver call, and a loop over a name
-    an assignment bound to one. A tuple-unpack binds only its FIRST element — every resolver
-    here yields the template first (`iter_cron_targets` yields
-    `(template, task_file, cron, env)`, `cron_job_scripts` is keyed by template), and binding
-    `task_file` too would read a task-file read as a shell-template read.
+    an assignment bound to one. A tuple-unpack binds only its FIRST element, the position a
+    resolver yielding pairs would put the template in, so a read of the second is not flagged.
 
     A resolver result that arrives as a FUNCTION PARAMETER is reachable too, through the
     fixture that produced it (#3206). `_resolver_returning_fixtures` resolves each fixture's
     return expression once per module and binds the fixture's NAME, which is the name every
     consumer takes the value under, so a loop in a consumer's body reads as a loop over the
-    resolver. The `cron_map` fixture in
-    `scripts/validate/tests/test_shell_template_cron_rules.py` is the worked example.
+    resolver.
     """
     held: dict[str, str] = _resolver_returning_fixtures(tree)
     for node in ast.walk(tree):

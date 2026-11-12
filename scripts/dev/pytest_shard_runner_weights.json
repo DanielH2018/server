@@ -1162,7 +1162,6 @@
  "scripts/validate/tests/test_renovate_config_retry.py": 0.1,
  "scripts/validate/tests/test_rule_test_parts.py": 0.06,
  "scripts/validate/tests/test_secrets_case.py": 2.26,
- "scripts/validate/tests/test_shell_template_cron_rules.py": 0.03,
  "scripts/validate/tests/test_skip_roles_classes_hold.py": 0.26,
  "scripts/validate/tests/test_vale_sync_guard.py": 2.74,
  "scripts/validate/tests/test_validate_alert_conventions.py": 0.35,
