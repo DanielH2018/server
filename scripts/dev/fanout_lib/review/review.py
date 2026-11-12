@@ -91,7 +91,6 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from fanout_lib.branch_pr import OwnPr, needs_input_report, worktree_own_pr
 from fanout_lib.brief import ISSUES_HEADING, lands
 from fanout_lib.review.held_hooks import (
-    held_secret_paths,
     labelled,
     pointed_settings,
     read_hooks,
@@ -539,8 +538,6 @@ class Pipeline:
         single-session batch: a PR URL, a `VERDICT:` line, or a blocker line.
         """
         issues = issues_section(self.brief)
-        if self.project_settings:
-            self.hooks.update(held_secret_paths(self.run, SOURCE_ROOT))
         if not self.red_green:
             self.record.red_skipped = labelled_skip_reason(
                 self.run, self.batch, self.target.is_server

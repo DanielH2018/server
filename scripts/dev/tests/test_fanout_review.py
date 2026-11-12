@@ -431,11 +431,6 @@ def test_a_resumed_phase_loads_no_settings_file_the_agent_can_write(tmp_path):
         assert all(c.startswith(f"{hooks}/run-hook.sh ") for c in commands)
         assert settings["permissions"] == held["permissions"]
         assert (hooks / "block-protected-edits.py").is_file()
-    # The guard reads the secret-bearing paths derived at start, not the agent's tree.
-    assert run.derived[-1] == "scripts/secrets_mgmt/secret_bearing_host_paths.py"
-    assert json.loads((hooks / "secret_bearing_host_paths.json").read_text()) == {
-        "/usr/local/bin/a.sh": ["one_token", "two_token"]
-    }
     # With no red phase before it, the implement phase keeps the project source.
     assert "--setting-sources" not in run.claude[0][0]
 

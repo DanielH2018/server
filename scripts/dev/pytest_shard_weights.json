@@ -1277,8 +1277,6 @@
  "scripts/secrets_mgmt/tests/test_departed_secrets_are_accounted_for.py": 1.75,
  "scripts/secrets_mgmt/tests/test_host_secrets.py": 2.38,
  "scripts/secrets_mgmt/tests/test_rotation_tools.py": 0.0,
- "scripts/secrets_mgmt/tests/test_secret_bearing_host_paths.py": 0.42,
- "scripts/secrets_mgmt/tests/test_secret_bearing_host_scripts_are_not_world_readable.py": 0.14,
  "scripts/secrets_mgmt/tests/test_secret_classify.py": 0.0,
  "scripts/secrets_mgmt/tests/test_secret_consumers.py": 0.1,
  "scripts/secrets_mgmt/tests/test_secret_consumers_by_secret_name.py": 0.08,

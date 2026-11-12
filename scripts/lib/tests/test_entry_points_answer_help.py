@@ -235,7 +235,6 @@ WORK_BEFORE_HELP = (
     "validate.grafana_dashboard_uids",
     "validate.jinja_bash_collisions",
     "home_assistant.validate_ha_config",
-    "secrets_mgmt.secret_bearing_host_paths",
     "dev.k8s_autodeploy_counts",
     "grafana.export_grafana_dashboards",
     "dev.smoke_extract",
@@ -272,7 +271,6 @@ HOST_ARGV_DEFAULTERS = (
     "validate.grafana_dashboard_uids",
     "validate.jinja_bash_collisions",
     "home_assistant.validate_ha_config",
-    "secrets_mgmt.secret_bearing_host_paths",
     "dev.k8s_autodeploy_counts",
     # These three called `answer_help(__doc__)` with no argv at all (#6561).
     "grafana.export_grafana_dashboards",
