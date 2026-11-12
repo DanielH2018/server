@@ -1348,7 +1348,7 @@ jobs:
 
       # The record `decide` wrote beside the bundles names each changed snapshot role's digest8
       # and claims and `sha-<T>`'s digest. The webhook is the repository secret
-      # DEPLOY_DISCORD_WEBHOOK, a copy of the SOPS value gitops_deploy_discord_webhook, and
+      # DEPLOY_DISCORD_WEBHOOK, a copy of the SOPS value discord_alert_webhook, and
       # promote.py never prints it.
       - name: Post the stateful hold
         env:

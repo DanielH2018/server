@@ -21,7 +21,7 @@ outputs:
     owner: root
     group: renovate-agent
     mode: "0640"
-    keys: [gitops_deploy_discord_webhook]
+    keys: [discord_alert_webhook]
     persist: false
     link: true
   # Read by systemd as root through EnvironmentFile=, so neither value appears in a unit line.

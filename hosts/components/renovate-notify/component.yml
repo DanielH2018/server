@@ -33,7 +33,7 @@ outputs:
     owner: ubuntu
     group: ubuntu
     mode: "0600"
-    keys: [gitops_deploy_discord_webhook]
+    keys: [discord_alert_webhook]
     persist: false
     link: true
 enable:

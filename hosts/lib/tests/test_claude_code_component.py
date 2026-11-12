@@ -111,7 +111,7 @@ def test_every_ansible_era_unit_is_retired(manifest):
 
 def test_the_agents_github_token_is_a_host_secret_and_never_rendered(package):
     keys = host_secrets.tree_keys(REPO, "daniel-server")
-    assert {"claude_code_agent_gh_token", "gitops_deploy_discord_webhook"} <= keys
+    assert {"claude_code_agent_gh_token", "discord_alert_webhook"} <= keys
     template = text(
         package, "/usr/lib/homelab/secret-templates/var/lib/claude/.config/gh/hosts.yml"
     )

@@ -1172,7 +1172,7 @@ input*.
   forward-only tag, the stateful form wins; neither resets.
 - **The post.** Once the hold is written, the `post` job runs `promote.py hold`, which posts
   to the deployer's Discord channel through the `DEPLOY_DISCORD_WEBHOOK` repository secret,
-  a copy of `gitops_deploy_discord_webhook`. It names the held SHA, every changed tag and
+  a copy of `discord_alert_webhook`. It names the held SHA, every changed tag and
   every failed name, each marked as a snapshot role or not, and, when `soak` failed, the soak
   Job and the command that reads the services it named. Then, for each changed snapshot
   role, it prints the `digest8`, each claim's snapshot prefix, and a command block in the
@@ -2102,7 +2102,7 @@ run with. The flux role's `CLAUDE.md` has its rotation steps, and the
 rotation registry's `external-90d` tier is the one its SOPS copy belongs on.
 
 The repository secret `DEPLOY_DISCORD_WEBHOOK` holds the value of the SOPS key
-`gitops_deploy_discord_webhook`, the deployer's Discord channel. Only the `post` job reads it,
+`discord_alert_webhook`, the deployer's Discord channel. Only the `post` job reads it,
 for the stateful hold's post, and that job holds `contents: read` alone. `promote.py` never
 prints the URL, and a failed post names only the HTTP status. `docs/secret-rotation.md` has
 the rotation step for the copy.
