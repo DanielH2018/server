@@ -30,5 +30,5 @@
 ansible/roles/k8s/monitor-bridge/tests/test_check_service.py 409
 evals/ablate.py 456
 hosts/components/claude-code/files/homelab_rootq.py 520  # conjoined: 520 with the allowlist entries #6988 needs and the DENY_EXEMPT pair #7007 needs, because root runs it as the single stdlib file /usr/local/sbin/homelab-rootq under python3 -I, which puts no other directory on sys.path, so a second module would be a second root-owned file the install task, the sudoers grant's reach and the lander's approval list must all name
-hosts/components/fake-remux/tests/test_fake_remux_replace_logic.py 450
+hosts/components/fake-remux/tests/test_fake_remux_replace_logic.py 442
 scripts/backup/tests/test_longhorn_reap_logic.py 431

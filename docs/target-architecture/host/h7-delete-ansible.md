@@ -1,7 +1,9 @@
 # H7 — Remaining roles, then delete Ansible
 
-Status: IN PROGRESS. Partial landings through 2026-11-01, named by PR: [#6081](https://github.com/DanielH2018/server/pull/6081), [#6087](https://github.com/DanielH2018/server/pull/6087), [#6084](https://github.com/DanielH2018/server/pull/6084), [#6138](https://github.com/DanielH2018/server/pull/6138), [#6169](https://github.com/DanielH2018/server/pull/6169), [#6190](https://github.com/DanielH2018/server/pull/6190), [#6201](https://github.com/DanielH2018/server/pull/6201), [#6224](https://github.com/DanielH2018/server/pull/6224), [#6242](https://github.com/DanielH2018/server/pull/6242), [#6248](https://github.com/DanielH2018/server/pull/6248), [#6264](https://github.com/DanielH2018/server/pull/6264), [#6230](https://github.com/DanielH2018/server/pull/6230), [#6339](https://github.com/DanielH2018/server/pull/6339), [#6593](https://github.com/DanielH2018/server/pull/6593), [#6600](https://github.com/DanielH2018/server/pull/6600), [#6637](https://github.com/DanielH2018/server/pull/6637), [#6683](https://github.com/DanielH2018/server/pull/6683), [#6701](https://github.com/DanielH2018/server/pull/6701), [#6717](https://github.com/DanielH2018/server/pull/6717), [#6719](https://github.com/DanielH2018/server/pull/6719), [#6782](https://github.com/DanielH2018/server/pull/6782), [#6788](https://github.com/DanielH2018/server/pull/6788), [#6806](https://github.com/DanielH2018/server/pull/6806), [#6856](https://github.com/DanielH2018/server/pull/6856), [#6871](https://github.com/DanielH2018/server/pull/6871), [#7222](https://github.com/DanielH2018/server/pull/7222), [#7524](https://github.com/DanielH2018/server/pull/7524), [#7642](https://github.com/DanielH2018/server/pull/7642), [#7756](https://github.com/DanielH2018/server/pull/7756). Which numbered steps are complete is not recorded. Exit observation 3 does not hold
-yet: *Exit readings, 2026-11-12* records all seven.
+Status: DONE on 2026-11-12. Every exit observation is met: exit 2 is waived
+([#7505](https://github.com/DanielH2018/server/issues/7505)), exit 4 holds by the operator's
+ruling ([#8136](https://github.com/DanielH2018/server/issues/8136)), and *Exit readings,
+2026-11-12* records all seven. Landings named by PR: [#6081](https://github.com/DanielH2018/server/pull/6081), [#6087](https://github.com/DanielH2018/server/pull/6087), [#6084](https://github.com/DanielH2018/server/pull/6084), [#6138](https://github.com/DanielH2018/server/pull/6138), [#6169](https://github.com/DanielH2018/server/pull/6169), [#6190](https://github.com/DanielH2018/server/pull/6190), [#6201](https://github.com/DanielH2018/server/pull/6201), [#6224](https://github.com/DanielH2018/server/pull/6224), [#6242](https://github.com/DanielH2018/server/pull/6242), [#6248](https://github.com/DanielH2018/server/pull/6248), [#6264](https://github.com/DanielH2018/server/pull/6264), [#6230](https://github.com/DanielH2018/server/pull/6230), [#6339](https://github.com/DanielH2018/server/pull/6339), [#6593](https://github.com/DanielH2018/server/pull/6593), [#6600](https://github.com/DanielH2018/server/pull/6600), [#6637](https://github.com/DanielH2018/server/pull/6637), [#6683](https://github.com/DanielH2018/server/pull/6683), [#6701](https://github.com/DanielH2018/server/pull/6701), [#6717](https://github.com/DanielH2018/server/pull/6717), [#6719](https://github.com/DanielH2018/server/pull/6719), [#6782](https://github.com/DanielH2018/server/pull/6782), [#6788](https://github.com/DanielH2018/server/pull/6788), [#6806](https://github.com/DanielH2018/server/pull/6806), [#6856](https://github.com/DanielH2018/server/pull/6856), [#6871](https://github.com/DanielH2018/server/pull/6871), [#7222](https://github.com/DanielH2018/server/pull/7222), [#7524](https://github.com/DanielH2018/server/pull/7524), [#7642](https://github.com/DanielH2018/server/pull/7642), [#7756](https://github.com/DanielH2018/server/pull/7756). Which numbered steps are complete is not recorded.
 Depends on: H2, H5, H6, R4, per PR (the *Waits on* column of *Steps, as PRs*)
 Unblocks: none (it closes Area 3)
 
@@ -109,9 +111,9 @@ The exit criterion is seven observations:
 ## Exit readings, 2026-11-12
 
 Taken at `34ab03eed` (#8114). Exits 4 and 5 were re-read at `73e730d65` the same day, after
-the operator's ruling on exit 4 and the operator's cleanup for exit 5. Observation 3 does not
-hold yet, so the status stays IN PROGRESS. Each reading uses the commands its observation
-names.
+the operator's ruling on exit 4 and the operator's cleanup for exit 5. Exit 3 was read at
+20:30 UTC the same day, after the package timer's first run. Every observation holds or is
+waived, so the status is DONE. Each reading uses the commands its observation names.
 
 1. **Holds.** `git ls-files ':(glob)ansible/*.yml' ':(glob)ansible/*.sh'` prints only
    `ansible/secret_rotation.yml`. The second and third listings print nothing, and
@@ -119,13 +121,22 @@ names.
    `uv tree | grep -c ansible-core` prints 0, and `grep -c ansible-lint prek.toml` prints 0.
 2. **Waived** by the operator on 2026-11-08
    ([#7505](https://github.com/DanielH2018/server/issues/7505)).
-3. **Not yet observed**
-   ([#8129](https://github.com/DanielH2018/server/issues/8129)).
-   `homelab-etcd-restore-drill.timer` has never fired. It reports no `LastTriggerUSec`,
-   and its first run is due on 2026-12-01 at 11:20 UTC. The package's service unit ran the
-   drill green on 2026-11-07, run `20261107T213915Z`, from a hand `systemctl start`. That
-   run read `k3s version v1.37.2+k3s1` and `fence=hold`. The agent's installer env file,
-   which the drill reads the join token from, is present, owned by root and mode `0600`.
+3. **Holds**, read on 2026-11-12
+   ([#8129](https://github.com/DanielH2018/server/issues/8129)). The operator moved
+   `homelab-etcd-restore-drill.timer` with a runtime drop-in to fire at 20:30 UTC, so the
+   reading did not wait for the first monthly run on 2026-12-01.
+    - `systemctl show homelab-etcd-restore-drill.timer -p LastTriggerUSec` reads
+      `Thu 2026-11-12 20:30:00 UTC`.
+    - `systemctl show homelab-etcd-restore-drill.service -p Result` reads `success`.
+    - The `etcd-restore-drill-vm` journal line reads `status=up run=20261112T203001Z full
+      restore drill passed in guest etcd-drill`. It counts 10 namespaces, 79 deployments,
+      45 PVCs and 72 CRDs, and reads `k3s version v1.37.2+k3s1` and `fence=hold`.
+    - The agent's installer env file, which the drill reads the join token from, is
+      present, owned by root and mode `0600`.
+
+   The drop-in replaces the package's monthly `OnCalendar` rather than adding to it. The
+   timer has no next run until a reboot clears `/run`
+   ([#8196](https://github.com/DanielH2018/server/issues/8196)).
 4. **Holds.** The Flux half holds by the operator's ruling of 2026-11-12
    ([#8136](https://github.com/DanielH2018/server/issues/8136)).
     - *The host half.* `etcd-restore-drill-vm --rehearse-bootstrap`, run

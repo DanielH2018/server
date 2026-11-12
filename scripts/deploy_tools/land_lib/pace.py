@@ -19,6 +19,11 @@ Instead, the cap rises by one for each `RAISE_CAP_EVERY_S` the landing has been 
 the whole wait, held and unheld, reaches `merge_timeout`, the landing merges without pacing. A
 failed read merges too: pacing is a throughput control, not a safety gate.
 
+A rate-limit refusal is the exception, and holds the poll. The quota runs out only when many
+landers are live, so merging on it would release every held landing at once (#8139). The read
+does not wait out the quota itself: a wait inside `hold` would sit outside the poll accounting
+that keeps the whole wait inside `merge_timeout`.
+
 `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off. A PR armed by hand with
 `gh pr merge --auto` merges without passing through here.
 """
@@ -33,6 +38,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.json_types import as_list, as_object
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import say
+from lib import gh_rate_limit
 
 # DECIDED: an unfinished run created more than 2 hours ago is not counted. On 2026-10-24 the
 # slowest master run took 61 minutes from creation to finish, so a run still unfinished at
@@ -114,6 +120,8 @@ def hold(ln: Landing, held_s: int, waited_s: int) -> str:
         ValueError,
     ) as exc:
         why = getattr(exc, "stderr", None) or str(exc)
+        if gh_rate_limit.is_rate_limited(why):
+            return f"pacing the merge: GitHub refused the master CI run count ({why.strip()})"
         say(
             f"could not count unfinished master CI runs ({why.strip()}); merging without pacing"
         )

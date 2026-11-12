@@ -21,6 +21,7 @@ SYS_USER = "ubuntu"
 BASE = {"root", "adm", SYS_USER}
 HOME = PurePosixPath("/home") / SYS_USER
 SYSUSERS = "/usr/lib/sysusers.d/homelab.conf"
+HOMELAB_UIDS = range(900, 950)
 
 Files = dict[str, tuple[bytes, int]]
 
@@ -69,6 +70,33 @@ def test_a_tmpfiles_line_naming_an_undeclared_user_is_reported(packages):
     }
 
     assert undeclared_users(files) == {"planted"}
+
+
+def declared_uids(files: Files) -> dict[str, int]:
+    sysusers = files.get(SYSUSERS, (b"", 0))[0].decode()
+    return {
+        fields[1]: int(fields[2])
+        for fields in (line.split() for line in sysusers.splitlines())
+        if fields[0] == "u"
+    }
+
+
+def test_every_declared_uid_sits_below_the_range_ubuntu_allocates_from_999_down(
+    packages,
+):
+    # The base install and step 4's LXD snap take uids from 999 down before step 5 runs (#8100).
+    declared = {host: declared_uids(files) for host, files in packages.items()}
+
+    assert {"claude", "renovate-agent", "homelab-builder"} <= set(
+        declared["daniel-box"]
+    )
+    assert {"node_exporter"} <= set(declared["daniel-pi"])
+    assert {
+        (host, name, uid)
+        for host, users in declared.items()
+        for name, uid in users.items()
+        if uid not in HOMELAB_UIDS
+    } == set()
 
 
 def test_every_parent_under_the_operators_home_is_declared_and_owned_by_the_operator(

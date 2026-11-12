@@ -51,8 +51,7 @@ definitive and independent of codec, resolution and size, so it catches an AVC r
 really an AVC re-encode and needs no 2160p exclusion.
 
 It runs the host's `ffprobe` directly, because daniel-box runs no Docker. `HOST_DATA_ROOT` maps
-Sonarr's `/data` view to the host path, and an empty `fake_remux_jellyfin_container` selects this
-host mode (the `docker exec jellyfin` mode in the script is the retired daniel-server path). A probe
+Sonarr's `/data` view to the host path. A probe
 glitch, a missing binary or a wrong path SKIPS the file rather than flagging it, which is
 fail-safe: the scan seeds a ledger the live reconciler acts on, so a false positive costs a
 real file. The scan never deletes or re-searches itself — each newly found fake is seeded

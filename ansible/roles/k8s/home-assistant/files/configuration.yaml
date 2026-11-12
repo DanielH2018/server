@@ -344,8 +344,17 @@ logger:
     # fault emits sit on this logger, so no query for `_connect_hass failed` can tell "not
     # firing" from "silenced". The operator accepted the fault on 2026-09-30 (#2800) and
     # unpinned the view theme whose receiver TypeError was the `frontend.js` signal above, so
-    # that signal is gone too. A failed cast still logs `_handle_signal_show_view`. The
+    # that signal is gone too. A failed cast's `_handle_signal_show_view` record is dropped by
+    # the `refresh_token` filter below, so it leaves no record either. The
     # rejected alternative was an ignore list in the log-error check, because a growing ignore
     # list means the check is decaying. `pychromecast.socket_client` keeps its default level:
     # its connect-retry lines carry no traceback, so the pattern never matches them.
     pychromecast.controllers: critical
+  # HA drops a record whose message matches one of these regexes before any handler sees it, so
+  # it reaches neither stdout (`kubectl logs`) nor system_log. A failed cast logs its
+  # `cast_show_view` args on this logger, and they carry the cast user's refresh_token.
+  # DECIDED: drop the record at the logger rather than close `kubectl logs` (operator,
+  # 2026-11-12). The cost is the only record of a failed cast; #8206 is its replacement signal.
+  filters:
+    homeassistant.util.logging:
+      - "refresh_token"

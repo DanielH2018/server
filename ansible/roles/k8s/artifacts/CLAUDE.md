@@ -113,6 +113,16 @@ recognised term. **Retiring a service should ADD its name there**, not drop it f
 `artifacts_platform_services`. That is the opposite of the usual cleanup instinct, which is why
 it is called out here.
 
+## A scheduled generator declares `artifact:origin`
+Every index entry carries an `origin`: `scheduled` for an artifact a headless run wrote with no
+operator in the session, `session` for everything else. The GUI's origin filter reads it, and
+a `scheduled` card shows a chip. A generator declares it with
+`<meta name="artifact:origin" content="scheduled">`, or `origin: scheduled` in Markdown
+frontmatter. An artifact that declares nothing is `session`, unless its filename starts with an
+entry in `SCHEDULED_NAME_PREFIXES` (`files/artifact_meta.py`). That list covers the
+changelog-watch artifacts written before the field existed. **A new scheduled generator
+declares its origin rather than adding a prefix there.**
+
 ## Pruning
 Artifacts age out after 30 days without an update, so a doc that keeps being refreshed as work
 lands stays put and an abandoned one clears itself. **Executable files are never pruned** — a

@@ -513,6 +513,7 @@ containers_list:
     platform: k8s
     # Flux applies navidrome through `promote`, and every Ansible path skips it (D5.8).
     weekly_backup_claims: {navidrome-data: 3}  # Wed
+    depends_on: [media-volume]
     hostname: "navidrome"
     # No ingress probe while parked: the role deploys no route at replicas 0, so the probe
     # would fail permanently. Delete this line when bringing it back.

@@ -556,8 +556,9 @@ fi
 stop_after 4
 
 # create_declared_users <deb>: create the users the .deb declares in sysusers.d. A Depends that
-# creates a system user takes the next free uid down from 999, the range the host packages
-# declare, so this runs before any install. A declared uid already held is the users arm's fault.
+# creates a system user takes the next free uid down from 999. The host packages declare uids in
+# 900-949 below that, and this runs before any install so a Depends cannot take one first. A
+# declared uid already held is the users arm's fault.
 create_declared_users() {
     users_dir=$(mktemp -d)
     CLEAN="$CLEAN $users_dir"

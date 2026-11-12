@@ -25,7 +25,7 @@ from validate.validate_lib import bootstrap_repo_case as repo_case
 from validate.validate_lib import fixture_host_case as fixture_case
 from validate.validate_lib import scratch_clones as clones
 from validate.validate_lib import host_fixtures
-from validate.validate_lib.host_container import CaseFailed, Container
+from validate.validate_lib.host_container import CaseFailed, Container, uid_problems
 
 SCRIPT = case.SCRIPT.read_text()
 DEBS = (
@@ -186,6 +186,52 @@ def test_a_node_whose_k3s_unit_is_enabled_or_running_is_flagged(
     assert run.unit_problems() == [
         f"k3s-agent.service's {prop} is {value}, not {LEFT_STOPPED[prop]}"
     ]
+
+
+PI_PASSWD = (
+    "ubuntu:x:1000:1000::/home/ubuntu:/bin/bash\n"
+    "node_exporter:x:904:904::/home/node_exporter:/usr/sbin/nologin\n"
+)
+
+
+def _baseline_run(monkeypatch, tmp_path, passwd: str):
+    run = case.Bootstrap(
+        SimpleNamespace(image="img", work=tmp_path, python="3.12"),
+        "daniel-pi",
+        tmp_path,
+        None,
+        "pi",
+    )
+    answers = {
+        "id -nG ubuntu": "ubuntu ssh-users",
+        "getent passwd": passwd,
+        "systemctl is-enabled networkd-dispatcher.service || true": "masked",
+    }
+    monkeypatch.setattr(run.container, "ok", answers.__getitem__)
+    monkeypatch.setattr(
+        run.container, "read", lambda path: "/swapfile none swap sw 0 0\n"
+    )
+    return run
+
+
+def test_a_guest_whose_declared_users_hold_their_uids_is_clean(monkeypatch, tmp_path):
+    assert _baseline_run(monkeypatch, tmp_path, PI_PASSWD).baseline_problems() == []
+
+
+def test_a_declared_user_left_at_another_uid_after_step_5_is_flagged(
+    monkeypatch, tmp_path
+):
+    run = _baseline_run(monkeypatch, tmp_path, PI_PASSWD.replace(":904:", ":999:"))
+
+    assert run.baseline_problems() == [
+        "node_exporter has uid 999, not the declared 904"
+    ]
+
+
+def test_a_declared_user_step_5_never_created_is_flagged():
+    assert uid_problems(
+        'u claude 900 "Claude agent" /var/lib/claude /bin/bash\n', ""
+    ) == ["claude has uid none, not the declared 900"]
 
 
 def test_the_fixture_clone_is_one_commit_past_the_green_one_and_builds_a_new_host(

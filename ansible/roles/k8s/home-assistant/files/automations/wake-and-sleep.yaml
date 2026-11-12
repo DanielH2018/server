@@ -222,7 +222,8 @@
     - choose:
         # START (first eligible minute of the window, nothing stamped yet today): stamp the anchor,
         # clear overnight overrides, re-apply the fan (person-home is a top-level condition, so no
-        # extra `if home`), greet, then apply the first frame (~1%). Setup runs EXACTLY once because
+        # extra `if home`), apply the first frame (~1%), then greet last, because a renamed notify
+        # service aborts whatever follows it. Setup runs EXACTLY once because
         # stamping last_wake flips wake_today true on the next tick.
         - conditions:
             - "{{ no_real_wake }}"
@@ -236,16 +237,16 @@
                 datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
             - service: script.bedroom_clear_overrides
             - service: script.bedroom_apply_fan
-            - service: script.bedroom_notify
-              data:
-                title: "☀️ Good morning"
-                message: "Wake ramp starting on the 06:00 fallback (no watch alarm detected)."
-                tag: sleep_morning
             - service: script.bedroom_lights_set
               data:
                 reason: "wake_fallback"
                 brightness_pct: >-
                   {% from 'lighting.jinja' import wake_brightness %}{{ wake_brightness(0) | int }}
+            - service: script.bedroom_notify
+              data:
+                title: "☀️ Good morning"
+                message: "Wake ramp starting on the 06:00 fallback (no watch alarm detected)."
+                tag: sleep_morning
         # RAMP: inside the 45-min window on a stamped fallback morning -> apply ONE frame via the
         # sanctioned single writer. A mid-window HA restart resumes HERE on the next tick, because
         # elapsed is derived from the persisted anchor, not an in-process loop.

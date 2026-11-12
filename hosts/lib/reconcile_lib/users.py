@@ -10,7 +10,9 @@ The renderer writes the same list to /usr/lib/sysusers.d/homelab.conf, and the a
 missing users with `systemd-sysusers`. sysusers creates only users that are missing, so a user
 that exists with another uid would keep it. The arm therefore compares each declared uid with
 `getent passwd` first. A mismatch is a fault: the package shipped a wrong uid, and the run fails
-and holds the host. A user still missing after sysusers is a fault too.
+and holds the host. The arm never renumbers an existing user. The fault names the one-time,
+operator-run scripts/deploy_tools/renumber_host_users.py, which moves each declared user to its
+declared uid. A user still missing after sysusers is a fault too.
 
 The arm never deletes a user. A user that leaves the list is expired with `usermod --expiredate
 1`, and removing its home is an operator step. The arm expires only a name its own record
@@ -65,7 +67,7 @@ def check(user: dict) -> str:
         return "fault"
     if int(fields[2]) != user["uid"]:
         log(
-            f"{user['name']} has uid {fields[2]}; the package declares {user['uid']}",
+            f"{user['name']} has uid {fields[2]}; the package declares {user['uid']}. To move it, run scripts/deploy_tools/renumber_host_users.py --apply as root, then sudo /usr/lib/homelab/homelab-updater --clear-hold",
             ERR,
         )
         return "fault"

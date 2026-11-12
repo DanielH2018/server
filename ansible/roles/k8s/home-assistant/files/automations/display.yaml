@@ -48,8 +48,8 @@
       above: 60
     # The Hub must actually be reachable. When it's unavailable/unknown (powered off, off the
     # network, or its cast connection to HA is down), every re-cast fails — flooding the log with
-    # pychromecast NotConnected errors AND logging the cast user's refresh_token in plaintext on
-    # each attempt. Gate those states out so we only (re)cast a Hub that can receive it.
+    # pychromecast NotConnected errors on each attempt. Gate those states out so we only (re)cast
+    # a Hub that can receive it.
     - condition: not
       conditions:
         - condition: state

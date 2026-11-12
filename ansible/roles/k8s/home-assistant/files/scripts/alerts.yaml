@@ -126,37 +126,12 @@ bedroom_notify:
                 title: "{{ title }}"
                 message: "{{ message }}"
         - stop: "held while away (non-critical)"
-    # continue_on_error on both pushes: without it a renamed notify service (re-paired
-    # phone/watch → new notify.mobile_app_* slug) raises ServiceNotFound and ABORTS the
-    # script HERE — skipping the visibility fallback below, the exact failure it exists
-    # for (2026-07-03 review; the watch rename already happened once, 2026-06-20).
-    # Do not remove.
-    - service: notify.mobile_app_pixel_9_pro
-      continue_on_error: true
-      data:
-        title: "{{ title }}"
-        message: "{{ message }}"
-        data:
-          tag: "{{ tag }}"
-          channel: "{{ channel }}"
-          importance: "{{ importance }}"
-          # Action buttons (empty list = none). Taps fire mobile_app_notification_action ->
-          # bedroom_notification_action dispatches on the BEDROOM_* action id.
-          actions: "{{ actions | default([]) }}"
-    - if: "{{ watch | default(false) }}"
-      then:
-        - service: notify.mobile_app_pixel_watch_3
-          continue_on_error: true
-          data:
-            title: "{{ title }}"
-            message: "{{ message }}"
-            data:
-              tag: "{{ tag }}"
     # Visibility fallback for the ELEVATED tiers (pierce / watch / critical_away): the alert ALSO lands
     # in the HA UI as a persistent notification, so a critical/elevated event stays visible even if the
-    # mobile push silently fails (lapsed FCM token, or a re-paired phone → the notify.mobile_app_*
-    # service renamed → a service_not_found swallowed by the pushes' continue_on_error above —
-    # which is what makes this block reachable in that case). This is the backstop the runtime-error alert
+    # mobile push fails. It runs BEFORE the pushes because a re-paired phone or watch renames its
+    # notify.mobile_app_* service, and the resulting ServiceNotFound aborts the script at that push even
+    # under continue_on_error (HA re-raises configuration errors; the watch rename happened 2026-06-20).
+    # This is the backstop the runtime-error alert
     # can't be: it deliberately ignores script.bedroom_notify's OWN logger to avoid a loop, so a broken
     # notify service is otherwise invisible for these tiers (sensor-offline, air quality, extreme-temp
     # away, UPS). notification_id = tag (a repeat replaces in place); a recovery — every recovery
@@ -179,3 +154,26 @@ bedroom_notify:
                 notification_id: "{{ tag }}"
                 title: "{{ title }}"
                 message: "{{ message }}"
+    # continue_on_error covers a failed delivery only. A renamed service still aborts here, which is
+    # why the fallback above runs first and every caller puts its own state changes before its notify.
+    - service: notify.mobile_app_pixel_9_pro
+      continue_on_error: true
+      data:
+        title: "{{ title }}"
+        message: "{{ message }}"
+        data:
+          tag: "{{ tag }}"
+          channel: "{{ channel }}"
+          importance: "{{ importance }}"
+          # Action buttons (empty list = none). Taps fire mobile_app_notification_action ->
+          # bedroom_notification_action dispatches on the BEDROOM_* action id.
+          actions: "{{ actions | default([]) }}"
+    - if: "{{ watch | default(false) }}"
+      then:
+        - service: notify.mobile_app_pixel_watch_3
+          continue_on_error: true
+          data:
+            title: "{{ title }}"
+            message: "{{ message }}"
+            data:
+              tag: "{{ tag }}"
