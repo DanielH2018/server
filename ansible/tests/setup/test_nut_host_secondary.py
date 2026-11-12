@@ -231,7 +231,7 @@ def test_the_watchdog_reads_the_deployed_conf_not_an_ansible_var():
     The check would then pass against an address upsmon does not use, reproducing the
     blindness it exists to remove.
     """
-    assert "/etc/nut/upsmon.conf" in WATCHDOG
+    assert "UPSMON_CONF=/var/lib/homelab-secrets/etc/nut/upsmon.conf" in WATCHDOG
     assert "nut_host_upsd_host" not in WATCHDOG
 
 
