@@ -24,7 +24,7 @@ ServiceAccount and the RBAC. The CronJob shipped `suspend: true` at H2.3d, and H
   `ansible/tests/k8s/test_step6_tags_render_into_created_namespaces.py` holds that. The
   generated `homelab-namespace` kind gives this tag its `dependsOn`, so it waits for `homelab`.
 - **The tag renders no Namespace.** A Namespace object here would be a second writer of
-  `homelab` beside `ansible/deploy.yml`, which C4 forbids.
+  `homelab` beside the generated `homelab-namespace` kind, which C4 forbids.
 - **The stamp ConfigMap carries two annotations.** `kustomize.toolkit.fluxcd.io/ssa: IfNotPresent`
   makes Flux create it once and never revert the drill's writes to its data.
   `kustomize.toolkit.fluxcd.io/prune: disabled` keeps it when a render drops it, because the

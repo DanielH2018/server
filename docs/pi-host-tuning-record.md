@@ -549,6 +549,5 @@ The first live publish confirmed the trigger on 2026-11-03. The poll logged
 ## See also
 
 - `hosts/components/pi-heartbeats/component.yml` — the container-recovery contract.
-- `ansible/roles/setup/optimize_pi/CLAUDE.md` — where each step of the emptied role went.
 - [Security tools](security-tools.md) — the triage rows for `sar`, `lastcomm` and `ausearch`,
   whose retention the log RAM budget caps.
