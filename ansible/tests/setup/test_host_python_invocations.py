@@ -172,7 +172,7 @@ def test_the_pin_is_enforced_everywhere_except_the_deploy_pipeline():
     pipeline's.
 
     gitops-deploy and homelab-checkout-sync are exempt on purpose. The deployer applies changes,
-    and checkout-sync fast-forwards the primary checkout that owed_run.py, probe.py and land.sh
+    and checkout-sync fast-forwards the primary checkout that probe.py and land.sh
     refuse to work from when stale. A hard failure in either blocks every landing, including the
     one that ships the correction. This test pins BOTH halves, so neither the rule nor its
     exceptions can drift silently.

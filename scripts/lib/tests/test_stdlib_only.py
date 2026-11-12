@@ -139,16 +139,6 @@ def test_yaml_added_to_the_fanout_review_path_turns_the_walk_red(tmp_path):
     assert "yaml" in checker.walk(injected, [tmp_path, *dirs])
 
 
-def test_a_colliding_gitops_basename_outside_the_map_turns_the_walk_red(tmp_path):
-    # The import resolves, to a module beside the importer, but a basename two roles share is
-    # accepted only through the map, so resolving is not enough.
-    checker = _checker()
-    (tmp_path / "gitops_hold.py").write_text("HOLD = 1\n", encoding="utf-8")
-    module = tmp_path / "importer.py"
-    module.write_text("import gitops_hold\n", encoding="utf-8")
-    assert "gitops_hold" in checker.walk(module, [tmp_path])
-
-
 def test_a_role_module_the_map_lists_is_accepted(tmp_path):
     checker = _checker()
     directory, names = next(iter(_role_map().items()))
@@ -277,16 +267,6 @@ def test_the_declared_fanout_units_are_the_commands_the_builders_write():
             continue  # what the fanout_place.py shim forwards to, not a command line
         shape = " ".join([entry.relative_to(REPO).as_posix(), *argv]) + " "
         assert any(shape in command for command in written), shape
-
-
-def test_a_mapped_basename_two_dirs_on_the_path_hold_turns_the_walk_red(tmp_path):
-    # Both gitops roles ship `gitops_hold`; with both on the path the map cannot say which loads.
-    checker = _checker()
-    module = tmp_path / "importer.py"
-    module.write_text("import gitops_hold\n", encoding="utf-8")
-    dirs = [tmp_path, repo_paths.MONITOR_BRIDGE_FILES, repo_paths.GITOPS_DEPLOY_FILES]
-    assert "gitops_hold" in checker.walk(module, dirs)
-    assert checker.walk(module, [tmp_path, repo_paths.GITOPS_DEPLOY_FILES]) == []
 
 
 def _uv_gate_leg(drill: str) -> str:

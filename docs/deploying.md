@@ -11,9 +11,7 @@ packages apply the host plane, and the Pi's services ship in its host package. T
   `land-after-merge` skill has the commands, and [Landing](landing.md) has the verdicts. To apply
   a green master commit that no promotion followed, dispatch `promote` with its full 40-hex SHA:
   `gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>`.
-- **A setup role:** the GitOps deployer applies it on the tick after the merge. A role the tick
-  cannot apply becomes a `manual_plane` line in `owed.jsonl`, and
-  `uv run python scripts/deploy_tools/owed_run.py <role>` clears it. By hand, run the playbook
+- **A setup role:** the GitOps deployer applies it on the tick after the merge. By hand, run the playbook
   and tag that the `Applied by:` line of the role's `CLAUDE.md` names. Neither follows from the
   role's name: `chezmoi_setup` takes the tag `chezmoi`, and `k3s` applies through
   `k3s-bringup.yml`, where the same page names narrower tags than the maximal `k3s`. Ansible

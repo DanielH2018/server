@@ -1,8 +1,7 @@
 """`probe.py landing`'s promotion lines: both holds, `prod` and `last-good`, then suspensions.
 
-Two holds coexist. The deployer's `hold_sha` holds the setup plane, and the `promote`
-workflow's repository variable `DEPLOY_HOLD` holds the Flux-owned tags. `hold_lines` prints a
-line for each on every run, even when it reads `none`, so neither can be forgotten.
+The `promote` workflow's repository variable `DEPLOY_HOLD` holds the Flux-owned tags.
+`hold_lines` prints its line on every run, even when it reads `none`, so it cannot be forgotten.
 
 The first three reads are the ones docs/target-architecture/deploy/d2-first-leaf.md (*What
 `probe.py landing` reads, and what it costs*) prices: one `api.github.com` call, two `ghcr.io`
@@ -254,17 +253,16 @@ LIVE_PROMOTE_READS = PromoteReads(
 
 
 def hold_lines(snap: dict) -> list[str]:
-    """The two holds, `prod`, `last-good`, the suspended Flux objects and the skipped ones.
+    """`DEPLOY_HOLD`, `prod`, `last-good`, the suspended Flux objects and the skipped ones.
 
     The last line names the objects a break-glass left with the reconcile-disabled annotation.
-    The two holds coexist while the deployer and `promote` do. Each hold line names its source and the plane it holds, and prints even when it reads
+    The hold line names its source and the plane it holds, and prints even when it reads
     `none`. A `failed=` hold prints its names. `prod` is reported equal to `last-good` only
     when both digests were read and match. The suspension line names each object's field
     managers for `spec.suspend`, so a hand suspend (`homelab-operator`) reads differently from
     one rendered from git.
     """
     promote = snap.get("promote") or {}
-    hold = snap.get("hold")
     deploy_hold = promote.get("deploy_hold")
     prod, last_good = promote.get("prod"), promote.get("last_good")
 
@@ -277,8 +275,6 @@ def hold_lines(snap: dict) -> list[str]:
 
     same = bool(prod and last_good and last_good["digest"] == prod["digest"])
     return [
-        "hold_sha (GitOps deployer, setup plane): "
-        + ("unknown" if hold is None else hold["sha"][:8] or "none"),
         "DEPLOY_HOLD (promote workflow, Flux-owned tags): "
         + ("unknown" if deploy_hold is None else deploy_hold or "none")
         + hold_cause(deploy_hold),

@@ -28,7 +28,7 @@ an interval we cannot state" is not a claim this page makes.
 CADENCE comes from a loop's packaged timer (`package_timers.cadence_minutes`), or from
 crons.cadence_minutes() wherever the loop is an `ansible.builtin.cron`
 task (matched by job name against crons.build_rows()) or its own systemd timer interval
-(gitops-deploy, renovate-agent, renovate-notify -- none of which are cron jobs, so they
+(renovate-agent, renovate-notify -- neither of which is a cron job, so they
 carry a hardcoded value read once from the role that defines the timer, cited in a comment
 at each constant). Two crons -- the Longhorn and etcd restore drills -- build their schedule
 with `.split()[N]` off one compound var, so crons.py's own schedule column prints unresolved
@@ -66,12 +66,7 @@ from lib import yaml_fast
 from docs.catalog_lib import package_timers
 from docs.reference import crons as crons_mod
 from lib.kubectl import DEFAULT_TOOLS, MissingKubectl, Tools, WrongCluster, kubectl
-from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_HOST_CHECKS_DEFAULTS, K8S_ROLES
-
-# The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
-_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from gitops_hold import DeployerSnapshot
-from gitops_markers import MARKERS, STATE_DIR
+from lib.repo_paths import K3S_HOST_CHECKS_DEFAULTS, K8S_ROLES
 
 # The drill's stamp ConfigMap parser, shared with backup health and the Longhorn upgrade gate.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "lib"))
@@ -104,7 +99,7 @@ def _epoch_marker(state_dir: Path, filename: str, outcome_ok: str) -> LoopRun:
     """Read `<state_dir>/<filename>` as a bare unix-epoch marker.
 
     Shared by every loop whose state file is nothing but `str(time.time())` or
-    `date +%s` -- gitops-deploy, renovate-agent, renovate-notify, and the Longhorn restore
+    `date +%s` -- renovate-agent, renovate-notify, and the Longhorn restore
     drill all write exactly that.
     """
     if not state_dir.is_dir():
@@ -117,32 +112,6 @@ def _epoch_marker(state_dir: Path, filename: str, outcome_ok: str) -> LoopRun:
     except OSError, ValueError:
         return LoopRun(None, "state file content did not parse", unreadable=True)
     return LoopRun(dt.datetime.fromtimestamp(epoch, dt.timezone.utc), outcome_ok)
-
-
-def gitops_deploy_run(state_dir: Path = Path(STATE_DIR)) -> LoopRun:
-    """The 10-minute GitOps deploy tick.
-
-    Cadence: OnUnitActiveSec in gitops-deploy.timer.j2, from gitops_deploy_tick_interval
-    (roles/setup/gitops_deploy/defaults/main.yml:37 = 10min).
-    """
-    base = _epoch_marker(state_dir, MARKERS["last_run"], "ticked, no hold")
-    if base.last_run is None:
-        return base
-    try:
-        snap = DeployerSnapshot.load(state_dir)
-    except OSError, UnicodeDecodeError:
-        return LoopRun(
-            base.last_run, "deployer state not readable from here", unreadable=True
-        )
-    if not snap.hold:
-        return base
-    # The `owed` ledger's `hold_plane` class (#3392).
-    plane = "; ".join(snap.held_planes) or "a service deploy"
-    return LoopRun(
-        base.last_run,
-        f"**HOLD** at `{snap.hold[:8]}` ({plane}) -- a health gate or broad apply failed "
-        "and is parked until cleared",
-    )
 
 
 def renovate_agent_run(state_dir: Path = Path("/var/lib/renovate-agent")) -> LoopRun:
@@ -299,7 +268,6 @@ def _loops(tools: Tools = DEFAULT_TOOLS) -> list[tuple[str, LoopRun, float | Non
     )
     etcd_default = _k3s_default_var("k3s_etcd_restore_drill_cron")
     return [
-        ("gitops-deploy", gitops_deploy_run(), 10.0),
         ("renovate-agent", renovate_agent_run(), 1440.0),
         ("renovate-notify", renovate_notify_run(), 1440.0),
         (

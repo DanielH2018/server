@@ -24,7 +24,7 @@
 .claude/hooks/tests/test_block_footguns.py 2
 ansible/roles/k8s/artifacts/tests/test_artifact_server.py 1
 ansible/roles/k8s/autofix-bridge/tests/test_autofix.py 12
-hosts/components/deploy-ui/tests/test_deploy_ui_app.py 6
+hosts/components/deploy-ui/tests/test_deploy_ui_app.py 5
 hosts/components/fake-remux/tests/test_fake_remux_replace_logic.py 2
 hosts/components/renovate-notify/tests/test_pending_soak_wiring.py 6
 scripts/backup/tests/test_longhorn_reap_delete_transport.py 5

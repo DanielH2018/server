@@ -1,29 +1,18 @@
 """Guards and writes for the deploy UI. A guard returns None to allow, else the refusal text.
 
-The refusals mirror the repo CLAUDE.md *When to wait* list: nothing lands under a
-`hold_sha`, and the hold is cleared HERE, by an operator who typed the SHA, never bypassed.
-`clear_hold` hands the clear to `gitops_hold.Hold`, the deployer's own owner of the rule that
-`hold_sha` goes only together with its `owed` ledger `hold_plane` lines (#3658).
+A landing refuses itself under `DEPLOY_HOLD`, so no guard here reads the hold.
 """
 
-import contextlib
-import fcntl
 import os
 import signal
 import subprocess
 import tempfile
 import threading
 import time
-from collections.abc import Generator, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 
 from deploy_ui_lib.deploy_ui_reads import Run
-from gitops_hold import HOLD_PLANE_SEP, Hold
-
-# Seconds a Clear waits for the git-tree lock before it refuses. `gitops_state.py` waits as
-# long for the same reason: an operator is waiting on the reply, a tick can hold the lock for
-# most of an hour, and a refused Clear costs nothing to repeat.
-LOCK_WAIT_S = 5.0
 
 REQUIRED_HEADER = "X-Deploy-UI"
 
@@ -38,15 +27,11 @@ def write_allowed(headers: Mapping[str, str]) -> str | None:
     return None
 
 
-def _hold_refusal(hold_sha: str) -> str | None:
-    return f"deployer holds {hold_sha}; clear the hold first" if hold_sha else None
-
-
-def guard_land(pr: str, inflight: list[Run], hold_sha: str) -> str | None:
-    """Refuse a duplicate landing for the same PR, or any landing while a hold is set."""
+def guard_land(pr: str, inflight: list[Run]) -> str | None:
+    """Refuse a duplicate landing for the same PR."""
     if any(l.pr == pr for l in inflight):
         return f"a landing for PR {pr} is already running"
-    return _hold_refusal(hold_sha)
+    return None
 
 
 def guard_cancel(pid: int, listed: set[int]) -> str | None:
@@ -54,64 +39,6 @@ def guard_cancel(pid: int, listed: set[int]) -> str | None:
     if pid not in listed:
         return f"pid {pid} is not a listed landing"
     return None
-
-
-@contextlib.contextmanager
-def _tree_lock(tree_lock: Path, wait_s: float) -> Generator[None]:
-    """Hold the git-tree lock, polling for up to `wait_s` seconds.
-
-    Raises:
-        TimeoutError: a tick or deploy still held the lock at the deadline.
-    """
-    with open(tree_lock, "a") as lock:
-        deadline = time.monotonic() + wait_s
-        while True:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                if time.monotonic() >= deadline:
-                    raise TimeoutError(tree_lock) from None
-                time.sleep(0.1)
-        yield
-
-
-def clear_hold(
-    state_dir: Path, expected_sha: str, tree_lock: Path, wait_s: float = LOCK_WAIT_S
-) -> str | None:
-    """Remove `hold_sha` and every plane the hold waits on, only when `expected_sha` matches.
-
-    `gitops_hold.Hold.clear` owns the rule. This passes it the git-tree lock, which a tick
-    already holds when the deployer writes the hold, and `wait_s` bounds the wait for it.
-    The lock is taken for every Clear, so a Clear during a tick refuses with the retry text,
-    and a timeout leaves the hold whole.
-    """
-    try:
-        return Hold(state_dir).clear(
-            expected_sha, lock=lambda: _tree_lock(tree_lock, wait_s)
-        )
-    except TimeoutError:
-        return "a tick or deploy holds the git-tree lock; retry once it finishes"
-
-
-def hold_cleared_message(dropped: list[str]) -> str:
-    """What the page says after a Clear, naming every plane it just stopped recording.
-
-    Args:
-        dropped: the `hold_plane` entries the Clear removed, from `hold_plane_entries`.
-
-    A Clear removes every `hold_plane` line, whatever it holds. Since #2381 that is one entry
-    per failed apply, and the deployer clears them one at a time as each plane is applied — so a
-    Clear can drop entries for planes nobody has applied, and after it nothing records them
-    (#2453). The message names them and says what is owed.
-    """
-    if not dropped:
-        return "hold cleared (hold_sha and hold_plane)"
-    return (
-        f"hold cleared (hold_sha and hold_plane). {len(dropped)} plane(s) were recorded as "
-        f"unapplied and are now recorded nowhere — apply each by hand: "
-        + HOLD_PLANE_SEP.join(dropped)
-    )
 
 
 def spawn_logged(argv: list[str], cwd: Path, log_dir: Path, action: str) -> Path:
