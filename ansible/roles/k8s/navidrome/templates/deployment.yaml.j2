@@ -1,6 +1,5 @@
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
-{% from 'pod-affinity.yml.j2' import node_affinity_preference with context %}
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 apiVersion: apps/v1
@@ -13,7 +12,6 @@ spec:
   # deadlock: the new pod waits for a volume the old pod still holds. Navidrome's index is
   # sqlite besides, which wants one writer.
 {{ spec_shell('Recreate') }}
-  # Zero on purpose — see the parked note in this role's defaults/main.yml.
   replicas: {{ navidrome_k8s_replicas }}
   selector:
     matchLabels:
@@ -27,7 +25,8 @@ spec:
       # Longhorn hands back a root-owned filesystem; without an fsGroup the non-root process
       # cannot create its sqlite index on the fresh volume.
 {{ pod_shell('homelab-best-effort', run_as_user=navidrome_k8s_uid, run_as_group=navidrome_k8s_uid, fs_group=navidrome_k8s_uid) }}
-{{ node_affinity_preference('daniel-server') }}
+{# DECIDED: no node affinity; the bound media-data local PV's nodeAffinity pins this pod to
+   daniel-box, where the library lives, and a preference for any other node is dead. #}
       containers:
         - name: navidrome
           image: {{ navidrome_k8s_image }}
@@ -53,11 +52,10 @@ spec:
           volumeMounts:
             - name: navidrome-data
               mountPath: /data
-            # The library. An emptyDir until a music tree exists on the media volume — the
-            # media PVC holds books, movies and tv only. Mounting the media root here instead
-            # would point the scanner at the video library.
-            - name: navidrome-music
+            # The music subPath only: the volume root would point the scanner at the video library.
+            - name: media
               mountPath: {{ navidrome_k8s_music_dir }}
+              subPath: {{ navidrome_k8s_media_subpath }}
               readOnly: true
             # readOnlyRootFilesystem is on, and the transcoder writes its scratch files here.
             - name: navidrome-tmp
@@ -79,7 +77,9 @@ spec:
         - name: navidrome-data
           persistentVolumeClaim:
             claimName: {{ navidrome_k8s_claim }}
-        - name: navidrome-music
-          emptyDir: {}
+        - name: media
+          persistentVolumeClaim:
+            claimName: {{ navidrome_k8s_media_claim }}
+            readOnly: true
         - name: navidrome-tmp
           emptyDir: {}
