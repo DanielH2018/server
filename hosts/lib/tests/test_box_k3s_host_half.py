@@ -62,6 +62,7 @@ def test_the_media_directories_are_tmpfiles_lines_with_no_mode(package):
     assert [line for line in lines if not line.startswith("#")] == [
         "d /srv/media - 1000 1000 -",
         "d /srv/media/media - 1000 1000 -",
+        "d /srv/media/media/music - 1000 1000 -",
         "d /srv/media/torrents - 1000 1000 -",
     ]
 
