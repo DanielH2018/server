@@ -14,7 +14,7 @@ non-literal value (`fn=service.check_n8n`) is left out, because it names code ra
 data. A positional argument raises, as does a missing table or an element that is not a call:
 either would otherwise drop a row, and a dropped row is a check no generated fragment names.
 
-No Ansible import at load time, so the tests call the same function the playbook runs.
+No Ansible import at load time, so the tests call the same function the renderer runs.
 `FilterModule` registers it through `_as_filter`, which re-raises a `ValueError` as
 `FilterError("py_table: ...")` and fails the render before anything applies (#4505).
 """

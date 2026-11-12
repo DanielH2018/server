@@ -22,7 +22,7 @@ rendering attacker-supplied pages in a headless browser.
 - **Secrets:** `prowlarr_api_key` (also reused as the exportarr sidecar's credential —
   Prowlarr has no scoped read-only key to mint instead).
 - **Flux applies it, not Ansible** (#5594, a Wave D PR with monitor-bridge). Its
-  `containers_list` entry is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. authelia and traefik stay Ansible-owned, so the Kustomization records
   them in its
   `homelab/ansible-owned-deps` annotation, not in `dependsOn`.

@@ -118,7 +118,7 @@ spec:
             path: {{ artifacts_peer_dir }}/{{ peer.name }}
             type: Directory
 {% endfor %}
-        # type: Directory for the same reason as the trees above; tasks/main.yml creates it.
+        # type: Directory for the same reason as the trees above; the host package creates it.
         - name: artifacts-stars
           hostPath:
             path: {{ artifacts_stars_dir }}

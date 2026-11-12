@@ -1,6 +1,6 @@
 ---
 # Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
-# Route-only role (see tasks/main.yml): it renders no Deployment of its own, only a
+# Route-only role: it renders no Deployment of its own, only a
 # selector-less Service, its EndpointSlice and the IngressRoute onto deploy-ui.service on
 # daniel-box. There is no workload to wait
 # on. But the page behind this route starts landings and clears the deployer's hold, so a bad

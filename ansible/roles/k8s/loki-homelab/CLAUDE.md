@@ -21,7 +21,7 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   LogQL checks. A broken apply blinds the LogQL checks without paging. The host crons'
   `status=` lines land here too, as the local record of each verdict.
 - **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is
-  `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged
+  `platform: k8s`, so nothing applies it by hand, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. traefik stays
   Ansible-owned, so the Kustomization

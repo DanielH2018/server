@@ -27,19 +27,18 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
   (`ansible/roles/k8s/image-builder/CLAUDE.md`). All of this matters because the volume holds
   irreplaceable world data.
 - **Flux applies it, not Ansible** (D5.15, Wave C). Its `containers_list` entry is
-  `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged
+  `platform: k8s`, so nothing applies it by hand, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy:
   false` still stops Renovate's
   automerge of the digest bump. The Deployment is `Recreate`, so a change that rolls it takes
   the server down until the new pod passes its startup probe.
 - **Parked at `replicas: 0`.** `ansible/inventory/group_vars/all.yml:terraria_k8s_replicas` is
   0 (#822), so the render holds `replicas: 0` and a roll starts no pod. Flux's drift
-  correction now resets a hand scale as well. The value has three readers on two planes: this
-  role's Deployment, which `promote` applies, and game-stats' `terraria-stats` Deployment and
-  observability's `terraria-stats` scrape job, which Ansible deploys. So unparking is a merge
-  that `promote` applies for the server plus Ansible deploys of game-stats and observability.
-  The restore checklist on #822 has the rest. The comment above the value in `group_vars`
-  still names `--tags terraria`, which `deploy.sh` refuses with exit 5.
+  correction now resets a hand scale as well. The value has three readers: this role's
+  Deployment, game-stats' `terraria-stats` Deployment and observability's `terraria-stats`
+  scrape job. All three roles are Flux-owned, so unparking is one merge that `promote`
+  applies. The restore checklist on #822 has the rest. The comment above the value in
+  `group_vars` still names `--tags terraria`, a tag nothing applies by hand.
 - **Where the tasks went.** The build became
   the `images` job (D5.4), which pushes `ghcr.io/danielh2018/terraria:<content tag>`. The
   defaults name `<k8s_registry_pull_host>/terraria`; the renderer rewrites that ref to the GHCR

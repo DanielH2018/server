@@ -35,7 +35,7 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   secrets, no exec. Deliberately narrower than the shell's own read-only ServiceAccount.
 - **Secrets** (SOPS keys, not values): `homelab_mcp_token`, `claude_ha_token`.
 - **Flux applies it, not Ansible** (D5.14, the first Wave C PR). Its `containers_list` entry
-  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Kustomization has no Ansible-owned
   dependency to record, because the role renders no route.
@@ -47,10 +47,11 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   through `cluster_vars.py write`, which the operator runs after the hand rotation: both keys
   are `assisted`-tier in `ansible/secret_rotation.yml`. The rotation rolls the pod through the
   restart checksum.
-- **A `homelab_mcp_token` rotation crosses two planes.** traefik's gate Secret matches the
-  same token in the `homelab-mcp-local` router's `Authorization` header, and traefik stays
-  Ansible-owned. So the GitOps deployer applies the edge's copy and `promote` applies the
-  pod's, each on its own schedule. Bearer calls fail until both have applied.
+- **A `homelab_mcp_token` rotation crosses two Kustomizations.** traefik's gate Secret
+  matches the same token in the `homelab-mcp-local` router's `Authorization` header. One
+  promotion carries both copies, but traefik's Kustomization applies the edge's copy and
+  homelab-mcp's applies the pod's, each when it reconciles. Bearer calls fail until both
+  have applied.
 - **Flux prunes the cluster-scoped RBAC.** Flux prunes by its own inventory, which holds the `homelab-mcp-read`
   ClusterRole and ClusterRoleBinding,
   so dropping one from `rbac.yaml.j2` deletes it live at the next promotion.

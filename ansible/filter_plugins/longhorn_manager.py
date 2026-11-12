@@ -10,7 +10,7 @@ function.
 The rule: on this node, phase `Running`, and every container ready. A pod reporting no
 `containerStatuses` is NOT ready, because its containers have not started.
 
-No Ansible import, so the reaper and the tests call the same function the playbook runs.
+No Ansible import, so the reaper and the tests call the same function the renderer runs.
 """
 
 

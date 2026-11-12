@@ -15,7 +15,7 @@ daniel-box since E3 (2026-08-12). See repo-root `CLAUDE.md` for shared conventio
 
 - **Depends on:** traefik, authelia
 - **Flux applies it, not Ansible** (D5.7, the third Wave A PR). Its `containers_list` entry
-  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. Both dependencies stay
   Ansible-owned, so the

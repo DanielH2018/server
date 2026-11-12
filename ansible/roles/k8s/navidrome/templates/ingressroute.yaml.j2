@@ -6,7 +6,7 @@
   EndpointSlice behind one is empty — every ~20s, forever, while navidrome sits at replicas 0.
   That drowns the traefik log, which is where a real edge failure shows up first (#1323).
 
-  The gate lives in tasks/main.yml rather than here. The role arms `manifests_prune`, whose
+  The gate lives in `manifests_files` in defaults/main.yml rather than here. The role arms `manifests_prune`, whose
   labelling wrapper refuses a template that renders no document, and dropping the name from
   the list is what makes the prune delete the live route.
 #}

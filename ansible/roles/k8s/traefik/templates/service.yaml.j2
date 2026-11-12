@@ -18,8 +18,9 @@ metadata:
     # Kubernetes accepts any annotation key, and MetalLB ignores ones it does not recognise,
     # so a wrong prefix is silent: the Service is created, an address is assigned from the
     # auto-assign pool instead of the reserved VIP, and nothing anywhere reports a problem.
-    # That is why the assert in tasks/main.yml checks the landed address rather than
-    # trusting the annotation. Every pinned-address Service here has that assert.
+    # That is why observability's TraefikIngressAddressNotPinned alert checks the landed
+    # address rather than trusting the annotation. Every pinned-address Service has such an
+    # alert (observability's files/rules/k8s-services.yaml).
     metallb.io/loadBalancerIPs: {{ k3s_metallb_ingress_vip }}
 spec:
   type: LoadBalancer

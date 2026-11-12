@@ -19,7 +19,7 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
   LiveSync client uses basic auth and can't pass Authelia 2FA
 - **Depends on:** traefik
 - **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry
-  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. traefik
   stays Ansible-owned, so the
   Kustomization records it in its `homelab/ansible-owned-deps` annotation, not in `dependsOn`.

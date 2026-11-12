@@ -18,7 +18,7 @@ shared conventions.
   Also mounts the shared `media-data` claim (read/write, via subPath) for the files
   themselves.
 - **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry
-  is `platform: k8s`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
+  is `platform: k8s`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. authelia, media-volume
   and traefik stay
