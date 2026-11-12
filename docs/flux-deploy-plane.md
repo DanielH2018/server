@@ -2105,8 +2105,10 @@ for the stateful hold's post, and that job holds `contents: read` alone. `promot
 prints the URL, and a failed post names only the HTTP status. `docs/secret-rotation.md` has
 the rotation step for the copy.
 
-The SOPS key `flux_github_status_token` is a fine-grained token with Commit statuses read and
-write on two repositories, `DanielH2018/server` and `DanielH2018/dotfiles`, which
-notification-controller posts statuses with. It has no expiration date. It lives only in
-SOPS, on the registry's `external` tier, and the flux role's `CLAUDE.md` has its rotation
-steps.
+The SOPS keys `flux_github_app_id`, `flux_github_app_installation_id` and
+`flux_github_app_private_key` are the credentials of a GitHub App with Commit statuses read
+and write, installed on two repositories, `DanielH2018/server` and `DanielH2018/dotfiles`.
+notification-controller posts statuses as that App, so the posts draw on the App's own rate
+limit and never on the operator's 5,000 requests per hour. The keys live only in SOPS and
+reach the cluster as the SOPS manifest for the Secret `flux-github-status`. The flux role's
+`CLAUDE.md` has the rotation steps.

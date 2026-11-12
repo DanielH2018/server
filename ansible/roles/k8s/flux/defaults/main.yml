@@ -106,6 +106,13 @@ flux_break_glass_public_key: |
   iyWO5ALzv7WNgSdFHRSX+oscTgeIBHYzfEeS60TbahTNhf7OzX+pGYXowA==
   -----END PUBLIC KEY-----
 
+# The manifest whose Secret holds the GitHub App credentials, a multi-line PEM block and two
+# all-digit IDs that no Flux placeholder can carry. A placeholder render (scripts/renderer, target
+# slice R2) leaves it out, and D3 ships it as a SOPS-encrypted manifest instead.
+# `sops-manifest-entries` in scripts/renderer/renderer_lib/sops_entries.py holds the entry to one
+# Secret of `SOPS_MANIFEST_KEYS` keys.
+render_sops_manifests: [github-status-secret.yaml]  # noqa var-naming[no-role-prefix]
+
 # The repository notification-controller posts commit statuses to.
 flux_github_repository_url: https://github.com/DanielH2018/server
 

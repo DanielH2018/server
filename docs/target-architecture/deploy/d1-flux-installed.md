@@ -779,9 +779,11 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
       moment `decide` runs, not through the `vars` context, so a hold that an earlier job
       wrote is always seen. Writing `DEPLOY_HOLD` arrives in D2. Whether `GITHUB_TOKEN` can
       write repository variables is Open question 3; this plan assumes it cannot.
-    - The SOPS variable `flux_github_status_token` is a fine-grained token with Commit statuses
-      read and write on this repository, for notification-controller. Open question 12 asks
-      whether a GitHub App token replaces it.
+    - The SOPS variable `flux_github_status_token` was a fine-grained token with Commit statuses
+      read and write on this repository, for notification-controller. Open question 12 asked
+      whether a GitHub App token replaces it, and #8023 switched the `github-status` Provider
+      to one. The live credentials are the SOPS keys `flux_github_app_id`,
+      `flux_github_app_installation_id` and `flux_github_app_private_key`.
     - **Requirement: no agent token ever carries `write:packages`.** Pushing, signing and
       moving a tag happen only in the code-free jobs above. A token that an agent session
       holds never carries that scope, so an agent cannot push an artifact or move `prod`,
@@ -1638,8 +1640,8 @@ fails. Exit 2 shows that the same object was read and reconciled.
 - **Commit statuses share a user's rate limit.** At full fleet each promoted SHA gets about
   70–120 commit-status contexts, one per Kustomization. `flux_github_status_token` is a
   fine-grained token, and such a token shares its owner's 5,000 requests per hour. D1
-  posts one context per SHA, so the risk starts in D2. Open question 12 recommends a
-  GitHub App token.
+  posts one context per SHA, so the risk starts in D2. Open question 12 recommended a
+  GitHub App token, and #8023 adopted it after a drained operator quota stopped a status post.
 - **A token expires.** `PROMOTE_TOKEN` expires 90 days after it is minted, and the status
   token within a year. When the status token expires, statuses stop and D2's promote job
   times out into a hold. When `PROMOTE_TOKEN` expires, `decide` errors and promotion stops.
@@ -1876,7 +1878,8 @@ fails. Exit 2 shows that the same object was read and reconciled.
     limit of its own and a short life. Resolution: D2 measures the burst per promoted SHA
     and per hour. The D2 PR also confirms that the pinned notification-controller's `github`
     Provider accepts App credentials. Creating the App is a GitHub setting
-    (**operator-only**).
+    (**operator-only**). #8023 resolved it: the Provider authenticates as a GitHub App,
+    through the SOPS manifest for the Secret `flux-github-status`.
 13. **Do commit-status descriptions carry substituted values?** notification-controller
     posts each event's message as the status description, and the repository is public.
     D1's root substitutes nothing, so the question starts in D2. Resolution: D2's
