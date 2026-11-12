@@ -119,7 +119,8 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   render this role's templates in place (`role: initial_setup`), and each cron becomes a timer
   at the cron's slot. The weekly reboot refuses while the validation flag of `homelab-reconcile` exists. The
   push tokens and the Healthchecks.io key arrive as unit credentials, not as `/etc` env files.
-  The first AIDE and rkhunter baselines and the mask on `dailyaidecheck.timer` stay host state.
+  The first rkhunter baseline stays host state on every host. The first AIDE baseline and the
+  mask on `dailyaidecheck.timer` stay host state on daniel-box and daniel-server only.
   The role keeps no task of either subject for any host. The weekly
   firmware update ships only where `has_fwupd` is true, which is daniel-box alone.
 - **AIDE and rkhunter are scheduled against each other, and the package's own timer is masked.**
