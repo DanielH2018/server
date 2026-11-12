@@ -3,14 +3,12 @@
 A test replaces one field of `Tools` and never a PATH entry. The defaults are the real
 implementations, defined here so the phase modules never import subprocess.
 
-WHICH CHECKOUT EACH HELPER COMES FROM. await_ci, land_tags, deploy_lib/detach_notify and
-land_flux's promote_lib.wait are imported from land.py's checkout, so they are the same release as
-it: a PR adding a flag to one and its call site must pass its own landing, though the primary
-checkout holds the previous release. deploy_tags.py is run as a subprocess with the PRIMARY checkout as cwd, because its question
-IS the primary checkout: `blockers` reads `HEAD..origin/master` and `changed` reads
-`<since>...HEAD`. Moving it to this file's checkout would silently re-aim it at the worktree's
-HEAD. WHAT IS NOT
-HERE. Three path-list decisions -- `plane_note`, `derive`, `quiet_paths` -- are NOT on
+WHICH CHECKOUT EACH HELPER COMES FROM. await_ci, land_tags, health_gate and land_flux's
+promote_lib.wait are imported from land.py's checkout, so they are the same release as it: a PR
+adding a flag to one and its call site must pass its own landing, though the primary checkout
+holds the previous release.
+
+WHAT IS NOT HERE. Three path-list decisions -- `plane_note`, `derive`, `quiet_paths` -- are NOT on
 `Tools`. They are pure functions of a file list, so a fake of them would leave no pipeline
 test running the real derivation. They live on the frozen `Classifier` the Landing holds
 beside `Tools`, so a test takes the real ones and fake boundaries.
@@ -18,7 +16,6 @@ beside `Tools`, so a test takes the real ones and fake boundaries.
 
 import contextlib
 import os
-import re
 import shutil
 import signal
 import socket
@@ -34,20 +31,13 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# land_tags imports `narrow_setup` bare, so its directory must be reachable. The shim puts it
-# at sys.path[0] and pytest's pythonpath lists it; this covers an interpreter import.
+# `land_flux` imports `forge` bare from scripts/deploy_tools. The shim puts it at sys.path[0]
+# and pytest's pythonpath lists it; this covers an interpreter import.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
-from lib.repo_paths import GITOPS_DEPLOY_FILES
-
-# The deployer's own modules import each other bare (`import deploy_locks`), so the directory
-# has to be on the path for the names this module reads from it.
-_sys.path.insert(2, str(GITOPS_DEPLOY_FILES))
-from gitops_hold import DeployerSnapshot, read_field
-from gitops_markers import MARKERS
 from deploy_tools import await_ci
 from deploy_tools.land_lib import land_flux, land_tags, land_tested_base
 from deploy_tools.land_lib import fresh, own_checkout, verdict_log
-from deploy_tools.deploy_lib.detach_notify import GateResult, gate as health_gate
+from deploy_tools.land_lib.health_gate import GateResult, gate as health_gate
 from lib.exit_codes import CI_DISARMED
 from deploy_tools.land_lib.land_tags import Derivation
 from lib.gh import gh, gh_json
@@ -58,41 +48,9 @@ from lib.git import git
 HERE = _Path(__file__).resolve().parents[1]
 # What `uv run` reads to find an existing venv instead of building one where it stands.
 UV_PROJECT_ENVIRONMENT = "UV_PROJECT_ENVIRONMENT"
-# `uv run` resolves the venv from cwd, PRIMARY here, which may predate `deploy_cli.py` (#4347).
-DEPLOY_TAGS_ARGV = ("uv", "run", "-q", "python", "scripts/deploy_tools/deploy_tags.py")
 # The parent a gate snapshot is made in, and the env var that moves it for a test.
 GATE_TMP_ROOT = "/tmp"
 GATE_TMP_ROOT_ENV = "LAND_GATE_TMPDIR"
-
-
-# What `uv run` itself writes to stderr, which `-q` and an unset `VIRTUAL_ENV` mostly silence.
-_UV_CHATTER = re.compile(r"^(Bytecode compiled \d+ files|warning: .*VIRTUAL_ENV=)")
-
-
-def run_deploy_tags(primary: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
-    """Run deploy_tags.py in the primary checkout; stdout captured, its own stderr shown.
-
-    The caller's `VIRTUAL_ENV` names another checkout's venv, so uv would only warn about it.
-    uv's stderr shows only on a non-zero exit; deploy_tags' advisories, such as the
-    `secrets.yml` consumers warning, show on any exit.
-    """
-    env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
-    res = subprocess.run(
-        [*DEPLOY_TAGS_ARGV, *args],
-        cwd=primary,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    shown = [
-        line
-        for line in res.stderr.splitlines()
-        if res.returncode or not _UV_CHATTER.match(line)
-    ]
-    if shown:
-        print("\n".join(shown), file=_sys.stderr)
-    return res
 
 
 @contextlib.contextmanager
@@ -132,22 +90,15 @@ def gate_snapshot(primary: Path, sha: str) -> Generator[Path | None]:
     on the first landing of every new service, which is the landing that most needs gating.
 
     UV_PROJECT_ENVIRONMENT is pointed at the primary's `.venv` for the life of the snapshot,
-    for the reason `deploy_playbook.run_playbook` sets it: a snapshot carries no `.venv`, so
-    the probe would otherwise build a fresh environment in a directory removed seconds later.
+    because a snapshot carries no `.venv`, so the probe would otherwise build a fresh environment in a directory removed seconds later.
 
     DECIDED: NO tree lock is taken. `git worktree add --detach <tmp> <pinned sha>` writes the
     new directory and one file under `.git/worktrees/`, nothing in the primary's working tree,
     so there is nothing for the lock that guards that tree to serialise. Taking it
     non-blocking and degrading on a refusal is what the first cut did, and it reopened the
-    gap this whole path closes: `gitops-deploy.service` holds that lock for its entire unit
-    run, so the tick most landings race is exactly when the gate would have fallen back to
-    the primary and read `skipped` on a role the primary has not pulled.
-
-    DECIDED: under `tempfile.mkdtemp`, NOT under HOMELAB_DEPLOY_SNAPSHOT_ROOT. deploy.sh's
-    reaper collects any directory there whose `.deploy-owner.lock` nobody holds -- and it
-    creates that lock file itself to ask, so an unowned live gate snapshot would be reaped
-    mid-gate by a concurrent deploy. Outside the root the reaper never looks, and the prune at
-    `deploy_under_locks.reap_dead_snapshots` only deregisters worktrees already gone.
+    gap this whole path closes: a checkout-sync run holding that lock is exactly when the
+    gate would have fallen back to the primary and read `skipped` on a role the primary has
+    not pulled.
 
     Yields None, never raises, when the worktree could not be created. The caller must NOT
     assume the primary can answer instead (see `health_verdict.gate_from_the_deployed_tree`).
@@ -277,7 +228,7 @@ def declared_tags_at(ref: str, primary: Path) -> set[str] | None:
 
     Read at the MERGE COMMIT rather than from a checkout, because a PR that adds a role and its
     `containers_list` entry together is the case a checkout answers wrongly: the entry is absent
-    from every tree until the tick fast-forwards, so the new role reads as one somebody forgot
+    from every tree until checkout-sync fast-forwards, so the new role reads as one somebody forgot
     to register. None makes `land_tags` read the tree it lives in, so a ref this checkout cannot
     resolve costs nothing extra.
 
@@ -292,48 +243,13 @@ def declared_tags_at(ref: str, primary: Path) -> set[str] | None:
         return None
 
 
-# Each basename `read_state` accepts, mapped to the `DeployerSnapshot` field that holds it.
-_SNAPSHOT_FIELDS = {MARKERS[f]: f for f in DeployerSnapshot._fields}
-
-
-def read_state(deployer_state: Path, name: str) -> str | None:
-    """The deployer's `<name>` marker, stripped; '' when absent, None when unreadable.
-
-    A basename `gitops_hold.DeployerSnapshot` carries (`hold_sha`, `behind_since`) is read
-    through `gitops_hold.read_field` (#3972), one marker only, so a torn sibling cannot turn
-    a readable hold into None. Any other basename (`receipts.jsonl`) is read raw.
-
-    ABSENT AND UNREADABLE ARE DIFFERENT ANSWERS. A missing marker means the deployer is not
-    holding and is not behind, the ordinary case. Collapsing the two reads a hold the landing
-    never saw as absent. Callers must fail
-    closed on None.
-    """
-    field_name = _SNAPSHOT_FIELDS.get(name)
-    try:
-        if field_name is None:
-            return (deployer_state / name).read_text().strip()
-        return read_field(deployer_state, field_name) or ""
-    except FileNotFoundError:
-        return ""
-    except OSError, UnicodeDecodeError:
-        return None
-
-
 # Every `files` parameter below is positional-only. The real functions and the fakes name it
 # differently (`files` against `paths`), and a Protocol matches a keyword-capable parameter by
 # NAME -- so without the `/` a fake with an equally valid signature is rejected.
 class PlaneNote(Protocol):
     """`land_tags.plane_note`: what a PR still needs a HUMAN to apply, or ""."""
 
-    def __call__(
-        self,
-        files: list[str],
-        /,
-        *,
-        quiet: Iterable[str] = (),
-        narrow_tags: dict[str, frozenset[str]] | None = None,
-        owed: frozenset[str],
-    ) -> str: ...
+    def __call__(self, files: list[str], /) -> str: ...
 
 
 class Derive(Protocol):
@@ -358,26 +274,14 @@ class Tools:
     # Above `await_ci:`, whose field name shadows the module for the rest of this class body.
     await_ci: Callable[[str, int], CiVerdict] = await_ci_verdict
     tested_base: Callable[[str], str | None] = land_tested_base.tested_base
-    deploy_tags: Callable[[Path, list[str]], subprocess.CompletedProcess[str]] = (
-        run_deploy_tags
-    )
     # `cwd` is the checkout the probe renders the deployed role's manifests from; None is the
-    # one this file lives in. `deploy_detach_notify.check_one` carries the argument.
-    gate: Callable[..., GateResult] = field(
-        default=lambda tags, cwd=None: health_gate(tags, True, cwd=cwd)
-    )
+    # one this file lives in. `health_gate.check_one` carries the argument.
+    gate: Callable[..., GateResult] = health_gate
     snapshot: Callable[[Path, str], contextlib.AbstractContextManager[Path | None]] = (
         gate_snapshot
     )
     declared_at: Callable[[str, Path], set[str] | None] = declared_tags_at
-    read_state: Callable[[Path, str], str | None] = read_state
-    read_owed: Callable[[Path], frozenset[str]] = land_tags.read_owed
     flux: land_flux.FluxReads = field(default_factory=land_flux.FluxReads)
-    # The PR's own narrowing. It runs git over the PR's range, so it is a boundary;
-    # `classify.narrow_plane` calls it.
-    own_narrowing: Callable[[list[str], str, Path], dict[str, frozenset[str]]] = (
-        land_tags.own_narrow_tags
-    )
     # `handoff.land_through_unit`'s one boundary: starts the lander unit, reads its exit code.
     # The landing's own modules that lag master at a base commit; None when git could not say.
     stale_code: Callable[[str], list[str] | None] = own_checkout.stale_landing_code

@@ -1,80 +1,41 @@
-#!/usr/bin/env python3
 """Derive deploy tags from a merged PR's own file list.
 
-WHY NOT A SHA RANGE. `deploy.sh --changed <ref>` diffs a commit range, and after a merge
-that range covers every other session's merged work too. Deploying somebody else's
-half-finished landing is not this session's to do. A PR's file list is exactly this
-session's scope.
+WHY NOT A SHA RANGE. A commit range after a merge covers every other session's merged work
+too. Deploying somebody else's half-finished landing is not this session's to do. A PR's file
+list is exactly this session's scope.
 
 WHY A ROLE NAME IS NOT AUTOMATICALLY A TAG. Only a role with a `containers_list` entry has
-one. Eight roles under ansible/roles/k8s/ have no entry because other roles include them by
+one. Several roles under ansible/roles/k8s/ have no entry because other roles include them by
 literal name, and a landing ends `deploy-failed` on a tag no k8s entry declares. Those roles
 come out of the tags.
 
 WHY THE COUNT ASSERTION. `gh pr view --json files` paginates at 100. A 137-file PR returns
 100 entries with no error and no marker, so the derived tag list is a silent subset of what
 merged -- and every downstream check reads green over it. When the returned count disagrees
-with the PR's own `changedFiles`, this reports `fallback` and the caller widens to
-`deploy_tags.py changed <since>`: wider than the truth is recoverable, narrower is not.
+with the PR's own `changedFiles`, this reports `fallback` and the caller widens to the diff
+since `--since`: wider than the truth is recoverable, narrower is not.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tags.py
 """
 
+import re
 import subprocess
 import sys
-from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
 from typing import NamedTuple
 
-
-# The build/roll couplings live in deploy_logic so this and `deploy_tags.py changed` widen
-# identically -- two derivations that disagree is the defect this import exists to prevent.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
-sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
 
-# `service_tags_at` is re-exported rather than defined here: `role_reads` needs it too,
-# and importing this module for it would put a cycle through `deploy_tags`.
-from lib.cli_help import answer_help
-from lib.exit_codes import USAGE_ERROR
-from lib.render_guard import (  # noqa: F401
-    containers_entries_in,
+from lib.git import git, git_stdout
+from lib.render_guard import (  # noqa: F401  (`service_tags_at` is read through this module)
+    containers_entries,
+    entry_tags,
+    host_files,
     service_tags_at,
 )
-from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
-
-sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-
-
-sys.path.insert(0, str(HOST_LIB_FILES))
-from gitops_ledger import OWED_MANUAL_PLANE, owed_line_key
-from gitops_markers import MARKERS, STATE_DIR
-from deployer_lib.deploy_logic import (
-    broad_remediation,
-    setup_role_playbook,
-    manual_plane_clear_for,
-    setup_role_tag,
-    tick_applies_setup_role,
-)
-
-# `deploy_tags.service_tags` is the one reader of containers_list, and sharing it is what keeps
-# "is this name a deploy tag?" answered identically here and in deploy.sh's own validation.
-from deploy_tools.deploy_lib import tags as deploy_tags
-
-# Bare, from scripts/deploy_tools, inserted above.
-import narrow_setup
-import reach
-
-# Re-exported, not defined here: the path-to-role mappers live in `reach` and the shared-role
-# reader built on them in `land_shared`. Every reader keeps its old name, and
-# `test_land_tags_shared_mapper_agreement.py` keeps pinning `land_tags.role_for`.
-from deploy_tools.land_lib.land_shared import (  # noqa: F401  (`role_of` has an out-of-module reader)
-    declared_tags,
-    is_role_test_path,
-    role_for,
-    role_of,
-    shared_roles,
-)
+from lib.repo_paths import REPO
+from lib.role_paths import SECRETS_FILE, tag_for
 
 # The remediation for a rotated secret. Flat text rather than derived from the file list,
 # because the consuming role is not knowable from here: a secret's value lives in no role's
@@ -90,318 +51,42 @@ _ROTATION_NOTE = (
     "OLD value until its own role renders again. Resolve them: `uv run python "
     "scripts/secrets_mgmt/secret_rotation.py consumers <secret>` greps the tree for who now "
     "holds a stale copy and prints the exact repair command per plane; run each printed "
-    "command. The GitOps tick applies a setup role that reads a changed key and "
-    "that its own host runs (#5436)."
+    "command."
 )
 
-# Where a k8s consumer of a changed key gets the new value, appended to `_ROTATION_NOTE`. The
-# tick applied the k8s readers itself until D6.12 deleted its k8s arms (#5577, #5409). A
+# Where a k8s consumer of a changed key gets the new value, appended to `_ROTATION_NOTE`. A
 # flux-owned role reads the value through `homelab-cluster-vars`, which only
 # `cluster_vars.py write` regenerates, and `promote` then applies it.
 _K8S_READERS_NOTE = (
-    "The GitOps tick applies no k8s role. A k8s consumer reads a changed key through "
-    "`homelab-cluster-vars`: regenerate it with `cluster_vars.py write` (operator-only), and "
-    "`promote` applies it with the next bundle."
+    "A k8s consumer reads a changed key through `homelab-cluster-vars`: regenerate it with "
+    "`cluster_vars.py write` (operator-only), and `promote` applies it with the next bundle."
 )
 
 
-def own_narrow_tags(files, pr_range: str, repo) -> dict[str, frozenset[str]]:
-    """`narrow_setup.role_tags` over this PR's own range, per setup role it touches.
-
-    A landing that never awaits the tick prints this directly: no receipt exists for its
-    range yet, and the narrowed clear drops only these tags, so a wider row recorded later
-    keeps the rest. A role whose derivation refuses or raises is left out and keeps its role
-    tag.
-
-    A role the range reaches no host through maps to an EMPTY set (#4408), which
-    `plane_note` reads as "leave the role out", the way the tick drops it from its run. No
-    other caller of `plane_note` passes an empty set: `classify.narrow_plane` filters the
-    receipt's empty rows out before rendering, because a receipt stores a refusal that way.
-    """
-    if ".." not in pr_range:
-        return {}
-    old, new = pr_range.split("..", 1)
-    out: dict[str, frozenset[str]] = {}
-    for role in reach.reach(list(files)).changes.setup_roles:
-        tag, playbook = setup_role_tag(role), setup_role_playbook(role)
-        if playbook is None:
-            continue
-        # DECIDED: `except Exception`, because any failure here must print the role tag. The
-        # derivation shells out to git and decodes the output. An escape would kill a landing
-        # that has already merged, over a note the whole-role tag answers correctly.
-        try:
-            out[tag] = narrow_setup.role_tags(role, tag, old, new, str(repo), playbook)
-        except narrow_setup.NothingToApply as exc:
-            # Before the generic arm, which would read it as a refusal: it subclasses
-            # `CannotNarrow` so that a caller knowing only the refusal keeps the role tag.
-            print(f"narrow-setup: {role} needs no tag ({exc})", file=sys.stderr)
-            out[tag] = frozenset()
-        except Exception as exc:
-            print(f"narrow-setup: {role} keeps its role tag ({exc})", file=sys.stderr)
-    return out
+def declared_tags() -> set[str]:
+    """Every name that selects a service, read from containers_list."""
+    return {
+        tag
+        for path in host_files()
+        for entry in containers_entries(path)
+        for tag in entry_tags(entry)
+    }
 
 
-def _needs_nothing(role: str, narrow_tags: dict[str, frozenset[str]] | None) -> bool:
-    """Whether `own_narrow_tags` answered that this PR's range reaches no host through `role`.
-
-    The key must be PRESENT with an empty set. An absent key is a refusal, and a refusal
-    keeps the whole-role tag.
-    """
-    tag = setup_role_tag(role)
-    return narrow_tags is not None and tag in narrow_tags and not narrow_tags[tag]
-
-
-def manual_planes_in(text: str) -> frozenset[str]:
-    """The subjects of the owed ledger's `manual_plane` lines in `text`.
-
-    A torn line counts, as `gitops_hold._held_subjects` counts one: it still names a line
-    that `clear-owed` can clear.
-    """
-    keys = (owed_line_key(line) for line in text.splitlines())
-    return frozenset(k[1].strip() for k in keys if k and k[0] == OWED_MANUAL_PLANE)
-
-
-DEPLOYER_STATE = Path(STATE_DIR)
-
-
-def read_owed(deployer_state: Path) -> frozenset[str]:
-    """The role tags the owed ledger in `deployer_state` holds as `manual_plane`.
-
-    Empty when the ledger is absent. ABSENT AND UNREADABLE ARE DIFFERENT ANSWERS, as for
-    `tools.read_state`, but this raises the read error (`OSError`, `UnicodeDecodeError`) where
-    that returns None, so the caller can name it in the verdict it ends with.
-    """
-    try:
-        text = (deployer_state / MARKERS["owed"]).read_text()
-    except FileNotFoundError:
-        return frozenset()
-    return manual_planes_in(text)
-
-
-class LedgerUnreadable(Exception):
-    """The owed ledger did not read, and this PR's paths nominate a role it would answer for."""
-
-
-def owed_for(
-    files,
-    quiet,
-    deployer_state: Path,
-    read: Callable[[Path], frozenset[str]] = read_owed,
-) -> frozenset[str]:
-    """The role tags the ledger holds as `manual_plane`, for the `owed` of `plane_note`.
-
-    An unreadable ledger raises `LedgerUnreadable` naming the read error, because the ledger
-    is the one record of what a hand owes and a guess either way is wrong (#7906). That holds
-    only when a path nominates a role for the ledger to answer: a PR that touches no such
-    role reads nothing from it, so a broken ledger cannot defer that PR.
-    """
-    try:
-        return read(deployer_state)
-    except (OSError, UnicodeDecodeError) as exc:
-        roles = sorted(manual_role_candidates(files, quiet))
-        if not roles:
-            return frozenset()
-        raise LedgerUnreadable(
-            f"the PR changes setup role {', '.join(roles)}, and the owed ledger "
-            f"{deployer_state / MARKERS['owed']} could not be read "
-            f"({type(exc).__name__}: {exc})"
-        ) from exc
-
-
-def setup_roles_of(path: str) -> frozenset[str]:
-    """The setup roles `path` belongs to; empty for a path outside every setup role."""
-    return frozenset(reach.reach([path]).changes.setup_roles)
-
-
-def manual_role_candidates(
-    files, quiet=(), narrow_tags: dict[str, frozenset[str]] | None = None
-) -> frozenset[str]:
-    """The setup roles this PR's paths could have left on the ledger as `manual_plane`.
-
-    Those are the roles the tick does not apply (`k3s` lives in k3s-bringup.yml, `common` in
-    no playbook of its own, `optimize_pi` is gated off the tick's host), minus any role
-    `narrow_tags` maps to an empty set. A path only NOMINATES a role here: `plane_note` owes a
-    hand for a nominee only when the ledger holds its line.
-    """
-    return frozenset(
-        r
-        for r in reach.reach(list(files), quiet).changes.setup_roles
-        if not tick_applies_setup_role(r) and not _needs_nothing(r, narrow_tags)
-    )
-
-
-def forecast_owed(files) -> frozenset[str]:
-    """The `owed` that makes `plane_note` name every role `files` nominates.
-
-    For a forecast made before any ledger exists, such as a brief that says what a change
-    would owe a hand if the deployer recorded its line.
-    """
-    return frozenset(setup_role_tag(r) for r in manual_role_candidates(files))
-
-
-def plane_note(
-    files,
-    quiet=(),
-    narrow_tags: dict[str, frozenset[str]] | None = None,
-    *,
-    owed: frozenset[str],
-) -> str:
+def plane_note(files) -> str:
     """What this PR still needs a HUMAN to apply, or "" if nothing.
 
-    A deploy tag covers roles/k8s. It does not cover the setup plane,
-    which `deploy.yml` cannot apply at all -- so a PR touching only roles/setup derives zero
-    tags. That must not read as `nothing-to-deploy` when the ledger owes a setup-role apply.
-
-    Returned for the tag-carrying case too. A PR can touch a k8s role AND the setup plane,
-    where the deploy genuinely succeeds and half the change is still unapplied -- the harder
-    version of the same silence, because the verdict reads `settled`.
-
-    A rotated secret is the second shape, and the one with no path to match at all. A secret's
-    value lives in no role's template, so `ansible/vars/secrets.yml` derives zero tags however
-    many roles consume it: every consumer keeps rendering the old value, and the landing
-    would report `nothing-to-deploy`.
-
-    `quiet` is the broad-plane paths whose diff carries no content change, from
-    `deploy_tags.comment_only_paths`. Here they are dropped from the BROAD half only: a playbook
-    named for three edited comments has nothing to apply. The secrets half reads the unfiltered
-    list -- `comment_only_broad_changes` cannot return `ansible/vars/secrets.yml`, and
-    keeping the reads separate means a later widening there cannot silently mute a rotation.
-
-    `narrow_tags` is role tag -> the tags that role's change needs. A role mapped to an
-    empty set needs none over this range (`own_narrow_tags`), so the note leaves it out,
-    clear command included: `deploy_defer.record` writes no `manual_plane` line for it.
-
-    `owed` is the role tags the owed ledger holds as `manual_plane` (`manual_planes_in`). It
-    decides which setup roles the note names, and the paths only nominate them
-    (`manual_role_candidates`). The ledger is the one record of what is owed, so the note never
-    sends an operator after a line the host lacks.
+    A rotated secret is the one shape left. A secret's value lives in no role's template, so
+    `ansible/vars/secrets.yml` derives zero tags however many roles consume it: every consumer
+    keeps rendering the old value, and the landing would report `nothing-to-deploy`.
     """
-    files = list(files)
-    quiet = set(quiet)
-    notes = []
-    cs = reach.reach(files).changes
-    # Only the broad changes the deployer will NOT apply itself are owed to a human. The tick
-    # fast-forwards and applies a setup-plane change as `initial_setup.yml --tags <role>`,
-    # including the deployer's own role, and `promote` applies a deploy-plane change.
-    # What is left for a hand: the bring-up playbooks
-    # (`_BROAD_MANUAL_PREFIXES`, which park the tick outright), and a setup role that
-    # initial_setup.yml does not include (k3s lives in k3s-bringup.yml, common in no playbook)
-    # or gates off the tick's host (optimize_pi, #3933), for which `setup_tags_for` derives
-    # nothing and the tick defers. Reporting the self-applied
-    # roles here would make land.sh exit 1 with `needs-manual-apply` while the next tick is
-    # applying exactly those roles. land.sh reads the deployer's own state for
-    # that case instead.
-    loud = reach.reach(files, quiet)
-    # DECIDED: the owed ledger decides which setup role is owed a hand, and the paths only name
-    # the roles whose line this PR could have created (#7906). A path-derived verdict named
-    # work no one owes once H7.52 retired the tick, the only writer of `manual_plane` lines: a
-    # modified `k3s` role with an empty ledger ended `needs-manual-apply` over a line that does
-    # not exist. The bring-up playbooks stay path-derived (`loud.manual`): the tick parked on
-    # them and never wrote a line, so a ledger test would mute them for good.
-    unroutable = {
-        r
-        for r in manual_role_candidates(files, quiet, narrow_tags)
-        if setup_role_tag(r) in owed
-    }
-    if loud.manual or unroutable:
-        notes.append(
-            broad_remediation(
-                False,
-                True,
-                unroutable,
-                narrow_tags=narrow_tags if narrow_tags is not None else {},
-                playbooks=loud.changes.manual_playbooks,
-            )
-        )
-    if unroutable and not loud.manual:
-        # A role the ledger holds in `manual_plane` stays on the SessionStart banner after the
-        # hand apply until it is cleared.
-        #
-        # `not manual` because `deploy_defer.parks_the_tick` gives `cs.broad_manual` priority:
-        # a range carrying BOTH a bring-up playbook and an unapplyable role parks outright and
-        # writes no marker, so printing the clear command there sends an operator after a file
-        # that does not exist.
-        # `--applied` where the apply above was narrowed; see `manual_plane_clear_for`.
-        cmd = manual_plane_clear_for(unroutable, narrow_tags or {})
-        notes.append(f"Then clear the deployer's marker: `{cmd}`.")
-    if cs.secrets:
-        # DECIDED: fire on ANY change to secrets.yml, and never try to name which keys moved.
-        # Naming them means decrypting both revisions, and no plaintext may reach a terminal, a
-        # transcript or a log. `.gitattributes` sets `diff=sops`, so even `git diff
-        # ansible/vars/secrets.yml` renders the values, which is why a hook denies that form.
-        # Over-firing on a key that needed no redeploy costs one exit code; under-firing leaves
-        # a rotated credential stale in a consumer this file list cannot show.
-        #
-        # DECIDED: fire on the tag-carrying path too, which is the opposite of what
-        # deploy_logic.alert_secrets_deferred does for the deployer. Not a contradiction, a
-        # different reader: that alert is unattended, so a false fire on the /add-secret happy
-        # path is noise nobody can act on. Here an operator is reading land.sh's output, and a
-        # PR shipping secrets.yml WITH one consuming template still cannot show the OTHER
-        # consumers -- PR #695's token had two, in two planes, and the landing got neither.
-        #
-        # `cs.secrets` rather than a path literal, so this and the deployer answer "did a secret
-        # change?" identically. It is exactly `ansible/vars/secrets.yml`: the registry
-        # `ansible/secret_rotation.yml` carries names and dates but no values, and
-        # `ansible/vars/secrets-staging.yml` belongs to daniel-stage, which land.sh never
-        # deploys. Both are correctly outside it.
-        #
-        # The k8s half: the tick applies no k8s role since D6.12, whatever else the range
-        # carries, so one note names the cluster's path for every k8s consumer.
-        notes.append(_ROTATION_NOTE)
-        notes.append(_K8S_READERS_NOTE)
-    return " ".join(notes)
-
-
-def self_applied_playbooks(files, quiet=()) -> frozenset[str]:
-    """The playbooks the TICK runs for this PR's broad half; empty when it runs none.
-
-    `self_applied` is whether this is non-empty. `Landing.tick_applied` asks the tick's
-    receipt for each of them, because a receipt naming only the setup plane says nothing
-    about a deploy plane the tick deferred (#4333). The tick runs no `ansible/deploy.yml`
-    since D6.12, so a deploy-plane path adds nothing here: `promote` applies it, and the
-    landing waits on land-wait for it.
-    """
-    cs = reach.reach(files, quiet).changes
-    out = {setup_role_playbook(r) for r in cs.setup_roles if tick_applies_setup_role(r)}
-    return frozenset(p for p in out if p)
-
-
-def self_applied(files, quiet=()) -> bool:
-    """Whether the PR carries a broad change that the TICK applies, not deploy.sh.
-
-    When true, the landing is not done until the deployer's own state says it converged.
-    True for a setup role initial_setup.yml includes (`--tags <role>`). False for a
-    deploy-plane change, which `promote` applies since D6.12, for docs, for an ordinary service
-    (deploy.sh's job), and for what `plane_note` already hands to a human. land.sh uses it
-    to decide whether `behind_since` after the tick means "this PR is not applied yet" or
-    is merely somebody else's pending merge.
-
-    `quiet` is dropped for the same reason `plane_note` drops it: a comment-only setup-role
-    edit is nothing for the tick to apply, so waiting on the deployer's state to prove it
-    did is waiting on a convergence that means something else.
-    """
-    return bool(self_applied_playbooks(files, quiet))
-
-
-def self_applied_command(files, quiet=()) -> str:
-    """What applies BY HAND the half of this PR the TICK normally applies itself, or "".
-
-    Over exactly the paths `self_applied` answers True for, so the two cannot name different
-    work. `broad_remediation` is the deployer's own text, ff-merge first — Ansible renders from
-    the working tree, so a playbook run before the merge applies the PRE-merge files and reports
-    `changed=0`.
-
-    THE TICK CONVERGING IS NOT PROOF IT APPLIED ANYTHING. Any session's `git merge --ff-only`
-    also makes local == origin, and from then on `next_action()` returns `noop` for every later
-    tick — so the plane is stranded permanently and the one mechanism that would apply it never
-    sees the range again. This is the line `land.sh` prints when the deployer
-    recorded no apply covering the PR.
-    """
-    cs = reach.reach(files, quiet).changes
-    routable = {r for r in cs.setup_roles if tick_applies_setup_role(r)}
-    if not (cs.broad_deploy or routable):
-        return ""
-    return broad_remediation(cs.broad_deploy, bool(routable), routable)
+    # DECIDED: fire on ANY change to secrets.yml, and never try to name which keys moved.
+    # Naming them means decrypting both revisions, and no plaintext may reach a terminal, a
+    # transcript or a log. Over-firing on a key that needed no redeploy costs one exit code;
+    # under-firing leaves a rotated credential stale in a consumer this file list cannot show.
+    if SECRETS_FILE in files:
+        return f"{_ROTATION_NOTE} {_K8S_READERS_NOTE}"
+    return ""
 
 
 class DeriveSource(StrEnum):
@@ -427,75 +112,109 @@ def derive(
     range. The tag list returned alongside it is empty on purpose: a partial list is worse
     than none, because it looks like an answer.
 
-    A changed role with no `containers_list` entry yields no tag. It is not dropped silently
-    -- `plane_note` names it and what applies it -- because dropping it from BOTH would let the
-    setup plane read as `nothing-to-deploy`.
-
-    `quiet` is `quiet_paths`'s set. Of what it holds, only a comment-only k8s `defaults/` file
-    maps to a tag, and the tick treats that edit as no change (#4460), so it deploys nothing.
+    `quiet` is `quiet_paths`'s set: a comment-only k8s `defaults/` edit renders the same
+    manifests (#4460), so it deploys nothing.
     """
     files = list(files)
     if len(files) != changed_files:
         return Derivation([], DeriveSource.FALLBACK)
     declared = declared_tags() if declared is None else declared
-    # A build role whose workload lives in a different role must not deploy alone: the build
-    # would push a new image that nothing rolls onto, and report green doing it.
-    return Derivation(sorted(reach.reach(files, quiet).tags(declared)), DeriveSource.PR)
+    quiet = frozenset(quiet)
+    tags = {t for p in files if p not in quiet and (t := tag_for(p, declared))}
+    return Derivation(sorted(tags), DeriveSource.PR)
 
 
 def doc_paths(paths) -> set[str]:
-    """The paths in `paths` that are documentation, which no playbook applies.
-
-    A `.md` only. Not `docs/`, which matches no plane prefix anyway, and not a `.txt` or a
-    `README` without a suffix -- the narrow predicate is the one that cannot swallow a file
-    something renders. It is the same suffix test the deployer's own mapper makes.
-    """
+    """The paths in `paths` that are documentation, which nothing renders: a `.md` only."""
     return {p for p in paths if p.endswith(".md")}
 
 
-def quiet_paths(paths: list[str], range_: str) -> set[str]:
-    """The broad paths in `paths` a landing owes nothing for: docs, and comment-only edits.
+# A k8s role's `defaults/` file. Ansible reads it only through its values, so an edit that
+# moves no content line renders the same manifests. `manifests` is left out: it is the renderer
+# every service includes.
+_K8S_DEFAULTS_FILE = re.compile(
+    r"^ansible/roles/k8s/(?!manifests/)[^/]+/defaults/[^/]+\.ya?ml$"
+)
+# `key: |` / `key: >-` and their chomping/indent modifiers, with or without a trailing comment.
+# A bare list item `- |` opens one too; missing it read the scalar's `#` lines as comments.
+_BLOCK_SCALAR_HEAD = re.compile(r"(?::|^\s*-)\s*[|>][-+0-9]*\s*(?:#.*)?$")
 
-    Documentation is quiet on its own terms, before any range is read: a `.md` under
-    `roles/setup/k3s/` still takes the broad arm by prefix, so a docs-only PR there would end
-    `needs-manual-apply` naming `k3s-bringup.yml` with nothing to apply. The comments-only
-    test below cannot reach that case -- it reads
-    YAML content lines, and prose is not comments.
+
+def _content_lines(text: str) -> list[str]:
+    """The lines of a YAML file that carry meaning.
+
+    Full-line comments and blank lines are dropped, except inside a block scalar, where a
+    line starting with `#` is part of the string and a blank line is a newline in it. The
+    scalar runs from its `key: |` line until the next non-blank line indented no deeper
+    than that key. A trailing comment on a content line is kept, so such a line reads as
+    changed.
+    """
+    kept: list[str] = []
+    scalar_indent: int | None = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip())
+        if scalar_indent is not None:
+            if stripped and indent <= scalar_indent:
+                scalar_indent = None
+            else:
+                kept.append(line.rstrip())
+                continue
+        if not stripped or stripped.startswith("#"):
+            continue
+        kept.append(line.rstrip())
+        if _BLOCK_SCALAR_HEAD.search(line):
+            scalar_indent = indent
+    return kept
+
+
+def _git_show(ref: str, path: str) -> str:
+    """`git show <ref>:<path>`, unstripped, because the file's own trailing newline is content."""
+    return git("show", f"{ref}:{path}", cwd=REPO).stdout
+
+
+def comment_only_k8s_defaults(paths, old: str, new: str, show=_git_show) -> set[str]:
+    """The k8s role `defaults/` files whose change between two refs is comments only.
+
+    A path that is added, deleted or unreadable on either side is left out: the fail-safe
+    direction is to keep the change, never to skip past one this did not read.
+    """
+    quiet: set[str] = set()
+    for p in paths:
+        if not _K8S_DEFAULTS_FILE.match(p):
+            continue
+        try:
+            before, after = show(old, p), show(new, p)
+        except RuntimeError, subprocess.CalledProcessError, OSError:
+            continue
+        if _content_lines(before) == _content_lines(after):
+            quiet.add(p)
+    return quiet
+
+
+def quiet_paths(paths: list[str], range_: str) -> set[str]:
+    """The paths in `paths` a landing deploys nothing for: docs, and comment-only defaults.
 
     Empty of comment-only paths when no range was given, or when the range is malformed, or
-    when git cannot read a side of it -- every one of those keeps the path broad, which is the
-    direction a wrong answer here must fall. The docs half survives all three,
-    because it asks nothing of the range.
+    when git cannot read a side of it -- every one of those keeps the path loud, which is the
+    direction a wrong answer here must fall. The docs half survives all three, because it
+    asks nothing of the range.
 
-    A RANGE NARROWER THAN THE FILE LIST is the same failure wearing a valid range, and it
-    fails the unsafe way: a broad path substantively changed OUTSIDE the range reads as
-    identical on both sides, so it comes back quiet and its manual apply is skipped. The PR
-    file list is the whole PR; a range covering only part of it cannot answer for the rest.
+    A RANGE NARROWER THAN THE FILE LIST is the same failure wearing a valid range: a path
+    changed OUTSIDE the range reads as identical on both sides, so it would come back quiet.
     So every path asked about must appear in the range's own diff, or nothing is quiet --
-    the same shape as `derive`'s count assertion, and for the same reason: wider than the
-    truth is recoverable, narrower is not.
+    the same shape as `derive`'s count assertion, and for the same reason.
     """
     docs = doc_paths(paths)
     old, sep, new = range_.partition("..")
     if not (sep and old and new):
         return docs
     try:
-        covered = set(deploy_tags.range_paths(old, new))
+        covered = set(
+            git_stdout("diff", "--name-only", f"{old}..{new}", cwd=REPO).splitlines()
+        )
         if not set(paths) <= covered:
             return docs
-        return docs | deploy_tags.comment_only_paths(paths, old, new)
+        return docs | comment_only_k8s_defaults(paths, old, new)
     except subprocess.CalledProcessError, OSError:
         return docs
-
-
-# The CLI lives in `land_tags_cli.py`, above `land_reach`. Run directly, this
-# module refuses rather than printing nothing, because an empty answer reads as "no tags".
-_MOVED = (
-    "land_tags.py is a library. Its CLI is "
-    "scripts/deploy_tools/land_lib/land_tags_cli.py, with the same arguments."
-)
-
-if __name__ == "__main__":
-    answer_help(f"{__doc__.strip().splitlines()[0]}\n\n{_MOVED}")
-    print(_MOVED, file=sys.stderr)
-    sys.exit(USAGE_ERROR)

@@ -482,13 +482,13 @@ def owner_stance(tags: str = "") -> str:
     that is not Ansible-owned*.
 
     Args:
-        tags: the entry's deploy tags, comma-joined. When given, the refusal names them as a
+        tags: the entry's deploy tags, comma-joined. When given, the gate names them as a
             literal `--tags=<tags>`, which the glance needs: the role-doc census
             (`ansible/tests/repo/test_role_claude_md.py`) wants `--tags` and the role's name
             on one line, and the `=` form gives the glance's wrap no space to break at.
     """
-    tag = f"`--tags={tags}`" if tags else "its tag"
-    return f"Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses {tag} with exit 5"
+    tag = f"`land.sh --tags={tags}`" if tags else "`land.sh`"
+    return f"Flux, through `promote` (`platform: k8s`); {tag} gates the rollout"
 
 
 def entry_owner(entry: dict[str, Any]) -> str | None:

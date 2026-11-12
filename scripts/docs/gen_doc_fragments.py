@@ -77,7 +77,6 @@ from fragment_renderers import (
     render_deadman_cadences,
     render_etcd_offbox_retention,
     render_fail2ban_jails,
-    render_gitops_prefixes,
     render_lan_addresses,
     render_record_keys,
     render_longhorn_tiers,
@@ -115,11 +114,6 @@ from lib.service_tiers import resolved_tier_lists
 SELF = "scripts/docs/gen_doc_fragments.py"
 DEFAULT_OUT_DIR = "docs/assets/generated/fragments"
 
-GITOPS_DEFAULTS = REPO / "ansible/roles/setup/gitops_deploy/defaults/main.yml"
-DEPLOY_CHANGES = (
-    REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py"
-)
-GITOPS_DEPLOY = REPO / "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"
 SECRET_ROTATION = REPO / "scripts/secrets_mgmt/secret_rotation.py"
 SECRET_REGISTRY = REPO / "ansible/secret_rotation.yml"
 PI_PEER_ROLE = K8S_ROLES / "pi-peer-backup"
@@ -155,14 +149,6 @@ def _longhorn() -> tuple[str, list[str]]:
         "ansible/roles/k8s/longhorn-backup/defaults/main.yml",
         "ansible/roles/k8s/longhorn-reconcile/defaults/main.yml",
     ]
-
-
-def _gitops() -> tuple[str, list[str]]:
-    return render_gitops_prefixes(
-        module_constant(DEPLOY_CHANGES, "_BROAD_SETUP_PREFIXES"),
-        module_constant(DEPLOY_CHANGES, "_BROAD_DEPLOY_PREFIXES"),
-        module_constant(DEPLOY_CHANGES, "_BROAD_MANUAL_PREFIXES"),
-    ), ["ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py"]
 
 
 def _autodeploy_coverage() -> tuple[str, list[str]]:
@@ -272,7 +258,6 @@ def _record_keys() -> tuple[str, list[str]]:
 # name -> () -> (body, sources). The name is the file stem a page includes.
 FRAGMENTS: dict[str, Callable[[], tuple[str, list[str]]]] = {
     "longhorn-tiers": _longhorn,
-    "broad-prefixes": _gitops,
     "autodeploy-coverage": _autodeploy_coverage,
     "node-agent-liveness": _crowdsec_agent_liveness,
     "etcd-offbox-retention": _etcd_offbox_retention,

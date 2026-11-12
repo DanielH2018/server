@@ -14,7 +14,7 @@ import pytest
 @pytest.mark.parametrize(
     "path",
     [
-        "scripts/deploy_tools/land_lib/land_reach.py",
+        "scripts/deploy_tools/setup_lib/setup_gates.py",
         "scripts/deploy_tools/setup_lib/setup_role_chains.py",
     ],
 )

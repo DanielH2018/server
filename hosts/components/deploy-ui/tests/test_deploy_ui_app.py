@@ -414,23 +414,6 @@ def test_client_closing_mid_response_logs_one_line_no_traceback_is_flagged(
     ]
 
 
-def test_lock_names_agree_with_deploy_locks_is_clean(monkeypatch):
-    """The daemon runs outside the venv and cannot import the lock names, so this is
-    the literal-agreement guard: the service-lock shape the page watches is the one
-    `deploy_locks.py` names -- the one module that names them, for the deployer and for
-    deploy.sh, which imports it (issues #2054, #2412). The tree lock's path reaches the
-    daemon from its unit instead (#3276)."""
-    from deployer_lib import deploy_locks
-
-    monkeypatch.delenv("HOMELAB_DEPLOY_LOCK_DIR", raising=False)
-    lock_dir = deploy_ui.Config.__dataclass_fields__["lock_dir"].default
-    assert str(lock_dir) == deploy_locks.lock_dir() == "/var/lock"
-    for name in (deploy_locks.SERVICE_LOCK_ALL, "sonarr", "pi-peer-backup"):
-        path = pathlib.PurePath(deploy_locks.lock_path(name))
-        assert path.parent == lock_dir
-        assert path.match(deploy_ui.SERVICE_LOCK_GLOB), (name, path)
-
-
 def test_the_service_lock_glob_does_not_match_the_tree_lock_is_flagged():
     """The reject half: a glob loose enough to take the tree lock for a service lock would
     show the tick as a deploy of a service called `git-tree`."""

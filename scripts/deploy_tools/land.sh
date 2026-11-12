@@ -10,8 +10,7 @@
 # so invoked from outside a checkout it builds an environment without the repo's dependencies
 # and land.py dies at import (`ModuleNotFoundError: yaml`) before it can annotate anything.
 # It is THIS checkout's root, not PRIMARY: the helpers land.py imports must be the same
-# release as land.py itself, while deploy_tags.py and deploy.sh keep their own
-# `cwd=PRIMARY` in tools.py. land_lib/classify.py refuses a landing whose copy of them
+# release as land.py itself, and land_lib/classify.py refuses a landing whose copy of them
 # lags master's. The exec path is relative to that root rather than to `$0`,
 # which after the cd would resolve against the new working directory.
 cd "$(dirname "$(readlink -f "$0")")/../.." || exit 1

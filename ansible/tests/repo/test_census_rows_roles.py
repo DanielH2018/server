@@ -197,7 +197,7 @@ ROWS = (
         # 501 files under those directories before H7.52 deleted gitops_deploy's four task files
         # and its handlers, 493 before H7.63 deleted initial_setup's and common's, 484 before
         # H7.44 deleted three of k3s's and its handlers.
-        min_matches=479,
+        min_matches=469,
         # The `*_files` lists the bare-entry alternative exists for, and the deployer's own role.
         must_find=frozenset(
             {

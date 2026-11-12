@@ -34,7 +34,6 @@ INITIAL_SETUP_TEMPLATES = "ansible/roles/setup/initial_setup/templates"
 # H7.10 moved the checkout timers' scripts into host components; they take the lock there.
 HOST_COMPONENTS = "hosts/components"
 SETUP_ROLES = "ansible/roles/setup"
-DEPLOY_UNDER_LOCKS = "scripts/deploy_tools/deploy_lib/under_locks.py"
 
 ISSUE_MODEL = "scripts/dev/findings_lib/issue_model.py"
 FINDINGS_LIB = "scripts/dev/findings_lib"
@@ -126,8 +125,8 @@ def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
     """Every job that takes the git-tree lock, derived from the templates that do.
 
     A holder is a systemd unit whose `ExecStart` wraps `flock` around `server_git_tree_lock`, a
-    cron script that imports the `take_git_tree_lock` macro from `git-tree-lock.j2`, or
-    `deploy.sh` through `deploy_lib/under_locks.py`. The unit and the cron scripts are found by
+    or a cron script that imports the `take_git_tree_lock` macro from `git-tree-lock.j2`. Both
+    are found by
     pattern, so a new one joins the list without an edit here.
 
     Args:
@@ -135,11 +134,10 @@ def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
 
     Returns:
         One dict per holder with `job`, `how` and `source` (a path relative to `repo`), units
-        first, then crons by name, then `deploy.sh`.
+        first, then crons by name.
 
     Raises:
-        ValueError: when a template imports the macro and never calls it with a job name, or
-            when `deploy_lib/under_locks.py` no longer reads the lock path.
+        ValueError: when a template imports the macro and never calls it with a job name.
     """
     holders = []
     units = [
@@ -176,16 +174,6 @@ def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
                     "source": template.relative_to(repo).as_posix(),
                 }
             )
-    wrapper = repo / DEPLOY_UNDER_LOCKS
-    if "tree_lock_path()" not in wrapper.read_text():
-        raise ValueError(f"{DEPLOY_UNDER_LOCKS} no longer takes the tree lock")
-    holders.append(
-        {
-            "job": "deploy.sh",
-            "how": "`deploy_lib/under_locks.py`, held only while it snapshots `HEAD`",
-            "source": DEPLOY_UNDER_LOCKS,
-        }
-    )
     return holders
 
 

@@ -12,8 +12,9 @@ the day it lands. `EXEMPT` names the roles whose crons change no state, each wit
 a heartbeat that only writes a verdict is not an autonomous actor, and demanding a contract of it
 would teach readers the heading means nothing.
 
-Red-proof pairs use fixture roles under `tmp_path`; non-vacuity pins named members the live
-census must contain, so a renamed `tasks/` layout fails loudly rather than checking nothing.
+Red-proof pairs use fixture roles under `tmp_path`. No live setup role installs a cron or a
+timer since H7.53 deleted the deployer's, so the live census has no member to pin; #8027 tracks
+retiring this module.
 """
 
 from pathlib import Path
@@ -25,13 +26,7 @@ CONTRACT_HEADING = "## Autonomous-role contract"
 
 # Roles whose cron/timer changes no state: it reads, then pushes a heartbeat or a notification.
 # Each reason is the thing to re-check before keeping the role here.
-EXEMPT: dict[str, str] = {
-    "gitops_deploy": (
-        "`templates/gitops-deploy.timer.j2` stays until H7.53 deletes the deployer, but the "
-        "role's tasks are one `meta: end_role`, so no host gets the timer; the retired "
-        "contract is in docs/archive/gitops-deploy-role.md"
-    ),
-}
+EXEMPT: dict[str, str] = {}
 
 
 def _installs_a_cron_or_timer(role_dir: Path) -> bool:
@@ -87,17 +82,6 @@ def test_exempt_roles_still_install_a_cron_or_timer():
         name for name in EXEMPT if not _installs_a_cron_or_timer(SETUP_ROLES / name)
     ]
     assert not stale, f"EXEMPT names roles with no cron or timer: {stale}"
-
-
-def test_census_finds_the_roles_known_to_install_crons():
-    """Non-vacuity, per CLAUDE.md's "a check that finds its own subject by pattern" rule."""
-    found = {
-        d.name
-        for d in role_dirs(SETUP_ROLES, skip_dotted=True)
-        if _installs_a_cron_or_timer(d)
-    }
-    expected = {"gitops_deploy"}
-    assert expected <= found, f"missing from the cron/timer census: {expected - found}"
 
 
 def test_docker_install_is_out_of_the_subject_not_exempt():

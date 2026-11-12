@@ -82,11 +82,9 @@ def test_test_node_is_clean():
 
 
 def test_marker_is_clean():
-    c = _one(
-        "`ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py:DECIDED: a fixed slice while`"
-    )
+    c = _one("`scripts/deploy_tools/land_lib/land_tags.py:DECIDED: fire on ANY change`")
     assert c.form == "marker"
-    assert c.selector == "a fixed slice while"
+    assert c.selector == "fire on ANY change"
 
 
 def test_a_probe_subcommand_is_no_citation():

@@ -33,7 +33,6 @@ DISTRO_PACKAGES = {
 OLD_UV = "/usr/local/bin/uv"
 # Readers the census must have moved, so a narrowed grep cannot pass over nothing.
 MOVED_UV_READERS = (
-    "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
     "hosts/components/k3s-host-checks/templates/longhorn-backup-health.sh.j2",
 )
 

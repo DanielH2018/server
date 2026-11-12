@@ -1,6 +1,6 @@
 """Step 4: wait on the promotion that applies this PR, or say why there is nothing to wait on.
 
-No landing runs deploy.sh. Every `containers_list` entry is `platform: k8s`, so `promote` and
+Every `containers_list` entry is `platform: k8s`, so `promote` and
 Flux apply every tag, and a host's package reaches it through the host wait in step 5.
 """
 
@@ -10,37 +10,25 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from lib.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 from deploy_tools.land_lib import promotion
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Cause, Verdict, host_not_waited_note, say
 
 
 def derive_from_diff(ln: Landing) -> None:
-    """Resolve the fallback to a tag list HERE rather than handing deploy.sh --changed.
+    """Resolve a truncated file list to the tags of the diff from `--since` to the merge.
 
-    deploy.sh resolves --changed internally, so the verdict call would receive an empty
-    --tags and report settled having checked nothing -- on the large-PR path, where
-    verification matters most.
-
-    A range `changed` refuses as broad derives no tag here. Its k8s half is the promotion's,
-    and land-wait's changed set names the tags this landing gates. The refusal's stderr names
-    what its Pi and setup halves owe; `run_deploy_tags` shows stderr only on a non-zero exit.
+    The range covers every other session's merged work too, which is wider than the PR: wider
+    than the truth is recoverable, and a narrower list would gate nothing on the large-PR path,
+    where verification matters most.
     """
     say(f"deriving tags from the diff since {ln.opts.since}")
-    r = ln.tools.deploy_tags(ln.opts.primary, ["changed", ln.opts.since])
-    if r.returncode == DEPLOY_BROAD:
-        say(
-            "`changed` refused the range as broad; the promotion's changed set names its k8s "
-            "tags, and the host wait covers a change to a host's package"
-        )
-        ln.resolved_tags = []
-        return
-    if r.returncode != DEPLOY_OK:
-        ln.die(f"deploy_tags.py changed failed (exit {r.returncode})", 1)
-    # An empty element (a doubled or trailing comma) carries no service, so reading it as a
-    # tag would end the landing as a tag miss with nothing wrong.
-    ln.resolved_tags = [t for t in r.stdout.strip().split(",") if t]
+    r = ln.git("diff", "--name-only", f"{ln.opts.since}..{ln.merge_sha}")
+    if r.returncode != 0:
+        ln.die(f"git diff {ln.opts.since}..{ln.merge_sha[:12]} failed", 1)
+    paths = [p for p in r.stdout.splitlines() if p]
+    declared = ln.classification.declared_set()
+    ln.resolved_tags = ln.classifier.derive(paths, len(paths), declared).tags
 
 
 def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
@@ -51,8 +39,8 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
     its own wording, because a refused broad derivation is not the same fact and an operator
     reading `reaches no service tag` about a 330-file PR goes looking for a different bug.
 
-    A setup role the deployer's timer applies ends `nothing-to-deploy`: this landing reads
-    none of the deployer's state, so it reports neither the apply nor a failure of it.
+    A setup role ends `nothing-to-deploy`: the host package applies it, and the host wait
+    covers a change to a host's package.
     """
     pr = ln.opts.pr
     if ln.plane:

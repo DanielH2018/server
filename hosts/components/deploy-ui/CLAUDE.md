@@ -68,9 +68,8 @@ never makes the lock panel unavailable. The page links each PR number to its Git
 Only a `land` row is cancellable. SIGTERM to a deploy mid-play leaves whatever applied
 before it live (`deploy.sh` exit 20), which is not a cancel.
 
-The daemon runs outside the venv and cannot import `deploy_locks.py`. The unit passes the tree
-lock's path in as `DEPLOY_UI_TREE_LOCK`, rendered from `server_git_tree_lock`, and
-`test_lock_names_agree_with_deploy_locks_is_clean` pins the service-lock names.
+The daemon runs outside the venv. The unit passes the tree
+lock's path in as `DEPLOY_UI_TREE_LOCK`, rendered from `server_git_tree_lock`.
 
 ## Writes
 

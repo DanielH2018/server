@@ -8,8 +8,8 @@ else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
-  `--tags=system-upgrade` with exit 5
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=system-upgrade`
+  gates the rollout
 - **Images:** `rancher/system-upgrade-controller` (`system_upgrade_controller_image`), `python`
   (`system_upgrade_gate_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)

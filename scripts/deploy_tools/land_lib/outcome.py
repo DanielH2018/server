@@ -18,22 +18,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import LAND_FAILED, LAND_GAVE_UP
-from lib.repo_paths import GITOPS_DEPLOY_FILES
-
-sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from gitops_markers import HOLD_CLEAR_CMD
-
-
-def hold_clear_hint(sha: str | None) -> str:
-    """How a hand clears the deployer's hold on `sha` once every held plane is applied.
-
-    `gitops_state.py clear-hold` takes the FULL held SHA and refuses any other, so `sha` is
-    never sliced here (#4015, #4081).
-    """
-    return (
-        "Once every held plane is applied, clear the hold with Clear in the deploy UI "
-        f"or `{HOLD_CLEAR_CMD} {sha}` (CLAUDE.md, When to wait)"
-    )
 
 
 class Verdict(StrEnum):
@@ -43,7 +27,6 @@ class Verdict(StrEnum):
     UNHEALTHY = "unhealthy"
     DEPLOY_FAILED = "deploy-failed"
     NOTHING_TO_DEPLOY = "nothing-to-deploy"
-    BLOCKED = "blocked"
     NEEDS_MANUAL_APPLY = "needs-manual-apply"
     DEFERRED = "deferred"
     MERGE_CONFLICT = "merge-conflict"
@@ -90,10 +73,6 @@ class Cause(StrEnum):
     `gate-unreadable` is a gate that could not read its store, and `gate-stale` a gate whose
     tree was older than `origin/master`. Nothing gates health again after either, so
     `land_probe` reads them as a give-up rather than a plain deferral.
-
-    `ledger-unreadable` is the owed ledger failing to read at step 1, beside `deferred`, for a
-    PR touching a setup role the tick does not apply (#7906). No updater answers it, so
-    `land_probe` reads it as a give-up too (#7969).
     """
 
     TAG_MISS = "tag-miss"
@@ -101,7 +80,6 @@ class Cause(StrEnum):
     PROMOTE_TIMEOUT = "promote-timeout"
     GATE_UNREADABLE = "gate-unreadable"
     GATE_STALE = "gate-stale"
-    LEDGER_UNREADABLE = "ledger-unreadable"
     SOAK_FAILED = "soak-failed"
     INVALID = "invalid-cause"
 
@@ -215,17 +193,6 @@ STALE_GATE_NOTE = (
     "  The health gate's tree held an older role definition than origin/master, so those "
     "workloads were not graded. This is NOT the ordinary deferral: nothing gates health again.\n"
     "  Re-run land.sh; it gates from the origin/master it reads then. No store failed to answer."
-)
-
-
-# What a `deferred` from step 1 means when the owed ledger could not be read and the PR touches a
-# setup role the tick does not apply (#7906). The ledger is the one record of what a hand owes,
-# so the landing guesses neither way. The landing records `Cause.LEDGER_UNREADABLE`, and
-# `land_probe` reports it as `gave-up`, a resume point, as it does for UNREADABLE_GATE_NOTE.
-UNREADABLE_LEDGER_NOTE = (
-    "  The owed ledger could not be read, so what a hand owes for this PR's setup roles is "
-    "unknown. This is NOT the ordinary deferral: no updater will answer it.\n"
-    "  Re-run land.sh once the ledger reads."
 )
 
 

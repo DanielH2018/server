@@ -78,8 +78,6 @@ ROWS = (
                 "ansible/tests/_ci_scoping.py",
                 ".claude/hooks/tests/test_rules_globs_match_a_tracked_file.py",
                 "hosts/components/renovate-agent/tests/test_prepare_worktree.py",
-                "scripts/deploy_tools/tests/_narrow_fixtures.py",
-                "scripts/deploy_tools/tests/test_deploy_staleness.py",
                 "scripts/deploy_tools/tests/test_land_tools.py",
                 "scripts/dev/tests/test_prune_worktrees.py",
                 "scripts/lib/tests/test_render_guard.py",
@@ -108,10 +106,6 @@ ROWS = (
         allow={
             SELF: "the red fixtures above hold the offending spelling as text",
             "scripts/lib/tests/test_git_testing.py": "the module under test IS the scrub",
-            "scripts/deploy_tools/tests/_deploy_sh_fakes.py": (
-                "`git_free_env` builds the whole environment a `deploy.sh` child runs under, "
-                "the shared scrub WITHOUT the scratch commit identity, as its docstring says"
-            ),
         },
     ),
     Census(

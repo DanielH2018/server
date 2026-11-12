@@ -67,7 +67,7 @@ Secrets are committed **encrypted** (SOPS/age), so the clone already contains
 > ```bash
 > ./ansible/bring-up.sh --scaffold   # §4: create the inventory entries, then stop to edit them
 > ./ansible/bring-up.sh              # §3+§5: install uv, run bootstrap.yml, print the SOPS steps
-> ./ansible/bring-up.sh --continue   # §8: preflight + initial_setup + deploy
+> ./ansible/bring-up.sh --continue   # §8: preflight + initial_setup + k3s-bringup
 > ```
 >
 > It takes `--host <name>` to bring up a host other than this one, checks the target resolves
@@ -207,8 +207,12 @@ Ansible runs through the repo's pinned uv env (see repo-root [`CLAUDE.md`](../CL
 uv run ansible-playbook ansible/preflight.yml       # read-only; asserts §1-§5 actually landed
 uv run ansible-playbook ansible/initial_setup.yml   # OS hardening; base pkgs, uv-tool CLIs, gitops deployer — needs §5 SOPS
 uv run ansible-playbook ansible/k3s-bringup.yml     # cluster foundation (k3s, Longhorn, CRDs) — cluster nodes only
-./scripts/deploy.sh                                 # deploy all workloads (both plays dependency-ordered; deploy.yml toposorts the k8s play)
 ```
+
+No playbook deploys a workload. Flux applies every k8s workload once it is bootstrapped; on a
+rebuilt cluster, follow [Bootstrapping Flux on a rebuilt
+cluster](../docs/flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster). The Pi's services
+ship in its host package.
 
 > `docker_install` is an `end_role` stub on every host. The cluster nodes' host packages retire
 > its old teardown half's crons and drop-ins as legacy entries (H7.48). `group_vars/all.yml`

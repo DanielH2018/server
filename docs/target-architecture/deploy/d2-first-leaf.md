@@ -462,13 +462,12 @@ applies nothing and says so. No site ever hands an empty `--tags` value on.
 
 | Entry point | Behaviour for a tag T that is not Ansible-owned |
 |---|---|
-| `deploy.sh --tags T` | Exits `DEPLOY_FLUX_OWNED` (5) before any lock and prints that T lands through `promote`. |
-| `deploy.sh --changed` | Drops T before `derive_changed_tags`'s empty check, so a derivation left empty ends as `Refused(0)`, with a note naming T. |
-| `deploy.sh --list-services` | Marks T with its owner. |
-| GitOps deployer | Routes T's paths to a new `cs.flux` set: fast-forwarded, logged, never deferred, never alerted, never owed. `_deploy_plane` drops T before its `if not tags` check, so a list left empty is `NARROWED_TO_NOTHING`. Ownership is read at the commit being applied. |
 | `land.sh` | Splits the PR's tags. T waits on promotion (below). Before it merges, it refuses a PR that makes T Ansible-owned while T's Kustomization exists (*Rollback*). |
 | `probe.py health T` | Reads T's Kustomization, not a release record, for its reference time when the tree marks T flux-owned (`tag_owners`). |
-| `gen_role_glance.py`, `service_catalog.py` | For `owner: flux`, print that Flux applies the role through `promote` and that `deploy.sh` refuses it with exit 5, in place of the deploy tag and the auto-deploy stance. |
+| `gen_role_glance.py`, `service_catalog.py` | For `owner: flux`, print that Flux applies the role through `promote`, in place of the deploy tag and the auto-deploy stance. |
+
+H7.53 ([#7962](https://github.com/DanielH2018/server/issues/7962)) deleted `deploy.sh` and the
+GitOps deployer, which held the table's other four rows.
 
 No skip reads the Flux label alone. After a handback the orphaned objects keep the labels
 `kustomize.toolkit.fluxcd.io/name` and `/namespace`, and kustomize-controller's

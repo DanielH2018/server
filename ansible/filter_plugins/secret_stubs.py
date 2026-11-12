@@ -8,9 +8,7 @@ module is the one definition of the form, which R1's renderer and its playbook c
 built to share, so neither restates it. `docs/homelab-render.md` is the operator's page.
 
 Ansible loads every module under `filter_plugins/` in every play, so this one imports the
-standard library only. `FilterModule.filters()` returns one literal dict, because
-`scripts/deploy_tools/narrow_lib/filters.py:filter_names` reads the filter names statically
-and refuses any other shape.
+standard library only. `FilterModule.filters()` returns one literal dict.
 """
 
 from collections.abc import Mapping

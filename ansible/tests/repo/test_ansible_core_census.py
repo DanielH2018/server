@@ -35,9 +35,7 @@ from renderer.renderer_lib.environment import strict_env
 
 CHILD = Path(__file__).with_name("_collect_without_ansible.py")
 ALLOW = {
-    "scripts/deploy_tools/deploy_lib/flags.py": "H7.53 deletes the deployer's PlaybookCLI read",
     "ansible/tests/setup/test_pi_escalation_timeout.py": "H7.55 deletes it with the playbooks",
-    "scripts/deploy_tools/tests/test_deploy_flags.py": "H7.53, with flags.py, its subject",
 }
 PI_TIMEOUT = "ansible/tests/setup/test_pi_escalation_timeout.py"
 IN_A_STRING = {

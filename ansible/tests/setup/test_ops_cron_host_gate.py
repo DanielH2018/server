@@ -14,7 +14,7 @@ Run: uv run pytest ansible/tests/setup/test_ops_cron_host_gate.py
 """
 
 from _helpers import ALL_VARS
-from deploy_tools.land_lib.land_reach import _eval_when
+from deploy_tools.setup_lib.setup_gates import _eval_when
 from lib import yaml_fast
 
 VAR = "ops_cron_host"

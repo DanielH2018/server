@@ -6,16 +6,14 @@ every merge attempt, or spread over several lines of raw `gh` text.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_one_line_per_fact.py
 """
 
-import stat
 import subprocess
 from dataclasses import replace
 
 import pytest
 
 from _land_fakes import Fakes
-from deploy_tools.land_lib import merge, tools as land_tools
+from deploy_tools.land_lib import merge
 from deploy_tools.land_lib.outcome import Outcome
-from lib.proc_testing import path_with
 
 OLD = "a" * 40
 # What master changed since the PR's tested base, none of it a path the PR changes.
@@ -107,56 +105,3 @@ def test_arming_a_direct_merge_prints_one_line(land_run):
     _, out, _, _, _ = land_run(["--arm-merge", "--await-merge"], fakes)
     arming = [line for line in out.splitlines() if "arming" in line.lower()]
     assert len(arming) == 1, out
-
-
-@pytest.fixture
-def fake_uv(tmp_path, monkeypatch):
-    """A `uv` on PATH that writes uv's chatter to stderr and records its argv and VIRTUAL_ENV."""
-    record = tmp_path / "record"
-    uv = tmp_path / "bin" / "uv"
-    uv.parent.mkdir()
-    uv.write_text(
-        "#!/bin/sh\n"
-        f'printf "%s\\n" "$*" "venv=${{VIRTUAL_ENV-unset}}" > {record}\n'
-        'echo "Bytecode compiled 2316 files in 86ms" >&2\n'
-        'echo "warning: VIRTUAL_ENV=/elsewhere does not match the project" >&2\n'
-        'exit "${FAKE_UV_RC:-0}"\n'
-    )
-    uv.chmod(uv.stat().st_mode | stat.S_IXUSR)
-    monkeypatch.setenv("PATH", path_with(uv.parent))
-    monkeypatch.setenv("VIRTUAL_ENV", "/elsewhere")
-    return record
-
-
-@pytest.mark.parametrize("rc", [0, 2])
-def test_deploy_tags_runs_uv_quietly_and_shows_its_stderr_only_on_failure(
-    fake_uv, tmp_path, capfd, monkeypatch, rc
-):
-    monkeypatch.setenv("FAKE_UV_RC", str(rc))
-    res = land_tools.run_deploy_tags(tmp_path, ["blockers", "origin/master"])
-    assert res.returncode == rc
-    argv, venv = fake_uv.read_text().splitlines()
-    assert {"-q", "--quiet"} & set(argv.split()), argv
-    assert venv == "venv=unset"
-    cap = capfd.readouterr()
-    shown = "Bytecode compiled" in cap.out + cap.err
-    assert shown == bool(rc)
-
-
-def test_deploy_tags_shows_its_own_advisory_on_success(tmp_path, capfd, monkeypatch):
-    """Only uv's chatter is hidden: `changed` prints a rotation advisory on exit 0."""
-    advisory = "deploy_tags.py: warning: --changed: a rotated key derives no tag"
-    uv = tmp_path / "bin" / "uv"
-    uv.parent.mkdir()
-    uv.write_text(
-        "#!/bin/sh\n"
-        'echo "Bytecode compiled 2316 files in 86ms" >&2\n'
-        f'echo "{advisory}" >&2\n'
-    )
-    uv.chmod(uv.stat().st_mode | stat.S_IXUSR)
-    monkeypatch.setenv("PATH", path_with(uv.parent))
-    res = land_tools.run_deploy_tags(tmp_path, ["changed", "origin/master"])
-    assert res.returncode == 0
-    err = capfd.readouterr().err
-    assert advisory in err
-    assert "Bytecode compiled" not in err

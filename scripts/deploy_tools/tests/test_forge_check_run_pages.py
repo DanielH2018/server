@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 
 import forge
-from deployer_lib.deploy_git import ci_verdict
+from ci_verdict import ci_verdict
 
 T = "a" * 40
 FAILING = "lint"

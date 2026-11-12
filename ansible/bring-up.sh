@@ -28,8 +28,8 @@ Usage:  ansible/bring-up.sh [--host <name>] [--scaffold] [--continue]
   --host <name>   inventory host to bring up (default: this machine's hostname)
   --scaffold      create the §4 inventory entries (hosts.ini line + host_vars file) if
                   missing, then stop so you can edit them. Never overwrites.
-  --continue      skip §3-§5 and run §8: preflight.yml, initial_setup.yml,
-                  k3s-bringup.yml (k3s server nodes only), then deploy.sh
+  --continue      skip §3-§5 and run §8: preflight.yml, initial_setup.yml, then
+                  k3s-bringup.yml (k3s server nodes only)
   -h, --help      show this help
 EOF
 }
@@ -140,9 +140,8 @@ if [[ "$CONTINUE" == true ]]; then
   uv run ansible-playbook ansible/preflight.yml -e target="$HOST"
   echo ">> initial_setup (OS hardening) ..."
   uv run ansible-playbook ansible/initial_setup.yml -e target="$HOST"
-  # README §8 lists this between initial_setup and deploy for a cluster node; leaving it
-  # out lets a rebuilt control-plane node reach deploy.yml with no cluster to apply
-  # manifests to. Skipped with a named reason on every other host, rather than run
+  # README §8 lists this after initial_setup for a cluster node; leaving it out leaves a
+  # rebuilt control-plane node with no cluster for Flux to apply manifests to. Skipped with a named reason on every other host, rather than run
   # and left to fail k3s-bringup.yml's `inventory_hostname in k3s_server_hosts` assert.
   SERVER_NODES="$(k3s_server_nodes)"
   if printf '%s\n' "$SERVER_NODES" | grep -qxF "$HOST"; then
@@ -153,21 +152,16 @@ if [[ "$CONTINUE" == true ]]; then
     echo "   Narrow on purpose — an AGENT node joins through its bootstrap, run ON the agent:"
     echo "       K3S_URL=<url> K3S_TOKEN=<token> hosts/bootstrap-host.sh $HOST"
   fi
-  # deploy.sh, not `ansible-playbook deploy.yml`: the playbook alone takes none of the locks
-  # the other tree-lock holders take (docs/deploying.md#who-holds-the-tree-lock), so a bring-up
-  # that overlaps one interleaves two writers. No --tags — an empty tag set is a full run.
-  #
-  # It refuses a tree behind origin/master (exit 4, nothing deployed). That gate is kept: a
-  # bring-up host deploying an old master is the same hazard anywhere else, and `git pull`
-  # then re-running --continue is the fix.
-  echo ">> deploy (all workloads, dependency-ordered) ..."
-  ./scripts/deploy.sh -e target="$HOST"
   cat <<'EOF'
 
 ============================================================
- Deployed. Now finish README §9 — the app-database setup
- Ansible cannot do (*arr API keys, HA
- tokens, ...). Most of it fails SILENTLY, so verify with:
+ Host set up. No playbook deploys a workload: Flux applies
+ every k8s workload once it is bootstrapped (on a rebuilt
+ cluster: docs/flux-deploy-plane.md, "Bootstrapping Flux on
+ a rebuilt cluster"), and the Pi's services ship in its
+ host package. Then finish README §9 — the app-database
+ setup Ansible cannot do (*arr API keys, HA tokens, ...).
+ Most of it fails SILENTLY, so verify with:
         uv run python scripts/diagnostics/postflight.py
 ============================================================
 EOF

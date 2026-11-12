@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from _land_fakes import MERGE_SHA, Fakes
-from deploy_tools.deploy_lib.detach_notify import GateResult
+from deploy_tools.land_lib.health_gate import GateResult
 from deploy_tools.land_lib import health_verdict, outcome
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.landing import Classification

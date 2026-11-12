@@ -47,16 +47,3 @@ def test_a_recursive_alias_refuses_rather_than_blowing_the_stack():
             mapping_at(text + "m: 1\n", "main.yml"),
             "main.yml",
         )
-
-
-def test_both_narrowing_modules_raise_the_same_class():
-    """The drift guarded: two `CannotNarrow` classes no single `except` could catch.
-
-    A raise crossing from one half to a caller of the other had to match whichever class the
-    catch site happened to import.
-    """
-    from deploy_tools.narrow_lib import role_reads
-    import narrow_setup
-
-    assert role_reads.CannotNarrow is CannotNarrow
-    assert narrow_setup.CannotNarrow is CannotNarrow

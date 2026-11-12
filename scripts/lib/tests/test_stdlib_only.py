@@ -350,9 +350,6 @@ def test_a_staged_copy_is_checked_against_its_own_install_only():
 DEPLOY_UI_UNIT = (
     REPO / "hosts" / "components" / "deploy-ui" / "templates" / "deploy-ui.service.j2"
 )
-GITOPS_UNIT = (
-    repo_paths.GITOPS_DEPLOY_FILES.parent / "templates" / "gitops-deploy.service.j2"
-)
 
 
 def test_a_role_command_maps_to_its_installed_copy_is_clean():
@@ -367,17 +364,6 @@ def test_a_role_command_no_copy_installs_is_flagged():
         role_installs.role_entry(
             "/usr/lib/homelab/deploy-ui/never_shipped.py", DEPLOY_UI_UNIT
         )
-
-
-def test_an_emptied_roles_template_yields_no_entry():
-    assert role_installs.runs_on_no_host(GITOPS_UNIT.parents[1])
-    # The emptied role's unit still runs a script no copy task installs; only the skip keeps
-    # it out of the entries.
-    with pytest.raises(ValueError, match="no copy task"):
-        role_installs.role_entry("/opt/gitops-deploy/gitops_deploy.py", GITOPS_UNIT)
-    assert not any(
-        "gitops-deploy" in str(entry) for entry, _ in role_installs.role_entries()
-    )
 
 
 def test_an_import_guarded_by_import_error_is_clean(tmp_path):
@@ -398,24 +384,6 @@ def test_an_import_guarded_by_another_exception_is_flagged(tmp_path):
         encoding="utf-8",
     )
     assert checker.walk(module, [tmp_path]) == ["yaml"]
-
-
-def test_the_deployers_subprocess_helpers_run_in_the_venv(monkeypatch):
-    # #4455 listed these as --no-project callers; they run `uv run --frozen`, in the venv, so
-    # they import yaml legitimately and are not in the set. A switch to --no-project must
-    # add them to lib.stdlib_only's callers.
-    monkeypatch.syspath_prepend(str(repo_paths.GITOPS_DEPLOY_FILES))
-    narrow = importlib.import_module("deployer_lib.deploy_narrow")
-    setup_roles = importlib.import_module("deployer_lib.deploy_setup_roles")
-    argvs = [
-        narrow.narrow_setup_argv("r", "t", "p", "a", "b"),
-        setup_roles.routing_argv("HEAD", "h"),
-    ]
-    for argv in argvs:
-        assert argv[:3] == ["uv", "run", "--frozen"], argv
-        assert "--no-project" not in argv, (
-            f"{argv}: add it to lib.stdlib_only's callers"
-        )
 
 
 def test_runtime_import_passes_a_module_that_exits_after_its_imports(tmp_path):
@@ -446,7 +414,7 @@ def test_runtime_import_fails_a_module_that_exits_on_a_failed_import(tmp_path):
 
 def test_a_no_project_command_with_a_script_path_is_read_is_clean():
     text = "uv run --no-project --python 3.14 \\\n  /opt/x/run.py --dry-run\n"
-    assert role_installs._scripts_run(text, GITOPS_UNIT) == ["/opt/x/run.py"]
+    assert role_installs._scripts_run(text, DEPLOY_UI_UNIT) == ["/opt/x/run.py"]
 
 
 @pytest.mark.parametrize(
@@ -461,4 +429,4 @@ def test_a_no_project_command_with_a_script_path_is_read_is_clean():
 )
 def test_a_no_project_command_with_no_readable_script_is_flagged(text):
     with pytest.raises(ValueError, match=r"runs no \.py path"):
-        role_installs._scripts_run(text, GITOPS_UNIT)
+        role_installs._scripts_run(text, DEPLOY_UI_UNIT)

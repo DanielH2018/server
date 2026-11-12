@@ -280,7 +280,7 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   `deploy_cross_role.py:SETUP_FILES_SHIPPED_BY_OTHER_ROLES` maps `alert_unit.yml` to
   `_ALERT_UNIT` and `install_host_lib.yml` to `_HOST_LIB`. `_STAMPED`, the importers of
   `stamp_deployed.yml` and `stamp_render.yml`, is `_HOST_LIB` plus three roles.
-  `ansible/tests/setup/test_setup_cross_role_files.py:test_the_deployers_table_equals_the_trees_cross_role_files`
+  the cross-role files census (deleted by H7.53):test_the_deployers_table_equals_the_trees_cross_role_files`
   asserts that the table equals the tree's imports.
 - **monitor-bridge already reads the Pi through Prometheus.** The `pi_pressure` row of
   `ansible/roles/k8s/monitor-bridge/files/check_table.py:CHECKS` carries `gate="prometheus"`
@@ -840,7 +840,7 @@ Each run does these steps:
       `ansible/roles/setup/gitops_deploy/defaults/main.yml` naming `homelab_builder` to
       `deploy_cross_role.py:SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, as the `claude_code` and
       `k3s` defaults rows do. The defaults-read census in
-      `ansible/tests/setup/test_setup_cross_role_files.py` fails the PR without that row.
+      the cross-role files census (deleted by H7.53) fails the PR without that row.
       With it, a change to either key re-applies the builder's config. That route ends when
       H7.2e moves both keys into inventory, and H7.2e owes its replacement (*What H7
       inherits from this slice*).
@@ -1479,7 +1479,7 @@ says otherwise.
       `CI_CONTEXTS` and the walk bound (builder step 4).
     - Add the row `ansible/roles/setup/gitops_deploy/defaults/main.yml` naming
       `homelab_builder` to `deploy_cross_role.py:SETUP_FILES_SHIPPED_BY_OTHER_ROLES`. The
-      defaults-read census in `ansible/tests/setup/test_setup_cross_role_files.py` requires
+      defaults-read census in the cross-role files census (deleted by H7.53) requires
       it once the role's template reads `gitops_deploy_ci_contexts`.
     - Give `homelab-builder.service` its sandboxing directives (*The builder and the
       repository*, Sandboxing), with the test that holds them.
@@ -1838,7 +1838,7 @@ says otherwise.
     - Render the Prometheus loopback address and `observability_prometheus_cluster_ip`
       into `config.env`. The builder reads both from there, never from its clone. The PR
       adds whatever row the defaults-read census in
-      `ansible/tests/setup/test_setup_cross_role_files.py` requires for that read.
+      the cross-role files census (deleted by H7.53) requires for that read.
     - Add the root-owned `release` override and its runbook step.
 15. **H3.13 The daily fallback, only if the Pi's memory peaks call for it.** The trigger
     is the threshold in *Risks*, apt memory. **Verdict, 2026-11-02: the fallback applies.**
@@ -2442,7 +2442,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       `test_host_lib_sibling_copies.py`, which compares with `==` (H3.5a);
     - `homelab_builder` in `_ALERT_UNIT` and `_HOST_LIB` of
       `deploy_cross_role.py:SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, which
-      `ansible/tests/setup/test_setup_cross_role_files.py` holds equal to the tree, and the
+      the cross-role files census (deleted by H7.53) holds equal to the tree, and the
       stamp imports that `_STAMPED` then requires (H3.5a);
     - the `gitops_deploy/defaults/main.yml` row naming `homelab_builder` in the same table,
       which that file's defaults-read census requires, and the `config.env` render test
@@ -3103,7 +3103,7 @@ round's cross-slice notes.
       own pattern, and it is not a path read of the old file.
     - A role that reads another role's default is a row of
       `deploy_cross_role.py:SETUP_FILES_SHIPPED_BY_OTHER_ROLES`. The docstring of
-      `ansible/tests/setup/test_setup_cross_role_files.py` says its own census holds those
+      the cross-role files census (deleted by H7.53) says its own census holds those
       rows (#4303, #4357), and the `claude_code` and `k3s` defaults rows are the
       precedent. H3.5a adds the `gitops_deploy` defaults row naming `homelab_builder`, so a
       change to either key re-applies the builder's config.

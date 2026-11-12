@@ -4,8 +4,8 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
-  `--tags=livesync` with exit 5
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=livesync` gates
+  the rollout
 - **Image:** `couchdb` (`livesync_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `livesync-data` (no backup (StorageClass longhorn-nobackup))

@@ -30,13 +30,15 @@ import pytest
 
 from deploy_tools.land_lib import land_probe
 from deploy_tools.land_lib import detach
-from _deploy_sh_fakes import BUSCTL_REFUSED
 
 from lib.exit_codes import LAND_BAD_ARGS, LAND_GAVE_UP
 from lib.git_testing import scrubbed_env
 from lib.proc_testing import fake_bin, path_with
 
 _LAND_SH = Path(__file__).resolve().parents[1] / "land.sh"
+BUSCTL_REFUSED = (
+    "#!/bin/sh\necho 'busctl stubbed by the land test harness' >&2\nexit 1\n"
+)
 
 _GH_STUB = """#!/bin/sh
 case "$*" in

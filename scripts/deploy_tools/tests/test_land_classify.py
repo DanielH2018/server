@@ -4,15 +4,11 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_classify.py
 """
 
 import dataclasses
-import subprocess
 
 import pytest
 import yaml
 
-from deployer_lib import deploy_cross_role
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes
-from deployer_lib.deploy_changes import setup_roles_for
-from lib.repo_paths import REPO
 from deploy_tools.land_lib import land_tags
 from deploy_tools.land_lib import classify
 from deploy_tools.land_lib.landing import Classification
@@ -45,16 +41,16 @@ def test_the_range_comes_from_the_pull_ref_and_its_merge_base(landing):
 
 
 def test_an_unreadable_range_is_empty_and_says_so(landing, capsys):
-    """Empty classifies every broad path as loud -- the direction a wrong answer must fall."""
+    """Empty keeps every comment-only edit loud -- the direction a wrong answer must fall."""
     ln, _ = landing(Fakes(pull_ref_rc=1))
     assert classify.pr_range(ln) == ""
-    assert "every broad path stays owed to a hand" in capsys.readouterr().out
+    assert "no comment-only edit is read as quiet" in capsys.readouterr().out
 
 
 def test_classify_fills_tags_and_plane(landing):
     ln, _ = landing(
         Fakes(
-            plane="initial_setup.yml --tags k3s",
+            plane="secrets.yml changed",
             derived=(["sonarr", "radarr"], "pr"),
         )
     )
@@ -62,7 +58,7 @@ def test_classify_fills_tags_and_plane(landing):
     classify.classify(ln)
     assert (ln.tags_csv, ln.plane, ln.needs_diff) == (
         "sonarr,radarr",
-        "initial_setup.yml --tags k3s",
+        "secrets.yml changed",
         False,
     )
 
@@ -236,58 +232,6 @@ def test_a_classification_helper_calling_die_itself_is_not_relabelled(landing):
     with pytest.raises(Outcome) as exc:
         classify.classify(ln)
     assert exc.value.error == "something else entirely"
-
-
-@pytest.fixture
-def restore_cross_role_tables():
-    """`use_tables` rebinds module globals, which outlive the test that called it."""
-    saved = deploy_cross_role.current_tables()
-    yield
-    deploy_cross_role.use_tables(saved)
-
-
-def _show_returns(ln, rc: int, source: str) -> None:
-    git = ln.tools.git
-
-    def fake(*args, **kwargs):
-        if args[0] == "show":
-            return subprocess.CompletedProcess(args, rc, stdout=source, stderr="gone")
-        return git(*args, **kwargs)
-
-    ln.tools = dataclasses.replace(ln.tools, git=fake)
-
-
-_NEW_ROW = "ansible/roles/setup/common/templates/added-with-its-row.j2"
-
-
-def test_the_merge_commits_cross_role_tables_classify_the_pr(
-    landing, restore_cross_role_tables
-):
-    """#3890 added alert-unit files and their rows together. A landing that read its own
-    checkout's older tables recorded `common` and printed the resolv.conf remediation."""
-    ln, _ = landing()
-    ln.merge_sha = MERGE_SHA
-    source = (REPO / deploy_cross_role.CROSS_ROLE_FILE).read_text() + (
-        "\nSETUP_FILES_SHIPPED_BY_OTHER_ROLES = {**SETUP_FILES_SHIPPED_BY_OTHER_ROLES, "
-        f"{_NEW_ROW!r}: frozenset({{'claude_code'}})}}\n"
-    )
-    assert setup_roles_for(_NEW_ROW) == {"common"}
-    _show_returns(ln, 0, source)
-    classify.adopt_cross_role_tables(ln)
-    assert setup_roles_for(_NEW_ROW) == {"claude_code"}
-
-
-def test_an_unreadable_merge_commit_keeps_the_checkouts_tables(
-    landing, restore_cross_role_tables, capsys
-):
-    ln, _ = landing()
-    ln.merge_sha = MERGE_SHA
-    _show_returns(ln, 128, "")
-    classify.adopt_cross_role_tables(ln)
-    assert setup_roles_for(_NEW_ROW) == {"common"}
-    assert (
-        "classifying with this checkout's cross-role tables" in capsys.readouterr().out
-    )
 
 
 def test_a_truncated_file_list_without_since_exits_as_bad_arguments(landing):

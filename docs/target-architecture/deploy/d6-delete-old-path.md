@@ -162,7 +162,7 @@ reader that D6 does not delete.
       `tables_in`, `use_tables` and `owner_routed_consumers`.
     - Their readers are `deploy_changes.py:setup_roles_for`, `deploy_remediation.py`,
       `deploy_phases.py`, `scripts/deploy_tools/narrow_setup.py`, `land_lib/land_reach.py`,
-      `land_lib/classify.py` and `ansible/tests/setup/test_setup_cross_role_files.py`.
+      `land_lib/classify.py` and the cross-role files census (deleted by H7.53).
     - `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes a change to `gitops_markers.py` or
       `gitops_ledger.py` to the deploy_ui and renovate_agent installs.
     - `K8S_ROLES_IMPORTING_SETUP_FILES` and `k8s_lookup_readers` are k8s-only. Their
@@ -2304,7 +2304,7 @@ The steps merged in this order.
     - Rewrite the prose that names those symbols: `deploy_cross_role.py`'s module docstring,
       `reach.py`'s docstrings, and the sentence in `ansible/roles/setup/common/CLAUDE.md`
       that names `deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`.
-    - `ansible/tests/setup/test_setup_cross_role_files.py` loses its k8s table.
+    - the cross-role files census (deleted by H7.53) loses its k8s table.
     - **Test.** In `scripts/deploy_tools/tests/`, a PR whose only path is under
       `ansible/roles/k8s/bento-pdf/templates/` reaches `land-wait` with `bento-pdf` after
       `ChangeSet.k8s` is gone. `land_tags.derive` reads no `ChangeSet`, so the `cs.flux` route

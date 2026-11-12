@@ -7,7 +7,6 @@ Python readers would each serialise against a different file (#3276).
 Run: uv run pytest scripts/lib/tests/test_tree_lock.py
 """
 
-from deployer_lib import deploy_locks
 from lib import yaml_fast
 from lib.repo_paths import ALL_VARS
 from lib.tree_lock import TREE_LOCK
@@ -19,7 +18,3 @@ def _group_var() -> str:
 
 def test_the_template_var_and_the_python_constant_agree_is_clean():
     assert _group_var() == TREE_LOCK
-
-
-def test_the_deployer_copy_agrees_until_h7_20a_deletes_it():
-    assert deploy_locks.TREE_LOCK == TREE_LOCK

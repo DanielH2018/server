@@ -1,6 +1,6 @@
 ---
 name: land-after-merge
-description: Merge a PR and follow it through to a verified deploy with `land.sh`. Use when a PR is ready to merge, has just merged, or when you need the exact merge → CI-wait → tick → deploy → verify sequence. Covers what `land.sh` does, its VERDICT line, and why hand-polling CI and hand-merging are wrong here.
+description: Merge a PR and follow it through to a verified deploy with `land.sh`. Use when a PR is ready to merge, has just merged, or when you need the exact merge → CI-wait → promotion → verify sequence. Covers what `land.sh` does, its VERDICT line, and why hand-polling CI and hand-merging are wrong here.
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
@@ -128,7 +128,7 @@ outcome as logfmt for a script to read. `land.sh --help` lists the closed vocabu
 | `unbuilt` | A host the landing would defer on has no package published at or after the merge, and the builder reports a failing reason, so no updater fire can apply it. Read `uv run python scripts/diagnostics/probe.py builder`, fix the builder, then re-run the same `land.sh` command. |
 | `handoff-timeout` | The lander unit outlived land.sh's wait and may still be running. Re-run the same command; it waits on the unit again rather than starting a second landing. |
 
-**A k8s tag never reaches `deploy.sh`.** `land.sh`
+**`land.sh` deploys nothing itself.** It
 waits until a promotion covers the merge commit (`promote.py land-wait`) and then gates the
 k8s tags. A `deploy-failed` with cause `promote-held` means `DEPLOY_HOLD` holds
 promotion, and clearing it is **operator-only**: stop and name the hold. Cause
@@ -140,14 +140,13 @@ PR that also owes a plane ends `needs-manual-apply`, and one that changes a host
 on to the host wait.
 
 **A `nothing-to-deploy` for a PR that changes a setup role does not say the role applied.**
-`land.sh` starts no tick and reads none of the deployer's markers. The deployer's own 10-minute
-timer applies the role, so read the changed state on the host for the outcome.
+Nothing applies a setup role on its own since H7.53; a change that has to reach a host belongs
+in the host component that replaced the role.
 A PR that changes `cluster-vars.sops.env` or `cluster-vars.source` waits on promotion too,
 for the `cluster-vars` Kustomization and every Kustomization that depends on it
 (`docs/landing.md`, *A tag Flux applies waits on promotion*).
 
-`deploy-failed` has one variant that is **not** a resume point — `a playbook task failed AFTER
-applying; some changes are live`. Every other `deploy-failed`, and every give-up
+Every `deploy-failed`, and every give-up
 (`merge-timeout`, `ci-red`, `ci-timeout`, `merge-conflict`, `pr-ci-red`), deployed
 nothing and re-runs safely.
 

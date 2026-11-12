@@ -19,10 +19,10 @@ it and an edit to that playbook parks the deployer. Repo-root `CLAUDE.md` has th
 and Flux apply every k8s change. `docs/gitops-pipeline.md` says what runs in the deployer's
 place.
 
-The deployer's code under `files/`, its unit templates and its tests stay until H7.53 re-homes
-and deletes them. Before editing that code, read `docs/archive/gitops-deploy-role.md`, which
-holds the rules it follows, and `docs/archive/gitops-deployer.md`, which holds the record behind
-each rule.
+H7.53 deleted the deployer's code under `files/`, its unit templates and its tests. The role
+keeps its `end_role` stub and `defaults/main.yml`, whose `gitops_deploy_*` keys surviving
+checks still read. `docs/archive/gitops-deploy-role.md` and `docs/archive/gitops-deployer.md`
+hold the record of the deleted code.
 
 ## Rollback
 A revert of H7.52 restores the role's tasks, and the operator then re-applies the role on

@@ -19,8 +19,22 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
-from _deploy_sh_callers_row import PLAN, table_rows
 from _helpers import REPO
+
+PLAN = "docs/target-architecture/deploy/d2-first-leaf.md"
+TABLE_HEADING = "### What each entry point does with a tag that is not Ansible-owned"
+
+
+def table_rows(text: str) -> set[str]:
+    """The first cells of the table under `TABLE_HEADING` in `text`, or none without one."""
+    _, found, rest = text.partition(TABLE_HEADING)
+    section = rest.split("\n#", 1)[0] if found else ""
+    return {
+        line.split("|")[1].strip()
+        for line in section.splitlines()
+        if line.startswith("| ") and not line.startswith("|-")
+    }
+
 
 # `table_rows` returns the header row's first cell with the others.
 HEADER = "Entry point"
@@ -48,44 +62,9 @@ class Link:
     call: bool = True
 
 
-OWNERS = "scripts/deploy_tools/deploy_lib/owners.py"
-RUN = "scripts/deploy_tools/deploy_lib/run.py"
-
-K8S_TAGS = (
-    Link(OWNERS, "read_k8s_tags", "declared_k8s_tags"),
-    Link(OWNERS, "declared_k8s_tags", "k8s_tags"),
-)
-
 # Each first cell of the plan's owner table, as written there, to the chain from the entry
 # point down to the reader it asks.
 ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
-    "`deploy.sh --tags T`": (
-        Link(RUN, "_gated_run", "refuse_k8s_tags"),
-        Link(OWNERS, "refuse_k8s_tags", "read_k8s_tags"),
-        *K8S_TAGS,
-    ),
-    "`deploy.sh --changed`": (
-        Link(RUN, "run_changed", "changed"),
-        Link("scripts/deploy_tools/deploy_lib/tags.py", "changed", "service_records"),
-    ),
-    "`deploy.sh --list-services`": (
-        Link(RUN, "_gated_run", "mark_k8s_tags"),
-        Link(RUN, "_gated_run", "read_k8s_tags"),
-        *K8S_TAGS,
-    ),
-    "GitOps deployer": (
-        Link(
-            "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_phases.py",
-            "plan_tick",
-            "services_from_changed_paths",
-        ),
-        Link(
-            "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py",
-            "services_from_changed_paths",
-            "flux",
-            call=False,
-        ),
-    ),
     "`land.sh`": (
         Link(
             "scripts/deploy_tools/land_lib/promotion.py",
@@ -96,11 +75,9 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
             "scripts/deploy_tools/land_lib/promotion.py", "_flux_owned", "k8s_tags_at"
         ),
         Link(
-            "scripts/deploy_tools/land_lib/land_flux.py",
-            "k8s_tags_at",
-            "declared_k8s_tags",
+            "scripts/deploy_tools/land_lib/land_flux.py", "k8s_tags_at", "k8s_tags_in"
         ),
-        Link(OWNERS, "declared_k8s_tags", "k8s_tags"),
+        Link("scripts/lib/k8s_roles.py", "k8s_tags_in", "k8s_tags"),
     ),
     "`probe.py health T`": (
         Link(
@@ -120,8 +97,6 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
 
 # The rows whose chain ends somewhere other than a tree reader, each with the reason.
 NOT_A_TREE_READER = {
-    "`deploy.sh --changed`": "it leaves out a tag by the platform of its entry",
-    "GitOps deployer": "it routes every k8s role path to `cs.flux` with no ownership read",
     "`probe.py health T`": "it reads T's Kustomization for every tag, with no ownership read",
 }
 
@@ -218,7 +193,7 @@ def _source_with(rel: str, text: str) -> Source:
 
 
 def test_every_entry_point_in_the_owner_table_reads_ownership_is_clean():
-    assert len(table_rows(_plan())) >= 8
+    assert len(table_rows(_plan())) >= 4
     assert census_problems(_plan()) == []
 
 

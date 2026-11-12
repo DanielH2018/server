@@ -26,12 +26,7 @@ from _role_census import role_dirs, role_task_files
 MARKERS = ("write_check_textfile", "homelab_check_last_run_timestamp_seconds")
 _INSTALL_MODULES = ("ansible.builtin.copy", "ansible.builtin.template")
 
-EXEMPT: dict[str, str] = {
-    "gitops_deploy: timer `gitops-deploy`": (
-        "writes /var/lib/gitops-deploy/last_run every tick, which monitor-bridge's GitOps-Alive "
-        "check reads, and gitops_tick_metrics.py counts each tick by outcome"
-    ),
-}
+EXEMPT: dict[str, str] = {}
 
 
 def _command_members(role: Path) -> dict[str, str]:
@@ -147,14 +142,6 @@ def test_every_exemption_names_a_member_that_still_writes_none():
     found = census()
     stale = [key for key in EXEMPT if found.get(key, True)]
     assert not stale, f"EXEMPT names members that are gone or write a textfile: {stale}"
-
-
-def test_census_resolves_each_route_a_writer_takes():
-    """Non-vacuity: the one template timer left, which writes none. No setup task installs a
-    cron since H7.34 and no setup timer writes a textfile since H7.63, so the fixture pairs
-    below hold those routes."""
-    found = census()
-    assert found.get("gitops_deploy: timer `gitops-deploy`") is False
 
 
 # ── Fixture pairs ─────────────────────────────────────────────────────────────────────

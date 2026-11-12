@@ -64,16 +64,11 @@ no template carries goes in `depends_on:` on the entry, never in its list positi
 Run ansible through `uv run` so it uses the repo's pinned env
 (`docs/python-code-organization.md`). Bare `ansible-playbook` lacks the module deps, and deploys
 fail.
-**A k8s service deploys through `promote`, never through Ansible.** `deploy.sh` exits 5 for a
-k8s tag, `--check` and `--dry-run` included. The merge is the deploy, and `land.sh` follows it.
-**No setup role applies on its own since H7.52 retired the GitOps deployer's timer, and the
-Pi's services ship in its host package.** `./scripts/deploy.sh` runs `ansible/deploy.yml`, which applies no role.
-`docs/deploying.md` says which path applies a change and what the wrapper still does, owns the
-lock rules and lists the holders.
-
-**A failing wrapper run says what its exit code means in its last two lines.** `docs/deploying.md`'s
-*Exit codes are resume points* owns the rest. The `deploy` skill has config-only runs and
-initial setup.
+**A k8s service deploys through `promote` and Flux, never through Ansible.** The merge is the
+deploy, and `land.sh` follows it. **A host's setup plane ships in its host package**, which the
+builder publishes and each host's updater installs; no setup role applies on its own, and
+H7.53 deleted `deploy.sh` with the GitOps deployer. `docs/deploying.md` says which path applies
+a change. The `deploy` skill has the commands.
 
 ### Checking a k8s change without deploying it
 `prek run --all-files` and CI's render-diff gates check a k8s change before it merges.
@@ -125,15 +120,7 @@ if you override with `--tags`, keep it to your own services.
 Say which of these applies, then stop. `probe.py landing` reads `DEPLOY_HOLD` and master CI.
 
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
-- A change in one of the bring-up playbooks sits in the `local..origin` range, and it is another
-  session's: `bootstrap.yml`, `k3s-bringup.yml`, `initial_setup.yml`, the list
-  `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:_BROAD_MANUAL_PREFIXES`
-  holds. The deployer never applies these. Clearing it means applying their change; name it and
-  stop.
-- `deploy.sh --changed` exits 3 and prints a setup or bring-up command: the range holds a broad
-  path only that command applies. `deploy.sh` exits 5 for a k8s tag, and that is no reason to
-  wait: `promote` and Flux apply the change.
-- The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.
+- The change is docs- or tests-only: nothing renders it, so `land.sh` ends `nothing-to-deploy`.
 - The `DEPLOY_HOLD` repository variable reads anything but `none`: `promote` holds the cluster.
   `land.sh` ends `deploy-failed` with cause `promote-held`, and clearing the hold is the
   operator's decision (`docs/landing.md`).
@@ -237,13 +224,13 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
 The repo uses [prek](https://prek.j178.dev). `prek.toml` holds the config and each hook's history.
 Run `prek run --all-files` to check before committing. **That does not run the suite.** No
 hook runs it, neither at commit nor at push. The one exception is `static-ratchet-tests` and
-its `static-ratchet-tests-*` siblings: at commit time it runs twenty-seven static ratchet, lint
+its `static-ratchet-tests-*` siblings: at commit time it runs twenty-six static ratchet, lint
 and census test files. CI's `pytest` job runs the suite whole on every PR. To see a red test
 before CI does, run `uv run pytest` yourself. A fan-out batch names test paths instead, and
 `.claude/hooks/block-batch-full-suite.py` refuses its whole-suite run. To catch the repo-wide
 census tests that no test beside a change reaches, run `uv run python scripts/dev/repo_guards.py`
 once before `gh pr create`.
-`.gitignore`'s root deny is load-bearing — one untracked file parks the deployer.
+`.gitignore`'s root deny is load-bearing — one untracked file parks `homelab-checkout-sync`.
 
 **One hook runs at the `commit-msg` stage, and only where its shim exists.** `reject-robot-emoji`
 rejects a commit message holding U+1F916. `prek install` writes the shim, and a checkout

@@ -10,7 +10,7 @@ autonomous-role contract therefore lists them under **Never a cron**, and this g
 The census is STRUCTURAL, not textual. The names appear on purpose in `defaults/main.yml`
 comments, in the scripts' own docstrings and in the role docs, so "the name appears nowhere under
 `roles/setup/`" would fail on prose. What is forbidden is a SCHEDULE: a `cron:` task's fields and a
-systemd `.service.j2`/`.timer.j2` template.
+systemd `.service.j2`/`.timer.j2` template, under `roles/setup/` or a host component.
 
 A third surface arrives with target slice H2, which moves host crons into CronJobs: a rendered
 k8s CronJob whose command, or a ConfigMap it mounts, names the reaper (the CronJob arm below).
@@ -26,12 +26,12 @@ from _helpers import load_tasks
 from _helpers import walk_tasks
 from _k8s_render import pod_spec, rendered_docs
 from _role_census import task_files
-from _setup_render import rendered_setup_texts
 import json
 
 from lib.repo_paths import K3S_HOST_CHECKS
 
 SETUP = ANSIBLE / "roles" / "setup"
+COMPONENTS = REPO / "hosts" / "components"
 BACKUP_SCRIPTS = REPO / "scripts" / "backup"
 # Both reapers are subcommands of one entry point since #4345, so its name covers either.
 REAPERS = frozenset({"longhorn_reap.py"})
@@ -50,30 +50,18 @@ def _uncommented(text: str) -> str:
     )
 
 
-def unit_texts(setup_root: Path) -> dict[str, str]:
-    """Every systemd unit template under `setup_root`, keyed `<role>/templates/<name>`.
+def unit_texts(root: Path) -> dict[str, str]:
+    """Every systemd unit template under `root`, keyed `<owner>/<templates|units>/<name>`.
 
-    Read as the deploy renders it wherever a render reaches the role, and from the SOURCE only
-    where none does — a synthetic unit under `tmp_path`, which has no role defaults and no
-    inventory entry (#3218). An `ExecStart=` whose command arrives through a variable is
-    invisible to a source scan, so the render is what makes the contract below enforceable
-    against a schedule that does not spell the reaper's name.
-    `test_the_render_reaches_every_setup_unit_template` holds the fallback to the synthetic
-    half.
+    Read from the source: a role keeps its units in `templates/`, a host component in `units/`
+    or `templates/`. An `ExecStart=` whose command arrives through a variable stays invisible
+    to this scan.
     """
-    rendered = (
-        {(role, tpl): text for role, tpl, text in rendered_setup_texts()}
-        if setup_root == SETUP
-        else {}
-    )
     found: dict[str, str] = {}
-    for unit in sorted(setup_root.glob("*/templates/*.j2")):
-        if not unit.name.endswith(UNIT_SUFFIXES):
-            continue
-        text = rendered.get((unit.parent.parent.name, unit.name))
-        found[str(unit.relative_to(setup_root))] = _uncommented(
-            text if text is not None else unit.read_text()
-        )
+    units = [*root.glob("*/templates/*.j2"), *root.glob("*/units/*.j2")]
+    for unit in sorted(units):
+        if unit.name.endswith(UNIT_SUFFIXES):
+            found[str(unit.relative_to(root))] = _uncommented(unit.read_text())
     return found
 
 
@@ -104,27 +92,6 @@ def scheduled_reapers(setup_root: Path) -> list[tuple[str, str]]:
     ]
 
 
-def test_the_render_reaches_every_setup_unit_template() -> None:
-    """The denylisted half of `unit_texts`: no real unit template falls back to its source.
-
-    Every `*.service.j2`/`*.timer.j2` under `roles/setup/` is in
-    `_setup_render.rendered_setup_texts`, so the source read above serves only the synthetic
-    units the red proofs below write under `tmp_path`. A template the render stopped reaching
-    would read as source again and silently lose its variable-fed `ExecStart=`.
-    """
-    rendered = {(role, tpl) for role, tpl, _ in rendered_setup_texts()}
-    on_disk = {
-        (unit.parent.parent.name, unit.name)
-        for unit in SETUP.glob("*/templates/*.j2")
-        if unit.name.endswith(UNIT_SUFFIXES)
-    }
-    assert on_disk, "the unit-template glob matched nothing — the census reads no units"
-    assert on_disk - rendered == set(), (
-        "these setup unit templates are no longer rendered, so the census reads their source "
-        f"and cannot follow a variable: {sorted(on_disk - rendered)}"
-    )
-
-
 def test_both_reapers_exist_in_scripts_backup() -> None:
     """Non-vacuity: a renamed reaper would make the census below pass on nothing."""
     missing = sorted(r for r in REAPERS if not (BACKUP_SCRIPTS / r).exists())
@@ -134,18 +101,18 @@ def test_both_reapers_exist_in_scripts_backup() -> None:
 def test_census_finds_the_scheduled_heartbeat() -> None:
     """Non-vacuity: the scanner must see a real schedule before its silence means anything.
 
-    No setup task installs a cron since H7.34, and none removes one since H7.63, so the unit
-    templates are the one live surface; a silent scan must still have read them.
+    No setup role ships a cron or a unit since H7.53, so the host components' unit templates
+    are the one live surface; a silent scan must still have read them.
     """
-    texts = scheduled_texts(SETUP)
-    assert any(k.endswith(".timer.j2") for k in texts), (
-        "the census no longer reads systemd timer templates"
+    texts = scheduled_texts(COMPONENTS)
+    assert "k3s-host-checks/units/homelab-etcd-token-drift.timer.j2" in texts, (
+        "the census no longer reads the host components' timer templates"
     )
 
 
 def test_no_setup_role_schedules_a_reaper() -> None:
     """The contract itself: no cron or unit template names either reaper."""
-    assert scheduled_reapers(SETUP) == [], (
+    assert scheduled_reapers(SETUP) + scheduled_reapers(COMPONENTS) == [], (
         "a reaper is scheduled; they are operator-invoked only (Never a cron, "
         "hosts/components/k3s-host-checks/component.yml)"
     )

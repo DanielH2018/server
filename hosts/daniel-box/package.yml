@@ -227,9 +227,9 @@ legacy:
   - {path: /etc/systemd/system/containerd.service.d}
   # H7.52: the GitOps deployer's timer and the units, rule and records its role installed. The
   # timer goes first, and reconcile keeps the service's entry while a tick is still running.
-  # /opt/gitops-deploy, /etc/gitops-deploy and /var/lib/gitops-deploy stay: land.sh, the banner
-  # and deploy-ui read hold_sha until H7.53, which names the state directory as the operator's
-  # cleanup.
+  # H7.53 deleted every reader of /opt/gitops-deploy, /etc/gitops-deploy and
+  # /var/lib/gitops-deploy. They are the operator's cleanup, not entries here: reconcile removes
+  # only an empty directory, and each holds files and interpreter caches no list names.
   - {unit: gitops-deploy.timer}
   - {unit: gitops-deploy.service}
   - {unit: gitops-deploy-alert.service}

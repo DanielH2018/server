@@ -53,7 +53,6 @@ GUARDS = (
     "ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py",
     "evals/tests/test_eval_cases.py",
     "ansible/tests/deploy/test_landing_annotations.py",
-    "ansible/tests/deploy/test_gitops_deploy_imports.py",
     "scripts/validate/tests/test_validate_alert_rules.py::test_the_tree_rules_meet_every_convention_is_clean",
     "scripts/validate/tests/test_validate_unit_templates.py::test_discover_templates_finds_the_known_set",
     # The census and structure tests behind 15 failed runs in the week to 2026-11-06 (#7438).
@@ -65,7 +64,6 @@ GUARDS = (
     "scripts/renderer/tests/test_renderer_task_inputs.py",
     "ansible/tests/setup/test_setup_crons_write_a_textfile.py",
     "scripts/deploy_tools/tests/test_land_imports.py",
-    "scripts/deploy_tools/tests/test_land_deploy_arm_retired.py",
 )
 
 

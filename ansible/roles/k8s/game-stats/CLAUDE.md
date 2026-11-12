@@ -12,8 +12,8 @@ claims are unchanged.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
-  `--tags=game-stats` with exit 5
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=game-stats` gates
+  the rollout
 - **Image:** `python` (`game_stats_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** `terraria-stats-data` (weekly -> B2 (default target)), `valheim-stats-data`

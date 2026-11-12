@@ -10,7 +10,7 @@ before it reads anything at the merge.
 
 The code compared is every module this process has loaded from the checkout, plus every
 module those import, read from their source: a later phase's function-level import
-(`deploy_lib/owners.py` importing `lib.ansible_inventory`) has not run when the refusal does.
+(`lib/k8s_roles.py` importing `lib.ansible_inventory`) has not run when the refusal does.
 `classify.refuse_stale_code_before_merge` runs the same comparison against origin/master
 before `--arm-merge` merges anything (#7830).
 """

@@ -235,8 +235,7 @@ def host_files(host_vars: Path = HOST_VARS) -> list[Path]:
     ``_example.yml`` is a template for a new host, not a host — Ansible only loads a host_vars
     file whose name matches an inventory hostname, so it is inert to a real run and must be
     inert here too. ``ansible/tests/deploy/test_containers_list_roles_exist.py`` makes the same
-    exclusion, and ``test_deploy_tags.py::test_example_host_vars_is_not_a_source_of_tags`` pins
-    it. The ``host_vars`` argument stays a parameter because every caller's tests inject a
+    exclusion. The ``host_vars`` argument stays a parameter because every caller's tests inject a
     ``tmp_path`` through it.
     """
     return sorted(p for p in host_vars.glob("*.yml") if not p.name.startswith("_"))
@@ -306,7 +305,7 @@ def entry_platform(entry: dict) -> str:
 
     No host_vars file sets ``platform`` on a docker entry (daniel-pi's don't carry the key at
     all) -- k8s is the one that's always explicit, so docker is the default rather than an
-    unlabelled third state. One definition, because ``deploy_tags.service_records`` reads the
+    unlabelled third state. One definition, because ``land_lib/health_gate.tag_platforms`` reads the
     working tree and ``service_records_at`` below reads a git ref.
     """
     return entry.get("platform", "docker")

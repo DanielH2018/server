@@ -281,11 +281,10 @@ def test_live_tree_includes_the_gitops_deploy_lock_order_marker():
     matches = [
         r
         for r in rows
-        if r["path"]
-        == "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py"
-        and "the lock order" in r["text"]
+        if r["path"] == "scripts/deploy_tools/land_lib/land_tags.py"
+        and "fire on ANY change" in r["text"]
     ]
-    assert matches, "expected the lock-order marker in deploy_locks.py"
+    assert matches, "expected the secrets-rotation marker in land_tags.py"
 
 
 def test_live_tree_includes_the_autoheal_marker_in_the_pi_compose_plane():

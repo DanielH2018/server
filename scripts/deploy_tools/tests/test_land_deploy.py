@@ -34,21 +34,24 @@ def test_no_tag_outcomes(landing, fakes, verdict, code):
     assert ln.ledger.cause == ""
 
 
-def test_the_diff_fallback_derives_in_the_primary_checkout(landing):
-    ln, calls = _ready(landing, Fakes(changed="sonarr"), since="abc")
+def test_the_diff_fallback_derives_from_since_to_the_merge_in_the_primary_checkout(
+    landing,
+):
+    path = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
+    ln, calls = _ready(landing, Fakes(changed=f"{path}\n"), since="abc")
     ln.needs_diff = True
     deploy.derive_from_diff(ln)
     assert ln.resolved_tags == ["sonarr"]
-    assert ("deploy_tags", ("changed", "abc"), {"cwd": PRIMARY}) in calls
+    diff = ("diff", "--name-only", f"abc..{MERGE_SHA}")
+    assert ("git", diff, {"cwd": PRIMARY}) in calls
 
 
-def test_the_diff_fallback_drops_an_empty_tag_element(landing):
-    """A doubled or trailing comma is not a service, so it is dropped here rather than read
-    as a tag miss that ends the landing."""
-    ln, _ = _ready(landing, Fakes(changed="sonarr,,radarr,"), since="abc")
+def test_a_diff_that_fails_ends_the_landing_naming_the_range(landing):
+    ln, _ = _ready(landing, Fakes(changed_rc=128), since="abc")
     ln.needs_diff = True
-    deploy.derive_from_diff(ln)
-    assert ln.resolved_tags == ["sonarr", "radarr"]
+    with pytest.raises(Outcome) as exc:
+        deploy.derive_from_diff(ln)
+    assert exc.value.rc == 1 and f"abc..{MERGE_SHA[:12]}" in exc.value.error
 
 
 def test_deploy_phase_stamps_the_ledger_and_the_gated_tree(landing):

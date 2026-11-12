@@ -44,14 +44,7 @@ class Classification:
         quiet: the broad paths whose diff carries no content change.
         declared: the tags declared at the merge commit; None when that read failed, and
             every reader then falls back to its own tree.
-        plane: what a hand must apply, as step 1 renders it with whole-role tags; "" for
-            nothing. `Landing.plane` is the note to print.
-        deleted: the deleted paths that owe nothing: those outside a setup role, and those in a
-            setup role whose whole task set the PR deletes. No playbook applies a deleted
-            file, so the plane note leaves them out; the tags still read them.
-        owed: the role tags the deployer's owed ledger holds as `manual_plane`. The plane
-            note names a setup role only when this holds it. Empty when `--tags` skipped the
-            read.
+        plane: what a hand must apply, "" for nothing: the note a rotated secret prints.
     """
 
     pr_paths: tuple[str, ...] = ()
@@ -59,13 +52,6 @@ class Classification:
     quiet: frozenset[str] = frozenset()
     declared: frozenset[str] | None = None
     plane: str = ""
-    deleted: frozenset[str] = frozenset()
-    owed: frozenset[str] = frozenset()
-
-    @property
-    def plane_quiet(self) -> frozenset[str]:
-        """The paths the plane note owes nothing for: `quiet` plus the deletions."""
-        return self.quiet | self.deleted
 
     def declared_set(self) -> set[str] | None:
         """`declared` as the mutable set the classifiers take, or None when the read failed."""
@@ -85,9 +71,6 @@ class Landing:
         self.merge_sha = ""
         self.resolved_tags = [t for t in opts.tags.split(",") if t]
         self.classification = Classification()
-        # The plane note rendered again with the narrow tags the deployer recorded for this
-        # PR's range, by `classify.narrow_plane`; None until then, or when nothing narrowed.
-        self.narrowed_plane: str | None = None
         self.warnings: list[str] = []  # `warn` fills it; `pipeline.run` reports it
         self.needs_diff = False
         self.host_candidate = False  # a path is under HOST_INPUTS
@@ -116,10 +99,8 @@ class Landing:
 
     @property
     def plane(self) -> str:
-        """What a hand must apply, or "": the narrowed note once there is one, else step 1's."""
-        if self.narrowed_plane is None:
-            return self.classification.plane
-        return self.narrowed_plane
+        """What a hand must apply, or ""."""
+        return self.classification.plane
 
     @property
     def tags_csv(self) -> str:
@@ -185,7 +166,3 @@ class Landing:
     def fetch_branch(self) -> None:
         if self.git("fetch", "-q", "origin", BRANCH).returncode != 0:
             self.die(f"could not fetch origin/{BRANCH}", 1)
-
-    def state(self, name: str) -> str | None:
-        """The deployer's `<name>` marker; "" when absent, None when it could not be read."""
-        return self.tools.read_state(self.opts.deployer_state, name)

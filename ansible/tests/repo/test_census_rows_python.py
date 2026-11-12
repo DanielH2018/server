@@ -397,7 +397,6 @@ ROWS = (
             {
                 "ansible/filter_plugins/toposort.py",
                 "hosts/lib/host_lib.py",
-                "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
                 "ansible/roles/k8s/monitor-bridge/files/registry.py",
                 "ansible/roles/k8s/homelab-mcp/files/safe_reads.py",
                 "scripts/lib/cli_registry.py",

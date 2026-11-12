@@ -294,12 +294,10 @@ def node_resolves(cited: str, name: str, source: Path) -> bool:
 
 def test_node_resolution_accepts_a_context_relative_citation():
     """A runtime module citing its sibling test by bare filename, the common shape."""
-    source = (
-        REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_phases.py"
-    )
+    source = REPO / "scripts/deploy_tools/land_lib/land_tags.py"
     assert node_resolves(
-        "test_deploy_config.py",
-        "test_the_config_is_frozen",
+        "test_land_tags.py",
+        "test_small_pr_scopes_to_its_services",
         source,
     )
 
@@ -310,17 +308,13 @@ def test_node_resolution_rejects_a_renamed_test_and_a_renamed_file():
     A file that no longer exists, and a test name nothing defines. Matching on the file
     alone would accept the second.
     """
-    source = (
-        REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_phases.py"
-    )
+    source = REPO / "scripts/deploy_tools/land_lib/land_tags.py"
     assert not node_resolves(
-        "test_deploy_logic.py",
-        "test_the_config_is_frozen",
+        "test_land_tagz.py",
+        "test_small_pr_scopes_to_its_services",
         source,
     )
-    assert not node_resolves(
-        "test_deploy_config.py", "test_no_such_test_anywhere", source
-    )
+    assert not node_resolves("test_land_tags.py", "test_no_such_test_anywhere", source)
 
 
 def test_node_corpus_excludes_the_generated_decisions_page():

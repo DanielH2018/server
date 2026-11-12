@@ -21,8 +21,8 @@ MUST_FIND = frozenset(
     {
         "hosts/components/k3s-host-dns/templates/netplan-dns.yaml.j2",
         "hosts/components/k3s-host-dns/templates/host-corefile.j2",
-        "roles/setup/gitops_deploy/templates/config.env.j2",
-        "roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
+        "hosts/components/claude-code/templates/claude-triage-config.env.j2",
+        "hosts/components/claude-code/templates/claude-clone-sync.service.j2",
         "roles/setup/common/templates/resolv.conf.j2",
         "roles/setup/nut_host/templates/host-upsmon.conf.j2",
         "hosts/components/hypervisor/templates/staging-nwfilter.xml.j2",
@@ -49,7 +49,7 @@ def test_the_census_finds_the_named_setup_templates():
     """Non-vacuity: the glob must return these by name, not merely return something."""
     found = {_rel(p) for p in v.discover_templates()}
     assert MUST_FIND <= found, f"discovery lost: {sorted(MUST_FIND - found)}"
-    assert len(found) >= 97
+    assert len(found) >= 93
 
 
 def test_every_real_setup_template_renders_with_no_unresolved_variable(known):

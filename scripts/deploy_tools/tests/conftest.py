@@ -170,12 +170,3 @@ def _no_syspath_leak():
         "by bare name would resolve against it. Remove the entry in a finally, or use "
         "monkeypatch.syspath_prepend."
     )
-
-
-@pytest.fixture(scope="session")
-def pre_h763_tree():
-    """`setup_file_hosts`' tree keywords over the last tree `initial_setup` ran tasks in."""
-    from _pre_h763_tree import pre_h763_paths
-
-    with pre_h763_paths() as paths:
-        yield paths

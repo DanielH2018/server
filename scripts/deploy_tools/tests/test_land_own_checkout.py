@@ -81,7 +81,6 @@ def test_loaded_paths_keeps_only_modules_under_the_checkout(tmp_path):
 _INCIDENT_READERS = frozenset(
     {
         "scripts/lib/render_guard.py",
-        "scripts/deploy_tools/deploy_lib/owners.py",
         "scripts/lib/k8s_roles.py",
         "scripts/lib/ansible_inventory.py",
     }

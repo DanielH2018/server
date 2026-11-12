@@ -256,15 +256,3 @@ def test_no_mutate_covers_check_mode_and_dry_run() -> None:
         "neither in practice — image-builder was fully --check-clean and would still have "
         "built and pushed an image under a dry run."
     )
-
-
-def test_wrapper_translates_dry_run_and_skips_the_lock() -> None:
-    from deploy_tools.deploy_lib import run as deploy_run
-
-    dry, plain = (deploy_run.Plan(repo_root=_REPO) for _ in range(2))
-    deploy_run.parse_wrapper_flags(["--dry-run", "--tags", "n8n"], dry)
-    deploy_run.parse_wrapper_flags(["--tags", "n8n"], plain)
-    assert dry.args[:2] == ["-e", "k8s_dry_run=true"]
-    # ansible-playbook has no --dry-run, and a run that writes nothing takes no lock.
-    assert (deploy_run.exec_target(dry) or [])[:3] == ["uv", "run", "ansible-playbook"]
-    assert deploy_run.exec_target(plain) is None  # locked, in process

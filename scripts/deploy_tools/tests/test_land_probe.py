@@ -81,17 +81,6 @@ def test_a_promote_timeout_cause_gave_up_without_its_note(tmp_path):
     assert land_probe.read(log)["state"] == "gave-up"
 
 
-def test_a_ledger_unreadable_cause_gave_up_without_its_note(tmp_path):
-    """#7969: an unreadable owed ledger gives up on its `LAND-RESULT:` cause alone."""
-    log = landing(
-        tmp_path,
-        "LAND-RESULT: verdict=deferred cause=ledger-unreadable exit=75 pr=939 sha=- tags=0\n"
-        "VERDICT: deferred (PR #939 — ledger unreadable)\n",
-        rc=75,
-    )
-    assert land_probe.read(log)["state"] == "gave-up"
-
-
 def test_a_deferral_no_promotion_covered_still_gave_up(tmp_path):
     """A promote timeout may be a publish refusal, which no later tick clears: re-run land.sh."""
     log = landing(
@@ -117,16 +106,6 @@ def test_a_deferral_whose_gate_tree_was_stale_still_gave_up(tmp_path):
     log = landing(
         tmp_path,
         f"{outcome.STALE_GATE_NOTE}\nVERDICT: deferred (PR #939 — gate tree stale)\n",
-        rc=75,
-    )
-    assert land_probe.read(log)["state"] == "gave-up"
-
-
-def test_a_deferral_whose_owed_ledger_could_not_read_still_gave_up(tmp_path):
-    """#7906: no updater answers an unreadable ledger, so only a re-run of land.sh does."""
-    log = landing(
-        tmp_path,
-        f"{outcome.UNREADABLE_LEDGER_NOTE}\nVERDICT: deferred (PR #939 — ledger unreadable)\n",
         rc=75,
     )
     assert land_probe.read(log)["state"] == "gave-up"
@@ -246,18 +225,6 @@ def test_a_gate_note_beside_a_causeless_result_line_stays_a_plain_deferral(
         tmp_path,
         "LAND-RESULT: verdict=deferred cause=- exit=75 pr=939 sha=- tags=1\n"
         f"{note}\nVERDICT: deferred (PR #939 — landed, not yet applied)\n",
-        rc=75,
-    )
-    assert land_probe.read(log)["state"] == "deferred"
-
-
-def test_a_ledger_note_beside_a_causeless_result_line_stays_a_plain_deferral(tmp_path):
-    """#7969: the cause on `LAND-RESULT:` decides a ledger give-up; the note's text does not."""
-    log = landing(
-        tmp_path,
-        "LAND-RESULT: verdict=deferred cause=- exit=75 pr=939 sha=- tags=1\n"
-        f"{outcome.UNREADABLE_LEDGER_NOTE}\n"
-        "VERDICT: deferred (PR #939 — landed, not yet applied)\n",
         rc=75,
     )
     assert land_probe.read(log)["state"] == "deferred"

@@ -33,10 +33,8 @@ from _ratchet_census import (
     PATCHES,
     code_line_counts,
     monkeypatch_counts,
-    module_fixtures_by_dir,
     module_fixtures_for,
     run_git,
-    tracked_python_files,
 )
 from _ratchet import (
     NON_TEST_CAP,
@@ -61,14 +59,6 @@ CENSUS_MEMBERS = frozenset(
         "evals/trend.py",
         "scripts/lib/repo_paths.py",
     }
-)
-
-# The conftest fixture census finds its subject by globbing for `conftest.py`, so it has to
-# name a member it must find: the one fixture in the tree that hands a test a first-party
-# module. Without this the census reads empty the day that conftest is renamed, and every
-# fixture-parameter patch goes back to counting 0 with nothing saying so.
-MODULE_FIXTURE_MEMBERS = frozenset(
-    {("ansible/roles/setup/gitops_deploy/tests", "gitops_deploy")}
 )
 
 # Changing any of these changes what the lists are allowed to contain, which is what lets a
@@ -465,13 +455,6 @@ def test_the_census_reaches_every_tree_that_holds_python():
     assert CENSUS_MEMBERS <= set(counts), CENSUS_MEMBERS - set(counts)
     assert sum(1 for rel in counts if cap_for(rel) == TEST_CAP) >= 100
     assert sum(1 for rel in counts if cap_for(rel) == NON_TEST_CAP) >= 100
-
-
-def test_the_module_fixture_census_finds_the_fixtures_it_names():
-    """A glob census that goes empty would silently return every count to zero."""
-    by_dir = module_fixtures_by_dir(tracked_python_files())
-    found = {(d, name) for d, names in by_dir.items() for name in names}
-    assert MODULE_FIXTURE_MEMBERS <= found, MODULE_FIXTURE_MEMBERS - found
 
 
 def test_no_module_is_longer_than_its_cap_or_its_allowlist_entry():

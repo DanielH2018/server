@@ -36,9 +36,6 @@ def _workflow_job_names() -> set[str]:
 
 
 GROUP_VARS = ALL_VARS
-DEPLOYER_DEFAULTS = (
-    REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "defaults" / "main.yml"
-)
 
 
 def _contexts_in(path, key: str) -> set[str]:
@@ -84,14 +81,9 @@ def test_the_workflow_parse_actually_finds_jobs():
     assert _workflow_job_names(), "parsed no job names out of ci.yml"
 
 
-def test_the_deployers_role_default_refers_to_the_shared_key():
-    """The deployer's settings file renders the role default, so it must name the shared list."""
-    default = yaml_fast.safe_load(DEPLOYER_DEFAULTS.read_text())
-    assert default["gitops_deploy_ci_contexts"] == "{{ ci_required_contexts }}"
-    assert default["gitops_deploy_ci_ancestor_walk_max"] == "{{ ci_ancestor_walk_max }}"
-
-
-def test_a_reference_in_place_of_the_list_is_flagged():
-    """The reject half: reading the role default as a list fails, because it is now a string."""
+def test_a_reference_in_place_of_the_list_is_flagged(tmp_path):
+    """The reject half: a Jinja reference where the list belongs is no literal list."""
+    path = tmp_path / "all.yml"
+    path.write_text('ci_required_contexts: "{{ other_contexts }}"\n')
     with pytest.raises(AssertionError, match="not a literal list"):
-        _contexts_in(DEPLOYER_DEFAULTS, "gitops_deploy_ci_contexts")
+        _contexts_in(path, "ci_required_contexts")

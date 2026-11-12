@@ -1,29 +1,11 @@
-#!/usr/bin/env python3
-"""Post-deploy notifier for `scripts/deploy.sh --detach`.
+"""The health gate a landing ends with: `probe.py health` for every tag a promotion applied.
 
-Runs after the backgrounded ansible-playbook invocation finishes: gates the "settled"
-verdict on `probe.py health <svc>` for every service tag that was deployed, then posts one
-Discord message reusing gitops-deploy's own webhook and its `discord_post` helper — the same
-channel every other automated deploy outcome in this repo already posts to (deploy failures,
-CI gate rejections, rollbacks). An operator watching that channel is the one this notifier is
-for; it does not invent a second alert path.
+Each tag's state is `ok`, `unhealthy`, `unreadable` (the probe could not read its store) or
+`skipped` (the tag declares no workload), and `gate` folds them into one verdict.
 
-Degrades to a log-only note, never a crash, when:
-  - a tag isn't a k8s workload OR a Pi Docker container (a block tag like
-    `config`/`deploy`/`cron`, a name that matches neither, or a role whose manifests declare no
-    workload at all -- netpol-baseline, media-volume) -- probe.py exits `PROBE_NOT_APPLICABLE`,
-    and the tag is skipped from the verdict rather than counted as a failure
-  - the gitops-deploy webhook config isn't present on this host -- deploy.sh normally runs on
-    daniel-box, where it is; anywhere else this just prints and returns
-
-A post that fails because the host cannot reach Discord is queued in `DETACH_SPOOL_DIR`, and the
-gitops-deploy tick flushes that queue every ten minutes (#3987). This notifier runs once per
-detached deploy, so it has no next run of its own to retry from.
-
-Run: uv run pytest scripts/deploy_tools/tests/test_deploy_detach_notify.py
+Run: uv run pytest scripts/deploy_tools/tests/test_land_health_gate.py
 """
 
-import contextlib
 import subprocess
 import sys
 from collections.abc import Callable
@@ -35,29 +17,33 @@ from typing import NamedTuple
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
-from lib.cli_help import ArgumentParser
-
 from lib.repo_paths import HOST_VARS, REPO
+from lib.render_guard import containers_entries, entry_platform, entry_tags, host_files
 from lib.summary import grouped
-
-# `tag_platforms` is the reader of containers_list that says which probe can see a tag's workload.
-from deploy_tools.deploy_lib import tags as deploy_tags
 from diagnostics.probe_lib.health_checkout import STALE_CHECKOUT
-from lib.exit_codes import DEPLOY_NO_HOSTS, PROBE_NOT_APPLICABLE, PROBE_UNREADABLE
+from lib.exit_codes import PROBE_NOT_APPLICABLE, PROBE_UNREADABLE
 
 # The inventory directory as a path relative to a checkout root. `check_one` reads the
 # inventory from whichever tree the probe renders the manifests from, which is not always this
 # one, so it needs the shape of that path without repo_paths' own root baked in.
 HOST_VARS_REL = HOST_VARS.relative_to(REPO)
 
-HOST_LIB_PATH = Path("/opt/gitops-deploy/host_lib.py")
-CONFIG_ENV_PATH = Path("/etc/gitops-deploy/config.env")
-# Under the deployer's state directory, because the deployer's tick is the one regular poster
-# on this host that holds the same webhook: `deploy_alerts.flush_detach_spool` sends what this
-# notifier could not. The tick runs only on the `has_gitops` host, and teardown removes this
-# directory with the config everywhere else, so a verdict is never queued where nothing
-# flushes it. `test_deploy_detach_notify.py` holds this path equal to the deployer's.
-DETACH_SPOOL_DIR = Path("/var/lib/gitops-deploy/detach_spool")
+
+def tag_platforms(tag: str, host_vars: Path = HOST_VARS) -> set[str]:
+    """The platforms (`docker`, `k8s`) whose containers_list entries carry `tag`.
+
+    Empty for a tag no host declares. A Docker-only tag has nothing on the cluster to check,
+    and probing it there first could find a same-named cluster workload (loki-homelab's Alloy
+    DaemonSet) and report the Pi's undeployed container healthy.
+    """
+    return {
+        entry_platform(entry)
+        for path in host_files(host_vars)
+        for entry in containers_entries(path)
+        if tag in entry_tags(entry)
+    }
+
+
 # One `probe.py health` run. The alert plane sets the floor: up to 90s waiting for a probe
 # sample newer than the rollout, a 60s re-read of a would-fail verdict, and a second probe
 # wait on that re-read (`probe_lib/health_alerts.py`), on top of the render and kubectl reads.
@@ -65,20 +51,18 @@ PROBE_TIMEOUT_S = 300
 
 
 @dataclass(frozen=True)
-class NotifyTools:
+class GateTools:
     """The two boundaries the health gate crosses, so a test replaces a field, not a module.
 
     `run` is the probe subprocess; `tag_platforms` reads the inventory. Both default to the
-    real implementation, the way `land_lib.tools.Tools` does. `notify()` below is a third
-    boundary (the host's gitops-deploy webhook) and stays outside this seam: it is
-    best-effort by contract and its tests stub the host files it reads.
+    real implementation, the way `land_lib.tools.Tools` does.
     """
 
     run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run
     # Takes the inventory to read as a keyword, because which TREE answers is decided per call
     # (see `check_one`), not once when the tools are built.
     tag_platforms: Callable[..., set[str]] = field(
-        default=lambda tag, host_vars: deploy_tags.tag_platforms(tag, host_vars)
+        default=lambda tag, host_vars: tag_platforms(tag, host_vars)
     )
 
 
@@ -94,7 +78,7 @@ COUNTED_AS = {"ok": "healthy", "unreadable": "not graded"}
 
 
 class GateResult(NamedTuple):
-    """The notification's headline verdict, a count line, and a line per tag not healthy.
+    """The landing's headline verdict, a count line, and a line per tag not healthy.
 
     A healthy or skipped tag is only counted, so a broad landing's log stays short (#7894).
 
@@ -118,7 +102,7 @@ class GateResult(NamedTuple):
 
 def check_one(
     tag: str,
-    tools: NotifyTools | None = None,
+    tools: GateTools | None = None,
     platforms: set[str] | None = None,
     cwd: Path | None = None,
 ) -> CheckResult:
@@ -151,7 +135,7 @@ def check_one(
         workload.
     """
 
-    tools = tools or NotifyTools()
+    tools = tools or GateTools()
 
     def probe(extra: list[str]) -> tuple[int, str]:
         """Run probe.py health for `tag` with `extra` args; return (exit code, first line)."""
@@ -229,21 +213,14 @@ def check_one(
 
 def gate(
     tags: list[str],
-    ansible_ok: bool,
-    tools: NotifyTools | None = None,
+    tools: GateTools | None = None,
     cwd: Path | None = None,
 ) -> GateResult:
-    """(settled, report_lines). `settled` is the notification's headline verdict.
-
-    A failed ansible-playbook run is authoritative on its own -- no health check runs, since a
-    failed apply didn't necessarily reach the point of rolling anything out.
+    """(settled, report_lines). `settled` is the landing's headline verdict.
 
     `cwd` is the checkout the probe renders the role's manifests from; `check_one` carries the
-    argument and the reason. None keeps deploy.sh's --detach behaviour, which renders the
-    checkout this file lives in.
+    argument and the reason. None renders the checkout this file lives in.
     """
-    if not ansible_ok:
-        return GateResult(False, ["ansible-playbook exited non-zero -- see the log."])
     lines, counted = [], []
     unhealthy = unreadable = stale = False
     for tag in tags:
@@ -274,119 +251,3 @@ def gate(
         unreadable=unreadable and not unhealthy,
         stale=stale and not unhealthy,
     )
-
-
-def notify(content: str) -> None:
-    """Best-effort Discord post reusing gitops-deploy's webhook + helper. Never raises."""
-    if not HOST_LIB_PATH.exists() or not CONFIG_ENV_PATH.exists():
-        print(
-            "deploy --detach: no gitops-deploy webhook config on this host "
-            f"({HOST_LIB_PATH} / {CONFIG_ENV_PATH} not found) -- skipping Discord notify."
-        )
-        return
-    # Removed again in the `finally`: the entry outlives the call otherwise, and a later
-    # bare-name `import host_lib` anywhere in the process then resolves against whatever
-    # sits in that directory. Under pytest that directory is a tmp_path holding a
-    # deliberately broken stub, which failed an unrelated test in another module.
-    lib_dir = str(HOST_LIB_PATH.parent)
-    sys.path.insert(0, lib_dir)
-    try:
-        from host_lib import discord_post, parse_env_file  # type: ignore[import-not-found]
-
-        cfg = parse_env_file(str(CONFIG_ENV_PATH))
-        webhook = cfg.get("DISCORD_WEBHOOK", "")
-        posted = discord_post(
-            webhook,
-            content,
-            "deploy-detach",
-            log=print,
-            marker="deploy --detach:",
-            spool_dir=str(DETACH_SPOOL_DIR),
-        )
-        if not posted:
-            print(
-                "deploy --detach: Discord post failed or webhook unset -- a failure "
-                "another attempt can fix is queued for the gitops-deploy tick."
-            )
-    except Exception as exc:  # notifying must never crash the backgrounded run
-        print(
-            f"deploy --detach: notify failed ({exc}) -- deploy result is only in this log."
-        )
-    finally:
-        # `remove` takes the first occurrence, which is the one inserted above.
-        with contextlib.suppress(ValueError):
-            sys.path.remove(lib_dir)
-
-
-def main(argv: list[str] | None = None, tools: NotifyTools | None = None) -> int:
-    """Gate the deploy's health, post the verdict to Discord, and exit 0 if settled else 1."""
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
-        "--status", type=int, required=True, help="ansible-playbook's exit status"
-    )
-    parser.add_argument(
-        "--log", required=True, help="path to the deploy's captured output"
-    )
-    parser.add_argument(
-        "--tags", default="", help="comma-separated service tags that were deployed"
-    )
-    parser.add_argument(
-        "--cwd",
-        default="",
-        help=(
-            "the checkout to render the deployed role's manifests from; deploy_lib/detach_run.py passes "
-            "its snapshot, so the gate enumerates the workloads of the commit that was "
-            "deployed rather than of whatever this working tree holds"
-        ),
-    )
-    parser.add_argument(
-        "--no-post",
-        action="store_true",
-        help=(
-            "print the verdict, do not post it. land.sh returns the verdict to the "
-            "session instead; posting from both paths would split one verdict across "
-            "two channels."
-        ),
-    )
-    ns = parser.parse_args(argv)
-
-    tags = [t for t in ns.tags.split(",") if t]
-    # `tools` is the same seam `gate` and `check_one` take, carried one level up so a test can
-    # watch where the probe is actually run rather than patching this module.
-    result = gate(
-        tags, ns.status == 0, tools=tools, cwd=Path(ns.cwd) if ns.cwd else None
-    )
-    settled, lines = result.settled, result.lines
-    # Here, not in `gate`: an empty list from land.sh means a landing with nothing to gate.
-    if not tags and ns.status == 0:
-        lines = ["no --tags given -- health not gated, ansible exit code only."]
-    # deploy.sh's own code, not ansible's: the playbook exited 0 having matched no host, and
-    # the wrapper read that off the PLAY RECAP. Said in those words, because
-    # "exited non-zero -- see the log" sends the reader to a log whose ansible run looks clean.
-    who = "ansible"
-    if ns.status == DEPLOY_NO_HOSTS:
-        who = "deploy.sh"
-        lines = [
-            "the playbook matched NO host, so nothing was deployed -- see the log."
-        ]
-
-    # Not FAILED: nothing was found broken, only not read. Still exit 1, because a deploy
-    # nobody graded is not reported settled.
-    headline = "settled" if settled else "UNGRADED" if result.unreadable else "FAILED"
-    content = "\n".join(
-        [
-            f"deploy --detach {headline} ({who} exit {ns.status})",
-            # The gate's count line names no tag, so the post names what it gated.
-            *([f"tags: {', '.join(tags)}"] if tags else []),
-            *lines,
-            f"log: {ns.log}",
-        ]
-    )
-    print(content)
-    if not ns.no_post:
-        notify(content)
-    return 0 if settled else 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

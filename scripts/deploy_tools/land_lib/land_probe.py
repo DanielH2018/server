@@ -28,9 +28,8 @@ cause `promote-timeout` on its `LAND-RESULT:` line stays `gave-up`: no promotion
 Flux applies, and a publish refusal does not clear on its own. So does one with cause
 `gate-unreadable`: the health gate could not read its store, and nothing gates health again
 (#5543). So does one with cause `gate-stale`: the gate's tree was older than `origin/master`
-(#7816). So does one with cause `ledger-unreadable`: the owed ledger did not read (#7906).
-The cause decides, never the note beside it (#7911, #7969); a log from before `LAND-RESULT:`
-existed falls back to the notes.
+(#7816). The cause decides, never the note beside it (#7911, #7969); a log from before
+`LAND-RESULT:` existed falls back to the notes.
 """
 
 import json
@@ -45,7 +44,6 @@ from deploy_tools.land_lib.outcome import (
     Cause,
     STALE_GATE_NOTE,
     UNREADABLE_GATE_NOTE,
-    UNREADABLE_LEDGER_NOTE,
     Verdict,
 )
 from lib.cli_help import ArgumentParser, refuse_help_under_describe
@@ -69,14 +67,12 @@ _VERDICT_TOKEN = re.compile(r"^VERDICT: (\S+)")
 _PROMOTE_TIMEOUT = PROMOTE_TIMEOUT_NOTE.splitlines()[0].strip()
 _UNREADABLE_GATE = UNREADABLE_GATE_NOTE.splitlines()[0].strip()
 _STALE_GATE = STALE_GATE_NOTE.splitlines()[0].strip()
-_UNREADABLE_LEDGER = UNREADABLE_LEDGER_NOTE.splitlines()[0].strip()
 # The causes beside `deferred` that nothing clears on its own.
 _GIVE_UP_CAUSES = frozenset(
     {
         Cause.PROMOTE_TIMEOUT,
         Cause.GATE_UNREADABLE,
         Cause.GATE_STALE,
-        Cause.LEDGER_UNREADABLE,
     }
 )
 
@@ -165,7 +161,7 @@ def _is_plain_deferral(log: Path, verdict: str) -> bool:
     if not match or match.group(1) != Verdict.DEFERRED:
         return False
     text = log.read_text(errors="replace")
-    notes = (_PROMOTE_TIMEOUT, _UNREADABLE_GATE, _STALE_GATE, _UNREADABLE_LEDGER)
+    notes = (_PROMOTE_TIMEOUT, _UNREADABLE_GATE, _STALE_GATE)
     return not any(note in text for note in notes)
 
 

@@ -2,7 +2,7 @@
 
 PR #5533's landing read `VERDICT: unhealthy` because Prometheus was rolling and Traefik
 answered `no available server`, while the workload was `1/1 Running` and a re-run a minute
-later read healthy. Only the probe subprocess is faked here: `detach_notify.gate` and
+later read healthy. Only the probe subprocess is faked here: `health_gate.gate` and
 `check_one` run as land.sh runs them, so these grade what the landing does with an unreadable
 gate rather than a GateResult this file made up.
 
@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 
 from _land_fakes import MERGE_SHA
-from deploy_tools.deploy_lib import detach_notify
+from deploy_tools.land_lib import health_gate
 from deploy_tools.land_lib import outcome
 from deploy_tools.land_lib import health_verdict, land_probe, ledger
 from deploy_tools.land_lib.landing import Classification
@@ -38,14 +38,10 @@ def _unreadable_landing(landing, stderr="no available server\n"):
             stderr=stderr,
         )
 
-    tools = detach_notify.NotifyTools(
-        run=run, tag_platforms=lambda tag, host_vars: {"k8s"}
-    )
+    tools = health_gate.GateTools(run=run, tag_platforms=lambda tag, host_vars: {"k8s"})
     ln.tools = replace(
         ln.tools,
-        gate=lambda tags, cwd=None: detach_notify.gate(
-            tags, True, tools=tools, cwd=cwd
-        ),
+        gate=lambda tags, cwd=None: health_gate.gate(tags, tools=tools, cwd=cwd),
     )
     return ln
 

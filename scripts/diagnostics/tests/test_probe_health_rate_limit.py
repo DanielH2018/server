@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from deploy_tools.deploy_lib import detach_notify
+from deploy_tools.land_lib import health_gate
 from diagnostics.probe_lib import core, health_alerts
 from lib.exit_codes import PROBE_UNREADABLE
 
@@ -80,6 +80,6 @@ def test_a_429_past_the_retry_cutoff_is_not_retried():
 
 
 def test_the_waits_after_the_cutoff_fit_inside_the_probe_timeout():
-    assert health_alerts.PROBE_TIMEOUT_S == detach_notify.PROBE_TIMEOUT_S
+    assert health_alerts.PROBE_TIMEOUT_S == health_gate.PROBE_TIMEOUT_S
     tail = 2 * health_alerts.PROBE_WAIT_S + health_alerts.REREAD_WAIT_S
     assert 0 < health_alerts.RETRY_CUTOFF_S < health_alerts.PROBE_TIMEOUT_S - tail

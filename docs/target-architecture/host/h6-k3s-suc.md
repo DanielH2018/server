@@ -1879,7 +1879,7 @@ The results:
     - `test_k3s_node_ip_pinned.py`,
       `scripts/validate/tests/test_k8s_schema.py` and H1's CoreDNS image test read the new
       pin home through the new `repo_paths` constant;
-    - `ansible/tests/setup/test_setup_cross_role_files.py` admits the `include_vars`;
+    - the cross-role files census (deleted by H7.53) admits the `include_vars`;
     - `docs/k3s-upgrade.md` (pin path, stale symbol);
     - `ansible/roles/setup/k3s/CLAUDE.md`, whose `## At a glance` block regenerates;
     - the digest and default-deny render tests, each with its red fixture.

@@ -3,8 +3,7 @@ id: "0011"
 title: One lock serialises every path that writes the git tree
 status: Accepted
 date: 2026-08-23
-governs:
-  - "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2#contention exits 75"
+governs: []
 ---
 
 # ADR-0011: One lock serialises every path that writes the git tree
@@ -54,7 +53,7 @@ because `flock` died before the deployer started.
 The unit's own worst-case lock hold has to fit inside its `TimeoutStartSec` with the wait
 added, which leaves the largest legal `-w` at a few hundred seconds — far short of a routine
 20-minute deploy.
-`test_gitops_deploy_timeout_budgets.py::test_the_deployers_hold_survives_max_flock_contention`
+a deployer timeout test (deleted by H7.53)
 computes that bound from the live defaults and goes red if someone tries. (This record
 quoted the figures until 2026-09-02, and all three had moved.)
 

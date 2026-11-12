@@ -103,7 +103,7 @@ def _path_expr(node: ast.AST, path: Path) -> Path | None:
 
 def _path_inserts(nodes: list[ast.AST], path: Path) -> list[Path]:
     """The directories `path` puts on `sys.path` itself, in source order, from its walked nodes."""
-    # DECIDED: an insert whose argument is a name (`GITOPS_DEPLOY_FILES`, `HOST_LIB_FILES`,
+    # DECIDED: an insert whose argument is a name (`HOST_LIB_FILES`,
     # `FILTER_PLUGINS`) is skipped rather than evaluated. Every such insert in the tree points
     # outside `scripts/`, or at `scripts/` itself, which `_roots` already covers. An import only
     # such an insert explains resolves outside the tree, so it credits nothing here (#3038).

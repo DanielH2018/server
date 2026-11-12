@@ -26,7 +26,7 @@ from pathlib import Path as _Path, PurePosixPath
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
-from deploy_tools.land_lib.land_reach import setup_role_hosts
+from deploy_tools.setup_lib.role_hosts import setup_role_hosts
 from deploy_tools.setup_lib.setup_census_items import (
     CONTROL_MODULES,
     SETUP_ROLES,

@@ -37,11 +37,8 @@ MODULES = frozenset(
         "gh_read",
         "land_flux",
         "land_probe",
-        "land_reach",
-        "key_readers",
-        "land_shared",
         "land_tags",
-        "land_tags_cli",
+        "health_gate",
         "land_tested_base",
         "pin_gate",
         "pin_reads",
@@ -59,11 +56,10 @@ ALLOWED = {
         "own_checkout",
         # `Tools.fresh_landing`, the checkout `--fresh` lands from (#7933).
         "fresh",
-        "land_reach",
         "land_tags",
         "land_tested_base",
-        # The moved-key readers `Classifier.key_readers` derives (#6968).
-        "key_readers",
+        # `Tools.gate`, the health gate the landing ends with.
+        "health_gate",
         # The per-user verdict record `Tools.record_verdict` writes by default.
         "verdict_log",
     },
@@ -120,7 +116,7 @@ ALLOWED = {
     },
     # The split of a landing's tags and the wait on promotion, step 5's work (D2.3).
     "promotion": {"landing", "outcome"},
-    "health_verdict": {"landing", "outcome", "promotion"},
+    "health_verdict": {"landing", "outcome", "promotion", "health_gate"},
     "own_checkout": set(),
     # Makes a checkout and runs a child land.sh; it imports no phase.
     "fresh": set(),
@@ -131,9 +127,9 @@ ALLOWED = {
     # stops through Outcome so they carry the verdict a landing's would.
     "handoff": {"options", "outcome"},
     # The tag derivation and what it reads. None of them knows what a landing is.
-    "land_tags": {"land_shared"},
-    # The CLI over the tag derivation, which sits above what it reads (#4945).
-    "land_tags_cli": {"land_tags", "land_reach", "key_readers"},
+    "land_tags": set(),
+    # `probe.py health` per tag; it imports no phase.
+    "health_gate": set(),
     # H3.9a: the wait on the hosts a merge reaches. It takes `gate_snapshot` from `tools`.
     "host_wait": {
         "landing",
@@ -143,13 +139,9 @@ ALLOWED = {
         "host_published",
         "host_schedule",
     },
-    # The setup files reading a moved key, which the reach adds to a range's own paths (#6968).
-    "land_reach": {"key_readers"},
-    "key_readers": set(),
     # The boundaries for a tag Flux applies. It imports promote_lib.wait, outside land_lib.
     # It also holds the pin gate's reads, `pin_reads.PinReads`.
     "land_flux": {"pin_reads"},
-    "land_shared": set(),
     "land_tested_base": set(),
     # cc-wait's `land` source runs under `uv run --no-project`, so it reads only the
     # stdlib-only fork record and the verdict words.
