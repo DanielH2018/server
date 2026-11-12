@@ -363,7 +363,7 @@ def test_every_listed_path_is_admitted(rig, capsys, live) -> None:
 
 
 # The root-only files `probe.py applied claude_code` read as `unread` on 2026-10-25 that
-# PATHS does not yet admit (#6357). The neighbour is a polkit rule the role does not install.
+# PATHS does not yet admit (#6357). The neighbour is a polkit rule the package does not ship.
 POLKIT_RULES = [
     "/etc/polkit-1/rules.d/50-claude-fanout-alert.rules",
     "/etc/polkit-1/rules.d/50-claude-land.rules",

@@ -101,8 +101,8 @@ The `claude` agent reuses that shape: its own identity script in
   per-host copy of the agent users that host's package declares under `users:` (#4295, #6831), and
   the helper refuses a uid the map does not name. Adding or removing a host's agent edits that host's
   list in `hosts/components/worktree-holders/component.yml` too, and
-  `ansible/tests/setup/test_worktree_holders_install.py` fails while the two differ. The `claude_code` role's `agent_access.yml` puts each present agent in
-  the group. A session started before its user joined the group falls back to the
+  `ansible/tests/setup/test_worktree_holders_install.py` fails while the two differ.
+  `claude-agent-setup` puts each present agent in the group. A session started before its user joined the group falls back to the
   unprivileged scan until it restarts. `sudo -n true` still fails.
 
   The operator approved the second socket on 2026-10-29 (#6350), for the same reason: the
@@ -130,24 +130,22 @@ daniel-box's host_vars switches it on. The operator enters as `claude` with
 `sudo machinectl shell claude@ /bin/bash -l`. The user has no `ssh-users` membership and no
 authorized key.
 
-- **The clone stays current.** The `claude_code` role fast-forwards `~/server` as `claude` on each
-  apply, before its `uv sync`, and moves only a clean `master`. The deployer routes no change to
-  `ui_mcp.sh`, `ui_login.py` or `.claude/hooks/` to `claude_code`, so `claude-clone-sync.timer`
-  runs the same fast-forward every `claude_code_agent_clone_sync_interval` (15 minutes). The
+- **The clone stays current.** `claude-agent-setup` clones `~/server` when it is missing.
+  `homelab-claude-clone-sync.timer` fast-forwards it as `claude` every
+  `claude_code_agent_clone_sync_interval` (15 minutes) and moves only a clean `master`, because
+  a change to `ui_mcp.sh`, `ui_login.py` or `.claude/hooks/` ships no host package version. The
   script is `hosts/components/claude-code/files/claude-clone-sync.sh`, and it re-syncs the
   `.venv` and the collections when a pull moves their lock files. The hook shim and the
   homelab-ui launcher run from that clone, so a stale clone breaks both.
 - **The agent has commit hooks.** The agent's setup installs a pinned `prek` and `uvx` beside
-  `uv`. The `claude_code` role runs `prek install` in the clone, which covers
+  `uv`. `claude-agent-setup` runs `prek install` in the clone, which covers
   every worktree made from it, so the agent's commits run gitleaks and the commit-time ratchets.
   It re-runs the install while any shim `prek.toml`'s `default_install_hook_types` names is
   missing, so a clone made before `commit-msg` joined the list gains that shim.
   `renovate-agent` gets the binary but no hooks.
-- **`~/.claude` is `drwx------ claude:ubuntu`.** The role sets that mode on every apply, in
-  `tasks/agent_github.yml`, because the directory holds the session's login. Slice 4 widens it
-  for the operator's group.
-- **A detached deploy logs per user.** The log directory is `/tmp/homelab-deploy-logs-<user>`, so
-  one user's directory never blocks the other's `deploy.sh --detach`.
+- **`~/.claude` is `drwx------ claude:ubuntu`.** `claude-agent-setup` sets that mode on every
+  run, because the directory holds the session's login. Slice 4 widens it for the operator's
+  group.
 - **The Claude Code installer runs with `CLAUDE_INSTALL_ALLOW_SUDO=1`**, because the installer
   refuses to run under a sudo guard otherwise.
 
@@ -218,8 +216,8 @@ lander. The checks and the merge live in `land.sh`, and the lander does not re-i
   changes a module the lander imports refuses too, and so does one that can run code on import
   with no import line, such as a non-empty `__init__.py` or a symlink.
   `--verdict-file` writes `PENDING`, then the final `VERDICT:` or `REFUSED:` line.
-- **The unit** `homelab-claude-land@.service`, a `setup/claude_code` template that daniel-box's
-  host package ships, runs `land.sh` as `ubuntu` with the policy pinned to `DanielClaudeBot`,
+- **The unit** `homelab-claude-land@.service`, a `hosts/components/claude-code` template that
+  daniel-box's host package ships, runs `land.sh` as `ubuntu` with the policy pinned to `DanielClaudeBot`,
   the `worktree-claude+` prefix and a root-owned approval-paths file. The pins are literals in
   `templates/claude-land-pins.j2`, so no inventory value moves them. A polkit rule lets `claude`
   start only `homelab-claude-land@<n>.service`.
@@ -322,7 +320,8 @@ daniel-box sets it to the agent. The variable routes the unit's `User=`, `Group=
   uid is `claude_code_user_uid` in daniel-box's host_vars.
 - **The agent takes the operator's user-level config through chezmoi.** [The operator's
   dotfiles](#the-operators-dotfiles) describes it. `claude_code_agent_operator_config` switches
-  the older copied subset off, and `tasks/agent_operator_config.yml` has its mechanics. The
+  only the operator import line of the older copied subset, which the component does not ship.
+  The
   agent's telemetry carries the resource attribute `process.owner=claude`, so its metrics carry
   the label `process_owner="claude"` and the operator's carry none.
 - **The memory store is re-copied after every stint as the operator.** `claude-agent-home`
@@ -373,7 +372,7 @@ artifacts pod may not need it, because its template sets no `securityContext` an
 root with `CAP_DAC_OVERRIDE`. The slice 4 check tests that read anyway, because a later hardening
 of the pod would drop the capability.
 
-- The `~/.claude` item in `agent_github.yml` is mode `0710`. Group `ubuntu` gets traverse but not
+- `claude-agent-setup` sets `~/.claude` to mode `0710`. Group `ubuntu` gets traverse but not
   list. The grant relies on `.credentials.json` staying `0600`.
 - `~/.claude/projects` and `~/.claude/projects/<key>` get group `ubuntu` and `0710` too. The
   memory directory sits under both.
@@ -424,13 +423,13 @@ a clone, `uv`, Claude Code, a GitHub identity and a signing key.
 - **daniel-server.** `claude_code_agent_user_enabled: true` builds `claude` as on daniel-box,
   minus the lander, `claude-rc.service`, the memory copy and the homelab-ui browser and login.
   `claude_agent_ssh_login_enabled: true` adds `ssh-users` to the agent's exact group list
-  (`agent_access.yml`) and writes a root-owned `authorized_keys` holding daniel-box's agent key
-  with `restrict` (`agent_ssh_login.yml`). The play reads that key over ssh as the operator.
+  and `claude-agent-setup` writes a root-owned `authorized_keys` holding daniel-box's agent key
+  with `restrict`. The host carries that key's public half as `claude_agent_peer_public_key`.
   `claude_code_agent_dotfiles: true` gives the agent the operator's dotfiles, as on daniel-box.
   A batch needs them: every headless launch names claude-guard's prompt server, and refuses to
   start when the agent has no `claude-guard` shim (#6117).
-- **daniel-box.** `agent_peers.yml` generates the agent's peer key once, as the agent, at
-  `claude_agent_ssh_key_path`, and renders `~/.ssh/config` with one stanza per peer whose switch
+- **daniel-box.** `claude-agent-home` generates the agent's peer key once, as the agent, at
+  `claude_agent_ssh_key_path`, and `claude-agent-setup` renders `~/.ssh/config` with one stanza per peer whose switch
   is on: `User claude`, the peer's `server_ip`, `IdentitiesOnly yes` and
   `StrictHostKeyChecking accept-new`.
 - **Both hosts.** The agent user lingers, so a batch started with `systemd-run --user`, over ssh
@@ -452,10 +451,10 @@ instead of the operator.
   `assisted`, like `claude-ui`'s). The `authelia` role never reads it. The role renders the
   digest `authelia_agent_password_argon2`, a SOPS key of its own, so a rotation mints a new
   digest by the procedure in `docs/secret-rotation.md`, *Authelia user passwords*.
-- The `claude_code` role renders `/var/lib/claude/.config/homelab-ui/credentials.json` with the
-  username, the password and the domain. The file is `0600`, owned by `claude`, and written
-  under `no_log`. Ansible decrypts the three values as the operator, so the agent never holds
-  the age key.
+- daniel-box's host package renders the login, with the username, the password and the
+  domain, as an output of its SOPS file under `/run/homelab-secrets`. `claude-agent-setup`
+  links `/var/lib/claude/.config/homelab-ui/credentials.json` to it. The host decrypts the
+  values with its own age key, so the agent never holds one.
 - The file carries the domain because `ui_mcp.sh` and `ui_login.py` read it from SOPS for the
   operator. The agent can already read the domain from the IngressRoutes its read-only
   kubeconfig covers.
@@ -501,14 +500,14 @@ runs `sudo machinectl shell claude@ /bin/bash -lc 'cd ~/server && exec claude ag
 `claude-rc.service`, and the phone host still connects. daniel-server still runs sessions as
 `ubuntu`.
 
-- **Caps render for both users.** The login-slice caps and the pytest fan-out cap render for every
-  user ID in `claude_code_login_uids`, which defaults to `[claude_code_login_uid]` (1000). On a
-  host with `claude_code_agent_user_enabled`, `tasks/login_caps.yml` adds the agent's ID, looked up
-  from the user database and never written down. Sessions started as either account carry the same
-  `MemoryHigh`, `MemorySwapMax` and `PYTEST_XDIST_AUTO_NUM_WORKERS` as `claude-rc.service`, under
-  the fleet bound on `user.slice`. An ID that leaves the list has its slice drop-in and
-  `environment.d` file removed on the next apply, and `claude_code_login_caps_enabled: false`
-  removes every one.
+- **Caps render for both users.** The component ships the login-slice cap for the operator's
+  user ID 1000 while `claude_code_login_uids` names it. Each host's `package.yml` ships the same
+  cap for the agent's user ID, which it declares as a literal: 995 on daniel-server, 996 on
+  daniel-box. The pytest fan-out cap is one `/usr/lib/environment.d` file that every user
+  manager reads. Sessions started as either account carry the same `MemoryHigh`,
+  `MemorySwapMax` and `PYTEST_XDIST_AUTO_NUM_WORKERS` as `claude-rc.service`, under the fleet
+  bound on `user.slice`. `claude_code_login_caps_enabled: false` drops every one from the next
+  package version.
 - **A metric counts sessions that run as the wrong account.** `claude-cgroup-metrics.sh`
   writes `claude_uid_processes{uid}` for each uid in `claude_code_watch_uids`, an explicit 0
   included. It counts processes named `claude` by their real uid in `/proc/<pid>/status`.
@@ -538,8 +537,8 @@ out](#what-this-page-leaves-out) has where it lives.
 
 ## Slice 7: a pre-merge dry run without secrets (optional)
 
-**Build:** add a `deploy.sh --dry-run` mode that renders with placeholder secret values and
-applies with a dry-run-only ServiceAccount. A ValidatingAdmissionPolicy denies that
+`deploy.sh` is deleted, so this plan is history. It read: add a `deploy.sh --dry-run` mode that
+renders with placeholder secret values and applies with a dry-run-only ServiceAccount. A ValidatingAdmissionPolicy denies that
 ServiceAccount every request whose `request.dryRun` is false.
 
 **Unverified:** whether this k3s version's admission CEL exposes `request.dryRun`, and whether
@@ -706,15 +705,14 @@ labels telemetry `process.owner=<user>`. Every guard hook stays. `chezmoi-guard`
 `serve-artifacts` are off: the agent's source is a clone it only pulls, and the artifact port is
 the operator's.
 
-`tasks/agent_dotfiles.yml` installs it, and `claude_code_agent_dotfiles` switches it. The
-steps:
+`claude-agent-setup` clones the source, `homelab-claude-dotfiles-sync.timer` applies it, and
+`claude_code_agent_dotfiles` switches it. The steps:
 
 1. Copy the operator's pinned chezmoi.
 1. Seed the three prompt answers.
 1. Clone the dotfiles as the agent's chezmoi source.
-1. Run `files/claude-dotfiles-sync.sh`. `<name>-dotfiles-sync.timer` runs the same script every
-   15 minutes, since a dotfiles merge applies no role here.
-1. Delete the subset tree the script moved aside.
+1. Run `files/claude-dotfiles-sync.sh` every 15 minutes from the timer, since a dotfiles merge
+   ships no host package version here.
 
 The script has three guards:
 
@@ -724,13 +722,13 @@ The script has three guards:
 - After that check, and only then, it renames each root-owned subset tree to
   `~/.claude/.subset-copy-<name>`. chezmoi, running as the agent, cannot write into a root-owned
   directory, and the agent cannot delete one. It owns `~/.claude`, though, so it can rename one
-  in place, and the role deletes the renamed tree on its next apply. A refused source therefore
+  in place. The component ships no subset and deletes no renamed tree. A refused source therefore
   leaves the subset where it was, and the agent always has one of the two.
 - It applies in two passes, every directory but `~/.claude` and `~/.config/gh` and then
   everything but directories. The first pass is non-recursive. chezmoi applies a directory
   target's whole tree below it, so applying `~/.config` reopened `~/.config/gh` to `0755`.
   The source names the directory `private_dot_claude`, and a plain apply sets its mode to 0700. That would cut the operator off from the agent's memory store and artifacts, which
-  `agent_github.yml` opens at 0710 for the operator's group.
+  `claude-agent-setup` opens at 0710 for the operator's group.
 
 **What the agent loses:** root ownership of its copied config. The subset was root-owned, which
 stopped an injected session from editing it in place. chezmoi writes as the agent, so the agent
@@ -796,13 +794,12 @@ operator can log in as `claude`, so only the operator can run the checks that st
 | 5 | As `claude` on daniel-box, `uv run python scripts/dev/fanout.py place read` prints a reading for both hosts, each with `signing=ok`. For the login alone, `uv run python scripts/diagnostics/ui_login.py && uv run python scripts/diagnostics/ui_login.py --verify homepage` succeeds, and homelab-ui renders a service page. | `claude_agent_ssh_login_enabled: false` in daniel-server's host_vars removes the key and the group. `claude_code_agent_user_enabled: false` there also expires the account and stops its linger. `claude_code_agent_homelab_ui_enabled: false` removes the browser, and deleting the `claude-agent` block from the authelia role revokes the login. |
 | 6 | Starting `claude` as `ubuntu` shows up as `claude_uid_processes{uid="1000"}` within one 30-second timer interval. | Delete the two lines in daniel-box's host_vars. `claude_code_login_uids` returns to uid 1000, and an empty `claude_code_watch_uids` stops the series. |
 | rootq socket | After `claude-rc.service` restarts, in a session as `claude` on each host: `rootq-socket nft` prints the host's ruleset (several chains, not an empty one), `rootq-socket cat /etc/shadow` and `rootq-socket cat /etc/netplan/../shadow` exit 2, and `id` lists `homelab-rootq`. As `ubuntu`, `rootq nft` still works through sudo. | `claude_code_rootq_socket_enabled: false` in that host's `host_vars` removes the socket, its units, the helper, the client and the group, and the agent leaves the group. The operator's `rootq` stays. |
-| dotfiles | A scratch run of the sync script as `claude` against the dotfiles branch applies the agent variant, leaves `~/.claude` at the mode it started with and keeps a pre-existing `.profile` and `.gitconfig`. The rendered `settings.json` carries every guard hook with `SUDO_ASKPASS` unset, `CLAUDE_ARTIFACTS_HOST=daniel-box-claude` and `OTEL_RESOURCE_ATTRIBUTES=process.owner=claude`. A second run is a no-op with an empty `chezmoi diff`. A source that predates the flag makes the script exit 1 and apply nothing. | Delete `claude_code_agent_dotfiles: true` from that host's `host_vars`. The next apply there stops the timer, removes its units, and installs the subset again. |
+| dotfiles | A scratch run of the sync script as `claude` against the dotfiles branch applies the agent variant, leaves `~/.claude` at the mode it started with and keeps a pre-existing `.profile` and `.gitconfig`. The rendered `settings.json` carries every guard hook with `SUDO_ASKPASS` unset, `CLAUDE_ARTIFACTS_HOST=daniel-box-claude` and `OTEL_RESOURCE_ATTRIBUTES=process.owner=claude`. A second run is a no-op with an empty `chezmoi diff`. A source that predates the flag makes the script exit 1 and apply nothing. | Delete `claude_code_agent_dotfiles: true` from that host's `host_vars`. The next package version there drops the timer and its units. |
 
 ## What the `claude` user cannot do
 
 | Capability | Why | Where it goes instead |
 |---|---|---|
-| `deploy.sh`, `--check` and `--dry-run` before a merge | All three decrypt SOPS, and the agent has no age key | Merged work deploys through the lander (slice 3). A pre-merge dry run returns with slice 7. |
 | `sudo` | No sudo rights and no `SUDO_ASKPASS` helper | The operator, or the deployer after a merge |
 | Adding or rotating a secret | `sops` needs the data key to write a value | The operator. Key names stay readable, because SOPS encrypts values only. |
 | ssh as `ubuntu` to the peers | That shell has sudo | The operator. The agent reaches daniel-server as its own `claude` agent user, for fan-out only (slice 5). The Pi has no agent login, because the one `probe.py` ssh path needs its `docker` group. |

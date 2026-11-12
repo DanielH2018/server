@@ -33,7 +33,8 @@ import sys
 import time
 from collections.abc import Callable
 
-# The runner runs from /opt/claude-triage, where tasks/triage.yml installs host_lib.py beside it.
+# The runner runs from /opt/claude-triage, where component.yml's `lib: host_lib.py` entry
+# ships host_lib.py beside it.
 from host_lib import ERR, WARNING, log, parse_env_file, write_textfile
 
 CONFIG = "/etc/claude-triage/config.env"

@@ -667,8 +667,8 @@ has_claude_code: false
 # switch through hostvars.
 claude_agent_ssh_login_enabled: false
 claude_agent_ssh_key_host: daniel-box
-# The agent's key for the peers, generated on the key host as the agent
-# (claude_code/tasks/agent_peers.yml). A peer's play reads the `.pub` half over ssh.
+# The agent's key for the peers, generated on the key host as the agent by claude-agent-home
+# (hosts/components/claude-code). Each peer carries the `.pub` half as claude_agent_peer_public_key.
 claude_agent_ssh_key_path: /var/lib/claude/.ssh/peers_ed25519
 
 # --- The CI gate every deploy path grades by (H7.2e) ---

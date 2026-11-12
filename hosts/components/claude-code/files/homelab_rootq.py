@@ -1,9 +1,10 @@
 #!/usr/bin/python3 -I
 """homelab-rootq — read root-only host state, run as root through one NOPASSWD line (#6323).
 
-Installed as /usr/local/sbin/homelab-rootq by tasks/rootq.yml; /usr/local/bin/rootq runs it
-through `sudo -n`. It reads and never writes. Every verb, path and argument shape it accepts
-is listed here, and anything not listed is refused. The verbs come in two tiers.
+Shipped as /usr/local/sbin/homelab-rootq by the homelab host package
+(hosts/components/claude-code); /usr/local/bin/rootq runs it through `sudo -n`. It reads and
+never writes. Every verb, path and argument shape it accepts is listed here, and anything not
+listed is refused. The verbs come in two tiers.
 
 Tier 1 never prints file content. Each takes a PATH on the PATHS list:
 
@@ -14,8 +15,7 @@ Tier 1 never prints file content. Each takes a PATH on the PATHS list:
 
 For `matches`, the shim hashes FILE as the caller and passes only the hash, so this script
 receives `matches PATH HEX` and never opens a caller-named file. The shim also takes the
-64-hex SHA-256 in place of FILE, which is how `probe.py applied` asks on a host with no
-checkout.
+64-hex SHA-256 in place of FILE, for a caller on a host with no checkout.
 
 Tier 2 prints, and only from fixed sources, each through the redaction filter:
 

@@ -3,9 +3,9 @@
 # Bounds user-<uid>.slice for every uid in claude_code_login_uids and for the agent user
 # ({{ claude_code_agent_user }}) when claude_code_agent_user_enabled — every SSH/tty login
 # session of those accounts, including a `claude` process started directly from one — the same
-# way claude-rc.service bounds its own cgroup. One copy of this file lands in each uid's
-# user-<uid>.slice.d (tasks/login_caps.yml). A session started that way never touches the
-# unit's Environment=/MemoryHigh=/MemorySwapMax= lines: it lands in
+# way claude-rc.service bounds its own cgroup. component.yml ships the operator's copy to
+# user-1000.slice.d, and each host's package.yml ships the agent's to its user-<uid>.slice.d.
+# A session started that way never touches the unit's Environment=/MemoryHigh=/MemorySwapMax= lines: it lands in
 # user.slice/user-<uid>.slice/session-<n>.scope instead. Issue #1213: on 2026-09-05 that
 # untouched plane held 965 processes and 20.4G anon in one session scope while
 # claude-rc.service held 50.9 MB. Since 2026-10-09 new interactive sessions start as the agent

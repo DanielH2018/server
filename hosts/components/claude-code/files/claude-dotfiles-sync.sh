@@ -3,23 +3,22 @@
 #
 # The dotfiles repo renders an agent variant when its chezmoi data sets `agent = true`
 # (.chezmoitemplates/is-agent). That variant leaves the agent's login profile, git identity,
-# ssh and own CLAUDE.md to Ansible. A source that predates the variant would hand the agent
-# the operator's .gitconfig and push as the operator's identity, so this refuses to apply
-# unless the source renders is-agent as true.
+# ssh and own CLAUDE.md to claude-agent-setup. A source that predates the variant would hand
+# the agent the operator's .gitconfig and push as the operator's identity, so this refuses to
+# apply unless the source renders is-agent as true.
 #
 # Two passes, because a plain apply sets every managed directory to the source's mode, and
-# tasks/agent_github.yml sets two of them differently. The source names ~/.claude
+# claude-agent-setup sets two of them differently. The source names ~/.claude
 # `private_dot_claude`, so an apply chmods it to 0700 and cuts the operator off from the agent's
-# memory store and artifacts, which the role opens with mode 0710. It names ~/.config/gh
+# memory store and artifacts, which claude-agent-setup opens with mode 0710. It names ~/.config/gh
 # `dot_config/gh`, so an apply opens the directory holding the agent's GitHub token to 0755,
-# where the role sets 0710 (#6453). The first pass applies every managed directory but those
-# two, creating any new one. It passes --recursive=false: chezmoi applies a directory target's
-# whole subtree, so applying ~/.config would reach ~/.config/gh anyway. The second pass applies
+# where claude-agent-setup sets 0710 (#6453). The first pass applies every managed directory
+# but those two, creating any new one. It passes --recursive=false: chezmoi applies a
+# directory target's whole subtree, so applying ~/.config would reach ~/.config/gh anyway. The second pass applies
 # everything else and no directory, which leaves an existing directory's mode alone.
 #
-# Runs as the agent user, with HOME set to its home. The claude_code role runs it on each apply,
-# and <name>-dotfiles-sync.timer runs it between applies, since a dotfiles merge applies no role
-# here. Prints one line on stdout:
+# Runs as the agent user, with HOME set to its home. homelab-claude-dotfiles-sync.timer runs it,
+# because a dotfiles merge ships no host package version here. Prints one line on stdout:
 #   skipped: <reason>
 #   applied <old>..<new>      the source moved, or `applied at <sha>` when it did not
 # Exits non-zero when git or chezmoi fails, or when the source does not render the agent
@@ -54,7 +53,8 @@ after=$(git -C "$repo" rev-parse --short HEAD)
 
 # Re-render chezmoi.toml from the pulled template and the seed's answers, every run. A render
 # from a template that predates the agent prompt drops the `agent` answer, and rendering from
-# the last config would then lose it for good; the seed Ansible writes always carries it.
+# the last config would then lose it for good. The seed claude-agent-setup writes always
+# carries it.
 install -m 0600 "$seed" "$config"
 "$chezmoi" init --no-tty
 
@@ -64,9 +64,9 @@ if [[ $("$chezmoi" execute-template '{{ includeTemplate "is-agent" . }}' 2>/dev/
   exit 1
 fi
 
-# The subset the role installed before the dotfiles (tasks/agent_operator_config.yml) is
-# root-owned. chezmoi cannot write into it, and the agent cannot delete it, but the agent owns
-# ~/.claude and so can rename it in place; the role deletes what this moved on its next apply.
+# The subset the deleted claude_code role copied in before the dotfiles is root-owned. chezmoi
+# cannot write into it, and the agent cannot delete it, but the agent owns ~/.claude and so can
+# rename it in place. The component ships no subset and deletes no renamed tree.
 # Only after the check above, so a refused source leaves the subset where it was.
 for tree in operator rules output-styles skills; do
   if [[ -d "$HOME/.claude/$tree" && $(stat -c %U "$HOME/.claude/$tree") == root ]]; then
