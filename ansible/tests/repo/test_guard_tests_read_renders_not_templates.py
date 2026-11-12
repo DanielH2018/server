@@ -90,11 +90,6 @@ TEMPLATE_SOURCE_READERS = {
         "whether a tiered role's `pod_shell(...)` call passes a literal class or the derived "
         "one — both render the same `priorityClassName`, so only the source tells them apart"
     ),
-    "setup/test_pi_service_lists_census.py": (
-        "the red proof copies monitor-bridge's env template with the Pi's second key removed, "
-        "to show the census flags a reader that reads `containers_list` alone; a render has "
-        "no source to edit"
-    ),
     "services/test_n8n_build_is_pinned.py": (
         "Renovate's `matchString` runs against `Dockerfile.j2` on disk, braces intact; a "
         "render is not what Renovate sees"
