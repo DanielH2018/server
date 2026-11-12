@@ -240,7 +240,7 @@ each slice's *Complexity delta*. It counts owned code only, and leaves out tests
 | Alert rules and exporters | about 1,100, with 12 items unsized | about 40 | M1's series budget, 2,000 samples a second |
 | monitor-bridge | D2's deploy-pipeline family, about 150 | about 5,700 to 6,700 (M2, M5, M6) | residual about 6,500, capped at 7,000 (M6) |
 | Uptime Kuma | — | about 3,700 lines and 82 push-token secrets | deleted by M6 |
-| Docs guard | about 700 (G1, G4; G3 declined) | about 925 lines plus the 1,471-line generated lock (G2, G4) | — |
+| Docs guard | about 570 (G1, G4; G3 declined) | about 925 lines plus the 1,471-line generated lock (G2, G4) | — |
 
 The deleted side still outweighs the added side by a wide margin, so the direction holds.
 The added side is several times what this page claimed before the fold. A promote workflow
