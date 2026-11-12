@@ -10,18 +10,13 @@ def widget_role(tmp_path: Path):
     """Build a synthetic k8s role under tmp_path and return its directory.
 
     The autodeploy guards read a role off disk, so pinning their behavior means writing one.
-    The fixture makes the dir, makes tasks/ and writes tasks/main.yml, so a test starts at the
-    case it is about.
-
-    Pass `tasks` as the tasks/main.yml body, `templates` as {filename: body}, and `defaults` as
-    the defaults/main.yml body. Everything is optional: a role with no tasks file at all is
-    itself a case the guards have to handle.
+    Pass `templates` as {filename: body} and `defaults` as the defaults/main.yml body. Both are
+    optional: a role with no defaults file at all is itself a case the guards have to handle.
     """
 
     built = []
 
     def build(
-        tasks: str | None = None,
         *,
         templates: dict[str, str] | None = None,
         defaults: str | None = None,
@@ -34,9 +29,6 @@ def widget_role(tmp_path: Path):
             name or ("widget" if len(built) == 1 else f"widget-{len(built)}")
         )
         role.mkdir(parents=True, exist_ok=True)
-        if tasks is not None:
-            (role / "tasks").mkdir(exist_ok=True)
-            (role / "tasks" / "main.yml").write_text(tasks)
         if templates is not None:
             # An EMPTY templates dir is its own case: a role that renders no manifest at all
             # must read as ungated, not as gated-with-nothing-to-gate. Pass `templates={}`.

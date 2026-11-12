@@ -60,9 +60,8 @@ longhorn_restore_drill_mem_limit: 256Mi
 longhorn_restore_drill_cpu_request: 10m
 longhorn_restore_drill_mem_request: 64Mi
 
-# The eight keys below moved here from `setup/k3s`'s defaults under their names (H2.3d). No
-# `setup/` task or template reads them: ansible/tests/repo/test_census_rows_roles.py, row
-# `drill-keys-off-the-host-plane`, holds that. The comments moved with them.
+# The eight keys below moved here from `setup/k3s`'s defaults under their names (H2.3d). The
+# comments moved with them.
 
 # Restore drill — proves the backups come BACK, which nothing else here checks. The heartbeat
 # watches Longhorn's own objects, and none of them can tell you whether the bytes in B2 restore.
