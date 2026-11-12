@@ -15,7 +15,7 @@
 # dies, Alloy's docker_sd finds no targets and this host's container logs stop reaching Loki,
 # while Alloy keeps running with zero targets. docker-proxy-lifecycle has no probe from outside
 # the host.
-# This heartbeat watches EVERY container the host deploys (containers_list and compose_services,
+# This heartbeat watches EVERY container the host deploys (every compose_services entry,
 # plus docker-proxy's sub-proxies, which are services inside its compose file rather than list entries)
 # and writes a passing verdict only while all of them run, every 5 min.
 # Prometheus reads the textfile (pi-checks.yaml, M6 batch B5). PiRecoveryFailed names the dead
