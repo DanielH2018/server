@@ -172,9 +172,9 @@ every direct merge, and the landing waited about 75 minutes towards `merge-timeo
 
 - `gh run rerun` refuses a completed run, and a `workflow_dispatch` run does not replace the
   PR's check. Only a new head commit gives the PR a fresh set of checks.
-- Once `await_ci` has read a head green and the PR has stayed unmerged for
-  `stuck_checks.AFTER_S` (600s), the merge wait reads the head's check runs and check suites,
-  and reads them again every 600s after. A head that is not green is never read this way.
+- Once the wait has sat on one head for `stuck_checks.AFTER_S` (600s), the merge wait reads
+  that head's check runs and check suites on a poll where `await_ci` reads it green, and
+  again every 600s after. A head that is not green is never read this way.
 - A check still pending in a completed suite ends the wait at `merge-timeout`, exit 75. The
   message names the check and the remedy: push an empty commit to the PR branch, then re-run
   `land.sh`.

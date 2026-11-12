@@ -595,8 +595,8 @@ def await_merge(ln: Landing) -> None:
     If the head is still skipped after it, the wait ends (`_draft_skipped_dead_end`). Neither
     happens while a ready `ci.yml` run exists on the head (`_ready_run_on`); the grace restarts.
 
-    A head await_ci reads green that stays unmerged for `stuck_checks.AFTER_S` has its checks
-    read, and again each `AFTER_S` after. A check left pending under a completed workflow run
+    A head the wait has sat on for `stuck_checks.AFTER_S` has its checks read on a poll where
+    await_ci reads it green, and again each `AFTER_S` after. A check left pending under a completed workflow run
     ends the wait `merge-timeout` with the empty-commit remedy, because no poll ever clears it
     (#7996).
     """

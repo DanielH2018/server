@@ -8,9 +8,9 @@ retried"), and a `workflow_dispatch` run on the branch does not replace the PR's
 new head commit gives the PR a fresh set of checks.
 
 `find` names such checks on one head with two reads: the head's check runs, then its check
-suites, one suite per workflow run. `merge.await_merge` calls it only once await_ci has read
-the head green for `AFTER_S`, so the ordinary path makes no extra read. A read that fails names
-nothing, so it never ends a wait on its own.
+suites, one suite per workflow run. `merge.await_merge` calls it only on a poll where await_ci
+reads the head green and the wait has sat on that head for `AFTER_S`, so the ordinary path
+makes no extra read. A read that fails names nothing, so it never ends a wait on its own.
 """
 
 import sys as _sys
