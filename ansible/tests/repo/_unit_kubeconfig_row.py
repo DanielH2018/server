@@ -17,7 +17,6 @@ import re
 from functools import cache
 from pathlib import Path
 
-
 from _helpers import REPO
 from _row_table import Census, Subject, tracked
 from lib import yaml_fast
@@ -247,7 +246,7 @@ UNITS_REACHING_THE_CLUSTER_SET_KUBECONFIG = Census(
         _LANDER: (
             "land.py waits on Flux through lib.kubectl, whose find_kubeconfig falls back to the "
             "kubeconfig under HOME, and the unit sets HOME. The unit is on the lander's "
-            "approval list, so adding KUBECONFIG waits on the operator"
+            "approval list, so adding KUBECONFIG waits on the operator (#8207)"
         ),
         _LOKI_WITNESS: (
             "probe.py loki-labels reads Loki over HTTP and runs no kubectl. The row counts it "
