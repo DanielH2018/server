@@ -153,8 +153,8 @@ operator.
 
 Every rule in the rest of this section lives in `files/run_worktree.py`.
 
-**A worktree holding work is not thrown away.** If the previous tick left uncommitted changes or
-commits whose content is not on `origin/master`, the tick skips, posts the path and exits
+**A worktree holding work is not thrown away.** If the previous run left uncommitted changes or
+commits whose content is not on `origin/master`, the run skips, posts the path and exits
 `EXIT_WORKTREE_BLOCKED` (2). Removing the tree is how unlanded work is lost.
 
 Content, not ancestry. The run branch is fixed (`worktree-renovate-auto`) and nothing resets it

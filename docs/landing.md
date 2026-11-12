@@ -286,7 +286,8 @@ has the operator-only fix-forward after a failed bump.
 ## The CI wait
 
 **Do not hand-poll CI and do not hand-merge.** `await_ci.py` reads the same check-runs endpoint
-the deployer reads, so its verdict and the tick's agree by construction. Hand-polling cost 835
+through the same `hosts/lib/ci_verdict.py:ci_verdict` as `homelab-checkout-sync` and the
+builder, so their verdicts agree by construction. Hand-polling cost 835
 polls across 213 wait episodes before it existed.
 
 `cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
@@ -294,7 +295,8 @@ SHA is bad* — `_CI_NO_VERDICT_CONCLUSIONS` in `hosts/lib/ci_verdict.py` is the
 merge was immediately followed by another reads `cancelled` permanently. The rule covers the
 gate job too: ci.yml runs `prek` under `always()`, so a cancelled run still runs the gate, which
 fails on its cancelled needs. `ci_verdict.ci_verdict` leaves that gate out unless a need in the
-same run failed outright (#5931), and the deployer's tick reads it the same way (#6007).
+same run failed outright (#5931), and `homelab-checkout-sync` and the builder read it the same
+way (#6007).
 `await_ci.py` follows the tip in that case, but only once your commit is an ancestor of it. The log line is `<sha> has
 no verdict (cancelled/stale) — following the tip <tip>`, and it is normal. It also fires when
 the cancellation came before the `prek` job registered a check-run at all: the check-runs list
@@ -305,7 +307,7 @@ case waited out the whole budget and exited 75.
 GitHub sometimes drops a master push event, and then the commit never gets a CI run at all.
 `await_ci.py` reads a SHA with no GitHub Actions check suite after `DROPPED_PUSH_GRACE_S` as
 that case. It then takes the verdict of the nearest descendant on master whose CI has
-finished, which is the rule the tick already deploys by (#4621). The log line is
+finished, which is the rule `homelab-checkout-sync` and the builder already follow (#4621). The log line is
 `<descendant>: CI green (GitHub never ran CI for <sha>; ...)`. A red nearest descendant ends
 the wait red; a later green commit is not taken past it, since it may hold the fix your merge
 commit lacks. The landing still deploys its own merge commit, whose tree no CI ran on by
@@ -714,7 +716,7 @@ CLAUDE.md, and asked for a full `ansible/deploy.yml` (issue #1701). `lib/role_pa
 
 **A role the PR itself registers is not one either.** Which tags exist is read at the MERGE
 COMMIT (`land_tags.service_tags_at`), not from a checkout — a `containers_list` entry added by
-the same PR is absent from every tree until the tick fast-forwards.
+the same PR is absent from the primary checkout until `homelab-checkout-sync` fast-forwards it.
 
 **HISTORY —** `land.sh` used to report the new role as unregistered and ask for a full
 `ansible/deploy.yml`. PR #1539 landed that way and `./scripts/deploy.sh --tags pihole-exporter`
@@ -724,9 +726,11 @@ deployed it a minute later (issue #1544).
 
 Every run writes one logfmt line to syslog on exit (`logger -t landing-annotation`): the PR, the
 merge SHA, the verdict, and seconds spent in each phase — `wait_merge`, `wait_ci`, `deploy`,
-`total`. `deploy` runs from master CI's answer to the end of the promotion wait. Lines written
-before H7.49a also carry `tick`, `lock`, `holder` and `kick`, which described the GitOps tick
-`land.sh` no longer runs. Loki keeps them until about 2026-12-07, and no panel reads them.
+`total`. `deploy` runs from master CI's answer to the end of the promotion wait.
+
+**HISTORY — the GitOps tick's fields.** Lines written before H7.49a also carry `tick`, `lock`,
+`holder` and `kick`, which described the GitOps deployer run that `land.sh` no longer starts.
+Loki keeps them until about 2026-12-07, and no panel reads them.
 
 Promtail ships it to Loki and the **Landings** Grafana board (Infrastructure folder) plots it, so
 "sessions wait too long" is answered by the phase medians there rather than by memory:
