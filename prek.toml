@@ -390,7 +390,7 @@ id = "actionlint"
 name = "Lint GitHub Actions workflows"
 entry = "uv run --frozen python scripts/validate/actionlint_dollar_refs.py"
 language = "system"
-files = "^(\\.github/(workflows/[^/]+\\.ya?ml|actions/.*|actionlint\\.yaml)|scripts/validate/actionlint_dollar_refs\\.py|scripts/lib/(git|repo_paths)\\.py)$"
+files = "^(\\.github/(workflows/[^/]+\\.ya?ml|actions/.*|actionlint\\.yaml)|scripts/validate/actionlint_dollar_refs\\.py|scripts/lib/(cli_help|exit_codes|git|repo_paths)\\.py)$"
 pass_filenames = false
 
 # The security half of workflow linting, which actionlint does not do: a checkout that leaves

@@ -31,6 +31,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib.cli_help import ArgumentParser
 from lib.git import git
 from lib.repo_paths import REPO
 
@@ -73,5 +74,11 @@ def lint(args: list[str], root: Path = REPO) -> int:
         return subprocess.run(["actionlint", *args], cwd=dest, check=False).returncode
 
 
+def main(argv: list[str] | None = None) -> int:
+    parser = ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("args", nargs="*", help="passed to actionlint")
+    return lint(parser.parse_args(argv).args)
+
+
 if __name__ == "__main__":
-    sys.exit(lint(sys.argv[1:]))
+    sys.exit(main())
