@@ -57,6 +57,10 @@ SOPS_MANIFEST_KEYS = frozenset(
         "authelia_oidc_rsa_key_content",
         # Home Assistant's Google service account, a JSON document.
         "google_assistant_service_account",
+        # The Flux GitHub App's credentials: two all-digit IDs and a PEM block.
+        "flux_github_app_id",
+        "flux_github_app_installation_id",
+        "flux_github_app_private_key",
     }
 )
 

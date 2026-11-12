@@ -358,7 +358,9 @@ def _rendered_secret_names() -> set[str]:
     return {
         d["metadata"]["name"]
         for role, tpl, d in rendered_docs()
-        if role == "flux" and tpl == "secret.yaml.j2" and d["kind"] == "Secret"
+        if role == "flux"
+        and tpl in {"secret.yaml.j2", "github-status-secret.yaml.j2"}
+        and d["kind"] == "Secret"
     }
 
 

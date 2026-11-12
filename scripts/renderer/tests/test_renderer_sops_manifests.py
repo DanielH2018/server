@@ -41,6 +41,7 @@ ENTRIES = {
     "pi-peer-backup": ("ssh-key-secret.yaml", "pi_peer_backup_ssh_key"),
     "qbittorrent": ("mullvad-account-secret.yaml", "mullvad_account"),
     "authelia": ("oidc-jwk-secret.yaml", "authelia_oidc_rsa_key_content"),
+    "flux": ("github-status-secret.yaml", "flux_github_app_private_key"),
 }
 
 
@@ -56,7 +57,7 @@ def _check(entries: dict[str, str | None]) -> list[str]:
     return sops_manifest_entries(render, [GA, "domain", "fixture_token"])
 
 
-def test_the_real_tree_holds_four_entries_is_clean():
+def test_the_real_tree_holds_one_entry_per_role_is_clean():
     entries = {tag: sops_manifests(tag) for tag in select_tags(None)}
     assert {tag: names for tag, names in entries.items() if names} == {
         role: [entry] for role, (entry, _key) in ENTRIES.items()
@@ -198,13 +199,14 @@ def _unlisted(template: str, key: str) -> str:
 
 
 def test_the_real_tree_names_each_key_only_in_an_entry_is_clean():
-    # The clause is an equality: the namers are exactly the four entries' templates.
+    # The clause is an equality: the namers are exactly the entries' templates. A template
+    # that holds several keys appears once per key, so the namers are compared as a set.
     result = rule5(homelab_render.secret_keys())
     entry_templates = sorted(
         f"ansible/roles/k8s/{role}/templates/{entry}.j2"
         for role, (entry, _key) in ENTRIES.items()
     )
-    namers = sorted(template for _tag, template, _key in result.sops_namers)
+    namers = sorted({template for _tag, template, _key in result.sops_namers})
     assert namers == entry_templates
     assert sorted(sops_entry_templates()) == entry_templates
     assert sops_manifest_namers(result) == []

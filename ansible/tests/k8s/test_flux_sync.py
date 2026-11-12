@@ -276,3 +276,34 @@ def test_key_offences_is_clean_on_the_committed_secret():
 )
 def test_key_offences_is_flagged_on_a_private_half_or_a_missing_key(key):
     assert key_offences(_break_glass_secret(flux_break_glass_public_key=key))
+
+
+def test_the_github_status_provider_authenticates_as_a_github_app():
+    """The Secret holds the three App keys and no `token`, with the PEM's newlines intact.
+
+    A PAT in `token` would draw on the operator's own 5,000 requests per hour (#8023).
+    """
+    pem = "-----BEGIN RSA PRIVATE KEY-----\nAAAA\nBBBB\n-----END RSA PRIVATE KEY-----\n"
+    text = render_role_template(
+        "flux",
+        "github-status-secret.yaml.j2",
+        {
+            "flux_github_app_id": 123456,
+            "flux_github_app_installation_id": 7890123,
+            "flux_github_app_private_key": pem,
+        },
+    )
+    (secret,) = (d for d in yaml_fast.safe_load_all(text) if d)
+    assert secret["metadata"]["name"] == "flux-github-status"
+    assert secret["stringData"] == {
+        "githubAppID": "123456",
+        "githubAppInstallationID": "7890123",
+        "githubAppPrivateKey": pem,
+    }
+    provider = next(
+        d
+        for d in _sync_docs()
+        if (d["kind"], d["metadata"]["name"]) == ("Provider", "github-status")
+    )
+    assert provider["spec"]["secretRef"] == {"name": "flux-github-status"}
+    assert provider["spec"]["address"].startswith("https://github.com/")

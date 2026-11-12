@@ -106,7 +106,7 @@ hands them to the end-of-play stabilisation gate, as observability does. Every
 and no controller reads a Secret or ConfigMap through its pod spec; `defaults/main.yml` has the
 full reason. The release record would otherwise owe all three a restart after a
 NetworkPolicy edit, or after a rotation of either Secret that `templates/secret.yaml.j2`
-renders.
+renders or of the SOPS manifest `templates/github-status-secret.yaml.j2`.
 
 **Memory, an idle floor.** On 2026-10-13, with no source configured, `kubectl top pod -n
 flux-system` read source-controller at 16Mi, kustomize-controller at 18Mi and
@@ -217,18 +217,27 @@ OCIRepository `homelab`. `FluxNotReady` stayed quiet for the same reason, and
   scripts/secrets_mgmt/secret_rotation.py sync`, and commit `ansible/secret_rotation.yml`.
   The copy's registry row is on the `external-90d` tier with `source: record`, so the audit
   flags it before the token expires.
-- **`flux_github_status_token` rotation (operator-only).** notification-controller posts
-  commit statuses with this fine-grained token, which has Commit statuses read and write on
-  two repositories, `DanielH2018/server` and `DanielH2018/dotfiles`. It has no expiration
-  date. It lives only in SOPS, with no GitHub secret beside it, and
-  `templates/secret.yaml.j2` renders it into the Secret `flux-github-status`. Its registry
-  row is on the `external` tier, so the audit flags it 365 days after its last rotation,
-  and that audit is the only rotation prompt. To rotate it, mint the
-  replacement, store it with `sops set` as `flux_github_status_token`, run `uv run python
-  scripts/secrets_mgmt/secret_rotation.py sync`, and write the cluster file with
-  `cluster_vars.py write`, then commit. The `flux` Kustomization substitutes the value into
-  the Secret once `promote` publishes the commit. notification-controller reads the Secret on
-  each event, so no controller restarts.
+- **GitHub App credentials rotation (operator-only).** notification-controller posts commit
+  statuses as a GitHub App, which has a rate limit of its own, so a drained operator quota
+  cannot stop a `flux/*` status post (#8023). The App has Commit statuses read and write, no
+  webhook, and an installation on `DanielH2018/server` and `DanielH2018/dotfiles`. The SOPS
+  keys `flux_github_app_id`, `flux_github_app_installation_id` and
+  `flux_github_app_private_key` hold its App ID, its Installation ID and its PEM private key.
+  They live only in SOPS, with no GitHub secret beside them.
+- **The App credentials reach the cluster as a SOPS manifest.** Flux deletes the newlines of a
+  substituted PEM and types an all-digit ID as a number, so all three keys are
+  `SOPS_MANIFEST_KEYS` keys. `render_sops_manifests` ships
+  `templates/github-status-secret.yaml.j2` as D3's SOPS-encrypted copy, and the `flux`
+  Kustomization renders `decryption` with `sops-age`. The Secret `flux-github-status` holds the
+  keys `githubAppID`, `githubAppInstallationID` and `githubAppPrivateKey`, and the
+  `github-status` Provider sets `address` to the repository URL and reads that Secret. To
+  rotate the private key, generate a new one in the App's settings, store it with `sops set`
+  as `flux_github_app_private_key`, run `uv run python
+  scripts/secrets_mgmt/secret_rotation.py sync`, and write the cluster file and the SOPS
+  manifest with `cluster_vars.py write`, then commit. notification-controller reads the
+  Secret on each event, so no controller restarts. The SOPS key `flux_github_status_token`,
+  the operator's former fine-grained token, stays until a follow-up removes it, and no
+  template reads it.
 
 ## The break-glass source form
 
@@ -240,4 +249,5 @@ production render. Normal operation reads the Secret nowhere, because the produc
 verifies keyless against the `promote` identity. The runbook is in `docs/break-glass.md`
 (*GitHub, GHCR or Sigstore is unreachable*), and operator-only to run. `flux-deletion-drill`
 renders this role's templates with the lever on and a throwaway key, so a change to
-`templates/sync.yaml.j2` or `templates/secret.yaml.j2` runs the drill on its PR.
+`templates/sync.yaml.j2`, `templates/secret.yaml.j2` or
+`templates/github-status-secret.yaml.j2` runs the drill on its PR.

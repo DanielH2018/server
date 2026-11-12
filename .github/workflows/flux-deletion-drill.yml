@@ -90,6 +90,7 @@ jobs:
               ansible/roles/k8s/flux/defaults/main.yml \
               ansible/roles/k8s/flux/templates/sync.yaml.j2 \
               ansible/roles/k8s/flux/templates/secret.yaml.j2 \
+              ansible/roles/k8s/flux/templates/github-status-secret.yaml.j2 \
               ansible/roles/k8s/flux/files/gotk-components.yaml \
               ansible/roles/k8s/registry/ \
               ansible/roles/k8s/cluster-base/templates/priorityclass.yaml.j2 \
