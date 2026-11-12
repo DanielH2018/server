@@ -24,6 +24,7 @@ MODULES = frozenset(
         "promotion",
         "health_verdict",
         "own_checkout",
+        "fresh",
         "pipeline",
         "detach",
         "handoff",
@@ -55,6 +56,8 @@ ALLOWED = {
     "tools": {
         "land_flux",
         "own_checkout",
+        # `Tools.fresh_landing`, the checkout `--fresh` lands from (#7933).
+        "fresh",
         "land_reach",
         "land_tags",
         "land_tested_base",
@@ -95,7 +98,15 @@ ALLOWED = {
     # Its boundaries. It imports `promote.py`'s `last-good` reader, outside land_lib.
     "pin_reads": set(),
     "policy": {"landing", "outcome", "pr_json", "gh_read"},
-    "classify": {"landing", "outcome", "land_tags", "own_checkout", "promotion"},
+    "classify": {
+        "landing",
+        "outcome",
+        "land_tags",
+        "own_checkout",
+        "promotion",
+        # The stale-code refusals name `--fresh` as their remedy.
+        "fresh",
+    },
     "closing_refs": {"gh_read", "landing", "outcome"},
     "ci": {"landing", "outcome"},
     "deploy": {
@@ -107,6 +118,8 @@ ALLOWED = {
     "promotion": {"landing", "outcome"},
     "health_verdict": {"landing", "outcome", "promotion"},
     "own_checkout": set(),
+    # Makes a checkout and runs a child land.sh; it imports no phase.
+    "fresh": set(),
     # The fork, the logfile and the verdict wait. It imports no phase: `land.py` hands it a
     # callable and it never knows what a landing is.
     "detach": set(),

@@ -46,7 +46,7 @@ from gitops_hold import DeployerSnapshot, read_field
 from gitops_markers import MARKERS
 from deploy_tools import await_ci
 from deploy_tools.land_lib import land_flux, land_tags, land_tested_base
-from deploy_tools.land_lib import own_checkout, verdict_log
+from deploy_tools.land_lib import fresh, own_checkout, verdict_log
 from deploy_tools.deploy_lib.detach_notify import GateResult, gate as health_gate
 from lib.exit_codes import CI_DISARMED
 from deploy_tools.land_lib.land_tags import Derivation
@@ -381,6 +381,8 @@ class Tools:
     # `handoff.land_through_unit`'s one boundary: starts the lander unit, reads its exit code.
     # The landing's own modules that lag master at a base commit; None when git could not say.
     stale_code: Callable[[str], list[str] | None] = own_checkout.stale_landing_code
+    # `--fresh`: runs `land.sh <argv>` from a new checkout of origin/master; its exit code.
+    fresh_landing: Callable[[Path, list[str]], int] = fresh.land_fresh
     systemctl: Callable[..., subprocess.CompletedProcess[str]] = systemctl
     # Its other boundary: follows the unit's journal, so its phase lines reach the handoff's log.
     follow_journal: Callable[[str, float], subprocess.Popen[str]] = follow_journal
