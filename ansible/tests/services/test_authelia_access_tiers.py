@@ -187,7 +187,10 @@ def test_every_sso_entry_resolves_to_its_declared_tier():
     )[len("*.local.") :]
     for entry in entries:
         host = f"{entry['hostname']}.local.{domain}"
-        assert _policy(rules, host, "10.0.0.5") == entry["auth_tier"], entry["name"]
+        # As an `admins` member, so karma's subject-scoped rule yields its declared tier.
+        assert (
+            _policy(rules, host, "10.0.0.5", groups=("admins",)) == entry["auth_tier"]
+        ), entry["name"]
         # The LAN tier is the LAN name's alone: the public name stays two_factor.
         assert (
             _policy(rules, f"{entry['hostname']}.{domain}", "1.2.3.4") == "two_factor"
@@ -221,26 +224,31 @@ def test_the_one_factor_rule_is_scoped_like_the_wildcard_it_replaces():
     assert wildcard["networks"] == RFC1918
 
 
-def _alertmanager_host(rules):
+def _silence_ui_host(rules, name):
     domain = next(
         r["domain"] for r in rules if str(r["domain"]).startswith("*.local.")
     )[len("*.local.") :]
-    return f"alertmanager.local.{domain}"
+    return f"{name}.local.{domain}"
 
 
-def test_an_admins_member_reaches_alertmanager_at_two_factor():
-    """The silence-capable UI asks the `admins` group, claude-ui included, for a second
+SILENCE_UIS = ["karma", "alertmanager"]
+
+
+@pytest.mark.parametrize("name", SILENCE_UIS)
+def test_an_admins_member_reaches_a_silence_ui_at_two_factor(name):
+    """A silence-capable UI asks the `admins` group, claude-ui included, for a second
     factor rather than riding the `*.local` one_factor wildcard (#6689)."""
     rules = _rendered_rules()
-    host = _alertmanager_host(rules)
+    host = _silence_ui_host(rules, name)
     assert _policy(rules, host, "10.0.0.5", groups=("admins", "dev")) == "two_factor"
 
 
-def test_a_user_outside_admins_is_denied_alertmanager():
+@pytest.mark.parametrize("name", SILENCE_UIS)
+def test_a_user_outside_admins_is_denied_a_silence_ui(name):
     """claude-agent has no groups and holds a one_factor session. Without the `deny` rule
     it would skip the subject-scoped rule and fall through to the `*.local` wildcard."""
     # fact: ansible/roles/k8s/authelia/CLAUDE.md#Access control comes from containers_list
     rules = _rendered_rules()
-    host = _alertmanager_host(rules)
+    host = _silence_ui_host(rules, name)
     assert _policy(rules, host, "10.0.0.5") == "deny"
     assert _policy(rules, host, "192.168.1.20", groups=("dev",)) == "deny"

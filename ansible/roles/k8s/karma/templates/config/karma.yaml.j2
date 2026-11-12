@@ -1,0 +1,46 @@
+alertmanager:
+  interval: 30s
+  servers:
+    - name: homelab
+      uri: http://alertmanager.{{ k8s_observability_namespace }}.svc.cluster.local:9093
+      timeout: 10s
+      # The browser cannot reach the in-cluster URI, so silence writes go through karma.
+      proxy: true
+      healthcheck:
+        filters:
+          watchdog:
+            - alertname=Watchdog
+authentication:
+  header:
+    name: Remote-User
+    value_re: ^(.+)$
+filters:
+  default:
+    - "@state=active"
+    - "@receiver!=blackhole"
+grid:
+  sorting:
+    order: label
+    reverse: false
+    label: severity
+    customValues:
+      labels:
+        severity:
+{% for sev in karma_severities %}
+          {{ sev.value }}: {{ loop.index }}
+{% endfor %}
+labels:
+  order:
+    - severity
+  color:
+    custom:
+      severity:
+{% for sev in karma_severities %}
+        - value: {{ sev.value }}
+          color: "{{ sev.color }}"
+{% endfor %}
+listen:
+  address: 0.0.0.0
+  port: {{ container_item.port }}
+ui:
+  colorTitlebar: true

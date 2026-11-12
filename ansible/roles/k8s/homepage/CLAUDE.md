@@ -102,9 +102,9 @@ that bite from a config edit alone.
   ENFORCED by `ansible/tests/services/test_homepage_block_label_overrides.py`. A widget that
   takes a `label:` per block, `customapi` or `prometheusmetric`, names its blocks in config and
   needs no rename; the Alertmanager tile is one.
-- **The Alertmanager tile's `href` is hand-written.** The observability entry's `hostname` is
-  `grafana`, and `alertmanager.local.<domain>` is a second route behind Authelia `two_factor`
-  (M6 B-4). Its three blocks count firing critical and warning alerts without `shadow="true"`
+- **The Alertmanager tile links to Karma's LAN name.** Karma is the alert UI, and its route
+  matches no public name, so the tile passes `lan=True` to `homepage_href`. Its three blocks
+  read Prometheus, not Karma. They count firing critical and warning alerts without `shadow="true"`
   or `drill="true"`, the two the routing tree blackholes, and the Watchdog.
 - **The Longhorn widget is configured across TWO files, and the wrong half is silent.**
   `providers.longhorn.url` in `templates/config/settings.yaml.j2` holds the connection;

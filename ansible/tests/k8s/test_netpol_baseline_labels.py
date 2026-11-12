@@ -73,6 +73,10 @@ BORN_FENCED_ROLES = {
     # egress (unenforced here) plus an `app: pihole-exporter` podSelector in
     # netpol-baseline/templates/networkpolicy-pihole.yaml.j2.
     "pihole-exporter",
+    # The alert UI. Traefik is its only caller. It dials Alertmanager in the observability
+    # namespace, which is egress (unenforced here) plus the `app: karma` podSelector in
+    # netpol-baseline/templates/networkpolicy-alertmanager.yaml.j2.
+    "karma",
     # GPU utilization from DRM sysfs. The simplest shape in this set: Prometheus is its only
     # caller, which the baseline already admits, and it makes NO outbound connection of any
     # kind — it reads the kernel through a read-only /host/sys mount, so unlike its two

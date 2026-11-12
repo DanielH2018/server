@@ -161,13 +161,9 @@ def test_an_override_landing_past_the_end_of_a_fields_list_is_rejected():
 
 
 def alertmanager_tile() -> dict:
-    """The body of the one tile linking to the Alertmanager UI."""
-    found = [
-        body for _name, body in tiles() if "alertmanager." in (body.get("href") or "")
-    ]
-    assert len(found) == 1, (
-        f"expected one tile linking to alertmanager., got {len(found)}"
-    )
+    """The body of the one tile linking to Karma, the alert UI."""
+    found = [body for _name, body in tiles() if "karma." in (body.get("href") or "")]
+    assert len(found) == 1, f"expected one tile linking to karma., got {len(found)}"
     return found[0]
 
 
@@ -184,7 +180,7 @@ def test_the_alertmanager_tile_names_its_blocks_in_config():
         "Warning",
         "Watchdog",
     ]
-    assert not [key for key in css_overrides(custom_css()) if "alertmanager." in key[0]]
+    assert not [key for key in css_overrides(custom_css()) if "karma." in key[0]]
 
 
 def blackholed_matchers() -> set[str]:
