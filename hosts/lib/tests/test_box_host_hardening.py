@@ -16,13 +16,28 @@ from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
 from lib.render_context import render_context
 from lib.repo_paths import REPO
-from test_pi_host_hardening import BLACKLIST, BLACKLIST_WRITTEN, WRITTEN
+from test_pi_host_hardening import (
+    BLACKLIST,
+    BLACKLIST_WRITTEN,
+    SUDOERS,
+    SUDOERS_DIRECTIVE,
+    WRITTEN,
+    sudoers_directives,
+)
 
 from renderer.renderer_lib import host as host_mode
 
 FILTER = "/etc/rsyslog.d/49-homelab-info-filter.conf"
 I915 = "/etc/modprobe.d/i915.conf"
-BASELINE_PATHS = {*WRITTEN, BLACKLIST, FILTER, I915, "/etc/issue", "/etc/issue.net"}
+BASELINE_PATHS = {
+    *WRITTEN,
+    SUDOERS,
+    BLACKLIST,
+    FILTER,
+    I915,
+    "/etc/issue",
+    "/etc/issue.net",
+}
 
 
 @pytest.fixture(scope="module")
@@ -33,6 +48,10 @@ def package() -> host_mode.Package:
 @pytest.mark.parametrize("dst", sorted(WRITTEN))
 def test_daniel_box_ships_the_bytes_the_role_wrote(package, dst):
     assert package.files[dst][0].decode() == WRITTEN[dst]
+
+
+def test_daniel_box_ships_the_sudoers_directive_the_role_wrote(package):
+    assert sudoers_directives(package.files[SUDOERS][0]) == [SUDOERS_DIRECTIVE]
 
 
 def test_daniel_box_ships_the_filter_and_adopts_the_blacklist(package):

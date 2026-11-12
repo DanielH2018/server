@@ -25,13 +25,8 @@ BANNER = (
     "All connections are monitored and recorded.\n"
     "Disconnect immediately if you are not an authorized user.\n"
 )
-# The bytes initial_setup's tasks wrote to each path before H7.60 deleted them. The sudoers
-# header names the component that ships it since #8072.
+# The bytes initial_setup's tasks wrote to each path before H7.60 deleted them.
 WRITTEN = {
-    SUDOERS: (
-        "# Shipped by the host-hardening host component — edits here are overwritten.\n"
-        "Defaults timestamp_type=global, timestamp_timeout=60\n"
-    ),
     "/etc/audit/rules.d/hardening.rules": (
         "# Identity file changes\n"
         "-w /etc/passwd -p wa -k identity\n"
@@ -48,6 +43,8 @@ WRITTEN = {
         "[Coredump]\nStorage=none\nProcessSizeMax=0\n"
     ),
 }
+# The one directive the task wrote to SUDOERS; the file's comment header is the component's own.
+SUDOERS_DIRECTIVE = "Defaults timestamp_type=global, timestamp_timeout=60"
 BLACKLIST_WRITTEN = (
     "install dccp /bin/true\n"
     "install sctp /bin/true\n"
@@ -84,7 +81,6 @@ def _edits(package: host_mode.Package, path: str) -> list[dict]:
 @pytest.mark.parametrize(
     "dst, mode",
     [
-        (SUDOERS, 0o440),
         ("/etc/audit/rules.d/hardening.rules", 0o640),
         ("/etc/modules-load.d/wireguard.conf", 0o644),
         ("/etc/systemd/coredump.conf.d/disable.conf", 0o644),
@@ -94,6 +90,16 @@ def test_each_shipped_file_holds_the_bytes_and_mode_its_task_wrote(package, dst,
     data, shipped_mode = package.files[dst]
     assert data.decode() == WRITTEN[dst]
     assert shipped_mode == mode
+
+
+def sudoers_directives(data: bytes) -> list[str]:
+    return [ln for ln in data.decode().splitlines() if ln and not ln.startswith("#")]
+
+
+def test_the_sudoers_file_holds_only_the_directive_its_task_wrote(package):
+    data, shipped_mode = package.files[SUDOERS]
+    assert sudoers_directives(data) == [SUDOERS_DIRECTIVE]
+    assert shipped_mode == 0o440
 
 
 def test_visudo_accepts_the_sudoers_file_and_rejects_a_broken_copy(package, tmp_path):
