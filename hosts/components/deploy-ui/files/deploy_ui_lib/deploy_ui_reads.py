@@ -12,7 +12,7 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
-_RUN_RE = re.compile(r"\b(land\.py|ansible-playbook)\b")
+_RUN_RE = re.compile(r"\bland\.py\b")
 _PR_RE = re.compile(r"--pr\s+(\d+)")
 _TAGS_RE = re.compile(r"--tags[= ]+(\S+)")
 # `grep` is whoever is looking for a run, not a run.
@@ -29,7 +29,7 @@ class Proc:
 
 @dataclass(frozen=True)
 class Run:
-    """One process family in flight: a landing, a deploy, or a bare lock holder.
+    """One process family in flight: a landing or a bare lock holder.
 
     `locks` names the lock files the family holds and `waiting_on` the ones it is queued
     on, both by basename. A process blocked on a lock has the file OPEN for the whole
@@ -135,10 +135,9 @@ def runs(
     """Fold processes into one row per family.
 
     The topmost run or lock holder on a pid's ancestor chain owns every run and holder
-    below it. A landing is `uv run … land.py`, its python child, and any
-    `ansible-playbook` it spawns: one row, kind `land`. A terminal playbook run is
-    `uv run ansible-playbook` and its child: one row, kind `deploy`. A lock
-    holder that is neither — the GitOps tick on the tree lock — is a row of kind `lock`,
+    below it. A landing is `uv run … land.py`, its python child, and every process it
+    spawns: one row, kind `land`. A lock holder that is not a landing — the GitOps tick
+    on the tree lock — is a row of kind `lock`,
     so a held lock is never invisible because its holder matched no pattern. fuser lists
     every process with the file open, children included, which is why the fold has to
     include holders and not only runs.
@@ -175,12 +174,7 @@ def runs(
                 waiting.append(name)
             elif lock and lock.held:
                 holding.append(name)
-        if "land.py" in p.args:
-            kind = "land"
-        elif _is_run(p.args):
-            kind = "deploy"
-        else:
-            kind = "lock"
+        kind = "land" if _is_run(p.args) else "lock"
         pr = _PR_RE.search(p.args)
         tag = _TAGS_RE.search(p.args)
         rows.append(

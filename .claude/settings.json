@@ -2,7 +2,6 @@
   "disableClaudeAiConnectors": true,
   "permissions": {
     "allow": [
-      "Bash(ansible-lint *)",
       "Bash(git check-ignore *)",
       "Bash(uv run python scripts/diagnostics/probe.py:*)",
       "Bash(kubectl get *)",

@@ -1,8 +1,7 @@
 {
     "ansible.python.interpreterPath": "/bin/python3",
     "ansible.validation.enabled": true,
-    "ansible.validation.lint.enabled": true,
-    "ansible.validation.lint.arguments": "--config-file .ansible-lint",
+    "ansible.validation.lint.enabled": false,
     "files.exclude": {
         "containers/code-server/config/extensions": true
     },
@@ -12,7 +11,6 @@
         "Email-to-RSS/.wrangler": true
     },
     "files.associations": {
-        "*.yml.j2": "jinja-yaml",
-        ".ansible-lint": "yaml"
+        "*.yml.j2": "jinja-yaml"
     }
 }

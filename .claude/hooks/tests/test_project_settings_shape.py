@@ -97,7 +97,6 @@ def test_the_read_only_check_accepts_a_read_verb():
 @pytest.mark.parametrize(
     "rule",
     [
-        "Bash(ansible-lint *)",
         "Bash(git check-ignore *)",
         "Bash(uv run python scripts/diagnostics/probe.py:*)",
     ],

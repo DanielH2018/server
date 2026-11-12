@@ -11,17 +11,6 @@ ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # give a future Pi-exposed service a "daniel-pi" hostname, use a `pi.`-prefixed subdomain of the
 # working zone (e.g. glances.pi.daniel-hunter.com — real DNS via cloudflare-ddns), not a
 # separate daniel-pi.com zone.
-# Escalation-prompt budget for a 456 MB Zero 2 W. ansible-core's ssh plugin waits
-# `2 + timeout` seconds for sudo's prompt (plugins/connection/ssh.py, "Timeout (%ds) waiting
-# for privilege escalation prompt"), and `timeout` defaults to 10 — so a sudo that takes
-# longer than 12 s to prompt reads as UNREACHABLE, not as slow. Measured with every container
-# in its limit (alloy 30 MiB of 96): 456 MB total, 308 used,
-# 148 available, 319 MB of swap in use on the SD card, load average 1.21 — the host daemons
-# (alloy, dockerd, containerd, node_exporter) hold the RAM, and sudo pages in behind them.
-# 30 s (32 s at the prompt) is four times the observed floor and still fails fast. This is the
-# per-host spelling of `[defaults] timeout`; there is no become-specific timeout var in the
-# pinned core. A retry loop is the wrong shape: the wait is the whole cost.
-ansible_ssh_timeout: 30
 # The only Docker host, so this is the one host that
 # opts IN to the engine (group_vars/all.yml defaults it false). Every service in
 # compose_services below runs on it.

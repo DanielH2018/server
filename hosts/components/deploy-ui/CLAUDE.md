@@ -50,9 +50,8 @@ descriptor, so the holder comes from fuser and only the waiter from `/proc/locks
 
 `ps` with `ppid` folds each process family to one row carrying `locks` (held) and
 `waiting_on`. A landing (`land.py`, its `uv run` wrapper and its children) is one `land`
-row. A bare `ansible-playbook` run is one `deploy` row. A holder that matches neither
-pattern, such as the GitOps tick on the tree lock, is a `lock` row rather than nothing.
-A `grep` for a run is not a run. fuser lists only processes whose `/proc/<pid>/fd` this
+row. A holder that is not a landing, such as the GitOps tick on the tree lock, is a `lock`
+row rather than nothing. A `grep` for a run is not a run. fuser lists only processes whose `/proc/<pid>/fd` this
 user can read; every landing here runs as `{{ sys_user }}`, the daemon's own user.
 
 A landing row carries its PR's title. A landing merges its PR mid-run, which drops it from
@@ -60,8 +59,7 @@ A landing row carries its PR's title. A landing merges its PR mid-run, which dro
 daemon's life. A failed lookup leaves the title blank and is retried on the next poll; it
 never makes the lock panel unavailable. The page links each PR number to its GitHub page.
 
-Only a `land` row is cancellable. SIGTERM to a playbook mid-play leaves whatever applied
-before it live, which is not a cancel.
+Only a `land` row is cancellable.
 
 The daemon runs outside the venv. The unit renders `DEPLOY_UI_TREE_LOCK` from
 `server_git_tree_lock`.
