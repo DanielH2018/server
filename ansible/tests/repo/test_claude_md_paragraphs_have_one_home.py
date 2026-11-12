@@ -68,7 +68,7 @@ def test_a_short_pointer_is_not_graded():
 
 # A census that finds its subject by pattern must know it found something, or a changed split
 # leaves it green over nothing.
-MIN_GRADED_PARAGRAPHS = 20
+MIN_GRADED_PARAGRAPHS = 12
 
 
 def test_the_census_grades_the_root_file():

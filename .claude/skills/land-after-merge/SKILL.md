@@ -69,7 +69,8 @@ does not kill it either. The log's first line names that scope, which is the way
 landing itself. `--since` is
 resolved from `origin/master` before the merge is armed, so you do not pass it.
 
-`land.sh --help` prints the flags, the exit codes and the verdicts.
+`land.sh --help` prints the flags, the exit codes and the verdicts. `homelab-checkout-sync`
+pulls all of master, not just your commit, so a `--tags` override names your own services only.
 
 ```bash
 ./scripts/deploy_tools/land.sh --pr <n> --tags sonarr,radarr ...   # skip derivation, scope by hand

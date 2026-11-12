@@ -186,7 +186,9 @@ A role's templates render with these variables, resolved for daniel-box:
   with the stub file's variables over all of them;
 - `containers_list`: the k8s entries only, in the dependency order of `toposort_containers`.
   `scripts/renderer/renderer_lib/context.py` builds it with two filters from
-  `ansible/filter_plugins/toposort.py`, and templates read that order;
+  `ansible/filter_plugins/toposort.py`, and templates read that order. An entry's position
+  in the inventory list therefore does not matter: an ordering no template carries goes in
+  `depends_on:` on the entry;
 - `container_item`, the tag's own entry from that list;
 - `hostvars` for every host in `ansible/inventory/hosts.ini`. daniel-box's entry is the
   rendered context, so `hostvars[k8s_primary_node].containers_list` is that same list.
