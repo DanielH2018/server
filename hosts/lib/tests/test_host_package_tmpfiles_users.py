@@ -1,9 +1,10 @@
 """Each host package's tmpfiles.d lines hold on a fresh host, where bootstrap step 5 runs them.
 
 Step 5 of `hosts/bootstrap-host.sh` runs `systemd-sysusers`, then `systemd-tmpfiles --create`,
-straight after the install. A line naming a user the package does not declare fails there, and
-a missing parent under the operator's home is created root-owned, which tmpfiles then refuses as
-an unsafe path transition (#8088).
+straight after the install; `test_bootstrap_host.py` holds that order. These tests hold what the
+packages declare. A line naming a user no package declares fails at step 5, and a missing parent
+under the operator's home is created root-owned, which tmpfiles then refuses as an unsafe path
+transition (#8088).
 
 Run: uv run pytest hosts/lib/tests/test_host_package_tmpfiles_users.py
 """
@@ -19,52 +20,76 @@ SYS_USER = "ubuntu"
 # The Ubuntu image's users and groups; the installer creates the operator's.
 BASE = {"root", "adm", SYS_USER}
 HOME = PurePosixPath("/home") / SYS_USER
+SYSUSERS = "/usr/lib/sysusers.d/homelab.conf"
+
+Files = dict[str, tuple[bytes, int]]
 
 
-def tmpfiles_lines(package: host_mode.Package) -> list[list[str]]:
+def tmpfiles_lines(files: Files) -> list[list[str]]:
     return [
         line.split()
-        for dst, (body, *_) in package.files.items()
+        for dst, (body, _mode) in files.items()
         if dst.startswith(("/usr/lib/tmpfiles.d/", "/etc/tmpfiles.d/"))
         for line in body.decode().splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
 
 
-@pytest.fixture(scope="module", params=HOSTS)
-def package(request) -> host_mode.Package:
-    return host_mode.render_host(request.param)
-
-
-def test_every_user_a_tmpfiles_line_names_exists_once_sysusers_has_run(package):
-    sysusers = package.files.get("/usr/lib/sysusers.d/homelab.conf")
+def undeclared_users(files: Files) -> set[str]:
+    """The users and groups tmpfiles lines name that neither the image nor sysusers.d creates."""
+    sysusers = files.get(SYSUSERS, (b"", 0))[0].decode()
     declared = {
-        line.split()[1]
-        for line in (sysusers[0].decode() if sysusers else "").splitlines()
-        if line.startswith("u ")
+        line.split()[1] for line in sysusers.splitlines() if line.startswith("u ")
     }
     named = {
         owner.lstrip(":")
-        for fields in tmpfiles_lines(package)
+        for fields in tmpfiles_lines(files)
         for owner in fields[3:5]
         if owner != "-" and not owner.lstrip(":").isdigit()
     }
-    assert named - BASE - declared == set()
+    return named - BASE - declared
+
+
+@pytest.fixture(scope="module")
+def packages() -> dict[str, Files]:
+    return {host: host_mode.render_host(host).files for host in HOSTS}
+
+
+def test_every_user_a_tmpfiles_line_names_is_declared_in_sysusers_d(packages):
+    assert {host: undeclared_users(files) for host, files in packages.items()} == {
+        host: set() for host in HOSTS
+    }
+
+
+def test_a_tmpfiles_line_naming_an_undeclared_user_is_reported(packages):
+    planted = b"d /var/lib/planted 0700 planted root -\n"
+    files = {
+        **packages["daniel-box"],
+        "/usr/lib/tmpfiles.d/planted.conf": (planted, 0o644),
+    }
+
+    assert undeclared_users(files) == {"planted"}
 
 
 def test_every_parent_under_the_operators_home_is_declared_and_owned_by_the_operator(
-    package,
+    packages,
 ):
-    owners = {
-        PurePosixPath(fields[1]): fields[3].lstrip(":")
-        for fields in tmpfiles_lines(package)
-        if len(fields) > 3
-    }
-    undeclared = {
-        str(parent)
-        for path in owners
-        if HOME in path.parents
-        for parent in path.parents
-        if HOME in parent.parents and owners.get(parent) != SYS_USER
-    }
+    nested, undeclared = set(), set()
+    for host, files in packages.items():
+        owners = {
+            PurePosixPath(fields[1]): fields[3].lstrip(":")
+            for fields in tmpfiles_lines(files)
+            if len(fields) > 3
+        }
+        for path in owners:
+            for parent in path.parents:
+                if HOME in parent.parents:
+                    nested.add((host, str(parent)))
+                    if owners.get(parent) != SYS_USER:
+                        undeclared.add((host, str(parent)))
+
+    assert {
+        ("daniel-box", str(HOME / ".claude")),
+        ("daniel-pi", str(HOME / "server")),
+    } <= nested
     assert undeclared == set()
