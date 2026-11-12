@@ -144,7 +144,7 @@ Most cluster-reading crons become CronJobs, one family per PR, and a few stay on
 decision (H2). Two native features replace hand-written ones: Longhorn's `filesystem-trim`
 RecurringJob and k3s `etcd-s3` snapshots to R2. Those snapshots exclude the server token. The
 token stays out of band, as `docs/break-glass.md` item 2 records, and a daily comparison on
-daniel-box reports drift (H2). H7's fresh join decides whether agents move to an agent-scoped
+daniel-box reports drift (H2). The agent keeps the server token, and H7 adds no agent-scoped
 token (H6 Open question 4).
 
 Registry garbage collection does not move. D5 retires it in wave D, because after D5.4 no
@@ -420,8 +420,9 @@ a tag that is not flux-owned (M6 Open question 4), so that flip waits on the dri
 1. **The `Depends` question.** Whether the updater's `apt-get install` installs a newly added
    `Depends` cleanly on every host. H3 tests it first. If it fails, ansible-pull becomes the
    host plan and H4 to H7 are revised.
-1. **Reconciler size.** Whether the reconcilers for ufw, libvirt and users stay small enough
-   to justify a second mechanism beside dpkg. Each H-slice that adds one reports its size.
+1. **Reconciler size.** Whether the four reconcilers, for ufw, libvirt, users and in-place
+   line edits ([ADR-0029](../adr/0029-each-host-is-configured-by-its-own-package-not-ansible.md)),
+   stay small enough to justify a second mechanism beside dpkg. Each H-slice that adds one reports its size.
    H7 sets a line ceiling on reconcile as an exit criterion. Crossing it is the trigger to
    switch the host plan to ansible-pull.
 1. **The host trust anchor** (H3 Open question 1, ruled 2026-10-14). The builder trusts a

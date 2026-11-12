@@ -26,7 +26,7 @@ LIB = REPO / "hosts" / "lib"
 # The 30% is headroom for fixes inside that scope, not room for another arm.
 #
 # DECIDED: raising CEILING is an operator ruling, never part of an ordinary change. Crossing it
-# is design.md's trigger to cut reconcile, to raise the ceiling in the H7 ADR with a reason, or
+# is design.md's trigger to cut reconcile, to raise the ceiling in ADR-0029 with a reason, or
 # to switch the host plan to ansible-pull. The ceiling and its derivation are in
 # docs/target-architecture/host/h7-delete-ansible.md, *Reconcile's line ceiling*.
 BASE_LINES = 326
