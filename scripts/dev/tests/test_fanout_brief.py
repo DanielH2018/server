@@ -43,7 +43,7 @@ def test_the_landing_brief_tells_the_agent_what_a_pending_host_apply_needs():
     """
     box = render_brief(ISSUES, "daniel-box", "1345-1386", "worktree-orch", [])
     assert "needs-manual-apply" in box and "blocked" in box
-    assert "probe.py landing" in box and "manual_plane" in box
+    assert "probe.py landing" in box and "DEPLOY_HOLD" in box
     assert "MANUAL APPLY PENDING" in box
 
 
@@ -51,7 +51,7 @@ def test_the_non_landing_brief_carries_no_pending_apply_instruction():
     """The CLEAN half. A daniel-server agent must not merge, so it owes no apply and must not
     be sent to read the deployer's markers."""
     server = render_brief(ISSUES, "daniel-server", "1345-1386", "worktree-orch", [])
-    assert "probe.py landing" not in server and "manual_plane" not in server
+    assert "probe.py landing" not in server and "DEPLOY_HOLD" not in server
     assert "MANUAL APPLY PENDING" not in server
 
 

@@ -23,8 +23,6 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from gitops_hold import DeployerSnapshot
-from gitops_markers import STATE_DIR
 from host_lib import discord_post, flush_discord_spool
 from host_lib import log as host_log
 
@@ -73,7 +71,7 @@ def run(
 
 @dataclass(frozen=True)
 class AgentTools:
-    """The boundaries the worktree, census, hold-gate, crash-report and spool-flush paths cross.
+    """The boundaries the worktree, census, crash-report and spool-flush paths cross.
 
     The defaults are production, so `main()` passes nothing.
 
@@ -87,12 +85,6 @@ class AgentTools:
     flush_discord_spool: Callable[..., bool] = flush_discord_spool
     rmtree: Callable[..., None] = shutil.rmtree
     read_file: Callable[[str], str] = read_file
-    # The deployer's markers, which `decide` gates on. Raises OSError or UnicodeDecodeError
-    # when one exists and cannot be read, unlike `read_file`, so an unreadable `hold_sha`
-    # never reads as no hold.
-    deployer_state: Callable[[], DeployerSnapshot] = lambda: DeployerSnapshot.load(
-        STATE_DIR
-    )
 
 
 TOOLS = AgentTools()

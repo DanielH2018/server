@@ -12,10 +12,10 @@ import dataclasses
 import json
 import os
 import shutil
-import types
 
 import pytest
 from _setup_render import render_setup_text
+from _wifi_fallback import WIFI_FILE, WIFI_RENDERED, installed_wifi_file
 
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY, role_defaults
@@ -28,8 +28,6 @@ HOST = "daniel-box"
 SYSTEM = "/usr/lib/systemd/system/"
 COMPONENTS = REPO / "hosts" / "components"
 TOOLS = REPO / "hosts" / "packages" / "homelab-tools" / "package.yml"
-WIFI_FILE = "/etc/netplan/80-homelab-wifi-fallback.yaml"
-WIFI_RENDERED = "/var/lib/homelab-secrets/netplan/80-homelab-wifi-fallback.yaml"
 # Each cron file `setup/k3s` installed, with the timer that replaces it and its OnCalendar.
 TIMERS = {
     "longhorn-backup-health": ("homelab-longhorn-backup-health", "*:00/10"),
@@ -296,21 +294,6 @@ def test_the_kubeconfig_oneshot_waits_for_k3s_rather_than_failing(package):
     assert "ConditionPathExists=/etc/rancher/k3s/k3s.yaml\n" in unit
 
 
-def _wifi_file(package, ssid: str, password: str) -> dict:
-    """The installed wifi file as netplan parses it, through homelab-secrets' own substitution."""
-    script = REPO / "hosts" / "lib" / "homelab-secrets"
-    secrets = types.ModuleType("homelab_secrets")
-    exec(compile(script.read_text(), str(script), "exec"), secrets.__dict__)
-    (output,) = [o for o in package.outputs if "wifi_password" in o["keys"]]
-    rendered = secrets.substitute(
-        text(package, f"/usr/lib/homelab/secret-templates{WIFI_FILE}"),
-        set(output["keys"]),
-        {"wifi_ssid": ssid, "wifi_password": password},
-        output.get("format"),
-    )
-    return yaml_fast.safe_load(rendered)
-
-
 def test_the_wifi_secrets_reach_netplan_only_through_the_guarded_copy(package):
     """A symlink in /etc/netplan would fail `netplan generate` while the output is missing."""
     assert WIFI_FILE not in package.links and WIFI_FILE not in package.files
@@ -321,7 +304,7 @@ def test_the_wifi_secrets_reach_netplan_only_through_the_guarded_copy(package):
 
 @pytest.mark.parametrize("password", ['pa"ss', "ab\\tc", "plain"])
 def test_a_password_reaches_netplan_unchanged(package, password):
-    file = _wifi_file(package, 'home "net"', password)
+    file = installed_wifi_file(package, 'home "net"', password)
     assert file["network"]["wifis"]["wlp4s0"]["access-points"] == {
         'home "net"': {"password": password}
     }
@@ -333,7 +316,7 @@ def test_the_json_wifi_file_equals_the_roles_yaml_template(package):
         "netplan-wifi-fallback.yaml.j2",
         {"k3s_node_wifi_link": "wlp4s0", "wifi_ssid": "home", "wifi_password": "pw"},
     )
-    assert _wifi_file(package, "home", "pw") == yaml_fast.safe_load(role)
+    assert installed_wifi_file(package, "home", "pw") == yaml_fast.safe_load(role)
 
 
 def _run_wifi_copy(tmp_path, generate_rc: int):

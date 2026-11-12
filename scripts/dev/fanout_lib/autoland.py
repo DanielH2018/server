@@ -135,7 +135,6 @@ class Boundaries:
         release: remove a checkout.
         running: whether a live `land.py` names this PR.
         local_records: daniel-box's own recent review records, for the waiting gauge.
-        owed: the deployer's `owed.jsonl`, for the waiting gauge.
         clock: the epoch second now.
         testpaths_only: whether the PR at this head changes `pyproject.toml` only in `testpaths`.
         role_docs_only: whether the PR's files under `DOC_ONLY_ROLES` are all `CLAUDE.md` files
@@ -157,7 +156,6 @@ class Boundaries:
     local_records: Callable[[], list[dict]] = lambda: operator_waits.read_local_records(
         READER
     )
-    owed: Callable[[], str] = lambda: operator_waits.read_owed()
     open_issues: Callable[[], list[dict]] = lambda: read_open_issues()
     clock: Callable[[], float] = time.time
     testpaths_only: Callable[[str], bool] = lambda head: (
@@ -475,7 +473,6 @@ def write_waits(
     starts = operator_waits.waits(
         [(b.judge(r, prs[n]), r) for n, r in server.items()],
         [(b.judge(r, prs[n]), r) for n, r in box.items()],
-        operator_waits.owed_manual_planes(b.owed()),
     )
     body = operator_waits.render(starts, b.clock())
     try:

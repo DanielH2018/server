@@ -6,17 +6,6 @@ state behind it once. This subcommand reads that state on demand, as one JSON do
 
 Every fact comes from a reader that already exists; this module only joins them:
 
-- **Hold.** Where this user can read the deployer's state directory, `hold_sha` and the
-  `owed` ledger are read directly, through `gitops_markers` and `gitops_ledger`. Anywhere else,
-  including a user on the deployer's host the directory's mode shuts out, deploy-ui's
-  `/api/state` serves the same two through those same modules.
-- **Manual planes.** Read from the ledger through `gitops_ledger.manual_plane_entries`, and
-  worded by `deployer_park.manual_plane_lines`, the banner's renderer. The text view prints
-  each role's apply and clear commands on lines of their own, from
-  `deployer_park.manual_plane_remedies`, so each pastes as it stands. deploy-ui serves that
-  class's raw ledger lines as `manual_plane_owed`, so both paths word them the same way. A
-  deploy-ui that predates the key leaves the field `null` (unknown), never `[]`: an empty list
-  would read as "nothing owed" when the truth is "not readable from here".
 - **Master CI.** The newest `ci.yml` run on master, through `gh`. A conclusion in
   `deploy_git._CI_NO_VERDICT_CONCLUSIONS` is no verdict and a run in progress is pending.
   Neither is red, per `docs/landing.md`.
@@ -43,8 +32,8 @@ Every fact comes from a reader that already exists; this module only joins them:
   carries (`fanout_lib.launch.worktree_path`: `fanout-<n>-<n>`), because a fan-out batch's
   issues are claimed under the orchestrator's branch, not the batch's.
 
-`blockers` is the list a landing would stop on: a non-empty hold, a red master CI, or an owed
-manual plane. It is computed here rather than in the mod so that the band, the model's
+`blockers` is the list a landing would stop on: a `DEPLOY_HOLD` other than `none`, or a red
+master CI. It is computed here rather than in the mod so that the band, the model's
 system-prompt section and this command's text view cannot disagree. A blocker line carries no
 age or other value that moves each minute: the mod puts the list in the system prompt, and a
 line that changed every read would rewrite the prompt on every turn. Because that prompt is
@@ -67,7 +56,6 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "deploy_tools"))
 
 import functools
 import json
-import os
 import re
 import socket
 import subprocess
@@ -78,9 +66,9 @@ from collections.abc import Callable
 from pathlib import Path
 
 from land_lib.detach import _VERDICT_LINE, default_log_dir, error_in, verdict_in
-from lib import deployer_park, yaml_fast
+from lib import yaml_fast
 from lib.ansible_inventory import GITOPS_HOST, host_vars_file
-from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO, ROLES
+from lib.repo_paths import HOST_LIB_FILES, REPO
 
 from diagnostics.probe_lib.promote_state import (
     LIVE_PROMOTE_READS,
@@ -88,11 +76,9 @@ from diagnostics.probe_lib.promote_state import (
     hold_lines,
 )
 
-# The deployer's own modules, so the CI and ledger rules are its rules and not a copy.
-_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from deployer_lib.deploy_git import _CI_NO_VERDICT_CONCLUSIONS
-from gitops_hold import DeployerSnapshot
-from gitops_ledger import held_planes
+# The host-side verdict logic, so the CI rule is the builder's and not a copy.
+_sys.path.insert(0, str(HOST_LIB_FILES))
+from ci_verdict import _CI_NO_VERDICT_CONCLUSIONS
 
 # deploy-ui's daemon on the deployer's host: `deploy_ui_port` in
 # `hosts/components/deploy-ui/defaults/main.yml`. Its ufw rules admit every node IP, which
@@ -156,11 +142,8 @@ def parse_worktrees(porcelain: str) -> list[dict]:
     return trees
 
 
-# The blocker lines go into every deck session's system prompt (#3793), and off the deployer's
-# host the hold and the owed roles come from deploy-ui's `/api/state`. So a line interpolates
-# only a value checked against a closed shape: a hex SHA, a setup role this checkout has, a
-# GitHub Actions run URL. A free-text field, such as a held plane's tags, is counted instead.
-_HEX_SHA = re.compile(r"[0-9a-f]{1,8}")
+# The blocker lines go into every deck session's system prompt (#3793), so a line interpolates
+# only a value checked against a closed shape, such as a GitHub Actions run URL.
 _RUN_URL = re.compile(
     r"https://github\.com/[\w.-]{1,100}/[\w.-]{1,100}/actions/runs/\d{1,20}"
     r"(/attempts/\d{1,5})?",
@@ -169,41 +152,24 @@ _RUN_URL = re.compile(
 UNSAFE_TOKEN = "<entry not shown>"
 
 
-def setup_roles() -> frozenset[str]:
-    """The setup roles this checkout carries: every directory under `ansible/roles/setup/`."""
-    return frozenset(p.name for p in (ROLES / "setup").iterdir() if p.is_dir())
-
-
 def _checked(value, shape: Callable[[str], object]) -> str:
     """`value` where it is a string `shape` returns a truthy result for, else `UNSAFE_TOKEN`."""
     return value if isinstance(value, str) and shape(value) else UNSAFE_TOKEN
 
 
-def blockers(snap: dict, roles: frozenset[str] | None = None) -> list[str]:
+def blockers(snap: dict) -> list[str]:
     """One line per condition in CLAUDE.md's *When to wait* that this snapshot shows.
 
     A field that is `null` (unread) adds nothing: the mod gates nothing, and a band that cried
-    "blocked" every time a source timed out would be read past.
+    "blocked" every time a source timed out would be read past. `DEPLOY_HOLD` is free text
+    from GitHub, so the line says it is set and `probe.py landing` names the value.
 
     Args:
         snap: the snapshot `collect` builds.
-        roles: the setup role names a manual-plane role must be one of. Defaults to
-          `setup_roles()`.
     """
-    roles = setup_roles() if roles is None else roles
     out = []
-    hold = snap.get("hold")
-    if hold and hold.get("sha"):
-        count = len(hold.get("planes") or [])
-        out.append(
-            f"hold_sha is set ({_checked(hold['sha'][:8], _HEX_SHA.fullmatch)})"
-            + (
-                f", waiting on {count} plane{'s' if count != 1 else ''}; "
-                "`probe.py landing` names them"
-                if count
-                else ""
-            )
-        )
+    if (snap.get("promote") or {}).get("deploy_hold") not in (None, "", "none"):
+        out.append("DEPLOY_HOLD is set; `probe.py landing` names it")
     if (snap.get("ci") or {}).get("state") == "red":
         url = snap["ci"].get("url", "")
         out.append(
@@ -211,54 +177,7 @@ def blockers(snap: dict, roles: frozenset[str] | None = None) -> list[str]:
                 ": "
             )
         )
-    for owed in snap.get("manual_planes") or []:
-        out.append(
-            f"the `{_checked(owed['role'], roles.__contains__)}` setup role is merged and "
-            "unapplied; `probe.py landing` names the apply"
-        )
     return out
-
-
-def manual_plane_rows(owed: str | None, now: float) -> list[dict]:
-    """Each owed `manual_plane` role with the banner's line for it and its parts, oldest first.
-
-    `line` comes from `deployer_park.manual_plane_lines` and carries the role's age and its way
-    out; the deck mod renders it. The other fields are that line's parts, from
-    `deployer_park.manual_plane_remedies`. Both walk the same entries in the same order, so
-    the two zip.
-    """
-    remedies = deployer_park.manual_plane_remedies(owed, now)
-    lines = deployer_park.manual_plane_lines(owed, now)
-    return [
-        {
-            "role": r.role,
-            "line": line.strip().removeprefix("✗ ").strip(),
-            "age": r.age,
-            "apply": r.apply,
-            "by_hand": r.by_hand,
-            "clear": r.clear,
-        }
-        for r, line in zip(remedies, lines, strict=True)
-    ]
-
-
-def _owed_locally(
-    state_dir: str = deployer_park.GITOPS_STATE_DIR,
-) -> tuple[str | None, str | None] | None:
-    """`(hold_sha, owed ledger text)` from the deployer's state dir, or None if unreadable.
-
-    The directory is 0750 and owned by the deploy user, so another user on the deployer's host
-    (the `claude` agent user) sees it exist and still cannot read a marker. `DeployerSnapshot`
-    raises on that EACCES rather than reading it as no hold and nothing owed, and None sends
-    the caller to deploy-ui instead.
-    """
-    if not os.path.isdir(state_dir):
-        return None
-    try:
-        snap = DeployerSnapshot.load(state_dir)
-    except OSError, UnicodeDecodeError:
-        return None
-    return snap.hold, snap.owed
 
 
 @functools.cache
@@ -310,7 +229,6 @@ def _last_verdict(log_dir: _Path | None = None) -> dict | None:
 
 
 def collect(
-    owed_locally: Callable[[], tuple[str | None, str | None] | None] = _owed_locally,
     get_json: Callable[[str], dict] = _get_json,
     run: Callable[[list[str]], str] = _run,
     get_text: Callable[[str], str] = _get_text,
@@ -319,7 +237,6 @@ def collect(
     """Read every source once. A source that fails is named in `errors`, its field `null`.
 
     Args:
-        owed_locally: reads this host's deployer markers, or answers None off that host.
         get_json: GETs one deploy-ui API path and parses it.
         run: runs an argv in the repo and answers its stdout.
         get_text: GETs one deploy-ui API path as text, for `/api/log`.
@@ -328,8 +245,6 @@ def collect(
     snap: dict = {
         "host": socket.gethostname(),
         "read_at": int(time.time()),
-        "hold": None,
-        "manual_planes": None,
         "ci": None,
         "runs": None,
         "last_verdict": None,
@@ -351,23 +266,6 @@ def collect(
             fn()
         except Exception as exc:
             snap["errors"].append(f"{name}: {type(exc).__name__}: {exc}")
-
-    def read_hold():
-        local = owed_locally()
-        if local is not None:
-            sha, owed = local
-            snap["hold"] = {"sha": sha or "", "planes": held_planes(owed)}
-            snap["manual_planes"] = manual_plane_rows(owed, time.time())
-            return
-        state = get_json("/api/state")
-        snap["hold"] = {
-            "sha": state.get("hold_sha", ""),
-            "planes": state.get("hold_plane_entries", []),
-        }
-        if "manual_plane_owed" in state:
-            snap["manual_planes"] = manual_plane_rows(
-                state["manual_plane_owed"], time.time()
-            )
 
     def read_ci():
         runs = json.loads(
@@ -459,7 +357,6 @@ def collect(
                 snap["promote"]["reconcile_disabled"] = read_annotated()
 
             attempt("reconcile_disabled", read_reconcile_disabled)
-    attempt("hold", read_hold)
     attempt("ci", read_ci)
     attempt("runs", read_runs)
     attempt("last_verdict", read_last_verdict)
@@ -472,24 +369,6 @@ def unmatched_claims(snap: dict) -> list[dict]:
     """The claims no listed worktree works, each still carrying findings.py's own reason."""
     held = {n for t in snap["worktrees"] or [] for n in t["claims"]}
     return [c for c in snap["claims"] or [] if c["number"] not in held]
-
-
-def owed_lines(row: dict) -> list[str]:
-    """One owed manual plane as lines for a terminal, each command alone on its line.
-
-    A command line holds nothing but the command, so a triple-click copies a line that runs
-    as pasted.
-    """
-    lines = [
-        f"Owed: the `{row['role']}` setup role, merged {row['age']} ago. "
-        "The GitOps deployer cannot apply it itself."
-    ]
-    if row["apply"]:
-        lines += ["  Apply it by hand:", f"    {row['apply']}"]
-    else:
-        lines.append(f"  {row['by_hand'][:1].upper()}{row['by_hand'][1:]}.")
-    lines += ["  Then clear its ledger line:", f"    {row['clear']}"]
-    return lines
 
 
 def worktree_lines(worktrees: list[dict], blocked: bool) -> list[str]:
@@ -511,11 +390,7 @@ def worktree_lines(worktrees: list[dict], blocked: bool) -> list[str]:
 
 
 def format_text(snap: dict) -> str:
-    """The snapshot as lines for a terminal, one blank line between sections.
-
-    The owed manual planes follow the status line that counts them, ahead of the runs in
-    flight, so no owed line reads as a run.
-    """
+    """The snapshot as lines for a terminal, one blank line between sections."""
 
     def known(value, render):
         return "unknown" if value is None else render(value)
@@ -524,15 +399,8 @@ def format_text(snap: dict) -> str:
     lines += [f"  ✗ {b}" for b in snap["blockers"]] or ["  none"]
     lines += ["", *hold_lines(snap)]
     lines += [
-        "master CI: "
-        + known(snap["ci"], lambda c: f"{c['state']} {c['sha']}".strip())
-        + "   manual planes: "
-        + known(snap["manual_planes"], lambda m: str(len(m))),
+        "master CI: " + known(snap["ci"], lambda c: f"{c['state']} {c['sha']}".strip()),
     ]
-    if snap["hold"] and snap["hold"]["planes"]:
-        lines.append("held planes: " + "; ".join(map(str, snap["hold"]["planes"])))
-    for owed in snap["manual_planes"] or []:
-        lines += ["", *owed_lines(owed)]
     if snap["runs"]:
         lines += ["", "In flight:"]
         for r in snap["runs"]:

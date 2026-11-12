@@ -7,12 +7,14 @@ for each, and holds that the job runs them.
 Run: uv run pytest scripts/validate/tests/test_bootstrap_case.py
 """
 
+import argparse
 import shutil
 import subprocess
 import time
 from types import SimpleNamespace
 
 import pytest
+from lib import yaml_fast
 from lib.git import git
 from lib.repo_paths import REPO
 from validate import host_package_cases
@@ -90,6 +92,55 @@ def test_the_plan_runs_every_host_online_then_offline_with_three_reds(tmp_path):
     assert (fixture.clone, fixture.host) == ("fixture-host", fixture_case.FIXTURE_HOST)
     assert fixture.marker == case.UNCHECKED
     assert {p.clone for p in planned[:-2]} == {"green"}
+
+
+def _gating(tmp_path):
+    green = tmp_path / "bootstrap-kit" / "green"
+    green.mkdir(parents=True)
+    (green / "k3s").write_text("k3s")
+    return case.selected(case.plan(tmp_path, green), k3s_download=False)
+
+
+def test_each_shard_holds_one_offline_build_and_the_shards_cover_the_plan_once(
+    tmp_path,
+):
+    planned = _gating(tmp_path)
+    builds = [p.label for p in planned if p.builds_offline]
+    shards = [case.shard(planned, k, len(builds)) for k in range(1, len(builds) + 1)]
+
+    assert set(builds) == {"offline", "red-depends", "fixture-host"}
+    assert [[p.label for p in s if p.builds_offline] for s in shards] == [
+        [label] for label in builds
+    ]
+    dealt = [p.label for s in shards for p in s]
+    assert sorted(dealt) == sorted(p.label for p in planned)
+    assert all(s == [p for p in planned if p in s] for s in shards)
+
+
+def test_ci_runs_one_bootstrap_shard_per_offline_build_on_each_release(tmp_path):
+    builds = sum(p.builds_offline for p in _gating(tmp_path))
+    workflow = yaml_fast.safe_load((REPO / ".github/workflows/ci.yml").read_text())
+    legs = workflow["jobs"]["host_packages_bootstrap"]["strategy"]["matrix"]["include"]
+    shards: dict[str, list[str]] = {}
+    for leg in legs:
+        shards.setdefault(leg["release"], []).append(leg["shard"])
+
+    assert len(shards) >= 2
+    expected = [f"{k}/{builds}" for k in range(1, builds + 1)]
+    assert {release: sorted(s) for release, s in shards.items()} == {
+        release: expected for release in shards
+    }
+
+
+def test_a_shard_from_one_to_its_count_is_parsed():
+    assert host_package_cases.shard_arg("2/3") == (2, 3)
+    assert host_package_cases.shard_arg("3/3") == (3, 3)
+
+
+@pytest.mark.parametrize("text", ["0/3", "4/3", "2", "a/3", "2/"])
+def test_a_shard_outside_its_count_or_not_k_of_n_is_refused(text):
+    with pytest.raises(argparse.ArgumentTypeError):
+        host_package_cases.shard_arg(text)
 
 
 def _unit_state_run(monkeypatch, tmp_path, host, answers):

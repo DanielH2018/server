@@ -35,7 +35,6 @@ from diagnostics.probe_lib.host_reader import (
     read_host,
     unit_span_s,
 )
-from lib.deployer_park import _age_phrase
 from lib.exit_codes import PROBE_FAILED, PROBE_OK
 from lib.repo_paths import REPO
 
@@ -138,11 +137,13 @@ def report(doc: dict, *, now: float, last: int, deadline_s: int) -> tuple[str, i
     if reason not in HEALTHY:
         problems.append(f"reason {reason}")
     if fetch_age > deadline_s:
-        problems.append(f"last fetch {_age_phrase(fetch_age)} ago, past {deadline_s}s")
+        problems.append(
+            f"last fetch {core.age_phrase(fetch_age)} ago, past {deadline_s}s"
+        )
     behind = "caught up" if not since else f"unbuilt since {_stamp(since)}"
     lines = [
         f"builder ({doc.get('host')}): reason={reason} at {sha}, {behind}; "
-        f"last fetch {_age_phrase(fetch_age)} ago"
+        f"last fetch {core.age_phrase(fetch_age)} ago"
     ]
     lines.append("published:")
     lines += [

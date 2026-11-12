@@ -569,6 +569,21 @@ def _warn_scan_unreachable(sock: str, why: str) -> None:
     )
 
 
+IN_USE = "in use by a live process"
+
+
+def in_use_reason(path: str) -> str:
+    """Why `path` must not be removed: `IN_USE` and each pid using it, or "" when none does.
+
+    A removal refused with this reason is a skip, not a failure: the weekly sweep removes the
+    directory once its holder exits, so the caller must not exit non-zero for it (#7949).
+    """
+    users = processes_using(path)
+    if not users:
+        return ""
+    return f"{IN_USE}: " + "; ".join(f"pid {pid} ({how})" for pid, how in users)
+
+
 def remove(repo: str, tree: Worktree) -> tuple[bool, str]:
     """Refuse while a process uses the tree; otherwise unlock if needed, then remove.
 
@@ -584,10 +599,9 @@ def remove(repo: str, tree: Worktree) -> tuple[bool, str]:
     remove a locked working tree") and the caller would report success while removing nothing.
     """
     if Path(tree.path).exists():
-        users = processes_using(tree.path)
-        if users:
-            named = "; ".join(f"pid {pid} ({how})" for pid, how in users)
-            return False, f"in use by a live process: {named}"
+        held = in_use_reason(tree.path)
+        if held:
+            return False, held
     if tree.locked:
         git("worktree", "unlock", tree.path, cwd=repo, check=False)
     result = git("worktree", "remove", tree.path, cwd=repo, check=False)

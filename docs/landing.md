@@ -348,9 +348,7 @@ else.
 
 **A PR that reaches only a setup role the deployer applies waits for master CI and the
 promotion, then ends `nothing-to-deploy`.** Its author reads the outcome on the host: the changed
-state itself, or a `manual_plane` line in
-`owed.jsonl` for a role the deployer cannot apply (`k3s`). `probe.py gitops-state` prints every
-marker, read-only. A change to a plane nobody applies on its own, which `plane` names, still
+state itself. A change to a plane nobody applies on its own, which `plane` names, still
 ends `needs-manual-apply` with the command that applies it.
 
 **It scopes the derivation to the PR's own file list rather than a SHA range**, so another session's
@@ -633,8 +631,7 @@ unreadable owed ledger. It ends the wait as `deferred`, exit 4, for any other.
 `nothing-to-deploy` also covers a PR that reaches only a setup role the deployer applies.
 `land.sh` starts no tick and reads none of the deployer's state, so it reports neither the
 apply nor a failure of it, and it names no other host the role reaches. Read the host: the
-changed state itself, or `probe.py gitops-state`, which prints `last_run`, `hold_sha` and
-`owed.jsonl`. The deployer records a `manual_plane` line for a role it cannot apply, and for a
+changed state itself. The deployer records a `manual_plane` line for a role it cannot apply, and for a
 role it applied on daniel-box whose change reaches another host (#6510). No check pages on a
 `hold_sha`. A failed apply shows in the deployer's Discord post, in the SessionStart banner and
 as `deploy-failed` from every later `land.sh` run.
@@ -677,9 +674,7 @@ Two things sit in the position of needing a hand:
 
 **A setup role the deployer cannot apply also needs its marker cleared.** For `k3s` and `common`
 the tick fast-forwards the range and records a `manual_plane` line in the `owed` ledger.
-`scripts/deploy_tools/owed_run.py <role>` runs the printed apply commands and the clear in one
-step, and `--dry-run` shows them first. It refuses a role applied by hand and a primary checkout
-behind `origin/master`, so run those as printed, including any
+Run the printed apply commands and the clear as printed, including any
 `--applied <tags>` on the clear. A bring-up
 playbook gets no such line, because the tick parks on those and writes no marker. A landing reads
 the line (see above), so a PR touching a recorded role ends `needs-manual-apply`. A role the tick DID apply
