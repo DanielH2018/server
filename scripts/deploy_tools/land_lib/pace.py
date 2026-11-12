@@ -37,7 +37,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from lib.json_types import as_list, as_object
+from lib.json_types import JsonValue, as_list, as_object
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import say
 from lib import gh_rate_limit
@@ -56,10 +56,35 @@ STUCK_AFTER_S = 2 * 60 * 60
 # `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` sizes LAND_DEADLINE on it.
 RAISE_CAP_EVERY_S = 15 * 60
 # Enough to see every run inside the 2-hour window at today's merge rate.
-_RUNS_URL = (
+RUNS_URL = (
     "repos/{owner}/{repo}/actions/workflows/ci.yml/runs"
     f"?branch={BRANCH}&event=push&per_page=50"
 )
+RUNS_JQ = "[.workflow_runs[] | {status, created_at}]"
+
+
+def count_unfinished(runs: JsonValue, now: float, older_than_s: int = 0) -> int:
+    """How many of `runs`, `RUNS_JQ`'s answer, are unfinished and not wedged.
+
+    `older_than_s` counts only the runs created more than that long before `now`.
+
+    Raises:
+        ValueError: `runs` is not a list of run objects with a parseable `created_at`.
+    """
+    # Every status but `completed` counts. The API's `status=` filter takes one value, and a run
+    # whose last job is waiting reads `queued` even after most of its jobs finished.
+    count = 0
+    for item in as_list(runs, "gh api ci.yml runs"):
+        run = as_object(item, "a ci.yml run")
+        if run.get("status") == "completed":
+            continue
+        created = datetime.fromisoformat(
+            str(run.get("created_at")).replace("Z", "+00:00")
+        )
+        age = now - created.timestamp()
+        if age <= STUCK_AFTER_S and (not older_than_s or age > older_than_s):
+            count += 1
+    return count
 
 
 def unfinished_master_runs(ln: Landing) -> int:
@@ -70,26 +95,8 @@ def unfinished_master_runs(ln: Landing) -> int:
         subprocess.TimeoutExpired: gh timed out.
         ValueError: gh's answer did not parse.
     """
-    # Every status but `completed` counts. The API's `status=` filter takes one value, and a run
-    # whose last job is waiting reads `queued` even after most of its jobs finished.
-    got = ln.tools.gh_json(
-        "api",
-        _RUNS_URL,
-        "--jq",
-        "[.workflow_runs[] | {status, created_at}]",
-    )
-    now = ln.tools.wall_clock()
-    count = 0
-    for item in as_list(got, "gh api ci.yml runs"):
-        run = as_object(item, "a ci.yml run")
-        if run.get("status") == "completed":
-            continue
-        created = datetime.fromisoformat(
-            str(run.get("created_at")).replace("Z", "+00:00")
-        )
-        if now - created.timestamp() <= STUCK_AFTER_S:
-            count += 1
-    return count
+    got = ln.tools.gh_json("api", RUNS_URL, "--jq", RUNS_JQ)
+    return count_unfinished(got, ln.tools.wall_clock())
 
 
 def hold(ln: Landing, held_s: int, waited_s: int) -> str:
