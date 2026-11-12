@@ -54,7 +54,7 @@ PLANES = [
     Plane(
         "setup",
         SETUP_ROLES,
-        floor=4,
+        floor=6,
         members=frozenset({"initial_setup", "k3s", "common", "nut_host"}),
     ),
 ]
