@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-12 05:59 UTC
-generated_sha: f6557919a
+generated_at: 2026-11-12 06:51 UTC
+generated_sha: 3c40ce775
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: f6557919a
 
 # Decisions
 
-789 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
+788 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -812,7 +812,6 @@ generated_sha: f6557919a
 | the shard is declared per claim, never derived from a position. | `ansible/filter_plugins/longhorn_groups.py` | 2026-10-10 |
 | ` marker named. | `ansible/filter_plugins/role_label.py` | 2026-10-04 |
 | PyYAML's emitter, not libyaml's. differently, which would change every checksum annotation over them. | `ansible/filter_plugins/role_label.py` | 2026-11-09 |
-| deploy.yml's Docker play and this filter's `docker` default stay until H7 deletes that file's last play. The play runs no role. Long form: docs/target-architecture/host/h5-pi-compose.md, H5-R1-06. | `ansible/filter_plugins/toposort.py` | 2026-11-07 |
 | cni0 alone, for netpol_baseline_node_cidrs. `netpol_baseline_node_cidrs` reads the pair above and NOT the flannel pair below, deliberately. A host process reaching a baseline-selected pod on the other node is denied — measured 2026-09-10 (#1725) with the pod's node as the only variable: from daniel-box, sonarr's ClusterIP (pod on daniel-box) answered 200 while prowlarr's (pod on daniel-server) timed out, and from daniel-server the two verdicts swapped. The census found ONE host caller of that shape, `get_via_service()` in scripts/diagnostics/postflight.py, and it already falls back to the workload's Traefik route when the ClusterIP does not answer (#1633) — which is why the *arr `-monitoring` routes had to admit the flannel pair in #1697. Traefik itself is immune: its policy's first ingress rule carries ports 8000/8443 with no `from:`, so the three host crons that dial it are unaffected by this list. Adding the flannel pair here would re-scope every pod the namespace-scoped baseline selects, to buy a fast path that already has a working fallback. Contradict this with a NAMED host caller that has no route fallback. The two nodes' flannel.1 VXLAN addresses — the OTHER source a host process can arrive as. Which of the two sets a host request carries depends on where the traefik pod sits: traffic to a pod on the SAME node leaves via cni0 and arrives as that node's cni0 gateway above, while traffic to a pod on the OTHER node crosses the overlay and arrives as the sending node's flannel.1 address. Traefik is pinned to daniel-box, so daniel-box arrives as 10.42.0.1 and daniel-server as 10.42.1.0 — measured 2026-09-10 (#1693): from a daniel-server shell `ip route get` to a daniel-box pod reads `src 10.42.1.0`, and the same day's #1683 measurement read `ClientHost: 10.42.1.0` off Traefik's access log. | `ansible/inventory/group_vars/all.yml` | 2026-09-11 |
 | 40x CPU / 32x memory default-to-request, two namespaces only; do not tighten it, and do not extend it to longhorn-system (instance-manager already peaks near a 2Gi limit). | `ansible/inventory/group_vars/all.yml` | 2026-09-30 |
 | off, and the DB-size risk is covered by a proxy instead. re-encrypts every Secret (#2294), k3s-bringup.yml is manual-plane by construction, and the flag opens an unauthenticated :2381 — more cost than the gap is worth on a single voter, where leader changes and WAL fsync latency carry little signal anyway. The one series that does matter, the DB size against its 2 GiB quota, is readable WITHOUT the flag: `apiserver_storage_size_bytes` is scraped unconditionally, and #2403 reports it matching the etcd snapshot's size. The `EtcdDBNearQuota` rule reads it (ansible/roles/k8s/observability/files/rules/storage.yaml, #2403). Reopen this with evidence that fsync latency or leader churn is what broke, not with the observation that the etcd series are empty — that is this decision, not a finding. | `ansible/inventory/group_vars/all.yml` | 2026-09-25 |

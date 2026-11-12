@@ -119,7 +119,9 @@ def _order_violations(listed, packaged, edges, depends_on=None):
 
 def _pi_lists():
     pi = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
-    listed = [c["name"] for c in filter_by_platform(pi.get("containers_list") or [])]
+    listed = [
+        c["name"] for c in filter_by_platform(pi.get("containers_list") or [], "docker")
+    ]
     return listed, [c["name"] for c in pi.get("compose_services") or []]
 
 

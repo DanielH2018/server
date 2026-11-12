@@ -48,11 +48,6 @@ def test_explicit_platform_selects_matching_entries():
     assert _names(filter_by_platform(containers, "k8s")) == ["speedtest"]
 
 
-def test_platform_defaults_to_docker_when_argument_omitted():
-    containers = [_c("traefik"), _c("speedtest", "k8s")]
-    assert _names(filter_by_platform(containers)) == ["traefik"]
-
-
 def test_input_order_is_preserved():
     containers = [_c("z"), _c("a"), _c("m")]
     assert _names(filter_by_platform(containers, "docker")) == ["z", "a", "m"]
