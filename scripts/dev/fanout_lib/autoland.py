@@ -18,17 +18,18 @@ never qualifies: flips are `--no-review` and need operator checks before the mer
 read from GitHub must then still be the one the record reviewed: open, not a draft, on
 `worktree-fanout-<batch>`, at the head the record names, with no operator step in its body.
 
-NO PER-PR LOCK. `land.sh` takes none. It holds the deploy tree and service locks, and
-`homelab-claude-land@` holds a flock, so two landings of one PR would both arm the merge. This
-command therefore starts a PR once: it skips a PR whose log directory already holds a `land<pr>-*.log`
+NO PER-PR LOCK. `land.sh` takes none: `land_lib/detach.py` flocks only a per-orchestrator slot
+count, `land_lib/verdict_log.py` flocks only its own log, and `homelab-claude-land@` flocks one
+`/var/lock/claude-land.lock` for every PR it lands. So two landings of one PR would both arm
+the merge. This command therefore starts a PR once: it skips a PR whose log directory already holds a `land<pr>-*.log`
 (a landing that ended `refused` or `ci-red` is the operator's to read, not to retry every ten
 minutes), and a PR that any live `land.py` process names with `--pr <n>`, which finds the
 landings an orchestrator started from another log directory.
 
 THE CHECKOUT. Each landing runs from its own worktree at `origin/master` under the state
-directory, never from the primary checkout: one untracked file in the primary parks the
-deployer, and `deploy.sh` renders from the tree it runs in. The next run removes a worktree
-whose landing has ended.
+directory, never from the primary checkout: one untracked file in the primary parks
+`homelab-checkout-sync`, and `land.sh` runs `land.py` and its helpers from the checkout it
+lives in (`land_lib/own_checkout.py`). The next run removes a worktree whose landing has ended.
 
 THE UNIT SETS `LAND_REQUIRE_BRANCH_PREFIX` and `LAND_REQUIRE_AUTHOR`. With the prefix set,
 `land_lib/policy.py` also refuses while the deployer holds a SHA and pins the merge to the
