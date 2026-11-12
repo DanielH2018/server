@@ -44,8 +44,8 @@ from lib.git import git_stdout
 
 # A code span, and within it a path-like word: a letter-led extension, an optional `:12`,
 # `:12-40` or `::test_name` suffix, which is dropped. Words rather than whole spans, because
-# the docs name a file inside a command as often as on its own -- `./scripts/deploy.sh
-# --tags x` names deploy.sh. The extension must start with a letter so that
+# the docs name a file inside a command as often as on its own -- `./scripts/deploy_tools/land.sh
+# --pr 1` names land.sh. The extension must start with a letter so that
 # `10.0.0.240:51820` does not parse as a file.
 SPAN = re.compile(r"`([^`\n]+)`")
 PATH_WORD = re.compile(
