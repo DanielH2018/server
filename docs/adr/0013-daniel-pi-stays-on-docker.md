@@ -20,6 +20,19 @@ holds: the setup plays are deleted. The Pi's setup plane ships in `homelab-danie
 `homelab-docker-engine.service` moves the Docker engine, and nothing reaches the Pi over SSH
 with `-e target=daniel-pi`.
 
+The decision stands: `daniel-pi` keeps Docker Compose and stays out of the cluster. Slices
+H7.53 to H7.57 make these statements below history. They stay as written:
+
+- *Decision*, "driven remotely over SSH with `-e target=daniel-pi`, sets `has_gitops:
+  false`": the Pi installs its own `homelab-daniel-pi` package through its updater. H7.55
+  deleted the playbooks and removed `has_gitops` from `host_vars/daniel-pi.yml`.
+- *Amendment*, "`deploy.sh -e target=daniel-pi` renders and applies over SSH": H7.53
+  deleted `deploy.sh`.
+- *Amendment*, "`-e target=daniel-pi` stays for the setup plays" and "`initial_setup.yml`
+  and the Docker engine upgrade still reach the Pi over SSH": H7.55 deleted
+  `initial_setup.yml` and the setup roles, and H7.56 removed ansible-core and the Pi's empty
+  `containers_list` key. H7.57 accepted ADR-0029, which records the result.
+
 ## Context
 
 The k3s migration covered `daniel-box` and `daniel-server`. `daniel-pi` was named explicitly
