@@ -45,8 +45,7 @@ FIELD NOTES (what is genuinely undecidable from the repo alone, and why):
     yet-undiscovered third pattern) would still read as "no PVC (stateless)". A claim named
     by a shell variable (`${DRILL}`, in a script's own manifest) reads as no declared tier.
   - owner. A k8s entry (`catalog_backup.autodeploy_eligibility`) is not Ansible's to deploy, so its
-    Auto-deploy cell names what applies it: Flux through `promote`. `deploy.sh` refuses its
-    tag with exit 5.
+    Auto-deploy cell names what applies it: Flux through `promote`, gated by `land.sh`.
 
 Run: uv run python scripts/docs/service_catalog.py --out /tmp/service_catalog.html
 Tests: uv run pytest scripts/docs/tests/test_service_catalog.py

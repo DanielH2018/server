@@ -333,8 +333,10 @@ def test_a_hand_edited_block_is_flagged(tmp_path):
     assert g.stale_k8s_docs(write=False, estate=estate, k8s_roles=roles) == []
 
     doc = (dst / "CLAUDE.md").read_text()
-    assert "`--tags=sonarr`" in doc
-    (dst / "CLAUDE.md").write_text(doc.replace("`--tags=sonarr`", "`--tags=sonar`", 1))
+    assert "`land.sh --tags=sonarr`" in doc
+    (dst / "CLAUDE.md").write_text(
+        doc.replace("`land.sh --tags=sonarr`", "`land.sh --tags=sonar`", 1)
+    )
     assert g.stale_k8s_docs(write=False, estate=estate, k8s_roles=roles) == [
         "k8s/sonarr"
     ]
@@ -389,9 +391,9 @@ def test_a_k8s_role_glance_names_flux_in_place_of_the_deploy_tag(tmp_path):
     """No `owner` key marks the entry: `platform: k8s` alone makes it Flux's (H1.9)."""
     block = _littlelink_block(tmp_path)
     assert "- **Applied by:** Flux, through `promote`" in block
-    # The block is wrapped, so match the refusal across a line break.
+    # The block is wrapped, so match the gate across a line break.
     unwrapped = " ".join(block.split())
-    assert "`deploy.sh` refuses `--tags=littlelink` with exit 5" in unwrapped
+    assert "`land.sh --tags=littlelink` gates the rollout" in unwrapped
     assert "Deploy tag" not in block and "Auto-deploy" not in block
 
 

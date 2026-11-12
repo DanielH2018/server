@@ -22,8 +22,8 @@ The working-out lives in `docs/observability-dashboards.md`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
-  `--tags=observability` with exit 5
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=observability`
+  gates the rollout
 - **Images:** `otel/opentelemetry-collector-contrib` (`observability_k8s_collector_image`),
   `grafana/loki` (`observability_k8s_loki_image`), `prom/prometheus`
   (`observability_k8s_prometheus_image`), `prom/alertmanager`

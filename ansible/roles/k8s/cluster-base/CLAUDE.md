@@ -7,8 +7,8 @@ Secret holds.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `deploy.sh` refuses
-  `--tags=cluster-base` with exit 5
+- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=cluster-base`
+  gates the rollout
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
 <!-- /generated_from -->

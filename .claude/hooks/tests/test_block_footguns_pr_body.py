@@ -1,4 +1,4 @@
-"""Rule 7 of the block-footguns guard: a PR body that skips a heading of the PR template.
+"""Rule 6 of the block-footguns guard: a PR body that skips a heading of the PR template.
 
 Its own file because test_block_footguns.py was near its line cap. Each case runs in
 a throwaway repo under `tmp_path` holding a two-heading template, except the first, which

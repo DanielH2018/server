@@ -126,22 +126,16 @@ PRIMARY_STATUS_ARGV = ("--no-optional-locks", "status", "--porcelain")
 def dirty_primary_lines(porcelain, path):
     """One banner line naming what makes the primary checkout dirty, or [].
 
-    `gitops_deploy` skips a tick outright while `git status --porcelain` on the primary checkout
-    is non-empty, so ONE stray file there stops every deploy in the fleet. The session that hits
-    it sees `deploy.sh` exit 4 — "this tree is N commit(s) behind origin/master" — which names
-    its own worktree and points at `git rebase`, the wrong repair. Worse, no session can look:
+    `homelab-checkout-sync` refuses to fast-forward while `git status --porcelain` on the
+    primary checkout is non-empty, so ONE stray file there parks the checkout every landing and
+    probe reads. The session that hits it sees a stale-tree refusal, which names its own
+    worktree and points at `git rebase`, the wrong repair. Worse, no session can look:
     the isolation guard refuses a git command targeting the shared checkout, correctly. This
     banner is the way the cause reaches a worktree session at all.
 
-    Names the paths with their porcelain status codes, the way the deployer's own journal line
-    does. `??` is the code worth seeing: `git status --porcelain` counts untracked files, so the
+    Names the paths with their porcelain status codes. `??` is the code worth seeing: `git status --porcelain` counts untracked files, so the
     tree can be dirty with nothing modified.
 
-    The parse is a deliberate COPY of `dirty_summary` in
-    `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_git.py`, not an import of it — importing
-    would drag the whole `deploy_git` module into a hook that must never fail to load. The cost
-    is that the two can drift apart silently if the deployer ever changes what counts as dirty,
-    so change them together.
     """
     entries = []
     for line in porcelain.splitlines():
@@ -216,11 +210,11 @@ def master_moved_problems(git=None):
     `git rev-list --count HEAD..origin/master` reads only the local object store -- no
     `git fetch` runs here, so this can only ever be as current as the last fetch this
     checkout happened to do (a login shell's periodic fetch, a manual `git fetch`, an
-    earlier `deploy.sh` run). That is the honest answer for a read-only, always-runs
+    earlier `git pull`). That is the honest answer for a read-only, always-runs
     SessionStart hook: a live check would mean a network call on every session open. The
-    line says "last fetched" rather than claiming to be current, and deploy.sh's own
-    staleness gate (scripts/deploy_tools/deploy_lib/staleness.py, exit 4) is what actually refuses a stale
-    deploy -- this is only the earlier, cheaper warning. [] on any failure of the git READ,
+    line says "last fetched" rather than claiming to be current, and the stale-probe rule
+    (`.claude/hooks/_stale_probe_rule.py`) is what actually refuses a probe gate from a stale
+    tree -- this is only the earlier, cheaper warning. [] on any failure of the git READ,
     including a checkout with no origin/master ref at all -- diagnosing that is not this
     hook's job.
 
@@ -261,8 +255,8 @@ def master_moved_problems(git=None):
     plural = "s" if count != 1 else ""
     return [
         f"  ⚠ this branch is {count} commit{plural} behind origin/master (as of the last "
-        "fetch -- `git fetch` to refresh; a deploy from here would be refused, see "
-        "scripts/deploy_tools/deploy_lib/staleness.py)"
+        "fetch -- `git fetch` to refresh; a probe.py gate from here would be refused, see "
+        ".claude/hooks/_stale_probe_rule.py)"
     ]
 
 

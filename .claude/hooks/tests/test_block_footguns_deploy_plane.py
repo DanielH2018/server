@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `block-footguns` rule 8, the deploy plane's three verdicts.
+"""Tests for `block-footguns` rule 7, the deploy plane's three verdicts.
 
 Each verdict has a case table that runs through the hook's own `decide`, so a case proves the
 dispatch as well as the rule. A tag move is denied, a write that clears `DEPLOY_HOLD` or

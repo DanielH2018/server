@@ -9,11 +9,12 @@ holds that tree-wide), so no deploy can apply it.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_role_tests_reach_no_cluster.py
 """
 
+import dataclasses
+
 import pytest
 
-from _land_fakes import MERGE_SHA
-from deploy_tools.land_lib import deploy, land_tags
-from deploy_tools.land_lib.landing import Classification
+from _land_fakes import MERGE_SHA, Fakes
+from deploy_tools.land_lib import classify, land_tags
 from deploy_tools.land_lib.outcome import Outcome
 from lib.repo_paths import REPO as REPO_ROOT
 from lib.role_paths import tag_for
@@ -52,10 +53,37 @@ def test_a_declared_role_test_file_beside_a_real_change_does_not_excuse_it():
     ]
 
 
-def test_a_declared_role_test_change_ends_nothing_to_deploy(landing):
-    ln, _ = landing(None)
+def _classified_landing(landing, paths: list[str]):
+    """A landing whose PR changed `paths`, classified by the REAL plane note and derivation."""
+    ln, _ = landing(
+        Fakes(
+            gh_views={
+                "files,changedFiles": {
+                    "files": [{"path": p} for p in paths],
+                    "changedFiles": len(paths),
+                }
+            },
+            declared_at=land_tags.declared_tags(),
+        )
+    )
+    ln.classifier = dataclasses.replace(
+        ln.classifier, plane_note=land_tags.plane_note, derive=land_tags.derive
+    )
     ln.merge_sha = MERGE_SHA
-    ln.classification = Classification(plane=land_tags.plane_note([_DECLARED_TESTS]))
+    classify.classify(ln)
+    return ln
+
+
+def test_a_declared_role_test_change_ends_nothing_to_deploy(landing):
+    ln = _classified_landing(landing, [_DECLARED_TESTS])
+    assert ln.resolved_tags == []
     with pytest.raises(Outcome) as exc:
-        deploy.no_tag_outcome(ln)
+        classify.shortcut_if_nothing(ln)
     assert (exc.value.verdict, exc.value.rc) == ("nothing-to-deploy", 0)
+
+
+def test_a_declared_role_shipped_file_change_does_not_end_the_landing(landing):
+    """The reject half: the same path through the same steps owes its tag."""
+    ln = _classified_landing(landing, [_DECLARED_FILES])
+    assert ln.resolved_tags == ["monitor-bridge"]
+    classify.shortcut_if_nothing(ln)

@@ -169,9 +169,9 @@ TEMPLATE_SOURCE_READERS = {
         "`test_container_security_context.py`"
     ),
     "longhorn/test_longhorn_reap_never_scheduled.py": (
-        "the fallback for a unit template no render reaches: the synthetic `.service.j2` and "
-        "`.timer.j2` under `tmp_path` the red proofs write. Every real setup unit reads its "
-        "render, and `test_the_render_reaches_every_setup_unit_template` holds that"
+        "the host components' unit templates, which no render covers, and the synthetic "
+        "`.service.j2` and `.timer.j2` under `tmp_path` the red proofs write. A schedule is "
+        "forbidden by name, so the source is the subject"
     ),
     "k8s/test_root_security_context_is_written_out_in_full.py": (
         "whether a template builds a root securityContext through "

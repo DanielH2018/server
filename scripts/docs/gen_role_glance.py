@@ -33,7 +33,7 @@ roles:
   tier here is read from the claim's StorageClass and the k3s role's `k3s_longhorn_*_volumes`
   lists, never typed, and a claim named by a shell variable has none). For every k8s entry
   (`catalog_backup.entry_owner`), an **Applied by** line replaces the deploy tag: it names Flux and `promote`,
-  and says `deploy.sh` refuses `--tags=<tag>` with exit 5;
+  and says `land.sh --tags=<tag>` gates the rollout;
 - a setup role (`roles/setup/<name>/`, every directory but the include-only `common`): the
   playbook and tag that apply it, with the `when:` that restricts it to a host, read from the
   `roles:` lists and `include_role` tasks of the bring-up playbooks; every cron it installs,
