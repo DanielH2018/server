@@ -36,9 +36,7 @@ this role only declares the targets. It also renders `k3s-etcd-snapshot-s3-confi
   `k3s_longhorn_backup_cron`, `k3s_longhorn_weekly_backup_minute_hour` and
   `k3s_longhorn_weekly_backup_retain` live here. The backup-health reader derives the arm state
   and the schedules from the live objects, so a flip reaches the cluster through Flux alone.
-  ENFORCED:
-  `ansible/tests/repo/test_census_rows_roles.py::test_census_row_holds_on_the_tree`, row
-  `no-flux-born-key-on-the-host-plane`.
+  A host package renders without a k8s role's defaults, so no host file can read one.
 - **The etcd Secret must stay in `kube-system`.** k3s reads `etcd-s3-config-secret` from no
   other namespace, and it reads the Secret at each snapshot, not at start, so a missing one
   costs an upload and never a control-plane boot. Its `etcd-s3-region` reads

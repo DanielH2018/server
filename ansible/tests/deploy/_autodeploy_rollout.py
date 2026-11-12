@@ -92,9 +92,9 @@ def _rollout_gate_offender(role: Path) -> bool:
 
 
 def _render_metadata_text(role: Path) -> str:
-    """`role`'s defaults/main.yml and tasks/main.yml, the two files a render key can sit in."""
-    files = (role / "defaults/main.yml", role / "tasks/main.yml")
-    return "\n".join(path.read_text() for path in files if path.is_file())
+    """`role`'s defaults/main.yml, the file a render key sits in, or "" for a role with none."""
+    defaults = role / "defaults/main.yml"
+    return defaults.read_text() if defaults.is_file() else ""
 
 
 _EXTRA_ROLLOUTS_BLOCK = re.compile(
@@ -134,8 +134,7 @@ def _primary_rollout_name(role: Path) -> str:
     Reads `manifests_rollout | default(manifests_service)`. `manifests_service` defaults to the role directory's
     name (#4053), a caller that overrides it writes a literal string, and every
     `manifests_rollout` override is likewise a literal (checked repo-wide), so a regex match is
-    safe here. A role with `tasks/` that sets neither key renders nothing and resolves to '', which
-    matches no real Deployment name. A role with no `tasks/` renders under its own name.
+    safe here. A role that sets neither key renders under its own name.
 
     Tolerates a trailing comment after the value, as `_sets_empty_rollout` does. Without it,
     `manifests_rollout: ''  # nothing to roll` would disagree between the two matchers reading
@@ -154,7 +153,7 @@ def _primary_rollout_name(role: Path) -> str:
     service = re.search(r"^\s*manifests_service:\s*(\S+)\s*$", text, re.MULTILINE)
     if service:
         return service.group(1)
-    return "" if (role / "tasks").is_dir() else role.name
+    return role.name
 
 
 def _primary_rollout_kind(role: Path) -> str:

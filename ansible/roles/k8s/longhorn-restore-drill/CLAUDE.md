@@ -112,12 +112,9 @@ real, and tears everything down. It moved here from `setup/k3s` at H2.3d.
 - **Hand runs are operator-only.** The agent's kubeconfig cannot create a Job. The plain and the
   pinned form are in `docs/k3s-node-plane-crons-and-incidents.md`, and both run outside the
   04:10 UTC slot. A pinned run stamps `success.<pvc>` and not `last-success`.
-- **The drill's keys live here, not in `setup/k3s`.** The eight moved keys keep their
-  `k3s_longhorn_restore_drill_*` names. No `setup/` task or template may read one. ENFORCED:
-  `ansible/tests/repo/test_census_rows_roles.py::test_census_row_holds_on_the_tree`, row
-  `drill-keys-off-the-host-plane`. The keys a host reader needs stay in `setup/k3s`:
-  `k3s_longhorn_restore_drill_max_age_days`, `k3s_longhorn_restore_drill_coverage_slack_days`,
-  the namespace and, until H2.3f, the stamp directory.
+- **The drill's keys live here.** The eight keys moved from `setup/k3s` keep their
+  `k3s_longhorn_restore_drill_*` names. A host package renders without a k8s role's defaults,
+  so no host file can read one.
 - **The `DECIDED:` markers moved with the keys** into `defaults/main.yml`: the 4 GiB size cap,
   the 2700-second timeout and the 04:10 UTC slot. The script keeps its own, including the
   candidate list published from the full eligible set and the pinned run that leaves the global
