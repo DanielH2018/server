@@ -18,12 +18,11 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
 - **No Authelia because** CouchDB enforces its own auth (`require_valid_user = true`); the
   LiveSync client uses basic auth and can't pass Authelia 2FA
 - **Depends on:** traefik
-- **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry
-  is `platform: k8s`, so nothing applies it by hand, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. traefik
-  stays Ansible-owned, so the
-  Kustomization records it in its `homelab/ansible-owned-deps` annotation, not in `dependsOn`.
-  The Deployment is `Recreate`, so a change that rolls it takes sync down briefly.
+- **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry is
+  `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when
+  `promote` publishes and verifies the next bundle. traefik is flux-owned too, so the
+  Kustomization lists it in `dependsOn`, and Flux applies this tag only after its Kustomization is
+  Ready. The Deployment is `Recreate`, so a change that rolls it takes sync down briefly.
 - **`k8s_autodeploy: false` still stops Renovate automerging the image bump.** The deployer
   skips the tag, so the flag no longer gates an apply. The denial reason above is about the
   revert, not the snapshot.

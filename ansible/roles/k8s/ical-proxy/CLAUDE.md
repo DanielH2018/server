@@ -19,12 +19,11 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
   image as `app.py`.
 - **Host:** daniel-box (k8s), since 2026-08-10 — slice-7 Phase C
 - **The route guards by ClientIP** so only Homepage reads the unauthenticated private feeds
-- **Flux applies it, not Ansible** (D5.14, the first Wave C PR). Its `containers_list` entry
-  is `platform: k8s`, so nothing applies it by hand, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. traefik
-  stays Ansible-owned, so the
-  Kustomization records it in its `homelab/ansible-owned-deps` annotation, not in `dependsOn`.
-  The Deployment is `RollingUpdate` with one replica. The default surge starts the new pod
+- **Flux applies it, not Ansible** (D5.14, the first Wave C PR). Its `containers_list` entry is
+  `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when
+  `promote` publishes and verifies the next bundle. traefik is flux-owned too, so the
+  Kustomization lists it in `dependsOn`, and Flux applies this tag only after its Kustomization is
+  Ready. The Deployment is `RollingUpdate` with one replica. The default surge starts the new pod
   before the old one stops, so a roll keeps one pod serving.
 - **`promote` builds the image, not `k8s/image-builder`.** The renderer writes the build
   context to `DIR/images/ical-proxy/` and its content tag to `DIR/images/tags.json`, and the

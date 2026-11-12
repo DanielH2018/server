@@ -20,14 +20,12 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
 - **The monitors that read from here:** the ruler's own rules and monitor-bridge's remaining
   LogQL checks. A broken apply blinds the LogQL checks without paging. The host crons'
   `status=` lines land here too, as the local record of each verdict.
-- **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is
-  `platform: k8s`, so nothing applies it by hand, and a merged
-  change reaches the cluster when `promote` publishes and verifies the next bundle. Its
-  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. traefik stays
-  Ansible-owned, so the Kustomization
-  records it in its `homelab/ansible-owned-deps` annotation, not in `dependsOn`. The Loki
-  Deployment is `Recreate`, so a change that rolls it takes log queries, pushes and the ruler
-  down briefly.
+- **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is `platform:
+  k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote`
+  publishes and verifies the next bundle. Its image-bump PRs therefore draw no `land-wait` and no
+  `probe.py health` run. traefik is flux-owned too, so the Kustomization lists it in `dependsOn`,
+  and Flux applies this tag only after its Kustomization is Ready. The Loki Deployment is
+  `Recreate`, so a change that rolls it takes log queries, pushes and the ruler down briefly.
 - **Where the task went.** Its default `manifests_rollout:
   loki-homelab`
   and the `alloy` entry in `manifests_extra_rollouts` name the two workloads for the

@@ -17,14 +17,13 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
   `files/nginx-feed-cache.conf`. Edit the cache conf / extensions HERE, then merge; `promote`
   applies it.
 - **Port:** 80
-- **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry
-  is `platform: k8s`, so nothing applies it by hand, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
-  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. Both dependencies,
-  authelia and traefik, stay
-  Ansible-owned, so the Kustomization records them in its `homelab/ansible-owned-deps`
-  annotation, not in `dependsOn`. The FreshRSS Deployment is `Recreate`, so a change that
-  rolls it takes the service down briefly. The feed cache is a one-replica `RollingUpdate`.
+- **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry is
+  `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when
+  `promote` publishes and verifies the next bundle. Its image-bump PRs therefore draw no
+  `land-wait` and no `probe.py health` run. authelia and traefik are flux-owned too, so the
+  Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
+  Kustomizations are Ready. The FreshRSS Deployment is `Recreate`, so a change that rolls it takes
+  the service down briefly. The feed cache is a one-replica `RollingUpdate`.
 - **The `freshrss-snapshot` Job snapshots `freshrss-config` before each revision applies**
   (D5.2a). The freshrss Kustomization depends on `freshrss-snapshot`, so a revision applies
   only after the snapshot is ready; `docs/flux-deploy-plane.md` lists the Job's checks. A
