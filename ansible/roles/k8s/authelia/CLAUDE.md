@@ -26,13 +26,11 @@ redis incident, the notifier's history and the OIDC derivations are in
 A service's policy is the `auth_tier: one_factor | two_factor` beside its `use_authelia: true` in
 `inventory/host_vars/<host>.yml`, not a rule in this role. `templates/config-secret.yaml.j2` renders
 one rule per tier from those entries through `filter_plugins/authelia_access.py`, plus one scoped
-bypass, the silence UIs' pairs and two wildcards. A generated rule names only the LAN name, so
+bypass, Karma's pair and two wildcards. A generated rule names only the LAN name, so
 the public name keeps the `*.<domain>` wildcard's `two_factor` whatever the entry declares (#2057).
 
-**`karma.local.<domain>` and `alertmanager.local.<domain>` are the `subject:`-scoped rules.**
-Karma can silence a page, so its host takes `two_factor` for `group:admins`, and a `deny` rule
-for the same domain follows it. Alertmanager's pair outlives its retired UI route by one
-release, so the route never falls to the wildcard while its removal rolls out.
+**`karma.local.<domain>` is the one `subject:`-scoped rule.** Karma can silence a page, so its
+host takes `two_factor` for `group:admins`, and a `deny` rule for the same domain follows it.
 Authelia skips a rule whose subject does not match, so without the `deny` a user outside
 `admins` would fall through to the `*.local` wildcard at `one_factor`. ENFORCED:
 `ansible/tests/services/test_authelia_access_tiers.py::test_a_user_outside_admins_is_denied_a_silence_ui`.
