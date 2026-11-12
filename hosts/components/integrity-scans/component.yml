@@ -32,7 +32,8 @@
 #   a run whose every difference a package explains (#4599). It never advances on a DOWN, and
 #   never creates an `aide.db` that is missing. Nothing reaches another host.
 # - Mode (explicit and reversible): each timer's enable link arms it. Dropping the component from a
-#   host package stops both timers on the install that drops it. A DOWN on an unexplained change stays DOWN until an operator reviews it and
+#   host package stops both timers on the install that drops it, and a host in
+#   `integrity_scans_aide_unscheduled_hosts` gets no AIDE enable link at all. A DOWN on an unexplained change stays DOWN until an operator reviews it and
 #   runs `/usr/lib/homelab/aide-check --accept`.
 # - Authoritative sources: AIDE's own exit code and report, dpkg's file lists and digests, and
 #   rkhunter's log summary; each script's header has why the exit code alone cannot say.
@@ -53,6 +54,10 @@ defaults:
   # (98_aide_local.conf.j2 has the measurement).
   integrity_scans_aide_lean_hosts: [daniel-pi]
   integrity_scans_aide_lean: "{{ inventory_hostname in integrity_scans_aide_lean_hosts }}"
+  # The hosts whose weekly AIDE scan stays unscheduled. daniel-pi's lean scan still outgrew its
+  # 456 MB: swap reached 614 MB and the watchdog reset the board 54 minutes in (2026-11-12).
+  # The unit and script still ship, so an operator can run one by hand.
+  integrity_scans_aide_unscheduled_hosts: [daniel-pi]
 depends:
   - rkhunter
   - aide
@@ -79,7 +84,7 @@ files:
   - {src: units/homelab-rkhunter-propupd.service, dst: /usr/lib/systemd/system/homelab-rkhunter-propupd.service}
 enable:
   homelab-rkhunter-check.timer: timers.target
-  homelab-aide-check.timer: timers.target
+  homelab-aide-check.timer: {target: timers.target, when: "inventory_hostname not in integrity_scans_aide_unscheduled_hosts"}
 lines:
   # The weekly scan flags only changes no package event explains, because the refresh unit above
   # rebaselines after every dpkg run. rkhunter's own 90rkhunter hook ran that refresh inside apt
@@ -93,3 +98,6 @@ legacy:
   - {path: /usr/local/bin/aide-check.sh}
   - {path: /var/lib/homelab/setup-render-manifest.d/rkhunter-check}
   - {path: /var/lib/homelab/setup-render-manifest.d/aide-check}
+  # An unscheduled host's last verdict, which HostCheckOverdue would otherwise page once its
+  # deadline passed.
+  - {path: /var/lib/node-exporter-textfile/aide-check.prom, when: "inventory_hostname in integrity_scans_aide_unscheduled_hosts"}

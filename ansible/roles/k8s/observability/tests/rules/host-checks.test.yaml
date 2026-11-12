@@ -1143,38 +1143,52 @@ tests:
         alertname: OtlpDoorNotReporting
         exp_alerts: []
 
-  # daniel-pi's AIDE check writes a fresh red verdict. AideCheckFailed fires for daniel-pi from
-  # the `node-pi` job, and AideCheckNotReporting stays quiet for it while the file is fresh.
+  # Every host writes a fresh red aide-check verdict. AideCheckFailed fires for the two k3s nodes
+  # and not for daniel-pi, which schedules no AIDE scan, so a red verdict left from before its
+  # timer went fires nothing.
   - interval: 1m
     input_series:
+      - series: 'homelab_check_success{check="aide-check", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x10'
+      - series: 'homelab_check_success{check="aide-check", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x10'
       - series: 'homelab_check_success{check="aide-check", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
         values: '0x10'
-      - series: 'homelab_check_last_run_timestamp_seconds{check="aide-check", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
-        values: '0+60x10'
-      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
-        values: '1x10'
     alert_rule_test:
       - eval_time: 5m
         alertname: AideCheckFailed
         exp_alerts:
           - exp_labels:
               check: aide-check
-              instance: daniel-pi
-              job: node-pi
-              origin: daniel-pi
+              instance: daniel-box
+              job: node
+              origin: daniel-box
               severity: warning
-              service: daniel-pi
+              service: daniel-box
             exp_annotations:
-              summary: daniel-pi's weekly AIDE check failed or found an unexplained change.
+              summary: daniel-box's weekly AIDE check failed or found an unexplained change.
               description: >-
-                aide-check on daniel-pi ended with status=down: a file changed that no package
+                aide-check on daniel-box ended with status=down: a file changed that no package
                 explains, AIDE exited with an error and checked nothing, or the previous week's
-                run still held the lock. Run `journalctl -t aide-check` on daniel-pi; once every
+                run still held the lock. Run `journalctl -t aide-check` on daniel-box; once every
+                unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`.
+          - exp_labels:
+              check: aide-check
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: daniel-server's weekly AIDE check failed or found an unexplained change.
+              description: >-
+                aide-check on daniel-server ended with status=down: a file changed that no package
+                explains, AIDE exited with an error and checked nothing, or the previous week's
+                run still held the lock. Run `journalctl -t aide-check` on daniel-server; once every
                 unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`.
 
-  # No AIDE file on any host, and daniel-pi's exporter is down. The absent_over_time arm fires
-  # for the two k3s nodes, and daniel-pi's rule leaves its dead exporter to the `targets` check
-  # because its `unless` clause reads `node-pi`, not `node`.
+  # No AIDE file on any host, and every exporter is up. The absent_over_time arm fires for the
+  # two k3s nodes and not for daniel-pi, which carries no AIDE rule.
   - interval: 1m
     input_series:
       - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
@@ -1182,7 +1196,7 @@ tests:
       - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
         values: '1x10'
       - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
-        values: '0x10'
+        values: '1x10'
     alert_rule_test:
       - eval_time: 5m
         alertname: AideCheckNotReporting

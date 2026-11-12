@@ -192,7 +192,8 @@ groups:
       # M6 BATCH B9 (#6168). The weekly AIDE and rkhunter scans run on every host and write the
       # textfile beside their Kuma push, and these rules replaced the "AIDE Integrity" and
       # "rkhunter Scan" tiles that Cutover-1a deleted. Each host gets a Failed and a NotReporting
-      # rule for each scan. A NotReporting rule's two literals equal the DEADLINE_S its script
+      # rule for each scan it schedules; daniel-pi schedules no AIDE scan
+      # (integrity_scans_aide_unscheduled_hosts in hosts/components/integrity-scans/component.yml). A NotReporting rule's two literals equal the DEADLINE_S its script
       # renders, which equalled the deleted tile's interval:
       # ansible/tests/setup/test_integrity_scan_rule_literals.py pins them. daniel-pi's rules read
       # the `node-pi` job. Every tile notified Discord only, so the rules are `warning`. Each
@@ -255,36 +256,6 @@ groups:
           summary: daniel-server's weekly AIDE check has stopped reporting.
           description: >-
             No aide-check verdict newer than 626400s reached Prometheus from daniel-server's
-            textfile collector, so nothing confirms the file-integrity scan still runs. Read the
-            `Weekly AIDE file integrity check` cron and `journalctl -t aide-check`, then
-            /var/lib/node-exporter-textfile/aide-check.prom on the host.
-      - alert: AideCheckFailed
-        expr: homelab_check_success{check="aide-check",origin="daniel-pi"} == 0
-        labels:
-          severity: warning
-          service: daniel-pi
-        annotations:
-          summary: daniel-pi's weekly AIDE check failed or found an unexplained change.
-          description: >-
-            aide-check on daniel-pi ended with status=down: a file changed that no package
-            explains, AIDE exited with an error and checked nothing, or the previous week's
-            run still held the lock. Run `journalctl -t aide-check` on daniel-pi; once every
-            unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`.
-      - alert: AideCheckNotReporting
-        expr: |
-          (
-              time() - homelab_check_last_run_timestamp_seconds{check="aide-check",origin="daniel-pi"} > 626400
-            or
-              absent_over_time(homelab_check_last_run_timestamp_seconds{check="aide-check",origin="daniel-pi"}[626400s])
-          )
-          unless on (origin) (up{job="node-pi"} == 0)
-        labels:
-          severity: warning
-          service: daniel-pi
-        annotations:
-          summary: daniel-pi's weekly AIDE check has stopped reporting.
-          description: >-
-            No aide-check verdict newer than 626400s reached Prometheus from daniel-pi's
             textfile collector, so nothing confirms the file-integrity scan still runs. Read the
             `Weekly AIDE file integrity check` cron and `journalctl -t aide-check`, then
             /var/lib/node-exporter-textfile/aide-check.prom on the host.
