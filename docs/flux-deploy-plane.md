@@ -1091,6 +1091,12 @@ and promotion*), then dispatch `promote` with `-f sha=<master tip>`. An agent ma
 once the operator approves its permission prompt. `decide` promotes the newest
 eligible commit.
 
+**A clear alone re-holds while a failed Job stands under an unchanged name.** Flux does not
+re-run a failed `<tag>-verify` Job, and the next promotion applies the same Job name, so the
+same failure holds again. When a verify Job failed for an environmental reason, delete the
+Job before the clear (**operator-only**). `docs/volume-snapshot-drills.md`, *A verify Job
+that failed for an environmental reason*, has the steps.
+
 **The revert rule is off.** `promote.REVERT_RULE` is `False`. Turning it on is an
 **operator-only** ruling (D2 Open question 11), made in a PR of its own. With it on, a
 `failed=` hold would let `decide` promote a descendant of the held commit whose `footprint`
@@ -1179,7 +1185,8 @@ input*.
   gets one retry after its `retry_after`, up to 10 seconds. A failed post fails the run red;
   the hold is already written by then.
 - **The way out** is **operator-only**: the runbook in `docs/volume-snapshot-drills.md`, then
-  a clear of `DEPLOY_HOLD`.
+  a clear of `DEPLOY_HOLD`. A hold whose verify Job failed for an environmental reason takes
+  that runbook's *A verify Job that failed for an environmental reason*.
 
 ### The reset input
 

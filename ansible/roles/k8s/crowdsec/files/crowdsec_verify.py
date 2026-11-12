@@ -26,10 +26,16 @@ The verdict, once the ban reads back from LAPI:
   no probe answer of any status was counted in the window, because nothing was observed;
 - otherwise a failure naming **the edge**, with the statuses it answered while banned.
 
+A Pi that cannot be scraped is not a broken edge. While `up{job="alloy-pi"}` is not 1, the
+script waits instead of judging: before the ban it does not ban, and in the window a poll that
+finds the scrape down extends the deadline by one poll. `OUTAGE_GRACE_SECONDS` bounds the two
+waits together. Once it is spent, the run fails naming the channel and the runbook step that
+re-runs the Job, because a Job either passes or fails and a pass needs a 403.
+
 The window covers one probe period, one 60-second scrape and the 30-second scrape timeout,
 with slack. Inputs come from the Job's environment: `LAPI_URL`, `LAPI_MACHINE`,
-`LAPI_PASSWORD`, `BAN_IP`, `BAN_DURATION`, `PROMETHEUS_URL` and `WINDOW_SECONDS`. Exit 0 when
-the edge enforced the ban, 1 otherwise, naming the hop.
+`LAPI_PASSWORD`, `BAN_IP`, `BAN_DURATION`, `PROMETHEUS_URL`, `WINDOW_SECONDS` and
+`OUTAGE_GRACE_SECONDS`. Exit 0 when the edge enforced the ban, 1 otherwise, naming the hop.
 
 Run: python3 crowdsec_verify.py (in the Job; it takes no arguments)
      uv run pytest ansible/roles/k8s/crowdsec/tests/test_crowdsec_verify.py
@@ -53,6 +59,10 @@ CHANNEL_UP = 'up{job="alloy-pi"}'
 CALL_TIMEOUT = 10
 POLL_SECONDS = 15
 SCENARIO = "crowdsec-verify: ban daniel-pi to prove the edge enforces it"
+ENVIRONMENTAL = (
+    "Once the Pi is scraped again, delete this Job and clear the hold"
+    " (docs/volume-snapshot-drills.md, *A verify Job that failed for an environmental reason*)"
+)
 
 
 class Failed(Exception):
@@ -225,11 +235,16 @@ def run(
         Failed: A hop failed; the message names it.
     """
     ip, prom = env["BAN_IP"], env["PROMETHEUS_URL"]
-    if not channel_up(http, prom):
-        raise Failed(
-            'the evidence channel: up{job="alloy-pi"} is not 1, so Prometheus cannot read'
-            " the Pi's probe counter; the edge was not tested"
-        )
+    grace = float(env["OUTAGE_GRACE_SECONDS"])
+    while not channel_up(http, prom):
+        if grace <= 0:
+            raise Failed(
+                'the evidence channel: up{job="alloy-pi"} stayed below 1 through the'
+                f" {int(float(env['OUTAGE_GRACE_SECONDS']))}s grace, so Prometheus cannot"
+                f" read the Pi's probe counter; the edge was not tested. {ENVIRONMENTAL}"
+            )
+        sleep(POLL_SECONDS)
+        grace -= POLL_SECONDS
     before = counts(http, prom)
     lapi = Lapi(http, env["LAPI_URL"], env["LAPI_MACHINE"], env["LAPI_PASSWORD"])
     lapi.ban(ip, env["BAN_DURATION"], now())
@@ -238,6 +253,7 @@ def run(
             raise Failed(f"LAPI holds no active decision for {ip} after the ban")
         deadline = clock() + float(env["WINDOW_SECONDS"])
         rises: dict[str, float] = {}
+        paused = 0.0
         while True:
             rises = increase(before, counts(http, prom))
             if rises.get("403"):
@@ -245,8 +261,18 @@ def run(
             if clock() >= deadline:
                 break
             sleep(POLL_SECONDS)
+            # A poll that finds the scrape down does not count against the window.
+            if grace > 0 and not channel_up(http, prom):
+                step = min(POLL_SECONDS, grace)
+                deadline, grace, paused = deadline + step, grace - step, paused + step
         window = int(float(env["WINDOW_SECONDS"]))
         if not channel_up(http, prom) or not rises:
+            if paused:
+                raise Failed(
+                    f'the evidence channel: up{{job="alloy-pi"}} was below 1 for {int(paused)}s'
+                    f" of the window, and no 403 from {ip} was counted by the grace's end;"
+                    f" the edge was not tested. {ENVIRONMENTAL}"
+                )
             raise Failed(
                 f"the evidence channel: no probe answer from {ip} was counted in {window}s,"
                 ' or up{job="alloy-pi"} fell; the edge was not tested'

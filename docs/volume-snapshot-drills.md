@@ -60,6 +60,10 @@ Then pick the branch:
 - **Branch 1** when a changed snapshot role that attempted R failed: its `<s>` or
   `<s>-verify` failed or timed out, or the soak named its service.
 - **Branch 3** when a `<s>-snapshot` Job failed on a full cap.
+- ***A verify Job that failed for an environmental reason*** below, when the only failure
+  is a `<tag>-verify` Job whose log names an environmental cause, such as
+  `crowdsec-verify` naming the evidence channel. Check this before Branch 2, whose forward
+  revert would revert a sound commit.
 - **Branch 2** otherwise.
 
 ### Branch 1: a snapshot role failed
@@ -132,6 +136,32 @@ the check. Delete that volume's older snapshots by hand. Then delete
 the failed Job so that Flux creates it again. Both are `kubectl` writes. Then clear the hold
 with `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server` and dispatch `promote`
 for R.
+
+### A verify Job that failed for an environmental reason
+
+A `<tag>-verify` Job can fail while R itself is sound. On 2026-11-12, `crowdsec-verify`
+failed because Prometheus could not scrape daniel-pi, which was out of memory and rebooting
+(#8060). Its log line names the cause: `crowdsec_verify.py` names the evidence channel and
+this section. Nothing applied R wrongly, so no volume needs a revert and no commit needs a
+forward revert.
+
+**Clearing the hold alone re-holds.** The Job's name derives from its inputs, so the next
+promotion applies the same name. Flux never re-runs a Job that already failed under that
+name, so the verify fails again with no new run. Delete the Job first. Every step that
+writes is **operator-only**.
+
+1. **Read the failed Job's log** to confirm the cause was environmental:
+   `kubectl -n homelab logs job/<the failed Job>`.
+2. **Wait until the cause has settled.** For `crowdsec-verify`, `up{job="alloy-pi"}` reads 1
+   again in Prometheus.
+3. **Delete the failed Job**, so that Flux creates it again:
+
+    ```bash
+    sudo k3s kubectl -n homelab delete job <the failed Job>
+    ```
+
+4. **Clear the hold** with `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`,
+   and dispatch `promote` for R.
 
 ### The entry point
 
