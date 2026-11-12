@@ -205,7 +205,7 @@ review, if it approves the head SHA, lifts that refusal. With either of the firs
 the landing, and a re-run checks the new head. `--verdict-file <path>` writes `PENDING`, then
 the landing's one result line, for a unit to hand on to the agent that started it. A landing
 that sets neither setting is unchanged, and `--any-author` lifts neither.
-`homelab-claude-land@<n>.service` (`roles/setup/claude_code`'s template, shipped in daniel-box's
+`homelab-claude-land@<n>.service` (the `claude-code` component's template, shipped in daniel-box's
 host package) sets all four for the `claude` agent user's PRs, and a polkit rule lets that user
 start it and do nothing else. That user's profile sets `LAND_HANDOFF_UNIT=homelab-claude-land`,
 so its own `land.sh` starts the unit and reports the

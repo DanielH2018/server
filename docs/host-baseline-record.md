@@ -1,8 +1,8 @@
 # Host baseline record
 
-The traps, derivations and measured incidents behind the `initial_setup` role — the host
-baseline every machine in the homelab runs. `ansible/roles/setup/initial_setup/CLAUDE.md`
-carries the rules and the tag inventory; this page is the working-out, read when you edit the
+The traps, derivations and measured incidents behind the host baseline every machine in
+the homelab runs, which the host packages ship; the `initial_setup` role that applied it
+was deleted by H7.55b. This page is the working-out, read when you edit the
 block it covers.
 
 `tasks/` is the role's own inventory: one file per block tag, named for its subject. Read the
@@ -388,7 +388,5 @@ future AMD or NVIDIA host with `has_igpu: true` needs its own flag before it lis
 
 ## See also
 
-- `ansible/roles/setup/initial_setup/CLAUDE.md` — the rules, the granular tag inventory and the
-  two autonomous-role contracts.
 - [Pi host tuning record](pi-host-tuning-record.md) — the Pi's own tuning, including the
   `has_rsyslog: false` mask that keeps the `rsyslog-filter` component off the Pi.

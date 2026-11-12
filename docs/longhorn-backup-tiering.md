@@ -204,7 +204,7 @@ A completed `b2-deletions` run ends with one line of a fixed shape —
 `b2-deletions: charged N, skipped N, unpriced N`, or `b2-deletions: declined: <reason>` when the
 BackupTarget carries no URL. Check 10 of `longhorn-backup-health.sh` reads that line to tell a
 run that finished from one that died part-way, so a reword changes the check's regexes in the
-same edit (`ansible/roles/setup/k3s/CLAUDE.md`, *Required evidence*).
+same edit (`docs/k3s-node-plane-crons-and-incidents.md`).
 
 Deletions against the `r2` BackupTarget are skipped. R2's caps are monthly and vast, and charging
 one against B2's 2,500/day Class C cap would inflate the ledger against a cap that does not

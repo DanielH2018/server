@@ -30,7 +30,7 @@ Focus your review on:
   ServiceAccount tokens, missing `securityContext`, secrets landing in env vars or ConfigMaps,
   and IngressRoutes that skip the `authelia` middleware. Note egress NetworkPolicies are **not
   enforced** by this cluster's CNI — never treat one as a control.
-- `ansible/roles/setup/k3s/` — cluster-level config, RBAC, the read-only ServiceAccount
+- `hosts/components/k3s-server/` — cluster-level config, RBAC, the read-only ServiceAccount
 - `hosts/components/pi-compose/` — the Pi's Docker Compose templates and the unit that runs them (daniel-pi only)
 - `ansible/vars/` — Secrets files (check encryption, not contents)
 - `ansible/inventory/` — Variable files for credential exposure

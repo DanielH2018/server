@@ -36,6 +36,5 @@ pod. Say what you exercised.
 
 - [ ] This is a **broad** change (`ansible/inventory/`, `ansible/templates/` or a shared
       template). `promote` applies it to every tag that renders it, so do not hand-run anything.
-      Nothing applies `ansible/roles/setup/` or a bring-up playbook on its own; run a bring-up
-      playbook by hand.
+      A host's setup plane ships in its host package, so a change there belongs under `hosts/`.
 - [ ] New check, guard, or probe — ships with a paired test: one input it must accept, one it must reject.

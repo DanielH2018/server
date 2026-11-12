@@ -221,7 +221,7 @@ and re-running it, not by reasoning:
 1. **Cite paths that exist.** `003` cited `roles/containers/app` (no such role; the Pi runs four
    plus the shared `common`) and scored 1/3 twice; repointed at the real `roles/containers/wg-easy`
    it scores **3/3**. Cases citing retired roles (`k8s/kopia`) or roles that never existed
-   (`k8s/longhorn` — the real files are under `roles/setup/k3s/templates/`) were corrected for the
+   (`k8s/longhorn` — the real files are under `hosts/components/k3s-server/templates/`) were corrected for the
    same reason. H5.12 deleted `roles/containers/`, so a cited `roles/containers/<x>` path is now
    always missing. A fixture for a service that does not exist yet goes under `roles/k8s/`,
    marked "(a new role, not yet merged)".

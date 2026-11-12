@@ -61,8 +61,7 @@ a need appears.
   receives `matches PATH HEX` and never opens a caller-named file. The shim refuses a REPO_FILE
   that is absolute, holds `..`, or resolves outside the checkout. It also takes the 64-hex
   SHA-256 in place of REPO_FILE and passes it on as it is, which gains the caller nothing a
-  file in a checkout could not. `probe.py applied` asks that way, on hosts with no checkout,
-  for each installed file it cannot stat or open, and uses only `stat` and `matches` (#6357).
+  file in a checkout could not.
 - **Tier 2 prints, from fixed sources only:** `nft list ruleset`, `ufw status verbose`,
   `sshd -T`, `crontab -l -u root`, and `cat` of `/etc/netplan/*.yaml`. Every argv is written
   in `hosts/components/claude-code/files/homelab_rootq.py:COMMANDS`, and no caller flag
@@ -82,17 +81,15 @@ a need appears.
   it exists or not. The DENY entries in `PATHS` are exact names:
   `/etc/claude-rc/alert-webhook.env`, and the four paths under
   `/etc/rancher/k3s/manifests/registry-jobs/` and its directory (#6988). That tree stays denied as a whole, because it
-  holds every staged role's `secret.yaml`, so `probe.py applied` compares most of those rows
-  by mode and owner only.
+  holds every staged role's `secret.yaml`.
 - **Two DENY paths are exempt by exact name.** The operator ruled this on 2026-11-02 (#7007).
   `hosts/components/claude-code/files/homelab_rootq.py:DENY_EXEMPT` names the two registry
   mirror GC Jobs, `registry-jobs/ghcr-mirror-gc-job.yaml` and
   `registry-jobs/dockerhub-mirror-gc-job.yaml`, which hold no secret. `denied()` returns
-  false for them, so every tier-1 verb answers them and `probe.py applied` compares their
-  content. Tier 1's credential check still applies to what they hold. The exemption takes
+  false for them, so every tier-1 verb answers them. Tier 1's credential check still applies to what they hold. The exemption takes
   exact names only, never a glob. rootq cannot stat a file in the agent user's home,
   which root does not own. The role therefore makes `~/.config/gh` and `~/.config/homelab-ui`
-  0710 under `claude_code_agent_operator_read`, so `probe.py applied` stats the 0600 token
+  0710 under `claude_code_agent_operator_read`, so the operator account stats the 0600 token
   and login files as the operator, without listing either directory or reading either file.
 - **What it prints:** output that matches `REFUSE`, such as a private key, a bearer token or a
   webhook URL, is withheld whole. The rest is redacted by default. A value prints only when it

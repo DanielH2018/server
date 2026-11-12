@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Apply a change through the path that owns it — `land.sh`, `promote` and Flux for a k3s workload, a host package for anything under `hosts/` and the Pi, and a hand-run playbook for a bring-up step. No script deploys a workload by hand. Use when the user wants to deploy or redeploy a service, asks for `deploy.sh`, or to check a k8s manifest change before it merges (`prek` vs the renderer vs the render-diff gates).
+description: Apply a change through the path that owns it — `land.sh`, `promote` and Flux for a k3s workload, a host package for anything under `hosts/` and the Pi, and `hosts/bootstrap-host.sh` for a host bring-up. No script deploys a workload by hand. Use when the user wants to deploy or redeploy a service, asks for `deploy.sh`, or to check a k8s manifest change before it merges (`prek` vs the renderer vs the render-diff gates).
 allowed-tools: Bash, Glob
 ---
 
@@ -13,8 +13,6 @@ which Flux applies. H7.53 deleted `scripts/deploy.sh` with the GitOps deployer.
 
 - Role under `ansible/roles/k8s/<service>/`, an inventory value or a shared template → **k3s
   workload** (this is nearly everything). It lands through `land.sh`, `promote` and Flux.
-- Role under `ansible/roles/setup/<name>/` → **setup role**. Nothing applies it on its own; see
-  *Applying a setup role*.
 - Entry in `compose_services` in `host_vars/daniel-pi.yml`, or anything under `hosts/` → **host
   package**. For the Pi's docker-proxy, wg-easy, alloy and autoheal, the `homelab-daniel-pi`
   package renders them from `hosts/components/pi-compose/services/<name>/`, and the Pi's updater
@@ -80,30 +78,14 @@ full 40-hex SHA. `promote` refuses a commit without green CI:
 gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>
 ```
 
-## Applying a setup role
+## Bringing up a host
 
-Nothing applies a setup role on its own: every role a host still runs is emptied or moving into
-a host package (H7), and `land.sh` ends a setup-only PR `nothing-to-deploy`. A change that has to
-reach a host belongs in the component that replaced the role.
-
-A playbook goes through `uv run`, because bare `ansible-playbook` (the uv-tool shim) lacks the
-module deps and fails. A setup play aimed at the Pi takes `-e target=daniel-pi`, because the
-playbooks default `hosts:` to the local hostname and `--limit` alone matches nothing.
-
-To apply one setup role by hand, read the playbook and tag from the `Applied by:` line of the
-role's `CLAUDE.md`. Neither follows from the role's name: `chezmoi_setup` takes the tag `chezmoi`,
-and `k3s` applies through `k3s-bringup.yml`, where the same page names narrower tags than the
-maximal `k3s`. Ansible exits 0 on a tag that matches nothing, so a wrong guess reads as a green
-recap.
+`hosts/bootstrap-host.sh` brings a host up. `docs/host-packages.md` (*Rebuilding daniel-box*,
+*Rebuilding daniel-server*) and `docs/break-glass.md` (the Pi runbook) order the steps. A host's
+setup plane ships in its host package, so no playbook applies it and `land.sh` ends a PR that
+changes nothing else `nothing-to-deploy`.
 
 ```bash
-# Apply one setup role by hand, with the playbook and tag its Applied by: line names
-uv run ansible-playbook ansible/<playbook> --tags <tag>
-
-# Initial server setup. The first-host bring-up ORDER (uv -> SOPS onboarding -> this) is in
-# ansible/README.md
-uv run ansible-playbook ansible/initial_setup.yml
-
 # Edit encrypted secrets
 sops ansible/vars/secrets.yml
 ```

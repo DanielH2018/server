@@ -40,7 +40,7 @@ deployed, `ufw status` listed it, and the probe still reached all three targets.
 `/etc/default/ufw` already carried `DEFAULT_FORWARD_POLICY="DROP"`, so if UFW's forward chain
 governed this traffic the guest would have been fenced before that rule existed — libvirt's own
 FORWARD accept is reached first. The fence that replaced it is the hypervisor component's nwfilter,
-`ansible/roles/setup/hypervisor/templates/staging-nwfilter.xml.j2`.
+`hosts/components/hypervisor/templates/staging-nwfilter.xml.j2`.
 
 The reachability that forced the fence was measured on 2026-08-27 from inside the guest, which
 reached the whole production LAN masqueraded as daniel-server: MetalLB VIP 301, k3s API 401,

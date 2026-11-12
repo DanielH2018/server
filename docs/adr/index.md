@@ -25,7 +25,7 @@ they spend an hour on it.
 Cite a marker by its text, not its line. This command finds the live example wherever it lands:
 
 ```bash
-grep -rn 'DECIDED: the lock order' ansible/roles/setup/gitops_deploy/files/
+git grep -n 'DECIDED:' -- hosts scripts
 ```
 
 The marker it finds reads `the lock order is server-deploy-all.lock first … then each service's

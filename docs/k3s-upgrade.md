@@ -39,7 +39,7 @@ Merging does not park the deployer: see *After merging the pin* below.
 1. Pass the gates.
 2. Record pre-upgrade state.
 3. Merge the pin. SUC upgrades daniel-box, then daniel-server. The pin writes no `manual_plane`
-   line (H6.1b), so only a change elsewhere under `ansible/roles/setup/k3s/` leaves one to clear.
+   line (H6.1b).
 4. Verify the server by its node label and version.
 5. Verify the agent by its node label and version.
 
@@ -117,9 +117,7 @@ the upgrade container replaces the binary. No Ansible command is part of the upg
 The apiserver, Traefik's ingress path and Pi-hole DNS go away for the length of the restart,
 because they all sit behind this node.
 
-Do not run `k3s-bringup.yml --tags k3s_server` to upgrade. Its install guard has no version
-clause since H6.3c, and no argument clause since H6.4b, so it runs only for a missing binary. The
-server's flags are daniel-box's package's: they live in
+The server's flags are daniel-box's package's: they live in
 `hosts/components/k3s-server/component.yml`, and `homelab-k3s-restart` applies a change inside
 its window.
 
@@ -250,14 +248,7 @@ A pin change no longer reaches the deployer's setup plane. The pin lives in the 
 waits on through promotion, and the deployer writes no `manual_plane` line for `k3s`. The
 `k3s-server` Plan selects daniel-box since H6.3c and the `k3s-agent` Plan selects daniel-server
 since H6.3d, so merging the pin upgrades both nodes through SUC and no hand apply is owed for
-either. Another change under
-`ansible/roles/setup/k3s/` still takes the setup plane's path. `k3s` is routed to
-`k3s-bringup.yml`, not to `initial_setup.yml` (`deploy_setup_roles.py:roles_outside_initial_setup_in`),
-so `tick_applies_setup_role` returns false for it. `handle_broad` (`deploy_handlers.py`) then
-fast-forwards the primary checkout and writes a `manual_plane` line for `k3s` to
-`/var/lib/gitops-deploy/owed.jsonl`. Only the bring-up playbooks in `_BROAD_MANUAL_PREFIXES`
-(`deploy_changes.py`) still park the tick. Before 2026-09-11 a `k3s` change did park the tick
-(issue #1467).
+either.
 
 The primary
 checkout needs no hand `git pull --ff-only`: `homelab-checkout-sync.timer` fast-forwards it to
@@ -285,6 +276,5 @@ a minor bump rather than assuming it: `sudo k3s etcd-snapshot ls`, which needs a
 
 ## What this procedure does not serialize
 
-`k3s-bringup.yml` does not take `/var/lock/server-git-tree.lock`; only `deploy.sh` does. Another
-session's deploy can therefore run straight through the control-plane restart. Check the SessionStart
+Check the SessionStart
 banner for live sessions before starting, and prefer a quiet window.

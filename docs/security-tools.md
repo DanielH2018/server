@@ -1,6 +1,6 @@
 # Security Tools Reference
 
-This document covers the security and monitoring tools deployed by `ansible/roles/setup/initial_setup/tasks/main.yml` — what each one does and how to read its output.
+This document covers the security and monitoring tools deployed by the host packages — what each one does and how to read its output.
 
 ---
 

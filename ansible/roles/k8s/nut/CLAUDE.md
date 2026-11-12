@@ -119,5 +119,5 @@ first.
   where no UPS matches it), the `nut-monitor` drop-in that points
   upsmon at the rendered `/var/lib/homelab-secrets/etc/nut/upsmon.conf`, and the
   `homelab-ups-watchdog` timer. Edit the component, and the host picks the change up through
-  `homelab-updater`; no `initial_setup.yml` run applies it. The `nut_host` role is emptied (H7.33)
-  and still holds the two templates and the defaults the component renders, until H7.20a.
+  `homelab-updater`. The component holds the templates and defaults it renders
+  (`hosts/components/nut-secondary/{templates,defaults}/`).

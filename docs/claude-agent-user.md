@@ -292,9 +292,9 @@ Two choices keep the floor from being bypassed through the inventory:
   lander. Each pin is a literal. A pin that templated the agent profile's variables resolved
   from the inventory and pinned nothing.
 
-**The floor is not a barrier to root.** The deployer applies any setup-role change as root, so
-a task added to an unlisted role reaches root without approval. A true root barrier would put
-`ansible/roles/setup/` itself on the list.
+**The floor is not a barrier to root.** A host package installs as root, so a change under an
+unlisted `hosts/` path reaches root without approval. A true root barrier would put `hosts/`
+itself on the list.
 
 The list does not name the modules the landing process imports, such as `scripts/lib/` and the
 deployer's helpers. The policy derives that set when it runs, from the modules it has loaded,
@@ -374,12 +374,12 @@ of the pod would drop the capability.
   list. The grant relies on `.credentials.json` staying `0600`.
 - `~/.claude/projects` and `~/.claude/projects/<key>` get group `ubuntu` and `0710` too. The
   memory directory sits under both.
-- `~/.config/chezmoi` is `0710` and its `seed.toml` is `0640`, so `probe.py applied` reads the
-  seed as `ubuntu` (#6408). `rootq` cannot answer for it, because its ancestor rule refuses every
+- `~/.config/chezmoi` is `0710` and its `seed.toml` is `0640`, so the `ubuntu` group can read
+  the seed (#6408). `rootq` cannot answer for it, because its ancestor rule refuses every
   directory the agent owns. The seed holds three chezmoi answers and no credential, and
   `chezmoi.toml` beside it stays `0600`.
-- `~/.config/gh` and `~/.config/homelab-ui` are `0710` for the same reason. `probe.py applied`
-  stats the `0600` gh token and homelab-ui login as `ubuntu` (#6484, #6487). The group gets
+- `~/.config/gh` and `~/.config/homelab-ui` are `0710` for the same reason. The `ubuntu` group
+  can stat the `0600` gh token and homelab-ui login (#6484, #6487). The group gets
   traverse only, so it can neither list the directories nor read the files.
 - A task creates `~/.claude/artifacts` and the memory directory as root, owned by the agent,
   `setgid`, with group `ubuntu`. It cannot run as the agent, because the agent belongs to no

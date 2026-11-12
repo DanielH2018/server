@@ -447,8 +447,7 @@ Mint a new value in the provider, then `sops set` + redeploy the consumer:
   tokens, owner DanielH2018, *Public repositories (read-only)*, no permissions. The
   host-package builder reads CI check runs with it, because its system user has no gh login
   and an anonymous read shares one quota per source IP with the deployer's CI gate. A leaked
-  copy reads only public data. Redeploy with `initial_setup.yml --tags homelab_builder`,
-  which the setup-plane tick runs.
+  copy reads only public data.
 - `monitor_bridge_deploy_pipeline_github_token`: GitHub → Settings → Developer settings →
   Fine-grained tokens, named `homelab-deploy-pipeline-exporter`, owner DanielH2018, only the
   `server` repository, with *Actions* read and *Variables* read and no other permission.

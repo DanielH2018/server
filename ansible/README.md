@@ -1,21 +1,17 @@
 # Host Bring-Up Runbook
 
-One-time, low-level steps to get a **new physical host** ready for this repo's Ansible.
-Once the host is reachable over SSH with the repo cloned, day-to-day deploys, tooling (uv),
+One-time, low-level steps to get a **new physical host** ready for this repo.
+`hosts/bootstrap-host.sh` brings the host up, and a host's setup plane ships in its host
+package. No playbook in `ansible/` applies a setup role. Day-to-day deploys, tooling (uv),
 secrets (SOPS), and "adding a service" are documented in the repo-root
-[`README.md`](../README.md) and [`CLAUDE.md`](../CLAUDE.md) — this file only covers the
-OS/hardware bring-up that those don't.
+[`README.md`](../README.md) and [`CLAUDE.md`](../CLAUDE.md). This file covers the
+OS/hardware steps around the script that those don't.
 
 ## 1. Reach the host over SSH
 
 1. Generate an SSH key (e.g. <https://phoenixnap.com/kb/generate-ssh-key-windows-10>) and set
    a password on the new machine.
 
-   > **That password must match the SOPS `become_password`** — or the deploy user must have
-   > NOPASSWD sudo (how `daniel-pi` does it, see `inventory/hosts.ini`). `pre_tasks/load_secrets.yml`
-   > sets `ansible_become_password` from that one fleet-wide secret before any role runs, and
-   > there is no per-host override, so a host whose password differs fails every escalated
-   > task in §8.
 2. **WiFi (if no ethernet):** edit the file under `/etc/netplan/` (`ls` to find it):
 
    ```yaml
@@ -49,8 +45,7 @@ git clone --recurse-submodules https://github.com/DanielH2018/server.git   # use
 
 Clone it to **`/home/<user>/server`, as the user named by `sys_user`** (`ubuntu`, in
 `group_vars/all.yml`). Both the path and the username are baked into role templates and
-systemd units — gitops-deploy's `REPO_DIR`, the secret-rotation crons, AIDE's local config,
-and every container role's `containers/` bind mount. A repo cloned elsewhere, or owned by a
+systemd units, such as the secret-rotation crons and AIDE's local config. A repo cloned elsewhere, or owned by a
 differently-named user, breaks those with no clear error.
 
 `--recurse-submodules` picks up `Email-to-RSS` (a pinned submodule — see
@@ -58,28 +53,12 @@ differently-named user, breaks those with no clear error.
 
 Secrets are committed **encrypted** (SOPS/age), so the clone already contains
 `ansible/vars/secrets.yml` — there is no separate secrets-copy step. Letting this host
-*decrypt* them is **§5** below (and must happen before §8's `initial_setup.yml`).
+*decrypt* them is **§5** below.
 
 ## 3. Install uv
 
-> **Shortcut:** [`bring-up.sh`](bring-up.sh) drives §3-§5 and §8:
->
-> ```bash
-> ./ansible/bring-up.sh --scaffold   # §4: create the inventory entries, then stop to edit them
-> ./ansible/bring-up.sh              # §3+§5: install uv, run bootstrap.yml, print the SOPS steps
-> ./ansible/bring-up.sh --continue   # §8: preflight + initial_setup + k3s-bringup
-> ```
->
-> It takes `--host <name>` to bring up a host other than this one, checks the target resolves
-> to exactly one inventory host before doing anything, and is idempotent throughout. §6, §7 and
-> §9 stay manual. The walkthrough below is what it does — and the path to take if you'd rather
-> run each step by hand.
-
-`uv` is the **only manual prerequisite** — everything else flows from it. The repo is a uv
-"virtual" project (`pyproject.toml` pins `ansible-core` in the `dev` group; `.python-version`
-pins 3.14), so `uv run ansible-playbook …` self-provisions Python + ansible-core + the runtime
-from `uv.lock`. That includes `bootstrap.yml` in §5, so no system-wide Ansible install is
-needed.
+`uv` runs the repo's Python tooling. The repo is a uv "virtual" project (`.python-version`
+pins 3.14), so `uv run` self-provisions Python and the runtime from `uv.lock`.
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -88,62 +67,33 @@ source ~/.bashrc   # (or re-login) to pick up ~/.local/bin on PATH
 
 ## 4. Add the host to inventory
 
-Every playbook (`bootstrap.yml`, `initial_setup.yml`, `k3s-bringup.yml`) resolves its target through
-`ansible/inventory/hosts.ini` — a host that isn't listed there matches nothing, and the run
-just silently no-ops. `./ansible/bring-up.sh --scaffold [--host <name>]` creates both files
-below if they're missing (it never overwrites) and then stops so you can fill them in. Before
+`ansible/inventory/hosts.ini` and `ansible/inventory/host_vars/<host>.yml` describe each host to
+the renderer and the host packages. A host that isn't listed there matches nothing. Before
 touching SOPS:
 
-1. Add the new host under `[homeservers]` in `ansible/inventory/hosts.ini`. **The connection
-   fields are not optional** — a bare hostname makes Ansible open an SSH connection to the
-   host even when it *is* the host. Use whichever line applies:
-
-   ```ini
-   # Playbooks are run ON this host (the usual case for a new server):
-   <host>   ansible_connection=local
-   # Driven remotely from another host acting as controller (how daniel-pi is set up):
-   <host>   ansible_host=<lan-ip> ansible_user=ubuntu ansible_connection=ssh
-   ```
+1. Add the new host's bare hostname under `[homeservers]` in `ansible/inventory/hosts.ini`.
 
 2. Create `ansible/inventory/host_vars/<host>.yml` — copy
    [`host_vars/_example.yml`](inventory/host_vars/_example.yml), which lists every variable a
    new host can set with its default and why it matters. At minimum:
    - `server_ip` — the host's LAN IP (no default exists; every role that publishes a
      LAN-bound port or firewalls by IP needs it).
-   - `ssh_config_path` — where sshd's config actually lives on this OS image. Check with
-     `sudo sshd -T | grep -i '^include'` or `ls /etc/ssh/sshd_config.d/` — cloud-init images
-     (like the Pi's) often drop a config under `sshd_config.d/`; a stock Ubuntu install uses
-     the bare `/etc/ssh/sshd_config`. Getting this wrong fails the SSH-hardening tasks in §8
-     outright (the `lineinfile`/`blockinfile` tasks have no `create:` fallback).
    - `containers_list: []` on a Docker host only. A k3s node drops the key, because the k3s
      services live in `cluster/services.yml` (see the repo-root `CLAUDE.md` → "Adding a New
      Service").
    - Any hardware capability flags a role you plan to deploy expects — e.g. `has_igpu: true`
      only if the host has an Intel iGPU (gates `/dev/dri` passthrough for jellyfin/tdarr;
      defaults to `false` in `group_vars/all.yml`).
-   - `has_gitops: false`. `group_vars/all.yml` sets the same `false`. The key only gates the
-     emptied `homelab_builder` role in `initial_setup.yml`, because H7.53 deleted the GitOps
-     deployer it once armed.
 
 ## 5. Onboard the host to SOPS
 
-This **gates §8**: `initial_setup.yml` decrypts `ansible/vars/secrets.yml` in
-a `pre_tasks` block that runs *before any role*. The host therefore needs `sops`, the pinned
-collections and an age key first, and no playbook provides any of the three.
+This step gates decryption: a host needs `sops` and an age key before it can read
+`ansible/vars/secrets.yml`.
 
 - `sops` comes from the host package. `hosts/bootstrap-host.sh` installs it, and the package's
   `sops` component puts `/usr/bin/sops` on `PATH` and depends on `age`.
-- The collections, `community.sops` among them, install by hand. Run the same command again
-  after a `requirements.yml` bump:
-
-  ```bash
-  uv run ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
-  ```
-
-- Ansible decrypts with the operator's `~/.config/sops/age/keys.txt`, so only a host that runs
-  Ansible needs one. `docs/break-glass.md` (*The age keys*) records which hosts hold one. To
-  create it, run `age-keygen -o ~/.config/sops/age/keys.txt` as the operator on the new host,
-  after `mkdir -p -m 0700 ~/.config/sops/age`, and note the public key it prints.
+- `hosts/bootstrap-host.sh` creates the host's age key at its step 3 and prints the public
+  key. `docs/break-glass.md` (*The age keys*) records which hosts hold one.
 
 Then:
 
@@ -169,14 +119,10 @@ sudo resize2fs /dev/ubuntu-vg/ubuntu-lv
 
 Only needed if this host will run jellyfin/tdarr with hardware transcode. Set
 `has_igpu: true` in its `host_vars` (§4) — that flag passes `/dev/dri` through in the
-jellyfin/tdarr compose templates, and on an **Intel** GPU also has `initial_setup.yml` write
-`/etc/modprobe.d/i915.conf` and rebuild the initramfs.
+jellyfin/tdarr compose templates, and on an **Intel** GPU the host package also writes
+`/etc/modprobe.d/i915.conf` (`hosts/components/host-hardening/templates/i915.conf`).
 
-```bash
-uv run ansible-playbook ansible/initial_setup.yml --tags igpu
-```
-
-It deliberately does **not** reboot for you — this is the machine running the whole homelab.
+The package deliberately does **not** reboot for you — this is the machine running the whole homelab.
 GuC only takes effect after a reboot, so do that when convenient, then confirm with
 `ls /dev/dri` and `dmesg | grep -i guc`.
 
@@ -193,42 +139,16 @@ an OEM kernel matching **this host's Ubuntu release** plus a reboot. Don't copy
 `linux-oem-22.04` from an older runbook onto a 24.04 host: there it's a transitional dummy
 package (verified on daniel-server, where the generic 6.8 kernel already provides i915).
 
-## 8. Run the playbooks
+## 8. Install the host packages
 
-Ansible runs through the repo's pinned uv env (see repo-root [`CLAUDE.md`](../CLAUDE.md) →
-"Common Commands"). From the repo root:
-
-```bash
-uv run ansible-playbook ansible/preflight.yml       # read-only; asserts §1-§5 actually landed
-uv run ansible-playbook ansible/initial_setup.yml   # OS hardening; base pkgs, uv-tool CLIs, gitops deployer — needs §5 SOPS
-uv run ansible-playbook ansible/k3s-bringup.yml     # cluster foundation (k3s, Longhorn, CRDs) — cluster nodes only
-```
+`hosts/bootstrap-host.sh <hostname>` installs the host's packages. `docs/host-packages.md`
+(*Rebuilding daniel-box*, *Rebuilding daniel-server*) orders the steps for a cluster node, and
+the Pi runbook in `docs/break-glass.md` does the same for `daniel-pi`.
 
 No playbook deploys a workload. Flux applies every k8s workload once it is bootstrapped; on a
 rebuilt cluster, follow [Bootstrapping Flux on a rebuilt
 cluster](../docs/flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster). The Pi's services
 ship in its host package.
-
-> `docker_install` is an `end_role` stub on every host. The cluster nodes' host packages retire
-> its old teardown half's crons and drop-ins as legacy entries (H7.48). `group_vars/all.yml`
-> defaults `has_docker: false` and `daniel-pi` alone overrides it true. The Pi's Docker engine ships in its host package
-> (`hosts/components/pi-docker/`, H7.26), so no Ansible run installs Docker anywhere.
-> Both cluster nodes also declare the `false` at host level, where the reason for each is
-> recorded. `ansible/tests/setup/test_k3s_host_has_no_docker.py` guards against reintroducing the
-> old `when: has_docker` gate on the role include.
-
-or `./ansible/bring-up.sh --continue [--host <name>]`, which runs them in order and stops at
-the first failure. It reads `k3s_server_hosts` from the inventory and runs `k3s-bringup.yml`
-only on a host listed there, naming the join command for an agent node instead — an agent is
-joined from the server node over SSH, which the agent's own bring-up cannot do. Add
-`-e target=<host>` to each command when driving another host (see the §5 note — `--limit` alone
-silently matches nothing).
-
-`preflight.yml` changes nothing — it just fails fast, with an error that names the cause, on
-the mistakes that otherwise surface deep inside `initial_setup.yml`: a missing `host_vars`
-entry, an `ssh_config_path` that doesn't exist on this OS image, a sudo password that doesn't
-match the SOPS `become_password` (§1), or a repo cloned somewhere other than
-`/home/<user>/server` (§2). Reaching its asserts at all proves §5's SOPS onboarding worked.
 
 **CrowdSec's bouncers need no manual registration.** Since slice-6 B2 the single LAPI runs in
 the k3s cluster (`roles/k8s/crowdsec`) and registers its one bouncer declaratively from the
@@ -298,7 +218,7 @@ history — do not follow it.
 
 ## Not bring-up, moved out of this file
 
-- **journald** log level and disk cap are managed by `initial_setup.yml` (the drop-in at
+- **journald** log level and disk cap ship in the host package (the drop-in at
   `/etc/systemd/journald.conf.d/50-homelab.conf`) — nothing to do by hand.
 - **LaTeX editing in code-server:**
   [`roles/k8s/code-server/CLAUDE.md`](roles/k8s/code-server/CLAUDE.md).

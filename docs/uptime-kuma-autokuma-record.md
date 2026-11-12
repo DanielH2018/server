@@ -254,8 +254,8 @@ hourly host cron therefore stayed red until that cron's next slot after the faul
 #1781 read the deadlines as the cause. They are not. Recovery time is set on the producer, in two
 shapes:
 
-- **A host check is a `kuma-check-<name>` systemd timer**, from `roles/setup/common`'s
-  `check_timer.yml` until H7.63 deleted its last caller; the host packages ship the same shape
+- **A host check is a `kuma-check-<name>` systemd timer**, from a setup-role task
+  until H7.63 deleted its last caller; the host packages ship the same shape
   as plain units. The contract is the exit code: the script exits 1 after it pushes `down` and 0 after `up`,
   and the oneshot service's `Restart=on-failure` reruns it every `RestartSec` (15 min for the hourly
   checks, 30 min for the daily ones) until it exits 0. A script that pushes `down` and exits 0 is a

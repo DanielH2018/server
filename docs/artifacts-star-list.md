@@ -32,7 +32,7 @@ It skips every artifact whose line carries its own label.
 ## A peer learns its stars from the sync
 
 daniel-server prunes its own tree, so it needs its own copy of the list. The sync cron on
-daniel-box, which `roles/setup/claude_code` installs, pushes the list from
+daniel-box, which the `claude-code` host component (`hosts/components/claude-code/`) installs, pushes the list from
 `claude_code_artifacts_stars_file` to each peer's `stars_path` after it pulls that peer's
 artifacts.
 The push uses the same ssh transport as the pull, and a failed push counts toward the same

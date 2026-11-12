@@ -2404,6 +2404,15 @@ the `manual_plane` clearing, and *Rollback*'s
     the host renderer still reads in place through `role:`, `setup_lib/` with its censuses,
     `probe.py applied`, and `test_pi_escalation_timeout.py` with the census's named member.
     The second PR marks H7.55 landed.
+    **Landed as [#8037](https://github.com/DanielH2018/server/pull/8037) and H7.55b
+    ([#8035](https://github.com/DanielH2018/server/issues/8035)).** Each component that
+    rendered a role source through `role:` owns it. A file two components render stays single:
+    `pi-resolver` owns `resolv.conf.j2`, which `k3s-host-dns` borrows through
+    `component: pi-resolver`, and `k3s-server` owns the k3s defaults and the address-pin
+    template, which `k3s-agent` borrows. `homelab-check-lib.sh` sits in `check-lib`'s
+    `files/`, and `SHARED_FILES` names it there. Every host and package render matched its
+    base under `diff -r`. `has_gitops`, `k3s_server_hosts` and `k3s_agent_hosts` went with the
+    playbooks that read them.
 32. **H7.56.** Both steps follow H7.55 and remove the last Ansible inputs: ansible-core with its
     config, its hook and leakguard's temp-dir sweep, and the Pi's empty key. *Removed in
     H7.20* names the sweep's parts. Neither moves a rendered byte. It carries exit

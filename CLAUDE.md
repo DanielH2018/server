@@ -8,8 +8,7 @@ Docker + k3s homelab managed with Ansible and deployed across three hosts via in
 - `daniel-server` — k3s agent node (Intel XE graphics, LVM storage, UPS hardware + the
   `nut_host` shutdown chain)
 - `daniel-pi` — Raspberry Pi, the **only** remaining Docker host (LAN-only: wg-easy, alloy,
-  autoheal, docker-proxy). Its containers ship in its `homelab-daniel-pi` package; Ansible's
-  setup plays still reach it over SSH with `-e target=daniel-pi`.
+  autoheal, docker-proxy). Its containers ship in its `homelab-daniel-pi` package.
 
 ## Directory Structure
 ```
@@ -61,9 +60,8 @@ entries (`ansible/filter_plugins/toposort.py`) into the bundle's `dependsOn` edg
 no template carries goes in `depends_on:` on the entry, never in its list position.
 
 ## Common Commands
-Run ansible through `uv run` so it uses the repo's pinned env
-(`docs/python-code-organization.md`). Bare `ansible-playbook` lacks the module deps, and deploys
-fail.
+Run the repo's Python tools through `uv run` so they use the pinned env
+(`docs/python-code-organization.md`). No playbook remains under `ansible/` to run.
 **A k8s service deploys through `promote` and Flux, never through Ansible.** The merge is the
 deploy, and `land.sh` follows it. **A host's setup plane ships in its host package**, which the
 builder publishes and each host's updater installs; no setup role applies on its own, and
@@ -216,9 +214,8 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
 - **The cluster file is generated, never hand-edited.** Only `cluster_vars.py write` writes
   `cluster-vars.sops.env`. It decrypts, so an agent never runs it. `docs/secret-rotation.md` owns
   the mechanics.
-- **A host that can't decrypt yet** fails `initial_setup.yml`/`deploy.yml` at their
-  secret-load `pre_task`, which reads as a playbook bug rather than a missing key. The
-  **`add-secret` skill** has the onboarding through `ansible/bootstrap.yml`.
+- **A host that can't decrypt yet** has no age key of its own. `hosts/bootstrap-host.sh` creates
+  the key at its step 3, and the **`add-secret` skill** has the onboarding.
 
 ## Pre-commit Hooks
 The repo uses [prek](https://prek.j178.dev). `prek.toml` holds the config and each hook's history.

@@ -83,7 +83,7 @@ merges it outside `land.sh`, runs `land.sh --regate <pr>` for it, then clears th
    `ansible/tests/longhorn/test_longhorn_storageclass.py` fails if the parameter reappears, and
    fails if the patched class differs from upstream's in anything but that parameter. Apply the same
    diff to `ansible/roles/k8s/longhorn/templates/storageclass-nobackup.yaml.j2`.
-3. **Merge through `land.sh`.** The merge is the apply, in place of `k3s-bringup.yml --tags longhorn`.
+3. **Merge through `land.sh`.** The merge is the apply.
    On daniel-box, run the command the `land-after-merge` skill gives for this PR. `land.sh` runs
    the gates above, posts `homelab/upgrade-gates`, merges, and follows the merge until `promote`
    has applied it. The `longhorn` Kustomization renders `wait: true`, so Flux waits for every
