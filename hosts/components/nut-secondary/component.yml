@@ -19,7 +19,7 @@
 # when the drop-in goes.
 #
 # The watchdog changes no state: it only reads and reports; it restarts, writes and deletes
-# nothing, so the nut_host role stays in test_setup_cron_roles_have_a_contract.py's EXEMPT list.
+# nothing, so it owes no autonomous-role contract.
 # The actor that changes state is upsmon, which the nut pod's CLAUDE.md documents.
 #
 # - Mode (explicit and reversible): nut_host_watchdog_armed arms the timer and ships true. Setting

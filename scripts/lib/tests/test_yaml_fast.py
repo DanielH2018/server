@@ -88,7 +88,6 @@ def _narrowing_modules() -> list[str]:
     return [
         "scripts/deploy_tools/setup_lib/setup_gates.py",
         "scripts/deploy_tools/setup_lib/setup_role_chains.py",
-        "scripts/lib/narrow_git.py",
         "scripts/lib/render_guard.py",
         "scripts/lib/k8s_role_callers.py",
     ]

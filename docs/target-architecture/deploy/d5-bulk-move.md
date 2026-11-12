@@ -2285,7 +2285,7 @@ one task file per source role, in a conversion PR before that role flips:
   it.
 - Its `CLAUDE.md` carries the Autonomous-role contract, because it installs a timer and
   removes crons. `ansible/tests/repo/test_role_claude_md.py` and
-  `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py` hold that.
+  `test_setup_cron_roles_have_a_contract.py` (deleted, #8027) hold that.
 - The role's playbook entry runs on daniel-box. `setup_routing.py` places a role whose gate
   admits only another host as a hand apply, so a Pi-gated role would never run from the tick.
   pi-peer-backup's two writes on daniel-pi therefore keep `delegate_to: daniel-pi` inside

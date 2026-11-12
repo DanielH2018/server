@@ -15,9 +15,6 @@ A row carries what differs between planes and nothing else:
 Role-doc size has no check here. The `DECIDED` block above `_doc_problems` records why, and
 `.claude/hooks/inject-nested-docs.py --report` prints each doc's margin under the hook's budget.
 
-The cron-contract half of the setup plane is a different property and stays in
-`ansible/tests/setup/test_setup_cron_roles_have_a_contract.py`.
-
 Run: uv run pytest ansible/tests/repo/test_role_claude_md.py
 """
 

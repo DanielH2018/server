@@ -1,5 +1,6 @@
 """The app's routing over an injected runner: every read degrades, every write is guarded."""
 
+import dataclasses
 import io
 import json
 import pathlib
@@ -30,21 +31,16 @@ class FakeRun:
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
 
-# A landing, a terminal deploy (deploy.sh and the playbook it runs, holding its two
-# service locks), and a second deploy of the same service queued on that lock.
+# A landing holding the tree lock, and a playbook run queued on it.
 PS = """\
  4321     1   125 /x/python3 scripts/deploy_tools/land.py --pr 1543 --since 72c1a41
- 5000     1    90 bash ./scripts/deploy.sh --tags n8n
- 5001  5000    88 /x/python3 /x/ansible-playbook ansible/deploy.yml --tags n8n
- 5100     1    30 bash ./scripts/deploy.sh --tags n8n
+ 5000     1    30 /x/python3 /x/ansible-playbook ansible/deploy.yml --tags n8n
 """
-# fuser with stderr merged: `<path>: <pids>` for each OPEN file. The queued deploy
-# (5100) has the n8n lock open too: deploy.sh opens the descriptor, then blocks on it.
-# The argv names every lock file under the App's lock_dir, so the prefix is the command
-# alone; the paths are filled in by the fixture, which knows the tmp dir.
+# fuser with stderr merged: `<path>: <pids>` for each OPEN file. The queued run (5000)
+# has the tree lock open too. The argv names the lock path, so the prefix is the command
+# alone; the path is filled in by the fixture, which knows the tmp dir.
 FUSER = """\
-{d}/server-deploy-all.lock: 5000 5001
-{d}/server-deploy-n8n.lock: 5000 5001 5100
+{d}/{name}: 4321 5000
 """
 TABLE: dict[tuple[str, ...], tuple[str, int | str]] = {
     ("ps", "-eo", "pid=,ppid=,etimes=,args="): (PS, 0),
@@ -65,27 +61,21 @@ def _proc_locks_line(path, waiter=None):
 
 @pytest.fixture
 def lock_dir(tmp_path):
-    """Three lock files, and a /proc/locks in which all.lock and n8n.lock are granted
-    and 5100 is blocked on n8n.lock. Keys are the files' real (dev, inode)."""
+    """The tree lock, and a /proc/locks in which it is granted and 5000 is blocked on it.
+    The key is the file's real (dev, inode)."""
     d = tmp_path / "lock"
     d.mkdir()
-    for name in (
-        TREE_LOCK_NAME,
-        "server-deploy-all.lock",
-        "server-deploy-n8n.lock",
-    ):
-        (d / name).touch()
+    (d / TREE_LOCK_NAME).touch()
     (tmp_path / "proc_locks").write_text(
-        _proc_locks_line(d / "server-deploy-all.lock")
-        + _proc_locks_line(d / "server-deploy-n8n.lock")
-        + _proc_locks_line(d / "server-deploy-n8n.lock", waiter=5100)
+        _proc_locks_line(d / TREE_LOCK_NAME)
+        + _proc_locks_line(d / TREE_LOCK_NAME, waiter=5000)
     )
     return d
 
 
 def _table(lock_dir):
     t = dict(TABLE)
-    t[("fuser",)] = (FUSER.format(d=lock_dir), 0)
+    t[("fuser",)] = (FUSER.format(d=lock_dir, name=TREE_LOCK_NAME), 0)
     return t
 
 
@@ -108,7 +98,6 @@ def app(tmp_path, lock_dir):
         bind="127.0.0.1",
         port=0,
         tree_lock=lock_dir / TREE_LOCK_NAME,
-        lock_dir=lock_dir,
         proc_locks=tmp_path / "proc_locks",
     )
     return deploy_ui.App(cfg, run=FakeRun(_table(lock_dir)))
@@ -181,39 +170,40 @@ def test_stale_route_is_gone_and_runs_nothing_is_flagged(app):
     assert status == 404 and not any(c[0] == "uv" for c in app.run.calls)
 
 
-def test_inflight_lists_landing_deploy_and_queued_deploy_is_clean(app):
+def test_inflight_lists_the_tree_lock_holder_and_waiter_is_clean(app):
     b = body(app.get("/api/inflight"))
     rows = {r["pid"]: r for r in b["runs"]}
+    assert set(rows) == {4321, 5000}
     assert rows[4321]["kind"] == "land" and rows[4321]["pr"] == "1543"
-    # The playbook (5001) folds into the deploy.sh that spawned it; the row carries the
-    # locks the family holds, and the tree lock is one of the files fuser was asked about.
-    assert set(rows) == {4321, 5000, 5100}
+    assert rows[4321]["locks"] == [TREE_LOCK_NAME]
+    # 5000 has the tree lock open like the holder does; /proc/locks says it is blocked on it.
     assert rows[5000]["kind"] == "deploy" and rows[5000]["tag"] == "n8n"
-    assert rows[5000]["locks"] == ["server-deploy-all.lock", "server-deploy-n8n.lock"]
-    # 5100 has n8n.lock open like the holder does; /proc/locks says it is blocked on it.
-    assert rows[5100]["locks"] == []
-    assert rows[5100]["waiting_on"] == ["server-deploy-n8n.lock"]
-    assert b["locks_watched"] == [
-        TREE_LOCK_NAME,
-        "server-deploy-all.lock",
-        "server-deploy-n8n.lock",
-    ]
+    assert rows[5000]["locks"] == []
+    assert rows[5000]["waiting_on"] == [TREE_LOCK_NAME]
+    assert b["locks_watched"] == [TREE_LOCK_NAME]
 
 
-def test_inflight_asks_fuser_about_every_lock_file_is_clean(app, lock_dir):
+def test_inflight_asks_fuser_about_the_tree_lock_is_clean(app, lock_dir):
     app.get("/api/inflight")
     fuser = next(c for c in app.run.calls if c[0] == "fuser")
-    assert fuser == [
-        "fuser",
-        *(
-            str(lock_dir / n)
-            for n in (
-                TREE_LOCK_NAME,
-                "server-deploy-all.lock",
-                "server-deploy-n8n.lock",
-            )
-        ),
-    ]
+    assert fuser == ["fuser", str(lock_dir / TREE_LOCK_NAME)]
+
+
+def test_inflight_ignores_other_lock_files_in_the_tree_locks_directory_is_flagged(
+    tmp_path, lock_dir, monkeypatch
+):
+    """A stale unit may still export DEPLOY_UI_LOCKS; nothing reads it."""
+    (lock_dir / "server-deploy-x.lock").touch()
+    monkeypatch.setenv("DEPLOY_UI_TREE_LOCK", str(lock_dir / TREE_LOCK_NAME))
+    monkeypatch.setenv("DEPLOY_UI_LOCKS", str(lock_dir))
+    cfg = dataclasses.replace(
+        deploy_ui.Config.from_env(), proc_locks=tmp_path / "proc_locks"
+    )
+    run = FakeRun(_table(lock_dir))
+    b = body(deploy_ui.App(cfg, run=run).get("/api/inflight"))
+    assert b["locks_watched"] == [TREE_LOCK_NAME]
+    fuser = next(c for c in run.calls if c[0] == "fuser")
+    assert fuser == ["fuser", str(lock_dir / TREE_LOCK_NAME)]
 
 
 def test_inflight_with_no_lock_files_says_so_is_flagged(tmp_path):
@@ -227,7 +217,6 @@ def test_inflight_with_no_lock_files_says_so_is_flagged(tmp_path):
         bind="",
         port=0,
         tree_lock=empty / TREE_LOCK_NAME,
-        lock_dir=empty,
         proc_locks=tmp_path / "proc_locks",
     )
     run = FakeRun(dict(TABLE))
@@ -244,7 +233,6 @@ def test_inflight_unreadable_proc_locks_is_unavailable_is_flagged(tmp_path, lock
         bind="",
         port=0,
         tree_lock=lock_dir / TREE_LOCK_NAME,
-        lock_dir=lock_dir,
         proc_locks=tmp_path / "missing",
     )
     b = body(deploy_ui.App(cfg, run=FakeRun(_table(lock_dir))).get("/api/inflight"))
@@ -412,9 +400,3 @@ def test_client_closing_mid_response_logs_one_line_no_traceback_is_flagged(
         "request method=GET path=/ status=200 user=daniel",
         "client-disconnected method=GET path=/ status=200 user=daniel",
     ]
-
-
-def test_the_service_lock_glob_does_not_match_the_tree_lock_is_flagged():
-    """The reject half: a glob loose enough to take the tree lock for a service lock would
-    show the tick as a deploy of a service called `git-tree`."""
-    assert not pathlib.PurePath(TREE_LOCK).match(deploy_ui.SERVICE_LOCK_GLOB)

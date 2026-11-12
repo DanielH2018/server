@@ -44,7 +44,7 @@ covers routes through the skill listing rather than this table.
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. `scripts/renderer/renderer_lib/restart.py` stamps the restart annotation on each restart target's pod template, and `ansible/roles/k8s/monitor-bridge/templates/script-configmap.yaml.j2` is the worked example. Content that reaches the cluster another way needs its own `checksum/<thing>` pod annotation from `ansible/templates/checksum-annotation.yml.j2`. |
 | A config edit won't recreate the container (Docker, the Pi) | The `new-container` skill · `hosts/components/pi-compose/services/alloy/compose.yaml.j2` is the worked example |
 | Starting Claude Code sessions from a phone | `hosts/components/claude-code/CLAUDE.md`, *The two Remote Control modes are different features* |
-| Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract*. A host component's timer owes one too. `ansible/tests/repo/test_role_claude_md.py`, `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py` and `ansible/tests/repo/_component_contract_row.py` enforce it |
+| Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract*. A host component's timer owes one too. `ansible/tests/repo/_component_contract_row.py` enforces it for host components |
 | Recording a finding, fix or improvement you will not do this session | `findings.py open` (flags: `findings.py open --help`). `findings.py list` is the open register; `docs/reference/backlog.md` renders it. Never `gh issue create` by hand — `.claude/hooks/block-footguns.py:issue_create_by_hand_problem` denies it and names the wrapper. |
 
 ## Adding a New Service
