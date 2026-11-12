@@ -1,8 +1,8 @@
-# navidrome — Subsonic-compatible music server (parked)
+# navidrome — Subsonic-compatible music server
 
-Navidrome, stood up 2026-09-02 for issue #803, then scaled to zero on operator request.
-There is nothing for it to serve yet: the media volume holds books, movies and TV, no music
-directory, so the library mount is an `emptyDir`.
+Navidrome serves the music library at `media/music` on the shared media volume to its web UI
+and to Subsonic clients. It was stood up 2026-09-02 for issue #803, parked at zero replicas
+until 2026-11-12, and unparked with an empty library for the music pipeline to fill.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
@@ -10,48 +10,52 @@ directory, so the library mount is an `emptyDir`.
   the rollout
 - **Image:** `ghcr.io/navidrome/navidrome` (`navidrome_k8s_image`)
 - **Route:** `navidrome.<domain>` · `navidrome.local.<domain>`, Authelia one_factor
-- **Claim:** `navidrome-data` (weekly -> B2 (default target))
+- **Claims:** `navidrome-data` (weekly -> B2 (default target)), `media-data` (not Longhorn
+  (media-local))
 <!-- /generated_from -->
 
 - **Pinned `tag@sha256`.**
-- **Host:** daniel-server preferred (`node_affinity_preference`), not pinned — schedules
-  elsewhere if daniel-server is cordoned or full.
-- **The route is not deployed while parked**, see below.
+- **Host:** daniel-box, by way of the `media-data` local PV's node pin. The template sets no
+  affinity of its own (the `DECIDED:` note in `templates/deployment.yaml.j2`).
+- **The library** is `media-data` at `subPath: media/music`, mounted read-only at `/music`.
+  daniel-box's host package creates the directory
+  (`hosts/daniel-box/tmpfiles.d/homelab-media-volume.conf.j2`). Nothing backs the library up,
+  like the rest of the media volume.
 - **`navidrome-data`** (`navidrome_k8s_claim`), Longhorn, 2Gi — SQLite index and transcoding
   cache, sized as headroom rather than a measurement.
-- **Parked at `navidrome_k8s_replicas: 0`.** `k8s_autodeploy: false` stops Renovate
-  automerging the image bump, because a bump would never reach a pod.
-- **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is `platform:
-  k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote`
-  publishes and verifies the next bundle. Its image-bump PRs therefore draw no `land-wait` and no
-  `probe.py health` run. authelia and traefik are flux-owned too, so the Kustomization lists them
-  in `dependsOn`, and Flux applies this tag only after their Kustomizations are Ready.
-- **Where the task went.** The renderer reads its
-  `manifests_files` list, so the replica gate on the route below holds under Flux too. The
-  Kustomization's `wait` replaces the rollout wait.
+- **The `navidrome-snapshot` Job snapshots `navidrome-data` before each revision applies**
+  (D5.2a), so `k8s_autodeploy: true` lets Renovate automerge an image bump that migrates the
+  index. A failed revision writes the stateful hold, and the operator reverts the claim
+  through `docs/volume-snapshot-drills.md`.
+- **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is
+  `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when
+  `promote` publishes and verifies the next bundle. The Kustomization lists its dependencies
+  (authelia, traefik, media-volume) in `dependsOn`, and its `wait` replaces the rollout wait.
 
 ## Notable
-- **Parked, not scaled live.** `defaults/main.yml` sets `navidrome_k8s_replicas: 0`
-  declaratively rather than via `kubectl scale`, because the read-only ServiceAccount cannot
-  scale anything, and Flux's drift correction would reset a live scale to the rendered
-  `replicas` anyway.
+- **The first account created in the web UI becomes the admin.** Authelia gates the UI, so
+  only a signed-in user can reach that form, but create the admin right after a fresh
+  `navidrome-data`.
+- **Subsonic clients cannot pass Authelia.** Behind `one_factor` only the web UI works; a
+  phone or desktop client needs `/rest/` exempted, with Navidrome's own auth in front of it.
 - **`ND_ENABLEEXTERNALSERVICES` is `"false"`**, which is load-bearing for the network posture:
   it disables both the GitHub release check and the metadata agents, so the pod opens no
   outbound connection at all — that's what puts it in `netpol-baseline`'s `BORN_FENCED_ROLES`.
+  Turning it on for Last.fm or ListenBrainz takes the role out of that list in
+  `ansible/tests/k8s/test_netpol_baseline_labels.py` (`docs/networkpolicy-default-deny.md`).
 - **The route is gated on the replica count.** `defaults/main.yml` lists `ingressroute.yaml` in
   `manifests_files` only while `navidrome_k8s_replicas` is above 0. Traefik re-reads every
   IngressRoute on each config refresh and logs `no servers found for homelab/navidrome`
   whenever the EndpointSlice behind one is empty — every ~20s, forever, burying every other
   router error (issue #1323). Flux prunes by its inventory (`prune: true`), so a render that
-  drops the route deletes the live IngressRoute at that promotion, as `manifests_prune`
-  (#3388) did under Ansible. The gate is in the list rather than the template because the
-  prune's labelling wrapper refuses a template that renders no document.
+  drops the route deletes the live IngressRoute at that promotion. The gate is in the list
+  rather than the template because the prune's labelling wrapper refuses a template that
+  renders no document.
 - **`Recreate` strategy**, not rolling: the data PVC is RWO on a single Longhorn replica, and
-  SQLite wants one writer. Once it has a pod, a change that rolls it takes the service down
-  briefly.
+  SQLite wants one writer. A change that rolls it takes the service down briefly.
 
-## Bringing it back
-Set `navidrome_k8s_replicas: 1`, point `navidrome_k8s_music_dir` at a real library on the
-media volume, flip `k8s_autodeploy: true`, and delete the entry's `probe: false` so the
-`blackbox-ingress` job derives its ingress probe (one added while parked would fire forever). The route comes back with the replica count — no separate step. Merge the change;
-`promote` applies it, and nothing applies it by hand.
+## Parking it again
+Set `navidrome_k8s_replicas: 0`, drop `k8s_autodeploy_snapshot_pvcs` and turn
+`k8s_autodeploy` off (a snapshot-protected role must have a pod), and add `probe: false` to
+the `containers_list` entry so the derived ingress probe does not fire forever. The route
+leaves with the replica count.

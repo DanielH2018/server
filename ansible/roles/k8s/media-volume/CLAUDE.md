@@ -1,8 +1,9 @@
-# media-volume — the shared media library, one filesystem for seven workloads
+# media-volume — the shared media library, one filesystem for eight workloads
 
-Declares `media-data`, the volume seven media-stack roles mount at `/data`. They must all see
-**one** filesystem or sonarr/radarr imports silently become copies instead of hardlinks. No
-route — infra role, no Deployment of its own.
+Declares `media-data`, the volume eight media-stack roles mount. The seven that write mount it
+at `/data`, and they must all see **one** filesystem or sonarr/radarr imports silently become
+copies instead of hardlinks. navidrome mounts only `media/music`, read-only. No route — infra
+role, no Deployment of its own.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
@@ -17,8 +18,8 @@ route — infra role, no Deployment of its own.
   reaches the cluster when `promote` publishes and verifies the next bundle. The claim carries
   `kustomize.toolkit.fluxcd.io/prune: disabled`, so neither a revert nor a removal from the
   bundle can delete it.
-- **Must run before any role that mounts `media-data`** — the seven mounters (`sonarr`,
-  `qbittorrent`, `radarr`, `bazarr`, `jellyfin`, `tdarr`, `janitorr`) each carry
+- **Must run before any role that mounts `media-data`** — the eight mounters (`sonarr`,
+  `qbittorrent`, `radarr`, `bazarr`, `jellyfin`, `tdarr`, `janitorr`, `navidrome`) each carry
   `depends_on: [media-volume]` on their `containers_list` entry, and every pair is pinned by
   `ansible/tests/deploy/test_k8s_toposort.py::test_documented_pairwise_ordering_survives_an_adversarial_list`.
 - **Storage:** a **static local PV** (`media-local` StorageClass) at `media_volume_host_path`

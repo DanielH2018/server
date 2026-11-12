@@ -39,7 +39,7 @@ def test_the_real_tree_keeps_its_known_opt_ins_and_excludes_the_comment_only_rol
     found = s.snapshot_optin()
     assert {"home-assistant", "code-server", "tdarr", "karakeep"} <= set(found)
     assert found["code-server"] == ["code-server-config", "code-server-workspace"]
-    assert {"observability", "navidrome"}.isdisjoint(found)
+    assert "observability" not in found
 
 
 def test_the_opt_in_table_counts_its_rows():

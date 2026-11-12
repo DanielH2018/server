@@ -467,12 +467,20 @@ claude_code_triage_daily_cap: 6
 # <state_dir>/shadow.jsonl, `armed` starts it. Shipped `shadow` so a week of would-be episodes
 # can be read before the first unattended run.
 claude_code_triage_poll_mode: shadow
-# A fall below this severity (`none`, `info`, `warning`, `critical`) is logged as skipped and
-# opens no run. The poller reads the `severity` label of the `ALERTS` series, so a series with
-# none ranks below `info`.
-# `critical` because a week of shadow episodes at no floor came to about 21 a day against the
-# six-run cap, mostly warnings (#6861).
-claude_code_triage_poll_min_severity: critical
+# The alerts whose fall opens an episode, each mapped to its profile; templates/claude-triage-pins.j2
+# says how a key is read. A fall the table does not route is logged as skipped and opens no run.
+# The seed is the down class, all `warning` but the two `*Critical` probe twins: a severity floor
+# at `critical` opened nothing for a down service from 2026-10-31 to 2026-11-12 (#8242).
+# wg-easy's probe stays out until its flap is fixed.
+claude_code_triage_poll_routes:
+  ExtraProbeFailed: triage
+  ExtraProbeFailedCritical: triage
+  IngressProbeFailed: triage
+  IngressProbeFailedCritical: triage
+  K8sDeploymentZeroAvailable: triage
+  K8sContainerCrashLooping: triage
+  ScrapeTargetDown: triage
+  "ExtraProbeFailed:wg-easy": none
 claude_code_triage_poll_interval: 2min
 # Loopback first, then observability_prometheus_cluster_ip: Prometheus publishes loopback only
 # on the node it runs on. test_claude_triage.py holds the second equal to the k8s key.

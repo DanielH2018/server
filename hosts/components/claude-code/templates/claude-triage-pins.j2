@@ -17,5 +17,18 @@ the component's defaults/main.yml.
 {%- set daily_cap = 6 -%}
 {#- Arming the poller is an operator decision too. -#}
 {%- set poll_mode = "shadow" -%}
-{#- Lowering the floor raises how many runs a day the poller asks for, so it is pinned too. -#}
-{%- set poll_min_severity = "critical" -%}
+{#- The alerts whose fall opens an episode, each mapped to the profile that runs it. A key is an
+alert name, or `<alert>:<service>` for one service of it, and the service key wins. `none` opens
+nothing, and so does an alert the table does not name. A routed alert's rule must not select on log
+text a session controls (the I6 test in ansible/tests/setup/test_claude_triage.py). Widening the
+table raises how many runs a day the poller asks for, so it is pinned too. -#}
+{%- set poll_routes = {
+  "ExtraProbeFailed": "triage",
+  "ExtraProbeFailedCritical": "triage",
+  "IngressProbeFailed": "triage",
+  "IngressProbeFailedCritical": "triage",
+  "K8sDeploymentZeroAvailable": "triage",
+  "K8sContainerCrashLooping": "triage",
+  "ScrapeTargetDown": "triage",
+  "ExtraProbeFailed:wg-easy": "none",
+} -%}

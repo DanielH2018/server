@@ -101,17 +101,47 @@ def test_continuation_stops_before_a_second_marker(tmp_path):
     assert rows["3"] == "second choice. more about the second choice."
 
 
-def test_prose_marker_has_no_continuation(tmp_path):
-    """Plain prose (no comment prefix) is rendered as a single line, never extended."""
+def test_a_mid_line_mention_is_not_a_marker(tmp_path):
     _write(
         tmp_path,
         "docs/notes.md",
-        "The reasoning is recorded as a `DECIDED:` marker at the code line.\n"
-        "This next line is a separate sentence in the same paragraph.\n",
+        "The reasoning is recorded as a `# DECIDED:` marker at the code line.\n"
+        "- **Mark a settled trade-off `# DECIDED:` at the line it governs.**\n",
     )
-    rows = _rows(tmp_path)
-    assert len(rows) == 1
-    assert "separate sentence" not in rows[0]["text"]
+    _write(tmp_path, "scripts/test_x.py", 'body = "# DECIDED: a fixture string"\n')
+    assert _rows(tmp_path) == []
+
+
+def test_a_marker_opening_a_docstring_bullet_or_jinja_line_counts_without_its_bold(
+    tmp_path,
+):
+    _write(
+        tmp_path,
+        "scripts/foo.py",
+        'def f():\n    """Do it.\n\n    DECIDED: in a docstring.\n    """\n',
+    )
+    _write(tmp_path, "docs/skill.md", "- **DECIDED: as a bullet.**\n")
+    _write(tmp_path, "docs/t.yaml.j2", "{# DECIDED: in Jinja. #}\n")
+    _write(tmp_path, "docs/t.xml", "  <!-- DECIDED: in XML. -->\n")
+    _write(tmp_path, "docs/c.py", "# # DECIDED: in a quoted comment.\n")
+    assert sorted(r["first_sentence"] for r in _rows(tmp_path)) == [
+        "as a bullet.",
+        "in Jinja.",
+        "in XML.",
+        "in a docstring.",
+        "in a quoted comment.",
+    ]
+
+
+def test_a_marker_mid_comment_counts_only_when_it_starts_a_sentence(tmp_path):
+    _write(
+        tmp_path,
+        "scripts/foo.yml",
+        "# Measured first. DECIDED: keep it.\n"
+        "# The `DECIDED: 30m` floor in rules.yaml is the reason.\n"
+        "# See the DECIDED: marker on that rule.\n",
+    )
+    assert [r["first_sentence"] for r in _rows(tmp_path)] == ["keep it."]
 
 
 def test_first_sentence_used_for_the_short_field(tmp_path):
@@ -128,7 +158,7 @@ def test_planes_are_grouped_by_path_prefix(tmp_path):
     _write(tmp_path, "ansible/roles/k8s/foo/tasks/main.yml", "# DECIDED: k8s thing.\n")
     _write(tmp_path, "scripts/bar.py", "# DECIDED: scripts thing.\n")
     _write(tmp_path, "hosts/components/baz/component.yml", "# DECIDED: host thing.\n")
-    _write(tmp_path, "README.md", "A `DECIDED:` marker lives elsewhere.\n")
+    _write(tmp_path, "README.md", "DECIDED: a marker lives elsewhere.\n")
     rows = {r["path"]: r["plane"] for r in _rows(tmp_path)}
     assert rows["ansible/roles/k8s/foo/tasks/main.yml"] == "roles/k8s"
     assert rows["scripts/bar.py"] == "scripts"

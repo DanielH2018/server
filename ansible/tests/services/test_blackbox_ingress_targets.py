@@ -29,7 +29,6 @@ OPTED_OUT = frozenset(
         "jellyfin",
         "livesync",
         "loki-homelab",
-        "navidrome",
         "pihole",
         "scrutiny",
     }
