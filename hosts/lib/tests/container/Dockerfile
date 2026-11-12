@@ -95,13 +95,6 @@ RUN systemctl mask \
         getty@tty1.service console-getty.service systemd-modules-load.service \
     && systemctl set-default multi-user.target
 
-# The live Pi held node_exporter at uid 999 before the package moved it to 904
-# (hosts/components/pi-node-exporter). The image carries the account at 999, as the live Pi
-# does, so the Pi case runs the users arm's move from `moved_from`. useradd fails the build if
-# 999 is already taken.
-RUN useradd --system --uid 999 --home-dir /home/node_exporter --no-create-home \
-        --shell /usr/sbin/nologin --comment 'Prometheus node exporter' node_exporter
-
 # The textfile directory with M3's owner and mode, which the Pi package's tmpfiles.d line creates
 # when node_exporter.service starts (sys_user is ubuntu). The image holds it so the updater's
 # first run finds it before that unit has started.

@@ -140,26 +140,6 @@ def test_a_user_the_arm_would_refuse_fails_the_render(hosts, users):
         _render(hosts, {"users": users})
 
 
-@pytest.mark.parametrize("moved_from", [1001, "995", 0, True])
-def test_the_arm_refuses_a_moved_from_the_renderer_refuses(hosts, moved_from):
-    users = [{**CLAUDE, "moved_from": moved_from}]
-
-    with pytest.raises(RenderRefused):
-        _render(hosts, {"users": users})
-    assert not _reconcile().users.valid({"users": users})
-
-
-def test_a_moved_from_uid_reaches_the_manifest_and_not_the_sysusers_file(hosts):
-    package = _render(hosts, {"users": [{**CLAUDE, "moved_from": 995}]})
-    manifest = _manifest(package)
-
-    assert manifest["users"]["users"][0]["moved_from"] == 995
-    assert _reconcile().users.valid(manifest["users"])
-    assert package.files["/usr/lib/sysusers.d/homelab.conf"][0].decode() == (
-        'u claude 1001 "Claude agent" /home/claude /bin/bash\n'
-    )
-
-
 # lines
 
 

@@ -13,7 +13,7 @@ repository (daniel-box)* holds the design.
 
 - The system users `homelab-builder` (uid 902) and `homelab-signer` (uid 903), nologin, declared by
   uid alone. The uids sit in the homelab band 900-949, below the uids Ubuntu hands out from 999
-  down. Each entry's `moved_from` (995 and 994) lets the users arm renumber the live account. A
+  down. The live accounts held 995 and 994 and move with `scripts/deploy_tools/renumber_host_users.py`. A
   rebuilt host gets groups whose gid equals the uid. Nothing reads the old gids 983 and 982.
 - `tmpfiles.d/homelab-builder.conf`, which keeps the directories the units' `StateDirectory=` lines do
   not create: `src/` and `uv-cache/` (0700), `staged/` (owned by the builder, group

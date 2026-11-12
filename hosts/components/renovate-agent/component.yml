@@ -10,8 +10,8 @@
 # on the directory until the operator's cleanup removes it, and H7.19b switches the readers.
 users:
   # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down (#8100).
-  # moved_from is the uid daniel-box held before; the users arm renumbers the live account.
-  - {name: renovate-agent, uid: 901, moved_from: 999, home: /var/lib/renovate-agent, shell: /bin/bash, comment: Unattended Renovate agent}
+  # The live account held 999 and moves with scripts/deploy_tools/renumber_host_users.py.
+  - {name: renovate-agent, uid: 901, home: /var/lib/renovate-agent, shell: /bin/bash, comment: Unattended Renovate agent}
 units:
   homelab-renovate-agent.service: {policy: manual}
 outputs:

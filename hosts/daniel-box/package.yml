@@ -63,8 +63,8 @@ defaults:
 component: claude-code
 users:
   # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down (#8100).
-  # moved_from is the uid this host held before; the users arm renumbers the live account.
-  - {name: claude, uid: 900, moved_from: 996, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
+  # The live account held 996 and moves with scripts/deploy_tools/renumber_host_users.py.
+  - {name: claude, uid: 900, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
 components:
   - reconcile
   - secrets-unit

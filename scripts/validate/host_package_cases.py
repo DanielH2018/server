@@ -505,7 +505,7 @@ class Cases:
             # Joins the start the postinst queued, and returns once that reconcile ends.
             c.ok("systemctl start homelab-reconcile.service")
             self.expect_reconciled(c, "updater-head", "pi-head")
-            # The image holds node_exporter at its moved_from uid, so reconcile moved it.
+            # The users arm creates node_exporter in the homelab band, below the dynamic range.
             expect_declared_uids(c)
             state = c.active(timer)
             expect(state == "active", f"{timer} is {state} after the install")

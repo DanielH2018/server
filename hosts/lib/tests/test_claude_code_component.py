@@ -59,14 +59,11 @@ def text(package, path: str) -> str:
     return package.files[path][0].decode()
 
 
-def test_the_agent_user_is_declared_with_its_uid_and_the_one_it_moves_from(
-    package, manifest
-):
+def test_the_agent_user_is_declared_with_its_homelab_band_uid(package, manifest):
     assert manifest["users"]["users"] == [
         {
             "name": "claude",
             "uid": 900,
-            "moved_from": 995,
             "home": "/var/lib/claude",
             "shell": "/bin/bash",
             "comment": "Claude agent",

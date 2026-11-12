@@ -360,8 +360,6 @@ class Bootstrap:
         c.boot(self.cases.python)
         c.ok("rm -f /etc/apt/sources.list.d/homelab.sources")
         install_apt_shim(c)
-        # The image holds node_exporter at the live Pi's old uid; a fresh guest holds no such user.
-        c.ok("! getent passwd node_exporter > /dev/null || userdel node_exporter")
         c.ok(
             f"install -d {COPY} && cp /srv/clone/hosts/bootstrap-host.sh"
             f" /srv/clone/hosts/keys/homelab-archive-keyring.gpg {COPY}/"
