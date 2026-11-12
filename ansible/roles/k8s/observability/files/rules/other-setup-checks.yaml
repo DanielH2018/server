@@ -54,7 +54,7 @@ groups:
         annotations:
           summary: daniel-box's UPS secondary watchdog reported a failure.
           description: >-
-            ups-secondary-health.sh on daniel-box ended with status=down: upsmon.conf is
+            /usr/lib/homelab/ups-secondary-health on daniel-box ended with status=down: upsmon.conf is
             unreadable or has no MONITOR line, nut-monitor is not active, or upsc cannot reach
             upsd. Until it is fixed, daniel-box would not power off on FSD. Run `systemctl
             is-active nut-monitor` and `upsc <endpoint> ups.status` on the host; the
@@ -74,9 +74,10 @@ groups:
           summary: daniel-box's UPS secondary watchdog has stopped reporting.
           description: >-
             No ups-secondary-health verdict newer than 25 minutes reached Prometheus from daniel-box's
-            textfile collector, so nothing confirms the secondary upsmon can still hear upsd. Read
-            the `UPS secondary watchdog` cron and the `ups-secondary-health` syslog tag, then
-            /var/lib/node-exporter-textfile/ups-secondary-health.prom on the host.
+            textfile collector, so nothing confirms the secondary upsmon can still hear upsd. Run
+            `systemctl status homelab-ups-watchdog.timer` and `journalctl -u
+            homelab-ups-watchdog.service` on the host, then read
+            /var/lib/node-exporter-textfile/ups-secondary-health.prom.
       # Replaced the "UPS Secondary (daniel-server)" tile.
       - alert: UpsSecondaryFailed
         expr: homelab_check_success{check="ups-secondary-health",origin="daniel-server"} == 0
@@ -86,7 +87,7 @@ groups:
         annotations:
           summary: daniel-server's UPS secondary watchdog reported a failure.
           description: >-
-            ups-secondary-health.sh on daniel-server ended with status=down: upsmon.conf is
+            /usr/lib/homelab/ups-secondary-health on daniel-server ended with status=down: upsmon.conf is
             unreadable or has no MONITOR line, nut-monitor is not active, or upsc cannot reach
             upsd. Until it is fixed, daniel-server would not power off on FSD. Run `systemctl
             is-active nut-monitor` and `upsc <endpoint> ups.status` on the host; the
@@ -107,9 +108,9 @@ groups:
           description: >-
             No ups-secondary-health verdict newer than 25 minutes reached Prometheus from
             daniel-server's textfile collector, so nothing confirms the secondary upsmon can
-            still hear upsd. Read the `UPS secondary watchdog` cron and the
-            `ups-secondary-health` syslog tag, then
-            /var/lib/node-exporter-textfile/ups-secondary-health.prom on the host.
+            still hear upsd. Run `systemctl status homelab-ups-watchdog.timer` and `journalctl -u
+            homelab-ups-watchdog.service` on the host, then read
+            /var/lib/node-exporter-textfile/ups-secondary-health.prom.
       # Replaced the "Fake Remux Scan" tile.
       - alert: FakeRemuxScanFailed
         expr: homelab_check_success{check="fake-remux-scan",origin="daniel-box"} == 0
