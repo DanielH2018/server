@@ -55,10 +55,6 @@ component.
   false on the Pi. ENFORCED:
   `ansible/tests/setup/test_journald_syslog_forwarding.py::test_raising_the_forwarding_level_requires_the_syslog_filter`,
   `ansible/tests/setup/test_journald_syslog_forwarding.py::test_the_filter_component_lists_exactly_on_hosts_with_rsyslog`.
-- **The role defines no handlers.** A `notify:` in a setup role resolves against every role in
-  the play, so it can reach another role's handler. ENFORCED:
-  `ansible/tests/setup/test_setup_handlers_resolve.py::test_every_notify_in_initial_setup_resolves_to_a_handler`,
-  `ansible/tests/setup/test_setup_handlers_resolve.py::test_every_handler_in_the_play_has_a_notifier`.
 
 ## Rollback
 A revert of H7.63 restores the task files, the drift check and their tests. The operator then

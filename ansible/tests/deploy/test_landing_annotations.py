@@ -107,6 +107,7 @@ _CAUSE_BESIDE_ANOTHER_VERDICT = [
     (Verdict.DEFERRED, Cause.PROMOTE_TIMEOUT),
     (Verdict.DEFERRED, Cause.GATE_UNREADABLE),
     (Verdict.DEFERRED, Cause.GATE_STALE),
+    (Verdict.DEFERRED, Cause.LEDGER_UNREADABLE),
 ]
 
 _LABEL_FILTER = re.compile(r'^(\w+)\s*(=~|!~|!=|=)\s*"((?:[^"\\]|\\.)*)"$')

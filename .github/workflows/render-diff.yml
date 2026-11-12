@@ -41,7 +41,7 @@ jobs:
           fetch-depth: 0  # the merge base and its tree need history
           persist-credentials: false
 
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
 
       - name: Render the merge base and the head with one commit value
         env:

@@ -49,7 +49,7 @@ jobs:
         with:
           persist-credentials: false  # nothing here pushes
 
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
 
       # `-m image` replaces the `not ui and not image` in addopts. The paths are the narrowest ones
       # that collect the marked modules; `-n 0` keeps the pull on one process, and `-s` lets the

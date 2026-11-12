@@ -228,41 +228,6 @@ def owed_clear_cmd(cls: str, subject: str, tags=()) -> str:
     return f"{cmd} --applied {','.join(applied)}" if applied else cmd
 
 
-# The setup roles whose whole-role tag is a blunt instrument, and the narrowed tags that still
-# reach the tasks that make it one. Empty since H7.44 emptied the k3s role, the last role whose
-# tasks restarted the control plane.
-#
-# The DATA lives here because three surfaces need it and two of them cannot reach the
-# deployer's tree: `deploy_remediation` composes the long prose for the journal, the Discord
-# alert and `land.sh`, while `scripts/lib/deployer_park.py` renders the SessionStart banner
-# with only `scripts/` on `sys.path` (#2345).
-MAXIMAL_ROLE_GATED_TAGS: dict[str, frozenset[str]] = {}
-
-# The one-line version of what such an apply arms, for a surface with no room for the prose.
-MAXIMAL_ROLE_WARNING: dict[str, str] = {}
-
-
-def maximal_apply_warning(role: str, tags) -> str:
-    """What a printed `--tags` value for `role` arms, or "" when it arms nothing gated.
-
-    Args:
-        role: the role, under the `--tags` value that selects it.
-        tags: the tags the surface is about to print, as an iterable of strings.
-
-    Two shapes carry the warning. The WHOLE-role tag, which is what a surface prints when the
-    deployer could not narrow the change. And a narrowed list that still reaches the role's
-    gated tasks — `MAXIMAL_ROLE_GATED_TAGS`. A narrowed list reaching neither gets nothing:
-    a warning printed beside every command is one nobody reads.
-    """
-    if role not in MAXIMAL_ROLE_WARNING:
-        return ""
-    tags = frozenset(tags)
-    gated = MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset())
-    if tags == frozenset({role}) or (tags & gated):
-        return MAXIMAL_ROLE_WARNING[role]
-    return ""
-
-
 # How long a contention streak may run before monitor-bridge pages on it and the SessionStart
 # banner names it: the deployer's longest apply budget, `gitops_deploy_broad_timeout_s` =
 # 1800 s, so a holder past it has outlived every legitimate deploy. The bridge's own default

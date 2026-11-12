@@ -32,7 +32,7 @@ from deploy_tools.land_lib import land_probe
 from deploy_tools.land_lib import detach
 from _deploy_sh_fakes import BUSCTL_REFUSED
 
-from lib.exit_codes import LAND_BAD_ARGS
+from lib.exit_codes import LAND_BAD_ARGS, LAND_GAVE_UP
 from lib.git_testing import scrubbed_env
 from lib.proc_testing import fake_bin, path_with
 
@@ -74,6 +74,7 @@ def _env(tmp_path: Path, gh: str = _GH_STUB) -> dict[str, str]:
         "PATH": path_with(bin_dir),
         "LAND_PRIMARY": str(tmp_path),
         detach.LOG_DIR_ENV: str(job_dir),
+        detach.LIVE_DIR_ENV: str(tmp_path / "live"),
     }
 
 
@@ -417,3 +418,37 @@ def test_a_log_with_no_verdict_line_reads_as_none(tmp_path, text):
 
 def test_an_unreadable_log_reads_as_none(tmp_path):
     assert detach.verdict_in(tmp_path / "absent.log") is None
+
+
+def _run_capped(
+    tmp_path: Path, live_pids: list[int]
+) -> subprocess.CompletedProcess[str]:
+    """`--detach` with the cap at 1 and one slot file per pid in `live_pids`."""
+    group = tmp_path / "live" / "default"
+    group.mkdir(parents=True)
+    for pid in live_pids:
+        (group / f"{pid}.slot").write_text("")
+    return subprocess.run(
+        ["bash", str(_LAND_SH), "--pr", "939", "--detach"],
+        env={**_env(tmp_path), detach.MAX_LIVE_ENV: "1"},
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+
+
+def test_a_detach_over_the_live_cap_is_refused_as_a_resume_point(tmp_path):
+    """#8018: with the cap's worth of landings live, no new landing forks and the caller may retry."""
+    result = _run_capped(tmp_path, [os.getpid()])
+
+    assert result.returncode == LAND_GAVE_UP, result.stderr
+    assert "1 landings are already live" in result.stderr
+    assert _logs(tmp_path) == []
+
+
+def test_a_dead_landings_slot_does_not_hold_the_cap(tmp_path):
+    """A landing SIGKILLed before it released its slot must not block the orchestrator forever."""
+    result = _run_capped(tmp_path, [2**22 + 12345])
+
+    assert result.returncode == 0, result.stderr
+    assert len(_logs(tmp_path)) == 1

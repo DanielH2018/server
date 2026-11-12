@@ -518,17 +518,14 @@ tasks count against daniel-pi.
 
 Each item must resolve to a package path, a legacy entry, a ufw or libvirt declaration, or
 an entry in the census's short allowlist of deleted items. The allowlist names each item
-with a reason, for example `Clear ansible log file`. The census runs in report mode from
-H7.2f, which prints the items left per host. H7.19c turns it strict, so it fails while any
-setup role still has a task that applies to a host. Its named members are
-`Weekly apt autoremove`, `claude-land@.service.j2`, `k3s/tasks/static-address.yml`,
-`/usr/local/bin/sops`, the `systemd_service` task `Enable and start the host upsmon
-service`, the `ansible.posix.sysctl` setting `net.core.bpf_jit_harden` and the ufw task
-`Enable UFW firewall`. The emptied role's `meta: end_role` stub is a control module, so
-strict mode never flags it.
-Until H7.4 moves it, the report must also list pi-peer-backup's forced-command wrapper in
-`k8s_host_files` under daniel-pi. That report is also the list of record for the rows
-`k8s_host_files` holds when H7 starts.
+with a reason, for example `Clear ansible log file`. The census is strict: it prints the
+items left per host and fails while any setup role still has a task that applies to a host.
+Every setup role is emptied, so `test_the_real_tree_leaves_no_item_on_any_host` holds every
+host at zero. The census's named members therefore sit on a fixture role in
+`ansible/tests/setup/test_setup_census.py`, which holds the shapes the last setup role held:
+the `template` task that pins the node's LAN address in netplan, and an
+`ansible.posix.sysctl` looped over both address families. An emptied role's
+`meta: end_role` stub is a control module, so the census never flags it.
 
 ### Roles are emptied before H7.20a, never deleted
 

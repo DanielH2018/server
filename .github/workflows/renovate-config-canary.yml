@@ -47,7 +47,7 @@ jobs:
 
       # The pinned Node, from the action ci.yml's `renovate-config` job uses, so the two run the
       # validator under one Node release.
-      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+      - uses: $/.github/actions/setup
         with:
           python: "false"
           uv: "false"
