@@ -653,20 +653,43 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   standing alert as a new fall. A `poll-state.json` written by a poller that still had the Kuma
   source holds `kuma:` keys. The first successful poll drops them and opens no episode,
   because nothing can recover them any more.
-- **A fall below `critical` opens no run.** The floor reads the `severity` label of the
-  `ALERTS` series, and a series with no label ranks below `info`.
-  The poller logs each skipped fall, and in `shadow` mode appends it to `shadow.jsonl` with
-  `"skipped": "below-floor"`. The floor is `poll_min_severity`, pinned in
-  `templates/claude-triage-pins.j2` because lowering it raises the runs a day the poller asks
-  for. An unknown value admits only `critical`.
-  Without the floor, the journal from 2026-10-31 18:21 to 2026-11-01 11:23 UTC held 15 shadow
-  episodes, about 21 a day against the six-run cap (#6861). That journal predates B-10, so
-  some of those episodes were Kuma falls. Replayed through the floor, 3 of
-  them open a run: Kuma's `etcd Restore Drill (full)`, `ProdMovedOutsidePromote` and
-  `CheckWithoutPager`. A per-key cooldown was rejected: every repeat in that window was a
-  warning or an untagged series, which the floor already drops.
-- **A storm is one run.** More than three keys at or above the floor falling in one poll make
-  a single storm episode that lists them all. Skipped falls never count towards a storm.
+- **A route table decides which falls open a run.** `poll_routes` in
+  `templates/claude-triage-pins.j2` maps an alert name to the profile that runs its episode,
+  and each episode carries that `profile`. Triage is the one profile today. A key may also be
+  `<alert>:<service>`, which wins over the alert's own key, and the profile `none` opens
+  nothing. An alert the table does not name opens nothing. The poller logs each unrouted fall,
+  and in `shadow` mode appends it to `shadow.jsonl` with `"skipped": "unrouted"`. The table
+  is pinned because widening it raises the runs a day the poller asks for, and a table the
+  poller cannot parse routes nothing.
+
+  | Alert | Profile | What fell |
+  |---|---|---|
+  | `ExtraProbeFailed`, `ExtraProbeFailedCritical` | `triage` | A `blackbox-extra` probe |
+  | `IngressProbeFailed`, `IngressProbeFailedCritical` | `triage` | An ingress probe |
+  | `K8sDeploymentZeroAvailable` | `triage` | A Deployment with no available replica |
+  | `K8sContainerCrashLooping` | `triage` | A crash-looping container |
+  | `ScrapeTargetDown` | `triage` | A scrape target |
+  | `ExtraProbeFailed:wg-easy` | `none` | wg-easy's probe, held out until its flap is fixed (#8252) |
+
+  The table replaced a `critical` severity floor (#8242). Every down-class alert is a
+  `warning`, so from 2026-10-31 to 2026-11-12 the floor logged 168 skipped falls and opened
+  nothing for a down service. Replayed through the table, that journal opens 8 episodes, all
+  for down falls. It holds back wg-easy's 7 falls, and every `PiLoadHigh`, `FluxNotReady` and
+  `FanoutSlotsIdleWithFreeWork` fall. The 12 critical falls the floor had opened, such as
+  `EtcdRestoreDrillFailed` and `HostReconcileFailed`, open nothing until a route names them.
+- **No routed alert counts log text a session can write.** This is invariant I6 of the
+  guardrails plan ([dotfiles#967](https://github.com/DanielH2018/dotfiles/issues/967)). A
+  session can write a syslog line with any tag, so any rule that counts log lines, whatever it
+  filters on, would let it open the next episode.
+  `test_no_routed_alert_counts_log_lines_a_session_can_write` in
+  `ansible/tests/setup/test_claude_triage.py` runs once per routed alert. It fails when a
+  `loki-homelab` rule for the alert counts lines over any stream, or when a Prometheus rule for
+  it reads a log-volume series: a count Alloy makes from log lines, or Loki's own
+  `loki_distributor_lines_received` or `loki_distributor_bytes_received`. `absent_over_time` is
+  the one exemption, because an added line can only keep it from firing. `HostLogErrors`,
+  `HostOutOfMemoryKill` and `WorkloadLogErrors` are counting rules, so none can be routed.
+- **A storm is one run.** More than three routed keys of one profile falling in one poll make
+  a single storm episode that lists them all. Unrouted falls never count towards a storm.
 - **Two gates defer an episode.** One is a firing `DeployHoldActive`. The other is the mute window
   around the weekly reboot, read from the same `weekly_reboot_*` group vars as the Alertmanager
   mute. A deferred key opens its episode once the gate lifts, if it is still down.
@@ -677,8 +700,8 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
 `claude_code_triage_poll_mode` picks what an episode does:
 
 - `off` reads nothing.
-- `shadow` logs `would start <episode>` to the journal and appends the episode to
-  `/var/lib/claude/triage/shadow.jsonl`, with each skipped fall beside them. It ships in
+- `shadow` logs `would queue <episode>` to the journal and appends the episode to
+  `/var/lib/claude/triage/shadow.jsonl`, with each unrouted fall beside them. It ships in
   this mode.
 - `armed` queues the episode in the inbox. Each poll starts the oldest queued episode when no
   run holds the runner's lock, so episodes run one after another. A queued episode whose run
