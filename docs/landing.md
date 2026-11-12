@@ -84,6 +84,10 @@ registry of live landings it is compared with.
   units (`renovate-agent-land@`, `claude-land@`) run it in the foreground and have no retry,
   so a refusal would page rather than wait. Their slot still lowers the room every
   `--detach` beside them sees. A `--fresh` child landing runs inside its parent's slot.
+- A `--detach` handed off through `LAND_HANDOFF_UNIT` takes no slot and is never refused. The
+  `claude` agent user hands its landings to `homelab-claude-land@<pr>.service`, which runs
+  `land.sh` as `ubuntu` on the `ubuntu` token. That foreground landing holds the slot in the
+  `ubuntu` group, so the agent's own registry and its token's quota have nothing to count.
 
 **Five conditions lower the limit for a new `--detach`.** The lowest one wins.
 

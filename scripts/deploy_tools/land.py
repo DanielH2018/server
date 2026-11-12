@@ -243,6 +243,10 @@ def _hand_off(opts: Options, unit: str, tools: Tools) -> int:
 
     The flags the unit cannot honour are refused here, before any fork, so the caller reads
     the refusal and its exit code at once rather than from a log.
+
+    A `--detach` here takes no slot and is never refused: the unit runs `land.sh` as the
+    operator, on the operator's token, and its foreground landing holds the slot in the
+    operator's registry. A slot or a quota read here would count the caller's user instead.
     """
     refused = handoff.refused_flags(opts)
     if refused:
@@ -266,10 +270,7 @@ def _hand_off(opts: Options, unit: str, tools: Tools) -> int:
             tools.record_verdict(opts.pr, rc, line)
         return rc
 
-    if not opts.detach:
-        return land()
-    reads = live_limit.github_reads(tools.gh_json)
-    return _detached(opts, land, live_limit.admission(opts.pr, reads))
+    return _detached(opts, land, None) if opts.detach else land()
 
 
 def _resolve_since(opts: Options) -> Options:
@@ -299,7 +300,7 @@ def _resolve_since(opts: Options) -> Options:
 
 
 def _detached(
-    opts: Options, landing: Callable[[], int], admission: live_limit.Admission
+    opts: Options, landing: Callable[[], int], admission: live_limit.Admission | None
 ) -> int:
     """Fork `landing` into its own logfile and name the `cc-wait` command that waits on it."""
     log = detach.log_path(opts.pr, Path(opts.log_dir) if opts.log_dir else None)

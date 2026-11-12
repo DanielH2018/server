@@ -228,7 +228,10 @@ def error_in(log: Path) -> str | None:
 
 
 def fork(
-    log: Path, landing: Callable[[], int], admission: Admits, scope_prefix: str = "land"
+    log: Path,
+    landing: Callable[[], int],
+    admission: Admits | None,
+    scope_prefix: str = "land",
 ) -> int:
     """Run `landing` in a detached, logged grandchild; its pid, in the parent.
 
@@ -244,6 +247,7 @@ def fork(
         process, which is what guarantees the blocking handle Ansible needs.
       landing: what the grandchild runs; its return value is the recorded exit code.
       admission: the limit the landing is admitted under, and the kind its slot records.
+        None for a landing that holds its slot elsewhere: it is neither refused nor counted.
       scope_prefix: the name of the transient scope the landing moves into, before its pid.
 
     Returns:
@@ -258,7 +262,7 @@ def fork(
     with open(slots / ".lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         live = _live_kinds(slots)
-        cap, why = admission.limit(live)
+        cap, why = admission.limit(live) if admission else (len(live) + 1, "")
         if len(live) >= cap:
             retry = (
                 "Re-run this command once that clears"
@@ -273,7 +277,8 @@ def fork(
         sys.stdout.flush()
         sys.stderr.flush()
         pid = fork_detached(lambda: _run_landing(log, landing, scope_prefix))
-        (slots / f"{pid}.slot").write_text(admission.kind)
+        if admission:
+            (slots / f"{pid}.slot").write_text(admission.kind)
     pid_path(log).write_text(f"{pid}\n")
     return pid
 

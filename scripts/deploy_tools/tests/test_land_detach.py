@@ -485,3 +485,44 @@ def test_a_foreground_landing_holds_a_slot_only_while_it_runs(monkeypatch, tmp_p
         with detach.holding_slot("serial"):
             assert len(list(slots.glob("*.slot"))) == 1
     assert list(slots.glob("*.slot")) == []
+
+
+def test_a_foreground_land_sh_holds_a_slot_while_it_lands(tmp_path):
+    """#8142: `land.main` wraps a run without `--detach` in a slot, and releases it at the end."""
+    live = tmp_path / "live" / "default"
+    seen = tmp_path / "slots-seen"
+    gh = _GH_STUB.replace(
+        'case "$*" in', f'ls "{live}" >> "{seen}" 2>/dev/null\ncase "$*" in', 1
+    )
+    result = subprocess.run(
+        ["bash", str(_LAND_SH), "--pr", "939"],
+        env=_env(tmp_path, gh=gh),
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert seen.read_text().split()[-1].endswith(".slot")
+    assert list(live.glob("*.slot")) == []
+
+
+def test_a_detached_handoff_takes_no_slot_beside_a_full_group(tmp_path):
+    """#8142: a handed-off landing holds its slot in the unit user's registry, not the caller's."""
+    fake_bin(
+        tmp_path / "bin",
+        systemctl="#!/bin/sh\necho 'Access denied' >&2\nexit 1\n",
+        journalctl="#!/bin/sh\nexit 0\n",
+    )
+    result = _run_capped(
+        tmp_path,
+        [os.getpid()],
+        LAND_MAX_LIVE="1",
+        LAND_HANDOFF_UNIT="homelab-claude-land",
+    )
+
+    assert result.returncode == 0, result.stderr
+    [log] = _logs(tmp_path)
+    assert _recorded(log) is not None, log.read_text()
+    group = tmp_path / "live" / "default"
+    assert [p.name for p in group.glob("*.slot")] == [f"{os.getpid()}.slot"]
