@@ -109,6 +109,16 @@ def _selector_applies(selector: str | None, labels: dict[str, str]) -> bool:
     return True
 
 
+def expressions_for(container: str, namespace: str = "homelab") -> list[str]:
+    """The expression of each stage that applies to a line from `container`, in config order."""
+    labels = {"container": container, "namespace": namespace}
+    return [
+        pattern.pattern
+        for selector, pattern, _ in _replace_stages()
+        if _selector_applies(selector, labels)
+    ]
+
+
 def ship(container: str, line: str, namespace: str = "homelab") -> str:
     """The line as Loki stores it: each applicable stage's capture group replaced."""
     labels = {"container": container, "namespace": namespace}
