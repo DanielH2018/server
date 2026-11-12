@@ -12,6 +12,12 @@ that exists with another uid would keep it. The arm therefore compares each decl
 `getent passwd` first. A mismatch is a fault: the package shipped a wrong uid, and the run fails
 and holds the host. A user still missing after sysusers is a fault too.
 
+An entry may carry `moved_from`, the uid the user held before the package renumbered it. A live
+uid equal to `moved_from` is a declared move, not a fault. The arm stops the `.service` units
+running as the user, such as a lingering `user@<old>.service`, runs `usermod -u`, which re-owns
+the files under the home directory, and starts the units again. The user's primary group keeps
+its gid. A failed move starts the stopped units again under the old uid and faults.
+
 The arm never deletes a user. A user that leaves the list is expired with `usermod --expiredate
 1`, and removing its home is an operator step. The arm expires only a name its own record
 holds, and it expires nothing while the declared list is empty, so a revert to a version that
@@ -26,6 +32,7 @@ from reconcile_lib.common import ERR, run, log, under_root
 SYSUSERS = Path("/usr/lib/sysusers.d/homelab.conf")
 NAME = re.compile(r"[a-z_][a-z0-9_-]{0,31}")
 KEYS = {"name", "uid", "home", "shell", "comment"}
+MOVE_KEYS = KEYS | {"moved_from"}
 
 
 def valid(section: object) -> bool:
@@ -39,9 +46,16 @@ def valid(section: object) -> bool:
     uids = [u.get("uid") for u in users if isinstance(u, dict)]
     return (
         len(names) == len(users) == len(set(names)) == len(set(uids))
-        and all(set(u) == KEYS for u in users)
+        and all(set(u) in (KEYS, MOVE_KEYS) for u in users)
         and all(isinstance(u["name"], str) and NAME.fullmatch(u["name"]) for u in users)
         and all(type(u["uid"]) is int and 0 < u["uid"] < 65534 for u in users)
+        and all(
+            type(u["moved_from"]) is int
+            and 0 < u["moved_from"] < 65534
+            and u["moved_from"] != u["uid"]
+            for u in users
+            if "moved_from" in u
+        )
         and all(
             isinstance(u[key], str) and u[key].startswith("/") and ".." not in u[key]
             for u in users
@@ -55,7 +69,7 @@ def valid(section: object) -> bool:
 
 
 def check(user: dict) -> str:
-    """`live` when the user exists with the declared uid, `absent` when missing, else `fault`."""
+    """`live` at the declared uid, `move` at its `moved_from`, `absent` when missing, else `fault`."""
     found = run("getent", "passwd", user["name"])
     if found.returncode == 2:
         return "absent"
@@ -63,6 +77,8 @@ def check(user: dict) -> str:
     if found.returncode != 0 or len(fields) < 3 or not fields[2].isdigit():
         log(f"getent passwd {user['name']} failed: {found.stderr.strip()}", ERR)
         return "fault"
+    if int(fields[2]) == user.get("moved_from"):
+        return "move"
     if int(fields[2]) != user["uid"]:
         log(
             f"{user['name']} has uid {fields[2]}; the package declares {user['uid']}",
@@ -70,6 +86,42 @@ def check(user: dict) -> str:
         )
         return "fault"
     return "live"
+
+
+def holders(name: str) -> list[str]:
+    """The `.service` units with a process running as `name`.
+
+    A container that runs as the same uid sits in a `.scope`, and usermod ignores it because its
+    root differs, so the arm leaves scopes alone.
+    """
+    found = run("ps", "-o", "unit=", "-u", name)
+    units = {unit.strip() for unit in found.stdout.splitlines()}
+    return sorted(unit for unit in units if unit.endswith(".service"))
+
+
+def move(user: dict) -> bool:
+    """Renumber `user` from its `moved_from` uid to its declared uid; False after a failure."""
+    name, old, new = user["name"], user["moved_from"], user["uid"]
+    # DECIDED: the arm stops a user's units only for a move the package declares (#8100).
+    units = holders(name)
+    stopped = [unit for unit in units if run("systemctl", "stop", unit).returncode == 0]
+    moved = len(stopped) == len(units)
+    if not moved:
+        log(f"cannot stop every unit running as {name}: {', '.join(units)}", ERR)
+    else:
+        result = run("usermod", "-u", str(new), name)
+        moved = result.returncode == 0
+        if not moved:
+            log(f"usermod -u {new} {name} failed: {result.stderr.strip()}", ERR)
+    for unit in stopped:
+        if moved and unit == f"user@{old}.service":
+            unit = f"user@{new}.service"
+        if run("systemctl", "start", unit).returncode != 0:
+            log(f"cannot start {unit} after the move of {name}", ERR)
+            moved = False
+    if moved:
+        log(f"moved {name} from uid {old} to {new}")
+    return moved and check(user) == "live"
 
 
 def expire(name: str) -> bool:
@@ -87,6 +139,8 @@ def reconcile(section: dict | None, prev: dict | None) -> tuple[bool, dict | Non
     users = section["users"] if section else []
     verdicts = {user["name"]: check(user) for user in users}
     ok = "fault" not in verdicts.values()
+    if ok:
+        ok = all([move(user) for user in users if verdicts[user["name"]] == "move"])
     missing = [u for u in users if verdicts[u["name"]] == "absent"]
     if ok and missing:
         created = run("systemd-sysusers", str(under_root(SYSUSERS))).returncode == 0

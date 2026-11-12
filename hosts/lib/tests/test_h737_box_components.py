@@ -114,9 +114,13 @@ def test_the_package_needs_the_media_tools(package):
     assert {"ffmpeg", "mkvtoolnix"} <= set(package.depends)
 
 
-def test_the_agent_user_keeps_its_live_uid(package):
+def test_the_agent_user_moves_from_its_old_uid_into_the_homelab_band(package):
     [user] = [u for u in package.users if u["name"] == "renovate-agent"]
-    assert (user["uid"], user["home"]) == (999, "/var/lib/renovate-agent")
+    assert (user["uid"], user["moved_from"], user["home"]) == (
+        901,
+        999,
+        "/var/lib/renovate-agent",
+    )
 
 
 @pytest.mark.parametrize(

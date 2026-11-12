@@ -497,7 +497,7 @@ runs as `claude`:
 Interactive sessions start as `claude` through two dotfiles functions. Plain `claude` typed in
 `~/server` routes there (dotfiles #853), `claude-ubuntu` bypasses it, and `claude-agents`
 runs `sudo machinectl shell claude@ /bin/bash -lc 'cd ~/server && exec claude agents "$@"'`. A
-`claude-agents` session runs in `user.slice/user-996.slice/session-<n>.scope` beside
+`claude-agents` session runs in `user.slice/user-900.slice/session-<n>.scope` beside
 `claude-rc.service`, and the phone host still connects. daniel-server still runs sessions as
 `ubuntu`.
 

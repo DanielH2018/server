@@ -133,11 +133,25 @@ def test_users_reach_the_manifest_and_a_sysusers_file_and_reconcile_accepts_them
         pytest.param([{**CLAUDE, "extra": 1}], id="unknown-key"),
         pytest.param([CLAUDE, {**CLAUDE, "name": "other"}], id="duplicate-uid"),
         pytest.param([CLAUDE, {**CLAUDE, "uid": 1002}], id="duplicate-name"),
+        pytest.param([{**CLAUDE, "moved_from": 1001}], id="moved-from-itself"),
+        pytest.param([{**CLAUDE, "moved_from": "995"}], id="string-moved-from"),
+        pytest.param([{**CLAUDE, "moved_from": 0}], id="root-moved-from"),
     ],
 )
 def test_a_user_the_arm_would_refuse_fails_the_render(hosts, users):
     with pytest.raises(RenderRefused):
         _render(hosts, {"users": users})
+
+
+def test_a_moved_from_uid_reaches_the_manifest_and_not_the_sysusers_file(hosts):
+    package = _render(hosts, {"users": [{**CLAUDE, "moved_from": 995}]})
+    manifest = _manifest(package)
+
+    assert manifest["users"]["users"][0]["moved_from"] == 995
+    assert _reconcile().users.valid(manifest["users"])
+    assert package.files["/usr/lib/sysusers.d/homelab.conf"][0].decode() == (
+        'u claude 1001 "Claude agent" /home/claude /bin/bash\n'
+    )
 
 
 # lines

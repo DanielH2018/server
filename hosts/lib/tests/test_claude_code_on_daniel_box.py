@@ -71,7 +71,7 @@ SLICE_FOUR = (
     f"{UNITS}/homelab-claude-otel-health.timer",
     "/usr/lib/tmpfiles.d/homelab-artifacts.conf",
 )
-AGENT_UID = {"daniel-box": 996, "daniel-server": 995}
+AGENT_UID = {"daniel-box": 900, "daniel-server": 900}
 
 
 @pytest.fixture(scope="module")
@@ -231,8 +231,8 @@ def test_the_agents_profile_hands_landings_to_the_unit_the_box_ships(box):
 
 def test_daniel_box_declares_the_agent_with_its_own_uid(box):
     users = json.loads(box.files["/usr/lib/homelab/manifest.json"][0])["users"]["users"]
-    assert {u["name"]: u["uid"] for u in users}["claude"] == 996
-    assert 'u claude 996 "Claude agent" /var/lib/claude /bin/bash\n' in (
+    assert {u["name"]: u["uid"] for u in users}["claude"] == 900
+    assert 'u claude 900 "Claude agent" /var/lib/claude /bin/bash\n' in (
         box.files["/usr/lib/sysusers.d/homelab.conf"][0].decode()
     )
 
@@ -278,12 +278,12 @@ def test_each_host_caps_its_own_agents_slice_and_the_operator_only_where_listed(
     box, server
 ):
     # daniel-box's host_vars take uid 1000 off claude_code_login_uids; daniel-server keeps it.
-    assert slice_caps(box) == {"user-996"}
-    assert slice_caps(server) == {"user-995", "user-1000"}
+    assert slice_caps(box) == {"user-900"}
+    assert slice_caps(server) == {"user-900", "user-1000"}
 
 
 @pytest.mark.parametrize("host", sorted(AGENT_UID))
-def test_each_hosts_users_entry_names_its_live_uid_and_follows_the_agent_toggle(host):
+def test_each_hosts_users_entry_names_its_uid_and_follows_the_agent_toggle(host):
     # The users arm takes no `when:`, so switching the agent off means deleting the entry.
     spec = yaml.safe_load((REPO / "hosts" / host / "package.yml").read_text())
     host_vars = yaml.safe_load((HOST_VARS / f"{host}.yml").read_text())

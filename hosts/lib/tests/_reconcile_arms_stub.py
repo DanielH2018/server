@@ -1,4 +1,6 @@
-"""The stub commands of reconcile's users, libvirt and lines arms: getent, usermod, sysusers, virsh.
+"""The stub commands of reconcile's users, libvirt and lines arms.
+
+They are getent, usermod, ps, systemd-sysusers and virsh.
 
 `_reconcile_stub.py` merges `HANDLERS` into its own and documents the rest of the state. These
 keys are the ones the three arms read:
@@ -7,6 +9,8 @@ keys are the ones the three arms read:
     sysusers: {"creates": {name: uid}, "fail": bool}. What `systemd-sysusers` adds, when it does
         not fail. A name already in `users` keeps its uid, as sysusers leaves an existing user alone.
     expired: names `usermod --expiredate 1` was run for. "fail_usermod": true makes it exit 1.
+        `usermod -u <uid> <name>` sets the uid in `users`.
+    processes: {name: [unit, ...]}. The units `ps -o unit= -u <name>` prints, one per process.
     libvirt: {"networks": {name: {"active": bool, "autostart": bool}}, "nwfilters": {name: {}},
         "refuse": [name, ...], "fail": ["net-define", ...]}. `refuse` names the objects libvirt
         will not undefine, as for a filter a running guest references. `fail` names the verbs that
@@ -36,7 +40,16 @@ def usermod(state: dict, args: list[str]) -> int:
     if state.get("fail_usermod"):
         print("usermod: stub refuses", file=sys.stderr)
         return 1
+    if args[0] == "-u":
+        state["users"][args[2]] = int(args[1])
+        return 0
     state.setdefault("expired", []).append(args[-1])
+    return 0
+
+
+def ps(state: dict, args: list[str]) -> int:
+    for unit in state.get("processes", {}).get(args[-1], []):
+        print(f"  {unit}")
     return 0
 
 
@@ -97,6 +110,7 @@ def conffiles(state: dict, package: str) -> int:
 HANDLERS = {
     "getent": getent,
     "usermod": usermod,
+    "ps": ps,
     "systemd-sysusers": systemd_sysusers,
     "virsh": virsh,
 }

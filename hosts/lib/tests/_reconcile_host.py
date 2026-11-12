@@ -29,6 +29,7 @@ COMMANDS = (
     "iptables",
     "getent",
     "usermod",
+    "ps",
     "systemd-sysusers",
     "virsh",
     "udevadm",

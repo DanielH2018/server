@@ -130,6 +130,94 @@ def test_a_failing_sysusers_is_a_fault(node):
     assert node.run().returncode == 1
 
 
+# A user at its moved_from uid is renumbered, and its units come back either way.
+
+MOVED = {**CLAUDE, "moved_from": 995}
+
+
+def at_the_old_uid(node: Node) -> None:
+    declare(node, MOVED)
+    node.state["users"] = {"claude": 995}
+    node.state["processes"] = {
+        "claude": ["user@995.service", "user@995.service", "cri-containerd-a.scope"]
+    }
+    for unit in ("user@995.service", "user@1001.service"):
+        node.state["units"][unit] = {
+            "load": "loaded",
+            "active": "active" if unit == "user@995.service" else "inactive",
+            "enabled": "static",
+        }
+
+
+def unit_changes(node: Node) -> list[str]:
+    return [
+        " ".join(call["argv"][1:])
+        for call in node.calls("systemctl")
+        if call["argv"][1] in ("stop", "start")
+    ]
+
+
+def test_a_user_at_its_moved_from_uid_is_renumbered_and_its_manager_restarted(node):
+    at_the_old_uid(node)
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert node.state["users"] == {"claude": 1001}
+    assert unit_changes(node) == ["stop user@995.service", "start user@1001.service"]
+    assert [c["argv"] for c in node.calls("usermod")] == [
+        ["usermod", "-u", "1001", "claude"]
+    ]
+    assert node.run().returncode == 0
+    assert node.calls("usermod") == [], "the second run finds the user moved"
+
+
+def test_a_uid_that_is_neither_declared_nor_moved_from_faults_and_stops_nothing(node):
+    at_the_old_uid(node)
+    node.state["users"] = {"claude": 990}
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert "claude has uid 990; the package declares 1001" in result.stderr
+    assert unit_changes(node) == [] and node.calls("usermod") == []
+
+
+def failed_move_restarts_the_units(node: Node) -> None:
+    at_the_old_uid(node)
+    node.state["fail_usermod"] = True
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert node.state["users"] == {"claude": 995}
+    assert unit_changes(node) == ["stop user@995.service", "start user@995.service"]
+
+
+def test_a_failed_usermod_starts_the_old_units_again_and_fails_the_run(node):
+    failed_move_restarts_the_units(node)
+
+
+def test_red_a_move_that_never_restarts_would_leave_the_agent_stopped(tmp_path):
+    red(
+        tmp_path,
+        failed_move_restarts_the_units,
+        ARM,
+        "for unit in stopped:",
+        "for unit in []:",
+    )
+
+
+def test_a_unit_that_will_not_stop_leaves_the_uid_alone_and_fails_the_run(node):
+    at_the_old_uid(node)
+    node.state["fail"] = ["stop user@995.service"]
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert node.calls("usermod") == [] and node.state["users"] == {"claude": 995}
+
+
 # A user leaving the list is expired, never deleted.
 
 

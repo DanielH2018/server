@@ -39,7 +39,8 @@ A `users:` key declares system users with a fixed uid (`hosts/lib/reconcile_lib/
 
     users: [{name: claude, uid: 1001, home: /home/claude, shell: /bin/bash, comment: Claude agent}]
 
-The renderer writes every user of the host package to `/usr/lib/sysusers.d/homelab.conf`.
+The renderer writes every user of the host package to `/usr/lib/sysusers.d/homelab.conf`. An
+entry may add `moved_from: <old uid>`, which tells the arm to renumber a live user still at it.
 
 A `lines:` key declares edits in files dpkg does not overwrite (`hosts/lib/reconcile_lib/lines.py`)::
 
@@ -299,11 +300,14 @@ def add_users(package: Package, directory: Path, users: object) -> None:
     for user in users:
         if not (
             isinstance(user, dict)
-            and set(user) == USER_KEYS
+            and set(user) - {"moved_from"} == USER_KEYS
             and isinstance(user["name"], str)
             and USER_NAME.fullmatch(user["name"])
             and type(user["uid"]) is int
             and 0 < user["uid"] < 65534
+            and type(user.get("moved_from", 1)) is int
+            and 0 < user.get("moved_from", 1) < 65534
+            and user.get("moved_from") != user["uid"]
             and all(
                 isinstance(user[key], str)
                 and user[key].startswith("/")

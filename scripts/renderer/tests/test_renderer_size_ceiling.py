@@ -22,7 +22,8 @@ from lib.repo_paths import REPO
 # 13672 once #7961 dropped the deployer-state modules from the host source tables.
 # 13618 once H7.55 dropped the `role:` sources, which the components now own.
 # 13622 once #8023 listed the Flux GitHub App's three keys in `SOPS_MANIFEST_KEYS`.
-LINE_CEILING = 13622
+# 13626 once #8100 let a users entry carry `moved_from`.
+LINE_CEILING = 13626
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 

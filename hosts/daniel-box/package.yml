@@ -62,8 +62,9 @@ defaults:
 # agent's login-slice cap sit here; `component: claude-code` reaches only these files (H7.40).
 component: claude-code
 users:
-  # uid 996 is the live uid (`getent passwd claude` on daniel-box, 2026-10-31).
-  - {name: claude, uid: 996, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
+  # The homelab band 900-949 sits below the uids Ubuntu hands out from 999 down (#8100).
+  # moved_from is the uid this host held before; the users arm renumbers the live account.
+  - {name: claude, uid: 900, moved_from: 996, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
 components:
   - reconcile
   - secrets-unit
@@ -170,7 +171,7 @@ files:
   - {src: tmpfiles.d/homelab-media-volume.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-media-volume.conf}
   # The agent's login-session slice, capped like the Remote Control unit (claude-code component).
   - src: "component:templates/login-slice-caps.conf.j2"
-    dst: /usr/lib/systemd/system/user-996.slice.d/homelab-claude-caps.conf
+    dst: /usr/lib/systemd/system/user-900.slice.d/homelab-claude-caps.conf
     when: claude_code_login_caps_enabled and claude_code_agent_user_enabled
 legacy:
   # The hypervisor role's teardown half kept this host free of the network source directory until

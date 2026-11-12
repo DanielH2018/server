@@ -116,7 +116,7 @@ def test_reconcile_adopts_the_ssh_and_join_rules_and_leaves_the_hand_added_rule(
     node.state["installed"][f"homelab-{HOST}"] = node.state["installed"].pop(
         "homelab-daniel-pi"
     )
-    node.state["users"] = {"claude": 995}
+    node.state["users"] = {"claude": 900}
     # H7.59's filter restarts rsyslog, which the Pi fixture masks.
     live_unit(node, "rsyslog.service")
     lan = context["lan_subnet"]
