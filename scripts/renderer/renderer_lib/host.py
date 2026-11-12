@@ -531,8 +531,8 @@ def host_context(
     try:
         ctx = resolve(strict=True)
     except UnresolvedVarsError as exc:
-        # Not raised: group_vars hold values only a play can expand (`ansible_check_mode`),
-        # and a render fails only for a template that reads one.
+        # Not raised: group_vars may hold values only a play can expand, and a render fails
+        # only for a template that reads one.
         reasons |= {
             key: f"its inventory value does not expand in host mode ({reason})"
             for key, reason in exc.keys.items()

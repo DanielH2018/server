@@ -77,7 +77,7 @@ def resolves(cited: str, doc: Path) -> bool:
     """Whether a cited path names a file that exists, the way a reader would resolve it.
 
     Doc-relative first, then repo-relative, then as a path SUFFIX of some real file -- which
-    is what makes a context-relative citation like `roles/k8s/volume-revert/tasks/main.yml:112`
+    is what makes a context-relative citation like `roles/k8s/volume-snapshot/defaults/main.yml:12`
     resolve without the `ansible/` prefix nobody writes.
 
     DECIDED: a suffix, never a bare basename. `scripts/gen_infra_map.py` is not a suffix of
@@ -132,8 +132,8 @@ def test_a_citation_of_upstream_go_is_not_extracted(line):
 def test_resolution_accepts_a_context_relative_citation():
     """The common shape: the docs cite from context, without the `ansible/` prefix."""
     doc = REPO / "CLAUDE.md"
-    assert resolves("roles/k8s/volume-revert/tasks/main.yml", doc)
-    assert resolves("ansible/roles/k8s/volume-revert/tasks/main.yml", doc)
+    assert resolves("roles/k8s/volume-snapshot/defaults/main.yml", doc)
+    assert resolves("ansible/roles/k8s/volume-snapshot/defaults/main.yml", doc)
 
 
 def test_resolution_rejects_a_path_that_moved():

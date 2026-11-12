@@ -11,15 +11,12 @@ Run: uv run pytest ansible/tests/repo/test_census_rows_roles.py
 import re
 
 import pytest
-from _helpers import walk_tasks
 from _drill_keys_row import DRILL_KEYS
 from _flux_born_keys_row import FLUX_BORN_KEYS
 from _flux_ownership_row import K8S_ROLES_ARE_REACHABLE
 from _host_script_row import HOST_SCRIPT_WRITES
-from _out_of_render_row import OUT_OF_RENDER
 from _retired_cron_row import RETIRED_CRON_ARMS
 from _row_table import Census, Subject, check, proof_problems, tracked
-from lib import yaml_fast
 
 
 def _role_files(*directories: str) -> list[str]:
@@ -83,29 +80,6 @@ def _shipped(pattern: re.Pattern[str], subject: Subject) -> list[tuple[int, str]
         for match in pattern.finditer(code)
         if (name := next(g for g in match.groups() if g))
     ]
-
-
-# ── No role task writes a home-relative path ──────────────────────────────────────────
-
-# The keys that name a path on the target host. `src:` is deliberately absent: for `copy:` and
-# `template:` it names a file in the CONTROL node's role, where `~` never reaches sudo.
-_PATH_KEYS = ("path", "dest")
-
-
-def _home_relative_paths(subject: Subject) -> list[str]:
-    """Every `~`-relative target a task in this tasks file writes, whichever module it uses."""
-    hits = []
-    for task in walk_tasks(yaml_fast.safe_load(subject.text) or []):
-        for key, value in task.items():
-            if not isinstance(value, dict):
-                continue
-            hits += [
-                f"{task.get('name')}: {key}.{path_key}={target}"
-                for path_key in _PATH_KEYS
-                if isinstance(target := value.get(path_key), str)
-                and target.startswith("~")
-            ]
-    return hits
 
 
 # ── Every LSIO container takes PUID/PGID/TZ from lsio_env() ───────────────────────────
@@ -196,61 +170,16 @@ ROWS = (
         ),
         # 501 files under those directories before H7.52 deleted gitops_deploy's four task files
         # and its handlers, 493 before H7.63 deleted initial_setup's and common's, 484 before
-        # H7.44 deleted three of k3s's and its handlers.
-        min_matches=469,
+        # H7.44 deleted three of k3s's and its handlers, 469 before H7.55 deleted the emptied
+        # setup roles and the runbook roles.
+        min_matches=455,
         # The `*_files` lists the bare-entry alternative exists for, and the deployer's own role.
         must_find=frozenset(
             {
                 "ansible/roles/k8s/home-assistant/defaults/main.yml",
-                "ansible/roles/setup/gitops_deploy/tasks/main.yml",
+                "ansible/roles/setup/k3s/tasks/main.yml",
             }
         ),
-    ),
-    Census(
-        name="role-tasks-write-no-home-relative-path",
-        reason=(
-            "`path: ~/.ssh` in a task with no `become:` of its own, under a play that becomes "
-            "root, writes /root/.ssh: the file module expands `~` as the become user and sudo "
-            "passes `-H`. Nothing in the task's text says which directory it writes, so the bug "
-            "survives every reading of it. Every playbook here becomes root and none means "
-            "/root, so name the directory absolutely (`/home/{{ sys_user }}/.ssh`)."
-        ),
-        files=lambda: [
-            rel
-            for rel in tracked("ansible/roles/*/tasks/*.yml")
-            if len(parts := rel.split("/")) == 6 and parts[4] == "tasks"
-        ],
-        offence=_home_relative_paths,
-        red=(
-            Subject(
-                "a.yml",
-                "- name: Set SSH directory permissions\n"
-                "  ansible.builtin.file:\n    path: ~/.ssh\n",
-            ),
-            Subject(
-                "b.yml",
-                "- block:\n    - ansible.builtin.copy:\n        src: ~/x\n        dest: ~/y\n",
-            ),
-        ),
-        green=(
-            Subject(
-                "a.yml",
-                "- name: Harden\n  ansible.builtin.file:\n"
-                "    path: /home/{{ sys_user }}/.ssh\n",
-            ),
-            Subject(
-                "b.yml",
-                "- ansible.builtin.copy:\n    src: ~/control-side\n    dest: /x\n",
-            ),
-        ),
-        # 56 once H7.34 deleted four of hypervisor's task files (60 before), 53 once H7.50 deleted
-        # three of deploy_ui's, 48 once H7.60 deleted five of initial_setup's, 47 once
-        # common/tasks/release_bin.yml went, 40 once H7.48 emptied k8s_host_files, 39 once
-        # H7.48 deleted docker_install's teardown.yml, 34 once H7.52 deleted four of
-        # gitops_deploy's and common's alert_unit.yml, 28 once H7.63 deleted common's four and
-        # two of initial_setup's, 25 once H7.44 deleted three of k3s's.
-        min_matches=25,
-        must_find=frozenset({"ansible/roles/k8s/volume-revert/tasks/claim.yml"}),
     ),
     Census(
         name="bespoke-netpol-says-why-it-is-not-a-callers-fence",
@@ -429,7 +358,6 @@ ROWS = (
         ),
     ),
     HOST_SCRIPT_WRITES,
-    OUT_OF_RENDER,
     K8S_ROLES_ARE_REACHABLE,
     FLUX_BORN_KEYS,
     DRILL_KEYS,

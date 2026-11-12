@@ -1071,7 +1071,7 @@ and those edits must land with the workload.
       After the rollout wait, include `k8s/manifests`' `rollout_amend.yml` once per result
       that was not skipped, under a loop variable other than `item`, because
       `rollout_amend.yml` loops with `item` itself. Filtering out the skipped results is what
-      `ansible/tests/deploy/test_conditional_register_consumers.py` requires of a conditional
+      `test_conditional_register_consumers.py` (deleted in H7.55) required of a conditional
       register's consumer.
     - "Snapshot the telemetry workloads' restart counts for the end-of-play gate" keeps its
       config arm. Its secret arm becomes the same per-entry condition as the restart's, so a

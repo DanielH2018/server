@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-12 04:58 UTC
-generated_sha: 07a39b942
+generated_at: 2026-11-12 05:59 UTC
+generated_sha: f6557919a
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 07a39b942
 
 # Decisions
 
-815 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
+789 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -109,160 +109,17 @@ generated_sha: 07a39b942
     * `ansible/roles/k8s/wg-easy/CLAUDE.md` and `ansible/tests/_ratchet.py`: ` marker in
     * `ansible/roles/k8s/wg-easy/CLAUDE.md` and `docs/target-architecture/monitoring/m6-status/b5.md`: ` marker in
     * `ansible/roles/k8s/wg-easy/CLAUDE.md` and `prek.toml`: ` marker in
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/claude_code/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/config_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/deploy_ui/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/docker_install/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/fake_remux/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/github_cli/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/gitops_deploy/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/homelab_builder/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/hypervisor/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/initial_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/k3s/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/k8s_host_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/nut_host/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/optimize_pi/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/chezmoi_setup/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/config_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/deploy_ui/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/docker_install/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/fake_remux/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/github_cli/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/gitops_deploy/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/homelab_builder/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/hypervisor/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/initial_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/k3s/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/k8s_host_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/nut_host/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/optimize_pi/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/claude_code/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/deploy_ui/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/docker_install/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/fake_remux/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/github_cli/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/gitops_deploy/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/homelab_builder/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/hypervisor/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/initial_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/k3s/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/k8s_host_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/nut_host/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/optimize_pi/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/config_files/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/docker_install/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/fake_remux/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/github_cli/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/gitops_deploy/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/homelab_builder/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/hypervisor/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/initial_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/k3s/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/k8s_host_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/nut_host/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/optimize_pi/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/deploy_ui/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/docker_install/tasks/main.yml` and `ansible/roles/setup/fake_remux/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/docker_install/tasks/main.yml` and `ansible/roles/setup/github_cli/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/docker_install/tasks/main.yml` and `ansible/roles/setup/gitops_deploy/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/docker_install/tasks/main.yml` and `ansible/roles/setup/homelab_builder/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/docker_install/tasks/main.yml` and `ansible/roles/setup/hypervisor/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/docker_install/tasks/main.yml` and `ansible/roles/setup/initial_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/docker_install/tasks/main.yml` and `ansible/roles/setup/k3s/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/docker_install/tasks/main.yml` and `ansible/roles/setup/k8s_host_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/docker_install/tasks/main.yml` and `ansible/roles/setup/nut_host/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/docker_install/tasks/main.yml` and `ansible/roles/setup/optimize_pi/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/docker_install/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/docker_install/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/docker_install/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/fake_remux/tasks/main.yml` and `ansible/roles/setup/github_cli/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/fake_remux/tasks/main.yml` and `ansible/roles/setup/gitops_deploy/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/fake_remux/tasks/main.yml` and `ansible/roles/setup/homelab_builder/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/fake_remux/tasks/main.yml` and `ansible/roles/setup/hypervisor/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/fake_remux/tasks/main.yml` and `ansible/roles/setup/initial_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/fake_remux/tasks/main.yml` and `ansible/roles/setup/k3s/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/fake_remux/tasks/main.yml` and `ansible/roles/setup/k8s_host_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/fake_remux/tasks/main.yml` and `ansible/roles/setup/nut_host/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/fake_remux/tasks/main.yml` and `ansible/roles/setup/optimize_pi/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/fake_remux/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/fake_remux/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/fake_remux/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/github_cli/tasks/main.yml` and `ansible/roles/setup/gitops_deploy/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/github_cli/tasks/main.yml` and `ansible/roles/setup/homelab_builder/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/github_cli/tasks/main.yml` and `ansible/roles/setup/hypervisor/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/github_cli/tasks/main.yml` and `ansible/roles/setup/initial_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/github_cli/tasks/main.yml` and `ansible/roles/setup/k3s/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/github_cli/tasks/main.yml` and `ansible/roles/setup/k8s_host_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/github_cli/tasks/main.yml` and `ansible/roles/setup/nut_host/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/github_cli/tasks/main.yml` and `ansible/roles/setup/optimize_pi/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/github_cli/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/github_cli/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/github_cli/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/gitops_deploy/tasks/main.yml` and `ansible/roles/setup/homelab_builder/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/gitops_deploy/tasks/main.yml` and `ansible/roles/setup/hypervisor/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/gitops_deploy/tasks/main.yml` and `ansible/roles/setup/initial_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/gitops_deploy/tasks/main.yml` and `ansible/roles/setup/k3s/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/gitops_deploy/tasks/main.yml` and `ansible/roles/setup/k8s_host_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/gitops_deploy/tasks/main.yml` and `ansible/roles/setup/nut_host/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/gitops_deploy/tasks/main.yml` and `ansible/roles/setup/optimize_pi/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/gitops_deploy/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/gitops_deploy/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/gitops_deploy/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/homelab_builder/tasks/main.yml` and `ansible/roles/setup/hypervisor/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/homelab_builder/tasks/main.yml` and `ansible/roles/setup/initial_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/homelab_builder/tasks/main.yml` and `ansible/roles/setup/k3s/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/homelab_builder/tasks/main.yml` and `ansible/roles/setup/k8s_host_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/homelab_builder/tasks/main.yml` and `ansible/roles/setup/nut_host/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/homelab_builder/tasks/main.yml` and `ansible/roles/setup/optimize_pi/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/homelab_builder/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/homelab_builder/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/homelab_builder/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/hypervisor/tasks/main.yml` and `ansible/roles/setup/initial_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/hypervisor/tasks/main.yml` and `ansible/roles/setup/k3s/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/hypervisor/tasks/main.yml` and `ansible/roles/setup/k8s_host_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/hypervisor/tasks/main.yml` and `ansible/roles/setup/nut_host/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/hypervisor/tasks/main.yml` and `ansible/roles/setup/optimize_pi/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/hypervisor/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/hypervisor/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/hypervisor/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/initial_setup/tasks/main.yml` and `ansible/roles/setup/k3s/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/initial_setup/tasks/main.yml` and `ansible/roles/setup/k8s_host_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/initial_setup/tasks/main.yml` and `ansible/roles/setup/nut_host/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/initial_setup/tasks/main.yml` and `ansible/roles/setup/optimize_pi/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/initial_setup/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/initial_setup/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/initial_setup/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/k3s/tasks/agent_verify.yml` and `ansible/roles/setup/k3s/tasks/static-address.yml`: this stays a task file that refuses, for the reason tasks/agent.yml gives: the verify
-    * `ansible/roles/setup/k3s/tasks/main.yml` and `ansible/roles/setup/k8s_host_files/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/k3s/tasks/main.yml` and `ansible/roles/setup/nut_host/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/k3s/tasks/main.yml` and `ansible/roles/setup/optimize_pi/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/k3s/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/k3s/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/k3s/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/k8s_host_files/tasks/main.yml` and `ansible/roles/setup/nut_host/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/k8s_host_files/tasks/main.yml` and `ansible/roles/setup/optimize_pi/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/k8s_host_files/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/k8s_host_files/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/k8s_host_files/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/nut_host/tasks/main.yml` and `ansible/roles/setup/optimize_pi/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/nut_host/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/nut_host/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/roles/setup/nut_host/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/optimize_pi/tasks/main.yml` and `ansible/roles/setup/renovate_agent/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/optimize_pi/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/optimize_pi/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/renovate_agent/tasks/main.yml` and `ansible/roles/setup/renovate_notify/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/renovate_agent/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
-    * `ansible/roles/setup/renovate_notify/tasks/main.yml` and `ansible/roles/setup/sops_setup/tasks/main.yml`: this role is emptied, never deleted, until H7.20a.
     * `ansible/tests/_ratchet.py` and `docs/target-architecture/monitoring/m6-status/b5.md`: ` marker in
     * `ansible/tests/_ratchet.py` and `prek.toml`: ` marker in
     * `ansible/tests/_ratchet.py` and `ansible/tests/_ratchet.py`: an entry has to MATCH its file, not merely bound it.
@@ -271,8 +128,6 @@ generated_sha: 07a39b942
     * `ansible/tests/repo/test_adr_links.py` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py`: `
     * `ansible/tests/repo/test_adr_links.py` and `scripts/lib/b2.py`: `
     * `ansible/tests/repo/test_adr_links.py` and `scripts/lib/render_context.py`: `
-    * `ansible/tests/repo/test_adr_links.py` and `ansible/tests/repo/test_census_rows_roles.py`: ")
-    * `ansible/tests/repo/test_adr_links.py` and `ansible/tests/repo/test_census_rows_roles.py`: ")
     * `ansible/tests/repo/test_adr_links.py` and `ansible/tests/repo/test_census_rows_roles.py`: ")
     * `ansible/tests/setup/test_aide_check.py` and `docs/archive/gitops-deployer.md`: ` marker has the measurement.
     * `docs/adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md` and `docs/adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md`: ` marker references this record yet.
@@ -585,8 +440,6 @@ generated_sha: 07a39b942
 | ` block at `valheim_k8s_server_size` in `defaults/main.yml` has the numbers. | `ansible/roles/k8s/valheim/CLAUDE.md` | 2026-09-29 |
 | 20Gi, not the 10Gi it was until 2026-09-17, because the volume holds THREE copies of the install at rest and a FOURTH during every game update. The image keeps steamcmd's own tree (dl/server), the rsync'd vanilla copy (server) and the BepInEx merge (bepinex), which with the three-day zip rotation measured 7.7 G steady on 2026-09-17. A Steam update then rsyncs server + the BepInEx pack into bepinex.tmp before swapping it in, so the merge needs one more install's worth free. At 10Gi that was 2.1 G free against a 2.2 G copy: the l-1.0.14 update on 2026-09-17 hit ENOSPC four times in an hour, the hourly world zip failed alongside it, and the PVC Fullness tile went DOWN (#1866). Longhorn thin-provisions, so the unused half costs nothing on disk; it exists so the peak sits near 55% rather than 100%. longhorn-nobackup allows expansion, so this line grows the live claim in place. | `ansible/roles/k8s/valheim/defaults/main.yml` | 2026-09-17 |
 | apk packages resolve at build time — an `=version` pin 404s once the branch supersedes it and nothing bumps it; the base digest is the pin. See #2211. | `ansible/roles/k8s/valheim/templates/Dockerfile.j2` | 2026-09-22 |
-| nothing self-heals a volume this attach leaves behind. an API call fails, the volume stays attached with `disableFrontend: true` and the workload at zero replicas (CLAUDE.md's manual-recovery steps), and the pod the next deploy's apply restores mounts the same RWO claim — whether that mount succeeds, hangs or fails against a non-pod maintenance attachment is untested, because nothing in this repo exercises a real Longhorn revert. Accepted: treat a stuck maintenance-mode attach as blocking that service's next deploy until cleared by hand, not as something the pipeline routes around. Long form: docs/archive/gitops-deployer.md, *The deployer's record*. | `ansible/roles/k8s/volume-revert/tasks/claim.yml` | 2026-09-21 |
-| no state wait after snapshotRevert; longhorn-manager v1.12.1 blocks on the engine gRPC call and returns 200 only on success, unlike the detach below. | `ansible/roles/k8s/volume-revert/tasks/claim.yml` | 2026-09-30 |
 | ` marker in | `ansible/roles/k8s/wg-easy/CLAUDE.md` | 2026-09-24 |
 | a one-shot init container, not a re-asserting sidecar. its SQLite DB (no env override), and upstream v15.4.0's default PostUp APPENDS `-A FORWARD -i wg0 -j ACCEPT` (migration 0001) while PostDown deletes exactly those rules; its firewall step (src/server/utils/firewall.ts) only ever touches the WG_CLIENTS chain and its jump. So a DROP inserted at position 1 before wg-easy starts stays above the ACCEPT through startup, a container restart (the pod netns survives it) and the UI's Restart Interface; a pod recreate reruns this. Same image as the main container on purpose: it selects iptables-legacy via update-alternatives, and another image could write the rules into the nft tables wg-quick never reads. Enabling per-client filtering in the UI inserts the WG_CLIENTS jump ABOVE these rules. | `ansible/roles/k8s/wg-easy/templates/deployment.yaml.j2` | 2026-09-24 |
 
@@ -594,16 +447,7 @@ generated_sha: 07a39b942
 
 | Marker | File | Decided |
 |---|---|---|
-| this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. | `ansible/roles/setup/chezmoi_setup/tasks/main.yml` | 2026-11-07 |
-| this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. The role's templates, files and defaults stay in the role directory because hosts/components/claude-code renders them (`role: claude_code`) until H7.20a moves them. | `ansible/roles/setup/claude_code/tasks/main.yml` | 2026-10-31 |
-| this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. | `ansible/roles/setup/config_files/tasks/main.yml` | 2026-10-25 |
-| this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. | `ansible/roles/setup/deploy_ui/tasks/main.yml` | 2026-11-08 |
-| this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. setup_gates.role_end_guard reads this task. | `ansible/roles/setup/docker_install/tasks/main.yml` | 2026-11-09 |
-| this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. | `ansible/roles/setup/fake_remux/tasks/main.yml` | 2026-11-07 |
-| this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. | `ansible/roles/setup/github_cli/tasks/main.yml` | 2026-11-07 |
-| this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line. | `ansible/roles/setup/gitops_deploy/tasks/main.yml` | 2026-11-09 |
 | this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. The role keeps its tests/ directory, which cover the scripts the component ships from hosts/lib/. | `ansible/roles/setup/homelab_builder/tasks/main.yml` | 2026-10-25 |
-| this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. | `ansible/roles/setup/hypervisor/tasks/main.yml` | 2026-11-07 |
 | this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES. An unconditional end_role keeps the playbook line. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. | `ansible/roles/setup/initial_setup/tasks/main.yml` | 2026-11-09 |
 | snapd's generated udev rules are not ROLE_WRITTEN (#7929). on device events, so the name alone explains nothing. One is explained only while no package owns it, it is a regular file, the same report adds a mount unit for a new revision of that snap, and snapd_rule_verdict reads every key in it as inert. On daniel-server on 2026-11-11, 70-snap.snapd.rules held snapd's 836-line copy of the ModemManager and oFono rules: match keys, ENV, GOTO and LABEL only. It changed on 2026-11-06 07:02 beside snap-snapd-28332.mount. A rule an edit or a connected interface changes outside a refresh still pages. | `ansible/roles/setup/initial_setup/templates/aide-check.sh.j2` | 2026-11-11 |
 | /usr/local/bin pages on a name a package also installs, not on every unpackaged entry the way /usr/local/sbin does. Root's PATH reaches /usr/local/bin before /usr/bin, so a twin of a packaged command replaces it for root. A list of the legitimate names would have to cover pip installs, k3s's links, hand-installed tools and the roles' scripts: daniel-server held 30 unpackaged entries on 2026-11-02, of which one (jsonschema, from pip) had a packaged twin. That one pages whenever it changes. A new entry with a unique name does not page; a unit, cron entry or profile script that would run it does. | `ansible/roles/setup/initial_setup/templates/aide-check.sh.j2` | 2026-11-02 |
@@ -614,12 +458,8 @@ generated_sha: 07a39b942
 | this stays a task file that refuses, for the reason tasks/agent.yml gives: the verify play in k3s-bringup.yml names it until H7.20a. | `ansible/roles/setup/k3s/tasks/agent_verify.yml` | 2026-11-07 |
 | this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing k3s-bringup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. | `ansible/roles/setup/k3s/tasks/main.yml` | 2026-11-09 |
 | this stays a task file that refuses, for the reason tasks/agent.yml gives: the agent-address play in k3s-bringup.yml imports it until H7.20a. Each node's pin is its package's: hosts/components/k3s-server on daniel-box, hosts/components/k3s-agent on daniel-server. | `ansible/roles/setup/k3s/tasks/static-address.yml` | 2026-11-09 |
-| this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. | `ansible/roles/setup/k8s_host_files/tasks/main.yml` | 2026-11-09 |
 | this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. The role's templates and defaults stay in the role directory because hosts/components/nut-secondary renders them (`role: nut_host`) until H7.20a moves them. | `ansible/roles/setup/nut_host/tasks/main.yml` | 2026-10-24 |
 | FINALDELAY stays 5 on every host, and is deliberately NOT parameterised to stagger the two poweroffs. The tempting design is to let daniel-box shut down before daniel-server, whose pod hosts upsd, so it cannot be stranded when upsd disappears. It is unnecessary: a secondary needs upsd only to OBSERVE FSD, not to complete SHUTDOWNCMD, and both hosts observe it within one POLLFREQALERT (5 s) of the pod's `upsmon -c fsd` — long before daniel-server's poweroff reaches containerd. Staggering would also rest on FINALDELAY applying in secondary mode, which upsmon.conf(5) documents for primary mode only. Full reasoning in roles/k8s/nut/CLAUDE.md. | `ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2` | 2026-08-28 |
-| this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. | `ansible/roles/setup/optimize_pi/tasks/main.yml` | 2026-10-25 |
-| this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. | `ansible/roles/setup/renovate_agent/tasks/main.yml` | 2026-11-07 |
-| this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. | `ansible/roles/setup/renovate_notify/tasks/main.yml` | 2026-11-07 |
 | this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml and bootstrap.yml, which are in the deployer's _BROAD_MANUAL_PREFIXES and park every session's landing. An unconditional end_role keeps the playbook lines, and the role applies as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. | `ansible/roles/setup/sops_setup/tasks/main.yml` | 2026-10-30 |
 
 ## pi-compose
@@ -759,7 +599,7 @@ generated_sha: 07a39b942
 | a path atom hashes EXISTENCE, not content. for the rule and the measurement behind it. | `scripts/lib/facts/atoms.py` | 2026-09-28 |
 | {c.selector}" in ln | `scripts/lib/facts/atoms.py` | 2026-10-10 |
 | (?P<sel>\S.*)$")), | `scripts/lib/facts/citations.py` | 2026-09-19 |
-| no repo-root prefix is required. matched 4 citations in the whole tree, because the docs overwhelmingly cite from context -- `roles/k8s/volume-revert/tasks/main.yml:112`, `land_tags.py:40`. A guard that checks four things is a guard that passes vacuously, which is why the guard asserts a citation count. The extension must begin with a letter, which is what keeps `127.0.0.1:3100` and `10.0.0.240:51820` from parsing as a file called `127.0.0.` with extension `1`. Four role docs and two networking docs cite host:port pairs exactly that way. | `scripts/lib/facts/citations.py` | 2026-10-03 |
+| no repo-root prefix is required. matched 4 citations in the whole tree, because the docs overwhelmingly cite from context -- `roles/k8s/volume-snapshot/defaults/main.yml:12`, `land_tags.py:40`. A guard that checks four things is a guard that passes vacuously, which is why the guard asserts a citation count. The extension must begin with a letter, which is what keeps `127.0.0.1:3100` and `10.0.0.240:51820` from parsing as a file called `127.0.0.` with extension `1`. Four role docs and two networking docs cite host:port pairs exactly that way. | `scripts/lib/facts/citations.py` | 2026-10-03 |
 | content counts as a substring, not a whole word. | `scripts/lib/facts/removed.py` | 2026-10-10 |
 | lazy, not registered with `register_ansible_filters` at the top of this module. heavy tier imports every filter plugin, and this module stays light for `probe.py monitors`. A wrapper here costs nothing until a default calls the filter, and then the call builds the heavy environment once. | `scripts/lib/k8s_context.py` | 2026-10-22 |
 | a lookup into a DECLARED role is an edge too (authelia and traefik -> crowdsec), rather than filtered out. Filtering would need the walked tree's host_vars, which the throwaway tree a test walks does not have. The landing, the deployer, the broad narrowing and the `--tags` expansion stop at a declared role, so they never read such an edge. `releases_consumers._closure` does not stop, and it reads the edge only for a census role whose closure passes through crowdsec or monitor-bridge. | `scripts/lib/k8s_role_callers.py` | 2026-11-05 |
@@ -861,7 +701,6 @@ generated_sha: 07a39b942
 | the `slice-` prefix in `k3s-migration/` stays, against the rule above.** Those | `docs/archive/README.md` | 2026-09-02 |
 | ` marker at the line it governs. | `docs/archive/README.md` | 2026-08-24 |
 | ` markers at the lines they govern in the deployer's code \| | `docs/archive/README.md` | 2026-11-09 |
-| ` marker in `ansible/roles/setup/gitops_deploy/tasks/main.yml` \| | `docs/archive/README.md` | 2026-11-09 |
 | the lock order is` note exists only because bash cannot import | `docs/archive/deploy-sh-python-port.md` | 2026-09-24 |
 | this preflight fails OPEN` note requires. | `docs/archive/deploy-sh-python-port.md` | 2026-09-24 |
 | the two halves of this gate come from different trees` split holds either way. | `docs/archive/deploy-sh-python-port.md` | 2026-09-24 |
@@ -998,8 +837,6 @@ generated_sha: 07a39b942
 | keep each module's hits, not its tree. from 11.7s to 8.4s but held 618 MiB per process (measured 2026-10-29, 1624 modules), and dropping the trees did not lower RSS: pymalloc keeps the freed arena pages resident (#6465). An LRU of trees never hits, because each row sweeps the census in the same order. The hits are a few strings per module, and PR #6464 records the measurements. | `ansible/tests/_row_table.py` | 2026-10-29 |
 | ` rule in | `ansible/tests/_setup_render.py` | 2026-10-02 |
 | ` rule in `lib/render_guard.py`), so a | `ansible/tests/_shell_render.py` | 2026-10-02 |
-| the exemption is per REGISTER, not per task (#2360). evaluates a skipped task's own `failed_when`, so a producer cannot meet its own skip result — but exempting the whole task hid its reads of every OTHER producer. Keyed on the register NAME rather than task identity: no task file in this tree registers one name twice, so the two are the same rule here. | `ansible/tests/deploy/_skip_result_rule.py` | 2026-09-24 |
-| a consumer check mode skips is not judged on its `failed_when` or its `changed_when` (#2375). Ansible evaluates both on the result a module returned, and a skipped task returns none — so a read there cannot happen on the very run that makes the producer a skip result. Its module args, its `when:` and its `until:` stay judged; `_check_mode.POST_MODULE_KEYS` says why `until:` is not in the set. The when-based rule in `_offenders` drops nothing: its producer is skipped on a REAL run, where this consumer runs, its module returns, and its `failed_when` meets the skip dict. The opt-out counts whether the consumer carries `check_mode: false` itself or inherits it from an enclosing `block:`; reading only its own key dropped the two keys for a consumer that in fact runs and evaluates them (#2379). | `ansible/tests/deploy/_skip_result_rule.py` | 2026-09-24 |
 | the class is accepted for the services whose regression is cheap, and fenced by the auto-deploy denylist for the ones whose regression is not. Censused 2026-09-10: of the 13 k8s roles carrying this pin shape, the three #1524 named as expensive — qbittorrent, tdarr, healthchecks — were ALREADY denied auto-deploy, as were cloudflare-ddns and dri-device-plugin. The eight that remain eligible are stateless front-ends and probes on `:latest`, where a backwards step costs a redeploy and no data. Option 3 in the issue (a CI job resolving each digest to a version) buys a version comparison for those eight at the price of a network transport nothing else in CI needs; option 1's ledger costs a manual append per bump on sixteen automerged pins. Neither is worth it at that exposure. What this file makes executable is the FENCE rather than the acceptance: the expensive three may not quietly become auto-deployable while still carrying an unreadable pin. | `ansible/tests/deploy/test_channel_tag_digest_pins_stay_off_autodeploy.py` | 2026-09-10 |
 | the restore drill runs no gate Job. Job that Flux runs once per revision, and a copy of this one creates a real Volume, PV and PVC under the fixed name `restore-drill-<pvc>` that a scheduled run also uses, so an extra run can tear down another run's restore. The plan's *First run* says the same: the bouncer prune and the drill are not gated. The first scheduled run is the evidence instead (H2.3e): its CronJob carries `homelab/gate: schedule`, and `probe.py health` gates it on its schedule (#6128). | `ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py` | 2026-10-24 |
 | the discriminator is the PR id, never an empty `sha`. | `ansible/tests/deploy/test_landing_annotations.py` | 2026-09-06 |
@@ -1018,16 +855,8 @@ generated_sha: 07a39b942
 | alpha and beta. | `ansible/tests/repo/test_adr_links.py` | 2026-09-12 |
 | host-shipped `ansible/roles/*/*/files/*.py` (and, since H7.2e, `hosts/lib/` and `scripts/lib/longhorn_lib/`) is EXEMPT, and the exemption is not cosmetic. Those programs run under the hosts' own interpreter, not the repo's uv env: `python3 -V` on daniel-server and daniel-pi both report 3.12.3 (measured 2026-09-05), and the k8s `files/*.py` run under whatever python their pod image ships. Below 3.14 there is no PEP 649, so annotations evaluate EAGERLY at def/class time and the import is load-bearing insurance against a forward reference — `def merge(self, other: Foo) -> Foo:` inside `class Foo` raises NameError without it. The repo suite cannot observe that: it runs on 3.14, where every such annotation is lazy either way. So the exemption is what keeps a green suite from authorising a cron-time NameError on a host. | `ansible/tests/repo/test_census_rows_python.py` | 2026-10-24 |
 | ` says which (#3701). | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
-| ` says which (#3701). | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
-| ` says which (#3701). | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
-| ") | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
-| ") | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
 | ") | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
 | marker"] | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
-| marker"] | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
-| marker"] | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
-| x. | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
-| x. | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
 | x. | `ansible/tests/repo/test_census_rows_roles.py` | 2026-10-09 |
 | `git ls-files`, not an `rglob` plus a skip list. to be on disk, and this repo grows untracked trees during ordinary work: `.venv`, `ansible/collections/` (vendored per worktree), `__pycache__`, and `styles/`, which `vale sync` creates and which carries `.txt` and `.json` files the repo itself does not have. That last one moves `_REPO_EXTENSIONS` below, so the same citation would be checked on a synced checkout and skipped on a fresh one. A guard whose verdict depends on whether someone has run `vale sync` has the defect this module rejected `.claude/worktrees/` for. | `ansible/tests/repo/test_documented_paths_exist.py` | 2026-10-03 |
 | minus `go` -- the only Go here is the traefik role's local plugin (files/cloudflare-realip/), while the docs cite UPSTREAM Go by basename (`docs/longhorn-backup-tiering.md`: Longhorn's `deltablock.go:117`, `s3.go:88`), which counting the plugin would turn into missing-file failures. | `ansible/tests/repo/test_documented_paths_exist.py` | 2026-09-24 |

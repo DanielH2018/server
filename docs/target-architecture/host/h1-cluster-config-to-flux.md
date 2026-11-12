@@ -2492,7 +2492,7 @@ subject's tests.
     - *H1.7b.* `_KNOWN_TASK_FILES` drops `setup/k3s/tasks/longhorn-backup.yml`. The two cases
       of `test_longhorn_group_labels.py` that load `longhorn-backup.yml` retarget to the
       `longhorn-backup` role's render.
-    - *Sample input, no change.* `ansible/tests/deploy/test_registering_consumers.py` holds
+    - *Sample input, no change.* `test_registering_consumers.py` (deleted in H7.55) held
       `Read the live Corefile` inside a fixture string.
     - *H1.3.* No test names `cluster-addons.yml`, `Install MetalLB` or
       `Apply the workload-tier PriorityClasses`.
@@ -3472,7 +3472,7 @@ Findings raised: H1-I2-01 (high) and H1-I2-02 (high). Both were checked against 
     - In `tasks/longhorn-backup.yml`, `Reconcile the Longhorn backup credential` and the
       target patches carry `longhorn_backup`. Before H1.7b no Flux tag creates the targets.
     - `Install Longhorn prerequisites` and the multipathd pair carry `tags: [longhorn]`, and
-      `ansible/tests/deploy/test_dual_tagged_producers.py`'s docstring records that an
+      `test_dual_tagged_producers.py`'s docstring (deleted in H7.55) recorded that an
       exclusion matches any tag. So skipping `longhorn` alone would drop open-iscsi.
 
   *Fixed:*

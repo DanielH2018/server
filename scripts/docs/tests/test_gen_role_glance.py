@@ -19,9 +19,7 @@ from lib.estate import Inventory
 KNOWN_SERVICES = frozenset(
     {"sonarr", "traefik", "authelia", "home-assistant", "pihole"}
 )
-KNOWN_SETUP_ROLES = frozenset(
-    {"gitops_deploy", "k3s", "renovate_agent", "initial_setup"}
-)
+KNOWN_SETUP_ROLES = frozenset({"k3s", "nut_host", "initial_setup"})
 # H5.9 moved wg-easy, the last Pi service, into the host package, so no Pi role takes a block.
 
 

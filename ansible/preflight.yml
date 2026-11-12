@@ -64,7 +64,7 @@
 
     - name: Stat the repo checkout at its expected path
       ansible.builtin.stat:
-        path: "/home/{{ sys_user }}/server/ansible/deploy.yml"
+        path: "/home/{{ sys_user }}/server/ansible/initial_setup.yml"
       register: preflight_repo
 
     - name: The repo is cloned where the role templates expect it

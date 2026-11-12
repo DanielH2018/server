@@ -338,8 +338,6 @@ def test_a_pr_changing_a_role_named_like_cluster_base_lands_without_the_operator
 OFF_THE_FLOOR = [
     "docs/landing.md",
     "hosts/components/claude-code/defaults/main.yml",
-    "ansible/roles/setup/claude_code/tasks/main.yml",
-    "ansible/roles/setup/gitops_deploy/defaults/main.yml",
     "ansible/inventory/host_vars/daniel-box.yml",
 ]
 

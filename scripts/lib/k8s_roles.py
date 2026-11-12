@@ -188,8 +188,6 @@ def k8s_autodeploy_denylist(ansible_dir: Path | str) -> list[str]:
 # stale exemption rather than left as a name nobody can justify.
 NO_MANIFEST_ROLES = {
     "volume-snapshot",
-    "longhorn-api",  # resolves a fact only, same as volume-snapshot
-    "volume-revert",  # reverts a volume through kubectl and the Longhorn API
     # declares sonarr's/radarr's Discord Connect notification over the app's own API — a row in
     # the app's database, which no manifest can express
     "arr-notification",

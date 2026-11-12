@@ -55,10 +55,7 @@ K8S_ROLES_ARE_REACHABLE = Census(
         ReachSubject("newsvc", {"newsvc"}, {}),
         ReachSubject("newsvc", set(), {"newsvc": {"sonarr"}}),
     ),
-    allow={
-        _K8S
-        + "volume-revert": "the operator's revert runbook, `ansible/volume-revert.yml`",
-    },
-    min_matches=70,
-    must_find=frozenset({_K8S + "bento-pdf", _K8S + "longhorn-api"}),
+    # 70 before H7.55 deleted the two runbook roles, longhorn-api and volume-revert.
+    min_matches=69,
+    must_find=frozenset({_K8S + "bento-pdf", _K8S + "arr-notification"}),
 )

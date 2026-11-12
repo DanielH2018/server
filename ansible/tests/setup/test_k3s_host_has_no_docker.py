@@ -29,7 +29,6 @@ from pathlib import Path
 
 import pytest
 from lib import yaml_fast
-from _helpers import ANSIBLE
 from lib.repo_paths import ALL_VARS, HOST_VARS
 
 
@@ -41,37 +40,6 @@ K3S_HOSTS = ("daniel-box", "daniel-server")
 
 def _load(path: Path):
     return yaml_fast.safe_load(path.read_text())
-
-
-def test_docker_install_is_an_end_role_stub():
-    """No Ansible task touches Docker on any host.
-
-    The Pi's package installs the engine (H7.26), and the cluster nodes' packages retire the
-    teardown's crons and drop-ins as legacy entries (H7.48). The role stays an unconditional
-    `end_role` stub until H7.20a deletes it with its initial_setup.yml entry.
-    """
-    plays = _load(ANSIBLE / "initial_setup.yml")
-    roles = [r for play in plays for r in play.get("roles", [])]
-    docker_entries = [
-        r for r in roles if isinstance(r, dict) and r.get("role") == "docker_install"
-    ]
-    assert docker_entries, "docker_install is no longer wired into initial_setup.yml"
-    for entry in docker_entries:
-        assert "when" not in entry, (
-            "docker_install must be included unconditionally, so its end_role stub runs on "
-            "every host and setup_gates.role_end_guard counts the role empty everywhere."
-        )
-
-    tasks = _load(ANSIBLE / "roles/setup/docker_install/tasks/main.yml")
-    assert tasks == [
-        {
-            "name": "End the role, whose work the host packages own",
-            "ansible.builtin.meta": "end_role",
-        }
-    ], (
-        "docker_install runs tasks again; only the host packages may install or reap Docker"
-    )
-    assert not (ANSIBLE / "roles/setup/docker_install/tasks/teardown.yml").exists()
 
 
 def test_has_docker_defaults_false_fleet_wide():

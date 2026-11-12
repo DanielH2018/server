@@ -139,17 +139,6 @@ def test_a_false_gate_drops_the_task_and_an_unreadable_one_is_skipped(tmp_path):
     assert "/etc/x/box" not in {w.path for w in pi_wants}
 
 
-def test_the_emptied_claude_code_role_runs_on_no_host_and_expects_no_file():
-    """Both hosts' packages ship what the role installed, and its `end_role` leaves no task."""
-    role = applied.SETUP / "claude_code"
-    assert applied_hosts.task_files("claude_code", role) == {}
-    for host in ("daniel-box", "daniel-server"):
-        assert applied_tasks.expected(role, host, applied.context(role, host)) == (
-            [],
-            [],
-        )
-
-
 RESCUED = """\
 - name: Render a filter, and withdraw it if the check fails
   block:
@@ -317,7 +306,7 @@ def test_every_jinja_import_in_the_real_setup_roles_resolves():
                 if s.unchecked and "render" in s.reason
             ]
         walked.append(role.name)
-    assert "claude_code" in walked and len(walked) > 10
+    assert "initial_setup" in walked and len(walked) >= 5
     assert lost == []
 
 

@@ -15,40 +15,8 @@
       ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
       tags: always
   roles:
-    - { role: config_files, tags: ["config_files"] }
     - { role: initial_setup, tags: ["initial_setup"] }
-    - { role: sops_setup, tags: ["sops_setup"] }
-    # Unconditional: the role dispatches on has_docker internally (install.yml vs
-    # teardown.yml). A role gated here is skipped, and a skipped role reaps nothing.
-    - { role: docker_install, tags: ["docker_install"] }
-    # Unconditional for the same reason as docker_install: the role dispatches on
-    # has_hypervisor internally, so a host that turns it off still gets the teardown half.
-    # After docker_install, so a host retiring one runtime has done that before gaining the
-    # other — both write firewall state, and doing them in one run in this order means they
-    # never overlap.
-    - { role: hypervisor, tags: ["hypervisor"] }
-    - { role: gitops_deploy, tags: ["gitops_deploy"] }
-    # After gitops_deploy, on the same host. The host-package builder publishes from the
-    # checkout the deployer keeps; the role dispatches on homelab_builder_enabled internally.
     - { role: homelab_builder, tags: ["homelab_builder"], when: has_gitops }
-    # After gitops_deploy: it reads /var/lib/gitops-deploy and dispatches on has_gitops.
-    - { role: deploy_ui, tags: ["deploy_ui"] }
-    # Per-user, become: false throughout — they manage the connecting user's home, not
-    # root's. Placed after docker_install so the OS is fully set up before the dotfiles
-    # land on top of it.
-    # Before chezmoi_setup, though not as a credential dependency: the dotfiles repo is
-    # public and clones anonymously. What the order buys is the rendered
-    # ~/.gitconfig. The dotfiles template writes the `gh auth git-credential` helper only when
-    # `gh` is already on PATH at the moment chezmoi renders it, and falls back to a timed
-    # credential cache otherwise — a fallback that then stands until the next apply.
-    - { role: github_cli, tags: ["github_cli"], when: has_github_cli }
-    - { role: chezmoi_setup, tags: ["chezmoi"], when: has_chezmoi }
-    - { role: claude_code, tags: ["claude_code"], when: has_claude_code }
-    - { role: renovate_notify, tags: ["renovate_notify"], when: inventory_hostname == renovate_notify_host }
-    # After claude_code: the agent's ExecStart is the `claude` binary that role installs.
-    # The role installs on renovate_agent_host regardless of renovate_agent_enabled; that var
-    # decides only whether the timer is armed, so the rollback is a var flip and a re-run.
-    - { role: renovate_agent, tags: ["renovate_agent"], when: inventory_hostname == renovate_agent_host }
     # Host half of the UPS stack (udev rule + secondary upsmon that performs the real
     # poweroff); the primary is the k8s/nut pod pinned to ups_host.
     #
@@ -61,12 +29,3 @@
     - role: nut_host
       tags: ["nut_host"]
       when: inventory_hostname == ups_host or nut_host_secondary_armed | bool
-    - { role: optimize_pi, tags: ["optimize_pi"], when: inventory_hostname == optimize_pi_host }
-    # The fake-remux detector + reconciler run on the media stack's host (fake_remux_host).
-    # Host-conditional like optimize_pi/renovate_notify.
-    - { role: fake_remux, tags: ["fake_remux"], when: inventory_hostname == fake_remux_host }
-    # The host-side rows D5 moves out of the k8s roles. daniel-box is a literal rather than a
-    # `*_host` var: a var would live in group_vars/all.yml, and an inventory change routes to
-    # the deploy plane as well as this one. setup_routing places a role gated to another host
-    # as a hand apply, so a Pi write here goes through `delegate_to` instead.
-    - { role: k8s_host_files, tags: ["k8s_host_files"], when: inventory_hostname == 'daniel-box' }

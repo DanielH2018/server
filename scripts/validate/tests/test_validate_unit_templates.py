@@ -16,8 +16,11 @@ requires_systemd_analyze = pytest.mark.skipif(
     reason="systemd-analyze not on PATH",
 )
 
-GITOPS_DEPLOY_UNIT = (
-    v.ROLES / "setup" / "gitops_deploy" / "templates" / "gitops-deploy.service.j2"
+RENOVATE_AGENT_TIMER = (
+    v.COMPONENT_TEMPLATES
+    / "renovate-agent"
+    / "templates"
+    / "homelab-renovate-agent.timer.j2"
 )
 
 
@@ -162,14 +165,14 @@ def test_discover_templates_finds_the_known_set():
 
 
 def test_unit_context_layers_the_owning_roles_real_defaults():
-    ctx = v.unit_context(GITOPS_DEPLOY_UNIT)
-    # A real value, not "STUB" — bare StubUndefined renders OnUnitActiveSec as the literal
-    # string "STUB", which is what made the sibling timer red before this layering existed.
-    assert ctx["gitops_deploy_tick_interval"] == "10min"
+    ctx = v.unit_context(RENOVATE_AGENT_TIMER)
+    # A real value, not "STUB" — bare StubUndefined renders OnCalendar as the literal
+    # string "STUB", which is what made a timer red before this layering existed.
+    assert ctx["renovate_agent_oncalendar"] == "*-*-* 06:00:00 America/Chicago"
 
 
 def test_unit_context_still_stubs_a_var_no_default_carries():
-    ctx = v.unit_context(GITOPS_DEPLOY_UNIT)
+    ctx = v.unit_context(RENOVATE_AGENT_TIMER)
     assert "inventory_hostname" not in ctx
 
 

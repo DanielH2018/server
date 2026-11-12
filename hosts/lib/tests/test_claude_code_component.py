@@ -19,9 +19,7 @@ from lib.repo_paths import HOST_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.cluster import RenderRefused
 from secrets_mgmt import host_secrets
-from setup_lib import setup_gates
 
-ROLE = REPO / "ansible" / "roles" / "setup" / "claude_code"
 COMPONENT = REPO / "hosts" / "components" / "claude-code"
 # A role a component may name with `role:` that still ships a `files/` script.
 FILES_ROLE = REPO / "ansible" / "roles" / "setup" / "initial_setup"
@@ -75,11 +73,6 @@ def test_the_agent_user_is_declared_with_its_live_uid(package, manifest):
     assert text(package, "/usr/lib/sysusers.d/homelab.conf") == (
         'u claude 995 "Claude agent" /var/lib/claude /bin/bash\n'
     )
-
-
-def test_the_role_ends_on_every_host():
-    hosts = ["daniel-box", "daniel-server", "daniel-pi"]
-    assert setup_gates.role_end_hosts(ROLE, hosts) == frozenset(hosts)
 
 
 def test_the_remote_control_host_ships_disabled_and_restarts_only_by_hand(

@@ -53,15 +53,6 @@ def test_no_play_loads_secrets_inline() -> None:
     assert offenders == {}
 
 
-def test_the_backup_playbooks_load_secrets_through_the_preamble() -> None:
-    importers = {
-        name
-        for name, plays in plays_by_playbook().items()
-        if any(map(imports_preamble, plays))
-    }
-    assert {"prune_backups.yml", "seed_volume_backup.yml"} <= importers
-
-
 def test_an_inline_load_is_flagged() -> None:
     play = {
         "pre_tasks": [

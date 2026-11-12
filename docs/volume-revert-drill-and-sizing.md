@@ -1,8 +1,9 @@
 # volume-revert drill, timeout sizing and the Longhorn API findings
 
-Working-out moved off `ansible/roles/k8s/volume-revert/CLAUDE.md` (#2995), which a session reads
-on every touch of the rollback path. The role doc keeps the caller contract, the sequence and the
-guards; this page keeps the 2026-08-21 drill timings, the timeout derivation behind
+`scripts/backup/volume_revert.py` performs the revert. The Ansible role this page describes,
+`k8s/volume-revert`, was deleted in H7.55 after the 2026-11-08 drill passed through the script.
+The script's module docstring holds the caller contract and the sequence. This page keeps the
+2026-08-21 drill timings, the timeout derivation behind
 `volume_revert_state_timeout` and `volume_revert_api_timeout`, the longhorn-manager behaviour the
 attach and detach were written against, the hand-recovery steps for a partial revert, and what no
 test in this repo covers.
@@ -19,7 +20,7 @@ mode. Read the failing task's name to see which claim it stopped on, then:
    for each of the service's volumes.
 2. Any volume still attached with `disableFrontend: true` needs
    `POST {api}/v1/volumes/<vol>?action=detach {}` against **this node's own** longhorn-manager
-   pod IP — the ClusterIP is a coin flip, see `k8s/longhorn-api`.
+   pod IP — the ClusterIP is a coin flip, see `ansible/filter_plugins/longhorn_manager.py`.
 3. Decide per claim whether to finish the revert or to accept the volumes as they are. Reverting
    the remaining claims by hand is the same sequence the role runs.
 4. Resume the service's Kustomizations to bring it back up. `deploy.sh --tags <service>` exits 5
@@ -55,9 +56,8 @@ defence in depth*, holds the reasoning that both roles share.
 
 Both halves of the pair stay in `claim.yml`: `Fail when no snapshot matches this deploy` under
 `when: not (k8s_no_mutate | bool)`, and `Report a dry run with nothing to revert` under the
-opposite guard. Nothing in this repo exercises the `k8s_no_mutate: true` branch, so
-`test_volume_revert.py`'s coverage of it pins the branch's own correctness in isolation, not that
-anything reaches it.
+opposite guard. Nothing in this repo exercised the `k8s_no_mutate: true` branch, so the role's
+tests pinned the branch's own correctness in isolation, not that anything reached it.
 
 ## The attach and the detach pair on an empty ticket key
 
@@ -171,8 +171,8 @@ full success getting cut short), not a proven-safe one. The unit's `TimeoutStart
 
 - The Longhorn API answers only from the **node-local** manager pod: the longhorn-manager
   NetworkPolicy's `from:` is all pod selectors, so host-originated traffic reaches no other. The
-  role never resolves that itself — `k8s/longhorn-api`, included with `tasks_from: resolve.yml`,
-  does, once per run and before the first claim is touched.
+  revert resolves that pod once per run, before the first claim is touched, through
+  `longhorn_manager.ready_manager_ip`.
 - `kubectl`'s `jsonpath` has **no `&&`** — `unrecognized character in action: U+0026`, verified
   2026-08-21. The snapshot listing filters on `spec.volume` alone and does the name prefix and
   `markRemoved` in Jinja. Do not fold them back together.
@@ -197,6 +197,5 @@ That drill also found what source-text tests structurally cannot. The role's inp
 SHA check as a bare `regex_search`, which returns the matched STRING; ansible-core 2.21 refuses a
 non-boolean conditional, so **the assert aborted on every invocation, with a valid SHA, before the
 role did anything** — the rollback path could never have run. Every test of that guard read its
-source text and passed throughout.
-`ansible/tests/longhorn/test_volume_revert_input_guard.py` now runs the guard instead, and is the
-test that would have caught it.
+source text and passed throughout. A test that ran the guard would have caught it, and the
+role's input-guard test did so until H7.55 deleted the role.
