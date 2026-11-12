@@ -1,7 +1,6 @@
 """Render k8s roles into C1's cluster layout: `DIR/cluster/<tag>/` and its `kustomization.yaml`.
 
-Each tag renders with the play-time context
-from `renderer_lib.context`, through the repo's Jinja environment and a strict undefined. A
+Each tag renders with the context from `renderer_lib.context`, through the repo's Jinja environment and a strict undefined. A
 name no layer supplies stops the render, where the render guards' `StubUndefined` would print
 `STUB` into the output.
 
@@ -68,7 +67,7 @@ from renderer.renderer_lib.bundle import (
     kustomization_text,
     reserved_tags,
 )
-from renderer.renderer_lib.context import play_context
+from renderer.renderer_lib.context import template_context
 from renderer.renderer_lib.environment import (
     RenderError,
     loader_name,
@@ -232,10 +231,10 @@ def bundle_ordering(
     group_vars: Path = GROUP_VARS,
     roles: Path = K8S_ROLES,
 ) -> Ordering:
-    """What the bundle generates `dependsOn` from: the play's own dependency map (D4.2).
+    """What the bundle generates `dependsOn` from: the full dependency map (D4.2).
 
-    The map is `build_k8s_dep_map` over the full k8s `containers_list`, as `deploy.yml`
-    builds it, never a `--role` subset, so a tag's edges do not depend on what else renders.
+    The map is `build_k8s_dep_map` over the full k8s `containers_list`, the same
+    map `template_context` sorts with, never a `--role` subset, so a tag's edges do not depend on what else renders.
     The suspended tags are read over every flux-owned role for the same reason (D5.1b).
 
     Raises:
@@ -298,8 +297,8 @@ def tag_context(
     host: str = K8S_HOST,
     inventory: Inventory = REPO_INVENTORY,
 ) -> dict:
-    """`play_context` with `container_item`, the k8s play's loop variable, set to `tag`'s entry."""
-    ctx = play_context(role_dir, overrides, host, inventory)
+    """`template_context` with `container_item`, the entry the role templates read, set to `tag`'s."""
+    ctx = template_context(role_dir, overrides, host, inventory)
     ctx["container_item"] = next(e for e in ctx["containers_list"] if e["name"] == tag)
     return ctx
 
@@ -332,9 +331,9 @@ def role_context(
     role_dir = roles / tag
     try:
         ctx = tag_context(role_dir, tag, stubs, host, inventory)
-        # A role default can read a fact a task sets, as every `*_k8s_image` built here reads
+        # A role default can read a derived fact, as every `*_k8s_image` built here reads
         # `k8s_built_image_tags`. The first pass leaves such a default undefined, so the facts
-        # go in as the overrides of a second pass, as `set_fact` outranks every file layer.
+        # go in as the overrides of a second pass, above every file layer.
         # The stub file's extra vars outrank them in turn.
         facts = derived_facts(role_dir, ctx, built)
         ctx = tag_context(role_dir, tag, {**facts, **stubs}, host, inventory)

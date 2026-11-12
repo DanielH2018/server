@@ -457,8 +457,8 @@ waived, so the status is DONE. Each reading uses the commands its observation na
   before apt runs and recreates each one afterwards", and that a `daemon.json` edit restarts
   dockerd and leaves docker-proxy on a stale socket inode. H5.7 changes `engine-upgrade.yml`
   to stop and start `homelab-compose.service`.
-- **The Docker networks are external.** H5's Baseline says "The `networks.yml.j2` macro
-  declares each network `external: true`", and that `docker_install` creates `proxy` and
+- **The Docker networks are external.** H5's Baseline says each Pi compose file declares
+  its networks `external: true`, and that `docker_install` creates `proxy` and
   `lifecycle`, the two the Pi's project attaches to. The task `Create Docker networks` in
   `docker_install/tasks/install.yml` loops over eight names, not two, and sets no `labels:`.
   Compose labels a network it creates itself, so the live networks lack the labels a
