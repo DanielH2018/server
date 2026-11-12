@@ -215,6 +215,7 @@ def test_a_unit_that_will_not_stop_leaves_the_uid_alone_and_fails_the_run(node):
     result = node.run()
 
     assert result.returncode == 1
+    assert "cannot stop every unit running as claude" in result.stderr
     assert node.calls("usermod") == [] and node.state["users"] == {"claude": 995}
 
 
