@@ -1,14 +1,17 @@
 # D7 — Superseding promotions
 
-Status: IN PROGRESS. D7.1 to D7.5 landed on 2026-10-24: D7.1 in #6140, D7.2 in #6145, D7.4
-in #6156, the refactor D7.5 needed in #6159, D7.5 in #6193, D7.7 in #6200, D7.8 in #6205,
-and the hold attribution #6199 asked for in #6204. The operator turned `SUPERSEDE` on in
-D7.6 (#6210), which merged on 2026-10-25. The live pair ran that day, and *Verification*
-records what it proved and what it left open. The red proof for the live pair ran on
-2026-10-29 and passed: promote run 40882393836, for #6497 (P), #6498 (T) and the revert
-#6508. The slice stays in progress because the exit criterion's one pair, with
-P superseded and T `good`, has not run: the 2026-10-25 pair did not exercise `superseded`,
-and the red proof's T failed on purpose.
+Status: DONE on 2026-11-12. D7.1 to D7.5 landed on 2026-10-24: D7.1 in #6140, D7.2 in
+#6145, D7.4 in #6156, the refactor D7.5 needed in #6159, D7.5 in #6193, D7.7 in #6200, D7.8
+in #6205, and the hold attribution #6199 asked for in #6204. The operator turned `SUPERSEDE`
+on in D7.6 (#6210), which merged on 2026-10-25. The live pair ran that day, and
+*Verification* records what it proved and what it left open. The red proof for the live
+pair ran on 2026-10-29 and passed: promote run 40882393836, for #6497 (P), #6498 (T) and the
+revert #6508. The exit criterion's pair ran naturally on 2026-11-12: promote run
+[43290958373](https://github.com/DanielH2018/server/actions/runs/43290958373) for #8140 (P)
+printed `superseded`, and run
+[43292081624](https://github.com/DanielH2018/server/actions/runs/43292081624) for #8149 (T)
+printed `good` and moved `last-good` to T. *The exit pair's result, 2026-11-12* under
+*Verification* quotes both runs and names the one part the pair did not exercise.
 
 Depends on: D5, through #5704's soak fix (the soak Job exits once `homelab` no longer
 holds its revision). D2.5's in-flight guard and D5.2b1's hold without a reset are the
@@ -33,6 +36,19 @@ The exit criterion is one measured pair of promote runs on production:
   moved `last-good` to `sha-<T>`;
 - `land.sh` read `settled` for both PRs, and T's landing settled earlier than P's
   `settle` plus T's own verification would have allowed.
+
+The slice was closed against a narrower bar. Issue #8115 asked for DONE on one natural pair
+in which P printed `superseded` and T printed `good`. The 2026-11-12 pair meets the first two
+bullets in full. It meets the third and fourth only in part, because T changed no service:
+
+- **Third bullet.** T printed `good` and moved `last-good`, but T's expected set held only
+  P's names. The 2026-10-29 red proof is the run whose T expected names from both commits,
+  and that T failed on purpose.
+- **Fourth bullet.** `land.sh` read `settled` for P and `nothing-to-deploy` for T. With no
+  verification of T's own, the timing comparison was not measured.
+
+No run has yet shown a superseding T with its own change that both verifies the union and
+settles `good`; #8208 tracks that run.
 
 ## Baseline at `53fe3f196`
 
@@ -395,6 +411,49 @@ supersedes another.
 
   A rerun of the proof, prepared on 2026-11-02 as #6999, #7001 and #7002, was closed
   unmerged once this record was found.
+- **The exit pair's result, 2026-11-12.** A natural burst of merges produced it; nobody
+  merged to force it. The two PRs were:
+    - P, #8140, merge cede3400e6 at 19:30:29Z: k8s role docs and comments. Its render
+      changed ten tags, so P's set was 29 names.
+    - T, #8149, merge 7465972305 at 19:36:51Z: `ansible/roles/k8s/longhorn/CLAUDE.md` and
+      a test, with no cluster footprint of its own.
+
+  P's promote run is
+  [43290958373](https://github.com/DanielH2018/server/actions/runs/43290958373), and T's is
+  [43292081624](https://github.com/DanielH2018/server/actions/runs/43292081624). Their logs,
+  quoted without their timestamps, check each exit bullet.
+    - T's `tag` moved `prod` to T at 19:39:42Z, before P's `verify` ended at 19:40:02Z.
+      T's `decide` read its base on `last-good`'s commit 73e730d65d and superseded P, and
+      T's `tag` tagged T `superseding` before the move:
+
+      ```
+      promote.py: 74659723050256149802662925faf69a05150355 supersedes the verification of cede3400e6914bbfcbdceeadb9d78535e23cc51b
+      tagged sha-74659723050256149802662925faf69a05150355 superseding: it supersedes the verification of cede3400e6914bbfcbdceeadb9d78535e23cc51b
+      ```
+    - P's `verify` printed `superseded`, and P's `settle` wrote nothing:
+
+      ```
+      verify: prod is at sha256:eca3a5fc9dcef8cb8682340767c23c1cc12eaff90414fe433d0dfccc20295f5d, not T's sha256:902092e4fb50bee8f963d4d7a2b383ce3b0fd3c5b95fd7f93d9ffbf021d5622d: a later run moved it, so this verification is superseded
+      target=cede3400e6914bbfcbdceeadb9d78535e23cc51b verdict=superseded failed=
+      verify read prod moved past sha-cede3400e6914bbfcbdceeadb9d78535e23cc51b, so this run writes nothing and dispatches nothing
+      ```
+    - T's `verify` expected P's 29 names on T and printed `good`. T's `settle` moved
+      `last-good` to T and dispatched the next run:
+
+      ```
+      target=74659723050256149802662925faf69a05150355 verdict=good failed=
+      last-good moved to sha-74659723050256149802662925faf69a05150355
+      dispatched promote for df27b94ccb5e8aa1c3e3dde2b7ce6231a1239314, master's newest green commit, which is newer than 74659723050256149802662925faf69a05150355
+      ```
+    - `probe.py landing-verdicts` recorded #8140 as
+      `VERDICT: settled (PR #8140, cede3400e6…)` at 19:48:12Z, 40 seconds after T's
+      `settle` moved `last-good`. It recorded #8149 as `VERDICT: nothing-to-deploy`,
+      because T touched no service.
+    - Not exercised: the disjoint union. T's own change was empty, so T's expected set
+      equals P's set, and the third bullet holds because T added no names. The red proof
+      of 2026-10-29 is the run in which T's `verify` expected names from both commits.
+      The fourth bullet's timing comparison has no T verification to weigh, for the same
+      reason.
 
 ## Rollback
 
