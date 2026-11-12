@@ -144,8 +144,8 @@ def test_prune_skips_an_orphan_a_process_still_uses(tmp_path, monkeypatch):
         holder.kill()
         holder.wait()
 
-    # The held orphan is a removal that did not happen, so the run exits 1 and names it.
-    assert done.returncode == 1, done.stderr
+    # The held orphan is a skip, not a failure: the run names it and exits 0 (#7949).
+    assert done.returncode == 0, done.stderr
     assert f"could not remove {held}: in use" in done.stderr
     assert not idle.exists(), done.stdout
     assert held.is_dir(), done.stdout

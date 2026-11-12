@@ -1026,6 +1026,12 @@ excluded. Each lands in one of four groups.
       it and its lander runs `land.sh`, so its reads switch to `DEPLOY_HOLD` or are
       dropped.
 
+[#7961](https://github.com/DanielH2018/server/issues/7961) landed the hold and ledger half of
+this list: it removed each of those readers from the census row's `allow`. The k3s and MetalLB
+runbook gates, `probe.py landing` and the deck mod now read `DEPLOY_HOLD`. deploy-ui, the
+renovate-agent wrapper, the fan-out waiting gauge and `docs/reference/state.md` read no hold,
+because `land.sh` refuses a landing under `DEPLOY_HOLD` itself.
+
 **Path readers.** An import census cannot see a module that reads a deployer file by path.
 H7.2e runs a fifth derivation grep, `git grep -n -E
 '/(etc|var/lib|opt)/gitops-deploy' -- ':!ansible/roles/setup/gitops_deploy/' ':!docs/'`,
@@ -1925,7 +1931,7 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | no: its two census greps run at its base | H7.54, H7.55, H5 |
 | H7.57 The ADR | H7.20c | yes | H7.55 |
 | H7.58 Pi: `initial_setup`, part 3 | new | yes | H7.26, H7.30, H7.42 |
-| H7.59 daniel-server: `initial_setup`, part 3, and its Loki witness | new | yes, with H7.58 | H7.58 live, H7.31, H7.61 live, H4 |
+| H7.59 daniel-server: `initial_setup`, part 3, and its Loki witness | new | landed in [`a7a9110e8`](https://github.com/DanielH2018/server/commit/a7a9110e8) and [`0ecdbe8b4`](https://github.com/DanielH2018/server/commit/0ecdbe8b4) | H7.58 live, H7.31, H7.61 live, H4 |
 | H7.60 daniel-box: `initial_setup`, part 3 | new | yes, with H7.58 | H7.59 live, H7.32, H6.2 |
 | H7.61 daniel-server: dev tooling and the worktree holder scan; `/usr/bin/uv` on both cluster hosts | new | yes | H7.38, H7.39, H7.41a |
 | H7.62 daniel-box: dev tooling, the worktree holder scan, `chezmoi_setup` and `github_cli` | new | yes, with H7.61 | H7.61 live, H7.40, H6.2 |

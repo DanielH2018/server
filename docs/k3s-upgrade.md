@@ -62,10 +62,9 @@ also means a deployer marker exists and could not be read, which is not a hold.
    replica goes. `detached`/`unknown` is normal for an idle volume; `degraded` (or `faulted`)
    is not.
 2. **No Longhorn backup mid-flight.** A restart aborts it and the retry storm follows.
-3. **The GitOps deployer holds no SHA.** A non-empty `hold_sha` means a previous deploy already
-   failed its health gate, and this upgrade would land on top of that. The marker lives on
-   daniel-box, so this gate fails on any other host rather than reading an absent directory as
-   a cleared hold.
+3. **`DEPLOY_HOLD` reads `none`.** A hold means a previous promotion already failed its health
+   gate, and this upgrade would land on top of that. The gate reads the repository variable, so
+   a missing or empty value fails it rather than reading as no hold.
 4. **Both nodes Ready.**
 
 ## Read the release notes for what this cluster actually runs
@@ -260,16 +259,7 @@ fast-forwards the primary checkout and writes a `manual_plane` line for `k3s` to
 (`deploy_changes.py`) still park the tick. Before 2026-09-11 a `k3s` change did park the tick
 (issue #1467).
 
-A recorded line stays in the SessionStart banner until something clears it. When the cluster is already upgraded by step 4, the hand-apply the line asks for is a
-verification run, not a change. After the merge, run the apply the deployer printed if you want
-that verification, then clear the line:
-
-```bash
-uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s
-```
-
-[A role only a hand can apply is recorded, not parked](archive/gitops-deployer.md#a-role-only-a-hand-can-apply-is-recorded-not-parked)
-owns the ledger, the narrowed `--applied` form of the clear, and the page. The primary
+The primary
 checkout needs no hand `git pull --ff-only`: `homelab-checkout-sync.timer` fast-forwards it to
 the newest green master commit every 10 minutes, and the retired deployer's `local..origin`
 range no longer exists to cancel.

@@ -33,7 +33,7 @@ def _no_issues():
     return []
 
 
-def _gauge(tmp_path, server, prs, box=(), owed="", ssh=None, issues=_no_issues):
+def _gauge(tmp_path, server, prs, box=(), ssh=None, issues=_no_issues):
     answer = ssh or subprocess.CompletedProcess([], 0, json.dumps(server), "")
     tools, _ = fake_tools(answers={autoland.SERVER_HOST: answer})
     b = Boundaries(
@@ -44,7 +44,6 @@ def _gauge(tmp_path, server, prs, box=(), owed="", ssh=None, issues=_no_issues):
         release=lambda *a: None,
         running=lambda n: False,
         local_records=lambda: list(box),
-        owed=lambda: owed,
         open_issues=issues,
         clock=lambda: NOW,
     )
@@ -122,29 +121,6 @@ def test_a_box_batch_counts_only_what_holds_its_own_landing(tmp_path):
     assert _count(text, "lander-surface") == 0
 
 
-def test_an_owed_manual_plane_counts_and_a_torn_line_is_skipped(tmp_path):
-    owed = "\n".join(
-        [
-            json.dumps(
-                {
-                    "class": "manual_plane",
-                    "subject": "k3s",
-                    "origin": "abc",
-                    "at": int(NOW - 600),
-                }
-            ),
-            json.dumps(
-                {"class": "hold_plane", "subject": "x", "origin": "abc", "at": 1}
-            ),
-            '{"class": "manual_plane", "at"',
-        ]
-    )
-    gauge, _ = _gauge(tmp_path, [], [], owed=owed)
-    text = gauge.read_text()
-    assert _count(text, "manual-plane") == 1
-    assert 'homelab_awaiting_operator_oldest_seconds{reason="manual-plane"} 600' in text
-
-
 def test_an_unreadable_daniel_server_writes_no_gauge(tmp_path):
     gauge, text = _gauge(
         tmp_path, [], [_pr()], ssh=subprocess.CompletedProcess([], 255, "", "no route")
@@ -158,7 +134,7 @@ def test_a_dry_run_writes_no_gauge(tmp_path):
         answers={autoland.SERVER_HOST: subprocess.CompletedProcess([], 0, "[]", "")}
     )
     b = Boundaries(
-        tools=tools, open_prs=lambda: [], local_records=list, owed=str, open_issues=list
+        tools=tools, open_prs=lambda: [], local_records=list, open_issues=list
     )
     gauge = tmp_path / "fanout_operator_waits.prom"
     autoland.run(b, tmp_path, tmp_path, dry_run=True, out=lambda _: None, gauge=gauge)

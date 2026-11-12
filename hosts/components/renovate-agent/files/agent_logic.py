@@ -18,7 +18,6 @@ import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from gitops_markers import HOLD_CLEAR_CMD
 
 # The session's result JSON marks its final object with this `type`. Anything printed before
 # it on stdout is a warning or progress line, which is why the parse scans rather than loads.
@@ -96,23 +95,11 @@ class Delta:
     touched: tuple[int, ...] = ()
 
 
-def decide(open_prs: list[OpenPR], hold_sha: str, hold_plane: str) -> Gate:
+def decide(open_prs: list[OpenPR]) -> Gate:
     """Whether to spend a session this tick.
 
-    Skips on a GitOps hold because a session could only reach `CLAUDE.md` → *When to wait* and
-    stop: a held host means an earlier SHA failed its health gate, so landing anything on top
-    of it is the state the hold exists to prevent.
+    The tick does not read `DEPLOY_HOLD`: the lander's `land.sh` refuses a landing under it.
     """
-    if hold_sha.strip():
-        held = hold_sha.strip()
-        plane = f" (broad apply: {hold_plane.strip()})" if hold_plane.strip() else ""
-        # The full SHA: `clear-hold` refuses any other (#4081).
-        return Gate(
-            run=False,
-            reason=f"the GitOps deployer is holding at {held[:8]}{plane} — once every held "
-            f"plane is applied, clear the hold with Clear in the deploy UI or "
-            f"`{HOLD_CLEAR_CMD} {held}`",
-        )
     if not open_prs:
         return Gate(run=False, reason="no open Renovate PRs", quiet=True)
     return Gate(run=True, reason=f"{len(open_prs)} open Renovate PR(s)")

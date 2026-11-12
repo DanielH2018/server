@@ -1,6 +1,5 @@
 """Readers behind the four panels. Each parser gets an accept and a reject case."""
 
-import json
 import os
 from pathlib import PurePath
 
@@ -21,7 +20,7 @@ PS = """\
  5100     1    30 bash ./scripts/deploy.sh --tags homepage
  5101  5100    29 flock -w 600 -E 75 11
  5200     1     1 bash ./scripts/deploy.sh --list-services
- 6000     1    20 /x/python3 /opt/gitops-deploy/gitops_deploy.py
+ 6000     1    20 /x/python3 /opt/homelab/other_holder.py
  6001  6000     2 git fetch
  7000     1     3 grep land.py
 """
@@ -84,7 +83,7 @@ def test_runs_open_but_ungranted_file_is_not_held_is_flagged():
 
 
 def test_runs_bare_lock_holder_is_a_row_is_clean():
-    """The GitOps tick matches no run pattern; its tree-lock hold still shows."""
+    """A holder that matches no run pattern still shows by its tree-lock hold."""
     r = _rows()[6000]
     assert r.kind == "lock" and r.locks == (PurePath(TREE_LOCK).name,)
 
@@ -173,49 +172,6 @@ def test_lock_key_matches_proc_locks_identity_is_clean(tmp_path):
     )
 
 
-def test_read_state_missing_reads_clear_is_clean(state_dir):
-    assert reads.read_state(state_dir)["hold_sha"] == ""
-
-
-def test_read_state_present_reads_value_is_flagged(state_dir):
-    (state_dir / "hold_sha").write_text("deadbeef\n")
-    st = reads.read_state(state_dir)
-    assert st["hold_sha"] == "deadbeef"
-
-
-def _held(subject: str, at: int, **extra) -> str:
-    return json.dumps(
-        {"class": "hold_plane", "subject": subject, "origin": "abc", "at": at, **extra}
-    )
-
-
-def test_read_state_lists_each_held_plane_oldest_first_is_clean(state_dir):
-    """One entry per failed apply, and the page lists them before a Clear."""
-    (state_dir / "owed.jsonl").write_text(
-        _held("ansible/deploy.yml sonarr", 2000)
-        + "\n"
-        + _held("ansible/initial_setup.yml k3s", 1000)
-    )
-    assert reads.read_state(state_dir)["hold_plane_entries"] == [
-        "ansible/initial_setup.yml k3s",
-        "ansible/deploy.yml sonarr",
-    ]
-
-
-def test_read_state_with_no_hold_plane_lists_no_entry_is_flagged(state_dir):
-    assert reads.read_state(state_dir)["hold_plane_entries"] == []
-
-
-def test_read_state_lists_a_hold_plane_line_with_an_unknown_key_is_clean(state_dir):
-    """A key this copy never heard of skips no line (#3392)."""
-    (state_dir / "owed.jsonl").write_text(
-        _held("ansible/initial_setup.yml k3s", 1000, added_by_a_newer_writer=True)
-    )
-    assert reads.read_state(state_dir)["hold_plane_entries"] == [
-        "ansible/initial_setup.yml k3s"
-    ]
-
-
 PRS = """[{"number": 1550, "title": "T", "headRefName": "b", "isDraft": false,
  "statusCheckRollup": [{"conclusion": "SUCCESS"}, {"conclusion": "SUCCESS"}]},
  {"number": 1551, "title": "U", "headRefName": "c", "isDraft": true,
@@ -244,22 +200,6 @@ TWO_PRS_PS = """\
 def test_runs_keep_landings_for_different_prs_apart_is_flagged():
     got = reads.runs(reads.parse_ps(TWO_PRS_PS), {}, {})
     assert [(r.pid, r.pr) for r in got] == [(4400, "1550"), (4500, "1551")]
-
-
-def test_read_state_serves_only_the_manual_plane_ledger_lines_is_clean(state_dir):
-    """`probe.py landing` reads them off daniel-box, where it cannot read the ledger (#3676)."""
-    manual = json.dumps(
-        {"class": "manual_plane", "subject": "k3s", "origin": "abc", "at": 1000}
-    )
-    (state_dir / "owed.jsonl").write_text(
-        _held("ansible/initial_setup.yml k3s", 1000) + "\n" + manual
-    )
-    assert reads.read_state(state_dir)["manual_plane_owed"] == manual
-
-
-def test_read_state_with_no_manual_plane_serves_empty_is_flagged(state_dir):
-    (state_dir / "owed.jsonl").write_text(_held("ansible/deploy.yml sonarr", 2000))
-    assert reads.read_state(state_dir)["manual_plane_owed"] == ""
 
 
 @pytest.mark.parametrize("module", ["deploy_cli.py", "deploy_run.py"])

@@ -50,11 +50,6 @@ sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # scripts/deploy_t
 from deploy_tools.deploy_lib.messages import PROG
 from lib.cli_help import ArgumentParser, error, warn
 
-from lib.deployer_park import (
-    GITOPS_STATE_DIR,
-    park_note,
-    read_behind_marker,
-)
 from lib.exit_codes import DEPLOY_STALE
 from lib.git import git
 
@@ -234,11 +229,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo", default=".")
     parser.add_argument("--ref", default="origin/master")
     parser.add_argument(
-        "--state-dir",
-        default=GITOPS_STATE_DIR,
-        help="the GitOps deployer's marker directory (a test points this at a tmp_path)",
-    )
-    parser.add_argument(
         "--no-fetch",
         action="store_true",
         help="skip refreshing the remote ref (tests, and offline runs)",
@@ -337,22 +327,10 @@ def main(argv: list[str] | None = None) -> int:
             ),
             prog=PROG,
         )
-        note = park_note(read_behind_marker(args.state_dir))
-        if note:
-            print(note, file=sys.stderr)
         return DEPLOY_STALE
 
     if behind:
         error(format_refusal(behind, ahead, args.ref, base), prog=PROG)
-        # Exit 4 names a rebase of THIS tree, which is the wrong repair when the deployer is
-        # parked: the primary checkout is what has to converge, and rebasing a worktree onto an
-        # origin the fleet is not running deploys nothing. The SessionStart banner already says
-        # this to a session as it OPENS; a session running for an hour that hits exit 4
-        # mid-landing never saw it. Additive and best-effort — the refusal above
-        # prints either way, so a host with no state directory changes nothing.
-        note = park_note(read_behind_marker(args.state_dir))
-        if note:
-            print(note, file=sys.stderr)
         return DEPLOY_STALE
     return 0
 

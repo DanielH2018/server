@@ -11,10 +11,10 @@ a crash loop's reason, and a file with no activation is never reported pending.
 import dataclasses
 import os
 import shutil
-import types
 
 import pytest
 from _helpers import load_tasks, load_yaml
+from _wifi_fallback import WIFI_FILE, WIFI_RENDERED, installed_wifi_file
 from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
 from lib.proc_testing import run, write_exec
@@ -22,8 +22,6 @@ from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE, REPO
 from renderer.renderer_lib import host as host_mode
 
 COMPONENT = REPO / "hosts" / "components" / "k3s-agent"
-WIFI_FILE = "/etc/netplan/80-homelab-wifi-fallback.yaml"
-WIFI_RENDERED = "/var/lib/homelab-secrets/netplan/80-homelab-wifi-fallback.yaml"
 UNIT = "k3s-agent.service"
 DROPIN = "/usr/lib/systemd/system/k3s-agent.service.d/50-homelab.conf"
 CONFIG = "/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
@@ -233,24 +231,9 @@ def test_the_join_task_file_refuses_and_names_the_bootstrap():
     assert "bootstrap-host.sh" in task["ansible.builtin.fail"]["msg"]
 
 
-def _wifi_file(package, ssid: str, password: str) -> dict:
-    """The installed wifi file as netplan parses it, through homelab-secrets' own substitution."""
-    script = REPO / "hosts" / "lib" / "homelab-secrets"
-    secrets = types.ModuleType("homelab_secrets")
-    exec(compile(script.read_text(), str(script), "exec"), secrets.__dict__)
-    (output,) = [o for o in package.outputs if "wifi_password" in o["keys"]]
-    rendered = secrets.substitute(
-        text(package, f"/usr/lib/homelab/secret-templates{WIFI_FILE}"),
-        set(output["keys"]),
-        {"wifi_ssid": ssid, "wifi_password": password},
-        output.get("format"),
-    )
-    return yaml_fast.safe_load(rendered)
-
-
 @pytest.mark.parametrize("password", ['pa"ss', "ab\\tc", "plain"])
 def test_a_password_reaches_netplan_unchanged(package, password):
-    file = _wifi_file(package, 'home "net"', password)
+    file = installed_wifi_file(package, 'home "net"', password)
     assert file["network"]["wifis"]["wlo1"]["access-points"] == {
         'home "net"': {"password": password}
     }

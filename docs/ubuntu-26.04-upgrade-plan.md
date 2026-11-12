@@ -1,7 +1,8 @@
 # Ubuntu 26.04 upgrade plan
 
-All three hosts can move from Ubuntu 24.04 to 26.04.1 LTS. They move one at a time, in the
-canary order daniel-server, daniel-pi, daniel-box, following *Upgrading a host's Ubuntu
+All three hosts can move from Ubuntu 24.04 to 26.04.1 LTS. They move one at a time:
+daniel-server, then daniel-box, with daniel-pi on its own at any time after daniel-server,
+following *Upgrading a host's Ubuntu
 release* in [`docs/host-packages.md`](host-packages.md). Two PRs remain: one moves the Pi's
 Docker source, and one retires 24.04. The upgrade itself is operator-only. This page records
 the answers the procedure rests on, then the sequence.
@@ -95,6 +96,13 @@ drop-in that skips obsolete removal. The notes below cover what is specific to e
 - The kernel already runs 7.0 (HWE), so the Intel XE graphics see no kernel jump.
 - Record what sudo-rs did for [#7645](https://github.com/DanielH2018/server/issues/7645).
 
+### daniel-box
+
+- This host runs every Claude session, the builder, the signer and the package repository.
+  Before the upgrade, stop every session and fan-out, and confirm no `promote` or builder
+  run is in flight.
+- The reboot takes the control plane and Pi-hole down for as long as the weekly reboot does.
+
 ### daniel-pi
 
 - Run it from the LAN, not over WireGuard. wg-easy runs on the Pi.
@@ -105,13 +113,6 @@ drop-in that skips obsolete removal. The notes below cover what is specific to e
   PR merges only once the Pi's updater runs again. `homelab-docker-engine` then installs the
   resolute builds of the same versions and restarts dockerd, which restarts the Pi's
   containers.
-
-### daniel-box
-
-- This host runs every Claude session, the builder, the signer and the package repository.
-  Before the upgrade, stop every session and fan-out, and confirm no `promote` or builder
-  run is in flight.
-- The reboot takes the control plane and Pi-hole down for as long as the weekly reboot does.
 
 ## The Docker PR: move the Pi's Docker source to 26.04
 

@@ -66,8 +66,6 @@ Subcommands:
     landing [--json]         What would stop a landing now, runs in flight, worktrees + claims
     landing-verdicts [<pr>]  Newest recorded VERDICT line per landed PR [--json --limit N]
                              (exit 1 when <pr> has none; this user, this host)
-    gitops-state [--json]    Every deployer marker + owed-ledger line with its clear command
-                             [--why adds the failure lines of the tick that wrote hold_sha]
     push-rules <branch>      Which ruleset rule a push to the branch meets and whether the gh
                              login bypasses it [--rev HEAD] [--remote origin]
     lander [--pr N]          daniel-box's server-batch lander: newest pass, the landings it

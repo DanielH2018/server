@@ -979,9 +979,10 @@ publishes a second host package.
       it costs off-LAN access until a LAN session repairs it (*Risks*). It is also the
       pilot, and the hostname every container case runs under.
 
-  The order is daniel-server, daniel-pi, daniel-box. When the server's package is not in a
-  run's changed set, the first host in that order whose package changed is that run's
-  canary. The Pi led this order until H3.13 put it on the daily fallback schedule.
+  daniel-server is the only canary. When its package is not in a run's changed set, the run
+  opens no gate and stages every host package at once. The Pi led the order until H3.13 put
+  it on the daily fallback schedule, and stayed eligible until 2026-11-12 (*The Pi is never a
+  canary*, below).
 - **The gate.** A run that stages the canary's package at version V records V's SHA as an
   open gate in the builder's state. While a gate is open, the builder builds the canary's
   package as usual, and moves the gate to each newer canary version. It builds no other
@@ -1121,8 +1122,8 @@ The `host_packages` job has no `name:` key. GitHub names each matrix leg after t
 the leg's values, such as `host_packages (24.04, 3.12)`. The gate census in
 `ansible/tests/repo/test_every_ci_job_is_gated.py` falls back to the job id, and the gate's
 `needs.host_packages.result` fails when either leg fails. The bootstrap cases run in
-`host_packages_bootstrap`, one leg per release in the same matrix, so the prefix filter below
-selects its legs too (#7819). The build job's `name:` does not start with `host_packages`, so
+`host_packages_bootstrap`, three legs per release, one per offline build, named by release
+alone, so the prefix filter below selects its legs too (#7819, #7879). The build job's `name:` does not start with `host_packages`, so
 the filter selects the case legs alone. Later
 host slices extend these jobs and add no workflow of their own. They read each leg's result from the `ci.yml` runs,
 filtered by the job name's prefix:

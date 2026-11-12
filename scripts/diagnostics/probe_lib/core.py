@@ -221,6 +221,14 @@ def prom_endpoint():
 _DURATION_UNITS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
 
 
+def age_phrase(seconds):
+    """`"45 min"` under two hours, `"7h"` above it. A negative age reads as zero."""
+    seconds = max(0.0, seconds)
+    if seconds < 2 * 3600:
+        return f"{int(seconds // 60)} min"
+    return f"{int(seconds // 3600)}h"
+
+
 def parse_duration_seconds(text):
     """`30m` / `6h` / `2d` / `1w` -> seconds. Raises UsageError on anything else.
 

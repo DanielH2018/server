@@ -11,9 +11,10 @@ import subprocess
 
 import pytest
 
-from deploy_tools.land_lib import merge, policy
+from deploy_tools.land_lib import gh_read, merge, policy
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.pr_json import parse_file
+from lib import gh_rate_limit
 
 # What gh exits with when GitHub's GraphQL endpoint does not answer: the shape #5296 logged.
 IO_TIMEOUT = subprocess.CalledProcessError(
@@ -147,3 +148,28 @@ def test_the_other_read_only_gh_calls_retry_a_timeout_too(landing, answer, read)
         pytest.fail(f"the landing refused on a transient read: {exc.error}")
     assert len(attempts) == 3
     assert _sleeps(calls) == [5, 15]
+
+
+# The secondary limit's wait is fixed, so these tests need no clock or gh subprocess; the
+# hourly quota's wait until its reset is `lib/tests/test_gh_rate_limit.py`'s.
+RATE_LIMITED = subprocess.CalledProcessError(
+    1, "gh", stderr="gh: You have exceeded a secondary rate limit. (HTTP 403)"
+)
+
+
+def test_a_rate_limited_read_waits_and_continues(landing):
+    """The 2026-11-11 refusal: a rate-limit 403 waits instead of refusing the landing (#7993)."""
+    ln, calls = landing()
+    attempts = _reads(ln, [RATE_LIMITED, ANSWER])
+    assert _view_or_fail(ln) == ANSWER
+    assert len(attempts) == 2
+    assert _sleeps(calls) == [gh_rate_limit.SECONDARY_WAIT_S]
+
+
+def test_a_read_still_rate_limited_after_its_waits_refuses(landing):
+    ln, calls = landing()
+    _reads(ln, [RATE_LIMITED] * (gh_read.RATE_LIMIT_WAITS + 1))
+    with pytest.raises(Outcome) as exc:
+        ln.view("headRefOid")
+    assert "rate limit" in exc.value.error
+    assert _sleeps(calls) == [gh_rate_limit.SECONDARY_WAIT_S] * gh_read.RATE_LIMIT_WAITS
