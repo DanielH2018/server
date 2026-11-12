@@ -9,13 +9,12 @@ WHY A HELPER AND NOT JUST argparse. argparse already gives this to the 60-odd en
 parse arguments, and those need nothing from here. This module is for the rest: a script that
 takes no arguments, one whose arguments are positional and hand-checked, and — the case that
 made the test fail rather than merely go unanswered — one whose real work starts *before* the
-parse. `deploy.sh` ran its staleness check first and answered `--help` with exit 4;
-`export_grafana_dashboards.py` resolved a kubeconfig at import and died; two scripts hung
+parse. `export_grafana_dashboards.py` resolved a kubeconfig at import and died; two scripts hung
 instead of answering. `answer_help` is a guard to put at the very top of `main`, ahead of every
 such step.
 
 The shell scripts do the same thing with four lines of `case` rather than by sourcing this —
-`land.sh` and `deploy.sh` are `exec` shims whose whole body is two statements, and a `source`
+`land.sh` is an `exec` shim whose whole body is two statements, and a `source`
 in front of that is more machinery than the check is worth.
 
 THE ONE EXCEPTION is a cc-wait repo probe asked for `--describe` (`.claude/wait-sources/`).
@@ -26,7 +25,7 @@ Help on stdout with exit 0 reached cc-wait as a malformed description (#4376).
 asked for `--help` alone still answers with exit 0.
 
 A USAGE ERROR EXITS 64. argparse's own `error()` exits 2, which many entry points here also
-return as an outcome (`CI_DISARMED`, `PUBLISH_PUSHED_NO_PR`, `DEPLOY_TAG_MISS`), so a mistyped
+return as an outcome (`CI_DISARMED`, `PUBLISH_PUSHED_NO_PR`), so a mistyped
 flag read as a real result. `ArgumentParser` below is argparse's with `error()` exiting
 `lib.exit_codes.USAGE_ERROR`. Subparsers inherit it, because `add_subparsers` defaults its
 `parser_class` to the parent's class. `scripts/lib/tests/test_exit_codes.py`'s census refuses a
@@ -129,8 +128,8 @@ _derived_prog = prog
 def warn(message: str, *, prog: str | None = None) -> None:
     """Print `<prog>: warning: <message>` on stderr.
 
-    `prog` overrides the derived name for a script reached through a wrapper: `deploy.sh`
-    execs `deploy_cli.py`, and the operator typed the first.
+    `prog` overrides the derived name for a script reached through a wrapper: `land.sh`
+    execs `land.py`, and the operator typed the first.
     """
     print(f"{prog or _derived_prog()}: warning: {message}", file=sys.stderr, flush=True)
 

@@ -42,7 +42,7 @@ def test_the_landing_brief_tells_the_agent_what_a_pending_host_apply_needs():
     carries it; `test_..._not_the_non_landing_brief` below is the clean half.
     """
     box = render_brief(ISSUES, "daniel-box", "1345-1386", "worktree-orch", [])
-    assert "needs-manual-apply" in box and "blocked" in box
+    assert "needs-manual-apply" in box and "blocked" not in box
     assert "probe.py landing" in box and "DEPLOY_HOLD" in box
     assert "MANUAL APPLY PENDING" in box
 

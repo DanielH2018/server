@@ -110,6 +110,7 @@ def test_announcement_and_the_primary_node_variable_agree():
     that resolves to the same node today. The sentinel render can: only a read of
     `k8s_primary_node` renders the sentinel.
     """
+    # fact: ansible/roles/k8s/metallb/CLAUDE.md#At a glance
     assert len(ANNOUNCING_NODES) == 1, (
         f"the L2Advertisements announce from {sorted(ANNOUNCING_NODES)}; the workload pins "
         "name one node, so the announcement must too"

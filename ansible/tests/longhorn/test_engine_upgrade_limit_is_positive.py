@@ -57,6 +57,7 @@ def test_the_real_render_is_clean() -> None:
 
 
 def test_a_zero_limit_is_flagged() -> None:
+    # fact: ansible/roles/k8s/longhorn/CLAUDE.md#At a glance
     assert _limit_offences([_setting("longhorn", "0")]) != []
 
 

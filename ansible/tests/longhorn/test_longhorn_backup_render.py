@@ -110,6 +110,7 @@ def test_the_etcd_s3_secret_lands_in_kube_system_with_flux_substitution_only_the
     The renderer's kustomization sets no `namespace:`, which would move it. `cluster-base` keeps
     no `postBuild`, so the control plane's own tag never depends on the secrets plane.
     """
+    # fact: ansible/roles/k8s/longhorn-backup/CLAUDE.md#At a glance
     out = tmp_path / "out"
     assert (
         homelab_render.main(

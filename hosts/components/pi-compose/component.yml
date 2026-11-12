@@ -73,8 +73,7 @@ files:
   - {src: units/homelab-compose.service.j2, dst: /usr/lib/systemd/system/homelab-compose.service, inputs_sha256: true}
 # What the Ansible-era projects wrote. Reconcile removes each file in its step 4, after step 3 has
 # restarted homelab-compose.service, so a file goes only once the project has run its service. Each
-# move PR (H5.6 to H5.9) adds its service's docker-compose.yml here. A revert of the move restores
-# the role, and `deploy.sh -e target=daniel-pi` renders the file again.
+# move PR (H5.6 to H5.9) adds its service's docker-compose.yml here.
 legacy:
   - {path: /home/ubuntu/server/containers/docker-proxy/docker-compose.yml}
   - {path: /home/ubuntu/server/containers/autoheal/docker-compose.yml}

@@ -50,7 +50,7 @@
                               The collision needs only that a Service name match the app's
                               env-var prefix, which is the normal case here.
     priority_class            REQUIRED, one of the homelab tiers in
-                              roles/setup/k3s/templates/priorityclass.yaml.j2 (or a k8s
+                              roles/k8s/cluster-base/templates/priorityclass.yaml.j2 (or a k8s
                               system class the hygiene test's `_SYSTEM_TIER` allowlists). No
                               default on purpose: five values are in use and none dominates,
                               and an omitted class is priority 0 — BELOW homelab-best-effort,

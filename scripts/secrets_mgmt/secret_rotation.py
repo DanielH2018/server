@@ -56,7 +56,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import SECRET_ROTATION_BAD_ARGS
-from secrets_mgmt.consumers import consumer_commands, tree_consumers
+from secrets_mgmt.consumers import HOST_PLANE, consumer_commands, tree_consumers
 from secrets_mgmt.git_dates import (
     RENAMED_FROM,
     advance_last_rotated,
@@ -101,10 +101,11 @@ def cmd_consumers(args) -> int:
     print("%s — %d consuming role(s):" % (args.name, len(consumers)))
     for role in sorted(consumers):
         plane = consumers[role]
-        note = {
-            "deploy": "",
-            "host": "   [host package — operator-only host_secrets.py sync]",
-        }.get(plane, "   [setup plane — its playbook applies it]")
+        note = (
+            "   [host package — operator-only host_secrets.py sync]"
+            if plane == HOST_PLANE
+            else ""
+        )
         print("  %-22s %s%s" % (role, plane, note))
     print("\nTo make a rotation take effect:")
     for command in consumer_commands(args.name):

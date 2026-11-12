@@ -122,28 +122,25 @@ def test_the_same_path_in_an_argv_list_is_still_an_invocation(tmp_path):
     )
 
 
-def _named_in_a_role_file(tmp_path, statement: str) -> str:
-    """The verdict on `leaf.py` when a role's `files/pkg/table.py` carries `statement`."""
+def test_a_guarded_script_a_role_names_is_a_deploy_gate(tmp_path):
+    """The reject half: a script with a `__main__` guard named by a role's `files/` runs there."""
     repo, scripts = _package(tmp_path, '"""Summary."""\n')
-    lib = repo / "ansible" / "roles" / "k8s" / "svc" / "files" / "pkg"
-    lib.mkdir(parents=True)
-    (lib / "table.py").write_text(f"{statement}\n")
-    return sc.classify(repo, scripts)["leaf.py"][0]
+    (scripts / "dev" / "pkg" / "leaf.py").write_text(
+        '"""Summary."""\nif __name__ == "__main__":\n    print(1)\n'
+    )
+    files = repo / "ansible" / "roles" / "k8s" / "svc" / "files"
+    files.mkdir(parents=True)
+    (files / "run.yml").write_text('- args: ["python", "scripts/dev/pkg/leaf.py"]\n')
+    assert sc.classify(repo, scripts)["leaf.py"][0] == "gate"
 
 
 def test_a_path_keying_a_roles_python_table_is_not_an_invocation(tmp_path):
     """A dict keyed by module paths names files as data, never as an argv element."""
-    assert (
-        _named_in_a_role_file(tmp_path, 'TABLE = {"scripts/dev/pkg/leaf.py": "svc"}')
-        != "gate"
-    )
-
-
-def test_a_path_in_a_roles_argv_list_is_a_deploy_gate(tmp_path):
-    assert (
-        _named_in_a_role_file(tmp_path, 'ARGV = ["python", "scripts/dev/pkg/leaf.py"]')
-        == "gate"
-    )
+    repo, scripts = _package(tmp_path, '"""Summary."""\n')
+    files = repo / "ansible" / "roles" / "k8s" / "svc" / "files" / "pkg"
+    files.mkdir(parents=True)
+    (files / "table.py").write_text('TABLE = {"scripts/dev/pkg/leaf.py": "svc"}\n')
+    assert sc.classify(repo, scripts)["leaf.py"][0] != "gate"
 
 
 def test_the_real_tree_still_classifies_each_shape_as_a_library():

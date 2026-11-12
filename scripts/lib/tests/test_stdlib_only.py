@@ -50,13 +50,12 @@ MUST_INCLUDE = frozenset(
         "hosts/components/fake-remux/files/state_push.py",
     }
 )
-# The `--project` hooks run in the venv; secret_bearing_host_paths.py imports `yaml` legitimately.
+# The `--project` hooks run in the venv, so they may import `yaml`.
 MUST_EXCLUDE = frozenset(
     {
         ".claude/hooks/bash-pretool.py",
         ".claude/hooks/block-protected-bash.py",
         ".claude/hooks/block-protected-edits.py",
-        "scripts/secrets_mgmt/secret_bearing_host_paths.py",
     }
 )
 

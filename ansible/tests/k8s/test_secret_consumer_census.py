@@ -4,7 +4,7 @@
 `secret_rotation.py audit` answers "what is due"; this census answers "who is still holding
 the old one". A rotation that misses a consumer leaves it holding a dead credential: a missed
 Sonarr or Radarr API key makes exportarr 401 on every scrape. daniel-box's fake-remux component is
-the consumer `deploy.sh` structurally cannot reach.
+a host-plane consumer, which Flux cannot reach.
 
 `tree_consumers()` measures the answer from the tree. These tests pin the two invariants that
 make it trustworthy, each with the input it must accept AND the input it must reject — a
@@ -19,13 +19,13 @@ from secrets_mgmt.consumers import consumer_commands, tree_consumers
 # The incident this file exists for, kept as the accept case: each of these renders or reads
 # sonarr_api_key.
 SONARR_KEY_CONSUMERS = {
-    "autofix-bridge": "deploy",
-    "configarr": "deploy",
+    "autofix-bridge": "k8s",
+    "configarr": "k8s",
     "daniel-box": "host",
-    "homepage": "deploy",
-    "janitorr": "deploy",
-    "monitor-bridge": "deploy",
-    "sonarr": "deploy",
+    "homepage": "k8s",
+    "janitorr": "k8s",
+    "monitor-bridge": "k8s",
+    "sonarr": "k8s",
 }
 
 
@@ -53,8 +53,8 @@ def test_the_census_credits_a_role_rendering_the_secret_out_of_another_roles_fil
         "data: {{ lookup('file', playbook_dir + '/roles/k8s/owner/files/table.py') }}\n"
     )
     assert tree_consumers("fixture_a6_push_token", str(tmp_path)) == {
-        "owner": "deploy",
-        "reader": "deploy",
+        "owner": "k8s",
+        "reader": "k8s",
     }
 
 
@@ -84,31 +84,37 @@ def test_the_repair_commands_give_the_operator_only_sync_and_the_package_path():
     )
     assert "operator-only" in sync
     assert "`hosts/daniel-pi/package.yml`" in sync
-    assert not any("deploy.sh" in c and "daniel-pi" in c for c in commands)
 
 
-def test_the_census_separates_the_plane_deploy_sh_cannot_reach():
+def test_the_census_separates_the_host_plane_from_the_k8s_plane():
     consumers = tree_consumers("sonarr_api_key")
 
     assert consumers["daniel-box"] == "host", (
-        "daniel-box's fake-remux is the consumer deploy.sh cannot reach; if it stops being "
-        "classified as a host package, the census stops warning about the exact trap it was "
-        "written for"
+        "daniel-box's fake-remux is a host-plane consumer, which Flux cannot reach; if it "
+        "stops being classified as a host package, the census stops sending the operator to "
+        "`host_secrets.py sync`"
     )
-    assert consumers["sonarr"] == "deploy"
+    assert consumers["sonarr"] == "k8s"
 
 
-def test_the_repair_commands_route_each_plane_to_a_playbook_that_can_reach_it():
+def test_the_repair_commands_route_each_plane_to_the_path_that_reaches_it():
     commands = consumer_commands("sonarr_api_key")
 
-    deploy_cmd = [c for c in commands if "deploy.sh" in c]
     host_cmd = [c for c in commands if "host_secrets.py sync" in c]
-
     flux_cmd = [c for c in commands if "is a k8s entry, so Flux applies it" in c]
 
-    # deploy.sh exits 5 on every k8s tag, so no printed command may send the operator there:
-    # each owned tag is named on a Flux-path line of its own instead.
-    assert deploy_cmd == []
     assert len(host_cmd) == 1
     assert "sync daniel-box" in host_cmd[0]
     assert any(c.startswith("sonarr is a k8s entry") for c in flux_cmd)
+    assert not any("ansible-playbook" in c for c in commands)
+
+
+def test_a_role_directory_outside_the_k8s_plane_is_not_a_consumer(tmp_path):
+    """`_census_corpus` walks the disk, so a leftover `roles/setup/` (a stale `__pycache__`
+    survives a deleted role) must name no consumer and print no `ansible-playbook` command."""
+    stale = tmp_path / "ansible/roles/setup/legacy/templates"
+    stale.mkdir(parents=True)
+    (stale / "x.j2").write_text("token: {{ fixture_stale_setup_token }}\n")
+
+    assert tree_consumers("fixture_stale_setup_token", str(tmp_path)) == {}
+    assert consumer_commands("fixture_stale_setup_token", repo=str(tmp_path)) == []

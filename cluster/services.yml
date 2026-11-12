@@ -218,9 +218,9 @@ containers_list:
     port: 8790
     use_authelia: true
     auth_tier: two_factor
-  # Route-only entry: Longhorn's workloads come from the upstream manifest roles/setup/k3s
-  # applies, and this role adds nothing but the IngressRoute plus the middleware copies it
-  # needs inside longhorn-system. `port` is longhorn-frontend's Service port. use_authelia
+  # Route-only entry: Longhorn's workloads come from the upstream manifest the longhorn role
+  # ships through Flux, and this entry adds nothing but the IngressRoute plus the middleware
+  # copies it needs inside longhorn-system. `port` is longhorn-frontend's Service port. use_authelia
   # is the entire access control — Longhorn's UI has no login of its own. two_factor: the UI
   # deletes volumes, replicas and their B2 backup chain on a stolen password alone, a heavier
   # blast radius than code-server/n8n.

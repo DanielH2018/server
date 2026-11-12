@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-12 17:26 UTC
-generated_sha: 061b0146e
+generated_at: 2026-11-12 18:40 UTC
+generated_sha: 65e094073
 ---
 
 !!! warning "Generated file — do not edit"

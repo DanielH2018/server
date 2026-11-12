@@ -34,12 +34,12 @@ def test_error_returns_rather_than_exiting(monkeypatch, capsys):
 
 
 def test_prog_names_the_wrapper_the_operator_typed(monkeypatch, capsys):
-    """`deploy.sh` execs `deploy_cli.py`; the line names the first (#4478)."""
-    monkeypatch.setattr("sys.argv", ["/repo/scripts/deploy_tools/deploy_cli.py"])
-    error("lock busy", prog="deploy.sh")
-    warn("tree is behind", prog="deploy.sh")
+    """`land.sh` execs `land.py`; the line names the first (#4478)."""
+    monkeypatch.setattr("sys.argv", ["/repo/scripts/deploy_tools/land.py"])
+    error("lock busy", prog="land.sh")
+    warn("tree is behind", prog="land.sh")
     assert capsys.readouterr().err == (
-        "deploy.sh: error: lock busy\ndeploy.sh: warning: tree is behind\n"
+        "land.sh: error: lock busy\nland.sh: warning: tree is behind\n"
     )
 
 

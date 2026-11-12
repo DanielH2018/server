@@ -364,6 +364,8 @@ _IDS = [row.name for row in ROWS]
 
 @pytest.mark.parametrize("row", ROWS, ids=_IDS)
 def test_census_row_holds_on_the_tree(row: Census):
+    # fact: ansible/roles/k8s/longhorn-backup/CLAUDE.md#At a glance
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
     problems = check(row)
     assert not problems, "\n".join(problems)
 

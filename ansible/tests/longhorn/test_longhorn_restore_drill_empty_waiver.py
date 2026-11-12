@@ -47,6 +47,7 @@ def test_a_still_empty_declared_volume_passes_and_stamps(tmp_path: Path) -> None
 
 def test_a_filled_declared_volume_fails_and_stamps_nothing(tmp_path: Path) -> None:
     """FLAGGED half: over the ceiling, an empty restore is a failure and proves nothing."""
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
     pvc = _declared()
     run = harness(tmp_path, [pvc], actual_sizes={pvc: _ceiling() + 1})
     proc = run(restore="pass", env={"K3S_STUB_PROBE": "files=0 bytes=0"})

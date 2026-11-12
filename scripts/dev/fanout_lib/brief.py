@@ -163,28 +163,30 @@ def _issue_block(issue: Issue) -> str:
     )
 
 
-# What a verdict that leaves a host apply owed asks of the session that reads it. The
+# What a verdict that leaves a change unapplied asks of the session that reads it. The
 # landing brief carries it, and so does the prompt `review_prompts.apply_prompt` resumes a
 # review batch's implementer with.
-APPLY_OWED = """### A verdict that leaves a host apply owed
-`needs-manual-apply` and `blocked` mean the PR merged and an apply is still owed on a host.
-`land.sh` has already printed the exact command — the playbook line. `land.sh` starts no GitOps tick
-and reads no deployer marker, so a PR that changes a setup role ends `nothing-to-deploy` whether
-or not the deployer applied it. Read what is still pending:
+APPLY_OWED = """### A verdict that leaves a change unapplied
+`needs-manual-apply` means the PR merged and a change is still owed a hand: a rotated secret,
+because `ansible/vars/secrets.yml` derives no deploy tag. `land.sh` printed it after "it needs
+applying by hand". promote and Flux apply every k8s tag, and a host's updater applies its
+package, so `land.sh` starts no apply of its own. Read what is still pending:
 ```bash
 uv run python scripts/diagnostics/probe.py landing
 ```
-A `DEPLOY_HOLD` other than `none` is CLAUDE.md *When to wait*. A host package the landing deferred on is the host wait's `deferred`
-(exit 4): the host's updater applies it, and re-running `land.sh` checks it.
-Do exactly one of these two things, never neither:
-- Apply the change and verify it, where *When to wait* leaves it to you — the apply is this
-  PR's own work, no bring-up playbook sits in the range, and no other session owns it.
-- Otherwise file it with `findings.py open`, carrying the host, the role and the exact command
-  `land.sh` printed, verbatim. Then list that issue number under a `MANUAL APPLY PENDING`
-  heading in your final report.
+A `DEPLOY_HOLD` other than `none` is CLAUDE.md *When to wait*. A host package the landing
+deferred on is the host wait's `deferred` (exit 4): the host's updater applies it, and
+re-running `land.sh` checks it.
+For `needs-manual-apply`, do exactly one of these two things, never neither:
+- Rotate the secret and verify it, where *When to wait* leaves it to you — the rotation is this
+  PR's own work, and no other session owns it.
+- Otherwise file it with `findings.py open`, carrying the secret's name and the note `land.sh`
+  printed, verbatim. Then list that issue number under a `MANUAL APPLY PENDING` heading in your
+  final report.
 
-A verdict that is neither `settled` nor `nothing-to-deploy`, with no `MANUAL APPLY PENDING`
-heading and no apply, leaves the pending apply in prose only, which nothing tracks.
+A verdict that is none of `settled`, `deferred` and `nothing-to-deploy`, with no
+`MANUAL APPLY PENDING` heading and no rotation, leaves the pending change in prose only, which
+nothing tracks.
 """
 
 
@@ -217,7 +219,6 @@ own code. It waits at most 570s. Exit 75 means the landing is still running: re-
 `land.sh` itself exiting 75 with `land: N landings are already live` printed no log: wait a few minutes and re-run the whole command.
 State `gave-up` (exit 3) is land.sh's own give-up, a resume point: re-run the whole command.
 State `deferred` (exit 4) is not: the PR landed, and a host's updater applies its package.
-`deploy.sh` exit 75 is a resume point to retry, not a failure to report.
 Close a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`; `--refuted` and
 `--accepted` are operator-only.
 

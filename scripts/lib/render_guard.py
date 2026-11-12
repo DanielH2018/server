@@ -397,8 +397,7 @@ def service_records_at_or_none(
 
     ``yaml_fast.UnparsableYaml`` is in the set because the read parses YAML fetched from ``ref``: a
     host_vars file that does not parse at that commit is a damaged read like any other, and
-    letting it escape turns ``deploy_tags.py validate --at <sha>`` into a traceback that
-    ``deploy.sh`` maps to its tag-miss exit -- "a --tags value matched no service", for a file
+    letting it escape turns a read of ``ref`` into a traceback for a file
     that is merely unparseable.
     """
     try:

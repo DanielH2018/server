@@ -66,6 +66,7 @@ def test_a_suffixed_mktemp_template_passes_on_the_host_and_fails_under_the_image
     tmp_path: Path, docker_available: None
 ) -> None:
     """The red case: GNU `mktemp` accepts the suffix, BusyBox does not, and the apply then fails."""
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
     run = harness(tmp_path, [A])
     text = run.script.read_text()
     assert "mktemp /tmp/restore-drill.XXXXXX" in text
