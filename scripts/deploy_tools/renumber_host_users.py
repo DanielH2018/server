@@ -272,7 +272,9 @@ def main(
         elif args.apply and not apply(account, run, exists):
             status = FAILED
     if args.apply and status == 0 and "move" in states:
-        print("done; run `homelab-updater --clear-hold` to rerun reconcile")
+        print(
+            "done; run `sudo /usr/lib/homelab/homelab-updater --clear-hold` to rerun reconcile"
+        )
     return status
 
 

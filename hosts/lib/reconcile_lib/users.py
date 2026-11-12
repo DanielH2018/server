@@ -67,7 +67,7 @@ def check(user: dict) -> str:
         return "fault"
     if int(fields[2]) != user["uid"]:
         log(
-            f"{user['name']} has uid {fields[2]}; the package declares {user['uid']}. To move it, run scripts/deploy_tools/renumber_host_users.py --apply as root, then homelab-updater --clear-hold",
+            f"{user['name']} has uid {fields[2]}; the package declares {user['uid']}. To move it, run scripts/deploy_tools/renumber_host_users.py --apply as root, then sudo /usr/lib/homelab/homelab-updater --clear-hold",
             ERR,
         )
         return "fault"
