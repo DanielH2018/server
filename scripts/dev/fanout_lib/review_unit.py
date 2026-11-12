@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib.review.api import Pipeline
+from fanout_lib.sizing import DEFAULT, LADDER, by_name
 from fanout_lib.target import resolve
 from fanout_lib.transport import this_host
 from lib.cli_help import ArgumentParser
@@ -34,11 +35,24 @@ def main(argv=None) -> int:
     Exits 1 when that report carries `is_error`, so the unit's own result agrees with the
     report `status` reads instead of recording a failed batch as a clean exit.
     """
+    report = build(argv, sys.stdin.read()).run_all()
+    write_report(report, sys.stdout, Path(".fanout") / "report.json")
+    return exit_code(report)
+
+
+def build(argv: list[str] | None, brief: str) -> Pipeline:
+    """The pipeline `argv` describes, in the cwd's worktree, fed `brief`."""
     p = ArgumentParser(
         prog="fanout.py review", description=__doc__.splitlines()[0], allow_abbrev=False
     )
     p.add_argument("--batch", required=True)
     p.add_argument("--repo", required=True)
+    p.add_argument(
+        "--rung",
+        choices=[rung.name for rung in LADDER],
+        default=DEFAULT.name,
+        help="the model and effort the implementer runs at",
+    )
     p.add_argument(
         "--red-green",
         action="store_true",
@@ -50,12 +64,11 @@ def main(argv=None) -> int:
         args.batch,
         this_host(),
         resolve(args.repo),
-        sys.stdin.read(),
+        brief,
         red_green=args.red_green,
     )
-    report = pipeline.run_all()
-    write_report(report, sys.stdout, Path(".fanout") / "report.json")
-    return exit_code(report)
+    pipeline.record.implementer = by_name(args.rung)
+    return pipeline
 
 
 def exit_code(report: dict) -> int:

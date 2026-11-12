@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-11-10 06:17 UTC
-generated_sha: e27d5c427
+generated_at: 2026-11-10 18:17 UTC
+generated_sha: 8eebbf42f
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,9 +19,9 @@ generated_sha: e27d5c427
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-11-09T17:49:44+0000 | 12h27m | 10m | late | ticked, no hold |
-| renovate-agent | 2026-11-09T12:11:07+0000 | 18h6m | 1d | ok | session completed |
-| renovate-notify | 2026-11-09T13:02:53+0000 | 17h14m | 1d | ok | notified |
-| docs-refresh | 2026-11-09T18:18:00+0000 | 11h59m | 12h | ok | generators: ok |
-| longhorn-restore-drill | 2026-11-10T04:10:49+0000 | 2h6m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-11-09T10:20:02+0000 | 19h57m | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1794182402.zip) |
+| gitops-deploy | 2026-11-09T17:49:44+0000 | 1d | 10m | late | ticked, no hold |
+| renovate-agent | 2026-11-10T12:12:12+0000 | 6h5m | 1d | ok | session completed |
+| renovate-notify | 2026-11-10T13:01:26+0000 | 5h16m | 1d | ok | notified |
+| docs-refresh | 2026-11-10T06:18:00+0000 | 11h59m | 12h | ok | generators: ok |
+| longhorn-restore-drill | 2026-11-10T04:10:49+0000 | 14h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-11-09T10:20:02+0000 | 1d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1794182402.zip) |
