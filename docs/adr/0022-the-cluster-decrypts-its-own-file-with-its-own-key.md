@@ -19,6 +19,22 @@ limits it to files written for it.
 Accepted. The operator accepted it on 2026-10-15 in PR D3.1's review. The answer was "Yes" to "accept ADR-0022 and the cluster recipient?" The same answer accepted the second operator-only decision in that PR: adding the cluster recipient to the two cluster creation rules in `ansible/.sops.yaml`. Slice H4 extends this record with per-host files
 (design.md, *Amend ADR-0003*); the *Amendment* section at the end of this record carries that extension.
 
+Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) on
+2026-11-12. Both decisions stand: the cluster decrypts its own files with its own key, and
+each host decrypts its own file with its own key. Slices H7.53 to H7.57 make these
+statements below history. They stay as written:
+
+- *Context*, "`community.sops.sops_decrypt` runs on the Ansible controller", and the
+  introduction's "a host that runs Ansible": H7.53 deleted `deploy.sh`, H7.55 deleted the
+  playbooks, and H7.56 removed ansible-core and its collections. No deploy-time lookup
+  remains, as the ADR-0029 note on [ADR-0003](0003-sops-with-age-for-secrets-at-rest.md)
+  records.
+- *Consequences*, "the *Notable* section of `ansible/roles/setup/sops_setup/CLAUDE.md`
+  carries the runbook": H7.55 deleted the `sops_setup` role and its `CLAUDE.md`. The header
+  of `ansible/.sops.yaml` and *Changing secrets.yml's recipients* in
+  [the secret-rotation runbook](../secret-rotation.md) carry it. H7.57 accepted ADR-0029,
+  which records the result.
+
 ## Context
 
 ADR-0003 decrypts at deploy time. `community.sops.sops_decrypt` runs on the Ansible

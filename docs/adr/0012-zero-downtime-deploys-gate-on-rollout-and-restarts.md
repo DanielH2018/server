@@ -17,6 +17,25 @@ the two gates below describe only the Ansible path. A flux-owned tag gates on th
 which the second paragraph of *Decision* describes. The rationale is unchanged: applying is
 not shipping, and an unreadable signal fails closed.
 
+Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) on
+2026-11-12. The decision stands for the Flux path: the soak Job and `promote.py verify` gate
+every k8s deploy. Slices H7.53 to H7.57 removed the Ansible path, so these statements are
+history. They stay as written:
+
+- *Status*, "the two gates below describe only the Ansible path" and the first paragraph of
+  *Decision*: no Ansible path remains. H7.53 deleted `scripts/deploy.sh`, H7.55 deleted
+  `ansible/deploy.yml` and the other playbooks, and H7.56 removed ansible-core. The two
+  gates survive as the soak Job's floor and as `probe.py health`, which `land.sh` runs after
+  a promotion.
+- *Context*, "An Ansible deploy applies manifests and returns": no Ansible deploy runs.
+- *Consequences*, "`--detach` returning is not a verified deploy", and the ADR-0020
+  amendment's "`deploy.sh` refuses a k8s tag with exit 5": H7.53 deleted `deploy.sh`, its
+  `--detach` flag and the `refuse_k8s_tags` check. A host change ships in the host's package
+  (ADR-0029), and no setup-plane deploy is left to detach.
+- *Governs*, "the shared rollout tasks" and `ansible/roles/k8s/manifests/files/flux_soak.py`:
+  the soak Job's script is `scripts/renderer/job_files/flux_soak.py`, as the ADR-0020
+  amendment says. H7.57 accepted ADR-0029, which records the result.
+
 ## Context
 
 An Ansible deploy applies manifests and returns. Applying is not shipping: `kubectl apply`
