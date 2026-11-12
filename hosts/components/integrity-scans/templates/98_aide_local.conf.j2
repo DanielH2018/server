@@ -82,3 +82,14 @@
 # Virtual/pseudo filesystems — not real files, cause inflated read counts
 !/proc/
 !/sys/
+{% if integrity_scans_aide_lean | bool %}
+
+# A 456 MB host. Debian's Full keeps about eleven digests per entry, and AIDE holds every entry
+# in memory: the 2026-11-12 scan on daniel-pi swapped to the SD card until the watchdog's
+# max-load-1 reset the board. sha256 alone measured 30% less memory and 85% less CPU per entry.
+# The kernel headers are a third of the Pi's entries, and nothing on the Pi executes them.
+HomelabLean = InodeData+m+c+sha256
+!/usr/src(/|$)
+# Placed before 99_aide_root's `/ 0 Full`, so it is the root rule that wins.
+/ HomelabLean
+{% endif %}
