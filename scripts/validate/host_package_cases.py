@@ -44,7 +44,8 @@ the homelab repository satisfies (H7.15a; `validate_lib/bootstrap_case.py`) and 
 the *Adding a host* walkthrough (H7.15d; `validate_lib/fixture_host_case.py`). The last runs the
 script without `--local-build` on daniel-pi, against the test repository with a rewritten copy of
 the script that pins its throwaway key (#6245; `validate_lib/bootstrap_repo_case.py`). A last
-case runs step 3 with real apt on an image holding no age (`validate_lib/bootstrap_age_case.py`).
+case runs step 3 with real apt on an image holding no age (`validate_lib/bootstrap_age_case.py`);
+it gives no verdict, not a failure, when snapshot.ubuntu.com answers 5xx or not at all.
 
 The bootstrap cases (`validate_lib/bootstrap_case.py`) run only under `--bootstrap`, which runs
 them and nothing else. CI runs them in a job of their own, `host_packages_bootstrap`, beside the
