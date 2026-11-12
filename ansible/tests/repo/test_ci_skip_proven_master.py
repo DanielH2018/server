@@ -2,7 +2,7 @@
 
 WHY THIS IS A TEST. Three properties hold the design together, and each fails silently:
 
-- A PR run is a full sweep. If a hook or ansible-lint were scoped to changed files again, the
+- A PR run is a full sweep. If a hook were scoped to changed files again, the
   push run that the proof skips would be the only place the scoped-out files were ever checked.
 - Every job that repeats on a push waits for `prove` and skips only on `proven == 'true'`. A job
   that dropped the condition would run on the proven path and cost what the change saves, and a
@@ -39,7 +39,6 @@ DEPENDENTS = (
     "hooks",
     "pr_gates",
     "pytest",
-    "ansible_lint",
     "deck_mod",
     "flux_roundtrip",
     "sops_manifest_type_proof",
@@ -53,7 +52,6 @@ GATE_ENV = (
     "HOOKS",
     "PR_GATES",
     "PYTEST",
-    "ANSIBLE_LINT",
     "DECK_MOD",
     "FLUX_ROUNDTRIP",
     "SOPS_TYPE_PROOF",
@@ -72,24 +70,18 @@ def _normal(condition: object) -> str:
     return str(condition).strip().removeprefix("${{").removesuffix("}}").strip()
 
 
-def test_pr_runs_do_not_scope_the_hooks_or_ansible_lint():
-    """The hooks and ansible-lint jobs have one sweep step each, and it is unconditional."""
+def test_pr_runs_do_not_scope_the_hooks():
+    """The hooks job has one sweep step, and it is unconditional."""
     jobs = _jobs()
-    for job, step_name in (
-        ("hooks", "Run hooks (full sweep)"),
-        ("ansible_lint", "Lint the whole tree"),
-    ):
-        steps = {s["name"]: s for s in jobs[job]["steps"] if "name" in s}
-        assert "if" not in steps[step_name], (
-            f"{job}: {step_name!r} is conditional again"
-        )
+    steps = {s["name"]: s for s in jobs["hooks"]["steps"] if "name" in s}
+    assert "if" not in steps["Run hooks (full sweep)"], (
+        "the hooks sweep is conditional again"
+    )
     text = CI_WORKFLOW.read_text()
     for gone in ("FULL_SWEEP_PATHS", "mode=scoped", '--files "${changed[@]}"'):
         assert gone not in text, f"ci.yml scopes a PR run again: {gone!r}"
     sweeps = [
-        s["run"]
-        for s in jobs["hooks"]["steps"] + jobs["ansible_lint"]["steps"]
-        if "prek run" in str(s.get("run", ""))
+        s["run"] for s in jobs["hooks"]["steps"] if "prek run" in str(s.get("run", ""))
     ]
     assert sweeps and all("--all-files" in run for run in sweeps), sweeps
 

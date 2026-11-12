@@ -151,8 +151,8 @@ def load_inventory(
 def declared_services(host: str, host_vars: dict, global_vars: dict) -> list[dict]:
     """Flatten a host's ``containers_list`` into normalized service records.
 
-    daniel-pi reads ``compose_services`` too (H5), so a service that moved into the Pi's
-    Compose project keeps its declaration; ``pi_entries_in`` raises when either key is missing.
+    daniel-pi's services are its ``compose_services`` (H5); ``pi_entries_in`` raises when that
+    key is missing.
     """
     variables = {**global_vars, **host_vars}
     services = []

@@ -5,8 +5,8 @@
   helper module makes on a test's behalf. Collection runs no test body, and the refusal sees
   only `__import__`, so a grep half also reads every tracked `*.py` for an import statement,
   an `import_module` or a `find_spec` naming `ansible`. A file outside `ALLOW` that either
-  half finds fails it. Each `ALLOW` entry names the H7 step that removes its import, and the
-  list must be empty before H7.56, which removes ansible-core, merges. An import held in a
+  half finds fails it. `ALLOW` is empty, because H7.56 removed ansible-core from the
+  environment, so an import of it now fails wherever it runs. An import held in a
   string a test runs in a subprocess reads as an import to the grep, so `IN_A_STRING` names
   each such file.
 - The filter census. Every filter and test name a tracked `*.j2` uses is registered in the
@@ -35,11 +35,10 @@ from renderer.renderer_lib.environment import strict_env
 
 CHILD = Path(__file__).with_name("_collect_without_ansible.py")
 ALLOW: dict[str, str] = {}
-# The grep half's named member: an import held in a string, which H7.56 deletes.
-LEAKGUARD = "ansible/tests/repo/test_leakguard.py"
+# The grep half's named member: an import held in a string.
+ANSIBLE_FREE = "scripts/renderer/tests/test_renderer_ansible_free.py"
 IN_A_STRING = {
-    "ansible/tests/repo/test_leakguard.py": "H7.56 deletes leakguard's temp-dir sweep",
-    "scripts/renderer/tests/test_renderer_ansible_free.py": "the shim of its red half",
+    ANSIBLE_FREE: "the shim of its red half",
     "ansible/tests/repo/test_ansible_core_census.py": "this census's own red fixtures",
 }
 IMPORT_LINE = re.compile(
@@ -75,7 +74,9 @@ def importers_by_text(paths: list[str]) -> list[str]:
 
 def test_no_tracked_python_names_ansible_core_in_an_import_outside_the_allowlist():
     found = importers_by_text(tracked("*.py"))
-    assert LEAKGUARD in found, "the grep no longer finds test_leakguard.py's import"
+    assert ANSIBLE_FREE in found, (
+        "the grep no longer finds test_renderer_ansible_free.py's import"
+    )
     offenders = sorted(set(found) - set(ALLOW) - set(IN_A_STRING))
     assert not offenders, f"these files import ansible-core: {offenders}"
 

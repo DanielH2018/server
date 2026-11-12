@@ -69,60 +69,39 @@ def test_daniel_server_is_fully_drained():
     assert filter_by_platform(containers, "k8s") == []
 
 
-def test_daniel_pi_is_fully_drained():
-    # The Pi's services are `compose_services` entries, which its package deploys. H5.12 deleted
-    # the Ansible Compose path, so a containers_list entry here would be deployed by nothing.
-    containers = _containers(HOST_VARS / "daniel-pi.yml")
-
-    assert len(containers) == 0
-
-
-# The Pi's containers_list stays empty, and the package's Compose project (H5) runs
-# `compose_services` through homelab-compose.service, independent of the play. Each pair is
-# (upstream, downstream): autoheal restarts containers through docker-proxy-lifecycle, and alloy
-# discovers logs through docker-proxy. From H5.6 an upstream moves no later than its downstream:
-#   - both in containers_list: the upstream is listed first (the play's order);
-#   - the upstream in compose_services: the downstream is in either key, and a downstream that is
-#     also in compose_services carries `depends_on` on the service it reaches;
-#   - the upstream in containers_list and the downstream in compose_services is a violation.
+# The Pi's package runs `compose_services` as one Compose project (H5) through
+# homelab-compose.service. Each pair is (upstream, downstream): autoheal restarts containers
+# through docker-proxy-lifecycle, and alloy discovers logs through docker-proxy. Both ends must
+# be packaged, and the downstream carries `depends_on` on the service it reaches.
 PI_ORDERING = [("docker-proxy", "autoheal"), ("docker-proxy", "alloy")]
 # What a packaged downstream's `depends_on` must name.
 PI_DEPENDS_ON = {"autoheal": "docker-proxy-lifecycle", "alloy": "docker-proxy"}
 COMPOSE = "/usr/lib/homelab/compose"
 
 
-def _order_violations(listed, packaged, edges, depends_on=None):
-    """Edges whose upstream is absent, later than its downstream, or in the wrong key.
+def _order_violations(packaged, edges, depends_on=None):
+    """Edges with an end missing from `packaged`, or a downstream without its `depends_on`.
 
     Args:
-        listed: Names in the Pi's `containers_list`, in play order.
-        packaged: Names in its `compose_services`.
+        packaged: Names in the Pi's `compose_services`.
         edges: (upstream, downstream) pairs.
         depends_on: Maps a downstream in `packaged` to the `depends_on` names its service file
             declares; None skips that check.
     """
     out = []
     for up, down in edges:
-        if up in packaged:
-            if down not in listed and down not in packaged:
-                out.append((up, down))
-            elif down in packaged and depends_on is not None:
-                if PI_DEPENDS_ON[down] not in depends_on.get(down, ()):
-                    out.append((up, down))
-        elif up in listed and down in listed:
-            if listed.index(up) > listed.index(down):
-                out.append((up, down))
-        else:
+        if up not in packaged or down not in packaged:
+            out.append((up, down))
+        elif depends_on is not None and PI_DEPENDS_ON[down] not in depends_on.get(
+            down, ()
+        ):
             out.append((up, down))
     return out
 
 
-def _pi_lists():
+def _pi_services():
     pi = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
-    listed = [
-        c["name"] for c in filter_by_platform(pi.get("containers_list") or [], "docker")
-    ]
-    return listed, [c["name"] for c in pi.get("compose_services") or []]
+    return [c["name"] for c in pi["compose_services"] or []]
 
 
 @functools.cache
@@ -142,11 +121,11 @@ def _service_depends_on(name):
     return list(_packaged_services()[name].get("depends_on") or [])
 
 
-def test_daniel_pi_moves_every_upstream_no_later_than_its_downstream():
-    listed, packaged = _pi_lists()
+def test_daniel_pi_packages_every_upstream_beside_its_downstream():
+    packaged = _pi_services()
     depends = {n: _service_depends_on(n) for n in packaged if n in PI_DEPENDS_ON}
 
-    assert _order_violations(listed, packaged, PI_ORDERING, depends) == []
+    assert _order_violations(packaged, PI_ORDERING, depends) == []
 
 
 def test_the_census_finds_docker_proxy_autoheal_and_alloy_packaged_with_their_depends_on():
@@ -154,7 +133,7 @@ def test_the_census_finds_docker_proxy_autoheal_and_alloy_packaged_with_their_de
 
     `depends_on` comes from the rendered Pi project, never from template source.
     """
-    _, packaged = _pi_lists()
+    packaged = _pi_services()
 
     assert {"docker-proxy", "autoheal", "alloy"} <= set(packaged)
     depends = {n: _service_depends_on(n) for n in packaged if n in PI_DEPENDS_ON}
@@ -162,23 +141,14 @@ def test_the_census_finds_docker_proxy_autoheal_and_alloy_packaged_with_their_de
     assert "docker-proxy" in depends["alloy"]
 
 
-def test_an_upstream_listed_after_its_downstream_is_a_violation():
-    names = ["autoheal", "docker-proxy", "alloy"]
-
-    assert _order_violations(names, [], PI_ORDERING) == [("docker-proxy", "autoheal")]
-
-
-def test_an_upstream_left_in_the_list_while_its_downstream_moves_is_a_violation():
-    assert _order_violations(["docker-proxy"], ["autoheal", "alloy"], PI_ORDERING) == [
-        ("docker-proxy", "autoheal"),
-        ("docker-proxy", "alloy"),
-    ]
+def test_an_upstream_missing_from_the_package_is_a_violation():
+    assert _order_violations(["autoheal", "alloy"], PI_ORDERING) == PI_ORDERING
 
 
 def test_a_packaged_downstream_without_depends_on_its_upstream_is_a_violation():
     packaged = ["docker-proxy", "autoheal"]
     edge = PI_ORDERING[:1]
 
-    assert _order_violations([], packaged, edge, {"autoheal": []}) == edge
+    assert _order_violations(packaged, edge, {"autoheal": []}) == edge
     wired = {"autoheal": ["docker-proxy-lifecycle"]}
-    assert _order_violations([], packaged, edge, wired) == []
+    assert _order_violations(packaged, edge, wired) == []

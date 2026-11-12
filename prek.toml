@@ -71,80 +71,6 @@ stages = ["pre-commit"]
 args = ["--fix=lf"]
 exclude = "^ansible/roles/[^/]+/[^/]+/files/upstream/"
 
-# Ansible linting
-[[repos]]
-repo = "https://github.com/ansible/ansible-lint"
-rev = "v26.10.1"
-
-[[repos.hooks]]
-id = "ansible-lint"
-stages = ["pre-commit"]
-# Scoped to `ansible/` and paired with pass_filenames — ansible-lint lints the files it is
-# GIVEN instead of walking the tree itself. Its cost is almost purely per-file (measured:
-# one task file 1.45s, five 1.98s, the whole repo 37s locally / 89.7s on the
-# runner), so handing it a diff is what makes a PR's lint ~2s instead of ~90s.
-#
-# Coverage is unchanged on a full run. A walk examines 954 files, but exactly 325 of those are
-# YAML and all 325 are tracked files under `ansible/` — the rest are .py/.j2/.sh that
-# ansible-lint classifies and no ansible rule applies to. That 325 is precisely what this
-# files/exclude pair passes.
-#
-# The regex must do its own excluding: `.ansible-lint`'s exclude_paths are NOT honoured for
-# explicitly-passed files (verified — it happily lints `.github/workflows/ci.yml` when named
-# directly). `ansible/collections/` needs no exclude here because it is gitignored and prek
-# only ever passes tracked files, but secrets.yml is tracked AND encrypted, so it does.
-files = "^ansible/.*\\.ya?ml$"
-# home-assistant/files/ is Home Assistant config, not Ansible: configuration.yaml carries HA's
-# own YAML tags (`!include`, `!include_dir_merge_list`, `!secret`), which ansible-lint's
-# loader cannot construct, and the validate-ha-config hook below is that tree's linter.
-# flux/files/gotk-components.yaml is Flux's install as `flux install --export` writes it, never
-# edited, so a regeneration diffs as upstream's change alone; its block-sequence indentation
-# trips yaml[indentation]. The validate-k8s-manifests hook validates its render.
-# vars/cluster-manifests/ holds SOPS-encrypted Secret manifests (target slice D3). A YAML file
-# under a `vars/` directory reads to ansible-lint as a vars file, which fails on `apiVersion`.
-# They stay under ansible/vars/ because the creation rules in ansible/.sops.yaml and the
-# runbooks point there, and `cluster_vars.py check` validates them instead.
-# files/upstream/ holds upstream manifests byte for byte, which this repo's lint rules do not
-# govern (scripts/dev/vendor_manifest.py).
-exclude ="^ansible/(vars/secrets\\.yml|vars/cluster-manifests/.*|roles/k8s/home-assistant/files/.*|roles/k8s/flux/files/gotk-components\\.yaml|roles/[^/]+/[^/]+/files/upstream/.*)$"
-# Cap ansible-core <3 so a surprise upstream major can't silently change lint behavior
-# or break this hook on a day nothing in the repo changed (these deps aren't lock-pinned).
-additional_dependencies = ["ansible-core>=2.18,<3.0", "jmespath"]
-# NB the `--` sentinel and `"$@"`, same as bash-syntax-check below: prek appends the filenames
-# to the entry, and after `bash -c '<script>'` those become the SCRIPT's positional params. A
-# bare `... && ansible-lint -c .ansible-lint` would silently lint nothing at all.
-#
-# The `$# -eq 0` guard is load-bearing, and the opposite of what the line above implies.
-# prek runs this hook even when NO staged file matches `files:` above, and `ansible-lint`
-# with no paths does not lint nothing — it WALKS THE FILESYSTEM. So a commit touching only
-# docs got a full-tree lint of ~1,600 files, including untracked and gitignored ones that
-# CI never sees, and any violation among them rejected the commit. That is what stopped
-# `docs-refresh.sh` committing: it stages only `docs/reference` and `docs/assets/generated`,
-# so this hook received zero filenames, walked, failed, and the script reset -- leaving the
-# tree permanently dirty, which in turn parked gitops-deploy behind origin.
-#
-# The exclude_paths in `.ansible-lint` are the older, partial answer to the same walk (see
-# their comments, which name the worktree and styles/ trees). Excluding paths is a chase:
-# every new untracked directory is another entry. Not walking is the fix.
-#
-# The `export` keeps ansible-core's local temp directory out of `~/.ansible/tmp`. ansible-galaxy
-# and ansible-lint both import ansible-core's constants, which create `ansible-local-<pid>…`
-# there and remove it only from an atexit handler. A hook killed by a signal, as when a
-# harness kills a background `git commit`, runs no handler and leaves the directory behind
-# (#6260). The target is the directory `ansible/tests/leakguard.py` sweeps of dead pids at
-# the start of every pytest run, so a killed lint's directory lasts until the next run.
-#
-# ENFORCED by scripts/tests/test_ansible_lint_hook.py.
-entry = "bash -c 'if [ \"$#\" -eq 0 ]; then exit 0; fi; export ANSIBLE_LOCAL_TEMP=\"${TMPDIR:-/tmp}/pytest-ansible-local-$(id -u)\"; ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections && ansible-lint -c .ansible-lint \"$@\"' --"
-pass_filenames = true
-# REQUIRED, not a tuning knob. Without it prek shards the filenames across parallel
-# invocations — measured at 16 batches of ~21-39 files for a full run, each one re-running the
-# `ansible-galaxy install` and paying ansible-lint's startup again, which made `--all-files`
-# SLOWER than the walk it replaced (43.8s vs 37.0s) and lints each batch without sight of the
-# others. One invocation gets the whole list, and ansible-lint parallelises internally anyway
-# (it saturates ~3 cores on its own).
-require_serial = true
-
 # Secret scanning
 [[repos]]
 repo = "https://github.com/gitleaks/gitleaks"
@@ -171,7 +97,7 @@ stages = ["pre-commit"]
 
 # Render container docker-compose.yml.j2 templates with stubbed vars and assert
 # the output is valid YAML — catches broken indentation / label-macro edits that
-# ansible-lint and check-yaml miss (they don't render .j2 files).
+# check-yaml misses (it doesn't render .j2 files).
 [[repos]]
 repo = "local"
 

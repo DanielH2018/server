@@ -324,8 +324,8 @@ template carries why it is a host timer at all.
 
 ## Autonomous-role contract (`claude-clone-sync`, `claude-dotfiles-sync`)
 
-- **Scope:** per agent: a `--ff-only` pull of its clone, then the venv and
-  collections if their locks moved; and a pull and `chezmoi apply` of the operator's dotfiles.
+- **Scope:** per agent: a `--ff-only` pull of its clone, then the venv if its lock moved;
+  and a pull and `chezmoi apply` of the operator's dotfiles.
 - **Mode:** the agent's `state` and `dotfiles`; off removes its `<name>-*-sync` units.
 - **Abort valve:** the clone sync skips unless the clone is a clean `master`; the dotfiles sync
   refuses a source without the agent variant.

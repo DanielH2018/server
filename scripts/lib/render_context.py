@@ -168,7 +168,6 @@ def _host_layer(inventory: Inventory, host: str | None) -> dict:
 # The host_vars `hostvars` carries for each host, each only while its value holds no Jinja.
 _HOSTVARS_KEYS = (
     "server_ip",
-    "containers_list",
     "compose_services",
     "claude_agent_ssh_login_enabled",
 )
@@ -178,12 +177,10 @@ def _hostvars(inventory: Inventory) -> dict[str, dict]:
     """Each host's literal values of ``_HOSTVARS_KEYS``, as Ansible's ``hostvars`` has them.
 
     ``group_vars``' ``k8s_pi_client_ip`` reads the Pi's address this way (#3719), and
-    observability's ``alloy-pi`` scrape job reads the Pi's ``alloy`` port from its
-    ``containers_list`` (#3860), so a strict render needs both. Those readers and monitor-bridge's
-    and artifacts' read the Pi's ``compose_services`` beside it (H5.1). A value goes in only while it
-    holds no Jinja: here it would resolve against the rendered host's context, so a Pi value such as
-    ``"{{ server_ip }}"`` would come out as daniel-box's address. daniel-box's
-    own ``containers_list`` templates its entries, so it stays out. A caller needing more
+    observability's ``alloy-pi`` scrape job and artifacts' service index read the Pi's
+    ``compose_services`` (#3860, H5.1), so a strict render needs both. A value goes in only while
+    it holds no Jinja: here it would resolve against the rendered host's context, so a Pi value
+    such as ``"{{ server_ip }}"`` would come out as daniel-box's address. A caller needing more
     passes its own ``hostvars``.
     """
     found = {}

@@ -148,7 +148,7 @@ that no package can do is verified by
 
 ## Quality gates (pre-commit)
 
-The repo uses [`prek`](https://prek.j178.dev) (`prek.toml`): YAML/JSON lint, `ansible-lint`,
+The repo uses [`prek`](https://prek.j178.dev) (`prek.toml`): YAML/JSON lint,
 `gitleaks`, rendered-template validation (compose + config + Home Assistant + Grafana),
 secret-rotation-registry sync, `ruff` (lint + format), and the `pytest` suite.
 

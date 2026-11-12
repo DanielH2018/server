@@ -3,7 +3,7 @@
 
 observability's `blackbox-pi-ports` scrape job probes one TCP port per Pi container that
 publishes one, and `PiPortDead` pages a dead port. The job's targets come from daniel-pi's
-`containers_list` and `compose_services` — every entry with a `port` — in
+`compose_services` — every entry with a `port` — in
 `prometheus.yaml.j2`. The derivation is what keeps the set from drifting as containers come and
 go, but a derivation can also silently drop a name it was written to cover, which is the failure
 this pins: `published_ports` returning one name instead of two reads as a narrowing nobody sees,
@@ -15,9 +15,9 @@ the way it was spelled — it cannot see which containers come out, which port e
 or that `udp_port` stays out (#3107, #2809). Rendered, the same value is a list of targets the
 test parses.
 
-The shared render context carries the Pi's literal `containers_list` in `hostvars` (#3860), but
+The shared render context carries the Pi's literal `compose_services` in `hostvars` (#3860), but
 this test needs to swap that list for one the inventory does not hold. So it deep-copies the
-context's `hostvars` and overrides the Pi's two service keys.
+context's `hostvars` and overrides the Pi's service list.
 
 The expected members are named rather than counted. A container legitimately added to or
 removed from the Pi changes the expected set here in the same commit that changes the
@@ -51,9 +51,7 @@ def _pi_vars() -> dict:
     return host_context()["hostvars"]["daniel-pi"]
 
 
-def published(
-    containers_list: list | None = None, compose_services: list | None = None
-) -> dict[str, int]:
+def published(compose_services: list | None = None) -> dict[str, int]:
     """The Pi job's targets as `service -> port`, in the order Prometheus scrapes them.
 
     Passing a list renders the template against a Pi that the inventory does not describe, which
@@ -62,8 +60,6 @@ def published(
     silently stops being probed.
     """
     hostvars = copy.deepcopy(host_context()["hostvars"])
-    if containers_list is not None:
-        hostvars["daniel-pi"]["containers_list"] = containers_list
     if compose_services is not None:
         hostvars["daniel-pi"]["compose_services"] = compose_services
     text = render_role_template(
@@ -98,7 +94,7 @@ def test_every_known_publisher_is_watched_on_its_published_port():
 
 
 def test_the_known_non_publishers_stay_out():
-    # docker-proxy-lifecycle is hardcoded in the Pi's compose and is not in containers_list
+    # docker-proxy-lifecycle is hardcoded in the Pi's compose and is not in compose_services
     # at all, so it falls out for a second reason; the other two are here by having no port.
     assert not (EXPECTED_NON_PUBLISHERS & set(published()))
 
@@ -125,7 +121,7 @@ def test_the_set_follows_the_inventory_rather_than_a_typed_list():
     container unwatched; one that cannot shrink probes a port nothing listens on any more.
     """
     added = published(
-        [*_pi_vars()["containers_list"], {"name": "probe-publisher", "port": 65000}]
+        [*_pi_vars()["compose_services"], {"name": "probe-publisher", "port": 65000}]
     )
     assert added.get("probe-publisher") == 65000, (
         f"a Pi container with a `port` did not reach {JOB}; the targets are typed in, not "
@@ -135,7 +131,6 @@ def test_the_set_follows_the_inventory_rather_than_a_typed_list():
     # Pi with none at all does not render. Dropping wg-easy's alone shows the same thing.
     pi = _pi_vars()
     unported = published(
-        pi["containers_list"],
         [
             {
                 key: value
@@ -155,27 +150,8 @@ def test_a_udp_only_container_does_not_join_the_set():
     """`udp_port` alone must not make a container watched — the probe has no UDP mode."""
     base = published()
     with_udp = published(
-        [*_pi_vars()["containers_list"], {"name": "probe-udp", "udp_port": 65001}]
+        [*_pi_vars()["compose_services"], {"name": "probe-udp", "udp_port": 65001}]
     )
     assert with_udp == base, (
         f"a container publishing only UDP changed the watched set: {with_udp!r} vs {base!r}"
     )
-
-
-def test_a_publisher_in_either_key_is_still_watched():
-    """The set is the same whichever key holds the entry, and the order is by name.
-
-    Every Pi publisher is in `compose_services` since H5.9, so the rollback shape is the one to
-    test: a revert of a move PR puts the entry back in `containers_list`.
-    """
-    pi = _pi_vars()
-    wg_easy = [e for e in pi["compose_services"] if e["name"] == "wg-easy"]
-    assert wg_easy, (
-        "wg-easy left compose_services, so this test no longer reverts a move"
-    )
-    reverted = published(
-        [*pi["containers_list"], *wg_easy],
-        [e for e in pi["compose_services"] if e["name"] != "wg-easy"],
-    )
-    assert list(reverted.items()) == list(published().items())
-    assert list(reverted.items()) == [("alloy", 12345), ("wg-easy", 51821)]

@@ -15,10 +15,8 @@
 !/Email-to-RSS
 !/.gitmodules
 !prek.toml
-!.ansible-lint
 !/.shellcheckrc
 !/.gitleaks.toml
-!ansible.cfg
 !/.vscode
 !/.github
 !/README.md

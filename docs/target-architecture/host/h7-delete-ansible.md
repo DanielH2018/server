@@ -1928,7 +1928,7 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | landed: its third PR ([#7962](https://github.com/DanielH2018/server/issues/7962)) deleted the deployer's code (item 29) | H7.52 live on daniel-box, H7.24a to H7.41, H7.24b, H7.44, H7.45, H7.48, H7.50, H7.58 to H7.64 |
 | H7.54 The test env leaves ansible-core | H7.19d | landed as [#7856](https://github.com/DanielH2018/server/pull/7856) (item 30) | H7.46, H7.48, H7.52 |
 | H7.55 Delete the playbooks and the role directories | H7.20a | no: it deletes what H7.53 leaves | H7.53 live on daniel-box, H7.43 (done: its rebuild half was waived), H7.44, H7.45 |
-| H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | no: its two census greps run at its base | H7.54, H7.55, H5 |
+| H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | landed as [#8050](https://github.com/DanielH2018/server/pull/8050) (item 32) | H7.54, H7.55, H5 |
 | H7.57 The ADR | H7.20c | yes | H7.55 |
 | H7.58 Pi: `initial_setup`, part 3 | new | yes | H7.26, H7.30, H7.42 |
 | H7.59 daniel-server: `initial_setup`, part 3, and its Loki witness | new | landed in [`a7a9110e8`](https://github.com/DanielH2018/server/commit/a7a9110e8) and [`0ecdbe8b4`](https://github.com/DanielH2018/server/commit/0ecdbe8b4) | H7.58 live, H7.31, H7.61 live, H4 |
@@ -2417,6 +2417,15 @@ the `manual_plane` clearing, and *Rollback*'s
     config, its hook and leakguard's temp-dir sweep, and the Pi's empty key. *Removed in
     H7.20* names the sweep's parts. Neither moves a rendered byte. It carries exit
     observation 1's two counts, the Pi service-list proof and the two render pairs.
+    **Landed as [#8050](https://github.com/DanielH2018/server/pull/8050).** Both render pairs
+    matched their base under `diff -r`, and the two counts read 0. The daniel-box and
+    daniel-server packages did move, by three readers the step list did not name.
+    `hosts/lib/ci_verdict.py` drops the deleted `ansible-lint` check-run, because
+    checkout-sync ships it. The claude-code component's clone sync drops its
+    `ansible-galaxy` step, which would have called a binary the same pull's `uv sync`
+    removed. The agent profile drops `ANSIBLE_COLLECTIONS_PATH`. Two rendered comments still
+    name both Pi keys, so that the renders stay byte-identical
+    ([#8047](https://github.com/DanielH2018/server/issues/8047)).
 33. **H7.57** stays alone, so the deletions land while the operator reviews it. Approving the
     ADR is **operator-only** (exit observation 6), and so is deciding whether ADR-0001,
     ADR-0011 and ADR-0017 need an amendment.

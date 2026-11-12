@@ -37,12 +37,8 @@ PRODUCERS = {
     "PiWatchdog": "pi-watchdog-health",
 }
 # Every container the recovery heartbeat watches, so a run with all of them up is a clean cycle.
-# Both of the Pi's lists, since the recovery heartbeat watches the union (H5.1), plus the
-# sub-proxy the docker-proxy compose file declares.
-ALL = [
-    c["name"]
-    for c in PI_HOST_VARS["containers_list"] + PI_HOST_VARS["compose_services"]
-] + ["docker-proxy-lifecycle"]
+# The Pi's compose_services, plus the sub-proxy the docker-proxy compose file declares.
+ALL = [c["name"] for c in PI_HOST_VARS["compose_services"]] + ["docker-proxy-lifecycle"]
 
 
 def test_a_healthy_sd_cycle_writes_success_one(tmp_path):

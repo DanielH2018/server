@@ -46,7 +46,6 @@ KNOWN_JOBS = frozenset(
         "hooks",
         "pr_gates",
         "pytest",
-        "ansible_lint",
         "deck_mod",
         "flux_roundtrip",
         "sops_manifest_type_proof",
@@ -69,15 +68,11 @@ NON_GATING_JOBS = frozenset(
 )
 
 # The results the gate's step must go on comparing, for the same reason.
-# `ansible_lint` rather than `ansible-lint`: a GitHub expression parses a hyphen as
-# subtraction, so `needs.ansible-lint.result` is a syntax error. The job id carries the
-# underscore and the display name carries the hyphen.
 GATE_READS = frozenset(
     {
         "hooks",
         "pr_gates",
         "pytest",
-        "ansible_lint",
         "deck_mod",
         "flux_roundtrip",
         "sops_manifest_type_proof",

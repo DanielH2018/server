@@ -158,7 +158,6 @@ ROWS = (
                 "ansible/tests/setup/test_github_ruleset_drift.py",
                 "ansible/tests/staging/_fence_probe.py",
                 "scripts/deploy_tools/tests/test_land_detach.py",
-                "scripts/tests/test_ansible_lint_hook.py",
                 "scripts/validate/tests/test_vale_sync_guard.py",
             }
         ),

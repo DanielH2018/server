@@ -177,13 +177,11 @@ def test_the_gate_skips_a_path_no_test_reads(path):
 
 
 def _sweeps(workflow: str) -> list[str]:
-    """Every `prek run` line in a workflow except the ansible-lint job's own runs."""
+    """Every `prek run` line in a workflow."""
     return [
         line.strip()
         for line in workflow.splitlines()
-        if "prek run" in line
-        and not line.lstrip().startswith("#")
-        and "prek run ansible-lint" not in line
+        if "prek run" in line and not line.lstrip().startswith("#")
     ]
 
 
@@ -199,9 +197,9 @@ def test_every_ci_prek_sweep_skipping_the_hook_is_clean():
 
 
 def test_a_ci_prek_sweep_without_the_skip_is_flagged():
-    workflow = "        run: prek run --all-files --skip ansible-lint --color always\n"
+    workflow = "        run: prek run --all-files --skip validate-k8s-manifests --color always\n"
     assert _unskipped(_sweeps(workflow)) == [
-        "run: prek run --all-files --skip ansible-lint --color always"
+        "run: prek run --all-files --skip validate-k8s-manifests --color always"
     ]
 
 

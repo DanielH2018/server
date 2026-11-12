@@ -12,7 +12,7 @@
 #   skipped: <reason>   the clone is off master or has uncommitted changes: the agent's work
 #   up to date at <sha>
 #   advanced <old>..<new>
-# Exits non-zero only when a git, uv or ansible-galaxy step fails, with its stderr.
+# Exits non-zero only when a git or uv step fails, with its stderr.
 #
 # Usage: claude-clone-sync.sh <clone-dir>
 set -euo pipefail
@@ -59,8 +59,4 @@ echo "advanced ${before:0:12}..${after:0:12}"
 # leaves the venv behind leaves guards that cannot import, and each falls back to `ask` (#3513).
 if ! git diff --quiet "$before" "$after" -- uv.lock pyproject.toml; then
   "$HOME/.local/bin/uv" sync --frozen --compile-bytecode
-fi
-# The login profile points ANSIBLE_COLLECTIONS_PATH at the clone's collections (#4108).
-if ! git diff --quiet "$before" "$after" -- ansible/requirements.yml; then
-  .venv/bin/ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
 fi

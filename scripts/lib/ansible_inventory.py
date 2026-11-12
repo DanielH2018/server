@@ -65,36 +65,24 @@ def containers_entries_in(data: dict | None) -> list[dict]:
     return [e for e in entries if isinstance(e, dict) and e.get("name")]
 
 
-# The two keys that list the Pi's services (H5): `containers_list` stays empty because nothing
-# deploys a Docker entry, and the `homelab-daniel-pi` package deploys `compose_services`. A service
-# is in exactly one.
-PI_LIST_KEYS = ("containers_list", "compose_services")
+# The key that lists the Pi's services, which the `homelab-daniel-pi` package deploys (H5).
+PI_LIST_KEY = "compose_services"
 
 
 def pi_entries_in(data: dict | None) -> list[dict]:
-    """The named entries of both Pi service lists in an already-parsed host_vars mapping.
+    """The named entries of the Pi's `compose_services` in an already-parsed host_vars mapping.
 
-    `containers_list` entries come first, then `compose_services`, each filtered as
-    ``containers_entries_in`` filters. A list set to null reads as empty, as there. A mapping
-    that lacks either key raises, so a reader of the Pi's services cannot keep reading one key
-    after a service moves to the other and look healthy (H5, *The service list*).
+    Entries are filtered as ``containers_entries_in`` filters, and a null list reads as empty.
+    A mapping that lacks the key raises, so a reader of the Pi's services cannot read an
+    inventory that lost it as a Pi with no services.
 
     Raises:
-        ValueError: `data` lacks `containers_list` or `compose_services`.
+        ValueError: `data` lacks `compose_services`.
     """
     data = data or {}
-    missing = [key for key in PI_LIST_KEYS if key not in data]
-    if missing:
-        raise ValueError(
-            f"the Pi's host_vars lack {' and '.join(missing)}; every reader of the Pi's "
-            "services reads both keys"
-        )
-    return [
-        e
-        for key in PI_LIST_KEYS
-        for e in data[key] or []
-        if isinstance(e, dict) and e.get("name")
-    ]
+    if PI_LIST_KEY not in data:
+        raise ValueError(f"the Pi's host_vars lack {PI_LIST_KEY}")
+    return [e for e in data[PI_LIST_KEY] or [] if isinstance(e, dict) and e.get("name")]
 
 
 @dataclass(frozen=True)

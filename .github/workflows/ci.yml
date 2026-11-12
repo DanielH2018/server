@@ -159,53 +159,16 @@ jobs:
           python3 scripts/dev/tested_tree.py prove \
             --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" --tree "$(git rev-parse "$GITHUB_SHA^{tree}")"
 
-  # The hook sweep is split three ways — `ansible-lint`, `pytest`, and this job for everything
-  # else. None of the three carries the branch-protection required context; the `prek` gate job
-  # at the bottom does, under the name "prek (lint + validate + tests + secrets)".
+  # The hook sweep is split two ways — `pytest`, and this job for everything else. Neither
+  # carries the branch-protection required context; the `prek` gate job at the bottom does,
+  # under the name "prek (lint + validate + tests + secrets)".
   #
-  # DECIDED: ansible-lint gets its own job, again. This repo split it out, reverted the split on
-  # 2026-08-14, and restored it on 2026-09-10 (#1332). The revert is not a precedent to re-apply,
-  # because the two facts it rested on have both gone:
+  # By PR run 40125170130 (2026-10-24) `hooks` took 4m58s and set the wall, ahead of pytest's
+  # slowest shard at 4m29s. 77s of that was the cross-plane order gate (the render-diff gates
+  # since D6.12), which now runs in the `pr_gates` job beside this one (#6149).
   #
-  #   - The 2026-08 split needed an AGGREGATOR job purely to re-report the required context, at
-  #     ~7s of runner acquisition per run. That aggregator is now the `prek` gate, which exists
-  #     unconditionally to cover the `pytest` split of 2026-09-01. A third half costs it nothing:
-  #     the gate waits on the MAX of its dependencies, not their sum, and its own step is 4s.
-  #   - The revert's case was PR wall time, where both halves are changed-files-scoped and a
-  #     second job's ~15-20s of fixed setup dwarfs ~7s of scoped lint. The PR wall is now set by
-  #     `pytest`, which runs UNSCOPED by design (the `pytest` job says why) at ~61s across the shards
-  #     (four when this was measured; six since #2239).
-  #     Both scoped hook halves finish well inside that, so on a PR this split is free rather
-  #     than cheap.
-  #
-  # The measurement that motivated it, master run 34029520131 (the merge of #1328): `hooks` 109s
-  # against pytest's slowest shard at 61s and a 120s run wall — every pytest leg done inside the
-  # first 61s, then 48s waiting on `hooks` alone. Its 109s is 20s setup + an 82s full sweep + 4s
-  # of mkdocs. Locally on daniel-server the sweep divides 106s of ansible-lint against 26s for
-  # all twenty other hooks, so the runner's 82s is roughly 66s / 16s — which puts the split's
-  # steady state at a ~40s `hooks` job beside an ~80s `ansible-lint` job, and the run wall at
-  # roughly 95s. Projected from those step times, not yet measured on master.
-  #
-  # `mkdocs build --strict` was the other candidate and is NOT worth a job: 4s on that same run.
-  # The `mkdocs-strict` hook in the full sweep is this job's only docs build (#6150).
-  #
-  # By PR run 40125170130 (2026-10-24) the picture had moved: `hooks` took 4m58s and set the
-  # wall, ahead of pytest's slowest shard at 4m29s. 77s of that was the cross-plane order gate
-  # (the render-diff gates since D6.12),
-  # which now runs in the `pr_gates` job beside this one (#6149).
-  #
-  # Two things that make the split behave, both learned the hard way and both enforced below:
-  # ansible-lint must never be handed an empty --files list (it walks all 954 files and reports
-  # a cheerful "Passed"), and $RUNNER_TEMP is per-job, so the new job computes its own changed-
-  # file list rather than reading one this job wrote.
-  #
-  # A third was checked and settled the Galaxy cache step out of this job. Nothing here ever
-  # installed the collections explicitly — the ansible-lint hook's own entry did it as a side
-  # effect, and that hook is skipped on both paths now. That is the shape the `pytest` job's own
-  # comment describes, and it would have failed only on a cache MISS, pointing nowhere near this
-  # change. Measured 2026-09-10 with `ansible/collections` moved aside: every hook left in this
-  # job still passes, so the remaining sweep reads no collection and the cache step is gone
-  # rather than kept for reassurance. `ansible_lint` and `pytest` both still carry it.
+  # `mkdocs build --strict` is NOT worth a job: 4s on master run 34029520131. The
+  # `mkdocs-strict` hook in the full sweep is this job's only docs build (#6150).
   #
   # NB the FIRST run on any given branch is slower, once — the merge of #166 took 108s, not 77s.
   # A branch restores its hook-env cache via restore-keys from an older entry and rebuilds the
@@ -237,7 +200,7 @@ jobs:
           persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
 
       # Python, uv and prek, with their caches. The pins and the reasoning behind each cache
-      # live in the action. No Galaxy cache: see the DECIDED block above.
+      # live in the action.
       - uses: $/.github/actions/setup
         with:
           prek-cache-key: prek
@@ -342,8 +305,7 @@ jobs:
           ALERT_TOOLS_ARCHIVES: ${{ runner.temp }}/pinned/alloy
         run: uv run python scripts/validate/alert_rules.py --prove-red
 
-      # A PR run is a full sweep. Every hook runs over the whole tree, and so does ansible-lint in
-      # its own job. This is what lets the push run skip when it merges a tree that a PR run
+      # A PR run is a full sweep. Every hook runs over the whole tree. This is what lets the push run skip when it merges a tree that a PR run
       # already tested (the `prove` job below, #5489): the PR run is the sweep, so the green it
       # records covers everything the push run would check. A changed-file scope on the PR run
       # would leave the scoped-out files unchecked, and the skipped push run would be the only
@@ -471,13 +433,12 @@ jobs:
       # other place it runs, and a broken internal link found there leaves the PREVIOUS site
       # serving with nothing saying why.
       - name: Run hooks (full sweep)
-        # --skip ansible-lint: it runs in its own job beside this one, as pytest does.
         # --skip static-ratchet-tests*: the `pytest` job runs those twenty-nine test files already.
         # --skip validate-k8s-manifests: the `pytest` job runs the same `main()` over the real
         # tree and asserts it exits 0 (scripts/validate/tests/test_validate_k8s_manifests.py,
         # `real_tree`), so the hook here was a second render of every k8s role (#6150).
         # --verbose: prek prints each hook's duration only with it, and this log is where a slow hook shows.
-        run: prek run --all-files --verbose --skip ansible-lint --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-owners --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-host-files --skip static-ratchet-tests-landing --skip static-ratchet-tests-deployer --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
+        run: prek run --all-files --verbose --skip validate-k8s-manifests --skip static-ratchet-tests --skip static-ratchet-tests-python --skip static-ratchet-tests-owners --skip static-ratchet-tests-lander --skip static-ratchet-tests-checksum --skip static-ratchet-tests-shell --skip static-ratchet-tests-renovate --skip static-ratchet-tests-evals --skip static-ratchet-tests-host-files --skip static-ratchet-tests-landing --skip static-ratchet-tests-deployer --skip static-ratchet-tests-alerts --skip static-ratchet-tests-units --skip static-ratchet-tests-test-modules --color always
 
   # The two PR-only refusals, the render-diff gates and the cluster pin checks, in a job of
   # their own (#6149). They ran serially inside `hooks`, ahead of its sweep, and on PR run
@@ -509,8 +470,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false  # nothing here pushes or fetches
 
-      # Python and uv only. Neither gate runs prek or reads a Galaxy collection; both ran in
-      # `hooks` before this job existed, where neither cache was restored for them.
+      # Python and uv only. Neither gate runs prek; both ran in `hooks` before this job existed.
       - uses: $/.github/actions/setup
         if: github.event_name == 'pull_request'
 
@@ -542,44 +502,6 @@ jobs:
         if: github.event_name == 'pull_request'
         timeout-minutes: 2
         run: uv run python scripts/validate/k3s_binary_sum.py --base HEAD^1
-
-  # ansible-lint alone. It is the biggest single piece of the hook sweep — 106s against 26s for
-  # all twenty other hooks together, measured on daniel-server — so it gets the job
-  # and `hooks` gets the remainder. The reasoning and the numbers are in the DECIDED block
-  # above `hooks`.
-  #
-  # This job deliberately does NOT install Vale, check systemd-analyze, or build the docs site:
-  # none of them is reachable from `prek run ansible-lint`. The Galaxy cache IS kept and shares
-  # its key with the `pytest` job, because the hook's own entry runs `ansible-galaxy collection
-  # install` before linting — warm that is a 0.4s no-op, cold a ~40 MB download.
-  ansible_lint:
-    needs: prove
-    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
-    name: ansible-lint
-    runs-on: ubuntu-26.04
-    timeout-minutes: 20  # cap a wedged ansible-galaxy install so it can't burn to the 6h default
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0  # the merge-base diff below needs history
-          persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
-
-      # Its own prek cache prefix rather than the `hooks` job's. The two jobs build disjoint hook
-      # environments, and one shared key would have them overwrite each other's entry every run.
-      - uses: $/.github/actions/setup
-        with:
-          prek-cache-key: prek-lint
-          galaxy: "true"
-
-      # Always the whole tree: on a PR run, a dispatch and a push the `prove` job did not skip.
-      # ansible-lint does no cross-file variable analysis, so a changed-file scope on the PR run
-      # would leave every unchanged consumer of a changed variable unlinted, and the push run
-      # that used to catch it is skipped when it merges a tree the PR run tested (#5489).
-      #
-      # NEVER hand this an empty --files list. ansible-lint given no filenames does not skip: it
-      # walks every file and reports "Passed". `--all-files` names the intent.
-      - name: Lint the whole tree
-        run: prek run ansible-lint --all-files --color always
 
   # The whole pytest suite, unscoped on PRs and pushes alike — the same suite the prek `pytest`
   # hook runs, invoked the same way (`uv run python -m pytest`, addopts from pyproject.toml), so
@@ -659,13 +581,7 @@ jobs:
         with:
           fetch-depth: 0  # several tests read git history and worktree state
           persist-credentials: false
-      # Several ansible/tests read the Galaxy collections, so they must be on disk. The action's
-      # Galaxy cache key is the one the `ansible_lint` job uses, so the two share one entry.
       - uses: $/.github/actions/setup
-        with:
-          galaxy: "true"
-      - name: Install Ansible collections
-        run: uv run ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
       # `cluster_vars.py write`'s tests (target slice D3) run the real sops against a throwaway
       # age key, and they fail rather than skip without it. The step reads the hosts' pin, the
       # amd64 `version` and `sha256` of `sops` in homelab-tools' package.yml, as the
@@ -928,7 +844,6 @@ jobs:
         with:
           persist-credentials: false
 
-      # The renderer imports no Galaxy collection, so no Galaxy cache.
       - uses: $/.github/actions/setup
 
       # The same FLUX_* pin as promote.yml's, so the CLI that checks the round trip is the CLI
@@ -1331,7 +1246,6 @@ jobs:
           fetch-depth: 0  # the merge-base render below needs history
           persist-credentials: false  # nothing here pushes or fetches
 
-      # The renderer imports no Galaxy collection, so no Galaxy cache.
       - uses: $/.github/actions/setup
 
       # 12 retries 30s apart outlast a release-host outage, as TOOL_RETRY_WINDOW_S does for the
@@ -2107,7 +2021,7 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
-    needs: [prove, hooks, pr_gates, pytest, ansible_lint, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_packages_bootstrap, host_tools_arm64]
+    needs: [prove, hooks, pr_gates, pytest, deck_mod, flux_roundtrip, sops_manifest_type_proof, host_packages_build, host_packages, host_packages_bootstrap, host_tools_arm64]
     # On a draft the gate skips with its dependents. A red gate there would pin the head red
     # for every reader that takes the worst check run per name (`deploy_git.ci_verdict`), even
     # after the ready run passes. The skipped gate is not a pass: GitHub refuses to merge a
@@ -2139,7 +2053,6 @@ jobs:
           HOOKS: ${{ needs.hooks.result }}
           PR_GATES: ${{ needs.pr_gates.result }}
           PYTEST: ${{ needs.pytest.result }}
-          ANSIBLE_LINT: ${{ needs.ansible_lint.result }}
           DECK_MOD: ${{ needs.deck_mod.result }}
           FLUX_ROUNDTRIP: ${{ needs.flux_roundtrip.result }}
           SOPS_TYPE_PROOF: ${{ needs.sops_manifest_type_proof.result }}
@@ -2149,7 +2062,6 @@ jobs:
           HOST_TOOLS_ARM64: ${{ needs.host_tools_arm64.result }}
         run: |
           echo "prove=$PROVE proven=${PROVEN:-} hooks=$HOOKS pr-gates=$PR_GATES pytest=$PYTEST" \
-            "ansible-lint=$ANSIBLE_LINT" \
             "deck-mod=$DECK_MOD flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
             "host-packages-build=$HOST_PACKAGES_BUILD host-packages=$HOST_PACKAGES" \
             "host-packages-bootstrap=$HOST_PACKAGES_BOOTSTRAP" \
@@ -2161,7 +2073,7 @@ jobs:
           proven=false
           if [ "$PROVE" = success ] && [ "${PROVEN:-}" = true ]; then proven=true; fi
           ok() { [ "$1" = success ] || { [ "$proven" = true ] && [ "$1" = skipped ]; }; }
-          ok "$HOOKS" && ok "$PR_GATES" && ok "$PYTEST" && ok "$ANSIBLE_LINT" && ok "$DECK_MOD" \
+          ok "$HOOKS" && ok "$PR_GATES" && ok "$PYTEST" && ok "$DECK_MOD" \
             && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES_BUILD" \
             && ok "$HOST_PACKAGES" && ok "$HOST_PACKAGES_BOOTSTRAP" \
             && ok "$HOST_TOOLS_ARM64"
@@ -2210,9 +2122,8 @@ jobs:
           uv: "false"
           node: "true"
 
-      # The script's `npm install renovate@latest` re-downloads Renovate on every run — 33-39s, and with
-      # ansible-lint scoped to changed files this job is the longest in the workflow on a PR that
-      # touches renovate.json. Skip it on PRs that do not touch the file it validates.
+      # The script's `npm install renovate@latest` re-downloads Renovate on every run — 33-39s, which
+      # makes this job the longest in the workflow on a PR that touches renovate.json. Skip it on PRs that do not touch the file it validates.
       # renovate.json moved in 26 of the last 1600 commits (~1.6%), so this is a fast green for
       # essentially every PR.
       #
@@ -2220,7 +2131,7 @@ jobs:
       # (309 MB) still re-resolves from the registry and cuts the step to 7.2s, but the key
       # cannot be content-derived from an unpinned package, so a rolling key would write a new
       # 309 MB entry every run and churn the repo's 10 GB cache budget — likely evicting the
-      # prek and galaxy caches this workflow depends on. Also keeping `_npx` (341 MB) gets to
+      # prek caches this workflow depends on. Also keeping `_npx` (341 MB) gets to
       # 0.9s but SILENTLY PINS: that tree's manifest records `renovate: ^44.30.1`, npm sees the
       # install satisfies it and reuses it without ever contacting the registry (it runs
       # happily with --offline). That would quietly defeat the whole point of this job, below.
@@ -2247,7 +2158,7 @@ jobs:
       # a typo'd packageRule field (e.g. matchPackageName vs matchPackageNames) is silently
       # IGNORED by Renovate (logged as a config warning, kept running), which would quietly
       # re-enable auto-merge of the stateful/DB-breaking bumps the automerge:false overrides
-      # (getmeili/meilisearch, the crowdsec bouncer plugin, galaxy collections) exist to block.
+      # (getmeili/meilisearch, the crowdsec bouncer plugin) exist to block.
       # `--strict` makes those warnings fail the build. Validates against the latest Renovate —
       # the same hosted Mend app version that actually consumes the config, which is why it is
       # deliberately unpinned and why neither caching variant above was taken.
