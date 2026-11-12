@@ -129,8 +129,11 @@ render_gid: 993
 #
 # Disarmed on 2026-10-03 and re-armed on 2026-10-05, once the session ran as its own user on
 # a repo-scoped token with no contents write (renovate_agent_gh_token) and the lander unit
-# alone could merge. Do not arm it again without both in place.
-renovate_agent_enabled: true
+# alone could merge. Disarmed again by the operator's ruling of 2026-11-12 (#8241): the
+# session's token can still write to PRs and Actions. Re-arm only once two slices of the
+# guardrails plan have landed: B2r, which moves that write to a controller user and gives the
+# session a read-only token, and B3, which fences the session's egress.
+renovate_agent_enabled: false
 
 # The window in which homelab-k3s-restart may restart k3s (H6.3b, hosts/components/k3s-restart).
 # An OnCalendar value, read by the component's timer: host_vars sit above a component's defaults,
