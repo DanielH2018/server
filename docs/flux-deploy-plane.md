@@ -1197,6 +1197,13 @@ else. It runs only from master's copy of the workflow, and dispatching it is **o
 It skips render, publish and promotion, and refuses a dispatch that also sets `sha` or
 `verify_drill`. `scripts/deploy_tools/promote_lib/reset.py` holds the rules.
 
+**Only two accounts can start a `promote` dispatch or re-run.** They are the operator's
+account and the workflow's own `GITHUB_TOKEN`, which `settle` dispatches with. Every job's
+`if` reads `github.triggering_actor`, so a dispatch or re-run by any other account, such as
+DanielClaudeBot, skips every job. The `refuse-starter` job then fails the run, so the refusal
+shows red. A re-run is gated too, because a re-run keeps the original run's inputs and
+`github.actor`.
+
 - **Its concurrency group is `promote-reset`, not `promote`.** In `promote`, the reset would
   wait behind a `decide` that waits on a verification in flight, for up to 6 hours, and a
   run that the next merge starts would evict it while it was pending.

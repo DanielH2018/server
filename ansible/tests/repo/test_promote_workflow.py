@@ -27,6 +27,8 @@ COSIGN_FETCH = "sigstore/cosign/releases/download/$COSIGN_VERSION/"
 
 # The reset_to_last_good dispatch's two jobs (D5.2b2), guarded by RESET_GUARDS instead.
 RESET_JOBS = ("reset-check", "reset-move")
+# The job that fails a run started by an account off the starter list (dotfiles#967 slice 1).
+REFUSE_JOB = "refuse-starter"
 JOBS = (
     "render",
     "images",
@@ -39,6 +41,7 @@ JOBS = (
     "post",
     "reconcile",
     *RESET_JOBS,
+    REFUSE_JOB,
 )
 NEEDS = {
     "reset-move": "reset-check",
@@ -58,6 +61,12 @@ TRIGGER_GUARDS = (
     "github.event.workflow_run.event == 'push'",
     "github.event.workflow_run.head_branch == 'master'",
     "github.event.workflow_run.head_repository.full_name == github.repository",
+)
+# Who may start a dispatch or a re-run: the operator, and `settle`'s own GITHUB_TOKEN dispatch.
+# DanielClaudeBot holds write access, so without this it could dispatch reset_to_last_good.
+STARTER_GUARD = (
+    "(github.event_name != 'workflow_dispatch' && github.run_attempt == '1' || "
+    'contains(fromJSON(\'["DanielH2018", "github-actions[bot]"]\'), github.triggering_actor))'
 )
 # A dispatch reaches every job, so every job also requires master's copy of the file.
 REF_GUARD = "github.ref == 'refs/heads/master'"
@@ -89,6 +98,7 @@ PERMISSIONS = {
     "reconcile": {"packages": "write", "statuses": "read"},
     "reset-check": {"contents": "read", "packages": "read", "actions": "read"},
     "reset-move": {"packages": "write"},
+    REFUSE_JOB: {},
 }
 
 RENDER_REF = "${{ inputs.sha || github.event.workflow_run.head_sha || github.sha }}"
@@ -135,6 +145,12 @@ def _step_index(job: dict, step_id: str) -> int | None:
 
 def _guard_problems(name: str, job: dict) -> list[str]:
     condition = " ".join(str(job.get("if", "")).split())
+    if name == REFUSE_JOB:
+        if condition != f"!{STARTER_GUARD}":
+            return [f"{name}: its `if` is not the negated starter guard"]
+        return []
+    if STARTER_GUARD not in condition:
+        return [f"{name}: its `if` lacks the starter guard"]
     if name in RESET_JOBS:
         return [
             f"{name}: its `if` lacks the reset guard {guard}"
