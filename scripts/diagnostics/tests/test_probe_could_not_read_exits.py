@@ -139,3 +139,54 @@ def test_ha_state_non_json_body_exits_unreadable(monkeypatch, capsys):
     assert rc == PROBE_UNREADABLE, f"a non-JSON `ha state` body exited {rc}"
     assert body.strip() in err
     assert body.strip() not in out
+
+
+SOPS_NO_KEY = "Failed to get the data key required to decrypt the SOPS file."
+
+
+def _sops_fails(monkeypatch, config_dir):
+    """Stub sops to fail and point every age key source this user could hold at `config_dir`."""
+    for name in (
+        "SOPS_AGE_KEY",
+        "SOPS_AGE_KEY_FILE",
+        "SOPS_AGE_KEY_CMD",
+        "SOPS_AGE_SSH_PRIVATE_KEY_FILE",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_dir))
+
+    def run(argv, **_):
+        if SECRETS_PATH in argv:
+            return subprocess.CompletedProcess(argv, 1, "", SOPS_NO_KEY + "\n")
+        return subprocess.CompletedProcess(argv, 0, "{}", "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+
+def test_sops_read_without_an_age_key_names_the_cause_and_the_operator(
+    tmp_path, monkeypatch, capsys
+):
+    """The `claude` user holds no age key, so `ha state` says so and sends it to the operator."""
+    _sops_fails(monkeypatch, tmp_path)
+    rc = _exit_code(lambda: probe.main(["ha", "state", "fan.tower_fan"]))
+    err = capsys.readouterr().err
+    assert rc == PROBE_UNREADABLE
+    assert "holds no age key" in err
+    assert "operator" in err
+    assert "docs/claude-agent-user.md" in err
+    assert SOPS_NO_KEY in err
+
+
+def test_sops_read_with_an_age_key_does_not_blame_a_missing_key(
+    tmp_path, monkeypatch, capsys
+):
+    """A user with keys.txt whose decrypt still fails gets sops' own error, not the no-key one."""
+    keys = tmp_path / "sops" / "age" / "keys.txt"
+    keys.parent.mkdir(parents=True)
+    keys.write_text("AGE-SECRET-KEY-PLACEHOLDER\n")
+    _sops_fails(monkeypatch, tmp_path)
+    rc = _exit_code(lambda: probe.main(["ha", "state", "fan.tower_fan"]))
+    err = capsys.readouterr().err
+    assert rc == PROBE_UNREADABLE
+    assert "holds no age key" not in err
+    assert SOPS_NO_KEY in err

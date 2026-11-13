@@ -7,6 +7,7 @@ into another module's globals by ``from core import sops_extract`` would
 not see the patch. One module attribute, one place to patch.
 """
 
+import getpass
 import json
 import os
 import re
@@ -433,10 +434,26 @@ def k8s_namespace():
     raise SystemExit(f"k8s_namespace not found in {GROUP_VARS_PATH}")
 
 
+_AGE_KEY_ENV = (
+    "SOPS_AGE_KEY",
+    "SOPS_AGE_KEY_FILE",
+    "SOPS_AGE_KEY_CMD",
+    "SOPS_AGE_SSH_PRIVATE_KEY_FILE",
+)
+
+
+def holds_age_key():
+    """Whether this user gives sops any age identity: an env source, or the default keys.txt."""
+    if any(os.environ.get(name) for name in _AGE_KEY_ENV):
+        return True
+    config = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    return os.path.isfile(os.path.join(config, "sops", "age", "keys.txt"))
+
+
 def sops_extract(key_name):
     """Decrypt a single top-level key from the SOPS secrets file.
 
-    Requires the host's age key (present on daniel-server).
+    Requires an age key, which the operator holds and the `claude` agent user does not.
     """
     out = subprocess.run(
         ["sops", "-d", "--extract", f'["{key_name}"]', SECRETS_PATH],
@@ -444,6 +461,13 @@ def sops_extract(key_name):
         text=True,
     )
     if out.returncode != 0:
+        if not holds_age_key():
+            raise Unreadable(
+                f"could not decrypt {key_name}: user {getpass.getuser()} holds no age key, "
+                f"so it cannot read {SECRETS_PATH}. Ask the operator to run this subcommand; "
+                "see docs/claude-agent-user.md#what-the-claude-user-cannot-do. "
+                f"sops said: {out.stderr.strip()}"
+            )
         raise Unreadable(
             f"could not decrypt {key_name} from {SECRETS_PATH}: {out.stderr.strip()}"
         )
