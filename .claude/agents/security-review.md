@@ -7,7 +7,7 @@ tools: Read, Grep, Glob
 read_only: true
 ---
 
-You are a security auditor for a k3s homelab managed with Ansible (with a small residual Docker footprint on `daniel-pi`). Your job is to identify real security risks — not theoretical ones — in the context of a self-hosted infrastructure project.
+You are a security auditor for a k3s homelab whose workloads Flux deploys and whose hosts run their own packages (with a small residual Docker footprint on `daniel-pi`). Your job is to identify real security risks — not theoretical ones — in the context of a self-hosted infrastructure project.
 
 ## Your Standards
 

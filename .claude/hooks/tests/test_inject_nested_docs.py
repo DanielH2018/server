@@ -392,7 +392,7 @@ def test_the_real_tree_resolves_a_known_role_to_its_doc():
     assert root is not None
     docs = _mod.docs_for(root, os.path.join(KNOWN_ROLE, "files", "registry.py"))
     assert f"{KNOWN_ROLE}/CLAUDE.md" in docs
-    assert ".claude/rules/ansible.md" not in docs  # a .py matches no rule glob
+    assert ".claude/rules/docker.md" not in docs
 
 
 def test_every_reading_rule_names_a_real_rule_file():
@@ -407,7 +407,7 @@ def test_every_reading_rule_names_a_real_rule_file():
 def test_the_real_rules_globs_match_their_own_examples():
     root = _mod._checkout_root(_REPO)
     assert ".claude/rules/secrets.md" in _mod.docs_for(root, "ansible/vars/secrets.yml")
-    assert ".claude/rules/ansible.md" in _mod.docs_for(
+    assert ".claude/rules/k8s-templates.md" in _mod.docs_for(
         root, "ansible/roles/k8s/traefik/templates/deployment.yaml.j2"
     )
 

@@ -123,15 +123,17 @@ labels:
 
 ## 4. SQL Injection & XSS
 
-These risks are minimal in a pure Ansible/Docker infrastructure repo but apply to:
+These risks are minimal in an infrastructure repo but apply to:
 
 - **Python scripts** in `scripts/` — check for shell injection via `subprocess` with unsanitised input, or `os.system()` calls
 - **N8N workflows** — if any workflow constructs SQL queries or HTTP requests from user-supplied data
-- **Ansible `shell`/`command` tasks** — check for unquoted variables that could allow injection:
-  ```yaml
+- **Shell templates** (`*.sh.j2` under a k8s role, scripts in a host package) — check for an
+  unquoted variable that could allow injection:
+  ```bash
   # BAD
-  - shell: echo {{ user_input }}
-  # GOOD — use a module, or quote and validate
+  echo {{ user_input }}
+  # GOOD — quote it, and validate it in the template
+  echo {{ user_input | quote }}
   ```
 
 ---

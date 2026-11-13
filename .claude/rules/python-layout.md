@@ -52,8 +52,9 @@ needs a basename no other role's `files/` or `pythonpath` root uses, because a f
 one session; the `no-two-import-roots-share-a-module-basename` row of
 `ansible/tests/repo/test_census_rows_python.py` enforces it.
 
-`ansible/tests/` is grouped by what a guard reads: `deploy/`, `k8s/`, `longhorn/`, `setup/`,
-`staging/`, `services/` (one role each) and `repo/` (CI, docs and the suite's own guards). The
+`ansible/tests/` is grouped by what a guard reads: `deploy/`, `k8s/`, `longhorn/`, `setup/`
+(the host packages and their components under `hosts/`), `staging/`, `services/` (one role
+each) and `repo/` (CI, docs and the suite's own guards). The
 shared modules (`_helpers.py`, `_k8s_render.py`, `_role_census.py`) and `conftest.py` stay at
 the root. A new guard keeps a unique basename, since pytest names modules by basename alone.
 
@@ -69,12 +70,13 @@ the root. A new guard keeps a unique basename, since pytest names modules by bas
 - `ansible/tests/_row_table.py` is the harness the tables share. A property needing a second
   render context, a cross-document join or a long exemption list keeps its own file.
 
-## No tests under `ansible/filter_plugins/`
+## A filter plugin's tests go in `ansible/tests/`
 
-Ansible's plugin loader imports every `.py` there, two directory levels deep, at deploy time,
-and would choke on the `pytest` import. `test_every_suite_file_sits_in_a_tests_directory`
-refuses a test file beside the plugin, but a `filter_plugins/tests/` subdirectory would pass it
-and still load.
+`ansible/filter_plugins/` is a `pythonpath` root that the renderer and the render guards import
+by bare module name (`scripts/lib/ansible_jinja_env.py`). Its tests sit in the `ansible/tests/`
+subdirectory for what the filter derives, as `deploy/test_toposort.py` does for `toposort.py`.
+`testpaths` does not reach `ansible/filter_plugins/`, so `test_repo_has_no_orphaned_test_files`
+refuses a test placed there.
 
 ## A new check ships with a proof it can go red
 
