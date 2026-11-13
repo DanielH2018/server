@@ -147,19 +147,28 @@ RECORD = f"gh variable set PROD_DIGEST --body {RESET} -R DanielH2018/server"
 # -- settle: a good verdict ------------------------------------------------------------------
 
 
-def test_a_good_verdict_moves_last_good_to_sha_t_and_writes_no_hold(tmp_path, jobs):
+def test_a_good_verdict_moves_last_good_to_ts_digest_and_writes_no_hold(tmp_path, jobs):
     result, calls = _settle(tmp_path, jobs, VERDICT="good", FAILED_NAMES="")
     assert result.returncode == 0, result.stderr
-    assert calls == [f"flux tag artifact {REPO_URL}:sha-{T} --tag last-good"]
+    assert calls == [f"flux tag artifact {REPO_URL}@{DIGEST} --tag last-good"]
 
 
 def test_a_good_verdict_from_the_revert_rule_also_clears_the_hold(tmp_path, jobs):
     result, calls = _settle(tmp_path, jobs, VERDICT="good", CLEARS_HOLD="true")
     assert result.returncode == 0, result.stderr
     assert calls == [
-        f"flux tag artifact {REPO_URL}:sha-{T} --tag last-good",
+        f"flux tag artifact {REPO_URL}@{DIGEST} --tag last-good",
         "gh variable set DEPLOY_HOLD --body none -R DanielH2018/server",
     ]
+
+
+def test_a_malformed_digest_moves_nothing_even_when_prod_is_unreadable(tmp_path, jobs):
+    result, calls = _settle(
+        tmp_path, jobs, VERDICT="good", DIGEST="sha-" + T, FAKE_PROD_STATUS="503"
+    )
+    assert result.returncode != 0
+    assert calls == []
+    assert "is not sha256:<64 hex>" in result.stdout
 
 
 # -- settle: anything else holds, then resets -----------------------------------------------
@@ -239,7 +248,7 @@ def test_a_forward_only_failure_holds_as_t_alone_and_leaves_prod(
     assert result.returncode == 0, result.stdout + result.stderr
     assert calls == [
         f"gh variable set DEPLOY_HOLD --body {T} -R DanielH2018/server",
-        f"flux tag artifact {REPO_URL}:sha-{T} --tag held",
+        f"flux tag artifact {REPO_URL}@{DIGEST} --tag held",
     ]
 
 
@@ -262,7 +271,7 @@ def test_a_failed_held_tag_exits_non_zero_with_the_hold_in_place(tmp_path, jobs)
 
 # -- settle: the stateful hold (D5.2b1) -----------------------------------------------------
 
-HELD = f"flux tag artifact {REPO_URL}:sha-{T} --tag held"
+HELD = f"flux tag artifact {REPO_URL}@{DIGEST} --tag held"
 
 
 def _stateful_hold(value: str) -> str:
@@ -447,7 +456,7 @@ def test_a_first_verified_run_seeds_last_good_before_prod_moves(tmp_path, jobs):
     assert result.returncode == 0, result.stderr
     assert calls == [
         f"flux tag artifact {REPO_URL}@{RESET} --tag last-good",
-        f"flux tag artifact {REPO_URL}:sha-{T} --tag prod",
+        f"flux tag artifact {REPO_URL}@{DIGEST} --tag prod",
     ]
     assert re.fullmatch(MOVED, output), output
 
@@ -455,7 +464,7 @@ def test_a_first_verified_run_seeds_last_good_before_prod_moves(tmp_path, jobs):
 def test_a_run_with_last_good_present_moves_prod_alone(tmp_path, jobs):
     result, calls, output = _move(tmp_path, jobs)
     assert result.returncode == 0, result.stderr
-    assert calls == [f"flux tag artifact {REPO_URL}:sha-{T} --tag prod"]
+    assert calls == [f"flux tag artifact {REPO_URL}@{DIGEST} --tag prod"]
     assert re.fullmatch(MOVED, output), output
 
 
@@ -489,7 +498,7 @@ def test_a_first_run_moves_prod_when_prod_is_still_absent(tmp_path, jobs):
         tmp_path, jobs, PRIOR_DIGEST="", FAKE_PROD_STATUS="404", FAKE_PROD_DIGEST=""
     )
     assert result.returncode == 0, result.stderr
-    assert calls == [f"flux tag artifact {REPO_URL}:sha-{T} --tag prod"]
+    assert calls == [f"flux tag artifact {REPO_URL}@{DIGEST} --tag prod"]
     assert re.fullmatch(MOVED, output), output
 
 

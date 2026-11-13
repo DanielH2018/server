@@ -17,6 +17,8 @@ _CURL_STEP = re.compile(r"^\s*(?:run:\s*)?curl\b.*$", re.MULTILINE)
 _CURL_RETRIES = re.compile(r"--retry (\d+)\b.*--retry-delay (\d+)\b")
 # The span of the 504s in run 42054080101.
 _RELEASE_OUTAGE_S = 300
+_TAG_MOVE = re.compile(r"\bflux tag artifact\b")
+_BY_DIGEST = re.compile(r'flux tag artifact\s+"?oci://[^\s"@]+@')
 
 
 def _package_build_download_offences(text: str) -> list[str]:
@@ -126,9 +128,13 @@ WORKFLOW_ROWS = (
             "verified digest (#8223). `oci://<repo>@<digest>` names the bytes decide verified."
         ),
         files=lambda: tracked(".github/workflows/*.yml"),
-        offence=lines_matching(
-            re.compile(r'flux tag artifact\s+"?oci://[^\s"@]+["\s]')
-        ),
+        offence=lambda s: [
+            f"line {n}: {line.strip()}"
+            for n, line in enumerate(s.text.splitlines(), 1)
+            if _TAG_MOVE.search(line) and not _BY_DIGEST.search(line)
+        ],
+        count=lambda s: len(_TAG_MOVE.findall(s.text)),
+        min_matches=10,
         red=(
             Subject(
                 "a.yml",
@@ -137,6 +143,10 @@ WORKFLOW_ROWS = (
             Subject(
                 "b.yml",
                 "run: flux tag artifact oci://ghcr.io/x/y:sha-abc --tag held\n",
+            ),
+            Subject("c.yml", 'run: flux tag artifact "$artifact" --tag prod\n'),
+            Subject(
+                "d.yml", "run: |\n  flux tag artifact \\\n    oci://x@y --tag prod\n"
             ),
         ),
         green=(

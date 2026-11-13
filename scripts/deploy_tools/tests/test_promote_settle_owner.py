@@ -10,6 +10,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_promote_settle_owner.py
 """
 
 from test_promote_settle import (
+    DIGEST,
     HOLD,
     RECORD,
     REPO_URL,
@@ -22,7 +23,7 @@ from test_promote_settle import (
 )
 
 LATER = "sha256:" + "f" * 64
-LAST_GOOD = f"flux tag artifact {REPO_URL}:sha-{T} --tag last-good"
+LAST_GOOD = f"flux tag artifact {REPO_URL}@{DIGEST} --tag last-good"
 
 
 def test_a_good_verdict_while_prod_names_t_moves_last_good_is_clean(tmp_path, jobs):
@@ -88,7 +89,7 @@ def test_the_dispatch_runs_only_for_the_run_that_owns_prod(jobs):
 def test_a_move_with_no_hold_moves_prod_is_clean(tmp_path, jobs):
     result, calls, _ = _move(tmp_path, jobs)
     assert result.returncode == 0, result.stderr
-    assert calls == [f"flux tag artifact {REPO_URL}:sha-{T} --tag prod"]
+    assert calls == [f"flux tag artifact {REPO_URL}@{DIGEST} --tag prod"]
 
 
 def test_a_hold_written_after_decide_moves_nothing_is_flagged(tmp_path, jobs):
@@ -128,8 +129,8 @@ def test_a_move_that_supersedes_tags_t_superseding_before_prod_is_flagged(
     result, calls, _ = _move(tmp_path, jobs, SUPERSEDES="b" * 40)
     assert result.returncode == 0, result.stderr
     assert calls == [
-        f"flux tag artifact {REPO_URL}:sha-{T} --tag superseding",
-        f"flux tag artifact {REPO_URL}:sha-{T} --tag prod",
+        f"flux tag artifact {REPO_URL}@{DIGEST} --tag superseding",
+        f"flux tag artifact {REPO_URL}@{DIGEST} --tag prod",
     ]
 
 
@@ -138,7 +139,7 @@ def test_a_failed_superseding_tag_moves_nothing(tmp_path, jobs):
         tmp_path, jobs, SUPERSEDES="b" * 40, FAKE_FLUX_FAIL="superseding"
     )
     assert result.returncode != 0
-    assert calls == [f"flux tag artifact {REPO_URL}:sha-{T} --tag superseding"]
+    assert calls == [f"flux tag artifact {REPO_URL}@{DIGEST} --tag superseding"]
     assert output == ""
 
 
@@ -153,7 +154,7 @@ def test_a_revert_rule_move_under_the_hold_decide_read_moves_prod_is_clean(
         tmp_path, jobs, FAKE_HOLD=REVERT_HOLD, HOLD_READ=REVERT_HOLD
     )
     assert result.returncode == 0, result.stderr
-    assert calls == [f"flux tag artifact {REPO_URL}:sha-{T} --tag prod"]
+    assert calls == [f"flux tag artifact {REPO_URL}@{DIGEST} --tag prod"]
 
 
 def test_a_hold_that_changed_since_decide_read_it_moves_nothing_is_flagged(
