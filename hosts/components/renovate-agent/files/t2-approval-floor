@@ -44,5 +44,6 @@ k8s/roles/*/tests/**
 k8s/roles/*/files/**
 # Instructions every session loads.
 **/CLAUDE.md
-# The MCP server a session's tools run in.
+# The MCP server a session's tools run in. Its pod still mounts the node's ansible/ tree (#8409).
+ansible/roles/k8s/homelab-mcp/
 k8s/roles/homelab-mcp/
