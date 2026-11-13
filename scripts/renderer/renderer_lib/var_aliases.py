@@ -65,7 +65,7 @@ NON_SECRET_VARS_LOOKUPS = frozenset(
     {
         # `lookup('vars', job.replicas_var) | int > 0` drops a scrape job whose workload is
         # scaled to zero. `replicas_var` is a field of a service entry's `metrics:`
-        # list (ansible/filter_plugins/scrape_jobs.py), and names a replica count.
+        # list (scripts/renderer/template_filters/scrape_jobs.py), and names a replica count.
         VarsLookupSite(
             "ansible/roles/k8s/observability/templates/prometheus.yaml.j2",
             "job.replicas_var",

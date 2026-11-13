@@ -8,7 +8,7 @@
   `IN_A_STRING` names each such file.
 - The filter census. Every filter and test name a tracked `*.j2` uses is registered in the
   renderer's strict environment: Jinja's built-ins, `renderer_lib/jinja_filters.py` and the
-  repo's filter plugins. `_jinja_env.jinja_env` renders on that set.
+  repo's template filters. `_jinja_env.jinja_env` renders on that set.
 
 Run: uv run pytest ansible/tests/repo/test_ansible_core_census.py
 """

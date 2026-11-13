@@ -14,7 +14,7 @@ from dev.findings_lib.tracked_paths import resolve_fragments
 
 COVERED = [
     "scripts/dev/findings.py",
-    "ansible/filter_plugins/toposort.py",
+    "scripts/renderer/template_filters/toposort.py",
     ".claude/hooks/fanout-stop.py",
     "ansible/roles/k8s/monitor-bridge/files/registry.py",
     "ansible/roles/k8s/home-assistant/files/custom_templates/fan.jinja",

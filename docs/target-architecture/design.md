@@ -67,7 +67,7 @@ its risks against [the recurring failure classes](../failure-classes.md). The su
 
 **Decision.** CI renders every manifest with `homelab-render` (C1), a Python + Jinja2 renderer
 that keeps the 273 templates and reuses `scripts/lib/ansible_jinja_env.py`,
-`scripts/deploy_tools/render_targets.py` and `ansible/filter_plugins/`. CI pushes the output
+`scripts/deploy_tools/render_targets.py` and `scripts/renderer/template_filters/`. CI pushes the output
 as an OCI artifact, a `promote` workflow moves the tag Flux follows (C2), and
 kustomize-controller applies it server-side with prune and wait (C3, C4).
 

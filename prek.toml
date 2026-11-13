@@ -107,7 +107,7 @@ name = "Validate rendered docker-compose templates"
 entry = "uv run --frozen python scripts/validate/compose_templates.py"
 language = "system"
 pass_filenames = false
-files = "^(cluster/services\\.yml|scripts/renderer/renderer_lib/(dialect|environment|jinja_filters)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render)\\.py|hosts/components/pi-compose/services/[^/]+/compose\\.yaml\\.j2|ansible/templates/[^/]+\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate/compose_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/renderer_lib/(dialect|environment|jinja_filters)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render)\\.py|hosts/components/pi-compose/services/[^/]+/compose\\.yaml\\.j2|ansible/templates/[^/]+\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate/compose_templates\\.py|scripts/lib/ansible_jinja_env\\.py|scripts/renderer/template_filters/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
 # Structurally validate the Home Assistant config (pure Python, no Docker): YAML syntax,
 # duplicate keys, broken !include targets, and a syntax parse-check of inline + custom_templates
@@ -160,7 +160,7 @@ name = "Validate the alert plane and the Alloy config with promtool, amtool, pin
 entry = "uv run --frozen python scripts/validate/alert_rules.py"
 language = "system"
 pass_filenames = false
-files = "^(cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|ansible/roles/k8s/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|ansible/roles/k8s/loki-homelab/(files/rules/.*|templates/(rules-)?configmap\\.yaml\\.j2|templates/config/config\\.alloy\\.j2|defaults/main\\.yml)|ansible/roles/k8s/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|ansible/roles/k8s/observability/defaults/main\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/filter_plugins/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/pint/.*|scripts/validate/k8s_manifests\\.py|scripts/validate/validate_lib/(ok_lines|k8s_net_rules|k8s_schema|rule_test_parts)\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|ansible/roles/k8s/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|ansible/roles/k8s/loki-homelab/(files/rules/.*|templates/(rules-)?configmap\\.yaml\\.j2|templates/config/config\\.alloy\\.j2|defaults/main\\.yml)|ansible/roles/k8s/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|ansible/roles/k8s/observability/defaults/main\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/renderer/template_filters/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/pint/.*|scripts/validate/k8s_manifests\\.py|scripts/validate/validate_lib/(ok_lines|k8s_net_rules|k8s_schema|rule_test_parts)\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
 # Same render-then-parse guard as validate-compose-templates above, for the k8s manifests.
 # Also parses the YAML *embedded* in ConfigMap/Secret values — the manifest wrapping Traefik's
@@ -182,7 +182,7 @@ pass_filenames = false
 # `k8s_manifests.py` would stop firing on the code that does the work — a hook that quietly
 # covers less is exactly what a pattern here would hide next
 # time, since a rename makes an alternation fail loudly and a pattern match nothing.
-files = "^(cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/k8s/.*\\.j2|ansible/templates/ingressroute\\.yml\\.j2|ansible/inventory/(group_vars/all|host_vars/daniel-box)\\.yml|scripts/validate/k8s_manifests\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py|scripts/validate/validate_lib/(k8s_net_rules|k8s_schema)\\.py|scripts/validate/schemas/(kubernetes\\.io|traefik\\.io)/.*\\.json|ansible/filter_plugins/[^/]+\\.py)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/k8s/.*\\.j2|ansible/templates/ingressroute\\.yml\\.j2|ansible/inventory/(group_vars/all|host_vars/daniel-box)\\.yml|scripts/validate/k8s_manifests\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py|scripts/validate/validate_lib/(k8s_net_rules|k8s_schema)\\.py|scripts/validate/schemas/(kubernetes\\.io|traefik\\.io)/.*\\.json|scripts/renderer/template_filters/[^/]+\\.py)$"
 
 # Render every Jinja-templated shell script (*.sh.j2) with stubbed vars and lint the OUTPUT
 # (bash -n + shellcheck) — the same render-then-lint pattern as validate-compose-templates /
@@ -203,7 +203,7 @@ pass_filenames = false
 # would leave the hook's selector matching a 197-line facade while its subject sat elsewhere.
 # A host component's templates are in scope since H3.8b, with its component.yml, whose
 # defaults the render reads, and each host's package.yml, which names the host it renders for.
-files = "^(scripts/renderer/renderer_lib/(dialect|environment|jinja_filters)\\.py|hosts/components/.*|hosts/[^/]+/package\\.yml|scripts/validate/validate_lib/(ok_lines|shipped_render)\\.py|ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate/shell_templates\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py|scripts/validate/validate_lib/shell_lint\\.py|ansible/filter_plugins/[^/]+\\.py)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|scripts/renderer/renderer_lib/(dialect|environment|jinja_filters)\\.py|hosts/components/.*|hosts/[^/]+/package\\.yml|scripts/validate/validate_lib/(ok_lines|shipped_render)\\.py|ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate/shell_templates\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py|scripts/validate/validate_lib/shell_lint\\.py|scripts/renderer/template_filters/[^/]+\\.py)$"
 
 # Render every systemd unit template (*.service.j2 / *.timer.j2) with stubbed vars PLUS the
 # owning role's real defaults, and verify the output with `systemd-analyze verify`. Neither
@@ -230,7 +230,7 @@ pass_filenames = false
 # alternative. Every file under hosts/ and the host renderer's modules are in scope because the
 # validator renders every host package through that renderer (H3.2c); a package unit may be a
 # static file, so no suffix narrows the hosts/ alternative.
-files = "^(hosts/.*|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render)\\.py|ansible/roles/.*\\.(service|timer|socket|rules)\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|hosts/.*|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render)\\.py|ansible/roles/.*\\.(service|timer|socket|rules)\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py|scripts/lib/ansible_jinja_env\\.py|scripts/renderer/template_filters/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_lookups|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
 # Flag bash's `${#var}` length expansion in a Jinja template, before anything renders it. `{#`
 # opens a Jinja comment, so a shell script inside a `.j2` that writes `${#var}` either fails the
@@ -278,7 +278,7 @@ pass_filenames = false
 # names, so a rename there changes the verdict for a template the same commit may not touch.
 # secret_rotation.yml is in scope for the same reason — it is the plaintext census of SOPS names (never values), and a
 # secret renamed there without its template is the shape this guard exists to catch.
-files = "^(scripts/renderer/renderer_lib/(dialect|environment|jinja_filters)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render)\\.py|hosts/components/.*\\.(j2|yml)|ansible/inventory/(group_vars/all|host_vars/[^/]+)\\.yml|ansible/secret_rotation\\.yml|scripts/validate/setup_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|scripts/renderer/renderer_lib/(dialect|environment|jinja_filters)\\.py|scripts/validate/validate_lib/(ok_lines|shipped_render)\\.py|hosts/components/.*\\.(j2|yml)|ansible/inventory/(group_vars/all|host_vars/[^/]+)\\.yml|ansible/secret_rotation\\.yml|scripts/validate/setup_templates\\.py|scripts/lib/ansible_jinja_env\\.py|scripts/renderer/template_filters/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|role_files|yaml_fast)\\.py)$"
 
 # Lint the GitHub Actions workflows themselves. `check-yaml` above only proves they PARSE —
 # nothing until now checked that a job's `needs:` names a job that exists, that a `${{ }}`
@@ -368,7 +368,7 @@ name = "Cluster SOPS files are ciphertext written by cluster_vars.py"
 entry = "uv run --frozen python scripts/secrets_mgmt/cluster_vars.py check --no-render --base HEAD"
 language = "system"
 pass_filenames = false
-files = "^(ansible/vars/cluster-|ansible/filter_plugins/[^/]+\\.py$|hosts/lib/host_lib\\.py$|scripts/(lib|renderer|secrets_mgmt)/.+\\.py$|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py$)"
+files = "^(ansible/vars/cluster-|scripts/renderer/template_filters/[^/]+\\.py$|hosts/lib/host_lib\\.py$|scripts/(lib|renderer|secrets_mgmt)/.+\\.py$|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py$)"
 
 # Assert uv.lock stays consistent with pyproject.toml. Every unattended production path
 # (promote.yml, secret-rotation-audit) runs `uv run --frozen`, which installs
@@ -396,7 +396,7 @@ files = "^(pyproject\\.toml|uv\\.lock)$"
 # The test stays as the backstop for a commit that skipped prek.
 #
 # `files` is every input the generator reads: the roles, the inventory, the shared templates
-# whose macros declare claims, the filter plugin it imports, and the Python under scripts/docs and
+# whose macros declare claims, the template filter it imports, and the Python under scripts/docs and
 # scripts/lib. A role CLAUDE.md matches too, so a hand edit inside the
 # markers is reverted in the same commit. None of the docs-refresh cron's three staged paths
 # match, so that cron's commit never writes under ansible/roles/. Renovate edits defaults
@@ -409,7 +409,7 @@ name = "Role At a glance blocks match their sources"
 entry = "uv run --frozen python scripts/docs/gen_role_glance.py --fix"
 language = "system"
 pass_filenames = false
-files = "^(cluster/services\\.yml|ansible/(roles|inventory|filter_plugins|templates)/.*|hosts/components/.*|hosts/[^/]+/package\\.yml|hosts/packages/.*|ansible/[^/]+\\.ya?ml|scripts/(docs|lib)/.*\\.py|scripts/renderer/renderer_lib/.*\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|ansible/(roles|inventory|templates)/.*|scripts/renderer/template_filters/.*|hosts/components/.*|hosts/[^/]+/package\\.yml|hosts/packages/.*|ansible/[^/]+\\.ya?ml|scripts/(docs|lib)/.*\\.py|scripts/renderer/renderer_lib/.*\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py)$"
 
 # Rewrites a stale docs fragment (docs/assets/generated/fragments/) in the commit that moves
 # one of its tunables, and fails like a formatter so the author stages the fragment and commits
@@ -420,7 +420,7 @@ files = "^(cluster/services\\.yml|ansible/(roles|inventory|filter_plugins|templa
 #
 # `files` is every input the generator reads: role defaults and templates (the auto-deploy
 # coverage walks every k8s role's defaults, which no fragment header lists), the inventory,
-# the filter plugin, `ansible/secret_rotation.yml`, the deployer's deploy_changes.py, and the
+# the template filter, `ansible/secret_rotation.yml`, the deployer's deploy_changes.py, and the
 # Python under scripts/ that reads or renders a fragment. The fragments themselves match too,
 # so a hand edit is reverted in the same commit. That makes the hook fire on the docs-refresh
 # cron's commit, which stages docs/assets/generated/; build_docs.py regenerates the fragments
@@ -433,7 +433,7 @@ name = "Docs fragments match their sources"
 entry = "uv run --frozen python scripts/docs/gen_doc_fragments.py --fix"
 language = "system"
 pass_filenames = false
-files = "^(cluster/services\\.yml|ansible/(roles|inventory|filter_plugins|templates)/.*|hosts/components/.*|hosts/[^/]+/package\\.yml|ansible/[^/]+\\.ya?ml|scripts/.*\\.py|docs/assets/generated/fragments/.*)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|ansible/(roles|inventory|templates)/.*|scripts/renderer/template_filters/.*|hosts/components/.*|hosts/[^/]+/package\\.yml|ansible/[^/]+\\.ya?ml|scripts/.*\\.py|docs/assets/generated/fragments/.*)$"
 
 # Lower each ratchet allowlist entry to what its file is today, so a PR that SHRINKS a listed
 # module needs no hand edit. An entry has to MATCH its file (the `DECIDED:` marker in
@@ -631,7 +631,7 @@ files = "(\\.py$|^scripts/.*\\.sh$|^(prek\\.toml|pyproject\\.toml|uv\\.lock)$)"
 # than the soak's own inputs: the soak fixture renders every flux-owned role, and
 # test_no_published_tag_builds_an_image reads every role's tasks for an image-builder
 # include (`images.builder_roles`). So a k8s role edit pays this hook's ~5s. The test module
-# reaches the filter plugins, hosts/lib and the secrets_mgmt, validate and probe_lib code
+# reaches the template filters, hosts/lib and the secrets_mgmt, validate and probe_lib code
 # through pytest's `pythonpath`, so the gate covers those too (#5921).
 [[repos.hooks]]
 id = "static-ratchet-tests-lander"
@@ -639,7 +639,7 @@ name = "Lander deadlines cover the soak"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider hosts/tests/test_lander_deadlines_cover_the_soak.py"
 language = "system"
 pass_filenames = false
-files = "^(cluster/services\\.yml|\\.github/workflows/promote\\.yml|ansible/inventory/.*|ansible/roles/k8s/[^/]+/(tasks|templates|defaults|files)/.*|hosts/lib/.*\\.py|hosts/components/(claude-code|renovate-agent)/.*|ansible/filter_plugins/[^/]+\\.py|scripts/(deploy_tools|renderer|lib|secrets_mgmt|validate)/.*\\.py|scripts/diagnostics/probe_lib/(core|host_reader|obs_api|health_checkout)\\.py|ansible/tests/_[^/]+\\.py|hosts/tests/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(cluster/services\\.yml|\\.github/workflows/promote\\.yml|ansible/inventory/.*|ansible/roles/k8s/[^/]+/(tasks|templates|defaults|files)/.*|hosts/lib/.*\\.py|hosts/components/(claude-code|renovate-agent)/.*|scripts/renderer/template_filters/[^/]+\\.py|scripts/(deploy_tools|renderer|lib|secrets_mgmt|validate)/.*\\.py|scripts/diagnostics/probe_lib/(core|host_reader|obs_api|health_checkout)\\.py|ansible/tests/_[^/]+\\.py|hosts/tests/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Every `checksum/<name>` a CLAUDE.md names, against the k8s roles' rendered manifests. The
 # render reaches scripts/validate/k8s_manifests.py and its validate_lib through pytest's
@@ -650,10 +650,10 @@ name = "Documented checksum annotations exist in the manifests"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/k8s/test_checksum_annotations_documented.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/k8s/.*|CLAUDE\\.md|ansible/(templates|filter_plugins)/.*|ansible/tests/(_[^/]+|render_share|k8s/test_checksum_annotations_documented)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/secrets_mgmt/cluster_vars_check\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|ansible/roles/k8s/.*|CLAUDE\\.md|ansible/templates/.*|ansible/tests/(_[^/]+|render_share|k8s/test_checksum_annotations_documented)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/secrets_mgmt/cluster_vars_check\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Every tracked `.sh` and rendered `*.sh.j2` answers `--help`. The test module renders the
-# templates through scripts/lib, scripts/validate and the filter plugins, which it reaches
+# templates through scripts/lib, scripts/validate and the template filters, which it reaches
 # through pytest's `pythonpath` (#5921).
 [[repos.hooks]]
 id = "static-ratchet-tests-shell"
@@ -661,13 +661,13 @@ name = "Shell entry points answer --help"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/repo/test_shell_entry_points_answer_help.py"
 language = "system"
 pass_filenames = false
-files = "(^scripts/renderer/renderer_lib/(dialect|environment|jinja_filters)\\.py$|\\.sh(\\.j2)?$|^ansible/tests/(_[^/]+|repo/test_shell_entry_points_answer_help)\\.py$|^(ansible/filter_plugins|scripts/(lib|validate))/.*\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
+files = "(^(hosts/lib/host_lib|scripts/lib/longhorn_lib/longhorn_backups)\\.py$|^scripts/renderer/renderer_lib/(dialect|environment|jinja_filters)\\.py$|\\.sh(\\.j2)?$|^ansible/tests/(_[^/]+|repo/test_shell_entry_points_answer_help)\\.py$|^scripts/(lib|validate|renderer/template_filters)/.*\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 
 # The two Renovate-rule modules: renovate.json against the autodeploy denylist, which each
 # k8s role's `k8s_autodeploy` in its defaults and `lib.k8s_roles` decide, and against who
 # owns each pin. Role defaults and the Dockerfile templates hold nearly every pin; a pin a
 # custom manager reads from a workflow, a task file or prek.toml reaches CI's `pytest` job
-# instead of this hook. The modules reach every filter plugin and scripts/validate through
+# instead of this hook. The modules reach every template filter and scripts/validate through
 # pytest's `pythonpath`, so the gate covers those too (#5921).
 [[repos.hooks]]
 id = "static-ratchet-tests-renovate"
@@ -675,7 +675,7 @@ name = "Renovate rules carry the autodeploy denylist marker"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py"
 language = "system"
 pass_filenames = false
-files = "^(cluster/services\\.yml|renovate\\.json|ansible/inventory/.*|ansible/roles/[^/]+/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|ansible/filter_plugins/[^/]+\\.py|ansible/tests/(_[^/]+|render_share|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/secrets_mgmt/cluster_vars_check\\.py|scripts/dev/k8s_autodeploy_counts\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|renovate\\.json|ansible/inventory/.*|ansible/roles/[^/]+/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|scripts/renderer/template_filters/[^/]+\\.py|ansible/tests/(_[^/]+|render_share|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/secrets_mgmt/cluster_vars_check\\.py|scripts/dev/k8s_autodeploy_counts\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Six more rules that failed PR CI between 2026-10-18 and 2026-10-25: the eval cases'
 # CLAUDE.md quotes, the k8s_host_files pairs (deleted with the role's rows in H7.48), the Landings board, the deployer's import
@@ -718,7 +718,7 @@ name = "Alert rules meet the alert conventions"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/test_validate_alert_rules.py::test_the_tree_rules_meet_every_convention_is_clean"
 language = "system"
 pass_filenames = false
-files = "^(cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|ansible/roles/k8s/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|ansible/roles/k8s/loki-homelab/(files/rules/.*|templates/(rules-)?configmap\\.yaml\\.j2|templates/config/config\\.alloy\\.j2|defaults/main\\.yml)|ansible/roles/k8s/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|ansible/roles/k8s/observability/defaults/main\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/filter_plugins/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/k8s_manifests\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/validate/tests/test_validate_alert_rules\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|cluster/services\\.yml|scripts/renderer/(renderer_lib/[^/]+|shadow_diff)\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/plain_scalar\\.py|ansible/roles/k8s/observability/(files/rules|tests/rules|files/alertmanager|tests/alertmanager)/.*|ansible/roles/k8s/loki-homelab/(files/rules/.*|templates/(rules-)?configmap\\.yaml\\.j2|templates/config/config\\.alloy\\.j2|defaults/main\\.yml)|ansible/roles/k8s/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|ansible/roles/k8s/observability/defaults/main\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/renderer/template_filters/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/notification_renders\\.py|scripts/validate/k8s_manifests\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/validate/tests/test_validate_alert_rules\\.py|scripts/lib/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # The unit-template census: every unit template the validator must find still exists.
 [[repos.hooks]]
@@ -727,7 +727,7 @@ name = "Every known unit template is still discovered"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/test_validate_unit_templates.py::test_discover_templates_finds_the_known_set"
 language = "system"
 pass_filenames = false
-files = "^((ansible/roles|hosts/components)/.*\\.(service|timer|socket|rules)\\.j2|scripts/validate/(unit_templates|tests/test_validate_unit_templates)\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/[^/]+\\.py|ansible/filter_plugins/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(hosts/lib/host_lib\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|(ansible/roles|hosts/components)/.*\\.(service|timer|socket|rules)\\.j2|scripts/validate/(unit_templates|tests/test_validate_unit_templates)\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/[^/]+\\.py|scripts/renderer/template_filters/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
 
 # The `hooks` key of .claude/settings.json is rendered from the `# gen-hooks:` block each file

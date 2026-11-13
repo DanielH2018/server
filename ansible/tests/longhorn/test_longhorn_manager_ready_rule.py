@@ -1,12 +1,12 @@
 """`ready_manager_ip` picks this node's ready longhorn-manager pod (#3736).
 
-`scripts/backup/volume_revert.py` and the snapshot reaper call `filter_plugins/longhorn_manager.py`. This runs
+`scripts/backup/volume_revert.py` and the snapshot reaper call `template_filters/longhorn_manager.py`. This runs
 the function over pod lists and asserts it picks the IP typed out here.
 """
 
 import pytest
 
-from longhorn_manager import ready_manager_ip
+from renderer.template_filters.longhorn_manager import ready_manager_ip
 
 NODE = "this-node"
 

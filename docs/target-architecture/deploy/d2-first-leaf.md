@@ -274,7 +274,7 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
   `stub-` plus the key with underscores turned to hyphens. At the baseline a stub-mode
   render therefore wrote `domain` as `stub-domain`.
     - Since R2's domain PR 2b (#5007), `PUBLISHED` in
-      `ansible/filter_plugins/secret_stubs.py` holds `domain`, so `homelab_stub_keys`
+      `scripts/renderer/template_filters/secret_stubs.py` holds `domain`, so `homelab_stub_keys`
       leaves it out. A stub-mode render writes the inventory value of `domain`, and a
       placeholder-mode render writes it as a literal, never as `${domain}`. The D2.6c gate
       tests below still use `stub-domain` and `${domain}`, as fixture inputs a gate must
@@ -375,7 +375,7 @@ them:
 
 Three readers answer both predicates:
 
-- the Ansible filter `ansible_owned`, added to `ansible/filter_plugins/toposort.py` beside
+- the Ansible filter `ansible_owned`, added to `scripts/renderer/template_filters/toposort.py` beside
   `filter_by_platform`, which keeps the Ansible-owned entries;
 - `tag_owners(host_vars)`, added to `scripts/lib/k8s_roles.py` for every script, which maps
   each tag whose entry sets `owner` to its value;
@@ -950,7 +950,7 @@ through Alertmanager from the first real flip.
 ### Tree diff
 
 ```diff
-  ansible/filter_plugins/toposort.py                     + ansible_owned              (PR D2.1d only)
+  scripts/renderer/template_filters/toposort.py                     + ansible_owned              (PR D2.1d only)
   ansible/deploy.yml                                     batch loop over              (PR D2.1d only)
                                                            containers_list | ansible_owned
   scripts/lib/k8s_roles.py                               + tag_owners
@@ -1088,7 +1088,7 @@ that D2.6d adds.
    nothing else in D2, and it lands before D2.2, whose three-reader census reads all three
    readers. The PR holds only these two play edits and their tests, so the refusal it draws
    is its own.
-    - Add `ansible_owned` to `ansible/filter_plugins/toposort.py` beside
+    - Add `ansible_owned` to `scripts/renderer/template_filters/toposort.py` beside
       `filter_by_platform`. Batch `containers_list | ansible_owned` in `ansible/deploy.yml`.
     - Tests in `ansible/tests/deploy/`:
         - the batch loop skips a fixture `flux` entry and a fixture `released` entry, while
@@ -1910,7 +1910,7 @@ in other documents, which this round hands to their owners.
 - **D2-I1-01 (high): D2.1a edited the play and `toposort.py`, so its landing owed every k8s
   service, and the plan called it inert.** Confirmed:
     - `deploy_changes.py:_BROAD_PLAY_PREFIXES` holds `ansible/deploy.yml` and
-      `ansible/filter_plugins/`;
+      `scripts/renderer/template_filters/`;
     - `narrow_lib/broad.py:broad_path_tags` raises `CannotNarrow` for a `PLAY_PREFIXES`
       path, and its module docstring says that `toposort.py`'s caller in `deploy.yml`
       refuses;

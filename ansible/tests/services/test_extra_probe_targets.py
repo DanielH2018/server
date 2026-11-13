@@ -20,9 +20,9 @@ import copy
 
 from _helpers import K8S_ROLES
 from _k8s_render import host_context, render_role_template
-from entry_fields import published_ports
+from renderer.template_filters.entry_fields import published_ports
 from lib import yaml_fast
-from service_tier import in_service_tier
+from renderer.template_filters.service_tier import in_service_tier
 
 OBS = K8S_ROLES / "observability"
 BLACKBOX = K8S_ROLES / "blackbox-exporter"

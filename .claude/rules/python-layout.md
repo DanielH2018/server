@@ -1,7 +1,6 @@
 ---
 paths:
   - "scripts/**"
-  - "ansible/filter_plugins/**"
   - "ansible/tests/**"
   - "ansible/roles/**/tests/**"
   - ".claude/hooks/**"
@@ -70,14 +69,6 @@ host packages and their components under `hosts/` goes in `hosts/tests/`. The sh
   `test_census_rows_test_renders.py`.
 - `ansible/tests/_row_table.py` is the harness the tables share. A property needing a second
   render context, a cross-document join or a long exemption list keeps its own file.
-
-## A filter plugin's tests go in `ansible/tests/`
-
-`ansible/filter_plugins/` is a `pythonpath` root that the renderer and the render guards import
-by bare module name (`scripts/lib/ansible_jinja_env.py`). Its tests sit in the `ansible/tests/`
-subdirectory for what the filter derives, as `deploy/test_toposort.py` does for `toposort.py`.
-`testpaths` does not reach `ansible/filter_plugins/`, so `test_repo_has_no_orphaned_test_files`
-refuses a test placed there.
 
 ## A new check ships with a proof it can go red
 

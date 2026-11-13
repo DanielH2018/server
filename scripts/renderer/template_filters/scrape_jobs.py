@@ -1,4 +1,4 @@
-"""Ansible filter plugin deriving plain Prometheus scrape jobs from `metrics` on containers_list.
+"""Filters deriving plain Prometheus scrape jobs from `metrics` on containers_list.
 
 An exporter's metrics port is declared once, as a `metrics` item on its `containers_list` entry
 (#3743). Three consumers read it:
@@ -34,20 +34,9 @@ A job needing auth, relabeling or pod discovery stays hand-written in the templa
 key raises rather than being ignored, so a `basic_auth:` written here fails the render instead of
 rendering a job without it.
 
-No Ansible import, so the render harnesses register the same function the renderer runs.
-`FilterModule` re-raises a function's `ValueError` as `FilterError` prefixed with the
-filter's name.
+`lib.ansible_jinja_env` registers each so a `ValueError` reaches the operator as a `FilterError`
+prefixed with the filter's name.
 """
-
-import sys as _sys
-from pathlib import Path as _Path
-
-# Ansible loads a plugin by file path, so `filter_errors` beside it imports by bare name only
-# once this directory is on the path (#4527).
-if str(_Path(__file__).resolve().parent) not in _sys.path:
-    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
-
-from filter_errors import _as_filter
 
 _REQUIRED = ("job",)
 _OPTIONAL = ("port", "service", "path", "interval", "params", "replicas_var")
@@ -163,12 +152,3 @@ def entry_port(containers_list, name):
                 raise ValueError(f"containers_list entry {name!r} has no `port`")
             return int(entry["port"])
     raise ValueError(f"no containers_list entry is named {name!r}")
-
-
-class FilterModule:
-    def filters(self):
-        return {
-            "scrape_jobs": _as_filter(scrape_jobs),
-            "metrics_port": _as_filter(metrics_port),
-            "entry_port": _as_filter(entry_port),
-        }

@@ -13,7 +13,7 @@ from lib.render_guard import StrictChainableUndefined, host_files, host_layer, l
 from lib.repo_paths import HOST_VARS, K8S_ROLES, K8S_SERVICES
 from renderer import shadow_diff
 from renderer.renderer_lib.context import sorted_services, template_context
-from toposort import build_k8s_dep_map, toposort_containers
+from renderer.template_filters.toposort import build_k8s_dep_map, toposort_containers
 
 ROLE = K8S_ROLES / "littlelink"
 

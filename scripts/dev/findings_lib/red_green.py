@@ -27,7 +27,7 @@ REPO = Path(__file__).resolve().parents[3]
 def suite_covered(path: str, repo: Path = REPO) -> bool:
     """Whether `path` is code the suite runs, or a test it collects.
 
-    Python under `scripts/`, the filter plugins and the hooks, and anything a role ships from
+    Python under `scripts/` and the hooks, and anything a role ships from
     `files/` when that role has its own `tests/`: monitor-bridge's registry and the HA Jinja
     macros are both that shape. A doc, a template or a task file is not, because no test
     imports it.
@@ -37,7 +37,7 @@ def suite_covered(path: str, repo: Path = REPO) -> bool:
         return True
     if p.parts[:1] == ("scripts",) and p.suffix == ".py":
         return True
-    if p.parent.as_posix() in ("ansible/filter_plugins", ".claude/hooks"):
+    if p.parent.as_posix() == ".claude/hooks":
         return p.suffix == ".py"
     if (
         p.parts[:2] == ("ansible", "roles")

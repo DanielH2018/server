@@ -142,7 +142,7 @@ reader that D6 does not delete.
     - **The annotation chain is host syslog.** Two emitters write a `deploy-annotation`
       line through `logger`: `deploy_io.emit_deploy_annotation` and `deploy.sh`'s
       `deploy_lib/playbook.py:annotate`. Alloy ships host syslog to loki-homelab, and
-      `ansible/filter_plugins/grafana_dashboards.py` adds one query to every provisioned
+      `scripts/renderer/template_filters/grafana_dashboards.py` adds one query to every provisioned
       dashboard, `ansible/roles/k8s/observability/defaults/main.yml:observability_deploy_annotation_expr`,
       which reads `{job="syslog"} |= "event=deploy" | logfmt`. The comment above that key
       names `deployer_lib/deploy_io.py` and "the emit_deploy_annotation comments", and
@@ -248,11 +248,11 @@ reader that D6 does not delete.
 
 `deploy_changes.py:_BROAD_DEPLOY_PREFIXES` lists `ansible/templates/`, `ansible/inventory/`,
 `ansible/deploy.yml`, `ansible/pre_tasks/`, `ansible/tasks/`, `ansible/post_tasks/`,
-`ansible/filter_plugins/` and `ansible.cfg`. Measured with
+`scripts/renderer/template_filters/` and `ansible.cfg`. Measured with
 `deploy_changes.services_from_changed_paths`:
 
 - `group_vars/all.yml`, `host_vars/daniel-pi.yml`, a template under `ansible/templates/`,
-  `deploy.yml`, `tasks/k8s_batch.yml`, `filter_plugins/toposort.py` and `ansible.cfg` each give
+  `deploy.yml`, `tasks/k8s_batch.yml`, `template_filters/toposort.py` and `ansible.cfg` each give
   `broad=True, broad_deploy=True` and no setup role.
 - `ansible/roles/k8s/bento-pdf/templates/deployment.yaml.j2` gives `k8s={'bento-pdf'}`.
 - `deploy_handlers.py` hands `cs.broad_deploy` to `deploy_narrow.plan`, which plans a
@@ -267,7 +267,7 @@ reader that D6 does not delete.
 
 ### The denylist plugin and the `k8s_autodeploy` key
 
-- **The plugin.** `ansible/filter_plugins/k8s_autodeploy.py` (207) defines
+- **The plugin.** `scripts/renderer/template_filters/k8s_autodeploy.py` (207) defines
   `k8s_autodeploy_denylist`, `is_leftover_dir` and `SHARED_ROLES`.
     - Its one Jinja caller is `gitops_deploy/defaults/main.yml:gitops_deploy_k8s_autodeploy_denylist`.
     - `scripts/lib/k8s_roles.py:is_leftover_dir` imports the rule lazily, and `role_dirs`
@@ -533,7 +533,7 @@ These facts come from the D2, D4 and D5 plans, because their code does not exist
 - **D6 deletes the callers and the decision logic:**
     - the deployer's k8s modules, fields and config, `_rollback_k8s`, `reconcile_denylist`,
       and the denylist line in `/etc/gitops-deploy/config.env`;
-    - `filter_plugins/k8s_autodeploy.py`, after moving its two live functions;
+    - `template_filters/k8s_autodeploy.py`, after moving its two live functions;
     - `land_lib`'s k8s deploy arm, `land_rerolls.py`, and `deploy.sh`'s k8s arm;
     - `shared_role_callers.py`, `shared_role_reach.py`, `digest_provable.py`,
       `narrow_lib/broad.py` and `narrow_lib/containers.py`;
@@ -818,7 +818,7 @@ below, so D6 adds no annotation query (#5425).
     - **The soak's query is the second query, and the only one beside the syslog one.**
       D5.3b3 added `observability_flux_deploy_annotation_expr`, which reads
       `{job="k8s", namespace="flux-system", container="soak"} |= "event=deploy" | logfmt`.
-      `ansible/filter_plugins/grafana_dashboards.py` injects it as "Flux deploys", with
+      `scripts/renderer/template_filters/grafana_dashboards.py` injects it as "Flux deploys", with
       refId `FluxDeployAnno`, beside `observability_deploy_annotation_expr`. D6 neither
       replaces it nor adds a third query beside it.
     - **One marker per soaked promotion, not per apply.** `flux_soak.py:main` prints the
@@ -1364,7 +1364,7 @@ than writing a second.
   ansible/roles/setup/gitops_deploy/files/{gitops_markers,gitops_ledger}.py
                                                     - the k8s ledger classes
   ansible/roles/setup/gitops_deploy/tasks/code.yml  copy loop shrinks; absent task grows
-- ansible/filter_plugins/k8s_autodeploy.py
+- scripts/renderer/template_filters/k8s_autodeploy.py
   scripts/lib/k8s_roles.py                          + is_leftover_dir, the denylist rule
 - scripts/deploy_tools/{shared_role_callers,shared_role_reach,digest_provable}.py
   scripts/deploy_tools/reach.py                     k8s readings removed
@@ -2009,7 +2009,7 @@ The steps merged in this order.
       apply, or if that apply fails and leaves a `manual_plane` line, the old lander refuses
       every landing with "the deployer's denylist is empty". That refusal fails closed, so
       it is harmless for a tick and visible in the verdict file.
-    - Delete `ansible/filter_plugins/k8s_autodeploy.py`, its row in
+    - Delete `scripts/renderer/template_filters/k8s_autodeploy.py`, its row in
       `SETUP_ROLES_CALLING_FILTER_PLUGINS`, and its path in `gen_doc_fragments.py`'s
       `_autodeploy_coverage` sources.
     - Delete the denylist path that D6.1 kept, and nothing else of the deployer's config:
@@ -2501,7 +2501,7 @@ uv run mkdocs build --strict --site-dir /tmp/d6-site
 
 # Exit 5.
 git ls-files scripts/deploy_tools/narrow_lib/broad.py scripts/diagnostics/probe_lib/releases.py \
-  ansible/filter_plugins/k8s_autodeploy.py | grep -c .   # 0, and so on for the tree diff
+  scripts/renderer/template_filters/k8s_autodeploy.py | grep -c .   # 0, and so on for the tree diff
 git grep -n -w -e K8S_ROLES_IMPORTING_SETUP_FILES -e k8s_lookup_readers \
   -e narrow_deploy_plane -e _rollback_k8s -e reconcile_denylist -e k8s_remediation \
   -e shared_caller_tags -- ansible scripts \
@@ -3730,7 +3730,7 @@ Nothing is refuted.
 - **D6-F1-01 (high): the moved set counted only `cluster/<tag>/`.** Fixed.
     - **Confirmed.** C1 *Cluster output* also publishes `cluster/<tag>-deferred/`, the
       `-snapshot` and `-verify` directories, `flux/<tag>.yaml` and each shared kind's files.
-      C3 *Ordering* takes `dependsOn` from `ansible/filter_plugins/toposort.py`, and an
+      C3 *Ordering* takes `dependsOn` from `scripts/renderer/template_filters/toposort.py`, and an
       ordering no template carries sits in `depends_on:` on the inventory entry. D4's *What
       counts as changed* counts `cluster/<tag>/` only, so an edge-only PR, which D4's arm 2
       requires, reached `land-wait` with an empty list. So did a `-deferred`-only,

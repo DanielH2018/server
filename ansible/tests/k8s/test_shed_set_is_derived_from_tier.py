@@ -1,6 +1,6 @@
 """The lost-node shed set is the untiered entries, derived from containers_list `tier` (#3481).
 
-`shed_entries` in `filter_plugins/service_tier.py` derives it and `probe.py shed-set` prints
+`shed_entries` in `template_filters/service_tier.py` derives it and `probe.py shed-set` prints
 it. Scaling these to zero is meant to leave the tiered services untouched, which holds only
 while no tiered entry depends on a shed one. `NEVER_SHED` keeps the untiered cluster plumbing
 out of it, and it must equal the untiered roles that set `flux_prune: false` (H1.1d). `cluster-base`
@@ -15,7 +15,11 @@ from _k8s_render import k8s_entries
 from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES
 from lib.service_tiers import shed_set
-from service_tier import NEVER_SHED, SERVICE_TIERS, shed_entries
+from renderer.template_filters.service_tier import (
+    NEVER_SHED,
+    SERVICE_TIERS,
+    shed_entries,
+)
 
 
 def _entry(name, tier=None, **extra):

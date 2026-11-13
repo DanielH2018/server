@@ -97,7 +97,7 @@ a shadow, and Ansible stays the only writer to the cluster.
   `netpol-baseline-observability`.
 - **Templates read the play's view of `containers_list`.** The k8s play in `ansible/deploy.yml`
   filters the list with `filter_by_platform('k8s')` and sorts it with
-  `ansible/filter_plugins/toposort.py:toposort_containers`. 70 template and defaults files
+  `scripts/renderer/template_filters/toposort.py:toposort_containers`. 70 template and defaults files
   read `containers_list`, so list order reaches rendered bytes (homepage tiles, Kuma
   monitors, scrape jobs).
 - **Templates read other hosts through `hostvars`.** `scripts/lib/render_context.py:_hostvars`
@@ -122,7 +122,7 @@ a shadow, and Ansible stays the only writer to the cluster.
   of all 294 templates (the 273 role templates and the 21 shared macros) through
   `scripts/lib/ansible_jinja_env.py:register_ansible_filters` collects every filter and test name.
   Two filters are not registered. `homelab_role_label` comes from
-  `ansible/filter_plugins/role_label.py`, and `role-labelled.yaml.j2` uses it. `from_json`
+  `scripts/renderer/template_filters/role_label.py`, and `role-labelled.yaml.j2` uses it. `from_json`
   is used by `home-assistant/templates/config/secrets.yaml.j2`. No template uses `from_yaml`.
   The content-tag expression in the task "Compute the content tag" in
   `ansible/roles/k8s/image-builder/tasks/main.yml` does use it. `template_env` defaults to
@@ -203,7 +203,7 @@ a shadow, and Ansible stays the only writer to the cluster.
 - **A deploy-plane change is deferred, not applied.**
   `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:_BROAD_PLAY_PREFIXES`
   derives to `ansible/deploy.yml`, `ansible/pre_tasks/`, `ansible/tasks/`,
-  `ansible/post_tasks/` and `ansible/filter_plugins/`, since `_BROAD_CENSUS_PREFIXES` holds
+  `ansible/post_tasks/` and `scripts/renderer/template_filters/`, since `_BROAD_CENSUS_PREFIXES` holds
   only `inventory/` and `templates/`.
     - `scripts/deploy_tools/narrow_lib/broad.py:broad_path_tags` maps a filter plugin first,
       through `_filter_tags`, to the roles that name its filters. It raises `CannotNarrow` for
@@ -355,9 +355,9 @@ module under `scripts/renderer/tests/` starts `test_renderer_`.
     - It writes deferred files to `DIR/cluster/<tag>-deferred/`.
     - It writes a `kustomization.yaml` that lists the files in each directory in lexical
       order, the order `kubectl apply -f <dir>/` reads them.
-- `ansible/filter_plugins/secret_stubs.py` holds the stub form, so the renderer and the
+- `scripts/renderer/template_filters/secret_stubs.py` holds the stub form, so the renderer and the
   Ansible preamble read one definition. C1 already has the renderer reuse
-  `ansible/filter_plugins/`.
+  `scripts/renderer/template_filters/`.
     - The filter `homelab_stub_keys` takes the parsed `secrets.yml` mapping. It returns the
       sorted key names without `sops` and without the keys in `NEVER_STUB`.
     - The filter `homelab_secret_stub` maps a variable `K` to `stub-` plus `K` with underscores
@@ -388,7 +388,7 @@ module under `scripts/renderer/tests/` starts `test_renderer_`.
       them in `ansible/pre_tasks/load_secrets.yml`, a `PLAY_PREFIXES` path, and
       `broad.py:_sort_hits` then raises `CannotNarrow` for that hit. From PR 5 on, every
       edit to the plugin lands like PR 5 itself (*Risks*).
-    - Ansible loads every module under `filter_plugins/` in every play, so the plugin uses
+    - Ansible loads every module under `template_filters/` in every play, so the plugin uses
       the standard library only. It never imports ansible-core, which also keeps R4's
       ansible-core grep over the renderer's filter plugins clean.
 - `shadow_diff.py` is a second entry point with four subcommands.
@@ -576,7 +576,7 @@ render, as a second check on the bytes themselves.
 
 A branch that changes only `scripts/renderer/` leaves Ansible's render of X unchanged. One
 operator run at X therefore serves every such branch based on X, and the agent renders and
-compares each branch itself. A branch that changes `ansible/filter_plugins/secret_stubs.py`
+compares each branch itself. A branch that changes `scripts/renderer/template_filters/secret_stubs.py`
 changes the stub file, and so both halves. It needs a new operator run at a master SHA that
 holds it.
 
@@ -603,7 +603,7 @@ channels, and R1 records each one rather than rendering it:
 + scripts/renderer/renderer_lib/task_inputs.py  (+ PINNED_LIVE_FACTS and its reader tags)
 + scripts/renderer/renderer_lib/cluster.py
 + scripts/renderer/tests/                       (library tests, four determinism modules)
-+ ansible/filter_plugins/secret_stubs.py        (stub form, key list, comparison, NEVER_STUB)
++ scripts/renderer/template_filters/secret_stubs.py        (stub form, key list, comparison, NEVER_STUB)
 + ansible/tests/k8s/                            (+ the secret-key task census module)
 + docs/homelab-render.md
   mkdocs.yml                                    (+ nav entry for docs/homelab-render.md)
@@ -645,7 +645,7 @@ updates `docs/homelab-render.md` for what it adds.
    needs PR 1a's stub file.
 
    **PR 1a: the stub module and the stub file** (about 160 lines).
-   `ansible/filter_plugins/secret_stubs.py`, complete: `homelab_stub_keys`,
+   `scripts/renderer/template_filters/secret_stubs.py`, complete: `homelab_stub_keys`,
    `homelab_secret_stub` with the home-assistant shape, `homelab_unstubbed_keys` and
    `NEVER_STUB`. `renderer_lib/task_inputs.py` holding only `PINNED_LIVE_FACTS`.
    `shadow_diff.py stubs`. `docs/homelab-render.md`, with its nav entry in `mkdocs.yml`
@@ -676,7 +676,7 @@ updates `docs/homelab-render.md` for what it adds.
       module in the weights table, so PR 1b refreshes its weight with `uv run python
       scripts/dev/pytest_shard.py --record-files` on that path.
 
-   `ansible/filter_plugins/` is a deploy-plane prefix. No file that `_grep` reads names the
+   `scripts/renderer/template_filters/` is a deploy-plane prefix. No file that `_grep` reads names the
    new filters yet, so `_filter_tags` maps the plugin to no tag and the tick merges and
    applies nothing. The executor reads the tick's `narrow:` journal line to confirm it. If
    the tick defers instead, the landing is the one PR 5 describes.
@@ -751,7 +751,7 @@ updates `docs/homelab-render.md` for what it adds.
       skipped and the play variable is read by nothing, so no fleet apply is owed.
     - **What it changes for later PRs.** The preamble now names `homelab_stub_keys` and
       `homelab_unstubbed_keys`. From this merge on, `_filter_tags` cannot narrow an edit to
-      `ansible/filter_plugins/secret_stubs.py`, and every such edit lands exactly like this
+      `scripts/renderer/template_filters/secret_stubs.py`, and every such edit lands exactly like this
       PR: a `k8s_unapplied` line for every declared service and `needs-manual-apply`. A
       stub edit moves no byte of a real render, so the lines clear the same way. R2's and
       R3's edits to the plugin inherit this landing (*Risks*).
@@ -1164,7 +1164,7 @@ whole-tree comparison, such as two full renders of one commit.
       R2 is the call without `--secret-stubs`. Its `flux/` writer skips stub mode. Its
       publish census also refuses any rendered string that contains a stub token: `stub-`
       followed by a `secrets.yml` key name or a `PINNED_LIVE_FACTS` name with underscores
-      turned to hyphens, as `ansible/filter_plugins/secret_stubs.py`'s
+      turned to hyphens, as `scripts/renderer/template_filters/secret_stubs.py`'s
       `homelab_secret_stub` builds it. A test of "equals the stub form" would miss both
       `bento-pdf.local.stub-domain` and the three home-assistant field values, which hold
       the token inside a longer string. That census has no false positive at the baseline:

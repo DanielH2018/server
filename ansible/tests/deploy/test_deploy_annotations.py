@@ -70,7 +70,7 @@ def test_the_expr_parses_the_fields_the_annotation_renders():
     of the service list — degraded rather than broken, and easy to miss.
     """
 
-    import grafana_dashboards
+    from renderer.template_filters import grafana_dashboards
 
     expr = load_defaults(_ROLE)["observability_deploy_annotation_expr"]
     annotation = grafana_dashboards.build_annotation("x", expr)
@@ -179,7 +179,7 @@ def test_the_template_injects_both_queries_into_every_board():
 
 def test_the_flux_query_matches_what_the_soak_job_prints():
     """The second query's join: its line filter, its parsed field and its container."""
-    import grafana_dashboards
+    from renderer.template_filters import grafana_dashboards
     from renderer.renderer_lib import soak
 
     expr = load_defaults(_ROLE)["observability_flux_deploy_annotation_expr"]

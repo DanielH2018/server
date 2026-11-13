@@ -60,7 +60,7 @@ DECIDED: the vendored Deployments meet each fleet guard by a render-time patch, 
 exemption row, with one exception. From the target architecture's slice D5 on, these
 controllers apply every service, and an exemption would be a lasting hole for that workload.
 `templates/components.yaml.j2` passes the file through the `flux_components` filter
-(`ansible/filter_plugins/flux_components.py`), which:
+(`scripts/renderer/template_filters/flux_components.py`), which:
 
 - merges `flux_pod_patch` into each Deployment: `revisionHistoryLimit`, `enableServiceLinks:
   false`, and a pod-level `runAsUser`/`runAsGroup` of 65534, the uid each image declares;

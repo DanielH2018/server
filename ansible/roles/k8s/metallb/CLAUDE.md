@@ -40,7 +40,7 @@ probes stay green.
   is, because a reset would re-apply an older vendored file over upgraded CRDs.
   `ansible/tests/k8s/test_forward_only_tags.py` holds the flagged roles equal to the H1
   plan's list.
-- **`NEVER_SHED` names the tag** in `ansible/filter_plugins/service_tier.py`. The role is
+- **`NEVER_SHED` names the tag** in `scripts/renderer/template_filters/service_tier.py`. The role is
   untiered, and the lost-node break-glass must not scale the announcer down.
   `ansible/tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune`
   holds the set equal to the untiered roles that set `flux_prune: false`.

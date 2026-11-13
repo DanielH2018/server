@@ -1,4 +1,4 @@
-"""Ansible filter plugin deriving Authelia's per-service access_control rules from containers_list.
+"""The filter deriving Authelia's per-service access_control rules from containers_list.
 
 Every `use_authelia: true` entry declares its own `auth_tier` beside its hostname, and the
 Authelia config template renders the per-service rules from that declaration. Until 2026-09-18
@@ -81,10 +81,3 @@ def authelia_service_rules(containers_list, domain, one_factor_networks):
             rule["networks"] = list(one_factor_networks)
         rules.append(rule)
     return rules
-
-
-class FilterModule:
-    """Ansible filter plugin registering the Authelia access_control helper."""
-
-    def filters(self):
-        return {"authelia_service_rules": authelia_service_rules}

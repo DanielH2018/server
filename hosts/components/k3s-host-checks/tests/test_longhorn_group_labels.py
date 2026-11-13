@@ -14,7 +14,7 @@ import pytest
 
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_env, register_ansible_filters
-from longhorn_groups import (
+from renderer.template_filters.longhorn_groups import (
     backup_group_label,
     longhorn_backup_name,
     longhorn_nobackup_claims,

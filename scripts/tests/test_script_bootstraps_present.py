@@ -3,7 +3,7 @@
 `.claude/rules/python-layout.md`: a directly-invoked script gets only its OWN directory on
 `sys.path`; `pyproject.toml`'s `pythonpath` list is a pytest-only setting. So a module that does `from
 lib.docs_provenance import ...` (or reaches into another `scripts/` subdirectory, or across into
-`ansible/filter_plugins`/a role's `files/`) resolves fine under pytest and then raises
+`hosts/lib`/a role's `files/`) resolves fine under pytest and then raises
 `ModuleNotFoundError` the moment a cron or a human runs it directly with `uv run python
 scripts/...`. Every such module is supposed to carry its own `sys.path.insert(...)` bootstrap rather
 than rely on pytest's `pythonpath`.
@@ -12,8 +12,8 @@ A bare textual check for the string `parents[1]` cannot tell a real bootstrap fr
 this is the *textual-guard-checks-break-on-indirection* class recorded in this repo's own memory.
 A real module proves it:
 
-  - `scripts/lib/ansible_jinja_env.py` needs `ansible/filter_plugins` and bootstraps through
-    `FILTER_PLUGINS`, not `parents[1]` -- a `parents[1]` substring check would wrongly flag
+  - `scripts/backup/longhorn_reap_lib/snapshots.py` needs `hosts/lib` and bootstraps through
+    `HOST_LIB_FILES`, not `parents[1]` -- a `parents[1]` substring check would wrongly flag
     this file as missing its bootstrap.
 
 So this test resolves the AST instead of grepping for a pattern: for each cross-directory
@@ -116,7 +116,7 @@ def build_import_index() -> dict[str, set[Path]]:
 
 
 def _resolve_module_file(dotted: str, index: dict[str, set[Path]]) -> Path | None:
-    """The `.py` file a dotted absolute import name (`lib.render_guard`, `toposort`)
+    """The `.py` file a dotted absolute import name (`lib.render_guard`, `host_lib`)
     resolves to, given the same directories `sys.path` would need."""
     parts = dotted.split(".")
     dirs = index.get(parts[0])
@@ -395,7 +395,7 @@ def test_the_import_index_is_not_empty():
     index = build_import_index()
     assert "lib" in index and (SCRIPTS in index["lib"]), index.get("lib")
     assert "docs_provenance" in index, index
-    assert "toposort" in index, index
+    assert "host_lib" in index, index
 
 
 def test_a_fixture_module_under_tests_is_pytest_only_and_a_library_beside_it_is_not():

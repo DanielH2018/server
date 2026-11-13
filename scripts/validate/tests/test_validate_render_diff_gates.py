@@ -19,7 +19,7 @@ import pytest
 from deploy_tools.object_loss import PRUNE_KEY, prune_disabled
 from renderer.renderer_lib.targets import render_targets
 from validate import render_diff_gates as gate
-from toposort import build_k8s_dep_map
+from renderer.template_filters.toposort import build_k8s_dep_map
 
 
 def snap(moved=(), flux=("bento-pdf",), texbrain_deps=(), side="base"):

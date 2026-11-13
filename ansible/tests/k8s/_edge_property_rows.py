@@ -7,7 +7,7 @@ file under the test-module length cap; the rules for what makes a row are in its
 import re
 from functools import cache
 
-from service_tier import tier_entries
+from renderer.template_filters.service_tier import tier_entries
 
 from _helpers import ALL_VARS, HOST_VARS, load_yaml
 from _k8s_render import k8s_entries, pod_spec

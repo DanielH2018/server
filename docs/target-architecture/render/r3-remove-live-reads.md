@@ -152,11 +152,11 @@ no fact. Ansible stays the only writer to the cluster.
     - `monitor-bridge/templates/env-secret.yaml.j2` and
       `uptime-kuma/templates/static-monitors.yaml.j2` call `lookup('vars', check.token)`. The
       loop runs over `CHECKS` in `monitor-bridge/files/check_table.py`, which
-      `ansible/filter_plugins/py_table.py` parses without running it. Each row's `token`
+      `scripts/renderer/template_filters/py_table.py` parses without running it. Each row's `token`
       names its push-token secret. The first row's is `monitor_bridge_disk_push_token`.
     - `observability/templates/prometheus.yaml.j2` calls `lookup('vars', job.replicas_var)`
       over `containers_list | scrape_jobs(k8s_namespace)`
-      (`ansible/filter_plugins/scrape_jobs.py`). The one `replicas_var` at this commit is
+      (`scripts/renderer/template_filters/scrape_jobs.py`). The one `replicas_var` at this commit is
       `terraria_k8s_replicas`, in daniel-box's host_vars, and
       `ansible/inventory/group_vars/all.yml` sets it to `0`.
     - Both plays in `ansible/deploy.yml` set `gather_facts: false`.
@@ -251,7 +251,7 @@ authelia. Its successor after D5 is under *Risks*. The character class and the l
 R1's pinned hash facts until PR 4, then the three `_argon2` keys' ordinary secret stubs, such
 as `stub-authelia-password-argon2`. Neither is PHC-shaped. The guard is R1's PR 4 precedent,
 `not (homelab_secret_stubs | default(false) | bool)`. With it, R3 needs no PHC-shaped stub, so
-it never edits `ansible/filter_plugins/secret_stubs.py`. R1's *Risks* gives every plugin edit
+it never edits `scripts/renderer/template_filters/secret_stubs.py`. R1's *Risks* gives every plugin edit
 after R1's PR 5 a `k8s_unapplied` line for every declared service and a fresh operator shadow
 run, and R3 avoids both. The assert renders nothing, so skipping it changes neither half of
 the shadow pair. Its coverage is the predicate test, the operator-only dry run before PR 3,
@@ -452,14 +452,14 @@ that shadows a default is caught, even though a render never finds that name und
 + scripts/renderer/tests/   (the live-read census, the stub-file key test)
 ```
 
-`ansible/filter_plugins/secret_stubs.py` does not change. The three `_argon2` keys take the
+`scripts/renderer/template_filters/secret_stubs.py` does not change. The three `_argon2` keys take the
 ordinary stub form, and the digest assert skips a stubbed run.
 
 ## Steps, as PRs
 
 R3 moves no object between writers, so C4 has nothing to check. Each PR is deployed by
 Ansible through `land.sh`. PR 4 also changes `ansible/vars/secrets.yml`, which changes the
-verdict its landing prints (PR 4). No PR edits `ansible/filter_plugins/secret_stubs.py`, so none
+verdict its landing prints (PR 4). No PR edits `scripts/renderer/template_filters/secret_stubs.py`, so none
 inherits the deferral that R1's *Risks* gives a plugin edit after R1's PR 5.
 `task_inputs.py` and `shadow_diff.py` are under `scripts/`, not `ansible/`.
 
@@ -837,7 +837,7 @@ Then repeat R1's shadow pair with a fresh `shadow_diff.py stubs` file. `compare`
       test expects no pinned facts.
     - If R2's PR 2 is at the base: R2's pinned-fact refusal, its test pair (`_is_flagged`
       and `_is_clean`) and its sentence in `docs/homelab-render.md` go.
-    - `ansible/filter_plugins/secret_stubs.py` does not change. R1's DNS-label test covers
+    - `scripts/renderer/template_filters/secret_stubs.py` does not change. R1's DNS-label test covers
       the three new keys unchanged, because their ordinary stubs are valid labels.
     - `ansible/roles/k8s/authelia/CLAUDE.md`, *The `claude-ui` user*: the rehash bullet
       becomes a pointer to the procedure. The `vanished-identifier` lint flags a section that
@@ -1028,7 +1028,7 @@ Fixed:
 - **R3-c1-03.** Fixed by a third route, which removes the plugin edit. The digest assert takes
   the `homelab_secret_stubs` guard, after R1's PR 4 precedent for sonarr's reads and asserts.
   A stubbed run then never needs a PHC-shaped stub, so R3 never edits
-  `ansible/filter_plugins/secret_stubs.py` and inherits no fleet-wide deferral. The wrong
+  `scripts/renderer/template_filters/secret_stubs.py` and inherits no fleet-wide deferral. The wrong
   `renderer_lib/secret_stubs.py` path is gone from the file tree and *Tests and docs*. PR 3
   no longer changes the pinned stub values. The finding's DNS-label exemption is not needed:
   the three `_argon2` keys take the ordinary form `stub-authelia-password-argon2` and its

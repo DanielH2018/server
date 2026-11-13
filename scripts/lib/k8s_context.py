@@ -39,7 +39,7 @@ __all__ = [
 # workload's namespace with it.
 #
 # DECIDED: lazy, not registered with `register_ansible_filters` at the top of this module. The
-# heavy tier imports every filter plugin, and this module stays light for `probe.py monitors`.
+# heavy tier imports every template filter, and this module stays light for `probe.py monitors`.
 # A wrapper here costs nothing until a default calls the filter, and then the call builds the
 # heavy environment once.
 _DEFAULTS_PLUGIN_FILTERS = (

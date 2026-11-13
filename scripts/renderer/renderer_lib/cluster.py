@@ -58,7 +58,7 @@ from lib.k8s_roles import (
 )
 from lib.k8s_context import resolve_vars
 from lib.render_guard import SHARED_TPL, StrictChainableUndefined, k8s_services
-from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, JOB_FILES, K8S_ROLES, K8S_SERVICES
+from lib.repo_paths import ANSIBLE, JOB_FILES, K8S_ROLES, K8S_SERVICES
 from renderer.renderer_lib.bundle import (
     KUSTOMIZATION,
     SHARED_KINDS,
@@ -88,11 +88,8 @@ from renderer.renderer_lib.ordering import (
 from renderer.renderer_lib.suspension import SYNC_SUSPEND_KEY, sync_suspend_refusal
 from renderer.renderer_lib.task_inputs import derived_facts, include_vars
 
-# Ansible loads a filter plugin by file path; a script reaches it through this insert.
-if str(FILTER_PLUGINS) not in _sys.path:
-    _sys.path.insert(0, str(FILTER_PLUGINS))
 
-from toposort import K8S_APPLIES_LAST, build_k8s_dep_map
+from renderer.template_filters.toposort import K8S_APPLIES_LAST, build_k8s_dep_map
 
 LABEL_WRAPPER = SHARED_TPL / "role-labelled.yaml.j2"
 FLUX_DEFAULTS = K8S_ROLES / "flux" / "defaults" / "main.yml"

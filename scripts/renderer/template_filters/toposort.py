@@ -1,4 +1,4 @@
-"""Ansible filter plugin for ordering the k8s services.
+"""Orders the k8s services.
 
 `toposort_containers` orders the renderer's entries by the map `build_k8s_dep_map` derives from
 each role's templates and entry. Every entry is a k8s service; the Pi's services deploy from
@@ -170,13 +170,3 @@ def build_k8s_dep_map(containers_list, k8s_roles, applies_last=None):
                 deps.add("traefik")
         dep_map[name] = sorted(deps)
     return dep_map
-
-
-class FilterModule:
-    """Ansible filter plugin registering this module's containers_list helpers."""
-
-    def filters(self):
-        return {
-            "build_k8s_dep_map": build_k8s_dep_map,
-            "toposort_containers": toposort_containers,
-        }

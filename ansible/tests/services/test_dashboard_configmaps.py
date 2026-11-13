@@ -21,7 +21,7 @@ import pytest
 
 from _helpers import ANSIBLE, load_defaults
 from _k8s_render import rendered_texts
-from grafana_dashboards import grafana_deploy_annotated
+from renderer.template_filters.grafana_dashboards import grafana_deploy_annotated
 from lib import yaml_fast
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster

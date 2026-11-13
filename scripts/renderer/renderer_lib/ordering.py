@@ -1,7 +1,7 @@
 """The generated `dependsOn` of the bundle's Kustomizations (D4.2).
 
 Every edge is generated, never hand-written, from an `Ordering` the caller reads out of
-`ansible/filter_plugins/toposort.py` (`cluster.bundle_ordering`):
+`scripts/renderer/template_filters/toposort.py` (`cluster.bundle_ordering`):
 
 - a tag depends on the flux-owned members of its `build_k8s_dep_map` edges. An edge to any
   other role is dropped, because it would name a Kustomization that does not exist, and the

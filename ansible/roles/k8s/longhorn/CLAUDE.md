@@ -109,7 +109,7 @@ host probes stay green.
   image cached measured 36s on 2026-10-22 (#5922), which is one pod's start. A version bump also cold-pulls the image on each node in turn,
   and the Kustomization's `wait: true` waits for the driver deployer and both Deployments too.
   A timeout on this forward-only tag writes `DEPLOY_HOLD`, so the value carries that headroom.
-- **`NEVER_SHED` names the tag** in `ansible/filter_plugins/service_tier.py`. The role is
+- **`NEVER_SHED` names the tag** in `scripts/renderer/template_filters/service_tier.py`. The role is
   untiered, and the lost-node break-glass must not scale the storage control plane down.
   `ansible/tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune`
   holds the set equal to the untiered roles that set `flux_prune: false`.

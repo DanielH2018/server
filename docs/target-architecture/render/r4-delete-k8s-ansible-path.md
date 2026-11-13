@@ -44,7 +44,7 @@ or changes how the renderer reads the tree without changing a rendered byte.
    both stay until H7.
    `ansible/deploy.yml` has no k8s play. `ansible/tasks/k8s_batch.yml`,
    `ansible/tasks/k8s_retire.yml`, `ansible/post_tasks/k8s_stabilise_gate.yml`,
-   `ansible/post_tasks/k8s_image_drift_gate.yml`, `ansible/filter_plugins/k8s_retire.py` and
+   `ansible/post_tasks/k8s_image_drift_gate.yml`, `scripts/renderer/template_filters/k8s_retire.py` and
    `ansible/roles/setup/render_records/` are absent.
 2. **No unit is left behind.** On daniel-box,
    `systemctl list-unit-files 'kuma-check-render-records*'` lists nothing.
@@ -83,7 +83,7 @@ or changes how the renderer reads the tree without changing a rendered byte.
    stated estimate: D2.6b's Kustomization and root writers, D2's footprint digests, D5's
    suffixed kinds, D6's deletion policy and tag rule, R4's moved task-made facts, and H3's
    host and package modes if they have landed, which C1 puts in the same CLI.
-   `ansible/filter_plugins/` is outside the set. An overrun stops R4, and the operator
+   `scripts/renderer/template_filters/` is outside the set. An overrun stops R4, and the operator
    decides whether the dialect ADR's subset shrinks or the bound rises (**operator-only**).
 
 ## Baseline at `70591c307`
@@ -103,9 +103,9 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
   services through `ansible/tasks/k8s_retire.yml` (146 lines), and batches roles through
   `ansible/tasks/k8s_batch.yml` (32 lines). Two post_tasks gate the play:
   `k8s_stabilise_gate.yml` (109 lines) and `k8s_image_drift_gate.yml` (131 lines).
-  `ansible/filter_plugins/k8s_retire.py` has one caller, `k8s_retire.yml`, which loops over
+  `scripts/renderer/template_filters/k8s_retire.py` has one caller, `k8s_retire.yml`, which loops over
   `k8s_retired_services` in `ansible/inventory/group_vars/all.yml`. D2 adds the
-  `ansible_owned` filter to `ansible/filter_plugins/toposort.py`, and D6's ownership table
+  `ansible_owned` filter to `scripts/renderer/template_filters/toposort.py`, and D6's ownership table
   assigns its deletion to R4.
 - **Render metadata lives in task files.** 43 task files outside the `manifests` and
   `image-builder` roles set `manifests_*` or `image_builder_*` include vars. At the baseline
@@ -258,7 +258,7 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
       secrets-defer path.
     - `ansible/inventory/group_vars/all.yml`, `ansible/deploy.yml`,
       `ansible/tasks/k8s_batch.yml`, `ansible/post_tasks/k8s_stabilise_gate.yml` and every
-      file under `ansible/filter_plugins/` that R4 edits give `broad_deploy=True`, the
+      file under `scripts/renderer/template_filters/` that R4 edits give `broad_deploy=True`, the
       deploy-plane arm that D6.12 and D6.18 delete. From D6.12 on, the tick fast-forwards past
       such a path with no apply and writes no ledger line (D6, *The route of a deploy-plane
       path after D6*).
@@ -299,11 +299,11 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
     - `scripts/lib/ansible_jinja_env.py:register_ansible_filters` imports `b64encode`,
       `comment`, `get_hash`, `mandatory`, `to_bool` and `to_uuid` from
       `ansible.plugins.filter.core`, and `search` from `ansible.plugins.test.core`.
-    - `ansible/filter_plugins/toposort.py` and `ansible/filter_plugins/authelia_access.py`,
+    - `scripts/renderer/template_filters/toposort.py` and `scripts/renderer/template_filters/authelia_access.py`,
       which the renderer imports, raise `ansible.errors.AnsibleFilterError`.
     - `scripts/lib/k8s_roles.py:is_leftover_dir` runs a deferred
       `from k8s_autodeploy import is_leftover_dir`, and
-      `ansible/filter_plugins/k8s_autodeploy.py` imports `ansible.errors`. `role_dirs` calls
+      `scripts/renderer/template_filters/k8s_autodeploy.py` imports `ansible.errors`. `role_dirs` calls
       `is_leftover_dir`. `scripts/validate/k8s_manifests.py`,
       `scripts/deploy_tools/setup_routing.py` and `scripts/docs/catalog_lib/catalog_backup.py`
       call `role_dirs`. D6.13 deletes `k8s_autodeploy.py`.
@@ -548,7 +548,7 @@ job, when the PR touches any of these paths:
 - anything under `ansible/roles/k8s/*/tasks/`;
 - a deletion anywhere under `ansible/roles/k8s/`;
 - `scripts/renderer/`, `scripts/lib/k8s_roles.py` or `scripts/lib/ansible_jinja_env.py`;
-- `ansible/filter_plugins/`;
+- `scripts/renderer/template_filters/`;
 - the renderer's dependency pins, from PR 7e: a `uv.lock` or `pyproject.toml` entry for a
   package in the renderer's dependency closure, Jinja2 and MarkupSafe among them.
 
@@ -966,9 +966,9 @@ root is withheld, not suspended*).
   ansible/deploy.yml                               (- the k8s play)
 - ansible/tasks/k8s_batch.yml, ansible/tasks/k8s_retire.yml
 - ansible/post_tasks/k8s_stabilise_gate.yml, ansible/post_tasks/k8s_image_drift_gate.yml
-- ansible/filter_plugins/k8s_retire.py
-  ansible/filter_plugins/toposort.py               (- ansible_owned; ValueError subclass)
-  ansible/filter_plugins/authelia_access.py        (ValueError subclass)
+- scripts/renderer/template_filters/k8s_retire.py
+  scripts/renderer/template_filters/toposort.py               (- ansible_owned; ValueError subclass)
+  scripts/renderer/template_filters/authelia_access.py        (ValueError subclass)
   ansible/inventory/group_vars/all.yml             (- k8s_retired_services, k8s-play-only keys,
                                                      render_records_*)
 - ansible/roles/setup/render_records/
@@ -1083,7 +1083,7 @@ Two costs follow from the narrowing:
 - **D6's later PRs carry a `Render-diff:` line.** From R4.1's merge, the `render-diff` context
   is required, and a PR on a hazard path needs the line (*The render-diff gate*). A grep of
   D6's steps for the hazard paths finds two D6 PRs that can merge after R4.1. D6.13 edits
-  `scripts/lib/k8s_roles.py` and deletes `ansible/filter_plugins/k8s_autodeploy.py`. D6.20
+  `scripts/lib/k8s_roles.py` and deletes `scripts/renderer/template_filters/k8s_autodeploy.py`. D6.20
   edits the deletion policy under `scripts/renderer/`. D6.13 carries `Render-diff: none`, and
   D6.20 lists every `flux/<tag>.yaml` it changes. The design already asks this of every slice
   that edits a hazard path while R4 is in flight.
@@ -1494,7 +1494,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
       `k8s_roles.py` copy alone stays. Each test's citations leave the docs in the same PR,
       as `.claude/rules/python-layout.md` (*A check retires when its subject does*)
       requires.
-    - Delete the `ansible_owned` filter, `ansible/filter_plugins/k8s_retire.py`,
+    - Delete the `ansible_owned` filter, `scripts/renderer/template_filters/k8s_retire.py`,
       `k8s_retired_services` with the retirement arm of D6's
       `scripts/validate/render_diff_gates.py`, which D6 leaves to R4, and every other
       `group_vars/all.yml` key that only the k8s play, its task files or the manifests role
@@ -1558,7 +1558,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
       cluster. A line that still sends the operator to it for the cluster stops this PR,
       and the gap goes to the slice that owns that step.
     - **Route.** The deploy-plane paths, `ansible/deploy.yml`, `ansible/tasks/`,
-      `ansible/post_tasks/`, `ansible/filter_plugins/` and `group_vars/all.yml`, fast-forward
+      `ansible/post_tasks/`, `scripts/renderer/template_filters/` and `group_vars/all.yml`, fast-forward
       with no apply from D6.12 on (D6, *The route of a deploy-plane path after D6*). PR 1
       re-measures that route and the route of a deleted role `tasks/` path after D6.12, and
       this PR quotes both.
@@ -2018,7 +2018,7 @@ daniel-box. The operator produces them, because each needs the host:
    R4's PR 10 does, and PR 1 reports the breakage as a D6 finding. Since the 2026-10-17
    re-slice, R4.1 can merge before D6.13, so R4.8, which follows the whole of D6, reports it.
 7. **Which route does the deployer give a deploy-plane path after D6?** PR 8 edits
-   `ansible/deploy.yml`, `ansible/tasks/`, `ansible/post_tasks/`, `ansible/filter_plugins/`
+   `ansible/deploy.yml`, `ansible/tasks/`, `ansible/post_tasks/`, `scripts/renderer/template_filters/`
    and `group_vars/all.yml`, all `broad_deploy` at the baseline. *Resolution:* resolved in
    D6, *The route of a deploy-plane path after D6*: from D6.12 on, the tick applies nothing
    for such a path, fast-forwards past it as it passes a docs-only one, and writes no ledger

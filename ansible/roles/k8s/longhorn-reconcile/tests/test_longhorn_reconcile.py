@@ -30,7 +30,7 @@ from _reconcile_world import (
     _pvc,
     _volume,
 )
-from longhorn_groups import (
+from renderer.template_filters.longhorn_groups import (
     backup_group_label,
     longhorn_backup_name,
     weekly_backup_group,

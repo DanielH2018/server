@@ -1,4 +1,4 @@
-"""Ansible filter plugin adding the deploy-annotation queries to a provisioned Grafana dashboard.
+"""The filter adding the deploy-annotation queries to a provisioned Grafana dashboard.
 
 observability's `templates/grafana-dashboards.yaml.j2` passes every board under
 `files/dashboards/` through `grafana_deploy_annotated` as it renders the board's ConfigMap, so
@@ -18,22 +18,12 @@ it. An injected annotation must not become something a UI export commits back as
 the injection is idempotent by name as well: a board that already declares an annotation with
 a given name keeps it exactly as it is.
 
-No Ansible import at load time, so the tests call the same function the renderer runs.
-`FilterModule` registers it through `_as_filter`, which re-raises a `ValueError` as
-`FilterError("grafana_deploy_annotated: ...")` and fails the render task before any
-apply.
+`lib.ansible_jinja_env` registers it so a `ValueError` fails the render as
+`FilterError("grafana_deploy_annotated: ...")` before any apply.
 """
 
 import json
-import sys as _sys
-from pathlib import Path as _Path
 
-# Ansible loads a plugin by file path, so `filter_errors` beside it imports by bare name only
-# once this directory is on sys.path.
-if str(_Path(__file__).resolve().parent) not in _sys.path:
-    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
-
-from filter_errors import _as_filter
 
 # The name is the idempotency key. Renaming it re-injects alongside the old one rather than
 # replacing it, so treat each as a fixed identifier rather than a label to tune.
@@ -103,10 +93,3 @@ def grafana_deploy_annotated(text: str, uid: str, expr: str, flux_expr: str) -> 
         doc, build_annotation(uid, flux_expr, FLUX_ANNOTATION_NAME, "FluxDeployAnno")
     )
     return json.dumps(doc, indent=2, sort_keys=True) + "\n"
-
-
-class FilterModule:
-    """Ansible filter plugin entry point."""
-
-    def filters(self):
-        return {"grafana_deploy_annotated": _as_filter(grafana_deploy_annotated)}

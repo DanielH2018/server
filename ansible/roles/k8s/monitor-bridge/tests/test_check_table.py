@@ -2,7 +2,7 @@
 
 The table is the one place a check is declared (#3659, #3788). The registry and the gate sets
 derive from it in Python, and the docs fragments derive from it through
-`ansible/filter_plugins/py_table.py`, which parses the module instead of running it. What is
+`scripts/renderer/template_filters/py_table.py`, which parses the module instead of running it. What is
 left to check is that each derivation reads what the table says.
 
 The rows carry no secret since M6 batch A6-8, so nothing here reads `secrets.yml`.
@@ -16,7 +16,7 @@ import check
 import registry
 from bridge.types import PushCheck
 from check_table import CHECKS
-from py_table import py_table
+from renderer.template_filters.py_table import py_table
 
 from _bridge_env import bridge_env
 

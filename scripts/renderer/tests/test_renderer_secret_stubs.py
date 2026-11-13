@@ -1,4 +1,4 @@
-"""The secret stub form in `ansible/filter_plugins/secret_stubs.py`, against the real tree.
+"""The secret stub form in `scripts/renderer/template_filters/secret_stubs.py`, against the real tree.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_secret_stubs.py
 """
@@ -9,7 +9,7 @@ import pytest
 
 from lib import yaml_fast
 from lib.repo_paths import ANSIBLE
-from secret_stubs import (
+from renderer.template_filters.secret_stubs import (
     NEVER_STUB,
     homelab_secret_stub,
     homelab_stub_keys,

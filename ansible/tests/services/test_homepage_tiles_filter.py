@@ -1,4 +1,4 @@
-"""Unit tests for filter_plugins/homepage_tiles.py.
+"""Unit tests for template_filters/homepage_tiles.py.
 
 `homepage_widget: true` on a containers_list entry both opens the entry's fence to homepage
 (`netpol_callers`) and is how homepage's tile list builds a ClusterIP widget URL
@@ -21,9 +21,8 @@ import pytest
 
 from _homepage_config import config_urls, namespace
 from _k8s_render import host_context, rendered_docs
-from filter_errors import FilterError
-from homepage_tiles import (
-    FilterModule,
+from lib.ansible_jinja_env import FilterError, repo_filters
+from renderer.template_filters.homepage_tiles import (
     homepage_href,
     homepage_widget_url,
     netpol_caller_fences,
@@ -200,5 +199,5 @@ def test_caller_fences_skip_what_a_role_renders_itself():
 def test_a_refusal_is_a_filter_error_named_for_its_filter(name, args):
     """A render failure names the filter that refused, through the filter Ansible calls."""
     with pytest.raises(FilterError) as caught:
-        FilterModule().filters()[name](ENTRIES, *args)
+        repo_filters()[name](ENTRIES, *args)
     assert str(caught.value).startswith(f"{name}: "), str(caught.value)

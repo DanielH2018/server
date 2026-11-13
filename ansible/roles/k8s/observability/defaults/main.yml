@@ -247,7 +247,7 @@ observability_dashboard_folders:
 # plus the lines deploy.sh wrote before H7.53c deleted it. The soak Job prints a line for every
 # promotion that passes its soak, which `observability_flux_deploy_annotation_expr` reads. Alloy
 # ships both to loki-homelab, and every dashboard gets one annotation query per source injected
-# at render time by the grafana_deploy_annotated filter (ansible/filter_plugins/grafana_dashboards.py).
+# at render time by the grafana_deploy_annotated filter (scripts/renderer/template_filters/grafana_dashboards.py).
 # No Grafana API call, so no pinned ClusterIP and no standing write credential. Every line carries
 # `result=ok|fail|rollback` (hosts/lib/host_lib.py:deploy_event, #6164), and the marker's title
 # shows it, so a failed deploy draws a marker that says so.

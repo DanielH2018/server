@@ -7,7 +7,7 @@ H1.7a. The schedule, retain and arm keys are the ``longhorn-backup`` role's sinc
 (``repo_paths.LONGHORN_BACKUP_ROLE``). A raw YAML read of those defaults returns the expressions
 rather than the volumes. Every
 Python reader of the tier lists resolves them here, through the same filters
-``ansible/filter_plugins/service_tier.py`` and ``longhorn_groups.py`` the playbook runs. ``shed_set`` is the lost-node
+``scripts/renderer/template_filters/service_tier.py`` and ``longhorn_groups.py`` the playbook runs. ``shed_set`` is the lost-node
 shed set ``probe.py shed-set`` prints, from the same module.
 """
 
@@ -15,15 +15,15 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-_sys.path.insert(
-    0, str(_Path(__file__).resolve().parents[2] / "ansible" / "filter_plugins")
-)
 
 from lib.k8s_roles import k8s_entries
 from lib.render_guard import load_yaml
 from lib.repo_paths import ALL_VARS
-from longhorn_groups import longhorn_nobackup_claims, longhorn_weekly_claims
-from service_tier import shed_entries, tier_backup_claims
+from renderer.template_filters.longhorn_groups import (
+    longhorn_nobackup_claims,
+    longhorn_weekly_claims,
+)
+from renderer.template_filters.service_tier import shed_entries, tier_backup_claims
 
 R2_TIER = "home-critical"  # a TIER_GROUPS name: home-edge and home-automation
 

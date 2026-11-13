@@ -124,7 +124,7 @@ else.
 - **The rendered `prometheus.yml` holds no stubbed value.** Rendered through
   `ansible/tests/_k8s_render.py:rendered_docs` at `70591c307`, the `prometheus-config`
   ConfigMap's `prometheus.yml` is 658 lines with no `STUB` in it. Its loops read
-  `containers_list` through `ansible/filter_plugins/scrape_jobs.py`, plus
+  `containers_list` through `scripts/renderer/template_filters/scrape_jobs.py`, plus
   `crowdsec_k8s_sidecar_agents` and `k3s_etcd_expose_metrics` from
   `ansible/inventory/group_vars/all.yml`.
 - **Upstream Prometheus v3.15.0 can reload its own rules.** `cmd/prometheus/main.go` defines
@@ -182,7 +182,7 @@ else.
   does not override it, and `ansible/tests/deploy/test_manifests_prune.py:_UNARMED_ROLES` is
   `{authelia, nut}`. For an armed role, "Render secret manifests" takes
   `ansible/templates/role-labelled.yaml.j2` as its `src`, as the ordinary render does. That
-  wrapper pipes the render through `ansible/filter_plugins/role_label.py:homelab_role_label`,
+  wrapper pipes the render through `scripts/renderer/template_filters/role_label.py:homelab_role_label`,
   which runs `yaml.load_all` and then `yaml.dump_all`. Only what survives that round trip
   reaches the staged file. A run of the function on a Secret dropped a top-level `#` line. It
   kept the same line inside a `stringData` block-scalar value, and it kept a metadata
@@ -907,7 +907,7 @@ would have no tool to run, or CI would provision a cache that the root-file hook
     - `ansible/inventory/(host_vars/[^/]+|group_vars/all)\.yml`, which feed the
       `prometheus.yml` loops and the Alertmanager template. The `validate-compose-templates`
       hook in `prek.toml` uses the same alternation;
-    - `ansible/filter_plugins/scrape_jobs.py`, which builds the scrape jobs;
+    - `scripts/renderer/template_filters/scrape_jobs.py`, which builds the scrape jobs;
     - `scripts/validate/alert_`.
 
   M2 adds `scripts/validate/pint/`. M5 adds `ansible/roles/k8s/loki-homelab/files/rules/` and

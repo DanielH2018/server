@@ -147,7 +147,7 @@ an **operator-only** ruling.
 
 ### The `ansible/` directory name
 
-The keep-list leaves `ansible/vars/`, `ansible/inventory/`, `ansible/filter_plugins/`,
+The keep-list leaves `ansible/vars/`, `ansible/inventory/`, `scripts/renderer/template_filters/`,
 `ansible/templates/`, `ansible/tests/`, `ansible/secret_rotation.yml`, and each k8s role's
 `templates/`, `defaults/` and `files/` under `ansible/`. A reader of that tree looks for
 playbooks that no longer exist.

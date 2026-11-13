@@ -12,7 +12,7 @@
 # see web.yaml.j2's `wait-for-influxdb` comment). That gate is bounded at 60 x 2s, so with this
 # policy absent the pod fails init after two minutes and backs off. `build_k8s_dep_map` cannot
 # see a split like it — it derives a role's edges from templates inside that role's own
-# directory (ansible/filter_plugins/toposort.py), so a dependency expressed in a sibling role
+# directory (scripts/renderer/template_filters/toposort.py), so a dependency expressed in a sibling role
 # produces no edge and no ordering constraint to violate.
 # ansible/tests/services/test_scrutiny_influxdb_policy.py pins the co-location.
 #

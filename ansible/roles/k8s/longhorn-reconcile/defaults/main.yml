@@ -63,7 +63,7 @@ longhorn_reconcile_k8s_mem_request: 32Mi
 # the keys of k3s_longhorn_weekly_volumes below.
 #
 # Derived, not listed: every `backup_claims` volume of every `home-critical` services
-# entry (tier `home-edge` or `home-automation`; filter_plugins/service_tier.py, #3389). To
+# entry (tier `home-edge` or `home-automation`; template_filters/service_tier.py, #3389). To
 # change the set, edit the entry.
 k3s_longhorn_r2_volumes: "{{ services | tier_backup_claims('home-critical', k8s_namespace) }}"
 
@@ -71,7 +71,7 @@ k3s_longhorn_r2_volumes: "{{ services | tier_backup_claims('home-critical', k8s_
 # (0=Sunday), so no weekday stacks two heavy volumes under B2's daily transaction cap.
 #
 # Derived, not listed: every `weekly_backup_claims` entry of every services entry, each
-# naming its own shard (filter_plugins/longhorn_groups.py, #4207). To change the set, edit the
+# naming its own shard (template_filters/longhorn_groups.py, #4207). To change the set, edit the
 # entry. The shard used to be the volume's index mod 7 in a hand list here, so removing one
 # volume moved every volume below it to another weekday; a declared shard moves only itself.
 # This job swaps each volume's recurring-job group label, so a PVC recreated from the `longhorn`
@@ -92,7 +92,7 @@ k3s_longhorn_weekly_volumes: "{{ services | longhorn_weekly_claims(k8s_namespace
 # publishes no cap-headroom endpoint, so **B2 Reachable** is the readout for a cap that fires.
 #
 # Derived, not listed: every `no_backup_claims` entry of every services entry, where
-# each claim carries the reason it is excluded (filter_plugins/longhorn_groups.py, #4207).
+# each claim carries the reason it is excluded (template_filters/longhorn_groups.py, #4207).
 k3s_longhorn_nobackup_volumes: "{{ services | longhorn_nobackup_claims(k8s_namespace) }}"
 
 # The CronJob's one-off run per role revision, `longhorn-reconcile-deploy-gate-<spec digest8>` in

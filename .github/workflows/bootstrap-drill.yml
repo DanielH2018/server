@@ -29,7 +29,6 @@ on:
       - scripts/renderer/**
       - ansible/roles/k8s/flux/**
       - ansible/roles/k8s/manifests/**
-      - ansible/filter_plugins/flux_components.py
 
 permissions:
   contents: read

@@ -9,7 +9,7 @@ plugins, and the unit and config guards had none. A template rendered clean unde
 and failed under another for no reason a reader could derive from the template (#2408).
 
 This module registers ONE set: ``renderer_lib/jinja_filters.py``'s reimplementations and this repo's
-``filter_plugins/``. ``to_json`` is ``k8s_yaml.to_json_stub``, because a guard renders secrets
+own filters in ``renderer/template_filters/``, each wrapped by ``as_filter``. ``to_json`` is ``k8s_yaml.to_json_stub``, because a guard renders secrets
 as ``StubUndefined``, and plain-data JSON would abort the render this module exists to
 complete. The renderer's own environment replaces it with ``filters.to_json``.
 
@@ -30,13 +30,14 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+import functools
 from pathlib import Path
+from types import FunctionType
 from typing import Any, cast
 
 from jinja2 import Environment
 
 from lib.k8s_yaml import to_json_stub
-from lib.repo_paths import FILTER_PLUGINS
 from lib.render_guard import (
     SHARED_TPL,
     StubUndefined,
@@ -47,10 +48,13 @@ from lib.render_guard import (
 __all__ = [
     "BOOLEANS_FALSE",
     "BOOLEANS_TRUE",
+    "FilterError",
     "ansible_bool",
+    "as_filter",
     "file_lookup",
     "make_env",
     "register_ansible_filters",
+    "repo_filters",
     "render_template",
     "template_env",
 ]
@@ -94,6 +98,82 @@ def ansible_bool(value) -> bool:
         return False
 
 
+class FilterError(ValueError):
+    """A filter that refused its input. The message opens with the filter's name.
+
+    The renderer reads it as the `ValueError` it is, so a caller that catches `ValueError`
+    still sees the refusal.
+    """
+
+
+def as_filter(func: FunctionType) -> FunctionType:
+    """`func` as a template calls it: a `ValueError` re-raised as `FilterError`.
+
+    The message opens with `<func's name>: `, which is the name the filter registers under, so
+    a render failure names the filter that refused rather than only the template (#4480). A
+    `FilterError` from a filter `func` calls passes through unprefixed.
+    """
+
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except FilterError:
+            raise
+        except ValueError as exc:
+            raise FilterError(f"{func.__name__}: {exc}") from exc
+
+    return cast(FunctionType, wrapped)
+
+
+def repo_filters() -> dict[str, FunctionType]:
+    """This repo's own filters, keyed by the function's name, which templates call them by.
+
+    Each is wrapped by `as_filter`. The modules load on the first call, so the light tier
+    above imports none of them.
+    """
+    from renderer.template_filters import (
+        authelia_access,
+        entry_fields,
+        flux_components,
+        grafana_dashboards,
+        homepage_tiles,
+        ingress_probes,
+        longhorn_groups,
+        role_label,
+        scrape_jobs,
+        service_tier,
+    )
+
+    funcs: tuple[FunctionType, ...] = (
+        authelia_access.authelia_service_rules,
+        entry_fields.entry_names,
+        entry_fields.lan_hostnames,
+        entry_fields.published_ports,
+        flux_components.flux_components,
+        grafana_dashboards.grafana_deploy_annotated,
+        homepage_tiles.homepage_href,
+        homepage_tiles.homepage_widget_url,
+        homepage_tiles.netpol_caller_fences,
+        homepage_tiles.netpol_callers,
+        ingress_probes.ingress_probe_targets,
+        longhorn_groups.backup_group_label,
+        longhorn_groups.longhorn_backup_name,
+        longhorn_groups.longhorn_nobackup_claims,
+        longhorn_groups.longhorn_weekly_claims,
+        longhorn_groups.weekly_backup_group,
+        longhorn_groups.weekly_backup_shard,
+        role_label.homelab_role_label,
+        scrape_jobs.entry_port,
+        scrape_jobs.metrics_port,
+        scrape_jobs.scrape_jobs,
+        service_tier.in_service_tier,
+        service_tier.tier_backup_claims,
+        service_tier.tier_priority_class,
+    )
+    return {func.__name__: as_filter(func) for func in funcs}
+
+
 def register_ansible_filters(env: Environment) -> Environment:
     """Register on ``env`` the Ansible filters and tests this repo's templates reach for.
 
@@ -105,7 +185,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     ``mandatory`` returns its input, so a guard's tracking Undefined passes through it and is
     judged by name as usual.
 
-    ``authelia_service_rules`` and ``tier_priority_class`` are this repo's own filter plugins:
+    ``authelia_service_rules`` and ``tier_priority_class`` are this repo's own template filters:
     authelia's config Secret derives its per-service access_control rules through the first,
     which raises on a ``use_authelia: true`` entry with no ``auth_tier``. A tiered role's pods
     take their PriorityClass from the second, which raises on an entry
@@ -153,20 +233,6 @@ def register_ansible_filters(env: Environment) -> Environment:
     Returns:
         ``env``, so a caller can build and register in one expression.
     """
-    # The heavy tier: imported here rather than at the top, so the light tier above loads no
-    # filter module and no renderer module.
-    if str(FILTER_PLUGINS) not in _sys.path:
-        _sys.path.insert(0, str(FILTER_PLUGINS))
-    from authelia_access import authelia_service_rules
-    import flux_components
-    import grafana_dashboards
-    from entry_fields import entry_names, lan_hostnames, published_ports
-    import homepage_tiles
-    import ingress_probes
-    import longhorn_groups
-    import role_label
-    import scrape_jobs
-    import service_tier
     from renderer.renderer_lib import jinja_filters as filters
 
     env.filters["b64encode"] = filters.b64encode
@@ -184,47 +250,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["mandatory"] = filters.mandatory
     env.filters["to_uuid"] = filters.to_uuid
     env.filters["to_json"] = to_json_stub
-    env.filters["authelia_service_rules"] = authelia_service_rules
-    env.filters["flux_components"] = flux_components.FilterModule().filters()[
-        "flux_components"
-    ]
-    # Through FilterModule, as Ansible loads them, so a refusal carries the filter's name.
-    service_tier_filters = service_tier.FilterModule().filters()
-    env.filters["tier_priority_class"] = service_tier_filters["tier_priority_class"]
-    env.filters["in_service_tier"] = service_tier_filters["in_service_tier"]
-    # The three tier filters longhorn-reconcile's ConfigMap calls over `containers_list` (H1.6).
-    env.filters["tier_backup_claims"] = service_tier_filters["tier_backup_claims"]
-    scrape_filters = scrape_jobs.FilterModule().filters()
-    env.filters["scrape_jobs"] = scrape_filters["scrape_jobs"]
-    env.filters["metrics_port"] = scrape_filters["metrics_port"]
-    env.filters["entry_port"] = scrape_filters["entry_port"]
-    env.filters["grafana_deploy_annotated"] = (
-        grafana_dashboards.FilterModule().filters()["grafana_deploy_annotated"]
-    )
-    env.filters["homelab_role_label"] = role_label.FilterModule().filters()[
-        "homelab_role_label"
-    ]
-    env.filters["ingress_probe_targets"] = ingress_probes.FilterModule().filters()[
-        "ingress_probe_targets"
-    ]
-    homepage_filters = homepage_tiles.FilterModule().filters()
-    env.filters["netpol_callers"] = homepage_filters["netpol_callers"]
-    env.filters["netpol_caller_fences"] = homepage_filters["netpol_caller_fences"]
-    env.filters["entry_names"] = entry_names
-    env.filters["published_ports"] = published_ports
-    env.filters["lan_hostnames"] = lan_hostnames
-    env.filters["homepage_widget_url"] = homepage_filters["homepage_widget_url"]
-    env.filters["homepage_href"] = homepage_filters["homepage_href"]
-    longhorn_filters = longhorn_groups.FilterModule().filters()
-    for name in (
-        "backup_group_label",
-        "weekly_backup_group",
-        "weekly_backup_shard",
-        "longhorn_backup_name",
-        "longhorn_weekly_claims",
-        "longhorn_nobackup_claims",
-    ):
-        env.filters[name] = longhorn_filters[name]
+    env.filters.update(repo_filters())
     env.tests["search"] = filters.search
     return env
 

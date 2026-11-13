@@ -20,7 +20,7 @@ mode. Read the failing task's name to see which claim it stopped on, then:
    for each of the service's volumes.
 2. Any volume still attached with `disableFrontend: true` needs
    `POST {api}/v1/volumes/<vol>?action=detach {}` against **this node's own** longhorn-manager
-   pod IP — the ClusterIP is a coin flip, see `ansible/filter_plugins/longhorn_manager.py`.
+   pod IP — the ClusterIP is a coin flip, see `scripts/renderer/template_filters/longhorn_manager.py`.
 3. Decide per claim whether to finish the revert or to accept the volumes as they are. Reverting
    the remaining claims by hand is the same sequence the role runs.
 4. Resume the service's Kustomizations to bring it back up. No local script applies a k8s

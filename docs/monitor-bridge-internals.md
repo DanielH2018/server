@@ -51,7 +51,7 @@ The rules below shaped those memberships.
 - **Liveness probe:** `cli.py` touches `/tmp/heartbeat` after every cycle and the probe in
   `templates/deployment.yaml.j2` fails past ~3×INTERVAL, so the kubelet restarts a hung loop.
 - **The table:** `files/check_table.py` holds one `PushCheck` row per check and gate (#3659,
-  #3788). `registry.build_checks` reads it in Python. `ansible/filter_plugins/py_table.py`
+  #3788). `registry.build_checks` reads it in Python. `scripts/renderer/template_filters/py_table.py`
   parses it without importing it for the docs fragments. `tests/test_check_table.py` pins the
   table to the registry, the gates, the env and that parse. A row carries `name`, `fn`, `gate`,
   `is_gate`, `critical` and `runbook`: A6-8 deleted `token`, `kuma_id`, `display`, `description`

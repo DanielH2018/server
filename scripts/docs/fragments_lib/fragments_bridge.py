@@ -22,11 +22,9 @@ from pathlib import Path as _Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from lib.repo_paths import FILTER_PLUGINS, MONITOR_BRIDGE_FILES, REPO, K8S_ROLES
+from lib.repo_paths import MONITOR_BRIDGE_FILES, REPO, K8S_ROLES
 
-_sys.path.insert(0, str(FILTER_PLUGINS))
-
-from py_table import py_table
+from renderer.template_filters.py_table import py_table
 
 BRIDGE_ROLE = K8S_ROLES / "monitor-bridge"
 CHECK_TABLE = MONITOR_BRIDGE_FILES / "check_table.py"

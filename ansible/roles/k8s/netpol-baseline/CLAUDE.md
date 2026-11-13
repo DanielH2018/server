@@ -55,7 +55,7 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
   `ansible/tests/k8s/test_netpol_baseline_labels.py` pins the set against templates.
 - **`netpol_baseline_node_cidrs` are `/32` host addresses on purpose** — a `/16` here would
   silently cancel the whole policy.
-- **Flux orders the role last.** `K8S_APPLIES_LAST` in `ansible/filter_plugins/toposort.py`
+- **Flux orders the role last.** `K8S_APPLIES_LAST` in `scripts/renderer/template_filters/toposort.py`
   gives the role an edge onto every other k8s entry. The renderer's ordering turns that into
   a dependency of `netpol-baseline` on every other flux-owned tag and on every other tag's
   `-deferred` Kustomization. `netpol-baseline-deferred` depends on `netpol-baseline`, and
@@ -102,7 +102,7 @@ needs, decides which one.
   An entry whose role renders its own copy also sets `netpol_role_owned: true`, and the loop skips it.
   `homepage_widget: true` on an entry adds `homepage` to its callers, because homepage's
   dashboard widget dials that ClusterIP. Every renderer reads the callers through the
-  `netpol_callers` filter in `ansible/filter_plugins/homepage_tiles.py`, never `netpol_from`
+  `netpol_callers` filter in `scripts/renderer/template_filters/homepage_tiles.py`, never `netpol_from`
   alone, so the key reaches role-owned fences too.
   A `netpol_fences` item its role renders sets `role_owned: true`, and the loop skips that too.
   `ansible/tests/k8s/test_netpol_from.py` fails if a policy name renders from two roles.

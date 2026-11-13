@@ -19,7 +19,7 @@ Secret holds.
   in `defaults/main.yml`). A render that drops a PriorityClass or the identity leaves it serving.
   The cost: an object removed from the render stays live until the operator deletes it
   (**operator-only**).
-- **`NEVER_SHED` names the tag** in `ansible/filter_plugins/service_tier.py`. The role is
+- **`NEVER_SHED` names the tag** in `scripts/renderer/template_filters/service_tier.py`. The role is
   untiered and renders no workload, so the lost-node break-glass has nothing to scale. The
   entry stays in the set because
   `ansible/tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune`

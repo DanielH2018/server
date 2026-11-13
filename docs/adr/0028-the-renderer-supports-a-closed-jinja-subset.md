@@ -35,59 +35,59 @@ outlive H7.
 
 | Filter | Source | Note |
 |---|---|---|
-| `authelia_service_rules` | `ansible/filter_plugins/` | See the spec case. |
+| `authelia_service_rules` | `scripts/renderer/template_filters/` | See the spec case. |
 | `basename` | `jinja_filters.py` | See the spec case. |
 | `bool` | `jinja_filters.py` | `'false'`, `'no'`, `'0'` and `0` read False. Not Python's `bool()`. |
 | `capitalize` | Jinja | See the spec case. |
 | `combine` | `jinja_filters.py` | See the spec case. |
 | `default` | Jinja | `default(x, true)` also replaces a falsy value. |
 | `dictsort` | Jinja | See the spec case. |
-| `entry_names` | `ansible/filter_plugins/` | See the spec case. |
-| `entry_port` | `ansible/filter_plugins/` | See the spec case. |
+| `entry_names` | `scripts/renderer/template_filters/` | See the spec case. |
+| `entry_port` | `scripts/renderer/template_filters/` | See the spec case. |
 | `first` | Jinja | See the spec case. |
-| `flux_components` | `ansible/filter_plugins/` | See the spec case. |
+| `flux_components` | `scripts/renderer/template_filters/` | See the spec case. |
 | `format` | Jinja | See the spec case. |
 | `from_yaml` | `jinja_filters.py` | See the spec case. |
-| `grafana_deploy_annotated` | `ansible/filter_plugins/` | See the spec case. |
+| `grafana_deploy_annotated` | `scripts/renderer/template_filters/` | See the spec case. |
 | `hash` | `jinja_filters.py` | Takes the algorithm's name, such as `sha256`. |
-| `homelab_role_label` | `ansible/filter_plugins/` | Re-serialises the text with `homelab/role` on every document. |
-| `homepage_href` | `ansible/filter_plugins/` | See the spec case. |
-| `homepage_widget_url` | `ansible/filter_plugins/` | See the spec case. |
-| `in_service_tier` | `ansible/filter_plugins/` | See the spec case. |
+| `homelab_role_label` | `scripts/renderer/template_filters/` | Re-serialises the text with `homelab/role` on every document. |
+| `homepage_href` | `scripts/renderer/template_filters/` | See the spec case. |
+| `homepage_widget_url` | `scripts/renderer/template_filters/` | See the spec case. |
+| `in_service_tier` | `scripts/renderer/template_filters/` | See the spec case. |
 | `indent` | Jinja | See the spec case. |
-| `ingress_probe_targets` | `ansible/filter_plugins/` | See the spec case. |
+| `ingress_probe_targets` | `scripts/renderer/template_filters/` | See the spec case. |
 | `int` | Jinja | See the spec case. |
 | `join` | Jinja | See the spec case. |
-| `lan_hostnames` | `ansible/filter_plugins/` | See the spec case. |
+| `lan_hostnames` | `scripts/renderer/template_filters/` | See the spec case. |
 | `length` | Jinja | See the spec case. |
 | `list` | Jinja | See the spec case. |
-| `longhorn_backup_name` | `ansible/filter_plugins/` | See the spec case. |
-| `longhorn_nobackup_claims` | `ansible/filter_plugins/` | See the spec case. |
-| `longhorn_weekly_claims` | `ansible/filter_plugins/` | See the spec case. |
+| `longhorn_backup_name` | `scripts/renderer/template_filters/` | See the spec case. |
+| `longhorn_nobackup_claims` | `scripts/renderer/template_filters/` | See the spec case. |
+| `longhorn_weekly_claims` | `scripts/renderer/template_filters/` | See the spec case. |
 | `lower` | Jinja | See the spec case. |
 | `map` | Jinja | See the spec case. |
 | `max` | Jinja | See the spec case. |
-| `metrics_port` | `ansible/filter_plugins/` | See the spec case. |
+| `metrics_port` | `scripts/renderer/template_filters/` | See the spec case. |
 | `min` | Jinja | See the spec case. |
-| `netpol_caller_fences` | `ansible/filter_plugins/` | See the spec case. |
-| `netpol_callers` | `ansible/filter_plugins/` | See the spec case. |
-| `published_ports` | `ansible/filter_plugins/` | See the spec case. |
+| `netpol_caller_fences` | `scripts/renderer/template_filters/` | See the spec case. |
+| `netpol_callers` | `scripts/renderer/template_filters/` | See the spec case. |
+| `published_ports` | `scripts/renderer/template_filters/` | See the spec case. |
 | `reject` | Jinja | See the spec case. |
 | `replace` | Jinja | See the spec case. |
 | `reverse` | Jinja | See the spec case. |
-| `scrape_jobs` | `ansible/filter_plugins/` | See the spec case. |
+| `scrape_jobs` | `scripts/renderer/template_filters/` | See the spec case. |
 | `selectattr` | Jinja | See the spec case. |
 | `sort` | Jinja | See the spec case. |
 | `string` | Jinja | See the spec case. |
-| `tier_backup_claims` | `ansible/filter_plugins/` | See the spec case. |
-| `tier_priority_class` | `ansible/filter_plugins/` | See the spec case. |
+| `tier_backup_claims` | `scripts/renderer/template_filters/` | See the spec case. |
+| `tier_priority_class` | `scripts/renderer/template_filters/` | See the spec case. |
 | `to_json` | `jinja_filters.py` | Keeps key order and escapes non-ASCII to `\uXXXX`. No `<` escape, unlike `tojson`. |
 | `tojson` | Jinja | Sorts keys and escapes `<`, `>`, `&` and `'` for HTML. |
 | `trim` | Jinja | See the spec case. |
 | `unique` | Jinja | See the spec case. |
 | `upper` | Jinja | See the spec case. |
 | `urlencode` | Jinja | See the spec case. |
-| `weekly_backup_group` | `ansible/filter_plugins/` | See the spec case. |
+| `weekly_backup_group` | `scripts/renderer/template_filters/` | See the spec case. |
 
 ### Tests
 

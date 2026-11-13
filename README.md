@@ -35,7 +35,6 @@ work already executed.
 ansible/          # Render inputs for the k8s roles; no playbook   ← EDIT HERE
   roles/k8s/          # One role per k8s workload (manifests rendered from templates)
   templates/          # Shared Jinja partials the k8s roles include
-  filter_plugins/     # Custom Jinja filters (toposort.py)
   inventory/          # group_vars/all.yml, host_vars/<host>.yml (one file per host)
   vars/secrets.yml    # SOPS-encrypted secrets
   tests/              # Tests over the roles, their renders and the deploy path
@@ -48,6 +47,7 @@ hosts/            # Host packages and the setup plane each one ships
   lib/                # The updater, reconcile and checkout-sync helpers
   bootstrap-host.sh   # One-time bring-up of a new host
 scripts/          # Renderer, landing, diagnostics and docs generators
+  renderer/template_filters/  # This repo's own Jinja filters (toposort.py)
 evals/            # Evals of the Claude Code setup
 docs/             # Runbooks, design specs, security notes
   reference/          # Generated reference pages; never hand-edited
@@ -106,7 +106,7 @@ A k3s workload deploys through `promote` and Flux once its PR merges. No script 
 workload by hand.
 
 - **The render** — `homelab_render.py` orders `roles/k8s/<name>` with `build_k8s_dep_map` /
-  `toposort_containers` (`ansible/filter_plugins/toposort.py`, unit-tested in
+  `toposort_containers` (`scripts/renderer/template_filters/toposort.py`, unit-tested in
   `ansible/tests/deploy/test_toposort.py`). A role rendering a Traefik CRD gets an edge onto
   `traefik`, which installs the CRDs every later `IngressRoute` depends on; `use_authelia: true` gets one onto
   `authelia`, which creates the middleware other routes reference. Both are derived from the
