@@ -1249,7 +1249,10 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     # What the `host_packages` legs gate their steps on, from the render step below.
+    # `run-cases` is the one answer to "does a cases job have anything to run": `k3s_download`
+    # skips on it, and the `prek` gate reads it to pass a job that skipped for that reason.
     outputs:
+      run-cases: ${{ github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true' || steps.render.outputs.cases == 'true' }}
       changed: ${{ steps.render.outputs.changed }}
       cases: ${{ steps.render.outputs.cases }}
       upgrade: ${{ steps.render.outputs.upgrade }}
@@ -1886,17 +1889,15 @@ jobs:
   # step shows as an annotation instead. `test_every_ci_job_is_gated.py` lists the job in
   # NON_GATING_JOBS. The id does not start with `host_packages`, for the reason above.
   #
-  # The job skips when the build changed nothing, so it takes no runner on a PR that touches no
-  # host input. A full run is more jobs than the account's 20-job cap, and a leg that only
-  # skips its steps still waits for a slot (docs/ci-throughput.md). Only a job outside the gate
-  # can skip this way: the gate and `ci_verdict.jobs_verdict` read a skipped need as a failure
-  # unless the pushed tree was proven, so the cases legs skip per step.
+  # The job skips when the build has no work for it (`run-cases`), so it takes no runner on a PR
+  # that touches no host input. A full run is more jobs than the account's 20-job cap, and a
+  # job that only skips its steps still waits for a slot (docs/ci-throughput.md).
   #
   # The budget matches the legs', because a Dockerfile PR builds the image here too.
   k3s_download:
     name: k3s release download case (does not gate)
     needs: [prove, host_packages_build]
-    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true' || needs.host_packages_build.outputs.cases == 'true') }}
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' && needs.host_packages_build.outputs.run-cases == 'true' }}
     continue-on-error: true
     runs-on: ubuntu-26.04
     timeout-minutes: 60
@@ -2064,10 +2065,16 @@ jobs:
       #
       # A dependency passes when it succeeded. It also passes when it was skipped AND the `prove`
       # job succeeded with `proven=true`: that is the proven path, where the pushed tree is one a
-      # green PR run swept. A skip on any other path is a failure, because a skipped job otherwise
-      # reads as a pass to GitHub.
+      # green PR run swept. A job that reads the build's artifacts also passes when it was skipped
+      # AND the build succeeded AND said it had no work for that job: `run-cases` for the cases
+      # legs, `arm64-tools` for the arm64 job. An output the build never wrote is not `false`,
+      # so it passes nothing. A skip on any other path is a failure, because a skipped job
+      # otherwise reads as a pass to GitHub. `hosts/lib/ci_verdict.py:jobs_verdict` applies the
+      # same rule to the check-runs, and `test_ci_jobs_verdict_matches_gate.py` holds them equal.
       - name: Require every half to have succeeded
         env:
+          RUN_CASES: ${{ needs.host_packages_build.outputs.run-cases }}
+          ARM64_TOOLS: ${{ needs.host_packages_build.outputs.arm64-tools }}
           PROVE: ${{ needs.prove.result }}
           PROVEN: ${{ needs.prove.outputs.proven }}
           HOOKS: ${{ needs.hooks.result }}
@@ -2086,7 +2093,7 @@ jobs:
             "deck-mod=$DECK_MOD lockfile=$LOCKFILE flux-roundtrip=$FLUX_ROUNDTRIP sops-type-proof=$SOPS_TYPE_PROOF" \
             "host-packages-build=$HOST_PACKAGES_BUILD host-packages=$HOST_PACKAGES" \
             "host-packages-bootstrap=$HOST_PACKAGES_BOOTSTRAP" \
-            "host-tools-arm64=$HOST_TOOLS_ARM64"
+            "host-tools-arm64=$HOST_TOOLS_ARM64 run-cases=${RUN_CASES:-} arm64-tools=${ARM64_TOOLS:-}"
           # `prove` runs on a push only, so it is `skipped` on every other event. A `cancelled`
           # or `failure` `prove` broke on the runner, so whatever it said is unproven and every
           # dependent ran (#5783).
@@ -2094,10 +2101,14 @@ jobs:
           proven=false
           if [ "$PROVE" = success ] && [ "${PROVEN:-}" = true ]; then proven=true; fi
           ok() { [ "$1" = success ] || { [ "$proven" = true ] && [ "$1" = skipped ]; }; }
+          # $1 a build reader's result, $2 the build's answer to whether it had work for it. The
+          # build's own result is required below, so a build that failed passes nothing here.
+          idle() { [ "$1" = skipped ] && [ "$2" = false ]; }
           ok "$HOOKS" && ok "$PR_GATES" && ok "$PYTEST" && ok "$DECK_MOD" && ok "$LOCKFILE" \
             && ok "$FLUX_ROUNDTRIP" && ok "$SOPS_TYPE_PROOF" && ok "$HOST_PACKAGES_BUILD" \
-            && ok "$HOST_PACKAGES" && ok "$HOST_PACKAGES_BOOTSTRAP" \
-            && ok "$HOST_TOOLS_ARM64"
+            && { ok "$HOST_PACKAGES" || idle "$HOST_PACKAGES" "${RUN_CASES:-}"; } \
+            && { ok "$HOST_PACKAGES_BOOTSTRAP" || idle "$HOST_PACKAGES_BOOTSTRAP" "${RUN_CASES:-}"; } \
+            && { ok "$HOST_TOOLS_ARM64" || idle "$HOST_TOOLS_ARM64" "${ARM64_TOOLS:-}"; }
 
       # Records what this green run tested, for the push run's `prove` job (#5489). On a pull
       # request GITHUB_SHA is the merge commit of refs/pull/N/merge, and its tree is the tree

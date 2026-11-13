@@ -29,15 +29,28 @@ Every figure is a measurement from 2026-11-12.
 A job with a false job-level `if:` reads `skipped` and takes no runner. A job that skips its
 steps one by one still waits for a slot.
 
-**Only a job outside the `prek` gate may skip at job level on its own inputs.** The gate
-accepts a skipped need only when `prove` said the pushed tree was tested, and
-`hosts/lib/ci_verdict.py:jobs_verdict` reads any other skipped need as `pending`. Each
-installed host package carries its own copy of `ci_verdict.py`, so a job-level skip of a gate
-need stalls the deployer, the builder and `homelab-checkout-sync` on every host that holds an
-older package.
+**The `prek` gate passes a skipped need on two paths only.** The first is the proven path:
+`prove` said the pushed tree was tested, and every dependent skipped. The second is a job that
+reads the build's artifacts and had nothing to run. That job skipped, `host_packages_build`
+succeeded, and the build's output said `false` for it: `run-cases` for the cases legs and
+`arm64-tools` for the arm64 job. Any other skipped need fails the gate, because GitHub reads a
+skipped required job as a pass.
 
-`k3s_download` is outside the gate, so it skips at job level when `host_packages_build`
-reports neither `changed` nor `cases`. A `workflow_dispatch` run still runs it.
+**`host_packages_build` owns the answer to whether a case has anything to run.** Its
+`run-cases` output
+is true on a `workflow_dispatch` run, and when the render reports `changed` or `cases`.
+`k3s_download` skips at job level on it.
+
+**`jobs_verdict` applies the gate's rule without the outputs.** A check-run does not carry a
+job output. `hosts/lib/ci_verdict.py:jobs_verdict` therefore passes a build reader that skipped
+beside a build that succeeded, and leans on the workflow for the rest: a reader's own `if:`
+must skip it only on the build's output. `jobs_verdict` decides only while the gate job has not
+concluded, and a concluded gate is believed.
+
+**A host with an older package loses the early verdict, not the verdict.** Each installed host
+package carries its own copy of `ci_verdict.py`. An older copy reads a skipped build reader as
+`pending` and waits for the gate job's own conclusion, which costs the wait for a runner that
+`jobs_verdict` exists to remove.
 
 ## The plan
 
@@ -48,14 +61,13 @@ The phases run in order, and each slice is one pull request.
 A run with no host change falls from 25 jobs to 15.
 
 1. **A1, landed.** `k3s_download` skips at job level.
-1. **A2, planned.** The gate and `jobs_verdict` accept a host-package leg that is skipped
-   while `host_packages_build` succeeded. The slice changes no job, and it ships in every host
-   package.
-1. **A3, planned.** The eight case legs skip at job level on `changed` and `cases`, and
+1. **A2, landed.** The gate and `jobs_verdict` pass a build reader that skipped because the
+   build had no work for it, and the build reports `run-cases`. No gate need skips yet.
+1. **A3, planned.** The eight case legs skip at job level on `run-cases`, and
    `host_tools_arm64` skips on `arm64-tools`. Their step-level conditions go.
 
 A3 waits until every host reports a package at or past A2's merge commit in
-`homelab_host_applied_info`.
+`homelab_host_applied_info`, so no host's reader loses the early verdict.
 
 ### Phase B: a merge queue on daniel-box that tests the merged tree
 

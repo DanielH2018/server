@@ -8,7 +8,7 @@ Run: uv run pytest ansible/tests/repo/test_ci_k3s_download_job_off_critical_path
 """
 
 import pytest
-from _actions_expressions import condition
+from _actions_expressions import condition, interpolate
 from _helpers import REPO
 from lib import yaml_fast
 
@@ -16,6 +16,7 @@ CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 CASES_ENTRY = "scripts/validate/host_package_cases.py"
 DOWNLOAD_FLAG = "--k3s-download"
 GATING_JOB = "host_packages"
+BUILD_JOB = "host_packages_build"
 GATE_JOB = "prek"
 HANDOFF_ARTIFACT = "host-packages-build"
 IMAGE_SCRIPT = "hosts/lib/tests/container/build-image.sh"
@@ -80,18 +81,20 @@ def test_the_k3s_download_job_takes_a_runner_only_when_the_build_has_work_for_it
 ):
     """A job that only skips its steps still holds one of the 20 runner slots (docs/ci-throughput.md)."""
     job_id, job = _download_job()
+    github = {"event_name": event}
+    render = {"render": {"outputs": {"changed": changed, "cases": cases}}}
+    run_cases = interpolate(
+        _jobs()[BUILD_JOB]["outputs"]["run-cases"], {"github": github, "steps": render}
+    )
     context = {
-        "github": {"event_name": event},
+        "github": github,
         "needs": {
             # `prove` runs on a push alone; an unproven push leaves `proven` false.
             "prove": {
                 "result": "success" if event == "push" else "skipped",
                 "outputs": {"proven": "false" if event == "push" else ""},
             },
-            "host_packages_build": {
-                "result": build,
-                "outputs": {"changed": changed, "cases": cases},
-            },
+            BUILD_JOB: {"result": build, "outputs": {"run-cases": run_cases}},
         },
     }
     assert condition(job, context) is runs, (
