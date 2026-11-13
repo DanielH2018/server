@@ -33,10 +33,20 @@ serves read-only.
   `lidarr-verify`, which declares the `Discord (health)` Connect notification over `/api/v1`
   (the script picks the version per app). The Job's pod carries `app: lidarr-verify`, which
   lidarr's `netpol_from` lists. `ansible/roles/k8s/arr-notification/CLAUDE.md` has the design.
+- **`templates/verify/quality-profiles.yaml.j2` declares the two quality profiles decided on
+  #8190**, from `lidarr_quality_profiles` in `defaults/main.yml`, through
+  `files/seed_lidarr_quality_profiles.py` at `/api/v1/qualityprofile`. It adopts Lidarr's shipped
+  `Standard` (the lossy profile) and `Lossless` by name, creates one that is missing, and never
+  deletes: `Any` stays. The script splits Lidarr's quality groups into single qualities, because
+  `allowed` belongs to a group and `MP3-320` shares one with `AAC-320`.
+- **Lidarr has no Opus quality.** The ruling's "Opus 192 and above" is `OGG Vorbis Q8` to `Q10`
+  in the lossy profile, and `AAC-VBR` stands for the AAC tier above `AAC-256`. A new Lidarr that
+  adds Opus is an edit to that one list.
 - **Not wired yet, and why.** Homepage's tiles read each app's key by name, so lidarr has no
-  tile. The quality profiles decided on #8190 are set in the UI until a seed Job declares them.
-- **Lidarr's own state lives in `lidarr.db`:** the root folder, the qBittorrent download client
-  and the quality profiles are configured in the UI and survive through the snapshot, not git.
+  tile.
+- **Lidarr's own state lives in `lidarr.db`:** the root folder and the qBittorrent download
+  client are configured in the UI and survive through the snapshot, not git. The quality
+  profiles are declared by the seed Job above and survive the same way.
 - **Import lists are the discovery feed, and they live in `lidarr.db` too.** Settings, Import
   Lists offers Last.fm tags, Lidarr's curated lists, MusicBrainz series and Spotify. A Last.fm
   tag list needs no Last.fm account. Set each list's monitoring to new albums only, or none: a
