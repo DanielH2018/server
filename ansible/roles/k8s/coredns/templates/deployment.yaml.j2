@@ -20,8 +20,8 @@
     - `hardened_security_context` writes `drop: [ALL]` where upstream writes `drop: [all]`. The
       runtime reads both as the same capability set. The block keeps upstream's
       `NET_BIND_SERVICE` add-back, which binding port 53 needs.
-    - The image is `coredns_image`, upstream's line plus the tag's digest. Its `repo:tag` equals
-      upstream's by the test in hosts/tests/test_coredns_image_follows_bundled_manifest.py.
+    - The image is `coredns_image`, upstream's line plus the tag's digest, which the test in
+      hosts/tests/test_coredns_image_follows_bundled_manifest.py holds.
 #}
 ---
 apiVersion: apps/v1

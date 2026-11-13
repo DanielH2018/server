@@ -164,13 +164,14 @@ carries the CoreDNS port in the same PR as the `k3s_version` move:
    `templates/config/coredns-corefile.j2`. Everything else goes into the
    Deployment, Service and RBAC templates, with each `%{...}%` placeholder written as the value
    k3s substitutes on this cluster.
-   Renovate does not touch this pin, so move its digest by hand. A new tag left with the old
-   digest passes every test, and the node keeps pulling the old image by that digest. To read
-   the tag's index digest, run
+   Renovate does not touch this pin, so move its digest by hand. A pin whose tag moved and whose
+   digest did not would keep the node pulling the old image by that digest. To read the tag's
+   index digest, run
    `curl -fsS https://hub.docker.com/v2/repositories/rancher/mirrored-coredns-coredns/tags/<tag> | jq -r .digest`.
 3. Move the excerpt and its label in
-   `hosts/tests/test_coredns_image_follows_bundled_manifest.py` to the new tag. The test
-   fails until the label equals `k3s_version` and the pin's `repo:tag` equals the excerpt's image.
+   `hosts/tests/test_coredns_image_follows_bundled_manifest.py` to the new tag, and record the
+   new tag's digest in its `_DIGESTS`. The test fails until the label equals `k3s_version`,
+   the excerpt's tag has a recorded digest, and the pin equals that tag at that digest.
 4. Read the image the new pod runs for a uid change. The Deployment pins
    `runAsUser: 65532` beside `runAsNonRoot`, so an image whose `USER` moved refuses to start.
 5. Merge through `land.sh`, which is the apply. A pod-template change rolls the single replica

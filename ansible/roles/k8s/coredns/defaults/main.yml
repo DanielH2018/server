@@ -14,8 +14,7 @@
 # role's defaults, and renovate.json disables this one. The image is whatever k3s bundles.
 #
 # The digest is the tag's index digest, and a k3s bump moves it by hand with the tag
-# (docs/k3s-upgrade.md). The test compares the tag alone, so a tag moved without its digest
-# passes it and the node keeps pulling the old image by digest.
+# (docs/k3s-upgrade.md). The test holds the pin to the digest it records for the excerpt's tag.
 coredns_image: rancher/mirrored-coredns-coredns:1.14.7@sha256:7efd3c635b03efd68c4e8398fc45f0d993d0e9ab016f72c1cefb0fd6d01aa286
 
 # The kube-dns Service address. `clusterIP` is immutable, so the render writes the address the
