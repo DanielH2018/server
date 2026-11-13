@@ -110,8 +110,12 @@ The rename lands in two steps:
   path alone starts at the rename commit and would date every secret to it.
 - The render changes in two places only. The homelab-mcp pod mounts the checkout's `k8s/`,
   `inventory/` and `tests/` trees under its jail root, where it mounted `ansible/`, because the
-  old host path no longer exists. Five deploy-gate annotations name their `homelab/rerun-safe`
-  test at its new path, because the renderer refuses a node ID that names no test in the tree.
+  old host path no longer exists. Ten verify Jobs and deploy gates name their
+  `homelab/rerun-safe` test at its new path, because the renderer refuses a node ID that names
+  no test in the tree.
+- The readers that compare two commits, the forward-only pin gate in `cluster_pins.py` and
+  `promote_lib/forward_only.py`, read both layouts. A range whose base predates the rename
+  would otherwise read no pin and no forward-only role on that side.
 - Comments inside shipped `templates/` and `files/` keep their `ansible/` paths. Each one
   reaches a rendered manifest or an image, and rewriting it would change the render.
 
