@@ -95,6 +95,29 @@ def test_the_platform_routing_reads_the_tree_the_probe_renders(tmp_path):
     assert [("--docker" in argv) for argv in seen] == [False]
 
 
+def test_a_pi_compose_service_tag_probes_the_pi_alone(tmp_path):
+    """#929: `alloy` is a Pi compose service and a cluster DaemonSet's name.
+
+    Read from the Pi's `compose_services`, the tag routes to `--docker` alone, so the
+    DaemonSet's ready pods cannot answer for the Pi's container.
+    """
+    _k8s_inventory(tmp_path, "loki-homelab")
+    (tmp_path / "ansible" / "inventory" / "host_vars" / "daniel-pi.yml").write_text(
+        "compose_services:\n  - name: alloy\n"
+    )
+    seen = []
+
+    def run(argv, **kwargs):
+        seen.append(argv)
+        return _result(0, "alloy: running")
+
+    state, _detail = notify_mod.check_one(
+        "alloy", tools=notify_mod.GateTools(run=run), cwd=tmp_path
+    )
+    assert state == "ok"
+    assert [("--docker" in argv) for argv in seen] == [True]
+
+
 def test_a_tag_no_tree_declares_still_probes_k8s_first(tmp_path):
     """CLEAN half: the fallback order is unchanged for a tag the rendered tree does not declare.
 

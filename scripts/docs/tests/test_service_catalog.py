@@ -9,7 +9,7 @@ Run: uv run pytest scripts/docs/tests/test_service_catalog.py
 
 import service_catalog
 from _catalog_fixtures import make_repo, write
-from docs.catalog_lib.catalog_facts import route_for
+from docs.catalog_lib.catalog_facts import k8s_route
 from docs.catalog_lib.catalog_model import ServiceRow
 from docs.catalog_lib.catalog_render import render_html, render_markdown
 
@@ -49,7 +49,7 @@ def test_k8s_route_uses_hostname_default_name_when_ingressroute_exists(tmp_path)
     row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.route.startswith("jellyfin.local.<domain>")
     entry = {"name": "jellyfin", "hostname": "jellyfin"}
-    direct = route_for(entry, "k8s", paths["k8s_roles"], paths["all_vars"])
+    direct = k8s_route(entry, paths["k8s_roles"], paths["all_vars"])
     assert direct == row.route
 
 
@@ -154,8 +154,8 @@ _ROW = ServiceRow
 
 def test_markdown_has_one_row_per_service():
     rows = [
-        _ROW("sonarr", "daniel-box", "k8s", "sonarr", "authelia", "weekly", "yes"),
-        _ROW("wg-easy", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
+        _ROW("sonarr", "daniel-box", "sonarr", "authelia", "weekly", "yes"),
+        _ROW("wg-easy", "daniel-pi", "LAN-direct", "none", "none", "no"),
     ]
     out = render_markdown(rows)
     # Count ROWS, not substrings: a service whose route equals its name puts the same
@@ -168,8 +168,8 @@ def test_markdown_has_one_row_per_service():
 def test_markdown_groups_by_host():
     """Grouped by host, matching render_html. A flat 59-row table is unreadable."""
     rows = [
-        _ROW("sonarr", "daniel-box", "k8s", "sonarr", "authelia", "weekly", "yes"),
-        _ROW("wg-easy", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
+        _ROW("sonarr", "daniel-box", "sonarr", "authelia", "weekly", "yes"),
+        _ROW("wg-easy", "daniel-pi", "LAN-direct", "none", "none", "no"),
     ]
     out = render_markdown(rows)
     assert "## daniel-box" in out
@@ -190,10 +190,10 @@ def test_markdown_escapes_pipes_in_values():
     No current value contains one, but route and backup_tier are derived from
     template text and nothing stops one appearing.
     """
-    rows = [_ROW("odd", "daniel-box", "k8s", "a|b", "authelia", "none", "no")]
+    rows = [_ROW("odd", "daniel-box", "a|b", "authelia", "none", "no")]
     out = render_markdown(rows)
     row_line = next(ln for ln in out.splitlines() if ln.startswith("| odd |"))
-    assert row_line.count("|") == 8, f"pipe count wrong, row split: {row_line}"
+    assert row_line.count("|") == 7, f"pipe count wrong, row split: {row_line}"
 
 
 def test_markdown_counts_unknown_fields():
@@ -202,7 +202,7 @@ def test_markdown_counts_unknown_fields():
     An underivable fact silently rendered as a blank cell is the failure the
     'unknown' convention exists to prevent.
     """
-    rows = [_ROW("x", "daniel-box", "k8s", "unknown", "authelia", "none", "no")]
+    rows = [_ROW("x", "daniel-box", "unknown", "authelia", "none", "no")]
     out = render_markdown(rows)
     assert "unknown" in out.lower()
 
@@ -210,8 +210,8 @@ def test_markdown_counts_unknown_fields():
 def test_markdown_is_stable_across_calls():
     """Unstable ordering would make the docs-refresh cron commit on every run."""
     rows = [
-        _ROW("b", "daniel-box", "k8s", "b", "authelia", "none", "no"),
-        _ROW("a", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
+        _ROW("b", "daniel-box", "b", "authelia", "none", "no"),
+        _ROW("a", "daniel-pi", "LAN-direct", "none", "none", "no"),
     ]
     first = render_markdown(rows)
     second = render_markdown(list(reversed(rows)))
@@ -225,9 +225,7 @@ def test_markdown_ends_with_exactly_one_newline():
     hook keeps rewriting fails that commit on every run until someone fixes the
     generator. Canonical output at the source is what stops that.
     """
-    out = render_markdown(
-        [_ROW("a", "daniel-box", "k8s", "a", "authelia", "none", "no")]
-    )
+    out = render_markdown([_ROW("a", "daniel-box", "a", "authelia", "none", "no")])
     assert out.endswith("\n")
     assert not out.endswith("\n\n")
 

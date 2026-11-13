@@ -75,7 +75,7 @@ def test_backup_tier_no_pvc_is_stateless_not_unknown(tmp_path):
     row = next(r for r in service_catalog.build_rows(**paths) if r.name == "authelia")
     assert row.backup_tier == "no PVC (stateless)"
     entry = {"name": "authelia"}
-    tier = backup_tier(entry, "k8s", "homelab", LonghornTiers(), paths["k8s_roles"])
+    tier = backup_tier(entry, "homelab", LonghornTiers(), paths["k8s_roles"])
     assert tier == row.backup_tier
 
 
@@ -132,14 +132,6 @@ def test_backup_tier_finds_pvc_referenced_only_by_claimname(tmp_path):
     )
     row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.backup_tier == "weekly -> B2 (default target)"
-
-
-def test_backup_tier_docker_is_not_longhorn(tmp_path):
-    paths = make_repo(tmp_path)
-    tier = backup_tier(
-        {"name": "dozzle"}, "docker", "homelab", LonghornTiers(), paths["k8s_roles"]
-    )
-    assert tier == "n/a (Docker/Pi, not Longhorn-backed)"
 
 
 def test_multiple_pvcs_report_each_tier_deduplicated(tmp_path):

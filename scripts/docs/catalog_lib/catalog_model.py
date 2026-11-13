@@ -34,13 +34,12 @@ class ServiceRow:
         route: The IngressRoute/Traefik reachability derivation, or an `UNKNOWN` explanation.
         auth_tier: Whether the route sits behind Authelia, read from `use_authelia`, and
             the policy its entry declares (`auth_tier`) when it does.
-        backup_tier: The Longhorn backup tier(s) its PVC(s) fall into, or "n/a" off k8s.
+        backup_tier: The Longhorn backup tier(s) its PVC(s) fall into.
         autodeploy: What applies this service's changes.
     """
 
     name: str
     host: str
-    platform: str  # "k8s" or "docker"
     route: str
     auth_tier: str
     backup_tier: str

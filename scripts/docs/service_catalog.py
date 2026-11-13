@@ -44,8 +44,8 @@ FIELD NOTES (what is genuinely undecidable from the repo alone, and why):
     reference, but a claim referenced with neither form (e.g. hardcoded past a
     yet-undiscovered third pattern) would still read as "no PVC (stateless)". A claim named
     by a shell variable (`${DRILL}`, in a script's own manifest) reads as no declared tier.
-  - owner. A k8s entry (`catalog_backup.autodeploy_eligibility`) is not Ansible's to deploy, so its
-    Auto-deploy cell names what applies it: Flux through `promote`, gated by `land.sh`.
+  - owner. A k8s entry is not Ansible's to deploy, so its Auto-deploy cell names what applies
+    it (`catalog_backup.owner_stance`): Flux through `promote`, gated by `land.sh`.
 
 Run: uv run python scripts/docs/service_catalog.py --out /tmp/service_catalog.html
 Tests: uv run pytest scripts/docs/tests/test_service_catalog.py
@@ -62,12 +62,12 @@ import sys as _sys
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from docs.catalog_lib.catalog_backup import (
-    autodeploy_eligibility,
     backup_tier,
     claim_index,
     load_longhorn_tier_lists,
+    owner_stance,
 )
-from docs.catalog_lib.catalog_facts import auth_tier, route_for
+from docs.catalog_lib.catalog_facts import auth_tier, k8s_route
 from docs.catalog_lib.catalog_model import K3S_DEFAULTS, K8S_ROLES, ServiceRow
 from docs.catalog_lib.catalog_render import render_html, render_markdown
 from lib.cli_help import ArgumentParser
@@ -109,25 +109,22 @@ def build_rows(
     k8s_namespace = estate.group_vars.get("k8s_namespace", "homelab")
 
     rows: list[ServiceRow] = []
+    autodeploy = f"n/a: applied by {owner_stance()}"
     for entry in estate.services:
-        name = entry["name"]
-        platform = "k8s"
         rows.append(
             ServiceRow(
-                name=name,
+                name=entry["name"],
                 host=K8S_HOST,
-                platform=platform,
-                route=route_for(entry, platform, k8s_roles, all_vars),
+                route=k8s_route(entry, k8s_roles, all_vars),
                 auth_tier=auth_tier(entry),
                 backup_tier=backup_tier(
                     entry,
-                    platform,
                     k8s_namespace,
                     tiers,
                     k8s_roles,
                     claim_classes,
                 ),
-                autodeploy=autodeploy_eligibility(entry, platform),
+                autodeploy=autodeploy,
             )
         )
     return rows
