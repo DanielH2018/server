@@ -74,9 +74,11 @@ def test_the_service_runs_the_script_as_sys_user_and_logs_under_its_old_tag(pack
     assert "ProtectHome" not in unit
 
 
-def test_the_service_loads_the_ping_key_after_the_secrets_unit(package):
+def test_the_service_imports_the_ping_key_after_the_secrets_unit(package):
+    """LoadCredential= fails the unit on a missing key file (243/CREDENTIALS); Import does not."""
     unit = _text(package, f"{UNITS}/homelab-worktree-sweep.service")
-    assert f"LoadCredential={PING_KEY}:/run/credstore/{PING_KEY}\n" in unit
+    assert f"\nImportCredential={PING_KEY}\n" in unit
+    assert "LoadCredential=" not in unit
     assert "homelab-secrets.service" in unit
 
 
