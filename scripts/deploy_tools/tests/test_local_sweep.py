@@ -188,6 +188,19 @@ def test_a_check_does_not_inherit_the_virtualenv_that_runs_the_sweep(repo, monke
     assert venv not in check.detail[0]
 
 
+def test_a_check_runs_under_a_hosted_runners_locale_not_this_hosts(repo, monkeypatch):
+    for name in ("LANG", "LC_ALL", "LC_COLLATE", "LANGUAGE"):
+        monkeypatch.setenv(name, "en_US.UTF-8")
+    shows_locale = _bash(
+        'echo "FAILED $LANG ${LC_ALL:-unset} ${LC_COLLATE:-unset} ${LANGUAGE:-unset}";'
+        " exit 1"
+    )
+
+    (check,) = sweep("HEAD", repo=repo, checks=shows_locale).checks
+
+    assert check.detail == ("FAILED C.UTF-8 unset unset unset",)
+
+
 def test_the_scratch_tree_goes_unless_the_caller_keeps_it(repo, cache):
     checks = _bash("exit 0", "hooks")
 
