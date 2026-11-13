@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-13 06:17 UTC
-generated_sha: 01164fdc0
+generated_at: 2026-11-13 18:17 UTC
+generated_sha: c9de2bd37
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 01164fdc0
 
 # Scheduled jobs
 
-53 job(s) scheduled by the host packages' timers.
+56 job(s) scheduled by the host packages' timers.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a unit declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -30,6 +30,8 @@ generated_sha: 01164fdc0
 | homelab-claude-clone-sync.timer | `OnBootSec=10min, OnUnitActiveSec=15min` | daniel-box, daniel-server | `claude` | read the script | `hosts/components/claude-code/templates/claude-clone-sync.timer.j2` |
 | homelab-claude-dotfiles-sync.timer | `OnBootSec=10min, OnUnitActiveSec=15min` | daniel-box, daniel-server | `claude` | read the script | `hosts/components/claude-code/templates/claude-dotfiles-sync.timer.j2` |
 | homelab-claude-fanout-server-lander.timer | `OnBootSec=5min, OnUnitActiveSec=10min` | daniel-box | `ubuntu` | read the script | `hosts/components/claude-code/templates/claude-fanout-server-lander.timer.j2` |
+| homelab-claude-guardrail-ack.timer | `OnCalendar=*-*-* *:02/5:00` | daniel-box, daniel-server | `root` | read the script | `hosts/components/claude-code/units/homelab-claude-guardrail-ack.timer.j2` |
+| homelab-claude-guardrail-audit.timer | `OnCalendar=*-*-* *:00/5:00` | daniel-box, daniel-server | `root` | read the script | `hosts/components/claude-code/units/homelab-claude-guardrail-audit.timer.j2` |
 | homelab-claude-memory-sync.timer | `OnBootSec=5min, OnUnitActiveSec=15min` | daniel-box | `ubuntu` | yes (delete) | `hosts/components/claude-code/templates/claude-memory-sync.timer.j2` |
 | homelab-claude-otel-health.timer | `OnCalendar=*-*-* *:00/10:00` | daniel-box | `ubuntu` | read the script | `hosts/components/claude-code/units/homelab-claude-otel-health.timer.j2` |
 | homelab-claude-pipeline-timeline.timer | `OnBootSec=15min, OnUnitActiveSec=1440min` | daniel-box | `ubuntu` | read the script | `hosts/components/claude-code/templates/claude-pipeline-timeline.timer.j2` |
@@ -53,6 +55,7 @@ generated_sha: 01164fdc0
 | homelab-github-ruleset-drift.timer | `OnCalendar=*-*-* 06:40:00` | daniel-box | `root` | read the script | `hosts/components/github-checks/units/homelab-github-ruleset-drift.timer.j2` |
 | homelab-infra-map.timer | `OnCalendar=*-*-* *:00,15,30,45:00` | daniel-box | `ubuntu` | read the script | `hosts/components/infra-map/units/homelab-infra-map.timer` |
 | homelab-k3s-restart.timer | `OnCalendar=Mon..Fri *-*-02..31 11:32:00` | daniel-box | `root` | yes (restart) | `hosts/components/k3s-restart/units/homelab-k3s-restart.timer.j2` |
+| homelab-local-sweep.timer | `OnBootSec=15min, OnUnitInactiveSec=15min` | daniel-box | `ubuntu` | yes (deploy) | `hosts/components/local-sweep/units/homelab-local-sweep.timer` |
 | homelab-loki-route-witness.timer | `OnCalendar=*-*-* *:23:00` | daniel-box, daniel-server | `ubuntu` | read the script | `hosts/components/loki-route-witness/units/homelab-loki-route-witness.timer` |
 | homelab-longhorn-backup-health.timer | `OnCalendar=*:00/10` | daniel-box | `ubuntu` | yes (backup) | `hosts/components/k3s-host-checks/units/homelab-longhorn-backup-health.timer.j2` |
 | homelab-mkv-attachment-repair.timer | `OnCalendar=*:0/15:00` | daniel-box | `ubuntu` | read the script | `hosts/components/fake-remux/units/homelab-mkv-attachment-repair.timer.j2` |
