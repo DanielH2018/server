@@ -56,6 +56,9 @@
         # natural state HONORING the lux gate (bright room -> off), and re-apply the fan if home.
         - conditions: "{{ act == 'button_1_hold_release' }}"
           sequence:
+            - service: script.turn_off
+              target:
+                entity_id: script.bedroom_fan_nudge
             - service: script.bedroom_exit_sleep
             - service: input_boolean.turn_off
               target:
@@ -125,6 +128,9 @@
                 oscillating: "{{ not is_state_attr('fan.tower_fan', 'oscillating', true) }}"
         - conditions: "{{ act == 'button_3_hold_release' }}"
           sequence:
+            - service: script.turn_off
+              target:
+                entity_id: script.bedroom_fan_nudge
             - service: timer.cancel
               target:
                 entity_id: timer.bedroom_fan_dial
@@ -140,6 +146,9 @@
         # the dial_rotate branches + timer.bedroom_fan_dial). Replaces the old hold-to-boost-100%.
         - conditions: "{{ act == 'button_4_press_release' }}"
           sequence:
+            - service: script.turn_off
+              target:
+                entity_id: script.bedroom_fan_nudge
             # Fan ONLY. Clear the fan's sleep cap (the sleep_mode flag) + the fan override, then apply the
             # temp band. Deliberately does NOT touch the lights or AL sleep mode: clearing AL sleep makes
             # Adaptive Lighting self-on the lights, and the FP300 illuminance is dominated by the bedroom
@@ -183,7 +192,8 @@
         # Dial rotate = brightness +/- 12% NORMALLY; in fan-dial mode (timer active) = fan +/-1 level.
         # (Substring match catches the *_step variants.) The nudge is STARTED with script.turn_on, not
         # called: a call waits on the DREO cloud ack (up to ~6 s with retries), which held this
-        # queue's slots. The nudge's own queue keeps the steps in order.
+        # queue's slots. The nudge's own queue keeps the steps in order, and can still be draining
+        # when a button runs, so every button branch that sets the fan stops the nudge first.
         - conditions: "{{ 'dial_rotate_right' in act }}"
           sequence:
             - if: "{{ is_state('timer.bedroom_fan_dial', 'active') }}"

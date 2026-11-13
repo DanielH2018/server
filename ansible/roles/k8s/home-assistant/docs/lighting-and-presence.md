@@ -61,7 +61,9 @@ and the bedtime/wake routines that drive them.
   `_release`. No branch handles those, and `bedroom_tap_dial_control`'s condition drops them before
   they take one of its 10 queue slots. Each fan-dial step starts `script.bedroom_fan_nudge` with
   `script.turn_on` rather than waiting on it, because the nudge blocks on the DREO cloud ack; the
-  nudge's own queue (`max: 30`) holds the burst in order.
+  nudge's own queue (`max: 30`) holds the burst in order. That queue can still be draining when a
+  button runs, so the B1 hold, B3 hold and B4 tap branches stop `script.bedroom_fan_nudge` (clearing
+  its queue) before they set the fan; otherwise the queued steps would undo them.
 
 ## The lux gate
 - Presence (FP300), an `input_boolean` manual-off override, and an alarm-driven morning reset

@@ -73,3 +73,19 @@ def test_fan_dial_starts_the_nudge_without_waiting():
     for step in nudges:
         assert step["service"] == "script.turn_on"
         assert step["target"]["entity_id"] == "script.bedroom_fan_nudge"
+
+
+def test_fan_setting_buttons_stop_queued_nudges_first():
+    branches = {
+        action: b["sequence"]
+        for b in _tap_dial()["action"][1]["choose"]
+        for action in re.findall(r"act == '([a-z0-9_]+)'", b["conditions"])
+    }
+    for action in (
+        "button_1_hold_release",
+        "button_3_hold_release",
+        "button_4_press_release",
+    ):
+        first = branches[action][0]
+        assert first["service"] == "script.turn_off", action
+        assert first["target"]["entity_id"] == "script.bedroom_fan_nudge", action
