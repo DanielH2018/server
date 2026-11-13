@@ -35,6 +35,11 @@ serves read-only.
   UI until a seed Job declares them.
 - **Lidarr's own state lives in `lidarr.db`:** the root folder, the qBittorrent download client
   and the quality profiles are configured in the UI and survive through the snapshot, not git.
+- **Import lists are the discovery feed, and they live in `lidarr.db` too.** Settings, Import
+  Lists offers Last.fm tags, Lidarr's curated lists, MusicBrainz series and Spotify. A Last.fm
+  tag list needs no Last.fm account. Set each list's monitoring to new albums only, or none: a
+  list that monitors every album of every artist it adds can fill `/srv/media`, which shares
+  daniel-box's root disk. Soularr then fetches whatever the lists leave wanted.
 
 ## Editing
 - Manifest: `templates/deployment.yaml.j2`, a single call to

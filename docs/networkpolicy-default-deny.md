@@ -260,10 +260,10 @@ clones or resolves anything; **texbrain** (2026-08-26), nginx over a static LaTe
 into the image. texbrain is worth a second look because it appears to contradict the shape: the
 app reaches jsDelivr for on-demand TeX packages and a CORS proxy for git. Those are the
 browser's fetches, made from the reader's machine, not the pod's — the container serves files
-and opens no connection of its own. **navidrome** (2026-09-02), the music server, is the one
-here that had to be *made* to fit: the image checks GitHub for a new release and runs metadata
-agents by default, so its deployment sets `ND_ENABLEEXTERNALSERVICES=false`. Turn that back on
-and navidrome stops being a leaf app, so it leaves this set at the same time.
+and opens no connection of its own. **navidrome** (2026-09-02), the music server, dials out
+since 2026-11-13: it scrobbles to ListenBrainz and fetches artist images from Deezer. Traefik is
+still its only caller, and the outbound calls are egress, which kube-router does not enforce
+here, so it stays in this set on the same terms as nut-exporter below.
 **nut-exporter** (2026-09-10), the UPS metrics exporter, stretches the shape in the other
 direction and is listed here anyway. Traefik is not its caller — it has no IngressRoute, and
 Prometheus is the only thing that reaches it — but the baseline admits Prometheus on every port,
