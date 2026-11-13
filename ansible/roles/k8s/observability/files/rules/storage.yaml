@@ -191,9 +191,10 @@ groups:
       # selector takes every origin: the Pi has no kubelet plugin mounts, and a pin to one
       # origin would hide the same fault on another node. An absent series is healthy.
       # `for: 1m` is two scrapes: the 2026-11-11 remounts lasted 2 to 6 minutes, and no CSI mount
-      # read 1 in the 20 days of retention before 2026-11-13 (#8212). This rule cannot see a
-      # fault on the node hosting Prometheus while it boots; loki-homelab's
-      # HostFilesystemRemountedReadOnly covers that from the kernel log.
+      # read 1 in the 20 days of retention before 2026-11-13 (#8212). A remount that clears
+      # while the node hosting Prometheus boots is never scraped; loki-homelab's
+      # HostFilesystemRemountedReadOnly reads that one from the kernel log. A remount of
+      # prometheus-data stops the Watchdog, which pages from Healthchecks.io.
       - alert: KubeletCSIMountReadOnly
         expr: node_filesystem_readonly{mountpoint=~"/var/lib/kubelet/plugins/.*"} == 1
         for: 1m

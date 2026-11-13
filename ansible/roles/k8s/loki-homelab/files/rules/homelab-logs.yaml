@@ -142,10 +142,11 @@ groups:
             container hitting its limit. Read {job="syslog", program="kernel"} in loki-homelab
             for the killed process and the memory report above it.
       # An ext4 filesystem the kernel remounted read-only after I/O errors pages on the first
-      # line (#8212). It is the arm that sees a fault on the node hosting Prometheus, which
-      # cannot scrape KubeletCSIMountReadOnly's series while that node boots: on 2026-11-11 four
-      # Longhorn devices on daniel-server stayed read-only for 2 to 6 minutes, inside the 11
-      # minutes Prometheus had no samples, and the lines reached this Loki once Alloy resumed.
+      # line (#8212). It catches a remount that clears before Prometheus scrapes again after its
+      # own node boots: on 2026-11-11 four Longhorn devices on daniel-server stayed read-only for
+      # 2 to 6 minutes, inside the 11 minutes Prometheus had no samples, and the lines reached
+      # this Loki once Alloy resumed. It shares that node, so a remount of this Loki's own claim
+      # that never clears stores no line; KubeletCSIMountReadOnly pages on that one instead.
       # The 1h range keeps a post-boot remount firing past the weekly reboot's Alertmanager mute,
       # which ends `weekly_reboot_mute_recovery_minutes` (40) after the reboot. Measured
       # 2026-11-13 over 14 days, including two weekly reboots, the line appeared only on 11-11.
