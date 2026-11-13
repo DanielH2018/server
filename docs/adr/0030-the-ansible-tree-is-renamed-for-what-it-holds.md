@@ -113,11 +113,16 @@ The rename lands in two steps:
   path alone starts at the rename commit and would date every secret to it.
 - The render changes in one place only. Ten verify Jobs and deploy gates name their
   `homelab/rerun-safe` test at its new path, because the renderer refuses a node ID that names
-  no test in the tree. The annotation is metadata, and no Job name changes.
+  no test in the tree. The annotation is metadata, and no Job name changes. The render-diff
+  gates, `scripts/validate/render_diff_gates.py`, read a base before the rename at its
+  `ansible/` layout, so they judge a range that crosses the rename.
 - The homelab-mcp pod still mounts the node's `ansible/` through a hostPath, and is the one
   node-local reader step 2 does not move. It runs on daniel-server, whose checkout no timer
-  syncs, so a mount of `k8s/` there would hold the pod in ContainerCreating. Moving it waits
-  for a checkout the pod's node keeps current.
+  syncs, so a mount of `k8s/` there would hold the pod in ContainerCreating. Its placement is
+  a preference, not a requirement. If daniel-server is down, the pod schedules on daniel-box,
+  where the synced checkout holds no `ansible/` tree, and it fails to mount or serves an
+  ignored-file leftover. Moving it waits for a checkout the pod's node keeps current
+  ([#8409](https://github.com/DanielH2018/server/issues/8409)).
 - The readers that compare two commits, the forward-only pin gate in `cluster_pins.py` and
   `promote_lib/forward_only.py`, read both layouts. A range whose base predates the rename
   would otherwise read no pin and no forward-only role on that side.
