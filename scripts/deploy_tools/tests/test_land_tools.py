@@ -76,7 +76,7 @@ def _snapshot_repo(tmp_path: Path) -> tuple[Path, str, str, str]:
     """A two-commit repo and a tree-lock path inside tmp_path; (repo, first, second, lock).
 
     The lock path is handed to the test that holds it while a snapshot is taken. It points
-    inside tmp_path, never at the production file a live gitops tick holds.
+    inside tmp_path, never at the production file a live tree job holds.
     """
     repo = init_repo(tmp_path / "repo")
     first = _commit(repo, "one")

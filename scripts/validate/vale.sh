@@ -15,7 +15,7 @@
 # a lock held on that directory would leave every waiter holding a lock on a deleted inode
 # and no mutual exclusion at all. Locking the parent is the reason this works. It is opened
 # read-only on fd 9 — flock(2) locks the open file description, so no lock file is created
-# and nothing untracked lands in the checkout (an untracked file parks the GitOps deployer).
+# and nothing untracked lands in the checkout (an untracked file parks `homelab-checkout-sync`).
 #
 # THE STAMP, NOT THE DIRECTORY, IS THE GUARD. `[ -d styles/Google ]` also passes for a
 # half-unpacked tree left by an interrupted sync, and Vale lints happily with a partial rule

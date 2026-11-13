@@ -50,7 +50,7 @@ descriptor, so the holder comes from fuser and only the waiter from `/proc/locks
 
 `ps` with `ppid` folds each process family to one row carrying `locks` (held) and
 `waiting_on`. A landing (`land.py`, its `uv run` wrapper and its children) is one `land`
-row. A holder that is not a landing, such as the GitOps tick on the tree lock, is a `lock`
+row. A holder that is not a landing, such as `homelab-checkout-sync` on the tree lock, is a `lock`
 row rather than nothing. A `grep` for a run is not a run. fuser lists only processes whose `/proc/<pid>/fd` this
 user can read; every landing here runs as `{{ sys_user }}`, the daemon's own user.
 

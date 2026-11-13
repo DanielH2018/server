@@ -1,8 +1,7 @@
 # The primary checkout's fast-forward on daniel-box (H7.51, docs/target-architecture/host/
 # h7-delete-ansible.md, *The deployer retires last, and checkout-sync replaces its fast-forward*).
-# It runs beside the GitOps deployer until H7.52 retires the deployer's timer. Both take the
-# git-tree lock, and a fast-forward to a commit HEAD already contains does nothing, so the two
-# never race.
+# It takes the git-tree lock, so it never races another tree job, and a fast-forward to a
+# commit HEAD already contains does nothing.
 #
 # homelab-checkout-sync.timer starts homelab-checkout-sync.service every 10 minutes as sys_user in
 # /home/<sys_user>/server. hosts/lib/checkout_sync.py does the work, and its docstring lists the

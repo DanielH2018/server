@@ -562,7 +562,7 @@ def main(argv=None) -> int:
         return EXIT_REFUSED
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    # Outside the checkout: an untracked file there parks the GitOps deployer.
+    # Outside the checkout: an untracked file there parks `homelab-checkout-sync`.
     out = args.out or Path.home() / ".cache" / "homelab-evals" / "ablation" / stamp
     (out / "runs").mkdir(parents=True, exist_ok=True)
     arms = build_arms(args.doc, doc, sections, agent_names)

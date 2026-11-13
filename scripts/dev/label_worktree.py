@@ -9,8 +9,8 @@ SessionStart banner and `prune_worktrees.py` print beside the name.
     uv run python scripts/dev/label_worktree.py --clear
 
 Issue numbers are read from this repo's register with `gh`; `--text` reads nothing. It refuses
-to write outside `.claude/worktrees/`, because a stray file in the primary checkout parks the
-GitOps deployer.
+to write outside `.claude/worktrees/`, because a stray file in the primary checkout parks
+`homelab-checkout-sync`.
 
 Exit codes: 0 written or cleared, 1 the `gh` read failed, 64 bad arguments or not in a
 worktree under `.claude/worktrees/`.

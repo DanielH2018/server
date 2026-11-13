@@ -2,10 +2,8 @@
 
 `ci_verdict` reduces GitHub's check-runs for ONE commit to `pass`, `pending` or `fail` over the
 required contexts, and `ci_walk_candidates` bounds the ancestor walk that runs when the tip is
-not green. Stdlib only and importing nothing first-party, because the GitOps deployer ships it
-beside its own modules in `/opt/gitops-deploy/`, the host packages' builder grades the same
-rule, and `homelab-checkout-sync` grades the fetched tip with it (H7.51). The deployer's
-`deploy_git.py` imports the names from here until H7.19a retires it.
+not green. Stdlib only and importing nothing first-party, because the host packages' builder grades the
+same rule and `homelab-checkout-sync` grades the fetched tip with it (H7.51).
 """
 
 from __future__ import annotations

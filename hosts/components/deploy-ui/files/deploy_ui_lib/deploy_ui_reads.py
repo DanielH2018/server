@@ -136,7 +136,7 @@ def runs(
 
     The topmost run or lock holder on a pid's ancestor chain owns every run and holder
     below it. A landing is `uv run … land.py`, its python child, and every process it
-    spawns: one row, kind `land`. A lock holder that is not a landing — the GitOps tick
+    spawns: one row, kind `land`. A lock holder that is not a landing — `homelab-checkout-sync`
     on the tree lock — is a row of kind `lock`,
     so a held lock is never invisible because its holder matched no pattern. fuser lists
     every process with the file open, children included, which is why the fold has to

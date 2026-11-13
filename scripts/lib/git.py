@@ -94,7 +94,7 @@ def git_dirty(
     ten different ways across four Python callers and six shell sites -- six counting untracked
     files, three scoped to a tracked list, one scoped to two paths. Each variant is right where
     it sits; the hazard is the next caller copying whichever it meets first. An untracked file
-    counted by a ``--porcelain`` check is what parks the GitOps deployer, and the ``.gitignore``
+    counted by a ``--porcelain`` check is what parks `homelab-checkout-sync`, and the ``.gitignore``
     fix for that deadlocks.
 
     Args:

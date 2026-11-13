@@ -1,4 +1,4 @@
-# Shipped by homelab-daniel-box with its enable link. Every 10 minutes, as the deployer's tick.
+# Shipped by homelab-daniel-box with its enable link. Every 10 minutes.
 [Unit]
 Description=Fast-forward the primary checkout every 10 minutes
 

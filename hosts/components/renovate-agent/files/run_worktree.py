@@ -2,7 +2,7 @@
 """The run worktree's lifecycle: decide whether it can be recreated, then recreate it.
 
 The session runs in a dedicated worktree, never in the primary checkout. One untracked file
-in /home/<user>/server parks the GitOps deployer silently, and a session that edits, renders
+in /home/<user>/server parks `homelab-checkout-sync` silently, and a session that edits, renders
 and tests is guaranteed to leave some.
 
 Everything here talks to git and to the forge, and to nothing the census and digest halves of
