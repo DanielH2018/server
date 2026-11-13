@@ -322,6 +322,47 @@ loki.process "k3s" {
   }
 }
 
+// auditd's log on each node (server#8250), so a write to a watched Claude Code guardrail path or
+// memory store leaves a record off the host. claude-guardrail-audit, a timer in each node's host
+// package, loads those watches under the keys `claude-guardrail` and `claude-memory`. Alloy runs
+// as root, and /var/log is already mounted, so the 0640 root:adm file needs no new mount.
+//
+// The exact file, never `audit.log*`: auditd rotates by renaming to `.1` and opening a new file.
+//
+// One audit event is several lines that share `msg=audit(<time>:<serial>)`: a SYSCALL line
+// carrying the rule's key and the process, a PATH line per file, a CWD and a PROCTITLE line.
+// Query a key with `|= "key=\"claude-memory\""`, then the event's other lines by its serial.
+local.file_match "host_audit" {
+  path_targets = [{"__path__" = "/var/log/audit/audit.log", "job" = "{{ loki_streams.host_audit.job }}", "machine" = sys.env("HOSTNAME")}]
+}
+
+loki.source.file "host_audit" {
+  targets    = local.file_match.host_audit.targets
+  forward_to = [loki.process.host_audit.receiver]
+}
+
+// Measured 2026-11-13 over daniel-box's live audit.log, 27487 lines in about 10 hours: the
+// kernel's BPF program loads and unloads (6000), netfilter rule changes (3276) and systemd's
+// unit start and stop records (5182) carry no watch key, and neither does the SYSCALL line paired
+// with a BPF or netfilter record (`key=(null)`). Dropping those keeps every record a keyed
+// watch writes. A match stage per drop, because test_traefik_access_log_drop.py holds every
+// stage.drop in this file inside a stage.match.
+loki.process "host_audit" {
+  forward_to = [loki.write.homelab.receiver]
+
+  stage.match {
+    selector            = "{job=\"{{ loki_streams.host_audit.job }}\"} |~ \"^type=(BPF|NETFILTER_CFG|SERVICE_START|SERVICE_STOP) \""
+    action              = "drop"
+    drop_counter_reason = "audit_unkeyed_bookkeeping"
+  }
+
+  stage.match {
+    selector            = "{job=\"{{ loki_streams.host_audit.job }}\"} |~ \"^type=SYSCALL .* key=[(]null[)]\""
+    action              = "drop"
+    drop_counter_reason = "audit_unkeyed_syscall"
+  }
+}
+
 {% if k3s_audit_log_enabled | default(false) %}
 // The apiserver audit log. Only daniel-box writes one — the file lives under the k3s SERVER
 // data directory and the agent node has no apiserver — but the source is declared on both
