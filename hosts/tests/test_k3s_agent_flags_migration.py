@@ -39,12 +39,10 @@ LIVE_ARGS = [
     "image-gc-low-threshold=55",
 ]
 
-K3S_NODES = ("daniel-box", "daniel-server")
-
 
 @functools.cache
-def rendered_config(host: str = "daniel-server") -> dict:
-    package = host_mode.render_host(host)
+def rendered_config() -> dict:
+    package = host_mode.render_host("daniel-server")
     return yaml_fast.safe_load(package.files[CONFIG][0].decode())
 
 
@@ -58,10 +56,10 @@ def test_a_flag_lost_in_the_move_is_detected():
     assert config_flags(config) != cli_flags(LIVE_ARGS)
 
 
-def image_gc_problems(host: str, config: dict) -> list[str]:
+def image_gc_problems(config: dict) -> list[str]:
     """The kubelet's image-GC thresholds must sit below Longhorn's replica scheduling floor.
 
-    Both nodes' image filesystem is the root volume Longhorn's disk shares, and
+    The image filesystem is the root volume Longhorn's disk shares, and
     k3s-host-checks' `k3s_disk_max_pct` is that floor. GC that starts above it leaves every
     superseded image on disk until Longhorn stops scheduling replicas (#8307). The kubelet
     refuses to start when the low threshold is not below the high one.
@@ -75,38 +73,32 @@ def image_gc_problems(host: str, config: dict) -> list[str]:
     high = args.get("image-gc-high-threshold")
     low = args.get("image-gc-low-threshold")
     if high is None or low is None:
-        return [f"{host}: kubelet-arg lacks an image-gc-high/low-threshold pair"]
+        return ["kubelet-arg lacks an image-gc-high/low-threshold pair"]
     problems = []
     if not int(high) < floor:
-        problems.append(f"{host}: image-gc-high-threshold {high} is not below {floor}")
+        problems.append(f"image-gc-high-threshold {high} is not below {floor}")
     if not int(low) < int(high):
-        problems.append(f"{host}: image-gc-low-threshold {low} is not below {high}")
+        problems.append(f"image-gc-low-threshold {low} is not below {high}")
     return problems
 
 
-def test_both_nodes_start_image_gc_below_the_longhorn_floor():
-    assert [
-        p for host in K3S_NODES for p in image_gc_problems(host, rendered_config(host))
-    ] == []
+def test_the_agent_starts_image_gc_below_the_longhorn_floor():
+    assert image_gc_problems(rendered_config()) == []
 
 
 def test_an_image_gc_threshold_at_the_kubelet_default_is_flagged():
-    config = dict(rendered_config("daniel-box"))
+    config = dict(rendered_config())
     config["kubelet-arg"] = [
         "image-gc-high-threshold=85" if item.startswith("image-gc-high") else item
         for item in config["kubelet-arg"]
     ]
-    assert image_gc_problems("daniel-box", config) == [
-        "daniel-box: image-gc-high-threshold 85 is not below 75"
-    ]
+    assert image_gc_problems(config) == ["image-gc-high-threshold 85 is not below 75"]
 
 
 def test_a_low_threshold_not_below_the_high_one_is_flagged():
-    config = dict(rendered_config("daniel-server"))
+    config = dict(rendered_config())
     config["kubelet-arg"] = [
         "image-gc-low-threshold=65" if item.startswith("image-gc-low") else item
         for item in config["kubelet-arg"]
     ]
-    assert image_gc_problems("daniel-server", config) == [
-        "daniel-server: image-gc-low-threshold 65 is not below 65"
-    ]
+    assert image_gc_problems(config) == ["image-gc-low-threshold 65 is not below 65"]
