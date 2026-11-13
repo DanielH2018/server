@@ -2,7 +2,7 @@
 """The agent user signs and pushes as its own GitHub account, and only with its own token.
 
 The claude-code host component gives `claude` a signing key, a git config and
-gh's token for the DanielClaudeBot machine account. Each test pins one leg: a commit that does
+gh's token for the claudemachineacct1 machine account. Each test pins one leg: a commit that does
 not carry the account's noreply address is not attributed to it, an unsigned one never reads
 Verified, and a token that reaches anywhere but the agent's 0600 file is one an operator session
 or a log could read.
@@ -31,9 +31,9 @@ def test_gh_reads_the_token_for_the_agents_own_account() -> None:
         {"claude_code_agent_gh_token": TOKEN},
     )
     host = yaml_fast.safe_load(rendered)["github.com"]
-    assert host["users"] == {"DanielClaudeBot": {"oauth_token": TOKEN}}
+    assert host["users"] == {"claudemachineacct1": {"oauth_token": TOKEN}}
     assert host["oauth_token"] == TOKEN
-    assert host["user"] == "DanielClaudeBot"
+    assert host["user"] == "claudemachineacct1"
     assert host["git_protocol"] == "https"
 
 
@@ -76,9 +76,9 @@ def git_config(rendered: str, tmp_path, key: str) -> list[str]:
 def test_git_signs_every_commit_as_the_machine_account(tmp_path) -> None:
     rendered = render_component_text("claude-code", "agent-gitconfig.j2")
     expect = {
-        "user.name": ["DanielClaudeBot"],
+        "user.name": ["claudemachineacct1"],
         # The noreply address carries the account's numeric id, which is what GitHub matches.
-        "user.email": ["338220904+DanielClaudeBot@users.noreply.github.com"],
+        "user.email": ["356237609+claudemachineacct1@users.noreply.github.com"],
         "user.signingkey": ["/var/lib/claude/.ssh/git_signing_ed25519"],
         "gpg.format": ["ssh"],
         "gpg.ssh.allowedsignersfile": ["/var/lib/claude/.config/git/allowed_signers"],
