@@ -20,8 +20,8 @@
 #   systemd-tmpfiles-setup.service applies the file at boot. The directory is not a dpkg-owned
 #   path, so removing the package leaves it in place.
 # - The users arm declares node_exporter in the homelab band 900-949, below the uids Ubuntu hands
-#   out from 999 down (#8100). The live Pi held 999 and moves with
-#   scripts/deploy_tools/renumber_host_users.py. The live group has gid 986; a rebuilt Pi gets gid equal to uid.
+#   out from 999 down (#8100). The live group has gid 986;
+#   a rebuilt Pi gets gid equal to uid.
 # - The LAN's 9100 ufw rule is the Pi package's `node-exporter` rule (hosts/daniel-pi/package.yml)
 #   since H7.30, which adopted the Ansible-era rule (`optimize_pi: node_exporter`) in place.
 # - Retired on the live Pi, and left to the next rebuild: /opt/node_exporter-<version>.linux-arm64

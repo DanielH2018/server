@@ -75,7 +75,7 @@ def render_file(env: jinja2.Environment, name: str, variables: dict) -> str:
 def _template_lookup(env: jinja2.Environment, ctx: dict):
     """`make_lookup`, with `template` rendered through `env` and the calling template's variables.
 
-    The labelling wrapper calls `lookup('ansible.builtin.template', manifests_label_src)`, and
+    The labelling wrapper calls `lookup('template', manifests_label_src)`, and
     the inner template reads the task's loop variable (`manifests_claim`). So the lookup renders
     with the caller's variables, through the same strict environment and loader, where
     `make_lookup` renders with the role context and a `StubUndefined` environment.
@@ -88,7 +88,6 @@ def _template_lookup(env: jinja2.Environment, ctx: dict):
 
     @pass_context
     def lookup(context: Context, kind: str, *args, **kwargs) -> object:
-        kind = kind.removeprefix("ansible.builtin.")
         if kind not in LOOKUPS:
             raise jinja2.TemplateRuntimeError(
                 f"lookup {kind!r} is not in the renderer's dialect"

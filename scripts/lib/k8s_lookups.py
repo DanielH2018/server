@@ -8,13 +8,14 @@ checkout to narrow a secrets change.
 import re
 from pathlib import Path
 
-# A `lookup('file' | 'template', playbook_dir ~ '/roles/k8s/<role>/<path>')` naming one file,
-# with `+` or `~` as the join and any keyword arguments after the path (`rstrip=False`, #5463).
+# A `lookup('b64file' | 'file' | 'template', playbook_dir ~ '/roles/k8s/<role>/<path>')`
+# naming one file, with `+` or `~` as the join and any keyword arguments after the path
+# (`rstrip=False`, #5463).
 # Group 1 is the path from `roles/`. A lookup that builds its path from a variable
 # (`'/roles/k8s/x/files/' + name`) names a directory, never a file, and every such lookup in
 # the tree reads its own role.
 K8S_LOOKUP_RE = re.compile(
-    r"lookup\(\s*'(?:ansible\.builtin\.)?(?:file|template)'\s*,\s*playbook_dir\s*[+~]\s*"
+    r"lookup\(\s*'(?:b64file|file|template)'\s*,\s*playbook_dir\s*[+~]\s*"
     r"'/(roles/k8s/[^']+)'\s*(?:,[^)]*)?\)"
 )
 

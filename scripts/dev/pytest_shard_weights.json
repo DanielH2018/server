@@ -853,6 +853,7 @@
  "scripts/deploy_tools/tests/test_land_imports.py": 0.01,
  "scripts/deploy_tools/tests/test_land_landing.py": 0.0,
  "scripts/deploy_tools/tests/test_land_ledger.py": 0.0,
+ "scripts/deploy_tools/tests/test_land_live_limit.py": 0.0,
  "scripts/deploy_tools/tests/test_land_merge.py": 0.0,
  "scripts/deploy_tools/tests/test_land_merge_past_review.py": 0.0,
  "scripts/deploy_tools/tests/test_land_merge_stuck_check.py": 0.0,

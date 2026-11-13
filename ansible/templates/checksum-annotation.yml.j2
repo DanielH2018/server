@@ -1,6 +1,6 @@
 {#
   checksum/<name> pod-template annotation — the trigger a Deployment/DaemonSet needs to
-  restart on content it mounts but `ansible.builtin.template` never rendered. A ConfigMap
+  restart on content it mounts but the template module never rendered. A ConfigMap
   staged by `kubectl create configmap --from-file` (observability's Grafana dashboards are the
   one left) sits outside the manifests role's own render/apply cycle, so `manifests_render is changed`
   never fires for it and the pod keeps running the code

@@ -23,8 +23,9 @@ from lib.repo_paths import REPO
 # 13618 once H7.55 dropped the `role:` sources, which the components now own.
 # 13622 once #8023 listed the Flux GitHub App's three keys in `SOPS_MANIFEST_KEYS`.
 # 13619 once #8172 rewrote the renderer's docstrings.
-# 13607 once #8165 deleted the owner-entry-points census and the renderer helper only it read.
-LINE_CEILING = 13607
+# 13627 once #8173 let rule 5 judge the labelling wrapper's `lookup('template')`.
+# 13615 once #8165 deleted the owner-entry-points census and the renderer helper only it read.
+LINE_CEILING = 13615
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 

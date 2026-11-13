@@ -11,8 +11,8 @@ WHAT COUNTS AS UNDEFINED. Rendering with a bare `StrictUndefined` would fail on 
 secret and every key a host component supplies, so this guard renders with a tracking
 Undefined and then judges each name it collected. A name is allowed to be undefined when it is:
 
-  - Ansible-supplied — `ansible_*`, `inventory_hostname`, `hostvars`, `groups`, `item`
-    (`ANSIBLE_SUPPLIED` / `ANSIBLE_SUPPLIED_PREFIXES`);
+  - supplied by the host renderer (`renderer_lib/host.py`) — `hostvars`, `inventory_hostname`
+    and `playbook_dir` (`HOST_RENDER_SUPPLIED`);
   - a SOPS secret, by name, from the plaintext registry `ansible/secret_rotation.yml`;
   - defined anywhere in the inventory — `group_vars/all.yml` or any host's `host_vars` file;
   - declared in the component's own `defaults/main.yml`. `lib.render_context` leaves out a
@@ -66,25 +66,11 @@ from lib.repo_paths import REPO
 COMPONENTS = REPO / "hosts" / "components"
 SECRET_REGISTRY = ANSIBLE / "secret_rotation.yml"
 
-# Names Ansible itself supplies, which no repo file defines and none should.
-ANSIBLE_SUPPLIED = frozenset(
-    {
-        "ansible_managed",
-        "hostvars",
-        "groups",
-        "inventory_hostname",
-        "item",
-        "playbook_dir",
-    }
-)
-ANSIBLE_SUPPLIED_PREFIXES = ("ansible_",)
+# The names `renderer_lib/host.py` supplies a component template, which no repo file defines.
+HOST_RENDER_SUPPLIED = frozenset({"hostvars", "inventory_hostname", "playbook_dir"})
 
-# Ansible-supplied values given a plausible rendering rather than a stub: the `comment` filter
-# raises on an Undefined, so `{{ ansible_managed | comment }}` cannot render without one.
-ANSIBLE_RUNTIME_CONTEXT = {
-    "ansible_managed": "Ansible managed",
-    "inventory_hostname": "daniel-box",
-}
+# The host the renderer sets `inventory_hostname` to, given a plausible value here.
+HOST_RENDER_CONTEXT = {"inventory_hostname": "daniel-box"}
 
 
 def _tracking_undefined(seen: dict[str, set[str]], template: str):
@@ -144,14 +130,12 @@ def inventory_names() -> frozenset[str]:
 def is_allowed_undefined(name: str, known: frozenset[str]) -> bool:
     """Whether an undefined variable is one this guard tolerates.
 
-    `known` is the union of the secret registry and the inventory;
-    Ansible's own magic vars are matched here rather than folded into it, because they come from
-    the runtime rather than from any file this repo could census.
+    `known` is the union of the secret registry and the inventory. The host renderer's own
+    names are matched here rather than folded into it, because no file this repo could census
+    holds them.
     """
     root = name.split(".", 1)[0].split("[", 1)[0]
-    if root in ANSIBLE_SUPPLIED or root.startswith(ANSIBLE_SUPPLIED_PREFIXES):
-        return True
-    return root in known
+    return root in HOST_RENDER_SUPPLIED or root in known
 
 
 def discover_templates(components: Path = COMPONENTS) -> list[Path]:
@@ -263,7 +247,7 @@ def check_role_template(
     is left out of the context and still counts as defined. `components` is where
     `component_supplied` looks, a parameter for the tests.
     """
-    ctx = component_context(tpl.parents[1], ANSIBLE_RUNTIME_CONTEXT)
+    ctx = component_context(tpl.parents[1], HOST_RENDER_CONTEXT)
     own = tpl.parents[1] / "defaults" / "main.yml"
     defaults = frozenset(load_yaml(own) if own.is_file() else ())
     return check_template(
