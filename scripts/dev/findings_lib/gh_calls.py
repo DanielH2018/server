@@ -132,7 +132,7 @@ def load_issues(
 SETTLED_LABELS = ("refuted", "accepted")
 
 # A not-planned close that carries neither settled label: closed by hand, outside
-# `findings.py close`, so no ruling and no reason were recorded.
+# `findings.py close`, so no ruling was recorded.
 UNRULED_CLOSE_SEARCH = "reason:not-planned " + " ".join(
     f"-label:{label}" for label in SETTLED_LABELS
 )

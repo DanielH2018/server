@@ -13,8 +13,8 @@ skeptic disproved it), grouped by reviewer domain with the close reason beside i
 reviewer agents under .claude/agents/ point at that table instead of carrying a hand-copied
 "don't re-flag" list each, which would drift. `findings.py open` refuses to re-file either
 outcome; this table is where a reviewer reads the same ruling before it spends a pass
-re-deriving it. The fourth lists the not-planned closes that carry neither label: closed by
-hand outside `findings.py`, with no ruling recorded, so they are absent from the settled
+re-deriving it. The fourth lists the not-planned closes that carry neither label: closed
+outside `findings.py close`, with no ruling recorded, so they are absent from the settled
 register and `findings.py open` reopens a re-file of one as a regression.
 
 WHAT IT READS. `findings_lib/issue_model.py`'s row model over the four narrow `gh issue
@@ -201,10 +201,10 @@ def _unruled_section(rows: list[dict]) -> list[str]:
     """Findings closed as not planned with neither settled label, by number."""
     parts = [
         "## Closed without a ruling\n",
-        "Findings closed as not planned outside `findings.py close`, so they carry neither "
-        "the `accepted` nor the `refuted` label and recorded no reason. None of them is "
-        "settled: `findings.py open` reopens a re-file of one as a regression. To record a "
-        "ruling, reopen the issue, then close it with `findings.py close --accepted "
+        "Findings closed as not planned that carry neither the `accepted` nor the "
+        "`refuted` label, so `findings.py close` recorded no ruling on them. None of them "
+        "is settled: `findings.py open` reopens a re-file of one as a regression. To record "
+        "a ruling, reopen the issue, then close it with `findings.py close --accepted "
         "--reason` or `--refuted --reason`, or work it.\n",
     ]
     if not rows:
