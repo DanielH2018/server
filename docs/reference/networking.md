@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/networking.py
-generated_at: 2026-11-12 15:10 UTC
-generated_sha: 0d7821e53
+generated_at: 2026-11-13 18:17 UTC
+generated_sha: c9de2bd37
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 0d7821e53
 
 # Networking
 
-35 routed k8s service(s).
+37 routed k8s service(s).
 
 !!! note "The domain is filled in by your browser"
     A route answers on the LAN name, the public name or both, and a static page cannot know which one you are on, so the generator writes `<domain>`. On the docs site the routes below become links, built from the domain of the URL you are reading this on — so you get LAN links on the LAN name and public links on the public one.
@@ -41,6 +41,7 @@ generated_sha: 0d7821e53
 | jellyfin | daniel-box | <span class="fqdn" data-host="jellyfin">jellyfin.&lt;domain&gt;</span> · <span class="fqdn" data-host="jellyfin.local">jellyfin.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
 | karakeep | daniel-box | <span class="fqdn" data-host="karakeep">karakeep.&lt;domain&gt;</span> · <span class="fqdn" data-host="karakeep.local">karakeep.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia`, `csp-karakeep` |
 | karma | daniel-box | <span class="fqdn" data-host="karma.local">karma.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit`, `authelia` |
+| lidarr | daniel-box | <span class="fqdn" data-host="lidarr">lidarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="lidarr.local">lidarr.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | littlelink | daniel-box | <span class="fqdn" data-host="www">www.&lt;domain&gt;</span> · <span class="fqdn" data-host="www.local">www.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
 | loki-homelab | daniel-box | <span class="fqdn" data-host="loki-homelab.local">loki-homelab.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
 | longhorn-ui | daniel-box | <span class="fqdn" data-host="longhorn.local">longhorn.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit`, `authelia` |
@@ -53,6 +54,7 @@ generated_sha: 0d7821e53
 | qbittorrent | daniel-box | <span class="fqdn" data-host="qbittorrent">qbittorrent.&lt;domain&gt;</span> · <span class="fqdn" data-host="qbittorrent.local">qbittorrent.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | radarr | daniel-box | <span class="fqdn" data-host="radarr">radarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="radarr.local">radarr.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | scrutiny | daniel-box | <span class="fqdn" data-host="scrutiny">scrutiny.&lt;domain&gt;</span> · <span class="fqdn" data-host="scrutiny.local">scrutiny.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
+| slskd | daniel-box | <span class="fqdn" data-host="slskd">slskd.&lt;domain&gt;</span> · <span class="fqdn" data-host="slskd.local">slskd.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | sonarr | daniel-box | <span class="fqdn" data-host="sonarr">sonarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="sonarr.local">sonarr.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | speedtest | daniel-box | <span class="fqdn" data-host="speedtest">speedtest.&lt;domain&gt;</span> · <span class="fqdn" data-host="speedtest.local">speedtest.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | tdarr | daniel-box | <span class="fqdn" data-host="tdarr">tdarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="tdarr.local">tdarr.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |

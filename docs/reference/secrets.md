@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-11-13 06:17 UTC
-generated_sha: 01164fdc0
+generated_at: 2026-11-13 18:17 UTC
+generated_sha: c9de2bd37
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 01164fdc0
 
 # Secrets
 
-111 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+116 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -55,7 +55,7 @@ needs a human to mint the new value in the app, then `sops set` it.
 | `calendar_2` | 2026-05-21 | 2027-05-11 | 179 |
 | `calendar_3` | 2025-09-25 | 2026-08-27 | -78 |
 | `calendar_4` | 2025-09-01 | 2026-08-30 | -75 |
-| `claude_code_agent_gh_token` | 2026-02-12 | 2027-01-14 | 62 |
+| `claude_code_agent_gh_token` | 2026-11-13 | 2027-10-15 | 336 |
 | `claude_code_triage_claude_oauth_token` | 2026-04-10 | 2027-03-23 | 130 |
 | `claude_ha_token` | 2025-10-03 | 2026-09-09 | -65 |
 | `cloudflare_analytics_token` | 2026-04-03 | 2027-03-18 | 125 |
@@ -85,6 +85,7 @@ needs a human to mint the new value in the app, then `sops set` it.
 | `karakeep_meili_master_key` | 2026-02-17 | 2027-01-25 | 73 |
 | `karakeep_nextauth_secret` | 2026-03-24 | 2027-03-09 | 116 |
 | `karakeep_python_api_key` | 2025-09-17 | 2026-08-21 | -84 |
+| `lidarr_api_key` | 2026-07-07 | 2027-07-07 | 236 |
 | `livesync_db_password` | 2025-11-16 | 2026-11-02 | -11 |
 | `livesync_sync_token` | 2025-09-04 | 2026-08-10 | -95 |
 | `longhorn_b2_application_key` | 2026-05-29 | 2027-05-13 | 181 |
@@ -106,13 +107,15 @@ needs a human to mint the new value in the app, then `sops set` it.
 | `qbittorrent_password` | 2025-09-20 | 2026-08-28 | -77 |
 | `r2_access_key_id` | 2026-04-28 | 2027-04-18 | 156 |
 | `r2_secret_access_key` | 2026-04-11 | 2027-04-10 | 148 |
-| `radarr_api_key` | 2026-08-29 | 2027-08-05 | 265 |
+| `radarr_api_key` | 2026-11-13 | 2027-10-20 | 341 |
 | `renovate_agent_claude_oauth_token` | 2026-06-01 | 2027-05-21 | 189 |
 | `renovate_agent_gh_token` | 2026-11-05 | 2027-10-28 | 349 |
 | `scrutiny_influxdb_admin_password` | 2026-07-23 | 2027-06-29 | 228 |
 | `scrutiny_influxdb_token` | 2026-03-10 | 2027-02-09 | 88 |
+| `slskd_wireguard_private_key` | 2026-04-12 | 2027-03-22 | 129 |
 | `smtp_notify_app_password` | 2026-04-29 | 2027-04-24 | 162 |
-| `sonarr_api_key` | 2026-08-29 | 2027-08-28 | 288 |
+| `sonarr_api_key` | 2026-11-13 | 2027-11-12 | 364 |
+| `soulseek_password` | 2026-04-20 | 2027-03-22 | 129 |
 | `speedtest_api_token` | 2026-08-30 | 2027-08-24 | 284 |
 | `speedtest_app_key` | 2025-08-25 | 2026-07-29 | -107 |
 | `terraria_password` | 2025-12-26 | 2026-12-09 | 26 |
@@ -135,6 +138,7 @@ lives in a third-party system; rotate there first.
 | `monitor_bridge_deploy_pipeline_github_token` | 2026-10-11 | 2027-09-22 | 313 |
 | `monitor_discord_webhook_url` | 2026-09-19 | 2027-08-27 | 287 |
 | `mullvad_account` | 2025-11-16 | 2026-10-18 | -26 |
+| `tested_tree_app_private_key` | 2026-11-13 | 2027-11-04 | 356 |
 | `weather_api_key` | 2026-08-30 | 2027-08-04 | 264 |
 | `wifi_password` | 2026-07-20 | 2027-06-24 | 223 |
 | `wireguard_interface_private_key` | 2026-02-09 | 2027-02-06 | 85 |
@@ -162,6 +166,7 @@ not rotated, and deliberately so.
 | `qbittorrent_username` | None | never (no interval for this tier) | n/a |
 | `r2_account_id` | None | never (no interval for this tier) | n/a |
 | `r2_bucket` | None | never (no interval for this tier) | n/a |
+| `soulseek_username` | None | never (no interval for this tier) | n/a |
 | `wifi_ssid` | None | never (no interval for this tier) | n/a |
 
 ## Rotating one

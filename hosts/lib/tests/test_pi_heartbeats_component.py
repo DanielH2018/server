@@ -73,7 +73,7 @@ def test_a_header_without_the_contract_is_flagged():
 
 
 def test_the_component_ships_its_units_and_links_its_timers(package):
-    names = ("sd-health", "gz-integrity", "recovery", "watchdog-health")
+    names = ("sd-health", "gz-integrity", "recovery", "watchdog-health", "audit-health")
     units = {
         f"homelab-pi-{name}.{kind}" for name in names for kind in ("service", "timer")
     }
@@ -88,6 +88,7 @@ def test_each_service_runs_its_script_as_sys_user(package):
         ("homelab-pi-gz-integrity.service", "pi-gz-integrity"),
         ("homelab-pi-recovery.service", "pi-recovery-health"),
         ("homelab-pi-watchdog-health.service", "pi-watchdog-health"),
+        ("homelab-pi-audit-health.service", "pi-audit-health"),
     ):
         unit = _text(package, f"{UNITS}/{service}")
         assert f"User={user}\n" in unit, service
