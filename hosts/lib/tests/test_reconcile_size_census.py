@@ -45,7 +45,10 @@ def over_ceiling(lib: Path, ceiling: int) -> str | None:
         return None
     parts = ", ".join(f"{name}={lines}" for name, lines in counted.items())
     return (
-        f"reconcile has {total} source lines, over its ceiling of {ceiling} ({parts})"
+        f"reconcile has {total} source lines, over its ceiling of {ceiling} ({parts}). "
+        "Raising the ceiling is an operator ruling (ADR-0029): in this PR the operator "
+        "rules whether to cut reconcile, to raise the ceiling in ADR-0029 with a reason, "
+        "or to switch the host plan to ansible-pull."
     )
 
 
@@ -89,6 +92,16 @@ def test_a_ceiling_one_line_below_the_count_fails_and_prints_both_numbers(tmp_pa
     assert message is not None
     assert "10 source lines" in message
     assert "ceiling of 9" in message
+
+
+def test_the_failure_message_names_the_operator_ruling_and_its_three_choices(tmp_path):
+    lib = _lib(tmp_path, {"homelab-reconcile": "#!/usr/bin/python3\nx = 1\n"})
+    message = over_ceiling(lib, 0)
+    assert message is not None
+    assert "operator ruling (ADR-0029)" in message
+    assert "cut reconcile" in message
+    assert "raise the ceiling in ADR-0029 with a reason" in message
+    assert "ansible-pull" in message
 
 
 def test_a_helper_only_reconcile_imports_carries_the_count_over_the_ceiling(tmp_path):

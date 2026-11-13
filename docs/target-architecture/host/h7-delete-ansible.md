@@ -177,6 +177,10 @@ waived, so the status is DONE. Each reading uses the commands its observation na
 7. **Holds, at the ceiling.** `hosts/lib/tests/test_reconcile_size_census.py` passes, 11
    tests. The census counts 1400 source lines against a ceiling of 1400:
    `homelab-reconcile` has 726, and the seven `reconcile_lib` modules have 674.
+   No headroom remains, so the next source line fails the census. ADR-0029's
+   *Reconcile carries a line ceiling* says what happens then: the operator rules in that PR
+   whether to cut reconcile, to raise the ceiling with a reason, or to switch the host plan
+   to ansible-pull. The census's failure message names the same three choices.
 
 ## Baseline at `70591c307`
 
