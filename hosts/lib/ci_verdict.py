@@ -89,6 +89,25 @@ CI_BUILD_READER_JOBS = frozenset(
 )
 
 
+def _legs(prefix: str) -> frozenset[str]:
+    return frozenset(n for n in CI_GATE_NEEDS_JOBS if n.startswith(prefix))
+
+
+# GitHub gives a matrix job that skipped at job level ONE check-run, named after the job and not
+# after its legs: the `name:` template with its expressions unexpanded, or the job id when it has
+# no `name:`. Run 43354559178 (2026-11-13) reported `host_packages` and the bootstrap template
+# below as skipped, and no leg of either. Each name stands for every leg it maps to.
+CI_SKIPPED_MATRIX_JOBS = {
+    "pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})": _legs(
+        "pytest (shard "
+    ),
+    "host_packages": _legs("host_packages ("),
+    "host_packages_bootstrap (${{ matrix.release }}, ${{ matrix.python }})": _legs(
+        "host_packages_bootstrap ("
+    ),
+}
+
+
 def _run_state(run: dict) -> str:
     """`pass` / `skipped` / `pending` / `fail` for one check-run."""
     if run.get("status") != "completed":
@@ -113,7 +132,8 @@ def jobs_verdict(check_runs: list[dict]) -> str:
     run that is not a push. A cancelled or failed `prove` (a runner fault) runs every dependent
     whatever `proven` says, so they must all pass.
     A `CI_BUILD_READER_JOBS` job that skipped beside a build that succeeded also passes: the
-    build had no work for it.
+    build had no work for it. A skipped matrix job arrives as one check-run under its
+    `CI_SKIPPED_MATRIX_JOBS` name, and counts as each of its legs skipped.
     Fail-closed: any failure is `fail`, a missing or unfinished job is
     `pending`, and a skipped job without that proof is `pending`, so the gate job's own
     conclusion decides it.
@@ -121,6 +141,9 @@ def jobs_verdict(check_runs: list[dict]) -> str:
     states: dict[str, set[str]] = {}
     for run in check_runs:
         name = run.get("name")
+        if name in CI_SKIPPED_MATRIX_JOBS and _run_state(run) == "skipped":
+            for leg in CI_SKIPPED_MATRIX_JOBS[name]:
+                states.setdefault(leg, set()).add("skipped")
         if name == CI_PROVE_JOB or name in CI_GATE_NEEDS_JOBS:
             # A cancelled or failed `prove` broke on the runner, and every dependent ran (#5783).
             unproven = name == CI_PROVE_JOB and run.get("conclusion") in (
