@@ -122,8 +122,8 @@ The hook fires on every path into apt, so the 04:20 and 05:20 UTC apt timers do 
   per published `homelab-daniel-pi`, so a publish can start a refresh at any hour. The process
   table read on 2026-11-05 at 01:35 UTC showed `appstreamcli` in `homelab-updater.service`'s
   cgroup, under the updater's `apt-get update`.
-- `initial_setup`'s *Update and upgrade system packages* task runs the hook through the Ansible
-  apt module.
+- **HISTORY —** `initial_setup`'s *Update and upgrade system packages* task ran the hook through
+  the Ansible apt module, until H7.55b deleted the role.
 
 The purge is dependency-safe. `apt-get -s purge appstream` on the Pi removes that one package,
 because `packagekit` only Recommends it and needs `libappstream5`, which stays. `apt-get
@@ -142,9 +142,9 @@ them:
 
 - **rsyslog**, whose text logs were a second copy of the journal written into the RAM-backed
   `/var/log`. journald is the log of record here, and fail2ban reads the journal. The mask is
-  why `host_vars/daniel-pi.yml` sets `has_rsyslog: false`: initial_setup's rsyslog filter
-  block reads that flag and skips, because its `Restart rsyslog` handler fails on a masked
-  unit (#1946). Unmasking rsyslog means flipping that flag too.
+  why `host_vars/daniel-pi.yml` sets `has_rsyslog: false`: a host with that flag never lists
+  the `rsyslog-filter` component, because its rsyslog restart fails on a masked unit (#1946).
+  Unmasking rsyslog means flipping that flag too.
 - **wpa_supplicant**, because the Pi is on wired ethernet with `wlan0` DOWN.
 - The stale `aideinit` log at `/var/log/aide/aide.log`, about 9 MB of dead RAM — the weekly
   `aide --check` logs to journald.

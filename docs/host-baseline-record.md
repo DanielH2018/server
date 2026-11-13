@@ -5,8 +5,9 @@ the homelab runs, which the host packages ship; the `initial_setup` role that ap
 was deleted by H7.55b. This page is the working-out, read when you edit the
 block it covers.
 
-`tasks/` is the role's own inventory: one file per block tag, named for its subject. Read the
-task file for what a block does. What follows is what a task file does not say on its own.
+`hosts/components/` is the baseline's own inventory: one component per subject, such as
+`host-hardening`, `host-tuning` and `host-maintenance`. Read the component for what a block does.
+What follows is what a component does not say on its own.
 
 ## What each block tag covers
 

@@ -37,7 +37,7 @@ from lib.repo_paths import REPO
 # page cannot see prek.toml.
 _DO_NOT_EDIT = (
     '!!! warning "Generated file — do not edit"\n'
-    "    This page is rendered from the Ansible tree by `{source}`. Hand edits are\n"
+    "    This page is rendered from this repository by `{source}`. Hand edits are\n"
     "    overwritten by the next run, and a prek hook rejects them at commit time.\n"
     "    To change what appears here, change the generator or the source it reads.\n"
 )
