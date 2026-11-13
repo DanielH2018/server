@@ -43,7 +43,7 @@ from lib.repo_paths import REPO
 SELF = "scripts/tests/test_census_rows_test_modules.py"
 PLAN_CITATION = re.compile(
     r"target-architecture"
-    r"|(?<![\w/-])(?:[dhmrg]\d-[a-z0-9-]+|contracts|design|alertmanager-ui-and-readers)\.md\b"
+    r"|(?<![\w-])(?:[dhmrg]\d-[a-z0-9-]+|contracts|design|alertmanager-ui-and-readers)\.md\b"
 )
 
 ROWS = (
@@ -260,6 +260,9 @@ ROWS = (
             Subject("d.py", "msg = 'must name a commit (contracts.md C6)'\n"),
             Subject("e.py", "# is design.md's trigger to cut reconcile\n"),
             Subject("f.py", "# alertmanager-ui-and-readers.md, *Readers*\n"),
+            Subject(
+                "g.py", '"""deploy/d7-superseding-promotions.md has the design."""\n'
+            ),
         ),
         green=(
             Subject(
