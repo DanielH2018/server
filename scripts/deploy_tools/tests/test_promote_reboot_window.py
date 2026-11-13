@@ -1,7 +1,6 @@
 """The weekly reboot's no-promotion window: its derivation, `decide`'s `deferred`, the cron, land-wait.
 
-The plan is docs/target-architecture/deploy/d5-bulk-move.md, *The stateful hold, its post,
-and the reset input*, *No promotion runs into the weekly reboot*. `World` commits the
+ADR-0020 records the weekly reboot window. `World` commits the
 committed schedule (`REBOOT_YAML`): the cron fires Sunday 07:30 UTC, the hosts go down at
 07:35, and M2's mute ends at 08:15.
 

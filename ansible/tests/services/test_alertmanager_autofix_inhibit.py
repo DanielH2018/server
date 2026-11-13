@@ -3,9 +3,8 @@
 M6 batch B7's Cutover-1b makes `AutofixBridgeDown` live (critical, 10m) beside the
 `ScrapeTargetDown` rule that covers `job="autofix-bridge"` (warning, 10m). When the exporter
 dies both rules read the same `up == 0`. The inhibit in `alertmanager-secret.yaml.j2` keeps that
-to the one page (docs/target-architecture/monitoring/m6-retire-kuma.md, "A3 and the handoffs it
-closes", task 6). It has no `equal` list: the job has one target, and the rule's `absent()` arm
-carries no `instance`.
+to the one page (ADR-0026). It has no `equal` list: the job has one target, and the rule's
+`absent()` arm carries no `instance`.
 
 Alertmanager inhibits before it routes, so the inhibit reads shadow alerts too. A shadow source
 over a live target would mute the only page, which is why the last two tests pin both rules live.

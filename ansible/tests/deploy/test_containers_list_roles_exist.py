@@ -3,7 +3,7 @@
 
 AN ENTRY WITH NO ROLE DEPLOYS NOTHING. A k8s entry needs ansible/roles/k8s/<name>/. The Pi's
 services are `compose_services` entries, which the `homelab-daniel-pi` package deploys
-(docs/target-architecture/host/h5-pi-compose.md).
+(ADR-0013).
 
 Run: uv run pytest ansible/tests/deploy/test_containers_list_roles_exist.py
 """

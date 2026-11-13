@@ -1,6 +1,6 @@
 """The B4 producers write a homelab_check_* textfile and push to nothing (M6 batch B4).
 
-docs/target-architecture/monitoring/m6-retire-kuma.md, batch B4: the UPS secondary watchdog, the
+ADR-0026 records the decision. The UPS secondary watchdog, the
 three fake-remux heartbeats, the etcd restore drill with its egress-fence leg, and the renovate
 notifier and agent each write `<check>.prom` through homelab-check-lib.sh, which the rules in
 `other-setup-checks.yaml` read. Each case runs the rendered script, or the rendered function or

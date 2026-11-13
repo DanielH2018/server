@@ -1,9 +1,9 @@
 """Every alert that cites a runbook page links it as a `runbook_url` on the docs site.
 
-M1 convention 4 (`docs/target-architecture/monitoring/m1-alertmanager.md`, *Annotations*)
-asks for `runbook_url` wherever a runbook exists, and `files/alertmanager/homelab.tmpl` prints
-it as the notification's `Runbook:` line. A description that names `docs/<page>.md` gives a
-reader on a phone a path they cannot open, so each such alert also carries the URL (#6174).
+The alert plane (ADR-0026) sets `runbook_url` wherever a runbook exists, and
+`files/alertmanager/homelab.tmpl` prints it as the notification's `Runbook:` line. A
+description that names `docs/<page>.md` gives a reader on a phone a path they cannot open, so
+each such alert also carries the URL (#6174).
 
 DECIDED: runbook_url is a literal URL in each rule, not a page slug that the Alertmanager
 template expands. The rule files are plain YAML that Jinja never renders, so the domain is a

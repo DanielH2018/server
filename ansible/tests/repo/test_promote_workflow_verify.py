@@ -1,13 +1,12 @@
 """The `promote` workflow's verification half: `verify`, `settle` and the dispatched `sha`.
 
 `test_promote_workflow.py`'s `problems` holds every job's guard, permissions, checkouts and
-handoff, these jobs included. This module adds the red fixtures for them that slice D2.5 lists
-(docs/target-architecture/deploy/d2-first-leaf.md, *Steps, as PRs*, item 9), and the
+handoff, these jobs included. This module adds the red fixtures for them (ADR-0020), and the
 properties only these two jobs have: each runs once `prod` has moved, whatever the jobs before
 it concluded, neither joins the `promote` concurrency group, and their timeouts sit inside the
 wait `decide` makes on a verification in flight.
 
-The three limits move together (docs/target-architecture/deploy/d4-ordering.md, *The cap*):
+The three limits move together (ADR-0020):
 `verify`'s `timeout-minutes` holds the capped derived timeout, `decide`'s in-flight wait holds
 `verify`'s and `settle`'s limits plus runner queueing, and the `promote` job holds that wait
 inside GitHub's 6-hour job limit. A `verify` its job limit stops leaves no verdict, and

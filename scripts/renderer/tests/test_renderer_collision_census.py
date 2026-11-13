@@ -7,8 +7,7 @@ its reason. A listed pair moves to Flux in one PR. A tag's `-deferred`, `-snapsh
 `-verify` directories count as the tag's own.
 
 The live test renders every render target in placeholder mode, as the render job does.
-The plan is docs/target-architecture/deploy/d5-bulk-move.md, *Prune exemptions, digests and
-the collision census (D5.1a1, D5.1a2)*.
+ADR-0020 records the decision.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_collision_census.py
 """

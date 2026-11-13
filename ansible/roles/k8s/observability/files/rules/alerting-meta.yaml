@@ -88,3 +88,50 @@ groups:
             prometheus.yml, or the scrape works and alertmanager_notifications_failed_total is
             gone, as after an upgrade that renamed it. AlertmanagerNotificationsFailing cannot
             fire until the series is back.
+      # A warning notifies Discord alone and repeats there every 6h, so one that never resolves
+      # reaches nobody who acts on it (#8218). This rule ages each firing warning into a
+      # critical, which routes to Discord and email. The original alertname and service move to
+      # `escalated_from` and `escalated_service`: Prometheus overwrites `alertname` with this
+      # rule's name, and a source `service` would put a critical in that tag's health gate and
+      # block the landing that fixes the job. `alert-escalation` is no deploy tag, so no gate
+      # reads this alert. To silence one escalation, match `escalated_from`.
+      #
+      # Shadow and drill alerts page nobody, so they never escalate. A rule whose warning holds
+      # by design, such as DeployHoldActive, carries `escalate: "false"` and is left out too.
+      #
+      # NO `for:`. Prometheus does not carry an alert's activation across a restart
+      # (m6-retire-kuma.md, Open question 9), so a 48h `for` would start over at every restart.
+      # The age is read from the stored ALERTS samples instead: the warning fires now, fired in
+      # the hour before the window opened, and fired in at least 95% of the window's
+      # evaluations, counted against the Watchdog's, which fires at every one. A restart
+      # gap removes samples from both counts, and an absence shorter than about 2h does not
+      # restart the age.
+      - alert: WarningUnresolved
+        expr: >-
+          label_replace(
+            label_replace(
+              max without (alertstate) (
+                ALERTS{alertstate="firing", severity="warning", shadow!="true", drill!="true", escalate!="false"}
+                and
+                last_over_time(ALERTS{alertstate="firing", severity="warning", shadow!="true", drill!="true", escalate!="false"}[1h] offset 48h)
+                and
+                count_over_time(ALERTS{alertstate="firing", severity="warning", shadow!="true", drill!="true", escalate!="false"}[48h])
+                >= on() group_left()
+                0.95 * count_over_time(ALERTS{alertname="Watchdog", alertstate="firing"}[48h])
+              ),
+              "escalated_from", "$1", "alertname", "(.+)"
+            ),
+            "escalated_service", "$1", "service", "(.+)"
+          )
+        labels:
+          severity: critical
+          service: alert-escalation
+        annotations:
+          summary: >-
+            {{ $labels.escalated_from }} ({{ $labels.escalated_service }}) has fired as a
+            warning for 48 hours.
+          description: >-
+            The warning {{ $labels.escalated_from }} for {{ $labels.escalated_service }} has
+            fired for 48 hours, and its Discord repeats have not cleared it. Its own
+            description names the failing job. This page resolves when the warning does. If
+            the warning holds by design, give its rule the label escalate: "false".

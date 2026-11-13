@@ -1,6 +1,6 @@
 # G3 — (optional) Notice dispatches the freshness reviewer
 
-Status: DECLINED. The operator declined G3 on 2026-11-12, under
+Status: ARCHIVED on 2026-11-13. Before archiving it read: DECLINED. The operator declined G3 on 2026-11-12, under
 [#7232](https://github.com/DanielH2018/server/issues/7232). Nothing in this plan is built.
 
 Depends on: [G2](g2-retire-lock.md)

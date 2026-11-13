@@ -72,11 +72,42 @@ defaults:
       - node.longhorn.io/create-default-disk=false
     kubelet-arg:
       - allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
+  # Kubelet's graceful node shutdown (#8296), rendered into kubelet.conf.d. Without it every
+  # shutdown of this node logs out Longhorn's iSCSI sessions under mounted ext4 filesystems:
+  # open-iscsi's stop runs logout-all.sh while the pods still hold the mounts, and each of the
+  # three boots before 2026-11-11 logged its `Aborting journal` lines in its last minute. kubelet
+  # instead stops the workloads first, so their volumes unmount while Longhorn still serves them,
+  # then Longhorn, then the system-critical pods.
+  #
+  # The boot side needs no iSCSI setting. iscsid.conf already sets `node.startup = manual`, and on
+  # 2026-11-11 open-iscsi's `--loginall=automatic` ran at 13:49:18 without starting iscsid. The
+  # logins at 13:49:33 followed instance-manager's tgtd (13:49:27) and a fresh sendtargets
+  # discovery, which is Longhorn's attach path, not a stale restore. The read-only remounts at
+  # 13:50-13:54 followed an ungraceful shutdown at 13:45:59. If a boot after a graceful shutdown
+  # still logs them, the cause is in Longhorn's engine or replica state, not here.
+  #
+  # Each group opens at its priority and runs to the next one. 1000000000 is the value of
+  # Longhorn's `longhorn-critical` PriorityClass, and 2000000000 is Kubernetes'
+  # system-cluster-critical; system-node-critical (2000001000) lands in that last group.
+  # ENFORCED: ansible/tests/setup/test_k3s_agent_component.py.
+  #
+  # DECIDED: 90 seconds in total, because the UPS chain cannot give more. upsmon's SHUTDOWNCMD is
+  # `systemctl poweroff`, which waits on kubelet's delay lock like the weekly reboot does, and an
+  # FSD raised by `battery.runtime.low` (120 s, roles/k8s/nut/defaults/main.yml) leaves about two
+  # minutes of battery. kubelet moves to the next group as soon as a group's pods have stopped, so
+  # a group's seconds are its ceiling, not its cost.
+  k3s_agent_graceful_shutdown:
+    - {priority: 0, seconds: 45}
+    - {priority: 1000000000, seconds: 30}
+    - {priority: 2000000000, seconds: 15}
 files:
   - {src: templates/50-homelab.conf.j2, dst: /usr/lib/systemd/system/k3s-agent.service.d/50-homelab.conf, activate: "manual:k3s-agent.service"}
   # The agent's flags. The only file in config.yaml.d, and nothing ships config.yaml.
   - {src: templates/50-homelab.yaml.j2, dst: /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, mode: "0644", activate: "manual:k3s-agent.service"}
   - {src: templates/registries.yaml.j2, dst: /etc/rancher/k3s/registries.yaml, mode: "0600", activate: "manual:k3s-agent.service"}
+  # kubelet reads its config only at start, so the first shutdown it governs is the one after the
+  # agent's next start.
+  - {src: templates/kubelet-graceful-shutdown.conf.j2, dst: /var/lib/rancher/k3s/agent/etc/kubelet.conf.d/50-homelab-graceful-shutdown.conf, mode: "0644", activate: "manual:k3s-agent.service"}
   - {src: templates/logrotate-k3s-agent.j2, dst: /etc/logrotate.d/k3s-agent}
   - {src: templates/tmpfiles-k3s-agent.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-agent.conf}
   # Longhorn's devices must stay out of multipathd's reach, or mounts fail. The block Ansible wrote

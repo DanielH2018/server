@@ -1,6 +1,6 @@
 """The way out of a hold: a uid mismatch holds the host, and only a fixed version clears it (H7.2d).
 
-*Which outcomes hold the host* (docs/target-architecture/host/h7-delete-ansible.md) ends in a
+Which outcomes hold the host (ADR-0029) ends in a
 procedure: install the fix or the revert, then run `homelab-updater --clear-hold`. This drives
 the real updater with the real reconcile. `_updater_stub.py`'s `reconcile_run` makes the
 updater's `systemctl start homelab-reconcile.service` run reconcile against the fake host in

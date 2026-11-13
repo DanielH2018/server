@@ -1,6 +1,6 @@
 """The shared kind `homelab-namespace` renders the `homelab` Namespace and its LimitRange.
 
-It is their only writer. The plan is docs/target-architecture/deploy/d5-bulk-move.md, step 30.
+It is their only writer. ADR-0020 records the decision.
 
 Run: uv run pytest ansible/tests/deploy/test_homelab_namespace_is_a_shared_kind.py
 """

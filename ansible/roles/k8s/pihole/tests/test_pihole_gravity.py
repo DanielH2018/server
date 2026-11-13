@@ -2,8 +2,7 @@
 
 The script tests run `pihole_gravity.main` against two stateful local stand-ins for FTL's v6
 REST API, one per instance. The render tests render a copy of the role, so an edit to a
-template or a default reaches the Job as Flux receives it. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, step 26.
+template or a default reaches the Job as Flux receives it. ADR-0020 records the decision.
 
 Run: uv run pytest ansible/roles/k8s/pihole/tests/test_pihole_gravity.py
 """

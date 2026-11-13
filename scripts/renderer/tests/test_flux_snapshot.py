@@ -2,8 +2,7 @@
 
 The API server is a real localhost HTTP server over a fixture world, so every call goes
 through `flux_job_connect.open_url` and the script reads real HTTP statuses. The clock and the
-sleep are the test's own, so the readiness timeout costs nothing. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, step 11 (D5.2a).
+sleep are the test's own, so the readiness timeout costs nothing. ADR-0020 records the snapshot Job.
 
 Run: uv run pytest scripts/renderer/tests/test_flux_snapshot.py
 """

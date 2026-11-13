@@ -1,6 +1,6 @@
 """D5.3b2's `soak` kind: its footprint ignores R's SHA, its W comes from the rules, its Job wiring.
 
-The plan is docs/target-architecture/deploy/d5-bulk-move.md, *The soak as a Job (D5.3)*.
+ADR-0020 records the soak as a Job.
 Its suspend annotation is tested in test_renderer_suspend.py, and its Job in the Job census.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_soak.py

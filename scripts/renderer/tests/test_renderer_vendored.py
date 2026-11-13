@@ -1,9 +1,7 @@
 """H1.1a's renderer support: vendored files, kustomize patches, `prune: false` and a role's timeout.
 
 Every fixture role lives in `tmp_path`, and `attach_vendored` and `bundle_files` take its tree
-as `roles`, so no role in the repo needs to vendor anything. The plan is
-docs/target-architecture/host/h1-cluster-config-to-flux.md, *Vendored upstream manifests* and
-*Plumbing tags are never pruned*.
+as `roles`, so no role in the repo needs to vendor anything. ADR-0020 records both rules.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_vendored.py
 """
@@ -160,7 +158,7 @@ def prune_split_problems(pair: list[tuple[str, bool, str]]) -> list[str]:
 
 
 def test_prune_split_problems_is_clean_on_the_tag_and_its_deferred_directory(tmp_path):
-    """`flux` renders `prune: false` and `flux-deferred` renders `prune: true` (D5 step 29)."""
+    """`flux` renders `prune: false` and `flux-deferred` renders `prune: true` (ADR-0020)."""
     _role(tmp_path, "flux_prune: false\nmanifests_rollout_timeout: 1200s\n", False)
     assert prune_split_problems(_deferred_pair(tmp_path)) == []
 

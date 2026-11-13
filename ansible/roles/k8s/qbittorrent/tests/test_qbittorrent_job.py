@@ -2,8 +2,7 @@
 
 The script tests run `qbittorrent_job.main` against a stateful local stand-in for the WebUI,
 which also echoes a fixed address as the egress service does. The render tests render a copy
-of the role, so a test can edit the copy and leave the tree alone. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md.
+of the role, so a test can edit the copy and leave the tree alone. ADR-0020 records the decision.
 
 Run: uv run pytest ansible/roles/k8s/qbittorrent/tests/test_qbittorrent_job.py
 """

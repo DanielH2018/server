@@ -1,7 +1,7 @@
 """`hosts/lib/homelab-reconcile`'s restart contract and secrets step (H4.1b).
 
-Each test is one of H4's *Verification* reconcile cases (docs/target-architecture/host/
-h4-secrets-unit.md), run against the stub `systemctl` of `_reconcile_host.py`. The fixture is
+Each test is a reconcile case of ADR-0022's H4 amendment, run against the stub `systemctl` of
+`_reconcile_host.py`. The fixture is
 daniel-server's shape: a package that ships `secrets-unit`, and `nut-monitor`, another package's
 unit, which a persisted output feeds.
 

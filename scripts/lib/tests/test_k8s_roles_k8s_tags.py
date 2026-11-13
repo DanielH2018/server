@@ -1,7 +1,6 @@
 """`k8s_tags` names every tag of every k8s entry in the service list, each one Flux applies.
 
-Every k8s entry is Flux's, so no key on the entry marks it
-(docs/target-architecture/host/h1-cluster-config-to-flux.md, H1.9).
+Every k8s entry is Flux's, so no key on the entry marks it (ADR-0020).
 """
 
 from lib.k8s_roles import k8s_tags

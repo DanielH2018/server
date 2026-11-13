@@ -1,6 +1,6 @@
 """homelab-check-lib.sh: the shared host-check library M6's batch B0 put on every host.
 
-The plan is docs/target-architecture/monitoring/m6-retire-kuma.md, *B0, B5, B7 and B8*. The
+ADR-0026 records the decision. The
 library carries `write_check_textfile` (M3's atomic write) and the three helpers moved from
 kuma-push-lib.sh. The check-lib and pi-heartbeats components ship it, and every consumer sources
 it with a failing guard instead of skipping silently.

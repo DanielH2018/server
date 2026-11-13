@@ -3,7 +3,7 @@
 The script tests run `netpol_baseline_verify` against local ports: an HTTP server stands in for
 a port that answers, a raw TCP server for a non-HTTP port that accepts, and a port nothing
 listens on for one the fence refuses. The render tests render the tag as Flux receives it and
-run the Job census over the result. The plan is docs/target-architecture/deploy/d5-bulk-move.md.
+run the Job census over the result. ADR-0020 records the decision.
 
 Run: uv run pytest ansible/roles/k8s/netpol-baseline/tests/test_netpol_baseline_verify.py
 """

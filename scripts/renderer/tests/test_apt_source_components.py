@@ -1,6 +1,6 @@
 """Each host package ships the apt sources its host uses, and only those (H7.24a).
 
-docs/target-architecture/host/h7-delete-ansible.md, old step H7.1. The `apt-docker`,
+ADR-0029 records the decision. The `apt-docker`,
 `apt-azlux` and `apt-github-cli` components replace the checksum and fingerprint tasks of
 `docker_install`, `github_cli` and `optimize_pi`, so these tests hold what those tasks held:
 the key bytes, and that each source's `Signed-By` names a key the host installs readable by

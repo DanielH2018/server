@@ -73,8 +73,7 @@ def _mentions_deploy_tag(role_name: str, text: str) -> bool:
 # it as its head plus an outline of the sections it cut. To see each doc's margin, run
 # `uv run --no-sync python .claude/hooks/inject-nested-docs.py --report`. The ruling accepts
 # that a role doc grown into a head defers a head rule in the same command, and that a revert
-# must trim every doc grown past the old ceiling. The long form is
-# `docs/target-architecture/docs-guard/g4-drop-size-test.md`.
+# must trim every doc grown past the old ceiling.
 def _doc_problems(role_dir: Path, plane: Plane) -> list[str]:
     """Every problem with role_dir's CLAUDE.md under the plane's rules ([] if adequate)."""
     doc = role_dir / "CLAUDE.md"

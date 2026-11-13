@@ -1,7 +1,7 @@
 """The bridge stays small: every `.py` under `files/` sums to at most `CAP_LINES` lines.
 
-M6 (docs/target-architecture/monitoring/m6-retire-kuma.md, *The residual bridge and its cap*)
-shrinks monitor-bridge to the checks Prometheus cannot express, and a cap holds it there. A
+The bridge keeps only the checks Prometheus cannot express (ADR-0026), and a cap holds it there.
+It shrinks monitor-bridge to the checks Prometheus cannot express, and a cap holds it there. A
 body that wants to join replaces one, or raises the cap in a reviewed PR.
 """
 

@@ -2,8 +2,7 @@
 
 `templates/grafana-dashboards.yaml.j2` renders one ConfigMap per `observability_dashboard_folders`
 entry, holding the boards that entry lists, each passed through `grafana_deploy_annotated`. The
-plan is docs/target-architecture/deploy/d5-bulk-move.md, the imperative-ConfigMap row: the
-ConfigMaps become a render, so observability's flip can hand them to Flux.
+ConfigMaps become a render (ADR-0020), so observability's flip can hand them to Flux.
 
 - The lists must match the files. A board on disk that no list names reaches no Grafana, and a
   listed board with no file fails the render.

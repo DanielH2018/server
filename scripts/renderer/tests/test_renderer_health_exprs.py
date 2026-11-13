@@ -2,8 +2,8 @@
 
 A role that sets them gets `spec.healthCheckExprs` and its own `spec.timeout` on `<tag>`, and a
 role that sets neither renders neither. Each fixture role is a `defaults/main.yml` under
-`tmp_path`, which `bundle_files` reads as `roles`. The plan is
-docs/target-architecture/host/h6-k3s-suc.md, *The Plans' outcome reaches `flux/system-upgrade`*.
+`tmp_path`, which `bundle_files` reads as `roles`. ADR-0025 records how the Plans' outcome
+reaches `flux/system-upgrade`.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_health_exprs.py
 """

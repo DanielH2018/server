@@ -1,8 +1,7 @@
 """compose-run and compose-adopt against a stub `docker` that logs its argv (H5.2a3).
 
-Each case is one of H5's *Verification* cases for compose-adopt and compose-run
-(docs/target-architecture/host/h5-pi-compose.md). A rule that a fixture script can break has a
-`_is_flagged` case, so a check that stopped matching fails its own test.
+Each case covers a rule of compose-adopt or compose-run. A rule that a fixture script can
+break has a `_is_flagged` case, so a check that stopped matching fails its own test.
 
 Run: uv run pytest hosts/lib/tests/test_pi_compose_scripts.py
 """
