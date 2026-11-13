@@ -4,8 +4,8 @@
 ADR-0026 records the decision. Pi-sd-health and
 pi-recovery-health each write `<check>.prom` through homelab-check-lib.sh, so the rules in
 `pi-checks.yaml` page for the "Daniel Pi SD Health" and "Daniel Pi Recovery" tiles that Cutover-1a
-deleted. Cutover-2 dropped the Kuma pushes. pi-watchdog-health follows the same contract, and
-test_pi_watchdog_alert.py runs it. Each case here runs the rendered script through
+deleted. Cutover-2 dropped the Kuma pushes. pi-watchdog-health and pi-audit-health follow the same
+contract, and test_pi_watchdog_alert.py and test_pi_audit_health.py run them. Each case here runs the rendered script through
 `_pi_health` against stubs, with the role's check library and `TEXTFILE_DIR` pointed at a temp
 directory.
 
@@ -35,6 +35,7 @@ PRODUCERS = {
     "PiSdHealth": "pi-sd-health",
     "PiRecovery": "pi-recovery-health",
     "PiWatchdog": "pi-watchdog-health",
+    "PiAudit": "pi-audit-health",
 }
 # Every container the recovery heartbeat watches, so a run with all of them up is a clean cycle.
 # The Pi's compose_services, plus the sub-proxy the docker-proxy compose file declares.

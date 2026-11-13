@@ -247,6 +247,14 @@ log file and logging goes on. auditd refuses to start unless `admin_space_left` 
 number. `disk_full_action` and `disk_error_action` stay `SUSPEND`, so a full tmpfs still stops
 the log.
 
+`homelab-pi-audit-health.timer` covers what is left. Every 5 minutes it reads the unit's state and
+the time of the last write to `audit.log`, and it reports `down` when the unit is active and the
+log has had no write for 60 minutes. The Pi writes 400 to 1,250 audit records an hour and auditd
+flushes every 50, so an hour with no write is not a quiet hour. `PiAuditFailed` fires once the
+verdict has read `down` for 30 minutes. That wait outlasts a boot: log2ram restores the log with
+its old modification time, and the Pi has no clock until NTP answers. To clear the alert, read
+`df -m /var/log` on the Pi, then run `sudo systemctl restart auditd`.
+
 ## earlyoom, and the guard that was inert for its whole life
 
 earlyoom kills the largest process when available memory drops under 10%, with `--avoid`
