@@ -14,7 +14,12 @@ import re
 
 from lib import yaml_fast
 from _helpers import ROLES
-from test_alertmanager_host_check_inhibit import _matcher, inhibited
+from test_alertmanager_host_check_inhibit import (
+    MATCHER,
+    _matcher,
+    inhibit_rules,
+    inhibited,
+)
 from test_alertmanager_routing import reached, route_tree
 
 RULES = ROLES / "k8s" / "observability" / "files" / "rules"
@@ -40,7 +45,12 @@ def escalation_rule() -> dict:
 
 def escalates(rule: dict) -> bool:
     """Whether the ALERTS series of `rule`, firing, matches the escalation's selector."""
-    [selector] = SELECTOR.findall(escalation_rule()["expr"])
+    selectors = {
+        s
+        for s in SELECTOR.findall(escalation_rule()["expr"])
+        if 'alertname="Watchdog"' not in s
+    }
+    [selector] = selectors
     series = {"alertname": rule["alert"], "alertstate": "firing", **rule["labels"]}
     return all(_matcher(m.strip(), series) for m in selector.split(","))
 
@@ -92,12 +102,40 @@ def test_an_escalation_pages_discord_and_email():
     ]
 
 
-def test_an_escalated_pair_inhibits_the_escalated_overdue_for_its_check():
+def sample(matchers: list[str]) -> dict[str, str]:
+    """One label set the `*_matchers` list selects."""
+    labels = {}
+    for matcher in matchers:
+        found = MATCHER.match(matcher)
+        assert found, matcher
+        name, op, value = found.groups()
+        assert op == "=" or (op == "=~" and value.startswith(".+")), matcher
+        labels[name] = "Sample" + value[2:] if op == "=~" else value
+    return labels
+
+
+def test_every_inhibited_warning_stays_inhibited_once_it_escalates():
+    warnings = {r["alert"] for r in alert_rules() if escalates(r)}
+    held = set()
+    for rule in inhibit_rules():
+        target = {"alertname": "SomeWarning", "severity": "warning", "service": "x"}
+        target |= sample(rule["target_matchers"])
+        if target["alertname"] == ESCALATION or (
+            target["alertname"] != "SomeWarning" and target["alertname"] not in warnings
+        ):
+            continue
+        source = sample(rule["source_matchers"])
+        for label in rule.get("equal", []):
+            source[label] = target[label] = target.get(label, f"same-{label}")
+        assert inhibited(escalated(target), [source]), rule
+        held.add(target["alertname"])
+    assert {"HostCheckOverdue", "ScrapeTargetDown", "PiPortDead", "SomeWarning"} <= held
+
+
+def test_an_escalation_with_another_equal_label_still_pages():
     pair = {"severity": "warning", "service": "daniel-box", "origin": "daniel-box"}
-    source = escalated(
-        {"alertname": "AideCheckNotReporting", "check": "aide-check", **pair}
-    )
+    source = {"alertname": "AideCheckNotReporting", "check": "aide-check", **pair}
     target = escalated({"alertname": "HostCheckOverdue", "check": "aide-check", **pair})
     other = escalated({"alertname": "HostCheckOverdue", "check": "unpaired", **pair})
-    assert inhibited(target, [source, target])
-    assert not inhibited(other, [source, other])
+    assert inhibited(target, [source])
+    assert not inhibited(other, [source])

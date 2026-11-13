@@ -53,7 +53,13 @@ def exporter_alert() -> dict:
 
 
 def exporter_inhibit() -> dict:
-    [rule] = [r for r in inhibit_rules() if _selects(r, "source", exporter_alert())]
+    # The WarningUnresolved copy of the rule shares its source.
+    [rule] = [
+        r
+        for r in inhibit_rules()
+        if _selects(r, "source", exporter_alert())
+        and 'alertname="WarningUnresolved"' not in r["target_matchers"]
+    ]
     return rule
 
 

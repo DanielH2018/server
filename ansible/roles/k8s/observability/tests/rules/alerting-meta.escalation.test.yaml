@@ -67,13 +67,13 @@ tests:
               summary: >-
                 DocsRefreshFailed (daniel-box) has fired as a warning for 48 hours.
               description: >-
-                The warning DocsRefreshFailed for daniel-box has fired without a break for 48
-                hours, and its Discord repeats have not cleared it. Its own description names
-                the failing job. This page resolves when the warning does. If the warning holds
-                by design, give its rule the label escalate: "false".
+                The warning DocsRefreshFailed for daniel-box has fired for 48 hours, and its
+                Discord repeats have not cleared it. Its own description names the failing job.
+                This page resolves when the warning does. If the warning holds by design, give
+                its rule the label escalate: "false".
 
-  # A warning that resolves for an hour restarts the hold: 30 hours, a gap, then 30 more never
-  # reach 48 in one stretch.
+  # A one-hour absence, as across a Prometheus restart, does not restart the age: 30 hours, a
+  # gap, then 30 more still escalate. A ten-hour absence does.
   - interval: 1h
     input_series:
       - series: 'up{job="alertmanager", instance="alertmanager:9093"}'
@@ -82,10 +82,25 @@ tests:
         values: '0x62'
       - series: 'ALERTS{alertname="EvalSweepFailed", alertstate="firing", severity="warning", service="daniel-box"}'
         values: '1x30 _ 1x30'
+      - series: 'ALERTS{alertname="DocsRefreshFailed", alertstate="firing", severity="warning", service="daniel-box"}'
+        values: '1x25 _x9 1x26'
     alert_rule_test:
       - eval_time: 61h
         alertname: WarningUnresolved
-        exp_alerts: []
+        exp_alerts:
+          - exp_labels:
+              escalated_from: EvalSweepFailed
+              escalated_service: daniel-box
+              severity: critical
+              service: alert-escalation
+            exp_annotations:
+              summary: >-
+                EvalSweepFailed (daniel-box) has fired as a warning for 48 hours.
+              description: >-
+                The warning EvalSweepFailed for daniel-box has fired for 48 hours, and its
+                Discord repeats have not cleared it. Its own description names the failing job.
+                This page resolves when the warning does. If the warning holds by design, give
+                its rule the label escalate: "false".
 
   # None of these escalate after 60 hours: a pending warning, a critical (it already emails),
   # an info, a shadow and a drill alert (they page nobody), and a rule that opts out with

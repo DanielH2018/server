@@ -155,8 +155,12 @@ To silence one escalation, match `escalated_from`. Shadow and drill alerts never
 and neither does a rule labelled `escalate: "false"`: `DeployHoldActive`,
 `FanoutSlotsIdleWithFreeWork` and `FluxSuspended` hold by design.
 `ansible/tests/services/test_warning_escalation_exemptions.py` holds that exempt set to the
-rules. An Alertmanager inhibit keeps the escalated `HostCheckOverdue` quiet beside its
-escalated `*NotReporting` pair.
+rules. The rule has no `for:`, because a Prometheus restart resets every alert's activation
+(`docs/target-architecture/monitoring/m6-retire-kuma.md`, Open question 9). It counts the
+stored `ALERTS` samples of the last 48 hours against the Watchdog's instead, so a gap of
+about 2 hours does not restart the age. Prometheus cannot see an inhibit, so each inhibit
+whose target is a warning has a copy in `templates/alertmanager-secret.yaml.j2` that holds
+the escalation, and the same test module fails an inhibit with no copy.
 
 **A host-plane rule names its host as a literal, so a new host is a rule edit.** The
 `host-checks` group carries one `HostReconcileFailed` per host in `hosts.ini`, and one
