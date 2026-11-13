@@ -74,9 +74,9 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   `scripts/diagnostics/tests/test_obs_api.py` imports it with `scripts/` off the path. The file
   is part of the build context, so a merged edit to it alone moves homelab-mcp's content tag,
   and the next promotion builds the image and rolls the pod.
-- The Dockerfile path is built from `playbook_dir`, not `role_path`: that render happens
-  **inside** `k8s/image-builder`, where `role_path` resolves to the wrong role (bit the first
-  deploy, 2026-08-13). No Flux path runs that render.
+- The build paths in `defaults/main.yml` come from `role_file()`. The render context resolves
+  them against this role before image-builder reads them, so they name this role's files even
+  though the build renders inside `k8s/image-builder`.
 
 ## Editing
 - App: `files/app.py`, `files/safe_reads.py` (tests in `tests/`), the shared

@@ -11,4 +11,4 @@ data:
   from the sidecar's own environment, so it has nothing to render, and a plain file is what the
   Pi-side image test in this role's CLAUDE.md runs unchanged.
 #}
-{{ lookup('file', playbook_dir + '/roles/k8s/qbittorrent/files/netns-reset.sh') | indent(4, true) }}
+{{ lookup('file', role_file('files/netns-reset.sh')) | indent(4, true) }}

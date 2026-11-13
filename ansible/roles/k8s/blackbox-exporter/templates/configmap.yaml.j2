@@ -10,4 +10,4 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   blackbox.yml: |
-{{ lookup('file', playbook_dir + '/roles/k8s/blackbox-exporter/files/blackbox.yml') | replace('__DOMAIN__', domain) | indent(4, true) }}
+{{ lookup('file', role_file('files/blackbox.yml')) | replace('__DOMAIN__', domain) | indent(4, true) }}

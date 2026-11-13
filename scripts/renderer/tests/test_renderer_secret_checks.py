@@ -356,7 +356,7 @@ def _embed_refusals(includer: str, embedded: str) -> list[tuple[str, str]]:
 
 
 INCLUDE_TRIM = "{% filter trim %}{% include 'b.j2' %}{% endfilter %}"
-LOOKUP = "{{ lookup('template', playbook_dir + '/b.j2') | %s }}"
+LOOKUP = "{{ lookup('template', role_file('templates/b.j2')) | %s }}"
 
 
 @pytest.mark.parametrize(

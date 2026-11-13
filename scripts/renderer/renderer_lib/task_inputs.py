@@ -5,7 +5,7 @@ value comes from a role's `tasks/`.
 
 `derived_facts` computes the one value a template reads that no file states,
 `k8s_built_image_tags`, with each tag by `derived.content_tag`.
-`playbook_dir` resolves as Ansible resolves it, so a lookup reads the same file a deploy reads.
+A build's paths come from `role_file()`, so a lookup reads the calling role's files.
 
 No value a template reads comes from live state, so the renderer pins no fact. Target slice
 R3 removed the last live reads, and R3's live-read census in `scripts/renderer/tests/` holds
@@ -27,7 +27,7 @@ import jinja2
 
 from lib import yaml_fast
 from lib.k8s_roles import RENDER_KEYS
-from lib.repo_paths import ANSIBLE, K8S_ROLES
+from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.derived import content_tag
 from renderer.renderer_lib.environment import evaluate, renderer_env
 
@@ -139,10 +139,11 @@ def site_variables(site: BuildSite, ctx: dict) -> dict:
     """The variables image-builder's tasks see for `site` in a role whose context is `ctx`.
 
     image-builder's own defaults sit under the calling role's variables, and the include's
-    `vars:` over both, with `playbook_dir` resolving to `ansible/`.
+    `vars:` over both. `role_path` stays the calling role's, so a build's `role_file()` paths
+    name that role's files.
     """
     defaults = cast(dict, _parsed(IMAGE_BUILDER / "defaults" / "main.yml"))
-    variables = {**defaults, **ctx, "playbook_dir": str(ANSIBLE)}
+    variables = {**defaults, **ctx}
     env = renderer_env(IMAGE_BUILDER / "templates", variables)
     return {**variables, **cast(dict, _template(env, site.vars, variables))}
 

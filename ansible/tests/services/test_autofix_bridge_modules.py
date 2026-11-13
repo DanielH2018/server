@@ -21,8 +21,10 @@ Run: uv run pytest ansible/tests/services/test_autofix_bridge_modules.py
 """
 
 import ast
+from pathlib import Path
 
 from lib import yaml_fast
+from lib.render_guard import make_env
 from _helpers import REPO
 
 ROLE = REPO / "ansible" / "roles" / "k8s" / "autofix-bridge"
@@ -36,12 +38,8 @@ def _ship_list():
 
 
 def _resolve_src(src):
-    """`{{ playbook_dir }}/...` -> the real file it renders to.
-
-    playbook_dir is the ansible/ directory deploy.yml runs from.
-    """
-    rel = src.replace("{{ playbook_dir }}/", "")
-    return REPO / "ansible" / rel
+    """`{{ role_file(...) }}` -> the real file it renders to in this role."""
+    return Path(make_env().from_string(src).render(role_path=str(ROLE)))
 
 
 def test_ship_list_carries_the_entrypoint():

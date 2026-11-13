@@ -36,7 +36,7 @@ patches is bound in the module it is patched on, and by
 ansible/tests/services/test_bridge_patch_boundary.py for the qualified-access rule across both bridges.
 
 Ship path: this file is monitor-bridge's canonical copy. autofix-bridge stages a copy of it onto
-the node from here (`{{ playbook_dir }}/roles/k8s/monitor-bridge/files/bridge/common.py`), the
+the node from here (`role_file('files/bridge/common.py', role='monitor-bridge')`), the
 same sibling-copy pattern as `hosts/lib/host_lib.py`, which each host package ships beside its
 consumer scripts — never fork a second edited copy under autofix-bridge/files/.
 """

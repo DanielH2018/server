@@ -15,6 +15,6 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   stats.py: |
-{{ lookup('file', playbook_dir + '/roles/k8s/game-stats/files/stats.py') | indent(4, true) }}
+{{ lookup('file', role_file('files/stats.py')) | indent(4, true) }}
   stats_lib.py: |
-{{ lookup('file', playbook_dir + '/roles/k8s/game-stats/files/stats_lib.py') | indent(4, true) }}
+{{ lookup('file', role_file('files/stats_lib.py')) | indent(4, true) }}

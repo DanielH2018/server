@@ -6,4 +6,4 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   karma.yaml: |
-{{ lookup('template', playbook_dir + '/roles/k8s/karma/templates/config/karma.yaml.j2') | indent(4, true) }}
+{{ lookup('template', role_file('templates/config/karma.yaml.j2')) | indent(4, true) }}

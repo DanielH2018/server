@@ -225,7 +225,7 @@ def is_manifest_template(path: Path) -> bool:
 
 
 _TEMPLATE_LOOKUP = re.compile(r"""lookup\(\s*['"]template['"]\s*,\s*([^)]*)\)""")
-_TEMPLATES_PATH = re.compile(r"""['"][^'"]*/templates/([^'"]*)['"]""")
+_TEMPLATES_PATH = re.compile(r"""['"](?:[^'"]*/)?templates/([^'"]*)['"]""")
 _YAML_COMMENT_LINE = re.compile(r"^\s*#.*$", re.M)
 
 

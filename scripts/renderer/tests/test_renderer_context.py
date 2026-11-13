@@ -10,7 +10,7 @@ import yaml
 from lib.ansible_jinja_env import template_env
 from lib.estate import Inventory
 from lib.render_guard import StrictChainableUndefined, host_files, host_layer, load_yaml
-from lib.repo_paths import ANSIBLE, HOST_VARS, K8S_ROLES, K8S_SERVICES
+from lib.repo_paths import HOST_VARS, K8S_ROLES, K8S_SERVICES
 from renderer import shadow_diff
 from renderer.renderer_lib.context import sorted_services, template_context
 from toposort import build_k8s_dep_map, toposort_containers
@@ -29,7 +29,7 @@ def _names(entries):
 
 def test_services_is_the_toposorted_service_list_and_no_host_view_remains(ctx):
     raw = load_yaml(K8S_SERVICES)["containers_list"]
-    expected = _names(toposort_containers(raw, build_k8s_dep_map(raw, str(ANSIBLE))))
+    expected = _names(toposort_containers(raw, build_k8s_dep_map(raw, str(K8S_ROLES))))
     assert _names(ctx["services"]) == expected
     assert "containers_list" not in ctx
     assert "hostvars" not in ctx
@@ -42,7 +42,7 @@ def test_sorted_services_sorts_a_reordered_list():
     view = _names(sorted_services(raw[::-1]))
     assert view != _names(raw[::-1])
     position = {name: i for i, name in enumerate(view)}
-    deps = build_k8s_dep_map(raw, str(ANSIBLE))
+    deps = build_k8s_dep_map(raw, str(K8S_ROLES))
     assert deps["traefik"] == ["crowdsec", "traefik-crds"]
     assert all(position[d] < position[n] for n, ds in deps.items() for d in ds)
 

@@ -113,8 +113,12 @@ def stubs(tmp_path_factory):
 
 
 def _flipped_copy(roles: Path, stubs, edit_collector=False) -> cluster.RenderedTag:
-    """Render a copy of the role, with the collector edited when asked."""
+    """Render a copy of the role, with the collector edited when asked.
+
+    The shared origin-pull template reads traefik's CA through `role_file()`, a sibling of the copy.
+    """
     shutil.copytree(K8S_ROLES / TAG, roles / TAG)
+    (roles / "traefik").symlink_to(K8S_ROLES / "traefik")
     templates = roles / TAG / "templates"
     if edit_collector:
         collector = templates / "collector.yaml.j2"

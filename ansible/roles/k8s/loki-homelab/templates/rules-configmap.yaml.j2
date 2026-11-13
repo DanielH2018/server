@@ -17,5 +17,5 @@ metadata:
 data:
 {% for group in loki_homelab_rule_groups %}
   {{ group }}.yaml: |
-    {{ lookup('file', playbook_dir + '/roles/k8s/loki-homelab/files/rules/' + group + '.yaml') | indent(4) }}
+    {{ lookup('file', role_file('files/rules/' + group + '.yaml')) | indent(4) }}
 {% endfor %}

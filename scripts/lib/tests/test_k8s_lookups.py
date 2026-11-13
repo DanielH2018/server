@@ -27,7 +27,7 @@ def test_a_reader_is_found_in_a_fixture_tree(tmp_path):
     (k8s / "owner" / "files").mkdir(parents=True)
     (k8s / "reader" / "templates").mkdir(parents=True)
     (k8s / "reader" / "templates" / "x.yaml.j2").write_text(
-        "data: {{ lookup('file', playbook_dir + '/roles/k8s/owner/files/a.txt') }}\n"
+        "data: {{ lookup('file', role_file('files/a.txt', role='owner')) }}\n"
         "# roles/k8s/owner/files/b.txt is named in prose only\n"
     )
     assert k8s_lookup_map(tmp_path) == {"roles/k8s/owner/files/a.txt": {"reader"}}
@@ -38,7 +38,7 @@ def test_a_lookup_with_keyword_arguments_is_a_reader(tmp_path):
     reader = tmp_path / "ansible" / "roles" / "k8s" / "reader" / "templates"
     reader.mkdir(parents=True)
     (reader / "x.yaml.j2").write_text(
-        "data: {{ lookup('file', playbook_dir + '/roles/k8s/flux/defaults/main.yml',"
+        "data: {{ lookup('file', role_file('defaults/main.yml', role='flux'),"
         " rstrip=False) }}\n"
     )
     assert k8s_lookup_map(tmp_path) == {"roles/k8s/flux/defaults/main.yml": {"reader"}}

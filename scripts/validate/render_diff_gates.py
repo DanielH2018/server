@@ -345,7 +345,7 @@ def snapshot(
     return Snapshot(
         renders=renders,
         owners=dict.fromkeys(names, FLUX_PLANE),
-        deps=build_k8s_dep_map(k8s, str(tree / "ansible")),
+        deps=build_k8s_dep_map(k8s, str(tree / "ansible" / "roles" / "k8s")),
         deferred={n: f for n, f in dirs.items() if n.endswith(DEFERRED_SUFFIX)},
         namespace_roles={
             str(group[var]): role

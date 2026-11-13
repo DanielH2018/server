@@ -25,24 +25,48 @@ from py_table import py_table
 from scrape_jobs import scrape_jobs
 
 from lib.ansible_jinja_env import make_env, register_ansible_filters
+from lib.role_files import repo_file_path, role_file_path
 
 LOOKUPS = frozenset({"lookup", "query", "q"})
 # The two variables that hold other variables by name.
 SCOPES = frozenset({"vars", "hosts"})
 
 
-def _path_value(playbook_dir: Path, node: nodes.Expr) -> str | None:
-    """A path expression of literals and `playbook_dir`, as a string, or None if it holds more."""
+def _path_value(role: Path | None, node: nodes.Expr) -> str | None:
+    """A path expression of literals, as a string, or None if it holds more.
+
+    A `role_file()` or `repo_file()` call over literals resolves from `role`, the directory of
+    the role whose template holds it, as the render resolves it.
+    """
     if isinstance(node, nodes.Const) and isinstance(node.value, str):
         return node.value
-    if isinstance(node, nodes.Name) and node.name == "playbook_dir":
-        return str(playbook_dir)
     if isinstance(node, (nodes.Concat, nodes.Add)):
         parts = (
             node.nodes if isinstance(node, nodes.Concat) else [node.left, node.right]
         )
-        values = [_path_value(playbook_dir, part) for part in parts]
+        values = [_path_value(role, part) for part in parts]
         return None if None in values else "".join(v for v in values if v is not None)
+    if role is not None and isinstance(node, nodes.Call):
+        return _path_call(role, node)
+    return None
+
+
+def _path_call(role: Path, call: nodes.Call) -> str | None:
+    """The path a `role_file()` or `repo_file()` call over literals names, or None."""
+    if not (isinstance(call.node, nodes.Name) and len(call.args) == 1):
+        return None
+    path = _path_value(role, call.args[0])
+    named = {
+        arg.key: arg.value.value
+        for arg in call.kwargs
+        if isinstance(arg.value, nodes.Const)
+    }
+    if path is None or len(named) != len(call.kwargs):
+        return None
+    if call.node.name == "role_file" and set(named) <= {"role"}:
+        return str(role_file_path(role, path, named.get("role")))
+    if call.node.name == "repo_file" and not named:
+        return str(repo_file_path(role, path))
     return None
 
 
@@ -69,14 +93,13 @@ class Reader:
         problems: Each lookup whose reads it cannot name.
     """
 
-    def __init__(self, playbook_dir: Path, containers: list[dict]) -> None:
+    def __init__(self, containers: list[dict]) -> None:
         """A reader for one tree.
 
         Args:
-            playbook_dir: What `playbook_dir` holds, so a file lookup's path resolves.
             containers: The k8s `services`, which `scrape_jobs` runs over.
         """
-        self.playbook_dir = playbook_dir
+        self.role: Path | None = None
         self.containers = containers
         self.accepted: list[str] = []
         self.vars_names: set[str] = set()
@@ -103,7 +126,7 @@ class Reader:
             if call.node.name not in LOOKUPS or len(call.args) != 2:
                 return None
             plugin = call.args[0]
-            path = _path_value(self.playbook_dir, call.args[1])
+            path = _path_value(self.role, call.args[1])
             if not (
                 isinstance(plugin, nodes.Const) and plugin.value == "file" and path
             ):
@@ -199,8 +222,18 @@ class Reader:
             names |= self._scan(where, child, loops)
         return names
 
-    def read(self, where: str, source: str) -> tuple[set[str], nodes.Template]:
-        """The names `source` reads, the `vars` lookup names included, and its syntax tree."""
+    def read(
+        self, where: str, source: str, role: Path | None = None
+    ) -> tuple[set[str], nodes.Template]:
+        """The names `source` reads, the `vars` lookup names included, and its syntax tree.
+
+        Args:
+            where: Where `source` comes from, for a problem's message.
+            source: The Jinja text.
+            role: The directory of the role `source` renders in, from which a `role_file()`
+                path resolves. None for text outside a role.
+        """
+        self.role = role
         ast = self.env.parse(source)
         names = meta.find_undeclared_variables(ast) - self.env.globals.keys()
         return names | self._scan(where, ast, []), ast
@@ -254,8 +287,8 @@ def references(ast: nodes.Template) -> Iterator[str]:
                 yield const.value
 
 
-def template_lookups(playbook_dir: Path, ast: nodes.Template) -> Iterator[str]:
-    """Each `lookup('template', P)` path that is a literal or `playbook_dir` plus literals."""
+def template_lookups(role: Path, ast: nodes.Template) -> Iterator[str]:
+    """Each `lookup('template', P)` path of literals, a `role_file()` one resolved from `role`."""
     for call in ast.find_all(nodes.Call):
         if not (
             isinstance(call.node, nodes.Name)
@@ -265,6 +298,11 @@ def template_lookups(playbook_dir: Path, ast: nodes.Template) -> Iterator[str]:
             continue
         plugin = call.args[0]
         if isinstance(plugin, nodes.Const) and plugin.value == "template":
-            path = _path_value(playbook_dir, call.args[1])
+            path = _path_value(role, call.args[1])
             if path:
                 yield path
+
+
+def role_path_value(role: Path, text: str) -> str:
+    """`text`, a path that may call `role_file()` or `repo_file()`, rendered in `role`."""
+    return make_env().from_string(text).render(role_path=str(role))

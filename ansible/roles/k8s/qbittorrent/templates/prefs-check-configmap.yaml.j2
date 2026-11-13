@@ -15,6 +15,6 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   prefs_check.py: |
-{{ lookup('file', playbook_dir + '/roles/k8s/qbittorrent/files/prefs_check.py') | indent(4, true) }}
+{{ lookup('file', role_file('files/prefs_check.py')) | indent(4, true) }}
   apply_prefs.py: |
-{{ lookup('file', playbook_dir + '/roles/k8s/qbittorrent/files/apply_prefs.py') | indent(4, true) }}
+{{ lookup('file', role_file('files/apply_prefs.py')) | indent(4, true) }}

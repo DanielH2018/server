@@ -10,6 +10,6 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   cloudflarerealip.go: |
-{{ lookup('file', playbook_dir + '/roles/k8s/traefik/files/cloudflare-realip/cloudflarerealip.go') | indent(4, true) }}
+{{ lookup('file', role_file('files/cloudflare-realip/cloudflarerealip.go')) | indent(4, true) }}
   traefik-plugin.yml: |
-{{ lookup('file', playbook_dir + '/roles/k8s/traefik/files/cloudflare-realip/traefik-plugin.yml') | indent(4, true) }}
+{{ lookup('file', role_file('files/cloudflare-realip/traefik-plugin.yml')) | indent(4, true) }}

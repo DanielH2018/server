@@ -237,7 +237,7 @@ def bundle_ordering(
     k8s = k8s_services(services)
     group = yaml_fast.safe_load(group_vars.read_text())
     return Ordering(
-        deps=build_k8s_dep_map(k8s, str(ANSIBLE)),
+        deps=build_k8s_dep_map(k8s, str(K8S_ROLES)),
         applies_last=frozenset(K8S_APPLIES_LAST),
         namespace_roles={
             str(group[var]): role for var, role in NAMESPACE_ROLE_VARS.items()

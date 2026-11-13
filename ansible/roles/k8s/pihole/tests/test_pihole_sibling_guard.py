@@ -200,7 +200,7 @@ def _render_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
     shutil.copy(ANSIBLE / "vars" / "cluster-vars.source", tree / "vars")
     if edit:
         edit(role)
-    copied = {**stubs, "playbook_dir": str(tree)}
+    copied = {**stubs, "role_path": str(tree / "roles" / "k8s" / TAG)}
     return cluster.render_tag(TAG, copied, roles=tree / "roles" / "k8s")
 
 

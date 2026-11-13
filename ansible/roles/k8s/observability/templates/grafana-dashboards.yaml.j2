@@ -33,6 +33,6 @@ metadata:
 data:
 {% for board in boards %}
   {{ board }}: |
-{{ lookup('file', playbook_dir ~ '/roles/k8s/observability/files/dashboards/' ~ folder ~ '/' ~ board) | grafana_deploy_annotated(observability_loki_homelab_uid, observability_deploy_annotation_expr, observability_flux_deploy_annotation_expr) | indent(4, true) }}
+{{ lookup('file', role_file('files/dashboards/' ~ folder ~ '/' ~ board)) | grafana_deploy_annotated(observability_loki_homelab_uid, observability_deploy_annotation_expr, observability_flux_deploy_annotation_expr) | indent(4, true) }}
 {% endfor %}
 {% endfor %}

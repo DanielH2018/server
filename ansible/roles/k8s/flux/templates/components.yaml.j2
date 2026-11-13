@@ -7,5 +7,5 @@
   controller's first container. The class is never a literal here (#3452), and this call
   makes the role a reader of services.
 #}
-{{ lookup('file', playbook_dir + '/roles/k8s/flux/files/gotk-components.yaml')
+{{ lookup('file', role_file('files/gotk-components.yaml'))
    | flux_components(flux_pod_patch, services | tier_priority_class('flux'), flux_volume_suffixes, flux_controller_args, flux_controller_resources) }}

@@ -27,7 +27,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from _live_read_jinja import Reader, references, template_lookups
+from _live_read_jinja import Reader, references, role_path_value, template_lookups
 
 from renderer.renderer_lib.targets import render_targets
 from lib import yaml_fast
@@ -176,7 +176,6 @@ def _role_of(tree: Tree, path: Path) -> Path | None:
 
 def _include_file(tree: Tree, current: Path, target: str) -> Path:
     role = _role_of(tree, current)
-    target = target.replace("{{ playbook_dir }}", str(tree.ansible))
     if role is not None:
         target = target.replace("{{ role_path }}", str(role))
     if "{{" in target or "{%" in target:
@@ -346,8 +345,7 @@ def tag_templates(
         for key in CONTEXT_VARS:
             value = site.get(key) or {}
             for path in [value] if isinstance(value, str) else list(value):
-                resolved = str(path).replace("{{ playbook_dir }}", str(tree.ansible))
-                found.add((Path(resolved), templates))
+                found.add((Path(role_path_value(role, str(path))), templates))
     return found
 
 
@@ -384,7 +382,7 @@ def census(
     walk = walk_roles(tree, tags)
     result = Census(set_by_tasks=walk.set_by_tasks, derived=derived)
     services = k8s_services(tree.ansible.parent / "cluster" / "services.yml")
-    reader = Reader(tree.ansible, services)
+    reader = Reader(services)
     pending: list[tuple[str, str]] = []
 
     for tag in tags:
@@ -395,9 +393,10 @@ def census(
                 continue
             result.templates.add(path)
             where = _rel(tree, path)
-            names, ast = reader.read(where, path.read_text())
+            role = role_templates.parent
+            names, ast = reader.read(where, path.read_text(), role)
             pending += [(name, where) for name in names]
-            for name in [*references(ast), *template_lookups(tree.ansible, ast)]:
+            for name in [*references(ast), *template_lookups(role, ast)]:
                 # A relative name resolves as the role's loader resolves it.
                 for base in (role_templates, tree.shared):
                     candidate = base / name

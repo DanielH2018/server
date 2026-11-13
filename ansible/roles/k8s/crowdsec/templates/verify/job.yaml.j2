@@ -41,7 +41,7 @@
 {% set script_name = 'crowdsec_verify.py' %}
 {% set script_dir = '/job' %}
 {% set data = {
-  script_name: lookup('file', playbook_dir + '/roles/k8s/crowdsec/files/' + script_name, rstrip=False),
+  script_name: lookup('file', role_file('files/' + script_name), rstrip=False),
   'flux_job_connect.py': flux_job_connect,
 } %}
 {% set configmap_name = 'crowdsec-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
@@ -49,16 +49,15 @@
     templates and the files they embed are read raw, never rendered, and `cluster-vars.source`
     holds a digest of each key's ciphertext, so no value enters the hash. The ConfigMap holds no
     secret (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`), so it renders. -#}
-{% set role_dir = playbook_dir + '/roles/k8s/crowdsec/' %}
 {% set roll = namespace(
   text=lookup('template', 'deployment.yaml.j2') + lookup('template', 'jobs-configmap.yaml.j2'),
-  secrets=lookup('file', role_dir + 'templates/config-secret.yaml.j2')
-    + lookup('file', role_dir + 'templates/config/crowdsec-discord.yaml.j2')
-    + lookup('file', role_dir + 'files/crowdsec-profiles.yaml')
-    + lookup('file', role_dir + 'files/crowdsec-whitelist.yaml')
-    + lookup('file', role_dir + 'files/crowdsec-trusted-remote-whitelist.yaml'),
+  secrets=lookup('file', role_file('templates/config-secret.yaml.j2'))
+    + lookup('file', role_file('templates/config/crowdsec-discord.yaml.j2'))
+    + lookup('file', role_file('files/crowdsec-profiles.yaml'))
+    + lookup('file', role_file('files/crowdsec-whitelist.yaml'))
+    + lookup('file', role_file('files/crowdsec-trusted-remote-whitelist.yaml')),
 ) %}
-{% for line in lookup('file', playbook_dir + '/vars/cluster-vars.source').splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
+{% for line in lookup('file', repo_file('ansible/vars/cluster-vars.source')).splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
 {% set roll.text = roll.text + line %}
 {% endfor %}
 {% set roll_digest8 = ((roll.text + roll.secrets) | hash('sha256'))[:8] %}

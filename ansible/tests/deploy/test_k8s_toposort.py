@@ -47,9 +47,8 @@ from pathlib import Path
 
 import pytest
 from lib.render_guard import k8s_services
-from lib.repo_paths import K8S_SERVICES
+from lib.repo_paths import K8S_ROLES, K8S_SERVICES
 
-from _helpers import ANSIBLE
 from _k8s_render import rendered_docs
 from toposort import (
     K8S_CRD_EDGE_EXEMPT,
@@ -91,7 +90,7 @@ def _index(entries: list[dict]) -> dict[str, int]:
 
 
 def _sorted_names(entries: list[dict]) -> list[str]:
-    dep_map = build_k8s_dep_map(entries, str(ANSIBLE))
+    dep_map = build_k8s_dep_map(entries, str(K8S_ROLES))
     return [c["name"] for c in toposort_containers(entries, dep_map)]
 
 
@@ -117,7 +116,7 @@ def _derived_traefik_edge(entries: list[dict]) -> set[str]:
     itself after the derivation changed. A K8S_APPLIES_LAST role depends on every entry,
     traefik included, for a reason that is not a route, so it is left out.
     """
-    dep_map = build_k8s_dep_map(entries, str(ANSIBLE))
+    dep_map = build_k8s_dep_map(entries, str(K8S_ROLES))
     return {
         name
         for name, deps in dep_map.items()
@@ -199,10 +198,10 @@ def test_a_routed_entry_that_ships_no_route_template_still_gets_the_edge():
     so an entry-blind derivation would return an empty dep list here.
     """
     entry = {"name": "widget", "hostname": "widget", "port": 80}
-    assert build_k8s_dep_map([entry], str(ANSIBLE))["widget"] == ["traefik"]
+    assert build_k8s_dep_map([entry], str(K8S_ROLES))["widget"] == ["traefik"]
 
     unrouted = {"name": "widget", "port": 80}
-    assert build_k8s_dep_map([unrouted], str(ANSIBLE))["widget"] == []
+    assert build_k8s_dep_map([unrouted], str(K8S_ROLES))["widget"] == []
 
 
 def test_traefik_is_deployed(host):
@@ -364,7 +363,7 @@ def test_every_applies_last_role_says_why():
 @functools.cache
 def _host_dep_map(path: Path) -> dict[str, list[str]]:
     """The host's dep map, built once: it reads no list order, and each build scans every role."""
-    return build_k8s_dep_map(_k8s_entries(path), str(ANSIBLE))
+    return build_k8s_dep_map(_k8s_entries(path), str(K8S_ROLES))
 
 
 def _applies_last_ahead_of(
@@ -421,5 +420,5 @@ def test_an_emptied_applies_last_lets_netpol_baseline_listed_first_stay_first():
     """The red half: without the dict, the adversarial list keeps netpol-baseline first."""
     path, name = APPLIES_LAST_PAIRS[0]
     entries = _k8s_entries(path)
-    dep_map = build_k8s_dep_map(entries, str(ANSIBLE), applies_last={})
+    dep_map = build_k8s_dep_map(entries, str(K8S_ROLES), applies_last={})
     assert _applies_last_ahead_of(entries, dep_map, name) == ["netpol-baseline"]

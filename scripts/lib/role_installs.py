@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
-from lib.repo_paths import ANSIBLE, REPO, ROLES
+from lib.repo_paths import REPO, ROLES
 from renderer.renderer_lib.host_sources import SHARED_FILES
 
 # A role command running a script `--no-project`: the first `.py` path after the flag, in one
@@ -58,14 +58,13 @@ def _defaults(role: Path) -> dict[str, str]:
 
 
 def _render(text: str, role: Path) -> str:
-    """`text` with `role_path`, `playbook_dir` and the role's defaults filled in.
+    """`text` with `role_path` and the role's defaults filled in.
 
     Anything else stays as written, so a caller tells a resolved path by the absence of `{{`.
     """
     values = {
         **_defaults(role),
         "role_path": str(role),
-        "playbook_dir": str(ANSIBLE),
     }
 
     def fill(match: re.Match) -> str:

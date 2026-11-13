@@ -14,4 +14,4 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   gpu_exporter.py: |
-{{ lookup('file', playbook_dir + '/roles/k8s/gpu-exporter/files/gpu_exporter.py') | indent(4, true) }}
+{{ lookup('file', role_file('files/gpu_exporter.py')) | indent(4, true) }}

@@ -15,8 +15,8 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   janitorr_health.py: |
-{{ lookup('file', playbook_dir + '/roles/k8s/janitorr/files/janitorr_health.py') | indent(4, true) }}
+{{ lookup('file', role_file('files/janitorr_health.py')) | indent(4, true) }}
   janitorr_health_logic.py: |
-{{ lookup('file', playbook_dir + '/roles/k8s/janitorr/files/janitorr_health_logic.py') | indent(4, true) }}
+{{ lookup('file', role_file('files/janitorr_health_logic.py')) | indent(4, true) }}
   host_lib.py: |
-{{ lookup('file', playbook_dir + '/../hosts/lib/host_lib.py') | indent(4, true) }}
+{{ lookup('file', repo_file('hosts/lib/host_lib.py')) | indent(4, true) }}

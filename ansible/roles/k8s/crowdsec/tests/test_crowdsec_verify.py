@@ -246,21 +246,21 @@ def _docs(texts: dict[str, str]) -> list[dict]:
 def _render_tree_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
     """The flipped render of a copy of the role and of `cluster-vars.source`.
 
-    `edit(role)` changes the copied role first. `playbook_dir` rides in the stubs, which outrank
+    `edit(role)` changes the copied role first. `role_path` rides in the stubs, which outrank
     every other layer, so the Job's lookups read the copy rather than the tree.
     """
     tree = tmp_path / "ansible"
     role = tree / "roles" / "k8s" / TAG
     shutil.copytree(K8S_ROLES / TAG, role)
     (tree / "roles" / "setup").symlink_to(ANSIBLE / "roles" / "setup")
-    (tmp_path / "hosts").symlink_to(HOST_LIB_FILES.parent)  # playbook_dir/../hosts/lib
-    # The jobs ConfigMap ships the renderer's helper, playbook_dir/../scripts/renderer.
+    (tmp_path / "hosts").symlink_to(HOST_LIB_FILES.parent)  # repo_file('hosts/lib/...')
+    # The jobs ConfigMap ships the renderer's helper, repo_file('scripts/renderer/...').
     (tmp_path / "scripts").symlink_to(SCRIPTS)
     (tree / "vars").mkdir()
     shutil.copy(ANSIBLE / "vars" / "cluster-vars.source", tree / "vars")
     if edit:
         edit(role)
-    copied = {**stubs, "playbook_dir": str(tree)}
+    copied = {**stubs, "role_path": str(tree / "roles" / "k8s" / TAG)}
     return cluster.render_tag(TAG, copied, roles=tree / "roles" / "k8s")
 
 

@@ -57,7 +57,7 @@
 {% set script_name = 'registry_verify.py' %}
 {% set script_dir = '/verify' %}
 {% set data = {
-  script_name: lookup('file', playbook_dir + '/roles/k8s/registry/files/' + script_name, rstrip=False),
+  script_name: lookup('file', role_file('files/' + script_name), rstrip=False),
   'flux_job_connect.py': flux_job_connect,
 } %}
 {% set configmap_name = 'registry-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}

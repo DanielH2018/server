@@ -17,4 +17,4 @@ metadata:
   namespace: kube-system
 data:
   Corefile: |
-{{ lookup('template', playbook_dir + '/roles/k8s/coredns/templates/config/coredns-corefile.j2') | indent(4, true) }}
+{{ lookup('template', role_file('templates/config/coredns-corefile.j2')) | indent(4, true) }}

@@ -127,7 +127,7 @@ def _role_renders_traefik_crd(role_templates_dir):
     return False
 
 
-def build_k8s_dep_map(containers_list, playbook_dir, applies_last=None):
+def build_k8s_dep_map(containers_list, k8s_roles, applies_last=None):
     """Derive the k8s roles' dependency map.
 
     There is no hand-authored per-role dependency file, and no constraint rests on list
@@ -144,6 +144,8 @@ def build_k8s_dep_map(containers_list, playbook_dir, applies_last=None):
     carries; configarr declares sonarr and radarr, whose bare Service names it dials; and
     jellyfin and tdarr declare dri-device-plugin, which advertises the `devic.es/dri`
     resource they request.
+
+    `k8s_roles` is the directory holding the k8s roles, whose templates the routed rule reads.
 
     Takes the FULL containers_list, never a `--role` subset. `cluster.bundle_ordering`
     generates every tag's `dependsOn` from this map, so a map built from a subset would give
@@ -163,9 +165,7 @@ def build_k8s_dep_map(containers_list, playbook_dir, applies_last=None):
         if c.get("use_authelia") and name != "authelia":
             deps.add("authelia")
         if name != "traefik" and name not in K8S_CRD_EDGE_EXEMPT:
-            role_templates = os.path.join(
-                playbook_dir, "roles", "k8s", name, "templates"
-            )
+            role_templates = os.path.join(k8s_roles, name, "templates")
             if _entry_is_routed(c) or _role_renders_traefik_crd(role_templates):
                 deps.add("traefik")
         dep_map[name] = sorted(deps)

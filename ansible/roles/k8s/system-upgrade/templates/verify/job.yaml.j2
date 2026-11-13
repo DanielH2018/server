@@ -24,7 +24,7 @@
 {% set script_dir = '/verify' %}
 {% set binary_path = '/host/usr/local/bin/k3s' %}
 {% set data = {
-  script_name: lookup('file', playbook_dir + '/roles/k8s/system-upgrade/files/' + script_name, rstrip=False),
+  script_name: lookup('file', role_file('files/' + script_name), rstrip=False),
   'flux_job_connect.py': flux_job_connect,
 } %}
 {% set configmap_name = 'system-upgrade-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}

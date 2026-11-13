@@ -179,10 +179,10 @@ flux_prepull_timeout: 4500s
 
 image_builder_builds:
   - image_builder_name: code-server
-    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/code-server/templates/Dockerfile.j2"
+    image_builder_dockerfile: "{{ role_file('templates/Dockerfile.j2') }}"
     # The one file the Dockerfile COPYs (flat — ConfigMap keys cannot contain '/').
     image_builder_context:
-      "{{ playbook_dir }}/roles/k8s/code-server/files/extensions.sh": extensions.sh
+      "{{ role_file('files/extensions.sh') }}": extensions.sh
     # MEASURED. This value is the Job's `activeDeadlineSeconds`
     # (image-builder/templates/build-job.yaml.j2), so exceeding it kills the build rather than
     # just failing the wait. A cold build with no layer cache took 1291 s end to end before

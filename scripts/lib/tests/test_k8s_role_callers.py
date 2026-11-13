@@ -67,8 +67,8 @@ def test_a_template_lookup_into_another_role_is_an_edge(tmp_path):
     verify = tmp_path / "ansible" / "roles" / "k8s" / "reader" / "templates" / "verify"
     verify.mkdir(parents=True)
     (verify / "job.yaml.j2").write_text(
-        "data: {{ lookup('file', playbook_dir + '/roles/k8s/helper/files/x.py') }}\n"
-        "own: {{ lookup('file', playbook_dir ~ '/roles/k8s/reader/files/y.py') }}\n"
+        "data: {{ lookup('file', role_file('files/x.py', role='helper')) }}\n"
+        "own: {{ lookup('file', role_file('files/y.py')) }}\n"
     )
     assert role_callers(tmp_path) == {"helper": {"reader"}}
 
@@ -77,7 +77,7 @@ def test_a_b64file_lookup_into_another_role_is_an_edge(tmp_path):
     templates = tmp_path / "ansible" / "roles" / "k8s" / "reader" / "templates"
     templates.mkdir(parents=True)
     (templates / "x.yaml.j2").write_text(
-        "x: {{ lookup('b64file', playbook_dir ~ '/roles/k8s/helper/files/a.png') }}\n"
+        "x: {{ lookup('b64file', role_file('files/a.png', role='helper')) }}\n"
     )
     assert role_callers(tmp_path) == {"helper": {"reader"}}
 
@@ -87,7 +87,7 @@ def test_a_lookup_with_keyword_arguments_is_an_edge(tmp_path):
     templates = tmp_path / "ansible" / "roles" / "k8s" / "reader" / "templates"
     templates.mkdir(parents=True)
     (templates / "x.yaml.j2").write_text(
-        "x: \"{{ lookup('template', playbook_dir ~ '/roles/k8s/helper/templates/a.j2',"
+        "x: \"{{ lookup('template', role_file('templates/a.j2', role='helper'),"
         ' rstrip=False) }}"\n'
     )
     assert role_callers(tmp_path) == {"helper": {"reader"}}
@@ -120,7 +120,7 @@ def test_a_named_repo_is_walked_instead_of_this_checkout(tmp_path, callers):
     templates = tmp_path / "ansible" / "roles" / "k8s" / "caller" / "templates"
     templates.mkdir(parents=True)
     (templates / "x.yaml.j2").write_text(
-        "data: {{ lookup('file', playbook_dir + '/roles/k8s/helper/files/x.py') }}\n"
+        "data: {{ lookup('file', role_file('files/x.py', role='helper')) }}\n"
     )
 
     derived = role_callers(tmp_path)

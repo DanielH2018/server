@@ -25,7 +25,7 @@
 {% set script_name = 'jellyfin_snapshot_cap.py' %}
 {% set script_dir = '/cap' %}
 {% set data = {
-  script_name: lookup('file', playbook_dir + '/roles/k8s/jellyfin/files/' + script_name, rstrip=False),
+  script_name: lookup('file', role_file('files/' + script_name), rstrip=False),
   'flux_job_connect.py': flux_job_connect,
 } %}
 {% set configmap_name = 'jellyfin-snapshot-cap-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}

@@ -69,4 +69,4 @@ data:
   # validate/k8s_manifests.py does not try to parse it as a manifest, and lands here as a
   # block scalar. Every label it emits is a contract; see the file's header.
   config.alloy: |
-{{ lookup('template', playbook_dir + '/roles/k8s/loki-homelab/templates/config/config.alloy.j2') | indent(4, true) }}
+{{ lookup('template', role_file('templates/config/config.alloy.j2')) | indent(4, true) }}

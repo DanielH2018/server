@@ -19,7 +19,7 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   sonarr_air_date_guard.py: |
-{{ lookup('file', playbook_dir + '/roles/k8s/sonarr/files/sonarr_air_date_guard.py') | indent(4, true) }}
+{{ lookup('file', role_file('files/sonarr_air_date_guard.py')) | indent(4, true) }}
 ---
 apiVersion: batch/v1
 kind: CronJob

@@ -273,6 +273,17 @@ table and a case in `scripts/renderer/tests/_dialect_cases.py`, in one PR.
 holds every template, variable value and render-key value of the k8s roles to the list. Host and package modes
 render through `strict_env`, which the subset does not bind.
 
+A template names a file it looks up from its role, never from the tree's root.
+`role_file('files/x.py')` is the path of a file in the role being rendered, and
+`role_file('files/x.yaml', role='crowdsec')` is one in a sibling role.
+`repo_file('hosts/lib/host_lib.py')` is a path from the repository root, for a file no role
+holds. `scripts/lib/role_files.py` defines both, and `make_env` registers them in every
+environment. Each resolves from `role_path`, the rendering role's directory, which
+`render_context` sets. A test that renders a copy of a role therefore reads the copy, and a
+copy whose templates call `repo_file()` or name a sibling role is laid out as
+`<root>/ansible/roles/k8s/<tag>`. `scripts/lib/k8s_lookups.py:cross_role_files` reads the
+`role=` form to find which roles read another role's files.
+
 A template census in `scripts/renderer/tests/` parses every template of the k8s roles and
 `ansible/templates/`. It fails when a filter or test name does not resolve in the environment
 the renderer renders with.
@@ -289,7 +300,8 @@ its content tag:
   `scripts/deploy_tools/ci_images.py:content_tag` holds a second copy, because the job that holds
   `packages: write` imports no renderer code.
 - Each `image_builder_builds` entry's variables are image-builder's defaults under the calling
-  role's context, with the entry's vars over both and `playbook_dir` resolving to `ansible/`.
+  role's context, with the entry's vars over both. `role_path` stays the calling role's, so a
+  build's `role_file()` paths name that role's files.
 - An entry whose `when:` is false adds no tag, as valheim's does without mods. Every role reads
   the map as `{}` when it builds nothing.
 

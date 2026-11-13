@@ -26,6 +26,7 @@ import copy
 import functools
 import subprocess
 import sys
+from typing import Any, cast
 from pathlib import Path
 
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader, StrictUndefined
@@ -34,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.git import git
+from lib.role_files import repo_file, role_file
 from lib.ansible_inventory import K8S_HOST, containers_entries_in, host_names
 from lib.repo_paths import (
     ALL_VARS,
@@ -173,8 +175,8 @@ def make_env(dirs=(), undefined_cls=StubUndefined) -> Environment:
     """The one Jinja Environment factory the render guards and the renderer build on.
 
     Carries the given template dirs on the loader, the stub-undefined class, and the whitespace
-    flags matching Ansible's Templar so rendered output matches a real deploy. It registers no
-    filter: ``lib.ansible_jinja_env.register_ansible_filters(make_env(...))`` adds the Ansible
+    flags matching Ansible's Templar so rendered output matches a real deploy. Its globals are
+    ``lib.role_files``' ``role_file`` and ``repo_file``. It registers no filter: ``lib.ansible_jinja_env.register_ansible_filters(make_env(...))`` adds the Ansible
     ones, and ``template_env`` does that over a template directory and ``ansible/templates/``.
 
     With no ``dirs`` the environment has an empty loader, which is the form a test takes to
@@ -183,13 +185,16 @@ def make_env(dirs=(), undefined_cls=StubUndefined) -> Environment:
     ``tests-build-no-bare-jinja-environment`` row of
     ``scripts/tests/test_census_rows_test_renders.py`` refuses one in a test.
     """
-    return Environment(
+    env = Environment(
         loader=FileSystemLoader([str(d) for d in dirs]),
         undefined=undefined_cls,
         trim_blocks=True,
         lstrip_blocks=False,
         keep_trailing_newline=True,
     )
+    # jinja2 leaves `Environment.globals` unannotated, so its inferred type rejects a callable.
+    cast(dict[str, Any], env.globals).update(role_file=role_file, repo_file=repo_file)
+    return env
 
 
 def pad_to_source_newlines(source: str, text: str) -> str:

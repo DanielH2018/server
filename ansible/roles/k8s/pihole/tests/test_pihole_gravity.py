@@ -301,7 +301,7 @@ def stubs(tmp_path_factory):
 def _render_tree_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
     """The render of a copy of the role and of `cluster-vars.source`.
 
-    `edit(role)` changes the copied role first. `playbook_dir` rides in the stubs, which outrank
+    `edit(role)` changes the copied role first. `role_path` rides in the stubs, which outrank
     every other layer, so the Job's lookups read the copy rather than the tree.
     """
     tree = tmp_path / "ansible"
@@ -311,7 +311,7 @@ def _render_tree_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
     shutil.copy(ANSIBLE / "vars" / "cluster-vars.source", tree / "vars")
     if edit:
         edit(role)
-    copied = {**stubs, "playbook_dir": str(tree)}
+    copied = {**stubs, "role_path": str(tree / "roles" / "k8s" / TAG)}
     return cluster.render_tag(TAG, copied, roles=tree / "roles" / "k8s")
 
 

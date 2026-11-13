@@ -41,14 +41,14 @@
 {% set script_name = 'traefik_bouncer_key_precheck.py' %}
 {% set script_dir = '/precheck' %}
 {% set data = {
-  script_name: lookup('file', playbook_dir + '/roles/k8s/traefik/files/' + script_name, rstrip=False),
+  script_name: lookup('file', role_file('files/' + script_name), rstrip=False),
   'flux_job_connect.py': flux_job_connect,
 } %}
 {% set configmap_name = 'traefik-precheck-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
 {#- The key's ciphertext digest, read from the cluster file's source; no value enters the
     spec. -#}
 {% set key = namespace(digest='') %}
-{% for line in lookup('file', playbook_dir + '/vars/cluster-vars.source').splitlines() if line and not line.startswith('#') and line.split()[0] == 'crowdsec_k8s_bouncer_api_key' %}
+{% for line in lookup('file', repo_file('ansible/vars/cluster-vars.source')).splitlines() if line and not line.startswith('#') and line.split()[0] == 'crowdsec_k8s_bouncer_api_key' %}
 {% set key.digest = line.split()[1] %}
 {% endfor %}
 {% set spec_text %}

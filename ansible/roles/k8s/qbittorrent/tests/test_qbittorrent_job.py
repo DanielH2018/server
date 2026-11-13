@@ -231,10 +231,11 @@ def stubs(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def flipped_tag(stubs, tmp_path_factory) -> cluster.RenderedTag:
-    """The render of a copy of the role."""
-    roles = tmp_path_factory.mktemp("roles")
-    shutil.copytree(K8S_ROLES / TAG, roles / TAG)
-    return cluster.render_tag(TAG, stubs, roles=roles)
+    """The render of a copy of the role, laid out as the repo lays it out for `repo_file()`."""
+    tree = tmp_path_factory.mktemp("copy") / "ansible"
+    shutil.copytree(K8S_ROLES / TAG, tree / "roles" / "k8s" / TAG)
+    (tree / "vars").symlink_to(ANSIBLE / "vars")
+    return cluster.render_tag(TAG, stubs, roles=tree / "roles" / "k8s")
 
 
 def _docs(texts: dict[str, str]) -> list[dict]:
@@ -342,7 +343,7 @@ def _roll_digests(flipped_docs: list[dict]) -> set[str]:
 def _render_tree_copy(tmp_path, stubs, edit=None) -> list[dict]:
     """The flipped `qbittorrent-verify` of a copy of the role and of `cluster-vars.source`.
 
-    `edit(tree)` changes the copy first. `playbook_dir` rides in the stubs, which outrank every
+    `edit(tree)` changes the copy first. `role_path` rides in the stubs, which outrank every
     other layer, so the Jobs' lookups read the copy rather than the tree.
     """
     tree = tmp_path / "ansible"
@@ -351,7 +352,7 @@ def _render_tree_copy(tmp_path, stubs, edit=None) -> list[dict]:
     shutil.copy(ANSIBLE / "vars" / "cluster-vars.source", tree / "vars")
     if edit:
         edit(tree)
-    copied = {**stubs, "playbook_dir": str(tree)}
+    copied = {**stubs, "role_path": str(tree / "roles" / "k8s" / TAG)}
     return _docs(cluster.render_tag(TAG, copied, roles=tree / "roles" / "k8s").verify)
 
 

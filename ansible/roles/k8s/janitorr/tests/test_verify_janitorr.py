@@ -180,21 +180,21 @@ def _docs(texts: dict[str, str]) -> list[dict]:
 def _render_tree_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
     """The flipped render of a copy of the role and of `cluster-vars.source`.
 
-    `edit(role)` changes the copied role first. `playbook_dir` rides in the stubs, which outrank
+    `edit(role)` changes the copied role first. `role_path` rides in the stubs, which outrank
     every other layer, so the Job's lookups read the copy rather than the tree. The copy links
     the tree's setup roles, which the health ConfigMap reads.
     """
     tree = tmp_path / "ansible"
     role = tree / "roles" / "k8s" / TAG
     shutil.copytree(K8S_ROLES / TAG, role)
-    # The health ConfigMap ships host_lib.py from hosts/lib by playbook_dir.
+    # The health ConfigMap ships host_lib.py from hosts/lib by repo_file().
     (tree / "roles" / "setup").symlink_to(ANSIBLE / "roles" / "setup")
-    (tmp_path / "hosts").symlink_to(HOST_LIB_FILES.parent)  # playbook_dir/../hosts/lib
+    (tmp_path / "hosts").symlink_to(HOST_LIB_FILES.parent)  # repo_file('hosts/lib/...')
     (tree / "vars").mkdir()
     shutil.copy(ANSIBLE / "vars" / "cluster-vars.source", tree / "vars")
     if edit:
         edit(role)
-    copied = {**stubs, "playbook_dir": str(tree)}
+    copied = {**stubs, "role_path": str(tree / "roles" / "k8s" / TAG)}
     return cluster.render_tag(TAG, copied, roles=tree / "roles" / "k8s")
 
 
@@ -390,7 +390,7 @@ def test_every_input_the_pod_names_is_one_the_roll_digest_reads(flipped_tag):
     named = {sources[ref] for ref in pod_references(deployment["spec"]["template"])}
     assert named == {"config-secret.yaml.j2"}
     text = (K8S_ROLES / TAG / "templates" / "verify" / "job.yaml.j2").read_text()
-    assert {name for name in named if f"/templates/{name}'" not in text} == set()
+    assert {name for name in named if f"'templates/{name}'" not in text} == set()
 
 
 def test_the_job_reads_no_other_roles_file():

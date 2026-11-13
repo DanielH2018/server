@@ -26,10 +26,11 @@ Run: uv run pytest ansible/tests/services/test_monitor_bridge_mount_layout.py
 import os
 import subprocess
 from lib.proc_testing import run
+from lib.render_guard import make_env
 import sys
 from pathlib import Path
 
-from _helpers import ANSIBLE, K8S_ROLES, load_yaml
+from _helpers import K8S_ROLES, load_yaml
 from _k8s_render import rendered_docs
 
 MONITOR_BRIDGE = K8S_ROLES / "monitor-bridge"
@@ -65,7 +66,9 @@ def _monitor_bridge_sources() -> dict[str, Path]:
 def _autofix_bridge_sources() -> dict[str, Path]:
     modules = load_yaml(AUTOFIX_BRIDGE / "defaults/main.yml")["autofix_bridge_modules"]
     return {
-        m["name"]: Path(m["src"].replace("{{ playbook_dir }}", str(ANSIBLE)))
+        m["name"]: Path(
+            make_env().from_string(m["src"]).render(role_path=str(AUTOFIX_BRIDGE))
+        )
         for m in modules
     }
 

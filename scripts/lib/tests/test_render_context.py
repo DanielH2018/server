@@ -69,6 +69,15 @@ def test_a_role_default_beats_a_base_stub(tree):
     assert rc.render_context(template, inventory=inv)["email"] == "real@example.org"
 
 
+def test_a_role_default_names_its_own_file_through_role_file(tree):
+    # An image build's Dockerfile path renders inside image-builder, so it must already name
+    # the calling role's file when the context resolves.
+    template, inv = tree({"dockerfile": "{{ role_file('templates/Dockerfile.j2') }}"})
+    role = template.parents[1]
+    ctx = rc.render_context(template, inventory=inv)
+    assert ctx["dockerfile"] == str(role / "templates" / "Dockerfile.j2")
+
+
 def test_the_k8s_plane_renders_with_its_hosts_vars(tree):
     template, inv = tree({}, group={"port": 1}, hosts={"box": {"port": 2}}, plane="k8s")
     assert rc.render_context(template, inventory=inv)["port"] == 2
@@ -122,7 +131,7 @@ def test_a_host_vars_mapping_replaces_the_hosts_file_and_resolves(tree):
 def test_a_value_that_will_not_expand_is_dropped(tree, capsys):
     # A dropped key renders as STUB. Kept raw, its literal braces would reach the render.
     template, inv = tree(
-        {"good": "{{ sys_user }}/x", "bad": "{{ playbook_dir | no_such_filter }}"},
+        {"good": "{{ sys_user }}/x", "bad": "{{ 'x' | no_such_filter }}"},
         group={"sys_user": "ubuntu"},
     )
     ctx = rc.render_context(template, inventory=inv)
@@ -153,7 +162,7 @@ def test_a_value_reading_a_dropped_key_is_dropped_under_a_strict_class():
 
 
 def test_a_strict_context_raises_naming_the_value_that_will_not_expand(tree):
-    template, inv = tree({"bad": "{{ playbook_dir | no_such_filter }}"})
+    template, inv = tree({"bad": "{{ 'x' | no_such_filter }}"})
     with pytest.raises(rc.UnresolvedVarsError) as exc:
         rc.render_context(template, strict=True, inventory=inv)
     assert set(exc.value.keys) == {"bad"}

@@ -24,7 +24,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import re
 from pathlib import Path
 
-from lib.k8s_lookups import K8S_LOOKUP_RE
+from lib.k8s_lookups import cross_role_files
 from lib.repo_paths import K8S_ROLES, REPO
 
 __all__ = ["CannotNarrow", "role_callers"]
@@ -58,7 +58,7 @@ def _looked_up(role_dir: Path) -> set[str]:
     for src in role_dir.glob("templates/**/*.j2"):
         try:
             text = src.read_text(errors="ignore")
-            found.update(path.split("/")[2] for path in K8S_LOOKUP_RE.findall(text))
+            found.update(path.split("/")[2] for path in cross_role_files(text))
         except OSError as exc:
             raise CannotNarrow(f"{src} does not load: {exc}") from exc
     return found

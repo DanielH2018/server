@@ -21,6 +21,6 @@ metadata:
 data:
   tiers.json: {{ {'r2': k3s_longhorn_r2_volumes, 'weekly': k3s_longhorn_weekly_volumes, 'nobackup': k3s_longhorn_nobackup_volumes} | to_json(sort_keys=True) | to_json }}
   longhorn_reconcile.py: |
-{{ lookup('file', playbook_dir + '/roles/k8s/longhorn-reconcile/files/longhorn_reconcile.py') | indent(4, true) }}
+{{ lookup('file', role_file('files/longhorn_reconcile.py')) | indent(4, true) }}
   flux_job_connect.py: |
-{{ lookup('file', playbook_dir + '/../scripts/renderer/job_files/flux_job_connect.py') | indent(4, true) }}
+{{ lookup('file', repo_file('scripts/renderer/job_files/flux_job_connect.py')) | indent(4, true) }}

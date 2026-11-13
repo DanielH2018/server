@@ -22,7 +22,7 @@ from renderer.tests._job_census import problems
 
 TAG = "tdarr"
 # A path into a role's tree, as any lookup names it; group 1 is the role.
-ROLE_PATH = re.compile(r"/roles/k8s/([^/'\"]+)/")
+ROLE_PATH = re.compile(r"(?:/roles/k8s/|\brole\s*=\s*')([^/'\"]+)")
 
 
 def _env(tmp_path, device=None, media=None) -> dict[str, str]:
@@ -141,7 +141,7 @@ def test_the_staged_job_reads_no_other_roles_file():
     The Job takes `flux_job_image` from the renderer rather than from the flux defaults, so a
     Renovate bump of that pin does not redeploy tdarr. This reads every role path the staged
     templates name, in any form, rather than only the lookup shapes the secret census's scan
-    (`k8s_lookups.K8S_LOOKUP_RE`) matches.
+    (`k8s_lookups.cross_role_files`) matches.
     """
     staged = sorted((K8S_ROLES / TAG / "templates" / "verify").glob("*.j2"))
     assert [p.name for p in staged] == ["job.yaml.j2", "rbac.yaml.j2"]
@@ -155,7 +155,7 @@ def test_the_staged_job_reads_no_other_roles_file():
 
 def test_the_role_path_scan_finds_a_lookup_with_keyword_arguments():
     """The red case: a lookup that passes keyword arguments is still a role path."""
-    text = "lookup('file', playbook_dir + '/roles/k8s/flux/defaults/main.yml', rstrip=False)"
+    text = "lookup('file', role_file('defaults/main.yml', role='flux'), rstrip=False)"
     assert ROLE_PATH.findall(text) == ["flux"]
 
 

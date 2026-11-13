@@ -6,7 +6,7 @@ bridge fragments need the same rows, rendered on the controller, where importing
 would mean importing every check body it names. So
 this filter PARSES the source instead of running it:
 
-    lookup('file', playbook_dir ~ '/roles/k8s/monitor-bridge/files/check_table.py')
+    lookup('file', role_file('files/check_table.py', role='monitor-bridge'))
     | py_table('CHECKS')
 
 returns one dict per call, holding each keyword argument whose value is a literal. A

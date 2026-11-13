@@ -36,7 +36,7 @@ metadata:
 data:
 {% for name in names %}
   {{ name }}: |
-{{ lookup('file', playbook_dir + '/roles/k8s/home-assistant/files/' + subdir + name) | indent(4, true) }}
+{{ lookup('file', role_file('files/' + subdir + name)) | indent(4, true) }}
 {% endfor %}
 {% if not loop.last %}
 ---
