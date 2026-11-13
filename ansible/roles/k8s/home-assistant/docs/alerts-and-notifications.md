@@ -29,8 +29,9 @@ that reports rather than actuates.
 - **Notification routing — `script.bedroom_notify` (since 2026-06-18).** The single cross-cutting
   layer EVERY bedroom alert calls (threshold engine, sensor-offline, away). Fields:
   `title, message, tag, watch, pierce` (last two default false). Computes the Android `channel` +
-  `importance` from `pierce` and the live **"quiet"** state (`sensor.pixel_9_pro_do_not_disturb_sensor`
-  not `off` OR `input_boolean.bedroom_sleep_mode` on): `pierce` → high-importance "Bedroom critical"
+  `importance` from `pierce` and the live **"quiet"** state (`sensor.pixel_watch_3_do_not_disturb_sensor`
+  not `off`, `unknown` or `unavailable` — the watch's DND, since the phone's sensor no longer
+  exists — OR `input_boolean.bedroom_sleep_mode` on): `pierce` → high-importance "Bedroom critical"
   channel (sounds, can bypass DND); else "Bedroom alerts", **low/silent while quiet**, default
   otherwise. `watch` → also `notify.mobile_app_pixel_watch_3` (the mobile-app notify service; the
   un-prefixed `notify.pixel_watch_3` does NOT exist — every `watch:true` alert raised a
