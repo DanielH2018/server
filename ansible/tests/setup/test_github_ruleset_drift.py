@@ -19,13 +19,16 @@ from _ruleset_drift import (
     ANONYMOUS_PRIVATE_REPO,
     BRANCH_RULESET_ID,
     DECLARED,
+    DOTFILES,
     FENCE_BYPASS,
     FENCE_EXCLUDE,
     FENCE_RULESET_ID,
     RENOVATE_EXCLUDE,
     REPO,
+    RESTRICTIONS,
     branch_ruleset_body,
     fence_ruleset,
+    restriction_ruleset,
     ruleset_body,
     run,
     textfile_series,
@@ -365,3 +368,101 @@ def test_the_declared_set_matches_the_role_defaults(tmp_path):
         "github_expected_ruleset_contexts drifted from this test's fixture — if the "
         "ruleset genuinely changed, update both; the monitor compares this list against GitHub"
     )
+
+
+MASTER, DOTFILES_MAIN, DOTFILES_TAGS = sorted(RESTRICTIONS)
+
+# Each way an update restriction can stop guarding its refs while still reading active.
+RESTRICTION_DRIFT = {
+    "master switched to evaluate": (
+        MASTER,
+        {"enforcement": "evaluate"},
+        "enforcement is 'evaluate', not active",
+    ),
+    "main moved off the branch target": (
+        DOTFILES_MAIN,
+        {"target": "push"},
+        "targets 'push', not branch",
+    ),
+    "master narrowed to another branch": (
+        MASTER,
+        {"conditions": {"ref_name": {"include": ["refs/heads/main"], "exclude": []}}},
+        "covers [refs/heads/main], declared [refs/heads/master]",
+    ),
+    "a tag pattern excluded": (
+        DOTFILES_TAGS,
+        {
+            "conditions": {
+                "ref_name": {"include": ["~ALL"], "exclude": ["refs/tags/v*"]}
+            }
+        },
+        "covers [!refs/tags/v* ~ALL], declared [~ALL]",
+    ),
+    "updates no longer restricted on main": (
+        DOTFILES_MAIN,
+        {"rules": [{"type": "deletion"}]},
+        "rules [deletion], declared [update]",
+    ),
+    "the agent's account allowed onto master": (
+        MASTER,
+        {
+            "bypass_actors": [
+                *restriction_ruleset(MASTER)["bypass_actors"],
+                {"actor_id": 338220904, "actor_type": "User", "bypass_mode": "always"},
+            ]
+        },
+        "newly-allowed:[User:338220904:always ]",
+    ),
+    "an anonymous read of the tag restriction": (
+        DOTFILES_TAGS,
+        {"bypass_actors": None},
+        "bypass list UNVERIFIED",
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(RESTRICTION_DRIFT))
+def test_a_weakened_update_restriction_is_flagged(tmp_path, case):
+    ruleset_id, overrides, expected = RESTRICTION_DRIFT[case]
+    rc, status, msg = run(
+        tmp_path,
+        curl_body=ruleset_body(DECLARED),
+        restriction_bodies={
+            ruleset_id: json.dumps(restriction_ruleset(ruleset_id, **overrides))
+        },
+    )
+    assert (rc, status) == (1, "down")
+    assert f"ruleset {ruleset_id}" in msg
+    assert expected in msg
+
+
+def test_a_clean_run_names_every_update_restriction(tmp_path):
+    rc, status, msg = run(tmp_path, curl_body=ruleset_body(DECLARED))
+    assert (rc, status) == (0, "up")
+    assert f"ruleset {MASTER} restricts refs/heads/master on {REPO}" in msg
+    assert f"ruleset {DOTFILES_MAIN} restricts refs/heads/main on {DOTFILES}" in msg
+    assert f"ruleset {DOTFILES_TAGS} restricts ~ALL on {DOTFILES}" in msg
+
+
+def test_a_private_dotfiles_repo_is_flagged(tmp_path):
+    """A free-plan private repo's rulesets read active and enforce nothing."""
+    rc, status, msg = run(
+        tmp_path,
+        curl_body=ruleset_body(DECLARED),
+        dotfiles_body=json.dumps({"full_name": DOTFILES, "visibility": "private"}),
+    )
+    assert (rc, status) == (1, "down")
+    assert f"repo {DOTFILES} reads 'private', not public" in msg
+
+
+def test_the_update_restriction_fixtures_match_the_role_defaults(tmp_path):
+    declared = {
+        rs["id"]: rs for rs in _defaults()["github_update_restriction_rulesets"]
+    }
+    assert sorted(declared) == sorted(RESTRICTIONS)
+    for ruleset_id, live in RESTRICTIONS.items():
+        rs = declared[ruleset_id]
+        assert (rs["repo"], rs["target"]) == (live["repo"], live["target"])
+        assert sorted(rs["include"]) == sorted(live["include"])
+        assert sorted(rs["rules"]) == sorted(live["rules"])
+        assert sorted(rs["bypass"]) == sorted(live["bypass"])

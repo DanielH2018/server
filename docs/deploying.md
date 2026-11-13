@@ -1,10 +1,19 @@
 # Deploying a change
 
 No script here deploys a workload by hand. `promote` and Flux apply every k8s change, and the
-host packages apply the host plane, the Pi's services included. H7.53
-([#7962](https://github.com/DanielH2018/server/issues/7962)) deleted `scripts/deploy.sh` with the
-GitOps deployer. The [GitOps pipeline](gitops-pipeline.md) says what runs in the deployer's place.
-This page says which path applies a change.
+host packages apply the host plane, the Pi's services included. This page says which path
+applies a change and what runs in place of the GitOps deployer.
+
+H7.52 retired `gitops-deploy.timer`, and H7.53
+([#7962](https://github.com/DanielH2018/server/issues/7962)) deleted its code with
+`scripts/deploy.sh`. [The GitOps deployer](archive/gitops-deployer.md) and
+[the archived role page](archive/gitops-deploy-role.md) hold its record, its rules and the
+incidents behind them.
+
+!!! warning "A merge is not a deploy"
+    `promote` and Flux apply every k8s change after master CI, an image-pin bump and a
+    deploy-plane path included, and `land.sh` waits on that promotion. The host packages apply
+    the host plane once the builder publishes them. No setup role applies on its own.
 
 ## Which path applies a change
 
@@ -18,6 +27,35 @@ This page says which path applies a change.
 - **A host's setup or a new host's bring-up:** H7.55 deleted the setup roles and the bring-up
   playbooks. A host's setup ships in its host package, as the bullet above says, and
   `hosts/bootstrap-host.sh` brings up a new host.
+
+Flux follows the promoted artifact and applies every service's render, so no Ansible play
+deploys a workload. [The Flux deploy plane](flux-deploy-plane.md) has what it runs and what it
+reports.
+
+`homelab-checkout-sync.timer` fast-forwards daniel-box's primary checkout to the newest green
+master commit. It applies nothing. `hosts/components/checkout-sync/component.yml` holds its
+contract.
+
+### A change under `hosts/` is the builder's
+
+The host-package builder on daniel-box applies a change under `hosts/`.
+`homelab-builder.timer` builds each changed package from the newest green master commit,
+`homelab-repo-sign.service` signs and publishes it, and each host's `homelab-updater.timer`
+installs it. [Host packages](host-packages.md) is the runbook. One change needs two paths: a
+key rotation commits the new keyring under `hosts/keys/`, and only a `homelab_builder` apply
+rewrites the `archive-key.fpr` the builder checks it against. The runbook names that apply.
+
+### Which image bumps Renovate may automerge
+
+Each k8s role declares its own `k8s_autodeploy` stance
+(`ansible/roles/k8s/<role>/defaults/main.yml`), which says only whether Renovate may automerge
+an image bump. `scripts/lib/k8s_roles.py` collects the roles declaring `false` into the
+denylist that `renovate.json`'s no-automerge rule and the Renovate lander read. A role on the
+denylist gets a `manual —` PR.
+
+<!-- Generated from k8s_autodeploy_counts.py, which reads every role's own declaration; edit
+     the role's defaults/main.yml, not this table. -->
+--8<-- "assets/generated/fragments/autodeploy-coverage.md"
 
 ### Who holds the tree lock
 

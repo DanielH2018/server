@@ -14,6 +14,8 @@ import os
 import shutil
 
 import pytest
+from _readonly_kubeconfig import TOKEN, run_kubeconfig, written_kubeconfig
+from _readonly_kubeconfig import UNIT as KUBECONFIG_UNIT
 from _wifi_fallback import WIFI_FILE, WIFI_RENDERED, installed_wifi_file
 
 from lib import yaml_fast
@@ -27,6 +29,7 @@ HOST = "daniel-box"
 SYSTEM = "/usr/lib/systemd/system/"
 COMPONENTS = REPO / "hosts" / "components"
 TOOLS = REPO / "hosts" / "packages" / "homelab-tools" / "package.yml"
+ADMIN_KUBECONFIG = "/etc/rancher/k3s/k3s.yaml"
 # Each cron file `setup/k3s` installed, with the timer that replaces it and its OnCalendar.
 TIMERS = {
     "longhorn-backup-health": ("homelab-longhorn-backup-health", "*:00/10"),
@@ -229,41 +232,16 @@ def test_the_inotify_key_and_the_zshenv_block_use_the_line_arm(package):
     assert "zsh" in package.depends
 
 
-def _run_kubeconfig(package, tmp_path, admin: str | None):
-    owner = os.environ.get("USER") or "ubuntu"
-    script = write_exec(
-        tmp_path / "k3s-readonly-kubeconfig",
-        text(package, "/usr/lib/homelab/k3s-readonly-kubeconfig"),
-    )
-    if admin is not None:
-        path = tmp_path / "etc/rancher/k3s/k3s.yaml"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(admin)
-    creds = tmp_path / "creds"
-    creds.mkdir(exist_ok=True)
-    (creds / "k3s_readonly_token").write_text("the-token")
-    return run(
-        [str(script)],
-        env={
-            **os.environ,
-            "HOMELAB_ROOT": str(tmp_path),
-            "KUBECONFIG_OWNER": owner,
-            "CREDENTIALS_DIRECTORY": str(creds),
-        },
-        check=False,
-    )
-
-
 def test_the_kubeconfig_oneshot_writes_the_token_and_the_admin_ca(package, tmp_path):
-    result = _run_kubeconfig(
+    result = run_kubeconfig(
         package,
         tmp_path,
+        ADMIN_KUBECONFIG,
         "clusters:\n- cluster:\n    certificate-authority-data: Q0E=\n",
     )
     assert result.returncode == 0, result.stderr
-    dest = next(tmp_path.glob("home/*/.kube/config"))
-    config = yaml_fast.safe_load(dest.read_text())
-    assert config["users"][0]["user"]["token"] == "the-token"
+    dest, config = written_kubeconfig(tmp_path)
+    assert config["users"][0]["user"]["token"] == TOKEN
     assert config["clusters"][0]["cluster"] == {
         "server": "https://127.0.0.1:6443",
         "certificate-authority-data": "Q0E=",
@@ -272,7 +250,7 @@ def test_the_kubeconfig_oneshot_writes_the_token_and_the_admin_ca(package, tmp_p
 
 
 def test_the_kubeconfig_oneshot_refuses_an_admin_file_with_no_ca(package, tmp_path):
-    result = _run_kubeconfig(package, tmp_path, "clusters: []\n")
+    result = run_kubeconfig(package, tmp_path, ADMIN_KUBECONFIG, "clusters: []\n")
     assert result.returncode == 1
     assert "no certificate-authority-data" in result.stderr
     assert not list(tmp_path.glob("home/*/.kube/config"))
@@ -281,7 +259,7 @@ def test_the_kubeconfig_oneshot_refuses_an_admin_file_with_no_ca(package, tmp_pa
 def test_a_rotated_token_restarts_the_kubeconfig_oneshot(package):
     (output,) = [o for o in package.outputs if o["keys"] == ["k3s_readonly_token"]]
     assert output["dependents"] == ["homelab-k3s-kubeconfig.service"]
-    unit = text(package, f"{SYSTEM}homelab-k3s-kubeconfig.service")
+    unit = text(package, KUBECONFIG_UNIT)
     assert (
         f"LoadCredential=k3s_readonly_token:/run/homelab-secrets/{output['destination']}\n"
         in unit
@@ -290,8 +268,8 @@ def test_a_rotated_token_restarts_the_kubeconfig_oneshot(package):
 
 def test_the_kubeconfig_oneshot_waits_for_k3s_rather_than_failing(package):
     # A rebuild installs the package before k3s starts, and a failed unit would hold the host.
-    unit = text(package, f"{SYSTEM}homelab-k3s-kubeconfig.service")
-    assert "ConditionPathExists=/etc/rancher/k3s/k3s.yaml\n" in unit
+    unit = text(package, KUBECONFIG_UNIT)
+    assert f"ConditionPathExists={ADMIN_KUBECONFIG}\n" in unit
 
 
 def test_the_wifi_secrets_reach_netplan_only_through_the_guarded_copy(package):

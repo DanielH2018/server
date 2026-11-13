@@ -1,7 +1,7 @@
 # The tick's deploy-plane narrowing, as it ran until D6.12
 
 Status: historical. Slice D6 deleted this path, and Flux applies every k8s change through `promote`.
-The text below moved from [The GitOps pipeline](../gitops-pipeline.md), *A deploy-plane change
+The text below moved from [The GitOps pipeline](gitops-pipeline.md), *A deploy-plane change
 applies nothing on the tick*, unedited except for the links.
 
 Until D6.12 the tick narrowed and applied the deploy plane. `handle_broad` asked

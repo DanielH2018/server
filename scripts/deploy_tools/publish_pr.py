@@ -8,9 +8,9 @@ the local master so ``homelab-checkout-sync`` can still fast-forward it once the
 under a new SHA, open the PR, and hand it to a detached ``land.py`` that merges it.
 
 WHY A LANDING AND NOT GITHUB'S AUTO-MERGE. When this was written, a ruleset blocked every
-auto-merged PR, because auto-merge never applies a bypass (#3609, #3911). That block is gone
-since 2026-10-11, and the landing stays because it merges at the head SHA it read green and
-then deploys the merge. ``land.py --arm-merge --await-merge`` waits for CI and merges through
+auto-merged PR, because auto-merge never applies a bypass (#3609, #3911). Ruleset 27167149
+blocks it again, and the landing also merges at the head SHA it read green and then deploys
+the merge. ``land.py --arm-merge --await-merge`` waits for CI and merges through
 the REST endpoint, pinned to that SHA. ``--detach`` matters as much as the merge. The callers hold the git-tree lock on
 fd 9 and read this script's output through a pipe, so a landing that inherited either would
 keep the lock for the whole CI wait. The detached landing closes every inherited descriptor

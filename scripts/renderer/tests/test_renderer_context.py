@@ -78,6 +78,12 @@ def test_a_name_no_layer_supplies_is_flagged(ctx):
         _render(ctx, "{{ k8s_built_image_tags }}")
 
 
+@pytest.mark.parametrize("name", ["inventory_hostname", "claude_code_watch_uids"])
+def test_a_name_only_a_play_or_a_host_component_reads_is_flagged(ctx, name):
+    with pytest.raises(jinja2.UndefinedError, match=name):
+        _render(ctx, f"{{{{ {name} }}}}")
+
+
 def _inventory(tmp_path, **edits):
     """Each host's layer as the renderer reads it, those named in `edits` edited."""
     host_vars = tmp_path / "host_vars"

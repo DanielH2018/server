@@ -83,7 +83,7 @@ def test_the_gate_matches_a_source_no_header_names(path):
 
 @pytest.mark.parametrize(
     "path",
-    ["docs/reference/services.md", "docs/gitops-pipeline.md", "CLAUDE.md"],
+    ["docs/reference/services.md", "docs/landing.md", "CLAUDE.md"],
 )
 def test_the_gate_skips_a_path_the_generator_does_not_read(path):
     assert not re.search(_hook()["files"], path)

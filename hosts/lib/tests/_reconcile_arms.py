@@ -64,7 +64,8 @@ def mutated(tmp_path: Path, where: str, old: str, new: str) -> Node:
     shutil.copy2(RECONCILE, copy / RECONCILE.name)
     target = copy / where
     text = target.read_text()
-    assert old in text, f"{where} no longer contains {old!r}: update the red fixture"
+    if old not in text:
+        pytest.fail(f"{where} no longer contains {old!r}: update the red fixture")
     target.write_text(text.replace(old, new, 1))
     (tmp_path / "node").mkdir()
     return base(Node(tmp_path / "node", script=copy / RECONCILE.name))

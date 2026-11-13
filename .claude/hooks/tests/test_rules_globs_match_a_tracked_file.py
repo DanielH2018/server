@@ -40,7 +40,6 @@ RULES_DIR = os.path.join(os.path.dirname(_HERE), "rules")
 # expects to find, or a renamed directory leaves it green over an empty set.
 KNOWN_RULES = frozenset(
     {
-        "ansible.md",
         "docker.md",
         "facts.md",
         "generated-docs.md",

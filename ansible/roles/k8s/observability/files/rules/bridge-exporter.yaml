@@ -246,7 +246,7 @@ groups:
       # through its first down cycle and pushes `down` on the second, and the exporter writes the
       # gauge before that hold (m6-retire-kuma.md, "Gates and grace"). A gauge that reads 0 for
       # one 300s cycle spans five or six 1-minute samples, so `for: 5m` fired on a one-cycle blip
-      # or not by scrape alignment (m6-status/a6.md). `for: 10m` needs two consecutive down
+      # or not by scrape alignment (m6-retire-kuma.md, A6 status). `for: 10m` needs two consecutive down
       # cycles, as the bridge does. `n8n` and `speedtest` keep their in-body streaks, on which
       # the grace already stacks. No row here has a gate, so no rule carries `requires` and no
       # inhibit rule reaches them. A row with no series stays quiet here: BridgeCheckStale owns

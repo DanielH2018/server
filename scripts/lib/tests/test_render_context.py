@@ -64,8 +64,8 @@ def test_a_role_default_with_no_inventory_key_of_its_name_survives(tree):
 def test_a_role_default_beats_a_base_stub(tree):
     # `BASE_CONTEXT` holds fallbacks for values no plaintext file carries, so any real file
     # outranks it. The shell validator's old order laid the stubs over the defaults.
-    template, inv = tree({"domain": "real.example"})
-    assert rc.render_context(template, inventory=inv)["domain"] == "real.example"
+    template, inv = tree({"email": "real@example.org"})
+    assert rc.render_context(template, inventory=inv)["email"] == "real@example.org"
 
 
 def test_the_k8s_plane_renders_with_its_hosts_vars(tree):
@@ -107,6 +107,7 @@ def test_a_host_vars_mapping_replaces_the_hosts_file_and_resolves(tree):
     # A key the mapping leaves out stays out, and an alias in it expands like a file value.
     template, inv = tree(
         {"tunable": "default"},
+        group={"sys_user": "ubuntu"},
         hosts={"box": {"tunable": "from-file", "unset_me": "x"}},
         plane="k8s",
     )
@@ -120,7 +121,8 @@ def test_a_host_vars_mapping_replaces_the_hosts_file_and_resolves(tree):
 def test_a_value_that_will_not_expand_is_dropped(tree, capsys):
     # A dropped key renders as STUB. Kept raw, its literal braces would reach the render.
     template, inv = tree(
-        {"good": "{{ sys_user }}/x", "bad": "{{ playbook_dir | no_such_filter }}"}
+        {"good": "{{ sys_user }}/x", "bad": "{{ playbook_dir | no_such_filter }}"},
+        group={"sys_user": "ubuntu"},
     )
     ctx = rc.render_context(template, inventory=inv)
     assert ctx["good"] == "ubuntu/x"

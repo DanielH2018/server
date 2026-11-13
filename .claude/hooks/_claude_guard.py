@@ -3,9 +3,6 @@
 #   reason: imported by _hook_common.py to bootstrap the claude_guard package
 """Bootstrap that puts the deployed `claude_guard` package on `sys.path` and imports it.
 
-The seed of the future `homelab_guard/__init__.py` — the dotfiles repo's design spec
-(`docs/specs/2026-09-06-claude-guard-design.md`, slice 5) plans a package by that name
-consolidating this repo's Bash hooks around `claude_guard.segment` and `claude_guard.tables`.
 This module carries the import path only. `_hook_common.py` reads `claude_guard.segment`
 (#2053, #2134), which every Bash guard here cuts its stages with. The read-only classifier
 that also read `claude_guard.tables` moved into the package itself (dotfiles #628).

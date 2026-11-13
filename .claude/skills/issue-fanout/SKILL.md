@@ -47,8 +47,8 @@ rule holds. When an agent finds an issue waits on other work rather than a date,
 again the moment `#<m>` closes. Never guess a date for work that waits on another issue: the
 date passes before the work lands, or the issue sits idle after it has.
 
-Group the results so that **no two agents touch the same Ansible role, and no two agents
-touch the same file**. Read each issue's cited file to find its role; two agents editing one
+Group the results so that **no two agents touch the same k8s role or host component, and no
+two agents touch the same file**. Read each issue's cited file to find its role; two agents editing one
 role concurrently is the hazard `CLAUDE.md`'s parallel-sessions section already warns about,
 with more agents.
 
@@ -172,8 +172,7 @@ CI-fix phases that resume its session. The red-test author and the reviewer stay
 `medium`. The launch line prints each batch's rung, and the run manifest records it.
 
 `scripts/dev/fanout.py` is the fan-out tooling's one entry point: `place`, `probe`, `review`
-and `stats`. The paths `fanout_place.py`, `fanout_probe.py`, `fanout_review.py` and
-`fanout_review_stats.py` beside it are shims that forward to it (#4346).
+and `stats`.
 
 The dispatcher claims each batch (step 2), writes the brief (issue bodies verbatim, the claim
 note, the landing path or the stop-at-PR rule, and the session-health lines of the placed host
@@ -607,7 +606,7 @@ chezmoi checkout and its `origin/main` (`REGISTER_CHECKOUTS` in
 lists. Three steps differ from the sections above.
 
 a. **Triage** with `next --json --repo DanielH2018/dotfiles`; `launch --repo` runs the reap.
-   The grouping rules are section 1's. The dotfiles repo has no Ansible roles, so group by cited
+   The grouping rules are section 1's. The dotfiles repo has no k8s roles or host components, so group by cited
    file alone.
 b. **Skip section 2: `launch` takes the claim itself.** Run
    `fanout.py place launch --repo DanielH2018/dotfiles --batch <n>,<n> …`.

@@ -157,9 +157,8 @@ def make_lookup(ctx: dict):
             args: The plugin's positional arguments; `args[0]` is always a path or a variable name.
             kwargs: Plugin options. Only `file`'s `rstrip` is recognised (default `True`,
                 which strips all trailing whitespace, as Ansible's own `file` lookup
-                does) — `checksum-annotation.yml.j2`'s
-                path-mode call passes `rstrip=False` so the bytes it hashes match a `copy`
-                task's checksum of the same file, which is not stripped either.
+                does). A verify Job's script passes `rstrip=False` so its ConfigMap holds
+                the file's exact bytes.
 
         Raises:
             ValueError: `kind` is not one of the four supported plugins.

@@ -822,7 +822,7 @@ its tokens. The sops removal and `cluster_vars.py write` are operator-only.
   `scripts/secrets_mgmt/git_dates.py:RETIRED`, run `cluster_vars.py write` (**operator-only**) so the
   cluster files lose the names, and delete `PENDING_RETIREMENT` with the test that holds it.
   M6's B6c reused the set, so its token PR (#6926) owns that deletion instead
-  (`docs/target-architecture/monitoring/m6-status/b6c.md`, step 5).
+  (`docs/target-architecture/monitoring/m6-retire-kuma.md`, *Status by batch*, B6c, step 5).
 - The recipe, as PR 4a first stated it when it carried the retirement, follows. Read "this PR"
   as PR 5 and "the agent's commit" as the commit that adds the `RETIRED` names.
 

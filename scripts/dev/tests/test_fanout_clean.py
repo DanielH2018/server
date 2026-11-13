@@ -186,7 +186,7 @@ def test_the_remote_command_resets_fetches_then_runs_the_primary_checkouts_copy_
     assert (
         "else cd /home/ubuntu/server && "
         "uv run --no-project --no-python-downloads --python 3.15.2 python "
-        f"/home/ubuntu/server/scripts/dev/fanout_place.py clean-one {B.worktree} {B.branch}"
+        f"/home/ubuntu/server/scripts/dev/fanout.py place clean-one {B.worktree} {B.branch}"
         in cmd
     )
     assert f"{B.worktree}/scripts/dev" not in cmd
@@ -369,7 +369,7 @@ def test_a_dotfiles_clean_fetches_main_and_runs_this_repos_copy_with_repo():
     assert (
         "else cd /home/ubuntu/.local/share/chezmoi && "
         "uv run --no-project --no-python-downloads --python 3.15.2 python "
-        f"/home/ubuntu/server/scripts/dev/fanout_place.py clean-one {wt} "
+        f"/home/ubuntu/server/scripts/dev/fanout.py place clean-one {wt} "
         "worktree-fanout-763 --repo DanielH2018/dotfiles" in cmd
     )
     assert f"{wt}/scripts/dev" not in cmd

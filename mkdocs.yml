@@ -101,9 +101,6 @@ exclude_docs: |
   # would otherwise build every one as an orphan page of one table. Excluding a file from
   # the build does not hide it from the snippets extension, which reads base_path from disk.
   assets/generated/fragments/
-  # M6's per-batch status records, hand-written and spliced into m6-retire-kuma.md the same
-  # way. One file per batch so parallel PRs do not conflict over one status block (#6656).
-  target-architecture/monitoring/m6-status/
 
 # Built and served on purpose, but deliberately absent from the nav. `archive/` is the
 # historical record of executed work — other docs and CLAUDE.md link INTO it, so excluding it
@@ -196,8 +193,6 @@ nav:
           # how the baseline selects pods — live content, not archive material.
           - "NetworkPolicy — what each slice settled": networkpolicy-slice-answers.md
           - "Argo and Flux evaluation (ADR-0010)": archive/gitops-argo-flux-evaluation.md
-          # The measurement #3734 took before initial_setup.yml looped over a setup_roles list.
-          - "Looped include_role measurement (#3734)": setup-role-loop-measurement.md
   # Six groups, ordered day-to-day first and recovery last. An upgrade is both a driving and
   # a recovery procedure, so the upgrades sit with recovery, where a reader looking for "how do
   # I get the cluster back" finds them. A group is a nav heading only: every page keeps its
@@ -209,7 +204,8 @@ nav:
           # and the verdict decoder; this page carries the measurement behind each rule, which
           # keeps the skill short.
           - Landing a merged PR: landing.md
-          - The GitOps pipeline: gitops-pipeline.md
+          # What the 20-job runner cap costs a landing, and the phased plan to get under it.
+          - CI throughput: ci-throughput.md
           - Host packages: host-packages.md
           - The Flux deploy plane: flux-deploy-plane.md
           - The homelab-render renderer: homelab-render.md
@@ -272,6 +268,7 @@ nav:
               - Email to RSS: email-to-rss.md
               - artifacts star list: artifacts-star-list.md
       - Recovery and upgrades:
+          - Host bring-up: host-bring-up.md
           - k3s control-plane upgrade: k3s-upgrade.md
           - Longhorn upgrade: longhorn-upgrade.md
           - Ubuntu 26.04 upgrade plan: ubuntu-26.04-upgrade-plan.md

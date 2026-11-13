@@ -18,9 +18,9 @@ import re
 from dev.findings_lib.issue_model import _TRAILER_RE, PR_REPO
 
 # The fan-out pipeline's own code, as an issue body names it: any `fanout*.py` (the
-# `fanout.py` entry point, its `fanout_place.py`-style shims, the `fanout-stop.py` hook) or any file
+# `fanout.py` entry point, the `fanout-stop.py` hook) or any file
 # under `fanout_lib/` at any depth, `fanout_lib/review/` included, with or without its directory. Bare names count because most of these
-# issues cite `fanout_place.py` with no path, which `cited_paths` never captures. The
+# issues cite a file such as `fanout_place.py` with no path, which `cited_paths` never captures. The
 # lookbehind keeps `test_fanout_red_gate.py` out: a test of the tooling does not run a batch.
 _FANOUT_TOOLING_RE = re.compile(
     r"(?<![\w-])(?:[\w.-]+/)*(?:fanout[\w-]*\.py|fanout_lib/(?:[\w.-]+/)*[\w.-]+\.\w+)(?![\w/])"
