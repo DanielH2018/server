@@ -86,8 +86,12 @@ keep merging their own pull requests, so every rule in `scripts/deploy_tools/lan
 where it is. The queue then records the tested tree, and the push run's `prove` job skips the
 hosted sweep. A merge costs about 1.1 hosted runs in place of 2.1.
 
-1. **B1, planned.** A shadow sweep of every master commit records its verdict, its duration
-   and its peak memory. It changes no behaviour.
+1. **B1.** A shadow sweep of every master commit records its verdict and its duration. It
+   changes no behaviour, and it lands in three parts.
+    - **B1a, landed.** `scripts/deploy_tools/local_sweep.py <commit>` sweeps one commit by
+      hand. *What the local sweep runs* below has its checks and its cost.
+    - **B1b, planned.** A timer on daniel-box sweeps each master commit.
+    - **B1c, planned.** A report compares each sweep's verdict with the hosted run's.
 1. **B2, planned.** A queue of one, behind a flag, for the fan-out server lander. The local
    sweep replaces the branch-update re-test.
 1. **B3, planned.** The queue records the tested tree before each merge, and
@@ -108,7 +112,31 @@ Three decisions are the operator's, and none is made:
   for the commits before it. `scripts/deploy_tools/await_ci.py` already lets a descendant's
   verdict stand for a commit that has none.
 - **Whose memory the sweep uses.** The sweep's cap comes out of the agent fleet's budget or
-  the homelab plane's. B1 measures the peak first.
+  the homelab plane's. With 16 workers the sweep holds 5,990 MiB. A sweep with fewer workers
+  holds less and takes longer, and nothing has measured that trade.
+
+#### What the local sweep runs
+
+The local sweep runs two of the gate's eleven jobs. `hooks` runs the command that the swept
+commit's own `ci.yml` carries. `pytest` runs the whole suite in one run, which the six hosted
+shards partition. `HOSTED` in `local_sweep.py` names the other nine jobs and why daniel-box
+runs none of them, so a local `pass` says nothing about those. A test holds the two tables to
+the gate's `needs`.
+
+One sweep took 290 s on daniel-box on 2026-11-13, at commit `592f0c8e1`, with the checks one
+after the other. Both checks passed.
+
+| Check | Seconds | Peak memory |
+|---|---|---|
+| `pytest`, 20,838 tests on 16 workers | 216 | 5,990 MiB |
+| `hooks` | 74 | 1,030 MiB |
+
+The memory column is anonymous plus shared memory, sampled once a second, which is what the
+check cannot give back under pressure. The cgroup's `memory.peak` read 8,454 MiB for the same
+run, because it also counts page cache.
+
+The scratch tree goes under `~/.cache/local-sweep`. A tree under `/tmp` fails one test of the
+Bash hook on every commit, because that hook reads any path under `/tmp` as scratch.
 
 Two limits are known. daniel-box runs Ubuntu 24.04 with no Docker, so the sweep cannot run
 the host-package cases, and a stacked tree that changes a host input gets no record. A hand
