@@ -131,9 +131,9 @@ bedroom_fan_nudge:
     Step fan.tower_fan up/down one DREO level (clamped 0-9, 0 = off) from the
     bedroom_fan_expected_level accumulator. Engages the manual fan override.
   mode: queued
-  # DECIDED: 20, not 10. The Tap Dial starts this without waiting, so a whole dial burst lands
-  # in this queue; a full 0->9->0 sweep is 18 steps (the 11-05 and 11-07 bursts were 6-7).
-  max: 20
+  # DECIDED: 30, not 10. The Tap Dial starts this without waiting, so a whole dial burst lands in
+  # this queue: Z2M logged 11 dial_rotate_* events in the 2026-11-05 burst and 22 in the 11-07 one.
+  max: 30
   fields:
     delta:
       description: "+1 to step up a level, -1 to step down."
