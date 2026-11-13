@@ -22,9 +22,15 @@ Exit codes:
       time limit, or the sweep itself raised
 
 Usage:
-    uv run python scripts/deploy_tools/local_sweep.py <commit> [--keep]
+    uv run python scripts/deploy_tools/local_sweep.py <commit> [--keep] [--once FILE]
 
 `--keep` leaves the scratch tree and each check's whole log in place, and prints where.
+
+`--once FILE` is for a timer. When FILE already names the commit, the tool prints nothing and
+exits 0. Otherwise it writes the commit to FILE before the first check, so a sweep that dies
+part-way is not repeated on the next run. A sweep that reaches a verdict then exits 0 whether
+the verdict is pass or fail, because a timer's run failed only if the sweep did not happen. That
+leaves 1 to mean what Python means by it: the tool itself did not start.
 """
 
 import dataclasses
@@ -65,6 +71,14 @@ CHECK_TIMEOUT = 30 * 60
 
 # A failed check lists at most this many of the lines that name what failed.
 MAX_DETAIL = 20
+
+_RESULT = "SWEEP-RESULT: "
+
+# A scratch directory's name says whether `--keep` asked for it, which `_reap` never removes.
+_SCRATCH = "sweep-"
+_KEPT = "kept-"
+# Six times the two checks' limits together.
+STALE_SECONDS = 6 * 3600
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
@@ -167,9 +181,37 @@ class Sweep:
             f"{c.job}={c.verdict} {c.job}_seconds={c.seconds}" for c in self.checks
         )
         return (
-            f"SWEEP-RESULT: verdict={self.verdict} sha={self.sha} tree={self.tree}"
+            f"{_RESULT}verdict={self.verdict} sha={self.sha} tree={self.tree}"
             f" seconds={self.seconds} {checks}"
         )
+
+
+def parse_result_line(line: str) -> Sweep | None:
+    """The sweep that a `Sweep.result_line` describes, or None when `line` carries none.
+
+    Text ahead of the prefix is ignored, so a journal or syslog line parses as it is. The
+    result has no `detail` and no `kept`, which the line does not carry.
+    """
+    fields = line.partition(_RESULT)[2]
+    pairs = dict(field.split("=", 1) for field in fields.split() if "=" in field)
+    try:
+        checks = tuple(
+            Check(
+                key.removesuffix("_seconds"),
+                pairs[key.removesuffix("_seconds")],
+                int(seconds),
+            )
+            for key, seconds in pairs.items()
+            if key.endswith("_seconds")
+        )
+        sweep = Sweep(pairs["sha"], pairs["tree"], checks, int(pairs["seconds"]))
+    except KeyError, ValueError:
+        return None
+    if any(check.verdict not in EXIT for check in checks):
+        return None
+    # A line cut short still parses, with a check missing and so another verdict. Only a
+    # sweep that writes this exact line back is the one the line describes.
+    return sweep if sweep.result_line() == _RESULT + fields.strip() else None
 
 
 def _work_root() -> Path:
@@ -182,6 +224,21 @@ def _work_root() -> Path:
     root = Path(cache) / "local-sweep"
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def _reap(root: Path) -> None:
+    """Remove the scratch trees that a killed sweep left under `root`.
+
+    A sweep that systemd times out, or that a reboot ends, never reaches its own cleanup. A tree
+    older than `STALE_SECONDS` belongs to no running sweep, because a sweep is killed long before.
+    """
+    for left in root.glob(f"{_SCRATCH}*"):
+        if time.time() - left.stat().st_mtime > STALE_SECONDS:
+            shutil.rmtree(left, ignore_errors=True)
+
+
+def _resolve(commit: str, repo: Path) -> str:
+    return git_stdout("rev-parse", "--verify", f"{commit}^{{commit}}", cwd=repo)
 
 
 def _check_env() -> dict[str, str]:
@@ -253,9 +310,11 @@ def sweep(
         subprocess.CalledProcessError: git could not resolve `commit` or check it out.
     """
     start = time.monotonic()
-    sha = git_stdout("rev-parse", "--verify", f"{commit}^{{commit}}", cwd=repo)
+    sha = _resolve(commit, repo)
     tree_id = git_stdout("rev-parse", f"{sha}^{{tree}}", cwd=repo)
-    work = Path(tempfile.mkdtemp(dir=_work_root()))
+    root = _work_root()
+    _reap(root)
+    work = Path(tempfile.mkdtemp(prefix=_KEPT if keep else _SCRATCH, dir=root))
     try:
         tree = work / "tree"
         git("clone", "--quiet", "--shared", "--no-checkout", str(repo), str(tree))
@@ -269,6 +328,14 @@ def sweep(
     return Sweep(
         sha, tree_id, ran, round(time.monotonic() - start), work if keep else None
     )
+
+
+def first_time(sha: str, record: Path) -> bool:
+    """Whether `record` does not name `sha` yet. When it does not, it does from here on."""
+    if record.exists() and record.read_text().strip() == sha:
+        return False
+    record.write_text(f"{sha}\n")
+    return True
 
 
 def report(result: Sweep) -> list[str]:
@@ -291,23 +358,37 @@ def report(result: Sweep) -> list[str]:
 EXIT = {"pass": SWEEP_PASSED, "fail": SWEEP_FAILED, "none": SWEEP_NO_VERDICT}
 
 
-def main(argv: list[str] | None = None, *, run: Callable[..., Sweep] = sweep) -> int:
-    """Sweep the commit `argv` names, print the report, and return the verdict's exit code.
+def main(
+    argv: list[str] | None = None,
+    *,
+    repo: Path = REPO,
+    checks: dict[str, Local] = LOCAL,
+) -> int:
+    """Sweep the commit `argv` names, print the report, and return the exit code.
 
     Args:
         argv: The command line, without the program name.
-        run: What sweeps the commit. A test passes a sweep of its own scratch repository.
+        repo: The repository that holds the commit. A test passes a scratch one.
+        checks: The checks to run. A test passes stand-ins.
     """
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] and argv[0] in HELP_FLAGS:
         print(__doc__.strip())
         return SWEEP_PASSED
     commits = [arg for arg in argv if arg != "--keep"]
-    if len(commits) != 1 or commits[0].startswith("-"):
+    once = None
+    if "--once" in commits:
+        at = commits.index("--once")
+        once, commits = commits[at + 1 : at + 2], commits[:at] + commits[at + 2 :]
+    if len(commits) != 1 or commits[0].startswith("-") or once == []:
         print(__doc__.strip(), file=sys.stderr)
         return SWEEP_BAD_ARGS
     try:
-        result = run(commits[0], keep="--keep" in argv)
+        # Resolved once: `origin/master` can move between the record and the sweep.
+        sha = _resolve(commits[0], repo)
+        if once and not first_time(sha, Path(once[0])):
+            return SWEEP_PASSED
+        result = sweep(sha, repo=repo, checks=checks, keep="--keep" in argv)
     except subprocess.CalledProcessError as exc:
         why = (exc.stderr or "").strip().splitlines()[-1:] or [str(exc)]
         print(f"no tree to sweep for {commits[0]}: {why[0]}", file=sys.stderr)
@@ -317,6 +398,8 @@ def main(argv: list[str] | None = None, *, run: Callable[..., Sweep] = sweep) ->
         traceback.print_exc()
         return SWEEP_NO_VERDICT
     print("\n".join(report(result)))
+    if once and result.verdict != "none":
+        return SWEEP_PASSED
     return EXIT[result.verdict]
 
 

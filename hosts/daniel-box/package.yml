@@ -90,6 +90,8 @@ components:
   - builder
   # H7.51: fast-forwards the primary checkout beside the deployer, which H7.52 retires.
   - checkout-sync
+  # B1b of docs/ci-throughput.md: sweeps the tip of master as checkout-sync last fetched it.
+  - local-sweep
   - unattended-upgrades
   - sshd
   - host-tuning

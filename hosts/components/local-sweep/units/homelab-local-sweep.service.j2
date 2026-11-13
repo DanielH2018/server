@@ -1,0 +1,41 @@
+# Shipped by homelab-daniel-box. Started by homelab-local-sweep.timer.
+[Unit]
+Description=Sweep the newest master commit with the CI gate's hooks and test suite (a shadow: nothing reads the verdict)
+
+[Service]
+Type=oneshot
+User={{ sys_user }}
+WorkingDirectory=/home/{{ sys_user }}/server
+# The record of the last commit swept. systemd creates the directory for the user above.
+StateDirectory=homelab-local-sweep
+Environment=HOME=/home/{{ sys_user }}
+# uv comes from /usr/bin, and prek from the user's own install, which is the last entry.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/{{ sys_user }}/.local/bin
+# Eight workers ran the suite in 209s on this host and sixteen in 216s, and eight hold 2.2 GiB
+# less (docs/ci-throughput.md, *What the local sweep runs*).
+Environment=PYTEST_XDIST_AUTO_NUM_WORKERS=8
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice
+# or the result line never reaches the journal.
+SyslogLevel=notice
+SyslogIdentifier=local-sweep
+
+# DECIDED: the sweep runs inside the fleet's memory bound and has no budget of its own. The host
+# has no unbudgeted memory (hosts/components/claude-code/defaults/main.yml), so a sweep costs the
+# fleet about one fan-out batch for the five minutes it runs. The operator ruled on 2026-11-13.
+Slice=user.slice
+# The suite peaked at 3,776 MiB of anonymous and shared memory on eight workers, and a sweep
+# under this bound took 301s against 290s without one. MemoryHigh throttles and never kills,
+# and no MemoryMax is set, for the reasons on homelab-claude-rc.service.
+MemoryHigh=4500M
+# Half the fleet's swap bound, so a sweep that passes MemoryHigh cannot take all of it.
+MemorySwapMax=1G
+# Half the default weight, so each other unit in the slice gets twice the sweep's share when
+# both want the CPU. The weight does not order the sweep against the cluster's workloads.
+CPUWeight=50
+
+# Above the two 30-minute limits the tool puts on its own checks.
+TimeoutStartSec=70min
+# --no-sync: the tool runs in the environment homelab-checkout-sync last synced, and uv writes
+# nothing in the primary checkout, where a changed file parks that unit. Under --once a red
+# sweep exits 0, so a failed run means the sweep did not happen.
+ExecStart=/usr/bin/uv run --no-sync python scripts/deploy_tools/local_sweep.py origin/master --once %S/homelab-local-sweep/last-swept

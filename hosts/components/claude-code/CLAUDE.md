@@ -297,6 +297,30 @@ runs `templates/claude-guardrail-audit.sh.j2` as root on both hosts.
 - **Next-run review:** before adding a path, check that a write to it is rare. Every write to
   a watched path is a shipped record.
 
+## Autonomous-role contract (`claude-guardrail-ack`, the post for each unexplained guardrail change)
+
+server#8250 slice 2. `homelab-claude-guardrail-ack.timer` runs `files/claude_guardrail_ack.py`
+as root on both hosts, two minutes after each audit run.
+
+- **Scope:** every file under `claude_code_guardrail_audit_paths`, never the memory stores.
+  A change is explained, and stays quiet, when the file matches its package's md5, when it
+  matches what chezmoi renders for its owner from the dotfiles repo's `main`, or when a
+  settings.json change touches only `claude_code_guardrail_ack_quiet_settings_keys`. The
+  operator ruled on 2026-11-13 to post only the rest. A posted diff masks any line naming a
+  token, key, secret, password or webhook, and any long credential-shaped value.
+- **Mode:** `claude_code_guardrail_ack_enabled`. False drops the timer, its units and the
+  config from the next package version, and keeps the state under
+  `/var/lib/homelab-claude-guardrail-ack`.
+- **Abort valves:** a failed post leaves the kept copies where they were, so the next run
+  posts the same changes again rather than losing them. The first run on a host keeps a copy
+  of every file and posts nothing.
+- **Evidence:** a `status=` line under `journalctl -t claude-guardrail-ack`, and
+  `claude-guardrail-ack.prom`, which `ClaudeGuardrailAckFailed` and
+  `ClaudeGuardrailAckNotReporting` read. The auditd record of the same change names the
+  writing process.
+- **Next-run review:** after a week, read the posts. A post with an obvious source, such as a
+  tool that rewrites settings.json, is a candidate for a new explanation rather than a mute.
+
 ## Autonomous-role contract (`sync-artifacts`, a mirror of another host's tree)
 
 - **Scope:** `rsync --delete` of each `claude_code_artifacts_peer_sources` entry's `path` into

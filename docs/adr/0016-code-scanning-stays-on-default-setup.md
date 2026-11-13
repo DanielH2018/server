@@ -4,7 +4,7 @@ title: Code scanning stays on default setup, and false positives are removed in 
 status: Superseded by ADR-0024
 date: 2026-09-02
 governs:
-  - scripts/diagnostics/probe_lib/ha.py:278
+  - scripts/diagnostics/probe_lib/ha.py:279
   - k8s/roles/homelab-mcp/files/safe_reads.py:267
 ---
 
@@ -147,7 +147,7 @@ those two queries matter most.
 
 ## Governs
 
-- `scripts/diagnostics/probe_lib/ha.py:278` — the `tls_context()` marker in the probe library.
+- `scripts/diagnostics/probe_lib/ha.py:279` — the `tls_context()` marker in the probe library.
 - `k8s/roles/homelab-mcp/files/safe_reads.py:267` — the same marker in the MCP
   server's ship list.
 

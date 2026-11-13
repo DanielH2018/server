@@ -71,6 +71,8 @@ files:
   - {src: templates/log2ram, dst: /usr/lib/homelab/log2ram, mode: "0755"}
   - {src: units/log2ram-dropin.conf, dst: /usr/lib/systemd/system/log2ram.service.d/50-homelab.conf}
   - {src: units/earlyoom-dropin.conf, dst: /usr/lib/systemd/system/earlyoom.service.d/50-homelab.conf}
+  # Without it a restart of the watchdog daemon leaves the daemon stopped; the file has the reason.
+  - {src: units/watchdog-dropin.conf, dst: /usr/lib/systemd/system/watchdog.service.d/50-homelab.conf}
   # Journald's cap for the 128 MB log2ram tmpfs. 60- sorts after host-tuning's 50-homelab.conf, so
   # this wins where the two disagree.
   - {src: templates/60-homelab-pi.conf, dst: /etc/systemd/journald.conf.d/60-homelab-pi.conf, activate: "try-restart:systemd-journald.service"}

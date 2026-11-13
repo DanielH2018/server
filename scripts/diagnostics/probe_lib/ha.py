@@ -178,7 +178,8 @@ def format_trace(trace) -> str:
         return (
             "no stored trace (the automation hasn't run since the last HA restart/deploy; "
             "an automation whose trigger never matched leaves no trace — check `ha get "
-            "logbook/<entity>` and the automation's last_triggered for that case)"
+            "logbook/<entity>` and the automation's last_triggered for that case; the "
+            "logbook is empty for an automation configuration.yaml's recorder excludes)"
         )
     lines = []
     trig = trace.get("trigger") or {}

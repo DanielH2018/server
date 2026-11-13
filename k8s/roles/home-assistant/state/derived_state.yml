@@ -102,6 +102,8 @@ writes:
   media_player.bedroom_display:
     - automation.bedroom_display_go_ambient_when_dark_or_sleeping
     - automation.bedroom_display_keep_dashboard_up
+  script.bedroom_fan_nudge:
+    - automation.bedroom_tap_dial_control
   switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom:
     - script.bedroom_bedtime
     - script.bedroom_clear_overrides

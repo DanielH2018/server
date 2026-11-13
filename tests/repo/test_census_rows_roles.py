@@ -242,13 +242,15 @@ ROWS = (
                 '          env:\n            - name: TZ\n              value: "{{ tz }}"\n',
             ),
         ),
-        # 12 calls across 11 templates when the row landed (2026-10-09); qbittorrent has two.
+        # 12 calls across 11 templates when the row landed (2026-10-09). qbittorrent's second,
+        # its WireGuard sidecar's, now sits in the shared wireguard-sidecar.yml.j2.
         min_matches=12,
         must_find=frozenset(
             {
                 "k8s/roles/qbittorrent/templates/deployment.yaml.j2",
                 "k8s/roles/home-assistant/templates/deployment.yaml.j2",
                 "k8s/templates/arr-deployment.yml.j2",
+                "k8s/templates/wireguard-sidecar.yml.j2",
             }
         ),
     ),

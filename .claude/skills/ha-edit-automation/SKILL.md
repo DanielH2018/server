@@ -152,6 +152,7 @@ REST API with the `claude_ha_token`:
 - **Why did it run but no-op?** `probe.py ha why <id-or-alias>` pulls the live per-condition
   trace. Traces are in-memory and wiped on every HA restart, and an automation whose trigger
   NEVER matched leaves no trace — for that case use `ha get logbook/<entity>` + `last_triggered`.
+  The logbook is empty for the high-churn automations `configuration.yaml`'s `recorder:` excludes.
 - **Live error log:** `probe.py ha get error_log` — catches a template that parsed structurally
   but throws at render time, or an integration that failed to set up.
 

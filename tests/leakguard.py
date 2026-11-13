@@ -166,6 +166,10 @@ _LIVE_API_TESTS = frozenset(
         # It starts and stops a real systemd user unit, because issue #3160 is about what that
         # stop kills. Skipped where no user manager answers.
         "scripts/deploy_tools/tests/test_land_detach.py::test_stopping_the_callers_unit_leaves_the_landing_running_to_its_verdict",
+        # It restarts, stops and kills stand-in systemd user units, because what a restart does
+        # to the Pi's watchdog daemon is decided by systemd's job queue. Skipped where no user
+        # manager answers.
+        "hosts/lib/tests/test_pi_tuning_component.py::test_a_restart_leaves_the_watchdog_daemon_running_and_a_stop_or_a_crash_starts_the_keepalive",
         # They `docker run` crowdsec's sidecar modules in the pinned
         # images, which is the linkage the operator's ruling on #5655 asked to check. They
         # skip where docker is missing and CI is unset.

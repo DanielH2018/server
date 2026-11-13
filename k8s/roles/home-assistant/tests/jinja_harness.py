@@ -107,3 +107,11 @@ def render_macro(file: str, macro: str, *args, **kwargs) -> str:
         "{%% from '%s' import %s %%}{{ %s(%s) }}" % (file, macro, macro, call)
     )
     return template.render(**ctx).strip()
+
+
+def render_template(source: str, **ctx) -> str:
+    """Render an HA template string from the config against the macro env and return it stripped.
+
+    The caller passes the HA globals the template reads (states, state_attr, now, ...) as `ctx`.
+    """
+    return _env().from_string(source).render(**ctx).strip()

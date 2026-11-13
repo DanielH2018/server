@@ -11,10 +11,12 @@ The same pin for disk-health is `test_disk_health_rule_literals.py`.
 Run: uv run pytest tests/services/test_b6a_rule_literals.py
 """
 
+import json
 import re
 
 import pytest
 from _helpers import K8S_ROLES
+from _setup_render import render_component_text
 from _shell_render import render_shell_script, shell_template_path
 from jinja2 import StrictUndefined
 from lib import yaml_fast
@@ -123,3 +125,27 @@ def test_literal_problems_is_flagged_on_an_arm_the_rule_lost():
     assert literal_problems(alert, expr, 1500) == [
         f"{alert} has 0 of the absent_over_time window, not one"
     ]
+
+
+def ack_deadline(minute: str | None = None) -> int:
+    """The deadline claude-guardrail-ack's rendered config carries, at the default or `minute`."""
+    overrides = None if minute is None else {"claude_code_guardrail_ack_minute": minute}
+    text = render_component_text(
+        "claude-code", "claude-guardrail-ack.json.j2", overrides
+    )
+    return json.loads(text)["deadline_s"]
+
+
+def test_the_ack_rules_carry_the_deadline_its_config_renders():
+    assert ack_deadline() == 900
+    for expr in rule_exprs("ClaudeGuardrailAckNotReporting"):
+        assert literal_problems("ClaudeGuardrailAckNotReporting", expr, 900) == []
+
+
+def test_the_ack_rules_are_flagged_when_its_timer_moves_without_them():
+    deadline = ack_deadline("*/30")
+    for expr in rule_exprs("ClaudeGuardrailAckNotReporting"):
+        assert literal_problems("ClaudeGuardrailAckNotReporting", expr, deadline) == [
+            "the `>` threshold reads 900s, and the producer renders 3900",
+            "the absent_over_time window reads 900s, and the producer renders 3900",
+        ]

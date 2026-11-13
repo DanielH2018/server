@@ -2,9 +2,9 @@
 # Threshold, sensor-offline and calibration alerts, and the notification action/hold plumbing. Conventions: see README.md in this directory.
 
 # Unified threshold alert engine: ALL `threshold` binary-sensors in thresholds.yaml (air
-# quality CO2/PM2.5/VOC/NOx + the SEVERE tier, battery FP300/Tap Dial, humidity high/low) feed this
-# ONE automation. Hysteresis lives in the threshold sensors, so this just reacts to off<->on edges,
-# anchored on off<->on (NOT unknown) so an HA restart while bad doesn't re-alert and an unavailable
+# quality CO2/PM2.5/VOC/NOx + the SEVERE tier, battery FP300/Tap Dial/T1/window sensor, humidity
+# high/low, Pixel Watch next-alarm overdue) feed this ONE automation. Hysteresis lives in the
+# threshold sensors, so this just reacts to off<->on edges, anchored on off<->on (NOT unknown) so an HA restart while bad doesn't re-alert and an unavailable
 # source can't false-alert (sensor-offline owns offline). The category is encoded in each trigger id
 # (<category>_bad / <category>_ok); everything else is derived generically from the triggering
 # sensor. Per-category differences live in the `cfg` map: title, `pulse` (light flash, air quality
@@ -62,6 +62,8 @@
       entity_id:
         - binary_sensor.bedroom_fp300_battery_low
         - binary_sensor.bedroom_tap_dial_battery_low
+        - binary_sensor.bedroom_t1_battery_low
+        - binary_sensor.bedroom_window_sensor_battery_low
       from: "off"
       to: "on"
       for: "00:01:00"
@@ -70,6 +72,8 @@
       entity_id:
         - binary_sensor.bedroom_fp300_battery_low
         - binary_sensor.bedroom_tap_dial_battery_low
+        - binary_sensor.bedroom_t1_battery_low
+        - binary_sensor.bedroom_window_sensor_battery_low
       from: "on"
       to: "off"
       for: "00:01:00"
@@ -106,6 +110,20 @@
       to: "off"
       for: "00:05:00"
       id: temperature_ok
+    - platform: state
+      entity_id:
+        - binary_sensor.pixel_watch_next_alarm_overdue_high
+      from: "off"
+      to: "on"
+      for: "00:01:00"
+      id: watch_bad
+    - platform: state
+      entity_id:
+        - binary_sensor.pixel_watch_next_alarm_overdue_high
+      from: "on"
+      to: "off"
+      for: "00:01:00"
+      id: watch_ok
     - platform: state
       entity_id:
         - binary_sensor.outdoor_pm2_5_high
@@ -162,6 +180,7 @@
               'battery':          {'bad': '🔋 Battery low', 'ok': '🔋 Battery OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
               'humidity':         {'bad': '💧 Humidity', 'ok': '💧 Humidity OK', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
               'temperature':      {'bad': '🌡️ Temperature', 'ok': '🌡️ Temperature OK', 'pulse': false, 'watch': true,  'pierce': false, 'critical_away': true, 'recovery': true},
+              'watch':            {'bad': '⌚ Pixel Watch not reporting', 'ok': '⌚ Pixel Watch reporting', 'pulse': false, 'watch': false, 'pierce': false, 'recovery': true},
               'airqualityoutdoor':       {'bad': '🌫️ Outdoor air', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true,  'pierce': false, 'recovery': true},
               'airqualityoutdoorsevere': {'bad': '🚨 Outdoor air HIGH', 'ok': '✅ Outdoor air', 'pulse': false, 'watch': true, 'pierce': true, 'recovery': false}}[category] }}
         # Air-quality bad alerts get a "Boost fan" action button (circulate the air); other
