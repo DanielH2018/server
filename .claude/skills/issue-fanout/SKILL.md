@@ -172,8 +172,7 @@ CI-fix phases that resume its session. The red-test author and the reviewer stay
 `medium`. The launch line prints each batch's rung, and the run manifest records it.
 
 `scripts/dev/fanout.py` is the fan-out tooling's one entry point: `place`, `probe`, `review`
-and `stats`. The paths `fanout_place.py`, `fanout_probe.py`, `fanout_review.py` and
-`fanout_review_stats.py` beside it are shims that forward to it (#4346).
+and `stats`.
 
 The dispatcher claims each batch (step 2), writes the brief (issue bodies verbatim, the claim
 note, the landing path or the stop-at-PR rule, and the session-health lines of the placed host
