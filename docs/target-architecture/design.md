@@ -216,6 +216,13 @@ of the session that opens the PR. The operator declined G3 on 2026-11-12
 ([#7232](https://github.com/DanielH2018/server/issues/7232)), because sessions still edited the
 prose for 16 of 30 moved atoms after G2.
 
+**Second round.** An audit on 2026-11-13 measured what remained.
+[ADR-0031](../adr/0031-each-kind-of-fact-has-one-stateless-detector.md) decides the answer:
+each kind of documented fact gets one home and one stateless detector. Slices G6 to G11 carry
+it. They widen the removed-name check to every doc and code comment, make the notice block
+once its yield is measured, re-derive stated values from the tree, and bind the most-read
+sections to content atoms.
+
 ## Combined end state
 
 Ansible is gone, and git is the only write path. The one exception is C2's break-glass
@@ -341,6 +348,7 @@ sub-edges. This sketch follows its slice-level edges:
 
 ```text
 G1 ──▶ G2 ──▶ G5          G2 ──▶ G3 (declined)          G4 (independent)
+G6 ──▶ G8                 G7 ──▶ G9 ──▶ G11             G10 ──▶ G11
 R1 ──▶ R2, R3
 M1 ──▶ M2, M3, M4, M5 ──▶ M6          M6's B-1e ──▶ D5's last stateless-leaf flip
 D1 + R1 + R2's PRs 1–2 ──▶ D2 ──▶ D3 (+ all of R2), D4 ──▶ D5 (+ R3, M1, M2) ──▶ D6 ──▶ R4
@@ -398,6 +406,12 @@ a tag that is not flux-owned (M6 Open question 4), so that flip waits on the dri
 | G3 | [Notice dispatches the freshness reviewer](docs-guard/g3-freshness-reviewer.md) | Declined on 2026-11-12: the post-G2 yield did not fall far enough to build it |
 | G4 | [Drop the CI size test](docs-guard/g4-drop-size-test.md) | Size is one read-time budget plus a report |
 | G5 | [Shrink root CLAUDE.md](docs-guard/g5-shrink-root-claude-md.md) | Mechanism prose sits in `.claude/rules/`, and tool output in `--help` |
+| G6 | [Repair what the facts audit found](docs-guard/g6-repair-audit-defects.md) | The memory hook lists every citation `origin/master` no longer tracks |
+| G7 | [Removed names fail the PR](docs-guard/g7-removed-names.md) | Deleting a function that a skill and a comment name fails the hook, which names both lines |
+| G8 | [Memory resolver, checked index, read-only replica](docs-guard/g8-memory-resolver-and-replica.md) | A memory write on daniel-server fails at once, and the session-start line names the route |
+| G9 | [The notice blocks](docs-guard/g9-blocking-gate.md) | A PR that moves a cited symbol fails until its section is edited or acked in a commit message |
+| G10 | [Value rows](docs-guard/g10-value-rows.md) | A commit that changes a derived value rewrites the number in the doc |
+| G11 | [The binding sweep](docs-guard/g11-binding-sweep.md) | The five root sections cite content atoms, and the uncited share falls each batch |
 
 ## Open questions
 

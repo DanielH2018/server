@@ -35,6 +35,10 @@ The plan is [g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock
 The plan named this record ADR-0020. D1's ADR took 0020 first, and ADR-0021 and ADR-0022
 followed it, so this record takes the next free number.
 
+Amended by [ADR-0031](0031-each-kind-of-fact-has-one-stateless-detector.md). The operator
+ruled on 2026-11-13 that the notice may block again once slice G9 measures its yield. Until
+G9's own ADR records that flip, the notice never blocks a merge.
+
 ## Context
 
 **ADR-0019's criterion is not met.** ADR-0019 retires the lock when `fact_status.py report
