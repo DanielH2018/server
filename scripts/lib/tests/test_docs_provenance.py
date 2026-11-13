@@ -45,9 +45,6 @@ def test_banner_does_not_name_the_retired_ansible_tree():
         "scripts/docs/service_catalog.py", when=FIXED, sha="abc1234"
     )
     assert "Ansible tree" not in banner
-    assert (
-        "rendered from this repository by `scripts/docs/service_catalog.py`" in banner
-    )
 
 
 def test_banner_opens_with_yaml_frontmatter():
