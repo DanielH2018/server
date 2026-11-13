@@ -474,12 +474,12 @@ unsupported-operator = "error"
 possibly-missing-submodule = "error"
 
 [[tool.ty.overrides]]
-# Two scripts run inside container images built elsewhere, so their third-party imports are not
+# Three scripts run inside container images built elsewhere, so their third-party imports are not
 # and should not be in this repo's dev group. The rule stays on everywhere else, where an
 # unresolved import means a typo or a missing search path above.
 #
 # THE COLLATERAL, stated because it is not obvious: this is per-file, not per-module, so these
-# two files lose the check on their FIRST-party imports too. homelab-mcp/files/app.py imports
+# files lose the check on their FIRST-party imports too. homelab-mcp/files/app.py imports
 # `k8s_reads` from its own directory, which is on extra-paths above and would otherwise be
 # checked — a typo there now reports nothing here and surfaces as a ModuleNotFoundError when the
 # pod starts. ty has no per-module suppression, so the alternatives are this or losing the rule
@@ -487,6 +487,7 @@ possibly-missing-submodule = "error"
 include = [
   "ansible/roles/k8s/homelab-mcp/files/app.py",
   "ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py",
+  "ansible/roles/k8s/home-assistant/files/cast_quit_app.py",
 ]
 [tool.ty.overrides.rules]
 import-not-found = "ignore"

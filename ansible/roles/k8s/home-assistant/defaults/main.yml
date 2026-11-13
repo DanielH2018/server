@@ -48,9 +48,10 @@ home_assistant_k8s_init_image: alpine:3.24@sha256:f59abe656b692d901e184be3445e08
 # that shipped nothing would surface only as missing automations at runtime. A new file is
 # added to its list and nowhere else.
 #
-# files/*.yaml, installed at the root of /config: configuration.yaml and the files it pulls
-# in by name. The root is not swept on install (the PVC's own files live there), so removing
-# a name here leaves the old copy on the PVC until it is deleted by hand.
+# files/*.yaml and files/*.py, installed at the root of /config: configuration.yaml, the files
+# it pulls in by name, and the scripts a shell_command runs. The root is not swept on install
+# (the PVC's own files live there), so removing a name here leaves the old copy on the PVC
+# until it is deleted by hand.
 home_assistant_root_files:
   - configuration.yaml
   - customize.yaml
@@ -64,6 +65,7 @@ home_assistant_root_files:
   - scenes.yaml
   - templates.yaml
   - rest.yaml
+  - cast_quit_app.py
 
 # files/automations/*.yaml, one file per topic, merged into the `automation:` list by
 # `!include_dir_merge_list automations/` in configuration.yaml.

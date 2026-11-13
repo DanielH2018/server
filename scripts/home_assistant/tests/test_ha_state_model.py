@@ -299,6 +299,11 @@ def test_config_services_registers_each_script():
     }
 
 
+def test_config_services_registers_each_shell_command():
+    config = {"shell_command": {"bedroom_display_quit_app": "python3 x.py"}}
+    assert hsm.config_services(config) == {"shell_command.bedroom_display_quit_app"}
+
+
 def test_cmd_refresh_writes_both_snapshots(tmp_path, monkeypatch):
     monkeypatch.setattr(hsm, "STATE_DIR", tmp_path)
     monkeypatch.setattr(hsm, "EXTERNAL_YAML", tmp_path / "external_entities.yml")
