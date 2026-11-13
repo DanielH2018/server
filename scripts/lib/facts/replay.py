@@ -29,8 +29,9 @@ def notice_replay(
     """Replay ``notice`` over every first-parent commit since ``since``, and count its rows.
 
     The window is the plain ``git log --since`` boundary. An exception from ``notice`` on one
-    commit becomes a ``crashed`` entry and the replay goes on. ``content_notices`` names each
-    commit and section of a row whose atom is not a path atom.
+    commit becomes a ``crashed`` entry and the replay goes on. ``content_notices`` holds each
+    row whose atom is not a path atom: its commit, section, atom and kind, and whether the
+    commit edited the section's prose.
     """
     lines = git(
         "log",
@@ -61,7 +62,15 @@ def notice_replay(
                 moved += 1
                 moved_edited += r.prose_edited
             if r.form != "path":
-                content_notices.append({"commit": sha, "unit": r.unit})
+                content_notices.append(
+                    {
+                        "commit": sha,
+                        "unit": r.unit,
+                        "atom": r.atom,
+                        "kind": r.kind,
+                        "prose_edited": r.prose_edited,
+                    }
+                )
     return {
         "commits": commits,
         "commits_with_notice": with_notice,

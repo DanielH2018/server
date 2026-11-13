@@ -5,7 +5,8 @@ Status: IN PROGRESS. Step 1, the shared predicate, is done.
 Depends on: the tree rename of
 [#8186](https://github.com/DanielH2018/server/issues/8186), which landed on 2026-11-13.
 
-Unblocks: [G9](g9-blocking-gate.md), whose replay reads the doc set this slice defines.
+Unblocks: [G9](g9-blocking-gate.md), whose replay reads the doc set this slice defines,
+and [G11](g11-binding-sweep.md), which sweeps that set.
 
 [ADR-0031](../../adr/0031-each-kind-of-fact-has-one-stateless-detector.md) records the
 decision this slice serves.
