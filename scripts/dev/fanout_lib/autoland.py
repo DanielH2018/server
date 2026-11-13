@@ -7,7 +7,7 @@ This command runs on daniel-box from `homelab-claude-fanout-server-lander.timer`
 `land.sh` for the PRs that qualify. The operator approved it on 2026-10-18.
 
 WHY NOT `homelab-claude-land@`. That unit admits only the `claude` user and pins the author
-`DanielClaudeBot` and the branch prefix `worktree-claude+`. A server batch runs as `ubuntu`
+`claudemachineacct1` and the branch prefix `worktree-claude+`. A server batch runs as `ubuntu`
 on `worktree-fanout-<batch>`, and widening the unit would change the agent lander's policy.
 
 THE ELIGIBILITY RULE has two halves, both in `problems`. The review record that daniel-server

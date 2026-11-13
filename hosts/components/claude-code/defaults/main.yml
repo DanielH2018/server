@@ -356,7 +356,7 @@ claude_code_agent_dotfiles_profile: server
 # ships no host package version here, so this bounds how long the agent runs the old hooks.
 claude_code_agent_dotfiles_sync_interval: 15min
 
-# The agent user's GitHub machine account, created 2026-10-05. homelab-secrets renders its gh
+# The agent user's GitHub machine account, created 2026-11-13. homelab-secrets renders its gh
 # login under /run, and claude-agent-setup links ~/.config/gh/hosts.yml to it. It is a
 # write collaborator and a bypass actor on no ruleset. "agent branch fence" lets it create,
 # update and delete only refs/heads/worktree-claude+**, the branch EnterWorktree gives a
@@ -365,7 +365,7 @@ claude_code_agent_dotfiles_sync_interval: 15min
 # Its token is claude_code_agent_gh_token in SOPS: a classic token with only public_repo,
 # because GitHub offers no fine-grained token to a collaborator on another personal account's
 # repo. Without the `workflow` scope, GitHub refuses its pushes that edit .github/workflows/.
-claude_code_agent_github_login: DanielClaudeBot
+claude_code_agent_github_login: claudemachineacct1
 # The worktree-name prefix the agent's own CLAUDE.md (templates/agent-user-claude-md.j2) tells
 # its sessions to use. EnterWorktree turns `claude/<slug>` into the branch
 # `worktree-claude+<slug>`, the one shape the fence above lets this account push. The repo
@@ -373,7 +373,7 @@ claude_code_agent_github_login: DanielClaudeBot
 # agent's login profile also exports it as CLAUDE_WORKTREE_PREFIX, which
 # scripts/dev/fanout_lib/target.py:branch_name reads to name fan-out batch branches (#3618).
 claude_code_agent_worktree_prefix: claude
-claude_code_agent_github_id: 338220904
+claude_code_agent_github_id: 356237609
 # The account's noreply address. GitHub attributes a commit to the account by it, and marks the
 # commit Verified when the signing key below is on the account as a Signing Key.
 claude_code_agent_git_email: >-

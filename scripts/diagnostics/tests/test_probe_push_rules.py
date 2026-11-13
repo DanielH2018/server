@@ -134,7 +134,7 @@ def _transport(
             if gh_fails:
                 return subprocess.CompletedProcess(argv, 1, "", "HTTP 403: rate limit")
             if argv[2] == "user":
-                return ok("DanielClaudeBot\n")
+                return ok("claudemachineacct1\n")
             if "/rules/branches/" in argv[2]:
                 return ok(rules_json)
             return ok(json.dumps(bodies[int(argv[2].rsplit("/", 1)[1])]))
@@ -163,7 +163,7 @@ def test_a_refused_push_exits_1_naming_each_ruleset_and_reason(monkeypatch, caps
         f"'CI gate' ({CI}) rule required_signatures: unsigned commits: {UNSIGNED[:9]}"
         in out
     )
-    assert "gh login DanielClaudeBot" in out
+    assert "gh login claudemachineacct1" in out
 
 
 def test_a_push_no_rule_binds_exits_0(monkeypatch, capsys):
