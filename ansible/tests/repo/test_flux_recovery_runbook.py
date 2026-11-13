@@ -11,7 +11,7 @@ leave the cluster worse than the failure the runbook answers:
 - a hand-apply branch whose apply comes before its `DEPLOY_HOLD` step, so a promotion can move
   `prod` past the reset while the operator works.
 
-The plan is docs/target-architecture/deploy/d5-bulk-move.md, step 29.
+ADR-0020 records the decision.
 
 Run: uv run pytest ansible/tests/repo/test_flux_recovery_runbook.py
 """

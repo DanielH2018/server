@@ -37,6 +37,8 @@ def _rule_tree(tmp_path, edit_rules=None, edit_tests=None):
         edit_tests(tests)
     (rules_dir / "alerting-meta.yaml").write_text(yaml.safe_dump(rules))
     (tests_dir / "alerting-meta.test.yaml").write_text(yaml.safe_dump(tests))
+    for part in alert_conventions.RULE_TESTS_DIR.glob("alerting-meta.*.test.yaml"):
+        (tests_dir / part.name).write_text(part.read_text())
     return rules_dir, tests_dir
 
 
@@ -329,7 +331,8 @@ def test_a_zero_series_case_that_fires_only_the_watchdog_is_flagged(tmp_path):
 
 def test_a_rule_file_with_no_test_file_is_flagged(tmp_path):
     rules_dir, tests_dir = _rule_tree(tmp_path)
-    (tests_dir / "alerting-meta.test.yaml").unlink()
+    for test_file in tests_dir.glob("alerting-meta*.test.yaml"):
+        test_file.unlink()
     problems = _rule_problems(rules_dir, tests_dir)
     assert problems == [
         "files/rules/alerting-meta.yaml holds alerts and "

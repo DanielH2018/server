@@ -1,6 +1,6 @@
 """`homelab-tools` renders pins, not bytes: one tree per architecture, each tool at a private path.
 
-H3.11 (docs/target-architecture/host/h3-pi-pilot.md, *`homelab-tools`*). The real package holds
+ADR-0029 records the `homelab-tools` pins. The real package holds
 `/usr/lib/homelab/bin/sops` and `/usr/lib/homelab/bin/chezmoi` as named members. The spec cannot
 name another install path, so the reject fixtures below are the ways a tool could end up
 elsewhere or unpinned.

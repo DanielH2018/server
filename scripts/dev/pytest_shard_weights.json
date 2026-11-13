@@ -542,6 +542,7 @@
  "ansible/tests/services/test_traefik_edge_selfcheck.py": 0.13,
  "ansible/tests/services/test_traefik_http_entrypoint_crowdsec.py": 0.04,
  "ansible/tests/services/test_traefik_watched_namespaces.py": 0.09,
+ "ansible/tests/services/test_warning_escalation_exemptions.py": 6.42,
  "ansible/tests/services/test_webhook_plugin_install.py": 0.0,
  "ansible/tests/services/test_wg_easy_peer_cluster_drop.py": 0.08,
  "ansible/tests/setup/test_agent_clone_fast_forward.py": 0.82,

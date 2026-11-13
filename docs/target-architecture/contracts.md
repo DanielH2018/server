@@ -1,5 +1,7 @@
 # Target architecture — cross-slice contracts
 
+Status: ARCHIVED on 2026-11-13. The migration finished on 2026-11-12, and [what the migration built](../what-the-migration-built.md) describes the result.
+
 Every slice plan in this directory builds against the interfaces below. A slice that needs
 an interface to change says so in its *Open questions* section and names the contract row. A
 slice must never silently diverge from a contract. [design.md](design.md) explains why each

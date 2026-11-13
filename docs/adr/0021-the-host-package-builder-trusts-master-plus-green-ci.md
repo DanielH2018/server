@@ -89,6 +89,13 @@ commit signature and no landing tag. Every host takes its packages on that ancho
   the two k3s nodes through the GitOps deployer.
 - **Builder step 5 adds no trust check.** It writes no `reason="trust"` refusal, and H3.5a
   ships no red and green pair for one.
+- **The builder's refusal reasons are a closed set.** The `reason=` label of
+  `homelab_builder_unbuilt_since_timestamp_seconds` is one of `ok`, `hold`, `ancestry`,
+  `keyring`, `ci`, `no-green`, `token`, `build`, `tools` and `canary`. `token` is a
+  missing token, or a 401 or 403 from the check-runs read, so a revoked token never reads
+  as `no-green`. `build` is a render or `nfpm` run that failed at the chosen commit.
+  `hosts/lib/tests/test_host_package_builder_refusals.py` holds this list equal to the
+  builder's `REASONS`.
 - **Option (c) stays available at no design cost.** H3.9b's enable link for
   `homelab-updater.timer` is the switch. Dropping that link moves the Pi to (c), and the
   operator then meets H3's exit observation 4 with a hand-started run.

@@ -146,6 +146,22 @@ holds the interval to that sum, and
 `ansible/tests/services/test_alertmanager_routing.py::test_every_route_a_paging_alert_reaches_is_muted`
 walks the routing tree to prove the alerts reach the mute.
 
+**A warning that fires for 48 hours pages as a critical.** `WarningUnresolved` in
+`files/rules/alerting-meta.yaml` reads firing warnings from `ALERTS` and escalates each one
+that holds for 48 hours, so it reaches Discord and email instead of repeating in Discord
+alone (#8218). It moves the source's name and service to `escalated_from` and
+`escalated_service`, and carries `service="alert-escalation"`, a tag no health gate reads.
+To silence one escalation, match `escalated_from`. Shadow and drill alerts never escalate,
+and neither does a rule labelled `escalate: "false"`: `DeployHoldActive`,
+`FanoutSlotsIdleWithFreeWork` and `FluxSuspended` hold by design.
+`ansible/tests/services/test_warning_escalation_exemptions.py` holds that exempt set to the
+rules. The rule has no `for:`, because a Prometheus restart resets every alert's activation
+(`docs/target-architecture/monitoring/m6-retire-kuma.md`, Open question 9). It counts the
+stored `ALERTS` samples of the last 48 hours against the Watchdog's instead, so a gap of
+about 2 hours does not restart the age. Prometheus cannot see an inhibit, so each inhibit
+whose target is a warning has a copy in `templates/alertmanager-secret.yaml.j2` that holds
+the escalation, and the same test module fails an inhibit with no copy.
+
 **A host-plane rule names its host as a literal, so a new host is a rule edit.** The
 `host-checks` group carries one `HostReconcileFailed` per host in `hosts.ini`, and one
 `HostUpdateStale` per entry of `observability_expected_hosts`, each from the shape in

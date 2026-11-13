@@ -2,9 +2,8 @@
 
 Each test clones a bare fixture origin into a primary checkout under `tmp_path`. GitHub is a stub
 whose check-runs come from a dict keyed by SHA, so a test sets each commit's CI by hand. The cases
-are H7.51's *Verify-by* (docs/target-architecture/host/h7-delete-ansible.md): a green tip
-fast-forwards, red or cancelled CI, a non-fast-forward and an untracked file each leave HEAD where
-it was.
+cover the checkout rules: a green tip fast-forwards, and red or cancelled CI, a
+non-fast-forward and an untracked file each leave HEAD where it was.
 
 Run: uv run pytest hosts/lib/tests/test_checkout_sync.py
 """

@@ -112,9 +112,8 @@ def _trim_volume(name, group_keys):
 
 
 def test_an_opt_out_volume_with_the_trim_label_keeps_its_sentinel():
-    # H2.2a joins a volume to the native trim with the per-job label, which is no tier
-    # (docs/target-architecture/host/h2-shrink-host-plane.md, *A per-job label, not a group
-    # label*). The opt-out volume keeps its sentinel, so rule 4 still counts nothing.
+    # The native trim joins a volume by the per-job label, which is no tier (ADR-0029).
+    # The opt-out volume keeps its sentinel, so rule 4 still counts nothing.
     group_job = logic.recurringjob_group_to_job(
         [_recurringjob("daily-backup", ["default"]), _recurringjob("trim", [])]
     )

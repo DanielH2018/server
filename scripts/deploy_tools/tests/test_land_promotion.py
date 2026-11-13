@@ -1,6 +1,6 @@
 """A k8s tag lands through `promote`: the split before deploy.sh and the wait.
 
-The plan is docs/target-architecture/deploy/d2-first-leaf.md, *How `land.sh` waits*. Every
+ADR-0020 records how `land.sh` waits on the cluster. Every
 boundary is a fake from `_land_fakes.py`; `promote.land_wait` itself is tested in
 test_promote_land_wait.py.
 

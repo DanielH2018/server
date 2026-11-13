@@ -221,7 +221,11 @@ ssh daniel-server 'systemctl show k3s-agent -p ExecMainStartTimestamp'
 Restarting the agent is ungraceful from Longhorn's point of view: `kubectl drain` and `cordon` are
 write verbs, and the ServiceAccount available here is read-only, so there is no drain step to run.
 Every replica on daniel-server detaches and reattaches. That is the single riskiest moment in this
-procedure, and the reason gate 1 exists.
+procedure, and the reason gate 1 exists. Kubelet's graceful node shutdown does not help here
+(#8296). It runs when the host shuts down, through the systemd-logind delay lock, and a restart of
+k3s-agent is not a host shutdown. A reboot of daniel-server is graceful: kubelet stops the
+workloads, then Longhorn, then the system pods, by the groups in `k3s_agent_graceful_shutdown`
+in `hosts/components/k3s-agent/component.yml`.
 
 ## Verify the change, not just the workload
 

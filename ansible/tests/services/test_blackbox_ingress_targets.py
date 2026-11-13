@@ -1,7 +1,7 @@
 """The `blackbox-ingress` scrape job probes every ingress tile, built from `containers_list`.
 
 observability's `prometheus.yaml.j2` renders one target per tile the `ingress_probe_targets`
-filter yields (docs/target-architecture/monitoring/m4-blackbox-ingress.md, *The probe job*).
+filter yields (ADR-0026).
 These guards render the job from the real inventory, with an entry added or changed where the
 question is what moves, so each states what Prometheus would receive.
 

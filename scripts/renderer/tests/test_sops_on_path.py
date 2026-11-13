@@ -1,6 +1,6 @@
 """Every host package puts the packaged `sops` on PATH and retires sops_setup's copy (H7.24b).
 
-docs/target-architecture/host/h7-delete-ansible.md, item 4. homelab-tools installs `sops` off
+ADR-0029 records the packaged `sops`. homelab-tools installs `sops` off
 PATH, and callers such as `deploy.sh`'s community.sops lookups and the rotation cron run a bare
 `sops`. Each host package therefore ships `/usr/bin/sops`, an exec of the packaged binary, and
 lists `/usr/local/bin/sops` as a legacy entry, because that directory comes first on PATH.

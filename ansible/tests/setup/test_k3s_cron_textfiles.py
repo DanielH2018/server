@@ -1,7 +1,6 @@
 """The k3s crons that M6's batch B1 moved write their verdict to the node_exporter textfile.
 
-The plan is docs/target-architecture/monitoring/m6-retire-kuma.md (*B1* and the recipe M3's
-disk-health proved). Each producer sources homelab-check-lib.sh with a guard that exits 1, and
+Each producer sources homelab-check-lib.sh with a guard that exits 1, and
 writes the three `homelab_check_*` series through the library's `write_check_textfile`. Since B1's
 Cutover-2 the textfile is the whole verdict: no producer sources kuma-push-lib.sh, reads a Kuma
 push credential or pushes. The real template is rendered and run under bash with the real

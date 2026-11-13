@@ -2,8 +2,7 @@
 
 A PR whose checks ran before a suspend merged can still merge after it, so `decide` holds a
 revision whose `own` digest differs from `last-good`'s for a tag suspended at both ends. The
-plan is docs/target-architecture/deploy/d5-bulk-move.md, *A suspended role takes no change
-(D5.1d)*. The cases run the CLI over the fake forge in `_promote_fakes.py`. The hold's post
+cases run the CLI over the fake forge in `_promote_fakes.py`. The hold's post
 (#5359) runs through `promote.main` with a fake sender in place of Discord.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_promote_decide_suspended.py

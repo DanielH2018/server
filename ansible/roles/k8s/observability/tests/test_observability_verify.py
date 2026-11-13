@@ -3,8 +3,7 @@
 The script tests run `observability_verify.main` with a stand-in for the API read, and one test
 serves an HTTP error from a local port to reach `read_daemonset` itself. The render tests render
 the tree through `render_tag`, so the Job is checked as Flux receives it in
-`observability-verify`, and render a copy with the collector edited for the rename test. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, *A verify conversion lands as inert code*.
+`observability-verify`, and render a copy with the collector edited for the rename test.
 
 Run: uv run pytest ansible/roles/k8s/observability/tests/test_observability_verify.py
 """

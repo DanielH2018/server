@@ -4,7 +4,7 @@ The censuses in `test_pi_compose_census.py` run over fixture services. This file
 the real render of `hosts/daniel-pi/package.yml`, which runs docker-proxy (H5.6), autoheal
 (H5.7), alloy (H5.8) and wg-easy (H5.9). H5.2b's `pi-canary` ran here until H5.10 removed it, and
 the file keeps its name. A plain inventory variable such as `domain` renders at build time
-(operator ruling 2026-10-24, h5-pi-compose.md *Open questions* 7). The package's Compose env file
+(operator ruling 2026-10-24, recorded in ADR-0013). The package's Compose env file
 holds only the keys autoheal and alloy read.
 
 Run: uv run pytest hosts/lib/tests/test_pi_compose_canary.py
