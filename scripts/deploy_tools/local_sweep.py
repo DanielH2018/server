@@ -93,6 +93,9 @@ STALE_SECONDS = 6 * 3600
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
+# The locale of a GitHub-hosted Ubuntu runner, which sets no `LC_*`.
+HOSTED_LANG = "C.UTF-8"
+
 _API = "repos/{owner}/{repo}/actions"
 # The refspec `actions/checkout` fetches for a pull-request run.
 _TESTED = re.compile(r"\+([0-9a-f]{40}):refs/remotes/pull/\d+/merge")
@@ -311,12 +314,22 @@ def tested_commit(run_id: int, repo: Path, github: Callable[..., str] = _github)
 
 
 def _check_env() -> dict[str, str]:
-    """This process's environment without git's variables or the virtualenv that runs it.
+    """This process's environment as a hosted runner would give it to a check.
 
-    `uv run` puts its project's `.venv/bin` first on `PATH`. A check that inherited it would run
-    a hook's `python` from the checkout this tool was started in, not from the swept tree.
+    It drops git's variables and the virtualenv that runs this tool. `uv run` puts its
+    project's `.venv/bin` first on `PATH`, and a check that inherited it would run a hook's
+    `python` from the checkout this tool was started in, not from the swept tree.
+
+    It sets the locale to `HOSTED_LANG`. Under `en_US.UTF-8`, `sort` ignores punctuation, so
+    it orders `~ALL` ahead of `!refs/tags/v*` where a runner orders it after. A test that
+    pinned the host's order passed here and failed hosted (CI run 43336474461).
     """
-    env = git_env()
+    env = {
+        name: value
+        for name, value in git_env().items()
+        if name != "LANGUAGE" and not name.startswith("LC_")
+    }
+    env["LANG"] = HOSTED_LANG
     venv = env.pop("VIRTUAL_ENV", None)
     if venv:
         env["PATH"] = os.pathsep.join(

@@ -167,6 +167,18 @@ eight. A whole sweep on eight workers under `MemoryHigh=4500M` took 301 s and pe
 The scratch tree goes under `~/.cache/local-sweep`. A tree under `/tmp` fails one test of the
 Bash hook on every commit, because that hook reads any path under `/tmp` as scratch.
 
+A check runs under a hosted runner's locale, `C.UTF-8`, and not the host's. daniel-box is
+`en_US.UTF-8`, where `sort` ignores punctuation and orders `~ALL` ahead of `!refs/tags/v*`.
+A runner orders it after. `_check_env` in `local_sweep.py` sets the locale, and *Replaying a
+hosted run* has the run that showed the difference.
+
+The local `pytest` skips tests that a hosted runner runs. Four tests of
+`ansible/roles/k8s/crowdsec/tests/test_jobs_image.py` need Docker, which daniel-box does not
+have, and they skip where `CI` is unset. A change that breaks one of them reads green
+locally. Issue [#8435][sweep-skips] tracks the full list.
+
+[sweep-skips]: https://github.com/DanielH2018/server/issues/8435
+
 #### The shadow sweep
 
 `homelab-local-sweep.service` runs the tool from the primary checkout as the deploy user, the
@@ -240,6 +252,12 @@ hooks check finds `prek`, which a user unit's own `PATH` does not hold. The next
 A replay that reads green where hosted CI read red is either a hosted flake or a difference
 between daniel-box and a hosted runner. Each one is read and explained before B2 starts,
 because the second kind is a failure a queue would merge.
+
+The first batch, on 2026-11-13, found one of the second kind in six replays. Run 43336474461
+failed `test_a_weakened_update_restriction_is_flagged[a tag pattern excluded]` hosted, and
+its replay read green. The test pinned the order `sort` gives two patterns, and that order
+depends on the locale. At the run's merge commit the test passes under `en_US.UTF-8` and
+fails under `C.UTF-8`. The sweep sets the hosted locale since then.
 
 The timer samples the tip of master. A commit that merges and is superseded between two runs
 is never swept, and at most three sweeps start in an hour.
