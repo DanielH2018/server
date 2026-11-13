@@ -79,6 +79,13 @@ defaults:
   # instead stops the workloads first, so their volumes unmount while Longhorn still serves them,
   # then Longhorn, then the system-critical pods.
   #
+  # The boot side needs no iSCSI setting. iscsid.conf already sets `node.startup = manual`, and on
+  # 2026-11-11 open-iscsi's `--loginall=automatic` ran at 13:49:18 without starting iscsid. The
+  # logins at 13:49:33 followed instance-manager's tgtd (13:49:27) and a fresh sendtargets
+  # discovery, which is Longhorn's attach path, not a stale restore. The read-only remounts at
+  # 13:50-13:54 followed an ungraceful shutdown at 13:45:59. If a boot after a graceful shutdown
+  # still logs them, the cause is in Longhorn's engine or replica state, not here.
+  #
   # Each group opens at its priority and runs to the next one. 1000000000 is the value of
   # Longhorn's `longhorn-critical` PriorityClass, and 2000000000 is Kubernetes'
   # system-cluster-critical; system-node-critical (2000001000) lands in that last group.
