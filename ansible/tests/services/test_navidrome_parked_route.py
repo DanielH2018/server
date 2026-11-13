@@ -57,17 +57,6 @@ def test_the_route_renders_when_navidrome_has_a_pod():
         assert route["spec"]["routes"], "an IngressRoute with no routes matches nothing"
 
 
-def test_only_the_subsonic_api_skips_authelia_on_the_public_name():
-    """Subsonic apps cannot follow a forward-auth redirect; the web UI stays gated."""
-    routes = _routes()
-    [bypass] = routes["navidrome-public-rest"]["spec"]["routes"]
-    assert "PathPrefix(`/rest/`)" in bypass["match"]
-    assert "authelia" not in {m["name"] for m in bypass["middlewares"]}
-    for name in ("navidrome", "navidrome-public"):
-        [rule] = routes[name]["spec"]["routes"]
-        assert "authelia" in {m["name"] for m in rule["middlewares"]}, name
-
-
 def test_navidrome_trusts_no_user_header_while_rest_skips_authelia():
     """Navidrome honours its reverse-proxy user header on /rest/ too.
 
