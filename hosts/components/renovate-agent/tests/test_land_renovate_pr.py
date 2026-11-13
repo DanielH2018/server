@@ -132,10 +132,22 @@ class _Run:
         return self.land_rc, self.land_out
 
 
-def _main(tmp_path, run):
+FLOOR_FILE = ROLE / "files" / "t2-approval-floor"
+
+
+def _main(tmp_path, run, floor_file=FLOOR_FILE):
     tools = agent_toolbox.AgentTools(run=run)
-    rc = lander.main(["land_renovate_pr.py", "3340"], tools, str(tmp_path / "out"))
+    rc = lander.main(
+        ["land_renovate_pr.py", "3340"], tools, str(tmp_path / "out"), str(floor_file)
+    )
     return rc, (tmp_path / "out" / "3340.verdict").read_text()
+
+
+def test_a_missing_floor_file_refuses_before_land_sh(tmp_path):
+    run = _Run(GOOD)
+    rc, result = _main(tmp_path, run, floor_file=tmp_path / "absent")
+    assert rc == 3 and "floor is unusable" in result
+    assert not any("land.sh" in " ".join(argv) for argv in run.calls)
 
 
 def test_the_denylist_comes_from_the_derivation_in_the_checkout(tmp_path, monkeypatch):

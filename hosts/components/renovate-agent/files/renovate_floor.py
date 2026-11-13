@@ -2,7 +2,7 @@
 
 dotfiles#967 slice 1. Renovate's content is app-authored version bumps, so approving every PR
 would block routine updates. A PR needs the operator's approval of its head only when it
-changes a path on `FLOOR` other than by a digest-only image bump, or when anyone but
+changes a path on the T2 approval floor other than by a digest-only image bump, or when anyone but
 `renovate[bot]` pushed to its branch. The lander also refuses a soak status that
 `renovate[bot]` did not post.
 
@@ -15,53 +15,8 @@ from __future__ import annotations
 import re
 from pathlib import PurePosixPath
 
-# A plain entry is a path prefix. An entry holding `*` is a glob over the whole path, where
-# `**` spans directories, so `**/conftest.py` matches one at any depth. Paths are listed on
-# both sides of ADR 0030's rename, because this file is installed and outlives the tree it
-# shipped in.
-FLOOR = (
-    # homelab-updater installs every host package as root, and builder/ and lib/ reach the
-    # archive signing key.
-    "hosts/",
-    # The secrets, who decrypts them, and what the renderer reads.
-    "ansible/vars/",
-    "ansible/.sops.yaml",
-    "secrets/",
-    "ansible/templates/",
-    "k8s/templates/",
-    # The interpreter and packages land.sh, the builder and the renderer run under.
-    "pyproject.toml",
-    "uv.lock",
-    "uv.toml",
-    ".python-version",
-    # CI, the session config, the hooks and the scripts a session or a timer runs.
-    ".github/",
-    ".claude/",
-    ".mcp.json",
-    "prek.toml",
-    "scripts/",
-    "evals/",
-    "renovate.json",
-    "mkdocs.yml",
-    "cluster/services.yml",
-    ".gitmodules",
-    ".gitattributes",
-    "Email-to-RSS",
-    # Code pytest runs in a session: the suites, every conftest, and each role's tests and
-    # the files/ modules ansible/roles/conftest.py imports.
-    "ansible/tests/",
-    "tests/",
-    "**/conftest.py",
-    "ansible/roles/*/*/tests/**",
-    "ansible/roles/*/*/files/**",
-    "k8s/roles/*/tests/**",
-    "k8s/roles/*/files/**",
-    # Instructions every session loads.
-    "**/CLAUDE.md",
-    # The MCP server a session's tools run in.
-    "ansible/roles/k8s/homelab-mcp/",
-    "k8s/roles/homelab-mcp/",
-)
+# The T2 approval floor this component ships, which every T2 lander reads (A5a).
+FLOOR_FILE = "/usr/lib/homelab/t2-approval-floor"
 RENOVATE_BOT = "renovate[bot]"
 SOAK_CONTEXT = "renovate/stability-days"
 # The only shape the digest-only exception admits: a host component's defaults.
@@ -70,9 +25,31 @@ _IMAGE_LINE = re.compile(r"^\s*[A-Za-z0-9_]+_image:\s")
 _DIGEST = re.compile(r"@sha256:[0-9a-f]{64}")
 
 
-def on_floor(path: str) -> bool:
-    """Whether `path` is under a `FLOOR` entry."""
-    for entry in FLOOR:
+def read_floor(path: str = FLOOR_FILE) -> tuple[str, ...]:
+    """The entries in the floor file at `path`, without blank lines and `#` comments.
+
+    Raises:
+        OSError: the file cannot be read.
+        ValueError: the file names no entry. An empty floor would approve every path, so it
+            is refused rather than read as "nothing needs approval".
+    """
+    with open(path, encoding="utf-8") as handle:
+        lines = handle.read().splitlines()
+    entries = tuple(
+        s for s in (line.strip() for line in lines) if s and not s.startswith("#")
+    )
+    if not entries:
+        raise ValueError(f"{path} names no path")
+    return entries
+
+
+def on_floor(path: str, floor: tuple[str, ...]) -> bool:
+    """Whether `path` is under an entry of `floor`.
+
+    A plain entry is a path prefix. An entry holding `*` is a glob over the whole path, where
+    `**` spans directories. `land_lib/policy.py:approval_hits` matches the same way.
+    """
+    for entry in floor:
         if "*" in entry:
             if PurePosixPath(path).full_match(entry):
                 return True
@@ -113,7 +90,7 @@ def digest_only(entry: dict) -> bool:
     return True
 
 
-def floor_hits(files: list[dict]) -> list[str]:
+def floor_hits(files: list[dict], floor: tuple[str, ...]) -> list[str]:
     """Each changed path on the floor that is not a digest-only bump, in order.
 
     A rename is checked under its old path too, so a rename out of a floor path counts.
@@ -121,7 +98,12 @@ def floor_hits(files: list[dict]) -> list[str]:
     hits: list[str] = []
     for entry in files:
         for name in (entry.get("filename"), entry.get("previous_filename")):
-            if name and name not in hits and on_floor(name) and not digest_only(entry):
+            if (
+                name
+                and name not in hits
+                and on_floor(name, floor)
+                and not digest_only(entry)
+            ):
                 hits.append(name)
     return hits
 

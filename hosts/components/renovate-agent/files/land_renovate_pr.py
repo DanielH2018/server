@@ -24,7 +24,7 @@ A PR is landed only when all of these hold:
 
 Then `land.sh` runs as an interactive session would run it, pinned to the head SHA these checks
 read, and only its `VERDICT:` line is written where the session can read it. land.sh also needs
-the operator's approval of that head when the PR changes a path on `renovate_floor.FLOOR`
+the operator's approval of that head when the PR changes a path on the T2 approval floor
 other than by a digest-only image bump, or when anyone but `renovate[bot]` pushed to its branch
 (dotfiles#967 slice 1). Stdlib only, like the rest of the agent.
 
@@ -49,7 +49,13 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agent_toolbox import TOOLS, AgentTools, log
 from host_lib import atomic_write
-from renovate_floor import floor_hits, pusher_problem, soak_problem
+from renovate_floor import (
+    FLOOR_FILE,
+    floor_hits,
+    pusher_problem,
+    read_floor,
+    soak_problem,
+)
 
 AUTHOR = "app/renovate"
 # The login whose approval of the head lets land.sh land a PR the floor check flags.
@@ -148,10 +154,12 @@ def read_api(tools: AgentTools, path: str) -> list[dict] | None:
     return entries if all(isinstance(e, dict) for e in entries) else None
 
 
-def approval_reasons(files: list[dict], events: list[dict], head: str) -> list[str]:
+def approval_reasons(
+    files: list[dict], events: list[dict], head: str, floor: tuple[str, ...]
+) -> list[str]:
     """Why the PR needs the operator's approval of `head`; empty when it lands without."""
     reasons = []
-    hits = floor_hits(files)
+    hits = floor_hits(files, floor)
     if hits:
         reasons.append(f"it changes floor paths: {', '.join(hits)}")
     pushers = pusher_problem(events, head)
@@ -178,6 +186,7 @@ def main(
     argv: list[str],
     tools: AgentTools = TOOLS,
     results_dir: str = RESULTS_DIR,
+    floor_file: str = FLOOR_FILE,
 ) -> int:
     """Check PR `argv[1]`, land it if every check passes, and record the outcome.
 
@@ -234,7 +243,11 @@ def main(
     soak = soak_problem(statuses)
     if soak:
         return refuse(soak)
-    approval = approval_reasons(files, events, head)
+    try:
+        floor = read_floor(floor_file)
+    except (OSError, ValueError) as exc:
+        return refuse(f"the T2 approval floor is unusable: {exc}")
+    approval = approval_reasons(files, events, head, floor)
     land = os.path.join(repo_dir, "scripts", "deploy_tools", "land.sh")
     if approval:
         log(

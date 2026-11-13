@@ -1,0 +1,57 @@
+# The T2 approval floor (dotfiles#967 slice 1, A5a). Shipped by the renovate-agent host
+# component to /usr/lib/homelab/t2-approval-floor.
+#
+# Every T2 lander reads this one list: renovate-agent-land@ through renovate_floor.py, and a
+# lander that sets LAND_APPROVAL_PATHS to this file through land_lib/policy.py. A PR changing
+# a path under an entry needs the operator's approval of its head. Renovate's lander exempts a
+# digest-only image bump; no other lander does.
+#
+# A plain entry is a path prefix. An entry holding `*` is a glob over the whole path, where
+# `**` spans directories, so `**/conftest.py` matches one at any depth. Paths are listed on
+# both sides of ADR 0030's rename, because the file is installed and outlives the tree it
+# shipped in.
+#
+# homelab-claude-land@ (T1, the phone host's lander) reads its own narrower list,
+# hosts/components/claude-code/templates/claude-land-approval-paths.j2.
+
+# homelab-updater installs every host package as root, and builder/ and lib/ reach the
+# archive signing key.
+hosts/
+# The secrets, who decrypts them, and what the renderer reads.
+ansible/vars/
+ansible/.sops.yaml
+secrets/
+ansible/templates/
+k8s/templates/
+# The interpreter and packages land.sh, the builder and the renderer run under.
+pyproject.toml
+uv.lock
+uv.toml
+.python-version
+# CI, the session config, the hooks and the scripts a session or a timer runs.
+.github/
+.claude/
+.mcp.json
+prek.toml
+scripts/
+evals/
+renovate.json
+mkdocs.yml
+cluster/services.yml
+.gitmodules
+.gitattributes
+Email-to-RSS
+# Code pytest runs in a session: the suites, every conftest, and each role's tests and the
+# files/ modules ansible/roles/conftest.py imports.
+ansible/tests/
+tests/
+**/conftest.py
+ansible/roles/*/*/tests/**
+ansible/roles/*/*/files/**
+k8s/roles/*/tests/**
+k8s/roles/*/files/**
+# Instructions every session loads.
+**/CLAUDE.md
+# The MCP server a session's tools run in.
+ansible/roles/k8s/homelab-mcp/
+k8s/roles/homelab-mcp/
