@@ -100,7 +100,8 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
   permission at all. The runner swaps it in as the session's `GH_TOKEN`
   (`renovate_agent.py:session_env`), and a session whose read token is unset never starts.
   The session asks for a close, a comment or a re-run by writing a JSON request into
-  `/var/lib/renovate-agent/requests/`. The runner carries each request out with its own token
+  `/var/lib/renovate-agent/requests/`, which `run_session` passes to Claude Code with
+  `--add-dir` so a headless Write there needs no approval. The runner carries each request out with its own token
   after the session ends, through `files/run_requests.py`, and logs each outcome to
   `requests.jsonl` in the state directory. A request must be a regular file under 16 KiB,
   opened without following a link and without blocking, and must name an open Renovate PR the
