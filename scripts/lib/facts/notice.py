@@ -1,4 +1,4 @@
-"""The facts diff notice: each ``CLAUDE.md`` section citing an atom that a diff moved.
+"""The facts diff notice: each instruction-file section citing an atom that a diff moved.
 
 The notice compares every cited atom at a diff's base with the same atom at its head, so it
 has to read both ends. The section walk in ``citations`` cannot: ``repo_docs`` and
@@ -16,7 +16,7 @@ either end through one interface, with two backends.
   an uncommitted edit is read. A listed file that is missing on disk reads as ``None``.
 
 ``git ls-tree`` takes no glob: a ``'**/CLAUDE.md'`` pathspec lists the root doc alone. Both
-backends therefore find the docs by basename in the full listing.
+backends therefore pick the docs out of the full listing with ``citations.is_fact_doc``.
 
 A doc's sections are cached by path and blob id for the life of the process, so a replay over
 many commits splits a doc that no commit changed only once.
@@ -47,12 +47,11 @@ from .citations import (
     Citation,
     Section,
     in_tree,
+    is_fact_doc,
     parse_citations,
     sections,
 )
 from .lint import bodies_at
-
-DOC_NAME = "CLAUDE.md"
 
 # (doc path, blob id) -> that blob split into sections. Keyed by path too, because a section
 # key starts with its doc's path and two docs can hold the same bytes.
@@ -135,10 +134,8 @@ class Tree:
         return self._present
 
     def docs(self) -> list[str]:
-        """Every tracked ``CLAUDE.md``, at any depth, sorted."""
-        return sorted(
-            p for p in self.tracked if p == DOC_NAME or p.endswith("/" + DOC_NAME)
-        )
+        """Every tracked instruction file, as ``citations.is_fact_doc`` defines one, sorted."""
+        return sorted(p for p in self.tracked if is_fact_doc(p))
 
     def text(self, rel: str) -> str | None:
         """The text of the tracked file ``rel``, or None when it is not there.
@@ -262,8 +259,8 @@ def moved_sections(repo: Path, base: str, head: str | None = None) -> list[Notic
     revision, every head-side input is read at that revision: the docs, the tracked set, the
     diff and the atoms. Rows come in doc order, then section order, one per unit and atom.
 
-    - The sections are those of every ``CLAUDE.md`` at the head. Their citations are parsed
-      with no tracked-set filter.
+    - The sections are those of every instruction file at the head. Their citations are
+      parsed with no tracked-set filter.
     - A citation whose path the diff did not touch gives no row. Neither does one that names
       a tracked file or directory at neither end. A file that the diff deletes is tracked at
       the base, so its citations still reach the rules below.

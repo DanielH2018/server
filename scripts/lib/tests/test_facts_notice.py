@@ -63,10 +63,16 @@ def test_docs_at_every_depth_are_listed(tmp_path, rev):
     commit(
         repo,
         "docs",
-        **{_DOC: _V1, "a/b/CLAUDE.md": _V1, "a/NOT_CLAUDE.md": _V1, "a/b.py": ""},
+        **{
+            _DOC: _V1,
+            "a/b/CLAUDE.md": _V1,
+            "a/NOT_CLAUDE.md": _V1,
+            "a/b.py": "",
+            ".claude/rules/facts.md": _V1,
+        },
     )
     with Tree(repo, rev) as tree:
-        assert tree.docs() == ["CLAUDE.md", "a/b/CLAUDE.md"]
+        assert tree.docs() == [".claude/rules/facts.md", "CLAUDE.md", "a/b/CLAUDE.md"]
 
 
 def test_a_path_absent_at_the_revision_reads_as_none_and_sends_no_request(tmp_path):

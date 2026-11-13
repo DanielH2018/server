@@ -2,13 +2,20 @@
 paths:
   - "CLAUDE.md"
   - "**/CLAUDE.md"
+  - ".claude/rules/**"
+  - ".claude/skills/**/SKILL.md"
+  - ".claude/agents/**"
   - "scripts/lib/facts/**"
   - "scripts/dev/fact_status.py"
 ---
 
-# Fact support — how a `CLAUDE.md` section cites what holds it up
+# Fact support — how an instruction file cites what holds it up
 
-A `CLAUDE.md` section names what holds it up by citing atoms. A section
+An instruction file is a `CLAUDE.md`, a rule under `.claude/rules/`, a skill's `SKILL.md` or
+an agent under `.claude/agents/`. `scripts/lib/facts/citations.py:is_fact_doc` is the one
+definition, and the lint, the notice and the replay all read it.
+
+A section of an instruction file names what holds it up by citing atoms. A section
 is the text under one heading up to the next heading of any level, so every citation has
 exactly one owning section, keyed `<doc>#<heading text>`. Heading text is not scanned for
 citations: a backticked span in a heading names the section, never an atom in it.
@@ -132,5 +139,7 @@ still blocks, through two checks.
 `tests/repo/test_every_section_lints_clean.py` fails CI on any error rule in any
 section, except `vanished-identifier`, which needs a range. The `facts-lint-changed` prek hook
 lints the sections the branch edits, and runs `vanished-identifier` over every section. It
-fires on a commit that touches a `CLAUDE.md` or any non-Markdown file other than the paths the
-docs-refresh and eval-run crons commit.
+fires on a commit that touches an instruction file or any non-Markdown file other than the
+paths the docs-refresh and eval-run crons commit.
+`tests/repo/test_every_section_lints_clean.py::test_the_lint_hook_fires_on_exactly_the_instruction_files`
+holds the hook's `files` pattern against `is_fact_doc`.

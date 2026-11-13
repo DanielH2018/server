@@ -1,10 +1,9 @@
 # G7 — A PR that removes a name fails while a doc or comment still uses it
 
-Status: PLANNED.
+Status: IN PROGRESS. Step 1, the shared predicate, is done.
 
 Depends on: the tree rename of
-[#8186](https://github.com/DanielH2018/server/issues/8186), which moves the test paths
-this slice edits.
+[#8186](https://github.com/DanielH2018/server/issues/8186), which landed on 2026-11-13.
 
 Unblocks: [G9](g9-blocking-gate.md), whose replay reads the doc set this slice defines.
 
@@ -85,7 +84,9 @@ hook, and the hook names both lines.
 ## Steps, as PRs
 
 1. The shared predicate. The lint reads rules, skills and agents, and the errors it finds
-   there are fixed in this PR.
+   there are fixed in this PR. Done: the widened lint found one error and four warnings.
+   At `1559855d5` the doc set is 109 files and 577 sections, 258 of which cite nothing.
+   The 30-day replay shows 98 moved rows over it, against 93 over `CLAUDE.md` alone.
 2. The anchor form.
 3. The widened `vanished-identifier` targets and the comment-holder change, as warnings,
    with the replay that counts their rows.
@@ -102,8 +103,6 @@ replay prints rows per merged PR over 30 days, by target class.
 
 - The false-alarm share of the widened rule is unmeasured. Step 3 measures it before any
   class blocks.
-- The errors step 1 finds in rules, skills and agents may be too many for one PR. If so,
-  the step splits by directory.
 - A removed name that survives as a substring of a longer name stays silent.
 
 ## Complexity delta

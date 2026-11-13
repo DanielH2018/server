@@ -426,19 +426,21 @@ def test_in_tree_out_of_tree_token_is_flagged():
     assert [c.raw for c in out_of_tree if in_tree(c, tracked)] == []
 
 
-def test_repo_docs_lists_every_tracked_claude_md(tmp_path):
+def test_repo_docs_lists_every_tracked_instruction_file(tmp_path):
     init_repo(tmp_path)
-    (tmp_path / "CLAUDE.md").write_text("# root\n")
-    (tmp_path / "role").mkdir()
-    (tmp_path / "role" / "CLAUDE.md").write_text("# role\n")
-    (tmp_path / "role" / "README.md").write_text("not a store\n")
-    (tmp_path / "untracked").mkdir()
-    (tmp_path / "untracked" / "CLAUDE.md").write_text("# not added\n")
-    git(tmp_path, "add", "CLAUDE.md", "role")
-    assert repo_docs(tmp_path) == [
-        tmp_path / "CLAUDE.md",
-        tmp_path / "role" / "CLAUDE.md",
+    tracked = [
+        ".claude/agents/reviewer.md",
+        ".claude/rules/facts.md",
+        ".claude/skills/deploy/SKILL.md",
+        "CLAUDE.md",
+        "role/CLAUDE.md",
     ]
+    not_docs = [".claude/skills/deploy/notes.md", "docs/page.md", "role/README.md"]
+    for rel in [*tracked, *not_docs, "untracked/CLAUDE.md"]:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("# doc\n")
+    git(tmp_path, "add", *tracked, *not_docs)
+    assert repo_docs(tmp_path) == [tmp_path / rel for rel in tracked]
 
 
 def test_a_real_history_bullet_is_masked_and_its_neighbours_are_not():

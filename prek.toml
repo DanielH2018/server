@@ -479,11 +479,11 @@ files = "(\\.py|^tests/repo/(module_length|monkeypatch)_allowlist\\.txt)$"
 # skip the hook, so it pays the whole ~0.4s. Against a 300-commit range the run took 1.9s.
 [[repos.hooks]]
 id = "facts-lint-changed"
-name = "fact citations in edited CLAUDE.md sections, and identifiers the branch removed"
+name = "fact citations in edited instruction-file sections, and identifiers the branch removed"
 entry = "uv run --frozen python scripts/dev/fact_status.py lint --changed-since origin/master"
 language = "system"
 pass_filenames = false
-files = "(^|/)CLAUDE\\.md$|^(?!.*\\.md$)"
+files = "(^|/)CLAUDE\\.md$|^\\.claude/(rules|agents)/[^/]+\\.md$|^\\.claude/skills/.+/SKILL\\.md$|^(?!.*\\.md$)"
 # The non-Markdown paths the docs-refresh and eval-run crons commit. Neither cron can edit a
 # CLAUDE.md, so a finding there would only park its publish, which the docs-refresh contract's
 # next-run review says to check before a hook gains one of its staged paths.

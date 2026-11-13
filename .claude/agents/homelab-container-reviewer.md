@@ -32,7 +32,7 @@ highest-signal findings.
 - **Docker (daniel-pi only)** — the source of truth is
   `hosts/components/pi-compose/services/<svc>/compose.yaml.j2`. Always cite that path, never
   the rendered project under `/usr/lib/homelab/compose/` on the Pi.
-- **A service tree has no `k8s/templates` on its search path**, so the Pi's compose files
+- **A service tree has no `k8s/templates/` on its search path**, so the Pi's compose files
   write out what a shared macro such as `resources.yml.j2` would
   render; don't flag the inlined blocks. Write the `healthcheck:` and `ports:` blocks
   directly, publishing a UI port bound to `{{ server_ip }}` (the Pi's LAN IP, never
