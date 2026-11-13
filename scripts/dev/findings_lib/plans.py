@@ -3,10 +3,6 @@
 Every command in `findings.py` plans first and runs second, so the decision — file, touch,
 reopen, refuse, escalate, close — is a pure function of the issue it was handed. `--dry-run`
 prints what these return; `gh_calls.run` is the only thing that executes them.
-
-`is_project_failure` and `without_project` are the exception that proves the shape: they are
-also pure, and they let `gh_calls._create_with_optional_project` decide whether a `gh`
-failure is worth retrying without ever looking at gh itself.
 """
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -25,7 +21,6 @@ from dev.findings_lib.issue_model import (
     NOT_BEFORE_PREFIX,
     NOT_BEFORE_STYLE,
     PR_REPO,
-    PROJECT_TITLE,
     _REOBSERVED,
     claim_comment,
     current_claim,
@@ -404,7 +399,6 @@ def plan_open(
             argv += ["--label", lab]
         if defer_until is not None:
             argv += ["--label", not_before_label(defer_until)]
-        argv += ["--project", PROJECT_TITLE]
         return "created", 0, [argv]
     n = str(existing["number"])
     names = label_names(existing)
@@ -481,32 +475,3 @@ def plan_close(
             f"{prefix}: {reason}",
         ],
     ]
-
-
-def without_project(argv: list[str]) -> list[str]:
-    """``argv`` with the ``--project <title>`` pair removed.
-
-    Removal is by position, not by value: a finding titled "Server Issue Tracking" would otherwise
-    lose its own ``--title`` argument.
-    """
-    out = []
-    skip = False
-    for i, arg in enumerate(argv):
-        if skip:
-            skip = False
-            continue
-        if arg == "--project" and i + 1 < len(argv):
-            skip = True
-            continue
-        out.append(arg)
-    return out
-
-
-def is_project_failure(stderr: str | None) -> bool:
-    """Whether ``gh``'s stderr blames the Project rather than the issue.
-
-    A missing board reads "could not resolve to a ProjectV2"; a token without the `project`
-    scope reads "missing required scopes". Both mean the issue itself is fine.
-    """
-    low = (stderr or "").lower()
-    return "project" in low or "scope" in low

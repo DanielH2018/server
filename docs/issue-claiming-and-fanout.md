@@ -57,18 +57,9 @@ withholding label was permanent and meant the wrong thing (#1739).
 
 The label cannot give a list of every deferred issue in date order. GitHub's issue search has
 no prefix match on label names and sorts only by created, updated, comments, reactions and
-interactions. Two views fill that gap, and both read from the label:
-
-- **The "Not before" Date field on the Server Issue Tracking Project.** `defer` and `open
-  --not-before` copy the date into it through `findings_lib/board.py`, adding the issue to the
-  board first when it is missing. `findings.py board-dates` makes every open issue's field
-  match its label, which backfills issues deferred before the field existed and repairs a date
-  someone changed on the board by hand. A saved table view filtered on `"Not before":>@today`
-  and sorted by the field lists what is still withheld; `"Not before":<=@today` lists what has
-  come due. The field is a copy: `next`, `claim` and the fan-out never read it, so a board
-  write that fails, for example on a token without the `project` scope, only warns.
-- **The "Deferred, by date" table on the generated backlog page.** `scripts/docs/reference/backlog.py`
-  renders every open finding carrying a date, soonest first, marked *withheld* or *date passed*.
+interactions. The "Deferred, by date" table on the generated backlog page fills that gap:
+`scripts/docs/reference/backlog.py` renders every open finding carrying a date, soonest first,
+marked *withheld* or *date passed*. It reads the label, so it never disagrees with `next`.
 
 A date is the wrong tool for work that waits on another issue. A guessed date either expires
 before that work lands or holds the issue back after it has. On 2026-11-09, #7195 waited on
