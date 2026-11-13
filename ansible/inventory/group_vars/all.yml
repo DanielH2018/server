@@ -27,7 +27,7 @@ cloudflare_ips:
 # Exact patch, not `3.15`. uv resolves a bare minor to whatever it already has, so two hosts
 # drift apart with nothing asking for either. Eighteen host scripts run on this and must be the
 # same interpreter on both machines. The minor must track
-# .python-version — ansible/tests/setup/test_host_python_pin.py enforces both halves.
+# .python-version — hosts/tests/test_host_python_pin.py enforces both halves.
 # Bump order: the dotfiles repo's `python` in tools.toml installs this interpreter, and units run
 # with --no-python-downloads. Land that bump and run `chezmoi apply` on both cluster hosts first,
 # or every unit naming this pin fails to find a Python. No check in this repo can see the other.
@@ -61,7 +61,7 @@ pgid: 1000
 # its package file reads origin='gh', archive='', codename='stable'.
 # `gh:stable` therefore matched nothing and upgraded nothing while reading as configured — it
 # shipped that way in 2fc0b537 and this is the fix. ENFORCED by
-# ansible/tests/setup/test_unattended_origins_pattern.py.
+# hosts/tests/test_unattended_origins_pattern.py.
 #
 # `origin=Ubuntu,archive=<codename>-updates` is the non-security pocket the login MOTD counts
 # as "N updates can be applied immediately". Without it those sit unapplied. Kernel upgrades
@@ -289,7 +289,7 @@ loki_streams:
 # not silence a caller reading the other.
 #
 # The SAME two URLs the bridge defaults to (`bridge/config_io.py:WAN_PROBE_DEFAULT`), pinned equal
-# by ansible/tests/setup/test_wan_probe_urls_match_the_bridge.py — two halves of one gate
+# by hosts/tests/test_wan_probe_urls_match_the_bridge.py — two halves of one gate
 # disagreeing about what "the internet" means is the drift that test exists to refuse. Empty
 # disables the host-side gate, the same way an empty WAN_PROBE_URLS disables the bridge's.
 wan_probe_urls:
@@ -482,7 +482,7 @@ k8s_node_client_ip: "{{ hostvars['daniel-box'].server_ip }}"
 # `k3s_host_dns_metrics_port` in hosts/components/k3s-host-dns/defaults/main.yml, deliberately: role
 # defaults are only in scope while that role runs, and the k8s play never includes it, so a
 # reference across the boundary is undefined rather than shared. The two are kept equal by
-# ansible/tests/setup/test_coredns_metrics_port_agrees.py — a drift would leave this job scraping
+# hosts/tests/test_coredns_metrics_port_agrees.py — a drift would leave this job scraping
 # a closed port, which surfaces as a permanently down target rather than as anything subtle.
 k8s_node_dns_metrics_port: 9253
 # In-cluster image registry. Two addresses for the same registry, and both are needed
@@ -620,7 +620,7 @@ docker_engine_packages:
 # rsyslog is MASKED there (journald is the log of record, and rsyslog's text logs
 # landed in the RAM-backed log2ram tmpfs), so its host package never lists the
 # `rsyslog-filter` component (hosts/components/rsyslog-filter/). ENFORCED by
-# ansible/tests/setup/test_journald_syslog_forwarding.py.
+# hosts/tests/test_journald_syslog_forwarding.py.
 has_rsyslog: true
 # Whether this host holds a checkout of THIS repository at ~/server. True by default, and no
 # host overrides it.

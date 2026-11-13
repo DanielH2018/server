@@ -34,7 +34,7 @@ source "${HOMELAB_LIB_DIR:-/usr/lib/homelab}/homelab-check-lib.sh" || {
 
 # The longest legitimate gap between two textfile writes: every job runs weekly, 604800s, and
 # the extra 2h is slack for a run that takes far longer than the last, as rkhunter-check.sh
-# keeps. Move it with the crons. ansible/tests/setup/test_host_maintenance.py pins the rules'
+# keeps. Move it with the crons. hosts/tests/test_host_maintenance.py pins the rules'
 # literals to it.
 DEADLINE_S=612000
 

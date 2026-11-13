@@ -39,7 +39,7 @@ re-measured where it drifted by `--refresh-drifted` since #4888), and
 `scripts/dev/pytest_shard_runner_weights.json` (the runner-seconds table the CI split packs on,
 refreshed from CI's own logs by `--refresh-runner` since #6178).
 Adding a fifth means editing the cron's `git add`, the porcelain check in its
-`restore_generated_tree`, and `ansible/tests/setup/test_docs_refresh_records_shard_weights.py`,
+`restore_generated_tree`, and `hosts/tests/test_docs_refresh_records_shard_weights.py`,
 which holds the first two against each other. A path written but not staged parks
 `homelab-checkout-sync`, which reads any porcelain output on the primary checkout as dirty.
 

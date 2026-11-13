@@ -66,7 +66,7 @@ defaults:
   # renovate: datasource=deb depName=docker-buildx-plugin versioning=semver extractVersion=^(?:\d+:)?(?<version>[\d.]+)- registryUrl=https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64
   docker_engine_buildx_plugin_version: "0.37.1"
   # GOMEMLIMIT for each Go daemon, paired with GOGC=off. docs/docker-engine-pins-and-runtime.md
-  # has the measurements; ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.py holds
+  # has the measurements; hosts/tests/test_docker_daemons_gomemlimit_headroom.py holds
   # each above its floor.
   docker_engine_gomemlimit_dockerd: 64MiB
   docker_engine_gomemlimit_containerd: 64MiB

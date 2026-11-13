@@ -3,7 +3,7 @@
 # manifests/coredns.yaml at k3s_version, with each `%{...}%` placeholder written as the value k3s
 # substitutes on this cluster. Nothing here is vendored, because that file is not YAML until k3s
 # substitutes it. A k3s bump refreshes the templates by hand, and
-# ansible/tests/setup/test_coredns_image_follows_bundled_manifest.py ties them to the version.
+# hosts/tests/test_coredns_image_follows_bundled_manifest.py ties them to the version.
 
 # The CoreDNS image k3s v1.37.2+k3s1 bundles, with `%{SYSTEM_DEFAULT_REGISTRY}%` replaced by the
 # empty string as k3s stages it. The k3s addon stopped reconciling it when the `.skip` marker

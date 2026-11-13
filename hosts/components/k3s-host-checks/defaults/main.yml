@@ -164,7 +164,7 @@ k3s_disk_health_cron_minute: "*/10"
 #            keep a grace of period + one slot instead of an open-ended one.
 # 420 < 600 satisfies the upper bound with 3 minutes of margin, and clears the lower by 102s.
 # Raising this past 599 breaks the arithmetic in docs/healthchecks-io-deadman.md — the guard test
-# in ansible/tests/setup/test_health_cron_boot_grace.py enforces the bound rather than the number.
+# in hosts/tests/test_health_cron_boot_grace.py enforces the bound rather than the number.
 #
 # NOT applied to the daily etcd-token-drift cron (02:45). For it a skipped slot is a skipped DAY,
 # which is a worse trade than the rare boot landing inside its one-minute window; its 1-hour

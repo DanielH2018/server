@@ -15,7 +15,7 @@ spec:
   # strand the shutdown chain on a value nothing re-resolves. The pin equals the address the
   # Service already held, so applying it changes nothing live. The package's copy is
   # `nut_host_upsd_clusterip` in hosts/components/nut-secondary/component.yml, and
-  # ansible/tests/setup/test_nut_host_secondary.py pins the two together.
+  # hosts/tests/test_nut_host_secondary.py pins the two together.
   clusterIP: {{ nut_k8s_cluster_ip }}
   selector:
     app: nut

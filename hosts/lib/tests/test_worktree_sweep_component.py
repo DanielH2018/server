@@ -5,7 +5,7 @@ Until H7.36 `initial_setup` installed the sweep as the `Weekly git object-store 
 the script as `sys_user`, the timer's slot, which equals the component's
 `worktree_sweep_cron_*` defaults the deadman fragment reads, the Healthchecks.io key credential
 every package shipping the sweep lists (#6815), and the legacy entry. The script's exit-code ping is run in
-`ansible/tests/setup/test_worktree_sweep_cron_reports_its_exit.py`.
+`hosts/tests/test_worktree_sweep_cron_reports_its_exit.py`.
 
 Run: uv run pytest hosts/lib/tests/test_worktree_sweep_component.py
 """

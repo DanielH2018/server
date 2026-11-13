@@ -48,7 +48,7 @@ EXPECTED_MODULES = {
 ADDED_BY_5481 = {
     "scripts/tests/test_scripts_import_direction.py": "scripts/lib/repo_paths.py",
     "scripts/lib/tests/test_exit_codes.py": "scripts/deploy.sh",
-    "ansible/tests/setup/test_lander_deadlines_cover_the_soak.py": ".github/workflows/promote.yml",
+    "hosts/tests/test_lander_deadlines_cover_the_soak.py": ".github/workflows/promote.yml",
     "scripts/tests/test_prek_files_cover_entry_imports.py": "prek.toml",
     "ansible/tests/repo/test_tracked_python_hazards.py": "scripts/dev/tests/test_findings.py",
     "ansible/tests/k8s/test_checksum_annotations_documented.py": "ansible/roles/k8s/monitor-bridge/CLAUDE.md",

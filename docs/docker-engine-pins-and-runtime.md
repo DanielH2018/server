@@ -127,7 +127,7 @@ daniel-pi, 46% of the host's, each GC cycle faulting a swapped-out heap back fro
 readings behind `docker_engine_gomemlimit_<daemon>` in the component's defaults: live heap 11–14 MB
 each, 114 and 97 KB/s of allocation, 0.7 GC cycles a minute — above the two-minute forced-cycle
 floor, so the heap goal was the trigger. 64 MiB gives each daemon a cycle every 350–430 s, the
-cadence the Pi's Alloy runs at. `ansible/tests/setup/test_docker_daemons_gomemlimit_headroom.py`
+cadence the Pi's Alloy runs at. `hosts/tests/test_docker_daemons_gomemlimit_headroom.py`
 refuses a limit whose slack is under two minutes of allocation, which is what the issue's
 "live + 50%" recipe would have been on a heap this small.
 

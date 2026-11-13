@@ -26,7 +26,7 @@
 # groups prefix applied. The prefix is not cosmetic: it is what stops an Authelia group name
 # from ever colliding with a built-in `system:` group. The API server end of that pair is the
 # `claimMappings.groups` block of its authentication config, in roles/setup/k3s, whose
-# `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py` carries the test that the two
+# `hosts/tests/test_k3s_oidc_trusts_authelia.py` carries the test that the two
 # spellings agree. A mismatch is the same empty dashboard with no error, so the value here is
 # not a free choice.
 #

@@ -71,7 +71,7 @@ component and step 4 of `hosts/bootstrap-host.sh`, and deleted the tasks.
 - **The UFW LAN allow must sort above the SSH limit rule**, which is why the `ssh-firewall`
   component declares `lan-ssh` with `position: first` and `before: ssh-limit`: UFW takes the
   first matching rule, so an allow appended below the limiter is inert (#508).
-  `ansible/tests/setup/test_ssh_rate_limit_lan_exempt.py` pins the exemption and its ordering.
+  `hosts/tests/test_ssh_rate_limit_lan_exempt.py` pins the exemption and its ordering.
   The exemption exists because `limit` REJECTs a source at 6 connections in 30 seconds on a
   rolling window, counting SUCCESSFUL ones, so retries sustain the block — parallel Claude
   sessions over ssh crossed it twice. fail2ban's sshd jail is what answers a credential attack.
@@ -106,7 +106,7 @@ component and step 4 of `hosts/bootstrap-host.sh`, and deleted the tasks.
 
 Use `Origins-Pattern`, not `Allowed-Origins` — the legacy form is rewritten to `o=X,a=Y` and
 matches only a repo publishing a `Suite:` field, which the gh repo does not
-(`ansible/tests/setup/test_unattended_origins_pattern.py`). And use the `::` append syntax: a
+(`hosts/tests/test_unattended_origins_pattern.py`). And use the `::` append syntax: a
 `{ ... }` block reads as a replacement and drops the `-security` and ESM pockets. Verify both
 `apt-config dump` keys — `Allowed-Origins` must still list `-security`, `Origins-Pattern` the
 extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-only.
@@ -144,7 +144,7 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   `homelab-check-lib.sh`, as check `aide-check` or `rkhunter-check`. Its `DEADLINE_S` is
   626400s for AIDE and 612000s for rkhunter. The `host-checks` rule group reads the files with a
   `Failed` and a `NotReporting` rule per scan per host. A cron moved without its `DEADLINE_S` and
-  its rules fails `ansible/tests/setup/test_integrity_scan_rule_literals.py`.
+  its rules fails `hosts/tests/test_integrity_scan_rule_literals.py`.
 - **`aide-check.sh` runs one scan at a time.** It takes `/run/lock/aide-check.lock` with
   `flock -n`, and a run that finds the lock held reads DOWN without starting a second scan.
   The deadline counts from the last verdict, so a scan that never finishes stays silent
@@ -234,7 +234,7 @@ deadline.
 without `-f`, so a route Traefik refuses returns `404 page not found` with exit **0**.
 `hosts/components/loki-route-witness/loki_route_health.py` decides — valid JSON, `status: success`,
 non-empty `data` — and `hosts/lib/tests/test_loki_route_health.py` holds that 404 as a DOWN case.
-`ansible/tests/setup/test_loki_route_witness.py` guards the host list, the deadline against
+`hosts/tests/test_loki_route_witness.py` guards the host list, the deadline against
 the timer period, the exit-code contract (a down verdict exits 1), and that the script does not
 push to Kuma, which M6 batch B2's Cutover-2 removed. B2's token PR retired both tokens a week later.
 

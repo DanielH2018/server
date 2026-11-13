@@ -1,7 +1,7 @@
 """daniel-box's package carries Renovate, fake-remux and the GitHub checks (H7.37).
 
 The scripts' behaviour has its own tests, under each component's `tests/` and in
-`ansible/tests/setup/`. These hold what the move added: the units and timer slots the package
+`hosts/tests/`. These hold what the move added: the units and timer slots the package
 ships, the secret outputs, the Sonarr pin the package renders literally, the legacy entries, and
 the agent's setup script run against stubs.
 

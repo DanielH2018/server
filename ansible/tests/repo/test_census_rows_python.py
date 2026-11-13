@@ -295,7 +295,7 @@ ROWS = (
             "that must use PyYAML's own parser goes in `allow` with the reason. Role `files/` "
             "are out of scope: they cannot reach `scripts/lib` and run cluster-side."
         ),
-        files=lambda: tracked("scripts/*.py", "ansible/tests/*.py"),
+        files=lambda: tracked("scripts/*.py", "ansible/tests/*.py", "hosts/tests/*.py"),
         offence=_pyyaml_offence,
         red=(
             Subject("a.py", "import yaml\ndata = yaml.safe_load(text)\n"),
@@ -317,10 +317,10 @@ ROWS = (
             "scripts/diagnostics/probe_lib/health_docker.py": (
                 "one function-local call on a path that runs once"
             ),
-            "ansible/tests/setup/test_host_python_invocations.py": (
+            "hosts/tests/test_host_python_invocations.py": (
                 "one function-local call on a path that runs once"
             ),
-            "ansible/tests/setup/test_github_ruleset_drift.py": (
+            "hosts/tests/test_github_ruleset_drift.py": (
                 "one function-local call on a path that runs once"
             ),
         },
@@ -345,7 +345,7 @@ ROWS = (
             "and a guard globbing under it passes on nothing. Import REPO, ANSIBLE or a role "
             "tree from `_helpers` instead."
         ),
-        files=lambda: tracked("ansible/tests/*.py"),
+        files=lambda: tracked("ansible/tests/*.py", "hosts/tests/*.py"),
         offence=lines_matching(_ANCHOR),
         red=(
             Subject("a.py", "ROLE = Path(__file__).resolve().parents[2] / 'ansible'\n"),

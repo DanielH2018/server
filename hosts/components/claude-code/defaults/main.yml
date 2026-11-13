@@ -151,7 +151,7 @@ claude_code_fleet_swap_max: 2G
 # One plane's share of the fleet bound above, applied to claude-rc.service's own cgroup AND
 # to user-<uid>.slice's drop-in. Each must be <= the fleet bound: a sub-bound above its
 # parent's is a number that can never be reached. ENFORCED by
-# ansible/tests/setup/test_claude_fleet_slice_cap.py.
+# hosts/tests/test_claude_fleet_slice_cap.py.
 #
 # Every fan-out agent on this host
 # runs in the login plane, so this is the cap the fan-out dispatcher runs out of first, and
@@ -501,7 +501,7 @@ claude_code_triage_poll_storm_size: 3
 claude_code_fanout_server_lander_enabled: false
 claude_code_fanout_server_lander_interval: 10min
 # land.sh's policy for these landings (LAND_REQUIRE_*). autoland.py holds the same two values,
-# and ansible/tests/setup/test_claude_fanout_server_lander.py holds them equal.
+# and hosts/tests/test_claude_fanout_server_lander.py holds them equal.
 claude_code_fanout_server_lander_branch_prefix: worktree-fanout-
 claude_code_fanout_server_lander_author: DanielH2018
 

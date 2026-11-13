@@ -14,7 +14,7 @@ docs/target-architecture/monitoring/m3-textfile-timer.md). One period is the nor
 second covers one failed or skipped run, `slack_s` is the longest legitimate run, and the 300s
 covers the 1m `node` scrape and the 1m rule evaluation. `period` is an `<N>min` timespan. Any
 other shape fails the render rather than publish a guessed deadline.
-`ansible/tests/setup/test_claude_timer_rule_literals.py` pins each rule's literals to the render.
+`hosts/tests/test_claude_timer_rule_literals.py` pins each rule's literals to the render.
 -#}
 {% macro timer_textfile(check, period, slack_s=0) -%}
 {%- set _minutes = period | string | regex_replace('^([0-9]+)min$', '\\1') -%}

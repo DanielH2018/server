@@ -41,8 +41,9 @@ Verify a moved or new entry point by RUNNING it (`uv run python scripts/<dir>/<n
 
 `testpaths` in `pyproject.toml` names every suite. The shapes: repo-wide guards in
 `ansible/tests/`, a role's own logic under `ansible/roles/<plane>/<role>/tests/` (the code stays
-in `files/`, which the role ships), the Bash classifier in `.claude/hooks/tests/`, and
-`scripts/<dir>/tests/`. `ansible/tests/repo/test_testpaths_covers_every_test_file.py` enforces
+in `files/`, which the role ships), guards over the host packages and their components in
+`hosts/tests/`, the Bash classifier in `.claude/hooks/tests/`, and `scripts/<dir>/tests/`.
+`ansible/tests/repo/test_testpaths_covers_every_test_file.py` enforces
 it.
 
 A role test imports its own role's `files/` modules by bare name: `ansible/roles/conftest.py`
@@ -52,11 +53,11 @@ needs a basename no other role's `files/` or `pythonpath` root uses, because a f
 one session; the `no-two-import-roots-share-a-module-basename` row of
 `ansible/tests/repo/test_census_rows_python.py` enforces it.
 
-`ansible/tests/` is grouped by what a guard reads: `deploy/`, `k8s/`, `longhorn/`, `setup/`
-(the host packages and their components under `hosts/`), `staging/`, `services/` (one role
-each) and `repo/` (CI, docs and the suite's own guards). The
-shared modules (`_helpers.py`, `_k8s_render.py`, `_role_census.py`) and `conftest.py` stay at
-the root. A new guard keeps a unique basename, since pytest names modules by basename alone.
+`ansible/tests/` is grouped by what a guard reads: `deploy/`, `k8s/`, `longhorn/`, `staging/`,
+`services/` (one role each) and `repo/` (CI, docs and the suite's own guards). A guard over the
+host packages and their components under `hosts/` goes in `hosts/tests/`. The shared modules
+(`_helpers.py`, `_k8s_render.py`, `_role_census.py`) and `conftest.py` stay at the root of
+`ansible/tests/`, which `pythonpath` puts in reach of `hosts/tests/` too. A new guard keeps a unique basename, since pytest names modules by basename alone.
 
 **A one-selector, one-predicate check is a row, not a file.**
 - A property of the rendered k8s manifests goes in `ansible/tests/k8s/test_rendered_properties.py`,

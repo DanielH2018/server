@@ -3,7 +3,7 @@
 # its own PR, because `host-tuning` is shared and a file added there would reach every host at once.
 # A host with `has_rsyslog: false` never lists it: its rsyslog is masked, so the try-restart has
 # nothing to restart and forwarding reaches nothing.
-# ansible/tests/setup/test_journald_syslog_forwarding.py holds the listing to has_rsyslog.
+# hosts/tests/test_journald_syslog_forwarding.py holds the listing to has_rsyslog.
 #
 # Without the filter every info line on the host lands in /var/log/syslog, which Alloy ships to Loki
 # as {job="syslog"}: +7 MB/day/host against 1.33 MB/day with it. The name sorts before

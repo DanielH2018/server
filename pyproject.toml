@@ -64,6 +64,7 @@ testpaths = [                        # single source of truth for WHAT runs
   "scripts",                         # closes the smoke_extract CI gap
   "evals",                                         # homelab eval-case schema validation
   "hosts/lib/tests",                               # the scripts the host packages ship (H3)
+  "hosts/tests",                                   # guards over the host packages and components
   "hosts/components/*/tests",                      # a host component's own scripts, as for a role
 ]
 # `-n auto` (pytest-xdist) fans the suite across the machine's cores: 5.6s -> 3.0s locally, and

@@ -87,13 +87,13 @@ secondary mode, which `upsmon.conf(5)` documents for **primary** mode only. Henc
 before a planned stop. The end of the battery is a *different* trigger: `AT LOWBATT * EXECUTE
 lowbatt` raises FSD as soon as the UPS asserts LB (`battery.charge.low` 10,
 `battery.runtime.low` 120). Measured runtime 2026-08-28 was 987 s at 43 % load, so 300 leaves
-roughly 11 minutes for the poweroffs. `ansible/tests/setup/test_nut_host_secondary.py` asserts the
+roughly 11 minutes for the poweroffs. `hosts/tests/test_nut_host_secondary.py` asserts the
 delay stays inside that band while a host beyond `ups_host` is armed.
 
 **Pinned ClusterIP.** The Service pins `spec.clusterIP` (H7.33), because daniel-box's package
 renders the address literally into `upsmon.conf`. A Service recreate keeps the address. The
 package's copy is `nut_host_upsd_clusterip` in `hosts/components/nut-secondary/component.yml`,
-and `ansible/tests/setup/test_nut_host_secondary.py` pins the two together.
+and `hosts/tests/test_nut_host_secondary.py` pins the two together.
 
 **Manual shutdown drill** (actually powers BOTH nodes off now that daniel-box is armed — have
 console access to each): `kubectl -n homelab exec deploy/nut -- upsmon -c fsd` → host poweroff

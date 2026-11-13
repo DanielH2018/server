@@ -344,7 +344,7 @@ If Docker *is* present, stop — someone installed it since, and the risk assess
 >
 > Docker was purged the same day and the precondition is now **enforced rather than assumed**:
 > `docker_install` carries `when: has_docker`, which `host_vars/daniel-box.yml` sets false.
-> See the handoff doc §1a and `ansible/tests/setup/test_k3s_host_has_no_docker.py`.
+> See the handoff doc §1a and `hosts/tests/test_k3s_host_has_no_docker.py`.
 
 - [ ] **Step 2: Install k3s**
 

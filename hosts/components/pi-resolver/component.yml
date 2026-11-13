@@ -6,7 +6,7 @@
 #   ORDER is the whole failover mechanism: Pi-hole first, a public resolver behind it, and
 #   `rotate` stays unset. This is the break-glass host, and its wg-easy tunnel is the documented
 #   way in when the cluster's own is unreachable, so it must never depend on the cluster for DNS.
-#   ansible/tests/setup/test_node_resolv_order.py holds the order.
+#   hosts/tests/test_node_resolv_order.py holds the order.
 # - The `127.0.1.1 <hostname>` line in /etc/hosts. sudo resolves the local hostname on every
 #   invocation and this file is the first hop; without the line each sudo on the Pi waits on
 #   the resolver, which is the cluster's Pi-hole VIP, exactly when an operator needs this host.

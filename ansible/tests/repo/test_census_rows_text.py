@@ -108,7 +108,9 @@ INLINE_REFLAG_LIST = re.compile(r"Honor accepted designs \(don't re-flag\):")
 
 def _namespace_dir_files() -> list[str]:
     # A role ships its Python from `files/`; only its `tests/` is a namespace directory.
-    return tracked("scripts/*", "ansible/tests/*", "ansible/roles/*/*/tests/*")
+    return tracked(
+        "scripts/*", "ansible/tests/*", "hosts/tests/*", "ansible/roles/*/*/tests/*"
+    )
 
 
 def _compiled_offence(subject: Subject) -> list[str]:

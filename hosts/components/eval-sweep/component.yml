@@ -22,7 +22,7 @@
 #   detail* has the REGRESSED-case commit rule and why there is no non-hermetic fallback.
 #
 # ENFORCED: hosts/lib/tests/test_eval_sweep_component.py, and the tests in
-# ansible/tests/setup/test_eval_sweep_cron.py and test_eval_run_failure_path.py, which read the
+# hosts/tests/test_eval_sweep_cron.py and test_eval_run_failure_path.py, which read the
 # rendered script.
 credentials:
   - anthropic_api_key

@@ -143,7 +143,7 @@ TAG=etcd-restore-drill-vm
 # fence's under its own, because the syslog tag is shared and a check file takes one verdict.
 # DEADLINE_S is the longest legitimate gap between two writes, which is the monthly cadence plus
 # slack (etcd_drill_full_kuma_interval_s, named for the Kuma tile that carried it until M6 batch
-# B4). ansible/tests/setup/test_b4_rule_literals.py pins the rules' literals to this value.
+# B4). hosts/tests/test_b4_rule_literals.py pins the rules' literals to this value.
 CHECK_DRILL=etcd-restore-drill-vm
 CHECK_FENCE=etcd-restore-drill-egress-fence
 DEADLINE_S={{ etcd_drill_full_kuma_interval_s }}

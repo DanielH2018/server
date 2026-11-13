@@ -38,7 +38,7 @@ source {{ integrity_scans_host_lib_dir }}/homelab-check-lib.sh || {
 # 02:00, hosts/components/integrity-scans/units/homelab-rkhunter-check.timer), 604800s, and the
 # extra 2h is the slack for a run that takes far longer than the last. The deleted Uptime Kuma
 # tile kept the same 612000. Move it with the timer (#6168).
-# ansible/tests/setup/test_integrity_scan_rule_literals.py pins the rules' literals to it.
+# hosts/tests/test_integrity_scan_rule_literals.py pins the rules' literals to it.
 DEADLINE_S=612000
 
 # rkhunter's LOGFILE default in /etc/rkhunter.conf. rkhunter truncates and rewrites it on every

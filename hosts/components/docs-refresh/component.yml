@@ -31,7 +31,7 @@
 #   detail* has why, the `PUSH_STATUS` default and the `vale` exception.
 #
 # ENFORCED: hosts/lib/tests/test_docs_refresh_component.py, and the failure-path tests in
-# ansible/tests/setup/test_docs_refresh_*.py, which read the rendered script.
+# hosts/tests/test_docs_refresh_*.py, which read the rendered script.
 files:
   - {src: templates/docs-refresh.sh.j2, dst: /usr/lib/homelab/docs-refresh, mode: "0755"}
   - {src: tmpfiles.d/homelab-docs-site.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-docs-site.conf}

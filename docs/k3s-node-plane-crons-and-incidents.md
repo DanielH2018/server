@@ -161,8 +161,8 @@ stanza. It truncates because systemd holds the fd and a rename would leave the u
 writing to the rotated inode. A drop-in rather than the unit because `k3s-install.sh` rewrites the
 unit file wholesale. Raising the unit's `SyslogLevel` to notice was the alternative and was
 rejected: notice passes the rsyslog info filter, so every k3s line would land in `/var/log/syslog`
-and ship to Loki. `ansible/tests/setup/test_k3s_server_component.py` and
-`ansible/tests/setup/test_k3s_agent_component.py` hold the two drop-ins.
+and ship to Loki. `hosts/tests/test_k3s_server_component.py` and
+`hosts/tests/test_k3s_agent_component.py` hold the two drop-ins.
 
 The file's warn, error and fatal lines still reach Loki, filtered, as `loki-homelab`'s
 `{job="k3s"}` stream (#6177), so a crash loop's reason outlives the file's four rotations.

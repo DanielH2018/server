@@ -429,7 +429,7 @@ Three literals survive and are correct where they are, so don't "finish" them:
   blocker, and it was not a pin problem: the Job proves a SECOND node's containerd reaches the
   registry, so on one node it is unschedulable and the role's `kubectl wait` stalls for its full
   180s timeout. It now renders only when `k3s_agent_node_ips` is non-empty, and the wait task
-  gates on the same variable. ENFORCED by `ansible/tests/setup/test_registry_selftest_single_node.py`.
+  gates on the same variable. ENFORCED by `hosts/tests/test_registry_selftest_single_node.py`.
 
 **Decision 4 was the remaining gate on the first staging service, and it landed on 2026-08-28.**
 It was unimplemented as this spec was first written: `roles/k8s/traefik` templated a
@@ -531,7 +531,7 @@ Answering that means auditing the role, not patching the task.
 git-hooks gate alone is not sufficient.** All nine task files under
 `roles/setup/initial_setup/tasks/` were read, plus the two `setup/common` fragments `crons.yml`
 imports. The hand audit below found two hits; a machine census
-(`ansible/tests/setup/test_repo_checkout_gate.py`, added 2026-09-02) found **six**, because
+(`hosts/tests/test_repo_checkout_gate.py`, added 2026-09-02) found **six**, because
 grepping a task cannot tell which SIDE reads the path. `template.src` and `copy.src` are read on
 the controller and shipped as content, so they are not hits however they are written; `chdir`,
 `cron.job`, `command.argv` and `copy.dest` resolve on the target and are. Classifying by module

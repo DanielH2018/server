@@ -47,7 +47,7 @@
 # Type=notify with TimeoutStartSec=0, so `systemctl restart k3s` hangs indefinitely rather
 # than failing — the same hang the component's node-ip note describes. The validation is
 # stricter than it looks; `prefix` alone has two rules the flag path did not have (see the
-# template). `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py` renders and shape-checks
+# template). `hosts/tests/test_k3s_oidc_trusts_authelia.py` renders and shape-checks
 # the component's template for that reason. Read `/var/log/k3s.log` (not `journalctl -u k3s`, which keeps none of
 # k3s's own lines, see the k3s-server component's 50-homelab.conf) before walking away.
 #
@@ -146,7 +146,7 @@ k3s_node_wifi_link: ""
 #   10250/tcp both directions   kubelet API (logs/exec/metrics-server)
 #   9100/tcp  both directions   node-exporter scrape (see the two rules below)
 # The two lists below are mirrors apart from 6443, which is server-only because agents dial the
-# API and the server never dials theirs. ansible/tests/setup/test_k3s_join_port_symmetry.py enforces
+# API and the server never dials theirs. hosts/tests/test_k3s_join_port_symmetry.py enforces
 # that.
 #
 # NOT a complete inventory of what this cluster needs open. A port missing from BOTH lists is

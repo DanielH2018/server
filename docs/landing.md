@@ -523,7 +523,7 @@ Instead it reads the cluster every 30 seconds:
   A branch update starts that chain again and gives the wait one more budget, so the
   deadline counts two merge budgets. It and every bound above it rose by 8340s, to 41460
   (#7129).
-  `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` renders the published bundle
+  `hosts/tests/test_lander_deadlines_cover_the_soak.py` renders the published bundle
   and fails once a newly published tag outgrows that headroom (#5427).
   Inside the no-promotion window around the weekly reboot, `decide` defers every promotion (D5.2b2),
   so a landing that merges as the window opens waits up to 22200 seconds before any

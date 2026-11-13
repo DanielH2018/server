@@ -838,7 +838,7 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
     - Tests in `scripts/secrets_mgmt/tests/`: a rotated cluster key reaches the `write`
       call, a host-only key does not, and an absent cluster file makes the hook a no-op. A
       failing `write` and a failing `check` each make `rotate` return non-zero without
-      calling the deploy. A test in `ansible/tests/setup/` holds the rendered `TRACKED` to
+      calling the deploy. A test in `hosts/tests/` holds the rendered `TRACKED` to
       the three paths behind the existence check.
     - **Landing.** The template is a setup-plane change, which the deployer applies. The
       `land.sh` verdict must show the `initial_setup` apply settled before D3.2c merges.
@@ -1271,7 +1271,7 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
   allowlisted path's guards and the `.source` scope. `prek.toml` gains the
   `cluster-vars-ciphertext` hook, and `prek.toml` and `.ansible-lint` each gain the
   exclusion with its reason.
-- D3.2b: tests in `scripts/secrets_mgmt/tests/` and `ansible/tests/setup/`.
+- D3.2b: tests in `scripts/secrets_mgmt/tests/` and `hosts/tests/`.
   `secret-rotate.sh.j2`'s header comment and its PR body, which says the diff is the secrets
   file and the registry, name the three cluster paths. A search of
   `docs/host-baseline-record.md`, `docs/secret-rotation.md` and the `initial_setup` role's

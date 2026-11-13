@@ -12,7 +12,7 @@
 # The list holds the release's regular updates pocket by operator ruling ("widen it", 2026-11-07),
 # so no Ubuntu update waits for a hand run. Docker's origin stays out, and the engine packages are
 # held besides (#1961). The homelab origin stays out, because the updater is the one path that
-# moves those packages. ansible/tests/setup/test_unattended_origins_pattern.py holds both origins
+# moves those packages. hosts/tests/test_unattended_origins_pattern.py holds both origins
 # against each host's rendered drop-in. A package with an edited conffile upgrades only where the
 # `host-hardening` component sets `--force-confold`, so a host waits for that component's row.
 #

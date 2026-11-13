@@ -4,7 +4,7 @@ The `uv` and `vale` components put the homelab-tools binaries on PATH, and the /
 copy of Vale that sits ahead of its binary is retired on this host, as is a stray
 /usr/local/bin/prek the dotfiles repo's prek replaces. The worktree holder scan's half
 of the row is
-`ansible/tests/setup/test_worktree_holders_install.py`.
+`hosts/tests/test_worktree_holders_install.py`.
 
 Run: uv run pytest hosts/lib/tests/test_server_dev_tooling.py
 """

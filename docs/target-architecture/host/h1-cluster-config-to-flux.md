@@ -342,7 +342,7 @@ The exit criterion has two parts:
     - `tasks/coredns.yml` writes a `coredns.yaml.skip` marker and patches the Corefile.
     - It sets the Deployment image from `manifests/coredns.yaml`, which k3s stages on the
       host at start.
-    - `ansible/tests/setup/test_coredns_image_follows_bundled_manifest.py` pins that
+    - `hosts/tests/test_coredns_image_follows_bundled_manifest.py` pins that
       extraction against an excerpt of v1.37.1+k3s1's manifest. Its comment says the
       excerpt has `%{SYSTEM_DEFAULT_REGISTRY}%` "already substituted to the empty string".
     - k3s's source file is not YAML until k3s substitutes it. At `v1.37.1+k3s1`,
@@ -2452,7 +2452,7 @@ subject's tests.
           that names `Verify cluster DNS resolves through the configured upstream` loses
           that name, because H1.4 deletes the probe and `probe.py health coredns` takes
           over its check (*CoreDNS without a host read*).
-        - `ansible/tests/setup/test_k3s_stage_gates.py:test_the_coredns_probe_name_defaults_to_a_real_name`
+        - `hosts/tests/test_k3s_stage_gates.py:test_the_coredns_probe_name_defaults_to_a_real_name`
           guards the probe's name variable. It goes with the probe, and so does the
           variable `k3s_coredns_probe_name` unless the per-key census finds another reader.
     - *H1.5a.* `ansible/tests/longhorn/test_longhorn_control_plane_resources.py` loads
@@ -2561,7 +2561,7 @@ subject's tests.
   the set of task-made facts `k3s_coredns_bundled_image`, `k3s_coredns_corefile` and
   `k3s_longhorn_b2_region`. H1.4 deletes the first two set_facts, and H1.7b deletes the third.
 - **H1.4:**
-    - `ansible/tests/setup/test_coredns_image_follows_bundled_manifest.py`;
+    - `hosts/tests/test_coredns_image_follows_bundled_manifest.py`;
     - `ansible/tests/k8s/test_pod_template_hygiene.py:_SYSTEM_TIER`, which gains the CoreDNS
       row, and `ansible/tests/k8s/test_container_security_context.py:_ROOT_ALLOWED` if the
       image runs as root;

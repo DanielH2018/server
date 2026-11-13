@@ -40,7 +40,7 @@
 # borrowed whole. Sessions and landings run on this node too, and without it every cluster read
 # here fails. The token cannot read Secrets, and this node already holds the join token.
 #
-# ENFORCED: ansible/tests/setup/test_k3s_agent_component.py.
+# ENFORCED: hosts/tests/test_k3s_agent_component.py.
 component: k3s-server
 depends:
   - open-iscsi
@@ -60,7 +60,7 @@ defaults:
   # /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, and 50-homelab.conf runs a bare `k3s agent`.
   # Each key is a flag name without `--`; a repeatable flag is a list. A change goes live at the
   # agent's next start, because daniel-server's package lists no `k3s-restart`.
-  # ENFORCED: ansible/tests/setup/test_k3s_agent_flags_migration.py.
+  # ENFORCED: hosts/tests/test_k3s_agent_flags_migration.py.
   k3s_agent_config:
     node-ip: "{{ server_ip }}"
     # INERT: Longhorn honors this label only when the cluster-level
