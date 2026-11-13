@@ -149,8 +149,8 @@ def dirty_primary_lines(porcelain, path):
     if len(entries) > PRIMARY_DIRTY_LIMIT:
         shown += f", +{len(entries) - PRIMARY_DIRTY_LIMIT} more"
     return [
-        f"  ✗ primary checkout {path} is dirty — the GitOps tick skips every run while it is, "
-        f"so nothing deploys and land.sh fails with exit 4 naming YOUR tree: {shown}"
+        f"  ✗ primary checkout {path} is dirty — homelab-checkout-sync refuses every run while it "
+        f"is, so the checkout stops following origin/master: {shown}"
     ]
 
 

@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Tests for the SessionStart hook's dirty-primary warning.
 
-A single stray file in the primary checkout `/home/ubuntu/server` makes `gitops_deploy` skip
-every tick, so nothing deploys and every session's `land.sh` fails with `deploy.sh` exit 4
-naming its OWN worktree. The isolation guard refuses a git command targeting the shared
-checkout, so the sessions that hit the failure structurally cannot inspect its cause. This
-banner is the only place that cause reaches them.
+A single stray file in the primary checkout `/home/ubuntu/server` makes `homelab-checkout-sync`
+refuse every run, so the checkout stops following origin/master. The isolation guard refuses a
+git command targeting the shared checkout, so the sessions that hit the failure structurally
+cannot inspect its cause. This banner is the only place that cause reaches them.
 
 Every test drives `dirty_primary_problems` through its injected seams rather than
 patching the module, because the monkeypatch ratchet (`ansible/tests/_ratchet.py`) caps a new
@@ -45,8 +44,10 @@ def test_dirty_primary_checkout_is_flagged():
     assert len(lines) == 1
     assert "/home/ubuntu/server" in lines[0]
     assert "ansible/tests/services/test_traefik_edge_selfcheck.py" in lines[0]
-    # The consequence, not just the state: exit 4 names the reader's own tree.
-    assert "exit 4" in lines[0]
+    # The consequence, not just the state: the job the dirty tree parks.
+    assert "homelab-checkout-sync" in lines[0]
+    assert "land.sh" not in lines[0]
+    assert "GitOps tick" not in lines[0]
 
 
 def test_clean_primary_checkout_is_not_flagged():

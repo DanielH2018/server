@@ -14,8 +14,8 @@ The rule denies `probe.py health` and `probe.py takeover` when the probe's check
 differs from `origin/master` in a file that `origin/master` changed since the merge base,
 under `ansible/` or `scripts/`. Three cases stay clean:
 
-- The primary checkout, the remedy #5912 names. The GitOps tick fast-forwards it, so it lags
-  `origin/master` by at most one tick, and inside that window `stale_checkout_reason` still
+- The primary checkout, the remedy #5912 names. `homelab-checkout-sync` fast-forwards it, so
+  it lags `origin/master` by at most one run, and inside that window `stale_checkout_reason` still
   refuses a stale role.
 - A worktree whose branch already holds master's change. After a squash merge the branch
   lacks the squash commit but carries the same files, so a commit count alone would refuse it.
