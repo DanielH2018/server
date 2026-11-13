@@ -167,6 +167,9 @@ def await_ci_verdict(
     An anonymous wait polls every 90s, not 20s, and walks no descendants
     (`await_ci.ANONYMOUS_INTERVAL_S`, #6148). A zero budget is one poll that never sleeps or
     reaches the dropped-push grace, so the merge loop's per-poll call skips the lookup.
+
+    Raises:
+        await_ci.RateLimitedError: under a zero budget, GitHub refused the read for its rate.
     """
     authenticated = bool(token()) if timeout_s else True
     interval = await_ci.poll_interval(20, authenticated, timeout_s)
