@@ -1,6 +1,6 @@
-"""rootq's answers for k8s_host_files' rows under the k3s manifests tree (#6988).
+"""rootq's answers for the registry-gc component's rows under the k3s manifests tree (#6988).
 
-`probe.py applied k8s_host_files` read these rows UNCHECKED, because the whole tree is on the
+rootq once answered these rows UNCHECKED, because the whole tree is on the
 deny list. The tree stays denied, since it holds every staged role's secret.yaml, so PATHS
 names each row exactly and stat alone answers it. tests/test_rootq.py's rig roots paths under
 the home, where the anchored `/etc/rancher/k3s/*` pattern cannot match, so these run with no

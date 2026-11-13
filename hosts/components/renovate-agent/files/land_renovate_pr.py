@@ -62,7 +62,7 @@ DENYLIST_ARGV = (
 RESULTS_DIR = "/var/lib/renovate-agent-land"
 # gh returns at most 100 changed files, so a PR at the cap may hide a denied path past it.
 FILE_CAP = 100
-# land.sh waits on the PR's CI, the merge, master CI, the tick, the deploy and the health gate.
+# land.sh waits on the PR's CI, the merge, master CI, the promotion and the health gate.
 # The unit's TimeoutStartSec sits above this plus its flock wait, so the script reports a
 # timeout before systemd kills it mid-deploy.
 # LAND_DEADLINE's 41460 plus the 22200 LAND_WINDOW_GRACE the reboot window may add (#5457).

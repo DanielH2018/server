@@ -74,7 +74,8 @@ spec:
             # it, so any TTL deletes a cached image one TTL after its first fetch while a pod
             # still runs it. A zero TTL never expires anything (proxyregistry.go starts no
             # scheduler), so the store is bounded instead by registry-gc.sh's offline prune of
-            # what no workload names (setup/k8s_host_files, dockerhub-mirror-gc-job.yaml.j2).
+            # what no workload names (the registry-gc host component,
+            # dockerhub-mirror-gc-job.yaml.j2).
             - name: REGISTRY_PROXY_TTL
               value: "0s"
           volumeMounts:

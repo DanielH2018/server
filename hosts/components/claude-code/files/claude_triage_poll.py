@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Find monitors that just went down and start one triage run per episode, as the agent user.
 
-`claude-triage-poll.timer` runs this every two minutes. It reads the firing `ALERTS` vector,
-the Alertmanager path, and Prometheus's own start time. It keeps per-key state in
+`claude-triage-poll.timer` runs this every two minutes. It reads two Prometheus vectors, the firing
+`ALERTS` and Prometheus's own start time. It keeps per-key state in
 `<STATE_DIR>/poll-state.json` and opens an episode only on an up→down transition that has held
 for `POLL_STREAK` polls. A key that stays down keeps one episode until it recovers.
 
@@ -364,7 +364,7 @@ def main(
     """One poll; `read`, `start` and `now` are the seams a test replaces."""
     argparse.ArgumentParser(
         prog="claude_triage_poll.py",
-        description="Poll Alertmanager once and start triage for new episodes.",
+        description="Poll Prometheus's ALERTS once and start triage for new episodes.",
     ).parse_args(argv[1:])
     cfg = parse_env_file(config_path)
     mode = cfg.get("POLL_MODE", "off")

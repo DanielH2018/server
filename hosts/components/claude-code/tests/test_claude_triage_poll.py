@@ -428,7 +428,7 @@ def test_the_poller_answers_help(capsys) -> None:
     with pytest.raises(SystemExit) as exit_:
         poll.main(["claude_triage_poll.py", "--help"], "/nonexistent")
     assert exit_.value.code == 0
-    assert "Poll Alertmanager" in capsys.readouterr().out
+    assert "Poll Prometheus's ALERTS" in capsys.readouterr().out
 
 
 def test_a_failed_prometheus_read_is_logged_with_its_url_at_warning(

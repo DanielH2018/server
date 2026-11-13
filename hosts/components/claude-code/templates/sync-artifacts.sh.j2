@@ -55,7 +55,8 @@ report=""
 # rather than just declining the tunnel (#2467).
 # --chmod=D0750 sets every directory's mode here instead of copying the peer's. With the
 # trailing slash, -a would put the peer root's mode on the top directory every run, and
-# k8s_host_files' "Ensure a peer directory exists" task sets it back to 0750 on every apply.
+# homelab-artifacts.conf's `d` line, which this unit's ExecStartPre= applies, sets it back to
+# 0750 on every run.
 # Keep the two modes equal (#5524).
 {% if peer.stars_path | default('') %}
 # The star list goes back over the same transport, after the pull, and a failed push counts
