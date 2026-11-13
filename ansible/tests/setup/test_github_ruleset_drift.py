@@ -396,7 +396,7 @@ RESTRICTION_DRIFT = {
                 "ref_name": {"include": ["~ALL"], "exclude": ["refs/tags/v*"]}
             }
         },
-        "!refs/tags/v*], declared [~ALL]",
+        "covers [!refs/tags/v* ~ALL], declared [~ALL]",
     ),
     "updates no longer restricted on main": (
         DOTFILES_MAIN,
