@@ -12,12 +12,6 @@
 # here so that no workflow carries its own copy of the token header; the `workflows-fetch-
 # through-the-shared-script` row of tests/repo/test_census_rows_text.py checks that.
 #
-# One caller reads only `changed.txt`. ci.yml's `pytest` job hands it to the shard-weight gate
-# as `--changed-files`, which fails a PR only for a test module the PR's diff changes (#5480).
-# It ignores the full-sweep verdict on purpose: a deletion changes which files a hook checks,
-# not which weights the PR's author can re-record. That job also writes the weight table at
-# the merge base itself, so the gate can tell a retired module's dropped row from a new one.
-#
 # Inputs, from the environment:
 #   BASE_REF          the PR's base branch (github.base_ref)
 #   FETCH_TOKEN       a contents:read token (github.token)

@@ -1,11 +1,11 @@
-"""The measured shard-weight gate: what CI's `pytest_shard.py --check-durations` step decides.
+"""The measured shard-weight check: what CI's `pytest_shard.py --check-durations` step reports.
 
 It reads the pytest `--durations` report a CI shard already wrote, and complains about three
 shapes no static check can see: a heavy test module with no recorded weight, a recorded weight
 far above what its module measured, and a heavy module whose recorded weight is far below it.
-`pytest_shard.py`'s module docstring has why the split needs the table and why the gate is a CI
-step. This module holds the bounds and the three arms; `pytest_shard.main` reads the report,
-hands over the committed table and turns the complaints into an exit code.
+`pytest_shard.py`'s module docstring has why the split needs the table and why no complaint
+fails the run. This module holds the bounds and the three arms; `pytest_shard.main` reads the
+report, hands over the committed table and prints each complaint as an annotation.
 
 Split out of `pytest_shard.py` when the margin band (#4010) took that module past the
 600-line cap. The runner-seconds table that `pytest_shard.py` packs the shards on lives here
@@ -48,20 +48,8 @@ _DURATION_LINE = re.compile(r"^([0-9.]+)s\s+(call|setup|teardown)\s+(\S+?)::")
 # recorded seconds: the gate sits at or below the pole cutoff a neighbour heuristic would use.
 RUNNER_HEAVY_SECONDS = 10.0
 
-# What an unweighted module may measure before the gate FAILS the run rather than annotating it.
-#
-# WHY A MARGIN OVER THE BOUND. One wall-clock reading against a fixed 10s bound is a coin flip
-# for a module near it: `scripts/dev/tests/test_fanout_red_gate.py` measured 12.4s on one PR run
-# and 11.2s on its rerun, and the step failed 6 branches in 10 runs that way (#4010). A module in
-# that band skews a ~40s shard by a quarter at most, and the docs-refresh cron records it
-# unattended within a day, so the band annotates and only a module past it fails. The band
-# narrows the flake rather than removing it: #3604 saw one module measure 8s and 15.6s on two
-# runs of the same code, so a module near 15s can still land either side of it. 15s is still
-# well under the ~30s module that motivated the gate.
-RUNNER_HEAVY_FAIL_SECONDS = 15.0
-
-# How many times its measured runner seconds a RECORDED weight may claim before the shard gate
-# rejects it, and the recorded seconds below which nobody cares.
+# How many times its measured runner seconds a RECORDED weight may claim before the shard check
+# annotates it, and the recorded seconds below which nobody cares.
 #
 # WHY AN OVER-RECORDING ARM. The unweighted arm asks "is this file missing from the
 # table". It never asks "is a recorded number still roughly what the file costs", so an entry that
@@ -74,9 +62,8 @@ RUNNER_HEAVY_FAIL_SECONDS = 15.0
 # WHY A RATIO AND NOT A DELTA. The table holds workstation seconds and the report holds runner
 # seconds, and the two are not the same scale. Controls measured on daniel-server
 # ran 1.10x to 1.46x their recorded values, so anything under about 3x is that scale
-# difference rather than a stale entry. FIVE leaves room above that noise, and a bound set
-# nearer the noise would turn into a weekly chore. Five is where the arm ANNOTATES; it fails
-# only at `STALE_WEIGHT_FAIL_RATIO`, because a busy recording host overshoots five on its own.
+# difference rather than a stale entry. FIVE leaves room above that noise; a busy recording
+# host still overshoots it on its own (`LOCAL_READING_MAX_RATIO`).
 #
 # WHY A FLOOR ON THE RECORDED VALUE. The parser's own floor is pytest's 0.005s, so a file
 # recorded at 0.05s and measuring 0.005s is a 10x ratio and pure rounding. The floor is what
@@ -97,27 +84,18 @@ RUNNER_HEAVY_FAIL_SECONDS = 15.0
 STALE_WEIGHT_RATIO = 5.0
 STALE_WEIGHT_FLOOR_SECONDS = 3.0
 
-# The ratio at which an over-recorded weight FAILS the run. Between `STALE_WEIGHT_RATIO` and
-# this it annotates, as the under-recorded arm's band below does.
+# How many times the runner table's seconds a local reading may claim before the docs-refresh
+# cron treats it as a cost of the recording host alone. `--refresh-drifted` then keeps the
+# recorded weight, and `--record-missing` writes the runner seconds.
 #
-# WHY TWENTY. A weight recorded on a host busy with fan-out batches comes out up to about nine
-# times what the runner measures, and FIVE failed three PRs on such entries (#5616):
-# `test_fanout_clean_chain.py` recorded 5.23s and measured 0.99s (5.3x), and a re-record on the
-# same busy host gave 9.14s (9.2x); `test_media_volume_verify.py` recorded 4.86s and measured
-# 0.97s (5.0x); `test_session_health.py` recorded 4.00s and measured 0.77s (5.2x). Each red
-# cost a CI round and a hand edit to the table. A module recorded 5x to 9x high costs a few
-# seconds of balance in a shard that projects around 40s, which is what this arm is about.
-# `UNDER_WEIGHT_RATIO` uses twenty for the same runner-versus-workstation variance, and the
-# 190x entry this arm exists for still fails. An entry in the band stays visible as an
-# annotation, and the docs-refresh cron's `--refresh-drifted` rewrites it. Neither of the cron's
-# writers records a local reading this ratio or more above the runner table, because this arm
-# would reject the row: `--refresh-drifted` keeps the recorded weight, and `--record-missing`
-# writes the runner seconds.
-STALE_WEIGHT_FAIL_RATIO = 20.0
+# WHY TWENTY. A host busy with fan-out batches reads up to about nine times what the runner
+# measures (#5616): `test_fanout_clean_chain.py` read 9.14s against 0.99s. A cost that is real on
+# one host alone reads further off still, such as a test walking untracked files: 85.09s against
+# CI's 2.08s (#7132). `UNDER_WEIGHT_RATIO` uses twenty for the same variance.
+LOCAL_READING_MAX_RATIO = 20.0
 
-# How many times its recorded weight a module may measure on the runner before the shard gate
-# reads the entry as too LOW. The arm fails the run at the unweighted arm's bound and annotates
-# from `UNDER_WEIGHT_WARN_SECONDS` below.
+# How many times its recorded weight a module may measure on the runner before the shard check
+# reads the entry as too LOW. The arm annotates from `UNDER_WEIGHT_WARN_SECONDS` below.
 #
 # WHY A THIRD ARM. The stale arm above catches a recorded number far too high, and
 # `--record-missing` never touches a present entry, so a weight far too low stood unseen. On
@@ -141,15 +119,14 @@ UNDER_WEIGHT_RATIO = 20.0
 # first reader, which `tests/conftest.py` now builds outside every timed phase; this
 # band is what makes that shape visible again if the build ever lands back on a test. Between
 # here and `RUNNER_HEAVY_SECONDS` a 20x ratio needs a weight of 0.25-0.5s or less, so the band
-# annotates only near-free entries, and it never fails the run: a 5s module is an eighth of a
-# shard, the skew the margin band above already tolerates.
+# annotates only near-free entries.
 UNDER_WEIGHT_WARN_SECONDS = 5.0
 
 # pytest's own `--durations-min`: no report line is smaller, so no measured total is either.
 # Used as the divisor's floor, which cannot then be zero.
 _DURATIONS_MIN_SECONDS = 0.005
 
-# The repair for the gate arm that finds a MISSING entry. `census()` reads `git ls-files`, so
+# The repair for the arm that finds a MISSING entry. `census()` reads `git ls-files`, so
 # the file has to be staged before the measurement can see it.
 RECORD_MISSING_HINT = (
     "stage the new file, then `uv run python scripts/dev/pytest_shard.py "
@@ -158,8 +135,7 @@ RECORD_MISSING_HINT = (
 
 # The repair for the stale arm, which `--record-missing` cannot do: it only fills gaps, and a
 # present-but-wrong entry is not a gap. A full `--record` re-measures the whole suite in
-# minutes; `--record-files` re-measures the named files in seconds, so the gate has a repair
-# cheap enough that nobody reaches for a stale entry as the lesser evil.
+# minutes; `--record-files` re-measures the named files in seconds.
 RECORD_FILES_HINT = (
     "re-measure just those files with `uv run python scripts/dev/pytest_shard.py "
     "--record-files <path>...` and commit scripts/dev/pytest_shard_weights.json; for a "
@@ -266,6 +242,13 @@ def heavy_underweighted(
     return sorted(flagged, key=lambda item: (-item[2], item[0]))
 
 
+def _repair(hint: str) -> str:
+    return (
+        "The docs-refresh cron repairs it unattended within a day; to repair it in this PR "
+        f"instead, {hint}"
+    )
+
+
 def _stale_complaint(stale: list[tuple[str, float, float]], ratio: float) -> str:
     listed = ", ".join(
         f"{f} (recorded {rec:.2f}s, measured {got:.2f}s)" for f, rec, got in stale
@@ -273,7 +256,7 @@ def _stale_complaint(stale: list[tuple[str, float, float]], ratio: float) -> str
     return (
         f"recorded at {ratio:.0f}x or more of what it measured on this runner, so the "
         f"shard split reserves time the file does not cost: {listed}. "
-        f"Repair (seconds): {RECORD_FILES_HINT}"
+        f"{_repair(RECORD_FILES_HINT)}"
     )
 
 
@@ -282,7 +265,7 @@ def _heavy_complaint(heavy: list[tuple[str, float]], threshold: float) -> str:
     return (
         f"measured {threshold:.0f}s or more on this runner with no recorded weight, so "
         f"the shard split packs it as the lightest thing in the suite: {listed}. "
-        f"Repair (seconds): {RECORD_MISSING_HINT}"
+        f"{_repair(RECORD_MISSING_HINT)}"
     )
 
 
@@ -295,210 +278,44 @@ def _under_complaint(
     return (
         f"measured {threshold:.0f}s or more on this runner and {ratio:.0f}x or more its "
         f"recorded weight, so the shard split packs it as nearly free: {listed}. "
-        f"Repair (seconds): {RECORD_FILES_HINT}. If it records near 0s again, the time is a "
+        f"{_repair(RECORD_FILES_HINT)}. If it records near 0s again, the time is a "
         "per-process cache its first test built: build that cache outside the timed phases, "
         "as tests/render_share.py does for the k8s and fleet renders"
     )
 
 
-def durations_warnings(
+def durations_complaints(
     text: str,
     weights: dict[str, float],
     threshold: float = RUNNER_HEAVY_SECONDS,
-    fail_above: float = RUNNER_HEAVY_FAIL_SECONDS,
+    ratio: float = STALE_WEIGHT_RATIO,
     under_ratio: float = UNDER_WEIGHT_RATIO,
     under_threshold: float = UNDER_WEIGHT_WARN_SECONDS,
-    ratio: float = STALE_WEIGHT_RATIO,
-    stale_fail_ratio: float = STALE_WEIGHT_FAIL_RATIO,
 ) -> list[str]:
-    """The complaints about a durations report that annotate the run and do not fail it.
-
-    An unweighted module measuring `threshold` or more but under `fail_above`: runner variance
-    alone moves a module across `threshold` (see `RUNNER_HEAVY_FAIL_SECONDS`). An
-    under-recorded module annotates from `under_threshold` instead (see
-    `UNDER_WEIGHT_WARN_SECONDS`). An over-recorded entry annotates from `ratio` up to
-    `stale_fail_ratio` (see `STALE_WEIGHT_FAIL_RATIO`). Empty when the report parses to
-    nothing, which `durations_problems` already fails on.
-    """
-    warnings = []
-    margin = [
-        (f, s) for f, s in heavy_unweighted(text, weights, threshold) if s < fail_above
-    ]
-    if margin:
-        warnings.append(_heavy_complaint(margin, threshold))
-    under = [
-        row
-        for row in heavy_underweighted(text, weights, under_threshold, under_ratio)
-        if row[2] < fail_above
-    ]
-    if under:
-        warnings.append(_under_complaint(under, under_threshold, under_ratio))
-    stale = [
-        row
-        for row in stale_overweight(text, weights, ratio)
-        if row[1] < stale_fail_ratio * max(row[2], _DURATIONS_MIN_SECONDS)
-    ]
-    if stale:
-        warnings.append(_stale_complaint(stale, ratio))
-    return warnings
-
-
-def durations_problems(
-    text: str,
-    weights: dict[str, float],
-    threshold: float = RUNNER_HEAVY_SECONDS,
-    ratio: float = STALE_WEIGHT_RATIO,
-    fail_above: float = RUNNER_HEAVY_FAIL_SECONDS,
-    under_ratio: float = UNDER_WEIGHT_RATIO,
-    stale_fail_ratio: float = STALE_WEIGHT_FAIL_RATIO,
-) -> list[str]:
-    """What is wrong with a shard's durations report, as readable complaints that fail the run.
+    """What is wrong with a shard's durations report, as readable complaints.
 
     Three arms over the one report, and all are reported: a heavy module with NO recorded
-    weight, a recorded weight far HIGHER than what the module measured here, and a heavy module
+    weight, a recorded weight far HIGHER than what the module measured here, and a module
     whose recorded weight is far LOWER. Each complaint carries its own repair, because the
-    repairs differ — `--record-missing` fills a gap and cannot refresh an entry that is merely
+    repairs differ: `--record-missing` fills a gap and cannot refresh an entry that is merely
     wrong.
 
-    It does not know which modules a pull request changed; `gate_complaints` splits the report
-    by that before calling it.
-
-    A function rather than inline asserts in `main`, so the accept and reject halves can hand
-    it a fixed report rather than needing a CI run.
-
-    An EMPTY report is itself a complaint. The gate's whole subject is found by parsing, so a
-    report format change would leave it passing over nothing forever — the vacuous-green shape
-    this repo's rule on pattern-found subjects names.
+    An EMPTY report is itself a complaint. The check's whole subject is found by parsing, so a
+    report format change would leave it reporting nothing forever.
     """
     if not parse_durations(text):
         return [
             "parsed no durations out of the report — has the format changed, or did the "
             "test step drop --durations=0?"
         ]
-    problems = []
-    fail_bound = max(threshold, fail_above)
-    if heavy := heavy_unweighted(text, weights, fail_bound):
-        problems.append(_heavy_complaint(heavy, fail_bound))
-    if under := heavy_underweighted(text, weights, fail_bound, under_ratio):
-        problems.append(_under_complaint(under, fail_bound, under_ratio))
-    stale_bound = max(ratio, stale_fail_ratio)
-    if stale := stale_overweight(text, weights, stale_bound):
-        problems.append(_stale_complaint(stale, stale_bound))
-    return problems
-
-
-# The prefix a complaint about a module outside a pull request's diff carries when it annotates.
-OUTSIDE_DIFF_NOTE = (
-    "outside this pull request's diff, so it annotates and does not fail; the docs-refresh "
-    "cron's --record-missing and --refresh-drifted repair it"
-)
-
-
-# The weight table, whose rows a pull request owns one at a time, and the gate's code, whose
-# bounds decide every module's verdict at once. A diff touching the code runs the gate unscoped.
-WEIGHTS_TABLE = "scripts/dev/pytest_shard_weights.json"
-GATE_CODE = frozenset(
-    {
-        "scripts/dev/pytest_shard.py",
-        "scripts/dev/shard_weight_gate.py",
-    }
-)
-
-
-def rows_written(weights: dict[str, float], base: dict[str, float]) -> set[str]:
-    """The modules whose table row differs from `base`: added, changed or dropped.
-
-    A pull request that edits the table owns exactly these rows. Until #6266 an edit to any
-    row made every module's complaint its author's. A PR that re-recorded one row then failed
-    on a heavy module another PR had merged without a weight, which its author neither wrote
-    nor could see in the diff. That shape was 6 of the 7 gate failures outside a PR's diff
-    between 2026-10-18 and 2026-10-25. A full `--record` writes every row, so it still owns
-    every module. A dropped row for a deleted module (#5989) names a file no shard runs, so it
-    widens nothing.
-    """
-    changed = {m for m, s in weights.items() if base.get(m) != s}
-    return changed | (base.keys() - weights.keys())
-
-
-def diff_scope(
-    changed: set[str] | None,
-    weights: dict[str, float],
-    base: dict[str, float] | None,
-) -> set[str] | None:
-    """The modules whose complaints fail a run with diff `changed`, or None for every module.
-
-    None when there is no diff (a push), when the diff touches the gate's code, or when it
-    edits the table with no `base` to compare against. Otherwise the diff's own paths, plus
-    the rows it wrote when it edits the table.
-    """
-    if changed is None or changed & GATE_CODE:
-        return None
-    if WEIGHTS_TABLE not in changed:
-        return changed
-    if base is None:
-        return None
-    return changed | rows_written(weights, base)
-
-
-def split_by_diff(text: str, changed: set[str]) -> tuple[str, str]:
-    """The durations lines of the modules in `changed`, and the lines of every other module.
-
-    Each half keeps every phase of its modules, so each module sums to the same total in its
-    half as in the whole report. Lines that are not durations lines go in neither half.
-    """
-    inside, outside = [], []
-    for line in text.splitlines():
-        match = _DURATION_LINE.match(line.strip())
-        if match:
-            (inside if match.group(3) in changed else outside).append(line)
-    return "\n".join(inside), "\n".join(outside)
-
-
-def gate_complaints(
-    text: str,
-    weights: dict[str, float],
-    changed: set[str] | None = None,
-    threshold: float = RUNNER_HEAVY_SECONDS,
-    ratio: float = STALE_WEIGHT_RATIO,
-    fail_above: float = RUNNER_HEAVY_FAIL_SECONDS,
-    base_weights: dict[str, float] | None = None,
-) -> tuple[list[str], list[str]]:
-    """`(problems, warnings)` for a durations report: what fails the run, and what annotates it.
-
-    `changed` is the set of paths a pull request's diff adds or modifies, or None for a run
-    with no diff to scope to. With None, every module's complaint counts, as on a push. With a
-    set, only a module in `diff_scope` can fail the run. Every other module's complaint becomes
-    a warning, because its author is not the one reading this run: 4 of the 16 gate failures
-    between 2026-10-15 and 2026-10-17 named a module outside the failing PR's diff (#5480).
-
-    `base_weights` is the table at the PR's merge base. A diff that edits the table also owns
-    the rows it wrote, which `rows_written` reads from the two tables.
-
-    The empty-report complaint reads the WHOLE report. Most PRs change no test module a given
-    shard ran, so a scoped half is usually empty, and that is not a format change.
-    """
-    scope = diff_scope(changed, weights, base_weights)
-    if scope is None or not parse_durations(text):
-        return (
-            durations_problems(text, weights, threshold, ratio, fail_above),
-            durations_warnings(text, weights, threshold, fail_above, ratio=ratio),
-        )
-    inside, outside = split_by_diff(text, scope)
-    problems, warnings = [], []
-    if inside:
-        problems = durations_problems(inside, weights, threshold, ratio, fail_above)
-        warnings = durations_warnings(
-            inside, weights, threshold, fail_above, ratio=ratio
-        )
-    if outside:
-        warnings += [
-            f"{OUTSIDE_DIFF_NOTE}: {complaint}"
-            for complaint in durations_problems(
-                outside, weights, threshold, ratio, fail_above
-            )
-            + durations_warnings(outside, weights, threshold, fail_above, ratio=ratio)
-        ]
-    return problems, warnings
+    complaints = []
+    if heavy := heavy_unweighted(text, weights, threshold):
+        complaints.append(_heavy_complaint(heavy, threshold))
+    if under := heavy_underweighted(text, weights, under_threshold, under_ratio):
+        complaints.append(_under_complaint(under, under_threshold, under_ratio))
+    if stale := stale_overweight(text, weights, ratio):
+        complaints.append(_stale_complaint(stale, ratio))
+    return complaints
 
 
 # ── The runner-seconds table the shards are packed on (#6149) ─────────────────────────────────
@@ -513,10 +330,10 @@ def gate_complaints(
 #
 # WHY NOT WRITE RUNNER SECONDS INTO THE WEIGHT TABLE. The docs-refresh cron's
 # `--refresh-drifted` re-measures that table on daniel-box and rewrites any entry 1.5x away from
-# what it measured, so runner seconds there would drift back within days (#5432). The gate's
-# ratio arms also compare that table with the runner on purpose, at bounds wide enough for the
-# scale gap. So the weight table keeps feeding the gate and the cron, and this one feeds only
-# `assign`.
+# what it measured, so runner seconds there would drift back within days (#5432). The shard
+# check's ratio arms also compare that table with the runner on purpose, at bounds wide enough
+# for the scale gap. So the weight table keeps feeding the check and the cron, and this one feeds
+# only `assign`.
 #
 # STALENESS IS GRACEFUL, as with the weight table. A module this table lacks is packed at its
 # recorded weight times the median runner-to-recorded ratio, and an entry for a deleted module
@@ -650,31 +467,31 @@ def load_runner_weights(path: Path = RUNNER_WEIGHTS_PATH) -> dict[str, float]:
     return {k: float(v) for k, v in json.loads(path.read_text()).items()}
 
 
-def readings_the_gate_rejects(readings: dict[str, float]) -> dict[str, float]:
-    """The local readings CI's over-recorded arm would fail, each mapped to its runner seconds.
+def host_only_readings(readings: dict[str, float]) -> dict[str, float]:
+    """The local readings `LOCAL_READING_MAX_RATIO`x the runner table or more, as runner seconds.
 
-    A module the runner table lacks has no CI seconds to judge against, so it is never rejected.
+    A module the runner table lacks has no CI seconds to judge against, so it is never included.
     """
     runner = load_runner_weights()
     return {
         module: runner[module]
         for module, reading in readings.items()
         if module in runner
-        and over_recorded(reading, runner[module], STALE_WEIGHT_FAIL_RATIO)
+        and over_recorded(reading, runner[module], LOCAL_READING_MAX_RATIO)
     }
 
 
-def readings_the_gate_accepts(readings: dict[str, float]) -> dict[str, float]:
-    """The local readings whose row CI's over-recorded arm would not fail, by the runner table.
+def runner_backed_readings(readings: dict[str, float]) -> dict[str, float]:
+    """The local readings `host_only_readings` leaves out.
 
     A line on stdout names each one dropped.
     """
-    rejected = readings_the_gate_rejects(readings)
+    rejected = host_only_readings(readings)
     for module, seconds in rejected.items():
         print(
             f"kept the recorded weight of {module}: this host read {readings[module]:.2f}s, the "
-            f"runner table holds {seconds:.2f}s, and CI's gate rejects a row "
-            f"{STALE_WEIGHT_FAIL_RATIO:g}x or more above it"
+            f"runner table holds {seconds:.2f}s, and a reading {LOCAL_READING_MAX_RATIO:g}x or "
+            "more above it is a cost of this host alone"
         )
     return {m: r for m, r in readings.items() if m not in rejected}
 

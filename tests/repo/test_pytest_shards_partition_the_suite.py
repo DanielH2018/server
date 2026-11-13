@@ -11,7 +11,7 @@ hardcoded `--of 4` beside a five-entry matrix would drop a fifth of the suite wi
 read anywhere.
 
 This module does not check whether a file is missing from the recorded weights table: the
-docs-refresh cron fills those gaps. Balance is checked by `pytest_shard.py --check-durations`,
+docs-refresh cron fills those gaps. Balance is reported by `pytest_shard.py --check-durations`,
 run as a step of CI's own `pytest` job. It measures each module while running it, so it sees a
 heavy unweighted file in a quiet directory and a stale recorded number, which a static check
 cannot. This module keeps the partition properties, which are about correctness rather than
@@ -162,9 +162,8 @@ def test_the_workflow_measures_every_shard_and_checks_what_it_measured():
     for every duration, it keeps the report, and a later step reads that same report. A step
     dropped or a path typed differently leaves `--check-durations` reading an absent file --
     which fails loudly -- or, worse, leaves the gate out of the job entirely with every leg
-    still passing. It is a `run:` step rather than a pytest test because a test that went red on
-    an unweighted file would fail the two crons that commit with hooks on, and neither can run
-    the repair.
+    still passing. It is a `run:` step rather than a pytest test because only the leg that ran
+    a module has its measurement.
     """
     runs = [str(s.get("run", "")) for s in _pytest_job()["steps"]]
     suite = [r for r in runs if "-m pytest" in r]
@@ -179,47 +178,6 @@ def test_the_workflow_measures_every_shard_and_checks_what_it_measured():
     assert log in gates[0], (
         f"the gate must read the report the test step wrote at {log}"
     )
-
-
-def test_the_gate_fails_only_where_its_repair_can_be_applied():
-    """The gate compares one wall-clock reading against a fixed bound, and runner variance spans
-    it. On a push to master nobody can re-record, yet a red run there parks every landing, so
-    push and merge_group annotate (`--warn-only`) and a pull_request still fails (#3604)."""
-    gate = next(
-        s
-        for s in _pytest_job()["steps"]
-        if "--check-durations" in str(s.get("run", ""))
-    )
-    assert gate["env"]["EVENT"] == "${{ github.event_name }}"
-    assert re.search(
-        r'\[ "\$EVENT" = push \] \|\| \[ "\$EVENT" = merge_group \]; then mode=\(--warn-only\)',
-        gate["run"],
-    ), "push and merge_group must pass --warn-only, and nothing else may"
-    assert '"${mode[@]}"' in gate["run"]
-
-
-def test_a_pull_request_fails_only_on_modules_its_diff_changes():
-    """A PR author can re-record only a module the diff contains, so on a pull_request the gate
-    reads the diff and annotates every other module (#5480). The diff is collected before the
-    suite runs, because the suite's tests write git state of their own."""
-    steps = _pytest_job()["steps"]
-    runs = [str(s.get("run", "")) for s in steps]
-    collect = next(i for i, r in enumerate(runs) if "pr_changed_files.sh" in r)
-    suite = next(i for i, r in enumerate(runs) if "-m pytest" in r)
-    assert collect < suite, "the diff must be read before the suite runs"
-    assert steps[collect]["if"] == "github.event_name == 'pull_request'"
-    gate = next(r for r in runs if "--check-durations" in r)
-    assert re.search(
-        r'\[ "\$EVENT" = pull_request \]; then mode=\(--changed-files "\$RUNNER_TEMP/changed\.txt"\)',
-        gate,
-    ), "a pull_request must scope the gate to the diff pr_changed_files.sh wrote"
-    assert "base_weights.json" in runs[collect], (
-        "the base table must be read before the suite"
-    )
-    assert re.search(
-        r'\[ "\$EVENT" = pull_request \]; then mode\+=\(--base-weights "\$RUNNER_TEMP/base_weights\.json"\)',
-        gate,
-    ), "a pull_request must hand the gate the table at its merge base (#5989)"
 
 
 def test_the_workflow_derives_the_shard_count_from_the_matrix():

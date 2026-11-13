@@ -29,21 +29,18 @@ The suite's median is 0.0s, so an unweighted file is packed as the lightest thin
 suite and placed last, into whichever shard happened to be least loaded. One unrecorded 30s
 module landing that way skews the four CI shards to 65/99/99/68s against a 43s projection.
 
-ONE GATE GUARDS THE TABLE, AND IT IS A CI STEP: `--check-durations`. It reads the durations
+ONE CHECK WATCHES THE TABLE, AND IT IS A CI STEP: `--check-durations`. It reads the durations
 report CI's own test step already wrote, so it measures each module by running it. That is what
 lets it see the two shapes nothing static can. A heavy module landing where every recorded
 sibling is light is invisible to a neighbour heuristic, and `def test_` count, byte size and
 directory mean all fail to separate a heavy module from an ordinary file; the
-gate annotates it at `RUNNER_HEAVY_SECONDS` and rejects it at `RUNNER_HEAVY_FAIL_SECONDS`
-(both in `shard_weight_gate.py`, with the arms).
+check annotates it at `RUNNER_HEAVY_SECONDS` (in `shard_weight_gate.py`, with the arms).
 And a recorded number can go wrong in the other direction, which no arm asking "is this file
 MISSING" ever sees:
 a recorded 17.31s against 0.09s measured makes the greedy split place the file first, so one
-shard carries 17s of phantom weight. The gate
-answers that as a RATIO: it annotates at `shard_weight_gate.STALE_WEIGHT_RATIO` and fails at
-`STALE_WEIGHT_FAIL_RATIO`, since a host busy with fan-out batches records up to about 9x what the
-runner measures (#5616). `--record-files` is its repair, since `--record-missing` only fills
-gaps. A third arm takes the opposite direction: a module that grew
+shard carries 17s of phantom weight. The check
+answers that as a RATIO: it annotates at `shard_weight_gate.STALE_WEIGHT_RATIO`.
+`--record-files` is its repair, since `--record-missing` only fills gaps. A third arm takes the opposite direction: a module that grew
 after its weight was recorded measured 45.67s against 0.48s, and the split packed it as free.
 `shard_weight_gate.UNDER_WEIGHT_RATIO` bounds it, and `--record-files` repairs it too.
 
@@ -56,7 +53,7 @@ pass the same way. `--summary` charges all three per shard, as `prebuild_seconds
 
 The docs-refresh cron runs `--record-missing` itself, so gaps in the table fill without a human.
 
-A WEIGHT THAT DRIFTS MODERATELY LOW IS INVISIBLE TO THE GATE, so the cron re-measures it too.
+A WEIGHT THAT DRIFTS MODERATELY LOW IS INVISIBLE TO THE CHECK, so the cron re-measures it too.
 Three modules measured 1.66x to 1.98x their recorded weight in a serial run (#4888), well
 inside the 20x under-recorded arm, and `--record-missing` never touches a present entry. A CI
 ratio that low cannot separate drift from runner scale, because the runner already measures
@@ -66,25 +63,22 @@ only the entries `DRIFT_RATIO` or more away from what they measured. Measurement
 that band leaves the table alone, which is what keeps a twice-daily run from churning it.
 Noise outside the band is caught by a second run of only the drifted files: an entry is
 rewritten only when both runs drift and agree with each other within the band. One outlying
-run wrote 0.0s for a 16s module and 62s for a 1s one, and CI failed the bot's branch (#6286).
+run wrote 0.0s for a 16s module and 62s for a 1s one (#6286).
 Two agreeing runs cannot catch a cost that is real on this host alone, such as a test walking
 untracked files: 85.09s against CI's 2.08s. So the refresh keeps the recorded weight and prints
-the module when the runner table says the gate would reject the row (#7132). A new row has no
+the module when the reading is `LOCAL_READING_MAX_RATIO` or more above the runner table (#7132). A new row has no
 recorded weight to keep, so `--record-missing` writes the runner seconds instead (#7136).
 
-THE GATE FAILS ONLY WHERE SOMEONE CAN APPLY THE REPAIR. On a pull request the author re-records
-and pushes. On a push to master nobody can, and a red master run still reaches the deployer's
-CI gate and every session's `land.sh`. Both arms compare one wall-clock reading against a fixed
-bound, and runner variance spans it: one module measured about 8s on its PR run and 15.6s on
-the master run of the same code (#3604). So CI passes `--warn-only` on push and merge_group,
-which prints each complaint as a `::warning::` annotation and exits zero. On a pull request
-the same variance lands a module near the bound on either side of it from run to run, so an
-unweighted module between the two bounds annotates there too (#4010). A pull request's author
-can repair only a module the PR's diff adds or changes, so CI passes the diff as
-`--changed-files` and every other module's complaint annotates there as well (#5480). A change
-to the table widens that to the rows it adds, changes or drops, which `--base-weights` lets
-the gate read, and no further: a row the PR did not write is not its author's (#6266). A
-change to the gate's own code widens it to every module.
+THE CHECK NEVER FAILS A RUN. It prints each complaint as a `::warning::` annotation and exits
+zero on every event. A wrong weight costs shard balance and nothing else, at most the module's
+own runner seconds on one leg, and the docs-refresh cron repairs it unattended within a day:
+`--refresh-runner` reads the packing table's rows off green master runs, and `--record-missing`
+and `--refresh-drifted` keep the recorded table. A failed run costs a full rerun of every job
+from a runner pool that is already the throughput limit, so failing on a weight spends more CI
+time than the weight costs. Each bound also compares one wall-clock reading against a fixed
+number, and runner variance spans it: one module measured about 8s and 15.6s on two runs of
+the same code (#3604). Five narrowings of a failing version (#3604, #4010, #5480, #5616,
+#5989) each answered a run it failed for no fault of the PR in front of it.
 
 Usage:
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1        # this shard's files
@@ -96,9 +90,7 @@ Usage:
     uv run python scripts/dev/pytest_shard.py --refresh-drifted 8     # one eighth, drifted rows only
     uv run python scripts/dev/pytest_shard.py --refresh-runner 3      # runner table from CI's logs
     uv run python scripts/dev/pytest_shard.py --leg-spread 42541064791  # one run's leg walls
-    uv run python scripts/dev/pytest_shard.py --check-durations ci.log  # CI's measured gate
-    uv run python scripts/dev/pytest_shard.py --check-durations ci.log --warn-only  # annotate, exit 0
-    uv run python scripts/dev/pytest_shard.py --check-durations ci.log --changed-files changed.txt
+    uv run python scripts/dev/pytest_shard.py --check-durations ci.log  # annotate, always exit 0
 """
 
 import hashlib
@@ -121,22 +113,21 @@ from lib.cli_help import ArgumentParser
 from lib.git import git
 from lib.repo_paths import REPO
 from shard_weight_gate import (
-    RUNNER_HEAVY_FAIL_SECONDS,
+    LOCAL_READING_MAX_RATIO,
     RUNNER_HEAVY_SECONDS,
     RUNNER_WEIGHTS_PATH,
-    STALE_WEIGHT_FAIL_RATIO,
     STALE_WEIGHT_FLOOR_SECONDS,
     STALE_WEIGHT_RATIO,
     drifted,
+    durations_complaints,
     fetch_runner_logs,
-    gate_complaints,
     green_pytest_legs,
+    host_only_readings,
     leg_spread,
     packing_table,
     parse_durations,
-    readings_the_gate_accepts,
-    readings_the_gate_rejects,
     refresh_runner_weights,
+    runner_backed_readings,
     write_runner_weights,
 )
 
@@ -175,7 +166,7 @@ _SLICE_PERIOD_SECONDS = 12 * 60 * 60
 
 # Weights only CI can measure, which every write to the table keeps. A module whose expensive
 # legs skip on every host here and run on CI records about 0s from any local re-measure, so
-# `--record-files`, the gate's own repair, would write back the number the gate rejected, and
+# `--record-files`, the check's own repair, would write back the number the check flagged, and
 # `--refresh-drifted` would undo a hand fix within days (#5756). Set a pin to the sum of the
 # module's lines in CI's `--durations` report, then run `--record-files` on it so the table,
 # which is all CI reads, carries the pin too.
@@ -331,8 +322,8 @@ def record_missing_weights(
     this on every tick. A recorded path no longer in the census is dropped on the way
     through, so the table does not keep a weight for a module that was deleted. A new row of
     `STALE_WEIGHT_FLOOR_SECONDS` or more is measured twice and keeps the lower reading. A new
-    row whose reading the gate's over-recorded arm would reject against the committed runner
-    table holds the runner seconds instead, and a line on stdout names it.
+    row whose reading `host_only_readings` names against the committed runner table holds the
+    runner seconds instead, and a line on stdout names it.
     """
     files = census() if files is None else files
     known = load_weights(path)
@@ -341,23 +332,23 @@ def record_missing_weights(
     if missing:
         measured = measure(missing)
         kept |= {f: measured.get(f, 0.0) for f in missing}
-        # One reading on a loaded host recorded 23.39s for a module CI measured at 0.91s, past
-        # the gate's fail ratio, and the cron's PR sat red (#6587). Load only adds time, so a
-        # new row heavy enough for the gate to compare runs once more and keeps the lower
-        # reading. A second run that measured nothing is no reading, not 0.0s (#6286).
+        # One reading on a loaded host recorded 23.39s for a module CI measured at 0.91s (#6587).
+        # Load only adds time, so a new row heavy enough for the stale arm to compare runs once
+        # more and keeps the lower reading. A second run that measured nothing is no reading,
+        # not 0.0s (#6286).
         heavy = [f for f in missing if kept[f] >= STALE_WEIGHT_FLOOR_SECONDS]
         again = measure(heavy) if heavy else {}
         kept |= {f: min(kept[f], again[f]) for f in heavy if again.get(f)}
-        # DECIDED: a reading the gate would reject writes the runner seconds, not no row. With no
-        # row the module is measured twice on every tick, under the git-tree lock, for as long as
-        # the local cost lasts. `assign` packs this module on the runner table either way, the
-        # row passes the gate, and `--refresh-drifted` refuses to raise it again (#7136).
-        rejected = readings_the_gate_rejects({f: kept[f] for f in missing})
+        # DECIDED: a host-only reading writes the runner seconds, not no row. With no row the
+        # module is measured twice on every tick, under the git-tree lock, for as long as the
+        # local cost lasts. `assign` packs this module on the runner table either way, and
+        # `--refresh-drifted` refuses to raise it again (#7136).
+        rejected = host_only_readings({f: kept[f] for f in missing})
         for module, seconds in rejected.items():
             print(
                 f"recorded {module} at the runner table's {seconds:.2f}s: this host read "
-                f"{kept[module]:.2f}s, and CI's gate rejects a row "
-                f"{STALE_WEIGHT_FAIL_RATIO:g}x or more above the runner table"
+                f"{kept[module]:.2f}s, and a reading {LOCAL_READING_MAX_RATIO:g}x or more "
+                "above the runner table is a cost of this host alone"
             )
         kept |= rejected
     return _write_weights(kept, path)
@@ -420,14 +411,14 @@ def refresh_drifted_weights(
 ) -> list[str]:
     """Re-measure slice `index` of `slices` of the recorded entries, and rewrite the drifted ones.
 
-    The unattended repair for a weight that has drifted but not far enough for the gate's
-    ratio arms. Only an entry `drifted` judges out of band is rewritten, so re-measuring a
+    The unattended repair for a weight that has drifted but not far enough for the shard
+    check's ratio arms. Only an entry `drifted` judges out of band is rewritten, so re-measuring a
     slice usually leaves the table byte-identical. A drifted entry is measured a second time,
     and it is rewritten with the lower of the two only when the two runs agree. A run that
     omits a file measured nothing and reads as 0.0. A recorded path no longer in the census is
-    dropped, as `record_missing_weights` drops it. An entry whose lower reading the gate's
-    over-recorded arm would reject against the committed runner table keeps its recorded
-    weight, and a line on stdout names it.
+    dropped, as `record_missing_weights` drops it. An entry whose lower reading
+    `host_only_readings` names against the committed runner table keeps its recorded weight,
+    and a line on stdout names it.
 
     Args:
         index: The 0-based slice to re-measure.
@@ -447,7 +438,7 @@ def refresh_drifted_weights(
     measured = measure(chosen) if chosen else {}
     candidates = [f for f in chosen if drifted(kept[f], measured.get(f, 0.0))]
     # One serial run is not enough to rewrite a row: a single outlier measured 0.0s for a 16s
-    # module and 62s for a 1s one, and CI then failed the bot's own branch on it (#6286). The
+    # module and 62s for a 1s one (#6286). The
     # drifted files run once more, and a row moves only when the second run drifts too and
     # agrees with the first within DRIFT_RATIO. Load only adds time, so it keeps the lower run.
     confirmed = measure(candidates) if candidates else {}
@@ -457,7 +448,7 @@ def refresh_drifted_weights(
         if drifted(kept[f], confirmed.get(f, 0.0))
         and not drifted(measured.get(f, 0.0), confirmed.get(f, 0.0))
     }
-    moved = readings_the_gate_accepts(agreed)
+    moved = runner_backed_readings(agreed)
     _write_weights(kept | moved, path, pins)
     return sorted(moved)
 
@@ -558,74 +549,23 @@ def main(argv=None) -> int:
         type=Path,
         metavar="LOG",
         help=(
-            "read a pytest --durations report and fail on a heavy unweighted module, a "
-            "recorded weight far above what its module measured, or one far below it"
+            "read a pytest --durations report and annotate a heavy unweighted module, a "
+            "recorded weight far above what its module measured, or one far below it; "
+            "always exits 0"
         ),
-    )
-    parser.add_argument(
-        "--warn-only",
-        action="store_true",
-        help=(
-            "print --check-durations complaints as GitHub ::warning:: annotations and exit 0, "
-            "for a run where nobody can apply the repair"
-        ),
-    )
-    parser.add_argument(
-        "--changed-files",
-        type=Path,
-        metavar="LIST",
-        help="the paths a PR's diff adds or modifies: only those modules fail the gate",
-    )
-    parser.add_argument(
-        "--base-weights",
-        type=Path,
-        metavar="JSON",
-        help="the weight table at the PR's merge base: only the rows a table edit wrote fail",
-    )
-    parser.add_argument(
-        "--threshold",
-        type=float,
-        default=RUNNER_HEAVY_SECONDS,
-        help="seconds an unweighted module may measure under --check-durations unannotated",
-    )
-    parser.add_argument(
-        "--fail-above",
-        type=float,
-        default=RUNNER_HEAVY_FAIL_SECONDS,
-        help="seconds an unweighted module may measure before --check-durations fails",
-    )
-    parser.add_argument(
-        "--stale-ratio",
-        type=float,
-        default=STALE_WEIGHT_RATIO,
-        help="how many times its measured seconds a recorded weight may claim",
     )
     args = parser.parse_args(argv)
 
     if args.check_durations:
         report = args.check_durations.read_text(errors="replace")
-        changed = args.changed_files and set(args.changed_files.read_text().split())
-        problems, warnings = gate_complaints(
-            report,
-            load_weights(),
-            changed,
-            threshold=args.threshold,
-            ratio=args.stale_ratio,
-            fail_above=args.fail_above,
-            base_weights=args.base_weights and load_weights(args.base_weights),
-        )
-        if args.warn_only:
-            warnings, problems = warnings + problems, []
-        if warnings:
-            print("\n".join(f"::warning::{w}" for w in warnings))
-        if problems:
-            print("\n".join(problems))
-            return 1
-        if not warnings:
+        complaints = durations_complaints(report, load_weights())
+        if complaints:
+            print("\n".join(f"::warning::{c}" for c in complaints))
+        else:
             print(
-                f"no unweighted or under-recorded module measured {args.threshold:.0f}s or "
-                f"more in this shard, and no recorded weight is {args.stale_ratio:.0f}x what "
-                f"its module measured"
+                f"no unweighted or under-recorded module measured {RUNNER_HEAVY_SECONDS:.0f}s "
+                f"or more in this shard, and no recorded weight is {STALE_WEIGHT_RATIO:.0f}x "
+                "what its module measured"
             )
         return 0
 

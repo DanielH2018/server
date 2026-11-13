@@ -406,10 +406,9 @@ if [ "$BUILD_DOCS_RC" -ne 0 ]; then
 fi
 
 # WEIGHT EVERY NEW TEST MODULE, heavy or light, with nobody in the loop (#2274). CI's measured
-# gate (`pytest_shard.py --check-durations`) rejects the PR that introduces an unweighted module
-# costing RUNNER_HEAVY_SECONDS or more and leaves the repair to a human. It says nothing about a
-# module under that bar, and an unweighted file is packed at the suite median of 0.0s — so
-# without this the split stays merely un-skewed rather than measured.
+# check (`pytest_shard.py --check-durations`) only annotates an unweighted module costing
+# RUNNER_HEAVY_SECONDS or more and never fails the run, and an unweighted file is packed at the
+# suite median of 0.0s, so this step is what repairs the table.
 #
 # --record-missing, NEVER --record. It runs pytest over only the files the table lacks, which is
 # seconds and usually no files at all, where --record re-measures the whole suite and rewrites
@@ -462,7 +461,7 @@ fi
 # of the average one. Only an entry more than 1.5x from what it measured is rewritten, so noise
 # inside that band leaves no diff and a run does not churn the table.
 #
-# A row CI's gate is certain to reject stays as recorded, and that leaves no diff either, so a
+# A reading 20x or more above CI's runner table stays as recorded, and that leaves no diff, so a
 # successful run prints the step's report to the journal. Not `alert`: PUSH_MSG holds failures.
 #
 # Same degrade-not-abort handling and its own `timeout`, for the reasons the step above gives.

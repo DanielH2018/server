@@ -242,14 +242,12 @@ push to Kuma, which M6 batch B2's Cutover-2 removed. B2's token PR retired both 
 ## The generated-docs refresh cron, in detail
 
 - **Why it weights test modules at all (#2274).** CI's `pytest_shard.py --check-durations` step
-  rejects the PR that introduces an unweighted module costing `RUNNER_HEAVY_FAIL_SECONDS` or
-  more and leaves the repair to a human. One costing `RUNNER_HEAVY_SECONDS` up to that bound
-  only annotates the run (#4010). It says nothing about a lighter one, and an unweighted file is
-  packed at the suite median of 0.0s — so without the cron the split is un-skewed rather than
-  measured. `--record-missing`, never `--record`: it measures only the files the table lacks,
+  only annotates an unweighted module costing `RUNNER_HEAVY_SECONDS` or more, and never fails
+  the run. It says nothing about a lighter one, and an unweighted file is packed at the suite
+  median of 0.0s, so the cron is what repairs the table. `--record-missing`, never `--record`: it measures only the files the table lacks,
   and writes the same bytes back when there are none, so an ordinary run leaves no diff.
 - **Why it also refreshes present weights (#4888).** `--record-missing` never touches an entry
-  the table holds, and the gate's under-recorded arm fires only at `UNDER_WEIGHT_RATIO` (20x).
+  the table holds, and CI's under-recorded arm fires only at `UNDER_WEIGHT_RATIO` (20x).
   Three modules measured 1.66x to 1.98x their weights in a serial run on 2026-10-13 and nothing
   noticed. A lower CI ratio cannot catch that, because the runner measures correctly recorded
   entries 1.1x to 13x their weight. So the cron runs `--refresh-drifted 8`, which re-measures
@@ -258,9 +256,9 @@ push to Kuma, which M6 batch B2's Cutover-2 removed. B2's token PR retired both 
   that band leaves no diff.
 - **Why a refresh can keep a drifted weight (#7132).** Two agreeing runs defend against one-off
   load, not against a cost that is real on this host alone. The cron wrote 85.09s for a module
-  CI measured at 2.08s, and CI's gate failed the cron's PR. `--refresh-drifted` compares the
-  reading with `pytest_shard_runner_weights.json`. At `STALE_WEIGHT_FLOOR_SECONDS` and
-  `STALE_WEIGHT_FAIL_RATIO` or more of CI's seconds, it keeps the recorded weight and names the
+  CI measured at 2.08s. `--refresh-drifted` compares the reading with
+  `pytest_shard_runner_weights.json`. At `STALE_WEIGHT_FLOOR_SECONDS` and
+  `LOCAL_READING_MAX_RATIO` or more of CI's seconds, it keeps the recorded weight and names the
   module in the journal under the tag `docs-refresh`.
 - **Why a new row can hold CI's seconds (#7136).** `--record-missing` applies the same comparison
   to a new row, which has no recorded weight to keep. It writes the module's seconds from
