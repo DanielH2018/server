@@ -20,10 +20,19 @@ import shlex
 import subprocess
 
 import agent_logic
+import pytest
 import renovate_agent
 from lib.proc_testing import write_exec
 
 SESSION_ID = "6f1c2a9e-4b7d-4e2a-9c3f-0d8b5a7e1c42"
+
+
+@pytest.fixture(autouse=True)
+def _session_token(monkeypatch, tmp_path):
+    """The unit's EnvironmentFile sets the session's read-only token; main() needs it."""
+    monkeypatch.setenv("RENOVATE_SESSION_GH_TOKEN", "gh-read-sentinel")
+
+
 HANDOFF = (
     "Left #71 open: manual — bump the immich DB format. The release notes require "
     "a pgvecto.rs migration before the new image starts."
@@ -209,7 +218,10 @@ def test_the_resumed_claude_gets_the_units_credentials_and_hook_env(tmp_path) ->
         f'echo "args=$*" >> {seen}\necho "cwd=$PWD" >> {seen}\nenv >> {seen}\n',
     )
     creds = tmp_path / "creds"
-    creds.write_text("GH_TOKEN=gh-sentinel\nCLAUDE_CODE_OAUTH_TOKEN=claude-sentinel\n")
+    creds.write_text(
+        "GH_TOKEN=gh-write-sentinel\nRENOVATE_SESSION_GH_TOKEN=gh-sentinel\n"
+        "CLAUDE_CODE_OAUTH_TOKEN=claude-sentinel\n"
+    )
     cmd = agent_logic.resume_command(
         SESSION_ID,
         str(worktree),
@@ -229,6 +241,7 @@ def test_the_resumed_claude_gets_the_units_credentials_and_hook_env(tmp_path) ->
     assert f"args=--resume {SESSION_ID}" in lines
     assert f"cwd={worktree}" in lines
     assert "GH_TOKEN=gh-sentinel" in lines
+    assert not any("gh-write-sentinel" in line for line in lines)
     assert "CLAUDE_CODE_OAUTH_TOKEN=claude-sentinel" in lines
     assert f"RUN_HOOK_PROJECT_DIR={worktree}" in lines
 
@@ -246,3 +259,15 @@ def test_the_resume_carries_every_variable_the_unit_sets() -> None:
     assert re.findall(r"^EnvironmentFile=(\S+)$", unit, re.MULTILINE) == [
         renovate_agent.SESSION_ENV_FILE
     ]
+
+
+def test_the_session_gets_the_read_only_token_as_gh_token() -> None:
+    env = renovate_agent.session_env(
+        {"GH_TOKEN": "write", "RENOVATE_SESSION_GH_TOKEN": "read", "PATH": "/bin"}
+    )
+    assert env == {"GH_TOKEN": "read", "PATH": "/bin"}
+
+
+def test_a_session_without_its_read_token_never_starts() -> None:
+    with pytest.raises(RuntimeError, match="RENOVATE_SESSION_GH_TOKEN is unset"):
+        renovate_agent.session_env({"GH_TOKEN": "write"})
