@@ -24,9 +24,9 @@ from pathlib import Path
 # titles. 2 KB per artifact keeps a ~50-file index well under a megabyte.
 EXCERPT_CHARS = int(os.environ.get("ARTIFACTS_EXCERPT_CHARS", "2000"))
 
-# The service names artifacts are matched against, rendered by Ansible from both hosts'
-# containers_list plus the retired names older documents still discuss. Absent in a unit test,
-# where the fixtures pass their own list.
+# The service names artifacts are matched against. The role's templates/configmap.yaml.j2
+# renders them from both hosts' containers_list plus the retired names older documents still
+# discuss. Absent in a unit test, where the fixtures pass their own list.
 SERVICES_FILE = Path(
     os.environ.get("ARTIFACTS_SERVICES_FILE", "/app/known_services.json")
 )
