@@ -122,7 +122,7 @@ SCRATCH="/var/tmp/etcd-restore-drill.$$"
 # before this was written down: 7445 as LB_PORT put the API-server LB on the supervisor's 7444
 # (header item 5, the agent-config loop); 7444 as SUPERVISOR_PORT collided with the API server's
 # own 7444 when the scratch server started ("bind: address already in use"); and a split
-# 7443/7445 left 7443 unbound. The test in ansible/tests/setup pins the layout.
+# 7443/7445 left 7443 unbound. The test in hosts/tests pins the layout.
 PORT=7443
 SUPERVISOR_PORT=$PORT
 LB_PORT=7448
@@ -251,7 +251,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # named), so `--no-project` is enough for it and the python version comes from the repo's own
 # `.python-version` rather than a second copy of the number here.
 #
-# GATE_CMD is an array so the test can stub it — ansible/tests/setup/test_etcd_restore_drill_gate.py
+# GATE_CMD is an array so the test can stub it — hosts/tests/test_etcd_restore_drill_gate.py
 # drives a refusal and a pass through it without a cluster.
 GATE_SCRIPT="$REPO_ROOT/scripts/deploy_tools/runbook_gates.py"
 if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
@@ -290,7 +290,7 @@ finish_list_only() {
 # proof CLAUDE.md asks for ("a new check ships with a proof it can go RED"). Reads
 # the KUBECTL array and SNAPSHOT the caller has already set; has no side effect beyond echo/die,
 # so sourcing this file and calling it is enough — see
-# ansible/tests/setup/test_etcd_restore_drill_verify.py.
+# hosts/tests/test_etcd_restore_drill_verify.py.
 verify_restored_objects() {
   # Counts, not names: the point is that the object graph came back, and a count that reads
   # zero is the failure this drill exists to catch.

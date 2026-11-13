@@ -168,7 +168,7 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   promtail reads the log as uid 1000.
 - **Three checks find the templates by their role path.**
   `scripts/validate/shell_templates.py:discover_templates` globs `*.sh.j2` under
-  `ansible/roles/`. `ansible/tests/setup/test_cron_scripts_publish_via_pr.py:push_corpus` and
+  `ansible/roles/`. `hosts/tests/test_cron_scripts_publish_via_pr.py:push_corpus` and
   `test_secret_rendering_host_scripts_have_no_log.py`'s `KNOWN_SECRET_SCRIPTS` (deleted by
   H7.55) name the two token scripts by role path.
 - **The two template validators read `ansible/roles/` only.**
@@ -302,7 +302,7 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   `crontab -l -u <sys_user>`. The same page calls each heartbeat a cron.
 - **No check holds a host script to Python 3.12.** Ubuntu 24.04's `/usr/bin/python3` is 3.12.
   `host_python_version` is `3.14.6`, and
-  `ansible/tests/setup/test_host_python_pin.py:test_host_python_pin_tracks_the_repo_minor` ties
+  `hosts/tests/test_host_python_pin.py:test_host_python_pin_tracks_the_repo_minor` ties
   it to `.python-version` (`3.14`). CI and `uv run` run 3.14.
 
 ## Design
@@ -1311,7 +1311,7 @@ daniel-pi: homelab-updater.timer ─▶ apt-get install homelab-updater homelab-
   ansible/roles/k8s/monitor-bridge/files/checks/gitops.py                   (+ the row's check body)
   ansible/roles/k8s/monitor-bridge/files/gates.py                           (host_packages in EXPORTER_DEPENDENT)
   ansible/tests/repo/test_lan_facts_have_one_source.py (+ hosts, .sh, the bootstrap row)
-  ansible/tests/setup/test_setup_cron_roles_have_a_contract.py  (optimize_pi named member retired, H3.8b)
+  hosts/tests/test_setup_cron_roles_have_a_contract.py  (optimize_pi named member retired, H3.8b)
 + docs/host-packages.md                                (the runbook, H3.4b and H3.5b)
   mkdocs.yml                                           (+ the runbook's nav entry, H3.4b)
   docs/pi-host-tuning-record.md                        (heartbeats and disarm on the package path)
@@ -1359,7 +1359,7 @@ says otherwise.
           included. A `.j2` glob would miss a static unit file. The validator asserts
           `homelab-updater.timer` as a named member, so an empty render fails. The prek
           `validate-unit-templates` selector gains `^hosts/`.
-        - Add the two-writer census, a test in `ansible/tests/setup/`, because it needs a
+        - Add the two-writer census, a test in `hosts/tests/`, because it needs a
           render context and a join that a `Census` row cannot hold.
             - It walks every setup role's tasks through
               `ansible/tests/_role_census.py:task_files_by_role` and `_helpers.walk_tasks`.
@@ -2407,7 +2407,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
   `--clear-hold` levers, the maintainer-script lint and the timeout inequality.
 - **H3.2b:** `hosts/lib/tests/` covers reconcile and the 3.12 syntax check.
 - **H3.2c:**
-    - the two-writer census joins `ansible/tests/setup/`;
+    - the two-writer census joins `hosts/tests/`;
     - the naming census is a `Census` row of `ansible/tests/repo/test_census_rows_text.py`,
       as `.claude/rules/python-layout.md` asks of a textual census;
     - `scripts/validate/unit_templates.py`'s test gains the host-render pair and the named
@@ -2480,18 +2480,18 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       runbook's host-plane page section naming `HostReconcileFailed` and
       `HostUpdateStale` (H3.5d).
 - **H3.6:**
-    - `ansible/tests/setup/test_pi_node_exporter_host_unit.py` changes with the textfile
+    - `hosts/tests/test_pi_node_exporter_host_unit.py` changes with the textfile
       flag, and asserts the directory task's owner, group and mode;
     - `ansible/tests/repo/test_lan_facts_have_one_source.py` gains `hosts`, `.sh`, the
       bootstrap allowlist row and its URL test;
     - the bootstrap fingerprint-pin test, beside the URL test;
     - `docs/pi-host-tuning-record.md` records the updater's measured memory peaks.
 - **H3.8b:**
-    - `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py`,
-      `ansible/tests/setup/test_pi_gz_integrity_sweep.py`, the Pi log-line shape test (deleted
-      by M6's PR B-2 with the Loki parser it fed) and `ansible/tests/setup/_pi_health.py`
+    - `hosts/tests/test_pi_recovery_restarts_and_reports.py`,
+      `hosts/tests/test_pi_gz_integrity_sweep.py`, the Pi log-line shape test (deleted
+      by M6's PR B-2 with the Loki parser it fed) and `hosts/tests/_pi_health.py`
       retarget the rendered component and its `defaults:` map instead of the role;
-    - `ansible/tests/setup/test_cron_scripts_publish_via_pr.py:push_corpus` names the two
+    - `hosts/tests/test_cron_scripts_publish_via_pr.py:push_corpus` names the two
       scripts at their component path;
     - `test_secret_rendering_host_scripts_have_no_log.py`'s `KNOWN_SECRET_SCRIPTS` (deleted by
       H7.55) drops both, because neither renders a secret any more;
@@ -2503,11 +2503,11 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - its `## Autonomous-role contract` moves into a header comment in
       `hosts/components/pi-heartbeats/component.yml`;
     - the `# fact:` marker in
-      `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py:test_a_dead_container_is_restarted`
+      `hosts/tests/test_pi_recovery_restarts_and_reports.py:test_a_dead_container_is_restarted`
       names the removed section, so it goes in the same edit;
     - the role's `## At a glance` block loses its three crons. The `regen-role-glance` hook
       rewrites it, and the rewritten block is committed;
-    - `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py:test_optimize_pi_is_not_exempt`
+    - `hosts/tests/test_setup_cron_roles_have_a_contract.py:test_optimize_pi_is_not_exempt`
       would pass vacuously once the role installs no cron. It is replaced by a test beside
       the component tests that `hosts/components/pi-heartbeats/component.yml` carries the
       contract header;
@@ -3077,10 +3077,10 @@ reason is given.
   same-PR list now runs `fact_status.py forget` for the removed contract section and
   `verify` for each changed one. G2's PR 3 has since retired the lock, and #7231 removed this step. It also covers three more breaks of the same kind:
     - the `# fact:` marker in
-      `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py:test_a_dead_container_is_restarted`
+      `hosts/tests/test_pi_recovery_restarts_and_reports.py:test_a_dead_container_is_restarted`
       that names the removed section;
     - the regenerated `## At a glance` block;
-    - `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py:test_optimize_pi_is_not_exempt`,
+    - `hosts/tests/test_setup_cron_roles_have_a_contract.py:test_optimize_pi_is_not_exempt`,
       which would pass vacuously once the role installs no cron.
 
   H3.9b re-verifies `CLAUDE.md#After a PR Merges — Pull, Deploy, Verify` when its new line

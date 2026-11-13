@@ -15,6 +15,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from infra_map.constants import HOST_PLANE, HOST_ROLE, HOSTS, NAMESPACE_OWNERS
 from infra_map.inventory import RoleIndex, declared_services
+from collections.abc import Sequence
 from typing import Any
 
 
@@ -202,8 +203,11 @@ def build_model(
     generated_at: str,
     roles: RoleIndex,
     cluster: dict | None = None,
+    k8s: Sequence[dict] = (),
 ) -> dict:
     """Merge declared and live state into the structure the renderer consumes.
+
+    *k8s* is the k8s service list, which the k8s host declares.
 
     *live* maps a host name to ``{"ok": bool, "error": str, "data": ...}``.
     *cluster* is the extra cluster-wide state from :func:`collect_cluster`, or
@@ -227,7 +231,7 @@ def build_model(
 
     for host in HOSTS:
         hv = host_vars.get(host, {})
-        declared = declared_services(host, hv, global_vars)
+        declared = declared_services(host, hv, global_vars, k8s)
         info = live.get(host, {"ok": False, "error": "not collected", "data": {}})
         platform = HOST_PLANE.get(host) or (
             "k8s" if any(s["platform"] == "k8s" for s in declared) else "docker"

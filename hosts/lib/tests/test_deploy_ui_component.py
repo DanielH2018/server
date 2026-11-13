@@ -75,7 +75,7 @@ def test_a_changed_python_file_restarts_the_daemon_is_clean(package, manifest):
 def test_the_port_admits_the_pod_cidr_and_both_nodes_and_never_the_lan(
     manifest, context
 ):
-    nodes = {context["server_ip"], context["hostvars"]["daniel-server"]["server_ip"]}
+    nodes = {context["server_ip"], context["hosts"]["daniel-server"]["server_ip"]}
     sources = {r["spec"].split()[2] for r in _port_rules(manifest)}
     assert sources == {context["k3s_pod_cidr"]} | nodes
     assert context["lan_subnet"] not in sources

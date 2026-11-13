@@ -204,14 +204,6 @@ OBSERVABILITY_DEFAULTS_PATH = os.path.join(
     "main.yml",
 )
 
-# Inventory hosts file (plaintext) — source of daniel-pi's LAN IP.
-HOSTS_INI_PATH = os.path.join(
-    REPO,
-    "ansible",
-    "inventory",
-    "hosts.ini",
-)
-
 
 def prom_endpoint():
     """The cluster prometheus's query-only IngressRoute endpoint."""

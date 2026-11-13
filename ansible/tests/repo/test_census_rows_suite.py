@@ -127,7 +127,7 @@ ROWS = (
             "as a role. That fails or miscensuses only in the long-lived primary checkout where "
             "the crons run the suite, never in CI (#2952, #2964). Use `_role_census.role_dirs`."
         ),
-        files=lambda: tracked("ansible/tests/*.py"),
+        files=lambda: tracked("ansible/tests/*.py", "hosts/tests/*.py"),
         offence=lines_matching(BARE_ROLE_WALK),
         red=(
             Subject("a.py", "for p in sorted(_K8S_ROLES.iterdir()):"),

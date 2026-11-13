@@ -3943,7 +3943,7 @@ PR follows a read that the tile is gone.
   the tests `scripts/docs/tests/test_fragments_storage.py`,
   `scripts/docs/tests/test_gen_doc_fragments.py`,
   `ansible/tests/services/test_monitor_bridge_healthchecks_expected.py`,
-  `ansible/tests/setup/test_health_cron_boot_grace.py` and
+  `hosts/tests/test_health_cron_boot_grace.py` and
   `scripts/validate/tests/test_backup_health_shim.py`.
 - **M5's Kuma rule.** M5 adds one Kuma rule, `KumaNotificationDropped` (`critical`,
   `service: uptime-kuma`), to `loki-homelab/files/rules/homelab-logs.yaml`. It adds no
@@ -4872,13 +4872,13 @@ reach A6-7a, fail the bijection test and lose its only pager.
   B0's apply on its own host (*Order*). B0's test finds the copy task by its name and fails
   when it lacks `always`, and it fails when a rendered script sources the library without
   `|| exit 1`.
-- **B5, the Pi's textfile collector. Already in place since H3.6;** the two steps below are the record of what that PR did, and B5 adds neither. `ansible/tests/setup/test_pi_node_exporter_host_unit.py` holds the flag and the directory. The producers are the package's `pi-sd-health` and `pi-recovery-health` scripts (H3.8b), which source a package copy of `homelab-check-lib.sh` (`host_sources.SHARED_FILES`). In `optimize_pi`, under the `node-exporter-host` tag:
+- **B5, the Pi's textfile collector. Already in place since H3.6;** the two steps below are the record of what that PR did, and B5 adds neither. `hosts/tests/test_pi_node_exporter_host_unit.py` holds the flag and the directory. The producers are the package's `pi-sd-health` and `pi-recovery-health` scripts (H3.8b), which source a package copy of `homelab-check-lib.sh` (`host_sources.SHARED_FILES`). In `optimize_pi`, under the `node-exporter-host` tag:
     - replace `--no-collector.textfile` in `templates/node_exporter.service.j2` with
       `--collector.textfile.directory=/var/lib/node-exporter-textfile`;
     - add the directory task with M3's owner contract: owner root, group `{{ sys_user }}`,
       mode 2775, files written 0644.
 
-  A test in `ansible/tests/setup/` asserts that the unit's flag and the directory task name the
+  A test in `hosts/tests/` asserts that the unit's flag and the directory task name the
   same path, and that the unit no longer carries `--no-collector.textfile`.
 - **B6b, the pod producers (operator ruling of 2026-10-23):**
     - **The crowdsec-jobs sidecar** is long-running, so it is an exporter. `files/jobs_metrics.py`
@@ -6161,7 +6161,7 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
       `scripts/renderer/tests/test_renderer_host_inputs.py` and
       `test_renderer_host_mode.py` stop using `kuma-push-lib.sh` as their sample shared
       file.
-    - C-3b: `test_kuma_check_timer.py` (in `ansible/tests/setup/`) is renamed with its task
+    - C-3b: `test_kuma_check_timer.py` (in `hosts/tests/`) is renamed with its task
       file and gains the legacy-unit case. The setup/common, gitops_deploy, initial_setup and
       render_records `CLAUDE.md` files are updated, and their glance blocks regenerate.
       `scripts/docs/tests/test_gen_role_glance.py` gains the named-member timer case.

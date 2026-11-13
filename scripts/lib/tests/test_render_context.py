@@ -27,6 +27,7 @@ def tree(tmp_path: Path):
         all_vars=tmp_path / "all.yml",
         host_vars=tmp_path / "host_vars",
         plane_hosts={"k8s": "box"},
+        services=tmp_path / "services.yml",
     )
     inventory.host_vars.mkdir()
 
@@ -158,14 +159,14 @@ def test_a_strict_context_raises_naming_the_value_that_will_not_expand(tree):
     assert set(exc.value.keys) == {"bad"}
 
 
-def test_a_group_var_reads_another_hosts_server_ip_through_hostvars(tree):
+def test_a_group_var_reads_another_hosts_server_ip_through_hosts(tree):
     # all.yml's k8s_pi_client_ip is this shape (#3719). A strict render raises only when
-    # `hostvars` is absent. A `hostvars` missing the Pi's entry resolves to None without
+    # `hosts` is absent. A `hosts` missing the Pi's entry resolves to None without
     # raising, so the rows in _scrape_property_rows.py and _edge_property_rows.py compare each
     # consumer against the Pi's literal.
     template, inv = tree(
         {},
-        group={"pi_ip": "{{ hostvars['pi'].server_ip }}"},
+        group={"pi_ip": "{{ hosts['pi'].server_ip }}"},
         hosts={"box": {"server_ip": "10.0.0.1"}, "pi": {"server_ip": "10.0.0.2"}},
         plane="k8s",
     )
@@ -174,7 +175,7 @@ def test_a_group_var_reads_another_hosts_server_ip_through_hostvars(tree):
     )
 
 
-def test_hostvars_carries_no_value_that_would_resolve_against_the_wrong_host(tree):
+def test_hosts_carries_no_value_that_would_resolve_against_the_wrong_host(tree):
     # The Pi's `ansible_host: "{{ server_ip }}"` would resolve against the rendered host's
     # server_ip here, which no deploy does, so the layer holds the literal server_ip only.
     template, inv = tree(
@@ -185,14 +186,14 @@ def test_hostvars_carries_no_value_that_would_resolve_against_the_wrong_host(tre
         },
         plane="k8s",
     )
-    hostvars = rc.render_context(template, inventory=inv)["hostvars"]
-    assert hostvars == {
+    hosts = rc.render_context(template, inventory=inv)["hosts"]
+    assert hosts == {
         "box": {"server_ip": "10.0.0.1"},
         "pi": {"server_ip": "10.0.0.2"},
     }
 
 
-def test_hostvars_carries_a_literal_compose_services_and_omits_a_templated_one(tree):
+def test_hosts_carries_a_literal_compose_services_and_omits_a_templated_one(tree):
     # observability's alloy-pi job reads the Pi's entry port this way (#3860). A templated
     # list would resolve against the rendered host, so it stays out like `ansible_host`.
     pi_list = [{"name": "alloy", "port": 12345}]
@@ -208,14 +209,32 @@ def test_hostvars_carries_a_literal_compose_services_and_omits_a_templated_one(t
         },
         plane="k8s",
     )
-    hostvars = rc.render_context(template, inventory=inv)["hostvars"]
-    assert hostvars == {"pi": {"server_ip": "10.0.0.2", "compose_services": pi_list}}
+    hosts = rc.render_context(template, inventory=inv)["hosts"]
+    assert hosts == {"pi": {"server_ip": "10.0.0.2", "compose_services": pi_list}}
 
 
-def test_a_callers_hostvars_replaces_the_inventory_layer(tree):
+def test_hosts_has_an_entry_per_host_vars_file_and_none_for_the_template(tree):
+    pi_list = [{"name": "alloy", "port": 12345}]
+    template, inv = tree(
+        {},
+        hosts={
+            "box": {"server_ip": "10.0.0.1"},
+            "pi": {"server_ip": "10.0.0.2", "compose_services": pi_list},
+            "_example": {"server_ip": "192.0.2.1"},
+        },
+        plane="k8s",
+    )
+    hosts = rc.render_context(template, inventory=inv)["hosts"]
+    assert hosts == {
+        "box": {"server_ip": "10.0.0.1"},
+        "pi": {"server_ip": "10.0.0.2", "compose_services": pi_list},
+    }
+
+
+def test_a_callers_hosts_replaces_the_inventory_layer(tree):
     template, inv = tree({}, hosts={"box": {"server_ip": "10.0.0.1"}}, plane="k8s")
-    ctx = rc.render_context(template, inventory=inv, overrides={"hostvars": {"x": {}}})
-    assert ctx["hostvars"] == {"x": {}}
+    ctx = rc.render_context(template, inventory=inv, overrides={"hosts": {"x": {}}})
+    assert ctx["hosts"] == {"x": {}}
 
 
 def test_a_host_vars_value_beats_a_component_default(tree):

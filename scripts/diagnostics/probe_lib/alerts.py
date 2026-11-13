@@ -45,7 +45,7 @@ _GAP_STEPS = 2
 # A Pi job is one whose static target names the Pi: the scrape jobs `pi_plane` derives, and
 # `blackbox-pi-ports`, whose targets are the Pi's published container ports (PiPortDead).
 _JOB_NAME_RE = re.compile(r"^\s*-\s*job_name:\s*(\S+)")
-_PI_PORTS_MARKER = "hostvars['daniel-pi']"
+_PI_PORTS_MARKER = "hosts['daniel-pi']"
 
 
 def step_seconds(days):

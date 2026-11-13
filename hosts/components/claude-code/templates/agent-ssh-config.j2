@@ -1,10 +1,10 @@
 # Shipped by the claude-code host component.
 # The agent reaches each peer as that peer's own agent user, `{{ claude_code_agent_user }}`, which
 # has no sudo. A peer appears here while its host_vars set claude_agent_ssh_login_enabled.
-{% for peer in hostvars | sort if peer != claude_agent_ssh_key_host and hostvars[peer].claude_agent_ssh_login_enabled | default(false) | bool %}
+{% for peer in hosts | sort if peer != claude_agent_ssh_key_host and hosts[peer].claude_agent_ssh_login_enabled | default(false) | bool %}
 
 Host {{ peer }}
-    HostName {{ hostvars[peer].server_ip }}
+    HostName {{ hosts[peer].server_ip }}
     User {{ claude_code_agent_user }}
     IdentityFile {{ claude_agent_ssh_key_path }}
     # Offer this key and no other, so a peer never sees a key the agent was not meant to use.

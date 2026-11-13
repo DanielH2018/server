@@ -6,8 +6,7 @@ until 2026-11-12, and unparked with an empty library for the music pipeline to f
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=navidrome` gates
-  the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=navidrome` gates the rollout
 - **Image:** `ghcr.io/navidrome/navidrome` (`navidrome_k8s_image`)
 - **Route:** `navidrome.<domain>` · `navidrome.local.<domain>`, Authelia one_factor
 - **Claims:** `navidrome-data` (weekly -> B2 (default target)), `media-data` (not Longhorn
@@ -28,7 +27,7 @@ until 2026-11-12, and unparked with an empty library for the music pipeline to f
   index. A failed revision writes the stateful hold, and the operator reverts the claim
   through `docs/volume-snapshot-drills.md`.
 - **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry is
-  `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. The Kustomization lists its dependencies
   (authelia, traefik, media-volume) in `dependsOn`, and its `wait` replaces the rollout wait.
 

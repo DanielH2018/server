@@ -5,8 +5,7 @@ Traefik terminates TLS. Every routed k8s role depends on it, and through it on t
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=traefik` gates the
-  rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=traefik` gates the rollout
 - **Images:** `traefik` (`traefik_k8s_image`), `alpine` (`traefik_k8s_logrotate_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `traefik-acme` (daily -> R2)
@@ -23,7 +22,7 @@ The init containers' working-out is `docs/crowdsec-waf-record.md`.
 ## Flux applies it
 
 - **Flux applies traefik, not Ansible** (D5, traefik's own window, #5707). Its
-  `containers_list` entry is `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle.
 - **Where the tasks went.** The CRD install and its "established" wait became the `traefik-crds`
   tag, which traefik's Kustomization depends on. The RBAC staging under `/etc/rancher/k3s`

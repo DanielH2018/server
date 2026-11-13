@@ -49,6 +49,30 @@ def sync_problems(docs: list[dict]) -> list[str]:
     ]
 
 
+def _strings(node):
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, dict):
+        for value in node.values():
+            yield from _strings(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _strings(value)
+
+
+def placeholder_problems(docs: list[dict]) -> list[str]:
+    """Name each string of a hand-applied document that holds `${` or `$$`.
+
+    A hand apply runs no substitution, so such a string reaches the API server verbatim.
+    """
+    return [
+        f"{d.get('kind')} {d.get('metadata', {}).get('name')}: {s!r} holds a placeholder"
+        for d in docs
+        for s in _strings(d)
+        if "${" in s or "$$" in s
+    ]
+
+
 def _docs(path):
     return [d for d in yaml_fast.safe_load_all(path.read_text()) if d]
 
@@ -94,13 +118,14 @@ def test_the_documents_applied_by_hand_hold_no_placeholder(
         if path.name != "kustomization.yaml":
             by_hand += _docs(path)
     assert len(by_hand) >= 5
-    assert drill.placeholder_problems(by_hand) == []
+    assert placeholder_problems(by_hand) == []
 
 
-def test_an_ocirepository_url_holding_a_placeholder_is_caught(flux_render):
+@pytest.mark.parametrize("owner", ["${owner}", "$$owner"])
+def test_an_ocirepository_url_holding_a_placeholder_is_caught(flux_render, owner):
     docs = _sync(flux_render)
-    docs[0]["spec"]["url"] = "oci://ghcr.io/${owner}/homelab-manifests"
-    assert drill.placeholder_problems(docs)
+    docs[0]["spec"]["url"] = f"oci://ghcr.io/{owner}/homelab-manifests"
+    assert placeholder_problems(docs)
 
 
 def test_no_plumbing_closure_reaches_flux_deferred_or_the_root(published_render):

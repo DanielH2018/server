@@ -24,7 +24,6 @@ from _helpers import K8S_ROLES
 from _k8s_render import host_context, pod_template, rendered_docs
 from homepage_tiles import netpol_callers
 from lib import yaml_fast
-from lib.ansible_inventory import containers_entries_in
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
@@ -114,7 +113,7 @@ def declared_fences() -> dict[str, dict]:
     `netpol_role_owned` or the item's `role_owned`, and its owner is then the entry's role.
     """
     fences = {}
-    for e in containers_entries_in(host_context()):
+    for e in host_context()["services"]:
         if callers := netpol_callers(e):
             fences[fence_name(e)] = {
                 "owner": e["name"] if e.get("netpol_role_owned") else "netpol-baseline",

@@ -143,7 +143,7 @@ TAG=etcd-restore-drill-vm
 # fence's under its own, because the syslog tag is shared and a check file takes one verdict.
 # DEADLINE_S is the longest legitimate gap between two writes, which is the monthly cadence plus
 # slack (etcd_drill_full_kuma_interval_s, named for the Kuma tile that carried it until M6 batch
-# B4). ansible/tests/setup/test_b4_rule_literals.py pins the rules' literals to this value.
+# B4). hosts/tests/test_b4_rule_literals.py pins the rules' literals to this value.
 CHECK_DRILL=etcd-restore-drill-vm
 CHECK_FENCE=etcd-restore-drill-egress-fence
 DEADLINE_S={{ etcd_drill_full_kuma_interval_s }}
@@ -313,8 +313,8 @@ fence_targets() {
   # lan_subnet: the cluster edge, the API server, and daniel-pi's wg-easy admin UI — which is
   # unauthenticated, and whose only protection is the LAN-only premise this guest sits outside.
   printf '%s|%s|\n' PRODVIP "$(fence_curl http://{{ k3s_metallb_ingress_vip }})"
-  printf '%s|%s|\n' K3SAPI "$(fence_curl https://{{ hostvars['daniel-box'].server_ip }}:6443/version)"
-  printf '%s|%s|\n' WGEASY "$(fence_curl http://{{ hostvars['daniel-pi'].server_ip }}:51821)"
+  printf '%s|%s|\n' K3SAPI "$(fence_curl https://{{ hosts['daniel-box'].server_ip }}:6443/version)"
+  printf '%s|%s|\n' WGEASY "$(fence_curl http://{{ hosts['daniel-pi'].server_ip }}:51821)"
   # k3s_service_cidr. Longhorn's frontend Service is the thing actually found exposed on
   # 2026-08-28, answering unauthenticated with a mutating `diskUpdate` action in its payload.
   printf '%s|%s|%s\n' LONGHORNSVC "$(fence_curl "$FENCE_LONGHORN_URL")" "$(fence_curl "$FENCE_LONGHORN_URL")"

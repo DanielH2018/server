@@ -139,7 +139,7 @@ The exit criterion is three observations:
   and docker-proxy-lifecycle sat Exited after a failed start until a person noticed. H3.8b
   moves the template into the `pi-heartbeats` component and the autonomous contract into that
   component's header, with the derivation unchanged.
-  `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py:MUST_WATCH` names autoheal,
+  `hosts/tests/test_pi_recovery_restarts_and_reports.py:MUST_WATCH` names autoheal,
   docker-proxy, docker-proxy-lifecycle and wg-easy.
 - **The engine upgrade reads the list too.**
   `ansible/roles/setup/docker_install/tasks/engine-upgrade.yml` stops every Compose project in
@@ -299,7 +299,7 @@ reading `containers_list` alone. At `70591c307` the answer is:
 - `estate.py:Estate.pi_entries` serves only `gen_role_glance.py`'s Pi compose-role shape.
   Each move PR deletes the role whose block that shape writes, and H5.12 drops the shape.
 
-**Census.** A test in `ansible/tests/setup/` fails on three conditions:
+**Census.** A test in `hosts/tests/` fails on three conditions:
 
 - a name appears in both keys;
 - a `compose_services` entry has no legacy entry for its Ansible-era compose file in the
@@ -1423,7 +1423,7 @@ upstream, revert its downstreams before it.
 
 - **H5.1:**
     - the census;
-    - `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py`, whose expected set reads
+    - `hosts/tests/test_pi_recovery_restarts_and_reports.py`, whose expected set reads
       both keys while `MUST_WATCH` stays fixed;
     - `ansible/tests/services/test_pi_publishing_containers.py`'s helper, whose expected
       members stay unchanged;

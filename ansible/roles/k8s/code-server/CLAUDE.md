@@ -6,8 +6,7 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=code-server` gates
-  the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=code-server` gates the rollout
 - **Image:** `ghcr.io/danielh2018/code-server` (`code_server_k8s_image`)
 - **Route:** `code-server.<domain>` · `code-server.local.<domain>`, Authelia two_factor
 - **Claims:** `code-server-config` (no backup (listed in k3s_longhorn_nobackup_volumes)),
@@ -19,7 +18,7 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   k8s/image-builder before D5.16.
 - **Host:** daniel-box (k3s), pinned by a required node affinity · **Port:** 8443
 - **Flux applies it, not Ansible** (D5.16, Wave C). Its `containers_list` entry is
-  `platform: k8s`, so nothing applies it by hand, and a merged
+  in `cluster/services.yml`, so nothing applies it by hand, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy:
   false` still stops Renovate's
   automerge of a base-image or build-pin bump.

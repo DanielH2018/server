@@ -67,21 +67,18 @@ source ~/.bashrc   # (or re-login) to pick up ~/.local/bin on PATH
 
 ## 4. Add the host to inventory
 
-`ansible/inventory/hosts.ini` and `ansible/inventory/host_vars/<host>.yml` describe each host to
-the renderer and the host packages. A host that isn't listed there matches nothing. Before
+`ansible/inventory/host_vars/<host>.yml` describes each host to the renderer and the host
+packages: one file is one inventory host, and a host without a file matches nothing. Before
 touching SOPS:
 
-1. Add the new host's bare hostname under `[homeservers]` in `ansible/inventory/hosts.ini`.
-
-2. Create `ansible/inventory/host_vars/<host>.yml` — copy
+1. Create `ansible/inventory/host_vars/<host>.yml` — copy
    `ansible/inventory/host_vars/_example.yml`, which lists every variable a
    new host can set with its default and why it matters. At minimum:
    - `server_ip` — the host's LAN IP (no default exists; every role that publishes a
      LAN-bound port or firewalls by IP needs it).
    - `compose_services: []` on a Docker host only, which its host package deploys. A k3s
      node drops the key, because the k3s services live in `cluster/services.yml` (see the
-     repo-root `CLAUDE.md` → "Adding a New Service"). No host_vars file defines
-     `containers_list`.
+     repo-root `CLAUDE.md` → "Adding a New Service").
    - Any hardware capability flags a role you plan to deploy expects — for example `has_igpu: true`
      only if the host has an Intel iGPU (gates `/dev/dri` passthrough for jellyfin/tdarr;
      defaults to `false` in `ansible/inventory/group_vars/all.yml`).

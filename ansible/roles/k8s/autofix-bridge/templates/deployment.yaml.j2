@@ -33,7 +33,7 @@ spec:
           command: ["python", "/app/autofix.py"]
           ports:
             - name: checks
-              containerPort: {{ containers_list | metrics_port('autofix-bridge') }}
+              containerPort: {{ services | metrics_port('autofix-bridge') }}
 {{ hardened_security_context(read_only=true) }}
           # The settings, as plain values; the credentials come from env-secret.yaml.j2. A
           # quoted number belongs here, never in the Secret: Flux's typed patch reads a
@@ -52,7 +52,7 @@ spec:
             # autofix.py): the `autofix-bridge` item on this role's containers_list entry, which
             # also renders the scrape job and the Service port (M6 batch B7).
             - name: CHECK_EXPORTER_PORT
-              value: "{{ containers_list | metrics_port('autofix-bridge') }}"
+              value: "{{ services | metrics_port('autofix-bridge') }}"
             # LIVE remediation, carried over unchanged — the operator flipped it 2026-07-06 and
             # the autonomous-role contract (this role's CLAUDE.md) governs any change here.
             - name: DRY_RUN

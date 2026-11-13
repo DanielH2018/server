@@ -7,12 +7,12 @@
   The pin keeps a CoreDNS or Pi-hole fault out of the probe path.
 
   blackbox-exporter's Deployment is the only caller, and says at its call site why that pod
-  probes the ingress. The list is rendered from `containers_list` | lan_hostnames, plus the one
+  probes the ingress. The list is rendered from `services` | lan_hostnames, plus the one
   literal probe host that fronts no workload.
 
   Emits the `hostAliases:` key at pod-spec indent (6 spaces) and no trailing newline, so a
   caller writes `{{ ingress_host_aliases() }}` on a line of its own. Each item writes its newline
-  before itself, for that reason. Import it `with context`: it reads hostvars,
+  before itself, for that reason. Import it `with context`: it reads hosts,
   k8s_primary_node, domain and k3s_metallb_ingress_vip.
 #}
 {% macro ingress_host_aliases() %}
@@ -29,7 +29,7 @@
             # existing *.local wildcard SAN, so it adds no ACME order.
             # test_the_all_clear_probe_host_fronts_no_route keeps it unrouted.
             - "edge-selfcheck.local.{{ domain }}"
-{%- for name in hostvars[k8s_primary_node].containers_list | lan_hostnames %}
+{%- for name in services | lan_hostnames %}
 {{ "\n" }}            - "{{ name }}.local.{{ domain }}"
 {%- endfor %}
 {% endmacro %}

@@ -1,11 +1,11 @@
 {# Not a macro — a whole manifest. The renderer renders this file as `service.yaml` for
    every role that resolves `service.yaml` into its `manifests_files` and ships no
-   `templates/service.yaml.j2` of its own. A role resolves it when its containers_list entry
+   `templates/service.yaml.j2` of its own. A role resolves it when its services entry
    carries a `port` and its include does not exclude it (`manifests_shared_defaults` in that role's
    defaults). This file is the three-line wrapper around the `service()` macro below that
    22 roles' Service templates would otherwise repeat byte for byte.
 
-   THE ENTRY IS THE INPUT. Name and port come from the role's `containers_list` entry, and the
+   THE ENTRY IS THE INPUT. Name and port come from the role's `services` entry, and the
    two variants those 22 roles differed on are entry keys rather than template edits:
 
      service_port_name    the Service's port NAME (home-assistant, homelab-mcp, zigbee2mqtt).

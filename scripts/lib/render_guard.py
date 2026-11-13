@@ -11,9 +11,9 @@ the repo path anchors, the non-secret fallback context, the plaintext-YAML loade
 source dumper, and the base stub-undefined class — live here so they stay in sync instead of
 being hand-copied.
 
-The inventory readers at the bottom (``host_files``, ``containers_entries``) serve a wider set:
-``deploy_tags.py`` and ``service_catalog.py`` both walked ``host_vars/`` and parsed
-``containers_list`` themselves, and each carried its own copy of the ``_``-prefix exclusion.
+The inventory readers at the bottom (``host_files``, ``k8s_services``) serve a wider set:
+``deploy_tags.py`` and ``service_catalog.py`` both walked ``host_vars/`` and parsed the
+service list themselves, and each carried its own copy of the ``_``-prefix exclusion.
 The path anchors come from ``repo_paths.py`` and are re-exported here for the callers that
 already import them from this module; a script that wants only a path imports
 ``repo_paths`` directly and skips the ``jinja2`` import this module costs.
@@ -33,8 +33,8 @@ from jinja2 import ChainableUndefined, Environment, FileSystemLoader, StrictUnde
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
-from lib.git import git, git_stdout
-from lib.ansible_inventory import K8S_HOST, containers_entries_in
+from lib.git import git
+from lib.ansible_inventory import K8S_HOST, containers_entries_in, host_names
 from lib.repo_paths import (
     ALL_VARS,
     ANSIBLE,
@@ -59,25 +59,21 @@ __all__ = [
     "SHARED_TPL",
     "StrictChainableUndefined",
     "StubUndefined",
-    "containers_entries",
-    "containers_entries_at",
     "containers_entries_in",
     "dump_numbered",
-    "entry_platform",
     "entry_tags",
     "entry_tags_at",
     "host_files",
     "host_layer",
+    "k8s_services",
+    "k8s_services_at",
     "load_yaml",
     "make_env",
     "pad_to_source_newlines",
     "render_or_error",
-    "service_records_at",
-    "service_records_at_or_none",
     "service_tags_at",
     "service_tags_at_or_none",
     "services_file",
-    "with_services",
 ]
 
 # k8s/image-builder publishes `k8s_built_image_tags` as a play fact at deploy time (image name ->
@@ -137,7 +133,7 @@ class StubUndefined(ChainableUndefined):
 class StrictChainableUndefined(ChainableUndefined, StrictUndefined):
     """An undefined that raises when it is printed, iterated or tested, as Ansible's does.
 
-    It stays chainable, so `hostvars['x'].missing | default('y')` still renders its default,
+    It stays chainable, so `hosts['x'].missing | default('y')` still renders its default,
     as it does under Ansible. `homelab-render` renders with it, where the guards keep
     `StubUndefined`.
     """
@@ -229,15 +225,12 @@ def render_or_error(
 
 
 def host_files(host_vars: Path = HOST_VARS) -> list[Path]:
-    """Every real host's ``host_vars`` file, sorted.
+    """Every host's ``host_vars`` file, in ``host_names`` order.
 
-    ``_example.yml`` is a template for a new host, not a host — Ansible only loads a host_vars
-    file whose name matches an inventory hostname, so it is inert to a real run and must be
-    inert here too. ``ansible/tests/deploy/test_containers_list_roles_exist.py`` makes the same
-    exclusion. The ``host_vars`` argument stays a parameter because every caller's tests inject a
+    The ``host_vars`` argument stays a parameter because every caller's tests inject a
     ``tmp_path`` through it.
     """
-    return sorted(p for p in host_vars.glob("*.yml") if not p.name.startswith("_"))
+    return [host_vars / f"{name}.yml" for name in host_names(host_vars)]
 
 
 def services_file(host_vars: Path) -> Path:
@@ -245,41 +238,14 @@ def services_file(host_vars: Path) -> Path:
     return host_vars.resolve().parents[2] / K8S_SERVICES.relative_to(REPO)
 
 
-def with_services(host: str, layer: dict, services: dict) -> dict:
-    """`layer` with the k8s host's ``containers_list`` taken from the parsed service list.
-
-    Only ``K8S_HOST`` gains the list, and only when `services` declares it, so a tree from
-    before the list left ``host_vars`` reads as it did.
-
-    Raises:
-        ValueError: the k8s host's host_vars file declares ``containers_list`` as well.
-    """
-    if host != K8S_HOST or "containers_list" not in services:
-        return layer
-    if "containers_list" in layer:
-        raise ValueError(
-            f"{K8S_HOST}'s host_vars and {K8S_SERVICES.relative_to(REPO)} both declare "
-            "containers_list; the k8s services live in the second alone"
-        )
-    return {**layer, "containers_list": services["containers_list"]}
-
-
 def host_layer(host_vars: Path, host: str) -> dict:
-    """`host`'s host_vars file as the renderer reads it, ``{}`` for a host without one.
-
-    The k8s host's ``containers_list`` comes from ``cluster/services.yml`` beside the
-    inventory (`with_services`), so every reader of that host's layer sees the k8s services
-    under the variable name the templates use.
-    """
-    layer = load_yaml(host_vars / f"{host}.yml")
-    if host != K8S_HOST:
-        return layer
-    return with_services(host, layer, load_yaml(services_file(host_vars)))
+    """`host`'s host_vars file, ``{}`` for a host without one."""
+    return load_yaml(host_vars / f"{host}.yml")
 
 
-def containers_entries(path: Path) -> list[dict]:
-    """The named ``containers_list`` entries of the host whose host_vars file is `path`."""
-    return containers_entries_in(host_layer(path.parent, path.stem))
+def k8s_services(path: Path = K8S_SERVICES) -> list[dict]:
+    """The named entries of the service list `path`, every k8s service, in file order."""
+    return containers_entries_in(load_yaml(path))
 
 
 # host_vars as git names it: ``git show`` and ``git ls-tree`` address a path in a tree, not on
@@ -289,127 +255,60 @@ SERVICES_IN_TREE = K8S_SERVICES.relative_to(REPO).as_posix()
 
 
 def entry_tags(entry: dict) -> list[str]:
-    """The tags one ``containers_list`` entry selects under.
+    """The tags one service entry selects under.
 
     An entry's own ``tags`` win, else its ``name`` alone. Every tag reader goes through here, or
-    an entry that overrides its tags is validated against a name that no longer selects it. One definition, because ``deploy_tags.service_tags`` reads the working
-    tree, and ``service_tags_at`` below reads a git ref.
+    an entry that overrides its tags is validated against a name that no longer selects it. One
+    definition, because ``deploy_tags.service_tags`` reads the working tree, and
+    ``service_tags_at`` below reads a git ref.
     """
     return list(entry.get("tags") or [entry["name"]])
 
 
-def entry_platform(entry: dict) -> str:
-    """The platform one ``containers_list`` entry deploys on: ``k8s`` or ``docker``.
+def k8s_services_at(ref: str, cwd: Path) -> list[dict]:
+    """The named entries of ``cluster/services.yml`` AT ``ref``, read with git.
 
-    No host_vars file sets ``platform`` on a docker entry (daniel-pi's don't carry the key at
-    all) -- k8s is the one that's always explicit, so docker is the default rather than an
-    unlabelled third state. One definition, because ``land_lib/health_gate.tag_platforms`` reads the
-    working tree and ``service_records_at`` below reads a git ref.
+    A PR that adds a role and its service entry together is the case a checkout answers
+    wrongly: the entry is in no tree until the tick fast-forwards, so the role reads as one
+    nobody registered (``land_lib/classify.py`` carries the argument). Raises
+    ``CalledProcessError`` on an unreadable ref or a ref without the file, and
+    ``yaml_fast.UnparsableYaml`` on a file that does not load at ``ref``.
     """
-    return entry.get("platform", "docker")
-
-
-def service_records_at(ref: str, cwd: Path) -> list[tuple[str, str, str]]:
-    """``(host, platform, tag)`` for every ``containers_list`` entry AT ``ref``, read with git.
-
-    A PR that adds a role and its ``containers_list`` entry together is the case a checkout
-    answers wrongly: the entry is in no tree until the tick fast-forwards, so the role reads as
-    one nobody registered (``land_lib/classify.py`` carries the argument), and a
-    new Pi role reads as declared on NO host, so its first landing deploys locally instead of
-    with ``-e target=daniel-pi``. Names are listed at ``ref`` too, so a host_vars
-    file the same PR adds counts, and ``_example.yml`` is excluded for the reason
-    ``host_files`` excludes it. The host is the file's stem, as ``deploy_tags.service_records``
-    names it from a path.
-
-    Reuses ``entry_tags``, ``entry_platform`` and ``containers_entries_in`` rather than
-    re-reading a containers_list entry its own way: two derivations of "which tags exist" that
-    disagree is exactly the defect this answer is meant to fix. Raises ``CalledProcessError``
-    on an unreadable ref.
-    """
-    return [
-        (host, entry_platform(entry), tag)
-        for host, entry in containers_entries_at(ref, cwd)
-        for tag in entry_tags(entry)
-    ]
-
-
-def containers_entries_at(ref: str, cwd: Path) -> list[tuple[str, dict]]:
-    """``(host, entry)`` for every named ``containers_list`` entry AT ``ref``, read with git.
-
-    The read ``service_records_at`` above is expressed on, kept separate because that one
-    flattens an entry to its tags and a caller asking which tags ONE entry declares cannot
-    recover the grouping from the flattened form. Raises ``CalledProcessError`` on an
-    unreadable ref, as its caller's docstring says, and ``yaml_fast.UnparsableYaml`` on a file
-    that does not load at ``ref``.
-    """
-    services = (
-        _mapping_at(ref, SERVICES_IN_TREE, cwd)
-        if git_stdout("ls-tree", "--name-only", ref, "--", SERVICES_IN_TREE, cwd=cwd)
-        else {}
+    loaded = yaml_fast.parse_yaml(
+        git("show", f"{ref}:{SERVICES_IN_TREE}", cwd=cwd).stdout
     )
-    entries: list[tuple[str, dict]] = []
-    for name in git_stdout(
-        "ls-tree", "--name-only", f"{ref}:{HOST_VARS_IN_TREE}", cwd=cwd
-    ).splitlines():
-        if not name.endswith(".yml") or name.startswith("_"):
-            continue
-        host = name.removesuffix(".yml")
-        layer = with_services(
-            host, _mapping_at(ref, f"{HOST_VARS_IN_TREE}/{name}", cwd), services
-        )
-        for entry in containers_entries_in(layer):
-            entries.append((host, entry))
-    return entries
-
-
-def _mapping_at(ref: str, path: str, cwd: Path) -> dict:
-    loaded = yaml_fast.parse_yaml(git("show", f"{ref}:{path}", cwd=cwd).stdout)
-    return loaded if isinstance(loaded, dict) else {}
+    return containers_entries_in(loaded if isinstance(loaded, dict) else {})
 
 
 def entry_tags_at(ref: str, cwd: Path) -> dict[str, set[str]]:
-    """Entry name -> the tags that entry declares, for every host's list AT ``ref``.
+    """Entry name -> the tags that entry declares, AT ``ref``.
 
     The answer ``ctx.declared`` cannot give: ``service_tags_at`` returns a flat set of tag
-    strings, so nothing in it says that an entry also declares a second tag, as ``n8n-images`` did. Two
-    hosts declaring the same name is not a shape this inventory has; the tags are unioned
-    rather than raising, because a union only ever makes a caller's answer more cautious.
+    strings, so nothing in it says that an entry also declares a second tag, as ``n8n-images``
+    did.
     """
-    tags: dict[str, set[str]] = {}
-    for _host, entry in containers_entries_at(ref, cwd):
-        tags.setdefault(entry["name"], set()).update(entry_tags(entry))
-    return tags
-
-
-def service_records_at_or_none(
-    ref: str, cwd: Path
-) -> list[tuple[str, str, str]] | None:
-    """``service_records_at``, answering None for a read that cannot be trusted.
-
-    AN EMPTY READ IS DAMAGE, NEVER EVIDENCE. ``[]`` says no service is declared anywhere,
-    which for a caller validating deploy tags refuses every tag there is; for one classifying
-    roles it marks every changed role unregistered; for one routing tags to
-    hosts it routes every tag to no host. A ref this checkout cannot resolve raises inside
-    ``git``, and an empty answer is indistinguishable from that here, so both become None and
-    the caller falls back to the tree it can read.
-
-    ``yaml_fast.UnparsableYaml`` is in the set because the read parses YAML fetched from ``ref``: a
-    host_vars file that does not parse at that commit is a damaged read like any other, and
-    letting it escape turns a read of ``ref`` into a traceback for a file
-    that is merely unparseable.
-    """
-    try:
-        return service_records_at(ref, cwd) or None
-    except subprocess.SubprocessError, OSError, ValueError, yaml_fast.UnparsableYaml:
-        return None
+    return {
+        entry["name"]: set(entry_tags(entry)) for entry in k8s_services_at(ref, cwd)
+    }
 
 
 def service_tags_at(ref: str, cwd: Path) -> set[str]:
-    """Every name that selects a service AT ``ref``: ``service_records_at`` flattened to tags."""
-    return {tag for _host, _platform, tag in service_records_at(ref, cwd)}
+    """Every name that selects a service AT ``ref``."""
+    return {tag for entry in k8s_services_at(ref, cwd) for tag in entry_tags(entry)}
 
 
 def service_tags_at_or_none(ref: str, cwd: Path) -> set[str] | None:
-    """``service_tags_at`` under ``service_records_at_or_none``'s damage rule: None, never ``set()``."""
-    records = service_records_at_or_none(ref, cwd)
-    return None if records is None else {tag for _host, _platform, tag in records}
+    """``service_tags_at``, answering None for a read that cannot be trusted.
+
+    AN EMPTY READ IS DAMAGE, NEVER EVIDENCE. An empty set says no service is declared, which
+    for a caller validating deploy tags refuses every tag there is, and for one classifying
+    roles marks every changed role unregistered. A ref this checkout cannot resolve raises
+    inside ``git``, and an empty answer is indistinguishable from that here, so both become
+    None and the caller falls back to the tree it can read. ``yaml_fast.UnparsableYaml`` is in
+    the set because a service list that does not parse at ``ref`` is a damaged read like any
+    other.
+    """
+    try:
+        return service_tags_at(ref, cwd) or None
+    except subprocess.SubprocessError, OSError, ValueError, yaml_fast.UnparsableYaml:
+        return None

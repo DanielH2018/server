@@ -30,7 +30,7 @@ spec:
       # engine container holds no Kubernetes credential. That volume sits off the default path,
       # which the rendered-property row no-mount-shadows-the-serviceaccount-token keeps free, and
       # the sidecar's kubectl finds it through the kubeconfig in the crowdsec-jobs ConfigMap.
-{{ pod_shell(containers_list | tier_priority_class('crowdsec'), service_account='crowdsec-jobs', automount=false) }}
+{{ pod_shell(services | tier_priority_class('crowdsec'), service_account='crowdsec-jobs', automount=false) }}
       initContainers:
         # /etc/crowdsec is an emptyDir the image entrypoint populates with defaults on
         # start; this seeds our config first so the entrypoint treats it as existing
@@ -150,7 +150,7 @@ spec:
             - name: appsec
               containerPort: {{ crowdsec_k8s_appsec_port }}
             - name: metrics
-              containerPort: {{ containers_list | metrics_port('crowdsec') }}
+              containerPort: {{ services | metrics_port('crowdsec') }}
           env:
             - name: TZ
               value: "{{ tz }}"
@@ -208,7 +208,7 @@ spec:
           command: ["python3", "/jobs/crowdsec_jobs.py"]
           ports:
             - name: jobs-metrics
-              containerPort: {{ containers_list | metrics_port('crowdsec-jobs') }}
+              containerPort: {{ services | metrics_port('crowdsec-jobs') }}
           env:
             # kubectl's discovery cache goes under $HOME.
             - name: HOME
@@ -226,7 +226,7 @@ spec:
             # `crowdsec-jobs` item on this role's containers_list entry, which also renders the
             # scrape job and the Service port.
             - name: JOBS_METRICS_PORT
-              value: "{{ containers_list | metrics_port('crowdsec-jobs') }}"
+              value: "{{ services | metrics_port('crowdsec-jobs') }}"
             # The home allowlist reads the addresses the crowdsec-home-ips CronJob writes, and
             # reports down once their lookup time is older than three of its periods.
             - name: HOME_IPS_CONFIGMAP

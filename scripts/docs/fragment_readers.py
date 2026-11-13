@@ -38,14 +38,10 @@ def module_constant(path: _Path, name: str):
 
 
 def host_has_docker(estate: Estate) -> dict[str, bool]:
-    """`{host: has_docker}` for every host in hosts.ini's `[homeservers]`, in file order.
-
-    The host list is what `initial_setup.yml` targets, so it is the set of hosts that install
-    the crons this role pings from.
-    """
+    """`{host: has_docker}` for every host, sorted by name."""
     return {
         host: bool(estate.vars(host).get("has_docker", False))
-        for host in estate.hosts_in("homeservers")
+        for host in estate.hosts()
     }
 
 

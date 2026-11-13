@@ -1,6 +1,6 @@
 """daniel-box's dev tooling, chezmoi_setup and github_cli move out of Ansible (H7.62).
 
-The worktree holder scan's half of the row is `ansible/tests/setup/test_worktree_holders_install.py`.
+The worktree holder scan's half of the row is `hosts/tests/test_worktree_holders_install.py`.
 
 Run: uv run pytest hosts/lib/tests/test_box_dev_tooling.py
 """

@@ -52,7 +52,7 @@ STUCK_AFTER_S = 2 * 60 * 60
 # re-run (#6466). Ending pacing at the budget alone would release every lander that arrived
 # together at once, the pile #5526 measured; the rising cap lets the longest-held landers merge
 # first, one at a time. The budget stays `merge_timeout` rather than growing, because
-# `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` sizes LAND_DEADLINE on it.
+# `hosts/tests/test_lander_deadlines_cover_the_soak.py` sizes LAND_DEADLINE on it.
 RAISE_CAP_EVERY_S = 15 * 60
 # Enough to see every run inside the 2-hour window at today's merge rate.
 RUNS_URL = (

@@ -18,7 +18,8 @@ from typing import NamedTuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
 from lib.repo_paths import HOST_VARS, REPO
-from lib.render_guard import containers_entries, entry_platform, entry_tags, host_files
+from lib.ansible_inventory import PI_HOST, host_vars_file, pi_entries_in
+from lib.render_guard import entry_tags, k8s_services, load_yaml, services_file
 from lib.summary import grouped
 from diagnostics.probe_lib.health_checkout import STALE_CHECKOUT
 from lib.exit_codes import PROBE_NOT_APPLICABLE, PROBE_UNREADABLE
@@ -30,17 +31,22 @@ HOST_VARS_REL = HOST_VARS.relative_to(REPO)
 
 
 def tag_platforms(tag: str, host_vars: Path = HOST_VARS) -> set[str]:
-    """The platforms (`docker`, `k8s`) whose containers_list entries carry `tag`.
+    """The platforms that declare `tag` in the tree whose host_vars are `host_vars`.
 
-    Empty for a tag no host declares. A Docker-only tag has nothing on the cluster to check,
-    and probing it there first could find a same-named cluster workload (loki-homelab's Alloy
-    DaemonSet) and report the Pi's undeployed container healthy.
+    `k8s` for a `cluster/services.yml` entry, `docker` for an entry of the Pi's
+    `compose_services`, and empty for a tag neither declares. A Docker-only tag has nothing on
+    the cluster to check, and probing it there first could find a same-named cluster workload
+    (loki-homelab's Alloy DaemonSet) and report the Pi's undeployed container healthy.
     """
+    pi = load_yaml(host_vars_file(PI_HOST, host_vars))
+    sources = {
+        "k8s": k8s_services(services_file(host_vars)),
+        "docker": pi_entries_in(pi) if pi else [],
+    }
     return {
-        entry_platform(entry)
-        for path in host_files(host_vars)
-        for entry in containers_entries(path)
-        if tag in entry_tags(entry)
+        platform
+        for platform, entries in sources.items()
+        if any(tag in entry_tags(e) for e in entries)
     }
 
 
@@ -118,7 +124,7 @@ def check_one(
     enumerates nothing and reads as `skipped`. A landing that deployed a snapshot of its merge
     commit passes that snapshot, so the workload list comes from the tree that was deployed.
 
-    `platforms` is the set of platforms whose containers_list declares the tag, read when not
+    `platforms` is the set of platforms that declare the tag (`tag_platforms`), read when not
     given from the inventory of that SAME tree -- both halves of one verdict come from the tree
     that was deployed. It decides which probe may answer:
 
@@ -171,7 +177,7 @@ def check_one(
 
     if platforms is None:
         # The SAME tree the probe renders from, not this checkout's inventory: a PR that adds a
-        # Pi role and its containers_list entry together declares the tag only at the commit
+        # Pi service and its compose_services entry together declares the tag only at the commit
         # that was deployed, and the primary reads `set()` for it -- which falls through to the
         # last branch below and probes k8s FIRST, where a same-named cluster workload answers.
         platforms = tools.tag_platforms(tag, host_vars=(cwd or REPO) / HOST_VARS_REL)

@@ -21,7 +21,6 @@ EXPECTED_FILTERS = {
     "hash": "renderer.renderer_lib.jinja_filters.hash_text",
     "mandatory": "renderer.renderer_lib.jinja_filters.mandatory",
     "to_uuid": "renderer.renderer_lib.jinja_filters.to_uuid",
-    "filter_by_platform": "toposort.filter_by_platform",
     "authelia_service_rules": "authelia_access.authelia_service_rules",
     "lan_hostnames": "entry_fields.lan_hostnames",
     "netpol_caller_fences": "homepage_tiles.netpol_caller_fences",

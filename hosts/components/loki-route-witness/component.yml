@@ -30,7 +30,7 @@
 #   must witness it, because which source address a host arrives as depends on where traefik
 #   runs (#1712).
 #
-# ENFORCED: ansible/tests/setup/test_loki_route_witness.py (the script's behaviour against
+# ENFORCED: hosts/tests/test_loki_route_witness.py (the script's behaviour against
 # stubs), hosts/lib/tests/test_loki_route_witness_component.py (the units and legacy entries)
 # and hosts/lib/tests/test_component_retired_stamp_fragments.py (the manifest fragment names).
 files:

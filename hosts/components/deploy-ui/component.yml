@@ -21,12 +21,12 @@ ufw:
   rules:
     - {id: deploy-ui-pods, spec: "allow from {{ k3s_pod_cidr }} to any port {{ deploy_ui_port }} proto tcp"}
     - {id: deploy-ui-daniel-box, spec: "allow from {{ server_ip }} to any port {{ deploy_ui_port }} proto tcp"}
-    - {id: deploy-ui-daniel-server, spec: "allow from {{ hostvars['daniel-server'].server_ip }} to any port {{ deploy_ui_port }} proto tcp"}
+    - {id: deploy-ui-daniel-server, spec: "allow from {{ hosts['daniel-server'].server_ip }} to any port {{ deploy_ui_port }} proto tcp"}
   # The Ansible rules carried this comment. The arm relabels each live rule in place.
   legacy:
     - {spec: "allow from {{ k3s_pod_cidr }} to any port {{ deploy_ui_port }} proto tcp", comment: deploy-ui from the k3s cluster, replaced_by: deploy-ui-pods}
     - {spec: "allow from {{ server_ip }} to any port {{ deploy_ui_port }} proto tcp", comment: deploy-ui from the k3s cluster, replaced_by: deploy-ui-daniel-box}
-    - {spec: "allow from {{ hostvars['daniel-server'].server_ip }} to any port {{ deploy_ui_port }} proto tcp", comment: deploy-ui from the k3s cluster, replaced_by: deploy-ui-daniel-server}
+    - {spec: "allow from {{ hosts['daniel-server'].server_ip }} to any port {{ deploy_ui_port }} proto tcp", comment: deploy-ui from the k3s cluster, replaced_by: deploy-ui-daniel-server}
 # What the deploy_ui role installed before H7.50.
 legacy:
   - {path: /etc/systemd/system/deploy-ui.service}

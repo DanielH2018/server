@@ -18,7 +18,7 @@ modules `files/` ships, the lander, and the denylist marker's own history are in
 The package ships the scripts, config, prompt and units whatever the flag says.
 `renovate_agent_enabled` alone decides whether the timer's enable link ships, and setting
 it back to `false` makes reconcile stop **and** disable the timer. That is the rollback, and
-`ansible/tests/setup/test_renovate_agent_unit.py` pins that both directions stay wired.
+`hosts/tests/test_renovate_agent_unit.py` pins that both directions stay wired.
 
 **A disarmed agent tells Prometheus so.** The package ships `renovate-agent-disarmed.prom` in
 node_exporter's textfile directory. `RenovateAgentNotReporting` and `HostCheckOverdue` stay
@@ -58,10 +58,10 @@ the caps or the schedule cannot quietly widen it.
   (ENFORCED twice: the lander's own author check, and its unit's
   `LAND_REQUIRE_AUTHOR=app/renovate`, which `land.sh --arm-merge` reads —
   `scripts/deploy_tools/land_lib/merge.py:_require_author`;
-  `ansible/tests/setup/test_renovate_agent_unit.py::test_the_lander_pins_land_sh_to_renovates_prs`
+  `hosts/tests/test_renovate_agent_unit.py::test_the_lander_pins_land_sh_to_renovates_prs`
   pins both to the wrapper's census). **Never** a push or merge by the session: its token has no
   contents write, so a `manual —` work order ends as a hand-off in the digest
-  (`ansible/tests/setup/test_renovate_agent_identity.py` pins the user and the token's route).
+  (`hosts/tests/test_renovate_agent_identity.py` pins the user and the token's route).
   **Never** a session in the primary
   checkout, **never** a worktree that still holds unlanded work (the tick skips, posts the path
   and exits non-zero), and **never a PR whose title OR BRANCH carries `k8s_autodeploy: false`**
@@ -72,7 +72,7 @@ the caps or the schedule cannot quietly widen it.
   `headRefName` beside the title because the marker can survive in the branch alone (#2641).
   The lander reads the denied roles from `scripts/dev/k8s_autodeploy_counts.py --denylist` in
   the primary checkout, and refuses when that command fails or prints no list.
-  `ansible/tests/setup/test_renovate_agent_unit.py` pins that the prompt names the same marker
+  `hosts/tests/test_renovate_agent_unit.py` pins that the prompt names the same marker
   the rule's `groupName` carries, and
   `ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py` asserts the
   marker sits on exactly the per-package rules whose pin a denied role owns. Which rules carry

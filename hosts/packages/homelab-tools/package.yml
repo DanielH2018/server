@@ -40,7 +40,7 @@ tools:
       url: https://github.com/twpayne/chezmoi/releases/download/{version}/chezmoi_{bare}_linux_arm64.tar.gz
       member: chezmoi
   # H7.25: the Pi's node exporter, the version the cluster DaemonSet's image pins
-  # (ansible/tests/setup/test_pi_node_exporter_host_unit.py holds the two equal). The tarball names
+  # (hosts/tests/test_pi_node_exporter_host_unit.py holds the two equal). The tarball names
   # its directory after the release, so `member` carries {bare}. Both digests come from the
   # release's sha256sums.txt:
   # https://github.com/prometheus/node_exporter/releases/download/v1.12.1/sha256sums.txt

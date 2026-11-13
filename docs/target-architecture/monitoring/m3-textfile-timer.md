@@ -89,7 +89,7 @@ cluster outage.
       writes `claude_cgroup.prom` on every host with `has_claude_code: true`, which is
       daniel-box and daniel-server. It writes through `mktemp
       "$TEXTFILE_DIR/claude_cgroup.prom.XXXXXX"`, `chmod 0644` and `mv`, and
-      `ansible/tests/setup/test_claude_cgroup_metrics.py` drives it through a `TEXTFILE_DIR`
+      `hosts/tests/test_claude_cgroup_metrics.py` drives it through a `TEXTFILE_DIR`
       override.
     - A live read on 2026-10-11, `probe.py metric 'node_textfile_mtime_seconds'`, returned
       `file=/textfile/claude_cgroup.prom` for `origin="daniel-box"` and
@@ -113,7 +113,7 @@ cluster outage.
   plus the period plus the grace, 2100s for this slug, measured to the second on 2026-09-09.
   The same page derives a 20-minute floor for the grace, because the first run after a boot is
   skipped. The extra 5 minutes are the operator's choice, kept at the 2026-09-25
-  reconciliation. `ansible/tests/setup/test_health_cron_boot_grace.py` holds the boot grace
+  reconciliation. `hosts/tests/test_health_cron_boot_grace.py` holds the boot grace
   under the cron period.
 - **Every change to the k3s role is a hand apply, recorded in the owed ledger.**
   `deploy_changes.py:_BROAD_MANUAL_PREFIXES` (under
@@ -136,10 +136,10 @@ cluster outage.
       does not.
     - `ansible/tests/services/test_healthchecks_pings.py`, which uses the script as its
       rendered sender.
-    - `ansible/tests/setup/test_health_cron_boot_grace.py:FREQUENT_SCRIPTS` includes the script.
+    - `hosts/tests/test_health_cron_boot_grace.py:FREQUENT_SCRIPTS` includes the script.
       `test_a_guarded_cron_still_beats_its_kuma_tile` requires `PUSH_URL="` before the guard and
       `kuma_push up "skipped — host still booting"` after it.
-    - `ansible/tests/setup/test_cron_scripts_publish_via_pr.py:_EXPECTED_IN_CORPUS` names the
+    - `hosts/tests/test_cron_scripts_publish_via_pr.py:_EXPECTED_IN_CORPUS` names the
       script. `push_corpus` keeps every template that mentions `api/push` or `PUSH_URL`. It
       measured 35 templates at `70591c307` against `_MIN_CORPUS` 23. The comment beside
       `_MIN_CORPUS` says "measured 24", which is stale.
@@ -156,7 +156,7 @@ cluster outage.
       check. Commit `6894e3523` ("Retire the E7-orphaned credentials") deleted its retired
       keys' rows by hand, in the commit that removed the keys.
     - Three sibling tests already run a rendered push script hermetically. `_pi_health.py` and
-      `_ruleset_drift.py` in `ansible/tests/setup/` replace `REAL_LIB` in the rendered body
+      `_ruleset_drift.py` in `hosts/tests/` replace `REAL_LIB` in the rendered body
       with a stub library, and `test_release_staleness_push_grouped.py` does the same with
       `body.replace`.
 
@@ -238,7 +238,7 @@ the same three series over HTTP.
 - 300s: cron start jitter, the 1m `node` scrape and the 1m rule evaluation, with margin.
 
 The template computes the period only for a `*/N` minute, and the derivation pytest fails on
-any other shape. That pytest, new in `ansible/tests/setup/`, renders the script and asserts
+any other shape. That pytest, new in `hosts/tests/`, renders the script and asserts
 three relations:
 
 - `DEADLINE_S` equals 2 × the cron's period + 300.
@@ -371,7 +371,7 @@ because the slice index does not order D5 after M3. Each order below holds under
     3. `DEADLINE_S` renders from `k3s_disk_health_cron_minute`.
     4. The boot-grace path is unchanged. It still pushes `up` when a token exists, and it
        writes nothing.
-- Add a script test in `ansible/tests/setup/`. Its harness follows the sibling tests named in
+- Add a script test in `hosts/tests/`. Its harness follows the sibling tests named in
   the Baseline:
     - It renders the script and replaces the absolute library path with a stub library. The
       stub's `boot_grace_active` returns what the test sets, so the runner's own uptime never
@@ -797,7 +797,7 @@ Refuted:
 - **M3-R1-05, the `_MIN_CORPUS` sub-claim only.** The finding says the floor of 23 against "a
   measured 24 ... leaves headroom for exactly one retirement". That number comes from the
   test's own comment, which is stale. Running `push_corpus()` from
-  `ansible/tests/setup/test_cron_scripts_publish_via_pr.py` at `70591c307` (a `uv run python`
+  `hosts/tests/test_cron_scripts_publish_via_pr.py` at `70591c307` (a `uv run python`
   import of the module) returned 35 templates against `_MIN_CORPUS` 23. PR 5 therefore leaves
   the floor alone and corrects the comment. The rest of the finding stands and is fixed above.
 

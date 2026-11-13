@@ -600,7 +600,7 @@ the node checks what the Job installed. H6.3e adds that check.
           `k3s_audit_log_path` and `k3s_etcd_expose_metrics` in
           `ansible/inventory/group_vars/all.yml`, `server_ip` in each host's `host_vars`,
           and the `k8s_registry_*` keys that `registries.yaml.j2` reads. loki-homelab reads
-          the audit keys, and `ansible/tests/setup/test_etcd_metrics_single_switch.py`
+          the audit keys, and `hosts/tests/test_etcd_metrics_single_switch.py`
           holds the etcd switch to one definition, so none of them moves.
         - **Move in H6.4a:** `k3s_oidc_issuer_urls`, `k3s_oidc_client_id`,
           `k3s_oidc_username_claim`, `k3s_oidc_groups_claim` and `k3s_oidc_groups_prefix`.
@@ -1917,9 +1917,9 @@ The results:
   check's tests in
   `scripts/validate/tests/`, and the role `CLAUDE.md`'s note on the sum pin.
 - **H6.4a:**
-    - `ansible/tests/setup/test_k3s_unit_logging.py` retargets the component's logging
+    - `hosts/tests/test_k3s_unit_logging.py` retargets the component's logging
       lines, logrotate file and `tmpfiles.d` entry, and keeps the agent case;
-    - `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py` reads the component template
+    - `hosts/tests/test_k3s_oidc_trusts_authelia.py` reads the component template
       and the component's defaults, where the `k3s_oidc_*` keys now live;
     - H1's *Mirrored identity keys* test gains the component's pair, and the host-render
       test is new;
@@ -1933,7 +1933,7 @@ The results:
     - the `## Notable` paragraph of the k3s role `CLAUDE.md`;
     - `_K3S_GATED_TASKS` in `deploy_remediation.py` drops the log restart.
 - **H6.4b:**
-    - `ansible/tests/setup/test_k3s_control_plane_hardening.py` and
+    - `hosts/tests/test_k3s_control_plane_hardening.py` and
       `test_k3s_node_ip_pinned.py` read the rendered drop-in;
     - the migration test and its fixtures;
     - the test holding `secrets-encryption` equal to `k3s_secrets_encryption`;
@@ -1941,7 +1941,7 @@ The results:
     - `docs/k3s-node-plane-crons-and-incidents.md` (the control-plane gates).
 - **H6.5a:** `test_k3s_unit_logging.py` loses its Ansible half.
 - **H6.5b:**
-    - `ansible/tests/setup/test_k3s_join_port_symmetry.py` keeps the agent's server URL in
+    - `hosts/tests/test_k3s_join_port_symmetry.py` keeps the agent's server URL in
       step with the env file the installer wrote;
     - `docs/hypervisor-libvirt-internals.md` and `ansible/roles/setup/hypervisor/CLAUDE.md`
       say the env file is no longer rewritten. A deliberate server-token rotation therefore
@@ -2460,7 +2460,7 @@ How each was fixed, with the evidence measured at `70591c307`:
     - Departure: the old list was also wrong in the other direction.
       `k3s_audit_log_enabled`, `k3s_audit_log_dir`, `k3s_audit_log_path` and
       `k3s_etcd_expose_metrics` are defined in `ansible/inventory/group_vars/all.yml`.
-      loki-homelab and `ansible/tests/setup/test_etcd_metrics_single_switch.py` depend on
+      loki-homelab and `hosts/tests/test_etcd_metrics_single_switch.py` depend on
       that, so they must not move.
     - The design now gives every variable one of five homes, and names the PR that moves
       each one. The two path keys exist in two places from H6.4a to H6.4b, and the

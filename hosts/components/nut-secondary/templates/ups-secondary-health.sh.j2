@@ -58,7 +58,7 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 # The longest legitimate gap between two textfile writes: two timer periods plus 300s, the rule
 # M3 fixed (docs/target-architecture/monitoring/m3-textfile-timer.md, "The deadline for
 # disk-health"). It renders from the same variable as the timer, and
-# ansible/tests/setup/test_b4_rule_literals.py pins the rules' literals to this value.
+# hosts/tests/test_b4_rule_literals.py pins the rules' literals to this value.
 DEADLINE_S={{ 2 * 60 * (nut_host_watchdog_interval_minutes | int) + 300 }}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 

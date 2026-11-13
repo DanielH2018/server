@@ -1,7 +1,7 @@
 """Check 12 of the backup heartbeat: k3s's S3 etcd snapshots must stay fresh and armed.
 
 The reader-side half is in `hosts/components/k3s-host-checks/tests/test_longhorn_backup_health_reader.py`,
-and `ansible/tests/setup/test_k3s_server_component.py` runs the parser over the rendered drop-in.
+and `hosts/tests/test_k3s_server_component.py` runs the parser over the rendered drop-in.
 """
 
 import pytest

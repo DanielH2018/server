@@ -29,7 +29,6 @@ from homepage_tiles import (
     netpol_caller_fences,
     netpol_callers,
 )
-from lib.ansible_inventory import containers_entries_in
 
 ENTRIES = [
     {"name": "sonarr", "hostname": "sonarr", "port": 8989, "homepage_widget": True},
@@ -117,7 +116,7 @@ def unadmitted_targets(targets: set[str], entries: list[dict]) -> set[str]:
 
 def test_every_in_namespace_widget_target_admits_homepage():
     targets = in_namespace_targets(config_urls(), namespace())
-    assert unadmitted_targets(targets, containers_entries_in(host_context())) == set()
+    assert unadmitted_targets(targets, host_context()["services"]) == set()
     assert KNOWN_TARGETS <= targets
 
 

@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""claude-fanout-server-lander lands finished daniel-server batches' PRs (issue #5496).
+
+The rule that decides a PR is `scripts/dev/fanout_lib/autoland.py`, tested in
+`scripts/dev/tests/test_fanout_autoland.py`. This module pins what the rule cannot see about
+its unit:
+
+1. `KillMode=process`. A detached landing leaves a user-manager service's cgroup only, so the
+   default kill of this system unit would end every landing when the oneshot exits.
+2. `SyslogLevel=notice`. This host's journald stores notice and above, so without it the one
+   line per candidate PR is dropped.
+3. The two `LAND_REQUIRE_*` values, held equal to the ones the command checks itself.
+4. The arming. True only on daniel-box, and false must remove the units, not leave a timer.
+
+Run: uv run pytest hosts/tests/test_claude_fanout_server_lander.py
+"""
+
+import re
+
+from _agent_package import render_daniel_server_with
+from _helpers import ANSIBLE, load_yaml
+from _setup_render import CLAUDE_CODE, render_component_text
+from fanout_lib import autoland
+from lib.repo_paths import HOST_VARS
+
+ROLE = CLAUDE_CODE
+DEFAULTS = load_yaml(ROLE / "defaults" / "main.yml")
+SERVICE = "claude-fanout-server-lander.service.j2"
+TIMER = "claude-fanout-server-lander.timer.j2"
+
+
+def _render(template: str = SERVICE, **overrides: object) -> str:
+    return render_component_text("claude-code", template, overrides)
+
+
+def test_a_detached_landing_survives_the_oneshot_that_started_it():
+    unit = _render()
+    assert re.search(r"^KillMode=process$", unit, re.M), (
+        "the default control-group kill ends every landing when this oneshot exits"
+    )
+    assert "TimeoutStartSec=" in unit
+
+
+def test_the_one_line_per_candidate_reaches_the_journal():
+    assert re.search(r"^SyslogLevel=notice$", _render(), re.M)
+
+
+def test_the_unit_runs_the_command_as_the_operator_and_alerts_on_failure():
+    unit = _render()
+    assert re.search(r"^User=ubuntu$", unit, re.M)
+    assert "scripts/dev/fanout.py land-server" in unit
+    assert "OnFailure=claude-fanout-server-lander-alert.service" in unit
+
+
+def test_the_command_runs_in_a_checkout_the_operator_owns_not_the_agents_clone():
+    # On daniel-box `claude_code_rc_workdir` is the agent's clone, which `ubuntu` cannot write
+    # and git refuses as "dubious ownership" (#5861).
+    unit = _render(
+        claude_code_rc_workdir="/var/lib/claude/server",
+        claude_code_operator_checkout="/home/ubuntu/server",
+    )
+    assert "/var/lib/claude/server" not in unit
+    assert re.search(r"^WorkingDirectory=/home/ubuntu/server$", unit, re.M)
+    assert "land-server --primary /home/ubuntu/server" in unit
+
+
+def test_land_sh_is_pinned_to_the_batches_branch_and_author():
+    unit = _render()
+    prefix = re.search(r"^Environment=LAND_REQUIRE_BRANCH_PREFIX=(.*)$", unit, re.M)
+    author = re.search(r"^Environment=LAND_REQUIRE_AUTHOR=(.*)$", unit, re.M)
+    assert prefix and prefix.group(1) == autoland.BRANCH_PREFIX
+    assert author and author.group(1) == autoland.AUTHOR
+
+
+def test_the_timer_runs_every_ten_minutes_by_default():
+    timer = _render(TIMER)
+    assert "OnUnitActiveSec=10min" in timer
+    assert autoland.MAX_STARTS == 2
+
+
+def test_armed_only_on_daniel_box_and_disarming_drops_the_units(tmp_path):
+    key = "claude_code_fanout_server_lander_enabled"
+    assert DEFAULTS[key] is False
+    assert load_yaml(HOST_VARS / "daniel-box.yml").get(key) is True
+    assert not load_yaml(HOST_VARS / "daniel-server.yml").get(key, False)
+
+    on = render_daniel_server_with(tmp_path / "on", **{key: True})
+    off = render_daniel_server_with(tmp_path / "off", **{key: False})
+    for unit in (
+        "/usr/lib/systemd/system/homelab-claude-fanout-server-lander.timer",
+        "/usr/lib/systemd/system/homelab-claude-fanout-server-lander.service",
+    ):
+        assert unit in on.files
+        assert unit not in off.files, (
+            "disarming must drop the units, or a stale timer keeps running"
+        )
+
+
+def test_the_host_component_ships_both_templates():
+    component = (
+        ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
+    ).read_text()
+    for name in (SERVICE, TIMER):
+        assert f"src: templates/{name}" in component, f"{name} is not shipped"
+
+
+def test_the_contract_section_names_the_unit():
+    doc = (ROLE / "CLAUDE.md").read_text()
+    assert re.search(
+        r"^## Autonomous-role contract \(`claude-fanout-server-lander`", doc, re.M
+    )

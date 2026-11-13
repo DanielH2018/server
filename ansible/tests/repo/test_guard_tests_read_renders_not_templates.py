@@ -16,11 +16,11 @@ for synthetic role trees no render reaches. `k8s/` joined with two (#3203): whet
 template CALLS the shared *arr macro or copies its body, and whether two roles ship
 byte-identical templates — both render differently from what they test — and a third
 (#3452): whether a tiered role passes `pod_shell` a literal class. `staging/` joined
-with none (#3205). `setup/` joined with two, each keyed on something no render carries: a
-Jinja FILTER, and the behaviour of a variable no render leaves undefined (#3202). Every
-test directory is now scanned. Entries are keyed
-`<directory>/<module>.py`, because a basename alone would let a module in one directory
-inherit another's exemption.
+with none (#3205). `hosts/tests/` joined, as `ansible/tests/setup/`, with two, each keyed on
+something no render carries: a Jinja FILTER, and the behaviour of a variable no render leaves
+undefined (#3202). Every test directory is scanned. Entries are keyed `<label>/<module>.py`,
+where the label is the directory's key in `SCANNED`, because a basename alone would let a
+module in one directory inherit another's exemption.
 
 The exposure is the same one the `tests-read-shell-templates-rendered` row of
 `scripts/tests/test_census_rows_test_renders.py` covers for `*.sh.j2` repo-wide: a value that
@@ -63,26 +63,27 @@ Run: uv run pytest ansible/tests/repo/test_guard_tests_read_renders_not_template
 import functools
 from pathlib import Path
 
-from lib.repo_paths import ANSIBLE
+from lib.repo_paths import ANSIBLE, REPO
 
 from _render_gate import sibling_sources, template_source_reads
 
 TESTS = ANSIBLE / "tests"
-# Every directory the rule covers. Adding one means converting its readers first.
-SCANNED = (
-    TESTS / "services",
-    TESTS / "longhorn",
-    TESTS / "repo",
-    TESTS / "deploy",
-    TESTS / "k8s",
-    TESTS / "staging",
-    TESTS / "setup",
-)
+# Every directory the rule covers, by the label its keys carry. Adding one means converting its
+# readers first.
+SCANNED = {
+    "services": TESTS / "services",
+    "longhorn": TESTS / "longhorn",
+    "repo": TESTS / "repo",
+    "deploy": TESTS / "deploy",
+    "k8s": TESTS / "k8s",
+    "staging": TESTS / "staging",
+    "hosts/tests": REPO / "hosts" / "tests",
+}
 
 # Modules that read a template's SOURCE, each with why a render cannot answer the question.
 # Every entry is permanent: a render erases the thing it reads.
 TEMPLATE_SOURCE_READERS = {
-    "setup/test_docs_refresh_failure_path.py": (
+    "hosts/tests/test_docs_refresh_failure_path.py": (
         "the tmpfiles `d` line's owner and mode are the subject, and the file is a one-line "
         "package path, not a shell script with a render to run"
     ),
@@ -194,7 +195,7 @@ TEMPLATE_SOURCE_READERS = {
         "render, and `test_every_source_fallback_is_a_template_no_render_covers` holds that "
         "nothing else falls back"
     ),
-    "setup/test_nut_host_secondary.py": (
+    "hosts/tests/test_nut_host_secondary.py": (
         "whether the two push-token expressions carry `| mandatory`, which decides whether an "
         "undefined token fails the play or renders empty. A render resolves every secret to "
         "`STUB`, so no render distinguishes `mandatory` from `default('')`"
@@ -240,36 +241,36 @@ KNOWN_MEMBERS = frozenset(
         "staging/test_etcd_drill_vm.py",
         "staging/test_staging_egress_fence.py",
         "staging/test_staging_network.py",
-        "setup/test_claude_code_on_daniel_server.py",
-        "setup/test_claude_memory_sync.py",
-        "setup/test_claude_rc_unit.py",
-        "setup/test_coredns_metrics_binds_wildcard.py",
-        "setup/test_etcd_metrics_single_switch.py",
-        "setup/test_k3s_control_plane_hardening.py",
-        "setup/test_loki_route_witness.py",
-        "setup/test_nut_host_secondary.py",
+        "hosts/tests/test_claude_code_on_daniel_server.py",
+        "hosts/tests/test_claude_memory_sync.py",
+        "hosts/tests/test_claude_rc_unit.py",
+        "hosts/tests/test_coredns_metrics_binds_wildcard.py",
+        "hosts/tests/test_etcd_metrics_single_switch.py",
+        "hosts/tests/test_k3s_control_plane_hardening.py",
+        "hosts/tests/test_loki_route_witness.py",
+        "hosts/tests/test_nut_host_secondary.py",
     }
 )
 
 
 def _modules() -> dict[str, Path]:
-    """Every scanned module, by its `<directory>/<module>.py` key."""
+    """Every scanned module, by its `<label>/<module>.py` key."""
     return {
-        f"{directory.name}/{p.name}": p
-        for directory in SCANNED
+        f"{label}/{p.name}": p
+        for label, directory in SCANNED.items()
         for p in sorted(directory.glob("*.py"))
         if p.name != "__init__.py"
     }
 
 
 @functools.cache
-def _importable(directory: str) -> tuple[tuple[str, str], ...]:
-    """Every module a test in `directory` can import, as (module name, text) pairs.
+def _importable(label: str) -> tuple[tuple[str, str], ...]:
+    """Every module a test in the `label` directory can import, as (module name, text) pairs.
 
     Cached as a tuple because `functools.cache` needs a hashable return value and the census
     asks for the same directory once per module in it.
     """
-    return tuple(sibling_sources(TESTS / directory, TESTS).items())
+    return tuple(sibling_sources(SCANNED[label], TESTS).items())
 
 
 def test_the_census_reaches_every_known_module():
@@ -284,6 +285,10 @@ def test_every_listed_module_still_exists():
     assert gone == [], f"listed modules that no longer exist: {gone}"
 
 
+def _label(key: str) -> str:
+    return key.rpartition("/")[0]
+
+
 def offenders(sources: dict[str, str]) -> dict[str, list[str]]:
     """The modules in `sources` (name -> text) that read a template and are not exempt.
 
@@ -293,7 +298,7 @@ def offenders(sources: dict[str, str]) -> dict[str, list[str]]:
     """
     by_directory: dict[str, dict[str, str]] = {}
     for name, text in sources.items():
-        by_directory.setdefault(name.split("/")[0], {})[Path(name).stem] = text
+        by_directory.setdefault(_label(name), {})[Path(name).stem] = text
     return {
         name: reads
         for name, text in sorted(sources.items())
@@ -301,8 +306,7 @@ def offenders(sources: dict[str, str]) -> dict[str, list[str]]:
         and (
             reads := template_source_reads(
                 text,
-                dict(_importable(directory := name.split("/")[0]))
-                | by_directory[directory],
+                dict(_importable(directory := _label(name))) | by_directory[directory],
             )
         )
     }
@@ -327,7 +331,7 @@ def test_every_exempt_module_is_still_flagged():
         for name in TEMPLATE_SOURCE_READERS
         if not template_source_reads(
             found[name].read_text(),
-            dict(_importable(name.split("/")[0])),
+            dict(_importable(_label(name))),
         )
     )
     assert unflagged == [], (
@@ -349,11 +353,11 @@ def test_a_new_module_reading_a_role_template_is_named_as_an_offender():
     assert list(found) == ["services/test_new_guard.py"], found
 
 
-def test_a_new_setup_guard_reading_a_role_template_is_named_as_an_offender():
+def test_a_new_host_guard_reading_a_role_template_is_named_as_an_offender():
     """The directory added in #3202, and the reason the keys carry one.
 
-    `setup/test_nut_host_secondary.py` is exempt, so a basename-keyed exemption would wave
-    through a `services/` module of the same name. Both halves are modules that are not on
+    `hosts/tests/test_nut_host_secondary.py` is exempt, so a basename-keyed exemption would
+    wave through a `services/` module of the same name. Both halves are modules that are not on
     disk, which is what makes this a proof the gate can fail.
     """
     source = (
@@ -362,15 +366,15 @@ def test_a_new_setup_guard_reading_a_role_template_is_named_as_an_offender():
     )
     found = offenders(
         {
-            "setup/test_new_guard.py": source,
+            "hosts/tests/test_new_guard.py": source,
             "services/test_nut_host_secondary.py": source,
-            "setup/test_already_clean.py": "from _setup_render import rendered_setup_text\n"
+            "hosts/tests/test_already_clean.py": "from _setup_render import rendered_setup_text\n"
             'assert "Slice=" in rendered_setup_text("claude_code", "claude-rc.service.j2")\n',
         }
     )
     assert sorted(found) == [
+        "hosts/tests/test_new_guard.py",
         "services/test_nut_host_secondary.py",
-        "setup/test_new_guard.py",
     ], found
 
 

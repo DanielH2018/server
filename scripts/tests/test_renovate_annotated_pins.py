@@ -251,7 +251,7 @@ def test_the_annotated_pin_rule_moved_last_would_strip_the_marker():
 # ── the two node_exporter pins move in one PR ─────────────────────────────────────────────
 
 # The cluster image and the Pi's `homelab-tools` pin, which
-# ansible/tests/setup/test_pi_node_exporter_host_unit.py holds equal.
+# hosts/tests/test_pi_node_exporter_host_unit.py holds equal.
 NODE_EXPORTER_TWINS = (
     ("prom/node-exporter", NODE_EXPORTER_DEFAULTS, "docker", None),
     ("prometheus/node_exporter", PI_TOOL_PINS, "github-release-attachments", None),

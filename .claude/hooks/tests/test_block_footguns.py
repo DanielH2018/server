@@ -65,7 +65,7 @@ def test_remote_git_with_dash_C_is_clean():
 
 
 def test_the_ssh_hosts_match_the_inventory_host_vars():
-    # Compared against host_vars rather than hosts.ini, so a broken import (which the hook
+    # Compared against a direct host_vars listing, so a broken import (which the hook
     # swallows into no hosts) or a reintroduced literal goes red here (#3705).
     host_vars = os.path.join(_REPO, "ansible", "inventory", "host_vars")
     expected = {

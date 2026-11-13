@@ -67,7 +67,7 @@ def _service_ports(text: str) -> list[int]:
 
 def test_every_metrics_item_renders_as_a_scrape_job():
     ctx = host_context()
-    derived = scrape_jobs(ctx["containers_list"], ctx["k8s_namespace"])
+    derived = scrape_jobs(ctx["services"], ctx["k8s_namespace"])
     assert {job["job"] for job in derived} == _DERIVED
     # Terraria's replica gate is the one thing that can drop a derived job, so pin it open.
     rendered = _scrape_targets(
@@ -84,12 +84,12 @@ def test_every_metrics_item_renders_as_a_scrape_job():
 )
 def test_the_scrape_target_and_the_service_read_one_port(entry_name, job):
     """Moving the port on the entry moves both halves; a copy left in either one fails here."""
-    entries = copy.deepcopy(host_context()["containers_list"])
+    entries = copy.deepcopy(host_context()["services"])
     entry = next(e for e in entries if e["name"] == entry_name)
     (item,) = entry["metrics"]
     assert item["port"] != 9999
     item["port"] = 9999
-    overrides = {"containers_list": entries}
+    overrides = {"services": entries}
     targets = _scrape_targets(
         render_role_template("observability", "prometheus.yaml.j2", overrides)
     )
@@ -100,12 +100,12 @@ def test_the_scrape_target_and_the_service_read_one_port(entry_name, job):
 
 def test_the_check_exporter_listener_service_and_scrape_job_read_one_port():
     """Moving monitor-bridge's `metrics` port moves the process env, the Service and the job."""
-    entries = copy.deepcopy(host_context()["containers_list"])
+    entries = copy.deepcopy(host_context()["services"])
     entry = next(e for e in entries if e["name"] == "monitor-bridge")
     (item,) = entry["metrics"]
     assert entry["port"] != 9999
     item["port"] = 9999
-    overrides = {"containers_list": entries}
+    overrides = {"services": entries}
     targets = _scrape_targets(
         render_role_template("observability", "prometheus.yaml.j2", overrides)
     )
@@ -127,43 +127,41 @@ def test_the_nut_job_renders_its_path_interval_and_params_from_the_item():
 
 def test_a_hand_written_job_reads_its_target_port_from_the_entry():
     """HA keeps a hand-written job for its auth; the port still lives on the entry."""
-    entries = copy.deepcopy(host_context()["containers_list"])
+    entries = copy.deepcopy(host_context()["services"])
     entry = next(e for e in entries if e["name"] == "home-assistant")
     assert entry["port"] != 9999
     entry["port"] = 9999
     targets = _scrape_targets(
         render_role_template(
-            "observability", "prometheus.yaml.j2", {"containers_list": entries}
+            "observability", "prometheus.yaml.j2", {"services": entries}
         )
     )
     assert targets["home-assistant"] == ["home-assistant.homelab.svc:9999"]
 
 
 def test_the_alloy_pi_job_reads_its_port_from_the_pis_entry():
-    """daniel-box's containers_list holds no Pi entry, so the job reads the Pi's through hostvars."""
+    """daniel-box's containers_list holds no Pi entry, so the job reads the Pi's through `hosts`."""
     ctx = host_context()
-    hostvars = copy.deepcopy(ctx["hostvars"])
+    hosts = copy.deepcopy(ctx["hosts"])
     # Since H5.8 the Pi's alloy entry sits in `compose_services`, which the job reads as well.
     entry = next(
-        e for e in hostvars["daniel-pi"]["compose_services"] if e["name"] == "alloy"
+        e for e in hosts["daniel-pi"]["compose_services"] if e["name"] == "alloy"
     )
     assert entry["port"] != 9999
     entry["port"] = 9999
     targets = _scrape_targets(
-        render_role_template(
-            "observability", "prometheus.yaml.j2", {"hostvars": hostvars}
-        )
+        render_role_template("observability", "prometheus.yaml.j2", {"hosts": hosts})
     )
     assert targets["alloy-pi"] == [f"{ctx['k8s_pi_client_ip']}:9999"]
 
 
 def test_the_gpu_jobs_pod_filter_and_the_exporters_listener_read_one_port():
     """The gpu job discovers pods, so its port lives in a relabel regex, not in a target (#3868)."""
-    entries = copy.deepcopy(host_context()["containers_list"])
+    entries = copy.deepcopy(host_context()["services"])
     entry = next(e for e in entries if e["name"] == "gpu-exporter")
     assert entry["port"] != 9999
     entry["port"] = 9999
-    overrides = {"containers_list": entries}
+    overrides = {"services": entries}
     prometheus = render_role_template("observability", "prometheus.yaml.j2", overrides)
     (port_filter,) = [
         rule

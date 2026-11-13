@@ -77,7 +77,7 @@ example of a plain service, and `alloy/` of one with a config file.
 **Check before committing**
 - `uv run python scripts/validate/compose_templates.py -v` renders every `compose_services`
   entry and runs the compose checks.
-- `uv run pytest hosts/lib/tests ansible/tests/setup/test_pi_service_lists_census.py` runs
+- `uv run pytest hosts/lib/tests hosts/tests/test_pi_service_lists_census.py` runs
   the package and service-list censuses.
 
 **Landing.** Merge the PR. The builder publishes the next `homelab-daniel-pi` version, the Pi's

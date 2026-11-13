@@ -5,7 +5,7 @@
 the move added: each edit adopts the line Ansible wrote, the memory and log numbers still fit the
 128 MB log2ram tmpfs, the patched Log2Ram differs from upstream only by `--sparse`, and the
 textfile directory exists with M3's owner contract. The unit tests of the node exporter and the
-forced command stay beside the code they read: `ansible/tests/setup/` and `ansible/tests/services/`.
+forced command stay beside the code they read: `hosts/tests/` and `ansible/tests/services/`.
 
 Run: uv run pytest hosts/lib/tests/test_pi_tuning_component.py
 """

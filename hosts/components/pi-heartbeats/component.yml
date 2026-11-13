@@ -52,7 +52,7 @@
 # - Next-run review: a repeat `restarted:` for the same container needs fixing upstream. Read
 #   the week's status=down lines before widening the watch set.
 #
-# ENFORCED: ansible/tests/setup/test_pi_recovery_restarts_and_reports.py::test_a_dead_container_is_restarted,
+# ENFORCED: hosts/tests/test_pi_recovery_restarts_and_reports.py::test_a_dead_container_is_restarted,
 # which renders the script and runs it against a stub `docker`.
 defaults:
   # The daily rotated-log integrity sweep (templates/pi-gz-integrity.sh.j2). It `gzip -t`s every

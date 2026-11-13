@@ -101,7 +101,7 @@ The `claude` agent reuses that shape: its own identity script in
   per-host copy of the agent users that host's package declares under `users:` (#4295, #6831), and
   the helper refuses a uid the map does not name. Adding or removing a host's agent edits that host's
   list in `hosts/components/worktree-holders/component.yml` too, and
-  `ansible/tests/setup/test_worktree_holders_install.py` fails while the two differ.
+  `hosts/tests/test_worktree_holders_install.py` fails while the two differ.
   `claude-agent-setup` puts each present agent in the group. A session started before its user joined the group falls back to the
   unprivileged scan until it restarts. `sudo -n true` still fails.
 
@@ -686,7 +686,7 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   session can write a syslog line with any tag, so any rule that counts log lines, whatever it
   filters on, would let it open the next episode.
   `test_no_routed_alert_counts_log_lines_a_session_can_write` in
-  `ansible/tests/setup/test_claude_triage.py` runs once per routed alert. It fails when a
+  `hosts/tests/test_claude_triage.py` runs once per routed alert. It fails when a
   `loki-homelab` rule for the alert counts lines over any stream, or when a Prometheus rule for
   it reads a log-volume series: a count Alloy makes from log lines, or Loki's own
   `loki_distributor_lines_received` or `loki_distributor_bytes_received`. `absent_over_time` is
@@ -804,7 +804,7 @@ A further agent's account is two entries:
    arm creates the account.
 1. The same name and its clone directory in `worktree_holders_agents_by_host` in
    `hosts/components/worktree-holders/component.yml`, so the worktree holder scan answers
-   it. `ansible/tests/setup/test_worktree_holders_install.py` fails while a host's
+   it. `hosts/tests/test_worktree_holders_install.py` fails while a host's
    `users:` names an agent its list does not.
 
 Everything that gives the account an identity is still the primary's alone: the setup script,

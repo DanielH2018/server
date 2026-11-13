@@ -57,7 +57,7 @@ MAX_PCT={{ k3s_disk_max_pct }}
 # jitter, the 1m `node` scrape and the 1m rule evaluation. Rendered from the cron's own minute,
 # read as `*/N`. Any other shape has no single period, so the render fails rather than publish
 # a deadline shorter than the real gap: `mandatory` on a name nothing defines is how a template
-# raises with a message. ansible/tests/setup/test_disk_health_deadline.py holds the value under
+# raises with a message. hosts/tests/test_disk_health_deadline.py holds the value under
 # the Healthchecks.io dead-man's timeout plus grace, and proves the refusal.
 {% set _every_n = k3s_disk_health_cron_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
 {% if _every_n.isdigit() and '*/' ~ _every_n == k3s_disk_health_cron_minute | string %}

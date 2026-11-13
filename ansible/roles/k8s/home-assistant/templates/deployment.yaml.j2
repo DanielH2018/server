@@ -47,7 +47,7 @@ spec:
       # row in ansible/tests/k8s/_edge_property_rows.py derives the set from `tier`.
       nodeSelector:
         kubernetes.io/hostname: {{ k8s_primary_node }}
-{{ pod_shell(containers_list | tier_priority_class('home-assistant')) }}
+{{ pod_shell(services | tier_priority_class('home-assistant')) }}
       # No pod-level runAsUser/fsGroup: the LSIO image starts as root and s6 drops to
       # PUID/PGID itself, chowning /config on the way — same contract as under Docker.
       initContainers:

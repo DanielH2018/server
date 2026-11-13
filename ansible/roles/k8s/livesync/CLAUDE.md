@@ -4,8 +4,7 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=livesync` gates
-  the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=livesync` gates the rollout
 - **Image:** `couchdb` (`livesync_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `livesync-data` (no backup (StorageClass longhorn-nobackup))
@@ -19,7 +18,7 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
   LiveSync client uses basic auth and can't pass Authelia 2FA
 - **Depends on:** traefik
 - **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry is
-  `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. traefik is flux-owned too, so the
   Kustomization lists it in `dependsOn`, and Flux applies this tag only after its Kustomization is
   Ready. The Deployment is `Recreate`, so a change that rolls it takes sync down briefly.

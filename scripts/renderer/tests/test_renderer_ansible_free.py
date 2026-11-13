@@ -62,8 +62,8 @@ REFUSE = """
 import json
 from renderer.renderer_lib.cluster import RenderError, render_tag
 stubs = json.loads(sys.argv[1])
-stubs["containers_list"] = [
-    {"name": "authelia", "platform": "k8s"},
+stubs["services"] = [
+    {"name": "authelia"},
 ]
 try:
     render_tag("authelia", stubs)

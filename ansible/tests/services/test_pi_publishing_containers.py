@@ -15,9 +15,9 @@ the way it was spelled — it cannot see which containers come out, which port e
 or that `udp_port` stays out (#3107, #2809). Rendered, the same value is a list of targets the
 test parses.
 
-The shared render context carries the Pi's literal `compose_services` in `hostvars` (#3860), but
+The shared render context carries the Pi's literal `compose_services` in `hosts` (#3860), but
 this test needs to swap that list for one the inventory does not hold. So it deep-copies the
-context's `hostvars` and overrides the Pi's service list.
+context's `hosts` and overrides the Pi's service list.
 
 The expected members are named rather than counted. A container legitimately added to or
 removed from the Pi changes the expected set here in the same commit that changes the
@@ -48,7 +48,7 @@ WG_EASY_UDP_PORT = 51822
 
 
 def _pi_vars() -> dict:
-    return host_context()["hostvars"]["daniel-pi"]
+    return host_context()["hosts"]["daniel-pi"]
 
 
 def published(compose_services: list | None = None) -> dict[str, int]:
@@ -59,12 +59,10 @@ def published(compose_services: list | None = None) -> dict[str, int]:
     assertion here rather than a skipped entry, because in the pod it is a container that
     silently stops being probed.
     """
-    hostvars = copy.deepcopy(host_context()["hostvars"])
+    hosts = copy.deepcopy(host_context()["hosts"])
     if compose_services is not None:
-        hostvars["daniel-pi"]["compose_services"] = compose_services
-    text = render_role_template(
-        "observability", "prometheus.yaml.j2", {"hostvars": hostvars}
-    )
+        hosts["daniel-pi"]["compose_services"] = compose_services
+    text = render_role_template("observability", "prometheus.yaml.j2", {"hosts": hosts})
     configmap = next(
         doc
         for doc in yaml_fast.safe_load_all(text)

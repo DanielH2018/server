@@ -52,7 +52,7 @@ from lib.json_types import JsonObject
 # nothing. Named rather than derived from the inventory at runtime — probe.py must answer
 # without parsing Ansible — and pinned to it by
 # scripts/diagnostics/tests/test_probe_health_cluster.py, which fails if a name here stops
-# appearing in ansible/inventory/hosts.ini.
+# naming a host_vars file under ansible/inventory/host_vars/.
 #
 # DECIDED: `stage` stays after daniel-stage was retired (#2941). What it buys does not depend
 # on a staging cluster existing: a `--cluster stage` request against this prod kubectl has to

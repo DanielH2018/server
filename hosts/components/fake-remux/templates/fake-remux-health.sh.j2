@@ -31,7 +31,7 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 # The longest legitimate gap between two textfile writes: two cron periods plus 300s, the rule
 # M3 fixed (docs/target-architecture/monitoring/m3-textfile-timer.md, "The deadline for
 # disk-health"). It renders from fake_remux_health_cron_minute, which must be `*/N`, and
-# ansible/tests/setup/test_b4_rule_literals.py pins the rules' literals to this value.
+# hosts/tests/test_b4_rule_literals.py pins the rules' literals to this value.
 {% set _every_n = fake_remux_health_cron_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
 {% if _every_n.isdigit() and '*/' ~ _every_n == fake_remux_health_cron_minute | string %}
 DEADLINE_S={{ 2 * 60 * (_every_n | int) + 300 }}

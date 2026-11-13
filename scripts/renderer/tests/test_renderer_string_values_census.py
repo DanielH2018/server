@@ -23,7 +23,6 @@ from yaml.resolver import Resolver
 
 from renderer.renderer_lib.targets import render_targets
 from lib import yaml_fast
-from lib.ansible_inventory import K8S_HOST
 from render_share import placeholder_renderer
 from renderer import homelab_render
 from renderer.renderer_lib.cluster import RenderedTag
@@ -129,7 +128,7 @@ def test_strings_that_stay_strings_and_unsubstituted_literals_are_clean():
 
 @functools.cache
 def _live() -> tuple[list[str], set[tuple[str, str]]]:
-    tags = sorted(render_targets(K8S_HOST))
+    tags = sorted(render_targets())
     return census(placeholder_renderer()(tags, homelab_render.secret_keys()))
 
 

@@ -38,7 +38,7 @@ from lib.k8s_roles import (
     k8s_entries,
     resolved_manifest_files,
 )
-from lib.render_guard import SHARED_TPL, host_layer
+from lib.render_guard import SHARED_TPL, host_layer, k8s_services
 from lib.repo_paths import ANSIBLE, K8S_ROLES
 from renderer import shadow_diff
 from renderer.renderer_lib.cluster import LABEL_WRAPPER, tag_context
@@ -48,7 +48,6 @@ from renderer.renderer_lib.task_inputs import (
     include_vars,
     render_defaults,
 )
-from toposort import filter_by_platform
 
 IMAGE_BUILDER = "k8s/image-builder"
 # The image-builder template the build context renders from. Its sibling `build-job.yaml.j2`
@@ -377,16 +376,15 @@ def census(
         tree: The Ansible tree.
         tags: The render targets, each a role under `roles/k8s/`.
         derived: The names the renderer computes from the tree.
-        entries: Each tag's `containers_list` entry, which decides its shared defaults.
+        entries: Each tag's service entry, which decides its shared defaults.
 
     Raises:
         CensusError: The play walk cannot resolve an include.
     """
     walk = walk_roles(tree, tags)
     result = Census(set_by_tasks=walk.set_by_tasks, derived=derived)
-    host_vars = host_layer(tree.ansible / "inventory" / "host_vars", tree.host)
-    containers = filter_by_platform(host_vars.get("containers_list") or [], "k8s")
-    reader = Reader(tree.ansible, containers)
+    services = k8s_services(tree.ansible.parent / "cluster" / "services.yml")
+    reader = Reader(tree.ansible, services)
     pending: list[tuple[str, str]] = []
 
     for tag in tags:
@@ -429,11 +427,11 @@ def derived_names(tags: list[str]) -> frozenset[str]:
 
     Every name `task_inputs.derived_facts` returns and every `include_role` var
     `task_inputs.include_vars` returns for any tag, the secret keys and the sentinel, and the
-    `containers_list` view `context.template_context` lays down.
+    `services` view `context.template_context` lays down.
     """
     stubs = shadow_diff.stub_vars()
     secrets = yaml_fast.safe_load(shadow_diff.SECRETS.read_text())
-    names = {"containers_list", *stubs, *(str(k) for k in secrets if k != "sops")}
+    names = {"services", *stubs, *(str(k) for k in secrets if k != "sops")}
     for tag in tags:
         role = K8S_ROLES / tag
         names |= derived_facts(role, tag_context(role, tag, stubs)).keys()
@@ -447,5 +445,5 @@ REAL_TREE = Tree(always=(CLAIM_TEMPLATE, LABEL_WRAPPER))
 @functools.cache
 def real_census() -> Census:
     """The census over the repo's tree and the k8s host's render targets."""
-    tags = render_targets(K8S_HOST)
+    tags = render_targets()
     return census(REAL_TREE, tags, derived_names(tags), k8s_entries())

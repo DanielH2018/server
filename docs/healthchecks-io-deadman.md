@@ -68,7 +68,7 @@ kept it at the 2026-09-25 reconciliation.
 
 That bound is what keeps the boot grace itself under 600 seconds. A boot grace longer than the
 cron interval could skip two consecutive slots, widening the legitimate gap to 30 minutes and
-making this table wrong. `ansible/tests/setup/test_health_cron_boot_grace.py` enforces the relation
+making this table wrong. `hosts/tests/test_health_cron_boot_grace.py` enforces the relation
 rather than either number.
 
 **A `/fail` ping ignores all of this.** Grace bounds *silence*; a `/fail` is an explicit failure

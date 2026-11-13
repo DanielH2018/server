@@ -940,8 +940,8 @@ arm64 only.
 
     In the same step, name the host in two more places. The renderer reads the inventory, and
     `bootstrap-host.sh` refuses a host that `HOSTS` does not list:
-    - add the host to `ansible/inventory/hosts.ini`, and copy
-      `ansible/inventory/host_vars/_example.yml` to `<host>.yml`;
+    - copy `ansible/inventory/host_vars/_example.yml` to `<host>.yml`, which makes it an
+      inventory host;
     - add the host to `HOSTS` in `hosts/bootstrap-host.sh`.
 1. **Operator-only:** create the age key and read its public key. Run the script from the PR
    branch's copy, with the keyring beside it, as *Preparing the installer on either node* describes:
@@ -971,7 +971,7 @@ arm64 only.
       daniel-box's firewall refuses the host's `apt-get update` in step 6;
     - one `HostReconcileFailed` rule in
       `ansible/roles/k8s/observability/files/rules/host-checks.yaml`, because
-      `ansible/tests/services/test_host_plane_rule_literals.py` fails a `hosts.ini` host without one.
+      `ansible/tests/services/test_host_plane_rule_literals.py` fails an inventory host without one.
 
     `host_secrets.py check` finds the host from `hosts/<host>/package.yml`, so it takes no edit.
 

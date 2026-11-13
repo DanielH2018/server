@@ -38,7 +38,7 @@
 # therefore owes `k3s-bringup.yml --tags node-address` on daniel-box before the next reboot
 # (operator-only); the revert restores that task file's import.
 #
-# ENFORCED: ansible/tests/setup/test_k3s_server_component.py and
+# ENFORCED: hosts/tests/test_k3s_server_component.py and
 # hosts/lib/tests/test_box_k3s_host_half.py.
 depends:
   - open-iscsi
@@ -130,7 +130,7 @@ defaults:
   #   retention          k3s carries this value over to S3. 28 at 12 hours is 14 days off-box.
   #                      docs/k3s-etcd-restore.md transcludes this value.
   #
-  # ENFORCED: ansible/tests/setup/test_k3s_server_flags_migration.py holds the rendered flags
+  # ENFORCED: hosts/tests/test_k3s_server_flags_migration.py holds the rendered flags
   # equal to the ones `k3s_server_args` passed before this file existed, plus H2.8a's.
   k3s_server_config:
     cluster-init: true
@@ -172,7 +172,7 @@ defaults:
   k3s_oidc_groups_claim: groups
   # The prefix that keeps an Authelia group from reading as a built-in `system:` group.
   # `headlamp_k8s_oidc_group` is this prefix plus the Authelia group, and
-  # ansible/tests/setup/test_k3s_oidc_trusts_authelia.py fails when the two drift.
+  # hosts/tests/test_k3s_oidc_trusts_authelia.py fails when the two drift.
   k3s_oidc_groups_prefix: "oidc:"
 files:
   - {src: templates/50-homelab.conf.j2, dst: /usr/lib/systemd/system/k3s.service.d/50-homelab.conf, activate: "manual:k3s.service"}

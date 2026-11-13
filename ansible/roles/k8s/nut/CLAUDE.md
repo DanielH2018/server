@@ -6,8 +6,7 @@ the pin is physical and never unwinds.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=nut` gates the
-  rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=nut` gates the rollout
 - **Image:** `ghcr.io/danielh2018/nut` (`nut_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
@@ -34,7 +33,7 @@ the pin is physical and never unwinds.
   adds nothing to the restart checksum the renderer stamps on nut, and adding it rolled
   nothing.
 - **Flux applies it, not Ansible** (D5.17, Wave C's UPS PR, which went alone). Its
-  `containers_list` entry is `platform: k8s`, so nothing applies it by hand. A merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand. A merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. The Deployment is `Recreate`, so every roll stops upsd for the container
   start, plus a pull
   when the content tag moved. That gap is time without power-cut shutdown coverage. The flip
@@ -87,13 +86,13 @@ secondary mode, which `upsmon.conf(5)` documents for **primary** mode only. Henc
 before a planned stop. The end of the battery is a *different* trigger: `AT LOWBATT * EXECUTE
 lowbatt` raises FSD as soon as the UPS asserts LB (`battery.charge.low` 10,
 `battery.runtime.low` 120). Measured runtime 2026-08-28 was 987 s at 43 % load, so 300 leaves
-roughly 11 minutes for the poweroffs. `ansible/tests/setup/test_nut_host_secondary.py` asserts the
+roughly 11 minutes for the poweroffs. `hosts/tests/test_nut_host_secondary.py` asserts the
 delay stays inside that band while a host beyond `ups_host` is armed.
 
 **Pinned ClusterIP.** The Service pins `spec.clusterIP` (H7.33), because daniel-box's package
 renders the address literally into `upsmon.conf`. A Service recreate keeps the address. The
 package's copy is `nut_host_upsd_clusterip` in `hosts/components/nut-secondary/component.yml`,
-and `ansible/tests/setup/test_nut_host_secondary.py` pins the two together.
+and `hosts/tests/test_nut_host_secondary.py` pins the two together.
 
 **Manual shutdown drill** (actually powers BOTH nodes off now that daniel-box is armed — have
 console access to each): `kubectl -n homelab exec deploy/nut -- upsmon -c fsd` → host poweroff

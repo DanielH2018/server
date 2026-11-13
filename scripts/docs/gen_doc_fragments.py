@@ -93,7 +93,6 @@ from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.docs_provenance import write_if_body_changed
 from lib.ansible_inventory import (
-    K8S_HOST,
     PI_HOST,
     PI_HOST_VARS,
     pi_entries_in,
@@ -221,7 +220,6 @@ def _deadman() -> tuple[str, list[str]]:
         "hosts/components/host-maintenance/defaults/main.yml",
         "hosts/components/worktree-sweep/defaults/main.yml",
         "ansible/inventory/group_vars/all.yml",
-        "ansible/inventory/hosts.ini",
         "ansible/inventory/host_vars/",
         *(f"hosts/{h}/package.yml" for h in hosts_listing_component("worktree-sweep")),
     ]
@@ -239,7 +237,7 @@ def _lan() -> tuple[str, list[str]]:
     return render_lan_addresses(
         str(group["k3s_metallb_ingress_vip"]),
         str(group["dns_k8s_vip"]),
-        container_udp_port(estate.entries(K8S_HOST), "wg-easy"),
+        container_udp_port(estate.services, "wg-easy"),
         container_udp_port(pi_entries_in(estate.own_vars(PI_HOST)), "wg-easy"),
         str(group["lan_subnet"]),
         str(group["wg_client_subnet"]),
