@@ -157,19 +157,37 @@ views:
               # On = quiet fan cap + AL sleep mode (bedtime sets it; morning reset clears).
               - entity: input_boolean.bedroom_sleep_mode
                 name: Sleep mode
-      # ── Aqara FP300 presence sensor (essentials only) ────────────────────
+      # ── Room sensors ─────────────────────────────────────────────────────
+      # Illuminance is the T1's: the lights dominate the FP300's reading, and the lux gate has read
+      # the T1 since 2026-09-01. "Auto-light" shows whether that gate lets presence turn the lights on.
       - type: glance
-        title: Aqara FP300
-        columns: 2
+        title: Room sensors
+        columns: 3
         entities:
           - entity: binary_sensor.aqara_fp300_presence
             name: Presence
           - entity: sensor.aqara_fp300_temperature
             name: Temperature
-          - entity: sensor.aqara_fp300_illuminance
+          - entity: sensor.aqara_t1_illuminance
             name: Illuminance
+          - entity: binary_sensor.bedroom_auto_light_allowed
+            name: Auto-light
+          - entity: binary_sensor.window_sensor_contact
+            name: Window
+          - entity: switch.air_purifier
+            name: Purifier
+      - type: glance
+        title: Batteries
+        columns: 4
+        entities:
           - entity: sensor.aqara_fp300_battery
-            name: Battery
+            name: FP300
+          - entity: sensor.0x001788010f0ccda4_battery
+            name: Tap Dial
+          - entity: sensor.aqara_t1_battery
+            name: T1
+          - entity: sensor.window_sensor_battery
+            name: Window
       # ── 🧪 Test scenarios (dev harness — script.bedroom_run_scenario) ─────
       - type: entities
         title: 🧪 Test scenarios

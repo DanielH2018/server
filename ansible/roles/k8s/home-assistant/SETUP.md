@@ -14,7 +14,7 @@ Nothing applies it by hand.
 ## 1. What it does (at a glance)
 
 - **Lighting** follows room presence (Aqara FP300) with an Adaptive-Lighting sun curve, a gentle
-  morning wake ramp tied to your real alarm, and a tap-on dim nightlight (Button 3) for night trips.
+  morning wake ramp tied to your real alarm, and a tap-on dim nightlight (Button 2) for night trips.
   Once you're in sleep mode the room stays dark on its own — presence won't auto-light you until
   morning.
 - **The fan** (DREO tower) tracks temperature on a smooth curve, with quieter caps at night / in
@@ -38,7 +38,7 @@ Nothing applies it by hand.
 | AirGradient ONE air monitor | AirGradient (local) | `sensor.bedroom_airgradient_one_{carbon_dioxide,pm2_5,voc_index,nox_index,temperature,humidity}` |
 | DREO tower fan | `dreo` (Marketplace, cloud) | `fan.tower_fan` |
 | APC UPS | NUT | (power monitoring) |
-| Pixel 9 Pro + Pixel Watch 3 | HA companion apps | `person.daniel`, `device_tracker.{pixel_9_pro,pixel_watch_3}`, `sensor.pixel_9_pro_{do_not_disturb_sensor,sleep_duration}`, `sensor.pixel_watch_3_next_alarm`, `binary_sensor.pixel_watch_3_bedtime_mode`, `notify.mobile_app_pixel_9_pro`, `notify.mobile_app_pixel_watch_3` |
+| Pixel 9 Pro + Pixel Watch 3 | HA companion apps | `person.daniel`, `device_tracker.{pixel_9_pro,pixel_watch_3}`, `sensor.pixel_watch_3_{do_not_disturb_sensor,next_alarm}`, `binary_sensor.pixel_watch_3_bedtime_mode`, `notify.mobile_app_pixel_9_pro`, `notify.mobile_app_pixel_watch_3` |
 | Adaptive Lighting | Marketplace | `switch.bedroom_adaptive_lighting_bedroom` (master), `switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom` |
 
 ---
@@ -54,9 +54,9 @@ These are **not** captured by `deploy.yml` — they're device/app/UI state:
    Right Light / Tap Dial / Aqara FP300). Z2M `availability:` is enabled in the role.
 3. **Light group** — create the **Bedroom Lights** group (HA Settings → Helpers / group) over the 3
    bulb entities → `light.bedroom_lights`.
-4. **Phone companion app** (Manage sensors → enable, grant the prompted permission):
-   `is_charging`, `do_not_disturb_sensor`, `sleep_confidence` / `sleep_segment` / `sleep_duration`
-   (Activity Recognition), `next_alarm`. On the watch: `bedtime_mode`, `next_alarm`.
+4. **Companion apps** (Manage sensors → enable, grant the prompted permission): the phone needs
+   only its location (`device_tracker.pixel_9_pro`) and notifications. On the watch: `bedtime_mode`,
+   `next_alarm`, `do_not_disturb_sensor`. No automation reads a phone sensor.
 5. **Critical notification channel** — after the first `pierce` alert creates the **"Bedroom
    critical"** channel, set it to **Override Do Not Disturb** (Android → Settings → Apps → Home
    Assistant → Notifications → that channel). High importance alone does *not* pierce DND.
@@ -121,16 +121,16 @@ of use:
 | Control | Press / Rotate | Hold |
 |---------|----------------|------|
 | **Button 1 — Power** | toggle: on → natural (Adaptive Lighting, ungated); off → off + stay-off | reset to auto (clear overrides, re-sync lights lux-gated + fan) |
-| **Button 2 — Brightness** | Relax / cozy scene (warm ~30%) | Bright scene (full) |
-| **Button 3 — Sleep** | sleep toggle: in sleep mode + lights on → all off (room dark, fan stays quiet); otherwise → nightlight (warm ~3%) | Bedtime routine (30-min fade to nightlight) |
-| **Button 4 — Fan** | fan → auto (clear manual override, re-apply curve) | toggle **fan-dial mode** (5-min window: the dial then steps the fan ±1 level; max fan still reachable by dialing to L9) |
-| **Dial** | brightness ±12% | — |
+| **Button 2 — Sleep** | sleep toggle: in sleep mode + lights on → all off (room dark, fan stays quiet); otherwise → nightlight (warm ~3%) | Bedtime routine (30-min fade to nightlight) |
+| **Button 3 — Fan character** | toggle oscillation (sweep ↔ fixed) | stop the fan and hold it off (sets fan-manual; exits fan-dial mode) |
+| **Button 4 — Fan** | fan → auto (clear sleep mode's fan cap and the manual override, re-apply curve; exits fan-dial mode) | toggle **fan-dial mode** (5-min window: the dial then steps the fan ±1 level; max fan still reachable by dialing to L9) |
+| **Dial** | brightness ±12%; in fan-dial mode, fan ±1 level | — |
 
 **Phone / watch:**
 - **Bedtime mode** (watch) → runs the bedtime routine.
-- **Next alarm** (phone Clock) → drives the morning wake ramp.
-- **Do Not Disturb** → routine alerts go silent; critical ones pierce (if you set the channel
-  override).
+- **Next alarm** (watch) → drives the morning wake ramp.
+- **Do Not Disturb** (watch) → routine alerts go silent; critical ones pierce (if you set the
+  channel override).
 - **Notification buttons** — Boost fan (air quality), Turn back on (away), Start now (bedtime).
 
 ---
@@ -152,8 +152,8 @@ All set per-category in `bedroom_threshold_alert`'s `cfg` map or per-call to `be
 | Want to change… | Where |
 |---|---|
 | Air-quality / humidity / battery / severe thresholds | the `threshold` sensors in `files/thresholds.yaml` (`upper`/`lower`/`hysteresis`) |
-| Fan curve (start temp / slope / caps) | `bedroom_apply_fan` in `scripts/fan.yaml` (the `ideal`/`cap` lines) |
-| Wake ramp curve (knees / final brightness / short-night softening) | `wake_brightness` macro in `custom_templates/lighting.jinja` (`mid`/`knee`/`full`); window length in `in_wake_window` |
+| Fan curve (start temp / slope / caps / sleep floor) | `fan_target_level` macro in `custom_templates/fan.jinja` (the `ideal`/`cap`/`floor` lines) |
+| Wake ramp curve (knees / final brightness) | `wake_brightness` macro in `custom_templates/lighting.jinja` (`mid`/`knee`/`full`); window length in `in_wake_window` |
 | Nightlight window | `bedroom_apply_natural` first exception (`sleep_mode` or 00:00–05:00) |
 | Bedtime fade length (30 min) | `transition:` on the `scene.turn_on` in `bedroom_bedtime` (`scripts/wake-and-sleep.yaml`) |
 | Away timings (10 / 30 min) | `bedroom_away` trigger `for:` |
@@ -174,9 +174,9 @@ Two **independent**, self-hosted (no Nabu Casa) integrations with a Nest Hub Max
   `google_assistant`** integration → your own Google Cloud project pointed at HA's existing
   public HTTPS endpoint. Authelia is already off for HA, so no per-path bypass is needed.
 - **Dashboard casting** (show a Lovelace view on the Hub Max screen) via the local **`cast`**
-  integration. **Why `known_hosts`:** HA is bridge-networked, so it can't discover Cast devices
-  over mDNS — `known_hosts` names the Hub Max by IP and skips discovery entirely. Outbound
-  container→LAN traffic works through bridge+NAT, so **no host-networking change is needed.**
+  integration. **Why `known_hosts`:** HA runs pod-networked in k3s, so it can't discover Cast
+  devices over mDNS — `known_hosts` names the Hub Max by IP and skips discovery entirely. Outbound
+  pod→LAN traffic works through the node's NAT, so **no host-networking change is needed.**
 
 ### 10a. Prerequisite — give the Hub Max a fixed IP
 `cast` `known_hosts` needs a stable address. Reserve a DHCP lease for the Hub Max's MAC (home
@@ -252,7 +252,7 @@ installs.
 Modern HA **rejects** a YAML `cast:` block ("does not support YAML setup") — Cast is a config-entry
 integration. `external_url`/`internal_url` are already set (§10c step 2), so only the device list is
 left, and it's a one-time UI step:
-- **Settings → Devices & Services → + Add Integration → Google Cast.** HA is bridge-networked (no
+- **Settings → Devices & Services → + Add Integration → Google Cast.** HA is pod-networked (no
   mDNS), so when prompted add the Hub by IP under **Known hosts = `10.0.0.137`** (or set it later via
   the integration's **Configure**). The Hub must keep that reserved DHCP lease (§10a).
 - A `media_player.<hub>` entity then appears. Cast a view from **Developer Tools → Actions** with

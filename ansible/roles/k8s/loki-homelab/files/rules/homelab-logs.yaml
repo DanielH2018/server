@@ -164,6 +164,23 @@ groups:
             and its workload cannot write until the volume detaches and reattaches. Read
             {job="syslog", program="kernel"} in loki-homelab for the device and the errors before
             it, then scale the workload to 0, wait for the volume to detach, and scale back.
+      # Home Assistant's Cast connect-back loop (#8206). pychromecast logs "Heartbeat timeout,
+      # resetting connection" at INFO each time it drops the Nest Hub's socket, and nothing else
+      # signals the loop. Measured 2026-11-13: the 2026-11-11/12 storms logged 57-119 per hour,
+      # and every other hour from 2026-11-06 logged at most 19, so 30 sits between them.
+      - alert: HomeAssistantCastHeartbeatStorm
+        expr: >-
+          sum(count_over_time({job="k8s", container="home-assistant"} |= "Heartbeat timeout" [1h])) > 30
+        labels:
+          severity: warning
+          service: home-assistant
+        annotations:
+          summary: Home Assistant's Cast connection to the bedroom display reset more than 30 times in an hour.
+          description: >-
+            home-assistant logged {{ $value }} pychromecast "Heartbeat timeout" lines in the last
+            hour, so the Cast connect-back loop is running and dashboard casts to the Nest Hub
+            fail. ansible/roles/k8s/home-assistant/docs/platform.md describes the loop and the
+            quit-app fallback.
       # The update line of each cloudflare-ddns Deployment, ported by M6's batch B7. favonia's
       # image serves no metrics, so the log is the only evidence an update cycle succeeded. Every
       # 5m cycle logs, per domain, either "are already up to date" (a cached or a checked no-op)

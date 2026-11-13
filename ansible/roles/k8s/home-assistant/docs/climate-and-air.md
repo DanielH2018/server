@@ -64,7 +64,11 @@ advisor.
   `light.bedroom_lights` **`tile`** card carrying inline `light-brightness` + `light-color-temp`
   feature sliders (built-in features, no HACS; tap the tile for HA's full RGB color wheel in the
   more-info dialog — the Hue bulbs are `color_temp` + `xy`) stacked above the **Bedroom Controls**
-  `entities` card (AL master switch + the three override booleans) — then the Aqara FP300 glance.
+  `entities` card (AL master switch + the three override booleans) — then the **Room sensors**
+  glance (FP300 presence and temperature, T1 illuminance, the lux gate's
+  `binary_sensor.bedroom_auto_light_allowed`, the window contact, the purifier switch) and a
+  **Batteries** glance (FP300, Tap Dial, T1, window sensor). Illuminance is the T1's because the
+  bedroom lights dominate the FP300's reading.
   **AL caveat:** Adaptive Lighting runs `take_over_control: true`, so dragging the color-temp (or
   brightness) slider pauses AL for that light until the next reset — expected, not a bug.
 - **Outdoor AQI + window advisor (since 2026-06-20).** Open-Meteo's free air-quality API feeds
