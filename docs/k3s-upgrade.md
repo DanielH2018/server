@@ -1,9 +1,11 @@
 # k3s control-plane upgrade runbook
 
-A k3s bump reinstalls the control plane on a single-server cluster, so it runs by hand. Renovate
-raises the PR and the `k3s control plane (manual — hand-run upgrade: docs/k3s-upgrade.md; k8s_autodeploy: false)`
-rule blocks its automerge, which means the daily unattended `/renovate-prs` run can never land it.
-This page is what an operator follows instead.
+Merging the k3s pin is the upgrade. SUC applies the merged pin to both nodes, and on this
+single-server cluster that restarts daniel-box, the only control-plane node. The operator
+therefore chooses when the upgrade happens by choosing when to merge. Renovate raises the PR,
+and the `k3s-io/k3s` package rule in `renovate.json` blocks its automerge, so the daily
+unattended `/renovate-prs` run can never land it. This page is what an operator follows before
+and after merging.
 
 Renovate raises k3s patch releases only. An `allowedVersions` cap on `k3s-io/k3s` holds k3s at
 the minor whose Kubernetes schemas are vendored under `scripts/validate/schemas/kubernetes.io/`,
