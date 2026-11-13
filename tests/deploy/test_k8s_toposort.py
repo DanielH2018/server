@@ -286,6 +286,7 @@ DOCUMENTED_ORDERINGS = {
     ("media-volume", "janitorr"): "k8s/roles/media-volume/CLAUDE.md",
     ("media-volume", "navidrome"): "k8s/roles/media-volume/CLAUDE.md",
     ("media-volume", "lidarr"): "k8s/roles/media-volume/CLAUDE.md",
+    ("media-volume", "slskd"): "k8s/roles/media-volume/CLAUDE.md",
     ("loki-homelab", "game-stats"): "k8s/roles/game-stats/CLAUDE.md",
     ("sonarr", "janitorr"): "host_vars/daniel-box.yml (janitorr comment)",
     ("radarr", "janitorr"): "host_vars/daniel-box.yml (janitorr comment)",

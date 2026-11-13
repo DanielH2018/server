@@ -452,6 +452,7 @@ def test_loki_sets_name_every_m5_rule():
         "LokiRulerNotificationsFailing",
         "CloudflareDdnsDirectUpdateSilent",
         "CloudflareDdnsProxiedUpdateSilent",
+        "HomeAssistantCastHeartbeatStorm",
     }
     # A7's Cutover-b dropped `shadow` from WorkloadLogErrors, B7's Cutover-1b from its two rules.
     assert loki_sets(shadow=True) == {}

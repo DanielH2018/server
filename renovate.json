@@ -700,6 +700,7 @@
         "k8s/roles/qbittorrent/defaults/main.yml",
         "k8s/roles/registry/defaults/main.yml",
         "k8s/roles/scrutiny/defaults/main.yml",
+        "k8s/roles/slskd/defaults/main.yml",
         "k8s/roles/system-upgrade/defaults/main.yml",
         "k8s/roles/tdarr/defaults/main.yml",
         "k8s/roles/terraria/defaults/main.yml",

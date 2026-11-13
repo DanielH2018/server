@@ -52,6 +52,10 @@ _NO_READINESS = {
     ("radarr", "exportarr"): "metrics sidecar; readiness would gate radarr's Service",
     ("lidarr", "exportarr"): "metrics sidecar; readiness would gate lidarr's Service",
     (
+        "slskd",
+        "soularr",
+    ): "a poll loop with no port; readiness would gate slskd's Service",
+    (
         "prowlarr",
         "exportarr",
     ): "metrics sidecar; readiness would gate prowlarr's Service",

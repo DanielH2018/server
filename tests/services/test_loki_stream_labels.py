@@ -221,6 +221,7 @@ def test_the_consumer_census_finds_its_named_members():
         "homelab-logs.yaml HostFilesystemRemountedReadOnly",
         "homelab-logs.yaml CloudflareDdnsDirectUpdateSilent",
         "homelab-logs.yaml CloudflareDdnsProxiedUpdateSilent",
+        "homelab-logs.yaml HomeAssistantCastHeartbeatStorm",
     ):
         assert name in consumers, f"{name} is no longer found, so it is unchecked"
     boards = {name.split(" #")[0] for name in _dashboard_queries()}
@@ -370,6 +371,7 @@ _RULE_CONTAINERS = {
     # Both cloudflare-ddns Deployments name their container this; the rules tell them apart by
     # `pod`, which test_a_cloudflare_ddns_rule_names_a_deployment_the_role_renders holds.
     "cloudflare-ddns": ("cloudflare-ddns", "deployment-direct.yaml.j2"),
+    "home-assistant": ("home-assistant", "deployment.yaml.j2"),
 }
 
 

@@ -977,6 +977,17 @@ containers_list:
     netpol_from:
       - traefik         # deliberate, not redundant — see the policy's header
       - prowlarr        # Application Sync writes indexers in
+      - slskd           # Soularr, a container in the slskd pod, triggers imports
+  # The Soulseek client, with Soularr feeding it Lidarr's wanted albums, behind its own
+  # Mullvad tunnel. Its only caller is traefik, which the baseline admits.
+  - name: slskd
+    depends_on: [media-volume]
+    hostname: "slskd"
+    port: 5030
+    use_authelia: true
+    auth_tier: one_factor
+    # slskd's settings and transfer history; the downloads live on media-data.
+    no_backup_claims: [slskd-config]
   # Deploys LAST: every workload role must finish before this role fences the namespace
   # (docs/networkpolicy-slice-answers.md). K8S_APPLIES_LAST in template_filters/toposort.py gives
   # it an edge onto every other entry, so it applies last wherever it sits in this list, and an

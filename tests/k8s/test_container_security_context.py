@@ -217,6 +217,7 @@ _HOST_OR_NETWORK_ROOT = {
     # NET_ADMIN + NET_RAW to insert the FORWARD drops for peer traffic to the cluster CIDRs.
     ("wg-easy", "peer-cluster-drop"),
     ("qbittorrent", "wireguard"),
+    ("slskd", "wireguard"),
 }
 
 # Deliberately root, declared as such, to fix up ownership before the workload starts.

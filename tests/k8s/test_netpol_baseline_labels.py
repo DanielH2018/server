@@ -96,6 +96,10 @@ BORN_FENCED_ROLES = {
     # Application Sync writes indexers in. It dials prowlarr, qBittorrent and MusicBrainz, which
     # is egress and unenforced here, so the label fences only its ingress.
     "lidarr",
+    # The Soulseek client. Traefik is its only caller; Soularr shares its pod and talks over
+    # localhost. It dials Soulseek peers through its tunnel and Lidarr in-cluster, which is
+    # egress and unenforced here.
+    "slskd",
 }
 
 LABEL = ("netpol-baseline", "enforced")

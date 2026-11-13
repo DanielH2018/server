@@ -201,10 +201,8 @@ and the bedtime/wake routines that drive them.
   getting gradually brighter. `sensor.bedroom_wake_start` = alarm−15 min (the window open edge;
   dynamic — see the dynamic-wake bullet below). Delegated entirely to `script.bedroom_apply_wake`
   (fixed warm 2200K, no `adaptive_lighting.apply` turn-on flash), driven per-minute by
-  `automation.bedroom_wake_ramp`. Short night (<6h) scales the mid/knee down to ~5/14% but still
-  reaches 100% by `alarm+30` (else the hand-off pop returns on short nights — see the sleep-quality
-  bullet). Pressing button 4 mid-window resumes the ramp from the current point (`bedroom_apply_wake`
-  recomputes the right frame for now()). When no morning alarm is set the sensor is `unavailable` →
+  `automation.bedroom_wake_ramp`. Pressing button 4 mid-window resumes the ramp from the current
+  point (`bedroom_apply_wake` recomputes the right frame for now()). When no morning alarm is set the sensor is `unavailable` →
   this exception is false and the default applies. `wake_transition` macro is gone — transition is
   now always 60 s (one ramp step). **`bedroom_morning_reset` also calls this dispatcher** (single
   source of truth — no duplicated ramp math). Color temp ALWAYS comes from AL; exceptions override
@@ -323,9 +321,9 @@ and the bedtime/wake routines that drive them.
   hot night, and a missing outdoor reading falls back to the winter band (quiet L2, the old behavior).
   Replaced the old flat L2 sleep cap 2026-07-13; TUNE the bands/floors/ceiling in `fan.jinja`. It does
   NOT freeze the fan. `bedroom_morning_reset` unwinds both sleep_mode + AL sleep mode before its fan/
-  light re-applies (later moves to the watch-alarm wake). Phone bedtime/sleep sensors (DND,
-  sleep_confidence, next_alarm) are now enabled in the companion app; the watch exposes
-  `sensor.pixel_watch_3_next_alarm` (the real wake alarm) + `notify.mobile_app_pixel_watch_3`.
+  light re-applies (later moves to the watch-alarm wake). The watch exposes
+  `sensor.pixel_watch_3_next_alarm` (the real wake alarm) + `notify.mobile_app_pixel_watch_3`;
+  no automation reads a phone sensor.
 - **Dynamic morning wake (since 2026-06-18).** The wake ramp is driven by the real alarm, not a
   hardcoded time. `sensor.bedroom_wake_start` (a `device_class: timestamp` template sensor in
   `files/templates.yaml`) = `sensor.pixel_watch_3_next_alarm − 15 min`, `availability:` gated to
@@ -366,16 +364,7 @@ and the bedtime/wake routines that drive them.
   drop the hold for an instant. `bedroom_apply_natural` keeps reading `wake_start` alone, because
   `bedroom_apply_wake` halts without it. The two per-minute ramp tickers also compute their own
   elapsed.
-- **Sleep-quality-aware morning (since 2026-06-18).** The wake ramp adapts to how you slept: the
-  `wake_brightness` macro (`custom_templates/lighting.jinja`, the tested source of the ramp —
-  `bedroom_apply_natural` now delegates the morning exception to `bedroom_apply_wake`) scales the
-  mid/knee down on a short night — knee **14%** (mid 5%) at `alarm+20` when
-  `sensor.pixel_9_pro_sleep_duration` is `0 < x < 360` min (under 6h), else knee **20%** (mid 8%);
-  unknown/0 falls back to the normal curve. The final segment STILL climbs to **100% by `alarm+30`**
-  on a short night — only the early (most-asleep) part softens; ending below 100% would reintroduce
-  the AL hand-off pop the ramp-to-100 design removes. `bedroom_morning_reset`'s alarm+present block
-  also sends a routine "you slept N h" note (😴 short night / ☀️ good morning), skipped if
-  sleep_duration is 0/unknown. **Caveat:** the Google Sleep API finalizes `sleep_duration` around
-  wake, so at alarm−15min it can be stale — best-effort (graceful fallback to a normal wake). Only
-  the early mid/knee change with sleep; the window/transition/final-100% and `presence_on` are
-  untouched.
+- **The wake ramp does not read sleep quality.** The short-night softening and the "you slept
+  N h" note were removed 2026-08-16: their only source, `sensor.pixel_9_pro_sleep_duration`, no
+  longer exists on either device. The `wake_brightness` comment in `custom_templates/lighting.jinja`
+  says what rebuilding it would take.
