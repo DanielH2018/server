@@ -653,3 +653,7 @@ rootq('s)?
 
 # Returning a flux-owned service to Ansible (docs/flux-deploy-plane.md)
 handback
+
+# The music pipeline: navidrome scrobbling and its artist-image agent
+scrobbles
+Deezer
