@@ -39,18 +39,19 @@ def _tools(box: str, server: str, **kwargs):
 
 
 def _box_at_its_cap(root):
-    """Three uncleaned batches on daniel-box; with no unit state read back, each counts as running."""
+    """Six uncleaned batches on daniel-box; with no unit state read back, each counts as running."""
     earlier = [
-        Batch(f"{n}", "daniel-box", "/w", "b", "u", [n], "t") for n in (91, 92, 93)
+        Batch(f"{n}", "daniel-box", "/w", "b", "u", [n], "t")
+        for n in (91, 92, 93, 94, 95, 96)
     ]
     save(Manifest("20260101T000010Z", "o", earlier), root=root)
 
 
 def _server_at_its_cap(root):
-    """Four uncleaned batches on daniel-server, whose cap is 4 (#5667)."""
+    """Six uncleaned batches on daniel-server."""
     earlier = [
         Batch(f"{n}", "daniel-server", "/w", "b", "u", [n], "t")
-        for n in (81, 82, 83, 84)
+        for n in (81, 82, 83, 84, 85, 86)
     ]
     save(Manifest("20260101T000020Z", "o", earlier), root=root)
 
@@ -82,8 +83,8 @@ def test_every_host_with_memory_at_its_batch_cap_is_full(tmp_path):
     _server_at_its_cap(tmp_path)
     reading = headroom_probe.read(_tools(ROOMY, SMALLER), 1, None, tmp_path)
     assert reading["state"] == "full"
-    assert "daniel-box already holds 3 live batch(es)" in reading["detail"]
-    assert "daniel-server already holds 4 live batch(es)" in reading["detail"]
+    assert "daniel-box already holds 6 live batch(es)" in reading["detail"]
+    assert "daniel-server already holds 6 live batch(es)" in reading["detail"]
 
 
 def test_a_launch_pinned_to_the_host_with_a_free_slot_is_room(tmp_path):
@@ -133,7 +134,10 @@ def test_the_wait_agrees_with_what_launch_does(
 
 def test_a_wait_right_after_a_launch_fills_the_last_slot_reads_full(tmp_path):
     """#6758: the launch that takes daniel-box's last slot leaves the next wait `full`."""
-    earlier = [Batch(f"{n}", "daniel-box", "/w", "b", "u", [n], "t") for n in (91, 92)]
+    earlier = [
+        Batch(f"{n}", "daniel-box", "/w", "b", "u", [n], "t")
+        for n in (91, 92, 93, 94, 95)
+    ]
     save(Manifest("20260101T000010Z", "o", earlier), root=tmp_path)
     _server_at_its_cap(tmp_path)
     issues = [Issue(n, f"issue {n}", "body", ("claude",)) for n in (1, 2)]
@@ -154,7 +158,7 @@ def test_a_wait_right_after_a_launch_fills_the_last_slot_reads_full(tmp_path):
 
     after = headroom_probe.read(tools(), 1, "daniel-box", tmp_path)
     assert after["state"] == "full"
-    assert "daniel-box already holds 3 live batch(es) (1 in run" in after["detail"]
+    assert "daniel-box already holds 6 live batch(es) (1 in run" in after["detail"]
     assert place_main(["launch", "--batch", "2", *root], tools()) == 3
 
 
