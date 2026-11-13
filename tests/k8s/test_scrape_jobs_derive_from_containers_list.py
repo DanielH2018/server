@@ -19,7 +19,7 @@ from lib import yaml_fast
 from renderer.template_filters.scrape_jobs import entry_port, metrics_port, scrape_jobs
 
 # Every job derived from a `metrics` item: the seven from #3743, `nut` from #3816 and
-# `monitor-bridge`, the check exporter's. Each must
+# `monitor-bridge`, the check exporter's, and `navidrome`. Each must
 # still render from an entry, so a `metrics` item dropped from the inventory fails here rather
 # than reading as a smaller loop.
 _DERIVED = {
@@ -34,6 +34,7 @@ _DERIVED = {
     "valheim-stats",
     "nut",
     "monitor-bridge",
+    "navidrome",
 }
 
 

@@ -236,28 +236,28 @@
         # stays routed and reachable by hostname.
         #
         # THEIR URL SHAPE DIFFERS FROM THE TILES ABOVE ON PURPOSE — do not normalise it. The
-        # sonarr/radarr/qbittorrent routes are Authelia-gated, and their monitoring IngressRoutes
-        # deliberately expose only /api/v3/queue, so no Traefik URL reaches their widget APIs.
-        # These three therefore address the ClusterIP directly, which bypasses Traefik and
-        # Authelia entirely and leaves `monitoring_route` (k8s/templates/ingressroute.yml.j2)
-        # as narrow as it was. Same URL shape monitor-bridge already uses
-        # (roles/k8s/monitor-bridge/templates/config/env.yaml.j2).
+        # lidarr/sonarr/radarr/qbittorrent/slskd routes are Authelia-gated, and the *arr
+        # monitoring IngressRoutes deliberately expose only /api/v3/queue, so no Traefik URL
+        # reaches their widget APIs. These tiles therefore address the ClusterIP directly, which
+        # bypasses Traefik and Authelia entirely and leaves `monitoring_route`
+        # (k8s/templates/ingressroute.yml.j2) as narrow as it was. Same URL shape
+        # monitor-bridge already uses (roles/k8s/monitor-bridge/templates/config/env.yaml.j2).
         #
         # Reaching a ClusterIP is pod → pod, so each target's NetworkPolicy must admit
         # `app: homepage` on that port. `homepage_widget: true` on each entry does that, through
-        # roles/k8s/{sonarr,radarr,qbittorrent}/templates/networkpolicy.yaml.j2. Fenced out, the
-        # widget fails as a widget-proxy error, not as an auth error.
-        - qBittorrent:
-            icon: qbittorrent.png
-            href: {{ services | homepage_href('qbittorrent', domain) }}
-            description: Download
+        # the role's own networkpolicy.yaml.j2 (sonarr, radarr, qbittorrent) or netpol-baseline's
+        # caller fences (lidarr, slskd). Fenced out, the widget fails as a widget-proxy error,
+        # not as an auth error.
+        - Lidarr:
+            icon: lidarr.png
+            href: {{ services | homepage_href('lidarr', domain) }}
+            description: Music
             widget:
-                type: qbittorrent
-                url: {{ services | homepage_widget_url('qbittorrent', k8s_namespace) }}
-                username: {{ qbittorrent_username }}
-                password: {{ qbittorrent_password }}
-                # Dropped: seed, upload.
-                fields: [leech, download]
+                type: lidarr
+                url: {{ services | homepage_widget_url('lidarr', k8s_namespace) }}
+                key: {{ lidarr_api_key }}
+                # Dropped: artists.
+                fields: [wanted, queued]
         - Radarr:
             icon: radarr.png
             href: {{ services | homepage_href('radarr', domain) }}
@@ -284,27 +284,54 @@
                 key: {{ sonarr_api_key }}
                 # Dropped: series.
                 fields: [wanted, queued]
-        - Lidarr:
-            icon: lidarr.png
-            href: {{ services | homepage_href('lidarr', domain) }}
-            description: Music
+        - qBittorrent:
+            icon: qbittorrent.png
+            href: {{ services | homepage_href('qbittorrent', domain) }}
+            description: Download
             widget:
-                type: lidarr
-                url: {{ services | homepage_widget_url('lidarr', k8s_namespace) }}
-                key: {{ lidarr_api_key }}
-                # Dropped: artists.
-                fields: [wanted, queued]
-        # Link-only: navidrome's widget needs a user's Subsonic token and salt, and slskd's
-        # needs an API key slskd does not issue while it runs with auth off. The Lidarr widget
-        # above sets this row's height.
+                type: qbittorrent
+                url: {{ services | homepage_widget_url('qbittorrent', k8s_namespace) }}
+                username: {{ qbittorrent_username }}
+                password: {{ qbittorrent_password }}
+                # Dropped: seed, upload.
+                fields: [leech, download]
+        # Read from Prometheus, not navidrome's own widget: that one sends a user's Subsonic
+        # token and salt in the query string, which proxy.js logs on any non-2xx. No
+        # `or vector(0)`: a down navidrome renders a blank block rather than an empty library.
         - Navidrome:
             icon: navidrome.png
             href: {{ services | homepage_href('navidrome', domain) }}
             description: Listen
+            widget:
+                type: prometheusmetric
+                url: "http://prometheus.{{ k8s_observability_namespace }}.svc.cluster.local:9090"
+                refreshInterval: 300000
+                metrics:
+                    - label: Artists
+                      query: 'db_model_totals{job="navidrome",model="artist"}'
+                      format:
+                          type: number
+                    - label: Albums
+                      query: 'db_model_totals{job="navidrome",model="album"}'
+                      format:
+                          type: number
+                    - label: Songs
+                      query: 'db_model_totals{job="navidrome",model="media"}'
+                      format:
+                          type: number
         - slskd:
             icon: slskd.png
             href: {{ services | homepage_href('slskd', domain) }}
             description: Soulseek
+            widget:
+                type: slskd
+                url: {{ services | homepage_widget_url('slskd', k8s_namespace) }}
+                # A placeholder, as Soularr's is: SLSKD_NO_AUTH accepts any key, but the widget
+                # sends one on every call.
+                key: slskd-runs-without-auth
+                # Dropped: updateStatus, uploads, and downloads, which counts every user in the
+                # transfer history rather than what is transferring.
+                fields: [slskStatus, sharedFiles]
     - Calendar:
         - Calendar:
             id: my-calendar

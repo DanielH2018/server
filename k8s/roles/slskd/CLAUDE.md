@@ -26,9 +26,11 @@ asks Lidarr to import them into `media/music`.
   under one manifest only, so `mullvad_account` cannot ship in a second one.
 - **slskd and Soularr run as the sidecar's PUID**, because `netns-reset.sh` fences only that uid
   off `eth0` while the tunnel is down. A container added here at another uid could leak.
-- **slskd runs with web auth off.** Authelia gates the UI, the pod's only caller is traefik,
-  and Soularr reaches the API over localhost with a placeholder key, which slskd's passthrough
-  scheme accepts.
+- **slskd runs with web auth off.** Authelia gates the UI. Soularr reaches the API over
+  localhost with a placeholder key, which slskd's passthrough scheme accepts. Homepage's widget
+  sends the same placeholder over the ClusterIP. `homepage_widget: true` on the entry admits
+  homepage, and that fence is the pod's only caller beyond traefik. Turning auth on breaks
+  both until each gets a real key.
 - **Why Soularr and not Tubifarry.** Tubifarry 2.3.1 builds against Lidarr 3.2, which is
   nightly-only, and Lidarr cannot return from nightly to stable without a database restore
   (#8192 has the evidence). Revisit once a stable Lidarr 3.2 ships.
