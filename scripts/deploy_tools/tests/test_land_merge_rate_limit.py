@@ -97,3 +97,12 @@ def test_merge_timeout_still_bounds_a_rate_limited_wait(landing, ci_reads):
     assert 2 * QUOTA_FREES_IN_S <= sum(slept) <= 3 * QUOTA_FREES_IN_S
     # One CI read per freed quota, not one per merge poll.
     assert len(ci_reads) <= 3
+
+
+def test_a_rate_limited_merge_timeout_names_the_rate_limit(landing, ci_reads):
+    ln, _calls = _rate_limited_landing(
+        landing, ci_reads, [_HEAD], merge_timeout=2 * QUOTA_FREES_IN_S
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert f"the quota frees in {QUOTA_FREES_IN_S}s" in exc.value.detail
