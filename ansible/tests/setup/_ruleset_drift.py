@@ -142,6 +142,57 @@ def fence_ruleset(**overrides):
     return body
 
 
+DOTFILES = "DanielH2018/dotfiles"
+PUBLIC_DOTFILES = json.dumps({"full_name": DOTFILES, "visibility": "public"})
+
+
+# The update restrictions as the live endpoint returned them on 2026-11-13, by id. A bypass
+# actor is `<actor_type>:<actor_id>:<bypass_mode>`, as the role defaults name it.
+RESTRICTIONS = {
+    27167149: {
+        "repo": REPO,
+        "target": "branch",
+        "include": ["refs/heads/master"],
+        "rules": ["update", "deletion", "non_fast_forward"],
+        "bypass": ["RepositoryRole:5:always", "Integration:2740:always"],
+    },
+    27167230: {
+        "repo": DOTFILES,
+        "target": "branch",
+        "include": ["refs/heads/main"],
+        "rules": ["update"],
+        "bypass": ["RepositoryRole:5:always"],
+    },
+    27167303: {
+        "repo": DOTFILES,
+        "target": "tag",
+        "include": ["~ALL"],
+        "rules": ["deletion", "creation", "update"],
+        "bypass": ["RepositoryRole:5:always"],
+    },
+}
+
+
+def restriction_ruleset(ruleset_id, **overrides):
+    """One update restriction in the live endpoint's shape, as a dict."""
+    live = RESTRICTIONS[ruleset_id]
+    body = {
+        "id": ruleset_id,
+        "target": live["target"],
+        "source_type": "Repository",
+        "source": live["repo"],
+        "enforcement": "active",
+        "conditions": {"ref_name": {"exclude": [], "include": live["include"]}},
+        "rules": [{"type": rule} for rule in live["rules"]],
+        "bypass_actors": [
+            {"actor_type": kind, "actor_id": int(actor_id), "bypass_mode": mode}
+            for kind, actor_id, mode in (actor.split(":") for actor in live["bypass"])
+        ],
+    }
+    body.update(overrides)
+    return body
+
+
 def run(
     tmp_path,
     curl_body=None,
@@ -149,6 +200,8 @@ def run(
     branch_body=None,
     fence_body=None,
     repo_body=PUBLIC_REPO,
+    restriction_bodies=None,
+    dotfiles_body=PUBLIC_DOTFILES,
 ):
     """Render the script, stub curl + the check lib, run it. Returns (exit_code, status, message).
 
@@ -156,8 +209,10 @@ def run(
     last one if it logs several.
 
     `curl_body` answers the merge-gate ruleset fetch, and `branch_body` and `fence_body` the other
-    two. `repo_body` answers the repo read that precedes them all. Those three default to a clean body, so each case reads the
-    verdict of the arm it is about. Every value the template reads comes from the inventory and
+    two. `repo_body` answers the repo read that precedes them all, and `dotfiles_body` the
+    dotfiles repo's. `restriction_bodies` maps an update restriction's id to the body that
+    replaces its clean one. Each defaults to a clean body, so a case reads the verdict of the
+    arm it is about. Every value the template reads comes from the inventory and
     the role's own defaults, which the shared accessor resolves. The `..._matches_the_role_defaults`
     tests in test_github_ruleset_drift.py keep this module's constants honest against them
     (#3178).
@@ -166,6 +221,11 @@ def run(
         branch_body = branch_ruleset_body()
     if fence_body is None:
         fence_body = json.dumps(fence_ruleset())
+    restrictions = {
+        ruleset_id: json.dumps(restriction_ruleset(ruleset_id))
+        for ruleset_id in RESTRICTIONS
+    }
+    restrictions.update(restriction_bodies or {})
     body = render_shell_script(*TEMPLATE)
 
     assert CHECK_LIB in body, "the script no longer sources homelab-check-lib.sh"
@@ -200,7 +260,12 @@ def run(
             f'case "${{@: -1}}" in\n'
             f"  */rulesets/{BRANCH_RULESET_ID}) printf '%s' {json.dumps(branch_body)} ;;\n"
             f"  */rulesets/{FENCE_RULESET_ID}) printf '%s' {json.dumps(fence_body)} ;;\n"
-            f"  */repos/{REPO}) printf '%s' {json.dumps(repo_body)} ;;\n"
+            + "".join(
+                f"  */rulesets/{ruleset_id}) printf '%s' {json.dumps(restriction)} ;;\n"
+                for ruleset_id, restriction in restrictions.items()
+            )
+            + f"  */repos/{REPO}) printf '%s' {json.dumps(repo_body)} ;;\n"
+            f"  */repos/{DOTFILES}) printf '%s' {json.dumps(dotfiles_body)} ;;\n"
             f"  *) printf '%s' {json.dumps(curl_body or '')} ;;\n"
             "esac\n"
             f"exit {curl_rc}\n"

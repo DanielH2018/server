@@ -25,10 +25,9 @@ is the wait: it prints the landing's `VERDICT:` line and exits with the landing'
 `land.sh` arms no PR for GitHub's auto-merge. Its direct merge is pinned to the head SHA it
 checked, which auto-merge cannot do (`docs/landing.md` has the detail).
 
-**Auto-merge is allowed, and it is not a landing.** `gh pr merge --auto --squash <n>` merges the
-PR once CI is green, from the operator's account or the agent's, with no review and no bypass.
-Use it when the merge should not wait on your session. Then run the command above as usual:
-`--arm-merge` on a merged PR is a no-op, and the landing deploys the merge commit.
+**Do not arm auto-merge.** Ruleset 27167149 lets only the admin role and Renovate update
+master, and GitHub's auto-merge applies no bypass, so `gh pr merge --auto` leaves the PR
+`BLOCKED` from either account. `land.sh` merges as the operator, which the bypass covers.
 
 **A stale base costs one branch update first.** Before the merge, `land.sh` asks which paths
 master changed since the base the head's green CI run tested it against (the PR's merge base

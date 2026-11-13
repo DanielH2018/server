@@ -26,8 +26,7 @@ landers are live, so merging on it would release every held landing at once (#81
 does not wait out the quota itself: a wait inside `hold` would sit outside the poll accounting
 that keeps the whole wait inside `merge_timeout`.
 
-`LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off. A PR armed by hand with
-`gh pr merge --auto` merges without passing through here.
+`LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off.
 """
 
 import subprocess
