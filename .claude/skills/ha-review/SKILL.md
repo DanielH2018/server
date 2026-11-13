@@ -31,13 +31,14 @@ override with a bigger `model` (e.g. the session model).
 include:
 - its **scope**: the home-assistant role (`ansible/roles/k8s/home-assistant/`) — automations,
   scenes, scripts, template sensors/macros, configuration — plus live state via `scripts/diagnostics/probe.py ha …`;
-- the **repo conventions** — `containers/` is generated/read-only, so cite the ansible role source,
-  never `containers/`;
+- the **repo conventions** — the `/config` on the PVC is installed from the role's ConfigMap on
+  every pod start, so cite the role source under `ansible/roles/k8s/home-assistant/`, never a
+  live `/config` path;
 - its **don't-re-flag list** (from step 1) + the verify-first discipline;
 - the **output format** below.
 
 ## 3. Output format the agent must return
-Findings grouped **High / Medium / Low**. Each: a 1-line title, the `file:line` (ansible source), what's
+Findings grouped **High / Medium / Low**. Each: a 1-line title, the `file:line` (role source), what's
 wrong, and a concrete fix — tagged **[GAP] / [IMPROVEMENT] / [ADDITION]**. Note verified-clean areas in
 one line. End with a **3-bullet top-priorities** summary. Be specific and skeptical: 5 real findings beat
 20 speculative ones.

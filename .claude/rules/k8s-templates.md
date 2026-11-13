@@ -16,6 +16,11 @@ that renders a document with no `kind` — and `is_manifest_template` in
 
 `docs/homelab-render.md`, *The file rules*, has the render contract every k8s role meets.
 
+## Never print a secret value
+
+A template, a script it ships or a Job it runs never echoes, logs or writes a secret's value to
+stdout. A pod's output reaches Loki, and a render's output reaches the transcript.
+
 ## Removing a key from a Secret template
 
 Removing a key from a `secret.yaml.j2` removes it live only when Flux owns the key. For a role

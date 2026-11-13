@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # gen-hooks: library
 #   reason: an arm of bash-pretool.py, which run-hook.sh runs through `uv run python`
-"""PreToolUse(Bash) guard: nine commands that fail silently or cost a second write here.
+"""PreToolUse(Bash) guard: eight commands that fail silently or cost a second write here.
 
 Usage: `bash-pretool.py` loads this file as an arm on PreToolUse:Bash, and it also runs
 standalone. It reads the hook JSON payload on stdin. It prints a `deny` (or `ask`) decision JSON
@@ -15,7 +15,8 @@ a gate the repo requires, so nothing downstream notices either way.
 
   1. `kubectl rollout restart`. Plain kubectl authenticates as the read-only ServiceAccount,
      which is Forbidden on this verb — and a Forbidden restart still prints "successfully
-     rolled out". The refusal and the success read identically. Ansible is the write path.
+     rolled out". The refusal and the success read identically. `promote` and Flux are the
+     write path.
 
   2. `ssh daniel-<host> '<git ...>'` with no `cd`. A non-interactive ssh lands in $HOME, not the
      repo, so the git command runs somewhere else entirely — usually reporting "not a git

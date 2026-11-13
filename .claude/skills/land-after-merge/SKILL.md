@@ -138,9 +138,6 @@ tag until a PR removes its `flux_suspend`; the suspend PR itself ends this way. 
 PR that also owes a plane ends `needs-manual-apply`, and one that changes a host package goes
 on to the host wait.
 
-**A `nothing-to-deploy` for a PR that changes a setup role does not say the role applied.**
-Nothing applies a setup role on its own since H7.53; a change that has to reach a host belongs
-in the host component that replaced the role.
 A PR that changes `cluster-vars.sops.env` or `cluster-vars.source` waits on promotion too,
 for the `cluster-vars` Kustomization and every Kustomization that depends on it
 (`docs/landing.md`, *A tag Flux applies waits on promotion*).
