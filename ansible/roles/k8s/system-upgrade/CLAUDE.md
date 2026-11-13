@@ -39,7 +39,9 @@ else upgrades k3s since H6.3c and H6.3d landed. The slice plan is
   `ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_role.py` holds each literal equal
   to its key in `defaults/main.yml`.
     - `system-upgrade-controller.yaml` pins the controller image by digest and sets the pod's
-      `priorityClassName` to the platform tier's class.
+      `priorityClassName` to the platform tier's class. It also sets the controller's
+      requests and limits, because a BestEffort pod is evicted first under memory pressure
+      whatever its class (#8225). Changing them rolls the controller pod.
     - `system-upgrade-controller-env.yaml` sets the Job deadline bounds (3600 and 5400) and the
       Job backoff limit (`system_upgrade_job_backoff_limit`).
       The controller reads its environment at start, so a later change to either bound or to
