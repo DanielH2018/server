@@ -14,9 +14,7 @@ mistakes would rebuild a cluster with empty volumes or with objects Flux cannot 
 R4's PR 7b `awk` program, carried verbatim, runs over the whole document and must exit 0 with
 empty output. It refuses an Ansible deploy or a hand suspend of the root anywhere in the
 section, fenced lines included. It joined this test in D5's namespace PR, which deleted the
-interim `./scripts/deploy.sh` step that R4's red half relies on. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, steps 29 and 30, and
-docs/target-architecture/render/r4-delete-k8s-ansible-path.md, *PR 7b*.
+interim `./scripts/deploy.sh` step that R4's red half relies on. ADR-0020 records the decision.
 
 Run: uv run pytest ansible/tests/repo/test_flux_bootstrap_section.py
 """

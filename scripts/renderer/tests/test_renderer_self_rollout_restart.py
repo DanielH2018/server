@@ -6,8 +6,7 @@ renders both roles as flux-owned through `homelab_render.cluster`, once as commi
 with an Alertmanager Secret edit and a pihole ConfigMap edit, against a fixture `.source` that
 records every secret key. A third render drops `grafana-dashboards.yaml` from observability's
 `manifests_exclude_files`, the flip's edit, and holds grafana and Prometheus still across an
-edit to a ConfigMap each reloads in place (#5679). The plan is docs/target-architecture/deploy/d5-bulk-move.md,
-*Restart annotations for self-rolled workloads (D5.1e)*.
+edit to a ConfigMap each reloads in place (#5679). ADR-0020 records the decision.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_self_rollout_restart.py
 """

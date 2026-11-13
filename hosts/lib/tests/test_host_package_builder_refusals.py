@@ -25,7 +25,12 @@ from test_host_package_builder import (
     staged,
 )
 
-PLAN = REPO / "docs" / "target-architecture" / "host" / "h3-pi-pilot.md"
+ADR = (
+    REPO
+    / "docs"
+    / "adr"
+    / "0021-the-host-package-builder-trusts-master-plus-green-ci.md"
+)
 
 
 class RefusingGitHub(FakeGitHub):
@@ -69,25 +74,18 @@ def test_a_refused_token_reads_token_and_pages_once(lab, status):  # noqa: F811
     assert staged(state) == []
 
 
-def plan_series_words(series: str) -> set[str]:
-    """The backticked words of the plan's *Shared names* bullet that names `series`."""
-    lines = PLAN.read_text().splitlines()
-    start = next(i for i, line in enumerate(lines) if f"`{series}" in line)
-    indent = len(lines[start]) - len(lines[start].lstrip())
-    bullet = [lines[start]]
-    for line in lines[start + 1 :]:
-        if line.strip() and len(line) - len(line.lstrip()) <= indent:
-            break
-        bullet.append(line)
-    return set(re.findall(r"`([a-z-]+)`", " ".join(bullet)))
+def adr_reasons() -> set[str]:
+    """The values ADR-0021's *refusal reasons* bullet lists for the `reason=` label."""
+    text = " ".join(ADR.read_text().split())
+    listed = re.search(
+        r"refusal reasons are a closed set\.\*\* .*? is one of (.*?)\. ", text
+    )
+    assert listed, f"{ADR.name} no longer lists the builder's refusal reasons"
+    return set(re.findall(r"`([a-z-]+)`", listed.group(1)))
 
 
-def test_the_plans_metrics_list_names_token():
-    values = plan_series_words("homelab_builder_unbuilt_since_timestamp_seconds{")
-    assert "no-green" in values, values
-    # `build` is the one value the builder carries that the plan does not name.
-    assert hb.REASONS - {"build"} <= values, hb.REASONS - values
-    assert "token" in values, values
+def test_adr_0021_lists_exactly_the_builders_reasons():
+    assert adr_reasons() == hb.REASONS
 
 
 def test_a_failed_worktree_cleanup_keeps_the_keyring_reason(lab):  # noqa: F811

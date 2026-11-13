@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """The backups reaper reads the native trim's per-job label as no tier.
 
-H2.2a joins a volume to Longhorn's `trim` RecurringJob with the per-job label
+A volume joins Longhorn's `trim` RecurringJob with the per-job label
 `recurring-job.longhorn.io/trim`, never with a `recurring-job-group.longhorn.io/trim` group
-label (`docs/target-architecture/host/h2-shrink-host-plane.md`, *A per-job label, not a group
-label*). `backup_owner_map` reads only group keys today, so a default-tier volume that carries
+label. `backup_owner_map` reads only group keys today, so a default-tier volume that carries
 the trim label keeps `default` as its owner. A reader widened to per-job keys, or an arm that
 writes the group form, would make `trim` the owner, and `classify_backups` would then see no
 current-tier backup and keep every stray under FLOOR 1.

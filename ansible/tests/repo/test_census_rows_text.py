@@ -231,7 +231,7 @@ ROWS = (
         must_find=frozenset(
             {
                 "CLAUDE.md",
-                "docs/target-architecture/monitoring/m5-loki-ruler.md",
+                "docs/adr/index.md",
             }
         ),
     ),

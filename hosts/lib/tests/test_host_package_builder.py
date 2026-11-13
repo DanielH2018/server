@@ -3,8 +3,8 @@
 Each test builds a real fixture history in a git repository under `tmp_path` and points the
 builder's clone at it. GitHub, the render and nfpm are stubs: the check-runs come from a dict
 keyed by SHA, the render writes one `homelab-updater` package around the committed archive
-keyring, and nfpm writes an empty `.deb` named the way nfpm names one. The cases are the
-*Builder* list of docs/target-architecture/host/h3-pi-pilot.md, *Verification*.
+keyring, and nfpm writes an empty `.deb` named the way nfpm names one. The cases cover the
+builder run that ADR-0021 records.
 
 Run: uv run pytest hosts/lib/tests/test_host_package_builder.py
 """

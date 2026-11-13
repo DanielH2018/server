@@ -2,8 +2,7 @@
 
 `reset-check` runs against `World`'s fake forge. `reset-move` checks out nothing, so its rule
 lives in the step text of `.github/workflows/promote.yml`, and each write test runs that step
-under bash with fake `curl`, `flux`, `docker` and `gh` that log their argv. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, *A reset input*.
+under bash with fake `curl`, `flux`, `docker` and `gh` that log their argv.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_promote_reset.py
 """

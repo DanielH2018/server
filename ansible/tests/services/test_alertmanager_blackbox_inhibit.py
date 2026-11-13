@@ -7,8 +7,7 @@ dies, every ingress target's scrape fails at once and both rules fire. The inhib
 `ScrapeTargetDown`, because `BlackboxExporterDown` fires only when every target reads 0.
 
 This module evaluates the rendered `inhibit_rules` the way Alertmanager does, with the evaluator
-`test_alertmanager_host_check_inhibit.py` uses. The plan is
-docs/target-architecture/monitoring/m6-retire-kuma.md, "A3 and the handoffs it closes", task 4.
+`test_alertmanager_host_check_inhibit.py` uses. ADR-0026 records the decision.
 
 Run: uv run pytest ansible/tests/services/test_alertmanager_blackbox_inhibit.py
 """

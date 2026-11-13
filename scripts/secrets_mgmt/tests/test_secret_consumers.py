@@ -18,7 +18,7 @@ from secrets_mgmt.consumers import FLUX_PATH, consumer_commands
 
 
 # ── the Flux path for a k8s consumer (D3.4) ──
-# d3-secrets.md, *Rotating a value read by both planes*: Flux substitutes the value from the
+# ADR-0022 records how a value read by both planes rotates. Flux substitutes the value from the
 # cluster file, so each k8s consumer's line names the operator's `write` and the landing. The
 # fixture is a whole repo because `consumer_commands` takes `repo`.
 _FIXTURE_SECRET = "fixture_issue_4983_api_key"

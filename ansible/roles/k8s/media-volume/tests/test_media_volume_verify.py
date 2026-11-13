@@ -2,7 +2,7 @@
 
 The script tests run `media_volume_verify.main` against a temporary volume. The render tests
 render a copy of the media-volume role, so one test can move the host path and leave the tree
-alone. The plan is docs/target-architecture/deploy/d5-bulk-move.md.
+alone. ADR-0020 records the decision.
 
 Run: uv run pytest ansible/roles/k8s/media-volume/tests/test_media_volume_verify.py
 """

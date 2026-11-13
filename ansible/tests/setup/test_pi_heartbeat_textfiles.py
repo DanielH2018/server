@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The Pi's verdict heartbeats write a homelab_check_* textfile and push nothing (M6 B5).
 
-docs/target-architecture/monitoring/m6-retire-kuma.md, batch B5: pi-sd-health and
+ADR-0026 records the decision. Pi-sd-health and
 pi-recovery-health each write `<check>.prom` through homelab-check-lib.sh, so the rules in
 `pi-checks.yaml` page for the "Daniel Pi SD Health" and "Daniel Pi Recovery" tiles that Cutover-1a
 deleted. Cutover-2 dropped the Kuma pushes. pi-watchdog-health follows the same contract, and

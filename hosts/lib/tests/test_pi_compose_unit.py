@@ -1,6 +1,6 @@
 """`homelab-compose.service`: its timeout and its place in reconcile's restart contract (H5.2a3).
 
-Each case is one of H5's *Verification* cases (docs/target-architecture/host/h5-pi-compose.md).
+Each case covers the `homelab-compose.service` contract that ADR-0013 records.
 The unit renders from the real component with the Pi's real healthcheck variables. The restart
 cases run the real reconcile against the stub `systemctl` of `_reconcile_host.py`, with the
 rendered unit as the unit file.

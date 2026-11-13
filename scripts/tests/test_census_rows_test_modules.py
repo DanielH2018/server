@@ -41,6 +41,9 @@ from _test_module_rules import (
 from lib.repo_paths import REPO
 
 SELF = "scripts/tests/test_census_rows_test_modules.py"
+PLAN_CITATION = re.compile(
+    r"target-architecture|\b(?:[dhmrg]\d-[a-z0-9-]+|contracts)\.md\b"
+)
 
 ROWS = (
     Census(
@@ -235,6 +238,42 @@ ROWS = (
                 "scripts/lib/tests/test_git.py",
             }
         ),
+    ),
+    Census(
+        name="tests-cite-no-target-architecture-plan",
+        reason=(
+            "The plans under `docs/target-architecture/` are finished and get archived, so a "
+            "test that reads one, or a docstring that sends the reader to one, breaks or goes "
+            "stale when they move (#8179). Anchor the fact to the ADR under `docs/adr/` that "
+            "records it, writing it there first if no ADR does. A slice-plan file name "
+            "(`d5-bulk-move.md`, `contracts.md`) is a hit without its directory too."
+        ),
+        files=pytest_only_modules,
+        offence=lines_matching(PLAN_CITATION),
+        red=(
+            Subject("a.py", 'PLAN = REPO / "docs" / "target-architecture" / "x.md"\n'),
+            Subject(
+                "b.py", '"""The plan is docs/target-architecture/deploy/d5.md."""\n'
+            ),
+            Subject("c.py", "# d5-bulk-move.md, *Reaching Prometheus*\n"),
+            Subject("d.py", "msg = 'must name a commit (contracts.md C6)'\n"),
+        ),
+        green=(
+            Subject(
+                "a.py", '"""docs/adr/0020-flux-applies-the-cluster.md records it."""\n'
+            ),
+            Subject("b.py", "# The architecture of the target render.\n"),
+            Subject("c.py", 'DOC = REPO / "docs" / "adr" / "index.md"\n'),
+        ),
+        min_matches=MODULE_FLOOR,
+        must_find=frozenset({"hosts/lib/tests/test_host_package_builder_refusals.py"}),
+        allow={
+            SELF: "the row's own pattern and subjects name the directory",
+            "ansible/tests/services/test_alert_runbook_urls.py": (
+                "its `CITED_PAGE` pattern excludes a design-doc citation from the runbook "
+                "rule, and its fixture is an alert description; it reads no plan"
+            ),
+        },
     ),
 )
 

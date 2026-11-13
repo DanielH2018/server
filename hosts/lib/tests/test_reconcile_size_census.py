@@ -1,6 +1,6 @@
-"""Reconcile stays under its line ceiling (H7, *Reconcile's line ceiling*, exit observation 7).
+"""Reconcile stays under its line ceiling (ADR-0029).
 
-The host plane grows a second mechanism beside dpkg, and design.md's *Open questions* 7 makes
+The host plane grows a second mechanism beside dpkg, and ADR-0029 makes
 this ceiling the trigger for reconsidering it. The census counts the source lines of
 `hosts/lib/homelab-reconcile` and of the `hosts/lib/` modules only it imports
 (`_reconcile_size.py`).
@@ -27,8 +27,7 @@ LIB = REPO / "hosts" / "lib"
 #
 # DECIDED: raising CEILING is an operator ruling, never part of an ordinary change. Crossing it
 # is design.md's trigger to cut reconcile, to raise the ceiling in ADR-0029 with a reason, or
-# to switch the host plan to ansible-pull. The ceiling and its derivation are in
-# docs/target-architecture/host/h7-delete-ansible.md, *Reconcile's line ceiling*.
+# to switch the host plan to ansible-pull. The ceiling and its derivation are in ADR-0029.
 BASE_LINES = 326
 STATED_GROWTH = 720
 CEILING = 1400

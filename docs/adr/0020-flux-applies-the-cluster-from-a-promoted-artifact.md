@@ -122,6 +122,15 @@ their objects carry the tag's name and no emptied template reaches them at a ret
 - `promote` defers a promotion that the weekly reboot window would cut short
   (`scripts/deploy_tools/promote_lib/reboot_window.py`).
 
+**The soak Job draws one Grafana deploy marker per soaked promotion.** The soak
+(`scripts/renderer/job_files/flux_soak.py`) prints an `event=deploy` line, and Grafana's "Flux deploys" annotation query reads it from
+Loki. A soak that passes prints it with `result=ok`. A soak that fails prints it with
+`result=fail`, the failed services in `services=` and `duration_s`. A soak that errors
+prints it with `result=fail` and `services=flux`. Flux has applied the revision in every
+case, so the dashboards mark it, and the annotation's title tells a failure from a pass
+([#6164](https://github.com/DanielH2018/server/issues/6164)).
+`scripts/renderer/tests/test_flux_soak.py` holds this paragraph to what the soak prints.
+
 **Deploys depend on GitHub and GHCR.** The artifact lives in GHCR and `promote` runs in GitHub
 Actions. Break-glass promotion covers an outage of either (`docs/break-glass.md`). It needs an
 operator-held key pair and keeps the in-cluster registry in service. The `flux-deletion-drill`

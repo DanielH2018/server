@@ -1,7 +1,6 @@
 """D5.1a3's Job census: every Job Flux applies is safe to re-run and cannot wedge an apply.
 
-The plan is `docs/target-architecture/deploy/d5-bulk-move.md`, *Rules for every Job Flux
-applies (D5.1a3)*. The census reads a publish bundle's `cluster/` tree: each directory is one
+The census reads a publish bundle's `cluster/` tree: each directory is one
 Kustomization's path, so the census's scope, the Jobs in a flux-owned tag's render and in the
 non-tag Kustomizations, is every directory there. It has seven rows, each a predicate over one
 Job and its directory:
@@ -88,8 +87,7 @@ SIBLINGS = {p.name: p for p in (HELPER, CHANGED_SET, SOAK_READS)}
 # stop a script built to dodge it through runtime indirection, such as `getattr`, `vars()` or
 # `globals()` subscripted with a string like `'urllib'`, or a frame's globals. The helper
 # exists so that a brand-new pod's first connection retries for 60 seconds while kube-router
-# learns the pod's address (`docs/target-architecture/deploy/d5-bulk-move.md`, "Rules for
-# every Job Flux applies (D5.1a3)", "A first connection retries"). That is a reliability
+# learns the pod's address (ADR-0020). That is a reliability
 # rule, so a deliberate bypass is outside it.
 # A module reached as an attribute of an allowed module, such as `dataclasses.inspect`, is
 # outside the row for the same reason: the row does not resolve an allowed module's re-export

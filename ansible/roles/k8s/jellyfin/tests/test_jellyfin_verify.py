@@ -2,7 +2,7 @@
 
 The script tests run `jellyfin_verify.main` against a temporary device and library. The render
 tests render a copy of the jellyfin role, so a test can edit the copy and leave the tree alone.
-The plan is docs/target-architecture/deploy/d5-bulk-move.md.
+ADR-0020 records the decision.
 The cap script's own tests are in test_jellyfin_snapshot_cap.py.
 
 Run: uv run pytest ansible/roles/k8s/jellyfin/tests/test_jellyfin_verify.py

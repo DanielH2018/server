@@ -2,8 +2,7 @@
 
 `verify` reads `prod`'s digest each poll and before a `failed` verdict, and prints
 `superseded` once a later run has moved `prod`. `land-wait` keeps waiting on a soak failure
-read after `homelab` moved past R. docs/target-architecture/deploy/d7-superseding-promotions.md
-has the design.
+read after `homelab` moved past R. ADR-0020 records the rule.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_verify_promotion_superseded.py
 """

@@ -5,8 +5,7 @@ The `prune-artifacts` workflow, which deletes old versions of the same artifact,
 
 WHY THIS IS A TEST. `promote.yml` triggers on `workflow_run`, so GitHub runs master's copy of
 the file and a PR that edits it never runs its own edit. Every property below is therefore
-checked statically, before the edit reaches master. The plan behind each one is
-docs/target-architecture/deploy/d1-flux-installed.md (*Decisions*, and *Steps, as PRs*, D1.4).
+checked statically, before the edit reaches master. ADR-0020 records the decision behind each one.
 
 `problems` reads the parsed workflow and name every broken property. The
 real files must produce none, and each red fixture is a real file with one property broken,

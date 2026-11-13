@@ -5,7 +5,7 @@ Authelia answers an SSO-gated name with 302 only when the request's Accept heade
 and with 401 when the request carries none. blackbox_exporter sends no Accept unless a module
 sets one, and Go's net/http adds none. The ingress probes count that 302 as up, so a module
 that lost its `headers` would read every one of the 23 SSO targets as down
-(docs/target-architecture/monitoring/m4-blackbox-ingress.md, *The exporter*).
+(ADR-0026).
 
 The check is a `..._is_clean` / `..._is_flagged` pair over the same reader, and the real file
 must yield the two modules the ingress probes use, so a reader that stopped finding modules

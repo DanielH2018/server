@@ -77,8 +77,7 @@ def test_no_custom_manager_tracks_the_retired_compose_plane() -> None:
     hosts/components/pi-compose/services/*/compose.yaml.j2. Until H5 the operator kept them
     untracked, because the Pi had no deploy path a merged bump could reach. On 2026-10-29 the
     operator ruled that Pi digest bumps auto-deploy: they automerge like an eligible k8s digest
-    bump, and the Pi's updater health-gates the install (Open question 1 of
-    docs/target-architecture/host/h5-pi-compose.md).
+    bump, and the Pi's updater health-gates the install.
     scripts/tests/test_renovate_pi_compose_pins.py guards that manager and its rules.
     """
     offenders = []
@@ -344,7 +343,7 @@ def test_disabling_currentvalue_rule_scoped_to_its_files() -> None:
 # an entry here only as a deliberate, reviewed exception; it defeats the point otherwise.
 # `rancher/k3s-upgrade` is the one exception (H6.1b): a SUC Plan's `upgrade.image` names the
 # repository alone, and SUC appends the Plan's `version` as the tag, so the pin that ages is
-# `k3s_version`, which an annotation tracks (H6 *Open questions* 12).
+# `k3s_version`, which an annotation tracks (ADR-0025).
 IMAGE_LITERAL_ALLOWLIST: frozenset[str] = frozenset({"rancher/k3s-upgrade"})
 
 

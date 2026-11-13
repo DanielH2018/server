@@ -3,8 +3,7 @@
 The fixture renders speedtest, a real role that declares one snapshot claim, through the real
 CLI as if the inventory marked it `owner: flux`, with a fixture ordering that gives it one
 flux-owned upstream, so the cases hold whatever the live inventory publishes. code-server is the
-first live tag that renders `<tag>-snapshot`, since D5.16. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, step 11.
+first live tag that renders `<tag>-snapshot`, since D5.16. ADR-0020 records the snapshot Job.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_snapshot.py
 """

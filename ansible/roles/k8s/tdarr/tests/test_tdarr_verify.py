@@ -2,7 +2,7 @@
 
 The script tests run `tdarr_verify.main` against a temporary device and library. The render
 tests render a copy of the tdarr role, so one test can change the image and leave the tree
-alone. The plan is docs/target-architecture/deploy/d5-bulk-move.md.
+alone. ADR-0020 records the decision.
 
 Run: uv run pytest ansible/roles/k8s/tdarr/tests/test_tdarr_verify.py
 """

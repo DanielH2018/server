@@ -5,7 +5,7 @@ AN ENTRY WITH NO ROLE DEPLOYS NOTHING. A k8s entry needs ansible/roles/k8s/<name
 
 A Docker entry has no deploy path at all since H5.12 deleted `ansible/roles/containers/`: the
 Pi's services are `compose_services` entries, which the `homelab-daniel-pi` package deploys
-(docs/target-architecture/host/h5-pi-compose.md). validate/compose_templates.py renders those,
+(ADR-0013). validate/compose_templates.py renders those,
 so a Docker entry left in `containers_list` fails here.
 
 Run: uv run pytest ansible/tests/deploy/test_containers_list_roles_exist.py

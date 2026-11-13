@@ -1,6 +1,6 @@
 """disk-health.sh writes its verdict to node_exporter's textfile collector and pushes nothing to Kuma.
 
-The plan is docs/target-architecture/monitoring/m3-textfile-timer.md, *PR 2*: the producer metric
+ADR-0026 records the decision: the producer metric
 contract's three `homelab_check_*` series, an atomic 0644 write and a boot-grace run that writes
 nothing. PR 5 removed the Kuma push, so the library stub records any `kuma_push` call and every
 case asserts there is none. The real template is rendered and run under bash. Its check library

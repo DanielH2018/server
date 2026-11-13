@@ -3,8 +3,7 @@
 The script tests run `prowlarr_verify.main` against local ports: an HTTP server stands in for a
 port that answers, and a port nothing listens on stands in for one the fence refuses. The render
 tests render the role's `templates/verify/` through `render_tag`, so the Job is checked as Flux
-receives it in `prowlarr-verify`. The plan is
-docs/target-architecture/deploy/d5-bulk-move.md, *A verify conversion lands as inert code*.
+receives it in `prowlarr-verify`. ADR-0020 records the decision.
 
 Run: uv run pytest ansible/roles/k8s/prowlarr/tests/test_prowlarr_verify.py
 """

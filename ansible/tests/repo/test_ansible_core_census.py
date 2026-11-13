@@ -1,4 +1,4 @@
-"""H7's two censuses for removing ansible-core (`docs/target-architecture/host/h7-delete-ansible.md`).
+"""Two censuses for removing ansible-core (ADR-0029).
 
 - The deletion census. A grep reads every tracked `*.py` for an import statement, an
   `import_module` or a `find_spec` naming `ansible`, and a file outside `ALLOW` that it finds

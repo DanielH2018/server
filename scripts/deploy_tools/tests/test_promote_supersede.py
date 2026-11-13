@@ -5,7 +5,7 @@ master's tip, then runs `promote.decide` with `supersede_on` passed as an argume
 than patched. A case that supersedes returns at once. A case that refuses falls back to the
 in-flight wait, whose fake clock moves `last-good` to P after 90 seconds, so the refusal
 reads as a promotion that waited 90 seconds and supersedes nothing.
-docs/target-architecture/deploy/d7-superseding-promotions.md has the case table.
+The superseding rule is recorded in ADR-0020.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_promote_supersede.py
 """
