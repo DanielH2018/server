@@ -53,8 +53,9 @@ that says not to merge, such as a fan-out batch with a review phase, wins over t
 
 ### The procedure
 
-Take the `land.sh` command from the `land-after-merge` skill. Do not hand-poll CI. Arm GitHub's
-auto-merge only on your own PR that you were asked to ship.
+Take the `land.sh` command from the `land-after-merge` skill. Do not hand-poll CI. Do not arm
+GitHub's auto-merge: master's update restriction leaves an armed PR `BLOCKED`
+(`docs/landing.md`).
 
 A `cancelled` CI run means *no verdict for this SHA*, never *this SHA is bad*.
 `docs/landing.md` owns the rule, and `hosts/lib/ci_verdict.py:_CI_NO_VERDICT_CONCLUSIONS` lists

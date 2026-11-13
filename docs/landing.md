@@ -120,8 +120,7 @@ added there appears here without an edit.
 
 **`--arm-merge` readies the merge inside the script.** A bare `gh pr merge` once sat on the
 ask list (`Bash(gh pr merge:*)`), and an unattended session has nobody to answer that prompt, so
-it timed out as a denial. Three attempts, three denials, on 2026-09-03 (issue #979). Since
-2026-10-11 `gh pr merge --auto` is allowed, so a session may arm GitHub's auto-merge; a plain
+it timed out as a denial. Three attempts, three denials, on 2026-09-03 (issue #979). A plain
 `gh pr merge` still asks. `land.sh --arm-merge` is not that command: its own text never
 contains `gh pr merge`, so it reaches the classifier as the single script invocation the
 worktree-containment check already accepts.
@@ -134,12 +133,12 @@ otherwise.
 pinned to the head SHA that `await_ci` read green and the landing policy checked. Auto-merge
 merges whatever head is green when CI finishes. The arm path was removed in #4001, when the
 agent branch fence still covered master and an armed PR sat `BLOCKED` because auto-merge never
-applies a bypass (#3911). Since 2026-10-11 the fence excludes master and no rule needs a
-review, so a PR armed for auto-merge by hand, from either account, merges once CI is green.
+applies a bypass (#3911).
 
-**A PR armed for auto-merge still needs a landing.** Auto-merge merges the PR and nothing
-more. Run the usual `land.sh --pr <n> --arm-merge --await-merge` afterwards: the arm is a no-op
-on a merged PR, and a PR still open is left for whichever merge fires first.
+**GitHub's auto-merge cannot merge to master.** Ruleset 27167149, created 2026-11-13, lets only
+the admin role and Renovate update master. Auto-merge applies no bypass (github/docs#45265),
+so a PR armed with `gh pr merge --auto` sits `BLOCKED` from any account. `land.sh` merges as
+the operator, whose admin role the bypass covers, and is the one merge path.
 
 `--arm-merge` refuses a `CHANGES_REQUESTED` PR before any merge call, because someone asked for
 it to change. `--await-merge` merges the PR through the REST merge endpoint on the first poll
@@ -181,7 +180,6 @@ and closed as not planned on 2026-11-02 (#6521).
   landings are live, so merging on the refusal would release every held landing at once
   (#8139). The held poll counts toward `merge_timeout` like any other.
 - `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off.
-- A PR armed by hand with `gh pr merge --auto` merges without this check.
 
 **A head whose only CI skipped as a draft is re-triggered once, then ends the wait if it skips again.** `ci.yml` runs
 no job on a draft, so the push's run skips every job, the `prek` gate included, and `await_ci`
