@@ -118,6 +118,14 @@ spec:
               port: 3100
             initialDelaySeconds: 20
             periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 3100
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
 {{ container_resources(cpu_limit='1', mem_limit='1Gi', cpu_request='50m', mem_request='128Mi') }}
       volumes:
         - name: loki-config

@@ -11,11 +11,11 @@ Renovate's k8s-images manager matches `roles/k8s/*/defaults` and `_image:` keys 
 shared var one directory up is invisible to it — the escape `crowdsec_k8s_image` made, recorded
 in renovate.json. Duplication that a test keeps in lockstep beats a single copy nothing tracks.
 
-WHAT THIS FILE DELIBERATELY DOES NOT ASSERT. The sidecars carry no readinessProbe, and that
-rule lives in `ansible/tests/k8s/test_readiness_coverage.py` alone: all three are rows in its
-`_NO_READINESS` record, and its `test_the_record_has_no_stale_entries` goes red the moment one
-gains a probe. Asserting it here as well would split one rule's rationale across two files.
-Do not add it here; add a row there.
+WHAT THIS FILE DELIBERATELY DOES NOT ASSERT. The sidecars carry a livenessProbe and no
+readinessProbe, and both rules live in `ansible/tests/k8s/test_readiness_coverage.py` alone: each
+sidecar is a row in its `_NO_READINESS` record and a member of `_LIVENESS_REQUIRED`. Asserting
+either here as well would split one rule's rationale across two files. Do not add it here; add a
+row there.
 """
 
 from lib.k8s_roles import resolved_manifest_files
@@ -110,31 +110,6 @@ def test_the_api_key_is_a_secret_reference_never_a_literal():
                 "`kubectl describe pod`; use secretKeyRef"
             )
             assert apikey["valueFrom"]["secretKeyRef"]["name"] == f"{role}-exportarr"
-
-
-def test_the_sidecar_is_restarted_when_it_wedges():
-    """The sidecar keeps a livenessProbe and no readinessProbe, and only one half lives here.
-
-    The readiness half lives in `ansible/tests/k8s/test_readiness_coverage.py`, which records
-    all three exportarr containers in `_NO_READINESS` with this reason — a readinessProbe on a
-    sidecar takes the whole pod out of its *arr's Service whenever the exporter hiccups, so
-    monitoring takes down the thing it monitors. That file's
-    `test_the_record_has_no_stale_entries` goes red the moment one of the three gains a probe,
-    so asserting it again here would duplicate the rule and split its rationale across two
-    files. `ARRS` is exactly the three roles recorded there.
-
-    Liveness is the half no table covers: nothing else in the suite asks whether an exempt
-    container is restartable at all, and a wedged exporter with no probe is simply silent.
-
-    Census first: the loop `continue`s past every container not named `exportarr`, so a rename
-    or an empty render would otherwise pass with zero assertions.
-    """
-    probed = _sidecars()
-    _census(probed)
-    for role, container in sorted(probed.items()):
-        assert "livenessProbe" in container, (
-            f"{role}'s exportarr should still be restarted when it wedges"
-        )
 
 
 def test_the_sidecar_cpu_limit_covers_a_scrape_burst():
