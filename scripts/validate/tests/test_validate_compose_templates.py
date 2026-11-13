@@ -185,6 +185,7 @@ def test_a_packaged_service_the_package_would_ship_broken_is_flagged(tmp_path):
     (tree / "head.j2").write_text("services:\n  svc:\n    container_name: svc\n")
     (tree / "compose.yaml.j2").write_text(
         "{% include 'head.j2' %}    image: busybox:stable@sha256:" + "ab" * 32 + "\n"
+        "    cap_drop: [ALL]\n    security_opt: [no-new-privileges:true]\n"
     )
     err = vct.check_component_service("daniel-pi", {"name": "svc"}, tmp_path)
     assert err and "invalid YAML" in err
