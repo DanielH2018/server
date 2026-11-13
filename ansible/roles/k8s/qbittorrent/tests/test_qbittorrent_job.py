@@ -343,8 +343,8 @@ def _roll_digests(flipped_docs: list[dict]) -> set[str]:
 def _render_tree_copy(tmp_path, stubs, edit=None) -> list[dict]:
     """The flipped `qbittorrent-verify` of a copy of the role and of `cluster-vars.source`.
 
-    `edit(tree)` changes the copy first. `role_path` rides in the stubs, which outrank every
-    other layer, so the Jobs' lookups read the copy rather than the tree.
+    `edit(tree)` changes the copy first. `render_tag` sets `role_path` to the copy, so
+    the Jobs' lookups read the copy rather than the tree.
     """
     tree = tmp_path / "ansible"
     shutil.copytree(K8S_ROLES / TAG, tree / "roles" / "k8s" / TAG)
@@ -352,8 +352,7 @@ def _render_tree_copy(tmp_path, stubs, edit=None) -> list[dict]:
     shutil.copy(ANSIBLE / "vars" / "cluster-vars.source", tree / "vars")
     if edit:
         edit(tree)
-    copied = {**stubs, "role_path": str(tree / "roles" / "k8s" / TAG)}
-    return _docs(cluster.render_tag(TAG, copied, roles=tree / "roles" / "k8s").verify)
+    return _docs(cluster.render_tag(TAG, stubs, roles=tree / "roles" / "k8s").verify)
 
 
 def _edit_netns_reset(tree) -> None:

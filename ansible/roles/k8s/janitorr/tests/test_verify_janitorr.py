@@ -180,8 +180,8 @@ def _docs(texts: dict[str, str]) -> list[dict]:
 def _render_tree_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
     """The flipped render of a copy of the role and of `cluster-vars.source`.
 
-    `edit(role)` changes the copied role first. `role_path` rides in the stubs, which outrank
-    every other layer, so the Job's lookups read the copy rather than the tree. The copy links
+    `edit(role)` changes the copied role first. `render_tag` sets `role_path` to the copy, so
+    the Job's lookups read the copy rather than the tree. The copy links
     the tree's setup roles, which the health ConfigMap reads.
     """
     tree = tmp_path / "ansible"
@@ -194,8 +194,7 @@ def _render_tree_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
     shutil.copy(ANSIBLE / "vars" / "cluster-vars.source", tree / "vars")
     if edit:
         edit(role)
-    copied = {**stubs, "role_path": str(tree / "roles" / "k8s" / TAG)}
-    return cluster.render_tag(TAG, copied, roles=tree / "roles" / "k8s")
+    return cluster.render_tag(TAG, stubs, roles=tree / "roles" / "k8s")
 
 
 @pytest.fixture(scope="module")

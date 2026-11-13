@@ -115,8 +115,7 @@ def _render_copy(tmp_path, stubs, switch: str = "true", key_digest: str | None =
     text = defaults.read_text()
     assert f"{SWITCH}: true" in text
     defaults.write_text(text.replace(f"{SWITCH}: true", f"{SWITCH}: {switch}"))
-    copied = {**stubs, "role_path": str(tree / "roles" / "k8s" / TAG)}
-    return cluster.render_tag(TAG, copied, roles=tree / "roles" / "k8s").directories()
+    return cluster.render_tag(TAG, stubs, roles=tree / "roles" / "k8s").directories()
 
 
 def _docs(files: dict[str, str]) -> list[dict]:
