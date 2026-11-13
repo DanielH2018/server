@@ -1,11 +1,9 @@
 """docs-refresh records a weight for every new test module, unattended.
 
-CI's measured gate (`pytest_shard.py --check-durations`) rejects the PR that introduces an
-unweighted module costing `RUNNER_HEAVY_FAIL_SECONDS` or more and hands the repair to a human.
-One costing `RUNNER_HEAVY_SECONDS` up to that bound only annotates the run. It says nothing
-about a lighter one, and an unweighted file is packed at the suite median of 0.0s
-— so the split stays un-skewed rather than measured. The twice-daily cron closes that: it holds
-the git-tree lock already and already publishes through a PR.
+CI's measured check (`pytest_shard.py --check-durations`) only annotates an unweighted module
+costing `RUNNER_HEAVY_SECONDS` or more, and says nothing about a lighter one. An unweighted file
+is packed at the suite median of 0.0s, so nothing but this cron repairs the table: it holds the
+git-tree lock already and already publishes through a PR.
 
 Three things have to hold together, and each has a way of failing that reads green:
 
@@ -155,10 +153,6 @@ _NON_REFRESHING_FLAGS = frozenset(
         "--out",
         "--summary",
         "--check-durations",
-        "--warn-only",
-        "--threshold",
-        "--fail-above",
-        "--stale-ratio",
     }
 )
 

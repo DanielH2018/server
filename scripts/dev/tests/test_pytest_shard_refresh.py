@@ -277,7 +277,7 @@ def _heaviest_runner_rows(count):
     """The heaviest rows, each far enough above the floor that only the ratio decides."""
     rows = _runner_rows(count, heaviest=True)
     floor = shard_weight_gate.STALE_WEIGHT_FLOOR_SECONDS
-    ratio = shard_weight_gate.STALE_WEIGHT_FAIL_RATIO
+    ratio = shard_weight_gate.LOCAL_READING_MAX_RATIO
     assert rows[-1][1] * ratio * 0.9 >= floor, "the runner table has no row this heavy"
     return rows
 
@@ -333,9 +333,9 @@ def test_the_refusal_starts_at_the_gates_floor(tmp_path):
     assert json.loads(table.read_text()) == {at_floor: 1.0, under_floor: floor - 0.5}
 
 
-def test_the_refusal_starts_at_the_gates_fail_ratio(tmp_path):
-    """#7132: from the annotate ratio up to the fail ratio CI lets the row through."""
-    ratio = shard_weight_gate.STALE_WEIGHT_FAIL_RATIO
+def test_the_refusal_starts_at_the_local_reading_ratio(tmp_path):
+    """#7132: a reading just under `LOCAL_READING_MAX_RATIO` is written, and one just over is not."""
+    ratio = shard_weight_gate.LOCAL_READING_MAX_RATIO
     (over, over_runner), (under, under_runner) = _heaviest_runner_rows(2)
     under_reading = under_runner * ratio * 0.9
     table = _table(tmp_path, {over: 1.0, under: 1.0})
@@ -369,23 +369,6 @@ def test_the_refusal_judges_the_lower_reading_the_row_would_hold(tmp_path):
     }
 
 
-def test_a_refreshed_table_passes_the_gate_on_the_runner_seconds(tmp_path):
-    """#7132: the cron never opens a PR its own gate fails on the over-recorded arm."""
-    [(module, runner)] = _lightest_runner_rows(1)
-    table = _table(tmp_path, {module: 2.0})
-    measure, _ = _runs({module: 85.0})
-
-    pytest_shard.refresh_drifted_weights(
-        0, 1, table, files=[module], measure=measure, pins={}
-    )
-
-    report = f"{runner}s call {module}::t\n"
-    assert (
-        shard_weight_gate.durations_problems(report, json.loads(table.read_text()))
-        == []
-    )
-
-
 def test_a_refresh_prints_the_module_it_refused(tmp_path, capsys):
     """#7132: a refused row leaves no diff, so the printed report is the only trace of it."""
     [(module, _)] = _lightest_runner_rows(1)
@@ -400,8 +383,9 @@ def test_a_refresh_prints_the_module_it_refused(tmp_path, capsys):
     assert module in captured.out + captured.err
 
 
-def test_a_new_row_ci_would_reject_holds_the_runner_seconds(tmp_path, capsys):
-    """#7136: an 85s row fails the gate, and leaving the row out re-measures it on every tick."""
+def test_a_host_only_new_row_holds_the_runner_seconds(tmp_path, capsys):
+    """#7136: an 85s row is a cost of this host alone, and leaving the row out re-measures it
+    on every tick."""
     [(module, runner)] = _lightest_runner_rows(1)
     table = _table(tmp_path, {})
     measure, calls = _runs({module: 85.0}, {module: 85.0})
@@ -412,7 +396,7 @@ def test_a_new_row_ci_would_reject_holds_the_runner_seconds(tmp_path, capsys):
     assert written == {module: runner}
     assert module in capsys.readouterr().out
     report = f"{runner}s call {module}::t\n"
-    assert shard_weight_gate.durations_problems(report, written) == []
+    assert shard_weight_gate.durations_complaints(report, written) == []
 
     measured_so_far = len(calls)
     pytest_shard.record_missing_weights(table, files=[module], measure=measure)

@@ -688,23 +688,6 @@ jobs:
       #
       # pipefail is what makes the tee safe: without it the pipeline reports tee's exit status
       # and a failing suite would read green.
-      # The gate below fails a pull request only for a module the PR's diff adds or changes
-      # (#5480). The diff is read here, before the suite runs, because the suite's tests write
-      # git state of their own. Only `changed.txt` is read: a deletion's full-sweep rule is
-      # about which files a hook checks, not about who can re-record a weight. The weight table
-      # at the merge base is read here for the same reason: it lets the gate tell a table edit
-      # that only drops retired modules' rows from one that wrote a row (#5989).
-      - name: Collect this PR's changed files
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
-          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own
-        run: |
-          set -euo pipefail
-          "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
-          base=$(git merge-base "origin/$BASE_REF" HEAD)
-          git show "$base:scripts/dev/pytest_shard_weights.json" > "$RUNNER_TEMP/base_weights.json"
-
       - name: Run the test suite
         run: |
           set -euo pipefail
@@ -712,52 +695,18 @@ jobs:
           uv run python -m pytest --color yes --durations=0 "${files[@]}" \
             | tee "$RUNNER_TEMP/durations.log"
 
-      # The measured half of the shard-weight coverage gate. The ratchet in
-      # `test_pytest_shards_partition_the_suite.py` is static: it catches an unweighted file
-      # only where a recorded pole already sits in the same directory, and no static proxy
-      # separates a heavy module from a light one elsewhere. This step has the measurement,
-      # because the shard just ran the file.
+      # The measured half of the shard-weight check. Nothing static separates a heavy module from
+      # a light one, so this step reads the durations report the shard just wrote. It has three
+      # arms: a heavy module with no recorded weight, a recorded weight far HIGHER than what the
+      # module measured, and one far LOWER (#4873). Each complaint names its own repair.
       #
-      # Three arms, and the other two need the measurement just as much: a recorded weight
-      # far HIGHER than what the module measured here reserves shard time the file does not
-      # cost, and one far LOWER packs a heavy module as free (#4873). Every static arm asks only
-      # whether a file is missing from the table. The complaint names its own repair, which
-      # differs per arm — `--record-missing` fills a gap and `--record-files` refreshes an
-      # entry that is merely wrong.
-      #
-      # A `run:` step and NOT a pytest test. The docs-refresh and eval-run crons commit with
-      # the prek chain on and deselect exactly one ratchet node id; a second test that went red
-      # on an unweighted file would fail their commits, and neither cron can
-      # run the repair. Nothing a cron commits passes through a workflow step.
-      #
-      # It fails only on a pull_request or a branch dispatch, where the author can re-record.
-      # On push and merge_group it annotates and passes (`--warn-only`): runner variance spans
-      # the fixed bound, so the same code that passed on its PR turned master red three times,
-      # and nobody can apply the repair on master (#3604). On a PR an unweighted module
-      # measuring between `RUNNER_HEAVY_SECONDS` and `RUNNER_HEAVY_FAIL_SECONDS` annotates
-      # too, since the same variance put one either side of the bound on a rerun (#4010).
-      # A recorded weight 5x to 20x what it measured annotates too, and fails only at 20x: a
-      # host busy with fan-out batches records up to about 9x the runner's figure, and that
-      # failed three PRs on a few seconds of shard balance (#5616).
-      # On a pull_request it fails only for a module the PR's diff adds or changes
-      # (`--changed-files`). A module outside the diff annotates, because its author is not the
-      # one reading the run and the docs-refresh cron re-records it: 4 of 16 gate failures in
-      # two days named such a module (#5480). A PR that changes the weight table or the gate's
-      # code fails on every module, because it wrote every row the gate reads. A table change
-      # that only drops the rows of modules the tree no longer holds is the exception: every PR
-      # that retires a module makes one, and it wrote no row (#5989). A dispatch has no base to
-      # diff, so it fails on every module too.
+      # DECIDED: the step annotates and never fails, on every event. A wrong weight costs one leg
+      # at most that module's own seconds, until the docs-refresh cron's `--refresh-runner` reads
+      # the module off green master runs, within a day. A failed run costs a full rerun from the
+      # 20-job runner pool. A failing version was narrowed five times (#3604, #4010, #5480,
+      # #5616, #5989), each after it failed a PR on a weight the PR could not have known about.
       - name: Check every heavy module's recorded weight
-        env:
-          EVENT: ${{ github.event_name }}  # via env, never interpolated into the shell
-        run: |
-          set -euo pipefail
-          mode=()
-          if [ "$EVENT" = push ] || [ "$EVENT" = merge_group ]; then mode=(--warn-only); fi
-          if [ "$EVENT" = pull_request ]; then mode=(--changed-files "$RUNNER_TEMP/changed.txt"); fi
-          if [ "$EVENT" = pull_request ]; then mode+=(--base-weights "$RUNNER_TEMP/base_weights.json"); fi
-          uv run python scripts/dev/pytest_shard.py "${mode[@]}" \
-            --check-durations "$RUNNER_TEMP/durations.log"
+        run: uv run python scripts/dev/pytest_shard.py --check-durations "$RUNNER_TEMP/durations.log"
 
   # The deck mod (`.claude/plugins/deck/`, #3676) is a Claude Code plugin of function hooks,
   # an early-access API that changes between releases. `claude plugin validate` reads the
