@@ -4,7 +4,8 @@
 Cutover-a2 each one mirrored an env value of the bridge row it shadowed, and this test read the
 rendered env. That cutover deleted the rows and their env keys, so the numbers below are the
 record of what the bridge carried (M1 convention 1), and a rule edit that drifts from them
-fails here. Two of them also derive from other roles (valheim's transient and jellyfin's
+fails here. KubeletCSIMountReadOnly is the exception: it holds two scrapes, shorter than the
+bridge's cycle, for the reason its comment in `storage.yaml` gives. Two of them also derive from other roles (valheim's transient and jellyfin's
 snapshot cap), and the last tests hold the rules to those roles.
 
 Run: uv run pytest ansible/tests/services/test_storage_rule_literals.py
@@ -98,7 +99,7 @@ def literal_problems(rules: dict[str, dict], env: dict[str, str], safe: str):
         "PVCFull": ONE_CYCLE,
         "PVCBelowFreeFloor": ONE_CYCLE,
         "PVCFreeFloorUnmonitored": ONE_CYCLE,
-        "KubeletCSIMountReadOnly": "1m",  # shortened from the bridge cycle by #8212
+        "KubeletCSIMountReadOnly": "1m",
         "EtcdDBNearQuota": ONE_CYCLE,
     }
     problems += [
