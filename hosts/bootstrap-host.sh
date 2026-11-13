@@ -555,17 +555,24 @@ if [ -n "$k3s_mode" ]; then
 fi
 stop_after 4
 
-# create_declared_users <deb>: create the users the .deb declares in sysusers.d. A Depends that
-# creates a system user takes the next free uid down from 999. The host packages declare uids in
-# 900-949 below that, and this runs before any install so a Depends cannot take one first. A
-# declared uid already held is the users arm's fault.
+# create_declared_users <deb>: create the users the .deb declares in sysusers.d, and die unless
+# each holds its declared uid. A Depends that creates a system user takes the next free uid down
+# from 999. The host packages declare uids in 900-949 below that, and this runs before any
+# install so a Depends cannot take one first. sysusers gives a user whose declared uid is already
+# held another uid and exits 0, so the uids are compared here, while step 5 can still be rerun.
 create_declared_users() {
     users_dir=$(mktemp -d)
     CLEAN="$CLEAN $users_dir"
     dpkg-deb -x "$1" "$users_dir" || die "cannot extract $1"
-    [ -f "$users_dir/usr/lib/sysusers.d/homelab.conf" ] || return 0
-    systemd-sysusers "$users_dir/usr/lib/sysusers.d/homelab.conf" ||
-        die "systemd-sysusers failed on the users $1 declares"
+    users_conf="$users_dir/usr/lib/sysusers.d/homelab.conf"
+    [ -f "$users_conf" ] || return 0
+    systemd-sysusers "$users_conf" || die "systemd-sysusers failed on the users $1 declares"
+    while read -r kind name declared _; do
+        [ "$kind" = u ] || continue
+        live=$(getent passwd "$name" | cut -d: -f3)
+        [ "$live" = "$declared" ] ||
+            die "$name has uid ${live:-none}; homelab-$host declares $declared. Move any user that holds uid $declared, give $name that uid, then rerun bootstrap-host.sh"
+    done < "$users_conf"
 }
 
 # Step 5: create the users homelab-<hostname> declares, install the three packages, then create

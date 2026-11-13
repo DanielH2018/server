@@ -77,6 +77,20 @@ case "$*" in
         ls "$cache" > "$HOMELAB_ROOT/tools-cache.listing" ;;
 esac
 """
+# Given a sysusers.d file, adds each `u` user missing from the fake passwd file at its declared
+# uid, or, as sysusers does when that uid is held, at the first free uid down from 999.
+SYSUSERS_STUB = """echo "sysusers $*" >> {log}
+[ -n "$1" ] || exit 0
+while read -r kind name uid _; do
+    [ "$kind" = u ] || continue
+    grep -q "^$name:" {passwd} && continue
+    if cut -d: -f3 {passwd} | grep -qx "$uid"; then
+        uid=999
+        while cut -d: -f3 {passwd} | grep -qx "$uid"; do uid=$((uid - 1)); done
+    fi
+    echo "$name:x:$uid:$uid::/:/usr/sbin/nologin" >> {passwd}
+done < "$1"
+"""
 NFPM_STUB = """#!/bin/sh
 for arg; do [ "$prev" = --target ] && target=$arg; prev=$arg; done
 echo "$HOMELAB_VERSION" >> "$HOMELAB_ROOT/nfpm.versions"
@@ -134,7 +148,11 @@ class FakeHost:
         )
         self._stub("dpkg-query", "exit 1")
         self._stub("systemctl", f'echo "systemctl $*" >> {self.log}')
-        self._stub("systemd-sysusers", f'echo "sysusers $*" >> {self.log}')
+        self.passwd = tmp_path / "passwd"
+        self.passwd.touch()
+        self._stub(
+            "systemd-sysusers", SYSUSERS_STUB.format(log=self.log, passwd=self.passwd)
+        )
         self._stub("systemd-tmpfiles", f'echo "tmpfiles $*" >> {self.log}')
         self._stub("fallocate", f'echo "fallocate $*" >> {self.log}; : > "$3"')
         self._stub("mkswap", f'echo "mkswap $*" >> {self.log}')
@@ -142,7 +160,9 @@ class FakeHost:
             "swapon", f'[ "$1" = --show=NAME ] || echo "swapon $*" >> {self.log}'
         )
         self._stub("id", "echo ubuntu")
-        self._stub("getent", "exit 2")
+        self._stub(
+            "getent", f'[ "$1" = passwd ] && grep "^$2:" {self.passwd} || exit 2'
+        )
         self._stub("groupadd", f'echo "groupadd $*" >> {self.log}')
         self._stub("usermod", f'echo "usermod $*" >> {self.log}')
         self._stub("dig", "echo 192.0.2.1")
@@ -175,6 +195,11 @@ class FakeHost:
         path = self.deb_tree / "usr/lib/sysusers.d/homelab.conf"
         path.parent.mkdir(parents=True)
         path.write_text(conf)
+
+    def add_user(self, name: str, uid: int) -> None:
+        """Give the fake passwd file a user that exists before the script runs."""
+        with self.passwd.open("a") as passwd:
+            passwd.write(f"{name}:x:{uid}:{uid}::/:/usr/sbin/nologin\n")
 
     def pin(self, old: str, new: str) -> None:
         """Replace the production digest `old` with `new` in the scratch copy of the script."""
