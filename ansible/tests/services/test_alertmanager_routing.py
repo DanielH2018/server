@@ -522,7 +522,8 @@ def test_every_a4_edge_rule_pages_with_its_ported_severity():
 
 def test_every_a5_storage_rule_pages_as_critical():
     """Non-vacuity for `literal_sets`: batch A5's ten storage rules all page since Cutover-b, so
-    none routes to the blackhole, and each is critical, so it mails as well as posting."""
+    none routes to the blackhole, and each is critical, so it mails as well as posting. The
+    Longhorn disk floor (#8214) joined the file later on the same terms."""
     assert literal_sets(STORAGE_RULES, shadow=True) == {}
     sets = literal_sets(STORAGE_RULES, shadow=False)
     assert set(sets) == {
@@ -534,6 +535,7 @@ def test_every_a5_storage_rule_pages_as_critical():
         "PVCCoverageShortfall/longhorn",
         "LonghornSnapshotNearCap/longhorn",
         "LonghornSnapshotCapUnmonitored/longhorn",
+        "LonghornDiskOverSchedulingFloor/longhorn",
         "KubeletCSIMountReadOnly/longhorn",
         "EtcdDBNearQuota/etcd",
     }

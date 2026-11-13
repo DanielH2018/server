@@ -1,13 +1,14 @@
 # The storage layer, read from the `longhorn`, `kubernetes-kubelet`, `node` and
 # `kubernetes-apiserver` scrape jobs: the Longhorn volumes' redundancy, the claims' fullness, the
-# snapshot space against a declared cap, the CSI mounts and etcd's database size. These are the
+# snapshot space against a declared cap, each node's Longhorn disk against the replica scheduling
+# floor, the CSI mounts and etcd's database size. All but the disk floor (#8214) are the
 # monitor-bridge rows longhorn_volumes, pvc_fullness, snapshot_headroom, kubelet_plugin_readonly
 # and etcd_db_size, which M6's batch A5 deleted. Plain YAML, never Jinja: prometheus-rules.yaml.j2
 # carries this file verbatim. The design is
 # docs/target-architecture/monitoring/m6-retire-kuma.md, batch A5.
 #
 # These rules page since A5's Cutover-b. They ran with `shadow: "true"` beside the retired tiles of
-# the rows they port until then. All ten are critical, so Discord and email.
+# the rows they port until then. All eleven are critical, so Discord and email.
 #
 # NO INHIBIT. PVCFreeFloorUnmonitored and PVCCoverageShortfall fire beside ScrapeTargetDown when
 # a kubelet target dies, and the rest go quiet on a dead scrape. Neither carries `job` or
@@ -186,6 +187,29 @@ groups:
           description: >-
             {{ $labels.pvc }} declares a snapshot cap and has no longhorn_snapshot_actual_size_bytes
             series, so its snapshot headroom is UNMONITORED, which is not the same as empty.
+      # A node's Longhorn disk past the replica scheduling floor (#8214). Longhorn's
+      # storage-minimal-available-percentage is 25, its default, so above 75% used it refuses
+      # replica placement on the node: a rebuild or a new volume then runs degraded, and only that
+      # symptom pages. The ratio is the quantity Longhorn schedules on, and it covers both nodes
+      # without a host package. node-exporter's root reading differs from it by about 21 GB, so
+      # this rule reads the Longhorn series alone. 0.75 equals k3s-host-checks' k3s_disk_max_pct,
+      # daniel-box's disk-health line, which test_storage_rule_literals.py holds the two to. An
+      # absent series is LonghornVolumesMissing's case. `for: 15m` is LONGHORN_CONSECUTIVE, as for
+      # the other Longhorn rows: the disk grows by GB a day, so the hold costs no warning.
+      - alert: LonghornDiskOverSchedulingFloor
+        expr: max by (node, disk) (longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes) > 0.75
+        for: 15m
+        labels:
+          severity: critical
+          service: longhorn
+        annotations:
+          summary: The Longhorn disk on {{ $labels.node }} is past the 75% replica scheduling floor.
+          description: >-
+            Longhorn's disk {{ $labels.disk }} on {{ $labels.node }} is
+            {{ $value | humanizePercentage }} used. Above 75% Longhorn places no replica on the
+            node, so with two replicas a rebuild or a new volume stays degraded. The disk shares
+            the root filesystem, so containerd's unused images count too: `sudo k3s crictl rmi
+            --prune` on the node frees them.
       # monitor-bridge's `kubelet_plugin_readonly` (#1243): a CSI global mount remounted ext4
       # read-only after an iSCSI stall. Longhorn's own state stays healthy through it. The
       # selector takes every origin: the Pi has no kubelet plugin mounts, and a pin to one

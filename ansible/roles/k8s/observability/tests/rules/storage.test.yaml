@@ -418,3 +418,41 @@ tests:
       - eval_time: 20m
         alertname: EtcdDBNearQuota
         exp_alerts: []
+
+  # A node's Longhorn disk past the 75% scheduling floor. daniel-server's disk is 80% used, and
+  # both manager pods report it, so `max by` reads it once. daniel-box's disk is 70% used and
+  # stays quiet. The 15m hold has not passed at 14m.
+  - interval: 1m
+    input_series:
+      - series: 'longhorn_disk_usage_bytes{job="longhorn", pod="longhorn-manager-a", node="daniel-server", disk="default-disk-1"}'
+        values: '400000000000x30'
+      - series: 'longhorn_disk_capacity_bytes{job="longhorn", pod="longhorn-manager-a", node="daniel-server", disk="default-disk-1"}'
+        values: '500000000000x30'
+      - series: 'longhorn_disk_usage_bytes{job="longhorn", pod="longhorn-manager-b", node="daniel-server", disk="default-disk-1"}'
+        values: '400000000000x30'
+      - series: 'longhorn_disk_capacity_bytes{job="longhorn", pod="longhorn-manager-b", node="daniel-server", disk="default-disk-1"}'
+        values: '500000000000x30'
+      - series: 'longhorn_disk_usage_bytes{job="longhorn", pod="longhorn-manager-b", node="daniel-box", disk="default-disk-2"}'
+        values: '700000000000x30'
+      - series: 'longhorn_disk_capacity_bytes{job="longhorn", pod="longhorn-manager-b", node="daniel-box", disk="default-disk-2"}'
+        values: '1000000000000x30'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: LonghornDiskOverSchedulingFloor
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: LonghornDiskOverSchedulingFloor
+        exp_alerts:
+          - exp_labels:
+              node: daniel-server
+              disk: default-disk-1
+              severity: critical
+              service: longhorn
+            exp_annotations:
+              summary: The Longhorn disk on daniel-server is past the 75% replica scheduling floor.
+              description: >-
+                Longhorn's disk default-disk-1 on daniel-server is
+                80% used. Above 75% Longhorn places no replica on the
+                node, so with two replicas a rebuild or a new volume stays degraded. The disk shares
+                the root filesystem, so containerd's unused images count too: `sudo k3s crictl rmi
+                --prune` on the node frees them.
