@@ -132,8 +132,8 @@ These risks are minimal in an infrastructure repo but apply to:
   ```bash
   # BAD
   echo {{ user_input }}
-  # GOOD — quote it, and validate it in the template
-  echo {{ user_input | quote }}
+  # GOOD — pass the value through the container's env, and quote the shell variable
+  echo "$USER_INPUT"
   ```
 
 ---
