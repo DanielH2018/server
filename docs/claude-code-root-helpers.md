@@ -59,9 +59,7 @@ a need appears.
   byte-identical to REPO_FILE in the caller's checkout, and 1 when it differs. The shim
   (`hosts/components/claude-code/files/rootq.sh`) hashes REPO_FILE as the caller and passes only the hash. Root therefore
   receives `matches PATH HEX` and never opens a caller-named file. The shim refuses a REPO_FILE
-  that is absolute, holds `..`, or resolves outside the checkout. It also takes the 64-hex
-  SHA-256 in place of REPO_FILE and passes it on as it is, which gains the caller nothing a
-  file in a checkout could not.
+  that is absolute, holds `..`, or resolves outside the checkout.
 - **Tier 2 prints, from fixed sources only:** `nft list ruleset`, `ufw status verbose`,
   `sshd -T`, `crontab -l -u root`, and `cat` of `/etc/netplan/*.yaml`. Every argv is written
   in `hosts/components/claude-code/files/homelab_rootq.py:COMMANDS`, and no caller flag
@@ -78,17 +76,10 @@ a need appears.
   length. A missing one is refused with `does not exist`. `cat`, `sha256` and `matches` still
   refuse every DENY path. DENY never widens what rootq reaches. rootq tests the allowlist
   before it resolves a DENY path, so a DENY path off the list gets the same refusal whether
-  it exists or not. The DENY entries in `PATHS` are exact names:
-  `/etc/claude-rc/alert-webhook.env`, and the four paths under
-  `/etc/rancher/k3s/manifests/registry-jobs/` and its directory (#6988). That tree stays denied as a whole, because it
-  holds every staged role's `secret.yaml`.
-- **Two DENY paths are exempt by exact name.** The operator ruled this on 2026-11-02 (#7007).
-  `hosts/components/claude-code/files/homelab_rootq.py:DENY_EXEMPT` names the two registry
-  mirror GC Jobs, `registry-jobs/ghcr-mirror-gc-job.yaml` and
-  `registry-jobs/dockerhub-mirror-gc-job.yaml`, which hold no secret. `denied()` returns
-  false for them, so every tier-1 verb answers them. Tier 1's credential check still applies to what they hold. The exemption takes
-  exact names only, never a glob. rootq cannot stat a file in the agent user's home,
-  which root does not own. The role therefore makes `~/.config/gh` and `~/.config/homelab-ui`
+  it exists or not. The one DENY entry in `PATHS` is the exact name
+  `/etc/claude-rc/alert-webhook.env`. `/etc/rancher/k3s/manifests/` is denied as a whole,
+  because it holds every staged role's `secret.yaml`.
+- **rootq cannot stat a file in the agent user's home**, which root does not own. The role therefore makes `~/.config/gh` and `~/.config/homelab-ui`
   0710 under `claude_code_agent_operator_read`, so the operator account stats the 0600 token
   and login files as the operator, without listing either directory or reading either file.
 - **What it prints:** output that matches `REFUSE`, such as a private key, a bearer token or a

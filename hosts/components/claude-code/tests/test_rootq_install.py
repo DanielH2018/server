@@ -96,12 +96,11 @@ def test_matches_hands_root_only_the_hash_of_the_repo_file(shim) -> None:
     assert argv == ["-n", SCRIPT, "matches", "/etc/netplan/a.yaml", digest]
 
 
-def test_matches_hands_root_a_hash_given_in_place_of_the_repo_file(shim) -> None:
-    """A caller on a host with no checkout asks this way (#6357)."""
-    digest = "ab" * 32
-    result, argv = shim("matches", "/etc/netplan/a.yaml", digest)
-    assert result.returncode == 0, result.stderr
-    assert argv == ["-n", SCRIPT, "matches", "/etc/netplan/a.yaml", digest]
+def test_matches_reads_a_hash_given_in_place_of_the_repo_file_as_a_path(shim) -> None:
+    result, argv = shim("matches", "/etc/netplan/a.yaml", "ab" * 32)
+    assert result.returncode == 2
+    assert "does not exist" in result.stderr
+    assert argv is None
 
 
 @pytest.mark.parametrize("almost", ["ab" * 31, "AB" * 32, "ab" * 32 + "0"])
