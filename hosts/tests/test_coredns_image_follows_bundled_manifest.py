@@ -51,7 +51,7 @@ def problems(
             f"the excerpt is labelled {label} but k3s_version is {k3s_version}: port the new "
             "manifest's image line into the excerpt, then move the pin"
         )
-    if pin != _bundled_image(excerpt):
+    if pin.split("@")[0] != _bundled_image(excerpt):
         out.append(
             f"coredns_image is {pin} but the excerpt's image is {_bundled_image(excerpt)}"
         )
@@ -88,6 +88,18 @@ def test_a_label_behind_k3s_version_is_flagged():
 def test_a_pin_that_differs_from_the_excerpt_is_flagged():
     image = _bundled_image(_EXCERPT)
     got = problems("v", "v", _EXCERPT, "rancher/mirrored-coredns-coredns:1.14.4", image)
+    assert any("coredns_image is" in p for p in got)
+
+
+def test_a_digest_on_the_pin_with_the_bundled_tag_is_clean():
+    image = _bundled_image(_EXCERPT)
+    pin = f"{image}@sha256:{'a' * 64}"
+    assert problems("v", "v", _EXCERPT, pin, pin) == []
+
+
+def test_a_digest_on_the_pin_with_another_tag_is_flagged():
+    pin = f"rancher/mirrored-coredns-coredns:1.14.4@sha256:{'a' * 64}"
+    got = problems("v", "v", _EXCERPT, pin, pin)
     assert any("coredns_image is" in p for p in got)
 
 
