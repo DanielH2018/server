@@ -87,8 +87,7 @@ SIBLINGS = {p.name: p for p in (HELPER, CHANGED_SET, SOAK_READS)}
 # stop a script built to dodge it through runtime indirection, such as `getattr`, `vars()` or
 # `globals()` subscripted with a string like `'urllib'`, or a frame's globals. The helper
 # exists so that a brand-new pod's first connection retries for 60 seconds while kube-router
-# learns the pod's address (ADR-0020). That is a reliability
-# rule, so a deliberate bypass is outside it.
+# learns the pod's address. That is a reliability rule, so a deliberate bypass is outside it.
 # A module reached as an attribute of an allowed module, such as `dataclasses.inspect`, is
 # outside the row for the same reason: the row does not resolve an allowed module's re-export
 # chains. The literal names a connection needs on any such route are refused instead:
