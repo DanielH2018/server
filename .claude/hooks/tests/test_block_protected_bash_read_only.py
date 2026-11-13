@@ -111,6 +111,8 @@ FLAGGED = [
     # A write inside a substitution or an ssh remote command.
     "cat $(rm -rf x)",
     "ssh daniel-server 'rm -rf /srv/x'",
+    # The redirect check runs before the command allowlist, so an allowed ghread cannot bypass it.
+    "ghread pr list --state open > CLAUDE.md",
 ]
 
 CLEAN = [
@@ -126,6 +128,9 @@ CLEAN = [
     "gh pr diff 12 | grep -n foo",
     "gh --repo o/r issue view 4",
     "gh api repos/o/r/pulls/12",
+    "ghread pr list --state open",
+    "ghread search prs --owner o -- networkpolicy | head",
+    "ghread run logs 4567 --failed --out /tmp/run.log",
     "grep -rn foo ansible/ &>/dev/null",
     "echo '{}' > /tmp/payload.json && cat /tmp/payload.json",
     "timeout 5 git log -1",
@@ -150,6 +155,19 @@ def test_a_read_only_agents_write_is_flagged(command):
     verdict = _mod.decision(_payload(command))
     assert verdict and verdict[0] == "deny", f"should deny: {command}"
     assert "`skeptic` is read-only" in verdict[1]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "ghread run logs 4567 --failed --out CLAUDE.md",
+        "ghread pr diff 12 --out=/home/ubuntu/server/CLAUDE.md",
+    ],
+)
+def test_a_ghread_out_outside_scratch_is_flagged(command):
+    verdict = _mod.decision(_payload(command))
+    assert verdict and verdict[0] == "deny", f"should deny: {command}"
+    assert "writes `ghread --out`" in verdict[1]
 
 
 @pytest.mark.parametrize("command", CLEAN)

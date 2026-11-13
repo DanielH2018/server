@@ -315,6 +315,24 @@ def _tee_check(repo_root, is_scratch):
     return check
 
 
+def _ghread_check(repo_root, is_scratch):
+    # ghread has no write subcommand; `--out` is its one write, and ghread confines it to /tmp
+    # itself, but that rule lives outside this repo, so the hook checks the path too.
+    def check(args):
+        for i, arg in enumerate(args):
+            if arg == "--out":
+                target = args[i + 1] if i + 1 < len(args) else ""
+            elif arg.startswith("--out="):
+                target = arg.split("=", 1)[1]
+            else:
+                continue
+            if not is_scratch(target, repo_root):
+                return f"writes `ghread --out` into `{target}`"
+        return None
+
+    return check
+
+
 # Scripts in this tree that only read, with the subcommands that only read. `None` allows every
 # subcommand: `probe.py` is the read-only diagnostics entry point by design.
 READ_SCRIPTS = {
@@ -378,6 +396,7 @@ def checks(repo_root, is_scratch):
             "docker": _docker,
             "ip": _ip,
             "tee": _tee_check(repo_root, is_scratch),
+            "ghread": _ghread_check(repo_root, is_scratch),
         }
     )
     # A journal write needs root, but these flags are journalctl's own writes.
