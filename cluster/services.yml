@@ -488,6 +488,11 @@ containers_list:
     # Authelia on the public name and navidrome authenticates each request itself.
     bridge_bypass_prefixes:
       - /rest/
+    # ND_PROMETHEUS_ENABLED serves /metrics beside the UI. db_model_totals feeds homepage's
+    # Navidrome tile. No replicas_var: navidrome_k8s_replicas is a role default, which
+    # observability cannot read, so parking navidrome means dropping this item too.
+    metrics:
+      - job: navidrome
   # CouchDB for Obsidian LiveSync. use_authelia is false because the LiveSync client uses
   # non-interactive basic auth and cannot pass 2FA — CouchDB's own require_valid_user is
   # the gate. Its data volume is longhorn-NOBACKUP, so the backup plane ignores this PVC
@@ -982,13 +987,16 @@ containers_list:
     # homepage's Lidarr widget dials the ClusterIP; this key adds homepage to the callers above.
     homepage_widget: true
   # The Soulseek client, with Soularr feeding it Lidarr's wanted albums, behind its own
-  # Mullvad tunnel. Its only caller is traefik, which the baseline admits.
+  # Mullvad tunnel. Traefik reaches it through the baseline; homepage's widget through the
+  # caller fence `homepage_widget` adds. LAN_NETWORKS keeps the pod CIDR off the tunnel, so the
+  # kill-switch passes homepage's replies.
   - name: slskd
     depends_on: [media-volume]
     hostname: "slskd"
     port: 5030
     use_authelia: true
     auth_tier: one_factor
+    homepage_widget: true
     # slskd's settings and transfer history; the downloads live on media-data.
     no_backup_claims: [slskd-config]
   # Deploys LAST: every workload role must finish before this role fences the namespace

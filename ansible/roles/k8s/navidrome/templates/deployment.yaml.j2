@@ -50,6 +50,11 @@ spec:
               value: "false"
             - name: ND_LASTFM_ENABLED
               value: "false"
+            # /metrics on the UI port, no password: the namespace fence admits only traefik and
+            # prometheus, and the route keeps the path behind Authelia. Homepage's tile reads the
+            # library counts from Prometheus.
+            - name: ND_PROMETHEUS_ENABLED
+              value: "true"
             - name: TZ
               value: "{{ tz }}"
           volumeMounts:

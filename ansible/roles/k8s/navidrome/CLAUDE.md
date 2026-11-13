@@ -56,8 +56,13 @@ until 2026-11-12, and unparked with an empty library for the music pipeline to f
 - **Each user turns on scrobbling in the UI:** Personal settings, ListenBrainz, then paste the
   user token from listenbrainz.org/settings. Nothing about it is in git.
 - **It stays in `BORN_FENCED_ROLES`** (`ansible/tests/k8s/test_netpol_baseline_labels.py`).
-  Traefik is still its only caller; its calls to ListenBrainz and Deezer are egress, which
-  kube-router does not enforce on this cluster (`docs/networkpolicy-default-deny.md`).
+  Traefik and Prometheus are its only callers, and the baseline admits both. Its calls to
+  ListenBrainz and Deezer are egress, which kube-router does not enforce on this cluster
+  (`docs/networkpolicy-default-deny.md`).
+- **`/metrics` is on, with no password.** `ND_PROMETHEUS_ENABLED` serves it on the UI port,
+  and the `navidrome` scrape job reads it. Homepage's Navidrome tile shows the artist, album
+  and song counts from `db_model_totals`, through Prometheus. The route keeps `/metrics` behind
+  Authelia, because only `/rest/` bypasses it.
 - **The route is gated on the replica count.** `defaults/main.yml` lists `ingressroute.yaml` in
   `manifests_files` only while `navidrome_k8s_replicas` is above 0. Traefik re-reads every
   IngressRoute on each config refresh and logs `no servers found for homelab/navidrome`
@@ -72,5 +77,6 @@ until 2026-11-12, and unparked with an empty library for the music pipeline to f
 ## Parking it again
 Set `navidrome_k8s_replicas: 0`, drop `k8s_autodeploy_snapshot_pvcs` and turn
 `k8s_autodeploy` off (a snapshot-protected role must have a pod), and add `probe: false` to
-the `containers_list` entry so the derived ingress probe does not fire forever. The route
+the `containers_list` entry so the derived ingress probe does not fire forever. Drop the
+entry's `metrics` item too, or the `navidrome` scrape job reads `up == 0` and pages. The route
 leaves with the replica count.
