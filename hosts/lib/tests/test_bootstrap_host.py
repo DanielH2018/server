@@ -88,7 +88,7 @@ def test_step_5_creates_the_declared_users_before_the_directories_that_name_them
 
 def test_step_5_creates_the_users_the_host_package_declares_before_any_install(host):
     host.declare_users(
-        'u node_exporter 999 "Node exporter" /nonexistent /usr/sbin/nologin\n'
+        'u node_exporter 904 "Node exporter" /nonexistent /usr/sbin/nologin\n'
     )
 
     result = host.run("daniel-pi")
@@ -98,6 +98,19 @@ def test_step_5_creates_the_users_the_host_package_declares_before_any_install(h
     [early] = [c for c in commands if c.endswith("/usr/lib/sysusers.d/homelab.conf")]
     first_install = next(c for c in commands if c.startswith("apt-get install"))
     assert commands.index(early) < commands.index(first_install)
+
+
+def test_step_5_dies_naming_both_uids_when_a_declared_uid_is_already_held(host):
+    host.declare_users(
+        'u node_exporter 904 "Node exporter" /nonexistent /usr/sbin/nologin\n'
+    )
+    host.add_user("lxd", 904)
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 1
+    assert "node_exporter has uid 999; homelab-daniel-pi declares 904" in result.stderr
+    assert not [c for c in host.apt_calls() if c.startswith("install")]
 
 
 def test_another_host_is_refused_before_anything_is_written(host):
