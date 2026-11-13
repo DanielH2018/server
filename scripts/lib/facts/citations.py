@@ -263,14 +263,32 @@ def sections(doc_path: str, text: str) -> list[Section]:
     return out
 
 
+def is_fact_doc(path: str) -> bool:
+    """Whether the repo-relative ``path`` is an instruction file that fact support reads.
+
+    The set is every ``CLAUDE.md``, the rules under ``.claude/rules/``, each skill's
+    ``SKILL.md`` and the agents under ``.claude/agents/``: the files a session loads as
+    instructions. The lint, the notice and the replay all read this one definition.
+    """
+    parts = path.split("/")
+    name = parts[-1]
+    if name == "CLAUDE.md":
+        return True
+    if parts[0] != ".claude" or not name.endswith(".md"):
+        return False
+    if parts[1:-1] in (["rules"], ["agents"]):
+        return True
+    return len(parts) > 3 and parts[1] == "skills" and name == "SKILL.md"
+
+
 def repo_docs(repo: Path) -> list[Path]:
-    """Every TRACKED ``CLAUDE.md`` under ``repo`` — the repo store, and nothing else.
+    """Every TRACKED instruction file under ``repo``, as ``is_fact_doc`` defines one.
 
     ``git ls-files`` rather than ``rglob``: a worktree session has other sessions' full
     checkouts under ``.claude/worktrees/``, and a walk would grade this commit against them.
     """
-    listed = git("ls-files", "-z", "--", "CLAUDE.md", "**/CLAUDE.md", cwd=repo).stdout
-    return [repo / p for p in sorted(listed.split("\0")) if p]
+    listed = git("ls-files", "-z", "--", "*.md", cwd=repo).stdout
+    return [repo / p for p in sorted(listed.split("\0")) if p and is_fact_doc(p)]
 
 
 def tracked_files(repo: Path) -> frozenset[str]:

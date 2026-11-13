@@ -425,6 +425,7 @@ _IDS = [row.name for row in ROWS]
 
 @pytest.mark.parametrize("row", ROWS, ids=_IDS)
 def test_census_row_holds_on_the_tree(row: Census):
+    # fact: .claude/skills/homelab-review/SKILL.md#2. Prime from memory FIRST (the signal-booster — do this before dispatching)
     problems = check(row)
     assert not problems, "\n".join(problems)
 
