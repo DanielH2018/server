@@ -96,12 +96,6 @@ def test_discover_templates_finds_the_known_set():
     }
 
 
-def test_discover_templates_excludes_vendored_collections():
-    # ansible/collections/ ships its own *.sh.j2 test fixtures (community.general) — not ours to
-    # lint, same exclusion pytest's testpaths / ruff's extend-exclude already apply.
-    assert all("collections" not in p.parts for p in v.discover_templates())
-
-
 def test_bash_syntax_check_catches_unmatched_quote(tmp_path):
     # The kopia bug class: an apostrophe breaks bash's own quote parsing inside a single-quoted block.
     # Reproduce the shape here — a stray unmatched single quote — and confirm bash -n rejects it.

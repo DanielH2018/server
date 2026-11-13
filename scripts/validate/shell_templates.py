@@ -112,11 +112,7 @@ def component_host(name: str) -> str | None:
 
 
 def discover_templates() -> list[Path]:
-    """Return every *.sh.j2 under ansible/roles/ and under a host component's templates/.
-
-    Excludes ansible/collections/, the vendored third-party tree, the same way pytest's
-    testpaths / ruff's extend-exclude skip it.
-    """
+    """Return every *.sh.j2 under ansible/roles/ and under a host component's templates/."""
     return sorted(ROLES.rglob("*.sh.j2")) + sorted(
         COMPONENTS.glob("*/templates/*.sh.j2")
     )

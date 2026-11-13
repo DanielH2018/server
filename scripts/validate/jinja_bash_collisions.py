@@ -89,11 +89,10 @@ def find_collisions(text: str) -> list[tuple[int, str]]:
 def templates(root: Path = ANSIBLE) -> list[Path]:
     """Every Jinja template under `root`, sorted, minus the vendored collections.
 
-    `ansible/collections/` is the galaxy-installed third-party tree — gitignored, present only
-    after `ansible-galaxy collection install`, and holding ~19 upstream test fixtures this
-    repo cannot edit. Scanning it would make the hook's verdict depend on whether the
-    collections happen to be installed. pytest's testpaths and ruff's extend-exclude skip it
-    the same way, and `shell_templates.py` avoids it by scanning `roles/` alone.
+    `ansible/collections/` is the galaxy-installed third-party tree — gitignored, left behind
+    in the primary checkouts by the retired `ansible-galaxy collection install`, and holding
+    ~19 upstream test fixtures this repo cannot edit. Scanning it would make the hook's
+    verdict depend on whether a checkout still holds it.
     """
     vendored = root / "collections"
     return sorted(p for p in root.rglob("*.j2") if not p.is_relative_to(vendored))

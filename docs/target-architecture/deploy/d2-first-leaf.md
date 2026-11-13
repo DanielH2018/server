@@ -1497,7 +1497,8 @@ later slices size against:
 - Every skip in D2.1a to D2.4b is tested as an `_is_clean` and `_is_flagged` pair against a
   fixture entry. Those pairs import the reader, not the entry point, so they still pass when
   an entry point is renamed or stops calling the reader (failure class 4).
-  `ansible/tests/repo/test_owner_entry_points_census.py` therefore names each row of the
+  The owner entry-points census (deleted by #8165 once every entry point read `k8s_tags`)
+  therefore named each row of the
   entry-point table as a member it must find, as `file:symbol`, and follows its calls down
   to `tag_owners`, `ansible_owned` or `service_owners`. The two host checks read no tree
   reader, and the census names the reason for each. A table row with no
@@ -1622,7 +1623,7 @@ later slices size against:
   is missing from the table writes bento-pdf behind Flux's back. Mitigation: two censuses.
   A `Census` row in `ansible/tests/repo/test_census_rows_text.py` selects every tracked
   file that invokes `deploy.sh` and fails on one that is neither in the table nor exempt
-  with a reason. `ansible/tests/repo/test_owner_entry_points_census.py` names every row of
+  with a reason. The owner entry-points census (deleted by #8165) named every row of
   the table as a member and fails when one stops reading ownership (*Verification*).
 - **A tick in flight at the flip.** A tick that started before D2.7 merged works from the
   older SHA. If its range holds a bento-pdf image bump, it deploys bento-pdf through Ansible

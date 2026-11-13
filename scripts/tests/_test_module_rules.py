@@ -35,16 +35,11 @@ _TEST_ROOTS = (
 
 
 def pytest_only_modules() -> list[str]:
-    """Every tracked module `is_pytest_only` accepts under a test root, the rows' one census.
-
-    `ansible/collections/` is vendored third-party code, never judged.
-    """
+    """Every tracked module `is_pytest_only` accepts under a test root, the rows' one census."""
     return [
         rel
         for rel in tracked("*.py")
-        if rel.startswith(_TEST_ROOTS)
-        and "collections" not in Path(rel).parts
-        and is_pytest_only(Path(rel))
+        if rel.startswith(_TEST_ROOTS) and is_pytest_only(Path(rel))
     ]
 
 

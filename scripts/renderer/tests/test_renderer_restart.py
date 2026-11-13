@@ -15,7 +15,8 @@ from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
 from render_share import sharing_placeholder_renders
 from renderer import homelab_render, standalone_map
-from renderer.renderer_lib.cluster import RenderedTag, RenderError, flux_owned_tags
+from lib.k8s_roles import k8s_tags
+from renderer.renderer_lib.cluster import RenderedTag, RenderError
 from renderer.renderer_lib.placeholders import PlaceholderRender, references, sentinel
 from renderer.renderer_lib.restart import (
     RESTART_ANNOTATION,
@@ -403,12 +404,12 @@ def fleet():
 
 
 def test_no_flux_owned_pod_names_another_roles_secret_or_config_map_is_clean(fleet):
-    assert outside_references(fleet, flux_owned_tags()) == []
+    assert outside_references(fleet, k8s_tags()) == []
 
 
 def test_every_outside_role_exemption_is_still_a_live_flux_owned_reference(fleet):
     """An entry whose tag left Flux, or whose pod stopped naming the object, is stale."""
-    found = set(outside_references(fleet, flux_owned_tags(), exempt={}))
+    found = set(outside_references(fleet, k8s_tags(), exempt={}))
     assert set(OUTSIDE_ROLE_EXEMPT) <= found, sorted(set(OUTSIDE_ROLE_EXEMPT) - found)
 
 
@@ -427,7 +428,7 @@ def test_every_outside_secret_declares_the_keys_its_owning_role_renders(fleet):
     }
     declared = {
         (tag, name): set(keys)
-        for tag in flux_owned_tags()
+        for tag in k8s_tags()
         for name, keys in outside_secrets(tag).items()
     }
     assert declared[("pihole-exporter", "pihole-env")] == {"pihole_password"}

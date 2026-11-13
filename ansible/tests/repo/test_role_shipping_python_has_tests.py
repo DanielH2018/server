@@ -1,7 +1,7 @@
 """A role that ships `files/**/*.py` has a `tests/` directory, and that directory is in `testpaths`.
 
 `.claude/rules/python-layout.md`: "A role that ships a `files/*.py` with logic gets a `tests/`
-directory, which the `ansible/roles/*/*/tests` glob in `testpaths` collects." The two sibling guards start from TEST files —
+directory, which the `ansible/roles/k8s/*/tests` glob in `testpaths` collects." The two sibling guards start from TEST files —
 `test_testpaths_covers_every_test_file.py` asks whether each test lies under a testpath, and
 the `no-role-ships-a-pytest-file` census row asks whether a role ships one — so a role
 with code and no tests at all is invisible to both.

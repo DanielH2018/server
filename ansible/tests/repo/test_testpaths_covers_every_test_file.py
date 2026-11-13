@@ -1,7 +1,7 @@
 """Guards on where a test file lives: under a `testpaths` entry, and in a `tests/` directory.
 
 `testpaths` is hand-enumerated — a handful of roots such as `ansible/tests`, `scripts`,
-`.claude/hooks` and `evals`, plus the `ansible/roles/*/*/tests` glob. Nothing derives it, so a
+`.claude/hooks` and `evals`, plus the `ansible/roles/k8s/*/tests` glob. Nothing derives it, so a
 test in a directory none of them reaches falls outside it silently. The tests
 are written, reviewed and committed; they pass when invoked directly; and `uv run pytest` never
 collects them. There is no error to read, because the suite reports the count it always
@@ -62,7 +62,7 @@ def orphaned_test_files(test_files, testpaths) -> list[str]:
 
     Matching is by path component rather than string prefix: a `scripts` entry must not be read
     as covering `scripts_extra/test_x.py`. `pytest_shard.under_testpaths` gives that, and also
-    expands a glob entry such as `ansible/roles/*/*/tests`, where a `str.startswith` would
+    expands a glob entry such as `ansible/roles/k8s/*/tests`, where a `str.startswith` would
     silently pass the exact file this guard exists to catch.
     """
     return [
@@ -107,7 +107,7 @@ def test_a_glob_testpath_covers_role_tests_and_not_role_files() -> None:
             "ansible/roles/k8s/newthing/tests/test_a.py",
             "ansible/roles/k8s/newthing/files/test_b.py",
         ],
-        ["ansible/roles/*/*/tests"],
+        ["ansible/roles/k8s/*/tests"],
     )
     assert orphans == ["ansible/roles/k8s/newthing/files/test_b.py"]
 

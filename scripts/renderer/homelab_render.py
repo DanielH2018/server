@@ -89,7 +89,7 @@ from renderer.renderer_lib.bundle import (
     bundle_files,
     write_bundle,
 )
-from lib.k8s_roles import ROLLOUT_TIMEOUT_DEFAULT
+from lib.k8s_roles import ROLLOUT_TIMEOUT_DEFAULT, k8s_tags
 from renderer.renderer_lib.ordering import NO_ORDERING, Ordering
 from renderer.renderer_lib.cluster import (
     RenderedTag,
@@ -97,7 +97,6 @@ from renderer.renderer_lib.cluster import (
     RenderRefused,
     attach_vendored,
     bundle_ordering,
-    flux_owned_tags,
     render_tag,
     select_tags,
     tag_context,
@@ -157,7 +156,7 @@ def cluster(
     roles: list[str] | None,
     secret_stubs: Path | None,
     render: Callable[[list[str], list[str]], PlaceholderRender] = render_placeholders,
-    flux_owned: Callable[[], set[str]] = flux_owned_tags,
+    flux_owned: Callable[[], set[str]] = k8s_tags,
     kinds: frozenset[str] = SHARED_KINDS,
     cluster_file: Path = CLUSTER_FILE,
     shared_only: bool = False,

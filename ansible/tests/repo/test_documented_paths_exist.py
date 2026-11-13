@@ -58,7 +58,7 @@ DOCS = discover_docs()
 #
 # DECIDED: `git ls-files`, not an `rglob` plus a skip list. An rglob sees whatever happens
 # to be on disk, and this repo grows untracked trees during ordinary work: `.venv`,
-# `ansible/collections/` (vendored per worktree), `__pycache__`, and `styles/`, which
+# `__pycache__`, and `styles/`, which
 # `vale sync` creates and which carries `.txt` and `.json` files the repo itself does not
 # have. That last one moves `_REPO_EXTENSIONS` below, so the same citation would be checked
 # on a synced checkout and skipped on a fresh one. A guard whose verdict depends on whether
@@ -237,7 +237,7 @@ def test_the_test_citation_walk_finds_citations_to_check():
 def _runtime_modules() -> list[Path]:
     """Every tracked first-party runtime .py file.
 
-    The vendored collections tree is nobody's claim. Test files are out too: a string inside
+    Test files are out: a string inside
     a test is an input, not a claim -- this module carries
     `ansible/tests/k8s/test_x.py::test_the_thing` as a parametrized fixture.
     """
@@ -245,7 +245,6 @@ def _runtime_modules() -> list[Path]:
         REPO / p
         for p in REPO_FILES
         if p.endswith(".py")
-        and not p.startswith("ansible/collections/")
         and not Path(p).name.startswith("test_")
         and Path(p).name != "conftest.py"
     ]
