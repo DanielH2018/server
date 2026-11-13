@@ -5,15 +5,14 @@ Shipped as /usr/local/bin/rootq-socket by the homelab host package (hosts/compon
 for a user in the socket's group that has no sudo, such as the agent user. The operator's
 `rootq` takes the same verbs through sudo.
 
-Usage: rootq-socket stat PATH | sha256 PATH | matches PATH REPO_FILE|HEX   (tier 1, no content)
-       rootq-socket nft | ufw | sshd | crontab | cat PATH                  (tier 2, redacted)
+Usage: rootq-socket stat PATH | sha256 PATH | matches PATH REPO_FILE   (tier 1, no content)
+       rootq-socket nft | ufw | sshd | crontab | cat PATH              (tier 2, redacted)
 
 The root helper runs the same script as `rootq` and refuses what that script refuses, so
 nothing is validated here beyond `matches`. This client hashes REPO_FILE as the caller and
 sends only the hash, so root never opens a caller-named file. REPO_FILE must be relative, hold
-no `..` and resolve inside the checkout around the working directory. A 64-hex SHA-256 in its
-place goes to root as it is. HOMELAB_ROOTQ_SOCKET names another socket for a test; this
-client runs as the caller, so naming one gains nothing.
+no `..` and resolve inside the checkout around the working directory. HOMELAB_ROOTQ_SOCKET
+names another socket for a test; this client runs as the caller, so naming one gains nothing.
 
 Exit status: rootq's own (0 and 1 for match and differ, 2 refused, 3 missing command), 69
 when the socket cannot be reached, 70 when the answer is missing or malformed.
@@ -22,13 +21,11 @@ when the socket cannot be reached, 70 when the answer is missing or malformed.
 import hashlib
 import json
 import os
-import re
 import socket
 import subprocess
 import sys
 
 SOCKET = "/run/homelab-rootq.sock"
-HEX64 = re.compile(r"[0-9a-f]{64}")
 ANSWER_MAX = 4 * 1024 * 1024
 TIMEOUT_S = 60
 UNREACHABLE = 69
@@ -42,8 +39,6 @@ def refuse(reason: str) -> int:
 
 def hash_repo_file(repo_file: str) -> str:
     """The SHA-256 of REPO_FILE in the caller's checkout, or ValueError naming why not."""
-    if HEX64.fullmatch(repo_file):
-        return repo_file
     if repo_file.startswith("/") or ".." in repo_file.split("/"):
         raise ValueError("REPO_FILE must be relative and hold no ..")
     top = subprocess.run(

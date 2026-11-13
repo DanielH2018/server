@@ -294,14 +294,19 @@ def serve_once(listener: socket.socket, serve) -> threading.Thread:
     return thread
 
 
-def test_the_client_prints_the_answer_and_exits_with_rootqs_status(scratch, capsys):
+def test_the_client_prints_the_answer_and_exits_with_rootqs_status(
+    scratch, capsys, tmp_path, monkeypatch
+):
     path = f"{scratch}/etc/netplan/a.yaml"
+    repo = init_repo(tmp_path / "repo")
+    (repo / "other.yaml").write_text("network: {}\n")
+    monkeypatch.chdir(repo)
     with short_socket_path() as sock, listening(sock) as listener:
         env = {"HOMELAB_ROOTQ_SOCKET": str(sock)}
         for argv, status in [
             (["cat", path], 0),
             (["cat", "/etc/shadow"], 2),
-            (["matches", path, "0" * 64], 1),
+            (["matches", path, "other.yaml"], 1),
         ]:
             thread = serve_once(
                 listener, lambda c: helper.serve(c, real_script(), seam(scratch))
@@ -339,8 +344,8 @@ def test_matches_sends_only_the_hash_of_the_callers_repo_file(tmp_path, monkeypa
     monkeypatch.chdir(repo)
     digest = hashlib.sha256(SECRET.encode()).hexdigest()
     assert client.hash_repo_file("conf/a.yaml") == digest
-    assert client.hash_repo_file(digest) == digest
     for bad, reason in [
+        (digest, "does not exist"),
         ("/etc/hostname", "relative"),
         ("../repo/conf/a.yaml", "relative"),
         ("..", "relative"),
