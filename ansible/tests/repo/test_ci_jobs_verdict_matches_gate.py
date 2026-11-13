@@ -28,6 +28,7 @@ from ci_verdict import (
     CI_GATE_NAME,
     CI_GATE_NEEDS_JOBS,
     CI_PROVE_JOB,
+    CI_SKIPPED_MATRIX_JOBS,
     jobs_verdict,
 )
 from lib import yaml_fast
@@ -162,10 +163,23 @@ def _gate_exit(
 
 
 def _runs(prove: str, results: dict[str, str]) -> list[dict]:
+    """The check-runs as GitHub lists them.
+
+    A matrix job whose legs all skipped is ONE run under the job's own name, which is what a
+    job-level skip produces (run 43354559178). A table fed leg-named skips passed while the
+    reader read every such run as `pending`.
+    """
+
     def run(name, conclusion):
         return {"name": name, "status": "completed", "conclusion": conclusion}
 
-    return [run(CI_PROVE_JOB, prove)] + [run(n, c) for n, c in results.items()]
+    listed = dict(results)
+    for name, legs in CI_SKIPPED_MATRIX_JOBS.items():
+        if all(results[leg] == "skipped" for leg in legs):
+            for leg in legs:
+                del listed[leg]
+            listed[name] = "skipped"
+    return [run(CI_PROVE_JOB, prove)] + [run(n, c) for n, c in listed.items()]
 
 
 @pytest.mark.parametrize(
@@ -212,6 +226,15 @@ def test_the_build_readers_are_the_gate_needs_that_wait_for_the_build():
         if build_id in jobs[job_id].get("needs", []):
             readers |= _check_run_names(job_id, jobs[job_id])
     assert readers == CI_BUILD_READER_JOBS
+
+
+def test_the_skipped_matrix_names_are_the_gates_matrix_jobs():
+    jobs = _jobs()
+    assert {
+        str(jobs[job_id].get("name", job_id)): _check_run_names(job_id, jobs[job_id])
+        for job_id in _gate_job()["needs"]
+        if (jobs[job_id].get("strategy") or {}).get("matrix")
+    } == CI_SKIPPED_MATRIX_JOBS
 
 
 def test_a_build_reader_with_no_work_passes_the_gate_and_the_reader():

@@ -48,6 +48,13 @@ beside a build that succeeded, and leans on the workflow for the rest: a reader'
 must skip it only on the build's output. `jobs_verdict` decides only while the gate job has not
 concluded, and a concluded gate is believed.
 
+**GitHub lists a skipped matrix job once, under the job's own name.** A matrix job that skips
+at job level gets one check-run, named after the job and not after its legs: the `name:`
+template with its expressions unexpanded, or the job id. `jobs_verdict` reads that check-run
+as each leg skipped, from `CI_SKIPPED_MATRIX_JOBS`. Slice A3 shipped without this. From its
+merge at 02:42 UTC on 2026-11-13 until slice A4, `jobs_verdict` read every run with no host
+change as `pending`, and each reader waited for the gate job's own conclusion.
+
 **A host with an older package loses the early verdict, not the verdict.** Each installed host
 package carries its own copy of `ci_verdict.py`. An older copy reads a skipped build reader as
 `pending` and waits for the gate job's own conclusion, which costs the wait for a runner that
@@ -66,6 +73,11 @@ A run with no host change falls from 25 jobs to 15.
    build had no work for it, and the build reports `run-cases`. No gate need skips yet.
 1. **A3, landed.** The eight cases legs skip at job level on `run-cases`, and
    `host_tools_arm64` skips on `arm64-tools`. Their step-level conditions are gone.
+1. **A4, landed.** `jobs_verdict` reads a skipped matrix job under the one name GitHub gives
+   it, so a run with no host change has its early verdict again.
+
+Run 43354559178, the first push after A3 with no host change, took a runner for 15 jobs and
+skipped the nine, with the gate green.
 
 ### Phase B: a merge queue on daniel-box that tests the merged tree
 
