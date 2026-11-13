@@ -29,7 +29,7 @@ from typing import NamedTuple
 
 from jinja2 import nodes
 
-from lib.repo_paths import ANSIBLE, K8S_ROLES, SHARED_TPL
+from lib.repo_paths import K8S_ROLES, SHARED_TPL
 
 TRUTHINESS = "truthiness test in an if"
 CONTAINER = "container literal"
@@ -311,8 +311,9 @@ class Embed(NamedTuple):
 
     Attributes:
         kind: `include` or `lookup`.
-        target: The include's name, or the lookup's path with `playbook_dir/` for that
-            variable. None when the target is not a literal, so it cannot be resolved.
+        target: The include's name, or the lookup's path. A `role_file()` path reads
+            `role_file:<role>:<path>`, with an empty role for the template's own. None when
+            the target is not a literal, so it cannot be resolved.
         use: The embed judged as a use of the keys its target names.
     """
 
@@ -343,7 +344,7 @@ class TemplateScan:
 
 
 def _template_lookup(node: nodes.Node) -> tuple[str | None] | None:
-    """`(path,)` when `node` is `lookup('template', path)`, with `playbook_dir/` for that name."""
+    """`(path,)` when `node` is `lookup('template', path)`, in `Embed.target`'s form."""
     if not (
         isinstance(node, nodes.Call)
         and isinstance(node.node, nodes.Name)
@@ -357,18 +358,19 @@ def _template_lookup(node: nodes.Node) -> tuple[str | None] | None:
     if isinstance(path, nodes.Const):
         return (str(path.value),)
     if (
-        isinstance(path, nodes.Add | nodes.Concat)
-        and len(
-            parts := (
-                [path.left, path.right] if isinstance(path, nodes.Add) else path.nodes
-            )
-        )
-        == 2
-        and isinstance(parts[0], nodes.Name)
-        and parts[0].name == "playbook_dir"
-        and isinstance(parts[1], nodes.Const)
+        isinstance(path, nodes.Call)
+        and isinstance(path.node, nodes.Name)
+        and path.node.name == "role_file"
+        and len(path.args) == 1
+        and isinstance(path.args[0], nodes.Const)
     ):
-        return ("playbook_dir/" + str(parts[1].value).lstrip("/"),)
+        roles = [
+            arg.value.value
+            for arg in path.kwargs
+            if arg.key == "role" and isinstance(arg.value, nodes.Const)
+        ]
+        if len(roles) == len(path.kwargs):
+            return (f"role_file:{''.join(roles)}:{path.args[0].value}",)
     return (None,)
 
 
@@ -407,20 +409,22 @@ def resolve_embed(
     embed: Embed,
     roles: Path = K8S_ROLES,
     shared: Path = SHARED_TPL,
-    playbook_dir: Path = ANSIBLE,
 ) -> Path | None:
     """The template `embed` in `path` reads, as the renderer resolves it, or None.
 
     An include searches the role's `templates/`, then the shared directory. A template
-    lookup reads `playbook_dir/<path>`, or a relative path under the role's `templates/`.
+    lookup reads a `role_file()` path from its role, or a relative path under the role's
+    `templates/`.
     """
     if embed.target is None:
         return None
-    own = roles / template_tag(path, roles) / "templates"
+    tag = template_tag(path, roles)
+    own = roles / tag / "templates"
     if embed.kind == "include":
         candidates = [own / embed.target, shared / embed.target]
-    elif embed.target.startswith("playbook_dir/"):
-        candidates = [playbook_dir / embed.target.removeprefix("playbook_dir/")]
+    elif embed.target.startswith("role_file:"):
+        _, role, rest = embed.target.split(":", 2)
+        candidates = [roles / (role or tag) / rest]
     else:
         candidates = [own / embed.target]
     return next((c for c in candidates if c.is_file()), None)

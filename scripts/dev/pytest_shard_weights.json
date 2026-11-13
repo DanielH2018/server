@@ -1188,6 +1188,7 @@
  "scripts/lib/tests/test_render_guard.py": 0.12,
  "scripts/lib/tests/test_renovate_annotations.py": 0.0,
  "scripts/lib/tests/test_repo_paths_primary_checkout.py": 0.0,
+ "scripts/lib/tests/test_role_files.py": 0.01,
  "scripts/lib/tests/test_role_paths.py": 0.0,
  "scripts/lib/tests/test_script_classify_assembled_paths.py": 0.0,
  "scripts/lib/tests/test_script_classify_in_process.py": 0.0,

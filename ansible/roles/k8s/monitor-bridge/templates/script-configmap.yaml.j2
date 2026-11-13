@@ -34,5 +34,5 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   {{ module | replace('/', '_') }}: |
-{{ lookup('file', playbook_dir ~ '/roles/k8s/monitor-bridge/files/' ~ module) | indent(4, true) }}
+{{ lookup('file', role_file('files/' ~ module)) | indent(4, true) }}
 {% endfor %}

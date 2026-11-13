@@ -70,7 +70,7 @@ def _render(tmp_path, text: str, name: str, port: int, defaults=None) -> list[di
         **BASE_CONTEXT,
         **load_yaml(ALL_VARS),
         **host_layer(HOST_VARS, K8S_HOST),
-        "playbook_dir": str(ANSIBLE),
+        "role_path": str(ANSIBLE / "roles" / "k8s" / name),
     }
     ctx = resolve_vars(base, base)
     ctx["container_item"] = {"name": name, "hostname": name, "port": port}

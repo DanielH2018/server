@@ -18,7 +18,7 @@
 #}
 {% set script_name = 'jellyfin_verify.py' %}
 {% set script_dir = '/verify' %}
-{% set data = {script_name: lookup('file', playbook_dir + '/roles/k8s/jellyfin/files/' + script_name, rstrip=False)} %}
+{% set data = {script_name: lookup('file', role_file('files/' + script_name), rstrip=False)} %}
 {% set configmap_name = 'jellyfin-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
 {% set deployment_digest8 = (lookup('template', 'deployment.yaml.j2') | hash('sha256'))[:8] %}
 {% set spec_text %}

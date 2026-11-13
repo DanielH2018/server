@@ -18,18 +18,16 @@ homelab_mcp_k8s_mem_request: 32Mi
 
 image_builder_builds:
   - image_builder_name: homelab-mcp
-    # playbook_dir, not role_path: these render INSIDE image-builder, where role_path
-    # names the wrong role.
-    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/homelab-mcp/templates/Dockerfile.j2"
+    image_builder_dockerfile: "{{ role_file('templates/Dockerfile.j2') }}"
     # Raw files, not templates: app.py embeds PromQL whose {{...}} braces Jinja would
     # eat (the reason image_builder_context_files exists).
     image_builder_context_files:
-      "{{ playbook_dir }}/roles/k8s/homelab-mcp/files/app.py": app.py
-      "{{ playbook_dir }}/roles/k8s/homelab-mcp/files/safe_reads.py": safe_reads.py
-      "{{ playbook_dir }}/roles/k8s/homelab-mcp/files/k8s_reads.py": k8s_reads.py
+      "{{ role_file('files/app.py') }}": app.py
+      "{{ role_file('files/safe_reads.py') }}": safe_reads.py
+      "{{ role_file('files/k8s_reads.py') }}": k8s_reads.py
       # The Prometheus/Loki client probe.py shares. It lives outside this role. An edit to it
       # moves the content tag, so promote rebuilds the image.
-      "{{ playbook_dir }}/../scripts/diagnostics/probe_lib/obs_api.py": obs_api.py
+      "{{ repo_file('scripts/diagnostics/probe_lib/obs_api.py') }}": obs_api.py
 
 # Flux prunes by its own inventory, which holds the ClusterRole and ClusterRoleBinding in
 # rbac.yaml, so dropping one deletes it live.

@@ -31,11 +31,12 @@ SERVER_VARS = yaml_fast.safe_load((HOST_VARS / "daniel-server.yml").read_text())
 def _render(path: Path, **ctx) -> str:
     """Render a template with the given context; undefined values are left to raise.
 
-    `playbook_dir` and `lookup` are wired the same way `validate/k8s_manifests.py` wires
+    `role_path` and `lookup` are wired the same way `validate/k8s_manifests.py` wires
     them, not just the caller's own `ctx`: this helper renders every role's
     `deployment.yaml.j2` generically, and any of them may call `lookup('file', ...)`.
     """
-    ctx.setdefault("playbook_dir", str(ANSIBLE))
+    if path.is_relative_to(K8S):
+        ctx.setdefault("role_path", str(K8S / path.relative_to(K8S).parts[0]))
     env = template_env(path.parent, undefined_cls=Undefined)
     env.globals.update(ctx)
     env.globals["lookup"] = make_lookup(ctx)

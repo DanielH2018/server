@@ -85,13 +85,13 @@ n8n_k8s_wait_image: alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf5
 
 image_builder_builds:
   - image_builder_name: n8n
-    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/n8n/templates/Dockerfile.j2"
+    image_builder_dockerfile: "{{ role_file('templates/Dockerfile.j2') }}"
   - image_builder_name: n8n-runners
-    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/n8n/templates/Dockerfile-runners.j2"
+    image_builder_dockerfile: "{{ role_file('templates/Dockerfile-runners.j2') }}"
     # The one file either Dockerfile COPYs. The key must be the exact path the COPY names,
     # since the ConfigMap mount puts each key at the context root under that name.
     image_builder_context:
-      "{{ playbook_dir }}/roles/k8s/n8n/templates/config/n8n-task-runners.json.j2": n8n-task-runners.json
+      "{{ role_file('templates/config/n8n-task-runners.json.j2') }}": n8n-task-runners.json
 
 # deployment-runners.yaml is a second Deployment running a second built image. Without this
 # nothing rolls it: the rebuilt-image trigger keys on manifests_service (`n8n`) while

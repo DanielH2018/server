@@ -50,7 +50,7 @@
 {% set script_name = 'pihole_sibling_guard.py' %}
 {% set script_dir = '/guard' %}
 {% set data = {
-  script_name: lookup('file', playbook_dir + '/roles/k8s/pihole/files/' + script_name, rstrip=False),
+  script_name: lookup('file', role_file('files/' + script_name), rstrip=False),
   'flux_job_connect.py': flux_job_connect,
 } %}
 {% set configmap_name = 'pihole-sibling-guard-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
@@ -60,9 +60,9 @@
 {% set roll = namespace(
   text=(lookup('template', 'deployment.yaml.j2') | from_yaml | to_json(sort_keys=True))
     + (lookup('template', 'configmap.yaml.j2') | from_yaml | to_json(sort_keys=True)),
-  secrets=lookup('file', playbook_dir + '/roles/k8s/pihole/templates/secret.yaml.j2'),
+  secrets=lookup('file', role_file('templates/secret.yaml.j2')),
 ) %}
-{% for line in lookup('file', playbook_dir + '/vars/cluster-vars.source').splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
+{% for line in lookup('file', repo_file('ansible/vars/cluster-vars.source')).splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
 {% set roll.text = roll.text + line %}
 {% endfor %}
 {% set roll_digest8 = ((roll.text + roll.secrets) | hash('sha256'))[:8] %}

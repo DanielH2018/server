@@ -37,7 +37,7 @@ def _code(subject: Subject) -> list[tuple[int, str]]:
 # ── No role ships a pytest file or a markdown file ──────────────────────────────────────
 
 # A ship names its file on a `src:`, `dest:` or `loop:` line, or inside a `lookup('file', ...)`
-# whose path may be built with `playbook_dir + '/roles/.../x.py'`. Jinja `{# #}` comments name
+# whose path may be built with `role_file('files/x.py')`. Jinja `{# #}` comments name
 # test files freely, so a `.py` on any other line is not a ship.
 _PY_SHIP_LINE = re.compile(r"""\b(?:src|dest|loop)\s*:|lookup\(\s*['"]file['"]""")
 _PY_BASENAME = re.compile(r"(?<![\w.-])([\w-][\w.-]*\.py)\b")
@@ -121,7 +121,7 @@ ROWS = (
             Subject("a.yml", "- ansible.builtin.copy:\n    src: test_deploy.py\n"),
             Subject(
                 "b.yml",
-                "data: {{ lookup('file', playbook_dir + '/roles/x/files/conftest.py') }}\n",
+                "data: {{ lookup('file', role_file('files/conftest.py')) }}\n",
             ),
             Subject("c.yml", "  loop: [host_lib.py, test_host_lib.py]\n"),
         ),

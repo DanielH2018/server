@@ -209,7 +209,7 @@ k8s_claims:
 
 image_builder_builds:
   - image_builder_name: valheim
-    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/valheim/templates/Dockerfile.j2"
+    image_builder_dockerfile: "{{ role_file('templates/Dockerfile.j2') }}"
     # Skipped when no mod is enabled: the Dockerfile would produce an image holding no DLLs and
     # the initContainer's `cp /mods/*.dll` would fail on the unmatched glob. The deployment
     # template drops the initContainer under the same condition.

@@ -180,7 +180,7 @@ spec:
             - /bin/sh
             - -c
             - |
-              {{ lookup('file', playbook_dir + '/roles/k8s/node-exporter/files/iscsi-sessions.sh') | indent(14) }}
+              {{ lookup('file', role_file('files/iscsi-sessions.sh')) | indent(14) }}
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=65534) }}
           volumeMounts:
             - name: node-exporter-sys
@@ -203,7 +203,7 @@ spec:
             - /bin/sh
             - -c
             - |
-              {{ lookup('file', playbook_dir + '/roles/k8s/node-exporter/files/ghcr-mirror-pull.sh') | indent(14) }}
+              {{ lookup('file', role_file('files/ghcr-mirror-pull.sh')) | indent(14) }}
           env:
             - name: NODE_NAME
               valueFrom:
@@ -234,7 +234,7 @@ spec:
             - /bin/sh
             - -c
             - |
-              {{ lookup('file', playbook_dir + '/roles/k8s/node-exporter/files/ghcr-mirror-pull.sh') | indent(14) }}
+              {{ lookup('file', role_file('files/ghcr-mirror-pull.sh')) | indent(14) }}
           env:
             - name: CHECK
               value: dockerhub-mirror-pull

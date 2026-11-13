@@ -10,4 +10,4 @@ data:
   Rendered from config/local.ini.j2 below. The smoosh ratios in particular are tuned to bound
   .couch bloat.
 #}
-{{ lookup('template', playbook_dir + '/roles/k8s/livesync/templates/config/local.ini.j2') | indent(4, true) }}
+{{ lookup('template', role_file('templates/config/local.ini.j2')) | indent(4, true) }}

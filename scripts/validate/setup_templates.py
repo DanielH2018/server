@@ -11,8 +11,8 @@ WHAT COUNTS AS UNDEFINED. Rendering with a bare `StrictUndefined` would fail on 
 secret and every key a host component supplies, so this guard renders with a tracking
 Undefined and then judges each name it collected. A name is allowed to be undefined when it is:
 
-  - supplied by the host renderer (`renderer_lib/host.py`) — `hosts`, `services`, `inventory_hostname`
-    and `playbook_dir` (`HOST_RENDER_SUPPLIED`);
+  - supplied by the host renderer (`renderer_lib/host.py`) — `hosts`, `services` and
+    `inventory_hostname` (`HOST_RENDER_SUPPLIED`);
   - a SOPS secret, by name, from the plaintext registry `ansible/secret_rotation.yml`;
   - defined anywhere in the inventory — `group_vars/all.yml` or any host's `host_vars` file;
   - declared in the component's own `defaults/main.yml`. `lib.render_context` leaves out a
@@ -67,9 +67,7 @@ COMPONENTS = REPO / "hosts" / "components"
 SECRET_REGISTRY = ANSIBLE / "secret_rotation.yml"
 
 # The names `renderer_lib/host.py` supplies a component template, which no repo file defines.
-HOST_RENDER_SUPPLIED = frozenset(
-    {"hosts", "services", "inventory_hostname", "playbook_dir"}
-)
+HOST_RENDER_SUPPLIED = frozenset({"hosts", "services", "inventory_hostname"})
 
 # The host the renderer sets `inventory_hostname` to, given a plausible value here.
 HOST_RENDER_CONTEXT = {"inventory_hostname": "daniel-box"}

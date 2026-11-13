@@ -24,7 +24,7 @@
 #}
 {% set script_name = 'media_volume_verify.py' %}
 {% set script_dir = '/verify' %}
-{% set data = {script_name: lookup('file', playbook_dir + '/roles/k8s/media-volume/files/' + script_name, rstrip=False)} %}
+{% set data = {script_name: lookup('file', role_file('files/' + script_name), rstrip=False)} %}
 {% set configmap_name = 'media-volume-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
 {% set render_digest8 = ((lookup('template', 'pv.yaml.j2') + lookup('template', 'storageclass.yaml.j2')) | hash('sha256'))[:8] %}
 {% set spec_text %}

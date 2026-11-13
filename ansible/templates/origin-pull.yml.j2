@@ -47,7 +47,7 @@ metadata:
 type: Opaque
 stringData:
   tls.ca: |
-{{ lookup('file', playbook_dir + '/roles/k8s/traefik/files/cloudflare-origin-pull-ca.crt') | indent(4, true) }}
+{{ lookup('file', role_file('files/cloudflare-origin-pull-ca.crt', role='traefik')) | indent(4, true) }}
 {%- endmacro %}
 
 {% macro origin_pull_tlsoption(namespace) -%}

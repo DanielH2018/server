@@ -54,11 +54,11 @@ nut_onbatt_shutdown_delay: 300
 
 image_builder_builds:
   - image_builder_name: nut
-    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/nut/templates/Dockerfile.j2"
+    image_builder_dockerfile: "{{ role_file('templates/Dockerfile.j2') }}"
     # Embedded verbatim (lookup('file')) — shell scripts Jinja must not touch.
     image_builder_context_files:
-      "{{ playbook_dir }}/roles/k8s/nut/files/entrypoint.sh": entrypoint.sh
-      "{{ playbook_dir }}/roles/k8s/nut/files/upssched-cmd": upssched-cmd
+      "{{ role_file('files/entrypoint.sh') }}": entrypoint.sh
+      "{{ role_file('files/upssched-cmd') }}": upssched-cmd
 
 # DECIDED: nut stays off `manifests_prune` (#3388, operator decision 2026-10-05). Arming it
 # adds the role label to this Deployment and restarts the UPS monitor once, which leaves

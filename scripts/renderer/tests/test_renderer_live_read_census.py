@@ -151,13 +151,13 @@ def test_the_same_read_in_a_deployment_template_is_flagged(tmp_path):
 
 
 def test_a_b64file_lookup_is_clean(tmp_path):
-    icon = "{{ lookup('b64file', playbook_dir ~ '/roles/k8s/widget/files/a.png') }}"
+    icon = "{{ lookup('b64file', role_file('files/a.png')) }}"
     found = _census(tmp_path, {"icons-configmap.yaml.j2": f"icon: {icon}\n"})
     assert found.offenders() == []
 
 
 def test_a_pipe_lookup_is_flagged(tmp_path):
-    icon = "{{ lookup('pipe', 'base64 -w0 ' ~ playbook_dir ~ '/roles/k8s/widget/files/a.png') }}"
+    icon = "{{ lookup('pipe', 'base64 -w0 ' ~ role_file('files/a.png')) }}"
     found = _census(tmp_path, {"icons-configmap.yaml.j2": f"icon: {icon}\n"})
     assert len(found.problems) == 1
     assert "lookup('pipe')" in found.problems[0]
@@ -207,7 +207,7 @@ def test_vars_or_hosts_read_by_a_computed_name_is_flagged(tmp_path, read):
 
 
 CHECK_LOOP = (
-    "{% for check in lookup('file', playbook_dir ~ '/roles/k8s/widget/files/table.py')"
+    "{% for check in lookup('file', role_file('files/table.py'))"
     " | py_table('CHECKS') %}\n"
     "  {{ check.name }}: {{ lookup('vars', check.token) }}\n"
     "{% endfor %}\n"

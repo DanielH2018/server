@@ -18,4 +18,4 @@ metadata:
   namespace: {{ longhorn_drill_namespace }}
 data:
   longhorn-restore-drill.sh: |
-{{ lookup('template', playbook_dir + '/roles/k8s/longhorn-restore-drill/templates/longhorn-restore-drill.sh.j2') | indent(4, true) }}
+{{ lookup('template', role_file('templates/longhorn-restore-drill.sh.j2')) | indent(4, true) }}

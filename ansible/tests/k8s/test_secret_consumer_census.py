@@ -50,7 +50,7 @@ def test_the_census_credits_a_role_rendering_the_secret_out_of_another_roles_fil
     reader.mkdir(parents=True)
     (owner / "files/table.py").write_text('TOKEN = "fixture_a6_push_token"\n')
     (reader / "x.yaml.j2").write_text(
-        "data: {{ lookup('file', playbook_dir + '/roles/k8s/owner/files/table.py') }}\n"
+        "data: {{ lookup('file', role_file('files/table.py', role='owner')) }}\n"
     )
     assert tree_consumers("fixture_a6_push_token", str(tmp_path)) == {
         "owner": "k8s",

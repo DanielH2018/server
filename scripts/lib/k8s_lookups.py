@@ -8,16 +8,18 @@ checkout to narrow a secrets change.
 import re
 from pathlib import Path
 
-# A `lookup('b64file' | 'file' | 'template', playbook_dir ~ '/roles/k8s/<role>/<path>')`
-# naming one file, with `+` or `~` as the join and any keyword arguments after the path
-# (`rstrip=False`, #5463).
-# Group 1 is the path from `roles/`. A lookup that builds its path from a variable
-# (`'/roles/k8s/x/files/' + name`) names a directory, never a file, and every such lookup in
-# the tree reads its own role.
-K8S_LOOKUP_RE = re.compile(
-    r"lookup\(\s*'(?:b64file|file|template)'\s*,\s*playbook_dir\s*[+~]\s*"
-    r"'/(roles/k8s/[^']+)'\s*(?:,[^)]*)?\)"
+# A `role_file('<path>', role='<role>')` naming one file of another role, the form every
+# cross-role lookup passes its path in. Group 1 is the path, group 2 the role. A path built
+# from a variable (`'files/' + name`) is not matched, and every such path in the tree names
+# its own role's file.
+_CROSS_ROLE_FILE = re.compile(
+    r"role_file\(\s*'([^']+)'\s*,\s*role\s*=\s*'([^']+)'\s*\)"
 )
+
+
+def cross_role_files(text: str) -> list[str]:
+    """Each other role's file `text` names through `role_file`, as `roles/k8s/<role>/<path>`."""
+    return [f"roles/k8s/{role}/{path}" for path, role in _CROSS_ROLE_FILE.findall(text)]
 
 
 def k8s_lookup_map(repo_root) -> dict[str, set[str]]:
@@ -35,7 +37,7 @@ def k8s_lookup_map(repo_root) -> dict[str, set[str]]:
                 text = src.read_text(errors="ignore")
             except OSError:
                 continue
-            for target in K8S_LOOKUP_RE.findall(text):
+            for target in cross_role_files(text):
                 if target.split("/")[2] != role.name:
                     found.setdefault(target, set()).add(role.name)
     return found

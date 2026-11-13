@@ -215,7 +215,11 @@ def test_the_render_fails_without_the_ca_file(tmp_path):
     tpl = K8S / "traefik" / "templates" / "origin-pull-secret.yaml.j2"
     assert _render(tpl, k8s_namespace="homelab")  # renders against the real tree
     with pytest.raises(FileNotFoundError):
-        _render(tpl, k8s_namespace="homelab", playbook_dir=str(tmp_path))
+        _render(
+            tpl,
+            k8s_namespace="homelab",
+            role_path=str(tmp_path / "ansible" / "roles" / "k8s" / "traefik"),
+        )
 
 
 _FIXTURE_RENDERED = {

@@ -165,7 +165,7 @@ flux_cronjob_gates:
 
 image_builder_builds:
   - image_builder_name: karakeep
-    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/karakeep/templates/Dockerfile.j2"
+    image_builder_dockerfile: "{{ role_file('templates/Dockerfile.j2') }}"
 
 # The drain gives every extra rollout below the budget of `manifests_rollout_timeout`.
 # meilisearch reads MEILI_MASTER_KEY from this role's Secret as an ENV var, which is only

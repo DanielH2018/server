@@ -22,7 +22,7 @@ from lib.repo_paths import SHARED_TPL
 from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.environment import renderer_env
 from renderer.renderer_lib.jinja_aliases import scan_templates
-from renderer.renderer_lib.jinja_uses import Policy, Use, embed_refusals
+from renderer.renderer_lib.jinja_uses import Policy, Use, embed_refusals, resolve_embed
 from renderer.renderer_lib.placeholders import apply_placeholders, sentinel
 from renderer.renderer_lib.secret_checks import (
     CONFINED_TO_SECRET,
@@ -356,7 +356,7 @@ def _embed_refusals(includer: str, embedded: str) -> list[tuple[str, str]]:
 
 
 INCLUDE_TRIM = "{% filter trim %}{% include 'b.j2' %}{% endfilter %}"
-LOOKUP = "{{ lookup('template', playbook_dir + '/b.j2') | %s }}"
+LOOKUP = "{{ lookup('template', 'b.j2') | %s }}"
 
 
 @pytest.mark.parametrize(
@@ -386,6 +386,49 @@ def test_an_embed_that_keeps_its_keys_intact_is_clean(includer, embedded):
 )
 def test_an_embed_that_transforms_its_keys_is_flagged(includer, embedded, refused):
     assert _embed_refusals(includer, embedded) == [refused]
+
+
+def _role_tree(tmp_path: Path) -> Path:
+    """Two roles, `reader` and `owner`, each with a config template holding a multi-line key."""
+    roles = tmp_path / "roles"
+    for role in ("reader", "owner"):
+        config = roles / role / "templates" / "config"
+        config.mkdir(parents=True)
+        (config / "b.j2").write_text("{{ pi_peer_backup_ssh_key | to_json }}\n")
+    return roles
+
+
+@pytest.mark.parametrize(
+    ("call", "owner"),
+    [
+        ("role_file('templates/config/b.j2')", "reader"),
+        ("role_file('templates/config/b.j2', role='owner')", "owner"),
+    ],
+)
+def test_a_role_file_template_lookup_resolves_in_the_named_role(tmp_path, call, owner):
+    roles = _role_tree(tmp_path)
+    source = f"{{{{ lookup('template', {call}) | indent(4) }}}}"
+    (embed,) = scan_template(source, frozenset(FIXTURE_KEYS)).embeds
+    resolved = resolve_embed(roles / "reader" / "templates" / "a.yaml.j2", embed, roles)
+    assert resolved == roles / owner / "templates" / "config" / "b.j2"
+
+
+def test_a_multi_line_key_indented_through_a_role_file_lookup_is_flagged(tmp_path):
+    roles = _role_tree(tmp_path)
+    includer = roles / "reader" / "templates" / "a.yaml.j2"
+    embedded = roles / "reader" / "templates" / "config" / "b.j2"
+    names = frozenset(FIXTURE_KEYS)
+    source = "{{ lookup('template', role_file('templates/config/b.j2')) | indent(4) }}"
+    scans = {
+        includer: scan_template(source, names),
+        embedded: scan_template(embedded.read_text(), names),
+    }
+    found = embed_refusals(
+        scans, lambda path, embed: resolve_embed(path, embed, roles), SOPS_MANIFEST_KEYS
+    )
+    assert [(key, form) for _, key, form in found] == [
+        (SOPS_KEY, "embeds through indent")
+    ]
 
 
 def test_named_members_and_the_floor_found_are_clean():

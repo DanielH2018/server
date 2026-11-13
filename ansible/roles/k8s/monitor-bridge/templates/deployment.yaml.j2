@@ -47,7 +47,7 @@ spec:
           # `to_json` writes each value as the double-quoted string the file holds, so a value
           # that file left unquoted as a number renders as one and the apply refuses it.
           env:
-{% for name, value in lookup('template', playbook_dir + '/roles/k8s/monitor-bridge/templates/config/env.yaml.j2') | from_yaml | dictsort %}
+{% for name, value in lookup('template', role_file('templates/config/env.yaml.j2')) | from_yaml | dictsort %}
             - name: {{ name }}
               value: {{ value | to_json }}
 {% endfor %}

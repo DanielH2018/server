@@ -56,5 +56,5 @@ data:
        ) | unique | sort | tojson }}
 {% for module in artifacts_modules %}
   {{ module }}: |
-{{ lookup('file', playbook_dir + '/roles/k8s/artifacts/files/' + module) | indent(4, true) }}
+{{ lookup('file', role_file('files/' + module)) | indent(4, true) }}
 {% endfor %}

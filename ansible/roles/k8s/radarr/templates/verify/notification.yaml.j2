@@ -24,11 +24,11 @@
   nothing, so the rotated URL reaches the app on the next revision that rolls it.
 #}
 {% set app = container_item.name %}
-{% set seed_defaults = lookup('file', playbook_dir + '/roles/k8s/arr-notification/defaults/main.yml') | from_yaml %}
+{% set seed_defaults = lookup('file', role_file('defaults/main.yml', role='arr-notification')) | from_yaml %}
 {% set script_name = 'seed_arr_notification.py' %}
 {% set script_dir = '/seed' %}
 {% set data = {
-  script_name: lookup('file', playbook_dir + '/roles/k8s/arr-notification/files/seed_arr_notification.py'),
+  script_name: lookup('file', role_file('files/seed_arr_notification.py', role='arr-notification')),
   'flux_job_connect.py': flux_job_connect,
 } %}
 {% set configmap_name = app + '-notification-seed-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}

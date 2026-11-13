@@ -41,7 +41,7 @@
 {% set script_name = 'qbittorrent_job.py' %}
 {% set script_dir = '/job' %}
 {% set data = {
-  script_name: lookup('file', playbook_dir + '/roles/k8s/qbittorrent/files/' + script_name, rstrip=False),
+  script_name: lookup('file', role_file('files/' + script_name), rstrip=False),
   'flux_job_connect.py': flux_job_connect,
 } %}
 {% set configmap_name = 'qbittorrent-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
@@ -53,9 +53,9 @@
   secrets='',
 ) %}
 {% for name in ['secret.yaml.j2', 'mullvad-account-secret.yaml.j2'] %}
-{% set roll.secrets = roll.secrets + lookup('file', playbook_dir + '/roles/k8s/qbittorrent/templates/' + name) %}
+{% set roll.secrets = roll.secrets + lookup('file', role_file('templates/' + name)) %}
 {% endfor %}
-{% for line in lookup('file', playbook_dir + '/vars/cluster-vars.source').splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
+{% for line in lookup('file', repo_file('ansible/vars/cluster-vars.source')).splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
 {% set roll.text = roll.text + line %}
 {% endfor %}
 {% set roll_digest8 = ((roll.text + roll.secrets) | hash('sha256'))[:8] %}

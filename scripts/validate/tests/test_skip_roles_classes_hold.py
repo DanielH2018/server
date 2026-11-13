@@ -92,9 +92,7 @@ def test_the_predicate_can_tell_a_manifest_from_a_helper(tmp_path: Path):
 # The two placement rules, one on the source and one on the render. Both are what lets app
 # config sit at templates/ top level unnoticed: the validator parses it as a manifest, finds no
 # `kind`, and skips it silently.
-_EMBED = (
-    "{{ lookup('template', playbook_dir + '/roles/k8s/x/templates/%s') | indent(4) }}"
-)
+_EMBED = "{{ lookup('template', role_file('templates/%s')) | indent(4) }}"
 
 
 def test_a_lookup_into_templates_config_is_clean():
@@ -123,7 +121,7 @@ def test_a_lookup_with_a_variable_target_is_not_judged():
 
 def test_a_commented_out_lookup_is_not_judged():
     src = (
-        "# not lookup('template', playbook_dir + '/roles/k8s/x/templates/old.yaml.j2')\n"
+        "# not lookup('template', role_file('templates/old.yaml.j2'))\n"
         "{# "
         + (_EMBED % "also-old.yaml.j2")
         + " #}\n"

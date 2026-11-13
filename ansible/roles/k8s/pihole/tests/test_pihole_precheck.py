@@ -73,8 +73,7 @@ def _render_copy(tmp_path, stubs, switch: str = "true") -> cluster.RenderedTag:
             "pihole_k8s_sibling_guard: true", f"pihole_k8s_sibling_guard: {switch}"
         )
     )
-    copied = {**stubs, "playbook_dir": str(tree)}
-    return cluster.render_tag(TAG, copied, roles=tree / "roles" / "k8s")
+    return cluster.render_tag(TAG, stubs, roles=tree / "roles" / "k8s")
 
 
 @pytest.fixture(scope="module")

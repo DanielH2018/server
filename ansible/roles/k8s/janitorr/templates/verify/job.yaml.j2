@@ -50,7 +50,7 @@
 {% set script_name = 'verify_janitorr.py' %}
 {% set script_dir = '/job' %}
 {% set data = {
-  script_name: lookup('file', playbook_dir + '/roles/k8s/janitorr/files/' + script_name, rstrip=False),
+  script_name: lookup('file', role_file('files/' + script_name), rstrip=False),
   'flux_job_connect.py': flux_job_connect,
 } %}
 {% set configmap_name = 'janitorr-verify-' + ({'data': data, 'binaryData': {}} | to_json(sort_keys=True, separators=(',', ':')) | hash('sha256'))[:8] %}
@@ -59,10 +59,10 @@
     holds a digest of each key's ciphertext, so no value enters the hash. -#}
 {% set roll = namespace(
   text=lookup('template', 'deployment.yaml.j2'),
-  secrets=lookup('file', playbook_dir + '/roles/k8s/janitorr/templates/config-secret.yaml.j2')
-    + lookup('file', playbook_dir + '/roles/k8s/janitorr/templates/config/application.yml.j2'),
+  secrets=lookup('file', role_file('templates/config-secret.yaml.j2'))
+    + lookup('file', role_file('templates/config/application.yml.j2')),
 ) %}
-{% for line in lookup('file', playbook_dir + '/vars/cluster-vars.source').splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
+{% for line in lookup('file', repo_file('ansible/vars/cluster-vars.source')).splitlines() if line and not line.startswith('#') and ('{{ ' + line.split()[0] + ' ') in roll.secrets %}
 {% set roll.text = roll.text + line %}
 {% endfor %}
 {% set roll_digest8 = ((roll.text + roll.secrets) | hash('sha256'))[:8] %}

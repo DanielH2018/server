@@ -42,7 +42,6 @@ from lib.estate import (
 )
 from lib.k8s_context import failed_key, resolve_vars
 from lib.render_guard import (
-    ANSIBLE,
     BASE_CONTEXT,
     StubUndefined,
     host_files,
@@ -142,7 +141,7 @@ def render_context(
             load_yaml(inventory.all_vars),
             _host_layer(inventory, host) if host_vars is None else host_vars,
         ),
-        "playbook_dir": str(ANSIBLE),
+        **({"role_path": str(role_dir)} if role_dir else {}),
         "services": k8s_services(inventory.services),
         "hosts": _hosts(inventory),
         **overrides,

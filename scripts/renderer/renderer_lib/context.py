@@ -24,7 +24,7 @@ from lib.ansible_inventory import K8S_HOST
 from lib.estate import REPO_INVENTORY, Inventory
 from lib.render_context import render_context
 from lib.render_guard import StrictChainableUndefined
-from lib.repo_paths import ANSIBLE, FILTER_PLUGINS
+from lib.repo_paths import FILTER_PLUGINS, K8S_ROLES
 
 # Ansible loads a filter plugin by file path; a script reaches it through this insert.
 if str(FILTER_PLUGINS) not in _sys.path:
@@ -44,7 +44,7 @@ def load_stubs(path: Path) -> dict:
 
 def sorted_services(entries: list[dict]) -> list[dict]:
     """`entries` in the order the templates read them, toposorted."""
-    return toposort_containers(entries, build_k8s_dep_map(entries, str(ANSIBLE)))
+    return toposort_containers(entries, build_k8s_dep_map(entries, str(K8S_ROLES)))
 
 
 def template_context(
