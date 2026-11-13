@@ -43,7 +43,7 @@ add a Deployment write back here.
   and `weekly` and `nobackup` for the group labels.
 - **Claims are `namespace/pvcName`.** The script reads the PVC a Volume CR serves from
   `status.kubernetesStatus`. A volume that serves none reads as `/`, is on no list, and is
-  left alone unless it carries the retired flat `weekly-backup` label.
+  left alone.
 
 ## What it writes, and how often (the autonomous-role contract)
 
@@ -53,7 +53,7 @@ authority is written here to keep a later edit from widening it.
 
 - **Writes, and nothing else.**
     - A JSON merge patch on a `volumes.longhorn.io` object. It touches only the label keys
-      `recurring-job-group.longhorn.io/{default, no-backup, weekly-backup, weekly-backup-d0..d6}`
+      `recurring-job-group.longhorn.io/{default, no-backup, weekly-backup-d0..d6}`
       and `spec.backupTargetName`. One patch per volume that must move, labels and target
       together.
     - The same patch carries the per-job label `recurring-job.longhorn.io/trim` (H2.2a). The
