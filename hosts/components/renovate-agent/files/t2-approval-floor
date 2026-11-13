@@ -42,7 +42,7 @@ cluster/services.yml
 .gitattributes
 Email-to-RSS
 # Code pytest runs in a session: the suites, every conftest, and each role's tests and the
-# files/ modules ansible/roles/conftest.py imports.
+# files/ modules k8s/conftest.py imports.
 ansible/tests/
 tests/
 **/conftest.py

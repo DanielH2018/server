@@ -38,8 +38,8 @@ def _bump(old=f"ghcr.io/x/y:1.2@sha256:{OLD}", new=f"ghcr.io/x/y:1.2@sha256:{NEW
     [
         "hosts/packages/homelab-tools/package.yml",
         "conftest.py",
-        "ansible/roles/k8s/sonarr/tests/deep/conftest.py",
-        "ansible/roles/k8s/monitor-bridge/files/registry.py",
+        "k8s/roles/sonarr/tests/deep/conftest.py",
+        "k8s/roles/monitor-bridge/files/registry.py",
         "docs/CLAUDE.md",
     ],
 )
@@ -50,8 +50,8 @@ def test_a_path_on_the_floor_is_flagged(path):
 @pytest.mark.parametrize(
     "path",
     [
-        "ansible/roles/k8s/sonarr/defaults/main.yml",
-        "ansible/roles/k8s/homelab-mcp-adjacent/defaults/main.yml",
+        "k8s/roles/sonarr/defaults/main.yml",
+        "k8s/roles/homelab-mcp-adjacent/defaults/main.yml",
     ],
 )
 def test_a_path_off_the_floor_is_clean(path):
@@ -262,7 +262,7 @@ def test_both_landers_read_the_floor_file_alike():
 
 def test_a_conftest_planted_at_a_new_depth_needs_approval_through_land_sh():
     entries = policy.read_approval_paths(str(FLOOR_FILE))
-    planted = "ansible/roles/k8s/sonarr/templates/deep/new/conftest.py"
+    planted = "k8s/roles/sonarr/templates/deep/new/conftest.py"
     files = [parse_file({"status": "added", "filename": planted})]
     assert policy.approval_hits(files, entries) == [planted]
 
