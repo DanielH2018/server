@@ -185,7 +185,9 @@ its own `Failed`/`NotReporting` pair exists (#6166). It cannot see a file that i
 because only a check's name says which series should exist, and it fires beside every
 pair's stale arm. An Alertmanager inhibit keyed on `check` and `origin` mutes it wherever a
 `*NotReporting` pair fires, shadow or not, so it pages alone only for a producer with no
-pair (#6186). The per-check literals and their pin tests stay, for the
+pair (#6186). `SystemdUnitsFailed` covers the other gap, a unit that fails with no hook or
+verdict of its own: host-maintenance's `systemd-units` check counts every failed system unit
+on each host every 5 minutes (#8219). The per-check literals and their pin tests stay, for the
 reason `docs/target-architecture/monitoring/m3-textfile-timer.md` gives under the deadline
 series. `HostRebootOverdue` pages a reboot-class change that has waited 8 days. It ages the
 change from `homelab_host_reboot_pending_since_seconds`, which a later package change never

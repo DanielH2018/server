@@ -1,0 +1,11 @@
+# Shipped by the host package's host-maintenance component with its enable link. Every 5 minutes;
+# systemd-units-check.sh's DEADLINE_S is three runs.
+[Unit]
+Description=Count failed system units every 5 minutes
+
+[Timer]
+OnCalendar=*:0/5
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
