@@ -16,3 +16,14 @@
 {%- set cast_fault = ': CastMediaPlayerEntity.' in msg and ' Failed: ' in msg -%}
 {{ lv in ['ERROR', 'CRITICAL'] and lg.startswith(scoped) and not cast_fault }}
 {%- endmacro -%}
+
+{# Hours the watch's next-alarm timestamp has sat in the past, rounded to 0.1; 0 for a future alarm
+   or no alarm (`alarm_ts` None). A healthy companion app moves the sensor on after the alarm rings,
+   so a large value means the watch stopped reporting. Used by sensor.pixel_watch_next_alarm_overdue. #}
+{%- macro alarm_overdue_hours(alarm_ts, now_ts) -%}
+{%- if alarm_ts is number and now_ts > alarm_ts -%}
+{{ ((now_ts - alarm_ts) / 3600) | round(1) }}
+{%- else -%}
+0
+{%- endif -%}
+{%- endmacro -%}

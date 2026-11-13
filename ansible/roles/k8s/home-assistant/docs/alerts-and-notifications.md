@@ -7,9 +7,13 @@ that reports rather than actuates.
 - **Threshold alerts — unified engine (since 2026-06-18).** `thresholds.yaml` defines sixteen
   built-in `threshold` binary-sensors; the platform's native hysteresis (on past bound±hyst) IS the
   "alert once + recovery, no bounce" lifecycle. ALL feed ONE automation `bedroom_threshold_alert`
-  (files/automations/alerts.yaml) in four **categories** — air quality (CO2/PM2.5/VOC/NOx, `upper`),
-  **air quality SEVERE** (same 4 at a higher cutoff), battery (FP300/Tap Dial, `lower`), humidity
-  (high `upper` + low `lower`). The category is encoded in each trigger `id` (`<cat>_bad`/`<cat>_ok`);
+  (files/automations/alerts.yaml) in **categories** — air quality (CO2/PM2.5/VOC/NOx, `upper`),
+  **air quality SEVERE** (same 4 at a higher cutoff), battery (FP300/Tap Dial at 20%, the coin-cell
+  T1 and window sensor at 30%, `lower`), humidity (high `upper` + low `lower`), temperature, outdoor
+  air, and `watch`. The `watch` category alerts when `sensor.pixel_watch_3_next_alarm` has held a
+  past time for over 36 h, the sign that the watch stopped reporting while its entities stay
+  available; `sensor.pixel_watch_next_alarm_overdue` (templates.yaml) carries the hours and the
+  36 h derivation sits at its threshold in thresholds.yaml. The category is encoded in each trigger `id` (`<cat>_bad`/`<cat>_ok`);
   everything else (label/value/unit, message, coalescing `tag`) is derived generically from the
   triggering sensor. Per-category differences live in a Jinja `cfg` map: `pulse` (red light flash —
   air quality only, via `script.bedroom_alert_pulse` when lights on), `watch` (wrist buzz), `pierce`
@@ -17,8 +21,8 @@ that reports rather than actuates.
   severe skips it; the moderate recovery covers it). **All notify routes through `script.bedroom_notify`**
   (DND/sleep-aware — see the notification-routing bullet). **Anchored on `off`↔`on` (not `unknown`)**
   so an HA restart while bad doesn't re-alert and an unavailable source can't false-alert (offline is
-  `bedroom_sensor_offline_alert`'s job). Per-category debounce: air quality 30s, battery 1m, humidity
-  5m. The label-strip is `friendly_name | replace(' high','') | replace(' low','') | replace(' severe','')`.
+  `bedroom_sensor_offline_alert`'s job). Per-category debounce: air quality 30s, battery 1m, watch
+  1m, humidity 5m. The label-strip is `friendly_name | replace(' high','') | replace(' low','') | replace(' severe','')`.
   **Adding a metric** = one threshold sensor + add it to its category's two trigger lists; a **new
   category** = two trigger blocks + one `cfg` entry. Thresholds (incl. the severe cutoffs CO2 2000 /
   PM2.5 100 / VOC 400 / NOx 200) are starting points — tune in the ~2026-06-25 pass.
