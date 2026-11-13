@@ -10,7 +10,11 @@ that emptied the glob would leave every test below passing over nothing.
 """
 
 import pytest
+import yaml
 
+from lib import yaml_fast
+from renderer.renderer_lib.environment import render_file
+from renderer.renderer_lib.host_sources import confined_env
 from validate import setup_templates as v
 
 # Named members the glob must find. Renaming or moving one of these should fail HERE, with the
@@ -208,3 +212,28 @@ def test_a_component_template_reading_a_name_nothing_defines_is_flagged(
     tpl = _component_template(tmp_path, "{{ widget_gone }}\n", "widget_on: true\n")
     problems = v.check_role_template(tpl, known, tmp_path)
     assert problems and "widget_gone" in problems[0]
+
+
+def _include_component(root):
+    """A component whose YAML is valid only if an `{% include %}` keeps its last newline."""
+    component = root / "widget"
+    (component / "templates").mkdir(parents=True)
+    (component / "component.yml").write_text("{}\n")
+    (component / "templates" / "item.j2").write_text("x\n")
+    tpl = component / "templates" / "widget.yaml.j2"
+    tpl.write_text("a: {% include 'templates/item.j2' %}b: 1\n")
+    return tpl
+
+
+def test_a_render_the_package_would_ship_broken_is_flagged(tmp_path):
+    """The guard renders through the package's environment, so it judges the bytes that ship (#8182).
+
+    The package's `strict_env` drops an include's last newline, which joins the two keys
+    into invalid YAML; an environment that keeps it renders valid YAML the package never ships.
+    """
+    tpl = _include_component(tmp_path)
+    shipped = render_file(confined_env(tpl.parents[1]), "templates/widget.yaml.j2", {})
+    with pytest.raises(yaml.YAMLError):
+        yaml_fast.safe_load(shipped)
+    problems = v.check_template(tpl, {}, frozenset())
+    assert any("invalid YAML" in p for p in problems), problems

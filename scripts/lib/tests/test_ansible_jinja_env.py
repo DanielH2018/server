@@ -3,6 +3,7 @@
 Run: uv run pytest scripts/lib/tests/test_ansible_jinja_env.py
 """
 
+import re
 import sys
 
 import pytest
@@ -222,3 +223,14 @@ def test_template_env_reads_a_file_lookup_and_refuses_any_other_plugin(tmp_path)
     assert env.get_template("inline.j2").render(path=str(data)) == "line|\n"
     with pytest.raises(ValueError, match="no stand-in"):
         env.get_template("other.j2").render()
+
+
+# `-e var=...`, `--extra-vars` or "extra vars": a playbook's command-line variables, which no
+# render path at HEAD has (#8182).
+_EXTRA_VARS = re.compile(r"(?<![\w-])-e\s+\w+=|extra[- _]vars", re.IGNORECASE)
+
+
+@pytest.mark.parametrize("name", ["ansible_bool", "register_ansible_filters"])
+def test_bool_rationale_cites_no_extra_vars_path(name: str):
+    doc = getattr(aje, name).__doc__ or ""
+    assert not _EXTRA_VARS.search(doc), _EXTRA_VARS.findall(doc)
