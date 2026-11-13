@@ -198,7 +198,8 @@ def test_a_soak_status_that_is_not_renovates_success_is_flagged(statuses, names)
 # PR may change it unapproved. A new root entry fails the test below until it is on the floor
 # or listed here.
 OFF_FLOOR = {
-    "ansible": "its floor paths are listed one by one: vars, templates, tests, role code",
+    "k8s": "its floor paths are listed one by one: templates, role tests and role code",
+    "inventory": "host and group vars the renderer reads, with no code a session runs",
     "cluster": "services.yml is on the floor; the rest is k8s content Flux applies",
     "docs": "pages a session may read, with no code a session runs",
     "CLAUDE.md": "on the floor through **/CLAUDE.md",
@@ -228,7 +229,7 @@ def unclassified(roots: set[str]) -> list[str]:
 def test_every_top_level_entry_is_on_the_floor_or_classified():
     listed = run(["git", "ls-files", "-z"], cwd=REPO, check=True).stdout
     roots = {path.split("/", 1)[0] for path in listed.split("\0") if path}
-    for member in ("hosts", "scripts", "uv.lock", "ansible", "docs"):
+    for member in ("hosts", "scripts", "uv.lock", "k8s", "docs"):
         assert member in roots, f"{member} is gone from the tracked tree"
     assert unclassified(roots) == []
 

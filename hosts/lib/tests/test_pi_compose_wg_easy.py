@@ -1,7 +1,7 @@
 """daniel-pi's wg-easy runs through the Pi's Compose project (H5.9).
 
 The healthcheck guard moved here with the service from
-`ansible/tests/services/test_wg_easy_healthcheck_timing.py`. It reads the rendered package of
+`tests/services/test_wg_easy_healthcheck_timing.py`. It reads the rendered package of
 `hosts/daniel-pi/package.yml`, which is what the Pi installs, never a template's source text.
 
 - **Healthcheck.** The image ships `wg show | grep -q interface` as its HEALTHCHECK, and its
@@ -29,7 +29,7 @@ from renderer.renderer_lib import host as host_mode
 TIMING_KEYS = ("interval", "timeout", "retries")
 COMPOSE_FILE = f"{COMPOSE}/wg-easy/compose.yaml"
 TMPFILES = REPO / "hosts/components/pi-compose/tmpfiles.d/homelab-compose.conf"
-PEER_BACKUP_DEFAULTS = REPO / "ansible/roles/k8s/pi-peer-backup/defaults/main.yml"
+PEER_BACKUP_DEFAULTS = REPO / "k8s/roles/pi-peer-backup/defaults/main.yml"
 PROJECT_DIR = "/home/ubuntu/server/containers/wg-easy"
 # The ports a client and the operator already use, written out so a drifted inventory entry
 # fails here instead of silently moving the endpoint.

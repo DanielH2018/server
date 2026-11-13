@@ -30,7 +30,7 @@
   the guest over ssh.
 
   The shape of this filter and its attachment are ENFORCED by
-  ansible/tests/staging/test_staging_egress_fence.py. A filter that is defined and unattached
+  tests/staging/test_staging_egress_fence.py. A filter that is defined and unattached
   reads identical to a working one from the host, so those checks see shape only.
 
   Whether it FIRES is measured once a month, by a leg of the drill orchestrator
@@ -71,7 +71,7 @@
        own pod and Service traffic is delivered on its internal cni0 and by its own kube-proxy
        rules; it never crosses the tap device this filter attaches to, so these rules cannot see
        it. Add a second node on this bridge and pod-to-pod traffic starts crossing the wire,
-       where a /16 drop would break it. ansible/tests/staging/test_staging_egress_fence.py ties
+       where a /16 drop would break it. tests/staging/test_staging_egress_fence.py ties
        that assumption to k3s_agent_node_ips and fails when it stops holding. -->
 {% for cidr in [lan_subnet, k3s_pod_cidr, k3s_service_cidr] %}
   <rule action='drop' direction='out' priority='100'>

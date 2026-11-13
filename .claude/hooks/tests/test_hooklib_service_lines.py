@@ -145,7 +145,7 @@ def test_is_scaled_to_zero_false_without_a_namespace():
 
 
 def test_k8s_namespace_reads_the_inventory_file(tmp_path):
-    group_vars = tmp_path / "ansible" / "inventory" / "group_vars"
+    group_vars = tmp_path / "inventory" / "group_vars"
     group_vars.mkdir(parents=True)
     (group_vars / "all.yml").write_text("other: x\nk8s_namespace: homelab\n")
     assert service_lines.k8s_namespace(str(tmp_path)) == "homelab"

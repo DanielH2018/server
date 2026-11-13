@@ -26,13 +26,11 @@ PREFIX = "worktree-claude+"
 # a role CLAUDE.md the PR's new size test read, in a directory the PR never touched.
 INCIDENT_2922 = [
     ".claude/hooks/session-health.py",
-    "ansible/roles/k8s/claude-otel/CLAUDE.md",
-    "ansible/tests/_ratchet.py",
+    "k8s/roles/claude-otel/CLAUDE.md",
+    "tests/_ratchet.py",
 ]
 # The PR's own file listing, sharing the role CLAUDE.md with INCIDENT_2922.
-OVERLAPPING = [
-    {"status": "modified", "filename": "ansible/roles/k8s/claude-otel/CLAUDE.md"}
-]
+OVERLAPPING = [{"status": "modified", "filename": "k8s/roles/claude-otel/CLAUDE.md"}]
 
 
 def _polls(*heads: str) -> list[dict]:
@@ -119,7 +117,7 @@ def test_master_changing_no_path_the_pr_changes_merges_without_an_update(landing
                 {
                     "status": "renamed",
                     "filename": "docs/claude-otel.md",
-                    "previous_filename": "ansible/roles/k8s/claude-otel/CLAUDE.md",
+                    "previous_filename": "k8s/roles/claude-otel/CLAUDE.md",
                 }
             ],
             id="pr-renamed-a-moved-path",

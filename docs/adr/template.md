@@ -43,7 +43,7 @@ ADR-0011 quoted three timeout figures and all three had moved by 2026-09-02.
 
 Where this decision is enforced in the tree. Each entry is a `file:line` anchor whose line
 carries a `# DECIDED:` marker referencing this record. The `governs:` frontmatter list must
-match, and `ansible/tests/repo/test_adr_links.py` checks both directions.
+match, and `tests/repo/test_adr_links.py` checks both directions.
 
 **The marker keeps `# DECIDED:` literal and puts the reference after it**, like this:
 

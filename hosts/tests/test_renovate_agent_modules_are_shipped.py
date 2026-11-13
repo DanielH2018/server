@@ -11,9 +11,9 @@ Run: uv run pytest hosts/tests/test_renovate_agent_modules_are_shipped.py
 from pathlib import Path
 
 from lib import yaml_fast
-from _helpers import ANSIBLE
+from _helpers import REPO
 
-COMPONENT = ANSIBLE.parent / "hosts" / "components" / "renovate-agent"
+COMPONENT = REPO / "hosts" / "components" / "renovate-agent"
 SPEC = yaml_fast.safe_load((COMPONENT / "component.yml").read_text())
 
 

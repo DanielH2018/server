@@ -14,8 +14,8 @@ import test_inject_nested_docs as base
 repo = base.repo
 _build, _mod = base._build, base._mod
 
-FOO_FILE = "ansible/roles/k8s/foo/templates/deployment.yaml.j2"
-BAR_DOC = "ansible/roles/k8s/bar/CLAUDE.md"
+FOO_FILE = "k8s/roles/foo/templates/deployment.yaml.j2"
+BAR_DOC = "k8s/roles/bar/CLAUDE.md"
 # About 2 KB, so it fits the session budget alone but not after `_spend_the_budget`.
 BAR_TEXT = (
     "# Bar\n\n## Bar rules\n\nthe bar body rule\n\n## Bar deploy\n\n"
@@ -23,9 +23,7 @@ BAR_TEXT = (
 )
 # Each rule's filler outgrows what `_spend_the_budget` leaves, so only the exemption inlines it.
 _RULE_FILLER = "a rule line that the budget alone would outline\n" * 40
-SECRETS_RULE = (
-    '---\npaths:\n  - "ansible/vars/**"\n---\n\n# Secrets body\n' + _RULE_FILLER
-)
+SECRETS_RULE = '---\npaths:\n  - "secrets/**"\n---\n\n# Secrets body\n' + _RULE_FILLER
 GENERATED_RULE = (
     '---\npaths:\n  - "docs/**"\n---\n\n# Generated docs body\n' + _RULE_FILLER
 )
@@ -33,19 +31,19 @@ GENERATED_RULE = (
 
 def _spend_the_budget(repo, session="sess-a", agent_id=None):
     """Inline foo's role doc, about 6.5 KB: under one payload, most of the session budget."""
-    (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(
+    (repo / "k8s" / "roles" / "foo" / "CLAUDE.md").write_text(
         "foo doc line with some words to fill the session budget\n" * 115
     )
     _, chosen = _mod.build_context(
         f"cat {FOO_FILE}", str(repo), session, agent_id=agent_id
     )
     assert [doc for doc, _, block in chosen if _mod._form(block) is None] == [
-        "ansible/roles/k8s/foo/CLAUDE.md"
+        "k8s/roles/foo/CLAUDE.md"
     ]
 
 
 def _add_bar(repo):
-    (repo / "ansible" / "roles" / "k8s" / "bar").mkdir()
+    (repo / "k8s" / "roles" / "bar").mkdir()
     (repo / BAR_DOC).write_text(BAR_TEXT)
 
 
@@ -76,7 +74,7 @@ def test_an_outlined_doc_is_not_sent_again(repo):
 def test_the_secrets_rule_is_whole_on_a_grep_after_the_budget_is_spent(repo):
     (repo / ".claude" / "rules" / "secrets.md").write_text(SECRETS_RULE)
     _spend_the_budget(repo)
-    context, chosen = _build(repo, "grep -c sops ansible/vars/secrets.yml")
+    context, chosen = _build(repo, "grep -c sops secrets/secrets.yml")
     assert [d for d, _ in chosen] == [".claude/rules/secrets.md"]
     assert _RULE_FILLER in context
 

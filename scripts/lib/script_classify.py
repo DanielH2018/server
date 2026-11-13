@@ -293,16 +293,16 @@ def _invocation_sites(repo: Path) -> list[tuple[Path, str, str]]:
     for path in _claude_hook_files(repo):
         sites.append((path, "gate", f"Claude hook: {path.name}"))
 
-    ansible = repo / "ansible"
+    roles = repo / "k8s" / "roles"
     # `files/*/*` reaches a package a role ships from a subdirectory, such as gitops_deploy's
     # `files/deployer_lib/` (#4355).
     patterns = (
-        "roles/**/templates/*",
-        "roles/**/files/*",
-        "roles/**/files/*/*",
+        "**/templates/*",
+        "**/files/*",
+        "**/files/*/*",
     )
     for pattern in patterns:
-        for path in sorted(ansible.glob(pattern)):
+        for path in sorted(roles.glob(pattern)):
             if not path.is_file() or "__pycache__" in path.parts:
                 continue
             if path.name.startswith("test_"):

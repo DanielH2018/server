@@ -76,7 +76,7 @@ from lib.progress import OnChange
 from deploy_tools.land_lib.tools import gate_snapshot
 from lib import yaml_fast
 from lib.git import git as run_git
-from lib.repo_paths import ANSIBLE, REPO
+from lib.repo_paths import REPO, K8S_ROLES
 from lib.systemd_timer import timer_settings
 
 # The renderer's host mode, run from a gate snapshot's root. A daniel-pi render takes about
@@ -105,9 +105,7 @@ LOOPBACK = "127.0.0.1"
 # observability's role defaults pin Prometheus's ClusterIP in plaintext. The address is read
 # from there, the way `probe_lib/core.py:observability_loki_ip` reads Loki's, and never through
 # `probe_lib/core.py:prom_endpoint`, which decrypts.
-OBSERVABILITY_DEFAULTS = (
-    ANSIBLE / "roles" / "k8s" / "observability" / "defaults" / "main.yml"
-)
+OBSERVABILITY_DEFAULTS = K8S_ROLES / "observability" / "defaults" / "main.yml"
 CLUSTER_IP_KEY = "observability_prometheus_cluster_ip"
 QUERY_TIMEOUT_S = 10
 UNREACHABLE = "Prometheus unreachable on loopback and ClusterIP"

@@ -67,7 +67,7 @@ NON_SECRET_VARS_LOOKUPS = frozenset(
         # scaled to zero. `replicas_var` is a field of a service entry's `metrics:`
         # list (scripts/renderer/template_filters/scrape_jobs.py), and names a replica count.
         VarsLookupSite(
-            "ansible/roles/k8s/observability/templates/prometheus.yaml.j2",
+            "k8s/roles/observability/templates/prometheus.yaml.j2",
             "job.replicas_var",
             _replicas_vars,
         ),
@@ -87,7 +87,7 @@ ALIAS_MEMBERS: tuple[tuple[str, str, str, int], ...] = ()
 # key: the Deployment hashes the block with `hash('sha1')`.
 NOT_ALIASES: tuple[tuple[str, str], ...] = (
     (
-        "ansible/roles/k8s/observability/templates/prometheus.yaml.j2",
+        "k8s/roles/observability/templates/prometheus.yaml.j2",
         "observability_prometheus_config",
     ),
 )

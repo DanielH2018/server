@@ -4,7 +4,7 @@ H6 (*Verification*, *Window*). The window runs from its `OnCalendar` start to th
 timer's `AccuracySec` plus the service's `TimeoutStartSec`. Every other fire is widened by its own
 accuracy. The sources are each timer a host package ships, and every CronJob and Longhorn
 RecurringJob schedule under
-`ansible/roles/k8s/`. A monotonic timer has no calendar
+`k8s/roles/`. A monotonic timer has no calendar
 instant, so it passes only through `EXEMPT`, and each entry names what replaces the check.
 
 Hosts: only daniel-box ships `homelab-k3s-restart.timer` so far. daniel-server's window joins this

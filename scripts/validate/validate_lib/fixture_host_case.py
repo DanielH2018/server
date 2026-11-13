@@ -26,7 +26,7 @@ from validate.validate_lib.host_container import CaseFailed
 FIXTURE_HOST = "daniel-fixture"
 WALKTHROUGH = "docs/host-packages.md"
 SCRIPT = "hosts/bootstrap-host.sh"
-EXAMPLE_VARS = "ansible/inventory/host_vars/_example.yml"
+EXAMPLE_VARS = "inventory/host_vars/_example.yml"
 # An address no host holds, for the example file's placeholder. Nothing dials it in a render.
 FIXTURE_IP = "10.0.0.250"
 

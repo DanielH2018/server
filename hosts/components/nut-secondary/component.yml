@@ -30,7 +30,7 @@
 defaults:
   # The nut Service's pinned ClusterIP, which any host but ups_host (daniel-box) names in its
   # MONITOR line (H7.33). ups_host reads 127.0.0.1 instead, so daniel-server ignores the value.
-  # roles/k8s/nut/defaults/main.yml:nut_k8s_cluster_ip is the other copy; a test pins the two.
+  # k8s/roles/nut/defaults/main.yml:nut_k8s_cluster_ip is the other copy; a test pins the two.
   nut_host_upsd_clusterip: 10.43.171.124
 depends:
   - nut-client

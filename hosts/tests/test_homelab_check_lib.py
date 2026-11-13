@@ -9,7 +9,7 @@ it with a failing guard instead of skipping silently.
 import re
 
 import pytest
-from _helpers import ANSIBLE, REPO
+from _helpers import K8S_ROLES, REPO
 from _shell_render import render_shell_script
 from lib.proc_testing import run
 
@@ -219,9 +219,9 @@ def test_a_source_without_a_failing_guard_is_caught_and_a_guarded_one_is_not():
 
 def test_every_rendered_script_sources_the_library_with_a_failing_guard():
     offenders = []
-    for path in sorted((ANSIBLE / "roles").glob("**/*")):
+    for path in sorted(K8S_ROLES.glob("**/*")):
         if path.suffix not in {".j2", ".sh"} or path == LIB:
             continue
         for lineno in _unguarded_sources(path.read_text()):
-            offenders.append(f"{path.relative_to(ANSIBLE)}:{lineno}")
+            offenders.append(f"{path.relative_to(REPO)}:{lineno}")
     assert not offenders, f"sourced without `|| exit 1`: {offenders}"

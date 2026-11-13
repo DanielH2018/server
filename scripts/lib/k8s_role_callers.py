@@ -86,7 +86,7 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
     this to decide, so that landing a helper-role change alongside all of its callers stops
     reading as `needs-manual-apply`.
 
-    Only ``roles/k8s`` is walked.
+    Only ``k8s/roles`` is walked.
 
     ``repo`` names the checkout to walk, for a caller that reads a tree other than the one
     this module was imported from (``role_reads.context_for(ref, cwd)``). Omitted, it walks

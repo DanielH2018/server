@@ -12,9 +12,9 @@ regenerates it.
 - `daniel-pi` — Raspberry Pi, the **only** Docker host (LAN-only: wg-easy, alloy, autoheal,
   docker-proxy). Its containers ship in its `homelab-daniel-pi` package.
 
-**A new service is a k3s role under `ansible/roles/k8s/<name>/`** unless it must run on the Pi.
+**A new service is a k3s role under `k8s/roles/<name>/`** unless it must run on the Pi.
 daniel-box and daniel-server have no Docker, so a Compose service there deploys nothing. The
-Pi's services are `compose_services` entries in `ansible/inventory/host_vars/daniel-pi.yml`.
+Pi's services are `compose_services` entries in `inventory/host_vars/daniel-pi.yml`.
 A service's config lives in the tree that deploys it: if a k3s workload reads it, it is under
 its role.
 
@@ -33,9 +33,9 @@ A task a skill covers routes through the skill listing; this table holds the res
 | Answering "what runs here / where / behind what" | `docs/reference/`. A page with a `generated_from:` banner is generated: change its generator (`scripts/docs/build_docs.py` lists them). |
 | Changing code that a `CLAUDE.md` section cites | `uv run python scripts/dev/fact_status.py notice --since origin/master`, then re-read each listed section the PR left unchanged. |
 | Choosing where a new Python module or test goes | `.claude/rules/python-layout.md` |
-| Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` and `ansible/roles/k8s/monitor-bridge/files/registry.py` **first** — most gaps are handled. |
+| Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` and `k8s/roles/monitor-bridge/files/registry.py` **first** — most gaps are handled. |
 | Checking that a UI renders, not just that its pod is Ready | The `homelab-ui` MCP server. Grafana is the exception: `uv run pytest -m ui -k grafana`. |
-| A config edit won't restart the pod | `scripts/renderer/renderer_lib/restart.py` stamps the restart annotation; content that reaches the cluster another way needs a `checksum/<thing>` annotation from `ansible/templates/checksum-annotation.yml.j2`. |
+| A config edit won't restart the pod | `scripts/renderer/renderer_lib/restart.py` stamps the restart annotation; content that reaches the cluster another way needs a `checksum/<thing>` annotation from `k8s/templates/checksum-annotation.yml.j2`. |
 | Adding / changing a cron that changes state | That role's `CLAUDE.md` *Autonomous-role contract*; a host component's timer owes one too. |
 | Starting Claude Code sessions from a phone | `hosts/components/claude-code/CLAUDE.md` |
 
@@ -60,7 +60,7 @@ GitHub's auto-merge: master's update restriction leaves an armed PR `BLOCKED`
 A `cancelled` CI run means *no verdict for this SHA*, never *this SHA is bad*.
 `docs/landing.md` owns the rule, and `hosts/lib/ci_verdict.py:_CI_NO_VERDICT_CONCLUSIONS` lists
 the conclusions it covers
-(`ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict`).
+(`tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict`).
 
 **Verify the change, not just the workload.** The `VERDICT:` line cannot see whether your change
 took effect, so exercise the thing you changed.
@@ -112,13 +112,13 @@ unlanded work is lost. The `worktree-cleanup` skill retires a worktree.
 
 ## Secrets Management
 
-Secrets live in `ansible/vars/secrets.yml`, encrypted with SOPS + age. Edit them with `sops` or
+Secrets live in `secrets/secrets.yml`, encrypted with SOPS + age. Edit them with `sops` or
 the `add-secret` skill; `.claude/rules/secrets.md` and `docs/secret-rotation.md` hold the rest.
 
-- **`git diff ansible/vars/secrets.yml` prints plaintext credentials.** `.gitattributes` sets
+- **`git diff secrets/secrets.yml` prints plaintext credentials.** `.gitattributes` sets
   `diff=sops`, so git decrypts before diffing, and an exposed value needs rotating. Use
   `git diff --stat` or `--name-only` to see that it changed.
-- **An agent never decrypts `ansible/vars/secrets.yml`**, by any `sops` form; the plaintext
+- **An agent never decrypts `secrets/secrets.yml`**, by any `sops` form; the plaintext
   lands in the transcript. A runbook step that decrypts is operator-only.
 - **Never commit plaintext secrets.** Private age keys never leave `~/.config/sops/age/keys.txt`.
 

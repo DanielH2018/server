@@ -77,7 +77,7 @@ def _rel_set(checker) -> dict[str, list[Path]]:
 def _role_dir(key) -> Path | None:
     """The role directory a map key names: the `Path` constant itself, or its name."""
     value = key if isinstance(key, Path) else getattr(repo_paths, str(key), None)
-    if isinstance(value, Path) and value.resolve().is_relative_to(repo_paths.ROLES):
+    if isinstance(value, Path) and value.resolve().is_relative_to(repo_paths.K8S_ROLES):
         return value.resolve()
     return None
 
@@ -198,11 +198,11 @@ def test_every_member_of_the_set_imports_outside_the_venv():
     assert failed == {}
 
 
-def test_ansible_tests_is_a_repo_paths_constant():
+def test_the_tests_directory_is_a_repo_paths_constant():
     values = {
         v for k, v in vars(repo_paths).items() if k.isupper() and isinstance(v, Path)
     }
-    assert repo_paths.ANSIBLE / "tests" in values
+    assert repo_paths.REPO / "tests" in values
 
 
 def _path_inserts(path: Path) -> list[ast.expr]:
@@ -217,13 +217,13 @@ def _path_inserts(path: Path) -> list[ast.expr]:
     ]
 
 
-def test_tighten_ratchets_inserts_ansible_tests_through_its_repo_paths_constant():
-    rel, directory = "scripts/dev/tighten_ratchets.py", repo_paths.ANSIBLE / "tests"
+def test_tighten_ratchets_inserts_the_tests_directory_through_its_repo_paths_constant():
+    rel, directory = "scripts/dev/tighten_ratchets.py", repo_paths.TESTS
     inserts = _path_inserts(REPO / rel)
     hand_built = [
         ast.unparse(arg)
         for arg in inserts
-        if "ansible" in ast.unparse(arg).lower()
+        if "tests" in ast.unparse(arg).lower()
         and any(
             isinstance(sub, ast.BinOp) and isinstance(sub.right, ast.Constant)
             for sub in ast.walk(arg)

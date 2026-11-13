@@ -3,7 +3,7 @@
 
 A DECLARED role's `tests/` must not derive that role's deploy tag, or a pytest-only PR to
 monitor-bridge deploys monitor-bridge. A role's `tests/` covers its `files/*.py` and is staged
-by nothing (the `no-role-ships-a-pytest-file` row of `ansible/tests/repo/test_census_rows_roles.py`
+by nothing (the `no-role-ships-a-pytest-file` row of `tests/repo/test_census_rows_roles.py`
 holds that tree-wide), so no deploy can apply it.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_role_tests_reach_no_cluster.py
@@ -19,8 +19,8 @@ from deploy_tools.land_lib.outcome import Outcome
 from lib.repo_paths import REPO as REPO_ROOT
 from lib.role_paths import tag_for
 
-_DECLARED_TESTS = "ansible/roles/k8s/monitor-bridge/tests/test_b2_storage.py"
-_DECLARED_FILES = "ansible/roles/k8s/monitor-bridge/files/checks/service.py"
+_DECLARED_TESTS = "k8s/roles/monitor-bridge/tests/test_b2_storage.py"
+_DECLARED_FILES = "k8s/roles/monitor-bridge/files/checks/service.py"
 
 
 def test_the_declared_paths_under_test_still_exist():

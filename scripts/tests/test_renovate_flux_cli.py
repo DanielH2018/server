@@ -3,8 +3,8 @@
 
 Each workflow that runs the flux CLI pins it in env as `FLUX_VERSION` and `FLUX_SHA256`, and
 its jobs fetch that release through a cache keyed on the pin.
-ansible/tests/repo/test_promote_workflow.py holds the promote workflow's pin equal to
-`flux_version` in roles/k8s/flux, and the census below holds every workflow's pin equal to it
+tests/repo/test_promote_workflow.py holds the promote workflow's pin equal to
+`flux_version` in k8s/roles/flux, and the census below holds every workflow's pin equal to it
 and to the amd64 digest in homelab-tools. A custom manager reads each pin from the
 `# renovate:` comment on the line above it.
 
@@ -29,7 +29,7 @@ from _renovate import (
 )
 
 WORKFLOW = ".github/workflows/promote.yml"
-FLUX_DEFAULTS = "ansible/roles/k8s/flux/defaults/main.yml"
+FLUX_DEFAULTS = "k8s/roles/flux/defaults/main.yml"
 DEP_NAME = "fluxcd/flux2"
 HOMELAB_TOOLS = "hosts/packages/homelab-tools/package.yml"
 

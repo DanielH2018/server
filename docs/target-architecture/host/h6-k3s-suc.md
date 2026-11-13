@@ -68,15 +68,15 @@ and H6.7, not H6.6 (step H6.7 says what running it first asks of H6.6's record):
 - `k3s_version` (`v1.37.1+k3s1`), `k3s_install_script_url` and `k3s_install_script_sha256`
   live in `ansible/roles/setup/k3s/defaults/main.yml`. `git grep -n k3s_version` finds no
   other definition. Role defaults are role-scoped, so a template under
-  `ansible/roles/k8s/` cannot read that pin.
+  `k8s/roles/` cannot read that pin.
 - Other readers of the file or the key:
     - `scripts/lib/repo_paths.py:K3S_DEFAULTS`. `scripts/validate/refresh_vendored_schemas.py`
       (`kubernetes_tag`) and
       `scripts/validate/tests/test_k8s_schema.py::test_vendored_core_schemas_match_the_cluster`
       read `k3s_version` through it, and the first one's error string names the old path.
       `git grep K3S_DEFAULTS` finds at least nine more importers that read keys which stay
-      in `setup/k3s`. Two of them are `ansible/tests/k8s/_manifest_guards.py`
-      (`K3S_DEFAULT_VALUES`) and `ansible/tests/k8s/test_k8s_manifests_metallb.py`
+      in `setup/k3s`. Two of them are `tests/k8s/_manifest_guards.py`
+      (`K3S_DEFAULT_VALUES`) and `tests/k8s/test_k8s_manifests_metallb.py`
       (`k3s_metallb_pool`);
     - the version-pin test in `test_k3s_node_ip_pinned.py` (H7.44 deleted it), which
       reads the pin through `load_defaults(K3S_ROLE)`, not through the constant;
@@ -209,7 +209,7 @@ and H6.7, not H6.6 (step H6.7 says what running it first asks of H6.6's record):
   class 3. This plan does not use events.
 
 **kube-state-metrics collects no Jobs.**
-`ansible/roles/k8s/observability/templates/kube-state-metrics.yaml.j2` runs it with
+`k8s/roles/observability/templates/kube-state-metrics.yaml.j2` runs it with
 `--resources=pods,deployments,statefulsets,daemonsets,nodes`. The comment above its
 ClusterRole requires the flag and the grant to change together. No `kube_job_*` series
 exists. M2 plans to add `replicasets` to the same flag, and M6's B7 plans to add
@@ -351,7 +351,7 @@ A k8s role, `system-upgrade`, is born Flux-owned. Its `containers_list` entry ca
 `owner: flux` from its first commit, so no Ansible path ever reaches it, as C4 requires.
 
 - **The pin moves here.** `k3s_version`, `k3s_install_script_url` and
-  `k3s_install_script_sha256` move into `ansible/roles/k8s/system-upgrade/defaults/main.yml`,
+  `k3s_install_script_sha256` move into `k8s/roles/system-upgrade/defaults/main.yml`,
   with the Renovate annotation and the comments. A pin change then routes to a Flux-owned
   tag. `land.sh` waits on promotion for it (D2's `promote.py land-wait`), and the tick
   writes no `manual_plane` line. The setup role's fresh-host install reads the same file
@@ -564,7 +564,7 @@ the node checks what the Job installed. H6.3e adds that check.
   finishes it, as it finishes the installer sha256 (H6.6). A CI check in
   `scripts/validate/`, beside the no-downgrade check, refuses a change to `k3s_version`
   that leaves the sum unchanged.
-- **The comparison.** `ansible/roles/k8s/system-upgrade/files/system_upgrade_verify.py`
+- **The comparison.** `k8s/roles/system-upgrade/files/system_upgrade_verify.py`
   makes it. It first reads the node's `kubeletVersion` through the API and executes no
   host binary. A version other than `k3s_version` reads pending, not a mismatch, because a
   hold can leave a node on the old version while the pin moved. At the pinned version, it
@@ -598,7 +598,7 @@ the node checks what the Job installed. H6.3e adds that check.
       variables*), so an inventory key needs no copy.
         - **Stay in the inventory:** `k3s_audit_log_enabled`, `k3s_audit_log_dir`,
           `k3s_audit_log_path` and `k3s_etcd_expose_metrics` in
-          `ansible/inventory/group_vars/all.yml`, `server_ip` in each host's `host_vars`,
+          `inventory/group_vars/all.yml`, `server_ip` in each host's `host_vars`,
           and the `k8s_registry_*` keys that `registries.yaml.j2` reads. loki-homelab reads
           the audit keys, and `hosts/tests/test_etcd_metrics_single_switch.py`
           holds the etcd switch to one definition, so none of them moves.
@@ -860,9 +860,9 @@ built by the etcd restore drill's orchestrator on its `staging` network behind
 
 ### Alerts
 
-The rules go in `ansible/roles/k8s/observability/files/rules/k3s-upgrade.yaml`, with promtool
+The rules go in `k8s/roles/observability/files/rules/k3s-upgrade.yaml`, with promtool
 tests, under M1's conventions. The node-exporter DaemonSet already reads
-`/var/lib/node-exporter-textfile` on both nodes (`ansible/roles/k8s/node-exporter/templates/daemonset.yaml.j2`).
+`/var/lib/node-exporter-textfile` on both nodes (`k8s/roles/node-exporter/templates/daemonset.yaml.j2`).
 
 | Alert | Expression, in words | `for` | Severity | `service` |
 |---|---|---|---|---|
@@ -892,13 +892,13 @@ that SUC re-creates after its TTL.
 `K3sConfigRestartMetricsAbsent` has one `absent()` term per host. A host whose textfile
 stops reaching Prometheus therefore fires, rather than reading as clean on the two restart
 alerts. The collector already serves `claude_cgroup.prom` from this hostPath on both nodes
-(`ansible/roles/k8s/node-exporter/CLAUDE.md`), but that file carries no `host` label, so it
+(`k8s/roles/node-exporter/CLAUDE.md`), but that file carries no `host` label, so it
 proves the directory and the scrape and nothing about this writer's file or the label the
 alerts read. So the rule lands in H6.4a, after H6.3b's live query has shown both series.
 
 ### Autonomous-role contract
 
-`ansible/roles/k8s/system-upgrade/CLAUDE.md` carries an `## Autonomous-role contract` for SUC
+`k8s/roles/system-upgrade/CLAUDE.md` carries an `## Autonomous-role contract` for SUC
 and `homelab-k3s-restart`. The k3s defaults comment says `k3s-bringup.yml` is manual
 "precisely so nothing automated ever applies it", and this slice reverses that. The ADR in
 PR H6.1a records the operator's approval.
@@ -919,11 +919,11 @@ PR H6.1a records the operator's approval.
 
 ```diff
 + docs/adr/<n>-k3s-upgrades-and-restarts-run-unattended.md
-+ ansible/roles/k8s/system-upgrade/                      (pin, vendored SUC, two Plans, CLAUDE.md)
-+ ansible/roles/k8s/observability/files/rules/k3s-upgrade.yaml
-  ansible/roles/k8s/observability/templates/kube-state-metrics.yaml.j2  (+ jobs, in the flag and the ClusterRole)
-  ansible/roles/k8s/cluster-base/templates/readonly-rbac.yaml.j2  (+ a kube-system Role: get one Lease; H1.2 moved the file)
-  ansible/roles/k8s/cluster-base/defaults/main.yml       (+ upgrade.cattle.io in k3s_readonly_crd_api_groups)
++ k8s/roles/system-upgrade/                      (pin, vendored SUC, two Plans, CLAUDE.md)
++ k8s/roles/observability/files/rules/k3s-upgrade.yaml
+  k8s/roles/observability/templates/kube-state-metrics.yaml.j2  (+ jobs, in the flag and the ClusterRole)
+  k8s/roles/cluster-base/templates/readonly-rbac.yaml.j2  (+ a kube-system Role: get one Lease; H1.2 moved the file)
+  k8s/roles/cluster-base/defaults/main.yml       (+ upgrade.cattle.io in k3s_readonly_crd_api_groups)
 + hosts/lib/k3s_gates.py
 + hosts/components/k3s-gates/component.yml              (k3s_gates.py, #6413)
 + hosts/components/k3s-restart/                          (unit, timer)
@@ -967,7 +967,7 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       How the observability half deploys follows the narrow output below. While
       `observability` is Ansible-owned, the narrow output names it through
       `scripts/deploy_tools/narrow_lib/broad.py:_changed_half`, which maps these edits
-      under `ansible/roles/k8s/observability/` to the role's tag. The added entry is not
+      under `k8s/roles/observability/` to the role's tag. The added entry is not
       the cause, because an entry without `hostname`, `port`, `tier` or `metrics` reaches
       no observability template (D2 Open question 10). The landing's deploy-plane apply
       therefore includes observability, and `k8s_autodeploy: false` does not stop that
@@ -1113,8 +1113,8 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
 5. **H6.2 daniel-box's package (about 60 lines).**
     - **Operator-only:** copy daniel-box's age key to `/etc/homelab/age.key`, as H4.2 did on
       daniel-server.
-    - Add the creation rule for `ansible/vars/hosts/daniel-box.sops.yaml` ahead of the
-      general rule in `ansible/.sops.yaml`, with the recipients H4 names. Add
+    - Add the creation rule for `secrets/hosts/daniel-box.sops.yaml` ahead of the
+      general rule in `secrets/.sops.yaml`, with the recipients H4 names. Add
       `homelab-daniel-box` to the named sets of both CI scans (H4).
     - **Operator-only:** run `sudo hosts/bootstrap-host.sh daniel-box`. `homelab-daniel-box`
       starts with only `reconcile`.
@@ -1604,7 +1604,7 @@ The results:
       `homelab-k3s-restart.timer` in both packages, which is also where it reads each
       window. A scan that misses it fails;
     - every rendered CronJob `spec.schedule` and every Longhorn RecurringJob `cron` under
-      `ansible/roles/`, read in the CronJob's `timeZone` or UTC. Each scan has a named
+      `k8s/roles/`, read in the CronJob's `timeZone` or UTC. Each scan has a named
       member that outlives M6's retirement of Kuma: the CronJob scan must find
       `homelab/configarr`, and the RecurringJob scan must find Longhorn's `daily-backup`.
       A scan that misses its member fails.
@@ -1873,7 +1873,7 @@ The results:
     - render tests for the role, including that both Plans render `k3s_version` and an
       empty `system_upgrade_nodes` matches no node, the *Plan access* and *Agent deadline*
       tests, and the expression test with its fixtures;
-    - the pin-routing test, in `ansible/tests/deploy/`;
+    - the pin-routing test, in `tests/deploy/`;
     - `K3sUpgradeJobFailed` in `k3s-upgrade.yaml` with its promtool test, and the render
       test holding `jobs` in kube-state-metrics' flag and ClusterRole together;
     - `test_k3s_node_ip_pinned.py`,
@@ -1886,7 +1886,7 @@ The results:
 - **H6.1b2:** the orchestrator's rehearsal-mode tests, and
   `docs/hypervisor-libvirt-internals.md` names the mode.
 - **H6.1c:** the expression test records the observed reason.
-- **H6.2:** `docs/host-packages.md` lists daniel-box; `ansible/.sops.yaml` gains its
+- **H6.2:** `docs/host-packages.md` lists daniel-box; `secrets/.sops.yaml` gains its
   creation rule; both CI scans' named sets gain `homelab-daniel-box`.
 - **H6.3a:** the gate tests, including the *Server-restart guard* red fixture, the parity
   test, the *Host reads under `/host`* test, the *Restart marker* test and the *Lock
@@ -1895,7 +1895,7 @@ The results:
     - the restart-unit tests, the window-derivation test, the promtool tests for the other
       three rules, and the test that the packaged deploy-lock path and the `tmpfiles.d`
       entry equal `deploy_locks.py:lock_path` for `SERVICE_LOCK_ALL`;
-    - `ansible/tests/k8s/test_k8s_manifests_rbac.py`, which renders the RBAC template from
+    - `tests/k8s/test_k8s_manifests_rbac.py`, which renders the RBAC template from
       `cluster-base` after H1.2, covers the Lease Role, its `resourceNames`, its
       RoleBinding's subject and `upgrade.cattle.io` in the ClusterRole's groups;
     - both host SOPS files, `host_secrets.py check`'s host set, and the credential in both
@@ -1913,7 +1913,7 @@ The results:
     - the k3s role `CLAUDE.md` loses the server upgrade path.
 - **H6.3d:** the agent half of `docs/k3s-upgrade.md`.
 - **H6.3e:** the comparison's tests in
-  `ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_verify.py`, the co-change
+  `k8s/roles/system-upgrade/tests/test_system_upgrade_verify.py`, the co-change
   check's tests in
   `scripts/validate/tests/`, and the role `CLAUDE.md`'s note on the sum pin.
 - **H6.4a:**
@@ -1924,8 +1924,8 @@ The results:
     - H1's *Mirrored identity keys* test gains the component's pair, and the host-render
       test is new;
     - `K3sConfigRestartMetricsAbsent` and its promtool test;
-    - `docs/headlamp-oidc-and-plugins.md`, `ansible/roles/k8s/headlamp/CLAUDE.md` and the
-      comments in `ansible/roles/k8s/headlamp/defaults/main.yml` name the component as the
+    - `docs/headlamp-oidc-and-plugins.md`, `k8s/roles/headlamp/CLAUDE.md` and the
+      comments in `k8s/roles/headlamp/defaults/main.yml` name the component as the
       home of the `k3s_oidc_*` keys;
     - the shipped-paths test;
     - `docs/k3s-node-plane-crons-and-incidents.md` (the log drop-in, the gated restart
@@ -2102,7 +2102,7 @@ The results:
     entry lands after D5 Open question 2 is ruled, and before nut's Wave C PR.
 16. **The Job backoff limit (opened 2026-10-24, for H6.3c).** The vendored controller manifest
     sets `SYSTEM_UPGRADE_JOB_BACKOFF_LIMIT: "99"` in `default-controller-env`
-    (`ansible/roles/k8s/system-upgrade/files/upstream/system-upgrade-controller.yaml:201`).
+    (`k8s/roles/system-upgrade/files/upstream/system-upgrade-controller.yaml:201`).
     The Baseline and *Gates at apply time* say a failing `prepare` ends in `JobFailed` after
     three pods, from `job.go`'s `BackoffLimit` 2. If v0.20.2's `job.go` reads that variable,
     a failing `prepare` retries until the Job deadline instead, and `JobFailed` arrives only
@@ -2459,7 +2459,7 @@ How each was fixed, with the evidence measured at `70591c307`:
   `k3s_readonly_sa_namespace`.
     - Departure: the old list was also wrong in the other direction.
       `k3s_audit_log_enabled`, `k3s_audit_log_dir`, `k3s_audit_log_path` and
-      `k3s_etcd_expose_metrics` are defined in `ansible/inventory/group_vars/all.yml`.
+      `k3s_etcd_expose_metrics` are defined in `inventory/group_vars/all.yml`.
       loki-homelab and `hosts/tests/test_etcd_metrics_single_switch.py` depend on
       that, so they must not move.
     - The design now gives every variable one of five homes, and names the PR that moves
@@ -2485,7 +2485,7 @@ How each was fixed, with the evidence measured at `70591c307`:
     - The gap was real, because no PR owned the removal of the deployer-coupled checks.
       Every "until D6" now reads "until H7.19a", and *Open questions* 10 asks H7.19a to
       remove all seven items.
-- **C3-08.** Confirmed: `ansible/roles/k8s/node-exporter/CLAUDE.md` called the textfile
+- **C3-08.** Confirmed: `k8s/roles/node-exporter/CLAUDE.md` called the textfile
   hostPath "an empty hook". M3 PR 1
   ([#4869](https://github.com/DanielH2018/server/pull/4869)) replaced that with the live
   `claude_cgroup.prom` producer.

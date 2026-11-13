@@ -69,7 +69,7 @@ def test_a_tag_at_prod_missing_while_its_role_stays_is_flagged(
     )
     assert code == FAILED
     assert (
-        "tag rule: bento-pdf leaves the bundle while ansible/roles/k8s/bento-pdf/"
+        "tag rule: bento-pdf leaves the bundle while k8s/roles/bento-pdf/"
         in capsys.readouterr().err
     )
 

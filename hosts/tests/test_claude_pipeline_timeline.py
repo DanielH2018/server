@@ -16,7 +16,7 @@ Run: uv run pytest hosts/tests/test_claude_pipeline_timeline.py
 import re
 
 from _agent_package import render_daniel_server_with
-from _helpers import ANSIBLE, load_yaml
+from _helpers import load_yaml, REPO
 from _setup_render import CLAUDE_CODE, render_component_text
 from lib.repo_paths import HOST_VARS
 
@@ -80,7 +80,7 @@ def test_armed_only_on_daniel_box_and_disarming_drops_the_units(tmp_path):
 
 def test_the_host_component_ships_both_templates():
     component = (
-        ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
+        REPO / "hosts" / "components" / "claude-code" / "component.yml"
     ).read_text()
     for name in (SERVICE, TIMER):
         assert f"src: templates/{name}" in component, f"{name} is not shipped"

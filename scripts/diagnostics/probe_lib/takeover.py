@@ -362,7 +362,7 @@ def census(tag, docs, live_of):
         except ReadForbidden:
             # DECIDED: route an unreadable object to the operator rather than widen the
             # read-only ServiceAccount. Its ClusterRole leaves `rbac.*` out on purpose
-            # (roles/k8s/cluster-base/templates/readonly-rbac.yaml.j2, *Deliberately absent*), and
+            # (k8s/roles/cluster-base/templates/readonly-rbac.yaml.j2, *Deliberately absent*), and
             # `view` omits Roles too, so every RBAC object a tag renders lands here (#5258).
             lines.append(
                 f"  {name}: not readable by the read-only ServiceAccount, so not checked"

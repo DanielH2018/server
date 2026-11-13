@@ -37,7 +37,7 @@ def _registry(tmp_path):
 def test_reads_only_the_plaintext_registry(tmp_path, monkeypatch):
     """The whole safety property, asserted behaviourally.
 
-    A generator that can reach ansible/vars/secrets.yml -- or shell out to the
+    A generator that can reach secrets/secrets.yml -- or shell out to the
     decryption tool -- is one bug away from committing plaintext credentials into a
     browsable page. Recording the paths it opens proves it cannot, where a scan of the
     source text would only prove which words it contains.

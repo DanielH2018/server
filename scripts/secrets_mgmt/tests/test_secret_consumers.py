@@ -1,6 +1,6 @@
 """Tests for the repair commands scripts/secrets_mgmt/consumers.py prints.
 
-`ansible/tests/k8s/test_secret_consumer_census.py` covers `tree_consumers` over the live tree.
+`tests/k8s/test_secret_consumer_census.py` covers `tree_consumers` over the live tree.
 
 Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_consumers.py
 """
@@ -27,7 +27,7 @@ _FIXTURE_SECRET = "fixture_issue_4983_api_key"
 def _repo_with_two_k8s_consumers(tmp_path: Path) -> str:
     """A repo whose secret is rendered by the k8s roles `bento-pdf` and `sonarr`."""
     for role in ("bento-pdf", "sonarr"):
-        template = tmp_path / "ansible/roles/k8s" / role / "templates/secret.yaml.j2"
+        template = tmp_path / "k8s/roles" / role / "templates/secret.yaml.j2"
         template.parent.mkdir(parents=True)
         template.write_text(f"apiKey: {{{{ {_FIXTURE_SECRET} }}}}\n")
     return str(tmp_path)

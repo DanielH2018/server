@@ -1,7 +1,7 @@
 """`hosts/bootstrap-host.sh` on a fake host: its hostname check, its keyring check, its apt calls.
 
 The script runs under stub `hostname` and `apt-get` commands and the real `gpg`, and writes under
-HOMELAB_ROOT. `ansible/tests/repo/test_lan_facts_have_one_source.py` holds the script's URL and
+HOMELAB_ROOT. `tests/repo/test_lan_facts_have_one_source.py` holds the script's URL and
 fingerprint pin to their sources.
 
 Run: uv run pytest hosts/lib/tests/test_bootstrap_host.py

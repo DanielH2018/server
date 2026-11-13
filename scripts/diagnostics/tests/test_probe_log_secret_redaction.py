@@ -2,7 +2,7 @@
 
 HA writes the Google Cast system user's `refresh_token` in plaintext whenever a cast fails in
 `_handle_signal_show_view`. The record reaches HA's own `system_log` and `/api/error_log`, which
-`probe.py ha get error_log` prints verbatim. The Alloy stage in `roles/k8s/loki-homelab` keeps new
+`probe.py ha get error_log` prints verbatim. The Alloy stage in `k8s/roles/loki-homelab` keeps new
 records out of Loki; this seam keeps the token out of THIS tool's stdout, including for the records
 Loki already holds until its 744h retention expires.
 
@@ -14,7 +14,7 @@ the only query that catches a cast timed out on a worker thread.
 The last test patches three names, which the monkeypatch ratchet caps at 0 for a new module. The
 seam it asks for would go in `probe_lib/ha.py`, and that module sits at exactly its 600-line cap on
 `origin/master`, so adding one there fails the length ratchet instead. This module therefore carries
-an entry in `ansible/tests/repo/monkeypatch_allowlist.txt`, which its header permits for a path
+an entry in `tests/repo/monkeypatch_allowlist.txt`, which its header permits for a path
 `origin/master` does not track. Shrink `ha.py`, then take the seam and drop the entry.
 """
 

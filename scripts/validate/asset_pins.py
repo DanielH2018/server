@@ -81,7 +81,7 @@ from lib.cli_help import ArgumentParser
 
 from lib import yaml_fast
 from lib.renovate_annotations import annotations_in, is_annotation_manager
-from lib.repo_paths import REPO, ROLES
+from lib.repo_paths import K8S_ROLES, REPO
 
 DIGEST_KEYS = ("sha256", "md5")
 FETCH_TIMEOUT = 60.0
@@ -246,14 +246,14 @@ COMPONENTS = REPO / "hosts" / "components"
 
 
 def defaults_sources(
-    roles: _Path = ROLES, components: _Path = COMPONENTS
+    roles: _Path = K8S_ROLES, components: _Path = COMPONENTS
 ) -> Iterator[tuple[_Path, str, dict]]:
     """Each defaults file as `(path, text, defaults)`, sorted.
 
     A role's `defaults/main.yml` is the whole file. A host component's `component.yml` carries its
     defaults under `defaults:`, as the claude-code component's Node pins do since H7.40.
     """
-    for path in sorted(roles.glob("*/*/defaults/main.yml")):
+    for path in sorted(roles.glob("*/defaults/main.yml")):
         text = path.read_text()
         loaded = yaml_fast.safe_load(text)
         if isinstance(loaded, dict):
@@ -266,7 +266,7 @@ def defaults_sources(
 
 
 def annotated_dep_names(
-    roles: _Path = ROLES,
+    roles: _Path = K8S_ROLES,
     managers: list[dict] | None = None,
     components: _Path = COMPONENTS,
 ) -> set[str]:
@@ -281,7 +281,7 @@ def annotated_dep_names(
 
 
 def discover_pins(
-    roles: _Path = ROLES,
+    roles: _Path = K8S_ROLES,
     managers: list[dict] | None = None,
     components: _Path = COMPONENTS,
 ) -> tuple[list[Pin], list[str]]:

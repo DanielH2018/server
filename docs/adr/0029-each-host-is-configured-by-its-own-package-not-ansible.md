@@ -147,14 +147,14 @@ an **operator-only** ruling.
 
 ### The `ansible/` directory name
 
-The keep-list leaves `ansible/vars/`, `ansible/inventory/`, `scripts/renderer/template_filters/`,
-`ansible/templates/`, `ansible/tests/`, `ansible/secret_rotation.yml`, and each k8s role's
+The keep-list leaves `secrets/`, `inventory/`, `scripts/renderer/template_filters/`,
+`k8s/templates/`, `tests/`, `secrets/secret_rotation.yml`, and each k8s role's
 `templates/`, `defaults/` and `files/` under `ansible/`. A reader of that tree looks for
 playbooks that no longer exist.
 
 The follow-on is one move PR that renames the tree to a neutral root the operator picks
 (**operator-only**). It uses `git mv` only, and changes every path constant through
-`scripts/lib/repo_paths.py`. The same PR moves `ansible/.sops.yaml` beside `vars/`, because
+`scripts/lib/repo_paths.py`. The same PR moves `secrets/.sops.yaml` beside `vars/`, because
 SOPS searches upward from the file. It also updates `.gitleaks.toml`, the Renovate rules,
 the prek hooks and the CI path filters. It runs when no other slice has a branch open,
 because every open branch conflicts with it.
@@ -216,7 +216,7 @@ Each note names which of slices H7.53 to H7.57 removed the statements it marks a
   and `homelab-checkout-sync` and the builder's own package take those places.
 - **[ADR-0022](0022-the-cluster-decrypts-its-own-file-with-its-own-key.md).** It cites
   `ansible/roles/setup/sops_setup/CLAUDE.md` for the recipient runbook, which H7.55 deleted.
-  The header of `ansible/.sops.yaml` and `docs/secret-rotation.md` carry the runbook. Both
+  The header of `secrets/.sops.yaml` and `docs/secret-rotation.md` carry the runbook. Both
   decryption decisions stand.
 
 ### ADR-0017 is superseded

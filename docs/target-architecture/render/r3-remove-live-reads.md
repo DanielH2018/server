@@ -62,7 +62,7 @@ no fact. Ansible stays the only writer to the cluster.
 ### pi-peer-backup
 
 - **pi-peer-backup reads the Pi over SSH before it renders.** In
-  `ansible/roles/k8s/pi-peer-backup/tasks/main.yml`, the task "Read daniel-pi's SSH host key for
+  `k8s/roles/pi-peer-backup/tasks/main.yml`, the task "Read daniel-pi's SSH host key for
   the known_hosts pin" slurps `/etc/ssh/ssh_host_ed25519_key.pub` from daniel-pi into the
   register `pi_peer_backup_hostkey`. "Compose the known_hosts pin line" builds
   `pi_peer_backup_known_hosts_line` from `hostvars['daniel-pi'].ansible_host` and the key's
@@ -78,7 +78,7 @@ no fact. Ansible stays the only writer to the cluster.
   `deployment-runners.yaml.j2` each render a `checksum_annotation('image', ...)` from
   `k8s_built_images`. image-builder fills that fact by reading the registry. The template
   comment records the incident it answered: on 2026-09-02 a pushed image never rolled out.
-  `test_n8n_image_stamp.py` in `ansible/tests/services/` holds the annotation.
+  `test_n8n_image_stamp.py` in `tests/services/` holds the annotation.
 - **The content tag already moves n8n's image reference.** `n8n_k8s_image` and
   `n8n_k8s_runners_image` in `n8n/defaults/main.yml` read
   `k8s_built_image_tags.get('n8n', 'latest')` and its `n8n-runners` twin. The tag is computed
@@ -88,7 +88,7 @@ no fact. Ansible stays the only writer to the cluster.
   named the mutable `:latest`, so a pushed but unrolled image left the spec unchanged.
 - **A rebuild under an unchanged content tag is caught only by the drift gate.**
   `image_builder_force=true` rebuilds with unchanged inputs, so it pushes under the same
-  `sha-…` tag (`ansible/roles/k8s/image-builder/CLAUDE.md`, *Notable*). `k8s_rebuilt_images`
+  `sha-…` tag (`k8s/roles/image-builder/CLAUDE.md`, *Notable*). `k8s_rebuilt_images`
   fills only when the pre- and post-build digests differ. `post_tasks/k8s_image_drift_gate.yml`
   compares each running pod's `imageID` with the registry digest and fails the play on a
   mismatch. For n8n alone, the `checksum/image` annotation also rolls the pod in that case.
@@ -109,20 +109,20 @@ no fact. Ansible stays the only writer to the cluster.
   prefix, and `kubectl run --attach` interleaves its own lines. "Fail if no password hash could
   be obtained" refuses an empty digest.
 - **Authelia decodes each stored digest.** The docstring of
-  `ansible/tests/services/test_authelia_argon2_parameters_agree.py` records that verification
+  `tests/services/test_authelia_argon2_parameters_agree.py` records that verification
   reads the algorithm and parameters off each digest's PHC prefix (`crypt.Decode`). The same
   test holds the mint flags against the hashing block in `config-secret.yaml.j2`. It finds the
   mint commands through `HASH_TASK_PODS`, the pod names `authelia-hash` and
   `authelia-hash-claude`.
 - **A hashed credential in SOPS has precedent.** `authelia_client_password_hash`, the OIDC
-  client secret's digest, is a SOPS key with an entry in `ansible/secret_rotation.yml`.
+  client secret's digest, is a SOPS key with an entry in `secrets/secret_rotation.yml`.
 - **The plaintext passwords stay in use.** `authelia_password`, `authelia_claude_password` and
-  `authelia_agent_password` are in `ansible/secret_rotation.yml`, and `authelia_password` is
+  `authelia_agent_password` are in `secrets/secret_rotation.yml`, and `authelia_password` is
   `source: record`. `scripts/diagnostics/ui_login.py` reads the operator's and claude-ui's
   plaintext to log in. The `claude_code` setup role renders the agent's plaintext into the agent
   user's home, and `tasks/agent_homelab_ui.yml` there asserts it is non-empty.
 - **Five files document the rehash flag as the rotation step.** `git grep -n rehash` finds it in
-  `ansible/roles/k8s/authelia/CLAUDE.md`, `ansible/roles/k8s/authelia/defaults/main.yml`,
+  `k8s/roles/authelia/CLAUDE.md`, `k8s/roles/authelia/defaults/main.yml`,
   `docs/authelia-sessions-and-crowdsec-init.md`, `docs/claude-agent-user.md` and
   `docs/secret-rotation.md`.
 - **D5 also plans this conversion.** `deploy/d5-bulk-move.md`, Open question 4, converts
@@ -141,7 +141,7 @@ no fact. Ansible stays the only writer to the cluster.
   `kuma_declarations` and `janitorr_dry_run` read no live state. R1 computes them.
 - **Templates call four lookup plugins, and two of them choose their target at render time.**
   A `git grep -ohE` for `(lookup|query)\(['"][a-z_.]+` over the k8s templates, role defaults,
-  `ansible/templates/` and inventory prints 35 `lookup('file`, 21 `lookup('template`, one
+  `k8s/templates/` and inventory prints 35 `lookup('file`, 21 `lookup('template`, one
   `lookup('ansible.builtin.template`, one `lookup('pipe` and four `lookup('vars`. One of the
   four `vars` hits is comment text in `monitor-bridge/templates/env-secret.yaml.j2`, so a
   Jinja parse sees three `vars` calls. `scripts/lib/k8s_yaml.py:make_lookup` implements
@@ -158,7 +158,7 @@ no fact. Ansible stays the only writer to the cluster.
       over `containers_list | scrape_jobs(k8s_namespace)`
       (`scripts/renderer/template_filters/scrape_jobs.py`). The one `replicas_var` at this commit is
       `terraria_k8s_replicas`, in daniel-box's host_vars, and
-      `ansible/inventory/group_vars/all.yml` sets it to `0`.
+      `inventory/group_vars/all.yml` sets it to `0`.
     - Both plays in `ansible/deploy.yml` set `gather_facts: false`.
 - **One task-set fact reaches a template that the render does not read.**
   `image-builder/templates/build-job.yaml.j2` names `image_builder_content_tag`, which a
@@ -172,7 +172,7 @@ no fact. Ansible stays the only writer to the cluster.
 
 ### pi-peer-backup: commit the Pi's public host key
 
-A new file, `ansible/roles/k8s/pi-peer-backup/files/daniel-pi-ssh-host-ed25519.pub`, holds the
+A new file, `k8s/roles/pi-peer-backup/files/daniel-pi-ssh-host-ed25519.pub`, holds the
 Pi's public host key. A public key is safe to commit. `templates/secret.yaml.j2` builds the
 `known_hosts` line from `hostvars['daniel-pi'].server_ip` and the file's first two fields,
 through `lookup('file')`. `server_ip` is a literal in the Pi's host_vars, and
@@ -272,7 +272,7 @@ plaintext's SOPS name.
    in `config-secret.yaml.j2`. The image is the one `authelia_k8s_image` names.
 
    ```bash
-   sops -d --extract "[\"$KEY\"]" ansible/vars/secrets.yml \
+   sops -d --extract "[\"$KEY\"]" secrets/secrets.yml \
      | sudo k3s kubectl -n homelab run authelia-mint --rm -i --attach --quiet \
          --restart=Never --image="<authelia_k8s_image>" --command -- sh -c '
        IFS= read -r pw
@@ -283,7 +283,7 @@ plaintext's SOPS name.
          | grep -qx "The password matches the digest." && printf "%s\n" "$d"' \
      | grep -x '\$argon2id\$v=19\$m=65536,t=3,p=4\$[A-Za-z0-9+/]*\$[A-Za-z0-9+/]*' \
      | jq -R . \
-     | sops set --value-stdin ansible/vars/secrets.yml "[\"${KEY}_argon2\"]"
+     | sops set --value-stdin secrets/secrets.yml "[\"${KEY}_argon2\"]"
    ```
 
    The pipeline prints nothing on success. A failed validation emits no digest, so `sops set`
@@ -294,7 +294,7 @@ plaintext's SOPS name.
    both SOPS values, and the cluster files when `write` changed them, in one commit, then
    open the PR.
 4. Land the PR with `land.sh`, passing `--tags authelia`. A rotation PR changes only
-   `ansible/vars/secrets.yml` and D3's cluster files, so land.sh derives no deploy tag from
+   `secrets/secrets.yml` and D3's cluster files, so land.sh derives no deploy tag from
    it. Without `--tags`, `scripts/deploy_tools/land_lib/land_tags.py:plane_note` adds
    `_ROTATION_NOTE`, which says a rotation "maps to no deploy tag by construction".
    `deploy.py:no_tag_outcome` in the same package then ends the landing
@@ -337,7 +337,7 @@ copy_digest() {  # $1: an Authelia username, or "operator"; $2: the SOPS key
   sudo k3s kubectl -n homelab get secret authelia-config -o json \
     | jq -r '.data["users_database.yml"]' | base64 -d \
     | uv run python -c "$pick" "$1" \
-    | sops set --value-stdin ansible/vars/secrets.yml "[\"$2\"]"
+    | sops set --value-stdin secrets/secrets.yml "[\"$2\"]"
 }
 copy_digest operator authelia_password_argon2
 copy_digest claude-ui authelia_claude_password_argon2
@@ -345,8 +345,8 @@ copy_digest claude-agent authelia_agent_password_argon2
 uv run python scripts/secrets_mgmt/secret_rotation.py sync
 ```
 
-The operator then commits `ansible/vars/secrets.yml` and `ansible/secret_rotation.yml` on PR 4's
-branch. D3 and R3 have no ordering edge. D3's `ansible/vars/cluster-vars.sops.env` holds every
+The operator then commits `secrets/secrets.yml` and `secrets/secret_rotation.yml` on PR 4's
+branch. D3 and R3 have no ordering edge. D3's `secrets/cluster-vars.sops.env` holds every
 key the cluster render references across all 56 tags, so PR 4's three new references fail
 D3's CI check `cluster_vars.py check` when D3 is at PR 4's base. In that order the operator
 also runs D3's `cluster_vars.py write` (**operator-only**) on PR 4's branch and commits the
@@ -379,19 +379,19 @@ computes three sets from the tree:
   For each of the 56 tags, those are the files `scripts/lib/k8s_roles.py:resolved_manifest_files`
   returns, the role's deferred files, and every template those pull in through
   `lookup('template')`, `{% import %}` or `{% include %}`. That brings in
-  `ansible/templates/` and the `templates/config/` files. The image contexts join them:
+  `k8s/templates/` and the `templates/config/` files. The image contexts join them:
   image-builder's `context-configmap.yaml.j2`, and each `Dockerfile*.j2` and context template
   that an image-builder include site names in its `vars:`. A one-off `*-job.yaml.j2` that a
   role's own task applies is outside the set. So `image-builder/templates/build-job.yaml.j2`,
   which reads the task-set `image_builder_content_tag`, is outside it, and R1's out-of-render
   census records that Job. The walk then repeats until it adds nothing: for each reached name
   that is not derived, it adds the names that each definition of that name reads. Definitions
-  are role `defaults/` and `vars/`, `ansible/inventory/group_vars/` and `host_vars/`,
+  are role `defaults/` and `vars/`, `inventory/group_vars/` and `host_vars/`,
   `include_role` `vars:` and `set_fact` values. A derived name stops the walk. The renderer
   computes it from the tree, and R1's parity tests hold that computation.
 
 The test reads names through Jinja's AST, with `meta.find_undeclared_variables` under the
-environment `scripts/lib/ansible_jinja_env.py` builds. A token grep would match text that is
+environment `scripts/lib/guard_jinja_env.py` builds. A token grep would match text that is
 not a name, such as the `k8s_rebuilt_images` in a Dockerfile comment in
 `valheim/templates/Dockerfile.j2`, or the `lookup('vars')` in a comment in monitor-bridge's
 `env-secret.yaml.j2`.
@@ -430,20 +430,20 @@ that shadows a default is caught, even though a render never finds that name und
 ### File tree
 
 ```diff
-+ ansible/roles/k8s/pi-peer-backup/files/daniel-pi-ssh-host-ed25519.pub
-  ansible/roles/k8s/pi-peer-backup/tasks/main.yml      (- slurp, - set_fact)
-  ansible/roles/k8s/pi-peer-backup/templates/secret.yaml.j2
-  ansible/roles/k8s/pi-peer-backup/files/pull-pi-peers.sh
-  ansible/roles/k8s/n8n/templates/deployment.yaml.j2           (- annotation)
-  ansible/roles/k8s/n8n/templates/deployment-runners.yaml.j2   (- annotation)
-  ansible/roles/k8s/image-builder/tasks/main.yml               (comment only)
-  ansible/templates/checksum-annotation.yml.j2                 (comment only)
-- ansible/tests/services/test_n8n_image_stamp.py
-  ansible/roles/k8s/authelia/tasks/main.yml            (+ 1 guarded assert, - 13 tasks)
-  ansible/roles/k8s/authelia/templates/config-secret.yaml.j2
-  ansible/roles/k8s/authelia/defaults/main.yml         (- toggle, stand-ins swapped)
-  ansible/vars/secrets.yml                             (+ 3 keys, operator-only)
-  ansible/secret_rotation.yml                          (+ 3 keys)
++ k8s/roles/pi-peer-backup/files/daniel-pi-ssh-host-ed25519.pub
+  k8s/roles/pi-peer-backup/tasks/main.yml      (- slurp, - set_fact)
+  k8s/roles/pi-peer-backup/templates/secret.yaml.j2
+  k8s/roles/pi-peer-backup/files/pull-pi-peers.sh
+  k8s/roles/n8n/templates/deployment.yaml.j2           (- annotation)
+  k8s/roles/n8n/templates/deployment-runners.yaml.j2   (- annotation)
+  k8s/roles/image-builder/tasks/main.yml               (comment only)
+  k8s/templates/checksum-annotation.yml.j2                 (comment only)
+- tests/services/test_n8n_image_stamp.py
+  k8s/roles/authelia/tasks/main.yml            (+ 1 guarded assert, - 13 tasks)
+  k8s/roles/authelia/templates/config-secret.yaml.j2
+  k8s/roles/authelia/defaults/main.yml         (- toggle, stand-ins swapped)
+  secrets/secrets.yml                             (+ 3 keys, operator-only)
+  secrets/secret_rotation.yml                          (+ 3 keys)
   scripts/renderer/shadow_diff.py                      (- pinned facts)
   scripts/renderer/renderer_lib/task_inputs.py         (- PINNED_LIVE_FACTS and its read)
   scripts/renderer/homelab_render.py                   (- R2's pinned-fact refusal and
@@ -458,7 +458,7 @@ ordinary stub form, and the digest assert skips a stubbed run.
 ## Steps, as PRs
 
 R3 moves no object between writers, so C4 has nothing to check. Each PR is deployed by
-Ansible through `land.sh`. PR 4 also changes `ansible/vars/secrets.yml`, which changes the
+Ansible through `land.sh`. PR 4 also changes `secrets/secrets.yml`, which changes the
 verdict its landing prints (PR 4). No PR edits `scripts/renderer/template_filters/secret_stubs.py`, so none
 inherits the deferral that R1's *Risks* gives a plugin edit after R1's PR 5.
 `task_inputs.py` and `shadow_diff.py` are under `scripts/`, not `ansible/`.
@@ -479,7 +479,7 @@ its own base. One that lands after R3's PR 4 ships no refusal (cross-slice note)
    from `PINNED_LIVE_FACTS`. R1's reader-tag test follows the constant. R1's `stubs` test
    expects four pinned facts instead of five. If R2's PR 2 is at the base, retire
    `pi-peer-backup` as a named member of its refusal. R2's PR 6 edits the same
-   `secret.yaml.j2`, so whichever lands second rebases. A test in `ansible/tests/services/`,
+   `secret.yaml.j2`, so whichever lands second rebases. A test in `tests/services/`,
    beside the forced-command test, runs the script's classification with a stub `ssh` on
    `PATH`. A host-key failure must yield the named message, and an rsync failure must not.
 2. **n8n's annotations** (about 100 lines, mostly deleted comments and one deleted test).
@@ -519,7 +519,7 @@ its own base. One that lands after R3's PR 4 ships no refusal (cross-slice note)
    rebases. Authelia gates SSO for the fleet, so land it in a window.
 
    land.sh derives `authelia` from the role files and deploys it. Because PR 4 also changes
-   `ansible/vars/secrets.yml`, `land_tags.py:plane_note` adds `_ROTATION_NOTE`, and
+   `secrets/secrets.yml`, `land_tags.py:plane_note` adds `_ROTATION_NOTE`, and
    `health_verdict.py:health` ends the landing `needs-manual-apply`, exit 1, with "services
    deployed, the plane above not". That verdict is expected and does not mean the deploy
    failed. `secret_rotation.py consumers` names only `authelia` for each `_argon2` name, and
@@ -548,7 +548,7 @@ the assert. The log must show the assert as `ok`, not `skipping`.
 **Before merging PRs 1 and 4: the Secret bytes must not move (operator-only).** Both change
 how a secret manifest is built, not what it holds. The baseline render record compares the
 bytes without printing them. `manifests_render_record` and `manifests_render_record_dir` in
-`ansible/roles/k8s/manifests/defaults/main.yml` switch it on. `tasks/render_record.yml`
+`k8s/roles/manifests/defaults/main.yml` switch it on. `tasks/render_record.yml`
 writes `<dir>/<manifests_service>.json` as root, with a `secret_digest` keyed by the
 root-only `manifests_secret_digest_key`. The run decrypts SOPS and writes as root, so the
 operator runs it on daniel-box, from a worktree at the PR's base and then at its head. For
@@ -601,7 +601,7 @@ Then repeat R1's shadow pair with a fresh `shadow_diff.py stubs` file. `compare`
 
 **Red-proofs:**
 
-- The digest assert: a predicate test in `ansible/tests/services/` renders the assert's
+- The digest assert: a predicate test in `tests/services/` renders the assert's
   expressions with ansible-core's `Templar`. A well-formed digest passes. Each of these fails:
   an empty value, a `Digest: ` prefix, a trailing newline, a plaintext, `m=1024`, and two
   users sharing one digest. The same test reads the task's `when` and requires the
@@ -641,7 +641,7 @@ Then repeat R1's shadow pair with a fresh `shadow_diff.py stubs` file. `compare`
   Secret holds: the copied digest, which the pre-merge check proved identical, or a later
   rotation's. So the render is unchanged only when the live digest is right. A wrong live
   digest is the case below. A plain `git revert` of PR 4 also reverts
-  `ansible/vars/secrets.yml`, so the revert branch restores that file from master before
+  `secrets/secrets.yml`, so the revert branch restores that file from master before
   its commit. The three SOPS keys then stay, unused, until removed with `sops`
   (**operator-only**), and land.sh derives `authelia` from the role files with no
   `_ROTATION_NOTE`. The revert also restores the three pinned hash facts and R1's
@@ -776,9 +776,9 @@ Then repeat R1's shadow pair with a fresh `shadow_diff.py stubs` file. `compare`
 ## Tests and docs that change in the same PR
 
 - **PR 1:**
-    - `ansible/roles/k8s/pi-peer-backup/CLAUDE.md`, *Auth* ("Host key pinned at deploy over
+    - `k8s/roles/pi-peer-backup/CLAUDE.md`, *Auth* ("Host key pinned at deploy over
       Ansible's own connection" becomes a committed pin) and *Alerting* (the new message).
-    - The script-classification test in `ansible/tests/services/`.
+    - The script-classification test in `tests/services/`.
     - R1's `stubs` test in `scripts/renderer/tests/` expects four pinned facts.
     - If R2's PR 2 is at the base, its refusal's test loses the named member
       `pi-peer-backup`.
@@ -786,48 +786,48 @@ Then repeat R1's shadow pair with a fresh `shadow_diff.py stubs` file. `compare`
     - R1's `stubs` test expects three pinned facts.
     - If R2's PR 2 is at the base, its refusal's test loses the named member `n8n`, and its
       flagged case moves to `authelia` and `authelia_password_hash`.
-    - Retire `test_n8n_image_stamp.py` in `ansible/tests/services/`, whose subject is gone.
+    - Retire `test_n8n_image_stamp.py` in `tests/services/`, whose subject is gone.
     - `test_a_dry_run_records_the_digest_n8n_stamps_and_the_gate_skips_it` in
       `test_built_image_drift_gate.py` loses its reason. Keep its second
       half, that every drift-gate task reading `k8s_built_images` skips on a dry run, under a
       name that does not mention n8n. Drop the first half, which held the record unguarded
       only for n8n's render.
-    - `ansible/roles/k8s/image-builder/tasks/main.yml`: the comment on "Record the registry
+    - `k8s/roles/image-builder/tasks/main.yml`: the comment on "Record the registry
       digest for the drift gate of …" names the drift gate as the only reader.
-    - `ansible/templates/checksum-annotation.yml.j2`: drop n8n's `checksum/image` from the
+    - `k8s/templates/checksum-annotation.yml.j2`: drop n8n's `checksum/image` from the
       value-mode examples.
-    - `ansible/tests/_k8s_render.py`: drop `k8s_built_images` from the examples in
+    - `tests/_k8s_render.py`: drop `k8s_built_images` from the examples in
       `render_role_template`'s docstring.
-    - `ansible/roles/k8s/n8n/CLAUDE.md`: how a rebuild rolls the pod, with the drift gate's
+    - `k8s/roles/n8n/CLAUDE.md`: how a rebuild rolls the pod, with the drift gate's
       remedy.
     - `docs/k8s-manifest-cycle-record.md`, two paragraphs: the one that says n8n's annotation
       reuses the macro's value mode, and the one that says it reads the registry digest under a
       dry run.
-    - `ansible/roles/k8s/image-builder/CLAUDE.md` does not mention the annotation, so it does
+    - `k8s/roles/image-builder/CLAUDE.md` does not mention the annotation, so it does
       not change.
 - **PR 3:**
-    - `ansible/tests/services/test_authelia_argon2_parameters_agree.py`: compare the assert's
+    - `tests/services/test_authelia_argon2_parameters_agree.py`: compare the assert's
       parameters with the rendered hashing block too, and add the assert's task name as a
       named member beside `HASH_TASK_PODS`. If D3.2d is at the base, its constant's member
       stays in the test.
-    - The assert's predicate test in `ansible/tests/services/`, with the guard clause.
-    - `ansible/roles/k8s/authelia/CLAUDE.md`, *The `claude-ui` user*: one line on the assert.
+    - The assert's predicate test in `tests/services/`, with the guard clause.
+    - `k8s/roles/authelia/CLAUDE.md`, *The `claude-ui` user*: one line on the assert.
 - **PR 4:**
-    - `ansible/tests/services/test_authelia_claude_ui_user.py`: the overrides become the three
+    - `tests/services/test_authelia_claude_ui_user.py`: the overrides become the three
       `_argon2` keys, and `test_the_hash_read_back_is_keyed_by_username` retires with its
       subject.
-    - `ansible/tests/services/test_authelia_argon2_parameters_agree.py`: `HASH_TASK_PODS` and
+    - `tests/services/test_authelia_argon2_parameters_agree.py`: `HASH_TASK_PODS` and
       the task-command parse go. The mint command in `docs/secret-rotation.md` becomes the
       second named member. If D3.2d is at the base, its constant's member stays. If not,
       D3.2d adds it when it lands.
     - If D3.2d is at the base, its tests in `scripts/secrets_mgmt/tests/` gain the
       named-member check on the three key names (*Risks*), which the render first satisfies
       at this commit. If not, D3.2d adds the check when it lands (cross-slice note to D3).
-    - `ansible/tests/k8s/test_k8s_manifests_routes.py`: `_k8s_authelia_config` passes
+    - `tests/k8s/test_k8s_manifests_routes.py`: `_k8s_authelia_config` passes
       `authelia_password_argon2` instead of `authelia_password_hash`. Every other repo render
       resolves an unsupplied secret name through `StubUndefined`, as it resolves the hash
       facts today, so it needs no seed.
-    - R1's secret-key census in `ansible/tests/k8s/`: the hashing-task exemptions go. Its named
+    - R1's secret-key census in `tests/k8s/`: the hashing-task exemptions go. Its named
       member becomes crowdsec's "Register the remote agent machines on the LAPI", which names
       `crowdsec_k8s_agent_password` and is guarded by `not k8s_no_mutate`.
     - R1's out-of-render census: drop authelia's three `kubectl run` hashing tasks from its
@@ -839,10 +839,10 @@ Then repeat R1's shadow pair with a fresh `shadow_diff.py stubs` file. `compare`
       and `_is_clean`) and its sentence in `docs/homelab-render.md` go.
     - `scripts/renderer/template_filters/secret_stubs.py` does not change. R1's DNS-label test covers
       the three new keys unchanged, because their ordinary stubs are valid labels.
-    - `ansible/roles/k8s/authelia/CLAUDE.md`, *The `claude-ui` user*: the rehash bullet
+    - `k8s/roles/authelia/CLAUDE.md`, *The `claude-ui` user*: the rehash bullet
       becomes a pointer to the procedure. The `vanished-identifier` lint flags a section that
       still names the deleted toggle, so this edit is required.
-    - `ansible/roles/k8s/authelia/defaults/main.yml`: the toggle's comment goes with it.
+    - `k8s/roles/authelia/defaults/main.yml`: the toggle's comment goes with it.
     - `docs/authelia-sessions-and-crowdsec-init.md`: the paragraph "Rotating either password
       needs `-e authelia_k8s_rehash_passwords=true`", and the last sentence of "The hashing
       parameters are configured twice", which says the `authelia crypto hash generate argon2`
@@ -852,8 +852,8 @@ Then repeat R1's shadow pair with a fresh `shadow_diff.py stubs` file. `compare`
       The procedure carries step 4's `land.sh --tags authelia` with its reason, that a
       secrets-only PR derives no deploy tag, and step 5's order for the `claude_code`
       apply. D5's authelia PR rewrites step 4 for Flux (cross-slice note).
-    - `ansible/secret_rotation.yml`: three keys at tier `assisted`.
-    - If D3's `cluster_vars.py` is at the base: `ansible/vars/cluster-vars.sops.env` and its
+    - `secrets/secret_rotation.yml`: three keys at tier `assisted`.
+    - If D3's `cluster_vars.py` is at the base: `secrets/cluster-vars.sops.env` and its
       `cluster-vars.source`, which the operator's `cluster_vars.py write` regenerates
       (Design).
     - `scripts/diagnostics/tests/test_probe_releases_check_mode.py` quotes authelia tasks as
@@ -957,7 +957,7 @@ Fixed:
   recovery, and revert plus `-e authelia_k8s_rehash_passwords=true` as the fallback. It states
   that SSH, `sudo k3s kubectl` and GitHub stay reachable during a lockout. The PR 4 bullet now
   says the revert renders whatever digest is live. Confirmed in
-  `ansible/roles/k8s/authelia/tasks/main.yml`: "Reuse the operator password hash already in the
+  `k8s/roles/authelia/tasks/main.yml`: "Reuse the operator password hash already in the
   cluster" reuses any non-empty live digest unless the toggle is set.
 - **R3-2.** *The census* walks names through defaults, inventory vars, `include_role` `vars:`
   and `set_fact` values until it adds nothing, reads names through the Jinja AST, includes
@@ -971,7 +971,7 @@ Fixed:
   two censuses and a replacement named member. PR 3 split into an assert PR and a switch PR,
   and the switch PR's size is recomputed with the reason it exceeds 200 lines.
 - **R3-5.** All the authelia docs and n8n comments are listed.
-  `ansible/roles/k8s/image-builder/CLAUDE.md` does not change: its only n8n mentions are the
+  `k8s/roles/image-builder/CLAUDE.md` does not change: its only n8n mentions are the
   caller list and the #2813 history, and it does not describe the annotation.
 - **R3-6.** Open question 2 names contracts.md row R3 and D5's Open question 4, records that
   R3 copies rather than mints, and sends the D5, contracts and design edits as cross-slice
@@ -1042,7 +1042,7 @@ Fixed:
 - **R3-c1-05.** Both steps are **operator-only**. The render-record step gives the full
   command with `manifests_render_record` and `manifests_render_record_dir` and the `jq -r
   .secret_digest` comparison. It cites the baseline mechanism in
-  `ansible/roles/k8s/manifests/defaults/main.yml` and `tasks/render_record.yml`, not R2. The
+  `k8s/roles/manifests/defaults/main.yml` and `tasks/render_record.yml`, not R2. The
   n8n check also passes `--secret-stubs`, which R1's `cluster` command takes.
 - **R3-c1-06.** *Risks* records the lockout under Flux. Open question 7 names D3's
   operator-only `cluster_vars.py write` as the successor guard, which already refuses values
@@ -1126,7 +1126,7 @@ Fixed:
     - `test_authelia_argon2_parameters_agree.py` already compares `--salt-size` and
       `--key-size` with `salt_length` and `key_length`, so the lengths addition reuses that
       mapping.
-- **R3-i1-02.** Confirmed. In `ansible/roles/k8s/authelia/tasks/main.yml`, "Reuse the
+- **R3-i1-02.** Confirmed. In `k8s/roles/authelia/tasks/main.yml`, "Reuse the
   operator password hash already in the cluster" sets `authelia_password_hash`, which
   `config-secret.yaml.j2` reads. After PR 5, the census fails CI on that name. *Rollback*
   makes the revert after PR 5 one PR that reverts PR 5 and PR 4 together, which also
@@ -1145,7 +1145,7 @@ Refuted: none.
 Findings raised:
 
 - R3-i2-01 (high): the rotation procedure's step 3 says `land.sh` deploys authelia, but
-  land.sh maps a change to `ansible/vars/secrets.yml` alone to no deploy tag.
+  land.sh maps a change to `secrets/secrets.yml` alone to no deploy tag.
 
 Fixed:
 

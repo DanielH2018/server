@@ -20,7 +20,7 @@ The judgement is here: which device (its Z2M friendly name — exact, spaces and
 `Aqara FP300`, `Tap Dial`), which option, and which value. The option names are the ones Z2M
 exposes for the device (HA shows them as `number`/`select` entities; the Z2M UI lists them
 under the device's *Exposes* tab). Every FP300 value applied so far and why is in
-`ansible/roles/k8s/home-assistant/CLAUDE.md`.
+`k8s/roles/home-assistant/CLAUDE.md`.
 
 ## 2. Apply and confirm
 
@@ -51,7 +51,7 @@ If the setting changes what HA sees (e.g. presence hold behaviour), verify downs
 ## 3. Record it (the part people forget)
 
 Document the applied setting + value + rationale in
-`ansible/roles/k8s/home-assistant/CLAUDE.md` (the FP300 tuning is already noted there),
+`k8s/roles/home-assistant/CLAUDE.md` (the FP300 tuning is already noted there),
 so it survives a re-pair and the next person knows it's intentional runtime state, not drift.
 
 ## Related

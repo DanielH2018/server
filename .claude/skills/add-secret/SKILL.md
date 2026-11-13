@@ -1,6 +1,6 @@
 ---
 name: add-secret
-description: Add a new SOPS-encrypted secret to ansible/vars/secrets.yml and register it for rotation tracking. Use when the user wants to add a credential, token, or password that a template will reference.
+description: Add a new SOPS-encrypted secret to secrets/secrets.yml and register it for rotation tracking. Use when the user wants to add a credential, token, or password that a template will reference.
 allowed-tools: Bash, Read, Edit
 disable-model-invocation: false
 ---
@@ -21,12 +21,12 @@ themselves (via the `! ` prefix) rather than putting the value in a command you 
 What reads the secret decides which stores it touches. Each store has its own writer
 (`docs/target-architecture/deploy/d3-secrets.md`, *What one secret costs*):
 
-- **`ansible/vars/secrets.yml`** holds every secret. You write it in step 3.
-- **`ansible/vars/cluster-vars.sops.env`** holds each value a cluster render substitutes.
+- **`secrets/secrets.yml`** holds every secret. You write it in step 3.
+- **`secrets/cluster-vars.sops.env`** holds each value a cluster render substitutes.
   It holds every key any k8s template references, not only the keys of Flux-owned
   services. Only the operator's `cluster_vars.py write` writes it (**operator-only**,
   because it decrypts).
-- **A SOPS manifest under `ansible/vars/cluster-manifests/`** holds the values of a Secret
+- **A SOPS manifest under `secrets/cluster-manifests/`** holds the values of a Secret
   that Flux must not substitute. `write` writes it too.
 - **A per-host SOPS file** holds the values its host reads. Its writer is the host-package
   plan's, not this skill's.
@@ -34,14 +34,14 @@ What reads the secret decides which stores it touches. Each store has its own wr
   Adding a secret never touches it.
 
 So a secret that only a host reads (a Pi compose template, a host component) touches
-`secrets.yml` here, and its host's file under `ansible/vars/hosts/` through the host-package
+`secrets.yml` here, and its host's file under `secrets/hosts/` through the host-package
 writer. A secret that a k8s template references also touches a cluster file,
 which only the operator can write. Step 6 tells you which case you are in.
 
 ## Steps
 
 1. **Check it doesn't already exist.** SOPS encrypts values but leaves key names in plaintext,
-   so `grep -c '^<name>:' ansible/vars/secrets.yml` answers without decrypting anything. `0`
+   so `grep -c '^<name>:' secrets/secrets.yml` answers without decrypting anything. `0`
    means the name is free. If it prints `1`, stop and tell the user. Never decrypt the file
    to inspect it; CLAUDE.md *Secrets Management* has why.
 
@@ -57,9 +57,9 @@ which only the operator can write. Step 6 tells you which case you are in.
 3. **Add the secret** (`.sops.yaml` auto-encrypts anything under `vars/`, so the file stays
    encrypted on disk):
    - **Preferred (value stays private):** tell the user to run it themselves —
-     `! sops ansible/vars/secrets.yml` — add the `name: value` line in the editor, save, exit.
+     `! sops secrets/secrets.yml` — add the `name: value` line in the editor, save, exit.
    - **A generated value:** generate and set without echoing the value:
-     `openssl rand -base64 32 | jq -Rc . | sops set --value-stdin ansible/vars/secrets.yml '["<name>"]'`
+     `openssl rand -base64 32 | jq -Rc . | sops set --value-stdin secrets/secrets.yml '["<name>"]'`
      (the value is never printed, and never reaches `sops`'s argv). `--value-stdin` parses
      stdin as JSON and refuses a bare string with `Value for --set is not valid JSON`, so
      `jq -Rc .` quotes it first. Neither settings file allow-lists these commands, so expect
@@ -67,13 +67,13 @@ which only the operator can write. Step 6 tells you which case you are in.
    - **User-provided value via sops set:** only if the user explicitly accepts that the value
      will appear in the command — warn them first.
 
-4. **Verify encryption** — `grep -c '^<name>: ENC\[' ansible/vars/secrets.yml` must print `1`.
+4. **Verify encryption** — `grep -c '^<name>: ENC\[' secrets/secrets.yml` must print `1`.
    That proves the key exists and its stored value is SOPS ciphertext, and it prints a count,
    never a value. Do not run `git diff` on the file: its `diff=sops` driver decrypts before
    diffing. The first deploy that reads the value proves it decrypts.
 
 5. **Reference it in the template** (if a service uses it): edit the role's
-   `ansible/roles/k8s/<svc>/templates/*.j2` to use `{{ name }}`. A Pi Docker service reads a
+   `k8s/roles/<svc>/templates/*.j2` to use `{{ name }}`. A Pi Docker service reads a
    secret through its package instead: add the key to `keys:` on the `compose.env` output in
    `hosts/components/pi-compose/component.yml`, and the operator runs
    `host_secrets.py sync daniel-pi` (**operator-only**). Add `no_log: true` to
@@ -95,7 +95,7 @@ which only the operator can write. Step 6 tells you which case you are in.
    If it fails naming only other keys, the tree was already stale: report that instead.
 
 7. **Register for rotation tracking:** `uv run python scripts/secrets_mgmt/secret_rotation.py sync` — this
-   reconciles `ansible/secret_rotation.yml` (plaintext registry: names/tiers/dates, no values)
+   reconciles `secrets/secret_rotation.yml` (plaintext registry: names/tiers/dates, no values)
    with the live secret names and assigns a tier + staggered due-date. `sync` knows only
    `*_user`/`*_username` (`ignore`); every other name lands in `assisted`. **If step 2 classified
    the key `external` or `pinned`, edit its `tier` in the registry now** — `sync`
@@ -114,14 +114,14 @@ which only the operator can write. Step 6 tells you which case you are in.
 
 ## Onboarding a host that cannot decrypt yet
 
-A host with no age key of its own cannot decrypt `ansible/vars/secrets.yml`. `hosts/bootstrap-host.sh`
+A host with no age key of its own cannot decrypt `secrets/secrets.yml`. `hosts/bootstrap-host.sh`
 creates the host's key at its step 3 and prints the **public** key; `docs/host-bring-up.md` has the
 full flow.
 
 1. On the new host, as the operator, run `hosts/bootstrap-host.sh <hostname> --until 3`. It
    prints the **public** key.
-2. Add that public key to `ansible/.sops.yaml` — tracked, and public keys only.
-3. On a host that can already decrypt: `sops updatekeys ansible/vars/secrets.yml`.
+2. Add that public key to `secrets/.sops.yaml` — tracked, and public keys only.
+3. On a host that can already decrypt: `sops updatekeys secrets/secrets.yml`.
 4. Commit and push, then `git pull` on the new host.
 
 Multi-recipient is **OR**: any listed key decrypts the whole file, so adding one grants the

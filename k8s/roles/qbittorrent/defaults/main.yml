@@ -1,0 +1,135 @@
+---
+# Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
+# tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
+qbittorrent_k8s_image: lscr.io/linuxserver/qbittorrent:latest@sha256:3d4c4545d51a690a0df15a2ff99038823a88a9822df8e794526447b9afbd7384
+qbittorrent_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:236f9a9a89c701bc83f6d41007157dc77361114d14e56a08e846bb4499622e97
+
+# Where the verify Job (templates/verify/job.yaml.j2) reads its own public address, to compare
+# with the one qBittorrent's peers see.
+qbittorrent_k8s_verify_egress_url: https://api.ipify.org
+
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
+# DENIED for state coupling, not missing recovery. The snapshot Job and the revert runbook work
+# fine here; the problem is that the config volume's state is coupled to something a snapshot
+# cannot capture — the data volume (media-data, torrents/ subpath) its bookkeeping references.
+# A revert rewinds in-flight torrent bookkeeping while the data volume does not move, so the
+# two disagree about what is on disk. The WireGuard kill-switch surviving a container restart
+# is a separate live trap that a revert does not clear either; see this role's CLAUDE.md.
+k8s_autodeploy: false
+k8s_autodeploy_reason: "state coupled outside the volume — reverting qbittorrent-config to a snapshot rewinds in-flight torrent bookkeeping while the media-data volume it references does not move; the snapshot Job and the operator revert work fine and are not the blocker"
+# The claim snapshotted before each revision applies. Under Flux the renderer turns this
+# list into the qbittorrent-snapshot Kustomization, whose Job snapshots it before qbittorrent applies
+# (D5.2a). Declared regardless of k8s_autodeploy.
+k8s_autodeploy_snapshot_pvcs: [qbittorrent-config]
+
+# The gate Job Flux runs in `qbittorrent-verify`, copied from the drift check's jobTemplate
+# (scripts/renderer/renderer_lib/cronjob_gate.py). It replaced the k8s/cronjob-gate run in
+# tasks/main.yml at qbittorrent's flip. The check reads the preferences and logs a verdict, and
+# exits 0 on a match and on drift alike, so it is a verify: a run that starts and reaches the
+# WebUI proves the check's image, Secret and fence peer.
+flux_cronjob_gates:
+  qbittorrent-prefs-check:
+    kind: verify
+
+# The manifest whose Secret holds the all-digit Mullvad account number, which no Flux
+# placeholder can carry as a string. A placeholder render (scripts/renderer, target slice R2)
+# leaves it out, and D3 ships it as a SOPS-encrypted manifest instead. Ansible renders and
+# applies it like any other secret file. `sops-manifest-entries` in
+# scripts/renderer/renderer_lib/sops_entries.py holds the entry to one Secret of
+# `SOPS_MANIFEST_KEYS` keys.
+render_sops_manifests: [mullvad-account-secret.yaml]
+
+# One config volume, two containers: wireguard and qbittorrent both mount it at /config. It
+# looks like a mistake and is not — they write different subtrees, and splitting them would
+# strand wg0.conf away from the mod that regenerates it.
+qbittorrent_k8s_claim: qbittorrent-config
+# Backed up. Excluding it would leave this volume with a single frozen restore point, and
+# whether steady-state incrementals actually drive B2's transaction cap cannot be read off
+# anything Longhorn or B2 expose. So it is tested rather than assumed —
+# docs/archive/b2-transaction-cap-monitoring-gaps.md.
+qbittorrent_k8s_storage_class: longhorn
+qbittorrent_k8s_size: 1Gi
+
+# torrents/ ONLY, via subPath — NOT the whole media tree: qbittorrent handles the fleet's
+# largest untrusted-input surface, and it has no business with write access to the book and
+# film library. The hardlink-import concern that unifies the \*arr mounts is theirs alone — link()
+# happens inside sonarr/radarr, whose single mount spans torrents/ AND media/.
+qbittorrent_k8s_media_claim: media-data
+qbittorrent_k8s_torrents_subpath: torrents
+
+qbittorrent_k8s_webui_port: 8080
+qbittorrent_k8s_torrenting_port: 6881
+
+# ── the tunnel ──────────────────────────────────────────────────────────────────────────────
+qbittorrent_k8s_mullvad_location: us-qas
+qbittorrent_k8s_mullvad_mod: linuxserver/mods:wireguard-mullvad
+
+# THE KILL-SWITCH ALLOW-LIST, and the one line in this file most likely to cause a silent
+# outage. The mod installs iptables rules that REJECT anything not leaving via wg0, except to
+# these ranges. Beyond the LAN ranges, the cluster needs the pod CIDR (10.42.0.0/16 — where
+# Traefik's requests and the kubelet's probes come from, so their replies must be allowed
+# back) and the Service CIDR (10.43.0.0/16 — cluster DNS).
+#
+# WRITTEN AS ONE /15, AND THAT IS NOT A TIDY-UP. 10.42.0.0/15 spans exactly those two /16s.
+# Listing them separately fails, because the mod turns every entry into BOTH an iptables ACCEPT
+# and an `ip route add ... via <gw>` — and flannel has already installed
+# `10.42.0.0/16 via 10.42.0.1` in every pod. The duplicate route returns
+#
+#     RTNETLINK answers: File exists
+#
+# which wg-quick treats as fatal: it tears the interface back down and reports
+# "Tunnel /config/wg_confs/wg0.conf failed", with nothing in the message about routes. The /15
+# duplicates nothing and yields the same ACCEPT coverage.
+qbittorrent_k8s_lan_networks: "192.168.0.0/24,{{ lan_subnet }},172.16.0.0/12,10.42.0.0/15"
+
+# NOT /run/secrets: /var/run/secrets is where Kubernetes projects the ServiceAccount token,
+# and a read-only
+# Secret volume over it leaves runc unable to create the mountpoint. There is a guard test for
+# exactly this (tests/k8s/test_k8s_manifests.py).
+qbittorrent_k8s_secret_mount: /mullvad
+
+qbittorrent_k8s_wg_cpu_limit: "1"
+qbittorrent_k8s_wg_mem_limit: 256Mi
+qbittorrent_k8s_wg_cpu_request: "50m"
+qbittorrent_k8s_wg_mem_request: 32Mi
+qbittorrent_k8s_cpu_limit: "2"
+qbittorrent_k8s_mem_limit: 2048Mi
+qbittorrent_k8s_cpu_request: "100m"
+qbittorrent_k8s_mem_request: 256Mi
+
+# The qbittorrent-prefs-check CronJob's schedule, read on Etc/UTC. Until H2.5d
+# (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 15) it was a daniel-box
+# host cron, whose clock is UTC; daniel-box's host package retires it through legacy entries. The host
+# cron's fields, unchanged. Daily, not */10 like the health readers: a WebUI edit or a Longhorn
+# restore that reverts files/apply_prefs.py's eight throughput settings is rare, and there is
+# no deadline this needs to stay under (files/prefs_check.py logs, it does not
+# push).
+qbittorrent_k8s_prefs_check_schedule: "37 6 * * *"
+
+# The repo's pinned python image, the same digest as configarr's and janitorr's health
+# readers (configarr_k8s_health_image), whose defaults record the evidence. The check calls
+# no kubectl, so it needs no alpine/k8s init container.
+qbittorrent_k8s_prefs_check_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+
+# Above the check's worst case: the 60 s connect wait (files/prefs_check.py:CONNECT_WAIT_S),
+# then a login and a preferences read at 15 s each, plus a cold image pull. The gate Job copies
+# it, and `bundle.flux_files` raises the `qbittorrent-verify` timeout above it.
+qbittorrent_k8s_prefs_check_deadline_seconds: 300
+# How long a finished drift-check Job, and its pod, stays visible: two schedule periods, so a
+# failed run clears instead of reading Failed until two more runs fail. It must exceed one
+# period, because `probe.py health` judges the newest Job (test_rendered_properties.py, row
+# cronjob-finished-jobs-age-out).
+qbittorrent_k8s_prefs_check_job_ttl_seconds: 172800
+
+qbittorrent_k8s_prefs_check_cpu_limit: "200m"
+qbittorrent_k8s_prefs_check_mem_limit: 128Mi
+qbittorrent_k8s_prefs_check_cpu_request: "10m"
+qbittorrent_k8s_prefs_check_mem_request: 32Mi
+
+# The claim the renderer emits for this role. The qbittorrent Kustomization applies it after the
+# qbittorrent-snapshot Job.
+# media-data is not here: it is the shared media claim, mounted by this role and owned elsewhere.
+k8s_claims:
+  - name: "{{ qbittorrent_k8s_claim }}"
+    storage_class: "{{ qbittorrent_k8s_storage_class }}"
+    size: "{{ qbittorrent_k8s_size }}"

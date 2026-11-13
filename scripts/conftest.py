@@ -47,7 +47,7 @@ postflight = _load_by_path("postflight", "diagnostics/postflight.py")
 
 # grafana_panel_report.py is imported by bare name from two test modules in that same
 # suite — test_grafana_panel_report.py and test_ui_smoke.py. Until this load existed they
-# resolved only as a side effect of collecting a testpath in `ansible/tests`, so
+# resolved only as a side effect of collecting a testpath in `tests`, so
 # `uv run pytest scripts` failed at collection while the whole suite passed.
 grafana_panel_report = _load_by_path(
     "grafana_panel_report", "diagnostics/grafana_panel_report.py"

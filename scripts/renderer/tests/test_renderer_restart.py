@@ -420,7 +420,7 @@ def test_every_outside_secret_declares_the_keys_its_owning_role_renders(fleet):
 
     pihole-exporter is the named member: it reads `pihole_password` from pihole's `pihole-env`.
     """
-    # fact: ansible/roles/k8s/pihole-exporter/CLAUDE.md#It holds no credential of its own
+    # fact: k8s/roles/pihole-exporter/CLAUDE.md#It holds no credential of its own
     secrets = {
         (obj.get("metadata") or {}).get("name"): (t.tag, set(references(text)))
         for t in fleet.tags

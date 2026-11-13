@@ -36,32 +36,28 @@ def test_a_doc_under_the_cap_but_over_what_the_preamble_leaves_is_a_head(repo):
     assert (
         _mod.INLINE_MAX_CHARS - len(_mod._PREAMBLE) < len(text) < _mod.INLINE_MAX_CHARS
     )
-    (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(text)
-    context, chosen = _build(
-        repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
-    )
-    assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _ in chosen]
+    (repo / "k8s" / "roles" / "foo" / "CLAUDE.md").write_text(text)
+    context, chosen = _build(repo, "cat k8s/roles/foo/templates/deployment.yaml.j2")
+    assert "k8s/roles/foo/CLAUDE.md" in [d for d, _ in chosen]
     assert "the opening rule" in context
 
 
 def test_a_doc_over_the_budget_is_injected_as_its_head(repo):
     """Headings alone are rarely enough, so an over-budget doc ships its head text."""
-    (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(_big_doc())
-    context, chosen = _build(
-        repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
-    )
-    assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _ in chosen]
+    (repo / "k8s" / "roles" / "foo" / "CLAUDE.md").write_text(_big_doc())
+    context, chosen = _build(repo, "cat k8s/roles/foo/templates/deployment.yaml.j2")
+    assert "k8s/roles/foo/CLAUDE.md" in [d for d, _ in chosen]
     assert "## At a glance" in context and "the opening rule" in context
     assert "filler filler" in context
-    assert "Read `ansible/roles/k8s/foo/CLAUDE.md`" in context
+    assert "Read `k8s/roles/foo/CLAUDE.md`" in context
     assert len(context) < _mod.INLINE_MAX_CHARS
     assert context.count("\n") < _mod.INLINE_MAX_LINES
 
 
 def test_the_head_names_the_sections_it_cut_off(repo):
     """The near miss for the head: a section past the cut is named, not silently dropped."""
-    (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(_big_doc())
-    context, _ = _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2")
+    (repo / "k8s" / "roles" / "foo" / "CLAUDE.md").write_text(_big_doc())
+    context, _ = _build(repo, "cat k8s/roles/foo/templates/deployment.yaml.j2")
     assert "NOT shown above" in context
     assert "## Section two" in context and "## Section three" in context
     assert "late rule" not in context
@@ -69,12 +65,12 @@ def test_the_head_names_the_sections_it_cut_off(repo):
 
 def test_an_over_budget_doc_waits_when_little_budget_is_left(repo):
     """A head under `MIN_HEAD_CHARS` teaches less than it costs, so the doc is deferred."""
-    (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(_big_doc())
+    (repo / "k8s" / "roles" / "foo" / "CLAUDE.md").write_text(_big_doc())
     assert (
         _mod.render(
             str(repo),
-            "ansible/roles/k8s/foo/CLAUDE.md",
-            "ansible/roles/k8s/foo",
+            "k8s/roles/foo/CLAUDE.md",
+            "k8s/roles/foo",
             _mod.MIN_HEAD_CHARS,
             _mod.INLINE_MAX_LINES,
         )
@@ -85,13 +81,13 @@ def test_an_over_budget_doc_waits_when_little_budget_is_left(repo):
 def test_a_rule_beside_an_over_budget_role_doc_is_flagged(repo):
     """A head that spends the payload first would defer a short rule to a later command that
     may never run."""
-    (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(_big_doc())
+    (repo / "k8s" / "roles" / "foo" / "CLAUDE.md").write_text(_big_doc())
     context, chosen = _build(
-        repo, "sed -i s/a/b/ ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+        repo, "sed -i s/a/b/ k8s/roles/foo/templates/deployment.yaml.j2"
     )
     assert sorted(d for d, _ in chosen) == [
         ".claude/rules/ansible.md",
-        "ansible/roles/k8s/foo/CLAUDE.md",
+        "k8s/roles/foo/CLAUDE.md",
     ]
     assert "# Rule body" in context and "the opening rule" in context
     assert len(context) < _mod.INLINE_MAX_CHARS
@@ -100,22 +96,22 @@ def test_a_rule_beside_an_over_budget_role_doc_is_flagged(repo):
 
 def test_a_rule_too_big_to_leave_the_head_its_floor_is_deferred(repo):
     """The near miss: a rule that would push the head under its floor waits, the head lands."""
-    (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(_big_doc())
+    (repo / "k8s" / "roles" / "foo" / "CLAUDE.md").write_text(_big_doc())
     (repo / ".claude" / "rules" / "ansible.md").write_text(
         RULE + "rule line of text here, padded out to a longer width\n" * 110
     )
     assert _mod.head_floor(str(repo), ".claude/rules/ansible.md", "x") is None
     context, chosen = _build(
-        repo, "sed -i s/a/b/ ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+        repo, "sed -i s/a/b/ k8s/roles/foo/templates/deployment.yaml.j2"
     )
-    assert [d for d, _ in chosen] == ["ansible/roles/k8s/foo/CLAUDE.md"]
+    assert [d for d, _ in chosen] == ["k8s/roles/foo/CLAUDE.md"]
     assert "the opening rule" in context
 
 
 def test_the_head_floor_is_the_smallest_budget_render_accepts(repo):
     """`head_floor` and `_head_block` share their arithmetic; this fails if they drift."""
-    (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(_big_doc())
-    args = (str(repo), "ansible/roles/k8s/foo/CLAUDE.md", "ansible/roles/k8s/foo")
+    (repo / "k8s" / "roles" / "foo" / "CLAUDE.md").write_text(_big_doc())
+    args = (str(repo), "k8s/roles/foo/CLAUDE.md", "k8s/roles/foo")
     chars, lines = _mod.head_floor(*args)
     assert _mod.render(*args, chars, lines) is not None
     assert _mod.render(*args, chars - 1, lines) is None
@@ -123,7 +119,7 @@ def test_the_head_floor_is_the_smallest_budget_render_accepts(repo):
 
 
 def test_a_doc_under_the_budget_has_no_head_floor(repo):
-    args = (str(repo), "ansible/roles/k8s/foo/CLAUDE.md", "ansible/roles/k8s/foo")
+    args = (str(repo), "k8s/roles/foo/CLAUDE.md", "k8s/roles/foo")
     assert _mod.head_floor(*args) is None
 
 
@@ -132,10 +128,8 @@ def test_the_head_cuts_at_a_heading_rather_than_mid_section(repo):
     lines = ["# Big role", ""] + [
         f"## S{i}\n\nrule {i} body text\n" for i in range(400)
     ]
-    (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(
-        "\n".join(lines)
-    )
-    context, _ = _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2")
+    (repo / "k8s" / "roles" / "foo" / "CLAUDE.md").write_text("\n".join(lines))
+    context, _ = _build(repo, "cat k8s/roles/foo/templates/deployment.yaml.j2")
     head = context.split("----- sections")[0]
     shown = [i for i in range(400) if f"rule {i} body" in head]
     assert shown, head[-400:]
@@ -145,15 +139,13 @@ def test_the_head_cuts_at_a_heading_rather_than_mid_section(repo):
 
 def test_a_head_row_logs_the_injected_size_not_the_file_size(repo, tmp_path):
     """`fact_status.py report` totals `bytes=`; a head row must count the head it delivered."""
-    doc = repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md"
+    doc = repo / "k8s" / "roles" / "foo" / "CLAUDE.md"
     doc.write_text(_big_doc())
     payload = {
         "tool_name": "Bash",
         "session_id": "sess-size-0001",
         "cwd": str(repo),
-        "tool_input": {
-            "command": "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
-        },
+        "tool_input": {"command": "cat k8s/roles/foo/templates/deployment.yaml.j2"},
     }
     block = _mod.context(payload).removeprefix(_mod._PREAMBLE)
     (row,) = (tmp_path / "instructions.log").read_text().splitlines()
@@ -161,8 +153,8 @@ def test_a_head_row_logs_the_injected_size_not_the_file_size(repo, tmp_path):
     assert len(block) < doc.stat().st_size
 
 
-FOO_DOC = "ansible/roles/k8s/foo/CLAUDE.md"
-FOO_FILE = "ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+FOO_DOC = "k8s/roles/foo/CLAUDE.md"
+FOO_FILE = "k8s/roles/foo/templates/deployment.yaml.j2"
 
 
 def _logged_row(repo, log_dir, text):

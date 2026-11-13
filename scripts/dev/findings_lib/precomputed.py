@@ -28,7 +28,7 @@ from lib.role_paths import role_for  # noqa: E402
 
 REPO = _SCRIPTS.parent
 # The shared trees every k8s role renders through.
-_SHARED_RENDER_INPUTS = ("ansible/templates/", "ansible/inventory/")
+_SHARED_RENDER_INPUTS = ("k8s/templates/", "inventory/")
 
 
 def deploy_line(paths: list[str]) -> str:

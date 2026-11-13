@@ -12,7 +12,7 @@ The drill restores the newest backup of one eligible volume into a new volume, m
 throwaway pod, checks the data is real, and tears everything down. Three refinements bound it.
 
 **An operator pin drills one volume without disturbing the rotation** (#2183). The drill is the
-CronJob `longhorn-restore-drill` in `homelab` since H2.3d (`ansible/roles/k8s/longhorn-restore-drill/`),
+CronJob `longhorn-restore-drill` in `homelab` since H2.3d (`k8s/roles/longhorn-restore-drill/`),
 and it runs on its schedule since H2.3e. A hand run is **operator-only**, because the agent's
 kubeconfig cannot create a Job, and it runs outside the 04:10 UTC slot. A plain run creates a Job
 from the CronJob:
@@ -39,12 +39,12 @@ longer the way in. The evidence is the pod log, read with
 
 **A volume whose content is legitimately empty is declared, and the declaration is bounded by
 size** (#2393). The name goes in
-`ansible/roles/k8s/longhorn-restore-drill/defaults/main.yml:k3s_longhorn_restore_drill_empty_ok_pvcs`, and the
+`k8s/roles/longhorn-restore-drill/defaults/main.yml:k3s_longhorn_restore_drill_empty_ok_pvcs`, and the
 drill waives its two content assertions for that name — everything else it proves for that volume
 it still proves. n8n-files restored to `files=0` on 2026-08-30, could not be re-drilled for
 another rotation, and check 8 paged `not restore-proven in 31d`. The name is not enough on its
 own: the waiver holds only while the source volume's `status.actualSize` stays under
-`ansible/roles/k8s/longhorn-restore-drill/defaults/main.yml:k3s_longhorn_restore_drill_empty_ok_max_actual_bytes`.
+`k8s/roles/longhorn-restore-drill/defaults/main.yml:k3s_longhorn_restore_drill_empty_ok_max_actual_bytes`.
 By name alone it applied whatever the volume held, and nothing else in the drill compares restored
 content with the source, so once n8n-files starts holding data an empty restore would still have
 stamped success and check 8 would still have read it as restore-proven. Over the ceiling the
@@ -172,7 +172,7 @@ and ship to Loki. `hosts/tests/test_k3s_server_component.py` and
 The file's warn, error and fatal lines still reach Loki, filtered, as `loki-homelab`'s
 `{job="k3s"}` stream (#6177), so a crash loop's reason outlives the file's four rotations.
 Alloy tails the file and drops every info line before it ships. The filter and its measured
-volume are in `ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2`.
+volume are in `k8s/roles/loki-homelab/templates/config/config.alloy.j2`.
 
 ## The apiserver's OIDC authenticator can wedge for the life of the boot
 
@@ -259,7 +259,7 @@ Because the node stays Ready on WiFi, a pulled cable or a dead switch port cause
 that anything else reports. Prometheus raises `WiredLinkDown`, a warning routed to Discord,
 once the link that `k3s_node_static_link` names has had no carrier, or has been down, for 5
 minutes. The rules live in the observability role's `host-checks` group, one per node.
-`ansible/tests/services/test_host_plane_rule_literals.py` holds them to each node's
+`tests/services/test_host_plane_rule_literals.py` holds them to each node's
 `k3s_node_static_link`, so a node that pins a new link fails that test until its rule is
 added (#5124).
 
@@ -276,7 +276,7 @@ gateway, which is also the access point. A WiFi link carries a fraction of the w
 bandwidth: daniel-server's `wlo1` read a signal level of `-71 dBm` on 2026-10-15, so Longhorn replication and
 media streaming slow down while it carries them.
 
-To apply it, add both keys with `sops ansible/vars/secrets.yml`, which opens an editor and
+To apply it, add both keys with `sops secrets/secrets.yml`, which opens an editor and
 keeps the password out of shell history. Then run
 `uv run python scripts/secrets_mgmt/secret_rotation.py sync` and commit. Then run the
 `node-address` tag on each node, the same two commands as the pin. The run refuses to start

@@ -1,14 +1,14 @@
 ---
 paths:
   - "hosts/components/pi-compose/**"
-  - "ansible/inventory/host_vars/daniel-pi.yml"
+  - "inventory/host_vars/daniel-pi.yml"
 ---
 
 # Docker Compose Rules
 
 These services deploy to `daniel-pi` only; neither cluster node has Docker. `alloy`, `autoheal`,
 `docker-proxy` and `wg-easy` are `compose_services` entries in
-`ansible/inventory/host_vars/daniel-pi.yml`, rendered from
+`inventory/host_vars/daniel-pi.yml`, rendered from
 `hosts/components/pi-compose/services/<name>/` into the `homelab-daniel-pi` package. The package
 runs them as one Compose project, `homelab`. The `/new-container` skill carries the service
 skeleton.

@@ -12,7 +12,7 @@ from renderer.renderer_lib.environment import renderer_env
 @pytest.fixture
 def tree(tmp_path):
     """A repo with two k8s roles, `reader` and `owner`, and a file outside every role."""
-    roles = tmp_path / "ansible" / "roles" / "k8s"
+    roles = tmp_path / "k8s" / "roles"
     for role in ("reader", "owner"):
         (roles / role / "files").mkdir(parents=True)
         (roles / role / "templates").mkdir()

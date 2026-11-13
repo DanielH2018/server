@@ -1,6 +1,6 @@
 # monitor-bridge internals — module table, prerequisites and the test seams
 
-Working-out moved off `ansible/roles/k8s/monitor-bridge/CLAUDE.md` (#2993), which a session reads on
+Working-out moved off `k8s/roles/monitor-bridge/CLAUDE.md` (#2993), which a session reads on
 every touch of the alert pipeline. The role doc keeps the rules; this page keeps the per-module
 table, the gate-set membership, the operator prerequisites and the test-side seams.
 `docs/monitor-bridge-checks.md` is the sibling page: the per-check record that links here for
@@ -9,7 +9,7 @@ the plumbing.
 ## Gate membership
 
 Every gate's members derive from the `gate` column of
-`ansible/roles/k8s/monitor-bridge/files/check_table.py`, and each member's row carries the
+`k8s/roles/monitor-bridge/files/check_table.py`, and each member's row carries the
 reason it is a member. `check.EXPORTER_DEPENDENT` is the one map the column does not hold, because it is keyed by scrape job. The table lists the members, generated from that column.
 
 --8<-- "assets/generated/fragments/bridge-gate-sets.md"
@@ -92,7 +92,7 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
   keys, which `templates/config/env.yaml.j2` renders from the `weekly_reboot_*` group vars, so
   PromotionStalled stays quiet while `promote` defers across the weekly reboot (#5458).
 - **The deploy-pipeline scrape port is a literal in `prometheus.yaml.j2`.**
-  `ansible/tests/services/test_deploy_pipeline_scrape.py` holds it to the role's default.
+  `tests/services/test_deploy_pipeline_scrape.py` holds it to the role's default.
 - **The gates' labels.** B2 and WAN Reachable skip the rows naming them. The `prometheus` gate
   value suppresses no row in the bridge: it labels the rows `EXPORTER_DEPENDENT` holds and the
   rules that carry the exporter inhibit. `registry.build_checks` hands each row's `gate` to
@@ -187,11 +187,11 @@ The role `CLAUDE.md` keeps the rules; this is the wiring.
 - **The loop's clock is a parameter as well.** `cli.main` takes `sleep`, and a test points
   `HEARTBEAT_FILE` at the null device through the env it hands `main`, so no test patches
   `time.sleep`, `bridge.common.touch_heartbeat` or `bridge.common.log` (#3986). No monitor-bridge
-  test patches a runtime module, and `ansible/tests/repo/monkeypatch_allowlist.txt` has no row
+  test patches a runtime module, and `tests/repo/monkeypatch_allowlist.txt` has no row
   for this role.
 - **A test that does patch one must patch the module that READS the name, and a module reads
   it qualified** (`bridge.net.prom_vector` at call time, never `from bridge.net import prom_vector`). Getting it
-  wrong is silent, so `ansible/tests/services/test_monitor_bridge_modules.py` re-derives every
+  wrong is silent, so `tests/services/test_monitor_bridge_modules.py` re-derives every
   patched `(module, name)` pair by AST, and `test_bridge_patch_boundary.py` beside it fails a
   runtime module that from-imports a patched name.
 - **Per-check state is a parameter too.** Every streak counter and probe cache is a field of

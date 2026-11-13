@@ -32,7 +32,7 @@ The drill guest's address is the network's one **DHCP reservation**, on a fixed 
 dynamic range. **The domain's interface MAC must equal that reservation**: drift leaves the
 guest booting on a dynamic address the orchestrator never gets an answer from.
 
-ENFORCED by `ansible/tests/staging/test_staging_network.py` — nothing else in the repo
+ENFORCED by `tests/staging/test_staging_network.py` — nothing else in the repo
 validates libvirt XML.
 
 ## The egress fence is an nwfilter, and the first attempt was not
@@ -68,8 +68,8 @@ aborts the run with nothing staged.
   alarms on the fence's OWN check, `etcd-restore-drill-egress-fence`: the drill's verdict reads
   `up` through an unproven range.
 
-ENFORCED by `ansible/tests/staging/test_staging_egress_fence.py`, which holds the filter's
-shape, and by `ansible/tests/staging/test_staging_egress_fence_fires.py`, which runs the leg
+ENFORCED by `tests/staging/test_staging_egress_fence.py`, which holds the filter's
+shape, and by `tests/staging/test_staging_egress_fence_fires.py`, which runs the leg
 against stub dials — one test per verdict.
 
 ## Autonomous-role contract (the monthly drill creates and destroys a guest)
@@ -104,5 +104,5 @@ a run. Its host key is pinned, not accepted on first connect.
   `status=` and `fence=` syslog lines carry the messages. B4's Cutover-2 removed the two Kuma
   pushes.
 - **Next-run review:** read the last run's directory before changing the cadence or what ships
-  into the guest. `ansible/tests/staging/test_etcd_drill_vm.py` pins the fence, the host key, no
+  into the guest. `tests/staging/test_etcd_drill_vm.py` pins the fence, the host key, no
   `define` and the deadline.

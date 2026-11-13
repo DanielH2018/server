@@ -131,7 +131,7 @@ def _manager_covering(path_fragment: str) -> dict:
 
 
 def _k8s_image_manager() -> dict:
-    return _manager_covering("roles/k8s")
+    return _manager_covering("k8s/roles")
 
 
 _IF_BLOCK = re.compile(r"\{\{#if (\w+)\}\}(.*?)\{\{/if\}\}", re.S)
@@ -177,7 +177,7 @@ def render_auto_replace(template: str, **values: str | None) -> str:
 # and no version string appears in the diff for a reader or a test to compare. The ledger
 # beside the Dockerfiles records the version each adopted digest carries; the helpers here
 # parse it, and the guards in test_renovate_dockerfiles.py assert against it.
-N8N_ROLE_DIR = REPO / "ansible/roles/k8s/n8n"
+N8N_ROLE_DIR = REPO / "k8s/roles/n8n"
 N8N_PIN_HISTORY = N8N_ROLE_DIR / "base-pin-history.tsv"
 
 # image -> the Dockerfile whose FROM must equal that image's last ledger entry. Named rather

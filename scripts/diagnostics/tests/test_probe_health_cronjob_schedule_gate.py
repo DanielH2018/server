@@ -100,7 +100,7 @@ def test_no_job_inside_one_schedule_period_of_the_apply_passes():
 
 
 def test_no_job_past_one_schedule_period_of_the_apply_fails():
-    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
+    # fact: k8s/roles/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
     text, code = _gate(None, NOW - timedelta(hours=25))
     assert code == 1, text
     assert "its first scheduled run never came" in text

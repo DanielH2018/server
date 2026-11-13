@@ -18,7 +18,7 @@ from typing import NamedTuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
 from lib.repo_paths import HOST_VARS, REPO
-from lib.ansible_inventory import PI_HOST, host_vars_file, pi_entries_in
+from lib.inventory_lists import PI_HOST, host_vars_file, pi_entries_in
 from lib.render_guard import entry_tags, k8s_services, load_yaml, services_file
 from lib.summary import grouped
 from diagnostics.probe_lib.health_checkout import STALE_CHECKOUT
@@ -129,7 +129,7 @@ def check_one(
     that was deployed. It decides which probe may answer:
 
       - {'docker'} probes the Pi only, and a miss there is `unhealthy`, never `skipped`. The
-        k8s probe is not consulted at all: a Docker-only tag has no role under roles/k8s/, so
+        k8s probe is not consulted at all: a Docker-only tag has no role under k8s/roles/, so
         probe.py falls back to guessing a workload by the tag's name, and a same-named cluster
         workload answers for it. That is issue #929: `alloy` is the Pi's log shipper AND the
         name of loki-homelab's cluster DaemonSet, so the gate read the DaemonSet's 2/2 ready

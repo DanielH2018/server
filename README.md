@@ -10,7 +10,7 @@ secrets encrypted with **SOPS/age**, storage on **Longhorn**, and reverse-proxie
      (they read 44 and 49 while the real total was 52). -->
 
 ```bash
-grep -c '^  - name:' ansible/inventory/host_vars/*.yml   # the actual per-host tally
+grep -c '^  - name:' inventory/host_vars/*.yml   # the actual per-host tally
 ```
 
 > Day-to-day conventions and the agent contract live in [`CLAUDE.md`](CLAUDE.md). Most
@@ -32,12 +32,12 @@ work already executed.
 ## Repository layout
 
 ```
-ansible/          # Render inputs for the k8s roles; no playbook   ← EDIT HERE
-  roles/k8s/          # One role per k8s workload (manifests rendered from templates)
+k8s/              # Render inputs for the k8s workloads   ← EDIT HERE
+  roles/              # One role per k8s workload (manifests rendered from templates)
   templates/          # Shared Jinja partials the k8s roles include
-  inventory/          # group_vars/all.yml, host_vars/<host>.yml (one file per host)
-  vars/secrets.yml    # SOPS-encrypted secrets
-  tests/              # Tests over the roles, their renders and the deploy path
+inventory/        # group_vars/all.yml, host_vars/<host>.yml (one file per host)
+secrets/          # SOPS-encrypted secrets.yml, its .sops.yaml and the rotation register
+tests/            # Tests over the roles, their renders and the deploy path
 cluster/          # services.yml: one entry per k8s deploy tag
 hosts/            # Host packages and the setup plane each one ships
   components/         # Units, timers and scripts a host package installs; the Pi's
@@ -58,7 +58,7 @@ docs/             # Runbooks, design specs, security notes
 installs it at `/usr/lib/homelab/compose/` on `daniel-pi`, the only Docker host; neither
 cluster node runs Docker. Edits there are overwritten by the next package version: always
 change `hosts/components/pi-compose/services/<svc>/` instead. The cluster's equivalent is the
-manifests rendered from `ansible/roles/k8s/`.
+manifests rendered from `k8s/roles/`.
 
 ## Ingress and segmentation
 
@@ -105,9 +105,9 @@ namespace. Where policies do exist, **ingress** rules are enforced; **egress** r
 A k3s workload deploys through `promote` and Flux once its PR merges. No script deploys a
 workload by hand.
 
-- **The render** — `homelab_render.py` orders `roles/k8s/<name>` with `build_k8s_dep_map` /
+- **The render** — `homelab_render.py` orders `k8s/roles/<name>` with `build_k8s_dep_map` /
   `toposort_containers` (`scripts/renderer/template_filters/toposort.py`, unit-tested in
-  `ansible/tests/deploy/test_toposort.py`). A role rendering a Traefik CRD gets an edge onto
+  `tests/deploy/test_toposort.py`). A role rendering a Traefik CRD gets an edge onto
   `traefik`, which installs the CRDs every later `IngressRoute` depends on; `use_authelia: true` gets one onto
   `authelia`, which creates the middleware other routes reference. Both are derived from the
   role's own templates/entry, not hand-listed; an edge no template carries (crowdsec before
@@ -118,7 +118,7 @@ workload by hand.
   deploys. No host lists a Docker `containers_list` entry:
   `scripts/validate/compose_templates.py:undeployed_docker_entries` refuses one. The Pi's
   ordering, docker-proxy before autoheal and alloy, is each service file's `depends_on`, and
-  `ansible/tests/deploy/test_platform_filter_real_inventory.py` pins it.
+  `tests/deploy/test_platform_filter_real_inventory.py` pins it.
 
 No playbook brings a host up. `hosts/bootstrap-host.sh` does, and `docs/host-packages.md`
 (*Rebuilding daniel-box*, *Rebuilding daniel-server*) and `docs/break-glass.md` (the Pi runbook)
@@ -128,16 +128,16 @@ that no package can do is verified by
 
 ## Cross-cutting systems
 
-- **Secrets** — `ansible/vars/secrets.yml`, encrypted with SOPS + age (`.sops.yaml`
-  auto-encrypts anything under `vars/`/`secrets/`). Decrypted at runtime via the
-  `community.sops` lookup. Edit with `sops ansible/vars/secrets.yml`. **Never commit
+- **Secrets** — `secrets/secrets.yml`, encrypted with SOPS + age (`.sops.yaml`
+  auto-encrypts any YAML under `secrets/`). Decrypted at runtime via the
+  `community.sops` lookup. Edit with `sops secrets/secrets.yml`. **Never commit
   plaintext secrets** — gitleaks runs pre-commit. The age private key is backed up
   out-of-band (single point of recovery).
 - **Observability** — the Prometheus / Grafana / Loki / Tempo stack runs in-cluster from
-  `ansible/roles/k8s/observability/`, alongside `roles/k8s/loki-homelab` (Loki + an Alloy
+  `k8s/roles/observability/`, alongside `k8s/roles/loki-homelab/` (Loki + an Alloy
   DaemonSet) for homelab logs. Prometheus scrapes node-exporter / cAdvisor / Traefik /
   CrowdSec. Grafana dashboards stay provisioned as code from
-  [`roles/k8s/observability/files/dashboards/`](ansible/roles/k8s/observability/files/dashboards/) — that
+  [`k8s/roles/observability/files/dashboards/`](k8s/roles/observability/files/dashboards/) — that
   tree is the single source of truth and is mounted into the cluster Grafana, which is why
   the role survives the migration despite not being in any `containers_list`.
   `monitor-bridge` exports Prometheus/Longhorn signals (backup freshness, disk, memory) as
@@ -169,7 +169,7 @@ prek run --all-files
 
 ## Adding a service
 
-Almost every new service is a **k8s** workload: add a role under `ansible/roles/k8s/<name>/`
+Almost every new service is a **k8s** workload: add a role under `k8s/roles/<name>/`
 rendering its manifests (Deployment/Service/IngressRoute/PVC), then an entry in
 `cluster/services.yml` `containers_list`. Position in the list
 doesn't matter — the renderer toposorts on derived Traefik-CRD and authelia edges, plus any

@@ -22,7 +22,7 @@ from render_guard import (
     k8s_services_at,
     service_tags_at_or_none,
 )
-from repo_paths import ALL_VARS, ANSIBLE, INVENTORY, ROLES
+from repo_paths import ALL_VARS, INVENTORY, K8S_ROLES, SECRETS
 from lib import yaml_fast
 from lib.git_testing import commit, init_repo
 
@@ -160,10 +160,10 @@ def test_host_files_skips_the_example_template(tmp_path):
 def test_anchors_resolve_to_the_real_tree():
     """A wrong ``parents[N]`` reads as an empty inventory, not an error."""
     assert (REPO / "pyproject.toml").is_file()
-    assert (ANSIBLE / "secret_rotation.yml").is_file()
+    assert (SECRETS / "secret_rotation.yml").is_file()
     assert (INVENTORY / "host_vars" / "daniel-box.yml").is_file()
     assert (HOST_VARS / "daniel-box.yml").is_file()
-    assert (ROLES / "k8s").is_dir()
+    assert (K8S_ROLES).is_dir()
 
 
 def test_render_guard_re_exports_the_same_anchor_objects():

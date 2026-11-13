@@ -77,7 +77,7 @@ fi
 # the same credentials file its login does, and ui_login.py falls back to group_vars.
 DOMAIN="$(uv --directory "$REPO_ROOT" run python scripts/diagnostics/ui_login.py --domain)"
 VIP="$(awk -F': *' '/^k3s_metallb_ingress_vip:/ {print $2; exit}' \
-  "$REPO_ROOT/ansible/inventory/group_vars/all.yml")"
+  "$REPO_ROOT/inventory/group_vars/all.yml")"
 
 if [[ -z "$DOMAIN" || -z "$VIP" ]]; then
   echo "could not resolve domain or MetalLB ingress VIP" >&2

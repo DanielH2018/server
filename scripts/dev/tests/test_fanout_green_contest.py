@@ -18,7 +18,7 @@ RED_GATE = Gate(files=["t.py"], nodes=[RED_NODE])
 # The implementer's answer to the green finding: the red test's premise, contradicted at a line.
 CONTEST = (
     f"{RED_NODE} is wrong: it assumes claude-rc.service runs on every host, but "
-    "ansible/inventory/host_vars/daniel-box.yml:12 is the only host that enables it. "
+    "inventory/host_vars/daniel-box.yml:12 is the only host that enables it. "
     f"{PR}"
 )
 

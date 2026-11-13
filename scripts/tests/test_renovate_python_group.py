@@ -17,8 +17,8 @@ from _renovate import _PACKAGE_RULES, _resolve_setting
 PYTHON_PIN_SITES = [
     (".github/actions/setup/action.yml", "custom.regex", "python-version"),
     (".python-version", "pyenv", "docker"),
-    ("ansible/roles/k8s/ical-proxy/templates/Dockerfile.j2", "dockerfile", "docker"),
-    ("ansible/roles/k8s/homelab-mcp/templates/Dockerfile.j2", "dockerfile", "docker"),
+    ("k8s/roles/ical-proxy/templates/Dockerfile.j2", "dockerfile", "docker"),
+    ("k8s/roles/homelab-mcp/templates/Dockerfile.j2", "dockerfile", "docker"),
 ]
 
 GROUP_PREFIX = "python (manual"
@@ -58,7 +58,7 @@ def test_a_python_site_outside_the_rule_is_flagged() -> None:
 def test_python_patch_bumps_and_k8s_image_pins_stay_out_of_the_manual_group() -> None:
     """A patch bump edits the CI pin alone, and the alpine image pins belong to the k8s plane."""
     image = (
-        "ansible/roles/k8s/monitor-bridge/defaults/main.yml",
+        "k8s/roles/monitor-bridge/defaults/main.yml",
         "custom.regex",
         "docker",
     )

@@ -124,7 +124,7 @@ Three decisions are the operator's, and all three are made:
   personal token can write as `danielh2018-homelab-tested-tree[bot]`, so a session cannot
   record its own tree. The App is number 5745632, installed on this repository alone as
   installation 181619225, and commit statuses are its only write permission. Its private key
-  is `tested_tree_app_private_key` in `ansible/vars/secrets.yml`. Nothing reads the key
+  is `tested_tree_app_private_key` in `secrets/secrets.yml`. Nothing reads the key
   before B3. The key is as safe as that file: a session that can decrypt it can record a
   tree.
 - **What a batch proves. Decided on 2026-11-13: the commits before its last.** A batch sweeps
@@ -180,7 +180,7 @@ values that are literal, since a value with a `${{ }}` expression is one only a 
 evaluate.
 
 The local `pytest` skips tests that a hosted runner runs. Four tests of
-`ansible/roles/k8s/crowdsec/tests/test_jobs_image.py` need Docker, which daniel-box does not
+`k8s/roles/crowdsec/tests/test_jobs_image.py` need Docker, which daniel-box does not
 have, and they skip where `CI` is unset. A change that breaks one of them reads green
 locally. Issue [#8435][sweep-skips] tracks the full list.
 

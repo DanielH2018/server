@@ -17,9 +17,9 @@ post-migration audit
 ruled that the rename merges only after every reader deployed separately from the merge
 accepts both paths and is installed.
 
-The four names that installed code reads are proposed by the PR that teaches those readers
-both paths, and the operator confirms them when that PR merges. The other rows of the table
-below are proposals that step 2 settles.
+The operator confirmed the four names that installed code reads on 2026-11-13, after the PR
+that taught those readers both paths had installed. Step 2 settled the other rows of the table
+below.
 
 ## Context
 
@@ -58,11 +58,13 @@ four rows, so a change to one of them costs another install cycle:
 | `ansible/inventory/` | `inventory/` | installed readers |
 | `ansible/vars/` | `secrets/` | installed readers |
 | `ansible/.sops.yaml` | `secrets/.sops.yaml` | installed readers |
-| `ansible/roles/conftest.py` | `k8s/roles/conftest.py` | step 2 |
+| `ansible/roles/conftest.py` | `k8s/conftest.py` | step 2 |
 | `ansible/templates/` | `k8s/templates/` | step 2 |
-| `ansible/secret_rotation.yml` | proposed: `secrets/secret_rotation.yml` | step 2 |
-| `ansible/tests/` | proposed: `tests/` | step 2 |
+| `ansible/secret_rotation.yml` | `secrets/secret_rotation.yml` | step 2 |
+| `ansible/tests/` | `tests/` | step 2 |
 | `ansible/README.md` | deleted; this record replaces it | step 2 |
+| `scripts/lib/ansible_inventory.py` | `scripts/lib/inventory_lists.py` | step 2 |
+| `scripts/lib/ansible_jinja_env.py` | `scripts/lib/guard_jinja_env.py` | step 2 |
 
 No alias or symlink keeps an old path.
 
@@ -93,6 +95,39 @@ The rename lands in two steps:
   ([dotfiles#1261](https://github.com/DanielH2018/dotfiles/issues/1261)). claude-guard
   matches the basenames of the encrypted files, which the rename keeps. The operator's memory
   index and the dotfiles repo's other briefs are updated after step 2 lands.
+
+## What step 2 found
+
+- The roles' conftest sits at `k8s/conftest.py`, not inside `k8s/roles/`. Every walk over the
+  roles directory reads each entry as a role, and a `conftest.py` there is not one.
+- `lib.repo_paths` drops `ANSIBLE`, `ROLES` and `ANSIBLE_TESTS`. `K8S`, `K8S_ROLES`,
+  `SHARED_TPL`, `INVENTORY`, `SECRETS` and `TESTS` name the new trees.
+- The SOPS creation rules match at the start of the path or after `secrets/`, such as
+  `(^|secrets/)hosts/daniel-pi\.sops\.yaml$`. Each rule then matches a path relative to
+  `secrets/`, to the repo root, or absolute, and matches no file outside `secrets/`, so
+  `sops --config secrets/.sops.yaml` run on any other file finds no rule.
+  `tests/repo/test_sops_creation_rules.py` holds both halves. The generic rule matches a YAML
+  file directly under `secrets/` or `secrets/cluster-manifests/`, and no per-host file. The
+  plaintext rotation register matches it, and no command encrypts it.
+- The secret-rotation history walk reads `secrets.yml` at both paths. A `git log` on the new
+  path alone starts at the rename commit and would date every secret to it.
+- The render changes in one place only. Ten verify Jobs and deploy gates name their
+  `homelab/rerun-safe` test at its new path, because the renderer refuses a node ID that names
+  no test in the tree. The annotation is metadata, and no Job name changes. The render-diff
+  gates, `scripts/validate/render_diff_gates.py`, read a base before the rename at its
+  `ansible/` layout, so they judge a range that crosses the rename.
+- The homelab-mcp pod still mounts the node's `ansible/` through a hostPath, and is the one
+  node-local reader step 2 does not move. It runs on daniel-server, whose checkout no timer
+  syncs, so a mount of `k8s/` there would hold the pod in ContainerCreating. Its placement is
+  a preference, not a requirement. If daniel-server is down, the pod schedules on daniel-box,
+  where the synced checkout holds no `ansible/` tree, and it fails to mount or serves an
+  ignored-file leftover. Moving it waits for a checkout the pod's node keeps current
+  ([#8409](https://github.com/DanielH2018/server/issues/8409)).
+- The readers that compare two commits, the forward-only pin gate in `cluster_pins.py` and
+  `promote_lib/forward_only.py`, read both layouts. A range whose base predates the rename
+  would otherwise read no pin and no forward-only role on that side.
+- Comments inside shipped `templates/` and `files/` keep their `ansible/` paths. Each one
+  reaches a rendered manifest or an image, and rewriting it would change the render.
 
 ## Governs
 

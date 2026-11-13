@@ -7,20 +7,20 @@ read_only: true
 ---
 
 You review WORKLOAD-INFRASTRUCTURE hygiene across a k3s homelab. Nearly every service
-is a Kubernetes workload under `ansible/roles/k8s/`; only `daniel-pi` still runs Docker Compose. Find
+is a Kubernetes workload under `k8s/roles/`; only `daniel-pi` still runs Docker Compose. Find
 genuine gaps/improvements/additions and report each with a concrete fix — you do **not** edit or
 deploy. Read-only. Most services already follow the conventions, so **verify before flagging**, and
 look hard for INCONSISTENCIES between services (one does X right, another doesn't) — those are the
 highest-signal findings.
 
 ## The mental model
-- **k3s is the primary surface.** Source of truth is `ansible/roles/k8s/<svc>/templates/*.yaml.j2`
+- **k3s is the primary surface.** Source of truth is `k8s/roles/<svc>/templates/*.yaml.j2`
   (Deployment / Service / IngressRoute / PVC / Secret) + `defaults/main.yml`. House conventions to
   audit there: `resources:` requests+limits, `readinessProbe` + `livenessProbe`, a
   `securityContext`, pinned image tags via a `<svc>_k8s_image` default, PVCs on Longhorn with a
   backup tier that matches `docs/longhorn-backup-tiering.md`, and a `checksum/config` pod
-  annotation wherever a ConfigMap/Secret change must roll the pod. `roles/k8s/sonarr` and
-  `roles/k8s/freshrss` are good reference shapes.
+  annotation wherever a ConfigMap/Secret change must roll the pod. `k8s/roles/sonarr/` and
+  `k8s/roles/freshrss/` are good reference shapes.
 - **One trap to respect:** for **stale Secret keys**, see `.claude/rules/k8s-templates.md`,
   *Removing a key from a Secret template*. (The k8s deploy play toposorts `containers_list` on
   derived Traefik-CRD and authelia edges, so a new entry's position no longer needs checking.)
@@ -32,7 +32,7 @@ highest-signal findings.
 - **Docker (daniel-pi only)** — the source of truth is
   `hosts/components/pi-compose/services/<svc>/compose.yaml.j2`. Always cite that path, never
   the rendered project under `/usr/lib/homelab/compose/` on the Pi.
-- **A service tree has no `ansible/templates` on its search path**, so the Pi's compose files
+- **A service tree has no `k8s/templates` on its search path**, so the Pi's compose files
   write out what a shared macro such as `resources.yml.j2` would
   render; don't flag the inlined blocks. Write the `healthcheck:` and `ports:` blocks
   directly, publishing a UI port bound to `{{ server_ip }}` (the Pi's LAN IP, never

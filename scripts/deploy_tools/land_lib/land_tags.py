@@ -5,7 +5,7 @@ too. Deploying somebody else's half-finished landing is not this session's to do
 list is exactly this session's scope.
 
 WHY A ROLE NAME IS NOT AUTOMATICALLY A TAG. Only a role with a `containers_list` entry has
-one. Several roles under ansible/roles/k8s/ have no entry because other roles include them by
+one. Several roles under k8s/roles/ have no entry because other roles include them by
 literal name, and a landing ends `deploy-failed` on a tag no k8s entry declares. Those roles
 come out of the tags.
 
@@ -45,7 +45,7 @@ from lib.role_paths import SECRETS_FILE, tag_for
 # reported as py/clear-text-logging-sensitive-data every time a refactor moved that line. This
 # constant is operator prose and holds no credential.
 _ROTATION_NOTE = (
-    "`ansible/vars/secrets.yml` changed, and a secret's VALUE lives in no role's template — so "
+    "`secrets/secrets.yml` changed, and a secret's VALUE lives in no role's template — so "
     "a rotation **maps to no deploy tag by construction**, and a consumer keeps rendering the "
     "OLD value until its own role renders again. Resolve them: `uv run python "
     "scripts/secrets_mgmt/secret_rotation.py consumers <secret>` greps the tree for who now "
@@ -71,7 +71,7 @@ def plane_note(files) -> str:
     """What this PR still needs a HUMAN to apply, or "" if nothing.
 
     A rotated secret is the one shape left. A secret's value lives in no role's template, so
-    `ansible/vars/secrets.yml` derives zero tags however many roles consume it: every consumer
+    `secrets/secrets.yml` derives zero tags however many roles consume it: every consumer
     keeps rendering the old value, and the landing would report `nothing-to-deploy`.
     """
     # DECIDED: fire on ANY change to secrets.yml, and never try to name which keys moved.
@@ -127,7 +127,7 @@ def doc_paths(paths) -> set[str]:
 # moves no content line renders the same manifests. `manifests` is left out: it is the renderer
 # every service includes.
 _K8S_DEFAULTS_FILE = re.compile(
-    r"^ansible/roles/k8s/(?!manifests/)[^/]+/defaults/[^/]+\.ya?ml$"
+    r"^k8s/roles/(?!manifests/)[^/]+/defaults/[^/]+\.ya?ml$"
 )
 # `key: |` / `key: >-` and their chomping/indent modifiers, with or without a trailing comment.
 # A bare list item `- |` opens one too; missing it read the scalar's `#` lines as comments.

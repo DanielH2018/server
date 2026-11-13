@@ -7,18 +7,18 @@
 # ever yields false positives.
 #
 # It is path-scoped to those files ONLY — every other file in the repo is scanned unchanged, so a
-# plaintext secret committed anywhere else still trips. A creation rule in ansible/.sops.yaml
+# plaintext secret committed anywhere else still trips. A creation rule in secrets/.sops.yaml
 # applies only when `sops` itself encrypts, so it keeps nothing out of these paths. These guards
 # do, per path:
-#   - ansible/vars/secrets.yml: the block-protected-edits hook denies an Edit or Write to a file
+#   - secrets/secrets.yml: the block-protected-edits hook denies an Edit or Write to a file
 #     carrying a SOPS MAC, and asks before a shell write to one, so the file is written only
 #     through `sops`.
-#   - the cluster file ansible/vars/cluster-vars.sops.env and the manifests under
-#     ansible/vars/cluster-manifests/ (target slice D3): the same hook, which also knows the
+#   - the cluster file secrets/cluster-vars.sops.env and the manifests under
+#     secrets/cluster-manifests/ (target slice D3): the same hook, which also knows the
 #     dotenv form's `sops_mac=` line; the `cluster-vars-ciphertext` pre-commit hook, which fails
 #     a plaintext value or a hand edit; and, from PR D3.2c, which commits the first such file,
 #     `cluster_vars.py check` in CI.
-#   - the per-host SOPS files ansible/vars/hosts/<host>.sops.yaml (target slice H4): the
+#   - the per-host SOPS files secrets/hosts/<host>.sops.yaml (target slice H4): the
 #     pytest job's `host_secrets.py check`, which fails a value that is not an `ENC[` string
 #     and a key that drifts from `secrets.yml`. It reads no key. `host_secrets.py sync` is the
 #     only writer.
@@ -36,16 +36,16 @@ useDefault = true
 [[allowlists]]
 description = "SOPS (AES256-GCM) ciphertext files: secrets.yml, the cluster file and manifests, the per-host files, and their publish copies"
 paths = [
-  '''^ansible/vars/secrets\.yml$''',
-  '''^ansible/vars/cluster-vars\.sops\.env$''',
-  '''^ansible/vars/cluster-manifests/[^/]+\.sops\.yaml$''',
-  '''^ansible/vars/hosts/[^/]+\.sops\.yaml$''',
+  '''^secrets/secrets\.yml$''',
+  '''^secrets/cluster-vars\.sops\.env$''',
+  '''^secrets/cluster-manifests/[^/]+\.sops\.yaml$''',
+  '''^secrets/hosts/[^/]+\.sops\.yaml$''',
   '''^out/cluster/cluster-vars/cluster-vars\.sops\.env$''',
   '''^out/cluster/[^/]+/[^/]+\.sops\.yaml$''',
   '''^usr/lib/homelab/secrets/[^/]+\.sops\.yaml$''',
 ]
 
-# ansible/vars/cluster-vars.source records one SHA-256 per cluster key, of that key's public
+# secrets/cluster-vars.source records one SHA-256 per cluster key, of that key's public
 # ciphertext in secrets.yml, beside the key's name. `generic-api-key` fires on a high-entropy
 # value next to a suggestive key name, and a line such as `grafana_admin_password <sha>`
 # supplies both halves. The value is a digest of tracked ciphertext, so a hit here is a false
@@ -53,9 +53,9 @@ paths = [
 # writes it, and `cluster_vars.py check` refuses a digest that matches no ciphertext. Scoped to
 # this one rule on this one path, so every other rule still scans it.
 [[allowlists]]
-description = "ansible/vars/cluster-vars.source holds ciphertext digests keyed by secret name, never a credential"
+description = "secrets/cluster-vars.source holds ciphertext digests keyed by secret name, never a credential"
 targetRules = ["generic-api-key"]
-paths = ['''^ansible/vars/cluster-vars\.source$''']
+paths = ['''^secrets/cluster-vars\.source$''']
 
 # The vendored Kubernetes schemas' provenance file holds digests too: one sha256 per upstream
 # file, keyed by the file's name. Upstream names an API group's file `apis__<group>...`, and
@@ -78,7 +78,7 @@ paths = ['''^scripts/validate/schemas/kubernetes\.io/v[0-9.]+/SOURCE\.json$''']
 # base62 or JWT credential has no underscore and still trips, and so does every other rule on the
 # same line. It needs both the bundle path and the line (`condition = "AND"`), and `regexTarget =
 # "line"` works in the bundle scan's `gitleaks dir` mode, unlike the pre-commit diff mode.
-# ENFORCED: ansible/tests/repo/test_gitleaks_secret_key_name_allowlist.py.
+# ENFORCED: tests/repo/test_gitleaks_secret_key_name_allowlist.py.
 [[allowlists]]
 description = "A rendered manifest's Secret key names (`key: <snake_case_name>`) are names, not values"
 condition = "AND"
@@ -94,7 +94,7 @@ regexes = ['''^\s*-?\s*key: [a-z][a-z0-9]*(?:_[a-z0-9]+)+\s*$''']
 # is a digest of the package's ciphertext and templates, written by the renderer. The line regex
 # admits only that key with a 64-hex value, so any other high-entropy line in the file, and every
 # other rule on this line, still trips. It needs both the path and the line (`condition = "AND"`).
-# ENFORCED: ansible/tests/repo/test_gitleaks_manifest_digest_allowlist.py.
+# ENFORCED: tests/repo/test_gitleaks_manifest_digest_allowlist.py.
 [[allowlists]]
 description = "A host package manifest's secrets_inputs_sha256 is a content digest, never a credential"
 condition = "AND"

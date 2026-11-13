@@ -106,7 +106,7 @@ def _coverage_rows():
     rows[0].update(
         status="covered",
         agent="security-review",
-        reviewed=["ansible/roles/k8s/n8n"],
+        reviewed=["k8s/roles/n8n"],
         findings=["k8s/n8n/x"],
     )
     rows[1].update(

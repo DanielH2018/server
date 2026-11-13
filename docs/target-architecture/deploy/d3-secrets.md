@@ -109,8 +109,8 @@ because the operator ruled on 2026-10-14 that `domain` is published (C3).
 
 After D3, Flux renders a flux-owned role's Secrets by substituting values from one Secret,
 `homelab-cluster-vars`. kustomize-controller builds that Secret by decrypting
-`ansible/vars/cluster-vars.sops.env` with an age key that only the cluster holds. CI holds no
-key, yet proves the file is in step with `ansible/vars/secrets.yml`. A changed secret value
+`secrets/cluster-vars.sops.env` with an age key that only the cluster holds. CI holds no
+key, yet proves the file is in step with `secrets/secrets.yml`. A changed secret value
 restarts the pods that read it, through a checksum of ciphertext, never of plaintext. `peanut`
 is the first role with a Secret that Flux owns. Every flux-owned tag whose render holds a
 secret placeholder substitutes it from the same Secret. `domain` is published and is not one
@@ -137,18 +137,18 @@ delivery path, which D5 uses when their roles move.
 ## Baseline at `70591c307`
 
 - **`secrets.yml` is flat.** It holds 184 top-level keys, each one `ENC[...]` scalar. Key
-  names are plaintext. `grep -c '^[A-Za-z0-9_]*: ENC\[' ansible/vars/secrets.yml` prints
+  names are plaintext. `grep -c '^[A-Za-z0-9_]*: ENC\[' secrets/secrets.yml` prints
   184, and the only indented lines belong to the `sops:` metadata block.
 - **A value's ciphertext moves only when the value or the data key changes.** This command
   prints line counts and never decrypts:
 
   ```bash
-  git log --no-textconv --numstat --format='%h %ad' --date=short -20 -- ansible/vars/secrets.yml
+  git log --no-textconv --numstat --format='%h %ad' --date=short -20 -- secrets/secrets.yml
   ```
 
   Of the last 20 commits that touched the file, 19 changed 4 to 6 lines: one value, `mac` and
   `lastmodified`. One, `1eb3891b5` (2026-10-03), changed 197 and removed 206: the Pi's
-  recipient removal with `sops rotate`, which `ansible/.sops.yaml` describes. This answers
+  recipient removal with `sops rotate`, which `secrets/.sops.yaml` describes. This answers
   the design's open question 4. A per-key ciphertext hash over-triggers only on a data-key
   rotation. A whole-file hash moves on every commit, because `mac` and `lastmodified` always
   change.
@@ -164,7 +164,7 @@ delivery path, which D5 uses when their roles move.
   `config.LookupConfigFile(".")`, which searches upward from the working directory.
   `parseCreationRuleForFile` in `config/config.go` strips the config file's directory from
   the file's path, matches each `path_regex` in order, and takes the first match. `git
-  ls-files` lists only `ansible/.sops.yaml`, and the *Notable* section of
+  ls-files` lists only `secrets/.sops.yaml`, and the *Notable* section of
   `sops_setup/CLAUDE.md` says to run `sops updatekeys` from `ansible/`. An encrypt run from
   the repo root therefore finds no creation rule. `sops set` on an existing file reads that
   file's own metadata, so it works from any directory. The global `--config` flag names the
@@ -218,9 +218,9 @@ delivery path, which D5 uses when their roles move.
 - **Every route carries `domain`, which is published.** The operator ruled on 2026-10-14
   that `domain` is not secret. At the baseline `grep -c '^domain: ENC\['` and
   `grep -c '^email: ENC\['` on `secrets.yml` each print 1. The `ingressroute` macro in
-  `ansible/templates/ingressroute.yml.j2` builds each Host rule as `hostname ~ '.local.' ~
+  `k8s/templates/ingressroute.yml.j2` builds each Host rule as `hostname ~ '.local.' ~
   domain`. bento-pdf and texbrain take their route from
-  `ansible/templates/ingressroute-default.yaml.j2`, and peanut's own
+  `k8s/templates/ingressroute-default.yaml.j2`, and peanut's own
   `templates/ingressroute.yaml.j2` imports the same macro. Until domain PR 2b of R2's
   *Publish `domain`* item, R2's placeholder mode renders `${domain}`, which R2's
   `PLACEHOLDER_ANYWHERE` allows outside a Secret. From domain PR 2b on, every route renders
@@ -232,27 +232,27 @@ delivery path, which D5 uses when their roles move.
   `peanut-secrets` twice through `secretKeyRef` and once as a volume's `secretName`.
 - **Every peanut key has a second reader.** `peanut_username` and `peanut_password` also
   render into homepage's PeaNUT widget, in
-  `ansible/roles/k8s/homepage/templates/config/services.yaml.j2`. `nut_ha_password` also
-  renders into `ansible/roles/k8s/nut/templates/config-secret.yaml.j2`.
+  `k8s/roles/homepage/templates/config/services.yaml.j2`. `nut_ha_password` also
+  renders into `k8s/roles/nut/templates/config-secret.yaml.j2`.
 - **The shared role restarts two kinds of target.** In
-  `ansible/roles/k8s/manifests/tasks/main.yml`, the task "Roll the deployment after a config
+  `k8s/roles/manifests/tasks/main.yml`, the task "Roll the deployment after a config
   change" restarts the `manifests_rollout` workload, and "Roll the extra deployments after a
   config or image change" restarts each `manifests_extra_rollouts` entry. The comment above
   `manifests_rolled_by_apply` says a `manifests_self_rollouts` entry gets "the owning role's
   private restart" instead.
 - **Ten roles pass an empty `manifests_rollout`.** A search of
-  `ansible/roles/k8s/*/tasks/*.yml` for `manifests_rollout: ''` or `""` finds cloudflare-ddns,
+  `k8s/roles/*/tasks/*.yml` for `manifests_rollout: ''` or `""` finds cloudflare-ddns,
   configarr, deploy-ui, dri-device-plugin, longhorn-ui, media-volume, netpol-baseline,
   observability, pi-peer-backup and pihole. Of those, cloudflare-ddns names two
   `manifests_extra_rollouts`, and only pihole and observability pass
   `manifests_self_rollouts`. The other seven name no restart target, so Ansible restarts
   nothing for them on a config change.
 - **Values already survive raw embedding.** Secret templates put values in double quotes, as
-  `ansible/roles/k8s/speedtest/templates/secret.yaml.j2` does for `APP_KEY`. Ansible embeds
+  `k8s/roles/speedtest/templates/secret.yaml.j2` does for `APP_KEY`. Ansible embeds
   each value raw today, so every live value is valid in its context. That does not exclude a
   backslash or a double quote inside a block scalar or a config file. R2 names value encoding
   as D3's job.
-- **Stale keys need a manual patch today.** `ansible/roles/k8s/manifests/tasks/verify_secret_keys.yml`
+- **Stale keys need a manual patch today.** `k8s/roles/manifests/tasks/verify_secret_keys.yml`
   exists because a client-side apply cannot remove a map key. Flux's server-side apply
   removes the keys it no longer applies (survey appendix, claim 25).
 - **The read-only ServiceAccount cannot read Secrets.** Every Secret read below is
@@ -262,11 +262,11 @@ delivery path, which D5 uses when their roles move.
   `ansible/roles/setup/initial_setup/templates/secret-rotate.sh.j2` runs
   `secret_rotation.py rotate --commit --deploy` on Sunday at 09:00, in the primary checkout
   (`REPO=/home/{{ sys_user }}/server`, then `cd "$REPO"`). It commits its `TRACKED`
-  paths, `ansible/vars/secrets.yml` and `ansible/secret_rotation.yml`, with `--no-verify`,
+  paths, `secrets/secrets.yml` and `secrets/secret_rotation.yml`, with `--no-verify`,
   and opens a PR on which CI still runs. Its `revert()` checks out only `TRACKED`, and it
   aborts a run while a previous rotation PR is open. `--deploy` redeploys the tags that
   `scripts/secrets_mgmt/consumers.py:consumer_tags` returns, before the PR exists. Auto-tier
-  keys feed cluster renders: `ansible/secret_rotation.yml` marks
+  keys feed cluster renders: `secrets/secret_rotation.yml` marks
   `cloudflare_ddns_direct_push_token` and `arr_autoblock_push_token` `tier: auto`, and
   cloudflare-ddns's `templates/secret.yaml.j2` and autofix-bridge's
   `templates/env-secret.yaml.j2` reference them.
@@ -281,14 +281,14 @@ delivery path, which D5 uses when their roles move.
   consumer. `land_tags.py` carries the marker `DECIDED fire on ANY change to secrets.yml,
   and never try to name which keys moved`. In
   `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:services_from_changed_paths`,
-  `secrets.yml` sets only `cs.secrets`, and another path under `ansible/vars/` matches no
+  `secrets.yml` sets only `cs.secrets`, and another path under `secrets/` matches no
   plane and adds nothing.
 - **The rotation registry holds only `secrets.yml` keys.** `secret_registry.py:registry_drift`
   reports a registry row with no matching key in `secrets.yml` as stale, and
   `secret_rotation.py audit --check` fails on a stale row. An age key is not a `secrets.yml`
   key, so the registry cannot track one.
 - **gitleaks allowlists one SOPS file and two digest files.** `.gitleaks.toml` extends the
-  default rules with a path-scoped allowlist for `ansible/vars/secrets\.yml`, whose comment
+  default rules with a path-scoped allowlist for `secrets/secrets\.yml`, whose comment
   says the default rules false-positive on ciphertext beside a suggestive key name. It
   scopes `generic-api-key` off `docs/facts.lock`, whose comment records that rule firing on a
   64-hex digest beside a name about secrets.
@@ -316,7 +316,7 @@ delivery path, which D5 uses when their roles move.
   emits no document for them, and stub mode still renders them. D3 supplies each as a
   SOPS-encrypted manifest. R2's round trip excludes all four.
 - **The Ansible prune list names no Secret.**
-  `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist` holds no
+  `k8s/roles/manifests/defaults/main.yml:manifests_prune_allowlist` holds no
   `core/v1/Secret`, so dropping a Secret's template leaves the live Secret in place.
 - **Plans D3 builds on**, not the tree:
     - D1's Alert `commit-status` sends every Kustomization event to the GitHub provider, with
@@ -340,9 +340,9 @@ delivery path, which D5 uses when their roles move.
 
 ```text
 operator (holds an age key)                      CI (holds no key)
-  cluster_vars.py write  ──writes──▶  ansible/vars/cluster-vars.sops.env    (dotenv, SOPS)
-                                      ansible/vars/cluster-vars.source      (plaintext hashes)
-                                      ansible/vars/cluster-manifests/*.sops.yaml
+  cluster_vars.py write  ──writes──▶  secrets/cluster-vars.sops.env    (dotenv, SOPS)
+                                      secrets/cluster-vars.source      (plaintext hashes)
+                                      secrets/cluster-manifests/*.sops.yaml
                                                 │
                      cluster_vars.py check ◀────┘  key set and freshness, against secrets.yml
 publish job ─▶ homelab_render.py cluster, placeholder mode (no --secret-stubs)
@@ -355,7 +355,7 @@ cluster:  Kustomization cluster-vars (decryption: sops, secretRef sops-age)
 ```
 
 - **A cluster-only age key.** The operator generates a dedicated age keypair. The public half
-  joins two new creation rules in `ansible/.sops.yaml`, for the cluster file and the
+  joins two new creation rules in `secrets/.sops.yaml`, for the cluster file and the
   cluster manifests only, so the cluster key never decrypts `secrets.yml`. The private half
   lives in the operator's password manager, beside the off-box recovery key, and in the
   Secret `flux-system/sops-age`. Both steps are **operator-only**.
@@ -363,7 +363,7 @@ cluster:  Kustomization cluster-vars (decryption: sops, secretRef sops-age)
   the three existing recipients, so the operator can regenerate the cluster files on any
   host that decrypts today. Adding or removing a host therefore edits all three rules. It
   runs `sops updatekeys`, or `sops rotate -i --rm-age <key>`, on `secrets.yml`, the cluster
-  file and each cluster manifest, from `ansible/` or with `--config ansible/.sops.yaml`.
+  file and each cluster manifest, from `ansible/` or with `--config secrets/.sops.yaml`.
   D3.1 rewrites the `.sops.yaml` header and the *Notable* section of `sops_setup/CLAUDE.md`
   to say so, and `check` refuses drift between the rules.
 - **The two cluster rules match from any working directory.** Their `path_regex` values are
@@ -455,7 +455,7 @@ cluster:  Kustomization cluster-vars (decryption: sops, secretRef sops-age)
           names the claude-ui and claude-agent digests only behind `authelia_k8s_manage_claude_user` and
           `authelia_k8s_manage_agent_user`, so `write` checks the users the assert checks.
           The three parameters live in one constant in `cluster_vars.py`, which joins
-          `ansible/tests/services/test_authelia_argon2_parameters_agree.py` as a named
+          `tests/services/test_authelia_argon2_parameters_agree.py` as a named
           member, compared with the rendered hashing block's `memory`, `iterations` and
           `parallelism`.
         - `mqtt_password_hash` must hold no `:`. That is R2's PR 4 colon-count assert, which
@@ -473,7 +473,7 @@ cluster:  Kustomization cluster-vars (decryption: sops, secretRef sops-age)
     - It regenerates a manifest when its key changed, or when its structure no longer
       matches the template's stub render. It builds the manifest in memory with
       `kustomize.toolkit.fluxcd.io/substitute: disabled` in its metadata, and pipes it to
-      `sops encrypt --filename-override <target> --config <repo>/ansible/.sops.yaml`. On
+      `sops encrypt --filename-override <target> --config <repo>/secrets/.sops.yaml`. On
       exit 0 it writes the ciphertext from stdout onto the target path. It never writes a
       temporary file beside the target, so a crash leaves no untracked file, and in the
       rotation cron every target is a tracked path that `revert()` restores. SOPS's MAC
@@ -488,7 +488,7 @@ cluster:  Kustomization cluster-vars (decryption: sops, secretRef sops-age)
   `(?m)^sops_mac=ENC\[AES256_GCM,`, to `is_sops_encrypted`, ahead of the first cluster file.
   The Bash arm loads the same `classify`, so one change covers both tool surfaces.
 - **A pre-commit hook runs the checks that need no render.** D3.2a adds a local hook,
-  `cluster-vars-ciphertext`, to `prek.toml`. It matches `^ansible/vars/cluster-` and runs
+  `cluster-vars-ciphertext`, to `prek.toml`. It matches `^secrets/cluster-` and runs
   `uv run python scripts/secrets_mgmt/cluster_vars.py check --no-render --base HEAD`. A
   plaintext value or a hand-edited cluster file then fails before the commit, not after a
   push. CI's full `check` stays the backstop for a commit made without hooks.
@@ -505,19 +505,19 @@ cluster:  Kustomization cluster-vars (decryption: sops, secretRef sops-age)
         - the copies under `out/cluster/`: `check --ciphertext-only` on those copies in the
           publish job, which runs before its gitleaks step. That step must load the repo's
           `.gitleaks.toml`, or the allowlist does not apply to `out/`.
-    - `ansible/vars/cluster-vars\.source` gets an allowlist scoped to `generic-api-key`, with
+    - `secrets/cluster-vars\.source` gets an allowlist scoped to `generic-api-key`, with
       a comment in the form of the `docs/facts.lock` entry. A `.source` line pairs a key name
       such as `grafana_admin_password` with a 64-hex digest, the shape that rule fired on.
 - **Lint.** The cluster manifests sit under a `vars/` directory, where ansible-lint reads
-  them as vars files and fails on `apiVersion`. They stay under `ansible/vars/`, because the
-  creation rules in `ansible/.sops.yaml` and the runbooks point there. D3.2a adds
+  them as vars files and fails on `apiVersion`. They stay under `secrets/`, because the
+  creation rules in `secrets/.sops.yaml` and the runbooks point there. D3.2a adds
   `vars/cluster-manifests/` to the `ansible-lint` hook's `exclude` regex in `prek.toml` and
   to `.ansible-lint`'s `exclude_paths`, each with a comment giving that reason.
 - **CI gets the binaries.** D3.2a adds a step to CI's `pytest` job that installs `sops` at
   `sops_setup_version`, verified against `sops_setup_binary_amd64_sha256`, and installs
-  `age`. A test in `ansible/tests/repo/` holds the step's version and checksum equal to the
+  `age`. A test in `tests/repo/` holds the step's version and checksum equal to the
   `sops_setup` defaults. The `write` tests fail, not skip, when either binary is missing.
-- **R2's manifests.** `write` produces each one under `ansible/vars/cluster-manifests/`,
+- **R2's manifests.** `write` produces each one under `secrets/cluster-manifests/`,
   SOPS-encrypted as a whole with `encrypted_regex: ^(data|stringData)$`. The renderer copies
   it byte for byte into its role's `cluster/<tag>/`, refuses one that lacks the
   substitute-disabled annotation, and sets `decryption` on that role's Kustomization. C3
@@ -547,14 +547,14 @@ cluster:  Kustomization cluster-vars (decryption: sops, secretRef sops-age)
 A secret lives in up to five stores (F-09). What reads the secret decides which stores it
 touches, and each store has its own writers:
 
-- **`ansible/vars/secrets.yml`** holds every secret. The add-secret author writes a value
+- **`secrets/secrets.yml`** holds every secret. The add-secret author writes a value
   there with `sops set`, and the rotation cron rewrites a rotated one. The two cluster
   files derive from it. H4 states how the per-host files relate to it.
 - **`cluster-vars.sops.env`** holds each value that a cluster placeholder substitutes. The
   `cluster-vars` Kustomization turns it into the Secret `homelab-cluster-vars`. Only
   `cluster_vars.py write` writes the file: the operator (**operator-only**), or the rotation
   cron for a rotated value (D3.2b).
-- **A SOPS manifest under `ansible/vars/cluster-manifests/`** holds the values in
+- **A SOPS manifest under `secrets/cluster-manifests/`** holds the values in
   `SOPS_MANIFEST_KEYS`, one manifest per `render_sops_manifests` entry. `write` writes it,
   with the same two writers.
 - **A per-host SOPS file** holds the values its host reads, and the host package carries it
@@ -725,7 +725,7 @@ step is **operator-only**, and the order keeps a working key in `sops-age` throu
    both entries, so either key decrypts.
 2. On a branch, replace the cluster recipient in both cluster creation rules, then run `sops
    updatekeys` and `sops rotate` on the cluster file and each cluster manifest, from
-   `ansible/` or with `--config ansible/.sops.yaml`. The values'
+   `ansible/` or with `--config secrets/.sops.yaml`. The values'
    ciphertext in `secrets.yml` does not move, so no `.source` hash moves, and no pod
    restarts. `check` reads the recipients from the rules, so it passes.
 3. Land the PR with `land.sh`. From D3.4 on, `land-wait` waits on `cluster-vars` for a PR
@@ -733,7 +733,7 @@ step is **operator-only**, and the order keeps a working key in `sops-age` throu
    promoted revision with the statuses read under *Verification*.
 4. Remove the old entry from `sops-age` and the old private half from the password manager.
 
-The registry in `ansible/secret_rotation.yml` does not track the key, because
+The registry in `secrets/secret_rotation.yml` does not track the key, because
 `registry_drift` would report its row as stale. `docs/secret-rotation.md` carries the
 procedure, and `docs/break-glass.md` lists the key in its recovery kit.
 
@@ -756,12 +756,12 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
 ### Tree diff
 
 ```diff
-  ansible/.sops.yaml                         + two creation rules, ahead of the generic one;
+  secrets/.sops.yaml                         + two creation rules, ahead of the generic one;
                                                the header's add and remove runbook covers all three
   ansible/roles/setup/sops_setup/CLAUDE.md   onboarding names all three rules
-+ ansible/vars/cluster-vars.sops.env
-+ ansible/vars/cluster-vars.source
-+ ansible/vars/cluster-manifests/            four SOPS-encrypted Secret manifests (R2's)
++ secrets/cluster-vars.sops.env
++ secrets/cluster-vars.source
++ secrets/cluster-manifests/            four SOPS-encrypted Secret manifests (R2's)
 + scripts/secrets_mgmt/cluster_vars.py       check (CI), --no-render, --ciphertext-only,
                                              and write (operator-only)
   scripts/secrets_mgmt/rotation_tools.py     sops_set takes a path
@@ -786,7 +786,7 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
   docs/secret-rotation.md                    cluster file, and cluster key rotation
   docs/break-glass.md                        recovery kit gains the cluster age key
 + docs/adr/<next free>-...md                 amends ADR-0003 (operator-only approval)
-  ansible/inventory/host_vars/daniel-box.yml peanut: owner: flux   (PR D3.6 only)
+  inventory/host_vars/daniel-box.yml peanut: owner: flux   (PR D3.6 only)
 ```
 
 ## Steps, as PRs
@@ -796,11 +796,11 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
    -n flux-system create secret generic sops-age --from-file=age.agekey=<file>`, then shred
    the file. Hand the public half to the D3.1 author.
 1. **D3.1 — Recipients, runbooks and the ADR** (about 60 lines, plus the ADR).
-    - Add the two creation rules to `ansible/.sops.yaml`. Adding a recipient is
+    - Add the two creation rules to `secrets/.sops.yaml`. Adding a recipient is
       **operator-only**, as design.md's ADR section says.
     - Rewrite the `.sops.yaml` header's add and remove runbook, and the *Notable* section of
       `ansible/roles/setup/sops_setup/CLAUDE.md`, for three rules and four kinds of file.
-      Each `sops` command there runs from `ansible/` or with `--config ansible/.sops.yaml`,
+      Each `sops` command there runs from `ansible/` or with `--config secrets/.sops.yaml`,
       and the header says the cluster rules stay ahead of the generic one. H4 also edits
       `.sops.yaml`, so whichever lands second rebases onto the other's rules.
     - Draft the ADR-0003 amendment: the cluster decrypts the cluster file with its own key,
@@ -826,7 +826,7 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
       `.claude/hooks/tests/test_block_protected_bash.py`: a shell write to the flagged
       fixture draws `ask`.
     - Add the `cluster-vars-ciphertext` pre-commit hook to `prek.toml`.
-    - Add the CI step that installs `sops` and `age`, and the test in `ansible/tests/repo/`
+    - Add the CI step that installs `sops` and `age`, and the test in `tests/repo/`
       that holds it to the `sops_setup` pin.
     - Extend `.gitleaks.toml`, rewrite its comment, and add the two ansible-lint exclusions,
       as *Design* says.
@@ -868,7 +868,7 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
         - For mosquitto, `$7$abc` is clean and `user:$7$abc` is refused.
         - Each refusal message names the key and not the value, and each refused run adds
           and changes no file.
-    - `ansible/tests/services/test_authelia_argon2_parameters_agree.py` gains the
+    - `tests/services/test_authelia_argon2_parameters_agree.py` gains the
       constant as a named member. R3's PR 3 and PR 4 also edit that file, and whichever
       lands second rebases onto the other.
     - **Operator-only before merge, when D3.2c has landed:** run `write` on the branch, in a
@@ -1016,10 +1016,10 @@ age-keygen -o "$KEYS/unrelated.agekey" 2>/dev/null
 # nothing.
 env -u SOPS_AGE_KEY -u SOPS_AGE_KEY_CMD XDG_CONFIG_HOME="$EMPTY" \
   SOPS_AGE_KEY_FILE="$KEYS/unrelated.agekey" \
-  sops decrypt ansible/vars/cluster-vars.sops.env >/dev/null 2>&1; echo "unrelated: $?"
+  sops decrypt secrets/cluster-vars.sops.env >/dev/null 2>&1; echo "unrelated: $?"
 env -u SOPS_AGE_KEY -u SOPS_AGE_KEY_CMD XDG_CONFIG_HOME="$EMPTY" \
   SOPS_AGE_KEY_FILE="$KEYS/cluster.agekey" \
-  sops decrypt ansible/vars/cluster-vars.sops.env >/dev/null 2>&1; echo "cluster: $?"
+  sops decrypt secrets/cluster-vars.sops.env >/dev/null 2>&1; echo "cluster: $?"
 shred -u "$KEYS"/*.agekey; rmdir "$KEYS" "$EMPTY"
 
 # D3.3a and D3.3b live, and D3.4 step 3: the status on the promoted revision T.
@@ -1261,9 +1261,9 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
 ## Tests and docs that change in the same PR
 
 - D3.1: the ADR-0003 amendment, and its row in `docs/adr/index.md` and the `mkdocs.yml` nav
-  (`ansible/tests/repo/test_adr_links.py` checks both). The `.sops.yaml` header and
+  (`tests/repo/test_adr_links.py` checks both). The `.sops.yaml` header and
   `ansible/roles/setup/sops_setup/CLAUDE.md`.
-- D3.2a: tests in `scripts/secrets_mgmt/tests/`, the pin test in `ansible/tests/repo/`, and
+- D3.2a: tests in `scripts/secrets_mgmt/tests/`, the pin test in `tests/repo/`, and
   the hook tests in `.claude/hooks/tests/test_block_protected_edits.py` and
   `.claude/hooks/tests/test_block_protected_bash.py`. The docstring of
   `block-protected-edits.py` names the dotenv form beside the `mac:` line.
@@ -1279,7 +1279,7 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
 - D3.2c: the test that runs `check` on the tree, in `scripts/secrets_mgmt/tests/`. The
   `CLAUDE.md` *Secrets Management* section gains one sentence on the cluster file.
 - D3.2d: tests in `scripts/secrets_mgmt/tests/`, and the named member in
-  `ansible/tests/services/test_authelia_argon2_parameters_agree.py`.
+  `tests/services/test_authelia_argon2_parameters_agree.py`.
   `docs/secret-rotation.md` gains one sentence: `write` refuses a malformed or duplicated
   `_argon2` digest and a `:` in `mqtt_password_hash`, and names the key only.
 - D3.3a: tests in `scripts/renderer/tests/` and `scripts/deploy_tools/tests/`.
@@ -1295,7 +1295,7 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
 - D3.4: `docs/secret-rotation.md`, `docs/break-glass.md`,
   `.claude/skills/add-secret/SKILL.md`, and tests in `scripts/secrets_mgmt/tests/` and
   `scripts/deploy_tools/tests/`.
-- D3.6: `ansible/roles/k8s/peanut/CLAUDE.md`.
+- D3.6: `k8s/roles/peanut/CLAUDE.md`.
 
 ## Complexity delta
 
@@ -1383,7 +1383,7 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
     - A malformed or duplicated `_argon2` digest: mint it again with R3's procedure, which
       validates the digest against the plaintext before `sops set`.
 8. **Could a cluster secret that no file in the tree holds skip the operator's `write`?**
-   (F-09) SOPS encrypts with the public recipients in `ansible/.sops.yaml` alone, and
+   (F-09) SOPS encrypts with the public recipients in `secrets/.sops.yaml` alone, and
    `write` already encrypts each manifest from stdin with `--filename-override` and
    `--config`. Only a change to a file that is already encrypted needs that file's data key.
    Such a secret could therefore ship as its own SOPS manifest, through C3's second path.
@@ -1435,7 +1435,7 @@ belong to D5, R2, R3, R4, H1 and contracts.md went to them as cross-slice notes.
   `parallelism: 4`, `memory: 65536`, `salt_length: 16` and `key_length: 32`, the parameters
   of R3's PHC pattern. It names the claude-ui and claude-agent digests only behind
   `authelia_k8s_manage_claude_user` and `authelia_k8s_manage_agent_user`.
-  `ansible/tests/services/test_authelia_argon2_parameters_agree.py` exists, with
+  `tests/services/test_authelia_argon2_parameters_agree.py` exists, with
   `HASH_TASK_PODS` and `FLAG_TO_CONFIG_KEY`. mosquitto's `config-secret.yaml.j2` splits
   `mqtt_password_hash` on its first `:`, and `grep -c '^mqtt_password_hash:'` on
   `secrets.yml` prints 1. A search of authelia's role for `X_AUTHELIA_CONFIG_FILTERS` finds
@@ -1520,7 +1520,7 @@ and D3.10. This round replaces both under C3's default.
   replaces the literal. D3.10 is gone, because the default leaves nothing to retire. Exit 5
   is checked after D2.7 settles. D3.3b's rollback reverts D2.7 first. Open question 4 raises
   `homelab-identifiers` as a contract gap. That Secret would be rendered by the Ansible-owned
-  flux role, and `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist`
+  flux role, and `k8s/roles/manifests/defaults/main.yml:manifests_prune_allowlist`
   holds no `core/v1/Secret`, so retiring it is an operator-only delete.
 - **D3-R10-02 (high). D3 claimed to introduce `SHARED_KINDS` in either order with D4.**
   Fixed. D3.3a waits on D4.3a, as the index says, and adds one literal member to the
@@ -1534,10 +1534,10 @@ and D3.10. This round replaces both under C3's default.
 - **D3-R10-03 (high). D2.6c's source gate knew only `IDENTIFIER_SOURCE_KEYS`.** Fixed.
   D3.3b gives the gate the dotenv's key names less `sops_*`, read without decrypting, with a
   pair in `scripts/deploy_tools/tests/` whose named member is peanut's placeholder render.
-- **D3-R10-04 (high). ansible-lint fails on manifests under `ansible/vars/`.** Fixed by
+- **D3-R10-04 (high). ansible-lint fails on manifests under `secrets/`.** Fixed by
   exclusion. The `ansible-lint` hook in `prek.toml` matches `^ansible/.*\.ya?ml$`, so a move
   to another directory under `ansible/` would still be linted, and SOPS needs the files under
-  `ansible/` to find `ansible/.sops.yaml`. D3.2a adds the path to the hook's `exclude` regex
+  `ansible/` to find `secrets/.sops.yaml`. D3.2a adds the path to the hook's `exclude` regex
   and to `.ansible-lint`'s `exclude_paths`, each with its reason.
 - **D3-R10-05 (high). A per-role `decryption` field breaks C3's "No other field varies by
   role".** Fixed. Open question 6 requests the fourth field, derived from

@@ -48,6 +48,9 @@ LOCAL_ONLY = frozenset(
         ".fanout",
         # A worktree's own label, from `scripts/dev/label_worktree.py`.
         ".claim",
+        # The tree ADR 0030 renamed. A checkout from before the rename keeps its gitignored
+        # leftovers (collections/, a stale tests/setup/) here after the tracked files move.
+        "ansible",
     }
 )
 

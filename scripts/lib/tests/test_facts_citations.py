@@ -49,8 +49,8 @@ def test_path_file_is_clean():
 
 
 def test_path_directory_keeps_trailing_slash():
-    c = _one("under `ansible/roles/k8s/traefik/`")
-    assert c.form == "path" and c.path == "ansible/roles/k8s/traefik/"
+    c = _one("under `k8s/roles/traefik/`")
+    assert c.form == "path" and c.path == "k8s/roles/traefik/"
 
 
 def test_symbol_is_clean():
@@ -61,14 +61,14 @@ def test_symbol_is_clean():
 
 
 def test_yaml_key_is_clean():
-    c = _one("`ansible/roles/k8s/traefik/defaults/main.yml:traefik_replicas` is 2")
+    c = _one("`k8s/roles/traefik/defaults/main.yml:traefik_replicas` is 2")
     assert c.form == "yaml"
-    assert c.path == "ansible/roles/k8s/traefik/defaults/main.yml"
+    assert c.path == "k8s/roles/traefik/defaults/main.yml"
     assert c.selector == "traefik_replicas"
 
 
 def test_yaml_dotted_key_is_clean():
-    c = _one("`ansible/inventory/host_vars/daniel-box.yml:containers_list.0.name`")
+    c = _one("`inventory/host_vars/daniel-box.yml:containers_list.0.name`")
     assert c.form == "yaml" and c.selector == "containers_list.0.name"
 
 
@@ -131,8 +131,8 @@ def test_form_census():
     "line,expected",
     [
         (
-            "pinned by `ansible/tests/k8s/test_x.py::test_the_thing`",
-            [("ansible/tests/k8s/test_x.py", "test_the_thing")],
+            "pinned by `tests/k8s/test_x.py::test_the_thing`",
+            [("tests/k8s/test_x.py", "test_the_thing")],
         ),
         (
             "    test_deploy_k8s_declarations.py::test_declares_snapshot_claims_agrees,",
@@ -161,7 +161,7 @@ def test_a_prose_node_citation_is_clean(line, expected):
     "line",
     [
         "see `scripts/example.sh` for the wrapper",
-        "at `ansible/roles/k8s/sonarr/tasks/main.yml:12`",
+        "at `k8s/roles/sonarr/tasks/main.yml:12`",
         "the collector listens on `127.0.0.1:4317`",
         "a fixture, `conftest.py::seq`, not a test",
         "a C++ scope `ns::test_helper` is not a file",
@@ -179,8 +179,8 @@ _EXTENSIONS = frozenset({"md", "py", "sh", "yml"})
     "line,expected",
     [
         (
-            "at `ansible/roles/k8s/sonarr/tasks/main.yml:12`",
-            ["ansible/roles/k8s/sonarr/tasks/main.yml"],
+            "at `k8s/roles/sonarr/tasks/main.yml:12`",
+            ["k8s/roles/sonarr/tasks/main.yml"],
         ),
         (
             "spans `scripts/dev/prune_worktrees.py:10-40`.",
@@ -203,9 +203,9 @@ def test_a_line_numbered_citation_is_clean(line, expected):
         # A bare path is not a claim about this tree now.
         "see `scripts/deploy.sh` for the wrapper",
         "the `docs/adr/` series",
-        "a new role, `ansible/roles/k8s/anilist-tags`, runs a CronJob",
+        "a new role, `k8s/roles/anilist-tags`, runs a CronJob",
         # A pytest node id is not a line reference.
-        "pinned by `ansible/tests/test_x.py::test_the_thing`",
+        "pinned by `tests/test_x.py::test_the_thing`",
         # A placeholder segment is a shape, not a path.
         "edit `containers/<svc>/docker-compose.yml:4` instead",
         "run `kubectl get pods` first",
@@ -226,14 +226,14 @@ def test_a_non_line_numbered_span_is_flagged_as_no_citation(line):
     "line,expected",
     [
         (
-            "run `ansible/tests/repo/test_helpers.py` first",
-            ["ansible/tests/repo/test_helpers.py"],
+            "run `tests/repo/test_helpers.py` first",
+            ["tests/repo/test_helpers.py"],
         ),
         (
-            "pinned by `ansible/tests/k8s/test_x.py::test_the_thing`",
-            ["ansible/tests/k8s/test_x.py"],
+            "pinned by `tests/k8s/test_x.py::test_the_thing`",
+            ["tests/k8s/test_x.py"],
         ),
-        ("ENFORCED: `ansible/tests/_helpers.py:27`", ["ansible/tests/_helpers.py"]),
+        ("ENFORCED: `tests/repo/_render_gate.py:28`", ["tests/repo/_render_gate.py"]),
         (
             "pinned by `hosts/tests/test_aide_check.py::test_x`",
             ["hosts/tests/test_aide_check.py"],
@@ -247,10 +247,10 @@ def test_a_guard_path_citation_is_clean(line, expected):
 @pytest.mark.parametrize(
     "line",
     [
-        "the guards live under `ansible/tests/`",
+        "the guards live under `tests/`",
         "see `scripts/deploy.sh` for the wrapper",
         "a role's own `tests/test_macros.py`",
-        "ansible/tests/repo/test_helpers.py with no code span",
+        "tests/repo/test_helpers.py with no code span",
     ],
 )
 def test_a_non_guard_path_span_is_flagged_as_no_citation(line):
@@ -418,7 +418,7 @@ def test_in_tree_gitignored_file_is_flagged(tmp_path):
 
 
 def test_in_tree_out_of_tree_token_is_flagged():
-    tracked = frozenset({"ansible/roles/k8s/traefik/defaults/main.yml"})
+    tracked = frozenset({"k8s/roles/traefik/defaults/main.yml"})
     out_of_tree = [
         Citation("path", "origin/master", "origin/master", ""),
         Citation("path", "10.42.0.0/16", "10.42.0.0/16", ""),
@@ -447,7 +447,7 @@ def test_a_real_history_bullet_is_masked_and_its_neighbours_are_not():
     The convention was set by wg-easy's role doc, which H5.9 deleted, so this reads
     media-volume's two history bullets.
     """
-    text = (REPO / "ansible/roles/k8s/media-volume/CLAUDE.md").read_text()
+    text = (REPO / "k8s/roles/media-volume/CLAUDE.md").read_text()
     assert "\n- " + HISTORY_MARKER in text
     masked = mask_history(text)
     assert "seeded once, at the 2026-08 migration" not in masked

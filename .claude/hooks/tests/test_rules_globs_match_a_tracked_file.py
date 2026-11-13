@@ -61,9 +61,9 @@ def matching_globs(globs, tracked):
 
 
 def test_a_glob_over_a_tracked_tree_matches():
-    tracked = [PurePosixPath("ansible/roles/k8s/traefik/templates/deployment.yaml.j2")]
-    assert matching_globs(["ansible/roles/k8s/**/templates/**"], tracked) == [
-        "ansible/roles/k8s/**/templates/**"
+    tracked = [PurePosixPath("k8s/roles/traefik/templates/deployment.yaml.j2")]
+    assert matching_globs(["k8s/roles/**/templates/**"], tracked) == [
+        "k8s/roles/**/templates/**"
     ]
 
 

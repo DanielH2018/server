@@ -24,8 +24,8 @@ from test_script_bootstraps_present import is_pytest_only
 # Every `testpaths` entry that holds Python, plus `.claude/tests`.
 _TEST_ROOTS = (
     "scripts/",
-    "ansible/tests/",
-    "ansible/roles/",
+    "tests/",
+    "k8s/roles/",
     ".claude/hooks/",
     ".claude/tests/",
     "evals/",
@@ -141,7 +141,7 @@ _BOUNDABLE_LAUNCHES = frozenset({"run", "check_output", "check_call", "call"})
 # function contains a `wait`/`communicate` at all, so a function-scoped AST rule cannot see
 # either one — and following the call would mean whole-program analysis.
 #
-# It HITS almost nothing else. Two of the three sites in `ansible/tests/repo/
+# It HITS almost nothing else. Two of the three sites in `tests/repo/
 # test_process_waits.py` would need an exemption, because that module's subject IS an
 # unbounded wait. The third, and `scripts/deploy_tools/tests/test_land_detach.py`, already
 # clear on the preceding `kill()`. That leaves a rule whose hit set is mostly its own

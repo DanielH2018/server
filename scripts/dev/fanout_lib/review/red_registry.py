@@ -20,7 +20,7 @@ from collections import Counter
 from collections.abc import Iterable
 
 # Ratchet files of `<path> <count>` lines, where a red test module may need registering.
-REGISTRIES = frozenset({"ansible/tests/repo/monkeypatch_allowlist.txt"})
+REGISTRIES = frozenset({"tests/repo/monkeypatch_allowlist.txt"})
 
 
 def forbidden_registry_change(red_src: str, head_src: str, added: Iterable[str]) -> str:

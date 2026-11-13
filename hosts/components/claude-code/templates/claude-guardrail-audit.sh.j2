@@ -33,7 +33,7 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 }
 
 # Two timer periods plus 300s, as the other claude-code timers derive theirs.
-# ansible/tests/services/test_b6a_rule_literals.py pins the NotReporting rules to it.
+# tests/services/test_b6a_rule_literals.py pins the NotReporting rules to it.
 {% set _every_n = claude_code_guardrail_audit_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
 {% if _every_n.isdigit() and '*/' ~ _every_n == claude_code_guardrail_audit_minute | string %}
 DEADLINE_S={{ 2 * 60 * (_every_n | int) + 300 }}

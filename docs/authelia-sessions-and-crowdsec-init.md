@@ -1,6 +1,6 @@
 # Authelia sessions, second factors and the SSO traps
 
-Working-out moved off `ansible/roles/k8s/authelia/CLAUDE.md` (#2997), which a session reads on
+Working-out moved off `k8s/roles/authelia/CLAUDE.md` (#2997), which a session reads on
 every touch of the SSO gate. The role doc keeps the access-control rule, the OIDC client list and
 the traps a session must not break; this page keeps the second-factor account, the redis session
 incident and its init-container gate, the identity-verification notifier's history, the
@@ -32,7 +32,7 @@ not recognise, this pod rolls under `Recreate` in front of most public routes, a
 `config.template.yml` is the source —
 `https://raw.githubusercontent.com/authelia/authelia/v<tag>/config.template.yml` — and
 the `authelia-webauthn-is-a-checked-second-factor` row in
-`ansible/tests/k8s/_config_property_rows.py` holds the rendered block to the keys someone
+`tests/k8s/_config_property_rows.py` holds the rendered block to the keys someone
 checked against that source — deliberately narrower than what 4.39.21 accepted when the keys were checked on 2026-09-29, so adding a key
 means editing `WRITTEN_WEBAUTHN_KEYS` there as well, which is where the check belongs.
 
@@ -55,7 +55,7 @@ changes, and with several worktrees editing this role at once that is several ti
 `authelia-redis` restarts on its own Secret only: its `manifests_extra_rollouts` entry carries
 `restart_on: ['secret']`, and its pod reads nothing but the `authelia-redis` Secret, so its
 `checksum/restart` never moves with the portal's config.
-`ansible/tests/services/test_authelia_redis_sessions.py` pins that, the redis provider block,
+`tests/services/test_authelia_redis_sessions.py` pins that, the redis provider block,
 and the 6379 agreement between the containerPort, the Service and the NetworkPolicy.
 
 **`authelia_secret` is load-bearing now.** The pinned template says it "is only used with Redis
@@ -98,7 +98,7 @@ emptyDir and need no network, so running them first overlaps their work with the
 leaves the hub → config → data ordering untouched. It uses `redis-cli` rather than the busybox
 `nc -z` the sibling gates in `crowdsec` and `n8n` use: that precedent rests on their own image
 being busybox-based, and under `Recreate` an init container failing on a missing applet is an
-SSO outage rather than a retry. `ansible/tests/services/test_authelia_redis_sessions.py` pins
+SSO outage rather than a retry. `tests/services/test_authelia_redis_sessions.py` pins
 the gate.
 
 **Neither the deploy's gates nor the repo tests could see the original failure.** The manifests
@@ -128,7 +128,7 @@ fails. This portal is the forward-auth gate in front of most public routes and r
 `Recreate`, so a Gmail blip would take SSO down for the fleet — including the tools to fix
 it — to protect a mail nobody is waiting on. The credential is not unwatched: monitor-bridge's
 `email_backstop` re-authenticates it on a throttle, and `DiscordDeliveryFailing` pages a
-failure. The `DECIDED:` marker sits at the line; `ansible/tests/services/test_smtp_wiring.py` holds the
+failure. The `DECIDED:` marker sits at the line; `tests/services/test_smtp_wiring.py` holds the
 nesting, because one level deeper is valid YAML that renders and lints clean and then fails to
 boot.
 
@@ -136,7 +136,7 @@ Codes still expire in ~5 min, the Authelia elevated-session default. Resend in t
 one goes stale.
 
 **A schema check covers the parse; nothing covers the boot.**
-`ansible/tests/services/test_authelia_config_schema.py` validates the rendered `notifier` block's
+`tests/services/test_authelia_config_schema.py` validates the rendered `notifier` block's
 values against the vendored schema for the pinned release (#2945). It rejects a wrong address scheme,
 a quoted `true` or a malformed timeout. No check covers the pod starting on the config, so a notifier
 change reaches production as its first boot. With the startup check off, Authelia opens no SMTP
@@ -153,15 +153,15 @@ If mail is down and you need the break-glass path, the file notifier is one edit
 The session secret is **`authelia_secret`**. That one SOPS key fills `session.secret` on both
 portals — the retired Docker one (the `configuration.yml` template, deleted in #2385:
 `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/authelia/templates/`) and this one (the `session:` block of
-`ansible/roles/k8s/authelia/templates/config-secret.yaml.j2`). Every `authelia_session*`
+`k8s/roles/authelia/templates/config-secret.yaml.j2`). Every `authelia_session*`
 string in the tree is a **cookie** name instead: `authelia_session` on the Docker portal,
-`authelia_session_k8s` here (`ansible/roles/k8s/authelia/defaults/main.yml:authelia_k8s_cookie_name`).
+`authelia_session_k8s` here (`k8s/roles/authelia/defaults/main.yml:authelia_k8s_cookie_name`).
 Searching the rotation registry for `authelia_session*` therefore
 finds nothing, which reads as an untracked credential.
 
 The rotation state of `authelia_secret` is settled:
 
-- `authelia_secret` is in `ansible/secret_rotation.yml` at tier `assisted`, and
+- `authelia_secret` is in `secrets/secret_rotation.yml` at tier `assisted`, and
   `secret_rotation.py audit` reads it `ok`. `sync` adds nothing.
 - The tier is right. Rotating this key re-signs session cookies, so every user is logged out
   and no data is lost. It needs none of the `pinned` care `authelia_storage` takes
@@ -220,7 +220,7 @@ legacy units — `config.Argon2.Memory = config.Memory * 1024` — so `memory: 6
 of effective argon2 memory, 1024× the CLI flag that mints the hashes. It passed validation
 silently (`MemoryMax` is `math.MaxUint32`) and no login could show it. `variant: argon2id`, not
 the short `id`: the parser takes either, the published v4.39 schema's enum takes only the long
-spelling, and that schema is what `ansible/tests/services/test_authelia_config_schema.py`
+spelling, and that schema is what `tests/services/test_authelia_config_schema.py`
 validates the rendered block against.
 
 **Revoking Claude's two_factor reach** is deleting the `claude-ui` block from

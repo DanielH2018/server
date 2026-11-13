@@ -78,7 +78,7 @@ Each fact below is what the design rests on, with its evidence.
   two minutes of the move. (`ghread api repos/DanielH2018/server/commits/<sha>/statuses`.)
 - **A Kustomization in a health check finishes the old revision first.**
   kustomize-controller v1.9.6 runs without `--feature-gates`
-  (`ansible/roles/k8s/flux/files/gotk-components.yaml`), so it does not cancel a health
+  (`k8s/roles/flux/files/gotk-components.yaml`), so it does not cancel a health
   check when the source moves (#5704). A Kustomization that is idle picks up a new
   revision on its next source event. A Kustomization still health-checking P applies T
   only after P's check ends.
@@ -314,7 +314,7 @@ supersedes another.
 
 1. **D7.1 — `settle` writes only while `prod` names T.** The read-compare-write on
    every write in `Apply the verdict`, and `tag`'s re-read of `DEPLOY_HOLD`. The
-   workflow tests in `ansible/tests/repo/` that pin the step shapes gain the pairs.
+   workflow tests in `tests/repo/` that pin the step shapes gain the pairs.
    About 120 lines.
 1. **D7.2 — `verify` prints `superseded`.** The `prod` read in
    `verify_promotion.py:verify`, the verdict in `report`, `packages: read` on the job,
@@ -341,7 +341,7 @@ supersedes another.
 
 ## Verification
 
-- Each PR's pairs, in `scripts/deploy_tools/tests/` and `ansible/tests/repo/`.
+- Each PR's pairs, in `scripts/deploy_tools/tests/` and `tests/repo/`.
 - **The live pair**, after D7.6. Merge two PRs that each change one stateless leaf, a
   few minutes apart, so the second merges while the first is in `verify`. Read the two
   promote runs: P's `verify` log prints `superseded`, P's `settle` log names T's move,
@@ -415,7 +415,7 @@ supersedes another.
   merged to force it. The two PRs were:
     - P, #8140, merge cede3400e6 at 19:30:29Z: k8s role docs and comments. Its render
       changed ten tags, so P's set was 29 names.
-    - T, #8149, merge 7465972305 at 19:36:51Z: `ansible/roles/k8s/longhorn/CLAUDE.md` and
+    - T, #8149, merge 7465972305 at 19:36:51Z: `k8s/roles/longhorn/CLAUDE.md` and
       a test, with no cluster footprint of its own.
 
   P's promote run is

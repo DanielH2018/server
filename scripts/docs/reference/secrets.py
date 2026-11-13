@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate docs/reference/secrets.md — the secret ROTATION REGISTRY, never any value.
 
-WHAT THIS READS. ansible/secret_rotation.yml only. That file is plaintext on purpose and
-holds names, tiers and dates — no values. It never reads ansible/vars/secrets.yml and never
+WHAT THIS READS. secrets/secret_rotation.yml only. That file is plaintext on purpose and
+holds names, tiers and dates — no values. It never reads secrets/secrets.yml and never
 invokes the decryption tool, because this page is committed and browsable behind SSO: a
 generator able to read plaintext secrets is one bug away from publishing them.
 
@@ -36,11 +36,11 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.cli_help import ArgumentParser
 
-from lib.repo_paths import ANSIBLE
+from lib.repo_paths import SECRETS
 from secrets_mgmt.secrets_lib import secret_registry as rotation_registry
 from secrets_mgmt import rotation_tools
 
-REGISTRY = ANSIBLE / "secret_rotation.yml"
+REGISTRY = SECRETS / "secret_rotation.yml"
 
 # What each tier means for an operator. The registry stores the tier name only.
 TIER_NOTES = {
@@ -91,7 +91,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     parts.append("# Secrets\n")
     parts.append(
         f"{len(rows)} secret(s) in the rotation registry "
-        "(`ansible/secret_rotation.yml`).\n"
+        "(`secrets/secret_rotation.yml`).\n"
     )
     parts.append(
         '!!! note "Names and dates only"\n'
@@ -125,7 +125,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     parts.append(
         "\n## Rotating one\n\n"
         "`uv run python scripts/secrets_mgmt/secret_rotation.py audit` reports what is due. Adding a "
-        "secret means `sops ansible/vars/secrets.yml`, then "
+        "secret means `sops secrets/secrets.yml`, then "
         "`secret_rotation.py sync`, then a commit — the `/add-secret` skill walks it. "
         "The `pinned` procedures are in [secret rotation](../secret-rotation.md) and are "
         "the ones to read before touching anything in that tier.\n"

@@ -1,18 +1,18 @@
 {#- wg-easy (H5.9, docs/target-architecture/host/h5-pi-compose.md). The Pi's WireGuard server and
     its admin UI. It was an Ansible role's compose file until H5.9. The macros that file imported
     (networks, resources, autokuma labels) are written out here, because a service tree has no
-    ansible/templates on its search path. The values are the ones the macros rendered for the Pi.
+    k8s/templates on its search path. The values are the ones the macros rendered for the Pi.
     This header holds what the role's CLAUDE.md said; the comments below carry the rest.
 
     - **Host.** daniel-pi only. It served daniel-server too until the k3s migration completed on
       2026-08-14, which uninstalled Docker there. The server's instance is
-      `ansible/roles/k8s/wg-easy/` and runs v15, which keeps its admin credentials in its own
+      `k8s/roles/wg-easy/` and runs v15, which keeps its admin credentials in its own
       SQLite database. The two instances share one public IP, so their UDP ports differ: the
       cluster's listens on 51820 and this one on 51822.
     - **Pin policy.** The v14 tag AND digest. The `:14` keeps the major visible, so a v15 bump
       is a deliberate PR, and the digest keeps the image immutable within v14.x. v15 replaces
       `PASSWORD_HASH` with a setup wizard, which is the only import path
-      (`roles/k8s/wg-easy/defaults/main.yml`). A v15 bump here is therefore a manual migration,
+      (`k8s/roles/wg-easy/defaults/main.yml`). A v15 bump here is therefore a manual migration,
       not a redeploy. Renovate tracks this pin in a `manual` group (H5.11), so neither a v15
       bump nor a v14 digest automerges.
     - **Ports.** The UDP port is published on every interface, and the web port on the Pi's LAN
@@ -28,7 +28,7 @@
       add a SOPS key that the pi-compose component's Compose env file carries, and pass it as
       `PASSWORD_HASH` with every `$` of the bcrypt hash doubled. Compose interpolates a bare `$`
       at parse time and mangles the hash. `wg_easy_password_hash` no longer exists in
-      `ansible/vars/secrets.yml`; add a new key rather than reusing that name.
+      `secrets/secrets.yml`; add a new key rather than reusing that name.
       `docs/wireguard-private-homelab-access.md` has the retired mechanism.
     - **The UDP port is the intentional external backup-access entry point (2026-07-06).** It is
       the way into the homelab when the cluster's wg-easy is unreachable. A client connects with
@@ -38,7 +38,7 @@
       It needs a router `51822/udp` port-forward to the Pi, which is an operator action. The bare
       publish binds dual-stack, on purpose, until the external path is confirmed over IPv4. A
       WireGuard port with no valid peer key is safe to expose.
-    - **The peer keys are pulled nightly by `ansible/roles/k8s/pi-peer-backup/`,** which owns the
+    - **The peer keys are pulled nightly by `k8s/roles/pi-peer-backup/`,** which owns the
       rsync of `./config`, the file-count floor, the **WG Pi Peer Backup** Kuma monitor and the
       Longhorn volume that a weekly shard carries to B2. Read its `CLAUDE.md` rather than
       re-deriving the pull. The data directory is `./config` under the project directory

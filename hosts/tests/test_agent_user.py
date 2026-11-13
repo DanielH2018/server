@@ -12,7 +12,7 @@ Run: uv run pytest hosts/tests/test_agent_user.py
 
 import re
 
-from _helpers import ANSIBLE
+from _helpers import REPO
 from _setup_render import render_component_text
 from renderer.renderer_lib import host as host_mode
 
@@ -50,7 +50,7 @@ def test_the_login_profile_points_the_hook_shim_at_the_agents_own_clone_and_uv()
     assert "\nexport RUN_HOOK_PROJECT_DIR=/srv/clone\n" in profile
     assert "\nexport RUN_HOOK_UV=/srv/agent/.local/bin/uv\n" in profile
     assert '\nPATH="$HOME/.local/bin:$PATH"\n' in profile
-    shim = (ANSIBLE.parent / ".claude" / "hooks" / "run-hook.sh").read_text()
+    shim = (REPO / ".claude" / "hooks" / "run-hook.sh").read_text()
     assert "${RUN_HOOK_PROJECT_DIR:-" in shim and "${RUN_HOOK_UV:-" in shim, (
         "the hook shim no longer reads the overrides this profile sets"
     )

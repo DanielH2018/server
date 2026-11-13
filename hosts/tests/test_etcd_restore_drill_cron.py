@@ -29,22 +29,19 @@ Run: uv run pytest hosts/tests/test_etcd_restore_drill_cron.py
 """
 
 import json
-from pathlib import Path
 
 import pytest
 
-from _helpers import ANSIBLE
+from _helpers import REPO, K8S_ROLES
 from _helpers import load_defaults
 from lib import yaml_fast
 from lib.repo_paths import K3S_HOST_CHECKS
 from renderer.renderer_lib import host as host_mode
 
 
-DRILL = Path(ANSIBLE).parent / "scripts" / "backup" / "etcd_restore_drill.sh"
-READER = Path(ANSIBLE) / "roles/k8s/monitor-bridge/files/checks/service.py"
-PAGING_RULES = (
-    Path(ANSIBLE) / "roles/k8s/observability/files/rules/bridge-exporter.yaml"
-)
+DRILL = REPO / "scripts" / "backup" / "etcd_restore_drill.sh"
+READER = K8S_ROLES / "monitor-bridge/files/checks/service.py"
+PAGING_RULES = K8S_ROLES / "observability/files/rules/bridge-exporter.yaml"
 SERVICE = "/usr/lib/systemd/system/homelab-etcd-restore-drill.service"
 TIMER = "homelab-etcd-restore-drill.timer"
 

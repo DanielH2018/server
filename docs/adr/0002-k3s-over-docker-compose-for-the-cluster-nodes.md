@@ -68,5 +68,5 @@ rather than a change to what it runs.
 
 ## Governs
 
-No single line. The decision is expressed by the existence of `ansible/roles/k8s/` and the
+No single line. The decision is expressed by the existence of `k8s/roles/` and the
 absence of Docker on both nodes, so `governs:` is empty.

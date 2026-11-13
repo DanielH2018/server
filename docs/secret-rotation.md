@@ -1,7 +1,7 @@
 # Secret rotation — audit, tiers, and runbooks
 
-Secrets in `ansible/vars/secrets.yml` are tracked for rotation by a plaintext registry
-(`ansible/secret_rotation.yml`) and the tool `scripts/secrets_mgmt/secret_rotation.py`. A daily server
+Secrets in `secrets/secrets.yml` are tracked for rotation by a plaintext registry
+(`secrets/secret_rotation.yml`) and the tool `scripts/secrets_mgmt/secret_rotation.py`. A daily server
 timer (`homelab-secret-rotation-audit.timer`, the `secret-rotation` component of the
 `homelab-daniel-box` package) writes the `secret-rotation-audit` textfile verdict.
 `SecretRotationAuditFailed` pages when any secret is past its per-tier window, or when a
@@ -35,7 +35,7 @@ genuinely overdue credential goes green without anyone touching it. Rename in fo
 
 1. Read what git says the secret's date is now:
    `uv run python scripts/secrets_mgmt/secret_rotation.py audit | grep '<old name>'`.
-2. Rename in the store: `EDITOR="sed -i s/^<old>/<new>/" sops ansible/vars/secrets.yml`.
+2. Rename in the store: `EDITOR="sed -i s/^<old>/<new>/" sops secrets/secrets.yml`.
 3. Add `"<new name>": "<old name>"` to `RENAMED_FROM` in
    `scripts/secrets_mgmt/git_dates.py`.
 4. Carry the date over:
@@ -59,12 +59,12 @@ fails on the undefined variable.
 Flux cannot read `secrets.yml`. It reads its own copies, which `cluster_vars.py write`
 derives from `secrets.yml`:
 
-- `ansible/vars/cluster-vars.sops.env` holds every key that the cluster render references
+- `secrets/cluster-vars.sops.env` holds every key that the cluster render references
   as `${key}`. The `cluster-vars` Kustomization decrypts it into the Secret
   `homelab-cluster-vars`, and each substituting Kustomization reads that Secret.
-- `ansible/vars/cluster-manifests/` holds one SOPS-encrypted Secret manifest per key set
+- `secrets/cluster-manifests/` holds one SOPS-encrypted Secret manifest per key set
   that Flux must not substitute.
-- `ansible/vars/cluster-vars.source` holds the SHA-256 of each copied key's ciphertext in
+- `secrets/cluster-vars.source` holds the SHA-256 of each copied key's ciphertext in
   `secrets.yml`. It is evidence that the copies are fresh, not a store.
 
 Only `scripts/secrets_mgmt/cluster_vars.py write` writes these files. It decrypts, so the
@@ -116,8 +116,8 @@ in the Secret `flux-system/sops-age` throughout.
    password manager. Add it to `sops-age` as a second entry, `age-next.agekey`.
    Flux's `kustomize-controller` imports every entry in that Secret, so either key decrypts.
 2. On a branch, replace the cluster recipient in both cluster creation rules in
-   `ansible/.sops.yaml`. Run `sops updatekeys` and `sops rotate` on the cluster file and on
-   each cluster manifest, from `ansible/` or with `--config ansible/.sops.yaml`. The
+   `secrets/.sops.yaml`. Run `sops updatekeys` and `sops rotate` on the cluster file and on
+   each cluster manifest, from `secrets/` or with `--config secrets/.sops.yaml`. The
    ciphertext in `secrets.yml` does not move, so no `.source` hash moves and no pod
    restarts. `check` reads the recipients from the rules, so it passes.
 3. Land the PR with `land.sh`, which waits on `cluster-vars` for a PR that changes the
@@ -130,7 +130,7 @@ in the Secret `flux-system/sops-age` throughout.
 revisions only. Every past revision in git and every published `sha-<sha>` artifact holds a
 copy of the cluster file and of each cluster manifest, all encrypted to the old key. Anyone
 holding that key can still read every value in those copies. After a suspected compromise,
-also rotate every key that `ansible/vars/cluster-vars.source` lists (**operator-only**). That
+also rotate every key that `secrets/cluster-vars.source` lists (**operator-only**). That
 list holds the cluster file's keys and the keys the cluster manifests hold, which carry the
 manifest's name in a third column: the Authelia OIDC signing key, the Google service-account
 key, the pi backup SSH key and the Mullvad account. For each key, set the new value with
@@ -138,7 +138,7 @@ key, the pi backup SSH key and the Mullvad account. For each key, set the new va
 `secret_rotation.py consumers <key>` prints them. The cluster key never decrypts
 `secrets.yml`, so the keys that only Ansible reads stay safe.
 
-The registry in `ansible/secret_rotation.yml` does not track the cluster key. The key lives
+The registry in `secrets/secret_rotation.yml` does not track the cluster key. The key lives
 outside `secrets.yml`, so `registry_drift` would report its row as stale. A lost cluster key
 needs no recovery: this procedure replaces it from any host that decrypts `secrets.yml`.
 `docs/break-glass.md` lists the key in its recovery kit.
@@ -146,7 +146,7 @@ needs no recovery: this procedure replaces it from any host that decrypts `secre
 ## Per-host SOPS files — the values a host decrypts itself
 
 A host that runs from a package does not hold a key for `secrets.yml` (ADR-0022). It decrypts
-its own file, `ansible/vars/hosts/<host>.sops.yaml`, with its own age key. The file holds a
+its own file, `secrets/hosts/<host>.sops.yaml`, with its own age key. The file holds a
 copy of each key that the host's rendered tree names. `secrets.yml` stays the only source of
 a value.
 
@@ -183,7 +183,7 @@ key a host file carries. No cron calls `sync`.
   the promote workflow's `PROMOTE_TOKEN`. The audit flags the copy before the token expires.
 - `pinned` — **must not be naively swapped**. The special procedure, below.
 - `ignore` — not a secret: usernames, the R2 bucket name, static addresses. `domain` left
-  the store on 2026-10-15 and is an inventory variable in `ansible/inventory/group_vars/all.yml`.
+  the store on 2026-10-15 and is an inventory variable in `inventory/group_vars/all.yml`.
 
 `sync` gives a newly registered key its tier from one name rule in
 `scripts/secrets_mgmt/secrets_lib/secret_classify.py`: `*_user` and `*_username` are `ignore`,
@@ -195,7 +195,7 @@ hand edit cannot register a tier that nothing audits.
 ## `assisted` — app-issued (regenerate in the app, then update SOPS)
 
 General shape: rotate/regenerate the credential **in the app**, `sops set
-ansible/vars/secrets.yml '["<name>"]' '"<new>"'`, update the registry date (`sync` won't,
+secrets/secrets.yml '["<name>"]' '"<new>"'`, update the registry date (`sync` won't,
 since the value already existed — `secret_rotation.py record --key <name> --last-rotated
 <date>` sets it), then
 run `host_secrets.py sync <host>` (**operator-only**) for each host file that carries the key
@@ -259,7 +259,7 @@ before deciding what is due. Examples:
   command deletes nothing. The old key's `k8straefik@<pod IP>` rows cannot be deleted by name,
   so they stay valid until the prune removes them, within two hours of the Traefik roll.
   The engine restart registers the new key either way, because the base name is missing. The
-  bouncer-prune section of `ansible/roles/k8s/crowdsec/CLAUDE.md` has the mechanism.
+  bouncer-prune section of `k8s/roles/crowdsec/CLAUDE.md` has the mechanism.
   For the agent password it is one `cscli machines delete <name>` per machine, and there are
   five: `k8s-traefik-agent`, `k8s-authelia-agent`, `k8s-node-agent-daniel-box`,
   `k8s-node-agent-daniel-server` and `crowdsec-verify`. The two node agents come from
@@ -276,7 +276,7 @@ before deciding what is due. Examples:
   lands. **Do NOT skip the bouncer delete.** Without it the LAPI keeps the old key's hash, and
   the rolled Traefik pod presents a key the LAPI rejects. The edge then refuses every
   request with a 403 from the first one. The bouncer sends its LAPI key to AppSec too,
-  because `ansible/roles/k8s/traefik/templates/dynamic.yaml.j2` sets no `crowdsecAppsecKey`.
+  because `k8s/roles/traefik/templates/dynamic.yaml.j2` sets no `crowdsecAppsecKey`.
   AppSec checks that key against the LAPI and answers 401, and the bouncer turns any AppSec
   answer other than 200 or 500 into a 403. The plugin's `bouncer.go` at
   `traefik_k8s_bouncer_plugin_version` has this, and so does CrowdSec's AppSec
@@ -306,7 +306,7 @@ before deciding what is due. Examples:
 - `google_assistant_service_account`: create a new JSON key for the service account in the
   Google Cloud console, then store the whole downloaded JSON with `sops set`. The value is
   multi-line, so it has a Secret of its own, `home-assistant-google-sa`, rendered from
-  `ansible/roles/k8s/home-assistant/templates/google-sa-secret.yaml.j2`. A rotation changes
+  `k8s/roles/home-assistant/templates/google-sa-secret.yaml.j2`. A rotation changes
   that one small Secret. Flux applies it once `cluster_vars.py write` has updated the cluster file. Delete the old key in the
   console only after HA has restarted on the new one. `google_assistant_project_id` changes
   only with a new Google project.
@@ -318,9 +318,9 @@ before deciding what is due. Examples:
   `sops set`, and commit the public half over
   `hosts/components/pi-peer-backup-target/pi-peer-backup.pub` and into the `line:` of that
   component's `component.yml`, which `hosts/lib/tests/test_pi_tuning_component.py` and
-  `ansible/tests/services/test_pi_peer_backup_forced_command.py` hold equal. The private key is
+  `tests/services/test_pi_peer_backup_forced_command.py` hold equal. The private key is
   multi-line, so it has a Secret of its own, `pi-peer-backup-ssh-key`, rendered from
-  `ansible/roles/k8s/pi-peer-backup/templates/ssh-key-secret.yaml.j2`. Flux owns pi-peer-backup,
+  `k8s/roles/pi-peer-backup/templates/ssh-key-secret.yaml.j2`. Flux owns pi-peer-backup,
   so that Secret reaches the cluster as the SOPS manifest `cluster_vars.py write` regenerates
   (operator-run), which `promote` applies once the change merges. The public half reaches the
   Pi as a new `homelab-daniel-pi` version: the reconcile line arm replaces the line anchored on
@@ -330,7 +330,7 @@ before deciding what is due. Examples:
 - `authelia_oidc_rsa_key_content`: generate a new RSA private key in PEM form, such as with
   `openssl genrsa 4096`, and store it with `sops set`. The value is multi-line, so it has a
   Secret of its own, `authelia-oidc-jwk`, rendered from
-  `ansible/roles/k8s/authelia/templates/oidc-jwk-secret.yaml.j2`. A rotation changes that one
+  `k8s/roles/authelia/templates/oidc-jwk-secret.yaml.j2`. A rotation changes that one
   small Secret. Flux owns authelia, so run `cluster_vars.py write` and land the PR as in step
   4 of *Authelia user passwords* below, not with `--tags authelia`. Authelia reads the key from
   the mounted file through its `template` config filter, so the landing must roll the pod. The
@@ -347,7 +347,7 @@ before deciding what is due. Examples:
 Each Authelia user has two SOPS keys: the plaintext password and its argon2 digest.
 `authelia_password` pairs with `authelia_password_argon2`, and `authelia_claude_password` and
 `authelia_agent_password` pair with their `_argon2` keys the same way.
-`ansible/roles/k8s/authelia/templates/config-secret.yaml.j2` reads only the digests. A changed
+`k8s/roles/authelia/templates/config-secret.yaml.j2` reads only the digests. A changed
 plaintext alone therefore changes no login. `scripts/secrets_mgmt/cluster_vars.py write`
 refuses a malformed or duplicated `_argon2` digest and a `:` in `mqtt_password_hash`, and names
 the key only. It cannot check that a digest matches its plaintext. This procedure does.
@@ -360,11 +360,11 @@ SOPS name.
 2. Mint and validate the digest in a one-shot pod, because daniel-box has no Docker. The
    plaintext travels over stdin, so it never reaches the pod spec. The flags match the hashing
    block in `config-secret.yaml.j2`, and
-   `ansible/tests/services/test_authelia_argon2_parameters_agree.py` holds the two equal. The
+   `tests/services/test_authelia_argon2_parameters_agree.py` holds the two equal. The
    image is the one `authelia_k8s_image` names in the role's `defaults/main.yml`.
 
    ```bash
-   sops -d --extract "[\"$KEY\"]" ansible/vars/secrets.yml \
+   sops -d --extract "[\"$KEY\"]" secrets/secrets.yml \
      | sudo k3s kubectl -n homelab run authelia-mint --rm -i --attach --quiet \
          --restart=Never --image="<authelia_k8s_image>" --command -- sh -c '
        IFS= read -r pw
@@ -375,7 +375,7 @@ SOPS name.
          | grep -qx "The password matches the digest." && printf "%s\n" "$d"' \
      | grep -x '\$argon2id\$v=19\$m=65536,t=3,p=4\$[A-Za-z0-9+/]*\$[A-Za-z0-9+/]*' \
      | jq -R . \
-     | sops set --value-stdin ansible/vars/secrets.yml "[\"${KEY}_argon2\"]"
+     | sops set --value-stdin secrets/secrets.yml "[\"${KEY}_argon2\"]"
    ```
 
    The pipeline prints nothing on success. A failed validation emits no digest, so `sops set`
@@ -425,7 +425,7 @@ pod rolls, and the old credential still works. The registry marks them `source: 
   plaintext, so a changed `authelia_password` is inert on its own. A rotation mints the new
   digest and stores both, as *Authelia user passwords* above describes.
 - `bazarr_api_key` — the only reference in the tree is a reader,
-  `roles/k8s/monitor-bridge/templates/env-secret.yaml.j2`. Regenerate it in Bazarr's
+  `k8s/roles/monitor-bridge/templates/env-secret.yaml.j2`. Regenerate it in Bazarr's
   Settings → General, `sops set` the new value, then redeploy monitor-bridge; setting SOPS
   alone breaks the checker with an HTTP 401 that reads as a monitoring fault.
 - `promote_token` — the GitHub `PROMOTE_TOKEN` repository secret holds the credential: a
@@ -460,7 +460,7 @@ Mint a new value in the provider, then `sops set` + redeploy the consumer:
       `sync` command, and the Pi installs the new value when the package's next version lands.
 - `mullvad_account`: Mullvad account panel. The value is all digits, so it has a Secret of its
   own, `qbittorrent-mullvad-account`, rendered from
-  `ansible/roles/k8s/qbittorrent/templates/mullvad-account-secret.yaml.j2`. A rotation changes
+  `k8s/roles/qbittorrent/templates/mullvad-account-secret.yaml.j2`. A rotation changes
   that one small Secret. Flux owns qbittorrent, so it takes the new Secret once
   `cluster_vars.py write` has updated the cluster file and the change lands.
 - `wireguard_peer_*`: Mullvad account panel / regenerate the WG key.

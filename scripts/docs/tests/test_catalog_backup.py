@@ -449,7 +449,7 @@ def test_a_template_that_calls_no_shared_macro_contributes_no_claim(tmp_path):
 
 def test_the_arr_roles_still_report_the_media_claim_they_mount_through_the_macro():
     """Named members, against the real tree: radarr and sonarr mount `media-data` only
-    through `ansible/templates/arr-deployment.yml.j2`, so a scanner that stopped
+    through `k8s/templates/arr-deployment.yml.j2`, so a scanner that stopped
     following the macro would drop it from both At-a-glance blocks and from the catalogue."""
     for role in ("radarr", "sonarr"):
         names = claim_names(K8S_ROLES / role)

@@ -92,7 +92,7 @@ datastore image, so it carries that blob.
 **The artifact that has to survive daniel-box is therefore `/var/lib/rancher/k3s/server/token`,
 not `encryption-config.json`.** Without the token nothing in the blob decrypts — CA certs, service
 key and encryption config alike — so a rebuilt host restores *nothing*, not merely Secrets. It is
-not in this repo: `grep -ci k3s ansible/vars/secrets.yml` returns 0.
+not in this repo: `grep -ci k3s secrets/secrets.yml` returns 0.
 
 **Out-of-band copy taken 2026-08-23** — the operator's password manager. That is the whole fix for
 the failure mode, and it is deliberately not machine-checkable: no automated check asserts the

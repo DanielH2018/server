@@ -63,7 +63,7 @@ For each sentence in a section, ask exactly one thing: **does the code at HEAD c
 sentence?**
 
 - Find the source of truth the sentence describes: the role's `tasks/`, `templates/`,
-  `defaults/`, the `containers_list` entries in `ansible/inventory/host_vars/`, `renovate.json`,
+  `defaults/`, the `containers_list` entries in `inventory/host_vars/`, `renovate.json`,
   a script's argparse, a cron template. A comment, another doc or a reassuring name is not a
   source of truth.
 - **A finding requires the quoted line that contradicts the sentence.** No quoted line, no finding.

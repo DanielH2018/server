@@ -1,0 +1,418 @@
+"""Traefik and Authelia must render without CrowdSec for a cluster that does not run it.
+
+The `crowdsec` role is not in the staging cluster's subset, so `crowdsec:8080` does not
+resolve there. An ungated agent sidecar crashloops against a LAPI that is not listening and
+the pod never reaches Ready — a false failure, which is the class docs/archive/staging-cluster.md
+Decision 5 exists to avoid.
+
+The two surfaces are asymmetric and each has its own flag. Traefik carries the bouncer
+plugin, the entrypoint Middleware that invokes it, an agent sidecar and five volumes;
+Authelia carries only an agent, its seed init container and four volumes. Neither flag is
+shared, because one variable would have to live in group_vars/all.yml — a path the GitOps
+deployer treats as broad.
+
+Two shapes are what the pairs below exist to catch, and neither is visible from a passing
+render. A mount left behind by a volume that dropped out is valid YAML and is rejected only
+at admission. A dangling `crowdsec` Middleware reference on an entrypoint is worse: Traefik
+disables plugins silently when the bouncer is gone, so the reference resolves to nothing and
+every request through that entrypoint fails while the pod reads healthy.
+
+What this suite does NOT prove: that either pod reaches Ready with CrowdSec off. Nothing
+here starts a container. That evidence comes from the staging bring-up.
+
+The checks every opt-out flag shares — both branches parse, every mount resolves, the flag
+defaults on — are `tests/k8s/test_staging_opt_out_flags_render.py`'s.
+"""
+
+import pytest
+
+from lib import yaml_fast
+
+from validate.k8s_manifests import (
+    K8S_ROLES,
+    load_yaml,
+)
+
+from _k8s_render import host_context, render_role_template, traefik_static_config
+from lib.inventory_lists import K8S_HOST
+from lib.render_guard import k8s_services
+
+_FLAGS = {
+    "traefik": "traefik_k8s_manage_crowdsec",
+    "authelia": "authelia_k8s_manage_crowdsec",
+}
+
+
+def _render(role: str, template: str, **overrides) -> str:
+    return render_role_template(role, template, overrides)
+
+
+def _docs(role: str, template: str, manage: bool) -> list[dict]:
+    text = _render(role, template, **{_FLAGS[role]: manage})
+    return [d for d in yaml_fast.safe_load_all(text) if d is not None]
+
+
+def _pod_spec(role: str, manage: bool, **extra) -> dict:
+    text = _render(role, "deployment.yaml.j2", **{_FLAGS[role]: manage, **extra})
+    return yaml_fast.safe_load(text)["spec"]["template"]["spec"]
+
+
+def _static_config(manage: bool) -> dict:
+    return traefik_static_config({_FLAGS["traefik"]: manage})
+
+
+@pytest.mark.parametrize("role", sorted(_FLAGS))
+def test_nothing_names_crowdsec_once_the_flag_is_off(role: str) -> None:
+    """The completeness rule: no CrowdSec VARIABLE may still be read with the flag off.
+
+    A text scan for the word cannot express this. Both roles carry prose that legitimately
+    names CrowdSec — the traefik-logs mount, the access-log-rotate rationale, Authelia's
+    log-path comment — and Authelia's sits inside a block scalar, so it survives parsing as
+    string content rather than as a comment.
+
+    Instead every CrowdSec variable is given a sentinel value. A reference that renders is a
+    reference that survived, wherever it hides. `crowdsec-secret.yaml.j2` is excluded because
+    the flag retires it by dropping it from manifests_secret_files, not by gating its body.
+    """
+    sentinel = "SURVIVING-CROWDSEC-REFERENCE"
+    role_vars = load_yaml(K8S_ROLES / role / "defaults" / "main.yml")
+    crowdsec_vars: dict[str, object] = {
+        name: sentinel
+        for name in list(role_vars) + ["crowdsec_k8s_image", "crowdsec_k8s_lapi_port"]
+        # The flag's own name matches, and a sentinel STRING is truthy — setting it here
+        # would silently switch the subsystem back on and the check would pass vacuously.
+        if ("crowdsec" in name or "bouncer" in name) and name != _FLAGS[role]
+    }
+    # The map the shared macro indexes by app, so its sentinel has to be a map too: a string
+    # would fail the lookup rather than render the sentinel.
+    crowdsec_vars["crowdsec_k8s_sidecar_agents"] = {role: sentinel}
+    assert crowdsec_vars, (
+        f"{role} names no CrowdSec variable — the sentinel proves nothing"
+    )
+
+    for template in sorted(
+        p.name
+        for p in (K8S_ROLES / role / "templates").glob("*.yaml.j2")
+        if p.name != "crowdsec-secret.yaml.j2"
+    ):
+        on = _render(role, template, **{_FLAGS[role]: True, **crowdsec_vars})
+        off = _render(role, template, **{_FLAGS[role]: False, **crowdsec_vars})
+        assert sentinel not in off, (
+            f"{role}/{template} still reads a CrowdSec variable with {_FLAGS[role]} off"
+        )
+        if template in {
+            "deployment.yaml.j2",
+            "dynamic.yaml.j2",
+            "static-config.yaml.j2",
+        }:
+            assert sentinel in on, (
+                f"{role}/{template} reads no CrowdSec variable even with the flag ON — "
+                "the sentinel is not reaching this template, so the check above is inert"
+            )
+
+
+def test_the_middleware_ships_with_crowdsec_on_and_not_with_it_off() -> None:
+    names = [d["metadata"]["name"] for d in _docs("traefik", "dynamic.yaml.j2", True)]
+    assert "crowdsec" in names
+
+    names = [d["metadata"]["name"] for d in _docs("traefik", "dynamic.yaml.j2", False)]
+    assert "crowdsec" not in names
+    assert names, "gating the Middleware must not empty dynamic.yaml"
+
+
+def test_the_bouncer_plugin_is_declared_with_crowdsec_on_and_gone_with_it_off() -> None:
+    assert "bouncer" in _static_config(True)["experimental"]["plugins"]
+    # The whole `experimental` key goes: the bouncer is its only entry, and Traefik disables
+    # plugins silently rather than failing when one cannot be resolved.
+    assert "experimental" not in _static_config(False)
+
+
+def test_no_entrypoint_references_the_middleware_once_it_is_gone() -> None:
+    """A dangling reference here fails requests while leaving the pod healthy."""
+    points = _static_config(True)["entryPoints"]
+    assert any("crowdsec" in m for m in points["http"]["http"]["middlewares"])
+    assert any("crowdsec" in m for m in points["https"]["http"]["middlewares"])
+
+    points = _static_config(False)["entryPoints"]
+    # http's chain held crowdsec alone, so the key goes; https keeps its other two.
+    assert "middlewares" not in points["http"]["http"]
+    https_chain = points["https"]["http"]["middlewares"]
+    assert not any("crowdsec" in m for m in https_chain)
+    assert any("default-headers" in m for m in https_chain)
+    assert any("compress" in m for m in https_chain)
+
+
+@pytest.mark.parametrize("role", sorted(_FLAGS))
+def test_the_agent_sidecar_ships_with_crowdsec_on_and_not_with_it_off(
+    role: str,
+) -> None:
+    names = [c["name"] for c in _pod_spec(role, True)["containers"]]
+    assert "crowdsec-agent" in names
+
+    names = [c["name"] for c in _pod_spec(role, False)["containers"]]
+    assert "crowdsec-agent" not in names
+    assert names, "gating the sidecar must not empty containers"
+
+
+def test_authelia_drops_the_init_container_key_rather_than_emptying_it() -> None:
+    """Three sources feed it: CrowdSec's seeding steps, the claude-ui TOTP seed and
+    `wait-for-redis`. Gating on CrowdSec alone emitted a bare `initContainers:` whenever CrowdSec
+    was off and redis on; all three off is the only branch with no contributor, and there the
+    key goes entirely."""
+    inits = _pod_spec("authelia", True)["initContainers"]
+    assert "crowdsec-config-install" in [c["name"] for c in inits]
+    no_claude = {"authelia_k8s_manage_claude_user": False}
+    without = _pod_spec(
+        "authelia", False, authelia_k8s_redis_sessions=True, **no_claude
+    )
+    assert [c["name"] for c in without["initContainers"]] == ["wait-for-redis"]
+    only_seed = _pod_spec("authelia", False, authelia_k8s_redis_sessions=False)
+    assert [c["name"] for c in only_seed["initContainers"]] == ["seed-claude-totp"]
+    assert "initContainers" not in _pod_spec(
+        "authelia", False, authelia_k8s_redis_sessions=False, **no_claude
+    )
+
+
+def test_traefik_prestages_the_agent_config_so_the_entrypoint_never_rsyncs() -> None:
+    """The sidecar's first start dies on every cold boot without the seed: the image entrypoint
+    populates /etc/crowdsec with ``rsync`` under ``set -e``, and about twenty staged
+    files are root-only, so the non-root sidecar's rsync exited 23. The init container
+    runs that rsync itself, tolerating exit 23 alone, so config.yaml exists before the
+    sidecar starts and the entrypoint skips the block."""
+    inits = {c["name"]: c for c in _pod_spec("traefik", True)["initContainers"]}
+    script = inits["crowdsec-config-install"]["command"][-1]
+    assert "rsync -a --ignore-existing /staging/etc/crowdsec/* /etc/crowdsec" in script
+    assert '|| [ "$?" -eq 23 ]' in script, "only a partial transfer may be tolerated"
+    assert script.index("rsync") < script.index("install -m 644 /seed/acquis.yaml"), (
+        "the seeds must be installed after the rsync so they win over the staged copies"
+    )
+
+
+def _copies_the_staged_datafiles(script: str) -> bool:
+    """True when the script copies the staged datafiles in per file, readable, and never fails.
+
+    Split out from the assertions below so the reject cases can drive it RED. A guard over the
+    rendered tree is only ever observed passing, which is indistinguishable from one that fires
+    on nothing.
+
+    Three properties. It must read the staged data
+    directory, or it seeds nothing. It must `install -m 644` per file rather than `cp -r`, or
+    the copies keep the 0600 the non-root agent cannot read and `trace/` (0700) fails the run.
+    And it must end in `exit 0`, because both pods roll under Recreate: the old pod is already
+    gone, so an init container that exits non-zero takes the workload down rather than costing
+    one dead parser.
+    """
+    if "/staging/var/lib/crowdsec/data/*" not in script:
+        return False
+    if "install -m 644" not in script:
+        return False
+    if "crowdsec.db*" not in script:
+        return False
+    return script.rstrip().endswith("exit 0")
+
+
+@pytest.mark.parametrize("role", sorted(_FLAGS))
+def test_the_staged_datafiles_are_copied_in_so_geoip_can_initialise(role: str) -> None:
+    """The image ships its datafiles 0600 root:root and the entrypoint symlinks them into the
+    data volume, so the non-root agent cannot read through the link and GeoIP never initialises
+    — `unable to open GeoLite2-City.mmdb: permission denied` behind a pod that reads healthy.
+    A root init container copies them in world-readable, which also defeats the symlink: the
+    entrypoint skips a name that already exists.
+
+    Parameterized over `_FLAGS`, which names both pods carrying the sidecar literally — a third
+    pod that gains the sidecar without the init container, or a rename of either, fails here
+    rather than shrinking the census to nothing.
+    """
+    spec = _pod_spec(role, True)
+    inits = {c["name"]: c for c in spec["initContainers"]}
+    assert "crowdsec-data-install" in inits, (
+        f"{role}'s pod runs the crowdsec agent non-root but has no crowdsec-data-install "
+        "init container, so GeoIP cannot initialise (#1177)"
+    )
+    init = inits["crowdsec-data-install"]
+    assert _copies_the_staged_datafiles(init["command"][-1])
+
+    sc = init["securityContext"]
+    assert sc["runAsUser"] == 0
+    assert "DAC_READ_SEARCH" in sc["capabilities"]["add"]
+    assert sc["capabilities"]["drop"] == ["ALL"]
+
+    mounts = {m["name"]: m["mountPath"] for m in init["volumeMounts"]}
+    assert mounts == {"crowdsec-data": "/var/lib/crowdsec/data"}, (
+        "this container must reach nothing but the data volume it seeds"
+    )
+
+
+@pytest.mark.parametrize(
+    ("label", "script"),
+    [
+        # `cp -r` keeps the source 0600 and dies on the 0700 trace/ directory.
+        (
+            "recursive copy instead of a per-file install",
+            "cp -r /staging/var/lib/crowdsec/data/* /var/lib/crowdsec/data/; exit 0",
+        ),
+        # Copying the db is the entrypoint's own documented skip.
+        (
+            "no db skip",
+            'for f in /staging/var/lib/crowdsec/data/*; do install -m 644 "$f" '
+            "/var/lib/crowdsec/data/; done; exit 0",
+        ),
+        # Without the trailing exit 0 an unreadable file fails the pod, and both roles roll
+        # under Recreate — for authelia that is SSO for the whole homelab.
+        (
+            "no trailing exit 0",
+            'for f in /staging/var/lib/crowdsec/data/*; do case "${f##*/}" in crowdsec.db*) '
+            'continue ;; esac; install -m 644 "$f" /var/lib/crowdsec/data/; done',
+        ),
+        # Seeding the wrong tree copies nothing the agent reads.
+        (
+            "the wrong staged tree",
+            'for f in /staging/etc/crowdsec/*; do case "${f##*/}" in crowdsec.db*) continue '
+            ';; esac; install -m 644 "$f" /var/lib/crowdsec/data/; done; exit 0',
+        ),
+    ],
+)
+def test_scripts_that_leave_geoip_broken_are_rejected(label: str, script: str) -> None:
+    assert not _copies_the_staged_datafiles(script), (
+        f"{label} should not have been accepted"
+    )
+
+
+def test_traefik_keeps_its_init_container_key_while_acme_still_needs_it() -> None:
+    """Traefik has two conditional init containers, so the key follows their disjunction."""
+    spec = _pod_spec("traefik", False, traefik_k8s_manage_acme=True)
+    assert [c["name"] for c in spec["initContainers"]] == ["fix-acme-permissions"]
+
+    spec = _pod_spec("traefik", False, traefik_k8s_manage_acme=False)
+    assert "initContainers" not in spec
+
+
+@pytest.mark.parametrize(
+    ("role", "volume", "writer"),
+    [("traefik", "traefik-logs", "traefik"), ("authelia", "authelia-logs", "authelia")],
+)
+def test_the_shared_log_volume_survives_without_crowdsec(
+    role: str, volume: str, writer: str
+) -> None:
+    """The agent tails these, but it is not what writes them.
+
+    Traefik's accessLog and Authelia's `log.file_path` both name a path on this volume, and
+    access-log-rotate tails Traefik's. Gating them out with the agent would take the log with
+    the reader.
+    """
+    spec = _pod_spec(role, False)
+    assert volume in {v["name"] for v in spec["volumes"]}
+    container = next(c for c in spec["containers"] if c["name"] == writer)
+    assert volume in {m["name"] for m in container["volumeMounts"]}
+
+
+# --- k8s_public_route and the bouncer must move together, per host ---
+#
+# Detection is on RENDERED output, under each host's own variables. Two shortcuts would make
+# the guard inert:
+#
+# 1. Detecting the bouncer by SUBSTRING over raw template text. Every occurrence sits inside
+#    `{% if traefik_k8s_manage_crowdsec %}`, so the text is present whatever the flag says and
+#    the comparison reads True unconditionally.
+# 2. Reading `k8s_public_route` from group_vars/all.yml only, so a host that overrides it is
+#    never evaluated. The reading is per-host, and the rejecting test below drives the False
+#    side through an override.
+
+
+def _host_render(host: str, template: str, overrides: dict | None = None) -> str:
+    return render_role_template("traefik", template, overrides, host=host)
+
+
+def _hosts_running_traefik() -> list[str]:
+    return [K8S_HOST] if any(c["name"] == "traefik" for c in k8s_services()) else []
+
+
+def test_the_edge_census_finds_daniel_box() -> None:
+    """An empty census turns the pairing test below into a skip, not a failure."""
+    assert "daniel-box" in _hosts_running_traefik()
+
+
+def has_bouncer(host: str, overrides: dict | None = None) -> bool:
+    """Whether this host's rendered Traefik both DECLARES the bouncer and ATTACHES it.
+
+    Both halves, because a declared-but-unattached middleware protects nothing, and an
+    attachment naming a middleware that is gone is worse than either — Traefik disables
+    plugins silently, so every request through that entrypoint fails while the pod reads
+    healthy.
+    """
+    dynamic = _host_render(host, "dynamic.yaml.j2", overrides)
+    declared = any(
+        "crowdsecLapiKeyFile" in str(doc)
+        for doc in yaml_fast.safe_load_all(dynamic)
+        if doc is not None
+    )
+    config = traefik_static_config(overrides, host=host)
+    attached = any(
+        "crowdsec" in mw
+        for entry in (config.get("entryPoints") or {}).values()
+        for mw in ((entry.get("http") or {}).get("middlewares") or [])
+    )
+    return declared and attached
+
+
+def public_edge_problem(public: bool, bouncer: bool) -> str:
+    """The verdict, taking both readings as arguments so the rejecting test drives the same code.
+
+    Empty string means the pair is consistent.
+    """
+    if public and not bouncer:
+        return (
+            "k8s_public_route is on with no CrowdSec bouncer on the edge — an unprotected "
+            "public edge one DNS record away."
+        )
+    if bouncer and not public:
+        return (
+            "the CrowdSec bouncer is on the edge with k8s_public_route off — not dangerous, "
+            "but the two are meant to move together and one has drifted."
+        )
+    return ""
+
+
+@pytest.mark.parametrize("host", _hosts_running_traefik())
+def test_the_public_route_and_the_bouncer_move_together(host: str) -> None:
+    ctx = host_context(host)
+    problem = public_edge_problem(bool(ctx["k8s_public_route"]), has_bouncer(host))
+    assert not problem, f"{host}: {problem}"
+
+
+def test_the_bouncer_reading_follows_the_flag() -> None:
+    """The rejecting half for the DETECTION.
+
+    Every host today is a consistent pair, so the assertion above is only ever observed passing and
+    cannot show that `has_bouncer` reads anything at all — a detector stuck on False would agree
+    with every LAN-only host.
+
+    daniel-box runs the bouncer. Turning the flag off by override gives one real True and one real False, which is what proves
+    the reading tracks the flag rather than the template text.
+    """
+    assert has_bouncer("daniel-box") is True
+    assert has_bouncer("daniel-box", {"traefik_k8s_manage_crowdsec": False}) is False
+
+
+@pytest.mark.parametrize(
+    ("public", "bouncer", "expect"),
+    [
+        (True, False, "unprotected public edge"),
+        (False, True, "one has drifted"),
+    ],
+)
+def test_the_verdict_rejects_a_mismatched_pair(
+    public: bool, bouncer: bool, expect: str
+) -> None:
+    """Each direction separately.
+
+    A guard catching only the harmless drift would still miss the unprotected edge, which is the one
+    that matters.
+    """
+    assert expect in public_edge_problem(public, bouncer)
+
+
+@pytest.mark.parametrize(("public", "bouncer"), [(True, True), (False, False)])
+def test_the_verdict_accepts_a_consistent_pair(public: bool, bouncer: bool) -> None:
+    """The accepting half, so a verdict that flagged everything would fail here."""
+    assert public_edge_problem(public, bouncer) == ""

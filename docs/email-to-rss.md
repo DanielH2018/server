@@ -53,7 +53,7 @@ hand-edit them; that step is obsolete.)
 
 **Monitoring:** The `blackbox-exporter` scrape job probes <https://email-rss.daniel-hunter.com/admin/login>
 for a 2xx, with the target `service: email-to-rss` declared in
-`ansible/roles/k8s/observability/templates/prometheus.yaml.j2`. That covers "the Worker is
+`k8s/roles/observability/templates/prometheus.yaml.j2`. That covers "the Worker is
 routed and its script runs"; it deliberately does **not** cover the ingest path (mail landing
 via ForwardEmail, KV writes), which is unmonitored — a silent stop in newsletter delivery
 still surfaces only as feeds going quiet.

@@ -10,13 +10,13 @@ governs: []
 
 Amends [ADR-0003](0003-sops-with-age-for-secrets-at-rest.md). ADR-0003's decision still
 stands: secrets live in the repo, encrypted with SOPS to age recipients, and
-`ansible/vars/secrets.yml` stays their source. What changes is who decrypts. ADR-0003 has one
+`secrets/secrets.yml` stays their source. What changes is who decrypts. ADR-0003 has one
 decrypting party, a host that runs Ansible. This record adds a second, the cluster, and
 limits it to files written for it.
 
 ## Status
 
-Accepted. The operator accepted it on 2026-10-15 in PR D3.1's review. The answer was "Yes" to "accept ADR-0022 and the cluster recipient?" The same answer accepted the second operator-only decision in that PR: adding the cluster recipient to the two cluster creation rules in `ansible/.sops.yaml`. Slice H4 extends this record with per-host files
+Accepted. The operator accepted it on 2026-10-15 in PR D3.1's review. The answer was "Yes" to "accept ADR-0022 and the cluster recipient?" The same answer accepted the second operator-only decision in that PR: adding the cluster recipient to the two cluster creation rules in `secrets/.sops.yaml`. Slice H4 extends this record with per-host files
 (design.md, *Amend ADR-0003*); the *Amendment* section at the end of this record carries that extension.
 
 Amended by [ADR-0029](0029-each-host-is-configured-by-its-own-package-not-ansible.md) on
@@ -31,7 +31,7 @@ statements below history. They stay as written:
   records.
 - *Consequences*, "the *Notable* section of `ansible/roles/setup/sops_setup/CLAUDE.md`
   carries the runbook": H7.55 deleted the `sops_setup` role and its `CLAUDE.md`. The header
-  of `ansible/.sops.yaml` and *Changing secrets.yml's recipients* in
+  of `secrets/.sops.yaml` and *Changing secrets.yml's recipients* in
   [the secret-rotation runbook](../secret-rotation.md) carry it. H7.57 accepted ADR-0029,
   which records the result.
 
@@ -61,9 +61,9 @@ Three options existed:
 ## Decision
 
 The cluster has its own age key. Its private half lives in the Secret `flux-system/sops-age`
-and in the operator's password manager, and nowhere else. `ansible/.sops.yaml` gives the key
-to two creation rules only: the cluster file, `vars/cluster-vars.sops.env`, and the cluster
-manifests, `vars/cluster-manifests/*.sops.yaml`. Both rules sit ahead of the generic rule,
+and in the operator's password manager, and nowhere else. `secrets/.sops.yaml` gives the key
+to two creation rules only: the cluster file, `secrets/cluster-vars.sops.env`, and the cluster
+manifests, `secrets/cluster-manifests/*.sops.yaml`. Both rules sit ahead of the generic rule,
 because SOPS takes the first rule that matches. The generic rule, which covers `secrets.yml`,
 never lists the cluster key. The cluster therefore decrypts the cluster file with its own key,
 and never `secrets.yml`.
@@ -76,7 +76,7 @@ of a value. The cluster files are derived from it.
 
 **Adding or removing a host edits three rules, not one.** It runs `sops updatekeys` or `sops
 rotate -i --rm-age` on `secrets.yml`, the cluster file and each cluster manifest. The header
-of `ansible/.sops.yaml` and the *Notable* section of
+of `secrets/.sops.yaml` and the *Notable* section of
 `ansible/roles/setup/sops_setup/CLAUDE.md` carry the runbook. A rule that drifts from the
 others leaves one host unable to regenerate a cluster file. Slice D3's `cluster_vars.py
 check` compares each file's recipients with its rule.
@@ -85,7 +85,7 @@ check` compares each file's recipients with its rule.
 cluster manifest. A cluster rule moved below it stops applying, and a manifest written then
 is encrypted without the cluster key, so the cluster cannot decrypt it.
 
-**Every `sops` command runs from `ansible/`, or with `--config ansible/.sops.yaml`.** SOPS
+**Every `sops` command runs from `secrets/`, or with `--config secrets/.sops.yaml`.** SOPS
 resolves `.sops.yaml` from the working directory. Run from the repo root without `--config`,
 it finds no creation rule. This held under ADR-0003 too, and three rules raise the cost of
 forgetting it.
@@ -133,14 +133,14 @@ Three options existed:
 ### Amendment decision
 
 A host that runs from a package has its own age key, `/etc/homelab/age.key`, and its own SOPS
-file, `ansible/vars/hosts/<host>.sops.yaml`. The package ships the file as
+file, `secrets/hosts/<host>.sops.yaml`. The package ships the file as
 `/usr/lib/homelab/secrets/<host>.sops.yaml`. The file holds only the keys that the host's
 rendered tree names, as credentials or as placeholders in a declared output.
 
 The host decrypts its own file and never `secrets.yml`. Each file is encrypted to three keys:
-the host's, daniel-box's and the off-box recovery key. `ansible/.sops.yaml` gets one creation
+the host's, daniel-box's and the off-box recovery key. `secrets/.sops.yaml` gets one creation
 rule per host file, ahead of the generic rule, because the generic rule's pattern also matches
-`ansible/vars/hosts/`. The generic rule and the two cluster rules do not change. The host key
+`secrets/hosts/`. The generic rule and the two cluster rules do not change. The host key
 appears in no rule except its own file's.
 
 `secrets.yml` stays the only source of a value. `scripts/secrets_mgmt/host_secrets.py sync`
@@ -175,4 +175,4 @@ else holds a copy that the cluster or the other hosts read.
 ## Governs
 
 No single line. `governs:` is empty; the decision is expressed by the creation rules in
-`ansible/.sops.yaml` and by `scripts/secrets_mgmt/host_secrets.py`.
+`secrets/.sops.yaml` and by `scripts/secrets_mgmt/host_secrets.py`.

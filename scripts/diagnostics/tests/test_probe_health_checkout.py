@@ -1,6 +1,6 @@
 """`probe.py health <tag>` run from a checkout that predates the tag's k8s role (#5909).
 
-A worktree six hours behind master had no `roles/k8s/metallb/`, so the probe guessed a workload
+A worktree six hours behind master had no `k8s/roles/metallb/`, so the probe guessed a workload
 named `metallb` in the default namespace and failed a healthy MetalLB. The role existed on
 `origin/master`, which is what lets the probe tell "this checkout is stale" from "not a k8s tag".
 
@@ -51,11 +51,9 @@ def test_a_role_present_here_is_never_called_stale(tmp_path):
 
 def test_role_on_origin_reads_the_origin_master_tree(tmp_path):
     repo = init_repo(tmp_path / "repo")
-    roles_dir = repo / "ansible" / "roles" / "k8s"
+    roles_dir = repo / "k8s" / "roles"
     assert not health_checkout.role_on_origin("metallb", roles_dir, repo)  # no ref yet
-    sha = commit(
-        repo, "add role", **{"ansible/roles/k8s/metallb/tasks/main.yml": "---\n"}
-    )
+    sha = commit(repo, "add role", **{"k8s/roles/metallb/tasks/main.yml": "---\n"})
     git(repo, "update-ref", "refs/remotes/origin/master", sha)
     assert health_checkout.role_on_origin("metallb", roles_dir, repo)
     assert not health_checkout.role_on_origin("glances", roles_dir, repo)
@@ -71,7 +69,7 @@ def _behind_origin(tmp_path, role="metallb"):
     reads only whether it exists cannot see that origin/master has moved it.
     """
     repo = init_repo(tmp_path / "repo")
-    prefix = f"ansible/roles/k8s/{role}"
+    prefix = f"k8s/roles/{role}"
     a = commit(repo, "add role", **{f"{prefix}/tasks/main.yml": "---\n"})
     b = commit(
         repo,
@@ -80,7 +78,7 @@ def _behind_origin(tmp_path, role="metallb"):
     )
     git(repo, "update-ref", "refs/remotes/origin/master", b)
     git(repo, "checkout", "-q", "--detach", a)
-    return repo, repo / "ansible" / "roles" / "k8s", a, b
+    return repo, repo / "k8s" / "roles", a, b
 
 
 def _deployment(name, namespace="metallb-system"):
@@ -116,7 +114,7 @@ def test_a_role_origin_master_changed_after_this_checkout_is_stale(
         health_checkout.stale_checkout_reason("metallb", roles_dir, lambda _r: True)
         is None
     )
-    commit(repo, "local edit", **{"ansible/roles/k8s/metallb/tasks/main.yml": "--- \n"})
+    commit(repo, "local edit", **{"k8s/roles/metallb/tasks/main.yml": "--- \n"})
     assert (
         health_checkout.stale_checkout_reason("metallb", roles_dir, lambda _r: True)
         is None
@@ -237,7 +235,7 @@ def test_a_squash_merged_branch_holding_origins_role_is_not_stale(
     """
     scrub_process_git_env(monkeypatch)
     repo, roles_dir, a, _b = _behind_origin(tmp_path)
-    upstream = {"ansible/roles/k8s/metallb/files/upstream/app.yaml": _deployment("x")}
+    upstream = {"k8s/roles/metallb/files/upstream/app.yaml": _deployment("x")}
     git(repo, "checkout", "-q", "--detach", a)
     squash = commit(repo, "squash of the branch", **upstream)
     git(repo, "update-ref", "refs/remotes/origin/master", squash)

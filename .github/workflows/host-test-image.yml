@@ -13,7 +13,7 @@ name: host-test-image
 # The weekly run republishes a tag that went missing. The pinned digest went with it, so the legs
 # pull the republished tag, and the summary prints the new pin.
 #
-# ansible/tests/repo/test_host_test_image.py holds these jobs equal to ci.yml's build sites,
+# tests/repo/test_host_test_image.py holds these jobs equal to ci.yml's build sites,
 # because the tag carries the release and the runner's architecture.
 
 on:

@@ -123,7 +123,7 @@ def test_linkify_does_not_match_a_bare_domain_placeholder(tmp_path):
 
 
 def test_a_comment_quoting_the_opt_out_is_not_the_opt_out(tmp_path):
-    """`roles/k8s/docs/` passed no `public` argument while explaining the one it dropped,
+    """`k8s/roles/docs/` passed no `public` argument while explaining the one it dropped,
     so its route read as LAN-only for five weeks (#3148)."""
     role = _role(
         tmp_path,

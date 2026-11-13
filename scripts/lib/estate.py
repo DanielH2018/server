@@ -35,7 +35,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Literal
 
-from lib.ansible_inventory import K8S_HOST
+from lib.inventory_lists import K8S_HOST
 from lib.render_guard import host_files, host_layer, k8s_services, load_yaml
 from lib.repo_paths import ALL_VARS, HOST_VARS, K8S_SERVICES
 
@@ -132,7 +132,12 @@ class Estate:
         and a setup role, which runs on several hosts, takes the group layer alone. Reading a
         role's defaults raw would print the default even where the inventory overrides it.
         """
-        host = host or self.inventory.plane_hosts.get(role_dir.parent.name)
+        plane = (
+            role_dir.parents[1].name
+            if role_dir.parent.name == "roles"
+            else role_dir.parent.name
+        )
+        host = host or self.inventory.plane_hosts.get(plane)
         return inventory_layers(
             role_defaults(role_dir),
             self.group_vars,

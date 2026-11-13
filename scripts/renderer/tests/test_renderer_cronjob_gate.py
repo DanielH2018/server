@@ -224,7 +224,7 @@ CRONJOB: dict = {
         }
     },
 }
-RERUN = "ansible/roles/k8s/sync/tests/test_sync.py::test_a_second_run_changes_nothing"
+RERUN = "k8s/roles/sync/tests/test_sync.py::test_a_second_run_changes_nothing"
 
 
 def test_a_mutation_gate_keeps_its_backoff_and_names_its_rerun_test():

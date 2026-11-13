@@ -13,7 +13,7 @@ Each fixture writes its labels in sorted key order, the order kubectl's JSON emi
 after `default` and wins, which is what lets it fail.
 
 The cases sit beside `test_longhorn_reap_logic.py` rather than in it, because that module is
-allowlisted at its line count in `ansible/tests/repo/module_length_allowlist.txt`. The snapshot
+allowlisted at its line count in `tests/repo/module_length_allowlist.txt`. The snapshot
 reaper's case is in `test_longhorn_reap_opt_out_snapshots.py`.
 
 Run: uv run pytest scripts/backup/tests/test_longhorn_reap_trim_label.py

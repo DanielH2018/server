@@ -49,7 +49,7 @@ ENTRY_POINT = _Path(__file__).resolve().parents[1] / "longhorn_reap.py"
 # Groups that name no RecurringJob CR by design, hardcoded because this module reads no file.
 # The sentinel's angle brackets cannot collide with a DNS-1123 RecurringJob name, nor
 # prefix-match a snapshot's truncated `RecurringJob` label. ENFORCED:
-# ansible/tests/longhorn/test_longhorn_reap_opt_out_groups.py::test_every_jobless_storageclass_group_is_a_known_opt_out
+# tests/longhorn/test_longhorn_reap_opt_out_groups.py::test_every_jobless_storageclass_group_is_a_known_opt_out
 OPT_OUT_GROUPS = frozenset({longhorn_backups.NO_BACKUP_GROUP})
 OWNER_NO_JOB_BY_DESIGN = "<no job by design>"
 

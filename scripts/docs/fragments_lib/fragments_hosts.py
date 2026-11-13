@@ -120,9 +120,7 @@ def render_loadbalancers(services: list[dict[str, str]]) -> str:
 
 
 def _loadbalancers() -> tuple[str, list[str]]:
-    return render_loadbalancers(read_loadbalancers()), [
-        "ansible/roles/k8s/*/templates/*.j2"
-    ]
+    return render_loadbalancers(read_loadbalancers()), ["k8s/roles/*/templates/*.j2"]
 
 
 # --- auditd-watches ------------------------------------------------------------------------

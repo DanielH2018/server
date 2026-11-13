@@ -19,7 +19,7 @@ Re-examined 2026-09-28 (#2808). Both renders share one derivation, so moving the
 single source of truth, and it loses locality: inject-nested-docs puts a role doc's head, this
 block first, in front of a session that touches the role, and nothing injects `services.md`.
 
-ONE FIELD SET. Every role is a k8s service role (`roles/k8s/<name>/`, every entry of
+ONE FIELD SET. Every role is a k8s service role (`k8s/roles/<name>/`, every entry of
 `cluster/services.yml`), and its block carries:
 
 - an **Applied by** line (`catalog_backup.owner_stance`): it names Flux and `promote`, and says
@@ -49,7 +49,7 @@ RUN AT COMMIT TIME, NOT BY THE DOCS-REFRESH CRON. The `regen-role-glance` prek h
 stale block and exits 1 like a formatter, so the author stages the rewritten doc and commits
 again. The block therefore lands in the same commit as the change that moved it, with no
 hand step. The cron stages `docs/reference` and `docs/assets/generated` only, and a write
-under `ansible/roles/` would leave the primary checkout dirty, which parks the GitOps
+under `k8s/roles/` would leave the primary checkout dirty, which parks the GitOps
 deployer. `scripts/docs/tests/test_gen_role_glance.py` stays as the CI backstop for a
 commit that skipped prek.
 
@@ -118,7 +118,7 @@ def begin_marker(sources: str) -> str:
 
 BEGIN = begin_marker(
     "defaults, templates or containers_list entry, or the Longhorn tier lists in "
-    "ansible/roles/k8s/longhorn-reconcile/defaults/main.yml"
+    "k8s/roles/longhorn-reconcile/defaults/main.yml"
 )
 END = "<!-- /generated_from -->"
 # Where promote's `images` job pushes each built image. `renderer_lib/images.py` holds the same

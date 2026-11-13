@@ -117,7 +117,7 @@ def test_a_host_wait_that_defers_ends_the_landing_deferred(land_run):
 
 def test_a_tag_and_a_host_wait_on_the_promotion_then_the_host(land_run):
     fakes = Fakes(
-        gh_views=_files("ansible/roles/k8s/sonarr/defaults/main.yml", PI_PACKAGE),
+        gh_views=_files("k8s/roles/sonarr/defaults/main.yml", PI_PACKAGE),
         host_targets=[PI],
     )
     rc, out, _, calls, _ = land_run([], fakes)

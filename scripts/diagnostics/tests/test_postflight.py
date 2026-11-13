@@ -139,7 +139,7 @@ def test_the_arr_key_check_asks_for_the_path_its_route_admits_is_clean(monkeypat
     `/api/<ver>/system/status`, which is on no monitoring route's PathPrefix, would fall
     through to the app's own Authelia'd route and 302 — §9.3 would be structurally SKIP. The
     route side is guarded by
-    ansible/tests/k8s/test_arr_monitoring_routes_admit_postflight.py.
+    tests/k8s/test_arr_monitoring_routes_admit_postflight.py.
     """
     seen = []
 

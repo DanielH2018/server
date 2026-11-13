@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Which roles exist under ``ansible/roles/k8s/``, and which of them each reader skips.
+"""Which roles exist under ``k8s/roles/``, and which of them each reader skips.
 
 ``role_dirs`` is the one census of a role tree for code under ``scripts/``: every reader
 that lists the roles calls it and passes the names it skips as ``exclude``. The two
@@ -97,7 +97,7 @@ def role_dirs(roles_dir: Path = K8S_ROLES, exclude: Collection[str] = ()) -> lis
     )
 
 
-def k8s_autodeploy_denylist(ansible_dir: Path | str) -> list[str]:
+def k8s_autodeploy_denylist(roles_dir: Path | str = K8S_ROLES) -> list[str]:
     """The k8s roles declaring `k8s_autodeploy: false`, sorted.
 
     Renovate may automerge an image bump only for a role this list leaves out, and the lander
@@ -105,13 +105,13 @@ def k8s_autodeploy_denylist(ansible_dir: Path | str) -> list[str]:
     therefore eligible, so anything this cannot read with certainty raises rather than drop out.
 
     Args:
-        ansible_dir: the directory holding `roles/k8s/`.
+        roles_dir: the directory holding one subdirectory per k8s role.
 
     Raises:
         ValueError: a role declares no boolean stance or no reason, its defaults cannot be
             read, an entry is not a directory, or the list is empty.
     """
-    roles_dir = Path(ansible_dir) / "roles" / "k8s"
+    roles_dir = Path(roles_dir)
     if not roles_dir.is_dir():
         raise ValueError(f"k8s_autodeploy_denylist: no such directory: {roles_dir}")
 
@@ -123,7 +123,7 @@ def k8s_autodeploy_denylist(ansible_dir: Path | str) -> list[str]:
         if not entry.is_dir():
             raise ValueError(
                 f"k8s_autodeploy_denylist: '{entry}' is not a directory. Every entry under "
-                f"roles/k8s/ must be a real role directory declaring `k8s_autodeploy`; a "
+                f"k8s/roles/ must be a real role directory declaring `k8s_autodeploy`; a "
                 f"dangling symlink is one likely cause."
             )
         if is_leftover_dir(entry):
@@ -146,7 +146,7 @@ def k8s_autodeploy_denylist(ansible_dir: Path | str) -> list[str]:
         if not isinstance(data, dict) or "k8s_autodeploy" not in data:
             raise ValueError(
                 f"k8s_autodeploy_denylist: role '{role}' does not set `k8s_autodeploy` in "
-                f"{path}. Every role under roles/k8s/ must declare whether Renovate may "
+                f"{path}. Every role under k8s/roles/ must declare whether Renovate may "
                 f"automerge its image bumps."
             )
         value = data["k8s_autodeploy"]
@@ -199,7 +199,7 @@ NO_MANIFEST_ROLES = {
 # `vars:` overrides. Rendering them standalone produces STUB-filled manifests that prove nothing.
 #
 # That exemption is a coverage gap, not a clean bill. The build job is closed for the test
-# suite: `ansible/tests/_k8s_render.py:rendered_build_job_text` renders it against a fixture of
+# suite: `tests/_k8s_render.py:rendered_build_job_text` renders it against a fixture of
 # a caller's vars, and the security-context, token-mount and namespace-defaults guards parse
 # that render. One manifest (image-builder's context-configmap) is still parsed as YAML
 # nowhere; this names that gap where someone will look for it.
@@ -293,7 +293,7 @@ def k8s_tags(services: Path = K8S_SERVICES) -> set[str]:
     }
 
 
-# Manifest basenames the renderer renders from a shared template under `ansible/templates/`
+# Manifest basenames the renderer renders from a shared template under `k8s/templates/`
 # when the owning role ships none of its own, mapped to that template's file name. Mirrors
 # The manifests role's two defaults the render reads. A role with no `manifests_prune` of its own
 # arms the prune and renders the `homelab/role` label, and one with no
@@ -463,7 +463,7 @@ def manifest_template(role, basename, k8s_roles=None, entry=None) -> Path | None
     """The template the renderer renders `basename` from for `role`, or None if it renders none.
 
     The role's own `templates/<basename>.j2` first, then the shared default under
-    `ansible/templates/` for a basename the role resolves into `manifests_files` and ships
+    `k8s/templates/` for a basename the role resolves into `manifests_files` and ships
     no template for. `entry` is as for `resolved_manifest_files`.
 
     The one place a reader asks "does this role get a `<basename>`, and from where". Every
@@ -684,7 +684,7 @@ def k8s_tags_in(repo_root: Path, at: str = "") -> set[str]:
     """
     import tempfile
 
-    from lib.ansible_inventory import K8S_HOST, host_vars_file
+    from lib.inventory_lists import K8S_HOST, host_vars_file
     from lib.git import git
     from lib.repo_paths import REPO
 

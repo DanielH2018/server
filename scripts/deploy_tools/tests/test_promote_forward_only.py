@@ -14,11 +14,11 @@ from _promote_fakes import NOW, World, bundle_files, digest_of
 
 from deploy_tools.promote_lib import forward_only, verify_promotion as vp
 
-PINS = "ansible/roles/k8s/system-upgrade/defaults/main.yml"
+PINS = "k8s/roles/system-upgrade/defaults/main.yml"
 FLAGGED = "flux_forward_only: true\n"
-LONGHORN = "ansible/roles/k8s/longhorn/defaults/main.yml"
-METALLB = "ansible/roles/k8s/metallb/defaults/main.yml"
-BENTO = "ansible/roles/k8s/bento-pdf/defaults/main.yml"
+LONGHORN = "k8s/roles/longhorn/defaults/main.yml"
+METALLB = "k8s/roles/metallb/defaults/main.yml"
+BENTO = "k8s/roles/bento-pdf/defaults/main.yml"
 GATES = forward_only.GATE_STATUS_CONTEXT
 
 

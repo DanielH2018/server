@@ -29,7 +29,7 @@ public since before this record: `gh repo view DanielH2018/server --json visibil
 
 **A self-hosted runner on a public repository executes fork pull-request workflows on the
 runner's host.** GitHub's own documentation tells you not to do that. `daniel-server` holds the
-age key that decrypts `ansible/vars/secrets.yml`, a `gh` token carrying `repo` and `workflow`
+age key that decrypts `secrets/secrets.yml`, a `gh` token carrying `repo` and `workflow`
 scopes, and an agent node of the production cluster. Arbitrary code on that host is a total
 compromise of the homelab.
 
@@ -59,7 +59,7 @@ one more reason the visibility change is a larger decision than the runner it en
 
 The repository stays public, and every CI job stays on GitHub-hosted runners. No
 `github_runner` role is built, and the `workflow-runners-are-pinned` row of
-`ansible/tests/repo/test_census_rows_text.py` keeps rejecting the `self-hosted` label. Secrets stay out of the tree in the SOPS and age form
+`tests/repo/test_census_rows_text.py` keeps rejecting the `self-hosted` label. Secrets stay out of the tree in the SOPS and age form
 ADR-0003 records, which is what makes a world-readable tree safe to publish.
 
 ## Consequences
@@ -70,7 +70,7 @@ this configuration. That is the whole of the benefit, and it is the reason the r
 not worth doing.
 
 **CI keeps GitHub's wall clock, and `daniel-server` keeps its memory for the fan-out agents.**
-The fleet-cap derivation in `ansible/inventory/host_vars/daniel-server.yml` stands as written,
+The fleet-cap derivation in `inventory/host_vars/daniel-server.yml` stands as written,
 because no runner competes with `user-1000.slice` for reclaim.
 
 **The 4-shard `pytest` matrix keeps earning its shape.** GitHub gives every job its own
@@ -99,6 +99,6 @@ actively unsafe.
 No line in the tree enforces this. A repository's visibility is a GitHub setting, in the same
 way ADR-0016's code-scanning choice is, so `governs:` is empty. The nearest thing to
 enforcement is the `workflow-runners-are-pinned` row of
-`ansible/tests/repo/test_census_rows_text.py`, which rejects the
+`tests/repo/test_census_rows_text.py`, which rejects the
 `self-hosted` label — it fails by accident of its regexes rather than by referencing this
 decision, so it carries no marker.

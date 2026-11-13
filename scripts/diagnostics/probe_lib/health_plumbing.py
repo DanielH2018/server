@@ -17,7 +17,7 @@ verdict cannot see what those tasks saw, so each check moves here, keyed by depl
 
 `health.py` folds these in after a passing rollout, on the path where the tag resolves to a k8s
 role. `coredns` resolves since H1.4 and `longhorn` since H1.5a (#5922), which added their
-`roles/k8s/` roles.
+`k8s/roles/` roles.
 
 A Corefile edit rolls no CoreDNS pod (the `coredns` role passes `manifests_rollout: ''`), so
 the rollout verdict passes at once while the running pod still serves the previous Corefile.

@@ -1,6 +1,6 @@
 """When each secret's ciphertext last changed, read out of git.
 
-A real rotation changes the value in `ansible/vars/secrets.yml` but leaves the registry's
+A real rotation changes the value in `secrets/secrets.yml` but leaves the registry's
 `last_rotated` behind, because `sync` deliberately will not touch an existing row's date. An
 app-side rotation nobody recorded is then invisible and ages into a false OVERDUE. These
 functions read the date back out of the git history and advance the registry IN MEMORY only,
@@ -29,7 +29,10 @@ from secrets_mgmt.rotation_tools import RotationTools
 # Repo-relative, for git revspecs — `git show <rev>:<path>` needs the tracked path.
 # `rotation_tools.SECRETS_FILE` is the absolute spelling of this same file, for the callers
 # that open it rather than ask git about it.
-SECRETS_GIT_PATH = "ansible/vars/secrets.yml"
+SECRETS_GIT_PATH = "secrets/secrets.yml"
+# The directory every SOPS file sat under before ADR 0030 renamed it to `secrets/`. The walks
+# read a file's history across the rename, so its older revisions are read at this path.
+PRE_RENAME_DIR, RENAMED_DIR = "ansible/vars/", "secrets/"
 
 # new name -> the name the same secret was stored under before it was renamed.
 #
@@ -41,7 +44,7 @@ SECRETS_GIT_PATH = "ansible/vars/secrets.yml"
 #
 # A renamed key gets NO derived date from before its rename: the walk stops at the boundary
 # rather than following the old spelling backwards. Its pre-rename history is frozen into
-# `ansible/secret_rotation.yml` at rename time instead, by carrying over the date the
+# `secrets/secret_rotation.yml` at rename time instead, by carrying over the date the
 # derivation reported on the commit before. A later real rotation derives normally, because
 # both revisions then spell the key the same way.
 #
@@ -134,7 +137,7 @@ RETIRED: frozenset[str] = frozenset(
         "healthchecks_password",
         "healthchecks_secret_key",
         # Published as an inventory variable by the operator's 2026-10-14 ruling;
-        # ansible/inventory/group_vars/all.yml holds it (target slice R2, domain PR 3).
+        # inventory/group_vars/all.yml holds it (target slice R2, domain PR 3).
         "domain",
         # The push tokens of the bridge's Loki ingestion, Loki-reachable and Kuma notification
         # checks, which M5's PR 4a deleted. M5's PR 5 retired them a week later.
@@ -320,15 +323,26 @@ def ciphertext_at(
     return {k: str(v) for k, v in data.items() if k != "sops"}
 
 
-def _revisions(tools: RotationTools, path: str = SECRETS_GIT_PATH) -> list[list[str]]:
-    """Every commit that touched `path`, newest first, as [sha, "YYYY-MM-DD"]."""
-    return [
-        line.split(" ", 1)
-        for line in tools.git(
-            "log", "--format=%H %ad", "--date=short", "--", path
-        ).splitlines()
-        if line
-    ]
+def _revisions(
+    tools: RotationTools, path: str = SECRETS_GIT_PATH
+) -> list[tuple[str, str, str]]:
+    """Every commit that touched `path`, newest first, as (sha, "YYYY-MM-DD", path at sha).
+
+    A commit from before ADR 0030's rename touched the file at its `ansible/vars/` path.
+    """
+    paths = [path]
+    if path.startswith(RENAMED_DIR):
+        paths.append(PRE_RENAME_DIR + path.removeprefix(RENAMED_DIR))
+    out = tools.git(
+        "log", "--no-renames", "--name-only", "--format=@%H %ad", "--date=short",
+        "--", *paths,
+    )  # fmt: skip
+    revs: list[tuple[str, str, str]] = []
+    for block in out.split("@")[1:]:
+        head, *names = [line for line in block.splitlines() if line]
+        sha, day = head.split(" ", 1)
+        revs.append((sha, day, path if path in names or not names else names[0]))
+    return revs
 
 
 def ciphertext_rotation_dates(
@@ -383,11 +397,11 @@ def _rotation_walk(
     found: dict[str, tuple[str, str]] = {}
     if not revs:
         return found
-    tracked = set(ciphertext_at(revs[0][0], tools, path))
+    tracked = set(ciphertext_at(revs[0][0], tools, revs[0][2]))
     newer: dict[str, str] = {}
     newer_rev = newer_day = ""
-    for rev, day in revs:
-        current = ciphertext_at(rev, tools, path)
+    for rev, day, at in revs:
+        current = ciphertext_at(rev, tools, at)
         reencrypt = guard and _is_whole_file_reencrypt(newer, current)
         for name, value in newer.items():
             if name in found:
@@ -458,8 +472,8 @@ def advance_last_rotated(
 def historical_names(tools: RotationTools) -> set[str]:
     """Every key any committed revision of secrets.yml has held. Names only, never values."""
     names: set[str] = set()
-    for rev, _day in _revisions(tools):
-        names |= set(ciphertext_at(rev, tools))
+    for rev, _day, at in _revisions(tools):
+        names |= set(ciphertext_at(rev, tools, at))
     return names
 
 

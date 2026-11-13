@@ -106,14 +106,14 @@ def node_citations(text: str) -> list[tuple[str, str]]:
     return _PROSE_NODE.findall(text)
 
 
-# The scanners below serve the operator-docs guards under ``ansible/tests/repo/``, not the
+# The scanners below serve the operator-docs guards under ``tests/repo/``, not the
 # facts store. None of them feeds ``parse_citations``. A ``file:line`` span is support there
 # and rejected here, because a line number in a long-lived runbook is still a claim that the
 # file exists, while a ``CLAUDE.md`` section's support has to hash stably.
 #
 # DECIDED: no repo-root prefix is required. Requiring one ("ansible/...", "scripts/...")
 # matched 4 citations in the whole tree, because the docs overwhelmingly cite from context --
-# `roles/k8s/volume-snapshot/defaults/main.yml:12`, `land_tags.py:40`. A guard that checks four
+# `k8s/roles/volume-snapshot/defaults/main.yml:12`, `land_tags.py:40`. A guard that checks four
 # things is a guard that passes vacuously, which is why the guard asserts a citation count.
 # The extension must begin with a letter, which is what keeps `127.0.0.1:3100` and
 # `10.0.0.240:51820` from parsing as a file called `127.0.0.` with extension `1`. Four role
@@ -132,19 +132,20 @@ def line_numbered_citations(
     return [path for path, ext in _LINE_NUMBERED.findall(text) if ext in extensions]
 
 
-# A bare `ansible/tests/<file>.py` or `hosts/tests/<file>.py` citation is the ONE exception to
-# the line-number rule. Every such path is a claim about this tree: nothing else has a
-# directory by that name, and a `pytest <path>` line or an `ENFORCED by <path>` note is an
-# instruction someone runs. A move of the guards rewrites these citations, and the line-number
+# A bare `tests/<group>/<file>.py` or `hosts/tests/<file>.py` citation is the ONE exception to
+# the line-number rule. Every such path is a claim about this tree: a role's own `tests/` holds
+# no group directory, so a role-relative `tests/test_x.py` does not match. A `pytest <path>`
+# line or an `ENFORCED by <path>` note is an instruction someone runs. A move of the guards rewrites these citations, and the line-number
 # rule would watch none of them go stale. A trailing `:line` or `::node_id` is allowed and
 # dropped.
 _GUARD_PATH = re.compile(
-    r"`((?:ansible|hosts)/tests/[\w./-]+\.py)(?::\d+(?:-\d+)?|::[\w\[\]:.-]+)?`"
+    r"`(hosts/tests/[\w./-]+\.py|tests/(?:deploy|k8s|longhorn|repo|services|staging)/[\w./-]+\.py)"
+    r"(?::\d+(?:-\d+)?|::[\w\[\]:.-]+)?`"
 )
 
 
 def guard_path_citations(text: str) -> list[str]:
-    """Every backticked ``ansible/tests/...py`` or ``hosts/tests/...py`` in ``text``."""
+    """Every backticked ``tests/...py`` or ``hosts/tests/...py`` in ``text``."""
     return _GUARD_PATH.findall(text)
 
 

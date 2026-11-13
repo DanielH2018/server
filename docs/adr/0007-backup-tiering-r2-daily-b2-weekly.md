@@ -108,8 +108,8 @@ backupstore," which is indistinguishable from a missing backup until the caps ar
 
 No single line. The tier lists, `k3s_longhorn_r2_volumes`, `k3s_longhorn_weekly_volumes` and
 `k3s_longhorn_nobackup_volumes`, live in the defaults of the `longhorn-reconcile` role
-(`ansible/roles/k8s/longhorn-reconcile/defaults/main.yml`). That role's CronJob applies them to
+(`k8s/roles/longhorn-reconcile/defaults/main.yml`). That role's CronJob applies them to
 the cluster, so `governs:` is empty. The arm flags `k3s_longhorn_backup_armed` and
 `k3s_longhorn_r2_armed`, the RecurringJob schedules and the retain counts live in the defaults of
-the `longhorn-backup` role (`ansible/roles/k8s/longhorn-backup/defaults/main.yml`), which Flux
+the `longhorn-backup` role (`k8s/roles/longhorn-backup/defaults/main.yml`), which Flux
 applies.

@@ -41,6 +41,6 @@ jwt:
         claim: "{{ k3s_oidc_groups_claim }}"
         # Groups DO carry a prefix, and it is what stops an Authelia group name from being
         # read as a built-in `system:` group. `headlamp_k8s_oidc_group`
-        # (roles/k8s/headlamp/defaults) is this prefix plus the Authelia group.
+        # (k8s/roles/headlamp/defaults) is this prefix plus the Authelia group.
         prefix: "{{ k3s_oidc_groups_prefix }}"
 {% endfor %}

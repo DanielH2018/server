@@ -49,11 +49,11 @@ def _payload(command, agent="skeptic"):
 
 
 FLAGGED = [
-    "echo x > ansible/roles/k8s/foo/defaults/main.yml",
+    "echo x > k8s/roles/foo/defaults/main.yml",
     "printf x >> CLAUDE.md",
     "sed -i s/a/b/ README.md",
     "git log -1 && tee notes.md",
-    "rm -rf ansible/roles/k8s/docs",
+    "rm -rf k8s/roles/docs",
     "mv README.md /tmp/README.md",
     "cp /tmp/payload.py .claude/hooks/block-protected-bash.py",
     "git commit -am 'apply the fix'",
@@ -106,8 +106,8 @@ FLAGGED = [
     "./scripts/deploy.sh --tags docs",
     "uv run python scripts/dev/findings.py open --title x",
     'python3 -c \'open("x", "w")\'',
-    "uv run pytest ansible/tests/repo -q",
-    "cp ansible/vars/secrets.yml /tmp/copy.yml",
+    "uv run pytest tests/repo -q",
+    "cp secrets/secrets.yml /tmp/copy.yml",
     # A write inside a substitution or an ssh remote command.
     "cat $(rm -rf x)",
     "ssh daniel-server 'rm -rf /srv/x'",
@@ -116,7 +116,7 @@ FLAGGED = [
 ]
 
 CLEAN = [
-    "git log --oneline -5 -- ansible/roles/k8s/docs",
+    "git log --oneline -5 -- k8s/roles/docs",
     "git blame -L 1,20 CLAUDE.md 2>/dev/null",
     "git -C /home/ubuntu/server show HEAD:CLAUDE.md | head",
     "git branch -a",
@@ -183,7 +183,7 @@ def test_the_same_write_from_a_writing_agent_is_clean(agent):
 
 def test_a_read_only_agents_write_to_a_protected_file_is_denied_not_asked():
     """Arm 1 would ask for this write; the read-only arm runs first and denies it."""
-    assert _mod.decision(_payload("echo x >> ansible/vars/secrets.yml"))[0] == "deny"
+    assert _mod.decision(_payload("echo x >> secrets/secrets.yml"))[0] == "deny"
 
 
 def test_the_set_is_derived_from_the_frontmatter_key(tmp_path):

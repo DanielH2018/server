@@ -1,17 +1,17 @@
 """A small named-entry registry shared by this repo's CLI dispatchers.
 
-Same shape as monitor-bridge's ``CHECKS`` list (``ansible/roles/k8s/monitor-bridge/files/
+Same shape as monitor-bridge's ``CHECKS`` list (``k8s/roles/monitor-bridge/files/
 check.py``), generalised: a name maps to a description and a callable, plus optional flags.
 monitor-bridge itself keeps its own copy (it ships inside a container image and must not import
 from ``scripts/``); this module is for everything that CAN import from ``scripts/`` —
 ``probe.py``.
 
 The name carries the ``cli_`` prefix because monitor-bridge's copy is
-``ansible/roles/k8s/monitor-bridge/files/registry.py``, and both directories sit on
+``k8s/roles/monitor-bridge/files/registry.py``, and both directories sit on
 ``pythonpath``. That role's module is imported bare (``import registry``, from inside the
 container image), so a second top-level ``registry`` would shadow one of them depending on
 ``sys.path`` order. The ``no-two-import-roots-share-a-module-basename`` row of
-``ansible/tests/repo/test_census_rows_python.py`` enforces the separation.
+``tests/repo/test_census_rows_python.py`` enforces the separation.
 
 Argparse still owns argument parsing in every caller. This module owns two things argparse
 does not: a `--list` renderer, and a completeness guard so a new entry point can't ship

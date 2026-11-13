@@ -55,7 +55,7 @@ defaults:
   k3s_readonly_kubeconfig_server: "https://{{ hosts['daniel-box'].server_ip }}:6443"
   k3s_readonly_kubeconfig_ca_source: /var/lib/rancher/k3s/agent/server-ca.crt
   # The log file k3s writes. The k3s-server component carries the same path, because Alloy tails
-  # one literal on every node; ansible/tests/k8s/test_alloy_ships_k3s_log.py holds all three equal.
+  # one literal on every node; tests/k8s/test_alloy_ships_k3s_log.py holds all three equal.
   k3s_log_file: /var/log/k3s.log
   # The k3s agent's flags (H6.5b). templates/50-homelab.yaml.j2 renders this mapping as
   # /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, and 50-homelab.conf runs a bare `k3s agent`.
@@ -98,7 +98,7 @@ defaults:
   #
   # DECIDED: 90 seconds in total, because the UPS chain cannot give more. upsmon's SHUTDOWNCMD is
   # `systemctl poweroff`, which waits on kubelet's delay lock like the weekly reboot does, and an
-  # FSD raised by `battery.runtime.low` (120 s, roles/k8s/nut/defaults/main.yml) leaves about two
+  # FSD raised by `battery.runtime.low` (120 s, k8s/roles/nut/defaults/main.yml) leaves about two
   # minutes of battery. kubelet moves to the next group as soon as a group's pods have stopped, so
   # a group's seconds are its ceiling, not its cost.
   k3s_agent_graceful_shutdown:

@@ -5,7 +5,7 @@ replace them through Sonarr, and repair mkv font-attachment names that break bur
 subtitles. `homelab-daniel-box` ships it. H7.37 moved it from the `fake_remux` role.
 
 Detail that predates the move — the design, the ledger shape, the tunables, how to run either
-script by hand in report-only or shadow mode — is in `roles/k8s/autofix-bridge/CLAUDE.md`, whose
+script by hand in report-only or shadow mode — is in `k8s/roles/autofix-bridge/CLAUDE.md`, whose
 contract section names fake-remux replacement as one of its actuator planes. This file carries
 what is specific to the host timers: the schedule, the lock, and the contract below.
 
@@ -50,7 +50,7 @@ what is specific to the host timers: the schedule, the lock, and the contract be
   each cron's own cadence (`fake_remux_*_max_age_hours` — a grace shorter than the gap flaps,
   one much longer clears the DOWN it exists to make sticky) and a deadline of two health periods
   plus 300 s rendered from `fake_remux_health_cron_minute`. The rules in
-  `ansible/roles/k8s/observability/files/rules/other-setup-checks.yaml` read them (M6 batch B4),
+  `k8s/roles/observability/files/rules/other-setup-checks.yaml` read them (M6 batch B4),
   and a `status=` syslog line per state file carries the message.
 - **Next-run review:** before widening scope (a looser detection threshold, a higher cap,
   a second library root), read `outcomes.jsonl` and the Discord log for what the previous
@@ -72,7 +72,7 @@ what is specific to the host timers: the schedule, the lock, and the contract be
   the state file aging.
 - **Sonarr is reached by its pinned ClusterIP**, not by name: the host has no cluster DNS, and
   the `-k8s` ingress name mis-resolves on this node. A package cannot read the cluster when it
-  renders, so `sonarr_k8s_cluster_ip` in `ansible/roles/k8s/sonarr/defaults/main.yml` and
+  renders, so `sonarr_k8s_cluster_ip` in `k8s/roles/sonarr/defaults/main.yml` and
   `fake_remux_sonarr_cluster_ip` in `defaults/main.yml` hold the same address, and
   `hosts/lib/tests/test_h737_box_components.py` holds the two equal.
 - Tests: `uv run pytest hosts/components/fake-remux/tests` runs the pure-logic suites.

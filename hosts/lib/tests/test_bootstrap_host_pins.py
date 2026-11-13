@@ -16,7 +16,7 @@ from lib.repo_paths import ALL_VARS, HOST_VARS, REPO
 
 SCRIPT = (REPO / "hosts" / "bootstrap-host.sh").read_text()
 TOOLS = (REPO / "hosts" / "packages" / "homelab-tools" / "package.yml").read_text()
-DEFAULTS = (REPO / "ansible/roles/k8s/system-upgrade/defaults/main.yml").read_text()
+DEFAULTS = (REPO / "k8s/roles/system-upgrade/defaults/main.yml").read_text()
 MANAGERS = json.loads((REPO / "renovate.json").read_text())["customManagers"]
 
 

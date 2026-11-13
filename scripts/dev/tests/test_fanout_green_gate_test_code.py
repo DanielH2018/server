@@ -247,7 +247,7 @@ def test_the_green_gate_passes_a_guard_constant_the_red_test_needs_changed(tmp_p
 
 
 # #5397: the red commits registered their patching module, and the fix raised its count.
-REGISTRY = "ansible/tests/repo/monkeypatch_allowlist.txt"
+REGISTRY = "tests/repo/monkeypatch_allowlist.txt"
 LISTED = "tests/test_listed.py 2\n"
 RED_LINE = "tests/test_new.py 8\n"
 PLAIN_RED_TEST = (

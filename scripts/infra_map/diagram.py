@@ -19,7 +19,7 @@ from typing import Any
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from infra_map.style import e
-from lib.ansible_inventory import LANDING_HOST, PI_HOST
+from lib.inventory_lists import LANDING_HOST, PI_HOST
 
 CAPTION = (
     "How a request reaches a workload, and what it runs on. Box outlines carry live "

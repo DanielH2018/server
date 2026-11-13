@@ -26,7 +26,7 @@ A role carrying someone else's history is a worse starting point than one carryi
 
 WHAT IT DOES NOT WRITE, deliberately:
 
-* No `service.yaml.j2`. The renderer renders `ansible/templates/service-default.yaml.j2`
+* No `service.yaml.j2`. The renderer renders `k8s/templates/service-default.yaml.j2`
   for a role that ships none (#2872), reading the name and port off the entry this script
   writes. A Service that needs more than that is a decision, so it stays a hand edit.
 * No PVC, no Secret, no NetworkPolicy, no probes beyond the readiness/liveness pair on the
@@ -58,7 +58,7 @@ from renderer.template_filters.toposort import K8S_APPLIES_LAST
 AUTH_TIERS = ("one_factor", "two_factor")
 STRATEGIES = ("RollingUpdate", "Recreate")
 
-# The tiers `ansible/roles/k8s/cluster-base/templates/priorityclass.yaml.j2` declares. Named here so a
+# The tiers `k8s/roles/cluster-base/templates/priorityclass.yaml.j2` declares. Named here so a
 # typo fails at the command line rather than at admission, hours later.
 PRIORITY_CLASSES = (
     "homelab-critical",
@@ -95,7 +95,7 @@ k8s_autodeploy_reason: "{reason}"
 {prefix}_k8s_mem_request: 64Mi
 
 # The uid the container runs as, pinned rather than left to the image's named user.
-# `ansible/tests/k8s/test_container_security_context.py::test_every_asserting_container_pins_a_uid`
+# `tests/k8s/test_container_security_context.py::test_every_asserting_container_pins_a_uid`
 # requires it: a pod asserting runAsNonRoot with no runAsUser still passes admission after a
 # tag bump moves that named user to a different uid. Read the image's own uid and set it here.
 {prefix}_k8s_uid: {uid}
@@ -160,10 +160,10 @@ def role_doc(name: str, route: bool) -> str:
     """
     shared = (
         "The Service and the IngressRoute render from "
-        "`ansible/templates/service-default.yaml.j2` and "
-        "`ansible/templates/ingressroute-default.yaml.j2`, off the containers_list entry."
+        "`k8s/templates/service-default.yaml.j2` and "
+        "`k8s/templates/ingressroute-default.yaml.j2`, off the containers_list entry."
         if route
-        else "The Service renders from `ansible/templates/service-default.yaml.j2`, off the "
+        else "The Service renders from `k8s/templates/service-default.yaml.j2`, off the "
         "containers_list entry. No IngressRoute: callers reach it in-cluster by Service name."
     )
     return f"""# {name} — TODO: one line on what this service is for
@@ -171,7 +171,7 @@ def role_doc(name: str, route: bool) -> str:
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
 <!-- /generated_from -->
 
 ## Notable
@@ -259,7 +259,7 @@ def write_role(args, roles_dir: Path | None = None) -> list[Path]:
 
     Args:
         args: the parsed command line.
-        roles_dir: where `<name>/` is created. Defaults to `ansible/roles/k8s`; a test passes
+        roles_dir: where `<name>/` is created. Defaults to `k8s/roles`; a test passes
             a temporary directory rather than patching the module-level constant.
     """
     role = (roles_dir or K8S_ROLES) / args.name
@@ -312,7 +312,7 @@ def parse_args(argv=None):
         choices=STRATEGIES,
         default="RollingUpdate",
         help="Deployment strategy. Recreate means a downtime gap on every deploy and has to "
-        "be allowlisted with a reason in ansible/tests/k8s/test_deploy_strategy.py.",
+        "be allowlisted with a reason in tests/k8s/test_deploy_strategy.py.",
     )
     parser.add_argument(
         "--priority-class", choices=PRIORITY_CLASSES, default="homelab-best-effort"
@@ -376,11 +376,11 @@ def next_steps(args, role: Path) -> str:
         f"`k8s_claims` entry in {(role / 'defaults' / 'main.yml').relative_to(REPO)}, not "
         f"a template.\n"
         f"\nTwo censuses a new role always has to join, which `prek` does not run and CI does:\n"
-        f"  BORN_FENCED_ROLES in ansible/tests/k8s/test_netpol_baseline_labels.py — add "
+        f"  BORN_FENCED_ROLES in tests/k8s/test_netpol_baseline_labels.py — add "
         f"{args.name} with the sentence saying why Traefik is its only caller, or drop the "
         f"`netpol-baseline: enforced` pod label and write the role its own NetworkPolicy.\n"
         f"  ROLES_WITH_A_DEFAULT_SERVICE in "
-        f"ansible/tests/k8s/test_shared_manifest_defaults.py — add {args.name}, since it "
+        f"tests/k8s/test_shared_manifest_defaults.py — add {args.name}, since it "
         f"takes the shared default Service{route_census}.\n"
         f"The regen-doc-fragments prek hook rewrites the Renovate stance fragment on "
         f"your commit and fails once: stage what it wrote and commit again."

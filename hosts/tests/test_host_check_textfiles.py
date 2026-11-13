@@ -19,11 +19,11 @@ Run: uv run pytest hosts/tests/test_host_check_textfiles.py
 import re
 
 import pytest
-from _helpers import ANSIBLE
+from _helpers import REPO
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, path_with, run, write_exec
 
-COMPONENTS = ANSIBLE.parent / "hosts" / "components"
+COMPONENTS = REPO / "hosts" / "components"
 CHECK_LIB = COMPONENTS / "check-lib" / "files" / "homelab-check-lib.sh"
 EPOCH = 1760000000
 OVERRIDES = {
@@ -177,9 +177,9 @@ def _run_audit(tmp_path, audit_rc=0):
     The stub records its argv, so a case can read which flag the wrapper asked for.
     """
     repo = tmp_path / "server"
-    (repo / "ansible" / "vars").mkdir(parents=True)
-    (repo / "ansible" / "vars" / "secrets.yml").write_text("a: 1\n")
-    (repo / "ansible" / "secret_rotation.yml").write_text("b: 1\n")
+    (repo / "secrets").mkdir(parents=True)
+    (repo / "secrets" / "secrets.yml").write_text("a: 1\n")
+    (repo / "secrets" / "secret_rotation.yml").write_text("b: 1\n")
     uv = write_exec(
         tmp_path / "uv",
         '#!/usr/bin/env bash\necho "$*" >> "$UV_ARGV"\nexit $STUB_AUDIT_RC\n',

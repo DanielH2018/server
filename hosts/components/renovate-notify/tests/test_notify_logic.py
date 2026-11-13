@@ -376,7 +376,7 @@ _LOOKUP_WARNING_BODY = """This issue lists Renovate updates and detected depende
 > [!WARNING]
 > Renovate failed to look up the following dependencies: `Failed to look up pypi package ruff: no-result`, `Failed to look up docker package registry.k8s.io/kube-state-metrics/kube-state-metrics: no-result`.
 >
-> Files affected: `pyproject.toml`, `ansible/roles/k8s/observability/defaults/main.yml`
+> Files affected: `pyproject.toml`, `k8s/roles/observability/defaults/main.yml`
 
 ---
 

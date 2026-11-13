@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
-from lib.repo_paths import REPO, ROLES
+from lib.repo_paths import K8S_ROLES, REPO
 from renderer.renderer_lib.host_sources import SHARED_FILES
 
 # A role command running a script `--no-project`: the first `.py` path after the flag, in one
@@ -39,8 +39,7 @@ def _role_of(path: Path) -> Path:
     """The role or component directory `path` sits in."""
     if path.is_relative_to(COMPONENTS):
         return COMPONENTS / path.relative_to(COMPONENTS).parts[0]
-    plane, name = path.relative_to(ROLES).parts[:2]
-    return ROLES / plane / name
+    return K8S_ROLES / path.relative_to(K8S_ROLES).parts[0]
 
 
 @functools.cache
@@ -168,7 +167,7 @@ def role_entries() -> list[tuple[Path, tuple[str, ...]]]:
     script with two subcommands rather than parsing which one each cron passes.
     """
     found = []
-    for path in sorted([*ROLES.rglob("*"), *COMPONENTS.rglob("*")]):
+    for path in sorted([*K8S_ROLES.rglob("*"), *COMPONENTS.rglob("*")]):
         if (
             path.suffix not in {".yml", ".yaml", ".j2"}
             or "tests" in path.parts

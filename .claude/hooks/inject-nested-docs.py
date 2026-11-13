@@ -13,7 +13,7 @@ tightest first, then the root `CLAUDE.md`. It exits non-zero on any error.
 WHY. Claude Code loads a role's `CLAUDE.md` (`nested_traversal`) and a `.claude/rules/*.md`
 whose `paths:` glob matches (`path_glob_match`) only when the Read, Edit or Write tool touches
 a matching path. Auto mode instructs the model to read files with `cat` / `sed -n` / `head`
-through Bash instead, which fires neither. `ansible/tests/repo/test_role_claude_md.py` guarantees
+through Bash instead, which fires neither. `tests/repo/test_role_claude_md.py` guarantees
 every role has a doc; nothing guaranteed a session loads it.
 
 WHAT. Every token in the command that names a path on disk inside a git checkout selects
@@ -133,7 +133,7 @@ AGENT_FIELD = "agent="
 _STATE_TTL_S = 24 * 3600
 
 # Where a command's path tokens end. Quotes and backticks are stripped from the token after
-# the split rather than treated as separators, so `'ansible/roles/k8s/foo/x.j2'` survives.
+# the split rather than treated as separators, so `'k8s/roles/foo/x.j2'` survives.
 _SEPARATORS = re.compile(r"[\s;|&<>()`]+")
 _QUOTES = "\"'"
 _TRAILING_PUNCT = ",:."
@@ -160,7 +160,7 @@ written_paths = _load_written_paths()
 def path_tokens(command):
     """Every token of `command` that could be a path: carries a `/`, is not a flag.
 
-    A token naming a path inside a git object — `git show origin/master:ansible/roles/k8s/foo/
+    A token naming a path inside a git object — `git show origin/master:k8s/roles/foo/
     tasks/main.yml` — yields the whole token AND the part after its last `:`, so the caller's
     existence check keeps whichever of the two is a real path. Both are emitted rather than
     one chosen here, because only the caller knows the cwd. A `file:line` token is unaffected:

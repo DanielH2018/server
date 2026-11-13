@@ -77,7 +77,7 @@ def coverage_problems(
             )
     mapped = {key for keys in committed.values() for key in keys}
     for key in sorted(mapped - known_keys):
-        problems.append(f"{key} is in the map and not in ansible/vars/secrets.yml")
+        problems.append(f"{key} is in the map and not in secrets/secrets.yml")
     return problems
 
 

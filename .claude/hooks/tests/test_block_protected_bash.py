@@ -42,11 +42,11 @@ _mod = _load("block-protected-bash")
 # Paths that exist in this repo and that classify() rejects. secrets.yml is detected by
 # CONTENT (its SOPS integrity MAC), docs/reference/ by the generated_from: banner.
 FLAGGED_WRITES = [
-    "sed -i s/a/b/ ansible/vars/secrets.yml",
+    "sed -i s/a/b/ secrets/secrets.yml",
     "cat > docs/assets/generated/infra-map.svg <<EOF",
     "tee docs/reference/services.md",
-    "echo x >> ansible/vars/secrets.yml",
-    "perl -pi -e s/a/b/ ansible/vars/secrets.yml",
+    "echo x >> secrets/secrets.yml",
+    "perl -pi -e s/a/b/ secrets/secrets.yml",
 ]
 
 # Near misses. Each is one token from a case above and must keep working: host_vars and
@@ -55,10 +55,10 @@ FLAGGED_WRITES = [
 CLEAN_WRITES = [
     "echo x > /tmp/scratch.txt",
     "sed -i s/a/b/ README.md",
-    "cat ansible/vars/secrets.yml",
-    "echo x >> ansible/inventory/host_vars/daniel-box.yml",
+    "cat secrets/secrets.yml",
+    "echo x >> inventory/host_vars/daniel-box.yml",
     "echo x >> docs/reference/topology.md",
-    "grep -n 'sed -i ansible/vars/secrets.yml' notes.md",
+    "grep -n 'sed -i secrets/secrets.yml' notes.md",
 ]
 
 
@@ -125,7 +125,7 @@ def test_a_write_asks_rather_than_denies():
     wrong one. `ask` carries the reason the plain permission prompt cannot and leaves the
     decision with the operator; `deny` would turn one bad extraction into unblockable work.
     """
-    decision, _ = _mod.decide("sed -i s/a/b/ ansible/vars/secrets.yml", _REPO)
+    decision, _ = _mod.decide("sed -i s/a/b/ secrets/secrets.yml", _REPO)
     assert decision == "ask"
 
 

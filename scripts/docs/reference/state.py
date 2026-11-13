@@ -158,7 +158,7 @@ def longhorn_restore_drill_run(
 ) -> LoopRun:
     """The daily Longhorn PVC restore drill.
 
-    Cadence: k3s_longhorn_restore_drill_cron (roles/k8s/longhorn-restore-drill/defaults/main.yml,
+    Cadence: k3s_longhorn_restore_drill_cron (k8s/roles/longhorn-restore-drill/defaults/main.yml,
     resolved directly -- see the module docstring).
 
     Reads `last-success` from the drill's stamp ConfigMap through `lib.kubectl` on `prod`, under

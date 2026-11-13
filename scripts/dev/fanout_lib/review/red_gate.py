@@ -111,7 +111,7 @@ PYTEST_CONFIG = frozenset(
     }
 )
 # `pyproject.toml`'s addopts loads this plugin into every run with `-p leakguard`.
-PLUGINS = ("ansible/tests/leakguard.py",)
+PLUGINS = ("tests/leakguard.py",)
 GREEN_PROTECTED = (*(f":(glob)**/{name}" for name in sorted(PYTEST_CONFIG)), *PLUGINS)
 
 RED_SCHEMA = {

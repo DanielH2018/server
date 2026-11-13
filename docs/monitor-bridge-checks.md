@@ -5,7 +5,7 @@ The measurements, incidents and retirements behind every threshold check the
 `homelab_check_success` gauge and pushes nothing to Uptime Kuma, so each push, tile or
 heartbeat named below describes the monitor a check fed before then. The per-check rule (what it reads, the threshold
 and the arms) lives in the `verdicts/` function that each `files/check_table.py` row names.
-`ansible/roles/k8s/monitor-bridge/CLAUDE.md` carries what holds across all checks: the gates,
+`k8s/roles/monitor-bridge/CLAUDE.md` carries what holds across all checks: the gates,
 the hysteresis and the module layout. `docs/monitor-bridge-internals.md` owns the module table,
 the operator prerequisites, the exporter plumbing and the gate-set membership. This page
 records where each number came from and which incident added each arm.
@@ -308,7 +308,7 @@ checks each gate suppresses.
   `SPEEDTEST_CONSECUTIVE` because an app restart under a deploy is a real transient, and
   `speedtest` is also `startup_grace`. This is the same split as `check_ha_heartbeat`.
   Reaching the app needs `monitor-bridge` in speedtest's `netpol_from` list in
-  `ansible/inventory/host_vars/daniel-box.yml`, because the baseline admits `traefik`,
+  `inventory/host_vars/daniel-box.yml`, because the baseline admits `traefik`,
   `prometheus` and two cni0 /32s, none of which is this pod.
   **The verdict stays on the REST API although Prometheus scrapes the same app.** #3105 asked for
   the switch, and the answer is marked `# DECIDED:` at the fetch in `checks/host_edge.py`. Three
@@ -318,7 +318,7 @@ checks each gate suppresses.
   `speedtest_tracker_result_id` last changed over an 8h window. `SPEEDTEST_FLOOR_CONSECUTIVE`
   counts RESULTS, which one REST fetch hands back, where Prometheus samples a 6-hourly result
   every 5 min and the arm would have to group samples by result id. And the scrape depends on a
-  manual UI toggle that `roles/k8s/speedtest/CLAUDE.md` records as impossible to set from config
+  manual UI toggle that `k8s/roles/speedtest/CLAUDE.md` records as impossible to set from config
   at the pinned build, on a `longhorn-nobackup` PVC, a human step this alert path should not
   acquire. The scrape stays what #996 added it for: history in Grafana.)
 - **`wan_reachable`** (two provider URLs fetched by hostname, tried in order: the root-cause GATE for
@@ -350,7 +350,7 @@ checks each gate suppresses.
   The probe classifies, not the error text: parsing curl exit codes and git stderr across
   heterogeneous crons is the "green and inert" shape that library's header records paying for
   twice, and a GitHub 403 while the link is up makes the probe succeed, so that alert still pages.
-  The endpoint list is `ansible/inventory/group_vars/all.yml:wan_probe_urls`, pinned equal to this
+  The endpoint list is `inventory/group_vars/all.yml:wan_probe_urls`, pinned equal to this
   gate's `WAN_PROBE_DEFAULT` by a test, because two halves disagreeing about what "the internet"
   means would leave a single-endpoint outage reported by nothing. The one wrong case is an
   HTTP-level failure coinciding with a WAN outage, reported as a skip; both alerts would have
@@ -400,7 +400,7 @@ checks each gate suppresses.
   streak n/N" `msg`, and the second straight failure pages. Empty `DISCORD_WEBHOOK_URL` disables
   the check (stays up). The check verifies that the webhook is DELIVERABLE (it catches a rotated or
   revoked URL). It does not assert that a route sends to the webhook:
-  `ansible/tests/services/test_alertmanager_routing.py` walks the routing tree. Pure `discord_webhook_ok()`, `email_backstop()`'s throttle and the
+  `tests/services/test_alertmanager_routing.py` walks the routing tree. Pure `discord_webhook_ok()`, `email_backstop()`'s throttle and the
   streak wrapper are unit-tested.)
 
 ## Retired and moved checks
@@ -408,7 +408,7 @@ checks each gate suppresses.
 Swallowed Push Verdicts (M6's C-7) retired without a successor because its subject is gone. It
 read `kuma-push-lib.sh`'s final `push failed (` line out of Loki and paged a DOWN verdict that
 one cron lost while a sibling's push landed (#1869). C-3a deleted the library, so no host pushes
-to Kuma and no cron writes that line. `git log --all -- ansible/roles/k8s/monitor-bridge/files/checks/logs.py` has the
+to Kuma and no cron writes that line. `git log --all -- k8s/roles/monitor-bridge/files/checks/logs.py` has the
 check and its post-reboot window (#2783).
 
 Prometheus Reachable (M6 batch A6's Cutover-2) retired without a rule of its own, by design. It
@@ -430,45 +430,45 @@ Disk Autoprune retired with the Docker daemon and has no successor.
 Scrape Targets, Cluster Scrape Targets and Log Shipper Dropped Entries (M6 batch A3) retired
 into the `scrape-targets` and `log-pipeline` rule groups in observability, and their tiles,
 rows and env keys are gone. The numbers those groups carry are pinned in
-`ansible/tests/services/test_scrape_target_rule_jobs.py`, and the `DECIDED:` marker for the
+`tests/services/test_scrape_target_rule_jobs.py`, and the `DECIDED:` marker for the
 3000-entry threshold sits at `LogShipperDroppingEntries` in
-`ansible/roles/k8s/observability/files/rules/log-pipeline.yaml`.
+`k8s/roles/observability/files/rules/log-pipeline.yaml`.
 TLS Cert Expiry, Traefik 5xx, Traefik Latency, Traefik 404 Flood and Traefik 421 (M6 batch A4)
 retired into the `edge` rule group in observability, and their tiles, rows and env keys are
 gone. The numbers that group carries are pinned in
-`ansible/tests/services/test_edge_rule_literals.py`. The `DECIDED:` markers for the exempt
+`tests/services/test_edge_rule_literals.py`. The `DECIDED:` markers for the exempt
 stream services, for bazarr and prowlarr staying measured, and for jellyfin staying measured
 (#6649) sit there too, and the `DECIDED:` marker for the 5-of-10-minute latency count sits at
-`TraefikBackendSlow` in `ansible/roles/k8s/observability/files/rules/edge.yaml`.
+`TraefikBackendSlow` in `k8s/roles/observability/files/rules/edge.yaml`.
 k3s Container Restarts, k3s Container OOM and k3s CPU Throttling (M6 batch A2) retired into the
 `container-checks` rule group in observability, and their tiles, rows, streak counters and env
 keys are gone. The 20-pod census floor behind `CAdvisorCoverageShortfall` is pinned in
-`ansible/tests/services/test_container_checks_rule_literals.py`, where its `DECIDED:` marker
+`tests/services/test_container_checks_rule_literals.py`, where its `DECIDED:` marker
 now sits. The CPU rule's 3-cycle streak became `for: 15m` over a `max_over_time(...[5m:1m])`
 smoothing, whose reasoning is at `ContainerCPUThrottled` in
-`ansible/roles/k8s/observability/files/rules/container-checks.yaml`.
+`k8s/roles/observability/files/rules/container-checks.yaml`.
 Longhorn Volume Redundancy, k3s PVC Fullness, Longhorn Snapshot Headroom, Kubelet CSI Mount
 Read-Only and etcd DB Size (M6 batch A5) retired into the `storage` rule group in
 observability, and their tiles, rows and env keys are gone. The thresholds those rules carry
-are pinned in `ansible/tests/services/test_storage_rule_literals.py`, which also holds
+are pinned in `tests/services/test_storage_rule_literals.py`, which also holds
 `PVCBelowFreeFloor` to the transient valheim declares, `LonghornSnapshotNearCap` to the
 jellyfin snapshot cap, and `LonghornVolumeDegraded` to `longhorn_robustness.SAFE_ROBUSTNESS`.
 The `DECIDED:` marker for the 3 GiB free-bytes floor sits there too.
 `hosts/tests/test_etcd_quota_and_its_monitor_agree.py` holds `EtcdDBNearQuota`'s
 quota to the one k3s runs. The reasoning behind each rule (the one-hot `state` label, the
 `max by` that reads a doubled scrape once, the claim census, why an absent etcd series is
-`ScrapeTargetDown`'s) is in `ansible/roles/k8s/observability/files/rules/storage.yaml`.
+`ScrapeTargetDown`'s) is in `k8s/roles/observability/files/rules/storage.yaml`.
 Root Disk, Memory, Host Temperature and UPS Battery Health (M6 batch A1) retired into the
 `hosts` rule group in observability, and their tiles, rows, check bodies, verdicts and env keys
 are gone. The thresholds, floors and `for:` durations those
-rules carry are pinned in `ansible/tests/services/test_host_check_rule_literals.py`, where the
+rules carry are pinned in `tests/services/test_host_check_rule_literals.py`, where the
 `DECIDED:` markers for the 1h temperature hold, the sanity-bounded hwmon limits, the Ryzen
 maximum junction temperature, the nut-only UPS source and the retired-uid note now sit. That file also holds the
 `ClaudeCgroupNotReporting` host and cgroup pairs to the inventory, and
 `test_claude_cgroup_consumers_agree_with_the_writer.py` holds the rules' `claude_cgroup_*`
 selectors to the series the writer emits. The reasoning behind each rule (the `up == 1` start of
 every missing-data arm, the per-host copies, the `unless on ()` that lets mains loss outrank the
-UPS runway arms) is in `ansible/roles/k8s/observability/files/rules/hosts.yaml`.
+UPS runway arms) is in `k8s/roles/observability/files/rules/hosts.yaml`.
 Pi Pressure (M6 batch B8) retired into `PiLoadHigh`, `PiMemoryLow`, `PiDiskFull`,
 `PiFilesystemReadOnly` and `PiMetricsMissing` in `hosts.yaml`, and into `PiPortDead`. Its row,
 tile, check body, verdicts, `PI_*` keys and push token are gone, and the 14 hand-written Kuma
@@ -490,16 +490,16 @@ a stopped container from a detached one. `PiHostDown` inhibits `PiPortDead`, as
 port and no reachability coverage: Kuma HTTP-monitored wg-easy and `ScrapeTargetDown` covers
 `alloy`, but nothing said which port went quiet, and the 2026-08-08 sweep across four monitors for
 that answer missed dozzle. The Pi limits are pinned in
-`ansible/tests/services/test_host_check_rule_literals.py`, the port set in
-`ansible/tests/services/test_pi_publishing_containers.py`, and `PiPortDead`'s hold and recreate
-hint in `ansible/tests/services/test_extra_probe_targets.py`. A fourth node-exporter host needs
+`tests/services/test_host_check_rule_literals.py`, the port set in
+`tests/services/test_pi_publishing_containers.py`, and `PiPortDead`'s hold and recreate
+hint in `tests/services/test_extra_probe_targets.py`. A fourth node-exporter host needs
 rules added to `hosts.yaml`: its per-host copies name the hosts, and
 `HostTemperatureCoverageShortfall` holds a literal floor of 3 hosts, so a fourth host makes that
 floor satisfiable by any three of four and one host can go dark silently.
 `test_every_node_exporter_job_is_mapped_in_exporter_dependent` (test_check_exporters.py)
 forces the decision for a host under a new scrape job, which is how daniel-pi arrived.
 Workload Log Errors (M6 batch A7) retired into the `WorkloadLogErrors` rule in
-`ansible/roles/k8s/loki-homelab/files/rules/homelab-logs.yaml`, and its tile, row, check body,
+`k8s/roles/loki-homelab/files/rules/homelab-logs.yaml`, and its tile, row, check body,
 `with_log_errors`, the `log_error_verdict` verdict and the `LOG_ERROR_*` env keys are gone. The
 rule counts, per container, the lines matching `panic:`, `fatal`, `traceback` or `out of memory`
 over 1h in the cluster pod and daniel-pi container streams, and fires above 20 lines. Its
@@ -581,7 +581,7 @@ The `K8sExtendedResourceMissing` rule in `k8s-workloads.yaml` writes the sanitis
 its comment carries this trap. Before trusting a metric-backed check, run its exact query against live
 Prometheus and confirm it returns rows. The unit tests mock the payload, so they prove the verdict
 logic and nothing about the selector. Guarded by
-`ansible/tests/services/test_dri_resource_name_agrees.py`.
+`tests/services/test_dri_resource_name_agrees.py`.
 
 ### The k8s log streams have no `app` label
 `kubectl` selects pods with `-l app=home-assistant`, so a LogQL selector written from that habit
@@ -597,9 +597,9 @@ one.**
 Unit tests cannot catch this, because they mock the payload. Run the selector against live Loki
 over a window containing a KNOWN event, which is the only check that separates "nothing happened"
 from "nothing matched." A green first cycle is not evidence. `LOKI_STREAM_LABELS`, which
-`ansible/tests/_loki_streams.py` derives, and `test_loki_selectors_use_real_stream_labels` in
+`tests/_loki_streams.py` derives, and `test_loki_selectors_use_real_stream_labels` in
 `test_check_loki.py` pin the vocabulary for all three Loki selectors. The Loki ruler's rules
-are held to the same vocabulary by `ansible/tests/services/test_loki_stream_labels.py`.
+are held to the same vocabulary by `tests/services/test_loki_stream_labels.py`.
 
 ### The runtime stamps the log lines; `bridge.common.log` does not
 `bridge.common.log` prints the bare message (`DOWN b2_reachable ...`) and the container runtime

@@ -23,7 +23,7 @@ from lib.git import git_stdout
 from lib.repo_paths import REPO
 from renderer import homelab_render
 
-SYNC = REPO / "ansible/roles/k8s/flux/templates/sync.yaml.j2"
+SYNC = REPO / "k8s/roles/flux/templates/sync.yaml.j2"
 
 TEN_M = 10 * 60
 # The OCIRepository interval and the 2m `retryInterval` the renderer writes.
@@ -200,7 +200,7 @@ def test_the_requeue_interval_is_kustomize_controllers_default():
 
     `--concurrent` is the role's flag; test_flux_role.py holds CONCURRENT to it.
     """
-    flux = REPO / "ansible/roles/k8s/flux"
+    flux = REPO / "k8s/roles/flux"
     assert (
         "--requeue-dependency" not in (flux / "files/gotk-components.yaml").read_text()
     )

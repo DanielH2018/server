@@ -1,6 +1,6 @@
 # Jellyfin plugins — the per-plugin record and the settled decisions
 
-Working-out moved off `ansible/roles/k8s/jellyfin/CLAUDE.md` (#2991), which a session reads on every
+Working-out moved off `k8s/roles/jellyfin/CLAUDE.md` (#2991), which a session reads on every
 touch of the media server. The role doc keeps the rules; this page keeps what each installed plugin
 is, what blocks the Jellyfin 12 image line, the live census of what the pod loads, and the two
 plugin decisions that outlived their issues.
@@ -126,7 +126,7 @@ removal are not obvious from the diff:
 - **The write-back analysis that gated the install** — a live rating-write HTTP route with no
   automatic caller, and an import task that can clear watch state but ships with no trigger and
   `SkipUnwatchedImportFromTrakt = true` — is in git history at the commit that added that section
-  (`git log -S 'SyncFromTraktTask' -- ansible/roles/k8s/jellyfin/CLAUDE.md`). Re-read it before
+  (`git log -S 'SyncFromTraktTask' -- k8s/roles/jellyfin/CLAUDE.md`). Re-read it before
   reinstalling; it was read from the `v30` tag and a Jellyfin 12 port on `v31`+ could restructure any
   of it.
 

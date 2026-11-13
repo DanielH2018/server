@@ -1,6 +1,6 @@
 # game-stats internals — the Valheim parser, and how `stats_lib.py` reaches a pod
 
-`ansible/roles/k8s/game-stats/CLAUDE.md` is the role doc: what each exporter is, where its
+`k8s/roles/game-stats/CLAUDE.md` is the role doc: what each exporter is, where its
 SQLite lives and which knobs cross a role boundary. This page is what a session needs only
 when it edits the code — the Valheim console lifecycle its parser reads, the three traps in
 reading it, how far it has been verified against real play, and the two-halved shipment that

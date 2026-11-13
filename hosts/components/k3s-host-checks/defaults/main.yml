@@ -10,7 +10,7 @@
 # The namespace the drill's stamp ConfigMap, `longhorn-restore-drill-stamps`, lives in. Backup
 # health's checks 7 and 8, the Longhorn upgrade gate and the docs state page read the ConfigMap in
 # this namespace. It mirrors the role's `longhorn_drill_namespace`, which the drill itself reads,
-# and ansible/tests/k8s/test_restore_drill_stamps.py holds the pair equal.
+# and tests/k8s/test_restore_drill_stamps.py holds the pair equal.
 k3s_longhorn_restore_drill_namespace: homelab
 
 # Where the B2-accounting cron line touches a stamp before its work runs, owned by sys_user so
@@ -79,7 +79,7 @@ k3s_longhorn_weekly_backup_max_age_hours: 198
 # */10 rather than the Pi crons' */5: this queries the k8s API rather than reading a local file,
 # and nothing here changes faster than the daily backup it watches. The script derives DEADLINE_S
 # from this value, and LonghornBackupHealthNotReporting's literal must follow it
-# (ansible/tests/services/test_b1_rule_literals.py).
+# (tests/services/test_b1_rule_literals.py).
 k3s_longhorn_backup_health_cron_minute: "*/10"
 
 # The B2 deletion ledger's two crons (units/homelab-b2-*.timer.j2). 07:10 charges the day's completed
@@ -174,7 +174,7 @@ k3s_health_cron_boot_grace_s: 420
 
 # The longest legitimate gap between two textfile writes of the once-a-day etcd-token-drift check:
 # a day plus an hour. The textfile rule carries it as a literal, pinned to this value by
-# ansible/tests/services/test_b1_rule_literals.py. Move the schedule and this together.
+# tests/services/test_b1_rule_literals.py. Move the schedule and this together.
 k3s_daily_check_deadline_s: 90000
 
 # ── Cluster-token drift check (templates/etcd-token-drift.sh.j2) ─────────────────────────────

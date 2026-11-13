@@ -19,7 +19,7 @@ def _repo(tmp_path, body: str):
     scripts = tmp_path / "scripts"
     scripts.mkdir()
     (scripts / "lonely.py").write_text('"""Summary."""\n')
-    runner = tmp_path / "ansible" / "roles" / "setup" / "r" / "files" / "runner.py"
+    runner = tmp_path / "k8s" / "roles" / "r" / "files" / "runner.py"
     runner.parent.mkdir(parents=True)
     runner.write_text(body)
     return tmp_path, scripts

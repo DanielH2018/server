@@ -1,6 +1,6 @@
 # Traefik record
 
-`ansible/roles/k8s/traefik/CLAUDE.md` is the role doc, and it keeps the rules. This page is the working-out behind them, in two halves. The first half covers startup: the outage that bought the startupProbe, the measured red path, what Traefik's plugin manager does at every process start, and how to change the in-repo local plugin. The second half covers client identity and TLS: the incidents that fixed each `X-Forwarded-For`, origin-pull and 421 rule, the verification commands, and the source trail for `allowEmptyServices`. A session reads it when it edits the plugin, probe, routing or TLS wiring (#2989).
+`k8s/roles/traefik/CLAUDE.md` is the role doc, and it keeps the rules. This page is the working-out behind them, in two halves. The first half covers startup: the outage that bought the startupProbe, the measured red path, what Traefik's plugin manager does at every process start, and how to change the in-repo local plugin. The second half covers client identity and TLS: the incidents that fixed each `X-Forwarded-For`, origin-pull and 421 rule, the verification commands, and the source trail for `allowEmptyServices`. A session reads it when it edits the plugin, probe, routing or TLS wiring (#2989).
 
 ## The outage the startupProbe exists for
 
@@ -15,7 +15,7 @@ The probe targets `edge-selfcheck-ingressroute.yaml.j2`, a router of Traefik's o
 kills it too and kubelet restarts the container instead.
 
 Three constraints hold it together, all ENFORCED by
-`ansible/tests/services/test_traefik_edge_selfcheck.py`: the route stays on an entrypoint
+`tests/services/test_traefik_edge_selfcheck.py`: the route stays on an entrypoint
 whose chain names the `crowdsec` Middleware, the probe path stays the route's own, and the
 route matches on a path rather than a Host. A kubelet probe sends no SNI, and Traefik
 answers a matched `Host()` router with 421 when SNI and Host disagree.
@@ -68,7 +68,7 @@ too.
 
 A name mismatch between `experimental.localPlugins`, the Middleware, the ConfigMap items and
 the manifest's `import` disables every plugin at startup, and `--dry-run` cannot see that.
-`ansible/tests/k8s/test_traefik_cloudflare_realip.py` pins the names.
+`tests/k8s/test_traefik_cloudflare_realip.py` pins the names.
 
 To change the Go source, run it first under the release binary of `traefik_k8s_image`'s
 version with a local `plugins-local/` tree: a Yaegi error appears only at Traefik startup, as
@@ -89,7 +89,7 @@ address it saw, so only the rightmost entry is not client-chosen. From any other
 Two readers take that rightmost entry. The CrowdSec agent sidecar's
 `crowdsecurity/traefik-logs` parser does from hub version 1.5 (hub PR #1665), and the
 sidecar's `hub upgrade` floats that version at every start rather than pinning it.
-`ansible/roles/k8s/crowdsec/files/remote_allowlist.py:authenticated_clients` takes the same
+`k8s/roles/crowdsec/files/remote_allowlist.py:authenticated_clients` takes the same
 entry, so the allowlist holds the address CrowdSec bans.
 
 On 2026-09-22 a scanner sent `X-Forwarded-For: 127.0.0.1` through Cloudflare, and Traefik
@@ -101,7 +101,7 @@ either reader**: it skips Cloudflare's append, so its leftmost entry is also its
 
 ## Cloudflare origin-pull, and the two traps the guard exists for
 
-`ansible/templates/origin-pull.yml.j2` renders the `cloudflare-origin-pull` TLSOption
+`k8s/templates/origin-pull.yml.j2` renders the `cloudflare-origin-pull` TLSOption
 (`modern` plus `clientAuth: RequireAndVerifyClientCert`) and the `cloudflare-origin-pull-ca`
 Secret it verifies against, from `files/cloudflare-origin-pull-ca.crt` — Cloudflare's
 published CA, public, provenance and expiry (2029-11-01) in the file header (#1990).
@@ -113,7 +113,7 @@ SNI, so the `ingressroute()` macro renders the public and `.local.` hosts as two
 (`<name>-public` and `<name>`) and only the public one names the option; a LAN or WireGuard
 client holds no certificate.
 
-`ansible/tests/k8s/test_public_routes_require_cloudflare_origin_pull.py` exists for two traps:
+`tests/k8s/test_public_routes_require_cloudflare_origin_pull.py` exists for two traps:
 
 - Every router on ONE public host must name the SAME option, or Traefik falls back to the
   default options, which require nothing — the bypass documents and healthchecks' ping twin

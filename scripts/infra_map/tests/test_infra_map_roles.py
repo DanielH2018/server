@@ -37,7 +37,7 @@ def test_load_roles_derives_ownership_from_the_role_trees():
 
 
 def _k8s_role(repo_root, name, *manifests):
-    templates = repo_root / "ansible" / "roles" / "k8s" / name / "templates"
+    templates = repo_root / "k8s" / "roles" / name / "templates"
     templates.mkdir(parents=True)
     for index, kind in enumerate(manifests):
         (templates / f"{index}.yaml.j2").write_text(f"kind: {kind}\n")
@@ -81,7 +81,7 @@ def test_load_roles_does_not_excuse_a_daemonset_or_statefulset_role(tmp_path):
 
 def test_load_roles_records_only_literal_manifest_namespaces(tmp_path):
     (tmp_path / "ansible" / "roles" / "containers").mkdir(parents=True)
-    templates = tmp_path / "ansible" / "roles" / "k8s" / "plugin" / "templates"
+    templates = tmp_path / "k8s" / "roles" / "plugin" / "templates"
     templates.mkdir(parents=True)
     (templates / "a.yaml.j2").write_text(
         "kind: DaemonSet\nmetadata:\n  namespace: kube-system\n"

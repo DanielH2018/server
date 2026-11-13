@@ -1,6 +1,10 @@
-# Ignore everything except ansible and docs
+# Ignore everything except the allow-listed trees below. ADR 0030 names k8s/, inventory/,
+# secrets/ and tests/.
 /*
-!/ansible
+!/k8s
+!/inventory
+!/secrets
+!/tests
 !/docs
 # docs/superpowers (design plans + specs) kept on-disk but intentionally untracked
 /docs/superpowers/
@@ -44,18 +48,12 @@
 # decrypted diff also requires a per-machine `git config diff.sops.textconv`,
 # which isn't set here — so this attribute is a no-op.
 !/.gitattributes
-# Make sure these are ignored
-ansible/.env
-ansible/.aws
-ansible/.ansible
-ansible/collections
-ansible/roles/containers/code-server/templates/github
 *.pyc
 __pycache__/
 .pytest_cache/
 # Never commit private key material — defense-in-depth alongside the gitleaks
 # pre-commit hook. These patterns have no leading slash, so they match in ANY
-# directory, including the allowlisted ansible/ tree where a stray key would
+# directory, including the allowlisted secrets/ tree where a stray key would
 # otherwise slip past the top-level /* deny rule.
 keys.txt
 *.agekey

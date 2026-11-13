@@ -14,7 +14,7 @@ check library the script sources and `curl`.
 import json
 
 import pytest
-from _helpers import ANSIBLE
+from _helpers import REPO as REPO_ROOT
 from _ruleset_drift import (
     ANONYMOUS_PRIVATE_REPO,
     BRANCH_RULESET_ID,
@@ -335,9 +335,7 @@ def _defaults():
     import yaml
 
     return yaml.safe_load(
-        (
-            ANSIBLE.parent / "hosts/components/github-checks/defaults/main.yml"
-        ).read_text()
+        (REPO_ROOT / "hosts/components/github-checks/defaults/main.yml").read_text()
     )
 
 

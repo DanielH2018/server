@@ -7,7 +7,7 @@
 # cgroup's counters reached Prometheus. This host sets DefaultMemoryAccounting/
 # CPUAccounting=yes, so the counters are already populated on cgroupfs and free to read; only
 # the scrape was missing. Written as a node-exporter textfile gauge set so no exporter change
-# or scrape-config change is needed. roles/k8s/node-exporter/CLAUDE.md, *The textfile
+# or scrape-config change is needed. k8s/roles/node-exporter/CLAUDE.md, *The textfile
 # collector directory*, names this file's readers and the contract it follows.
 #
 # Read-only observation, deliberately: this does not add or change any cgroup bound (#1213

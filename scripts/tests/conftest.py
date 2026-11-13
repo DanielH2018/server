@@ -12,7 +12,7 @@ def tracked() -> list[str]:
 
 
 # DECIDED: the census pass leaves `--durations`, as the k8s render does in
-# `ansible/tests/conftest.py`. Both `test_census_rows_test_*.py` files share one per-process pass
+# `tests/conftest.py`. Both `test_census_rows_test_*.py` files share one per-process pass
 # over about 1600 modules, and the first to run paid 8-11s of it while its sibling paid 0.05s.
 # The serial `pytest_shard.py --record` charged it to one file and CI measured it on the other,
 # which failed the shard-weight gate (#7976). `pytest_shard.py --summary` charges it per shard.

@@ -1,8 +1,8 @@
 # observability record
 
-Evidence and history behind `ansible/roles/k8s/observability/CLAUDE.md`, which keeps the rules a session loads on every touch of the role (#2925, #2993). The first half covers the Grafana boards: how the two community boards are seeded, the panel-query traps a 2026-09-10 audit measured, and the B2 usage board that was removed. The second half covers the Grafana OIDC measurements, the four behaviours that make an idle telemetry stack look broken, and the commands that exercise the pipeline end to end.
+Evidence and history behind `k8s/roles/observability/CLAUDE.md`, which keeps the rules a session loads on every touch of the role (#2925, #2993). The first half covers the Grafana boards: how the two community boards are seeded, the panel-query traps a 2026-09-10 audit measured, and the B2 usage board that was removed. The second half covers the Grafana OIDC measurements, the four behaviours that make an idle telemetry stack look broken, and the commands that exercise the pipeline end to end.
 
-Nothing tests the board half. `ansible/roles/k8s/observability/templates/grafana-dashboards.yaml.j2`, the board lists in `ansible/roles/k8s/observability/defaults/main.yml:observability_dashboard_folders` and the JSON under `ansible/roles/k8s/observability/files/` are the authority on what is provisioned; where a paragraph here disagrees with them, the tree is right.
+Nothing tests the board half. `k8s/roles/observability/templates/grafana-dashboards.yaml.j2`, the board lists in `k8s/roles/observability/defaults/main.yml:observability_dashboard_folders` and the JSON under `k8s/roles/observability/files/` are the authority on what is provisioned; where a paragraph here disagrees with them, the tree is right.
 
 ## Seeding and round-tripping a board
 
@@ -62,7 +62,7 @@ sonarr and radarr (`internal/commands/arr.go`), never for prowlarr; the flag gat
 `_unmonitored_total` and `_quality_total`, at two extra app API calls per series per scrape.
 Issue #1404 held that separate trade-off and shipped it for sonarr alone: sonarr's sidecar
 carries the flag, radarr's and prowlarr's do not, and
-`ansible/tests/services/test_exportarr_sidecars.py::test_only_sonarr_enables_the_additional_metrics_collector`
+`tests/services/test_exportarr_sidecars.py::test_only_sonarr_enables_the_additional_metrics_collector`
 asserts both halves. Measured after the change, sonarr's `scrape_duration_seconds` moved from
 ~18 ms to 335-403 ms while radarr's and prowlarr's stayed at ~12-15 ms.
 
@@ -81,7 +81,7 @@ and all three were repaired in that pass.
   `cs_bucket_pour_seconds_bucket` come only from the engine — a per-node board cannot filter them
   by node.
 - **`[1m]` against a 1-minute scrape returns nothing.** Every application job here sets
-  `scrape_interval: 1m` (`ansible/roles/k8s/observability/templates/prometheus.yaml.j2`), so a
+  `scrape_interval: 1m` (`k8s/roles/observability/templates/prometheus.yaml.j2`), so a
   `rate()`/`increase()` over a literal `[1m]` — or over `$__interval`, which is SHORTER than 1m
   on a typical range — sees one sample and yields no result. Use `$__rate_interval`, which
   Grafana derives from the datasource's `timeInterval`. This killed panels on `traefik-custom`
@@ -177,7 +177,7 @@ registered.
 
 **The `with_groups` claims policy and the client secret are the other two rules.** The policy is
 measured above. Three settings are written twice and drift silently (`require_pkce`, the `groups`
-scope, that `claims_policy`), and `ansible/tests/services/test_grafana_authelia_oidc.py` holds both
+scope, that `claims_policy`), and `tests/services/test_grafana_authelia_oidc.py` holds both
 the `observability` and `authelia` roles to them. The client secret is one credential in two SOPS
 keys, `grafana_oidc_client_secret` and `grafana_oidc_client_secret_hash`, so rotate them together.
 

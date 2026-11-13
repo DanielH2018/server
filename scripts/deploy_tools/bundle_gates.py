@@ -8,13 +8,13 @@ verification*, the design:
 - `source`: each Kustomization document in `flux/<name>.yaml` is judged against its own
   `spec.path` directory, so a tag's second document, `<tag>-deferred`, is judged against
   `cluster/<tag>-deferred/` (D4.3, the per-file rule). A document with no `postBuild` applies
-  a directory that holds no `${K}` whose K is a key name of `ansible/vars/secrets.yml`, read
+  a directory that holds no `${K}` whose K is a key name of `secrets/secrets.yml`, read
   as Flux reads it, each `$$` paired first. A document with `postBuild` names in
   `substituteFrom` only a Secret that a `secretGenerator` in the bundle makes. The gate fails
   a published name whose file or directories it could not examine, so it never passes over
   nothing.
 - `host`: every `Host(...)` in an IngressRoute ends in `.<domain>`, the literal that
-  `ansible/inventory/group_vars/all.yml` defines. While bento-pdf is published, its `.local.`
+  `inventory/group_vars/all.yml` defines. While bento-pdf is published, its `.local.`
   route is the gate's named member, and a gate that finds no Host rule there fails.
 - `no-stub`: no file under the bundle holds an R1 stub value, `stub-<key>` for a key name of
   `secrets.yml`, with each Secret's `data` decoded too.
@@ -34,7 +34,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 import yaml
 
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS, ANSIBLE
+from lib.repo_paths import ALL_VARS, SECRETS as SECRETS_DIR
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
     FLUX_DIR,
@@ -47,7 +47,7 @@ from renderer.renderer_lib.shadow import stub_tokens
 
 from renderer.template_filters.secret_stubs import homelab_secret_stub
 
-SECRETS = ANSIBLE / "vars" / "secrets.yml"
+SECRETS = SECRETS_DIR / "secrets.yml"
 
 # The host gate's named member: bento-pdf's `.local.` route, as (tag, namespace, name). The
 # gate asserts it only while the tag is published, so a bundle without the tag does not fail it.

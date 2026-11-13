@@ -14,7 +14,7 @@
 # a broken query.
 #
 # WHY A POD CANNOT BE THE WITNESS. The route's guard is a ClientIP set of node-owned addresses
-# (roles/k8s/loki-homelab/templates/ingressroute.yaml.j2), so monitor-bridge's request would
+# (k8s/roles/loki-homelab/templates/ingressroute.yaml.j2), so monitor-bridge's request would
 # arrive with a pod IP and fail for a reason unrelated to the operator's path. What broke was a
 # HOST-sourced grant, and only a host process can witness it.
 #
@@ -52,7 +52,7 @@ fi
 
 # The longest legitimate gap between two textfile writes: the timer fires at minute 23 of every
 # hour (3600s), and a run skipped by the boot grace may take one slot, so 7200s.
-# ansible/tests/services/test_not_reporting_rule_deadlines.py pins the rules' literals to it.
+# tests/services/test_not_reporting_rule_deadlines.py pins the rules' literals to it.
 DEADLINE_S=7200
 
 REPO_DIR=/home/{{ sys_user }}/server

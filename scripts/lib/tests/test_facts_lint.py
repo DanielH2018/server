@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from lib.ansible_inventory import host_names
+from lib.inventory_lists import host_names
 from lib.git_testing import git, init_repo
 from lib.facts.lint import (
     INVENTORY_REL,
@@ -319,7 +319,7 @@ def test_retired_host_in_a_history_bullet_is_clean(tmp_path):
 
 # ── version-as-fact ──────────────────────────────────────────────────────────────────────
 
-_REGISTRY = "ansible/roles/k8s/registry"
+_REGISTRY = "k8s/roles/registry"
 _ALLOY_COMPOSE = "hosts/components/pi-compose/services/alloy/compose.yaml.j2"
 
 
@@ -362,7 +362,7 @@ def test_a_shared_image_is_stale_only_when_no_pin_matches(tmp_path):
     details = _version_findings(
         tmp_path,
         doc,
-        **{_ALLOY_COMPOSE: compose, "ansible/roles/k8s/x/defaults/main.yml": defaults},
+        **{_ALLOY_COMPOSE: compose, "k8s/roles/x/defaults/main.yml": defaults},
     )
     assert details[0].startswith(
         "`grafana/alloy:v1.19.2` restates the `image:` line in "

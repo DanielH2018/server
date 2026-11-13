@@ -49,7 +49,7 @@ def two_commit_repo(tmp_path):
     commit and in no checkout until checkout-sync fast-forwards.
     """
     repo = tmp_path / "repo"
-    inventory = repo / "ansible" / "inventory" / "host_vars"
+    inventory = repo / "inventory" / "host_vars"
     inventory.mkdir(parents=True)
     (repo / "cluster").mkdir()
     box = repo / "cluster" / "services.yml"
@@ -129,12 +129,12 @@ def test_this_repo_at_head_agrees_with_its_own_working_tree():
 @pytest.mark.parametrize(
     "files",
     [
-        ["ansible/vars/secrets.yml"],
+        ["secrets/secrets.yml"],
         [
-            "ansible/vars/secrets.yml",
-            "ansible/roles/k8s/authelia/templates/config-secret.yaml.j2",
+            "secrets/secrets.yml",
+            "k8s/roles/authelia/templates/config-secret.yaml.j2",
         ],
-        ["ansible/vars/secrets.yml", "ansible/deploy.yml"],
+        ["secrets/secrets.yml", "ansible/deploy.yml"],
     ],
     ids=["secrets-only", "beside-a-k8s-role", "beside-the-deploy-plane"],
 )

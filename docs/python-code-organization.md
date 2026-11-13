@@ -28,7 +28,7 @@ decides what a module may import, so it is the first thing to establish about an
 | Kind | Where | How it reaches a host | May import |
 |---|---|---|---|
 | Operator scripts | `scripts/<dir>/` | Run from a checkout with `uv run python scripts/<dir>/<name>.py`, by hand or by a cron on `daniel-box` | Anything in the repo, after a bootstrap |
-| Role-shipped programs | `ansible/roles/<plane>/<role>/files/` | Ansible copies `files/` to `/opt/<role>/` or into a ConfigMap; the repo is not there | Only what the role's ship list copies beside it |
+| Role-shipped programs | `k8s/roles/<role>/files/` | Ansible copies `files/` to `/opt/<role>/` or into a ConfigMap; the repo is not there | Only what the role's ship list copies beside it |
 | Harness hooks | `.claude/hooks/` | Run by Claude Code from the checkout | The repo, after a bootstrap |
 
 The second row is the constraint that shapes everything else. A role-shipped program cannot
@@ -101,13 +101,13 @@ role that added the file. That is why the deployer's boundaries object lives in
 `deploy_toolbox.py` while the class it holds is `DeployTools`.
 
 The names at risk are the subdirectories of **every** `pythonpath` root in `pyproject.toml`,
-not `scripts/` alone. `ansible/tests` is a root too, so `deploy`, `k8s`, `longhorn`, `repo`,
+not `scripts/` alone. `tests` is a root too, so `deploy`, `k8s`, `longhorn`, `repo`,
 `services`, `setup` and `staging` are namespace portions by the same rule, and so are
-`bridge`, `checks` and `verdicts` under `ansible/roles/k8s/monitor-bridge/files`. Read the
+`bridge`, `checks` and `verdicts` under `k8s/roles/monitor-bridge/files`. Read the
 `pythonpath` list, then list what each root holds:
 
 ```bash
-ls -d scripts/*/ scripts/*/*/ ansible/tests/*/ ansible/roles/k8s/monitor-bridge/files/*/
+ls -d scripts/*/ scripts/*/*/ tests/*/ k8s/roles/monitor-bridge/files/*/
 ```
 
 For an agent PR, the landing policy enforces the rule. `land_lib/policy.py:shape_hits` needs
@@ -117,7 +117,7 @@ when it shadows a directory or module at the top of another. It reads those root
 `land.py`'s own inserts, not from `pythonpath`: the refusal protects what `land.py` imports,
 and `pythonpath` applies only under pytest. Across the `pythonpath` roots, every role's `files/`
 and every `scripts/<dir>` holding a `tests/`, the
-`no-two-import-roots-share-a-module-basename` row of `ansible/tests/repo/test_census_rows_python.py`
+`no-two-import-roots-share-a-module-basename` row of `tests/repo/test_census_rows_python.py`
 catches two roots that hold the same module name. No test catches a module that shadows a
 directory in another root.
 
@@ -144,20 +144,20 @@ module outside a `tests/` directory and evaluates what each insert actually puts
 path, so a missing or wrong bootstrap fails CI. A module under `tests/` — a `test_*.py` or a
 `_*.py` fixture beside it — has pytest as its only invoker, so
 `scripts/tests/test_test_module_bootstraps_present.py` refuses the insert there instead
-(#2061, #2099). It does not cover `ansible/roles/**/files/`; those modules resolve their
+(#2061, #2099). It does not cover `k8s/roles/**/files/`; those modules resolve their
 siblings by bare name from `sys.path[0]`, which is correct by construction on the host.
 
 `pythonpath` in `pyproject.toml` is a pytest setting and nothing else reads it. ty resolves the
 same directories through `[tool.ty.environment] extra-paths`, which its docs describe as the
 knob for "first-party or third-party modules that are not installed into your project's Python
 environment in a conventional way" ([ty configuration][ty-config]);
-`ansible/tests/repo/test_ty_config_covers_the_repo.py` keeps the two lists aligned.
+`tests/repo/test_ty_config_covers_the_repo.py` keeps the two lists aligned.
 
 ### Tests in a sibling `tests/`, never beside the code
 
 A role's `files/` is a ship list. A test inside it would be copied to the host. So tests sit
-in `ansible/roles/<plane>/<role>/tests/` and reach `files/` through `pythonpath` or a
-bootstrap. `ansible/tests/repo/test_testpaths_covers_every_test_file.py` enforces that every
+in `k8s/roles/<role>/tests/` and reach `files/` through `pythonpath` or a
+bootstrap. `tests/repo/test_testpaths_covers_every_test_file.py` enforces that every
 test directory is in `testpaths`.
 
 ### Options considered and not taken
@@ -192,7 +192,7 @@ listing the directory then sees one program rather than several. The operator ru
 imports and a `__main__` guard whose one statement calls the entrypoint of its own family. Shipped code
 or an older checkout may still run such a path, so a consolidation can leave a shim there
 until the last caller moves. The
-`module-families-live-in-a-package` row of `ansible/tests/repo/test_census_rows_layout.py`
+`module-families-live-in-a-package` row of `tests/repo/test_census_rows_layout.py`
 enforces the rule for a `scripts/` subdirectory and a role's `files/`. Its `allow` names each
 family that stays flat, with the reason. Two stay flat by design: the
 `scripts/validate/*_templates.py` checks, each its own prek hook, and the deployer's
@@ -210,7 +210,7 @@ The second shape, for a program whose boundary is configuration rather than I/O,
 `load_config(env)`, constructed once in `cli.py` and passed down. A test builds its own with `load_config({...})` or `dataclasses.replace(cfg,
 X=...)` rather than a fakes module, because the fields are values, not callables. The
 transport underneath (`bridge.net`) is still patched, which is why
-`ansible/tests/services/test_bridge_patch_boundary.py` stays and why that role's monkeypatch
+`tests/services/test_bridge_patch_boundary.py` stays and why that role's monkeypatch
 entries have not reached zero.
 
 **Decision functions are pure.** A function that decides takes plain values and returns plain
@@ -248,12 +248,12 @@ non-obvious. Shape is gated by ruff `D205/D415/D212/D209/D210`; content follows
 
 **`from __future__ import annotations` is dead on 3.14.** PEP 649 defers annotation
 evaluation by default ([What's new in 3.14][py314]). Do not add it to a new module, and
-the `no-future-annotations` row of `ansible/tests/repo/test_census_rows_python.py` enforces
+the `no-future-annotations` row of `tests/repo/test_census_rows_python.py` enforces
 that the tree agrees —
 the rule governed new modules only until 2026-09-05, so half of `scripts/infra_map/` carried
 the line and half did not.
 
-**The exception is `ansible/roles/*/*/files/`**, which the guard exempts. A program there runs
+**The exception is `k8s/roles/*/files/`**, which the guard exempts. A program there runs
 under the HOST's interpreter rather than the repo's uv env — `python3` on daniel-server and
 daniel-pi is 3.12.3 — and below 3.14 there is no PEP 649, so annotations evaluate eagerly at
 `def`/`class` time and the import is real insurance against a forward reference. The repo suite
@@ -269,14 +269,14 @@ so blank lines, comments and docstrings are free and the cap never argues for de
 documentation. A test module may patch no first-party module at all — a
 patch on the standard library is not counted, because no seam here can remove one. The files
 already past either limit are listed one per line in
-`ansible/tests/repo/module_length_allowlist.txt` and
-`ansible/tests/repo/monkeypatch_allowlist.txt`, with the number each stands at today, and
-`ansible/tests/repo/test_module_length_ratchet.py` fails when one grows past its line, when a
+`tests/repo/module_length_allowlist.txt` and
+`tests/repo/monkeypatch_allowlist.txt`, with the number each stands at today, and
+`tests/repo/test_module_length_ratchet.py` fails when one grows past its line, when a
 file over a cap has no line, when a file that has come back under its cap keeps one, and when
 a file has shrunk below its line without the line following it down — an entry records what
 the file is today, and the gap between the two would be regrowth headroom nothing reports. The
-rules themselves are in `ansible/tests/_ratchet.py`. The monkeypatch counter is
-`ansible/tests/_ratchet_patches.py`, whose docstring is where the counting heuristic's blind
+rules themselves are in `tests/_ratchet.py`. The monkeypatch counter is
+`tests/_ratchet_patches.py`, whose docstring is where the counting heuristic's blind
 spots are written down.
 
 It also diffs both lists against `origin/master`, so an entry only ever falls or is deleted
@@ -300,22 +300,22 @@ skips, saying which reason, when `origin/master` is unreadable: a shallow CI che
 such ref. Locally the ref is only as fresh as your last `git fetch`, so a stale one compares
 against older numbers; `git fetch` before relying on it.
 
-## Textual guards under `ansible/tests/`
+## Textual guards under `tests/`
 
 A guard reads rendered output where a render carries the claim, and source text where a render
 erases it.
 
 - **Rendered manifests.** A property of the rendered k8s manifests goes in as a row of
-  `ansible/tests/k8s/test_rendered_properties.py`, not as a regex over a template.
-- **Template-source readers are declared.** Every directory under `ansible/tests/` is in `SCANNED`
-  of `ansible/tests/repo/test_guard_tests_read_renders_not_templates.py`. A module that must read
+  `tests/k8s/test_rendered_properties.py`, not as a regex over a template.
+- **Template-source readers are declared.** Every directory under `tests/` is in `SCANNED`
+  of `tests/repo/test_guard_tests_read_renders_not_templates.py`. A module that must read
   template text lists itself in that file's `TEMPLATE_SOURCE_READERS` with what a render erases:
   a macro call against its expanded body, byte identity, a Jinja filter, or a variable name.
 - **A task file has no render, so the structural read is a parse.** Read `tasks/*.yml` through
   `yaml_fast` or `_helpers.walk_tasks`. Convert a regex over YAML or TOML text to a parse only
   where its claim survives the parse unchanged.
-- **The two ratchet lists are a different subject.** `ansible/tests/repo/module_length_allowlist.txt`
-  and `ansible/tests/repo/monkeypatch_allowlist.txt` run on one harness, `ansible/tests/_ratchet.py`,
+- **The two ratchet lists are a different subject.** `tests/repo/module_length_allowlist.txt`
+  and `tests/repo/monkeypatch_allowlist.txt` run on one harness, `tests/_ratchet.py`,
   and neither records a textual read.
 
 ## Why the check rules exist
@@ -341,7 +341,7 @@ behind them.
   uid validator, then `scripts/validate/grafana_dashboards.py`, hid the filter plugin from
   `pytest scripts` (#5956), because a `scripts/<dir>` holding a `tests/` counts as an import
   root too.
-- **Role tests import their own `files/`.** `ansible/roles/conftest.py` added that directory
+- **Role tests import their own `files/`.** `k8s/conftest.py` added that directory
   in #3746.
 - **No `template_filters/tests/`.** Ansible's `PluginLoader._get_paths_with_context` globs two
   levels of subdirectories, so a test there loads at deploy time.
@@ -356,9 +356,9 @@ behind them.
   `sys.path` leak into a test failure.
 - `scripts/deploy_tools/land_lib/outcome.py`: exit code and verdict constructed
   together and validated in `__init__`, so "printed without its verdict" is unrepresentable.
-- `ansible/tests/services/test_monitor_bridge_modules.py`: a ship list guarded in both
+- `tests/services/test_monitor_bridge_modules.py`: a ship list guarded in both
   directions against the tree.
-- `ansible/tests/services/test_monitor_bridge_mount_layout.py`: a synthesized missing
+- `tests/services/test_monitor_bridge_mount_layout.py`: a synthesized missing
   module must produce `No module named 'bridge.config'`.
 - `pyproject.toml` `addopts`: `-p leakguard` makes "does a test reach the network" a runner
   verdict rather than a review question.

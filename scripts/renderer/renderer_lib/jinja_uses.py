@@ -400,7 +400,7 @@ def rule5_templates(roles: Path = K8S_ROLES, shared: Path = SHARED_TPL) -> list[
 
 
 def template_tag(path: Path, roles: Path = K8S_ROLES) -> str:
-    """The role a template belongs to, or `shared` for `ansible/templates/`."""
+    """The role a template belongs to, or `shared` for `k8s/templates/`."""
     return path.relative_to(roles).parts[0] if path.is_relative_to(roles) else "shared"
 
 

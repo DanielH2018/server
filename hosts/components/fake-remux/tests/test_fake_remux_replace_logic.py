@@ -1,6 +1,6 @@
 import json
 
-# `ansible/roles/conftest.py` puts this role's `files/` on sys.path, which holds fake_remux_lib/.
+# `k8s/conftest.py` puts this role's `files/` on sys.path, which holds fake_remux_lib/.
 from fake_remux_lib import fake_remux_replace as sh
 from fake_remux_lib import fake_remux_replace_logic as rl
 

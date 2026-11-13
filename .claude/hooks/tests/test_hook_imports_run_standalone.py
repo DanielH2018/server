@@ -39,7 +39,7 @@ SKIPPED_DIRS = frozenset({"tests", "__pycache__"})
 OUT_OF_TREE = frozenset({"claude_guard", "_claude_guard"})
 # The top-level trees a hook's imports reach: the hooks themselves, `scripts/`, and the role
 # `files/` directories `lib.repo_paths` names.
-COPIED = (".claude/hooks", "scripts", "ansible")
+COPIED = (".claude/hooks", "scripts", "k8s", "inventory")
 # Anchored: the fallback after `||` names `run-hook.sh` again in its message text.
 _ENTRY = re.compile(
     r'"\$CLAUDE_PROJECT_DIR"/\.claude/hooks/run-hook\.sh ([\w.-]+)((?: --\S+)*)'
@@ -300,7 +300,7 @@ def test_the_held_ssh_guard_reads_the_inventory_hosts(held):
 
 @pytest.fixture
 def hooks_alone(tmp_path) -> Path:
-    """A copy of the hooks with no `scripts/` or `ansible/` beside it."""
+    """A copy of the hooks with no `scripts/`, `k8s/` or `inventory/` beside it."""
     shutil.copytree(
         REPO / ".claude/hooks",
         tmp_path / ".claude/hooks",

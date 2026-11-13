@@ -2,7 +2,7 @@
 
 A timer that stops firing pages nothing through OnFailure=, and node_exporter's systemd
 collector is off, so the file this line writes is the only signal that the timer still runs.
-`ansible/roles/k8s/observability/files/rules/host-checks.yaml` reads it as `<Check>NotReporting`.
+`k8s/roles/observability/files/rules/host-checks.yaml` reads it as `<Check>NotReporting`.
 
 ExecStartPost= runs only after ExecStart= succeeds, so the file only ever says success 1: a
 crash writes nothing and is paged by OnFailure=. The `+` runs the line as root past the unit's

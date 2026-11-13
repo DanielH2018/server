@@ -172,13 +172,13 @@ def test_whole_job_log_counts_only_the_failed_steps_seconds(tmp_path):
         _step_at(
             10,
             "Run the flaky retry",
-            "FAILED ansible/tests/repo/test_in_the_retry.py::test_case - assert 0",
+            "FAILED tests/repo/test_in_the_retry.py::test_case - assert 0",
             "success",
         ),
         _step_at(
             20,
             "Run the suite",
-            "FAILED ansible/tests/repo/test_in_the_suite.py::test_case - assert 0",
+            "FAILED tests/repo/test_in_the_suite.py::test_case - assert 0",
             "failure",
         ),
     )
