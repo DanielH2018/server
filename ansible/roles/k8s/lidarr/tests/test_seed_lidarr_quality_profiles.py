@@ -129,6 +129,7 @@ def test_the_lossy_profile_allows_exactly_the_decided_qualities() -> None:
     assert allowed_names(body) == set(STANDARD["allowed"])
     assert "AAC-256" in allowed_names(body)
     assert "MP3-256" not in allowed_names(body)
+    assert not {n for n in allowed_names(body) if "Vorbis" in n}
     assert body["cutoff"] == 4
     assert body["upgradeAllowed"] is True
 

@@ -39,9 +39,10 @@ serves read-only.
   `Standard` (the lossy profile) and `Lossless` by name, creates one that is missing, and never
   deletes: `Any` stays. The script splits Lidarr's quality groups into single qualities, because
   `allowed` belongs to a group and `MP3-320` shares one with `AAC-320`.
-- **Lidarr has no Opus quality.** The ruling's "Opus 192 and above" is `OGG Vorbis Q8` to `Q10`
-  in the lossy profile, and `AAC-VBR` stands for the AAC tier above `AAC-256`. A new Lidarr that
-  adds Opus is an edit to that one list.
+- **Lidarr has no Opus quality, and the lossy profile allows no Vorbis tier in its place.** The
+  operator ruled on 2026-11-13 to drop the "Opus 192 and above" tier, and `AAC-VBR` stands for
+  the AAC tier above `AAC-256`. A Lidarr that adds Opus is an edit to `lidarr_quality_profiles`.
+  The same ruling sets `upgradeAllowed` true on `Standard` and false on `Lossless`.
 - **Not wired yet, and why.** Homepage's tiles read each app's key by name, so lidarr has no
   tile.
 - **Lidarr's own state lives in `lidarr.db`:** the root folder and the qBittorrent download
