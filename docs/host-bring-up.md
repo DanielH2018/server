@@ -78,7 +78,7 @@ touching SOPS:
      LAN-bound port or firewalls by IP needs it).
    - `compose_services: []` on a Docker host only, which its host package deploys. A k3s
      node drops the key, because the k3s services live in `cluster/services.yml` (see the
-     repo-root `CLAUDE.md` → "Adding a New Service").
+     repo-root `CLAUDE.md` → "Project Overview").
    - Any hardware capability flags a role you plan to deploy expects — for example `has_igpu: true`
      only if the host has an Intel iGPU (gates `/dev/dri` passthrough for jellyfin/tdarr;
      defaults to `false` in `ansible/inventory/group_vars/all.yml`).

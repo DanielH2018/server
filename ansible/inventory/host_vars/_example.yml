@@ -21,7 +21,7 @@ ssh_config_path: /etc/ssh/sshd_config
 
 # A Docker host lists its Compose services here, which its host package deploys. A k3s node
 # deletes the key, because the k3s services live in cluster/services.yml (repo-root CLAUDE.md,
-# "Adding a New Service").
+# "Project Overview").
 compose_services: []
 
 # Bring-up: revert once the host is established
