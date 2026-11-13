@@ -300,10 +300,16 @@ def disk_floor_problems(text: str) -> list[str]:
         r"^k3s_disk_max_pct:\s*(\d+)\s*$", K3S_HOST_CHECKS_DEFAULTS.read_text(), re.M
     )
     assert match, "k3s-host-checks no longer declares k3s_disk_max_pct as a plain value"
-    ratio = f"> {int(match.group(1)) / 100}"
+    floor = int(match.group(1)) / 100
     expr = rule_expr("LonghornDiskOverSchedulingFloor", text)
-    if ratio not in expr:
-        return [f"LonghornDiskOverSchedulingFloor: expr lacks `{ratio}`"]
+    threshold = re.fullmatch(r".*\) > (\d+(?:\.\d+)?)", expr)
+    assert threshold, (
+        f"LonghornDiskOverSchedulingFloor no longer ends `) > <number>`: {expr}"
+    )
+    if float(threshold.group(1)) != floor:
+        return [
+            f"LonghornDiskOverSchedulingFloor: pages above {threshold.group(1)}, not {floor}"
+        ]
     return []
 
 
@@ -312,9 +318,10 @@ def test_the_longhorn_disk_floor_is_the_host_checks_floor():
 
 
 def test_a_disk_floor_that_leaves_the_host_checks_floor_behind_is_flagged():
+    # 0.755 keeps `> 0.75` as a substring, so only a numeric comparison catches it.
     text = RULES.read_text().replace(
-        "longhorn_disk_capacity_bytes) > 0.75", "longhorn_disk_capacity_bytes) > 0.8"
+        "longhorn_disk_capacity_bytes) > 0.75", "longhorn_disk_capacity_bytes) > 0.755"
     )
     assert disk_floor_problems(text) == [
-        "LonghornDiskOverSchedulingFloor: expr lacks `> 0.75`"
+        "LonghornDiskOverSchedulingFloor: pages above 0.755, not 0.75"
     ]
