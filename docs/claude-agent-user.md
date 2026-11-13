@@ -159,6 +159,11 @@ the hook-install task does not remove the hook. A broken hook refuses every agen
 
 - **A machine user account, not a GitHub App.** The account is `DanielClaudeBot`, a write
   collaborator, because a personal-account repo has no lower role.
+- **GitHub has hidden the account since 2026-10-10 (#5126).** Everything it authored returns
+  404 to every other account: its pull requests and its issues. 70 numbers from #3622 to #4247
+  are hidden, so `findings.py` cannot list or search them, or match a new finding against them. #8216 re-filed the
+  2026-10-10 review's findings under the operator's account, and #8328 lists the rest. The
+  operator ruled on 2026-11-13 to replace the account.
 - **Its token is a classic `public_repo` token.** GitHub does not support fine-grained tokens
   for a collaborator on another personal account's repo. The token is stored in SOPS as
   `claude_code_agent_gh_token`, so `ansible/secret_rotation.yml` tracks it.
