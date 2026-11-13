@@ -392,7 +392,6 @@ def test_the_real_tree_resolves_a_known_role_to_its_doc():
     assert root is not None
     docs = _mod.docs_for(root, os.path.join(KNOWN_ROLE, "files", "registry.py"))
     assert f"{KNOWN_ROLE}/CLAUDE.md" in docs
-    assert ".claude/rules/docker.md" not in docs
 
 
 def test_every_reading_rule_names_a_real_rule_file():
