@@ -92,14 +92,14 @@ def test_render_churning_stays_bounded_with_a_whole_section_churning():
 def test_stale_pending_is_clean_inside_the_allowance():
     now = 1_000_000.0
     current = {"renovate/x": "Update foo Docker tag to v2"}
-    seen = {"renovate/x": now - 13 * DAY}  # 7-day soak + 7-day grace = 14
+    seen = pl.update_pending_seen({}, current, now - 13 * DAY)  # 7-day soak + 7 grace
     assert pl.stale_pending(seen, current, now) == []
 
 
 def test_stale_pending_is_flagged_past_the_allowance():
     now = 1_000_000.0
     current = {"renovate/x": "Update foo Docker tag to v2"}
-    seen = {"renovate/x": now - 20 * DAY}
+    seen = pl.update_pending_seen({}, current, now - 20 * DAY)
     assert pl.stale_pending(seen, current, now) == [
         ("renovate/x", "Update foo Docker tag to v2", 20)
     ]

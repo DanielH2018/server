@@ -190,8 +190,8 @@ listing the directory then sees one program rather than several. The operator ru
 `probe_lib/`, and `hosts/components/fake-remux/files/fake_remux.py` with
 `fake_remux_lib/`. A forwarding shim at an old path does not count. A shim holds only
 imports and a `__main__` guard whose one statement calls the entrypoint of its own family. Shipped code
-or an older checkout still runs such a path, so the consolidation leaves a shim there
-(`scripts/dev/fanout_place.py`). The
+or an older checkout may still run such a path, so a consolidation can leave a shim there
+until the last caller moves. The
 `module-families-live-in-a-package` row of `ansible/tests/repo/test_census_rows_layout.py`
 enforces the rule for a `scripts/` subdirectory and a role's `files/`. Its `allow` names each
 family that stays flat, with the reason. Two stay flat by design: the

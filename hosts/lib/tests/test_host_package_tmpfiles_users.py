@@ -9,11 +9,13 @@ transition (#8088).
 Run: uv run pytest hosts/lib/tests/test_host_package_tmpfiles_users.py
 """
 
+import json
 from pathlib import PurePosixPath
 
 import pytest
 
 from renderer.renderer_lib import host as host_mode
+from renderer.renderer_lib.host_manifest import MANIFEST
 
 HOSTS = ("daniel-box", "daniel-server", "daniel-pi")
 SYS_USER = "ubuntu"
@@ -22,6 +24,7 @@ BASE = {"root", "adm", SYS_USER}
 HOME = PurePosixPath("/home") / SYS_USER
 SYSUSERS = "/usr/lib/sysusers.d/homelab.conf"
 HOMELAB_UIDS = range(900, 950)
+TMPFILES_DIRS = ("/usr/lib/tmpfiles.d/", "/etc/tmpfiles.d/")
 
 Files = dict[str, tuple[bytes, int]]
 
@@ -30,7 +33,7 @@ def tmpfiles_lines(files: Files) -> list[list[str]]:
     return [
         line.split()
         for dst, (body, _mode) in files.items()
-        if dst.startswith(("/usr/lib/tmpfiles.d/", "/etc/tmpfiles.d/"))
+        if dst.startswith(TMPFILES_DIRS)
         for line in body.decode().splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
@@ -70,6 +73,21 @@ def test_a_tmpfiles_line_naming_an_undeclared_user_is_reported(packages):
     }
 
     assert undeclared_users(files) == {"planted"}
+
+
+def test_every_tmpfiles_d_file_a_package_ships_is_applied_by_reconcile_on_install(
+    packages,
+):
+    # Reconcile runs `systemd-tmpfiles --create` on a file with the `tmpfiles` action when its
+    # hash changes, so a new line does not wait for the next boot (#8267).
+    unapplied = {}
+    for host, files in packages.items():
+        activations = json.loads(files[MANIFEST][0]).get("activations", {})
+        shipped = {dst for dst in files if dst.startswith(TMPFILES_DIRS)}
+        unapplied[host] = {d for d in shipped if activations.get(d) != "tmpfiles"}
+
+    assert "/usr/lib/tmpfiles.d/homelab-media-volume.conf" in packages["daniel-box"]
+    assert unapplied == {host: set() for host in HOSTS}
 
 
 def declared_uids(files: Files) -> dict[str, int]:

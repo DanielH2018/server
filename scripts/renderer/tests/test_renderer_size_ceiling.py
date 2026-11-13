@@ -25,7 +25,8 @@ from lib.repo_paths import REPO
 # 13619 once #8172 rewrote the renderer's docstrings.
 # 13627 once #8173 let rule 5 judge the labelling wrapper's `lookup('template')`.
 # 13615 once #8165 deleted the owner-entry-points census and the renderer helper only it read.
-LINE_CEILING = 13615
+# 13625 once #8267 gave every tmpfiles.d file the `tmpfiles` activation.
+LINE_CEILING = 13625
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 

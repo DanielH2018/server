@@ -26,7 +26,7 @@ call leaves it running to its verdict (issue #3158). The mechanics are ``land_li
 THE WAIT IS cc-wait's, NOT THIS SCRIPT'S. ``cc-wait`` is the one wait loop every repo shares (the
 dotfiles ``cc-wait`` package), and ``land_probe.py`` is this repo's ``land`` source for it. A
 wait that runs out of budget exits 75 and prints the command that resumes it: re-run THAT, never
-``land.sh``, which would start a second landing. ``--await-verdict`` is retired and refused.
+``land.sh``, which would start a second landing.
 
 WITHOUT ``--detach``, REDIRECT STDOUT AND STDERR TO A FILE YOURSELF. A backgrounded Bash call
 hands this script a non-blocking pipe, and a Python write to a full one raises

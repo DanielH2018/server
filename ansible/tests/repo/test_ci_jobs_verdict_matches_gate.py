@@ -23,6 +23,8 @@ import subprocess
 import pytest
 from _helpers import REPO
 from ci_verdict import (
+    CI_BUILD_JOB,
+    CI_BUILD_READER_JOBS,
     CI_GATE_NAME,
     CI_GATE_NEEDS_JOBS,
     CI_PROVE_JOB,
@@ -91,29 +93,27 @@ def test_the_expansion_finds_the_matrix_legs_it_must():
 
 
 def test_a_skipped_dependent_can_only_mean_the_tree_was_proven():
-    """The one case `jobs_verdict` cannot tell from the gate: `prove` succeeded with
-    `proven=false` and every dependent skipped. A check-run does not carry a job output, so the
-    reader leans on the workflow: each dependent skips only on `proven == 'true'`. The two jobs
-    that read the build's artifacts also skip when the build did not succeed, and the build's own
-    check-run then carries that verdict."""
+    """The cases `jobs_verdict` cannot tell from the gate, because a check-run does not carry a
+    job output. The reader leans on the workflow for both.
+
+    `prove` succeeded with `proven=false` and every dependent skipped: each dependent skips
+    only on `proven == 'true'`. A job that reads the build's artifacts skipped beside a build
+    that succeeded: it also skips when the build did not succeed, where the build's own
+    check-run carries that verdict, and when the build's output gave it no work, and on nothing
+    else. `test_ci_skip_proven_master.py` pins such a job's whole condition."""
     jobs = _jobs()
+    (build_id,) = [i for i, j in jobs.items() if j.get("name") == CI_BUILD_JOB]
     for job_id in _gate_job()["needs"]:
         if job_id == "prove":
             continue
         job = jobs[job_id]
-        # `host_tools_arm64` and `host_packages` also wait for `host_packages_build`; each
-        # skips when that does, or when it did not succeed.
         needs = [job["needs"]] if isinstance(job["needs"], str) else job["needs"]
         assert needs[0] == "prove", job_id
         assert set(needs[1:]) <= set(_gate_job()["needs"]), job_id
-        condition = (
-            str(job["if"])
-            .strip()
-            .removeprefix("${{")
-            .removesuffix("}}")
-            .strip()
-            .removesuffix(" && needs.host_packages_build.result == 'success'")
-        )
+        if build_id in needs:
+            continue
+        condition = str(job["if"]).strip().removeprefix("${{").removesuffix("}}")
+        condition = condition.strip()
         # The draft arm adds no skip `jobs_verdict` can see: a draft PR's head is never a
         # master commit, and the gate skips with its dependents there (#5563).
         assert condition == (
@@ -127,8 +127,17 @@ def _all(result: str, **override: str) -> dict[str, str]:
     return {n: override.get(n, result) for n in sorted(CI_GATE_NEEDS_JOBS)}
 
 
-def _gate_exit(prove: str, proven: str, results: dict[str, str]) -> int:
-    """Run the gate's own script. It reads one env var per `needs` job, not per matrix leg."""
+def _gate_exit(
+    prove: str,
+    proven: str,
+    results: dict[str, str],
+    build_said: dict[str, str] | None = None,
+) -> int:
+    """Run the gate's own script. It reads one env var per `needs` job, not per matrix leg.
+
+    `build_said` holds the build's outputs the script reads, by env name; an output left out is
+    one the build never wrote.
+    """
     jobs = _jobs()
     gate = _gate_job()
     check = next(s for s in gate["steps"] if "env" in s and "HOOKS" in s["env"])
@@ -142,7 +151,13 @@ def _gate_exit(prove: str, proven: str, results: dict[str, str]) -> int:
                 (bad for bad in ("failure", "cancelled", "skipped") if bad in legs),
                 "success",
             )
-    env = {"PROVE": prove, "PROVEN": proven, "PATH": "/usr/bin:/bin", **per_job}
+    env = {
+        "PROVE": prove,
+        "PROVEN": proven,
+        "PATH": "/usr/bin:/bin",
+        **per_job,
+        **(build_said or {}),
+    }
     return subprocess.run(["bash", "-c", check["run"]], env=env, timeout=30).returncode
 
 
@@ -160,7 +175,7 @@ def _runs(prove: str, results: dict[str, str]) -> list[dict]:
         ("success", "false", _all("success")),
         ("success", "true", _all("skipped")),
         ("skipped", "", _all("skipped")),
-        ("success", "", _all("success", host_tools_arm64="skipped")),
+        ("success", "", _all("success", **{"pytest (shard 3 of 6)": "skipped"})),
         ("success", "true", _all("skipped", host_tools_arm64="failure")),
         ("skipped", "", _all("success", **{"pytest (shard 3 of 6)": "failure"})),
         ("failure", "true", _all("skipped")),
@@ -172,9 +187,53 @@ def _runs(prove: str, results: dict[str, str]) -> list[dict]:
     ],
 )
 def test_jobs_verdict_agrees_with_the_gates_own_script(prove, proven, results):
-    """`pass` exactly when the gate exits 0; a run the gate fails is never `pass`."""
-    gate_passes = _gate_exit(prove, proven, results) == 0
+    """`pass` exactly when the gate exits 0; a run the gate fails is never `pass`.
+
+    The build's outputs are the ones a run with no work for its readers writes, because the
+    reader cannot see them and leans on the workflow for that case.
+    """
+    gate_passes = _gate_exit(prove, proven, results, _NO_WORK) == 0
     verdict = jobs_verdict(_runs(prove, results))
     assert (verdict == "pass") is gate_passes, (prove, proven, verdict)
     if not gate_passes:
         assert verdict in ("fail", "pending")
+
+
+# A run whose build had no work for its readers: each skipped at job level.
+_IDLE = dict.fromkeys(CI_BUILD_READER_JOBS, "skipped")
+_NO_WORK = {"RUN_CASES": "false", "ARM64_TOOLS": "false"}
+
+
+def test_the_build_readers_are_the_gate_needs_that_wait_for_the_build():
+    jobs = _jobs()
+    (build_id,) = [i for i, j in jobs.items() if j.get("name") == CI_BUILD_JOB]
+    readers: set[str] = set()
+    for job_id in _gate_job()["needs"]:
+        if build_id in jobs[job_id].get("needs", []):
+            readers |= _check_run_names(job_id, jobs[job_id])
+    assert readers == CI_BUILD_READER_JOBS
+
+
+def test_a_build_reader_with_no_work_passes_the_gate_and_the_reader():
+    results = _all("success", **_IDLE)
+    assert _gate_exit("skipped", "", results, _NO_WORK) == 0
+    assert jobs_verdict(_runs("skipped", results)) == "pass"
+
+
+@pytest.mark.parametrize(
+    ("reader", "build_said"),
+    [
+        # The build had work for a reader, so a skipped one never ran what the change touched.
+        ("skipped", {"RUN_CASES": "true", "ARM64_TOOLS": "false"}),
+        ("skipped", {"RUN_CASES": "false", "ARM64_TOOLS": "true"}),
+        # The build never wrote its outputs.
+        ("skipped", {}),
+        # No work excuses a skip, not a reader that started and did not finish.
+        ("cancelled", _NO_WORK),
+    ],
+)
+def test_the_gate_fails_a_build_reader_that_did_not_run_for_any_other_reason(
+    reader, build_said
+):
+    results = _all("success", **dict.fromkeys(CI_BUILD_READER_JOBS, reader))
+    assert _gate_exit("skipped", "", results, build_said) != 0

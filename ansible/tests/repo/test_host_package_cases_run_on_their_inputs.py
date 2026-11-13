@@ -23,7 +23,8 @@ job's `outputs:` into the `needs` context, and walks the cases job's steps up to
   call, so a renamed subcommand cannot turn the stub into a silent no-op.
 - Every other step is not run: the nfpm fetch, the builds and the cases themselves.
 - The cases job's steps are only evaluated, against a `steps` context of their own, as on the
-  runner: a cases step that read the build job's `steps.render` would see nothing there.
+  runner: a cases step that read the build job's `steps.render` would see nothing there. The
+  job's own `if:` is evaluated first, and a step of a job that skips counts as not run.
 
 The render is stubbed as unchanged because no input this module edits is a render input, so the
 real diff reports `changed=false` for each. That is the worst case for the trigger: the cases
@@ -261,13 +262,16 @@ def _simulate(
         k: interpolate(v, context) for k, v in (build.get("outputs") or {}).items()
     }
     context["needs"][BUILD_JOB] = {"outputs": outputs, "result": "success"}
+    # `prove` runs on a push alone, so a pull_request run reads it as skipped.
+    context["needs"]["prove"] = {"result": "skipped", "outputs": {}}
+    job_runs = condition(job, context)
     build_steps, context["steps"] = context["steps"], {}
     context["env"] = {}
     for scope in (workflow.get("env") or {}, job.get("env") or {}):
         context["env"].update({k: interpolate(v, context) for k, v in scope.items()})
     for index, step in enumerate(job["steps"]):
         name = step.get("name", step.get("uses", f"step {index}"))
-        verdicts[name] = condition(step, context)
+        verdicts[name] = job_runs and condition(step, context)
         if name == CASES_STEP:
             context["cases_env"] = {
                 k: interpolate(v, context) for k, v in (step.get("env") or {}).items()

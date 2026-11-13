@@ -986,7 +986,9 @@ arm64 only.
     - add the host's `HostUpdateStale` rule to `host-checks.yaml`. The test above prints the rule.
 
     A new cluster node instead needs a k3s mode in `hosts/bootstrap-host.sh` and an entry in `NODES`
-    in `hosts/lib/k3s_gates.py`.
+    in `hosts/lib/k3s_gates.py`. It still needs the last two steps, with job `node`: every host
+    whose package enables `homelab-updater.timer` needs an `observability_expected_hosts` entry,
+    and `ansible/tests/services/test_host_plane_rule_literals.py` fails a host that has none.
 1. **Operator-only**, after the merge: once the builder has published `homelab-<host>` and
    `homelab_host_applied_info{host="daniel-box"}` names the merge commit or a descendant, run
    the script to the end. daniel-box's firewall then holds the rule. To confirm the rule, check

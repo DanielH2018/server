@@ -704,8 +704,9 @@ When no host differs, the candidate is cleared and the landing ends
 `nothing-to-deploy`. A render or snapshot that fails makes every host a target, so a failure
 waits rather than skips.
 
-A PR with host targets and no service tag deploys nothing in step 4. A PR that also carries a plane a hand applies still ends
-`needs-manual-apply`, and the output names each host it did not wait on.
+A PR with host targets and no service tag deploys nothing in step 4. A PR that also rotates a
+secret, which no deploy tag or host package applies, still ends `needs-manual-apply`, and the
+output names each host it did not wait on.
 
 Step 5, `host_wait.wait_for_hosts`, queries Prometheus on loopback and then on the ClusterIP.
 A host settles when `homelab_host_applied_info` equals or descends from the merge commit and

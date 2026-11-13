@@ -38,7 +38,7 @@ from lib.repo_paths import HOST_VARS, HOSTS_INI
 
 # The host that runs `land.sh`, the fan-out and the host-package builder.
 LANDING_HOST = "daniel-box"
-# The one host whose host_vars set `has_docker: true`, driven over ssh with `-e target=`.
+# The one host whose host_vars set `has_docker: true`; its host package ships its compose services.
 PI_HOST = "daniel-pi"
 # The host whose `containers_list` the renderer fills from `cluster/services.yml`, the
 # group_vars `k8s_primary_node`. The same host as LANDING_HOST, but a different fact: moving the

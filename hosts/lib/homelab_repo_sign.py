@@ -538,9 +538,6 @@ class Signer:
 
     def swap(self, snapshot: Path) -> None:
         """Point `repo/dists` at `snapshot` with one rename of a symlink."""
-        if self.dists.is_dir() and not self.dists.is_symlink():
-            # A tree published before the snapshot layout: set it aside once.
-            self.dists.rename(self.snapshots / f"legacy-{int(self.now())}")
         link = self.repo / ".dists.new"
         link.unlink(missing_ok=True)
         os.symlink(os.path.relpath(snapshot, self.repo), link)

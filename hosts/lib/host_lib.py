@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Shared I/O-shell helpers for the host-run scripts.
 
-Used by gitops_deploy.py, renovate_notify.py, janitorr_health.py, configarr_health.py,
-longhorn_backup_health_logic.py, longhorn_reap_lib/logic.py, live_drift_check.py,
-the triage poller and runner, deploy_ui.py and the fake-remux scripts. Each runs via
-``uv run --no-project --python <pin>`` (host_python_version in
-ansible/inventory/group_vars/all.yml) or directly under cron, and is deployed into its own
-``/opt`` dir, where it does a ``sys.path.insert(0, <own dir>)`` so ``from host_lib import ...``
-resolves the copy sitting alongside. Single source of truth for helpers that had drifted between
+Used by the host components (checkout_sync.py, the builder, deploy_ui.py, renovate_notify.py,
+the renovate agent, the triage poller and runner, the fake-remux scripts), by the repo's own
+tools (await_ci.py, land_lib, promote_lib, longhorn_reap_lib, longhorn_lib) and by the
+janitorr and configarr health checks. A host component's package ships a copy beside its
+script (a ``lib:`` entry in its ``component.yml``), and the script does a
+``sys.path.insert(0, <own dir>)`` so ``from host_lib import ...`` resolves that copy. Single source of truth for helpers that had drifted between
 scripts: the Cloudflare-1010 User-Agent on the Discord POST and its length cap, the
 torn-write-safe atomic state write, the config.env parser, the kubectl runner, the RFC3339
 parser, the GitHub token lookup and REST read, the journal-aware ``log``
@@ -62,7 +61,7 @@ GITHUB_API = "https://api.github.com"
 GITHUB_TIMEOUT_S = 15
 
 # sd-daemon(3) priorities for `log`'s `level`. Without one, journald files a line at the unit's
-# `SyslogLevel=` (notice on the deployer), so `journalctl -p err` finds nothing for a failure
+# `SyslogLevel=` (notice on checkout-sync and the builder), so `journalctl -p err` finds nothing for a failure
 # (#4446). ERR marks a failure the run could not work around; WARNING a read or a gate that
 # failed and the run worked around.
 ERR = 3
@@ -459,9 +458,10 @@ def github_token(source: Mapping[str, str], run: Callable) -> str | None:
     """A GitHub token for REST reads, or None to query anonymously.
 
     ``GH_TOKEN`` then ``GITHUB_TOKEN`` in ``source`` win, then ``gh auth token``. ``source`` is
-    wherever the caller keeps its settings: the deployer passes ``os.environ``, renovate_notify
-    its ``config.env``. The gh CLI on daniel-box is logged in as the repo owner, and both callers
-    run as that user. The lookup is best-effort: a missing gh, an expired login, or a slow
+    wherever the caller keeps its settings: await_ci passes ``os.environ``, renovate_notify
+    its ``config.env``, checkout-sync and the builder their systemd credential. The gh CLI on
+    daniel-box is logged in as the repo owner, and the callers that let it answer run as that
+    user. The lookup is best-effort: a missing gh, an expired login, or a slow
     keyring all return None, and the caller queries anonymously.
 
     Why authenticate a read of a public repo. The anonymous limit is 60 requests/hour PER
@@ -510,7 +510,8 @@ def github_get(
 
     The one request shape every host GitHub reader shares, so the readers cannot drift on the
     headers, the auth or the timeout (#2136, #3362). What a failure MEANS stays with the caller:
-    the deployer's gate maps every error to ``pending``, a landing lets it raise.
+    checkout-sync's and the builder's CI gates read an error as ``pending``, a landing lets it
+    raise.
 
     Args:
         path: the part after the API root, query string included, e.g. ``repos/o/n/pulls``.

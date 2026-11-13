@@ -669,6 +669,9 @@ its unit file or drop-in changes. Each file in a `component.yml` therefore decla
 - `none`, for a file the program reads on each use, such as `limits.d`;
 - `try-restart:<unit>` or `reload:<unit>`;
 - `sysctl`, which runs `sysctl --system`;
+- `tmpfiles`, which runs `systemd-tmpfiles --create` on the changed files. The renderer gives
+  it to every file under `tmpfiles.d/` and refuses any other action there, so a new line
+  applies on the install that ships it, not at the next boot (#8267);
 - `modules-load`, which restarts `systemd-modules-load.service`;
 - `udev`, which is H4's arm;
 - `reboot`, which marks the host reboot-pending;

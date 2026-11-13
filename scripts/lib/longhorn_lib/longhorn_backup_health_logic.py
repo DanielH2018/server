@@ -196,7 +196,7 @@ def check_tier(
 ) -> None:
     """Ports check_tier() from the shell, mutating `result` in place.
 
-    check_tier() is called once per backup tier (daily, 7 weekly shards, weekly-legacy) and
+    check_tier() is called once per backup tier (daily and the 7 weekly shards) and
     every call shares the same global counters in the original script, which is what makes
     UNCOVERED/CHECKED/etc. fleet-wide totals rather than per-tier ones.
 
@@ -241,12 +241,7 @@ def check_tier(
                     result.graced_new += 1
                     result.graced_new_vols.append(claim)
                 continue
-            if job == "__no_job__":
-                result.uncovered.append(
-                    f"{claim} ({tier}, no recurring job selects it)"
-                )
-            else:
-                result.uncovered.append(f"{claim} ({tier}, no backup from {job})")
+            result.uncovered.append(f"{claim} ({tier}, no backup from {job})")
             continue
 
         result.checked += 1

@@ -153,15 +153,3 @@ def run_times(job_crons: dict[str, str]) -> dict[str, str | None]:
     return {
         job: hhmm_from_two_field_cron(job_crons.get(job, "")) for job in tier_jobs()
     }
-
-
-def legacy_run_time(times: dict[str, str | None]) -> str | None:
-    """The retired flat weekly group's run time. It has no job, so it takes the first shard's."""
-    return next(
-        (
-            times[backups.weekly_shard_group(shard)]
-            for shard in range(backups.WEEKLY_SHARDS)
-            if times[backups.weekly_shard_group(shard)]
-        ),
-        None,
-    )

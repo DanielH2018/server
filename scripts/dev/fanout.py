@@ -16,10 +16,6 @@ Usage::
 module under `fanout_lib/`, named in `COMMANDS`. This file imports only the module the command
 names: `review` and `place clean-one` run under `uv run --no-project`, which installs nothing,
 so no other command's imports may reach them (#4167).
-
-The pre-consolidation paths `fanout_place.py`, `fanout_probe.py`, `fanout_review.py` and
-`fanout_review_stats.py` stay beside this file as forwarding shims (#4346). Running fan-out
-batches, older checkouts and `fanout_lib.clean`'s remote leg still name them.
 """
 
 import argparse

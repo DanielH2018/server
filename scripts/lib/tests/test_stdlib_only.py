@@ -262,8 +262,6 @@ def test_the_declared_fanout_units_are_the_commands_the_builders_write():
         stop_post("1", SERVER_TARGET),
     ]
     for entry, argv in FANOUT_UNITS:
-        if entry.name == "fanout.py" and argv[:1] == ("place",):
-            continue  # what the fanout_place.py shim forwards to, not a command line
         shape = " ".join([entry.relative_to(REPO).as_posix(), *argv]) + " "
         assert any(shape in command for command in written), shape
 
@@ -365,21 +363,11 @@ def test_a_role_command_no_copy_installs_is_flagged():
         )
 
 
-def test_an_import_guarded_by_import_error_is_clean(tmp_path):
+def test_an_import_guarded_by_import_error_is_flagged(tmp_path):
     checker = _checker()
     module = tmp_path / "importer.py"
     module.write_text(
         "try:\n    import yaml\nexcept (ImportError, OSError):\n    yaml = None\n",
-        encoding="utf-8",
-    )
-    assert checker.walk(module, [tmp_path]) == []
-
-
-def test_an_import_guarded_by_another_exception_is_flagged(tmp_path):
-    checker = _checker()
-    module = tmp_path / "importer.py"
-    module.write_text(
-        "try:\n    import yaml\nexcept ValueError:\n    yaml = None\n",
         encoding="utf-8",
     )
     assert checker.walk(module, [tmp_path]) == ["yaml"]

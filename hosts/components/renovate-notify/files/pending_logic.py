@@ -178,27 +178,11 @@ def content_key(branch: str, description: str) -> str:
     return branch + CONTENT_KEY_SEP + digest
 
 
-def _content_keys_for(prev: dict[str, float], branch: str) -> list[str]:
-    """Every digest-clock key `prev` holds for `branch`, newest-first order not implied."""
-    prefix = branch + CONTENT_KEY_SEP
-    return [k for k in prev if k.startswith(prefix)]
-
-
 def _digest_first_seen(
     seen: dict[str, float], branch: str, description: str, now_epoch: float
 ) -> float:
-    """The digest clock for one item, falling back to its branch clock, then to now.
-
-    The branch-clock fallback covers the one run where a legacy state file has not been
-    rewritten yet (`update_pending_seen` seeds the digest key, but only the run after a read of
-    the old file writes it), and reading a state file written by the pre-#3076 version at all.
-    Falling back to the branch clock over-reports, which is the behaviour this fix narrows;
-    falling back to `now_epoch` would under-report to zero, which is a check that cannot fire.
-    """
-    ckey = content_key(branch, description)
-    if ckey in seen:
-        return seen[ckey]
-    return seen.get(branch, now_epoch)
+    """The digest clock for one item, or now when `seen` holds none for it."""
+    return seen.get(content_key(branch, description), now_epoch)
 
 
 def update_pending_seen(
@@ -210,24 +194,12 @@ def update_pending_seen(
     item that leaves the section (its PR was finally raised, or the update stopped being
     offered) and comes back later starts a fresh clock in both, and a superseded digest key
     goes rather than waiting to resurrect an old clock when a tag oscillates A -> B -> A.
-
-    A legacy entry — a branch key with no digest key beside it, which is every entry written
-    before #3076 — seeds its digest clock from the branch clock instead of from now. The
-    alternative restarts all 20-odd clocks on the upgrade run and blinds the arm for up to 14
-    days, the exact failure `pending_state_lost` exists to report. The cost is that a churning
-    branch keeps over-reporting until its next re-push, one cycle at most.
     """
     out: dict[str, float] = {}
     for branch, desc in current.items():
-        branch_first = prev.get(branch, now_epoch)
         ckey = content_key(branch, desc)
-        if ckey in prev:
-            out[ckey] = prev[ckey]
-        elif branch in prev and not _content_keys_for(prev, branch):
-            out[ckey] = branch_first
-        else:
-            out[ckey] = now_epoch
-        out[branch] = branch_first
+        out[ckey] = prev.get(ckey, now_epoch)
+        out[branch] = prev.get(branch, now_epoch)
     return out
 
 

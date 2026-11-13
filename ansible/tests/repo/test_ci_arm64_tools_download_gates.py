@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 
 import pytest
+from _actions_expressions import condition
 from _helpers import REPO
 from lib import yaml_fast
 from lib.proc_testing import run
@@ -100,6 +101,29 @@ def test_the_step_reports_whether_an_arm64_deb_exists(
     result = run(["bash", "-c", script], env=env)
     assert result.returncode == 0, result.stderr
     assert output.read_text() == f"built={built}\n"
+
+
+@pytest.mark.parametrize(
+    ("event", "built", "runs"),
+    [
+        ("pull_request", "false", False),
+        ("pull_request", "true", True),
+        ("workflow_dispatch", "false", True),
+    ],
+    ids=["no-build", "an-arm64-build", "a-dispatch-with-no-build"],
+)
+def test_the_arm64_job_takes_a_runner_only_for_a_build_or_a_dispatch(
+    workflow, event: str, built: str, runs: bool
+):
+    """With no build the job skips, and holds none of the 20 runner slots (docs/ci-throughput.md)."""
+    context = {
+        "github": {"event_name": event},
+        "needs": {
+            "prove": {"result": "skipped", "outputs": {}},
+            BUILD: {"result": "success", "outputs": {"arm64-tools": built}},
+        },
+    }
+    assert condition(workflow["jobs"][ARM64], context) is runs
 
 
 @pytest.mark.parametrize(

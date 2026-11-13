@@ -11,7 +11,8 @@
 # (hosts/components/k3s-restart). The first window after an install that changes the hash
 # therefore restarts k3s once, behind the gates, and the host package marks k3s.service
 # `windowed` so reconcile never restarts it. A path k3s does not read at startup (logrotate,
-# tmpfiles.d, the CoreDNS marker) carries no activation.
+# tmpfiles.d, the CoreDNS marker) carries no k3s activation; the renderer gives the tmpfiles.d
+# file the `tmpfiles` action, which never touches k3s.
 #
 # FORWARD-ONLY. A file here is named by a k3s flag (`audit-policy-file`, `authentication-config`)
 # or read at startup, and a missing authentication config wedges the API server on its next

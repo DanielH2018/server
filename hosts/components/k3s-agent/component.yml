@@ -9,7 +9,8 @@
 # `activate: manual:k3s-agent.service`, and the host package marks k3s-agent.service `windowed`,
 # so reconcile never restarts the agent. daniel-server's package lists no `k3s-restart`, so the
 # change goes live at the agent's next start: the weekly reboot, a SUC upgrade, or a hand restart.
-# A path k3s does not read at startup (logrotate, tmpfiles.d) carries no activation.
+# A path k3s does not read at startup (logrotate, tmpfiles.d) carries no k3s activation; the
+# renderer gives the tmpfiles.d file the `tmpfiles` action, which never touches k3s.
 #
 # FORWARD-ONLY for registries.yaml. Reverting the PR that added a file deletes it, and an agent
 # that starts without registries.yaml pulls every in-cluster image over HTTPS and fails. Return a

@@ -450,6 +450,7 @@ def test_loki_sets_name_every_m5_rule():
         "WorkloadLogErrors",
         "HostLogErrors",
         "HostOutOfMemoryKill",
+        "HostFilesystemRemountedReadOnly",
         "LokiHostLogsSilent",
         "LokiPodLogsSilent",
         "LokiPiLogsSilent",

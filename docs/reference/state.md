@@ -5,7 +5,7 @@ generated_sha: 3febc5ec5
 ---
 
 !!! warning "Generated file — do not edit"
-    This page is rendered from the Ansible tree by `scripts/docs/reference/state.py`. Hand edits are
+    This page is rendered from this repository by `scripts/docs/reference/state.py`. Hand edits are
     overwritten by the next run, and a prek hook rejects them at commit time.
     To change what appears here, change the generator or the source it reads.
 

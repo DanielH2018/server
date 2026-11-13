@@ -249,8 +249,8 @@ VERDICT_HINTS: dict[str, tuple[str, str]] = {
     ),
     "nothing-to-deploy": (
         "none",
-        "Nothing deployed. A PR that reaches only a setup role is applied by the "
-        "deployer's timer, which this landing does not watch.",
+        "Nothing deployed: the PR changed no service and no host package. A PR that changes "
+        "a host package waits for that host to apply it and ends settled instead.",
     ),
     "unhealthy": (
         "bad",

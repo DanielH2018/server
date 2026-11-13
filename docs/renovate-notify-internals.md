@@ -70,9 +70,7 @@ The role doc names both shapes; these are the measurements behind them.
   for `churning_pending`. The digest clock alone cannot page for `nginx:alpine`, re-pushed about
   every 3.6 days against a 1-day soak and 7-day grace, which is why the churn arm exists:
   `PENDING_CHURN_MULTIPLIER` times soak plus grace, so three consecutive allowances pass with
-  the item never once leaving the section before it pages. A legacy state file's branch-only
-  entry seeds its digest clock from the branch clock rather than from now, so the upgrade run
-  does not blind the arm for 14 days the way a lost file does.
+  the item never once leaving the section before it pages.
 - **A grouped row took the wrong soak.** `groupSingleUpdates: true` (#2646) titles a
   single-dependency update with its GROUP name, so the row reads `Update k8s image
   ghcr.io/haveagitgat/tdarr (manual — ...)` where an ungrouped digest row says `Docker digest
