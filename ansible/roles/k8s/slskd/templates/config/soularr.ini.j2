@@ -1,0 +1,53 @@
+[Lidarr]
+api_key = {{ lidarr_api_key }}
+host_url = http://lidarr.{{ k8s_namespace }}.svc.cluster.local:8686
+download_dir = {{ slskd_k8s_downloads_dir }}
+disable_sync = False
+
+[Slskd]
+api_key = slskd-runs-without-auth
+host_url = http://localhost:{{ container_item.port }}
+url_base = /
+download_dir = {{ slskd_k8s_downloads_dir }}
+delete_searches = False
+stalled_timeout = 3600
+remote_queue_timeout = 300
+
+[Release Settings]
+use_selected_lidarr_release = False
+use_most_common_tracknum = True
+allow_multi_disc = True
+accepted_countries = Europe,Japan,United Kingdom,United States,[Worldwide],Australia,Canada
+skip_region_check = False
+accepted_formats = CD,Digital Media,Vinyl
+
+[Search Settings]
+search_timeout = 5000
+maximum_peer_queue = 50
+minimum_peer_upload_speed = 0
+minimum_filename_match_ratio = 0.8
+minimum_search_interval = 5
+search_retry_wait_hours = 0
+allowed_filetypes = {{ slskd_k8s_soularr_filetypes }}
+ignored_users =
+album_prepend_artist = False
+search_type = incrementing_page
+number_of_albums_to_grab = 10
+title_blacklist =
+search_blacklist =
+search_source = missing
+failed_import_denylist = True
+ignore_failed_users = False
+failed_user_ignore_hours = 168
+
+[Download Settings]
+download_filtering = True
+use_extension_whitelist = False
+extensions_whitelist = lrc,nfo,txt
+rename_download_folders = True
+
+[Logging]
+level = INFO
+format = [%(levelname)s|%(module)s|L%(lineno)d] %(asctime)s: %(message)s
+datefmt = %Y-%m-%dT%H:%M:%S%z
+log_to_file = False

@@ -1,11 +1,11 @@
 ---
 # Fan level control: the tested curve, the raw setter, and the dial nudge. Conventions: see README.md in this directory.
 
-# Fan: set the DREO tower fan to its target speed for the CURRENT temperature + time. Single source
-# of truth for the temperature->band mapping, the 0.5°F hysteresis deadband, and the 22:00-06:00
-# night cap (Medium max). Works in the fan's 9 discrete LEVELS, not raw %, because the DREO
-# integration math.ceil()s a requested % up to the next level (so e.g. "67%" would land on level 7
-# = 77%). Callers (bedroom_fan_temperature, the morning reset, Tap Dial button 4) gate on the
+# Fan: set the DREO tower fan to its target speed for the CURRENT temperature + time. The curve, the
+# ±0.7-level hysteresis deadband, the 22:00-06:00 night cap (max L4) and the sleep-mode seasonal
+# floor live in fan.jinja's fan_target_level. Works in the fan's 9 discrete LEVELS, not raw %,
+# because the DREO integration math.ceil()s a requested % up to the next level (so e.g. "67%" would
+# land on level 7 = 77%). Callers (bedroom_fan_temperature, the morning reset, Tap Dial button 4) gate on the
 # bedroom_fan_manual override themselves — this just applies the right level, and only commands the
 # fan when the target level actually differs (avoids churn + self-echo manual-detects).
 bedroom_apply_fan:
@@ -131,7 +131,9 @@ bedroom_fan_nudge:
     Step fan.tower_fan up/down one DREO level (clamped 0-9, 0 = off) from the
     bedroom_fan_expected_level accumulator. Engages the manual fan override.
   mode: queued
-  max: 10
+  # DECIDED: 30, not 10. The Tap Dial starts this without waiting, so a whole dial burst lands in
+  # this queue: Z2M logged 11 dial_rotate_* events in the 2026-11-05 burst and 22 in the 11-07 one.
+  max: 30
   fields:
     delta:
       description: "+1 to step up a level, -1 to step down."

@@ -1,0 +1,28 @@
+# Shipped by both hosts' packages while claude_code_guardrail_ack_enabled. Started by
+# homelab-claude-guardrail-ack.timer.
+[Unit]
+Description=Post the Claude Code guardrail changes that nothing merged explains
+After=homelab-secrets.service network-online.target
+Wants=homelab-secrets.service network-online.target
+
+[Service]
+Type=oneshot
+# Root, because it reads every user's ~/.claude and renders each user's dotfiles as that user.
+LoadCredential=discord_webhook:/run/credstore/discord_alert_webhook
+Environment=PYTHONDONTWRITEBYTECODE=1
+TimeoutStartSec=10min
+# Root has no pinned interpreter of its own, so the unit keeps one in its state directory, as the
+# builder does. ExecStartPre= installs it, which downloads, and does nothing once it is present.
+# Only ExecStart= sets UV_PYTHON_DOWNLOADS=never.
+StateDirectory=homelab-claude-guardrail-ack
+StateDirectoryMode=0700
+Environment=UV_CACHE_DIR=/var/lib/homelab-claude-guardrail-ack/uv-cache
+Environment=UV_PYTHON_INSTALL_DIR=/var/lib/homelab-claude-guardrail-ack/python
+ExecStartPre=/usr/lib/homelab/bin/uv python install --no-bin {{ host_python_version }}
+ExecStart=/usr/bin/env UV_PYTHON_DOWNLOADS=never /usr/lib/homelab/bin/uv run --no-project \
+  --no-python-downloads --python {{ host_python_version }} \
+  /usr/lib/homelab/claude-guardrail-ack/claude_guardrail_ack.py /etc/homelab/claude-guardrail-ack.json
+SyslogLevel=notice
+# DECIDED: the tag stays `claude-guardrail-ack`. It is a join key: Loki selects the run's
+# `status=` line by it.
+SyslogIdentifier=claude-guardrail-ack

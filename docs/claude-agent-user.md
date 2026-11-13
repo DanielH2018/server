@@ -57,7 +57,7 @@ Only a human approval on every merge closes that path. The operator rejected tha
 reasons in
 [The decision: a visible trail, not a merge gate](#the-decision-a-visible-trail-not-a-merge-gate).
 The split makes the path visible instead. Every change that reaches root needs a signed commit by
-`DanielClaudeBot`, a CI run and a lander record.
+`claudemachineacct1`, a CI run and a lander record.
 
 The slice 3 gate has limits of its own. It requires the operator's approval only for the paths
 on its list and the modules the landing process imports. Code that runs only after the checks,
@@ -157,13 +157,14 @@ the hook-install task does not remove the hook. A broken hook refuses every agen
 
 ## Slice 2: Claude opens PRs under its own GitHub identity
 
-- **A machine user account, not a GitHub App.** The account is `DanielClaudeBot`, a write
+- **A machine user account, not a GitHub App.** The account is `claudemachineacct1`, a write
   collaborator, because a personal-account repo has no lower role.
-- **GitHub has hidden the account since 2026-10-10 (#5126).** Everything it authored returns
-  404 to every other account: its pull requests and its issues. 70 numbers from #3622 to #4247
-  are hidden, so `findings.py` cannot list or search them, or match a new finding against them. #8216 re-filed the
-  2026-10-10 review's findings under the operator's account, and #8328 lists the rest. The
-  operator ruled on 2026-11-13 to replace the account.
+- **It replaced `DanielClaudeBot` on 2026-11-13 (#5126).** GitHub has hidden that account since
+  2026-10-10. Everything it authored returns 404 to every other account: its pull requests and
+  its issues. 70 numbers from #3622 to #4247 are hidden, so `findings.py` cannot list or search
+  them, or match a new finding against them. #8216 re-filed the 2026-10-10 review's findings
+  under the operator's account, and #8328 lists the rest. Both hosts kept their signing keys:
+  the operator moved each public half from the old account to this one as a Signing Key.
 - **Its token is a classic `public_repo` token.** GitHub does not support fine-grained tokens
   for a collaborator on another personal account's repo. The token is stored in SOPS as
   `claude_code_agent_gh_token`, so `ansible/secret_rotation.yml` tracks it.
@@ -173,7 +174,7 @@ the hook-install task does not remove the hook. A broken hook refuses every agen
   which makes every change to master arrive as a PR, from any account.
 - **Only the admin role and Renovate update master.** Ruleset 27167149, created 2026-11-13
   under dotfiles#967 D12, restricts updates to master and bypasses `RepositoryRole:5` and
-  `Integration:2740`. DanielClaudeBot can therefore merge nothing itself, and GitHub's
+  `Integration:2740`. claudemachineacct1 can therefore merge nothing itself, and GitHub's
   auto-merge, which applies no bypass, leaves a PR from either account `BLOCKED`. Every agent
   PR reaches master through `homelab-claude-land@`, so `land_lib/policy.py` sees each one.
   `github-ruleset-drift.sh` pins the ruleset.
@@ -223,7 +224,7 @@ lander. The checks and the merge live in `land.sh`, and the lander does not re-i
   with no import line, such as a non-empty `__init__.py` or a symlink.
   `--verdict-file` writes `PENDING`, then the final `VERDICT:` or `REFUSED:` line.
 - **The unit** `homelab-claude-land@.service`, a `hosts/components/claude-code` template that
-  daniel-box's host package ships, runs `land.sh` as `ubuntu` with the policy pinned to `DanielClaudeBot`,
+  daniel-box's host package ships, runs `land.sh` as `ubuntu` with the policy pinned to `claudemachineacct1`,
   the `worktree-claude+` prefix and a root-owned approval-paths file. The pins are literals in
   `templates/claude-land-pins.j2`, so no inventory value moves them. A polkit rule lets `claude`
   start only `homelab-claude-land@<n>.service`.
@@ -273,14 +274,17 @@ truth, with a reason beside each entry. It holds:
 - `.github/`
 - `hosts/components/host-hardening/` and `hosts/components/sshd/`, which hold the sudo cache,
   ssh and the operator's login
-- `ansible/.sops.yaml` and `ansible/vars/secrets.yml`
+- `ansible/.sops.yaml` and `ansible/vars/secrets.yml`, and their paths after
+  [ADR-0030](adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md)'s rename,
+  `secrets/.sops.yaml` and `secrets/secrets.yml`
 - alert-triggered triage: every `templates/claude-triage*` template, which includes the pins
   template that sets the run's caps, the rule `templates/50-claude-triage.rules.j2`,
   `files/claude_triage_run.py` and `files/claude_triage_poll.py`, all under
   `hosts/components/claude-code/`. The operator added them on 2026-10-15. Later slices let
   a triage run land its own fixes with nobody watching, so it must not be able to raise its own
   caps.
-- `ansible/roles/k8s/cluster-base/`, the agent's read-only cluster RBAC. The operator added it
+- `ansible/roles/k8s/cluster-base/` and its path after the rename, `k8s/roles/cluster-base/`,
+  the agent's read-only cluster RBAC. The operator added it
   on 2026-10-16 (H1 Open question 7). Before H1, that RBAC applies only through
   `k3s-bringup.yml`, which the operator runs by hand. Once Flux applies `cluster-base` on
   merge, this entry holds a change under that directory for the operator. It does not cover a
@@ -788,7 +792,7 @@ The script has three guards:
 stopped an injected session from editing it in place. chezmoi writes as the agent, so the agent
 owns the files, and an edit lasts until the next sync, at most 15 minutes. The root ownership
 never stopped a rename of the whole directory, so the gap it closed was narrow. The hooks come
-from the dotfiles repo, where DanielClaudeBot can merge its own PRs. They guard against mistakes,
+from the dotfiles repo, where claudemachineacct1 can merge its own PRs. They guard against mistakes,
 not against a hostile session, as the copied skills already did.
 
 ## More than one agent
@@ -811,7 +815,7 @@ Everything that gives the account an identity is still the primary's alone: the 
 the token, the signing key, the clone and the syncs. A second agent that opens PRs therefore
 needs the component to render those per user first. That is its own change. It has to keep
 the rule the old filter enforced: a further agent never inherits the primary's GitHub login,
-id or token, so it cannot push as `DanielClaudeBot` by omission. No two agents may share a
+id or token, so it cannot push as `claudemachineacct1` by omission. No two agents may share a
 name, home or worktree prefix either.
 
 Only the primary agent gets the lander, the peer ssh login, the homelab-ui browser and login,
@@ -842,7 +846,7 @@ operator can log in as `claude`, so only the operator can run the checks that st
 | Slice | Check | Rollback |
 |---|---|---|
 | 1 | As `claude`, `id` lists none of the denied groups, `ls /home/ubuntu` is refused, `sudo -n true` fails, `kubectl get pods -A` works and `uv run pytest` passes. `prek --version` runs, and `~/server/.git/hooks/pre-commit` names `/var/lib/claude/.local/bin/prek`. | Turn `claude_code_agent_user_enabled` off. That locks the account and stops its units. It keeps the home, which holds the agent's clone and any unpushed work. |
-| 2 | As `claude`, a commit shows a good signature locally and `verified: true` on GitHub. A push to a `worktree-claude+` branch is accepted, and the PR is authored by `DanielClaudeBot`. The merge is refused at once by the CI gate, the branch fence and, until its deletion on 2026-10-11, the review gate. A push to a branch outside the prefix is refused with `Cannot create ref due to creations being restricted`. | Delete the branch fence, and revoke the token. |
+| 2 | As `claude`, a commit shows a good signature locally and `verified: true` on GitHub. A push to a `worktree-claude+` branch is accepted, and the PR is authored by `claudemachineacct1`. The merge is refused at once by the CI gate, the branch fence and, until its deletion on 2026-10-11, the review gate. A push to a branch outside the prefix is refused with `Cannot create ref due to creations being restricted`. | Delete the branch fence, and revoke the token. |
 | 3 | A session as `claude` runs `land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>` on three PRs. A deployable change ends in `VERDICT: settled` and the verdict file in `/var/lib/homelab-claude-land/<n>.verdict` ends with the same line. An approval-list path, a gate-imported module or an import shape such as a symlink refuses with `need the operator's approval: <path>`. After the operator approves the head, the lander logs `merged directly at the checked head`. | `claude_code_lander_enabled: false` removes the polkit rule and the unit. `claude` still opens PRs, and the operator lands them. |
 | 4 | From the phone, a session prints `id` (it must show `claude`), names the entries in the copied `MEMORY.md`, and writes an artifact and a new memory file. The artifact renders under `/a/daniel-box-claude/`, which proves the artifacts pod can traverse to the file. As `ubuntu`, `cat` of both new files succeeds. A permission error on the memory file means Claude Code created it `0600`, which `UMask=0027` cannot widen, so file a finding with `findings.py open`. `journalctl -u claude-memory-sync` shows a run that copied the file to daniel-server. | `claude_code_user: ubuntu`. A `User=` change restarts the host and drops its live sessions. |
 | 5 | As `claude` on daniel-box, `uv run python scripts/dev/fanout.py place read` prints a reading for both hosts, each with `signing=ok`. For the login alone, `uv run python scripts/diagnostics/ui_login.py && uv run python scripts/diagnostics/ui_login.py --verify homepage` succeeds, and homelab-ui renders a service page. | `claude_agent_ssh_login_enabled: false` in daniel-server's host_vars removes the key and the group. `claude_code_agent_user_enabled: false` there also expires the account and stops its linger. `claude_code_agent_homelab_ui_enabled: false` removes the browser, and deleting the `claude-agent` block from the authelia role revokes the login. |

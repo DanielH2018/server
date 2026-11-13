@@ -271,6 +271,56 @@ template carries why it is a host timer at all.
   deadline from its own minute default, so that default must stay `*/N`, and
   `ansible/tests/services/test_b6a_rule_literals.py` pins the rules to it.
 
+## Autonomous-role contract (`claude-guardrail-audit`, the audit watches on the guardrail paths)
+
+server#8250, the host half of dotfiles#967's slice 2. `homelab-claude-guardrail-audit.timer`
+runs `templates/claude-guardrail-audit.sh.j2` as root on both hosts.
+
+- **Scope:** auditd watches under the keys `claude-guardrail` and `claude-memory`, one per
+  path in `claude_code_guardrail_audit_paths` and `claude_code_guardrail_audit_memory_dirs`
+  that exists. Each run loads a missing watch and removes one the lists no longer name. It
+  touches no rule under any other key, so the host-hardening watches stay as they are.
+- **Why a timer, not a rules file:** `augenrules` stops at the first watch whose directory is
+  missing, which would also drop the hardening rules. The agent's memory store exists only
+  after the agent's first session in its clone, and the next run then watches it.
+- **Mode:** `claude_code_guardrail_audit_enabled`. The timer ships either way, so false
+  reaches a run that removes every watch under both keys and reports up.
+- **Abort valves:** a run stops at its first failed `auditctl` read and reports down, loading
+  nothing. It removes a watch only under its own two keys, and only one the lists no longer
+  name.
+- **Evidence:** a `status=` line under `journalctl -t claude-guardrail-audit`, and
+  `claude-guardrail-audit.prom`. `ClaudeGuardrailAuditFailed` pages a stopped auditd, kernel
+  auditing switched off, or a present path with no watch. `ClaudeGuardrailAuditNotReporting`
+  pages a timer that stopped. Each watched write lands in `/var/log/audit/audit.log`, which
+  loki-homelab's Alloy ships as `{job="audit"}`. Its SYSCALL line carries the key and the
+  writing process, so a Bash write shows apart from the Write tool's.
+- **Next-run review:** before adding a path, check that a write to it is rare. Every write to
+  a watched path is a shipped record.
+
+## Autonomous-role contract (`claude-guardrail-ack`, the post for each unexplained guardrail change)
+
+server#8250 slice 2. `homelab-claude-guardrail-ack.timer` runs `files/claude_guardrail_ack.py`
+as root on both hosts, two minutes after each audit run.
+
+- **Scope:** every file under `claude_code_guardrail_audit_paths`, never the memory stores.
+  A change is explained, and stays quiet, when the file matches its package's md5, when it
+  matches what chezmoi renders for its owner from the dotfiles repo's `main`, or when a
+  settings.json change touches only `claude_code_guardrail_ack_quiet_settings_keys`. The
+  operator ruled on 2026-11-13 to post only the rest. A posted diff masks any line naming a
+  token, key, secret, password or webhook, and any long credential-shaped value.
+- **Mode:** `claude_code_guardrail_ack_enabled`. False drops the timer, its units and the
+  config from the next package version, and keeps the state under
+  `/var/lib/homelab-claude-guardrail-ack`.
+- **Abort valves:** a failed post leaves the kept copies where they were, so the next run
+  posts the same changes again rather than losing them. The first run on a host keeps a copy
+  of every file and posts nothing.
+- **Evidence:** a `status=` line under `journalctl -t claude-guardrail-ack`, and
+  `claude-guardrail-ack.prom`, which `ClaudeGuardrailAckFailed` and
+  `ClaudeGuardrailAckNotReporting` read. The auditd record of the same change names the
+  writing process.
+- **Next-run review:** after a week, read the posts. A post with an obvious source, such as a
+  tool that rewrites settings.json, is a candidate for a new explanation rather than a mute.
+
 ## Autonomous-role contract (`sync-artifacts`, a mirror of another host's tree)
 
 - **Scope:** `rsync --delete` of each `claude_code_artifacts_peer_sources` entry's `path` into

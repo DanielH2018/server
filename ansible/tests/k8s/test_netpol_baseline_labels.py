@@ -57,9 +57,8 @@ BORN_FENCED_ROLES = {
     # app does reach jsDelivr for on-demand TeX packages and a CORS proxy for git — but those
     # are the BROWSER's fetches, not the pod's, so the container itself dials nothing.
     "texbrain",
-    # Music server over its own Longhorn volume. Traefik is its only caller, and
-    # ND_ENABLEEXTERNALSERVICES=false in its deployment turns off the two things that would
-    # otherwise make it dial out: the GitHub version check and the metadata agents.
+    # Music server over its own Longhorn volume. Traefik is its only caller. It dials
+    # ListenBrainz and Deezer, which is egress and unenforced here, as nut-exporter's is.
     "navidrome",
     # UPS metrics. The only entry here whose sole caller is PROMETHEUS rather than Traefik —
     # it has no IngressRoute at all — but the baseline admits prometheus on every port, so the
@@ -96,6 +95,10 @@ BORN_FENCED_ROLES = {
     # Application Sync writes indexers in. It dials prowlarr, qBittorrent and MusicBrainz, which
     # is egress and unenforced here, so the label fences only its ingress.
     "lidarr",
+    # The Soulseek client. Traefik is its only caller; Soularr shares its pod and talks over
+    # localhost. It dials Soulseek peers through its tunnel and Lidarr in-cluster, which is
+    # egress and unenforced here.
+    "slskd",
 }
 
 LABEL = ("netpol-baseline", "enforced")

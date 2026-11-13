@@ -26,6 +26,9 @@
         - idle
         - "off"
         - standby
+      # A Cast socket reconnect sets the Hub to idle for a moment, and without a hold each one
+      # re-cast into the same blocked socket window (2026-11-12, #8204).
+      for: "00:01:00"
     - platform: state
       entity_id: input_boolean.bedroom_sleep_mode
       to: "off"

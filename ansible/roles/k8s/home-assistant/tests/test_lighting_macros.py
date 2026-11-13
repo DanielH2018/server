@@ -50,6 +50,40 @@ def test_in_wake_release_window_is_a_bounded_catchup():
     assert _release_window(-1) == "False"  # no morning alarm / sensor unavailable
 
 
+NOW = 1_800_000_000.0
+MIN = 60
+
+
+def _elapsed(ws_ts, lw_ts, now_ts=NOW):
+    return float(render_macro(LIGHT, "wake_elapsed", ws_ts, lw_ts, now_ts))
+
+
+def test_wake_elapsed_reads_whichever_anchor_started_today():
+    assert _elapsed(NOW - 10 * MIN, NOW - 10 * MIN) == 10  # alarm morning: both stamped
+    assert _elapsed(None, NOW - 20 * MIN) == 20  # fallback morning: no watch alarm
+    assert _elapsed("unavailable", NOW - 20 * MIN) == 20
+    assert _elapsed(NOW - 5 * MIN, None) == 5  # alarm with the person away: no stamp
+
+
+def test_wake_elapsed_skips_an_anchor_dated_tomorrow():
+    # No alarm today, one tomorrow: wake_start is available but in the future while the fallback
+    # ramp runs off today's last_wake. A wake_start-first read would see a negative elapsed.
+    assert _elapsed(NOW + 23 * 60 * MIN, NOW - 15 * MIN) == 15
+
+
+def test_wake_elapsed_prefers_the_latest_past_anchor():
+    yesterday = NOW - 24 * 60 * MIN
+    assert _elapsed(NOW - 10 * MIN, yesterday) == 10
+    assert _elapsed(yesterday, NOW - 10 * MIN) == 10
+
+
+def test_wake_elapsed_is_the_sentinel_without_a_past_anchor():
+    assert _elapsed(None, None) == -1
+    assert _elapsed(0, None) == -1  # an unset input_datetime reads 0
+    assert _elapsed(NOW + 5 * MIN, None) == -1
+    assert _window(_elapsed(None, None)) == "False"
+
+
 def test_wake_brightness_curve_endpoints():
     assert _brightness(0) == 1  # 1% at window start (alarm-15)
     assert _brightness(15) == 3  # ~3% at the alarm (soft, non-jarring)

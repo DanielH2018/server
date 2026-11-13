@@ -101,6 +101,10 @@
   alias: Bedroom wake ramp
   description: Drive the sunrise ramp once a minute through the wake window; hand back to AL at window end.
   mode: single
+  # Fires every minute, so HA's default of 5 traces covers 5 minutes. 90 keeps a whole wake
+  # window for `probe.py ha why` the morning after.
+  trace:
+    stored_traces: 90
   trigger:
     - platform: time_pattern
       minutes: "/1"
@@ -177,6 +181,10 @@
   alias: Bedroom fallback wake (no watch alarm)
   description: Weekday 06:00 safety-net wake ramp (stateless per-minute) when the watch alarm didn't arm the real wake.
   mode: single
+  # Fires every minute, so HA's default of 5 traces covers 5 minutes. 90 keeps a whole wake
+  # window for `probe.py ha why` the morning after.
+  trace:
+    stored_traces: 90
   trigger:
     - platform: time_pattern
       minutes: "/1"
@@ -184,9 +192,6 @@
     - condition: state
       entity_id: person.daniel
       state: "home"
-    - condition: state
-      entity_id: input_boolean.bedroom_manual_off
-      state: "off"
     # Mon-Fri only (weekday() 0=Mon .. 4=Fri).
     - condition: template
       value_template: "{{ now().weekday() < 5 }}"
@@ -250,9 +255,13 @@
         # RAMP: inside the 45-min window on a stamped fallback morning -> apply ONE frame via the
         # sanctioned single writer. A mid-window HA restart resumes HERE on the next tick, because
         # elapsed is derived from the persisted anchor, not an in-process loop.
+        # DECIDED: the fallback overrides manual_off like the alarm reset does, so START runs with it
+        # on and clears it; only RAMP and RELEASE honour it, so a mid-ramp "off" still stops the
+        # ramp. Decided as #8381.
         - conditions:
             - "{{ no_real_wake }}"
             - "{{ in_window }}"
+            - "{{ is_state('input_boolean.bedroom_manual_off', 'off') }}"
           sequence:
             - service: script.bedroom_lights_set
               data:
@@ -269,6 +278,7 @@
         - conditions:
             - "{{ no_real_wake }}"
             - "{{ release_due }}"
+            - "{{ is_state('input_boolean.bedroom_manual_off', 'off') }}"
           sequence:
             - service: adaptive_lighting.set_manual_control
               data:
@@ -282,8 +292,8 @@
 # Sleep-mode fan reapply: when bedroom_sleep_mode is toggled DIRECTLY (dashboard tile / voice), the
 # fan's level cap (L2 in sleep mode) should engage/release immediately — otherwise it waits for the
 # next temperature report. The bedtime / Tap-Dial / morning-reset callers flip sleep_mode
-# programmatically and re-apply the fan themselves; those writes are parented, so the parent_id gate
-# skips them and only a genuine manual toggle reaches the mediator.
+# programmatically and re-apply the fan themselves; those writes carry no user_id, so the user_id gate
+# skips them and only a toggle a person made through HA reaches the mediator.
 - id: bedroom_sleep_mode_fan
   alias: Bedroom sleep mode fan reapply
   description: Re-apply the fan (via the bedroom_fan_set mediator) when sleep_mode is toggled directly, so its level cap engages/releases at once.
@@ -298,10 +308,10 @@
       from: "on"
       to: "off"
   condition:
-    # Direct/external toggle only — our own automations' parented turn_on/off carry a parent_id
-    # (same discriminator as bedroom_manual_light_detect / bedroom_fan_manual_detect).
+    # A person's toggle only (same discriminator as bedroom_manual_light_detect). Not parent_id: the
+    # MQTT- and time-triggered callers run in a root context, so their writes have none either (#8384).
     - condition: template
-      value_template: "{{ trigger.to_state.context.parent_id is none }}"
+      value_template: "{{ trigger.to_state.context.user_id is not none }}"
     # Respect a manual fan override, and don't spin the fan in an empty house (same gates as
     # bedroom_fan_temperature).
     - condition: state
@@ -317,7 +327,7 @@
 
 # Bedtime: when the phone's Bedtime mode turns on (surfaced by the Pixel Watch companion app) while
 # home, run the sleep routine (script.bedroom_bedtime: quiet fan cap + AL sleep mode + nightlight).
-# The Tap Dial button-1 hold (in bedroom_tap_dial_control) is the manual fallback. Gated on home so
+# The Tap Dial button-2 hold (in bedroom_tap_dial_control) is the manual fallback. Gated on home so
 # it never sets the room up for sleep — or switches the fan on — while away. The morning reset
 # unwinds it. Charging is deliberately NOT a trigger (the operator charges in-room at a desk).
 - id: bedroom_bedtime

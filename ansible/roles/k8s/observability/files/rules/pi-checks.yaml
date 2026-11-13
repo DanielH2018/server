@@ -1,6 +1,6 @@
 # The B5 Pi checks of M6 (docs/target-architecture/monitoring/m6-retire-kuma.md, batch B5), the
-# SD-card health heartbeat and the container-recovery heartbeat, plus the watchdog daemon heartbeat,
-# which replaced no tile. All three ship in the homelab-daniel-pi
+# SD-card health heartbeat and the container-recovery heartbeat, plus the watchdog daemon and
+# audit-log heartbeats, which replaced no tile. All four ship in the homelab-daniel-pi
 # package (hosts/components/pi-heartbeats/) and write a `homelab_check_*` textfile to the
 # `node-pi` scrape job, so these rules read the metric contract of
 # docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
@@ -102,9 +102,9 @@ groups:
           description: >-
             watchdog.service on daniel-pi has not been active for 30 minutes. wd_keepalive holds the
             device, so the board keeps its hardware watchdog, but the `max-load-1 = 24` load test is
-            off. An interrupted initial_setup run is the known cause. Run `sudo systemctl start
-            watchdog` on daniel-pi. The `pi-watchdog-health` lines in /var/log/pi-health/health.log
-            date the stop.
+            off. A stop or a daemon that died is the cause, because a restart leaves the daemon
+            running. Run `sudo systemctl start watchdog` on daniel-pi. The `pi-watchdog-health`
+            lines in /var/log/pi-health/health.log date the stop.
       - alert: PiWatchdogNotReporting
         expr: |
           (
@@ -123,3 +123,38 @@ groups:
             textfile collector, so nothing confirms the watchdog daemon is being watched. Read
             `systemctl status homelab-pi-watchdog-health.timer` on daniel-pi, then
             /var/lib/node-exporter-textfile/pi-watchdog-health.prom.
+      # A suspended auditd keeps its unit active, so the producer reads the age of audit.log. `for`
+      # outlasts a boot: log2ram restores the log with its old mtime, and the Pi has no clock until
+      # NTP answers, so the first cycles after a boot read a silent log.
+      - alert: PiAuditFailed
+        expr: homelab_check_success{check="pi-audit-health",origin="daniel-pi"} == 0
+        for: 30m
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi's auditd is not writing its log.
+          description: >-
+            pi-audit-health on daniel-pi has read status=down for 30 minutes. auditd.service is not
+            active, or it is active and /var/log/audit/audit.log has had no write for an hour.
+            auditd suspends logging when /var/log runs out of space, and only a restart resumes it.
+            Read `df -m /var/log` on daniel-pi, then run `sudo systemctl restart auditd`. The
+            `pi-audit-health` lines in /var/log/pi-health/health.log date the stop.
+      - alert: PiAuditNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="pi-audit-health",origin="daniel-pi"} > 900
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="pi-audit-health",origin="daniel-pi"}[900s])
+          )
+          unless on (origin) (up{job="node-pi"} == 0)
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi's audit-log heartbeat has stopped reporting.
+          description: >-
+            No pi-audit-health verdict newer than 15 minutes reached Prometheus from daniel-pi's
+            textfile collector, so nothing confirms auditd is being watched. Read
+            `systemctl status homelab-pi-audit-health.timer` on daniel-pi, then
+            /var/lib/node-exporter-textfile/pi-audit-health.prom.

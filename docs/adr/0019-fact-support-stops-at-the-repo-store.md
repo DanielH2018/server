@@ -15,6 +15,9 @@ Accepted.
 Amended by [ADR-0023](0023-fact-support-is-a-diff-notice.md). The lock is retired by a
 measured replacement, not by this record's criterion.
 
+Amended by [ADR-0031](0031-each-kind-of-fact-has-one-stateless-detector.md). Fact support
+also covers `.claude/rules`, skills and agents. This record's ruling on memory stands.
+
 ## Context
 
 The fact-support design of 2026-09-19 planned seven slices. Slices 1–3 shipped. They give

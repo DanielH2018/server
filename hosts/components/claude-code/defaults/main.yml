@@ -356,7 +356,7 @@ claude_code_agent_dotfiles_profile: server
 # ships no host package version here, so this bounds how long the agent runs the old hooks.
 claude_code_agent_dotfiles_sync_interval: 15min
 
-# The agent user's GitHub machine account, created 2026-10-05. homelab-secrets renders its gh
+# The agent user's GitHub machine account, created 2026-11-13. homelab-secrets renders its gh
 # login under /run, and claude-agent-setup links ~/.config/gh/hosts.yml to it. It is a
 # write collaborator and a bypass actor on no ruleset. "agent branch fence" lets it create,
 # update and delete only refs/heads/worktree-claude+**, the branch EnterWorktree gives a
@@ -365,7 +365,7 @@ claude_code_agent_dotfiles_sync_interval: 15min
 # Its token is claude_code_agent_gh_token in SOPS: a classic token with only public_repo,
 # because GitHub offers no fine-grained token to a collaborator on another personal account's
 # repo. Without the `workflow` scope, GitHub refuses its pushes that edit .github/workflows/.
-claude_code_agent_github_login: DanielClaudeBot
+claude_code_agent_github_login: claudemachineacct1
 # The worktree-name prefix the agent's own CLAUDE.md (templates/agent-user-claude-md.j2) tells
 # its sessions to use. EnterWorktree turns `claude/<slug>` into the branch
 # `worktree-claude+<slug>`, the one shape the fence above lets this account push. The repo
@@ -373,7 +373,7 @@ claude_code_agent_github_login: DanielClaudeBot
 # agent's login profile also exports it as CLAUDE_WORKTREE_PREFIX, which
 # scripts/dev/fanout_lib/target.py:branch_name reads to name fan-out batch branches (#3618).
 claude_code_agent_worktree_prefix: claude
-claude_code_agent_github_id: 338220904
+claude_code_agent_github_id: 356237609
 # The account's noreply address. GitHub attributes a commit to the account by it, and marks the
 # commit Verified when the signing key below is on the account as a Signing Key.
 claude_code_agent_git_email: >-
@@ -627,3 +627,59 @@ claude_code_rootq_socket_group: homelab-rootq
 claude_code_rootq_socket_path: /run/homelab-rootq.sock
 claude_code_rootq_socket_helper: /usr/local/libexec/homelab-rootq-socket
 claude_code_rootq_socket_client: /usr/local/bin/rootq-socket
+
+# ── The guardrail audit (server#8250, #967 slice 2's host half) ──────────────────────────
+# homelab-claude-guardrail-audit.timer runs claude-guardrail-audit.sh.j2 as root. Each run loads
+# an auditd watch on every path below that exists, removes a watch it loaded on a path the list
+# no longer names, and records whether auditd is running with every watch in place. A run, not a
+# rules file in /etc/audit/rules.d: augenrules stops loading at the first watch whose directory
+# is missing, which would take the host-hardening watches down with it, and the agent's memory
+# directory exists only after the agent's first session in its clone.
+#
+# The timer ships on every host this component ships to, so false is the way out: the next run
+# removes every watch under the two keys and reports up.
+claude_code_guardrail_audit_enabled: true
+# A `*/N` minute, read as the timer's period. A watch lost to an auditd restart is back within it.
+claude_code_guardrail_audit_minute: "*/5"
+# Watched under the key `claude-guardrail`: what decides what a session may do. Write and attribute
+# changes only (`-p wa`). A directory watch covers its whole subtree. The renovate-agent home is a
+# literal because that component's defaults do not reach this one;
+# hosts/tests/test_claude_guardrail_audit.py holds it equal to renovate_agent_home.
+claude_code_guardrail_audit_paths:
+  - /etc/claude-land/approval-paths
+  - /usr/lib/homelab/claude-agent-setup
+  - /usr/lib/homelab/claude-agent-home
+  - "/home/{{ sys_user }}/.claude/settings.json"
+  - "/home/{{ sys_user }}/.claude/hooks"
+  - "/home/{{ sys_user }}/.claude/CLAUDE.md"
+  - "/home/{{ sys_user }}/.claude/rules"
+  - "{{ claude_code_agent_user_home }}/.claude/settings.json"
+  - "{{ claude_code_agent_user_home }}/.claude/hooks"
+  - "{{ claude_code_agent_user_home }}/.claude/CLAUDE.md"
+  - "{{ claude_code_agent_user_home }}/.claude/rules"
+  - /var/lib/renovate-agent/.claude/settings.json
+# Watched under the key `claude-memory`: the memory stores a session reads at its next start. The
+# audit record names the writing process, so a Bash write shows apart from the Write tool's.
+claude_code_guardrail_audit_memory_dirs:
+  - "{{ claude_code_operator_memory_dir }}"
+  - "{{ claude_code_agent_memory_dir }}"
+
+# ── The guardrail acknowledgement (server#8250 slice 2) ──────────────────────────────────
+# homelab-claude-guardrail-ack.timer runs files/claude_guardrail_ack.py as root. Each run posts
+# to Discord every change to a file under claude_code_guardrail_audit_paths that nothing merged
+# explains: a package file that no longer matches its package's md5, or a file under a user's
+# home that does not match what chezmoi renders from the dotfiles repo's main. Memory stores are
+# audited, never posted. The operator ruled on 2026-11-13 to post unexplained changes only.
+# False drops the timer and its units from the next package version, and keeps the state.
+claude_code_guardrail_ack_enabled: true
+# A `*/N` minute, read as the timer's period.
+claude_code_guardrail_ack_minute: "*/5"
+# The settings.json keys Claude Code writes itself through /config and /model. A change that
+# touches only these stays quiet; a change to any other key posts, so a tool that drops
+# `autoMode` or `permissions` from the file is seen.
+claude_code_guardrail_ack_quiet_settings_keys:
+  - model
+  - effortLevel
+  - outputStyle
+  - theme
+claude_code_guardrail_ack_dotfiles_repo: https://github.com/DanielH2018/dotfiles.git

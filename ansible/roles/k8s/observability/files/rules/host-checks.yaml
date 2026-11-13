@@ -120,6 +120,139 @@ groups:
             textfile collector, so nothing is watching the OTLP door. Read the `Claude Code
             telemetry health` cron and `journalctl -t claude-otel-health`, then
             /var/lib/node-exporter-textfile/claude-otel-health.prom on the host.
+      # The guardrail audit (server#8250): claude-guardrail-audit loads the auditd watches on
+      # Claude Code's guardrail paths every 5 minutes, and its textfile says whether auditd runs
+      # with every watch in place. One pair per host that runs Claude Code. The NotReporting
+      # literals equal the DEADLINE_S the script renders, which
+      # ansible/tests/services/test_b6a_rule_literals.py pins.
+      - alert: ClaudeGuardrailAuditFailed
+        expr: homelab_check_success{check="claude-guardrail-audit",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The audit watches on daniel-box's Claude Code guardrail paths are not in place.
+          description: >-
+            claude-guardrail-audit on daniel-box ended with status=down: auditd is not running,
+            kernel auditing is off, or a guardrail path that exists has no watch. Until it
+            clears, a write to a hook, a settings file or a memory store leaves no audit record.
+            Run `journalctl -t claude-guardrail-audit` on daniel-box, then `systemctl status
+            auditd`.
+      - alert: ClaudeGuardrailAuditNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-guardrail-audit",origin="daniel-box"} > 900
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-guardrail-audit",origin="daniel-box"}[900s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The guardrail audit check on daniel-box has stopped reporting.
+          description: >-
+            No claude-guardrail-audit verdict newer than 15 minutes reached Prometheus from
+            daniel-box's textfile collector, so nothing reloads a watch an auditd restart dropped.
+            Read `systemctl status homelab-claude-guardrail-audit.timer` and `journalctl -t
+            claude-guardrail-audit`, then
+            /var/lib/node-exporter-textfile/claude-guardrail-audit.prom on the host.
+      - alert: ClaudeGuardrailAuditFailed
+        expr: homelab_check_success{check="claude-guardrail-audit",origin="daniel-server"} == 0
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: The audit watches on daniel-server's Claude Code guardrail paths are not in place.
+          description: >-
+            claude-guardrail-audit on daniel-server ended with status=down: auditd is not running,
+            kernel auditing is off, or a guardrail path that exists has no watch. Until it
+            clears, a write to a hook, a settings file or a memory store leaves no audit record.
+            Run `journalctl -t claude-guardrail-audit` on daniel-server, then `systemctl status
+            auditd`.
+      - alert: ClaudeGuardrailAuditNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-guardrail-audit",origin="daniel-server"} > 900
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-guardrail-audit",origin="daniel-server"}[900s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: The guardrail audit check on daniel-server has stopped reporting.
+          description: >-
+            No claude-guardrail-audit verdict newer than 15 minutes reached Prometheus from
+            daniel-server's textfile collector, so nothing reloads a watch an auditd restart dropped.
+            Read `systemctl status homelab-claude-guardrail-audit.timer` and `journalctl -t
+            claude-guardrail-audit`, then
+            /var/lib/node-exporter-textfile/claude-guardrail-audit.prom on the host.
+      # The guardrail acknowledgement (server#8250 slice 2): claude-guardrail-ack posts the
+      # guardrail changes that nothing merged explains. Same shape and deadline as the audit pair.
+      - alert: ClaudeGuardrailAckFailed
+        expr: homelab_check_success{check="claude-guardrail-ack",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The guardrail change poster on daniel-box is failing.
+          description: >-
+            claude-guardrail-ack on daniel-box ended with status=down: it could not read a guardrail
+            path, render the dotfiles, or deliver its Discord post. Until it clears, a change
+            to a hook or a settings file reaches nobody. Run `journalctl -t claude-guardrail-ack`
+            on daniel-box.
+      - alert: ClaudeGuardrailAckNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-guardrail-ack",origin="daniel-box"} > 900
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-guardrail-ack",origin="daniel-box"}[900s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-box
+        annotations:
+          summary: The guardrail change poster on daniel-box has stopped reporting.
+          description: >-
+            No claude-guardrail-ack verdict newer than 15 minutes reached Prometheus from
+            daniel-box's textfile collector, so no guardrail change is being posted. Read
+            `systemctl status homelab-claude-guardrail-ack.timer` and `journalctl -t
+            claude-guardrail-ack`, then
+            /var/lib/node-exporter-textfile/claude-guardrail-ack.prom on the host.
+      - alert: ClaudeGuardrailAckFailed
+        expr: homelab_check_success{check="claude-guardrail-ack",origin="daniel-server"} == 0
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: The guardrail change poster on daniel-server is failing.
+          description: >-
+            claude-guardrail-ack on daniel-server ended with status=down: it could not read a guardrail
+            path, render the dotfiles, or deliver its Discord post. Until it clears, a change
+            to a hook or a settings file reaches nobody. Run `journalctl -t claude-guardrail-ack`
+            on daniel-server.
+      - alert: ClaudeGuardrailAckNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="claude-guardrail-ack",origin="daniel-server"} > 900
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="claude-guardrail-ack",origin="daniel-server"}[900s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: daniel-server
+        annotations:
+          summary: The guardrail change poster on daniel-server has stopped reporting.
+          description: >-
+            No claude-guardrail-ack verdict newer than 15 minutes reached Prometheus from
+            daniel-server's textfile collector, so no guardrail change is being posted. Read
+            `systemctl status homelab-claude-guardrail-ack.timer` and `journalctl -t
+            claude-guardrail-ack`, then
+            /var/lib/node-exporter-textfile/claude-guardrail-ack.prom on the host.
       # M6 BATCH B1, LIVE SINCE ITS CUTOVER-1B. The two k3s crons write the textfile beside
       # their Kuma push, and Cutover-1a deleted Kuma's tiles for the same verdicts, so these
       # rules are their pager. Each check has the DiskHealth pair: `Failed` reads the verdict, and

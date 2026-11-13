@@ -1,0 +1,13 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: slskd-netns-reset
+  namespace: {{ k8s_namespace }}
+data:
+  netns-reset.sh: |
+{#
+  qbittorrent's script, read across roles so one copy serves both tunnels. It reads
+  LAN_NETWORKS and PUID from the sidecar's environment, so it renders nothing.
+#}
+{{ lookup('file', role_file('files/netns-reset.sh', role='qbittorrent')) | indent(4, true) }}

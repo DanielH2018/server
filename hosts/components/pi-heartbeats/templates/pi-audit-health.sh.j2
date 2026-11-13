@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Pi audit-log heartbeat — shipped by homelab-daniel-pi (hosts/components/pi-heartbeats);
+# edits overwritten.
+#
+# Usage: pi-audit-health [-h|--help]
+# Takes no arguments. homelab-pi-audit-health.timer runs it every 5 minutes on daniel-pi, through
+# homelab-pi-audit-health.service. It reads auditd.service's state from systemctl and the time of
+# the last write to /var/log/audit/audit.log, then writes pi-audit-health.prom to node_exporter's
+# textfile directory and one line to /var/log/pi-health/health.log. It never restarts auditd. To
+# run it by hand, start the service.
+#
+# auditd stops writing while its unit stays active. A write that finds too little free space, a
+# full filesystem or a write error suspends logging, and only a restart resumes it. /var/log is
+# the 128 MB log2ram tmpfs, and in the 12 days to 2026-11-13 the packaged 50 MB threshold kept the
+# log silent for 74% of the time with nothing reporting it. Only the log's age shows a suspended
+# daemon.
+#
+# Prometheus reads the textfile (pi-checks.yaml). PiAuditFailed names a log that stays silent,
+# and PiAuditNotReporting fires when the verdict goes stale.
+set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
+
+# shellcheck source=/dev/null
+source /usr/lib/homelab/homelab-check-lib.sh || {
+  logger -t pi-audit-health "homelab-check-lib.sh missing — reinstall homelab-daniel-pi"
+  exit 1
+}
+
+AUDIT_LOG=/var/log/audit/audit.log
+# The host writes 400 to 1,250 audit records an hour and auditd flushes every 50, so an hour with
+# no write is not a quiet hour.
+MAX_SILENCE_MIN=60
+
+# is-active exits non-zero for every state but active, so its stdout carries the state.
+STATE=$(systemctl is-active auditd.service 2>/dev/null)
+if [ "$STATE" != "active" ]; then
+  STATUS=down; MSG="auditd.service is ${STATE:-unreadable}, so nothing writes ${AUDIT_LOG} — run: sudo systemctl start auditd"
+elif [ ! -r "$AUDIT_LOG" ]; then
+  # The unit's adm group reads the log. Surface a lost read instead of passing.
+  STATUS=down; MSG="cannot read ${AUDIT_LOG}"
+elif [ -z "$(find "$AUDIT_LOG" -mmin "-${MAX_SILENCE_MIN}" -print 2>/dev/null)" ]; then
+  STATUS=down; MSG="auditd.service is active and ${AUDIT_LOG} has had no write for ${MAX_SILENCE_MIN} minutes, so logging is suspended — read df -m /var/log, then run: sudo systemctl restart auditd"
+else
+  STATUS=up;   MSG="auditd.service is active and wrote ${AUDIT_LOG} within ${MAX_SILENCE_MIN} minutes"
+fi
+
+# DEADLINE_S is 2 x the timer's 300s period + 300s, as M3 derives it; a test pins the rule's
+# literals to it. The directory is root:sys_user 2775, so this unit's user can write it.
+DEADLINE_S=900
+write_check_textfile pi-audit-health "$([ "$STATUS" = up ] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
+  || logger -t pi-audit-health "textfile write failed (status=${STATUS})"
+
+# Durable record of this cycle in the shape pi-recovery-health.sh.j2 documents. The first down
+# line dates the stop, which the textfile's latest verdict cannot.
+HEALTH_LOG="/var/log/pi-health/health.log"
+mkdir -p "${HEALTH_LOG%/*}" 2>/dev/null || true
+printf '%s %s %s: %s\n' "$(date -Is)" "$(hostname)" pi-audit-health "status=${STATUS} ${MSG}" >>"$HEALTH_LOG"

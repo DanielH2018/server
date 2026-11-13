@@ -102,6 +102,29 @@ minutes, and `PiWatchdogFailed` fires once it has stayed down for 30 minutes. Th
 the stop an `initial_setup` apply holds on purpose, which took 7m53s on 2026-11-01. The heartbeat
 only reports. To clear the alert, run `sudo systemctl start watchdog` on the Pi.
 
+**A restart of the daemon needs the `pi-tuning` drop-in to finish.** The packaged
+`watchdog.service` ends every stop as a failure on purpose, so that
+`OnFailure=wd_keepalive.service` keeps the hardware watchdog fed. `wd_keepalive.service` conflicts
+with `watchdog.service`, so systemd cancels the start half of a `systemctl restart`. On 2026-11-13
+an unattended upgrade of libc6 ran `needrestart`, which restarted thirteen services at 05:33 UTC.
+Its log reads `Job for watchdog.service canceled.`, and the daemon stayed down for 9.5 hours,
+until the operator started it. The watchdog package's `postinst` script restarts the daemon the
+same way.
+`units/watchdog-dropin.conf` sets `OnFailureJobMode=fail`, which refuses the `wd_keepalive` start
+while a job for `watchdog.service` is queued. A stop and a daemon that died queue none, so both
+still start `wd_keepalive`. Stand-in units under systemd 255.4, the Pi's version, gave these
+results:
+
+| Event | Packaged units | With the drop-in |
+|---|---|---|
+| `systemctl restart` | `wd_keepalive` runs, the daemon is down | the daemon runs |
+| `systemctl stop` | `wd_keepalive` runs | `wd_keepalive` runs |
+| the daemon is killed | `wd_keepalive` runs | `wd_keepalive` runs |
+
+`test_a_restart_leaves_the_watchdog_daemon_running_and_a_stop_or_a_crash_starts_the_keepalive`
+in `hosts/lib/tests/test_pi_watchdog_dropin.py` repeats the table on any host with a systemd
+user manager.
+
 The debloat step purges Open vSwitch, which was installed with no bridges and no netplan
 config yet mlockall-pinned about 14 MB, and snapd, which had zero snaps. Both are
 dependency-safe: netplan only Suggests OVS. It also purges fwupd — its hourly
@@ -182,7 +205,7 @@ The caps themselves, set when the tmpfs was 81% full on 2026-06-11:
   That outlasts the weekly AIDE and rkhunter reports, which log to the journal.
 - `ACCT_LOGGING="3"` cuts pacct retention from 30 daily generations (savelog via
   `/etc/cron.daily/acct`, about 28 MB/day of healthcheck exec churn) to 3.
-- auditd is capped to a 12 MB ceiling.
+- auditd is capped to a 12 MB ceiling. Its free-space thresholds have their own section below.
 - `HISTORY=2` cuts sysstat's shipped 7 days — 18 sa/sar files, 9.9 MB — to 2.
 
 **Every cap here is a cap, never a disable.** `sar`, `lastcomm` and `ausearch` each have a
@@ -193,6 +216,44 @@ found that nothing reads them.
 most of `/var/log` is itself swapped into zram. Freeing a megabyte here frees both the
 compressed physical page *and* a megabyte of zram capacity — and capacity is the axis under
 pressure, since zram runs about 81% full with the SD-card swapfile already carrying overflow.
+
+## auditd's free-space thresholds, and the log that was silent 74% of the time
+
+auditd suspends logging when a write finds less free space than `admin_space_left`, and only a
+restart resumes it. The unit stays active the whole time. The packaged thresholds are sized for a
+disk: `space_left = 75` and `admin_space_left = 50`, in MB, with
+`admin_space_left_action = SUSPEND`. `/var/log` is the 128 MB tmpfs, and the caps above leave it
+less free space than that by design.
+
+Measured on 2026-11-13:
+
+- In the 7 days before, the tmpfs never had more than 72.7 MB free, and it had less than 50 MB
+  free for 42% of the time. The 30-day low was 13 MB.
+- Process accounting is the largest tenant at 33 MB. `pacct.0` stays uncompressed for a day, at
+  22 MB. The journal held 30 MB and the audit logs 9 MB.
+- The three audit log files held four stretches of records between 2026-11-01 21:15 and
+  2026-11-12 14:45 UTC, each starting at a boot. They add up to 74.9 hours of the 283.6 hours to
+  the time of the measurement.
+- Two of the three stops that were not a reboot fell within a minute of the tmpfs dropping under
+  50 MB free. The third, on 2026-11-08 at 23:55, had 63 MB free and is unexplained.
+- After the reboot on 2026-11-12 at 14:46 the tmpfs had 36 MB free. auditd logged "Audit daemon is
+  suspending logging due to low disk space" at start and wrote nothing for 26 hours.
+
+No check reported any of it, because every check read the unit's state.
+
+The `pi-tuning` component sets `space_left = 10` and `admin_space_left = 5`, both under the 30-day
+low. It sets `admin_space_left_action = ROTATE`, so a write below 5 MB free drops the oldest 4 MB
+log file and logging goes on. auditd refuses to start unless `admin_space_left` is the smaller
+number. `disk_full_action` and `disk_error_action` stay `SUSPEND`, so a full tmpfs still stops
+the log.
+
+`homelab-pi-audit-health.timer` covers what is left. Every 5 minutes it reads the unit's state and
+the time of the last write to `audit.log`, and it reports `down` when the unit is active and the
+log has had no write for 60 minutes. The Pi writes 400 to 1,250 audit records an hour and auditd
+flushes every 50, so an hour with no write is not a quiet hour. `PiAuditFailed` fires once the
+verdict has read `down` for 30 minutes. That wait outlasts a boot: log2ram restores the log with
+its old modification time, and the Pi has no clock until NTP answers. To clear the alert, read
+`df -m /var/log` on the Pi, then run `sudo systemctl restart auditd`.
 
 ## earlyoom, and the guard that was inert for its whole life
 

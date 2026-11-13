@@ -127,6 +127,13 @@ AUTHELIA_BYPASS_ROUTES = {
         "trailing slash: the upload POSTs to exactly /api/assets, and nothing else under "
         "/api/ starts with `assets`."
     ),
+    # navidrome's session-less callers are Subsonic apps, which send credentials on every
+    # request and cannot follow an Authelia redirect.
+    "navidrome-public-rest": (
+        "The Subsonic API; navidrome rejects every /rest/ call without a valid username and "
+        "token or password. Its reverse-proxy auth stays off, so no header can stand in for "
+        "those credentials (test_navidrome_parked_route.py requires it)."
+    ),
 }
 
 

@@ -68,6 +68,29 @@
   entity_id: sensor.0x001788010f0ccda4_battery
   lower: 20                             # alerts <= 15%, clears >= 25%
   hysteresis: 5
+# The two coin-cell devices alert higher: a CR2450/CR2032 percentage can be voltage-derived and
+# fall late, so 20% may already be close to dead. No discharge curve observed yet (both read 100%).
+- platform: threshold
+  name: "Bedroom T1 battery low"        # -> binary_sensor.bedroom_t1_battery_low
+  entity_id: sensor.aqara_t1_battery
+  lower: 30                             # alerts <= 25%, clears >= 35%
+  hysteresis: 5
+- platform: threshold
+  name: "Bedroom window sensor battery low"  # -> binary_sensor.bedroom_window_sensor_battery_low
+  entity_id: sensor.window_sensor_battery
+  lower: 30                             # alerts <= 25%, clears >= 35%
+  hysteresis: 5
+# Pixel Watch stopped reporting: its next alarm has been in the past for longer than a healthy watch
+# ever leaves it. Source is the template sensor in templates.yaml; recovery fires once the sensor
+# moves forward (overdue drops to 0).
+# DECIDED: 36 h. A healthy watch held a past alarm for at most 27.3 h over 10-23..11-03 (Prometheus,
+# max_over_time((time() - hass_sensor_timestamp_seconds{entity="sensor.pixel_watch_3_next_alarm"})
+# [30d:5m] offset 10d), 11 days of retention), so 36 h clears it by ~9 h. Re-measure before lowering.
+- platform: threshold
+  name: "Pixel Watch next alarm overdue high"  # -> binary_sensor.pixel_watch_next_alarm_overdue_high
+  entity_id: sensor.pixel_watch_next_alarm_overdue
+  upper: 36                             # alerts > 36 h, clears when the alarm moves on (0 h)
+  hysteresis: 0
 # Humidity comfort — two-sided, so TWO one-sided sensors (high = mold risk, low = winter-dry).
 # Both feed the humidity category of bedroom_threshold_alert. Starting points — tune with the
 # air-quality thresholds (~2026-06-25 baseline pass).

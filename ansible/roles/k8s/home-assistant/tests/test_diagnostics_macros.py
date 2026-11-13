@@ -65,3 +65,24 @@ def test_error_in_scope_keeps_our_own_failed_call():
         _scope("ERROR", "homeassistant.components.automation.bedroom_fan", message)
         == "True"
     )
+
+
+ALARM = 1793793600.0
+
+
+def _overdue(alarm_ts, now_ts):
+    return render_macro(DIAG, "alarm_overdue_hours", alarm_ts, now_ts)
+
+
+def test_alarm_overdue_hours_counts_hours_past_the_alarm():
+    assert _overdue(ALARM, ALARM + 37 * 3600) == "37.0"
+    assert _overdue(ALARM, ALARM + 90) == "0.0"
+
+
+def test_alarm_overdue_hours_is_zero_for_a_future_or_current_alarm():
+    assert _overdue(ALARM, ALARM - 3600) == "0"
+    assert _overdue(ALARM, ALARM) == "0"
+
+
+def test_alarm_overdue_hours_is_zero_without_an_alarm():
+    assert _overdue(None, ALARM) == "0"

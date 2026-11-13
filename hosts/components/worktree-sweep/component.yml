@@ -6,7 +6,7 @@
 # fan-out batches run in both hosts' checkouts (#6815). Each host pings its own
 # `<host>-worktree-sweep` check, which monitor_bridge_healthchecks_expected lists.
 #
-# The service loads the Healthchecks.io ping key as the credential `healthchecks_ping_key`, so
+# The service imports the Healthchecks.io ping key as the credential `healthchecks_ping_key`, so
 # every package listing this component lists that credential. daniel-server's package retires
 # /etc/healthchecks, the file the script read until #6815.
 # The worktree holder scan's socket (`worktree-holders.socket`) is not part of this component.

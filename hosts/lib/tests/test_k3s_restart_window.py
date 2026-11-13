@@ -71,7 +71,10 @@ EXEMPT = {
     "homelab-claude-pipeline-timeline.timer": "joins GitHub, journals and review records; no cluster",
     "homelab-builder.timer": "builds and signs packages; a build during a restart only waits",
     "homelab-checkout-sync.timer": "fast-forwards a checkout, reads check-runs; no k3s, no Longhorn",
+    "homelab-local-sweep.timer": "runs the suite CI runs on a runner that has no cluster",
     "homelab-sync-artifacts.timer": "an ssh pull from daniel-server; reads no cluster state",
+    "homelab-claude-guardrail-audit.timer": "loads auditd watches; never touches k3s",
+    "homelab-claude-guardrail-ack.timer": "diffs guardrail files and posts to Discord; no k3s",
     # A */5 schedule fires inside any window longer than 5 minutes, so the span cannot avoid it.
     "CronJob crowdsec */5 * * * *": "home-IP lookup; a missed run is not made up (backoffLimit 0)",
     "CronJob sonarr */5 * * * *": "air-date guard; a run that cannot reach sonarr removes nothing",

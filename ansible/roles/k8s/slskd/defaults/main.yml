@@ -1,0 +1,74 @@
+---
+# slskd, the Soulseek client, and Soularr, which pushes Lidarr's wanted albums into it. One pod,
+# behind its own Mullvad WireGuard tunnel (ansible/templates/wireguard-sidecar.yml.j2).
+slskd_k8s_image: slskd/slskd:0.26.2@sha256:d0963a3e5b16facd295bf4f2156dad0182f246b1b21a032cae12f5494c694843
+slskd_k8s_soularr_image: ghcr.io/mrusse/soularr:1.2.3@sha256:e448d49d0ca6091a35653ff9198ebb4a3acf42abfc2f2056490a9a0f0cffd210
+slskd_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:236f9a9a89c701bc83f6d41007157dc77361114d14e56a08e846bb4499622e97
+
+# Renovate stance, qbittorrent's: a first start that fails its tunnel gate sets DEPLOY_HOLD for
+# the whole fleet, so a bump lands by hand through land.sh.
+k8s_autodeploy: false
+k8s_autodeploy_reason: "VPN-gated pod — a bump that breaks the WireGuard sidecar or slskd's start fails the tunnel gate and holds every promotion; it lands by hand through land.sh, as qbittorrent's does"
+
+# The first start installs the Mullvad mod and then waits up to 5 minutes on the wg0 gate, which
+# leaves Flux's 600s default no margin.
+manifests_rollout_timeout: 900s
+
+# The tunnel reads the Mullvad account from qbittorrent's Secret. Listing the key hashes its
+# `.source` digest into this pod's restart checksum, so a rotation rolls slskd too.
+manifests_outside_secrets:
+  - name: qbittorrent-mullvad-account
+    keys: [mullvad_account]
+
+# THE SHARE SWITCH. true shares the music library, read-only, with the Soulseek network; false
+# shares nothing. Flipping it changes slskd's environment, so the pod restarts with the new share.
+slskd_k8s_share_library: true
+
+# slskd's app dir and the sidecar's wg0.conf and mod cache share this claim's root, as
+# qbittorrent's do. Nothing here is hard to rebuild: transfer history and the mod cache.
+slskd_k8s_claim: slskd-config
+slskd_k8s_storage_class: longhorn-nobackup
+slskd_k8s_size: 1Gi
+
+slskd_k8s_media_claim: media-data
+# Downloads land in torrents/slskd, which Lidarr reads at the same /data/torrents/slskd path.
+slskd_k8s_downloads_dir: /data/torrents/slskd
+slskd_k8s_incomplete_dir: /data/torrents/slskd-incomplete
+
+# The tunnel: qbittorrent's values (see its defaults for the LAN_NETWORKS /15 trap).
+slskd_k8s_mullvad_location: us-qas
+slskd_k8s_mullvad_mod: linuxserver/mods:wireguard-mullvad
+slskd_k8s_lan_networks: "192.168.0.0/24,{{ lan_subnet }},172.16.0.0/12,10.42.0.0/15"
+# DECIDED: CoreDNS (coredns_cluster_ip), not Mullvad's resolver. With the tunnel up the pod's
+# resolv.conf names only this server, and Soularr must resolve Lidarr's Service. The cost is that
+# slskd's few hostname lookups, chiefly the Soulseek server's, leave through CoreDNS and Pi-hole
+# instead of the tunnel; peer traffic still goes through wg0.
+slskd_k8s_mullvad_dns: 10.43.0.10
+slskd_k8s_secret_mount: /mullvad
+
+# netns-reset.sh fences the sidecar's PUID off eth0 while the tunnel is down, so slskd and
+# Soularr run as that uid.
+slskd_k8s_uid: 1000
+
+# Soularr's poll interval, in seconds, and what it grabs. allowed_filetypes is in preference
+# order: the lossy default profile decided on #8190 first, lossless after.
+slskd_k8s_soularr_interval: "300"
+slskd_k8s_soularr_filetypes: "mp3 320,mp3 v0,flac 16/44.1,flac"
+
+slskd_k8s_wg_cpu_limit: "1"
+slskd_k8s_wg_mem_limit: 256Mi
+slskd_k8s_wg_cpu_request: "50m"
+slskd_k8s_wg_mem_request: 32Mi
+slskd_k8s_cpu_limit: "1"
+slskd_k8s_mem_limit: 1024Mi
+slskd_k8s_cpu_request: "100m"
+slskd_k8s_mem_request: 192Mi
+slskd_k8s_soularr_cpu_limit: "500m"
+slskd_k8s_soularr_mem_limit: 256Mi
+slskd_k8s_soularr_cpu_request: "20m"
+slskd_k8s_soularr_mem_request: 64Mi
+
+k8s_claims:
+  - name: "{{ slskd_k8s_claim }}"
+    storage_class: "{{ slskd_k8s_storage_class }}"
+    size: "{{ slskd_k8s_size }}"

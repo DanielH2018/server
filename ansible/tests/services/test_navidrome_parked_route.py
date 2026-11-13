@@ -28,14 +28,19 @@ from validate.k8s_manifests import (
 ROLE = ANSIBLE / "roles" / "k8s" / "navidrome"
 
 
-def _render_route() -> str:
+def _render(template: str) -> str:
     ctx = render_context(
         ROLE, overrides={"container_item": k8s_entries()["navidrome"]}, strict=True
     )
     env = make_env([ROLE / "templates", SHARED_TPL])
     env.globals["lookup"] = make_lookup(ctx)
     register_ansible_filters(env)
-    return env.get_template("ingressroute.yaml.j2").render(**ctx)
+    return env.get_template(template).render(**ctx)
+
+
+def _routes() -> dict[str, dict]:
+    docs = yaml_fast.safe_load_all(_render("ingressroute.yaml.j2"))
+    return {d["metadata"]["name"]: d for d in docs if d}
 
 
 def test_the_route_renders_when_navidrome_has_a_pod():
@@ -44,14 +49,41 @@ def test_the_route_renders_when_navidrome_has_a_pod():
     Raising the replica count is the documented way to bring the workload back, and the route
     it lists must then be a real one.
     """
-    docs = [d for d in yaml_fast.safe_load_all(_render_route()) if d]
-    # One object per host: the `.local.` route and its public twin.
-    assert [d["metadata"]["name"] for d in docs] == ["navidrome", "navidrome-public"], (
-        docs
-    )
-    for route in docs:
+    routes = _routes()
+    # One object per host, plus the public name's Subsonic API bypass.
+    assert list(routes) == ["navidrome", "navidrome-public", "navidrome-public-rest"]
+    for route in routes.values():
         assert route["kind"] == "IngressRoute"
         assert route["spec"]["routes"], "an IngressRoute with no routes matches nothing"
+
+
+def test_navidrome_trusts_no_user_header_while_rest_skips_authelia():
+    """Navidrome honours its reverse-proxy user header on /rest/ too.
+
+    With /rest/ unauthenticated at the edge, enabling that header would let any caller name
+    any user, so the deployment must not set either reverse-proxy switch.
+    """
+    [deployment] = [
+        d for d in yaml_fast.safe_load_all(_render("deployment.yaml.j2")) if d
+    ]
+    [container] = deployment["spec"]["template"]["spec"]["containers"]
+    env = {e["name"] for e in container["env"]}
+    assert not env & {"ND_REVERSEPROXYWHITELIST", "ND_REVERSEPROXYUSERHEADER"}, env
+
+
+def test_external_services_send_no_telemetry_and_skip_last_fm():
+    """ND_ENABLEEXTERNALSERVICES also turns on the insights collector and the Last.fm agent.
+
+    Only ListenBrainz and Deezer were asked for, so both of the others stay off explicitly.
+    """
+    [deployment] = [
+        d for d in yaml_fast.safe_load_all(_render("deployment.yaml.j2")) if d
+    ]
+    [container] = deployment["spec"]["template"]["spec"]["containers"]
+    env = {e["name"]: e.get("value") for e in container["env"]}
+    assert env["ND_ENABLEEXTERNALSERVICES"] == "true"
+    assert env["ND_ENABLEINSIGHTSCOLLECTOR"] == "false"
+    assert env["ND_LASTFM_ENABLED"] == "false"
 
 
 def _manifests_files(replicas: int) -> list[str]:

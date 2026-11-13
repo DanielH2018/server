@@ -71,6 +71,8 @@ files:
   - {src: templates/log2ram, dst: /usr/lib/homelab/log2ram, mode: "0755"}
   - {src: units/log2ram-dropin.conf, dst: /usr/lib/systemd/system/log2ram.service.d/50-homelab.conf}
   - {src: units/earlyoom-dropin.conf, dst: /usr/lib/systemd/system/earlyoom.service.d/50-homelab.conf}
+  # Without it a restart of the watchdog daemon leaves the daemon stopped; the file has the reason.
+  - {src: units/watchdog-dropin.conf, dst: /usr/lib/systemd/system/watchdog.service.d/50-homelab.conf}
   # Journald's cap for the 128 MB log2ram tmpfs. 60- sorts after host-tuning's 50-homelab.conf, so
   # this wins where the two disagree.
   - {src: templates/60-homelab-pi.conf, dst: /etc/systemd/journald.conf.d/60-homelab-pi.conf, activate: "try-restart:systemd-journald.service"}
@@ -112,6 +114,14 @@ lines:
   # so the action is a restart.
   - {path: /etc/audit/auditd.conf, line: "max_log_file = 4", regexp: '^max_log_file\s*=', activate: "try-restart:auditd.service"}
   - {path: /etc/audit/auditd.conf, line: "num_logs = 3", regexp: '^num_logs\s*=', activate: "try-restart:auditd.service"}
+  # auditd's free-space thresholds, in MB of the 128 MB tmpfs. The packaged 75 and 50 are sized
+  # for a disk: the tmpfs was never above 73 MB free in the week to 2026-11-13 and fell to 13 MB,
+  # and a write below admin_space_left under the packaged SUSPEND stops all logging until auditd
+  # restarts. ROTATE drops the oldest log file instead. auditd refuses to start unless
+  # admin_space_left is the smaller of the two. docs/pi-host-tuning-record.md has the measurement.
+  - {path: /etc/audit/auditd.conf, line: "space_left = 10", regexp: '^space_left\s*=', activate: "try-restart:auditd.service"}
+  - {path: /etc/audit/auditd.conf, line: "admin_space_left = 5", regexp: '^admin_space_left\s*=', activate: "try-restart:auditd.service"}
+  - {path: /etc/audit/auditd.conf, line: "admin_space_left_action = ROTATE", regexp: '^admin_space_left_action\s*=', activate: "try-restart:auditd.service"}
   # update-notifier's two apt hooks run apt-check, which loads the whole apt cache into memory on
   # this 456 MB host inside every apt transaction (#7681). ubuntu-server depends on
   # update-notifier-common, so the package stays and its conffile loses both hooks. The Pi's file

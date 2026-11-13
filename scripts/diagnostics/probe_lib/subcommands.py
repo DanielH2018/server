@@ -48,6 +48,7 @@ from diagnostics.probe_lib.monitors import run_monitors
 from diagnostics.probe_lib.pi_plane import run_pi_containers, run_targets
 from diagnostics.probe_lib.push_rules import run_push_rules
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
+from diagnostics.probe_lib.sweep_agreement import run_sweep_agreement
 from diagnostics.probe_lib.shed_set import run_shed_set
 from diagnostics.probe_lib.takeover import run_takeover
 from diagnostics.probe_lib.vip_placement import run_vip_placement
@@ -193,6 +194,13 @@ SUBCOMMANDS = [
         "builder",
         run_builder,
     ),
+    (
+        "sweep-agreement",
+        "the shadow sweep on daniel-box against hosted CI, and where slice B2's gate "
+        "stands (exit 1 when a sweep read green where hosted CI read red)",
+        "sweep_agreement",
+        run_sweep_agreement,
+    ),
 ]
 
 # The subcommands with a callable that `main()` routes by hand instead of through `handlers`,
@@ -223,6 +231,7 @@ VERDICT_SUBCOMMANDS = frozenset(
         "push-rules",
         "lander",
         "builder",
+        "sweep-agreement",
     }
 )
 VERDICT_HA_SUBCOMMANDS = frozenset({"verify-automations", "verify-entities"})

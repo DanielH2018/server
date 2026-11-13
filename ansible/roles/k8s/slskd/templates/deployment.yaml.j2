@@ -1,0 +1,166 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
+{% from 'wireguard-sidecar.yml.j2' import wireguard_sidecar with context %}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slskd
+  namespace: {{ k8s_namespace }}
+spec:
+  # The config claim is ReadWriteOnce on single-replica Longhorn.
+{{ spec_shell('Recreate') }}
+  replicas: 1
+  progressDeadlineSeconds: {{ manifests_rollout_timeout[:-1] | int }}
+  selector:
+    matchLabels:
+      app: slskd
+  template:
+    metadata:
+      labels:
+        app: slskd
+        netpol-baseline: enforced
+    spec:
+{{ pod_shell('homelab-standard') }}
+      securityContext:
+        # wg-quick aborts the tunnel unless this is already 1; see qbittorrent's deployment.
+        sysctls:
+          - name: net.ipv4.conf.all.src_valid_mark
+            value: "1"
+{{ wireguard_sidecar('slskd',
+                     image=slskd_k8s_wireguard_image,
+                     mod=slskd_k8s_mullvad_mod,
+                     secret_mount=slskd_k8s_secret_mount,
+                     location=slskd_k8s_mullvad_location,
+                     lan_networks=slskd_k8s_lan_networks,
+                     dns=slskd_k8s_mullvad_dns,
+                     cpu_limit=slskd_k8s_wg_cpu_limit,
+                     mem_limit=slskd_k8s_wg_mem_limit,
+                     cpu_request=slskd_k8s_wg_cpu_request,
+                     mem_request=slskd_k8s_wg_mem_request) }}
+        # slskd refuses to start until both directories exist, and it never creates them.
+        - name: slskd-dirs
+          image: {{ slskd_k8s_image }}
+          imagePullPolicy: IfNotPresent
+          command: ["mkdir", "-p", "{{ slskd_k8s_downloads_dir }}", "{{ slskd_k8s_incomplete_dir }}"]
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=slskd_k8s_uid, run_as_group=slskd_k8s_uid) }}
+          volumeMounts:
+            - name: media
+              mountPath: /data/torrents
+              subPath: torrents
+{{ container_resources(cpu_limit=slskd_k8s_soularr_cpu_limit, mem_limit=slskd_k8s_soularr_mem_limit, cpu_request=slskd_k8s_soularr_cpu_request, mem_request=slskd_k8s_soularr_mem_request) }}
+      containers:
+        - name: slskd
+          image: {{ slskd_k8s_image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: {{ container_item.port }}
+{{ hardened_security_context(non_root=true, run_as_user=slskd_k8s_uid, run_as_group=slskd_k8s_uid) }}
+          env:
+            - name: SLSKD_SLSK_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: slskd-soulseek
+                  key: username
+            - name: SLSKD_SLSK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: slskd-soulseek
+                  key: password
+            # Authelia gates the UI and the NetworkPolicy admits only traefik; Soularr reaches
+            # the API over localhost.
+            - name: SLSKD_NO_AUTH
+              value: "true"
+            - name: SLSKD_NO_HTTPS
+              value: "true"
+            - name: SLSKD_REMOTE_CONFIGURATION
+              value: "false"
+            - name: SLSKD_DOWNLOADS_DIR
+              value: "{{ slskd_k8s_downloads_dir }}"
+            - name: SLSKD_INCOMPLETE_DIR
+              value: "{{ slskd_k8s_incomplete_dir }}"
+{% if slskd_k8s_share_library %}
+            - name: SLSKD_SHARED_DIR
+              value: /music
+{% endif %}
+            - name: TZ
+              value: "{{ tz }}"
+          volumeMounts:
+            - name: slskd-config
+              mountPath: /app
+            # torrents/ only, as qbittorrent mounts it: slskd needs no write access to the library.
+            - name: media
+              mountPath: /data/torrents
+              subPath: torrents
+{% if slskd_k8s_share_library %}
+            - name: media
+              mountPath: /music
+              subPath: media/music
+              readOnly: true
+{% endif %}
+          readinessProbe:
+            tcpSocket:
+              port: {{ container_item.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: {{ container_item.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+{{ container_resources(cpu_limit=slskd_k8s_cpu_limit, mem_limit=slskd_k8s_mem_limit, cpu_request=slskd_k8s_cpu_request, mem_request=slskd_k8s_mem_request) }}
+        - name: soularr
+          image: {{ slskd_k8s_soularr_image }}
+          imagePullPolicy: IfNotPresent
+{{ hardened_security_context(non_root=true, run_as_user=slskd_k8s_uid, run_as_group=slskd_k8s_uid) }}
+          env:
+            - name: SCRIPT_INTERVAL
+              value: "{{ slskd_k8s_soularr_interval }}"
+            - name: WEBUI_ENABLED
+              value: "false"
+            - name: TZ
+              value: "{{ tz }}"
+          volumeMounts:
+            # Soularr's config and var dir. Its state (search attempts, failed imports) is
+            # rebuilt from Lidarr's wanted list, so it does not outlive the pod.
+            - name: soularr-data
+              mountPath: /data
+            - name: soularr-config
+              mountPath: /data/config.ini
+              subPath: config.ini
+              readOnly: true
+            # Renames finished download folders before Lidarr imports them.
+            - name: media
+              mountPath: /data/torrents
+              subPath: torrents
+{{ container_resources(cpu_limit=slskd_k8s_soularr_cpu_limit, mem_limit=slskd_k8s_soularr_mem_limit, cpu_request=slskd_k8s_soularr_cpu_request, mem_request=slskd_k8s_soularr_mem_request) }}
+      volumes:
+        - name: slskd-config
+          persistentVolumeClaim:
+            claimName: {{ slskd_k8s_claim }}
+        - name: media
+          persistentVolumeClaim:
+            claimName: {{ slskd_k8s_media_claim }}
+        - name: slskd-mullvad
+          projected:
+            defaultMode: 0400
+            sources:
+              - secret:
+                  name: slskd-mullvad
+              # DECIDED: qbittorrent's Secret, not a copy. cluster-vars.source files each SOPS
+              # key under one manifest, and both devices sit on the one Mullvad account.
+              - secret:
+                  name: qbittorrent-mullvad-account
+        - name: netns-reset
+          configMap:
+            name: slskd-netns-reset
+            defaultMode: 0555
+        - name: soularr-data
+          emptyDir: {}
+        - name: soularr-config
+          secret:
+            secretName: slskd-soularr
+            # Root owns a Secret's files and Soularr runs as uid 1000; configparser skips a
+            # file it cannot open, so 0400 leaves Soularr running with an empty config.
+            defaultMode: 0444

@@ -11,6 +11,7 @@ Run: uv run pytest hosts/lib/tests/test_pi_tuning_component.py
 """
 
 import difflib
+import os
 import re
 import shutil
 import subprocess
@@ -27,6 +28,7 @@ from renderer.renderer_lib import host as host_mode
 COMPONENTS = REPO / "hosts" / "components"
 LOG2RAM_CONF = "/etc/log2ram.conf"
 JOURNALD_CAP = "/etc/systemd/journald.conf.d/60-homelab-pi.conf"
+AUDITD_CONF = "/etc/audit/auditd.conf"
 APT_DROPINS = {
     "apt-daily.timer": "/usr/lib/systemd/system/apt-daily.timer.d/50-homelab.conf",
     "apt-daily-upgrade.timer": "/usr/lib/systemd/system/apt-daily-upgrade.timer.d/50-homelab.conf",
@@ -124,8 +126,11 @@ ADOPTED = [
     ("/etc/watchdog.conf", "max-load-1 = 24", "reboot"),
     ("/etc/sysctl.conf", "vm.swappiness=130", "sysctl"),
     ("/etc/sysctl.conf", "vm.page-cluster=0", "sysctl"),
-    ("/etc/audit/auditd.conf", "max_log_file = 8", "try-restart:auditd.service"),
-    ("/etc/audit/auditd.conf", "num_logs = 5", "try-restart:auditd.service"),
+    (AUDITD_CONF, "max_log_file = 8", "try-restart:auditd.service"),
+    (AUDITD_CONF, "num_logs = 5", "try-restart:auditd.service"),
+    (AUDITD_CONF, "space_left = 75", "try-restart:auditd.service"),
+    (AUDITD_CONF, "admin_space_left = 50", "try-restart:auditd.service"),
+    (AUDITD_CONF, "admin_space_left_action = SUSPEND", "try-restart:auditd.service"),
 ]
 
 
@@ -253,6 +258,54 @@ def test_a_drop_in_that_only_adds_a_schedule_is_flagged():
     assert dropin_problem("[Timer]\nOnCalendar=*-*-* 04:20\n") is not None
 
 
+# auditd's free-space thresholds.
+
+# The least free space /var/log held in the 30 days to 2026-11-13, in MB, from
+# node_filesystem_avail_bytes.
+LOG_TMPFS_LOW_WATER_MB = 13
+
+
+def audit_space_problems(settings: dict[str, str]) -> list[str]:
+    """Each way auditd.conf's free-space settings stop auditd logging on the log tmpfs."""
+    problems = []
+    space_left, admin = int(settings["space_left"]), int(settings["admin_space_left"])
+    if admin >= space_left:
+        problems.append(
+            "admin_space_left is not below space_left: auditd will not start"
+        )
+    if space_left > LOG_TMPFS_LOW_WATER_MB:
+        problems.append(
+            f"space_left = {space_left} MB is more than the tmpfs keeps free"
+        )
+    if settings["admin_space_left_action"].upper() in {"SUSPEND", "SINGLE", "HALT"}:
+        problems.append("a write below admin_space_left stops logging until a restart")
+    return problems
+
+
+def test_auditd_free_space_settings_fit_the_log_tmpfs_is_clean(package):
+    edits = _edits(package, AUDITD_CONF)
+    settings = dict(line.split(" = ") for line in edits)
+    assert audit_space_problems(settings) == []
+    # An unanchored `space_left` would also rewrite the action line beside it.
+    assert not re.search(
+        edits["space_left = 10"]["regexp"], "space_left_action = SYSLOG"
+    )
+
+
+def test_auditd_packaged_free_space_settings_are_flagged():
+    stock = {
+        "space_left": "75",
+        "admin_space_left": "50",
+        "admin_space_left_action": "SUSPEND",
+    }
+    assert audit_space_problems(stock) == [
+        "space_left = 75 MB is more than the tmpfs keeps free",
+        "a write below admin_space_left stops logging until a restart",
+    ]
+    swapped = {**stock, "space_left": "5", "admin_space_left": "10"}
+    assert "auditd will not start" in audit_space_problems(swapped)[0]
+
+
 # earlyoom.
 
 
@@ -334,8 +387,6 @@ def test_the_package_retires_the_interim_token_files_nothing_reads(package):
 def test_tmpfiles_creates_the_textfile_directory_setgid_and_the_updater_can_write_there(
     package, tmp_path, line_kept
 ):
-    import os
-
     config = tmp_path / "homelab-node-exporter.conf"
     root = tmp_path / "root"
     root.mkdir()

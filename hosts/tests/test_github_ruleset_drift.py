@@ -289,8 +289,8 @@ FENCE_DRIFT = {
         ["no longer restricts [update ]"],
     ),
     "the agent's account added": (
-        {"bypass_actors": [*ALWAYS, _actor("User", 338220904, "always")]},
-        ["newly-allowed:[User:338220904:always ]"],
+        {"bypass_actors": [*ALWAYS, _actor("User", 356237609, "always")]},
+        ["newly-allowed:[User:356237609:always ]"],
     ),
     "a body that is not a ruleset": (
         {"enforcement": None},
@@ -408,10 +408,10 @@ RESTRICTION_DRIFT = {
         {
             "bypass_actors": [
                 *restriction_ruleset(MASTER)["bypass_actors"],
-                {"actor_id": 338220904, "actor_type": "User", "bypass_mode": "always"},
+                {"actor_id": 356237609, "actor_type": "User", "bypass_mode": "always"},
             ]
         },
-        "newly-allowed:[User:338220904:always ]",
+        "newly-allowed:[User:356237609:always ]",
     ),
     "an anonymous read of the tag restriction": (
         DOTFILES_TAGS,

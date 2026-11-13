@@ -8,14 +8,27 @@
    window length (45 below) and the two internal knees in wake_brightness (15 = the alarm, 35 =
    alarm+20) define the 3-segment curve; the 15-min PRE-alarm lead MUST stay equal to the 15-min
    offset baked into templates.yaml's bedroom_wake_start state expression — change the pre-alarm lead
-   in both places together. The caller passes minutes since wake_start (or a negative sentinel when
-   unavailable). #}
+   in both places together. The caller passes minutes since the wake anchor (wake_elapsed, or the
+   ramp tickers' own elapsed), or a negative sentinel when there is none. #}
 {%- macro in_wake_window(elapsed_min) -%}
 {%- set e = elapsed_min | float(-1) -%}
 {{ 0 <= e < 45 }}
 {%- endmacro -%}
 
-{# Wake-ramp RELEASE catch-up window: [45, 90) minutes since wake_start. The hand-off back to
+{# Minutes since the most recent wake anchor at or before now, for in_wake_window and
+   in_wake_release_window. Two anchors, both epoch seconds: ws_ts is sensor.bedroom_wake_start (the
+   real alarm), lw_ts is input_datetime.bedroom_last_wake (stamped by both the alarm reset and the
+   06:00 fallback). A missing anchor arrives as none/unparseable and is skipped. The latest PAST anchor
+   wins, never "wake_start if available": on a no-alarm day before an alarm day, wake_start is
+   available but dated tomorrow while the fallback ramp runs off today's last_wake. -1 when neither
+   anchor is in the past. #}
+{%- macro wake_elapsed(ws_ts, lw_ts, now_ts) -%}
+{%- set now_s = now_ts | float(0) -%}
+{%- set past = [ws_ts | float(-1), lw_ts | float(-1)] | select('>', 0) | select('<=', now_s) | list -%}
+{{ ((now_s - past | max) / 60) if past else -1 }}
+{%- endmacro -%}
+
+{# Wake-ramp RELEASE catch-up window: [45, 90) minutes since the wake anchor. The hand-off back to
    Adaptive Lighting (set_manual_control:false + apply at window end) used to fire on a SINGLE tick
    (elapsed in [45,46)); an HA restart/deploy or a gated-off minute spanning that one tick stranded AL
    paused for the rest of the day. This widens it to a 45-min catch-up window so a missed release

@@ -42,7 +42,14 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.git import git, git_process
 
 from .atoms import Ambiguous, atom_content
-from .citations import Citation, Section, in_tree, parse_citations, sections
+from .citations import (
+    GENERATED_BLOCK,
+    Citation,
+    Section,
+    in_tree,
+    parse_citations,
+    sections,
+)
 from .lint import bodies_at
 
 DOC_NAME = "CLAUDE.md"
@@ -268,7 +275,10 @@ def moved_sections(repo: Path, base: str, head: str | None = None) -> list[Notic
       fails to parse at either end reads ``unparsable``. Any other exception propagates,
       because it is a defect in the notice rather than in the diff.
     - ``prose_edited`` compares the section's body at the base, from ``lint.bodies_at``, with
-      its body at the head.
+      its body at the head, after dropping generated blocks from both. A hook rewrites such
+      a block in the commit that moves its source, so its change is no edit. A section whose
+      heading the base lacks reads as unedited when a base section holds the same prose,
+      which is a renamed heading.
 
     Raises:
       subprocess.CalledProcessError: ``base`` or ``head`` does not name a revision.
@@ -313,10 +323,32 @@ def _walk(
                     continue
                 if base_bodies is None:
                     # One ``git show`` per doc that holds a row, not one per doc read.
-                    base_bodies = bodies_at(repo, base, doc)
-                edited = base_bodies.get(sec.key) != sec.body
-                rows.append(Notice(sec.key, c.raw, c.form, kind, edited))
+                    base_bodies = {
+                        key: _prose(body)
+                        for key, body in bodies_at(repo, base, doc).items()
+                    }
+                rows.append(
+                    Notice(sec.key, c.raw, c.form, kind, _edited(sec, base_bodies))
+                )
     return rows, parsed, touched
+
+
+def _prose(body: str) -> str:
+    """``body`` without its generated blocks."""
+    return GENERATED_BLOCK.sub("", body)
+
+
+def _edited(sec: Section, base_prose: dict[str, str]) -> bool:
+    """Whether the diff changed the hand-written prose of ``sec``.
+
+    ``base_prose`` maps each section key of the doc at the base to its prose. A heading the
+    base lacks is a rename when some base section holds the same prose, and a rename is no
+    edit. Any other heading the base lacks is a section the diff wrote.
+    """
+    prose = _prose(sec.body)
+    if sec.key in base_prose:
+        return base_prose[sec.key] != prose
+    return prose not in base_prose.values()
 
 
 @dataclass(frozen=True)

@@ -41,11 +41,14 @@ spec:
               value: /data
             - name: ND_PORT
               value: "{{ container_item.port }}"
-            # Off, and load-bearing for the netpol posture: this switch governs BOTH the
-            # GitHub release check and the metadata agents (Last.fm, Spotify, ListenBrainz).
-            # With it false the pod opens no outbound connection at all, which is what puts
-            # navidrome in BORN_FENCED_ROLES — see docs/networkpolicy-default-deny.md.
+            # On for ListenBrainz scrobbling and Deezer artist images. The same switch also turns
+            # on the anonymous insights collector and the Last.fm agent, so both are off below:
+            # Last.fm needs an API account this setup does not have.
             - name: ND_ENABLEEXTERNALSERVICES
+              value: "true"
+            - name: ND_ENABLEINSIGHTSCOLLECTOR
+              value: "false"
+            - name: ND_LASTFM_ENABLED
               value: "false"
             - name: TZ
               value: "{{ tz }}"

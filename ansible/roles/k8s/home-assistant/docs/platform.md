@@ -184,14 +184,21 @@ loop emits, because `Exception thrown when calling cast status listener` is logg
 `pychromecast.controllers` too, so a query for `_connect_hass failed` returns nothing whether
 or not the loop is firing. The receiver's `Uncaught error from Chrome` records were the
 channel that survived, and they came from the pinned theme's TypeError above. With the theme
-unpinned they stop, so the loop itself now has no audible signal. That is accepted with #2800,
-and the guard that kept the channel audible was retired with the pin.
+unpinned they stop. That is accepted with #2800, and the guard that kept the channel audible
+was retired with the pin.
+
+**`HomeAssistantCastHeartbeatStorm` is the loop's signal.** pychromecast logs `Heartbeat
+timeout, resetting connection` at INFO each time it drops the Hub's socket, and no logger filter
+drops it. The loki-homelab rule in
+`ansible/roles/k8s/loki-homelab/files/rules/homelab-logs.yaml` pages when the container logs
+more than 30 of those lines in an hour. On 2026-11-12 the storm logged 57 to 119 an hour for
+six hours, and the quiet hours from 2026-11-06 to 2026-11-13 logged at most 19.
 
 A cast that timed out on a worker thread leaves no record either. Its
 `_handle_signal_show_view` record carries the cast `refresh_token`, so the logger filter above
 drops it. That was the operator's choice on 2026-11-12, over closing `kubectl logs`; the
-`DECIDED:` marker at the filter in `configuration.yaml` records it. #8206 tracks a Loki rule on
-pychromecast's `Heartbeat timeout` lines to replace the lost signal. This query still finds
+`DECIDED:` marker at the filter in `configuration.yaml` records it.
+`HomeAssistantCastHeartbeatStorm` pages on the loop that causes those timeouts. This query still finds
 records stored before the filter shipped, until the 744h retention expires:
 
 ```logql
@@ -281,7 +288,7 @@ interactive. Rejected, and the reasons are worth keeping because the proposal re
 
 ## Storage and networking
 - **All persistent state is the `home-assistant-config` Longhorn PVC → `/config`** (`longhorn`
-  class → nightly B2 backup; Kopia stopped covering this at the cutover): the SQLite
+  class → daily R2 backup, ADR 0007; Kopia stopped covering this at the cutover): the SQLite
   recorder DB, `.storage/`, secrets, automations, and the templated `configuration.yaml`.
   **The "could not validate that the sqlite3 database was shutdown cleanly" warning on every boot is
   benign and not worth chasing with a longer shutdown grace** — a timed `docker stop` hit the full

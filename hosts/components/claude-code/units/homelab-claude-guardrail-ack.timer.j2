@@ -1,0 +1,13 @@
+# Shipped by both hosts' packages with its enable link while claude_code_guardrail_ack_enabled.
+# Every N minutes, where claude_code_guardrail_ack_minute is `*/N`; claude-guardrail-ack.json.j2
+# derives the textfile deadline from the same value and refuses any other shape.
+{% set _every_n = claude_code_guardrail_ack_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
+[Unit]
+Description=Post unexplained Claude Code guardrail changes every {{ _every_n }} minutes
+
+[Timer]
+OnCalendar=*-*-* *:02/{{ _every_n }}:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,112 @@
+{#
+  The WireGuard sidecar that tunnels a pod's egress through Mullvad: a native sidecar (an
+  initContainer with restartPolicy: Always) whose startupProbe holds the pod's other containers
+  until wg0 is up, with the netns reset in front of the image's init. qbittorrent and slskd
+  render it.
+
+  Arguments. `app` names the pod's own volumes: `<app>-config` (the config claim, also the
+  /modcache subPath) and `<app>-mullvad` (the projected key and account Secrets). The pod must
+  also carry a `netns-reset` volume from qbittorrent's netns-reset script, and set the
+  `net.ipv4.conf.all.src_valid_mark` sysctl, which the macro cannot own because the pod-level
+  securityContext belongs to the caller. Everything else is a value from the caller's defaults:
+  the image pin (Renovate reads it only from role defaults), the Mullvad mod, where the Secret
+  volume mounts, the relay location, LAN_NETWORKS, and the sidecar's resources. `dns`, when
+  given, replaces Mullvad's resolver: once wg0 is up, wg-quick points the whole pod's
+  resolv.conf at it, so a pod that looks up cluster names passes CoreDNS's address.
+
+  The gate in netns-reset.sh fences one uid, the pod's PUID. A container that runs as another uid
+  is not held off eth0 while the tunnel is down.
+#}
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'lsio-env.yml.j2' import lsio_env with context %}
+{% macro wireguard_sidecar(app, image, mod, secret_mount, location, lan_networks, cpu_limit, mem_limit, cpu_request, mem_request, dns=none) %}
+      initContainers:
+        # A NATIVE SIDECAR — an initContainer with restartPolicy: Always, and it is not
+        # cosmetic: ordinary pod containers all start in parallel, so {{ app }}
+        # could begin talking to trackers in the seconds before the tunnel and its kill-switch
+        # exist — traffic that would leave over eth0 in the clear. A sidecar's startupProbe
+        # gates the main containers, so {{ app }} cannot start until wg0 is up.
+        - name: wireguard
+          image: {{ image }}
+          imagePullPolicy: IfNotPresent
+          restartPolicy: Always
+          # files/netns-reset.sh runs before the image's own /init on EVERY start of this
+          # container. The pod netns outlives the container, so a restart inherits the dead
+          # wg0, wg-quick's policy rules, the LAN routes and the kill-switch from the previous
+          # one, and the mod cannot bring a tunnel up behind them — the 2026-08-16 (9h) and
+          # 2026-09-13 (3.5d) deadlocks, cleared both times by a pod delete. The reset makes a
+          # container restart equivalent to that delete, and gates {{ app }}'s uid off eth0
+          # while the tunnel is down. `exec` keeps /init as PID 1, which s6 requires.
+          command: ["/bin/sh", "-c", "/opt/netns-reset/netns-reset.sh && exec /init"]
+          # NET_ADMIN for the tunnel interface and its routing/fwmark rules; NET_RAW
+          # because the Mullvad mod's kill-switch initialises the iptables `raw` table,
+          # which fails with "unable to initialize table 'raw'" without it. Plus the LSIO
+          # s6 set to chown /config and drop privileges. NOT privileged, and no
+          # SYS_MODULE — the wireguard module is loaded on the host.
+{{ hardened_security_context(add=['NET_ADMIN', 'NET_RAW', 'CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
+          env:
+{{ lsio_env() }}
+            - name: DOCKER_MODS
+              value: "{{ mod }}"
+            - name: FILE__MULLVAD_PRIVATE_KEY
+              value: "{{ secret_mount }}/key"
+            - name: FILE__MULLVAD_ACCOUNT
+              value: "{{ secret_mount }}/account"
+            - name: MULLVAD_LOCATION
+              value: "{{ location }}"
+            - name: LAN_NETWORKS
+              value: "{{ lan_networks }}"
+{% if dns %}
+            - name: MULLVAD_DNS
+              value: "{{ dns }}"
+{% endif %}
+          volumeMounts:
+            - name: {{ app }}-config
+              mountPath: /config
+            # THE FIX FOR THE 9-HOUR OUTAGE, and it is one mount. LSIO's docker-mods script
+            # creates /modcache in the container and caches every downloaded mod there as
+            # `<name>.tar.xz`; on a registry failure it sets MOD_OFFLINE itself and applies the
+            # cached copy instead. That fallback already ran during the incident and found
+            # nothing, because /modcache was container-local and died with each pod. Persisting
+            # it means one successful start makes every later start survive an lscr.io outage.
+            #
+            # A subPath of the config claim rather than a PVC of its own: the tarball is a few MB
+            # against 1Gi, and a second claim would add a storage-class decision and a backup
+            # surface for a cache that any successful start can rebuild.
+            - name: {{ app }}-config
+              mountPath: /modcache
+              subPath: modcache
+            - name: {{ app }}-mullvad
+              mountPath: {{ secret_mount }}
+              readOnly: true
+            - name: netns-reset
+              mountPath: /opt/netns-reset
+              readOnly: true
+          startupProbe:
+            # THE GATE. Nothing else in this pod runs until this passes, so it must assert the
+            # tunnel exists — not that the process started. `wg show wg0` fails while the
+            # interface is absent, which is exactly the window {{ app }} must not run in.
+            exec:
+              command: ["sh", "-c", "wg show wg0 >/dev/null 2>&1"]
+            periodSeconds: 5
+            # 5 min. The mod resolves api.mullvad.net and negotiates a relay on first start,
+            # and a cold pull of the mod makes that slower still.
+            failureThreshold: 60
+          livenessProbe:
+            # Both signals: if the mod fails at boot then wg0 AND the kill-switch are never
+            # installed, so a bare reach
+            # for 1.1.1.1 LEAKS out eth0 and false-passes while the tunnel is dead. Asserting
+            # wg0 first makes that state fail instead. Tolerant — only a sustained outage
+            # restarts the tunnel.
+            exec:
+              command:
+                - sh
+                - -c
+                - wg show wg0 >/dev/null 2>&1 && curl -fsm 10 https://1.1.1.1 >/dev/null
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 15
+            failureThreshold: 6
+{{ container_resources(cpu_limit=cpu_limit, mem_limit=mem_limit, cpu_request=cpu_request, mem_request=mem_request) }}
+{%- endmacro %}

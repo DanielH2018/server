@@ -269,6 +269,8 @@ loki_streams:
     job: k8s-audit
   host_k3s:
     job: k3s
+  host_audit:
+    job: audit
   pi_containers:
     job: pi
     machine: daniel-pi

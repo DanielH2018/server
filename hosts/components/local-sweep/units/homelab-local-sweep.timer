@@ -1,0 +1,11 @@
+# Shipped by homelab-daniel-box with its enable link.
+[Unit]
+Description=Start the shadow sweep 15 minutes after the last one ended
+
+[Timer]
+OnBootSec=15min
+# Counted from the end of the last run, so a five-minute sweep starts at most three times an hour.
+OnUnitInactiveSec=15min
+
+[Install]
+WantedBy=timers.target
