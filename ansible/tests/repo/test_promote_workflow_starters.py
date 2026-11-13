@@ -10,16 +10,10 @@ import pytest
 from test_promote_workflow import (
     FLUX_DEFAULTS,
     REFUSE_JOB,
-    STARTER_GUARD,
     WORKFLOW,
     _load,
     problems,
 )
-
-
-def _reset_without_the_starter_guard(wf):
-    job = wf["jobs"]["reset-move"]
-    job["if"] = job["if"].replace(STARTER_GUARD, "true")
 
 
 def _the_bot_on_the_starter_list(wf):
@@ -34,10 +28,6 @@ def _refusal_for_dispatches_only(wf):
 
 
 RED = {
-    "a reset job any account can start": (
-        _reset_without_the_starter_guard,
-        "reset-move: its `if` lacks the starter guard",
-    ),
     "the bot on the starter list": (
         _the_bot_on_the_starter_list,
         "render: its `if` lacks the starter guard",

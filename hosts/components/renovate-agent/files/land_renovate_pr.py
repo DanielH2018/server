@@ -18,11 +18,15 @@ A PR is landed only when all of these hold:
 - It changes nothing under `inventory/` (`ansible/inventory/` before ADR 0030's rename). A pin there, such as `crowdsec_k8s_image` in
   `group_vars/all.yml`, reaches every role that reads it, denylisted ones included, and no path
   check can see which those are. An interactive session lands that class.
-- Its `renovate/stability-days` status, when it carries one, reads success. GitHub's auto-merge
-  waits only on the required checks, so without this a PR forced open mid-soak would land.
+- Its `renovate/stability-days` status, when it carries one, reads success and was posted by
+  `renovate[bot]`. GitHub's auto-merge waits only on the required checks, so without this a PR
+  forced open mid-soak would land, and DanielClaudeBot's write access can post a status.
 
-Then `land.sh` runs as an interactive session would run it, and only its `VERDICT:` line is
-written where the session can read it. Stdlib only, like the rest of the agent.
+Then `land.sh` runs as an interactive session would run it, pinned to the head SHA these checks
+read, and only its `VERDICT:` line is written where the session can read it. land.sh also needs
+the operator's approval of that head when the PR changes a path on `renovate_floor.FLOOR`
+other than by a digest-only image bump, or when anyone but `renovate[bot]` pushed to its branch
+(dotfiles#967 slice 1). Stdlib only, like the rest of the agent.
 
 Usage: land_renovate_pr.py <pr-number>
 
@@ -45,8 +49,11 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agent_toolbox import TOOLS, AgentTools, log
 from host_lib import atomic_write
+from renovate_floor import floor_hits, pusher_problem, soak_problem
 
 AUTHOR = "app/renovate"
+# The login whose approval of the head lets land.sh land a PR the floor check flags.
+APPROVER = "DanielH2018"
 BASE = "master"
 BRANCH_PREFIX = "renovate/"
 DENIED_SLUG = "k8s_autodeploy-false"
@@ -67,15 +74,13 @@ FILE_CAP = 100
 # timeout before systemd kills it mid-deploy.
 # LAND_DEADLINE's 41460 plus the 22200 LAND_WINDOW_GRACE the reboot window may add (#5457).
 LAND_TIMEOUT_S = 63660
-PR_FIELDS = (
-    "author,isCrossRepository,baseRefName,state,headRefName,files,statusCheckRollup"
-)
-SOAK_CONTEXT = "renovate/stability-days"
+PR_FIELDS = "author,isCrossRepository,baseRefName,state,headRefName,headRefOid,files"
 # Both sides of ADR 0030's rename: this script is installed, so it outlives the tree it shipped in.
 INVENTORY = ("inventory/", "ansible/inventory/")
 # `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import (#4487).
 USAGE_ERROR = 64
 _PR_NUMBER = re.compile(r"[1-9][0-9]{0,6}")
+_SHA = re.compile(r"[0-9a-f]{40}")
 _K8S_ROLE = re.compile(r"^(?:k8s/roles|ansible/roles/k8s)/([^/]+)/")
 _VERDICT = re.compile(r"^VERDICT: .*$", re.MULTILINE)
 _ROLE_LIST = re.compile(r"[a-z0-9_-]+(?:,[a-z0-9_-]+)*")
@@ -114,13 +119,8 @@ def refusals(pr: dict, denied: frozenset[str]) -> list[str]:
         reasons.append(f"its head branch is not {BRANCH_PREFIX}...")
     if DENIED_SLUG in branch:
         reasons.append(f"its head branch carries {DENIED_SLUG}")
-    soak = [
-        check.get("state")
-        for check in pr.get("statusCheckRollup") or []
-        if check.get("context") == SOAK_CONTEXT
-    ]
-    if any(state != "SUCCESS" for state in soak):
-        reasons.append(f"its {SOAK_CONTEXT} status has not passed")
+    if not _SHA.fullmatch(pr.get("headRefOid") or ""):
+        reasons.append("GitHub returned no head SHA to pin the landing to")
     paths = sorted({f.get("path", "") for f in pr.get("files") or []})
     if any(path.startswith(INVENTORY) for path in paths):
         reasons.append("it changes the inventory, which can reach a denylisted role")
@@ -133,6 +133,39 @@ def refusals(pr: dict, denied: frozenset[str]) -> list[str]:
                 f"{path} is in {match.group(1)}, which declares k8s_autodeploy: false"
             )
     return reasons
+
+
+def read_api(tools: AgentTools, path: str) -> list[dict] | None:
+    """Every entry of the REST listing at `path`, across all pages, or None on a failed read."""
+    rc, out = tools.run(["gh", "api", "--paginate", "--slurp", path])
+    try:
+        pages = json.loads(out) if rc == 0 else None
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(pages, list) or not all(isinstance(p, list) for p in pages):
+        return None
+    entries = [entry for page in pages for entry in page]
+    return entries if all(isinstance(e, dict) for e in entries) else None
+
+
+def approval_reasons(files: list[dict], events: list[dict], head: str) -> list[str]:
+    """Why the PR needs the operator's approval of `head`; empty when it lands without."""
+    reasons = []
+    hits = floor_hits(files)
+    if hits:
+        reasons.append(f"it changes floor paths: {', '.join(hits)}")
+    pushers = pusher_problem(events, head)
+    if pushers:
+        reasons.append(pushers)
+    return reasons
+
+
+def land_argv(land: str, number: int, head: str, approve: bool) -> list[str]:
+    """The land.sh command, pinned to `head` and needing `APPROVER`'s approval when `approve`."""
+    env = ["env", f"LAND_REQUIRE_HEAD={head}"]
+    if approve:
+        env += ["LAND_REQUIRE_APPROVAL=1", f"LAND_APPROVER={APPROVER}"]
+    return [*env, land, "--pr", str(number), "--arm-merge", "--await-merge"]
 
 
 def verdict_line(output: str) -> str:
@@ -189,10 +222,28 @@ def main(
     reasons = refusals(pr, denied)
     if reasons:
         return refuse("; ".join(reasons))
+    head = pr["headRefOid"]
+    statuses = read_api(tools, f"repos/{repo}/commits/{head}/statuses?per_page=100")
+    files = read_api(tools, f"repos/{repo}/pulls/{number}/files?per_page=100")
+    events = read_api(
+        tools,
+        f"repos/{repo}/activity?ref=refs/heads/{pr['headRefName']}&per_page=100",
+    )
+    if statuses is None or files is None or events is None:
+        return refuse("cannot read the head's statuses, files or branch activity")
+    soak = soak_problem(statuses)
+    if soak:
+        return refuse(soak)
+    approval = approval_reasons(files, events, head)
     land = os.path.join(repo_dir, "scripts", "deploy_tools", "land.sh")
-    log(f"PR #{number} passed every check; landing it")
+    if approval:
+        log(
+            f"PR #{number} needs {APPROVER}'s approval of {head[:8]}: {'; '.join(approval)}"
+        )
+    else:
+        log(f"PR #{number} passed every check; landing {head[:8]}")
     rc, out = tools.run(
-        [land, "--pr", str(number), "--arm-merge", "--await-merge"],
+        land_argv(land, number, head, bool(approval)),
         cwd=repo_dir,
         timeout=LAND_TIMEOUT_S,
     )

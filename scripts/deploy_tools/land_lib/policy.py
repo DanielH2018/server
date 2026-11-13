@@ -19,8 +19,14 @@ which is every interactive session and renovate-agent's lander:
   login's latest review is an approval of the head SHA the checks read. A later
   changes-requested or a dismissal undoes it, and so does a push: the approval then names an
   older commit. Unset, nothing lifts the refusal.
+- `LAND_REQUIRE_HEAD`: the head SHA a caller's own checks read. The landing refuses unless the
+  PR's head is still that commit, so nothing pushed after the caller's checks lands.
+- `LAND_REQUIRE_APPROVAL`: any non-empty value makes every landing need `LAND_APPROVER`'s
+  approval of the head, whatever paths it changes. renovate-agent's lander sets it when its
+  own floor check finds a path that needs approval: that check exempts digest-only image bumps,
+  which a path list here would refuse.
 
-When either of the first two is set, `check`
+When any of these but `LAND_APPROVER` is set, `check`
 returns the head SHA it checked. `merge.py` pins every merge path to that SHA, so a push after
 the checks fails the merge rather than landing unchecked.
 
@@ -365,6 +371,11 @@ def check(ln: Landing) -> str:
     head = view.get("headRefOid") or ""
     if not head:
         _refuse(ln, "GitHub returned no head SHA to pin the merge to")
+    if o.require_head and head != o.require_head:
+        _refuse(
+            ln,
+            f"the head is {head[:8]}, not the {o.require_head[:8]} the caller checked",
+        )
     if o.require_branch_prefix:
         problems = branch_problems(view, o.require_branch_prefix)
         if problems:
@@ -400,6 +411,14 @@ def check(ln: Landing) -> str:
                 _refuse(ln, f"{why}; {problem}")
             say(f"{o.approver} approved {head[:8]}, lifting the approval-path refusal")
             ln.approved_head = head
+    if o.require_approval and ln.approved_head != head:
+        if not o.approver:
+            _refuse(ln, "it needs the operator's approval, and no approver is set")
+        problem = approval_problem(_list(ln, "reviews", parse_review), o.approver, head)
+        if problem:
+            _refuse(ln, f"it needs the operator's approval; {problem}")
+        say(f"{o.approver} approved {head[:8]}")
+        ln.approved_head = head
     again = ln.view("headRefOid").get("headRefOid") or ""
     if again != head:
         _refuse(

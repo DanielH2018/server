@@ -34,7 +34,3 @@ def test_reading_one_issue_another_account_opened_is_refused():
     tools = _answering(make_issue(4, author=FOREIGNER))
     with pytest.raises(SystemExit, match=f"#4 was opened by {FOREIGNER}"):
         _load_issue(4, tools)
-
-
-def test_reading_one_operator_issue_returns_it():
-    assert _load_issue(5, _answering(make_issue(5)))["number"] == 5

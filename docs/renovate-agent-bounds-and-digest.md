@@ -16,6 +16,8 @@ worktree rules, what the Discord digest measures, and the exit codes behind the 
   the crash report.
 - `land_renovate_pr.py` — the lander, run by `renovate-agent-land@<n>.service` rather than by
   the session. *The lander* below says why it is separate.
+- `renovate_floor.py` — the floor the lander reads: the paths that need the operator's approval, the
+  digest-only exception, the branch-pusher check and the soak-status check.
 
 `component.yml` names each module in `files:`. The list is not derived from the directory, so a
 module in `files/` and not on the list is one the host never receives.
@@ -38,6 +40,25 @@ and the lander read one derivation. A non-zero exit, a timeout or output holding
 the landing. It never reads the PR title, because the session can edit a title. ENFORCED:
 `hosts/components/renovate-agent/tests/test_land_renovate_pr.py`, which also holds the polkit
 rule's unit-name pattern to the PR numbers the script accepts.
+
+**The floor decides which landings need the operator's approval** (dotfiles#967 slice 1).
+`renovate_floor.FLOOR` lists the paths a session, a host package or the landing itself runs:
+`hosts/`, the secrets, the interpreter pins, `.github/`, `.claude/`, `scripts/`, every
+`conftest.py` and `CLAUDE.md`, and each role's `tests/` and `files/`. A plain entry is a path
+prefix, and an entry holding `*` is a glob over the whole path. A PR changing a floor path
+needs approval, unless the change is a digest-only bump: a modified host component
+`defaults/main.yml` whose every changed line is an `*_image:` line that differs only in its
+`@sha256:` digest. A PR also needs approval when anyone but `renovate[bot]` pushed to its
+branch since the branch's newest creation, as the repository activity API reports it. The
+lander refuses outright a `renovate/stability-days` status that `renovate[bot]` did not post,
+because DanielClaudeBot's write access can post a status.
+
+The lander then runs `land.sh` with `LAND_REQUIRE_HEAD` set to the head it checked, and adds
+`LAND_REQUIRE_APPROVAL` and `LAND_APPROVER` when the floor flagged the PR. land.sh refuses a
+head that moved and, when asked, a head the operator has not approved. The test
+`test_every_top_level_entry_is_on_the_floor_or_classified` in
+`hosts/components/renovate-agent/tests/test_renovate_floor.py` fails when a new top-level entry
+is neither on the floor nor listed with a reason.
 
 The session starts the lander with a plain `systemctl start`, which blocks until the landing
 ends. The unit raises Claude Code's 10-minute Bash cap to `renovate_agent_bash_timeout_ms`
