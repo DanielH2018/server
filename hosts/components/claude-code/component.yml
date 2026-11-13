@@ -135,6 +135,12 @@ files:
   - {src: templates/claude-guardrail-audit.sh.j2, dst: /usr/lib/homelab/claude-guardrail-audit, mode: "0755"}
   - {src: units/homelab-claude-guardrail-audit.service.j2, dst: /usr/lib/systemd/system/homelab-claude-guardrail-audit.service}
   - {src: units/homelab-claude-guardrail-audit.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-guardrail-audit.timer}
+  # The guardrail acknowledgement (server#8250 slice 2).
+  - {src: files/claude_guardrail_ack.py, dst: /usr/lib/homelab/claude-guardrail-ack/claude_guardrail_ack.py, when: "claude_code_guardrail_ack_enabled"}
+  - {lib: host_lib.py, dst: /usr/lib/homelab/claude-guardrail-ack/host_lib.py, when: "claude_code_guardrail_ack_enabled"}
+  - {src: templates/claude-guardrail-ack.json.j2, dst: /etc/homelab/claude-guardrail-ack.json, when: "claude_code_guardrail_ack_enabled"}
+  - {src: units/homelab-claude-guardrail-ack.service.j2, dst: /usr/lib/systemd/system/homelab-claude-guardrail-ack.service, when: "claude_code_guardrail_ack_enabled"}
+  - {src: units/homelab-claude-guardrail-ack.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-guardrail-ack.timer, when: "claude_code_guardrail_ack_enabled"}
   # The agent's clone and dotfiles syncs. Their textfiles keep the names `claude-clone-sync` and
   # `claude-dotfiles-sync`, which observability's host-checks rules read.
   - {src: files/claude-clone-sync.sh, dst: /usr/local/bin/claude-clone-sync.sh, mode: "0755", when: "claude_code_agent_user_enabled"}
@@ -224,6 +230,7 @@ enable:
   homelab-claude-bg-resume.service: {target: multi-user.target, when: claude_code_bg_resume_enabled}
   homelab-claude-cgroup-metrics.timer: timers.target
   homelab-claude-guardrail-audit.timer: timers.target
+  homelab-claude-guardrail-ack.timer: {target: timers.target, when: claude_code_guardrail_ack_enabled}
   homelab-claude-clone-sync.timer: {target: timers.target, when: claude_code_agent_user_enabled}
   homelab-claude-dotfiles-sync.timer:
     target: timers.target
@@ -260,6 +267,8 @@ legacy:
     when: not claude_code_fanout_server_lander_enabled
   - path: /var/lib/node-exporter-textfile/claude-pipeline-timeline.prom
     when: not claude_code_pipeline_timeline_enabled
+  - path: /var/lib/node-exporter-textfile/claude-guardrail-ack.prom
+    when: not claude_code_guardrail_ack_enabled
   - {unit: claude-rc.service}
   - {unit: claude-rc-alert.service}
   - {unit: claude-rc-restart.service}

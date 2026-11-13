@@ -1,0 +1,19 @@
+# Shipped by both hosts' packages while claude_code_guardrail_ack_enabled. Started by
+# homelab-claude-guardrail-ack.timer.
+[Unit]
+Description=Post the Claude Code guardrail changes that nothing merged explains
+After=homelab-secrets.service network-online.target
+Wants=homelab-secrets.service network-online.target
+
+[Service]
+Type=oneshot
+# Root, because it reads every user's ~/.claude and renders each user's dotfiles as that user.
+LoadCredential=discord_webhook:/run/credstore/discord_alert_webhook
+Environment=PYTHONDONTWRITEBYTECODE=1
+TimeoutStartSec=10min
+ExecStart=/usr/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
+  /usr/lib/homelab/claude-guardrail-ack/claude_guardrail_ack.py /etc/homelab/claude-guardrail-ack.json
+SyslogLevel=notice
+# DECIDED: the tag stays `claude-guardrail-ack`. It is a join key: Loki selects the run's
+# `status=` line by it.
+SyslogIdentifier=claude-guardrail-ack

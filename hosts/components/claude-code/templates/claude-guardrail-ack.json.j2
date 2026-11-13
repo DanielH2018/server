@@ -1,0 +1,17 @@
+{% set _every_n = claude_code_guardrail_ack_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
+{% if not (_every_n.isdigit() and '*/' ~ _every_n == claude_code_guardrail_ack_minute | string) %}
+{{ guardrail_ack_cron_minute_not_every_n | mandatory('claude_code_guardrail_ack_minute must be */N, got ' ~ claude_code_guardrail_ack_minute) }}
+{% endif %}
+{% set _homes = [{'home': '/home/' ~ sys_user, 'user': sys_user, 'chezmoi': '/home/' ~ sys_user ~ '/.local/bin/chezmoi'}] %}
+{% if claude_code_agent_user_enabled %}
+{% set _homes = _homes + [{'home': claude_code_agent_user_home, 'user': claude_code_agent_user, 'chezmoi': claude_code_agent_user_home ~ '/.local/bin/chezmoi'}] %}
+{% endif %}
+{{ {
+  'paths': claude_code_guardrail_audit_paths,
+  'homes': _homes,
+  'quiet_settings_keys': claude_code_guardrail_ack_quiet_settings_keys,
+  'dotfiles_repo': claude_code_guardrail_ack_dotfiles_repo,
+  'dotfiles_clone': '/var/lib/homelab-claude-guardrail-ack-dotfiles',
+  'state_dir': '/var/lib/homelab-claude-guardrail-ack',
+  'deadline_s': 2 * 60 * (_every_n | int) + 300,
+} | to_json }}
