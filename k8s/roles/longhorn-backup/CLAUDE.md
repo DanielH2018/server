@@ -2,8 +2,7 @@
 
 The Longhorn backup plane: the credential Secrets `longhorn-b2` and `longhorn-r2`, the
 BackupTargets `default` (B2) and `r2`, and the RecurringJobs `daily-backup` and
-`weekly-backup-d0` to `weekly-backup-d6`, and the `trim` RecurringJob (H2.2a). It replaced the target tasks in
-`setup/k3s` (H1.7b). Which target a volume uses is `longhorn-reconcile`'s decision (H1.7a), and
+`weekly-backup-d0` to `weekly-backup-d6`, and the `trim` RecurringJob (H1.7b, H2.2a). Which target a volume uses is `longhorn-reconcile`'s decision (H1.7a), and
 this role only declares the targets. It also renders `k3s-etcd-snapshot-s3-config` in
 `kube-system`, the Secret k3s reads for its native etcd snapshot uploads to R2 (H2.8a).
 

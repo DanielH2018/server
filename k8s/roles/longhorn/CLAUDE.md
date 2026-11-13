@@ -58,7 +58,7 @@ host probes stay green.
       `tests/longhorn/test_longhorn_csi_secret_grant.py::test_the_patched_render_is_clean`
       fails a render in which the account still reads Secrets cluster-wide. Under
       `prune: false` the live objects stay until the operator deletes them (**operator-only**).
-- **Three templates hold the objects `setup/k3s` used to write** (H1.5b).
+- **Three templates hold the Settings, the no-backup class and the metrics policy** (H1.5b).
     - `templates/settings.yaml.j2` renders the eight `Setting` objects, each from one
       `k3s_longhorn_*` key in `defaults/main.yml`. Flux owns each Setting's `value`. longhorn-manager keeps its own
       annotation and status on the object, and the render declares neither, so Flux never takes
@@ -115,12 +115,13 @@ host probes stay green.
   holds the set equal to the untiered roles that set `flux_prune: false`.
 
 ## Host tasks and the backup plane
-The host tasks `setup/k3s` keeps for Longhorn (`open-iscsi`, `nfs-common` and the multipathd
-blacklist) carry the tag `longhorn_host` alone. No `setup/k3s` task writes a Longhorn object that
-Flux owns: this role owns the Settings and classes, the CSI sidecar requests among them
-(#5958), `longhorn-reconcile` the labels, and `longhorn-backup` the credentials, the backup
-targets and the RecurringJobs. A fourth `longhorn_host` task removes the manifests that retired
-tasks staged under /etc/rancher/k3s, these and the CoreDNS, MetalLB, cluster-base and traefik
+The `k3s-server` host component (`hosts/components/k3s-server/component.yml`) installs
+Longhorn's host half: the `open-iscsi`, `nfs-common` and `multipath-tools` packages and the
+multipathd drop-in `/etc/multipath/conf.d/50-homelab-longhorn.conf`. No host file writes a
+Longhorn object that Flux owns: this role owns the Settings and classes, the CSI sidecar
+requests among them (#5958), `longhorn-reconcile` the labels, and `longhorn-backup` the
+credentials, the backup targets and the RecurringJobs. The component's `legacy:` list removes
+the manifests once staged under /etc/rancher/k3s, these and the CoreDNS, MetalLB and RBAC
 ones, so no file remains for a hand `kubectl apply -f` to write a Flux-owned object from.
 The first bring-up run skips only `kubeconfig`. `docs/flux-deploy-plane.md`, *Bootstrapping Flux on a
 rebuilt cluster*, has the steps.

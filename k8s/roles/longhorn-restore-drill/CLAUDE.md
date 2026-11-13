@@ -46,7 +46,7 @@ ServiceAccount and the RBAC. The CronJob shipped `suspend: true` at H2.3d, and H
 The CronJob `longhorn-restore-drill` (`templates/cronjob.yaml.j2`) runs
 `templates/longhorn-restore-drill.sh.j2` from the script ConfigMap at 04:10 UTC. It restores the
 newest backup of ONE volume into a NEW volume, mounts it in a throwaway pod, checks the data is
-real, and tears everything down. It moved here from `setup/k3s` at H2.3d.
+real, and tears everything down (H2.3d).
 
 - **Scope.** It creates and deletes the Volume, PV, PVC and probe pod named
   `restore-drill-<pvc>`, and patches the stamp ConfigMap. It never touches the live volume. It
@@ -112,8 +112,8 @@ real, and tears everything down. It moved here from `setup/k3s` at H2.3d.
 - **Hand runs are operator-only.** The agent's kubeconfig cannot create a Job. The plain and the
   pinned form are in `docs/k3s-node-plane-crons-and-incidents.md`, and both run outside the
   04:10 UTC slot. A pinned run stamps `success.<pvc>` and not `last-success`.
-- **The drill's keys live here.** The eight keys moved from `setup/k3s` keep their
-  `k3s_longhorn_restore_drill_*` names. A host package renders without a k8s role's defaults,
+- **The drill's keys live here.** The eight
+  `k3s_longhorn_restore_drill_*` keys are in `defaults/main.yml`. A host package renders without a k8s role's defaults,
   so no host file can read one.
 - **The `DECIDED:` markers moved with the keys** into `defaults/main.yml`: the 4 GiB size cap,
   the 2700-second timeout and the 04:10 UTC slot. The script keeps its own, including the

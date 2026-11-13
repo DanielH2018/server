@@ -9,8 +9,8 @@ them — the staging reap, the subnet census, the inert UFW attempt, the fence's
 collisions, what ships into the drill guest, and why monitor-bridge never reads this drill's
 local stamp.
 
-- **Host:** `homelab-daniel-server` alone lists this component (H7.34). The `hypervisor` setup role
-  is an unconditional `end_role` until H7.20a, and no inventory flag gates the component.
+- **Host:** `homelab-daniel-server` alone lists this component (H7.34), and no inventory flag gates
+  it.
 - **What a package cannot ship, `etcd-drill-prepare` makes before each run:** the checksum-pinned
   base image, the guest's pinned host key, the seed ISO that embeds its private half, and the
   stamp and log directories. It keeps the operator's `libvirt` and `kvm` groups too. Its failure

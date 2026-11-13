@@ -45,8 +45,8 @@ probes stay green.
   `tests/k8s/test_shed_set_is_derived_from_tier.py::test_never_shed_matches_the_untiered_roles_that_never_prune`
   holds the set equal to the untiered roles that set `flux_prune: false`.
 - **`k3s_metallb_pool` is defined here**, and `tests/repo/test_lan_facts_have_one_source.py`
-  exempts this file for it. `templates/metallb-pool.yaml.j2` moved from `setup/k3s` and keeps
-  its `DECIDED:` and `PERMANENT` comments: the L2Advertisement announces from `k8s_primary_node`
+  exempts this file for it. `templates/metallb-pool.yaml.j2` carries the
+  `DECIDED:` and `PERMANENT` comments: the L2Advertisement announces from `k8s_primary_node`
   alone, and every VIP-backed workload's `nodeSelector` is the same variable.
   `tests/k8s/test_vip_pins.py::test_announcement_and_the_primary_node_variable_agree`
   holds the two halves together.
