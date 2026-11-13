@@ -131,7 +131,7 @@ def to_json_stub(value, **kwargs) -> str:
 
 
 def make_lookup(ctx: dict):
-    """Minimal stand-in for Ansible's ``lookup``, supporting the ``file`` and ``template`` plugins.
+    """The renderer's ``lookup``: ``b64file``, ``file``, ``template`` and ``vars``.
 
     A ConfigMap that embeds a config file the Docker role already owns reads it with a lookup
     rather than keeping a second copy. Stubbing the result would let a malformed embed through,
@@ -150,11 +150,11 @@ def make_lookup(ctx: dict):
 
     @pass_context
     def lookup(context: Context, kind: str, *args: str, **kwargs) -> object:
-        """Resolve one `lookup()` call: `file`, `pipe` (base64 only), `template` or `vars`.
+        """Resolve one `lookup()` call: `b64file`, `file`, `template` or `vars`.
 
         Args:
             kind: The lookup plugin name.
-            args: The plugin's positional arguments; `args[0]` is always a path or command.
+            args: The plugin's positional arguments; `args[0]` is always a path or a variable name.
             kwargs: Plugin options. Only `file`'s `rstrip` is recognised (default `True`,
                 which strips all trailing whitespace, as Ansible's own `file` lookup
                 does) — `checksum-annotation.yml.j2`'s
@@ -162,8 +162,7 @@ def make_lookup(ctx: dict):
                 task's checksum of the same file, which is not stripped either.
 
         Raises:
-            ValueError: `kind` is not one of the four supported plugins, or `kind == "pipe"`
-                names something other than `base64 -w0 <path>`.
+            ValueError: `kind` is not one of the four supported plugins.
         """
         if kind == "vars":
             value = context.resolve_or_missing(args[0])
@@ -175,16 +174,9 @@ def make_lookup(ctx: dict):
             text = path.read_text()
             # ansible-core's `file` lookup strips all trailing whitespace, not only newlines.
             return text.rstrip() if kwargs.get("rstrip", True) else text
-        if kind == "pipe":
-            # Only the binary-embed idiom, done hermetically in Python rather than by
-            # running a shell: lookup('file') utf-8-decodes and would mangle binary, so
-            # templates embedding images (homepage's icons ConfigMap) pipe base64 instead.
-            cmd = args[0].split()
-            if cmd[:2] == ["base64", "-w0"] and len(cmd) == 3:
-                return base64.b64encode(Path(cmd[2]).read_bytes()).decode()
-            raise ValueError(
-                f"lookup('pipe') is only supported for 'base64 -w0 <path>', got {args[0]!r}"
-            )
+        if kind == "b64file":
+            # `file` utf-8-decodes, which mangles binary such as homepage's icons.
+            return base64.b64encode(path.read_bytes()).decode()
         if kind == "template":
             env = make_env([path.parent])
             # jinja2 leaves `Environment.globals` unannotated, so its type is inferred from
@@ -198,7 +190,7 @@ def make_lookup(ctx: dict):
             # Not rstripped: ansible-core's `template` lookup keeps the trailing newlines.
             return env.get_template(path.name).render(ctx)
         raise ValueError(
-            "lib.k8s_yaml implements lookup('file'), lookup('pipe'), lookup('template') and "
+            "lib.k8s_yaml implements lookup('b64file'), lookup('file'), lookup('template') and "
             f"lookup('vars'), got {kind!r}"
         )
 

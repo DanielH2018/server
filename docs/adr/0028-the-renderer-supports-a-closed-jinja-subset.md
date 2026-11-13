@@ -106,9 +106,9 @@ as a filter named as an argument of `map` does.
 
 | Lookup | Note |
 |---|---|
+| `b64file` | Defined by the renderer, not Ansible. Reads a path's bytes and returns them base64-encoded, so a binary file embeds intact. |
 | `file` | Reads a path. Strips trailing whitespace unless `rstrip=False`. |
-| `pipe` | Only `base64 -w0 <path>`, computed without a shell. Anything else fails the render. |
-| `template` | Renders a path with the caller's variables, keeping its trailing newlines. `ansible.builtin.template` is the same lookup. |
+| `template` | Renders a path with the caller's variables, keeping its trailing newlines. |
 | `vars` | Reads a variable named at render time. |
 
 ### Variable semantics
@@ -142,7 +142,6 @@ Ansible behaviour.
   fails the render.
 - An include var does not reach a template. The renderer takes no value from a role's `tasks/`.
   Ansible's does.
-- `lookup('pipe')` runs nothing. It accepts one command, and Ansible runs any command.
 - A `hosts.ini` inline value that `ast.literal_eval` accepts, such as `ansible_port=22` or
   `x='"b"'`, fails the read and the error names the host. Ansible reads the int `22` and the
   string `b`. `Host.settings` holds only strings, so such a value goes in the host's `host_vars`

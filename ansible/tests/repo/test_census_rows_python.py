@@ -61,12 +61,7 @@ HOST_SHIPPED = re.compile(
 
 
 def _uv_run_modules() -> list[str]:
-    # `ansible/collections/` is the vendored third-party tree — never linted, never ours.
-    return [
-        rel
-        for rel in tracked("*.py")
-        if not rel.startswith("ansible/collections/") and not HOST_SHIPPED.match(rel)
-    ]
+    return [rel for rel in tracked("*.py") if not HOST_SHIPPED.match(rel)]
 
 
 def _future_offence(subject: Subject) -> list[str]:

@@ -95,7 +95,10 @@ def mismatch_fails_the_run(node: Node) -> None:
 
     assert result.returncode == 1
     assert "claude has uid 1000; the package declares 1001" in result.stderr
-    assert "scripts/deploy_tools/renumber_host_users.py --apply" in result.stderr
+    assert (
+        "renumber the user by hand, then sudo /usr/lib/homelab/homelab-updater --clear-hold"
+        in result.stderr
+    )
     assert node.applied()["result"]["ok"] is False
     assert commands(node) == [], "a faulted run creates nothing"
 

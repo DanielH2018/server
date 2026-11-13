@@ -111,6 +111,11 @@ def test_the_keep_reader_rejects_a_sweep_that_assigns_no_keep():
         _keep(without_assignment(script(SWEEP), "KEEP"))
 
 
+def test_a_red_half_whose_constant_is_gone_fails():
+    with pytest.raises(pytest.fail.Exception, match="assigns no NO_SUCH_CONSTANT"):
+        without_assignment(script(SWEEP), "NO_SUCH_CONSTANT")
+
+
 def _run(sweep: str, tmp_path) -> str:
     """The sweep, run for real against `tmp_path` instead of the PVC."""
     assert PLUGIN_ROOT in sweep, (

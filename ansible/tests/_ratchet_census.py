@@ -69,11 +69,7 @@ def tracked_python_files() -> list[str]:
     `git ls-files` rather than a walk, which from the repo root descends into
     `.claude/worktrees/<name>/` — see test_tracked_python_hazards.py for that incident.
     """
-    return [
-        rel
-        for rel in tracked_files("*.py")
-        if not rel.startswith("ansible/collections/")
-    ]
+    return tracked_files("*.py")
 
 
 def code_line_counts() -> dict[str, int]:

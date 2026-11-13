@@ -14,6 +14,7 @@ from lib.exit_codes import RENDER_OK
 from lib.proc_testing import run
 from lib.repo_paths import ALL_VARS, REPO
 from renderer import homelab_render, shadow_diff
+from lib.k8s_roles import k8s_tags
 from renderer.renderer_lib import cluster as cluster_mod
 
 
@@ -123,7 +124,7 @@ def test_a_flux_owned_tag_with_role_is_clean(out, tmp_path):
     assert cluster_mod.select_tags(["littlelink"], host_vars=host_vars) == [
         "littlelink"
     ]
-    flux_owned = cluster_mod.flux_owned_tags(host_vars / "daniel-box.yml")
+    flux_owned = k8s_tags(host_vars / "daniel-box.yml")
     assert flux_owned == {"littlelink"}
     # A fixture cluster file, so the bundle copies fake ciphertext rather than the tree's.
     dotenv = tmp_path / "cluster-vars"

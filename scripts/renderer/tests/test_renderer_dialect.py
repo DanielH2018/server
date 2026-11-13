@@ -93,10 +93,20 @@ def test_an_off_the_list_test_fails_the_render_and_the_census(tmp_path):
         _render(tmp_path, source, {})
 
 
-def test_an_off_the_list_lookup_fails_the_render_and_the_census(tmp_path):
-    source = "{{ lookup('env', 'HOME') }}"
-    assert off_the_list(source) == {Construct("lookup", "env")}
-    with pytest.raises(jinja2.TemplateRuntimeError, match="env"):
+@pytest.mark.parametrize(
+    ("kind", "argument"),
+    [
+        ("env", "'HOME'"),
+        ("pipe", "'base64 -w0 ' ~ lookup_dir ~ '/text.txt'"),
+        ("ansible.builtin.template", "lookup_dir ~ '/inner.j2'"),
+    ],
+)
+def test_an_off_the_list_lookup_fails_the_render_and_the_census(
+    tmp_path, kind, argument
+):
+    source = f"{{{{ lookup('{kind}', {argument}) }}}}"
+    assert off_the_list(source) == {Construct("lookup", kind)}
+    with pytest.raises(jinja2.TemplateRuntimeError, match=re.escape(kind)):
         _render(tmp_path, source, {})
 
 

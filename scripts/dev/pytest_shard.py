@@ -197,7 +197,7 @@ def under_testpaths(rel: str, paths) -> bool:
     """Whether `rel` lies under a `testpaths` entry, where an entry may be a glob.
 
     `full_match` against `<entry>/**` matches by path component, so a `scripts` entry does not
-    cover `scripts_extra/test_x.py`, and `ansible/roles/*/*/tests` covers every role's suite.
+    cover `scripts_extra/test_x.py`, and `ansible/roles/k8s/*/tests` covers every role's suite.
     """
     return any(PurePosixPath(rel).full_match(f"{entry}/**") for entry in paths)
 

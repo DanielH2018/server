@@ -4,11 +4,8 @@
 token grep, so a name in a comment or in a Dockerfile's plain text reads nothing. It judges
 every `lookup`, `query` or `q` call it finds. It accepts four plugins:
 
-- `file` and `template`, which read the tree. The names in their path expressions are names
-  the source reads.
-- `pipe`, only as `lookup('pipe', 'base64 -w0 ' ~ <path>)` with no further argument, the one shape `scripts/lib/k8s_yaml.py:make_lookup`
-  implements. Each piece of the path is a literal with no space or shell metacharacter,
-  `playbook_dir`, or a loop variable over a literal list of such pieces.
+- `b64file`, `file` and `template`, which read the tree. The names in their path expressions
+  are names the source reads.
 - `vars`, only over an attribute of a loop variable whose loop runs over a
   `py_table('CHECKS')` file lookup or over `containers_list | scrape_jobs(...)`. It runs the
   filter, as the render does, and every value of that attribute is a name the source reads.
@@ -20,7 +17,6 @@ Any other call is a problem, because nothing can say what it reads.
 `_live_read_census.py` is the census that calls it.
 """
 
-import re
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -31,9 +27,6 @@ from scrape_jobs import scrape_jobs
 from lib.ansible_jinja_env import make_ansible_env
 
 LOOKUPS = frozenset({"lookup", "query", "q"})
-PIPE_PREFIX = "base64 -w0 "
-# A literal piece of a piped path: no space and no shell metacharacter.
-PATH_PIECE = re.compile(r"[A-Za-z0-9_./-]+")
 # The two variables that hold other variables by name.
 SCOPES = frozenset({"vars", "hostvars"})
 
@@ -71,7 +64,7 @@ class Reader:
     """Reads Jinja sources and records each lookup it accepts or cannot name the reads of.
 
     Attributes:
-        accepted: Each accepted `pipe` or `vars` lookup, as `<plugin> in <where>`.
+        accepted: Each accepted `vars` lookup, as `vars in <where>`.
         vars_names: Every name a `vars` lookup source yields.
         problems: Each lookup whose reads it cannot name.
     """
@@ -130,17 +123,9 @@ class Reader:
         if not (isinstance(plugin, nodes.Const) and isinstance(plugin.value, str)):
             self.problems.append(f"{where}: a lookup whose plugin is not a literal")
             return set()
-        kind = plugin.value.removeprefix("ansible.builtin.")
+        kind = plugin.value
         arg = call.args[1] if len(call.args) > 1 else None
-        if kind in ("file", "template"):
-            return set()
-        if kind == "pipe":
-            if _is_base64_of_a_path(arg, loops) and _is_only_the_command(call):
-                self.accepted.append(f"pipe in {where}")
-                return set()
-            self.problems.append(
-                f"{where}: lookup('pipe') in a shape other than 'base64 -w0 ' ~ <path>"
-            )
+        if kind in ("b64file", "file", "template"):
             return set()
         if kind == "vars":
             if isinstance(arg, nodes.Getattr) and isinstance(arg.node, nodes.Name):
@@ -255,49 +240,6 @@ def _scope_access(node: nodes.Node) -> tuple[str | None, list[nodes.Expr]] | Non
     return None
 
 
-def _is_only_the_command(call: nodes.Call) -> bool:
-    """The call passes the plugin name and the command, and no other argument."""
-    return (
-        len(call.args) == 2
-        and not call.kwargs
-        and call.dyn_args is None
-        and call.dyn_kwargs is None
-    )
-
-
-def _is_path_part(node: nodes.Node, loops: list[nodes.For]) -> bool:
-    """A literal path piece, `playbook_dir`, or a loop variable over literal path pieces."""
-    if isinstance(node, nodes.Const):
-        return isinstance(node.value, str) and bool(PATH_PIECE.fullmatch(node.value))
-    if not isinstance(node, nodes.Name):
-        return False
-    if node.name == "playbook_dir":
-        return True
-    for loop in reversed(loops):
-        if isinstance(loop.target, nodes.Name) and loop.target.name == node.name:
-            items = loop.iter
-            return isinstance(items, (nodes.List, nodes.Tuple)) and all(
-                _is_path_part(item, []) for item in items.items
-            )
-    return False
-
-
-def _is_base64_of_a_path(arg: nodes.Node | None, loops: list[nodes.For]) -> bool:
-    """`'base64 -w0 ' ~ <path>`, where every piece of the path is a path piece.
-
-    A piece is never a shell metacharacter or a space, so the command stays base64 over one
-    file: `'base64 -w0 ' ~ p ~ '; cmd'` does not pass.
-    """
-    if not (isinstance(arg, nodes.Concat) and len(arg.nodes) > 1):
-        return False
-    first, *path = arg.nodes
-    return (
-        isinstance(first, nodes.Const)
-        and first.value == PIPE_PREFIX
-        and all(_is_path_part(piece, loops) for piece in path)
-    )
-
-
 def references(ast: nodes.Template) -> Iterator[str]:
     """Each template name an `{% import %}`, `{% from %}` or `{% include %}` gives as a literal."""
     for node in ast.find_all((nodes.Import, nodes.FromImport, nodes.Include)):
@@ -322,10 +264,7 @@ def template_lookups(playbook_dir: Path, ast: nodes.Template) -> Iterator[str]:
         ):
             continue
         plugin = call.args[0]
-        if (
-            isinstance(plugin, nodes.Const)
-            and str(plugin.value).removeprefix("ansible.builtin.") == "template"
-        ):
+        if isinstance(plugin, nodes.Const) and plugin.value == "template":
             path = _path_value(playbook_dir, call.args[1])
             if path:
                 yield path

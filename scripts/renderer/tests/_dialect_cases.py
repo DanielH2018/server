@@ -351,15 +351,15 @@ CASES = (
     ),
     Case(
         "lookup",
-        "pipe",
-        "{{ lookup('pipe', 'base64 -w0 ' ~ lookup_dir ~ '/text.txt') }}",
+        "b64file",
+        "{{ lookup('b64file', lookup_dir ~ '/text.txt') }}",
         {},
         "cGxhaW4gbGluZQo=",
     ),
     Case(
         "lookup",
         "template",
-        "[{{ lookup('ansible.builtin.template', lookup_dir ~ '/inner.j2') }}]",
+        "[{{ lookup('template', lookup_dir ~ '/inner.j2') }}]",
         {"value": "v"},
         "[inner v\n]",
     ),

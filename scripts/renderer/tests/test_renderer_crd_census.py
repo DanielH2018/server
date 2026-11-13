@@ -28,7 +28,7 @@ from lib.k8s_roles import K8S_ROLES, role_fields
 from lib.repo_paths import HOST_VARS
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE, KUSTOMIZATION
-from renderer.renderer_lib.cluster import flux_owned_tags
+from lib.k8s_roles import k8s_tags
 from renderer.renderer_lib.ordering import split_kind
 
 DOTENV = "peanut_password=ENC[AES256_GCM,data:eA==,iv:aQ==,tag:dA==,type:str]\n"
@@ -137,7 +137,7 @@ def test_no_render_target_renders_a_crd_under_prune(tmp_path):
     fields, problems = role_fields(targets)
     assert problems == []
     # Non-vacuity: each named member renders its kinds, is flux-owned, and its lever is off.
-    assert set(MEMBERS) <= flux_owned_tags()
+    assert set(MEMBERS) <= k8s_tags()
     for member, crd in MEMBERS.items():
         assert crd in crds.get(member, set()), member
         assert fields[member].get("prune") is False, member
