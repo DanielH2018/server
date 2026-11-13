@@ -286,6 +286,40 @@ def test_prose_edited_says_whether_the_diff_changed_the_citing_section(
     assert rows == [_row("a/b.py:PORT", "symbol", "moved", edited)]
 
 
+def _glance(port: int) -> str:
+    return f"<!-- generated_from: a/b.py -->\nport {port}\n<!-- /generated_from -->\n"
+
+
+@pytest.mark.parametrize(
+    ("doc_base", "doc_head", "unit", "edited"),
+    [
+        (
+            _doc("a/b.py:PORT") + _glance(1),
+            _doc("a/b.py:PORT") + _glance(2),
+            "CLAUDE.md#Ports",
+            False,
+        ),
+        (
+            _doc("a/b.py:PORT"),
+            _doc("a/b.py:PORT").replace("## Ports", "## Listen ports"),
+            "CLAUDE.md#Listen ports",
+            False,
+        ),
+        ("# Top\n", _doc("a/b.py:PORT"), "CLAUDE.md#Ports", True),
+    ],
+    ids=["only-a-generated-block-changed", "heading-renamed", "section-added"],
+)
+def test_prose_edited_reads_hand_written_prose_only(
+    tmp_path, doc_base, doc_head, unit, edited
+):
+    rows = _notice(
+        tmp_path,
+        {_DOC: doc_base, "a/b.py": "PORT = 1\n"},
+        {_DOC: doc_head, "a/b.py": "PORT = 2\n"},
+    )
+    assert rows == [Notice(unit, "a/b.py:PORT", "symbol", "moved", edited)]
+
+
 def test_each_citing_section_lists_the_atom_once(tmp_path):
     doc = _doc("a/b.py:PORT", "a/b.py:PORT") + "\n## Hosts\nSee `a/b.py:PORT`.\n"
     rows = _notice(

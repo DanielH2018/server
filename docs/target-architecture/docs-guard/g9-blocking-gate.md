@@ -1,6 +1,7 @@
 # G9 — The notice blocks, and an ack is a line in a commit message
 
-Status: PLANNED.
+Status: IN PROGRESS. Step 1, the comparison, landed as the fix for
+[#8419](https://github.com/DanielH2018/server/issues/8419).
 
 Depends on: [G7](g7-removed-names.md), whose doc predicate the replay reads.
 
@@ -24,20 +25,22 @@ ack line.
 ## Baseline at `4d85f67c5`
 
 - The 30-day replay showed 90 moved rows, and 47 read as edited in the same commit.
-- That split is inflated. The notice compares raw section bodies, so a regenerated
-  `## At a glance` block counts as a prose edit, and a section whose key is absent at the
-  base also reads as edited
-  ([#8419](https://github.com/DanielH2018/server/issues/8419)).
+- The notice compared raw section bodies, so a regenerated `## At a glance` block or a
+  renamed heading read as a prose edit
+  ([#8419](https://github.com/DanielH2018/server/issues/8419)). Step 1 corrected the
+  comparison. The correction changed no row in the window: the replay at `c9de2bd37`
+  showed 48 of 93 moved rows edited, before it and after it. The split the earlier
+  decisions read was therefore not inflated by this defect.
 - Nobody has measured how many unedited rows left a false sentence behind. The G3 build
   rule compared prose-edit ratios, which cannot show that.
 
 ## Design
 
-- **Fix the comparison first.** Strip generated blocks from both bodies with the lint's
-  `_GENERATED` pattern before comparing. Count a section whose key is absent at the base
-  as unedited, so a heading rename or a moved paragraph clears nothing.
-- **Then measure.** Re-run the 30-day replay with that comparison, over the doc set G7
-  defines. Grade every unedited row and a sample of the edited rows. The gate blocks only
+- **The comparison reads hand-written prose.** Step 1 drops generated blocks from both
+  bodies before comparing, so a hook's rewrite of a block clears nothing. A section whose
+  heading the base lacks reads as unedited when a base section holds the same prose, which
+  is a renamed heading. A section the PR wrote reads as edited.
+- **Measure.** Re-run the 30-day replay over the doc set G7 defines. Grade every unedited row and a sample of the edited rows. The gate blocks only
   when both thresholds hold:
     1. at least 20% of the graded unedited rows left a false sentence;
     1. the projected acks stay below the 116 lock commits in 30 days that ADR-0023 records.
@@ -72,7 +75,7 @@ ack line.
 
 ```diff
  scripts/lib/facts/notice.py
-+  edited: bodies compared after stripping generated blocks; a key absent at base is unedited
++  edited: prose compared without generated blocks; a renamed heading is unedited (step 1)
 +  a short id per section; --gate: exit 1 on a section neither edited nor acked
  .github/workflows/ci.yml
 -  step "Notice: CLAUDE.md sections citing atoms this PR moved"  (continue-on-error, hooks job)
@@ -93,7 +96,8 @@ ack line.
 ## Steps, as PRs
 
 1. The comparison fix, and the 30-day replay re-run with it
-   ([#8419](https://github.com/DanielH2018/server/issues/8419)).
+   ([#8419](https://github.com/DanielH2018/server/issues/8419)). Done: the replay's counts
+   did not move.
 2. The grading of the unedited rows and the ack projection, recorded in this file. The
    slice stops here when a threshold fails.
 3. `--gate`, the section id, the ack line and `squash_body`, with the CI step behind
@@ -118,8 +122,9 @@ projection is re-checked after G11's first batches.
 
 - The share of unedited moved rows that left a false sentence. Step 2 measures it.
 - The count of content citations G11 produces, which the ack projection scales to.
-- A trivial edit, a value-fixer rewrite or a rote ack satisfies the gate. The audit
-  samples edited and acked sections.
+- A trivial edit, a value-fixer rewrite or a rote ack satisfies the gate. So does a
+  paragraph moved into another section, which reads as edited there. The audit samples
+  edited and acked sections.
 - A PR green at its base misses a section that master adds afterwards.
 
 ## Complexity delta
