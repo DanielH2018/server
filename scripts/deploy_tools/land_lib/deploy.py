@@ -39,8 +39,8 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
     its own wording, because a refused broad derivation is not the same fact and an operator
     reading `reaches no service tag` about a 330-file PR goes looking for a different bug.
 
-    A setup role ends `nothing-to-deploy`: the host package applies it, and the host wait
-    covers a change to a host's package.
+    A host-only change ends `nothing-to-deploy`: its host package ships it, and the host wait
+    has already covered the hosts whose package the PR changed.
     """
     pr = ln.opts.pr
     if ln.plane:
