@@ -906,10 +906,10 @@ jobs:
               echo "::warning::last-good is at '$lg', not the '$RESET_DIGEST' decide read: the run $SUPERSEDES settled first, so this run moves nothing"
               exit 0
             fi
-            flux tag artifact "oci://$repo:sha-$TARGET" --tag superseding
+            flux tag artifact "oci://$repo@$DIGEST" --tag superseding
             echo "tagged sha-$TARGET superseding: it supersedes the verification of $SUPERSEDES"
           fi
-          flux tag artifact "oci://$repo:sha-$TARGET" --tag prod
+          flux tag artifact "oci://$repo@$DIGEST" --tag prod
           printf 'moved=true\nmoved_at=%s\n' "$moved_at" >> "$GITHUB_OUTPUT"
 
       # A write that fails every try leaves PROD_DIGEST behind prod, which the deploy-pipeline
@@ -1130,6 +1130,8 @@ jobs:
           eval "$RETRY_FUNCTIONS"
           printf '%s' "$TARGET" | grep -Eqx '[0-9a-f]{40}' \
             || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
+          printf '%s' "$DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}' \
+            || { echo "::error::decide's digest '$DIGEST' is not sha256:<64 hex>"; exit 1; }
           repo=ghcr.io/danielh2018/homelab-manifests
 
           # A verdict on T counts only while `prod` still names T's digest (D7.1). Once a
@@ -1182,7 +1184,7 @@ jobs:
           echo "owned=true" >> "$GITHUB_OUTPUT"
 
           if [ "$VERDICT" = good ]; then
-            if ! { ghcr_login && flux tag artifact "oci://$repo:sha-$TARGET" --tag last-good; }; then
+            if ! { ghcr_login && flux tag artifact "oci://$repo@$DIGEST" --tag last-good; }; then
               echo "::error::moving last-good to sha-$TARGET failed"
               exit 1
             fi
@@ -1207,7 +1209,7 @@ jobs:
             fi
             echo "stateful_hold=$hold" >> "$GITHUB_OUTPUT"
             echo "DEPLOY_HOLD set to '$hold': T changes snapshot role(s) $STATEFUL, so prod stays on sha-$TARGET"
-            if ! { ghcr_login && flux tag artifact "oci://$repo:sha-$TARGET" --tag held; }; then
+            if ! { ghcr_login && flux tag artifact "oci://$repo@$DIGEST" --tag held; }; then
               echo "::error::tagging sha-$TARGET held failed, so the next run after a clear waits as in flight"
               exit 1
             fi
@@ -1222,7 +1224,7 @@ jobs:
               exit 1
             fi
             echo "DEPLOY_HOLD set to '$TARGET': T changes forward-only $NO_RESET, so prod stays on sha-$TARGET"
-            if ! { ghcr_login && flux tag artifact "oci://$repo:sha-$TARGET" --tag held; }; then
+            if ! { ghcr_login && flux tag artifact "oci://$repo@$DIGEST" --tag held; }; then
               echo "::error::tagging sha-$TARGET held failed, so the next run after a clear waits as in flight"
               exit 1
             fi
