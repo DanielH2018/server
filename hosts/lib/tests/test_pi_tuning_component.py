@@ -5,7 +5,7 @@
 the move added: each edit adopts the line Ansible wrote, the memory and log numbers still fit the
 128 MB log2ram tmpfs, the patched Log2Ram differs from upstream only by `--sparse`, and the
 textfile directory exists with M3's owner contract. The unit tests of the node exporter and the
-forced command stay beside the code they read: `hosts/tests/` and `ansible/tests/services/`.
+forced command stay beside the code they read: `hosts/tests/` and `tests/services/`.
 
 Run: uv run pytest hosts/lib/tests/test_pi_tuning_component.py
 """
@@ -299,7 +299,7 @@ def test_the_key_pins_the_directory_the_cronjob_pulls(package):
         e for e in package.lines if e["path"].endswith("/.ssh/authorized_" + "keys")
     ]
     k8s = yaml_fast.safe_load(
-        (REPO / "ansible/roles/k8s/pi-peer-backup/defaults/main.yml").read_text()
+        (REPO / "k8s/roles/pi-peer-backup/defaults/main.yml").read_text()
     )["pi_peer_backup_src_dir"]
     pinned = re.search(
         r'command="/usr/local/bin/pi-peer-backup-shell (\S+)"', edit["line"]

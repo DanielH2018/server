@@ -1,0 +1,104 @@
+# docs — the MkDocs site, and why the build does not happen here
+
+Serves the built MkDocs Material site over `docs/`, behind Traefik and Authelia, so the repo's
+runbooks, design documents and generated reference pages are readable in a browser.
+
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
+- **Applied by:** Flux, through `promote`; `land.sh --tags=docs` gates the rollout
+- **Image:** `nginxinc/nginx-unprivileged` (`docs_k8s_image`)
+- **Route:** `docs.<domain>` · `docs.local.<domain>`, Authelia one_factor
+- **Claims:** none (no PVC)
+<!-- /generated_from -->
+
+- **Serves static files and nothing else** (an unprivileged nginx).
+- **Host:** pinned to `daniel-box` (`docs_k8s_node`), because it bind-mounts that host's built
+  site.
+- **Serves:** `docs_host_site_dir` (`/home/<user>/docs-site`), read-only.
+- **Public as well as LAN** — the `ingressroute()` call passes no `public` argument, and the
+  macro defaults to public. The route was LAN-only until 2026-08-24, and
+  `templates/ingressroute.yaml.j2` carries the reasoning for the flip. Everything under
+  `docs/` is served, so what is excluded from the build is a publishing decision — see
+  `mkdocs.yml`'s `exclude_docs`.
+- **Built by:** `scripts/docs/build_docs.py`, run by `homelab-docs-refresh.service`. **Not by this role** —
+  a deploy renders manifests, it does not rebuild the site.
+- **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry is
+  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
+  `promote` publishes and verifies the next bundle. authelia and traefik are flux-owned too, so
+  the Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
+  Kustomizations are Ready. The Deployment is `RollingUpdate` with one replica, so a roll keeps
+  one pod serving.
+- **Where the task went.** The Kustomization's `wait` replaces the
+  rollout wait, and the restart checksum the renderer stamps replaces the shared restart, so
+  an nginx config edit still rolls the pod. The site directory is the host package's (below).
+
+## The build runs on the host, never in the pod
+
+The pod holds no repo checkout, no `uv`, and no git credential. `scripts/docs/build_docs.py` runs the
+reference generators and `mkdocs build` on `daniel-box`, which already has all three.
+
+Getting the repo into a pod would mean either baking it into an image on every commit or giving
+a container a deploy key. Neither buys anything: the one host that must have the checkout already
+has it, and it is the same host the hostPath pins the pod to.
+
+**Consequence:** a deploy of this role never changes what the site says. If a page looks stale
+after a deploy, the cron is what to check, not the rollout.
+
+## `docs_host_site_dir` sits outside the repo checkout deliberately
+
+`/home/<user>/docs-site`, not `<repo>/site`.
+
+The GitOps tick rewrites the repo tree with `git pull` every 30 minutes. Serving a directory
+inside that tree would mean a pull can replace files mid-request. The built site is derived
+output with no reason to live under version control, so it lives beside it instead.
+
+`scripts/docs/build_docs.py` also builds to a sibling directory and renames into place, because
+`mkdocs build` cleans its `--site-dir` first — building straight into the served path would blank
+the site for several seconds on every run and leave it blank after any failure.
+
+## The node pin is load-bearing
+
+`nodeSelector: kubernetes.io/hostname: {{ k8s_primary_node }}`, which resolves to
+`daniel-box` on prod.
+
+hostPath is node-local. Unpinned, the pod can schedule onto `daniel-server`, mount a path that
+does not exist there, and serve an empty tree. That failure reads as "the build is broken" rather
+than as a scheduling mistake, which is the expensive kind of wrong.
+
+The `hostPath` volume is `type: Directory`, not `DirectoryOrCreate`. kubelet would create a
+missing path as root, and the build script runs as the unprivileged user, so it could then never
+write into it. `hosts/components/docs-refresh/tmpfiles.d/homelab-docs-site.conf.j2` creates the directory
+with the right ownership first, through the daniel-box host package: D5 moved it out of this
+role, because a Flux-owned role runs no task, and H7.10a moved it from the setup plane into
+that component. The docs-refresh service runs `systemd-tmpfiles --create` on the file in
+`ExecStartPre=`, and `systemd-tmpfiles-setup.service` applies it at boot. The file's path must
+equal this role's `docs_host_site_dir`, which
+`hosts/lib/tests/test_docs_refresh_component.py` holds.
+
+## `/healthz` is answered by nginx, not from the mounted tree
+
+The probe must not depend on the site being built. A cluster brought up before the first cron run
+has an empty `docs_host_site_dir`, and the right behaviour there is a 404 on `/`, not a
+crashlooping pod — "the site is not built" is an operator problem, not a rollout failure.
+
+## Verifying a change actually landed
+
+Under Flux, `promote`'s `verify` gates the rollout, and a merge draws no `land.sh` health run.
+`uv run python scripts/diagnostics/probe.py health docs` still reads the pod and the route by hand. It
+cannot see whether the site rendered: the Authelia middleware answers with a 302 before Traefik
+reaches nginx, so a green probe plus a working redirect proves nothing about content.
+
+To check content, dial the Service directly and bypass the middleware:
+
+```bash
+IP=$(kubectl get svc docs -n homelab -o jsonpath='{.spec.clusterIP}')
+curl -s "http://$IP:8080/" | grep -o "<title>[^<]*</title>"
+```
+
+## Born fenced
+
+The pod template carries `netpol-baseline: enforced`, and `docs` is listed in
+`BORN_FENCED_ROLES` in `tests/k8s/test_netpol_baseline_labels.py`. Traefik is its only
+caller and the pod dials nothing at all — the site is built on the host, so the container never
+fetches, clones or resolves. Adding the label without listing it there fails that test, and
+`docs/networkpolicy-default-deny.md` records the same set in prose.

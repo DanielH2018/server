@@ -21,7 +21,7 @@ real failures local full runs caught that week, the guard set catches 17. The ot
 cross-role census tests far from the change, now arrive as a red CI run and its fix round.
 
 THE RULE. Inside a fan-out batch's worktree, a pytest stage is denied when it names no test
-path, or when the paths it names select more than `MAX_MODULES` test modules. `ansible/tests`
+path, or when the paths it names select more than `MAX_MODULES` test modules. `tests`
 alone holds 537. Naming paths is the escape that matters, so a stage that names several
 broad directories to get round the first arm meets the second. `--collect-only` and the
 informational flags (`--help`, `--version`, `--markers`, `--fixtures`) are allowed.
@@ -47,7 +47,7 @@ from _hook_common import (
     strip_shell_keywords,
 )
 
-# `scripts/dev/repo_guards.py` selects 143 modules; `ansible/tests` alone selects 537 and the whole
+# `scripts/dev/repo_guards.py` selects 143 modules; `tests` alone selects 537 and the whole
 # suite about 1,337.
 MAX_MODULES = 300
 

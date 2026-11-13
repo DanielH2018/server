@@ -23,22 +23,20 @@ def repo(tmp_path) -> Path:
 
 
 def test_a_commit_without_hosts_unpacks_the_trees_it_holds(repo, tmp_path):
-    sha = commit(
-        repo, "c", **{"ansible/a.yml": "a", "scripts/s.py": "s", "docs/d.md": "d"}
-    )
+    sha = commit(repo, "c", **{"k8s/a.yml": "a", "scripts/s.py": "s", "docs/d.md": "d"})
     gate.extract(sha, tmp_path / "out", TREES, repo=repo)
-    assert (tmp_path / "out/ansible/a.yml").is_file()
+    assert (tmp_path / "out/k8s/a.yml").is_file()
     assert (tmp_path / "out/scripts/s.py").is_file()
     assert not (tmp_path / "out/docs").exists()
 
 
 def test_a_commit_with_hosts_unpacks_it_too(repo, tmp_path):
-    sha = commit(repo, "c", **{"ansible/a.yml": "a", "hosts/lib/host_lib.py": "h"})
+    sha = commit(repo, "c", **{"k8s/a.yml": "a", "hosts/lib/host_lib.py": "h"})
     gate.extract(sha, tmp_path / "out", TREES, repo=repo)
     assert (tmp_path / "out/hosts/lib/host_lib.py").is_file()
 
 
 def test_a_commit_holding_none_of_the_named_trees_unpacks_nothing(repo, tmp_path):
     sha = commit(repo, "c", **{"docs/d.md": "d"})
-    gate.extract(sha, tmp_path / "out", ("ansible", "hosts"), repo=repo)
+    gate.extract(sha, tmp_path / "out", ("k8s", "hosts"), repo=repo)
     assert list((tmp_path / "out").iterdir()) == []

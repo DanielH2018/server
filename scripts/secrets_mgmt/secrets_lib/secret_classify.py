@@ -2,7 +2,7 @@
 
 Pure name matching, no I/O and no imports outside the standard library: `secret_registry.sync()`
 classifies each newly registered secret with this, and an operator overrides the verdict by
-editing that secret's `tier` in `ansible/secret_rotation.yml` (`sync` preserves an override).
+editing that secret's `tier` in `secrets/secret_rotation.yml` (`sync` preserves an override).
 
 The tiers themselves, and the cadence each carries, are documented in
 `scripts/secrets_mgmt/secret_rotation.py`'s module docstring and published as

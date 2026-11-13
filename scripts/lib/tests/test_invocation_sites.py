@@ -105,7 +105,7 @@ def test_claude_hook_files_skips_a_test_file(tmp_path):
 
 def test_systemd_exec_lines_finds_an_execstart_line(tmp_path):
     _write(
-        tmp_path / "ansible" / "roles" / "r" / "templates" / "thing.service.j2",
+        tmp_path / "k8s" / "roles" / "r" / "templates" / "thing.service.j2",
         """
         [Unit]
         Description=Thing
@@ -120,7 +120,7 @@ def test_systemd_exec_lines_finds_an_execstart_line(tmp_path):
 
 def test_systemd_exec_lines_skips_a_non_execstart_line(tmp_path):
     _write(
-        tmp_path / "ansible" / "roles" / "r" / "templates" / "thing.service.j2",
+        tmp_path / "k8s" / "roles" / "r" / "templates" / "thing.service.j2",
         """
         [Unit]
         Description=scripts/dev/thing.py is not an ExecStart line

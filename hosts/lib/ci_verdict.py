@@ -39,7 +39,7 @@ _CI_NO_VERDICT_CONCLUSIONS = frozenset(
 # The rule lives in THIS module because it is the one module both runtimes import: the deployer
 # ships only its role's `files/`, so a rule under `scripts/` would not exist on the host, while
 # `scripts/deploy_tools/await_ci.py` already imports this file.
-# ENFORCED: `ansible/tests/repo/test_ci_jobs_verdict_matches_gate.py` holds the names below equal
+# ENFORCED: `tests/repo/test_ci_jobs_verdict_matches_gate.py` holds the names below equal
 # to the gate's `needs` in .github/workflows/ci.yml and runs the gate's own script against
 # `jobs_verdict`.
 CI_GATE_NAME = "prek (lint + validate + tests + secrets)"

@@ -16,13 +16,13 @@ import shlex
 from pathlib import Path
 
 import pytest
-from _helpers import ANSIBLE
+from _helpers import REPO
 from _setup_render import CLAUDE_CODE, render_component_text, role_context
 from deploy_tools.land_lib import handoff, options, policy
 from fanout_lib.target import branch_name
 from lib.worktree_owner import WORKTREE_PREFIX_ENV
 from lib import yaml_fast
-from lib.ansible_jinja_env import template_env
+from lib.guard_jinja_env import template_env
 
 ROLE = CLAUDE_CODE
 UNIT = "claude-land@.service.j2"
@@ -73,7 +73,7 @@ def test_the_unit_runs_land_sh_as_the_operator_from_the_primary_checkout() -> No
     (exec_start,) = directive(rendered, "ExecStart")
     argv = shlex.split(exec_start)
     land = f"{checkout}/scripts/deploy_tools/land.sh"
-    assert land in argv and (ANSIBLE.parent / "scripts/deploy_tools/land.sh").is_file()
+    assert land in argv and (REPO / "scripts/deploy_tools/land.sh").is_file()
 
 
 def test_a_landing_that_fails_or_is_refused_pages_through_its_alert() -> None:
@@ -121,7 +121,7 @@ def test_the_branch_prefix_is_the_one_the_fence_lets_the_agent_push(
     monkeypatch,
 ) -> None:
     prefix = environment(unit())[options.REQUIRE_BRANCH_PREFIX_ENV]
-    fence = defaults(ANSIBLE.parent / "hosts" / "components" / "github-checks")[
+    fence = defaults(REPO / "hosts" / "components" / "github-checks")[
         "github_fence_ruleset_exclude"
     ]
     # Master is excluded too, so the agent's account can merge a PR; the lander still lands
@@ -310,7 +310,7 @@ LANDER_FILES = [
 
 @pytest.mark.parametrize("path", LANDER_FILES)
 def test_a_pr_changing_the_lander_needs_the_operator(path, tmp_path) -> None:
-    assert (ANSIBLE.parent / path).is_file(), f"{path} moved; update this list"
+    assert (REPO / path).is_file(), f"{path} moved; update this list"
     assert policy.approval_hits([{"filename": path}], floor_prefixes(tmp_path)) == [
         path
     ]
@@ -342,13 +342,13 @@ def test_a_pr_changing_a_role_named_like_cluster_base_lands_without_the_operator
 OFF_THE_FLOOR = [
     "docs/landing.md",
     "hosts/components/claude-code/defaults/main.yml",
-    "ansible/inventory/host_vars/daniel-box.yml",
+    "inventory/host_vars/daniel-box.yml",
 ]
 
 
 @pytest.mark.parametrize("path", OFF_THE_FLOOR)
 def test_a_pr_off_the_floor_lands_without_the_operator(path, tmp_path) -> None:
-    assert (ANSIBLE.parent / path).is_file(), f"{path} moved; update this list"
+    assert (REPO / path).is_file(), f"{path} moved; update this list"
     assert policy.approval_hits([{"filename": path}], floor_prefixes(tmp_path)) == []
 
 

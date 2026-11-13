@@ -24,7 +24,7 @@ from diagnostics.probe_lib.health_rollout import seconds_since
 
 # RBAC decides which of two paths this gate can take: trigger a fresh run itself, the way the
 # retired `k8s/cronjob-gate` role did at deploy time, or fall back to reading the most recent existing run.
-# probe.py runs as `homelab-readonly` (see `roles/k8s/cluster-base/templates/readonly-rbac.yaml.j2`),
+# probe.py runs as `homelab-readonly` (see `k8s/roles/cluster-base/templates/readonly-rbac.yaml.j2`),
 # bound to the built-in `view` ClusterRole plus one additive ClusterRole, neither granting any
 # write verb. Verified live, running as that identity:
 #   k3s kubectl auth can-i create jobs -n homelab   -> no
@@ -245,7 +245,7 @@ def declared_suspended(docs, default_namespace):
 # The marker a CronJob carries when nothing runs it per revision and its schedule is the gate
 # (#6128). The restore drill carries it: a gate Job would run a real restore beside the
 # scheduled one, under the same `restore-drill-<pvc>` name
-# (`ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py:UNGATED_BY_DESIGN`).
+# (`tests/deploy/test_cronjob_only_roles_include_the_gate.py:UNGATED_BY_DESIGN`).
 SCHEDULE_GATE = "homelab/gate"
 SCHEDULE_GATE_VALUE = "schedule"
 

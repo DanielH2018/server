@@ -6,7 +6,7 @@ name: image-leg
 # and this job is the only place those tests run.
 #
 # A separate workflow rather than a ci.yml job, on purpose. Every ci.yml job must be read by the
-# `prek` gate (ansible/tests/repo/test_every_ci_job_is_gated.py), which would make this one a
+# `prek` gate (tests/repo/test_every_ci_job_is_gated.py), which would make this one a
 # merge blocker through that required context and add it to the deployer's gate lists. The
 # operator decides later whether this check is required, as image-smoke.yml's is. Until then a
 # red run is visible on the PR and blocks nothing.
@@ -19,10 +19,10 @@ on:
   pull_request:
     paths:
       - ".github/workflows/image-leg.yml"
-      - "ansible/roles/k8s/longhorn-restore-drill/**"
-      - "ansible/tests/longhorn/**"
+      - "k8s/roles/longhorn-restore-drill/**"
+      - "tests/longhorn/**"
       - "hosts/lib/tests/test_pi_compose_network_measurement.py"
-      - "ansible/tests/_shell_render.py"
+      - "tests/_shell_render.py"
       - "scripts/lib/proc_testing.py"
       - "pyproject.toml"
       - "uv.lock"
@@ -56,5 +56,5 @@ jobs:
       # Compose network measurement (H7.26) print Compose's own output into this log.
       - name: Run the image tests
         run: >-
-          uv run python -m pytest --color yes -n 0 -s -m image ansible/tests/longhorn/
+          uv run python -m pytest --color yes -n 0 -s -m image tests/longhorn/
           hosts/lib/tests/test_pi_compose_network_measurement.py

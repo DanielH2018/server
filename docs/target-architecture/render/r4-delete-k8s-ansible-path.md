@@ -23,7 +23,7 @@ Unblocks: H7, which removes Ansible and ansible-core once no slice needs them
 ## Goal and exit criterion
 
 After R4, no Ansible task renders, applies, prunes, drains, verifies or records anything for
-a k8s service. The roles under `ansible/roles/k8s/` keep only what the renderer reads:
+a k8s service. The roles under `k8s/roles/` keep only what the renderer reads:
 templates, defaults, files and their tests. Two runbook roles keep their tasks until H7 (exit
 1). `homelab-render` is the only render path, and it runs with ansible-core unimportable, so
 H7 can remove ansible-core.
@@ -36,7 +36,7 @@ or changes how the renderer reads the tree without changing a rendered byte.
 
 **Exit criterion.** Six checks, all green at one master commit:
 
-1. **The path is gone.** `git ls-files 'ansible/roles/k8s/*/tasks/*'` prints exactly the
+1. **The path is gone.** `git ls-files 'k8s/roles/*/tasks/*'` prints exactly the
    runbook allowlist that PR 1 records. PR 8 adds a test that asserts the set equals that
    allowlist. At `70591c307` the allowlist would be `volume-revert` (`main.yml`,
    `claim.yml`) and `longhorn-api` (`main.yml`, `resolve.yml`). D5.2 makes
@@ -93,7 +93,7 @@ re-measures every item and drops what D5 or D6 already deleted. Since the 2026-1
 R4.1 can merge while D6 is still in flight, so R4.5 and R4.7 re-measure their own items
 again (*Steps, as PRs*, *The edge to D6, narrowed*).
 
-- **86 task files, 9,635 lines,** under `ansible/roles/k8s/*/tasks/`. 57 of them include
+- **86 task files, 9,635 lines,** under `k8s/roles/*/tasks/`. 57 of them include
   `k8s/manifests`, and nine include `k8s/image-builder`.
 - **The manifests role** holds eight task files, `files/secret_hmac.py`, its tests and
   `defaults/main.yml`. Its `CLAUDE.md` documents the render, apply, prune, drain, digest and
@@ -104,7 +104,7 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
   `ansible/tasks/k8s_batch.yml` (32 lines). Two post_tasks gate the play:
   `k8s_stabilise_gate.yml` (109 lines) and `k8s_image_drift_gate.yml` (131 lines).
   `scripts/renderer/template_filters/k8s_retire.py` has one caller, `k8s_retire.yml`, which loops over
-  `k8s_retired_services` in `ansible/inventory/group_vars/all.yml`. D2 adds the
+  `k8s_retired_services` in `inventory/group_vars/all.yml`. D2 adds the
   `ansible_owned` filter to `scripts/renderer/template_filters/toposort.py`, and D6's ownership table
   assigns its deletion to R4.
 - **Render metadata lives in task files.** 43 task files outside the `manifests` and
@@ -122,7 +122,7 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
   netpol-baseline, observability, pihole, scrutiny, traefik and uptime-kuma. authelia and
   traefik build theirs with folded Jinja expressions. headlamp, netpol-baseline and pihole pass
   `manifests_deferred_files`, which places files in the `<tag>-deferred` Kustomization (C3).
-  n8n includes `k8s/image-builder` twice. All 63 role directories under `ansible/roles/k8s/`
+  n8n includes `k8s/image-builder` twice. All 63 role directories under `k8s/roles/`
   have a `defaults/main.yml`.
 - **Readers of role task files.** Seven, and the first one falls back silently:
     - `scripts/lib/k8s_roles.py:_named_files` reads `roles/<role>/tasks/main.yml` textually
@@ -141,13 +141,13 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
     - `scripts/dev/new_k8s_service.py` scaffolds a `tasks/main.yml`.
     - `scripts/docs/gen_role_glance.py` names `tasks` in its role readers and in the marker
       it writes into every k8s role's `CLAUDE.md`.
-    - `ansible/tests/deploy/test_image_builder_content_tag.py` reads
+    - `tests/deploy/test_image_builder_content_tag.py` reads
       `TASKS = ROLE / "tasks" / "main.yml"`, and fails with "no set_fact assigns" when the
       expression is missing.
 - **Task-made facts that templates read.** R1's census found these, all derivable from the
   tree:
     - `image_builder_content_tag`, set by the task "Compute the content tag" in
-      `ansible/roles/k8s/image-builder/tasks/main.yml`. The task "Publish the content tag to
+      `k8s/roles/image-builder/tasks/main.yml`. The task "Publish the content tag to
       the play" adds it to `k8s_built_image_tags`, which nine image pins read.
     - Four script checksums: `monitor_bridge_script_checksum` in monitor-bridge's
       `tasks/main.yml`, `autofix_bridge_script_checksum` in autofix-bridge's, and the two
@@ -158,13 +158,13 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
 - **Seven utility roles** are reached only through `include_role`: `manifests`,
   `image-builder` (ten include sites), `cronjob-gate` (configarr and pi-peer-backup; retired in #5716),
   `arr-notification`, `volume-snapshot`, `volume-revert` and `longhorn-api`. `volume-revert`
-  has one caller, the `include_role` in `ansible/roles/k8s/manifests/tasks/main.yml`, and it
-  includes `k8s/longhorn-api` itself. The deployer and `ansible/tests/longhorn/` also name
+  has one caller, the `include_role` in `k8s/roles/manifests/tasks/main.yml`, and it
+  includes `k8s/longhorn-api` itself. The deployer and `tests/longhorn/` also name
   the last three.
 - **Utility roles hold renderer inputs outside `tasks/`.** D5.4 renders each image's context
-  from `ansible/roles/k8s/image-builder/templates/context-configmap.yaml.j2`. D5's
+  from `k8s/roles/image-builder/templates/context-configmap.yaml.j2`. D5's
   `sonarr-verify` and `radarr-verify` Jobs run
-  `ansible/roles/k8s/arr-notification/files/seed_arr_notification.py`. The manifests role's
+  `k8s/roles/arr-notification/files/seed_arr_notification.py`. The manifests role's
   `defaults/main.yml` holds `manifests_prune: true` and `manifests_shared_defaults`.
   `scripts/lib/k8s_roles.py:SHARED_MANIFEST_DEFAULTS` mirrors the second, and
   `scripts/lib/render_context.py:render_context` layers role defaults in Ansible's
@@ -208,7 +208,7 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
     - `consumers.py:CROSS_HOST_PUSH_TOKENS` lists `render_records_push_token`.
       `scripts/secrets_mgmt/tests/test_secret_consumers.py:test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual`
       fails on an `auto`-tier registry token that is in neither that set nor a consumer's
-      tags. `ansible/secret_rotation.yml` holds the token at tier `auto`.
+      tags. `secrets/secret_rotation.yml` holds the token at tier `auto`.
     - `scripts/deploy_tools/render_targets.py` has four Python callers at the baseline:
       `render_records.py`, `shared_role_callers.py`, the deployer's `deploy_narrow.py` and
       `test_render_targets.py`. D6 deletes the second and edits the third. R1 adds three
@@ -218,7 +218,7 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
       script, workflow or template calls it.
 - **How the deployer routes R4's paths.** Measured with
   `deploy_changes.py:services_from_changed_paths`:
-    - `ansible/roles/k8s/<role>/tasks/` or `defaults/` gives `k8s={'<role>'}`, the k8s arm
+    - `k8s/roles/<role>/tasks/` or `defaults/` gives `k8s={'<role>'}`, the k8s arm
       that D6.12 deletes.
     - A path under `ansible/roles/setup/render_records/` gives `broad_setup=True` and
       `setup_roles={'render_records'}`. The tick applies `initial_setup.yml --tags
@@ -253,10 +253,10 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
       {'gitops_deploy', 'render_records'}, 'broad_manual': True, 'manual_playbooks':
       {'ansible/initial_setup.yml'}}`. `deploy_defer.py:parks_the_tick` returns true on
       `broad_manual`, so the range parks, and nothing then applies `gitops_deploy`.
-    - `ansible/vars/secrets.yml`, `ansible/secret_rotation.yml` and
+    - `secrets/secrets.yml`, `secrets/secret_rotation.yml` and
       `scripts/secrets_mgmt/consumers.py` together give `{'secrets': True}`, the deployer's
       secrets-defer path.
-    - `ansible/inventory/group_vars/all.yml`, `ansible/deploy.yml`,
+    - `inventory/group_vars/all.yml`, `ansible/deploy.yml`,
       `ansible/tasks/k8s_batch.yml`, `ansible/post_tasks/k8s_stabilise_gate.yml` and every
       file under `scripts/renderer/template_filters/` that R4 edits give `broad_deploy=True`, the
       deploy-plane arm that D6.12 and D6.18 delete. From D6.12 on, the tick fast-forwards past
@@ -266,37 +266,37 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
       `ansible/volume-revert.yml` give an empty change set.
     - D6 keeps the deployer, because it applies the host plane until H7 (D6, *Goal*, and its
       exit 2).
-- **Tests.** 47 files in `ansible/tests/k8s/` and `ansible/tests/deploy/` name the manifests
-  role, the k8s batch or `deploy.yml`. Across `ansible/tests/` and `scripts/`, 102 test files
+- **Tests.** 47 files in `tests/k8s/` and `tests/deploy/` name the manifests
+  role, the k8s batch or `deploy.yml`. Across `tests/` and `scripts/`, 102 test files
   name the manifests role, the k8s batch, `deploy.yml` or one of the two post_tasks. D6
   assigns "about 70 Ansible-mechanics tests" to R4. Some police Ansible mechanics, such as
   `test_manifests_apply_guarded.py`, `test_k8s_dry_run.py` and
   `test_secret_digest_reads_no_content.py`. Others check rendered properties through
-  `ansible/tests/_k8s_render.py`, such as `test_rendered_properties.py` and
+  `tests/_k8s_render.py`, such as `test_rendered_properties.py` and
   `test_k8s_manifests.py`.
-- **Kept tests read the play.** `ansible/tests/_k8s_render.py:deploy_play` raises
+- **Kept tests read the play.** `tests/_k8s_render.py:deploy_play` raises
   `AssertionError("deploy.yml no longer has a play named ...")` once the k8s play is gone.
   Two modules that also hold render-property tests import it:
-    - `ansible/tests/k8s/test_k8s_manifests.py`. Its
+    - `tests/k8s/test_k8s_manifests.py`. Its
       `test_the_k8s_play_does_not_filter_an_already_filtered_list` checks the play itself,
       and `test_the_build_job_mounts_nothing_over_the_serviceaccount_token` checks a render.
-    - `ansible/tests/k8s/test_namespace_resource_defaults.py`. `_homelab_ns_items` builds
+    - `tests/k8s/test_namespace_resource_defaults.py`. `_homelab_ns_items` builds
       the Namespace and LimitRange from the play's pre_task, and its tests check that
       LimitRange's content. `test_the_namespace_apply_reports_changed_per_line` checks the
       play's `changed_when`. D5.1a1 moves the Namespace and LimitRange into the shared kind
       `homelab-namespace`.
 
-  `grep -rlE 'roles/k8s/manifests/tasks|ansible/deploy.yml|"deploy.yml"|k8s_batch|k8s_stabilise_gate|k8s_image_drift_gate|k8s_retire' ansible/tests scripts .claude --include='*.py'`
+  `grep -rlE 'k8s/roles/manifests/tasks|ansible/deploy.yml|"deploy.yml"|k8s_batch|k8s_stabilise_gate|k8s_image_drift_gate|k8s_retire' tests scripts .claude --include='*.py'`
   lists 86 files. That selector misses tests that read a role's `tasks/` or the manifests
   role's `defaults/` and `files/`, all of which PR 8 deletes. An example is
-  `ansible/tests/k8s/test_shared_manifest_defaults.py`, which holds
-  `SHARED_MANIFEST_DEFAULTS` against the manifests role's defaults. Adding `roles/k8s/[a-z0-9-]+/tasks`,
-  `k8s/manifests/(defaults|files)` and `/ "tasks"` to the selector, over `ansible/tests`,
-  `scripts`, `ansible/roles/k8s` and `.claude`, lists 270 files. PR 1 sorts that wider set:
+  `tests/k8s/test_shared_manifest_defaults.py`, which holds
+  `SHARED_MANIFEST_DEFAULTS` against the manifests role's defaults. Adding `k8s/roles/[a-z0-9-]+/tasks`,
+  `k8s/manifests/(defaults|files)` and `/ "tasks"` to the selector, over `tests`,
+  `scripts`, `k8s/roles` and `.claude`, lists 270 files. PR 1 sorts that wider set:
   tests that PRs 3 to 5 retarget at defaults, tests that PR 7c retargets at the renderer,
   tests that PR 6 or PR 8 deletes with their subject, and code that is not a test.
 - **Ansible-core reaches the renderer by three routes.**
-    - `scripts/lib/ansible_jinja_env.py:register_ansible_filters` imports `b64encode`,
+    - `scripts/lib/guard_jinja_env.py:register_ansible_filters` imports `b64encode`,
       `comment`, `get_hash`, `mandatory`, `to_bool` and `to_uuid` from
       `ansible.plugins.filter.core`, and `search` from `ansible.plugins.test.core`.
     - `scripts/renderer/template_filters/toposort.py` and `scripts/renderer/template_filters/authelia_access.py`,
@@ -331,47 +331,47 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
   `ansible/roles/setup/gitops_deploy/defaults/main.yml`: `prek (lint + validate + tests +
   secrets)`, `pull + boot changed images`, `renovate config validator` and
   `flux-deletion-drill` (since 2026-10-25, #6042). The docstring of
-  `ansible/tests/repo/test_every_ci_job_is_gated.py` says a job outside the merge gate "runs
+  `tests/repo/test_every_ci_job_is_gated.py` says a job outside the merge gate "runs
   advisory-only".
 
 The commands behind the counts above, from the repo root at `70591c307`. PR 1 reruns them.
 
 ```bash
-ls ansible/roles/k8s/*/tasks/*.yml | wc -l                                 # 86
-wc -l ansible/roles/k8s/*/tasks/*.yml | tail -1                            # 9635
+ls k8s/roles/*/tasks/*.yml | wc -l                                 # 86
+wc -l k8s/roles/*/tasks/*.yml | tail -1                            # 9635
 wc -l ansible/deploy.yml ansible/tasks/k8s_*.yml ansible/post_tasks/k8s_*.yml
-grep -lE "^\s+(manifests_|image_builder_)[a-z_]+:" ansible/roles/k8s/*/tasks/*.yml \
-  | grep -v "roles/k8s/manifests/\|roles/k8s/image-builder/" | wc -l      # 43
+grep -lE "^\s+(manifests_|image_builder_)[a-z_]+:" k8s/roles/*/tasks/*.yml \
+  | grep -v "k8s/roles/manifests/\|k8s/roles/image-builder/" | wc -l      # 43
 grep -lE "^\s+manifests_(secret_|exclude_|deferred_)?files:" \
-  ansible/roles/k8s/*/tasks/main.yml | grep -v /k8s/manifests/             # 12 roles
-ls ansible/roles/k8s/*/defaults/main.yml | wc -l                           # 63
-ls ansible/roles/k8s/*/tasks/verify*.yml                                   # 6 + verify_secret_keys
-grep -l 'netpol-probe-job' ansible/roles/k8s/*/tasks/*.yml                 # 5 roles
-grep -lE "roles/k8s/manifests|k8s/manifests|k8s_batch|deploy\.yml" \
-  ansible/tests/k8s/*.py ansible/tests/deploy/*.py | wc -l                 # 47
+  k8s/roles/*/tasks/main.yml | grep -v /k8s/manifests/             # 12 roles
+ls k8s/roles/*/defaults/main.yml | wc -l                           # 63
+ls k8s/roles/*/tasks/verify*.yml                                   # 6 + verify_secret_keys
+grep -l 'netpol-probe-job' k8s/roles/*/tasks/*.yml                 # 5 roles
+grep -lE "k8s/roles/manifests|k8s/manifests|k8s_batch|deploy\.yml" \
+  tests/k8s/*.py tests/deploy/*.py | wc -l                 # 47
 grep -rlE "k8s/manifests|k8s_batch|deploy\.yml|k8s_stabilise_gate|k8s_image_drift_gate" \
-  ansible/tests scripts --include='test_*.py' | wc -l                      # 102
+  tests scripts --include='test_*.py' | wc -l                      # 102
 grep -rnE '^\s*(from|import) ansible' scripts/lib ansible/filter_plugins \
-  | grep -v '/tests/'                     # 2 in ansible_jinja_env.py, 5 filter plugins
+  | grep -v '/tests/'                     # 2 in guard_jinja_env.py, 5 filter plugins
 grep -n "is_leftover_dir\|from k8s_autodeploy" scripts/lib/k8s_roles.py
-grep -rn "k8s/volume-revert" --include='*.yml' ansible | grep -v roles/k8s/volume-revert/
+grep -rn "k8s/volume-revert" --include='*.yml' ansible | grep -v k8s/roles/volume-revert/
 grep -rln 'render_records\|k8s-renders.d' scripts ansible/roles/setup/gitops_deploy/files
 grep -n "deploy.sh" docs/longhorn-disaster-recovery.md docs/k3s-etcd-restore.md \
   docs/break-glass.md
-grep -ohE '\b(k8s|manifests)_[a-z_]+' ansible/roles/k8s/volume-revert/tasks/*.yml \
-  ansible/roles/k8s/longhorn-api/tasks/*.yml | sort -u       # the three shared keys
+grep -ohE '\b(k8s|manifests)_[a-z_]+' k8s/roles/volume-revert/tasks/*.yml \
+  k8s/roles/longhorn-api/tasks/*.yml | sort -u       # the three shared keys
 grep -n RETIRED_CLUSTER_NODES scripts/lib/kubectl.py
 grep -n -A4 '^gitops_deploy_expected_ruleset_contexts' \
   ansible/roles/setup/gitops_deploy/defaults/main.yml
 grep -n '^_CHECK_TIMER' \
   ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py
 grep -n 'render_records_push_token' scripts/secrets_mgmt/consumers.py \
-  ansible/secret_rotation.yml
-grep -rln 'deploy_play' ansible/tests scripts --include='*.py'
-grep -rlE 'roles/k8s/[a-z0-9-]+/tasks|k8s/manifests/(defaults|files)|/ "tasks"|roles/k8s/manifests/tasks|ansible/deploy.yml|"deploy.yml"|k8s_batch|k8s_stabilise_gate|k8s_image_drift_gate|k8s_retire' \
-  ansible/tests scripts ansible/roles/k8s .claude --include='*.py' | wc -l  # 270
+  secrets/secret_rotation.yml
+grep -rln 'deploy_play' tests scripts --include='*.py'
+grep -rlE 'k8s/roles/[a-z0-9-]+/tasks|k8s/manifests/(defaults|files)|/ "tasks"|k8s/roles/manifests/tasks|ansible/deploy.yml|"deploy.yml"|k8s_batch|k8s_stabilise_gate|k8s_image_drift_gate|k8s_retire' \
+  tests scripts k8s/roles .claude --include='*.py' | wc -l  # 270
 grep -rln 'render_targets' scripts ansible --include='*.py'      # the file + 4 callers
-grep -n 'import_tasks\|include_tasks' ansible/roles/k8s/*/tasks/*.yml \
+grep -n 'import_tasks\|include_tasks' k8s/roles/*/tasks/*.yml \
   | grep -v '/manifests/\|/image-builder/'   # game-stats imports its checksum files
 grep -n 'merge_method=' scripts/deploy_tools/land_lib/merge.py           # squash, once
 grep -n 'ff-only origin' \
@@ -392,7 +392,7 @@ from deployer_lib.deploy_changes import services_from_changed_paths as s
 cs = s(['ansible/initial_setup.yml',
         'ansible/roles/setup/render_records/defaults/main.yml',
         'ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py',
-        'scripts/secrets_mgmt/consumers.py', 'ansible/inventory/group_vars/all.yml'])
+        'scripts/secrets_mgmt/consumers.py', 'inventory/group_vars/all.yml'])
 print({k: v for k, v in vars(cs).items() if v})                 # PR 6's route
 from deployer_lib.deploy_remediation import broad_remediation as b
 print(b(cs.broad_deploy, cs.broad_setup, cs.setup_roles, 'master',
@@ -473,7 +473,7 @@ R4 checks four things that D5 owns:
 - **Verify successors** have the shape exit 5 names. A Job in the role's own Kustomization
   does not count. Flux applies it with the Deployment and starts it at once, while the old
   pod still serves the Service. That is the trap the header of
-  `ansible/roles/k8s/janitorr/tasks/verify.yml` describes: a readiness wait is satisfied by
+  `k8s/roles/janitorr/tasks/verify.yml` describes: a readiness wait is satisfied by
   the old pod, and only `rollout status` gates on the new ReplicaSet.
 - **Host-side rows** of all nine roles in R1's census have an owner. D5's baseline names two.
 - **traefik's cluster RBAC and CRDs** have a writer outside Ansible. The CRDs come from a URL,
@@ -545,9 +545,9 @@ zero differences. A list of paths requires the differing files to equal that lis
 binds whenever it is present, on any PR. The line is mandatory, and its absence fails the
 job, when the PR touches any of these paths:
 
-- anything under `ansible/roles/k8s/*/tasks/`;
-- a deletion anywhere under `ansible/roles/k8s/`;
-- `scripts/renderer/`, `scripts/lib/k8s_roles.py` or `scripts/lib/ansible_jinja_env.py`;
+- anything under `k8s/roles/*/tasks/`;
+- a deletion anywhere under `k8s/roles/`;
+- `scripts/renderer/`, `scripts/lib/k8s_roles.py` or `scripts/lib/guard_jinja_env.py`;
 - `scripts/renderer/template_filters/`;
 - the renderer's dependency pins, from PR 7e: a `uv.lock` or `pyproject.toml` entry for a
   package in the renderer's dependency closure, Jinja2 and MarkupSafe among them.
@@ -689,7 +689,7 @@ Two tests hold the move:
   renderer imports on every run, import `ansible` first. That run must fail.
 - **The validator and the test harness read the renderer's output.**
   `scripts/validate/k8s_manifests.py` validates the renderer's output instead of rendering
-  on its own; its schema and semantic rules stay. `ansible/tests/_k8s_render.py` renders
+  on its own; its schema and semantic rules stay. `tests/_k8s_render.py` renders
   through the renderer, so the render-property tests read the bytes Flux applies.
 
 ### The renderer's dialect is specified
@@ -719,7 +719,7 @@ PR 7d writes the dialect down and holds the renderer to it.
   PR 8. The literals then outlive H7.
 - **Refusals are part of the spec.** A template that uses a filter, lookup or test off the
   list fails the render with an error that names it. A census test parses every template
-  under `ansible/roles/k8s/` and asserts that each filter, lookup and test it uses is on the
+  under `k8s/roles/` and asserts that each filter, lookup and test it uses is on the
   list. The refusal and the census read one literal in the renderer, and a test asserts
   that the ADR's table names the same set.
 - **PR 10 keeps the subset.** Its reimplemented filters are exactly the ADR's list, and the
@@ -773,11 +773,11 @@ every apply it owes. PR 6's step holds the procedure.
 
 **The push token leaves after the role.** PR 6 keeps `render_records_push_token` in
 `consumers.py:CROSS_HOST_PUSH_TOKENS`. The consumers census fails on an `auto`-tier registry
-token that has no consumer, and the token stays in `ansible/secret_rotation.yml` until the
+token that has no consumer, and the token stays in `secrets/secret_rotation.yml` until the
 operator removes it. A follow-up commit after PR 6 makes these changes at once:
 
 - The operator removes the key from `secrets.yml` with `sops` (**operator-only**).
-- The commit deletes the 3-line registry row from `ansible/secret_rotation.yml` by hand.
+- The commit deletes the 3-line registry row from `secrets/secret_rotation.yml` by hand.
   `secret_rotation.py sync` only reports a stale row and keeps it. After the deletion, `sync`
   prints `sync: 0 added, 0 stale`.
 - The `consumers.py` entry goes.
@@ -834,8 +834,8 @@ The operator retired the tier on 2026-11-07
 the test went in one host-package change.
 
 The commit's description quotes the reads for M6's exit criterion 2:
-`grep -c '_push_token:' ansible/secret_rotation.yml` and the same read on
-`ansible/vars/secrets.yml` both print 0, and `secret_rotation.py audit --check` exits 0.
+`grep -c '_push_token:' secrets/secret_rotation.yml` and the same read on
+`secrets/secrets.yml` both print 0, and `secret_rotation.py audit --check` exits 0.
 
 ### The revert runbook
 
@@ -886,7 +886,7 @@ root is withheld, not suspended*).
        and the restores follow. Only then does the operator hand-apply the root at `prod`,
        and that apply is the resume. No step patches the root's `spec.suspend`. The
        mechanical half of this property is D5's flux-PR text test over the bootstrap
-       section, in `ansible/tests/repo/`. That test reads only the section, bounded by its
+       section, in `tests/repo/`. That test reads only the section, bounded by its
        heading, and fails when the root's apply comes before the restore step or a hand
        apply lacks `--field-manager=kustomize-controller`. Its red fixture is the section
        with step 9 moved before step 7.
@@ -957,19 +957,19 @@ root is withheld, not suspended*).
 ### File tree
 
 ```diff
-- ansible/roles/k8s/*/tasks/                      (86 files, less the runbook allowlist)
-- ansible/roles/k8s/manifests/                     (whole role, once no default is a renderer input)
-- ansible/roles/k8s/{image-builder,arr-notification,volume-snapshot}/tasks/
-  ansible/roles/k8s/{image-builder,arr-notification}/   (templates, files, defaults stay)
-  ansible/roles/k8s/{volume-revert,longhorn-api}/tasks/   (runbook allowlist, until H7)
-  ansible/roles/k8s/*/defaults/main.yml            (+ render metadata from include vars)
+- k8s/roles/*/tasks/                      (86 files, less the runbook allowlist)
+- k8s/roles/manifests/                     (whole role, once no default is a renderer input)
+- k8s/roles/{image-builder,arr-notification,volume-snapshot}/tasks/
+  k8s/roles/{image-builder,arr-notification}/   (templates, files, defaults stay)
+  k8s/roles/{volume-revert,longhorn-api}/tasks/   (runbook allowlist, until H7)
+  k8s/roles/*/defaults/main.yml            (+ render metadata from include vars)
   ansible/deploy.yml                               (- the k8s play)
 - ansible/tasks/k8s_batch.yml, ansible/tasks/k8s_retire.yml
 - ansible/post_tasks/k8s_stabilise_gate.yml, ansible/post_tasks/k8s_image_drift_gate.yml
 - scripts/renderer/template_filters/k8s_retire.py
   scripts/renderer/template_filters/toposort.py               (- ansible_owned; ValueError subclass)
   scripts/renderer/template_filters/authelia_access.py        (ValueError subclass)
-  ansible/inventory/group_vars/all.yml             (- k8s_retired_services, k8s-play-only keys,
+  inventory/group_vars/all.yml             (- k8s_retired_services, k8s-play-only keys,
                                                      render_records_*)
 - ansible/roles/setup/render_records/
   ansible/initial_setup.yml                        (- the render_records entry)
@@ -986,11 +986,11 @@ root is withheld, not suspended*).
   scripts/renderer/shadow_diff.py                  (- compare, stubcheck; keeps stubs, digest,
                                                      roundtrip)
   scripts/lib/k8s_roles.py                         (reads defaults; is_leftover_dir rule)
-  scripts/lib/ansible_jinja_env.py                 (imports the reimplemented filters)
+  scripts/lib/guard_jinja_env.py                 (imports the reimplemented filters)
   scripts/validate/k8s_manifests.py                (validates the renderer's output)
   scripts/dev/new_k8s_service.py                   (scaffolds no tasks/)
   scripts/docs/gen_role_glance.py                  (marker names no tasks)
-  ansible/tests/_k8s_render.py                     (renders through the renderer; - deploy_play)
+  tests/_k8s_render.py                     (renders through the renderer; - deploy_play)
   scripts/validate/render_diff_job.py              (PR 1 adds it, PR 11 removes it)
   .github/workflows/render-diff.yml                (PR 1 adds it, PR 11 deletes it)
   .github/pull_request_template.md                 (PR 1 adds Render-diff:, PR 11 removes it)
@@ -1296,7 +1296,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
       At R4.5's base, `scripts/validate/render_diff_gates.py` also imported it, for its default
       `targets`. R4.5 repoints that import at `renderer_lib/targets.py`, which lists the same
       66 tags on 2026-11-06.
-    - **Stale sections.** Edit `ansible/roles/k8s/manifests/CLAUDE.md#Release records`, which
+    - **Stale sections.** Edit `k8s/roles/manifests/CLAUDE.md#Release records`, which
       cites the role's directory, unless D6 already removed that section.
     - **The park and the owed apply.** The range parks the tick (`broad_manual`), with the
       route quoted in the Baseline. Extra commits in the parked range are the expected
@@ -1364,7 +1364,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
           zero until its resume. `DEPLOY_HOLD` holds every promotion from the drill's
           breaking PR until the drill's last step clears it.
         - **Rollback:** the runbook's own resume steps. If the revert fails, the volume's
-          hand recovery in `ansible/roles/k8s/volume-revert/CLAUDE.md` applies, and
+          hand recovery in `k8s/roles/volume-revert/CLAUDE.md` applies, and
           speedtest stays down until it runs.
     - **PR 7b: the bootstrap check** (no file changes, so no PR of its own; PR 8's
       description carries it). It keeps its number because other slices cite it. D5's
@@ -1372,7 +1372,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
       the operator's `age-keygen -y` comparison. PR 7b checks the four properties that
       *Bootstrapping Flux without Ansible* lists, at PR 8's merge base, each in its own way:
         - Property 1: D5's flux-PR text test over the bootstrap section, in
-          `ansible/tests/repo/`. CI's `pytest` job runs the whole suite on every PR, so
+          `tests/repo/`. CI's `pytest` job runs the whole suite on every PR, so
           PR 8's green `pytest` job covers it. The description names the test's result
           line from that job.
         - Property 2: one `awk` program over D5's section, which must exit 0 and print
@@ -1447,7 +1447,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
     - **PR 7c: the render harness and the renderer stop reading the play and the manifests
       role** (about 150 lines). PR 8 cannot pass CI while a kept test still calls
       `_k8s_render.py:deploy_play`, so this PR moves every kept reader first:
-        - `ansible/tests/_k8s_render.py` renders through the renderer, and `deploy_play`
+        - `tests/_k8s_render.py` renders through the renderer, and `deploy_play`
           goes.
         - The LimitRange content tests in `test_namespace_resource_defaults.py` read the
           `homelab-namespace` render instead of the play's pre_task, unless D5 already
@@ -1460,7 +1460,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
           `SHARED_MANIFEST_DEFAULTS`. A utility role's renderer inputs stay where they are,
           because PR 8 keeps those roles.
 
-      `Render-diff: none`. The description quotes `grep -rln deploy_play ansible/tests
+      `Render-diff: none`. The description quotes `grep -rln deploy_play tests
       scripts --include='*.py'`, which prints no kept test.
     - **PR 7d: the dialect ADR and its spec tests** (about 200 lines, most of them
       fixtures). It adds the ADR, the spec tests, the construct census and the literal set
@@ -1472,7 +1472,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
       gate*). `Render-diff: none`.
 8. **Delete the k8s play and the manifests role** (deletion PR).
     - Delete the play, the batch and retire task files, the two post_tasks, and every
-      `tasks/` directory under `ansible/roles/k8s/` outside the runbook allowlist. Delete
+      `tasks/` directory under `k8s/roles/` outside the runbook allowlist. Delete
       the manifests role whole: PR 7c moved every default the renderer read from it, and
       R4.7 moves `flux_soak.py`, `flux_snapshot.py`, `flux_job_connect.py` and
       `standalone_secret_keys.json` out of its `files/` to `scripts/renderer/job_files/`
@@ -1506,7 +1506,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
       that cite them. Root `CLAUDE.md#Adding a New Service` and `janitorr/CLAUDE.md#Notable`
       keep their `ansible/deploy.yml` path atom, but their prose describes the k8s play's
       toposort, so edit both.
-    - **The runbook still resolves.** A test in `ansible/tests/longhorn/` lists every
+    - **The runbook still resolves.** A test in `tests/longhorn/` lists every
       variable the allowlisted task files read. It also lists the names that a
       `group_vars/all.yml` value it uses reads in turn, so `k8s_no_mutate` brings in
       `ansible_check_mode` and `k8s_dry_run`. Each name must resolve from one of five
@@ -1520,7 +1520,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
           enumerates name by name. At the baseline it holds two names.
           `ansible_check_mode` is a magic variable, which the value of `k8s_no_mutate` in
           `group_vars/all.yml` reads. `ansible_hostname` is a gathered fact, which
-          `ansible/roles/k8s/longhorn-api/tasks/resolve.yml` reads four times. PR 8
+          `k8s/roles/longhorn-api/tasks/resolve.yml` reads four times. PR 8
           re-measures the set with a grep for `ansible_` over the allowlisted task files
           and quotes it.
 
@@ -1585,7 +1585,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
     - The description reconciles the tests R4 deleted in PRs 6, 8 and 9 with D6's "about
       70" and with the 102 files in the baseline.
 10. **Reimplement the filters and switch the validator** (about 200 lines).
-    `renderer_lib/filters.py` with one parity test per filter, and `ansible_jinja_env.py`
+    `renderer_lib/filters.py` with one parity test per filter, and `guard_jinja_env.py`
     importing it. The `ValueError` subclass in `toposort.py` and `authelia_access.py`.
     `is_leftover_dir`'s rule in `scripts/lib/k8s_roles.py`, if D6 left the import.
     `scripts/validate/k8s_manifests.py` reads the renderer's output. The ansible-free
@@ -1607,7 +1607,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
 **Exit checks:**
 
 ```bash
-git ls-files 'ansible/roles/k8s/*/tasks/*'     # exactly the runbook allowlist
+git ls-files 'k8s/roles/*/tasks/*'     # exactly the runbook allowlist
 grep -c "^- name: Deploy k8s workloads" ansible/deploy.yml                 # 0
 uv run pytest
 ```
@@ -1905,7 +1905,7 @@ daniel-box. The operator produces them, because each needs the host:
   and both forms of the line).
 - PRs 2 to 5: `docs/homelab-render.md` (where render metadata and task-made facts live);
   `.claude/skills/new-k8s-service/SKILL.md` (no `tasks/main.yml`, from PR 5); root
-  `CLAUDE.md`, *Adding a New Service*. `ansible/tests/k8s/test_derived_manifest_files.py`
+  `CLAUDE.md`, *Adding a New Service*. `tests/k8s/test_derived_manifest_files.py`
   and every other test that reads the moved keys from `tasks/` change in the PR that moves
   them.
 - PR 6: `docs/k8s-manifest-cycle-record.md`, *The hourly render-record producer*, marked as
@@ -1913,17 +1913,17 @@ daniel-box. The operator produces them, because each needs the host:
   `docs/claude-tooling.md` if it lists `probe.py releases`;
   the cross-role files census (deleted by H7.53)'s table equality, which holds the
   edited `_CHECK_TIMER`; the deleted tests listed under PR 6.
-  `ansible/secret_rotation.yml`, `consumers.py`, `git_dates.py`, the `secret-tiers` fragment
+  `secrets/secret_rotation.yml`, `consumers.py`, `git_dates.py`, the `secret-tiers` fragment
   and the tests that name the key or require an `auto` row change in the operator's secrets
   commit after PR 6, not in PR 6.
 - PR 7a: `docs/volume-snapshot-drills.md`, the revert runbook's command.
 - PR 7b changes no test and no doc. D5's bootstrap drill PR and flux PR write
   *Bootstrapping Flux on a rebuilt cluster*, its drill, its renderer test and the text
   test over its order.
-- PR 7c: `ansible/tests/_k8s_render.py` and the tests that read the play, retargeted;
+- PR 7c: `tests/_k8s_render.py` and the tests that read the play, retargeted;
   `docs/homelab-render.md`, for the manifests-role defaults that became renderer constants.
 - PR 8:
-    - `ansible/roles/k8s/manifests/CLAUDE.md` goes with the role, and
+    - `k8s/roles/manifests/CLAUDE.md` goes with the role, and
       `docs/k8s-manifest-cycle-record.md` moves to `docs/archive/`.
     - Root `CLAUDE.md`, *Where to Look*, loses the manifests-role row and the config-restart
       row. The `deploy` skill loses its k8s modes.
@@ -1932,7 +1932,7 @@ daniel-box. The operator produces them, because each needs the host:
       step 4, `docs/longhorn-disaster-recovery.md` step 5 and `docs/k3s-etcd-restore.md`
       *After the restore* step 4, and H1 owns the shed scenario. A line in those runbooks or
       in D5's bootstrap section that names a path PR 8 deletes changes its path only.
-    - `ansible/tests/longhorn/` gains the runbook-resolution test.
+    - `tests/longhorn/` gains the runbook-resolution test.
     - Every k8s role's generated glance block, rewritten by the `regen-role-glance` hook.
     - The tests whose subject PR 8 deletes, and their citations in the docs.
 - PRs 6, 8 and 9: `docs/failure-classes.md` loses any detector citation whose test goes, as
@@ -2052,7 +2052,7 @@ daniel-box. The operator produces them, because each needs the host:
     6). *Resolution:* R4 relies on that amendment for PRs 6 and 8. If it is refused, PR 8
     splits by subject in this order, each part with its own tests, docs and
     `Render-diff: none`:
-    1. the `tasks/` directories of the roles under `ansible/roles/k8s/`, in groups, which
+    1. the `tasks/` directories of the roles under `k8s/roles/`, in groups, which
        removes every `include_role` of the manifests role. The precondition test goes with
        the last group, and the allowlist equality test replaces it;
     1. the play, the batch and retire task files, the two post_tasks, `k8s_retire.py`, the
@@ -2159,7 +2159,7 @@ C7's *Verify successors* and C8's *No stage cluster*.
 - **X-05 (high)** D5 disarmed render_records through `group_vars/all.yml`, which routes to
   the deploy plane. *Fixed for R4's share:* R4's lever was already the role-defaults line. I
   measured both routes at `70591c307` with `services_from_changed_paths`.
-  `['ansible/inventory/group_vars/all.yml']` gives `{'broad': True, 'broad_deploy': True}`.
+  `['inventory/group_vars/all.yml']` gives `{'broad': True, 'broad_deploy': True}`.
   `['ansible/roles/setup/render_records/defaults/main.yml']` gives `{'broad': True,
   'broad_setup': True, 'setup_roles': {'render_records'}}`. *render_records* now cites why
   the deploy plane never reaches the role, and PR 1 reads the units rather than the key. D5
@@ -2238,7 +2238,7 @@ number. The new steps are PR 7c and PR 11.
   base-versus-last `diff -r` and the span-wide tag-set equality are gone. *Risks* gains the
   class-4 entry.
 - **R4-R10-H3 (high) PR 8 deleted the play before PR 9 retargeted the tests that read it.**
-  *Fixed.* Confirmed: `ansible/tests/_k8s_render.py:deploy_play` raises once the play is
+  *Fixed.* Confirmed: `tests/_k8s_render.py:deploy_play` raises once the play is
   gone, `test_k8s_manifests.py` and `test_namespace_resource_defaults.py` import it, and the
   finding's grep prints 86. That selector misses tests that read a role's `tasks/` or the
   manifests role's `defaults/` and `files/`, such as `test_shared_manifest_defaults.py`. A
@@ -2424,7 +2424,7 @@ Raised against R4: one high and one medium. Both are fixed, and nothing was refu
       3) and a root suspend patch (exit 1). I ran the program on each copy and on the
       missing file before writing it in.
     - Property 1's mechanical half is D5's flux-PR text test over the bootstrap section,
-      in `ansible/tests/repo/`, which fails when the root's apply comes before the restore
+      in `tests/repo/`, which fails when the root's apply comes before the restore
       step. It replaces the hand quote of the section's steps. PR 8's `pytest` job runs
       it.
     - The program gained one pattern beyond the finding's fix: a hand patch or a `flux
@@ -2490,7 +2490,7 @@ Raised against R4: one high and three mediums. All four are fixed, and nothing w
 
 - **R4-f1-H1 (high) PR 1's precondition was red by construction on `flux`, a member its
   floor requires.** *Fixed*, with the finding's option (a). I checked the claim before the
-  fix. `git ls-tree` at `70591c307` lists no `ansible/roles/k8s/flux/`, so D1 adds the
+  fix. `git ls-tree` at `70591c307` lists no `k8s/roles/flux/`, so D1 adds the
   file. D1's *What D1 adds* describes its `tasks/main.yml` as an include plus "own rollout
   wait; CRD wait; deferred sync apply; delete ocirepository/verify-drill while the lever is
   off". D5's flux PR, step 29, flips the role and has no step that strips those tasks.
@@ -2532,7 +2532,7 @@ Raised against R4: one high and three mediums. All four are fixed, and nothing w
   is harmless only while the restored role stays pinned by `render_records_state: absent`.
 - **R4-f1-M3 (medium) PR 8's runbook-resolution test had no source for the magic
   variables and facts the runbook reads.** *Fixed.* `git grep` at `70591c307` finds
-  `ansible_hostname` four times in `ansible/roles/k8s/longhorn-api/tasks/resolve.yml`.
+  `ansible_hostname` four times in `k8s/roles/longhorn-api/tasks/resolve.yml`.
   `ansible_check_mode` is in a comment in `volume-revert/tasks/claim.yml` and in the value
   of `k8s_no_mutate` in `group_vars/all.yml`. `ansible.cfg` sets no `gathering`, and
   `ansible/pre_tasks/load_secrets.yml` runs `ansible.builtin.setup` unless

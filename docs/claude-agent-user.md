@@ -167,7 +167,7 @@ the hook-install task does not remove the hook. A broken hook refuses every agen
   the operator moved each public half from the old account to this one as a Signing Key.
 - **Its token is a classic `public_repo` token.** GitHub does not support fine-grained tokens
   for a collaborator on another personal account's repo. The token is stored in SOPS as
-  `claude_code_agent_gh_token`, so `ansible/secret_rotation.yml` tracks it.
+  `claude_code_agent_gh_token`, so `secrets/secret_rotation.yml` tracks it.
 - **No ruleset requires a review.** The "master review gate" ruleset (24514824, created
   2026-10-05) required one approving review on a PR to master, and the operator deleted it on
   2026-10-11. The "master CI gate" ruleset carries a `pull_request` rule with zero approvals,
@@ -258,7 +258,7 @@ lander. The checks and the merge live in `land.sh`, and the lander does not re-i
 
 The approval list is a floor. It keeps the explicit grant points and the gate itself. The agent's
 own components (`claude-code`, `renovate-agent`), the deployer (`gitops_deploy`),
-`host_lib.py` and `ansible/inventory/` are not on it, so a PR changing them lands without the
+`host_lib.py` and `inventory/` are not on it, so a PR changing them lands without the
 operator.
 
 `hosts/components/claude-code/templates/claude-land-approval-paths.j2` is the source of
@@ -274,7 +274,7 @@ truth, with a reason beside each entry. It holds:
 - `.github/`
 - `hosts/components/host-hardening/` and `hosts/components/sshd/`, which hold the sudo cache,
   ssh and the operator's login
-- `ansible/.sops.yaml` and `ansible/vars/secrets.yml`, and their paths after
+- `secrets/.sops.yaml` and `secrets/secrets.yml`, and their paths after
   [ADR-0030](adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md)'s rename,
   `secrets/.sops.yaml` and `secrets/secrets.yml`
 - alert-triggered triage: every `templates/claude-triage*` template, which includes the pins
@@ -283,13 +283,13 @@ truth, with a reason beside each entry. It holds:
   `hosts/components/claude-code/`. The operator added them on 2026-10-15. Later slices let
   a triage run land its own fixes with nobody watching, so it must not be able to raise its own
   caps.
-- `ansible/roles/k8s/cluster-base/` and its path after the rename, `k8s/roles/cluster-base/`,
+- `k8s/roles/cluster-base/` and its path after the rename, `k8s/roles/cluster-base/`,
   the agent's read-only cluster RBAC. The operator added it
   on 2026-10-16 (H1 Open question 7). Before H1, that RBAC applies only through
   `k3s-bringup.yml`, which the operator runs by hand. Once Flux applies `cluster-base` on
   merge, this entry holds a change under that directory for the operator. It does not cover a
   binding that another role renders. The `read-only-identity-is-bound-only-to-read-roles` row of
-  `ansible/tests/k8s/test_rendered_properties.py` covers those: it fails when any role binds the
+  `tests/k8s/test_rendered_properties.py` covers those: it fails when any role binds the
   identity, or a `system:serviceaccounts` group that contains it, to a role outside the
   read-only set.
 
@@ -313,7 +313,7 @@ compiled module file: a `__pycache__/` path, a `.pyc` or an extension module. Py
 `.pyc` file in place of unchanged source and an extension module before the `.py` beside it, and
 a loaded module's `__file__` names the source either way, so the loaded set cannot see them.
 `gate_hits` in `scripts/deploy_tools/land_lib/policy.py` holds the rule, and the
-`no-compiled-module-file-is-tracked` row of `ansible/tests/repo/test_census_rows_text.py`
+`no-compiled-module-file-is-tracked` row of `tests/repo/test_census_rows_text.py`
 refuses such a file on any branch.
 
 ## Slice 4: the phone host runs as `claude`
@@ -415,7 +415,7 @@ of the pod would drop the capability.
 | `HOME`, `PATH`, `KUBECONFIG`, `ExecStart`, `WorkingDirectory` through `sys_user` | `hosts/components/claude-code/templates/claude-rc.service.j2` |
 | `claude_code_login_uid` and `claude_code_login_uids`, which drive the login-slice caps | `hosts/components/claude-code/defaults/main.yml` |
 | `claude_code_memory_sync_dir` and the path-derived project key | `hosts/components/claude-code/defaults/main.yml` |
-| `artifacts_host_dir` and its bind mount | `ansible/roles/k8s/artifacts/defaults/main.yml` |
+| `artifacts_host_dir` and its bind mount | `k8s/roles/artifacts/defaults/main.yml` |
 | Hooks that hard-code `/home/ubuntu`, and `SUDO_ASKPASS` | the dotfiles repo's `~/.claude` sources |
 | `/home/ubuntu` literals in repo tooling | the non-test files `git grep -l /home/ubuntu -- '*.py' '*.sh' '*.j2'` lists outside `tests/` (8 on 2026-10-10) |
 | The SessionStart banner's other-session list | It reads `git worktree list`, so it shows only sessions in the same clone |
@@ -455,7 +455,7 @@ generate the peer key, apply it on daniel-server, run one interactive `/login` a
 and register daniel-server's `~claude/.ssh/git_signing_ed25519.pub` on the agent's GitHub account
 as a Signing Key. `fanout.py place launch` refuses a host whose key is not registered.
 
-`scripts/z2m/set_device_option.sh` and `ansible/roles/k8s/qbittorrent/files/apply_prefs.py` stay
+`scripts/z2m/set_device_option.sh` and `k8s/roles/qbittorrent/files/apply_prefs.py` stay
 operator-run.
 
 **The homelab-ui login.** The MCP server logs in as its own Authelia user, `claude-agent`,

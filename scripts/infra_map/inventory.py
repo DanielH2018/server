@@ -18,7 +18,7 @@ from typing import Any
 # and pyproject's `pythonpath` is a pytest setting.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
-from lib.ansible_inventory import K8S_HOST, PI_HOST, pi_entries_in
+from lib.inventory_lists import K8S_HOST, PI_HOST, pi_entries_in
 from lib.render_guard import host_layer, k8s_services
 
 from infra_map.constants import (
@@ -89,7 +89,7 @@ def load_roles(repo_root: Path = REPO_ROOT) -> RoleIndex:
     # objects: an IngressRoute onto a chart-owned
     # Deployment (longhorn-ui), a PVC (media-volume), NetworkPolicies
     # (netpol-baseline). Derived from the manifests.
-    k8s_roles = repo_root / "ansible" / "roles" / "k8s"
+    k8s_roles = repo_root / "k8s" / "roles"
     for role in sorted(p for p in k8s_roles.glob("*") if p.is_dir()):
         templates = role / "templates"
         if not templates.is_dir():
@@ -141,7 +141,7 @@ def load_inventory(
     repo_root: Path = REPO_ROOT,
 ) -> tuple[dict[str, Any], dict[str, dict], list[dict]]:
     """Return ``(global_vars, {host: host_vars}, k8s services)`` from the inventory."""
-    inventory = repo_root / "ansible" / "inventory"
+    inventory = repo_root / "inventory"
     global_vars = (
         yaml_fast.safe_load((inventory / "group_vars" / "all.yml").read_text()) or {}
     )

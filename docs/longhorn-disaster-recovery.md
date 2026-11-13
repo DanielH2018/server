@@ -118,7 +118,7 @@ the per-volume map and each exclusion's rationale:
    [Rebuilding a cluster node](host-packages.md#rebuilding-a-cluster-node) in
    `docs/host-packages.md`, which installs the host package and lists what the packages do not
    hold yet. Without the old node's age key, the script's step 3 creates a fresh one: add its
-   public key to `ansible/.sops.yaml`, run `sops updatekeys` from a host that can decrypt (or use
+   public key to `secrets/.sops.yaml`, run `sops updatekeys` from a host that can decrypt (or use
    the off-box recovery key if no host survives), commit and pull.
 2. **Cluster bring-up and Flux**: follow [Bootstrapping Flux on a rebuilt cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster) in
    `docs/flux-deploy-plane.md`. That section owns the bring-up and DR order: k3s bring-up,
@@ -293,7 +293,7 @@ Grafana's volumes when Flux took over observability (#5816).
 `/sys/class/iscsi_session/*/state`. `IscsiSessionStale` fires for a session that has not been
 `LOGGED_IN` for 15 minutes, and its labels name the node, the session and the target. A
 stale session alerts before anything tries to attach its volume. The rule is in
-`ansible/roles/k8s/observability/files/rules/host-checks.yaml`.
+`k8s/roles/observability/files/rules/host-checks.yaml`.
 
 **The cleanup.** The operator runs these steps over SSH on the node the alert names. They
 need root. The sequence uses the standard open-iscsi commands, and it was not yet run against
@@ -350,7 +350,7 @@ data, and the cap surfaced as `cannot find volume.cfg in backupstore` (step 3). 
 against the volume's default target.
 
 **Scheduled since 2026-08-19; nightly and rotating since 2026-08-20.**
-The CronJob `longhorn-restore-drill` in `homelab` (`ansible/roles/k8s/longhorn-restore-drill/`,
+The CronJob `longhorn-restore-drill` in `homelab` (`k8s/roles/longhorn-restore-drill/`,
 script `longhorn-restore-drill.sh.j2`) is scheduled for 04:10 UTC every night, running since
 H2.3e, in place of the root cron and `/usr/local/bin/longhorn-restore-drill.sh` that ran it until
 H2.3d. Each run restores the

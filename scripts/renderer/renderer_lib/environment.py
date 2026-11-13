@@ -23,7 +23,7 @@ import jinja2
 from jinja2 import pass_context
 from jinja2.runtime import Context
 
-from lib.ansible_jinja_env import template_env
+from lib.guard_jinja_env import template_env
 from lib.k8s_yaml import make_lookup
 from lib.render_guard import StrictChainableUndefined, pad_to_source_newlines
 from renderer.renderer_lib import jinja_filters as filters
@@ -122,7 +122,7 @@ def loader_name(env: jinja2.Environment, path: Path) -> str:
     for root in cast(jinja2.FileSystemLoader, env.loader).searchpath:
         if path.is_relative_to(root):
             return path.relative_to(root).as_posix()
-    raise RenderError(f"{path} is outside the role's templates and ansible/templates/")
+    raise RenderError(f"{path} is outside the role's templates and k8s/templates/")
 
 
 def evaluate(env: jinja2.Environment, expression: str, variables: dict) -> object:

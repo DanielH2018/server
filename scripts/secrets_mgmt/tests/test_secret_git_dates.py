@@ -278,7 +278,7 @@ def test_the_git_fake_names_an_unscripted_ref_with_its_argv():
     """
     tools = build_tools(Fakes(history=[]))[0]
     with pytest.raises(AssertionError) as caught:
-        tools.git("show", "deadbeef:ansible/vars/secrets.yml")
+        tools.git("show", "deadbeef:secrets/secrets.yml")
     assert "unscripted git call" in str(caught.value)
     assert "deadbeef" in str(caught.value)
 
@@ -292,5 +292,5 @@ def test_the_git_fake_rejects_an_unscripted_verb():
     history = [("deadbeef", "2026-01-01", {"a_token": "x"})]
     tools = build_tools(Fakes(history=history))[0]
     with pytest.raises(AssertionError) as caught:
-        tools.git("rev-parse", "deadbeef:ansible/vars/secrets.yml")
+        tools.git("rev-parse", "deadbeef:secrets/secrets.yml")
     assert "rev-parse" in str(caught.value)

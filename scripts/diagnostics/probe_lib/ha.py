@@ -38,9 +38,8 @@ from lib.repo_paths import REPO
 # runs on the cluster. test_verify_automations_path_exists pins the path itself.
 AUTOMATIONS_DIR = os.path.join(
     REPO,
-    "ansible",
-    "roles",
     "k8s",
+    "roles",
     "home-assistant",
     "files",
     "automations",
@@ -71,9 +70,8 @@ _AUTOMATION_ID_RE = re.compile(r"^- id:\s*(\S+)", re.MULTILINE)
 # config references against — the "expected" set for the verify-entities gate.
 EXTERNAL_ENTITIES_YAML = os.path.join(
     REPO,
-    "ansible",
-    "roles",
     "k8s",
+    "roles",
     "home-assistant",
     "state",
     "external_entities.yml",

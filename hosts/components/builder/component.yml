@@ -51,7 +51,7 @@ users:
 defaults:
   builder_repo_port: 8791
   builder_github_repo: DanielH2018/server
-  # roles/k8s/observability/defaults/main.yml:observability_prometheus_cluster_ip, and a test holds
+  # k8s/roles/observability/defaults/main.yml:observability_prometheus_cluster_ip, and a test holds
   # the two equal. No loopback entry: nothing serves Prometheus on daniel-box's loopback, so one
   # logged a refused connection on every run and said nothing (#7047).
   builder_prom_urls:

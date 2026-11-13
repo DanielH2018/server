@@ -400,7 +400,7 @@ monkeypatch
 [Ss]ubcommand
 [Ss]ubcommands
 
-# GPU metrics from the kernel DRM interface (roles/k8s/gpu-exporter)
+# GPU metrics from the kernel DRM interface (k8s/roles/gpu-exporter)
 sysfs
 amdgpu
 

@@ -100,7 +100,7 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
       `max_redirects: 0`.
     - A tile without an `auth_tier` sets neither key, so Kuma's defaults apply: a 2xx status,
       reached through up to 10 redirects.
-- **The counts.** Running the filter over `ansible/inventory/host_vars/daniel-box.yml` yields 26
+- **The counts.** Running the filter over `inventory/host_vars/daniel-box.yml` yields 26
   tiles, 23 of them behind SSO. The three without SSO are `auth-k8s` (entry `authelia`),
   `littlelink-k8s` (hostname `www`) and `home-assistant-k8s`. Live, Kuma exports
   `monitor_status{monitor_type="http"}` for 32 monitors: those 26 plus 6 hand-written HTTP
@@ -110,13 +110,13 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
   Every other entry pages Discord only (`scripts/renderer/template_filters/service_tier.py:in_service_tier`,
   decided 2026-10-04, #3480). The filter's signature is `(containers_list, name, tier)`.
 - **Kuma pins every ingress name to the ingress VIP.**
-  `ansible/roles/k8s/uptime-kuma/templates/deployment.yaml.j2` renders `hostAliases` that map
+  `k8s/roles/uptime-kuma/templates/deployment.yaml.j2` renders `hostAliases` that map
   `<hostname>.local.<domain>` for every entry in
   `hostvars[k8s_primary_node].containers_list | selectattr('hostname', 'defined')`, plus each
   entry's `extra_hostnames` and `edge-selfcheck.local.<domain>`, to `k3s_metallb_ingress_vip`.
   The comment above it gives the reason: CoreDNS forwards to resolvers that can answer the
   public wildcard with the wrong address.
-  `ansible/tests/services/test_extra_probe_targets.py::test_the_edge_all_clear_host_is_pinned_by_the_exporter`
+  `tests/services/test_extra_probe_targets.py::test_the_edge_all_clear_host_is_pinned_by_the_exporter`
   asserts that blackbox-exporter's Deployment, which calls the same macro, renders the block. A pod without `hostAliases` resolves through
   cluster CoreDNS (`ansible/roles/setup/k3s/templates/coredns-corefile.j2`,
   `k3s_coredns_upstreams`).
@@ -164,7 +164,7 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
   `use_authelia` flag and whether it is routed (for the traefik edge). It never reads
   `entry_port`. The sort is stable. `scripts/dev/new_k8s_service.py:append_entry` appends a new
   entry after the list's last item, which is after `observability`.
-  `ansible/tests/deploy/test_k8s_toposort.py:DOCUMENTED_ORDERINGS` holds every ordering that
+  `tests/deploy/test_k8s_toposort.py:DOCUMENTED_ORDERINGS` holds every ordering that
   prose states, each as a `depends_on` edge. A simulation loaded the k8s entries of
   `daniel-box.yml` and ran `build_k8s_dep_map`, then `toposort_containers`. It printed these
   indices out of 56 or 57 roles:
@@ -192,29 +192,29 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
   `[--json] promql`, so every query runs at now unless the PromQL carries `@`.
 - **Other consumers of the filter.** `git grep kuma_ingress_monitors` names, beyond the Kuma
   template:
-    - `ansible/tests/services/test_ingress_probe_targets.py`, which M6's C-4a renamed from
+    - `tests/services/test_ingress_probe_targets.py`, which M6's C-4a renamed from
       `test_kuma_ingress_monitors.py`, and which renders Kuma's entities;
     - the `_INGRESS_LOOP_RE` arm of `scripts/diagnostics/probe_lib/kuma_table_loop.py`, and
       the test `test_the_real_template_declares_every_ingress_tile_ungated` in
       `scripts/diagnostics/tests/test_probe_monitors.py`, both retired by PR 4;
-    - a branch of `ansible/roles/k8s/uptime-kuma/tests/test_status_page_groups.py:declarations`,
+    - a branch of `k8s/roles/uptime-kuma/tests/test_status_page_groups.py:declarations`,
       whose
       the declaration census in `test_status_page_groups.py`, which C-1b deleted,
       names `grafana-k8s` and floors the census at 90;
     - `scripts/deploy_tools/narrow_lib/containers.py:FILTER_FIELDS` and
-      `scripts/lib/ansible_jinja_env.py`, which stay valid while any template calls the filter.
+      `scripts/lib/guard_jinja_env.py`, which stay valid while any template calls the filter.
 - **`probe.py monitors` reads Kuma only.**
   `scripts/diagnostics/probe_lib/monitors.py:format_monitor_status` formats
   `monitor_status`. Root `CLAUDE.md` says "`monitors` answers 'what is down'".
 - **Kuma already pages a new scrape job's `up == 0`.**
-  `ansible/roles/k8s/monitor-bridge/files/checks/cluster.py:check_cluster_targets` reads
+  `k8s/roles/monitor-bridge/files/checks/cluster.py:check_cluster_targets` reads
   `up{origin!="daniel-server"}`. That selector matches every job without an `origin` label,
   and its docstring says the two monitor-bridge selectors split every `up` series between
   them. Any member at 0 fails the check. Its row `cluster_targets` in
-  `ansible/roles/k8s/monitor-bridge/files/check_table.py:CHECKS` feeds the Kuma tile
+  `k8s/roles/monitor-bridge/files/check_table.py:CHECKS` feeds the Kuma tile
   `monitor-bridge-cluster-targets`, "Cluster Scrape Targets". The row sets no
   `critical=True`, so the tile pages Discord only. `CLUSTER_TARGETS_CONSECUTIVE` is `"3"` in
-  `ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2`, and monitor-bridge runs
+  `k8s/roles/monitor-bridge/templates/env-secret.yaml.j2`, and monitor-bridge runs
   every 300s. The row's description says the DOWN message names the target that stayed down
   15 minutes. The comment above the `coredns-host` job in `prometheus.yaml.j2` relies on the
   same tile for that job. M1 convention 5 forbids an unshadowed `up == 0` rule for such a job
@@ -225,8 +225,8 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
   `containers_list` entry. Its flags include `--no-route`, `--port`, `--uid`,
   `--priority-class`, `--no-autodeploy` and `--autodeploy-reason`. Its `main` prints the two
   censuses a new role joins and writes neither: `BORN_FENCED_ROLES` in
-  `ansible/tests/k8s/test_netpol_baseline_labels.py` and `ROLES_WITH_A_DEFAULT_SERVICE` in
-  `ansible/tests/k8s/test_shared_manifest_defaults.py`. The comment above `BORN_FENCED_ROLES`
+  `tests/k8s/test_netpol_baseline_labels.py` and `ROLES_WITH_A_DEFAULT_SERVICE` in
+  `tests/k8s/test_shared_manifest_defaults.py`. The comment above `BORN_FENCED_ROLES`
   describes its members as roles whose only caller is Traefik and which dial nothing.
 - **The baseline fences ingress.** `networkpolicy.yaml.j2` in `netpol-baseline` sets
   `policyTypes` to `Ingress` alone.
@@ -239,12 +239,12 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
 
 ### The exporter
 
-- **Role and placement.** `ansible/roles/k8s/blackbox-exporter/`, deploy tag
+- **Role and placement.** `k8s/roles/blackbox-exporter/`, deploy tag
   `blackbox-exporter`, in the `homelab` namespace. It does not go in `observability`, because
   that namespace's baseline relies on having one tenant (M1 baseline). In `homelab` it sits
   behind the same NetworkPolicy baseline as Kuma.
 - **Name resolution matches Kuma's.** Kuma's `hostAliases` block moves into a shared macro,
-  `ingress_host_aliases()`, in `ansible/templates/ingress-host-aliases.yml.j2`. Both
+  `ingress_host_aliases()`, in `k8s/templates/ingress-host-aliases.yml.j2`. Both
   Deployments call it, so the two lists cannot drift and the probes resolve every ingress name
   exactly as Kuma does. A CoreDNS or Pi-hole fault therefore stays out of the probe path, as it
   is for Kuma. A shared macro is chosen over a copied loop plus a parity test because the macro
@@ -291,7 +291,7 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
       what makes this module see the status Kuma sees. `http_2xx` carries the same header so
       that both modules send what Kuma sends.
 
-  A pytest in `ansible/tests/services/` loads `files/blackbox.yml` and asserts that both
+  A pytest in `tests/services/` loads `files/blackbox.yml` and asserts that both
   modules carry `Accept: */*`. It names `http_2xx` and `http_sso_302` as members it must find.
   Its `_is_flagged` half is a module without the header. M6's non-ingress probes add
   `tcp_connect`, `dns` and a keyword module here.
@@ -300,7 +300,7 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
 
 ### The probe job
 
-In `ansible/roles/k8s/observability/templates/prometheus.yaml.j2`, a hand-written job
+In `k8s/roles/observability/templates/prometheus.yaml.j2`, a hand-written job
 `blackbox-ingress`, scraped every 1m:
 
 ```yaml
@@ -402,8 +402,8 @@ test of these rules, and a quiet Sunday says nothing about the mute.
 
 The mute is proven statically instead, by M2's routing pytest
 ([M2](m2-first-bridge-family.md#the-weekly-reboot-mute)). M2's PR 3 writes it in
-`ansible/tests/services/`. It renders the observability role's Alertmanager Secret through
-`ansible/tests/_k8s_render.py:render_role_template` and walks the routing tree of
+`tests/services/`. It renders the observability role's Alertmanager Secret through
+`tests/_k8s_render.py:render_role_template` and walks the routing tree of
 `alertmanager.yml` the way Alertmanager does: children in order, stopping at the first match
 unless `continue: true`. Its red half is the `Watchdog` label set, which reaches the Watchdog
 route, which never takes the mute; the test must flag it. M4 writes no second walk and owns
@@ -469,23 +469,23 @@ tuned. The likely episodes:
 ### The tree
 
 ```diff
-+ansible/roles/k8s/blackbox-exporter/       scaffolded: defaults, tasks, templates, CLAUDE.md
++k8s/roles/blackbox-exporter/       scaffolded: defaults, tasks, templates, CLAUDE.md
 +  files/blackbox.yml
-+ansible/templates/ingress-host-aliases.yml.j2   ingress_host_aliases(), moved from uptime-kuma
- ansible/inventory/host_vars/daniel-box.yml
++k8s/templates/ingress-host-aliases.yml.j2   ingress_host_aliases(), moved from uptime-kuma
+ inventory/host_vars/daniel-box.yml
 ~  containers_list: the blackbox-exporter entry, appended; no depends_on
- ansible/tests/k8s/
+ tests/k8s/
 ~  test_netpol_baseline_labels.py            BORN_FENCED_ROLES gains blackbox-exporter (PR 1)
 ~  test_shared_manifest_defaults.py          ROLES_WITH_A_DEFAULT_SERVICE gains it (PR 1)
- ansible/tests/services/
+ tests/services/
 +  the Accept-header pytest                  both modules carry Accept: */* (PR 1)
 ~  M2's routing pytest                       four label sets with their outcomes (PR 3)
- ansible/roles/k8s/observability/
+ k8s/roles/observability/
 ~  defaults/main.yml                         observability_rule_groups gains ingress-probes (PR 3)
 ~  templates/prometheus.yaml.j2              the blackbox-ingress job
 +  files/rules/ingress-probes.yaml
 +  tests/rules/ingress-probes.test.yaml
- ansible/roles/k8s/uptime-kuma/
+ k8s/roles/uptime-kuma/
 ~  templates/deployment.yaml.j2              calls ingress_host_aliases()
 ~  templates/static-monitors.yaml.j2         the ingress loop removed in PR 4
  scripts/validate/
@@ -526,7 +526,7 @@ tuned. The likely episodes:
       shared default Service.
 - The role's `CLAUDE.md` follows the scaffold's template.
 - C4 check: after running the scaffolder, run
-  `git diff ansible/inventory/host_vars/daniel-box.yml | grep -n 'owner: flux'`. A match means
+  `git diff inventory/host_vars/daniel-box.yml | grep -n 'owner: flux'`. A match means
   D5's first Wave A PR has landed and the scaffolder wrote `owner: flux` on the entry. Then this
   PR also adds the role's Kustomization (C3), and the Ansible k8s play, `deploy.sh`, the
   deployer and `land.sh` skip it (C4). No match means it is an ordinary Ansible role, and D5
@@ -534,7 +534,7 @@ tuned. The likely episodes:
   scaffolder's source. At the baseline, `scripts/dev/new_k8s_service.py:entry_lines` writes
   only `name`, `platform`, `port` and the route keys.
 - Deploys: about 24 tags, most of them roles this PR does not touch.
-    - PR 1 edits `ansible/inventory/` and `ansible/templates/`, both in
+    - PR 1 edits `inventory/` and `k8s/templates/`, both in
       `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:_BROAD_DEPLOY_PREFIXES`.
       The GitOps tick therefore applies it as `deploy.yml` with the tags that
       `deploy_tags.py narrow` derives (`docs/gitops-pipeline.md`, *A deploy-plane change is
@@ -605,7 +605,7 @@ tuned. The likely episodes:
   `ingress-probes` to `observability_rule_groups` (M1 convention 1). Each alert gets a firing
   case that asserts its `service`, `severity` and `shadow` labels as this PR ships them. The
   zero-series case removes the job's `up` and expects `IngressProbesMissing`.
-- Add a pytest in `ansible/tests/services/` that renders the job and asserts:
+- Add a pytest in `tests/services/` that renders the job and asserts:
     - its targets equal `https://<tile.hostname>.local.<domain>` for each tile the filter
       yields, string for string. The filter's output carries no URL (its keys are `id`,
       `name`, `hostname`, `behind_sso` and `entry`), so the test builds the string the way
@@ -665,7 +665,7 @@ tuned. The likely episodes:
 - In PR 3's target pytest, retire the soak-join check, which compares the targets with the
   `url` that the deleted loop rendered. The assertion that builds each target from the filter
   stays.
-- In `ansible/tests/services/test_ingress_probe_targets.py`, named
+- In `tests/services/test_ingress_probe_targets.py`, named
   `test_kuma_ingress_monitors.py` until M6's C-4a, retire the six tests that render
   Kuma's entities or pin AutoKuma ids. PR 3's target pytest covers the three properties that
   carry over to the probe job: an added entry gets a probe, `auth_tier` picks the module, and
@@ -817,7 +817,7 @@ turns Kuma's Cluster Scrape Targets tile red and fires `BlackboxExporterDown`.
   remove the objects. It deletes the role and the entry, so the role's prune never runs again,
   and the Deployment, the ConfigMap and the shared default Service stay live. Retiring the
   objects through the role's own prune, in two PRs, does not work either:
-    - The entry's `port` earns the shared default Service (`ansible/roles/k8s/manifests/CLAUDE.md`,
+    - The entry's `port` earns the shared default Service (`k8s/roles/manifests/CLAUDE.md`,
       *The file lists are derived*). A PR that removes only the templates keeps that Service
       rendered and live.
     - Dropping `port` as well leaves the derived file list empty. The manifests role's task
@@ -831,7 +831,7 @@ turns Kuma's Cluster Scrape Targets tile red and fires `BlackboxExporterDown`.
     - Delete the role directory and its `containers_list` entry. The shared macro stays, with
       Kuma as its only caller.
     - Add `blackbox-exporter` to `k8s_retired_services` in
-      `ansible/inventory/group_vars/all.yml`. The comment above that key says its test refuses
+      `inventory/group_vars/all.yml`. The comment above that key says its test refuses
       an entry that is still a role or a `containers_list` entry, so the three changes land
       together.
     - Drop `blackbox-exporter` from `BORN_FENCED_ROLES` and from `ROLES_WITH_A_DEFAULT_SERVICE`,
@@ -847,7 +847,7 @@ turns Kuma's Cluster Scrape Targets tile red and fires `BlackboxExporterDown`.
   `ansible/tasks/k8s_retire.yml` for the entry. It deletes every object the service's staged
   directory declares, the shared default Service included, then removes that directory and
   the release records. No role runs for the tag, so no rollout wait is queued. The PR edits
-  `ansible/inventory/group_vars/all.yml`, which `land.sh` may treat as a broad change and not
+  `inventory/group_vars/all.yml`, which `land.sh` may treat as a broad change and not
   deploy itself. After that deploy runs, record on the PR the teardown's deletions and a
   read-only `kubectl -n homelab get deploy,service,configmap | grep blackbox-exporter` that
   prints nothing.
@@ -946,10 +946,10 @@ turns Kuma's Cluster Scrape Targets tile red and fires `BlackboxExporterDown`.
 
 - **PR 1.**
     - The scaffold's tests.
-    - The Accept-header pytest in `ansible/tests/services/`.
+    - The Accept-header pytest in `tests/services/`.
     - The two census rows, added by hand: `BORN_FENCED_ROLES` in
-      `ansible/tests/k8s/test_netpol_baseline_labels.py`, with its comment, and
-      `ROLES_WITH_A_DEFAULT_SERVICE` in `ansible/tests/k8s/test_shared_manifest_defaults.py`.
+      `tests/k8s/test_netpol_baseline_labels.py`, with its comment, and
+      `ROLES_WITH_A_DEFAULT_SERVICE` in `tests/k8s/test_shared_manifest_defaults.py`.
     - The role's `CLAUDE.md`, whose glance block regenerates and shows the denylist reason. Its
       prose says that no edge orders the role against `observability`, and why.
     - The uptime-kuma role's `CLAUDE.md` says that its `hostAliases` come from the shared
@@ -1192,9 +1192,9 @@ Findings raised: 2 (1 high, 1 medium). Fixed: 2. Refuted: none.
 - **M4-C2-01 (high).** From PR 3, `BlackboxExporterDown` pages while Kuma's Cluster Scrape
   Targets tile already pages for the same failure, which breaks M1 convention 5. **Fixed.**
   The premise "Kuma never watched the job or the exporter" was wrong.
-  `ansible/roles/k8s/monitor-bridge/files/checks/cluster.py:check_cluster_targets` reads
+  `k8s/roles/monitor-bridge/files/checks/cluster.py:check_cluster_targets` reads
   `up{origin!="daniel-server"}`, which matches every job without an `origin` label. The
-  `cluster_targets` row of `ansible/roles/k8s/monitor-bridge/files/check_table.py:CHECKS`
+  `cluster_targets` row of `k8s/roles/monitor-bridge/files/check_table.py:CHECKS`
   feeds the "Cluster Scrape Targets" tile with a 15-minute hold and no `critical=True`. The
   comment above the `coredns-host` job in `prometheus.yaml.j2` relies on that tile in the
   same way. M1 convention 5 forbids an unshadowed `up == 0` rule for such a job until M6's
@@ -1210,17 +1210,17 @@ Findings raised: 2 (1 high, 1 medium). Fixed: 2. Refuted: none.
 - **M4-C2-02 (medium).** PR 1's two-step rollback leaves the default Service live, queues a
   wait on a pruned Deployment, and never says PR 3 must be reverted first. **Fixed, by a
   different route from the one the finding proposed.** Both defects reproduced:
-  `ansible/roles/k8s/manifests/CLAUDE.md` derives the shared default Service from the entry's
+  `k8s/roles/manifests/CLAUDE.md` derives the shared default Service from the entry's
   `port`, and its caller contract defaults `manifests_rollout` to `manifests_service`. The
   proposed step 1 (drop `port`, `manifests_rollout: ''`, keep the role) fails on its own
   terms. The role would then render no file, and the manifests task "Check that a role arming
   the prune renders something to keep" asserts `manifests_files_resolved | length > 0`
   before any prune runs. `BORN_FENCED_ROLES` also could not wait for step 2, because
-  `ansible/tests/k8s/test_netpol_baseline_labels.py::test_exactly_the_fenced_roles_carry_the_baseline_label`
+  `tests/k8s/test_netpol_baseline_labels.py::test_exactly_the_fenced_roles_carry_the_baseline_label`
   compares it with the rendered pod labels in both directions. The rollback now uses the
   repo's own retirement path, `docs/deploying.md` *Retiring a k8s service*. One PR deletes the
   role and the entry, adds `blackbox-exporter` to `k8s_retired_services` in
-  `ansible/inventory/group_vars/all.yml`, and drops both census rows. The next k8s deploy
+  `inventory/group_vars/all.yml`, and drops both census rows. The next k8s deploy
   runs `ansible/tasks/k8s_retire.yml`, which deletes every staged object, the Service
   included, and queues no rollout wait. *Rollback* now opens with the reverse landing order,
   and PR 1's entry says it runs only after PR 3's rollback has deployed `observability`.
@@ -1256,8 +1256,8 @@ Findings raised: 3 (1 high, 2 medium). Fixed: 3. Refuted: none.
   **Fixed, with the failure path corrected.** `changed_fields` returns None for an added
   entry. `broad._list_reader_tags` with `changed=None` at `70591c307` named 23 reader tags of
   59 declared, crowdsec, traefik, pihole and authelia among them. With the entry's own tag that
-  is 24 of 60, under the half-the-fleet refusal. PR 1 edits `ansible/inventory/` and
-  `ansible/templates/`, both in `_BROAD_DEPLOY_PREFIXES`, so the GitOps tick applies the
+  is 24 of 60, under the half-the-fleet refusal. PR 1 edits `inventory/` and
+  `k8s/templates/`, both in `_BROAD_DEPLOY_PREFIXES`, so the GitOps tick applies the
   narrowed list, and `docs/gitops-pipeline.md` says that list is not filtered through the
   denylist. The finding's "`deploy-failed` with nothing rolled" understated the result. A
   broad arm is forward-only and writes `hold_sha`, which holds every later landing. `land.sh`
@@ -1294,11 +1294,11 @@ Findings raised: 1 (1 medium). Fixed: 1, for M4's part. Refuted: none.
   *Risks* extends the dead-exporter entry and gains a class 5 entry for the ordering. The
   `LokiHomelabDown` and `alertmanager` handoffs belong to M5 and M1, and this plan does not
   restate them.
-- **Not raised by the review: a red census.** `uv run pytest ansible/tests/repo` failed
+- **Not raised by the review: a red census.** `uv run pytest tests/repo` failed
   `test_census_rows_text.py` on the row `documented-macros-exist`. That row reads every
   `<name>.yml.j2` a doc names as a macro that must exist. This plan gave the future
   `ingress-host-aliases` macro file the `.yml.j2` suffix. **Fixed.** The plan now names it
   `ingress-host-aliases.yaml.j2`, the suffix that `service-default.yaml.j2` and three other
-  macros in `ansible/templates/` already carry. The same run then passed 869 tests. PR 1
+  macros in `k8s/templates/` already carry. The same run then passed 869 tests. PR 1
   created the file as `ingress-host-aliases.yml.j2`, the suffix of every other macro there.
   The row reads only a name a doc gives, so it passes once the file exists.

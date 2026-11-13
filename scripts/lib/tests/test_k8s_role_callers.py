@@ -15,7 +15,7 @@ import pytest
 from lib.k8s_roles import k8s_entries, role_callers
 from lib.k8s_role_callers import CannotNarrow
 
-# The helper roles: every role under ansible/roles/k8s/ that another role reaches and that has
+# The helper roles: every role under k8s/roles/ that another role reaches and that has
 # no containers_list entry of its own. Named, not counted -- a rename or a moved template
 # leaves a count-based assertion passing over a map that lost the member it was checking.
 # cronjob-gate left the set when configarr and qbittorrent, its last callers, flipped to Flux.
@@ -47,7 +47,7 @@ def test_the_defaults_form_resolves(callers):
 
 
 def test_a_defaults_key_is_an_edge_and_a_mention_in_a_comment_is_not(tmp_path):
-    roles = tmp_path / "ansible" / "roles" / "k8s"
+    roles = tmp_path / "k8s" / "roles"
     for role, text in (
         ("builder", "image_builder_builds: []\n"),
         ("mentions", "# image_builder_builds lives elsewhere\n"),
@@ -64,7 +64,7 @@ def test_the_lookup_form_resolves(callers):
 
 def test_a_template_lookup_into_another_role_is_an_edge(tmp_path):
     """The accept half on a throwaway tree; a lookup of the reader's own file is no edge."""
-    verify = tmp_path / "ansible" / "roles" / "k8s" / "reader" / "templates" / "verify"
+    verify = tmp_path / "k8s" / "roles" / "reader" / "templates" / "verify"
     verify.mkdir(parents=True)
     (verify / "job.yaml.j2").write_text(
         "data: {{ lookup('file', role_file('files/x.py', role='helper')) }}\n"
@@ -74,7 +74,7 @@ def test_a_template_lookup_into_another_role_is_an_edge(tmp_path):
 
 
 def test_a_b64file_lookup_into_another_role_is_an_edge(tmp_path):
-    templates = tmp_path / "ansible" / "roles" / "k8s" / "reader" / "templates"
+    templates = tmp_path / "k8s" / "roles" / "reader" / "templates"
     templates.mkdir(parents=True)
     (templates / "x.yaml.j2").write_text(
         "x: {{ lookup('b64file', role_file('files/a.png', role='helper')) }}\n"
@@ -84,7 +84,7 @@ def test_a_b64file_lookup_into_another_role_is_an_edge(tmp_path):
 
 def test_a_lookup_with_keyword_arguments_is_an_edge(tmp_path):
     """A keyword argument after the path, such as `rstrip=False`, does not hide the edge."""
-    templates = tmp_path / "ansible" / "roles" / "k8s" / "reader" / "templates"
+    templates = tmp_path / "k8s" / "roles" / "reader" / "templates"
     templates.mkdir(parents=True)
     (templates / "x.yaml.j2").write_text(
         "x: \"{{ lookup('template', role_file('templates/a.j2', role='helper'),"
@@ -117,7 +117,7 @@ def test_a_named_repo_is_walked_instead_of_this_checkout(tmp_path, callers):
     meaningful: the derived edge is the throwaway tree's, and none of the live tree's
     helpers may appear in it.
     """
-    templates = tmp_path / "ansible" / "roles" / "k8s" / "caller" / "templates"
+    templates = tmp_path / "k8s" / "roles" / "caller" / "templates"
     templates.mkdir(parents=True)
     (templates / "x.yaml.j2").write_text(
         "data: {{ lookup('file', role_file('files/x.py', role='helper')) }}\n"
@@ -131,7 +131,7 @@ def test_a_named_repo_is_walked_instead_of_this_checkout(tmp_path, callers):
 
 
 def test_a_dangling_template_symlink_refuses_by_name(tmp_path):
-    templates = tmp_path / "ansible" / "roles" / "k8s" / "caller" / "templates"
+    templates = tmp_path / "k8s" / "roles" / "caller" / "templates"
     templates.mkdir(parents=True)
     (templates / "bad.yaml.j2").symlink_to(tmp_path / "gone.yaml.j2")
     with pytest.raises(CannotNarrow, match=r"bad\.yaml\.j2"):

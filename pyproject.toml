@@ -42,7 +42,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
 ]
 # Tools only prek hooks and hand-run commands call, never a test. The CI jobs that run no lint
 # hook set UV_NO_GROUP=lint, so a lint tool's install (actionlint-py downloads its binary from
-# GitHub releases) cannot fail them. ansible/tests/repo/test_ci_lint_group.py holds both halves.
+# GitHub releases) cannot fail them. tests/repo/test_ci_lint_group.py holds both halves.
 lint = [
   "ruff>=0.16",                     # first-party Python lint gate (prek hook); pinned via uv.lock.
   # The floor is the version the [tool.ruff] `*.md` exclusion was written against.
@@ -58,8 +58,8 @@ lint = [
 
 [tool.pytest.ini_options]
 testpaths = [                        # single source of truth for WHAT runs
-  "ansible/tests",
-  "ansible/roles/k8s/*/tests",       # every k8s role's own logic tests
+  "tests",
+  "k8s/roles/*/tests",       # every k8s role's own logic tests
   ".claude/hooks",
   "scripts",                         # closes the smoke_extract CI gap
   "evals",                                         # homelab eval-case schema validation
@@ -99,7 +99,7 @@ testpaths = [                        # single source of truth for WHAT runs
 # unregistered one; --strict-config does the same for an unknown key in this table.
 # -p leakguard fails any test that reaches the network, the cluster or the host. It is
 # registered here rather than from a conftest so it covers every `testpaths` entry at once;
-# ansible/tests is on `pythonpath` below, which is what makes the bare module name resolve.
+# tests is on `pythonpath` below, which is what makes the bare module name resolve.
 # -p xdist_width narrows `-n auto` to the run's selection: its recorded seconds over its heaviest
 # module's, from scripts/dev/pytest_shard_weights.json, capped at the core count, so one file
 # runs on one worker rather than sixteen and five heavy ones get three. The whole suite and a CI
@@ -135,7 +135,7 @@ filterwarnings = [
 # Run them with `uv run pytest -m ui`, which overrides the default -m.
 markers = [
   "image: runs a script inside its pinned container image with `docker run`; deselected from the pytest shards (no Docker daemon) and run by .github/workflows/image-leg.yml with `-m image`",
-  "ui: live checks against the homelab's own routes — browser smoke (scripts/diagnostics/tests/test_ui_smoke.py) and the Uptime Robot keyword rules (ansible/tests/repo/test_uptime_robot_keywords.py)",
+  "ui: live checks against the homelab's own routes — browser smoke (scripts/diagnostics/tests/test_ui_smoke.py) and the Uptime Robot keyword rules (tests/repo/test_uptime_robot_keywords.py)",
 ]
 # hosts/lib: host_lib is the module the host components' scripts share, shipped beside them in
 # each host package — on pythonpath so the
@@ -144,28 +144,28 @@ markers = [
 # only worked for modules importing _k8s_render first.
 # monitor-bridge/files: bridge/common.py is the same cross-role pattern as host_lib.py, staged
 # into autofix-bridge's ConfigMap rather than duplicated — without this, `uv run pytest
-# ansible/roles/k8s/autofix-bridge/files` alone can't resolve `from bridge.common import ...`
+# k8s/roles/autofix-bridge/files` alone can't resolve `from bridge.common import ...`
 # (it only worked when monitor-bridge/files happened to already be on sys.path from the same run).
 # game-stats/files: stats_lib.py is the same shape again, staged into both valheim-stats' and
 # terraria-stats' ConfigMaps — without this, `import stats_lib` in either game's own script
 # resolves only when a test that inserts game-stats/files happened to run first in the session.
 pythonpath = [
-  # `ansible/tests` so the guards in its subdirectories reach the shared `_helpers.py` and
+  # `tests` so the guards in its subdirectories reach the shared `_helpers.py` and
   # `_k8s_render.py` at its root: pytest prepends only a test's OWN directory.
-  "ansible/tests",
+  "tests",
   "hosts/lib",
-  "ansible/roles/k8s/game-stats/files",
+  "k8s/roles/game-stats/files",
   "hosts/components/deploy-ui/files",
-  "ansible/roles/k8s/monitor-bridge/files",
+  "k8s/roles/monitor-bridge/files",
   # crowdsec/files: jobs_metrics.py is the same cross-role pattern, staged into autofix-bridge's
   # ConfigMap rather than duplicated (M6 batch B7). Without this, `from jobs_metrics import ...`
   # in autofix.py resolves only when a crowdsec test collected first.
-  "ansible/roles/k8s/crowdsec/files",
+  "k8s/roles/crowdsec/files",
   # flux_job_connect.py is the one transport of every Job script Flux runs, and
   # arr-notification's seed imports it from here on the controller path too.
   "scripts/renderer/job_files",
   # The claude-code host component's scripts, which its tests import by bare name the way a
-  # role's tests import its `files/` through ansible/roles/conftest.py.
+  # role's tests import its `files/` through k8s/conftest.py.
   "hosts/components/claude-code/files",
   # The same for the renovate-agent, renovate-notify, fake-remux, hypervisor and
   # worktree-holders components.
@@ -187,10 +187,10 @@ pythonpath = [
   "scripts",
   "scripts/backup",
   # its tests' `_reap_entrypoint_harness.py` holds the Longhorn CR builders that
-  # ansible/tests/longhorn/test_longhorn_reap_guard.py imports too
+  # tests/longhorn/test_longhorn_reap_guard.py imports too
   "scripts/backup/tests",
   "scripts/deploy_tools",
-  # its tests share _land_fakes.py the way ansible/tests share _helpers.py
+  # its tests share _land_fakes.py the way tests share _helpers.py
   "scripts/deploy_tools/tests",
   "scripts/dev",
   "scripts/docs",
@@ -302,7 +302,7 @@ select = [
 # it would be redundant rather than load-bearing.
 
 [tool.ruff.lint.per-file-ignores]
-# Vendored upstream script, byte-for-byte: ansible/tests/services/test_karakeep_time_tagger_script.py
+# Vendored upstream script, byte-for-byte: tests/services/test_karakeep_time_tagger_script.py
 # asserts its sha256 against the commit the archived Docker role pins, so a lint fix here is a
 # drift that test exists to catch.
 #
@@ -310,7 +310,7 @@ select = [
 # all 5 of the tree's D212 hits are in this one file, so without this entry `ruff check --fix`
 # rewrites it and that sha256 test fails. A gate that forces an edit to a byte-pinned file is a
 # gate nobody can turn on.
-"ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py" = [
+"k8s/roles/karakeep/files/karakeep-time-tagger.py" = [
   "RUF012",
   "D205",
   "D415",
@@ -344,18 +344,18 @@ python-version = "3.15"
 # it reports 189 import-not-found diagnostics for first-party modules that resolve fine at
 # runtime. The list is the union of pytest's `pythonpath` above, `.claude/hooks`, and the `files/`
 # sibling of every `testpaths` entry — the same three sources the bootstrap draws on.
-# ENFORCED: ansible/tests/repo/test_ty_config_covers_the_repo.py fails if a pythonpath entry
+# ENFORCED: tests/repo/test_ty_config_covers_the_repo.py fails if a pythonpath entry
 # is added here without a matching search path.
 extra-paths = [
-  "ansible/tests",
+  "tests",
   "hosts/components/worktree-holders/files",
   "hosts/lib",
   "hosts/components/deploy-ui/files",
-  "ansible/roles/k8s/monitor-bridge/files",
-  "ansible/roles/k8s/game-stats/files",
-  "ansible/roles/k8s/gpu-exporter/files",
-  "ansible/roles/k8s/karakeep/files",
-  "ansible/roles/k8s/longhorn-reconcile/files",
+  "k8s/roles/monitor-bridge/files",
+  "k8s/roles/game-stats/files",
+  "k8s/roles/gpu-exporter/files",
+  "k8s/roles/karakeep/files",
+  "k8s/roles/longhorn-reconcile/files",
   "scripts",
   "scripts/backup",
   "scripts/deploy_tools",
@@ -369,37 +369,37 @@ extra-paths = [
   "scripts/diagnostics",
   "scripts/secrets_mgmt",
   ".claude/hooks",
-  "ansible/roles/k8s/autofix-bridge/files",
-  "ansible/roles/k8s/configarr/files",
-  "ansible/roles/k8s/janitorr/files",
-  "ansible/roles/k8s/qbittorrent/files",
-  "ansible/roles/k8s/pihole/files",
-  "ansible/roles/k8s/arr-notification/files",
+  "k8s/roles/autofix-bridge/files",
+  "k8s/roles/configarr/files",
+  "k8s/roles/janitorr/files",
+  "k8s/roles/qbittorrent/files",
+  "k8s/roles/pihole/files",
+  "k8s/roles/arr-notification/files",
   "scripts/renderer/job_files",
   "hosts/components/fake-remux/files",
-  "ansible/roles/k8s/ical-proxy/files",
-  "ansible/roles/k8s/homelab-mcp/files",
-  "ansible/roles/k8s/crowdsec/files",
-  "ansible/roles/k8s/traefik/files",
-  "ansible/roles/k8s/artifacts/files",
+  "k8s/roles/ical-proxy/files",
+  "k8s/roles/homelab-mcp/files",
+  "k8s/roles/crowdsec/files",
+  "k8s/roles/traefik/files",
+  "k8s/roles/artifacts/files",
   "hosts/components/k3s-host-checks/files",
   "hosts/components/hypervisor/files",
   "hosts/components/renovate-notify/files",
   "hosts/components/renovate-agent/files",
   "hosts/components/claude-code/files",
-  "ansible/roles/k8s/home-assistant/files",
-  "ansible/roles/k8s/tdarr/files",
-  "ansible/roles/k8s/sonarr/files",
-  "ansible/roles/k8s/dri-device-plugin/files",
-  "ansible/roles/k8s/n8n/files",
-  "ansible/roles/k8s/prowlarr/files",
-  "ansible/roles/k8s/headlamp/files",
-  "ansible/roles/k8s/observability/files",
-  "ansible/roles/k8s/media-volume/files",
-  "ansible/roles/k8s/jellyfin/files",
-  "ansible/roles/k8s/registry/files",
-  "ansible/roles/k8s/netpol-baseline/files",
-  "ansible/roles/k8s/system-upgrade/files",
+  "k8s/roles/home-assistant/files",
+  "k8s/roles/tdarr/files",
+  "k8s/roles/sonarr/files",
+  "k8s/roles/dri-device-plugin/files",
+  "k8s/roles/n8n/files",
+  "k8s/roles/prowlarr/files",
+  "k8s/roles/headlamp/files",
+  "k8s/roles/observability/files",
+  "k8s/roles/media-volume/files",
+  "k8s/roles/jellyfin/files",
+  "k8s/roles/registry/files",
+  "k8s/roles/netpol-baseline/files",
+  "k8s/roles/system-upgrade/files",
   "scripts/backup/tests",
   "scripts/deploy_tools/tests",
   "scripts/docs/tests",
@@ -413,13 +413,13 @@ extra-paths = [
 # project. Measured 2026-09-02 — with `include` absent, a deliberately broken file at the repo
 # root was not checked at all, while one under `scripts/` still was. A hand-kept list is the
 # enumeration failure `testpaths` has a guard for, so this one has a guard too.
-# ENFORCED: ansible/tests/repo/test_ty_config_covers_the_repo.py fails on a tracked .py
+# ENFORCED: tests/repo/test_ty_config_covers_the_repo.py fails on a tracked .py
 # file outside these directories.
 include = [
   "scripts",
   ".claude",
-  "ansible/roles",
-  "ansible/tests",
+  "k8s",
+  "tests",
   "evals",
   "hosts",
 ]
@@ -485,9 +485,9 @@ possibly-missing-submodule = "error"
 # pod starts. ty has no per-module suppression, so the alternatives are this or losing the rule
 # tree-wide. The role's own tests are what cover that file's imports.
 include = [
-  "ansible/roles/k8s/homelab-mcp/files/app.py",
-  "ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py",
-  "ansible/roles/k8s/home-assistant/files/cast_quit_app.py",
+  "k8s/roles/homelab-mcp/files/app.py",
+  "k8s/roles/karakeep/files/karakeep-time-tagger.py",
+  "k8s/roles/home-assistant/files/cast_quit_app.py",
 ]
 [tool.ty.overrides.rules]
 import-not-found = "ignore"
@@ -498,7 +498,7 @@ import-not-found = "ignore"
 # `self.karakeep = None` and a later method assigns the client before any caller reads it, an
 # ordering ty cannot follow. The
 # override covers that one rule in that one file; ty checks every other rule there.
-include = ["ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py"]
+include = ["k8s/roles/karakeep/files/karakeep-time-tagger.py"]
 [tool.ty.overrides.rules]
 missing-union-attribute = "ignore"
 

@@ -30,7 +30,7 @@ from lib import yaml_fast
 from lib.git import git
 from secrets_mgmt.sops_io import REPO, SECRETS_FILE
 
-REGISTRY_FILE = os.path.join(REPO, "ansible", "secret_rotation.yml")
+REGISTRY_FILE = os.path.join(REPO, "secrets", "secret_rotation.yml")
 
 
 def run_git(*args: str) -> str:

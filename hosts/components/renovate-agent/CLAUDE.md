@@ -74,7 +74,7 @@ the caps or the schedule cannot quietly widen it.
   the primary checkout, and refuses when that command fails or prints no list.
   `hosts/tests/test_renovate_agent_unit.py` pins that the prompt names the same marker
   the rule's `groupName` carries, and
-  `ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py` asserts the
+  `tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py` asserts the
   marker sits on exactly the per-package rules whose pin a denied role owns. Which rules carry
   it, and the three rounds that got the marker into a title, are on the docs page.
 - **Mode (explicit + reversible):** `renovate_agent_enabled`, which ships `false` (see *Arming

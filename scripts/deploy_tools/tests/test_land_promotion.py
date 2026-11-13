@@ -56,7 +56,7 @@ def test_a_bento_pdf_template_path_derives_the_tag_the_landing_names(
     land_run, declared, named
 ):
     """`land_tags.derive` runs for real, so the path alone decides what the landing names."""
-    path = "ansible/roles/k8s/bento-pdf/templates/deployment.yaml.j2"
+    path = "k8s/roles/bento-pdf/templates/deployment.yaml.j2"
     derived = land_tags.derive([path], changed_files=1, declared=declared)
     fakes = _fakes(
         gh_views={"files,changedFiles": {"files": [{"path": path}], "changedFiles": 1}},
@@ -85,7 +85,7 @@ def test_a_changed_set_name_flux_does_not_own_is_not_gated(land_run):
     "path",
     [
         "docs/landing.md",
-        "ansible/roles/k8s/sonarr/CLAUDE.md",
+        "k8s/roles/sonarr/CLAUDE.md",
         "scripts/lib/tests/test_x.py",
     ],
 )

@@ -211,7 +211,7 @@ def derived_facts(
     That is `k8s_built_image_tags`, for every role.
 
     Args:
-        role_dir: The role directory, `ansible/roles/k8s/<tag>`.
+        role_dir: The role directory, `k8s/roles/<tag>`.
         ctx: The role's play-time context, the stub file's variables included.
         built: `k8s_built_image_tags` as the caller already computed it from `ctx`, so a
             render's `DIR/images/tags.json` and its consumers' refs share one computation.

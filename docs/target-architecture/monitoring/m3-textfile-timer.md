@@ -67,18 +67,18 @@ cluster outage.
     - Its header records why it exists apart from Prometheus: on 2026-08-23 it was the only
       thing watching daniel-box's root disk for 5.4 hours.
 - **The Kuma tile.** `daniel-box-disk.json` in
-  `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`, named `daniel-box Disk`,
+  `k8s/roles/uptime-kuma/templates/static-monitors.yaml.j2`, named `daniel-box Disk`,
   has `interval: 1200`, `tag-severity: critical`, and notifies Discord and email. AutoKuma
   syncs every 60s (`uptime_kuma_k8s_autokuma_sync_interval`) with `ON_DELETE=delete`, so
   dropping the entity deletes the live monitor.
 - **A tile deleted under a pushing script pages.** `swallowed_verdicts` in
-  `ansible/roles/k8s/monitor-bridge/files/verdicts/logs.py` counts a push that Kuma rejected
+  `k8s/roles/monitor-bridge/files/verdicts/logs.py` counts a push that Kuma rejected
   (`KUMA_REJECTED`, `by=kuma` on the line), whatever its status. It counts every tag outside
   `HC_ROUTED_TAGS`, and `disk-health` is outside it. The rejected line stays the tag's newest
   line until the script logs its next `status=` line.
 - **The textfile collector already has a producer, and monitor-bridge pages on it.**
     - The node-exporter DaemonSet
-      (`ansible/roles/k8s/node-exporter/templates/daemonset.yaml.j2`) mounts hostPath
+      (`k8s/roles/node-exporter/templates/daemonset.yaml.j2`) mounts hostPath
       `/var/lib/node-exporter-textfile` at `/textfile` and passes
       `--collector.textfile.directory=/textfile`, on both k3s nodes. The hostPath has
       `type: DirectoryOrCreate`, since a789fc266
@@ -134,7 +134,7 @@ cluster outage.
       `test_task_carrying_a_tag_the_env_task_has_is_clean` use `disk-health.sh.j2` as the
       fixture for a script that sources the env file. `_missing_env_tags` skips any script that
       does not.
-    - `ansible/tests/services/test_healthchecks_pings.py`, which uses the script as its
+    - `tests/services/test_healthchecks_pings.py`, which uses the script as its
       rendered sender.
     - `hosts/tests/test_health_cron_boot_grace.py:FREQUENT_SCRIPTS` includes the script.
       `test_a_guarded_cron_still_beats_its_kuma_tile` requires `PUSH_URL="` before the guard and
@@ -143,12 +143,12 @@ cluster outage.
       script. `push_corpus` keeps every template that mentions `api/push` or `PUSH_URL`. It
       measured 35 templates at `70591c307` against `_MIN_CORPUS` 23. The comment beside
       `_MIN_CORPUS` says "measured 24", which is stale.
-    - `ansible/tests/services/test_kuma_static_monitors.py:EMAIL_TIER` names `daniel-box Disk`,
+    - `tests/services/test_kuma_static_monitors.py:EMAIL_TIER` names `daniel-box Disk`,
       and `test_email_tier_membership_is_exactly_declared` asserts set equality.
     - `scripts/secrets_mgmt/consumers.py:CROSS_HOST_PUSH_TOKENS` names
       `daniel_box_disk_push_token`, and so does a comment in
       `scripts/secrets_mgmt/tests/test_secret_consumers.py`.
-    - `ansible/secret_rotation.yml` holds a row for `daniel_box_disk_push_token` in the
+    - `secrets/secret_rotation.yml` holds a row for `daniel_box_disk_push_token` in the
       `auto` tier. `grep -c '_push_token:'` on that file prints 83.
       `scripts/secrets_mgmt/secrets_lib/secret_registry.py:sync` adds missing names and only
       reports stale rows. `scripts/secrets_mgmt/secret_rotation.py:cmd_audit` returns 1 under
@@ -311,7 +311,7 @@ producer arrives. M6's B2 adds the task there for its two Loki-route witnesses.
 ### The tree
 
 ```diff
- ansible/roles/k8s/node-exporter/
+ k8s/roles/node-exporter/
 ~  CLAUDE.md                        names the directory's producers and the contract (PR 1)
 ~  templates/daemonset.yaml.j2      volume comment points at the CLAUDE.md (PR 1)
  ansible/roles/setup/claude_code/
@@ -320,10 +320,10 @@ producer arrives. M6's B2 adds the task there for its two Loki-route witnesses.
 ~  templates/disk-health.sh.j2      writes disk-health.prom (PR 2); drops the Kuma push (PR 5)
 ~  templates/kuma-push.env.j2       drops DANIEL_BOX_DISK_PUSH_TOKEN (PR 5)
 ~  tasks/health-crons.yml           the textfile-directory task (PR 2)
- ansible/roles/k8s/observability/
+ k8s/roles/observability/
 +  files/rules/host-checks.yaml     (PR 3; PR 5 drops shadow from two alerts)
 +  tests/rules/host-checks.test.yaml
- ansible/roles/k8s/uptime-kuma/
+ k8s/roles/uptime-kuma/
 ~  templates/static-monitors.yaml.j2   widens daniel-box-disk.json (PR 4), deletes it (PR 5)
  ansible/
 ~  vars/secrets.yml                 loses daniel_box_disk_push_token (PR 6, operator-only)
@@ -351,7 +351,7 @@ because the slice index does not order D5 after M3. Each order below holds under
 - The DaemonSet's volume comment and `claude-cgroup-metrics.sh`'s header point at that
   `CLAUDE.md` instead of restating it, so neither can go stale again.
 - Deploys `node-exporter`. `kubectl apply` reads a comment edit as `unchanged`, so nothing
-  rolls (`ansible/roles/k8s/manifests/CLAUDE.md`, the restart rule).
+  rolls (`k8s/roles/manifests/CLAUDE.md`, the restart rule).
 - Applies `claude_code` on both nodes. The tick applies `initial_setup.yml --tags claude_code`
   on daniel-box itself. `land.sh` names daniel-server's apply (`docs/landing.md`, *A
   self-applied setup role reaching a host beyond the tick's own*). The operator runs it on
@@ -411,7 +411,7 @@ because the slice index does not order D5 after M3. Each order below holds under
       The alert does not fire.
     - An exporter-down case: `up{job="node",origin="daniel-box"}` reads 0 and the series is
       gone. The alert does not fire.
-- Add the literal-pin pytest in `ansible/tests/services/`. It asserts that both literals in
+- Add the literal-pin pytest in `tests/services/`. It asserts that both literals in
   `DiskHealthNotReporting`, the `> 1500` and the `[1500s]` window, equal the rendered
   `DEADLINE_S`.
 - Deploys `observability`. The rules reload in place (M1, `--config.auto-reload`), and no pod
@@ -498,9 +498,9 @@ because the slice index does not order D5 after M3. Each order below holds under
 PR 6 is one commit with five parts. The first four are the token recipe M5's PR 5 and M6's
 token PRs use:
 
-1. **Operator-only:** remove `daniel_box_disk_push_token` from `ansible/vars/secrets.yml`
+1. **Operator-only:** remove `daniel_box_disk_push_token` from `secrets/secrets.yml`
    with `sops`.
-1. Delete the key's row from `ansible/secret_rotation.yml` by hand. Running
+1. Delete the key's row from `secrets/secret_rotation.yml` by hand. Running
    `secret_rotation.py sync` does not delete it, because `secret_registry.py:sync` only
    reports a stale row. A commit that leaves the row fails the
    `secret-rotation-registry-sync` prek hook, and CI's prek run with it (*Baseline*).
@@ -519,12 +519,12 @@ The PR body quotes four reads:
   hook runs the same command at commit time. Under `--check`, `cmd_audit`'s exit code reads
   registry drift only. Where an age key exists, its push-token-shape arm decrypts in-process
   and prints key names, never values.
-- `grep -c '_push_token:' ansible/secret_rotation.yml` printing one fewer than on
+- `grep -c '_push_token:' secrets/secret_rotation.yml` printing one fewer than on
   `origin/master`. The count was 83 at `70591c307`, and M5 and D5 each retire tokens of
   their own, so the absolute number depends on the order the slices land.
-- `grep -c '^daniel_box_disk_push_token:' ansible/vars/secrets.yml` printing 0. It prints a
+- `grep -c '^daniel_box_disk_push_token:' secrets/secrets.yml` printing 0. It prints a
   count, never a value.
-- `git diff --stat origin/master -- ansible/vars/secrets.yml`. Plain `git diff` on that file
+- `git diff --stat origin/master -- secrets/secrets.yml`. Plain `git diff` on that file
   prints plaintext.
 
 Land this a week after PR 5, for the reason M2's PR 5 gives.
@@ -544,8 +544,8 @@ uv run python scripts/diagnostics/probe.py metric 'ALERTS{alertname="TextfileCol
 # After PR 5: the tile is gone
 uv run python scripts/diagnostics/probe.py metric 'monitor_status{monitor_name="daniel-box Disk"}'
 # After PR 6: the key and its registry row are gone, and the registry is in sync (exit 0)
-grep -c '^daniel_box_disk_push_token:' ansible/vars/secrets.yml
-grep -c '^  daniel_box_disk_push_token:' ansible/secret_rotation.yml
+grep -c '^daniel_box_disk_push_token:' secrets/secrets.yml
+grep -c '^  daniel_box_disk_push_token:' secrets/secret_rotation.yml
 uv run python scripts/secrets_mgmt/secret_rotation.py audit --check
 ```
 
@@ -686,7 +686,7 @@ Kuma is untouched, because no push is involved.
       textfile metric.
     - The comment in `ansible/roles/setup/nut_host/defaults/main.yml` that names `daniel-box
       Disk` keeps its ratio and drops the tile's name.
-- **PR 6.** The `RETIRED` entry, the row deleted from `ansible/secret_rotation.yml`, the
+- **PR 6.** The `RETIRED` entry, the row deleted from `secrets/secret_rotation.yml`, the
   `secret-tiers` fragment that `regen-doc-fragments` rewrites, `CROSS_HOST_PUSH_TOKENS` and
   the test comment.
 
@@ -814,7 +814,7 @@ Fixed:
   `scripts/secrets_mgmt/secrets_lib/secret_registry.py:sync` adds missing names and builds
   its `stale` list without deleting a row. `scripts/secrets_mgmt/secret_rotation.py:cmd_audit`
   returns 1 under `--check` when `missing` or `stale` is non-empty. The `secret-rotation-registry-sync`
-  hook in `prek.toml` runs that command. `ansible/secret_rotation.yml` holds the
+  hook in `prek.toml` runs that command. `secrets/secret_rotation.yml` holds the
   `daniel_box_disk_push_token` row, so the old recipe would have failed prek and CI. PR 6 is
   now one commit with five parts: the **operator-only** `sops` removal, the row deleted by
   hand, the `RETIRED` entry, the rewritten `secret-tiers` fragment and the

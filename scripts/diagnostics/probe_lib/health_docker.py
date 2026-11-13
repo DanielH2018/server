@@ -25,7 +25,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from diagnostics.probe_lib import core
 
 from lib.exit_codes import PROBE_NOT_APPLICABLE
-from lib.ansible_inventory import PI_HOST, PI_HOST_VARS, pi_entries_in
+from lib.inventory_lists import PI_HOST, PI_HOST_VARS, pi_entries_in
 from lib.kubectl import DEFAULT_CLUSTER, kubectl
 
 

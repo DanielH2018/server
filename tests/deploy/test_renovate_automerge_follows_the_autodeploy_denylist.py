@@ -1,0 +1,508 @@
+#!/usr/bin/env python3
+"""Renovate automerges a k8s image bump only for a role the deployer may auto-deploy.
+
+renovate.json automerges minor/patch and digest image bumps under
+`k8s/roles/**`, and `promote` applies what merges. A role on the denylist that
+`lib.k8s_roles.k8s_autodeploy_denylist` derives from each role's `k8s_autodeploy` flag must not
+take that path. If the two boundaries disagree, Renovate merges a denied role's bump unattended.
+`k8s_autodeploy_counts.py --denylist` prints the same list for the lander, and the agreement
+tests below hold the two readers to one derivation.
+
+One `automerge: false` rule whose `matchFileNames` is the denylist spelled as paths.
+That list is typed into renovate.json, so this guard is what stops it drifting from the flags:
+it derives the expected set the same way the deployer does and asserts equality, and its
+failure message prints the exact line to add or drop. It also pins the rule's position, which
+is load-bearing — later rules win in Renovate, so the rule must follow the two automerge rules
+it overrides and precede the per-package manual rules that override its groupName.
+
+One path in the rule is not a role's defaults: `inventory/group_vars/all.yml`.
+`crowdsec_k8s_image` lives there because traefik's and authelia's sidecars read it too, and a
+per-role rule would leave it automerging while the deployer routes the merged bump through its
+broad plane — which applies every role reading the key with no denylist check. That path is
+safe in this rule only while every `_image:` pin in group_vars belongs to denied roles, so the
+census below reads each pin's Jinja readers out of the role trees and asserts they are all
+denied. A pin no role reads fails too: an unmappable pin must not pass as "not eligible".
+The `registry-gc` component's defaults are the other: they copy registry's pins, and
+`scripts/tests/test_renovate_host_file_copies.py` holds each copy resolving like its source.
+
+A second rule carries the same marker for a denied role's BASE image. The
+denylist rule is scoped to the custom.regex manager over `defaults/main.yml`, so it never sees
+a `FROM` pin in `templates/Dockerfile*.j2` — Renovate's built-in dockerfile manager finds
+those. Its `matchFileNames` is
+the denylist restricted to the roles that carry a Dockerfile, derived here the same way, with a
+named-member floor so a glob that finds nothing fails rather than agreeing with an empty rule.
+n8n is on it; its per-package rules override the groupName and carry the marker themselves.
+
+Run: uv run pytest tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py
+"""
+
+import json
+import re
+from pathlib import Path
+
+import pytest
+from lib import yaml_fast
+
+from _autodeploy import _denylist
+from _helpers import ALL_VARS, REPO
+from dev import k8s_autodeploy_counts
+from _role_census import role_dirs
+
+_RENOVATE = REPO / "renovate.json"
+
+# The rule is found by the fixed prefix of its groupName; the parenthetical is the
+# `manual —` tell the renovate-prs skill triages by.
+MANUAL_GROUP_PREFIX = "k8s images (manual — k8s_autodeploy: false"
+
+# The base-image rule's head differs from the denylist rule's so `find_rule` keeps its
+# exactly-one contract on each; the parenthetical carries the same marker.
+DOCKERFILE_MANUAL_GROUP_PREFIX = "k8s base images (manual — k8s_autodeploy: false"
+DOCKERFILE_GLOB = "templates/Dockerfile*.j2"
+
+# The denied roles the Dockerfile census must find, so a moved or renamed template fails as a
+# missing member rather than passing over an empty glob.
+KNOWN_DENIED_DOCKERFILE_ROLES = frozenset({"code-server", "nut", "terraria", "valheim"})
+
+# The automerge rules the manual rule must FOLLOW, and the first per-package manual rule it
+# must PRECEDE — the CrowdSec bouncer plugin pin shares traefik's defaults/main.yml, and its
+# own rule must keep the last word on that pin's group name.
+AUTOMERGE_GROUP = "k8s image {{depName}}"
+DIGEST_UPDATE_TYPES = ["digest", "pinDigest"]
+FIRST_PER_PACKAGE_MANUAL_GROUP_PREFIX = "crowdsec bouncer plugin (manual"
+
+# The manual paths that are not a denied role's defaults. Fixed here rather than tolerated
+# as "any extra": another path added by hand has to be argued for the way these were.
+ALL_VARS_REL = ALL_VARS.relative_to(REPO).as_posix()
+HOST_FILES_REL = "hosts/components/registry-gc/defaults/main.yml"
+_K8S_ROLES = REPO / "k8s" / "roles"
+
+# The pin the census must find, so a group_vars with no `_image:` key (renamed, moved back to
+# a role) fails as a missing member rather than passing over nothing.
+KNOWN_GROUP_VARS_PINS = frozenset({"crowdsec_k8s_image"})
+
+# A Jinja reference to the var — `{{ var }}`, `{% if var %}` — not a mention in a comment:
+# sonarr's defaults cite crowdsec_k8s_image in prose and read nothing.
+_JINJA_REF_PREFIX = r"\{[{%][^}%]*\b"
+
+# The floor the derived denylist must clear, mirroring test_the_real_repo_derives_a_plausible_denylist:
+# below it the filter has stopped reading roles and every assertion here runs over nothing.
+_DENYLIST_FLOOR = 34
+_LOAD_BEARING = frozenset({"traefik", "authelia", "code-server"})
+
+
+def expected_match_file_names(denylist: set[str]) -> list[str]:
+    """The denylist as Renovate must spell it: group_vars, the host-files copy, then each denied role."""
+    return [ALL_VARS_REL, HOST_FILES_REL] + [
+        f"k8s/roles/{role}/defaults/main.yml" for role in sorted(denylist)
+    ]
+
+
+def group_vars_image_pins(text: str) -> set[str]:
+    """Every top-level `*_image:` key in a group_vars document."""
+    data = yaml_fast.safe_load(text) or {}
+    return {k for k in data if str(k).endswith("_image")}
+
+
+def roles_reading(var: str, roles_dir: Path = _K8S_ROLES) -> set[str]:
+    """The k8s roles whose files reference `var` from inside a Jinja tag."""
+    pattern = re.compile(_JINJA_REF_PREFIX + re.escape(var) + r"\b")
+    readers: set[str] = set()
+    for role in role_dirs(roles_dir):
+        for f in role.rglob("*"):
+            if f.is_file() and f.suffix in {".j2", ".yml", ".yaml"}:
+                if pattern.search(f.read_text(errors="replace")):
+                    readers.add(role.name)
+                    break
+    return readers
+
+
+def group_vars_pin_problems(
+    readers_by_pin: dict[str, set[str]], denylist: set[str]
+) -> list[str]:
+    """Every group_vars image pin some eligible role reads, or no role reads. Empty means none.
+
+    Pure over `{pin: reader roles}` so the red half of the pair below can hand it a pin an
+    eligible role reads without editing the tree.
+    """
+    problems: list[str] = []
+    for pin, readers in sorted(readers_by_pin.items()):
+        if not readers:
+            problems.append(
+                f"{pin} in {ALL_VARS_REL} is read by no k8s role — an unmappable pin cannot be "
+                "argued as denied; find its reader or move it"
+            )
+            continue
+        eligible = sorted(readers - denylist)
+        if eligible:
+            problems.append(
+                f"{pin} in {ALL_VARS_REL} is read by auto-deployable role(s) {eligible}, so the "
+                "manual rule's group_vars entry would hold an eligible bump too — move the pin "
+                "into the role's defaults or deny the role"
+            )
+    return problems
+
+
+def find_rule(rules: list[dict], group_prefix: str) -> tuple[int, dict]:
+    """Index and body of the single rule whose groupName starts with `group_prefix`."""
+    hits = [
+        (i, r)
+        for i, r in enumerate(rules)
+        if str(r.get("groupName", "")).startswith(group_prefix)
+    ]
+    assert len(hits) == 1, (
+        f"expected exactly one rule with groupName starting {group_prefix!r}, found {len(hits)}"
+    )
+    return hits[0]
+
+
+def manual_rule_problems(rules: list[dict], denylist: set[str]) -> list[str]:
+    """Every way the manual rule can disagree with the denylist. Empty means they agree.
+
+    Pure over the parsed `packageRules` so the red half of the pair below can hand it a rule
+    set with a role missing, without editing renovate.json.
+    """
+    problems: list[str] = []
+    _, rule = find_rule(rules, MANUAL_GROUP_PREFIX)
+    if rule.get("automerge") is not False:
+        problems.append("the manual rule does not set `automerge: false`")
+    if "matchUpdateTypes" in rule:
+        problems.append(
+            "the manual rule sets matchUpdateTypes, so an update type it does not name "
+            "(digest is the one that bit tdarr) falls back to the automerge rules above"
+        )
+    actual = set(rule.get("matchFileNames", []))
+    expected = set(expected_match_file_names(denylist))
+    for path in sorted(expected - actual):
+        problems.append(
+            f"denied role missing from matchFileNames — add {json.dumps(path)}"
+        )
+    for path in sorted(actual - expected):
+        problems.append(
+            f"matchFileNames names a path no denied role owns — drop {json.dumps(path)}"
+        )
+    return problems
+
+
+def roles_with_dockerfiles(roles_dir: Path = _K8S_ROLES) -> set[str]:
+    """The k8s roles with at least one `templates/Dockerfile*.j2` — the built-in manager's reach."""
+    return {
+        role.name
+        for role in role_dirs(roles_dir)
+        if any((role / "templates").glob("Dockerfile*.j2"))
+    }
+
+
+def expected_dockerfile_match_file_names(
+    denylist: set[str], dockerfile_roles: set[str]
+) -> list[str]:
+    """The base-image rule's paths: one Dockerfile glob per denied role that carries one."""
+    return [
+        f"k8s/roles/{role}/{DOCKERFILE_GLOB}"
+        for role in sorted(denylist & dockerfile_roles)
+    ]
+
+
+def dockerfile_rule_problems(
+    rules: list[dict], denylist: set[str], dockerfile_roles: set[str]
+) -> list[str]:
+    """Every way the base-image rule can disagree with the denied Dockerfile roles. Empty means none.
+
+    Pure over the parsed rules and the role census, like `manual_rule_problems`, so the red half
+    of its pair can hand it a rule with a role missing without editing renovate.json.
+    """
+    problems: list[str] = []
+    _, rule = find_rule(rules, DOCKERFILE_MANUAL_GROUP_PREFIX)
+    if rule.get("automerge") is not False:
+        problems.append("the base-image rule does not set `automerge: false`")
+    if "matchUpdateTypes" in rule:
+        problems.append(
+            "the base-image rule sets matchUpdateTypes, so an update type it does not name "
+            "(code-server's FROM is a version pin, nut's a digest) arrives with a bare title"
+        )
+    if rule.get("matchManagers") != ["dockerfile"]:
+        problems.append(
+            "the base-image rule must match the built-in `dockerfile` manager alone — the "
+            "custom.regex pins already have the denylist rule"
+        )
+    actual = set(rule.get("matchFileNames", []))
+    expected = set(expected_dockerfile_match_file_names(denylist, dockerfile_roles))
+    for path in sorted(expected - actual):
+        problems.append(
+            f"denied role's Dockerfile missing from matchFileNames — add {json.dumps(path)}"
+        )
+    for path in sorted(actual - expected):
+        problems.append(
+            "matchFileNames names a Dockerfile no denied role owns — drop "
+            f"{json.dumps(path)}"
+        )
+    return problems
+
+
+def _rules() -> list[dict]:
+    return json.loads(_RENOVATE.read_text())["packageRules"]
+
+
+def test_the_denylist_this_guard_reads_is_not_vacuous() -> None:
+    denied = _denylist()
+    assert len(denied) >= _DENYLIST_FLOOR, sorted(denied)
+    assert _LOAD_BEARING <= denied, sorted(_LOAD_BEARING - denied)
+
+
+def test_the_landers_denylist_output_is_the_list_this_rule_reads(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert k8s_autodeploy_counts.main(["--denylist"]) == 0
+    assert set(capsys.readouterr().out.strip().split(",")) == _denylist()
+
+
+def test_the_landers_denylist_output_is_empty_when_the_derivation_raises(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert k8s_autodeploy_counts.print_denylist(tmp_path) == 1
+    assert capsys.readouterr().out == ""
+
+
+def test_the_manual_rule_matches_exactly_the_denied_roles() -> None:
+    problems = manual_rule_problems(_rules(), _denylist())
+    assert not problems, "\n".join(problems)
+
+
+def test_the_manual_rule_sits_between_the_automerge_rules_and_the_per_package_manual_rules() -> (
+    None
+):
+    rules = _rules()
+    manual_at, _ = find_rule(rules, MANUAL_GROUP_PREFIX)
+    automerge_at = next(
+        i for i, r in enumerate(rules) if r.get("groupName") == AUTOMERGE_GROUP
+    )
+    digest_at = next(
+        i
+        for i, r in enumerate(rules)
+        if r.get("matchUpdateTypes") == DIGEST_UPDATE_TYPES
+    )
+    first_per_package_at, _ = find_rule(rules, FIRST_PER_PACKAGE_MANUAL_GROUP_PREFIX)
+    assert automerge_at < manual_at, (
+        "the manual rule must follow the per-service automerge rule it overrides"
+    )
+    assert digest_at < manual_at, (
+        "the manual rule must follow the digest automerge rule it overrides"
+    )
+    assert manual_at < first_per_package_at, (
+        "the manual rule must precede the per-package manual rules, which override its groupName"
+    )
+
+
+def test_every_group_vars_image_pin_belongs_to_denied_roles() -> None:
+    pins = group_vars_image_pins(ALL_VARS.read_text())
+    assert KNOWN_GROUP_VARS_PINS <= pins, sorted(KNOWN_GROUP_VARS_PINS - pins)
+    problems = group_vars_pin_problems({p: roles_reading(p) for p in pins}, _denylist())
+    assert not problems, "\n".join(problems)
+
+
+def test_the_dockerfile_census_finds_the_known_denied_roles() -> None:
+    found = roles_with_dockerfiles() & _denylist()
+    assert KNOWN_DENIED_DOCKERFILE_ROLES <= found, sorted(
+        KNOWN_DENIED_DOCKERFILE_ROLES - found
+    )
+
+
+def test_the_base_image_rule_matches_exactly_the_denied_roles_with_a_dockerfile() -> (
+    None
+):
+    problems = dockerfile_rule_problems(_rules(), _denylist(), roles_with_dockerfiles())
+    assert not problems, "\n".join(problems)
+
+
+def test_the_base_image_rule_follows_the_denylist_rule() -> None:
+    """Kept beside the rule it extends, so the two marker rules read as one boundary."""
+    rules = _rules()
+    manual_at, _ = find_rule(rules, MANUAL_GROUP_PREFIX)
+    dockerfile_at, _ = find_rule(rules, DOCKERFILE_MANUAL_GROUP_PREFIX)
+    assert dockerfile_at == manual_at + 1
+
+
+def test_the_manual_rule_is_scoped_to_container_images() -> None:
+    """The bouncer plugin pin shares traefik's defaults/main.yml; this rule must not claim it."""
+    _, rule = find_rule(_rules(), MANUAL_GROUP_PREFIX)
+    assert rule.get("matchDatasources") == ["docker"]
+    assert rule.get("matchManagers") == ["custom.regex"]
+
+
+# --- the red-proof pair: the checker must accept a matching rule and reject a drifted one ---
+
+_DENYLIST = {"authelia", "traefik"}
+
+
+def _rule_set(paths: list[str], **overrides) -> list[dict]:
+    rule = {
+        "groupName": MANUAL_GROUP_PREFIX + ", so a person merges it)",
+        "automerge": False,
+        "matchFileNames": paths,
+    }
+    rule.update(overrides)
+    return [{"groupName": AUTOMERGE_GROUP, "automerge": True}, rule]
+
+
+def test_a_rule_spelling_the_denylist_exactly_is_clean() -> None:
+    assert (
+        manual_rule_problems(_rule_set(expected_match_file_names(_DENYLIST)), _DENYLIST)
+        == []
+    )
+
+
+def test_a_denied_role_missing_from_the_rule_is_flagged() -> None:
+    problems = manual_rule_problems(
+        _rule_set(expected_match_file_names({"authelia"})), _DENYLIST
+    )
+    assert problems == [
+        'denied role missing from matchFileNames — add "k8s/roles/traefik/defaults/main.yml"'
+    ]
+
+
+def test_a_promoted_role_still_in_the_rule_is_flagged() -> None:
+    problems = manual_rule_problems(
+        _rule_set(expected_match_file_names(_DENYLIST | {"sonarr"})), _DENYLIST
+    )
+    assert problems == [
+        'matchFileNames names a path no denied role owns — drop "k8s/roles/sonarr/defaults/main.yml"'
+    ]
+
+
+@pytest.mark.parametrize(
+    ("overrides", "fragment"),
+    [
+        ({"automerge": True}, "automerge: false"),
+        ({"matchUpdateTypes": ["minor", "patch"]}, "matchUpdateTypes"),
+    ],
+)
+def test_a_rule_that_still_automerges_some_way_is_flagged(
+    overrides: dict, fragment: str
+) -> None:
+    problems = manual_rule_problems(
+        _rule_set(expected_match_file_names(_DENYLIST), **overrides), _DENYLIST
+    )
+    assert any(fragment in p for p in problems), problems
+
+
+_DOCKERFILE_ROLES = {"traefik", "sonarr"}
+
+
+def _dockerfile_rule_set(paths: list[str], **overrides) -> list[dict]:
+    rule = {
+        "groupName": DOCKERFILE_MANUAL_GROUP_PREFIX + ", so a person merges it)",
+        "automerge": False,
+        "matchManagers": ["dockerfile"],
+        "matchFileNames": paths,
+    }
+    rule.update(overrides)
+    return [rule]
+
+
+def test_a_base_image_rule_spelling_the_denied_dockerfile_roles_is_clean() -> None:
+    paths = expected_dockerfile_match_file_names(_DENYLIST, _DOCKERFILE_ROLES)
+    assert paths == ["k8s/roles/traefik/templates/Dockerfile*.j2"]
+    assert (
+        dockerfile_rule_problems(
+            _dockerfile_rule_set(paths), _DENYLIST, _DOCKERFILE_ROLES
+        )
+        == []
+    )
+
+
+def test_a_denied_dockerfile_role_missing_from_the_base_image_rule_is_flagged() -> None:
+    problems = dockerfile_rule_problems(
+        _dockerfile_rule_set([]), _DENYLIST, _DOCKERFILE_ROLES
+    )
+    assert problems == [
+        "denied role's Dockerfile missing from matchFileNames — add "
+        '"k8s/roles/traefik/templates/Dockerfile*.j2"'
+    ]
+
+
+def test_an_eligible_dockerfile_role_still_in_the_base_image_rule_is_flagged() -> None:
+    problems = dockerfile_rule_problems(
+        _dockerfile_rule_set(
+            expected_dockerfile_match_file_names(
+                _DENYLIST | {"sonarr"}, _DOCKERFILE_ROLES
+            )
+        ),
+        _DENYLIST,
+        _DOCKERFILE_ROLES,
+    )
+    assert problems == [
+        "matchFileNames names a Dockerfile no denied role owns — drop "
+        '"k8s/roles/sonarr/templates/Dockerfile*.j2"'
+    ]
+
+
+@pytest.mark.parametrize(
+    ("overrides", "fragment"),
+    [
+        ({"automerge": True}, "automerge: false"),
+        ({"matchUpdateTypes": ["digest"]}, "matchUpdateTypes"),
+        ({"matchManagers": ["custom.regex"]}, "`dockerfile` manager"),
+    ],
+)
+def test_a_base_image_rule_that_reaches_the_wrong_pins_is_flagged(
+    overrides: dict, fragment: str
+) -> None:
+    problems = dockerfile_rule_problems(
+        _dockerfile_rule_set(
+            expected_dockerfile_match_file_names(_DENYLIST, _DOCKERFILE_ROLES),
+            **overrides,
+        ),
+        _DENYLIST,
+        _DOCKERFILE_ROLES,
+    )
+    assert any(fragment in p for p in problems), problems
+
+
+def test_the_dockerfile_census_reads_only_the_templates_directory(
+    tmp_path: Path,
+) -> None:
+    """A Dockerfile outside `templates/` is not where Ansible renders a build from."""
+    (tmp_path / "builder" / "templates").mkdir(parents=True)
+    (tmp_path / "builder" / "templates" / "Dockerfile-runners.j2").write_text(
+        "FROM a\n"
+    )
+    (tmp_path / "stray" / "files").mkdir(parents=True)
+    (tmp_path / "stray" / "files" / "Dockerfile.j2").write_text("FROM a\n")
+    (tmp_path / "plain").mkdir()
+    assert roles_with_dockerfiles(tmp_path) == {"builder"}
+
+
+def test_a_group_vars_pin_read_only_by_denied_roles_is_clean() -> None:
+    assert (
+        group_vars_pin_problems({"x_image": {"authelia", "traefik"}}, _DENYLIST) == []
+    )
+
+
+def test_a_group_vars_pin_an_eligible_role_reads_is_flagged() -> None:
+    problems = group_vars_pin_problems({"x_image": {"authelia", "sonarr"}}, _DENYLIST)
+    assert len(problems) == 1 and "['sonarr']" in problems[0], problems
+
+
+def test_a_group_vars_pin_no_role_reads_is_flagged() -> None:
+    problems = group_vars_pin_problems({"x_image": set()}, _DENYLIST)
+    assert len(problems) == 1 and "read by no k8s role" in problems[0], problems
+
+
+def test_the_jinja_reference_census_ignores_a_comment(tmp_path: Path) -> None:
+    """sonarr's defaults cite crowdsec_k8s_image in a comment and must not count as a reader."""
+    (tmp_path / "reader" / "templates").mkdir(parents=True)
+    (tmp_path / "reader" / "templates" / "d.yaml.j2").write_text(
+        "image: {{ x_image }}\n"
+    )
+    (tmp_path / "citer" / "defaults").mkdir(parents=True)
+    (tmp_path / "citer" / "defaults" / "main.yml").write_text(
+        "# see x_image in group_vars\n"
+    )
+    assert roles_reading("x_image", tmp_path) == {"reader"}
+
+
+def test_a_missing_manual_rule_fails_rather_than_passing_over_nothing() -> None:
+    with pytest.raises(AssertionError, match="expected exactly one rule"):
+        manual_rule_problems(
+            [{"groupName": AUTOMERGE_GROUP, "automerge": True}], _DENYLIST
+        )

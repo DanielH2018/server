@@ -33,13 +33,7 @@ from lib.kubectl import DEFAULT_CLUSTER, MissingKubectl, WrongCluster, kubectl_j
 from lib.repo_paths import REPO
 
 PROMETHEUS_TEMPLATE_PATH = (
-    REPO
-    / "ansible"
-    / "roles"
-    / "k8s"
-    / "observability"
-    / "templates"
-    / "prometheus.yaml.j2"
+    REPO / "k8s" / "roles" / "observability" / "templates" / "prometheus.yaml.j2"
 )
 
 # prometheus.yaml.j2 writes `origin: daniel-pi` as a literal on each Pi job rather than deriving

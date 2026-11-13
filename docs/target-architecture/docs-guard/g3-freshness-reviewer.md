@@ -415,7 +415,7 @@ printf '%s' '{"tool_name":"Bash","tool_input":{"command":"gh pr create --title x
 ```
 
 The output's `additionalContext` must name the section of
-`ansible/roles/k8s/image-builder/CLAUDE.md` that cites the symbol. Return with `git switch -`,
+`k8s/roles/image-builder/CLAUDE.md` that cites the symbol. Return with `git switch -`,
 delete the branch with `git branch -D g3-live-check`, and run the command again. The context
 must be gone.
 

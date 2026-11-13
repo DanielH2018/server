@@ -18,7 +18,7 @@ from typing import cast
 
 import jinja2
 
-from lib.ansible_jinja_env import SHARED_TPL
+from lib.guard_jinja_env import SHARED_TPL
 from lib.estate import role_defaults
 from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.environment import strict_env
@@ -149,7 +149,7 @@ class ConfinedLoader(jinja2.BaseLoader):
     `{% include %}`, `{% import %}` and `{% extends %}` load by name through the loader, and
     jinja's `FileSystemLoader` follows a symlink there. A link in the component to a file
     outside it would otherwise be read into the package. The roots are the component
-    directory and the shared `ansible/templates/` the environment also searches. Nothing else
+    directory and the shared `k8s/templates/` the environment also searches. Nothing else
     in host mode reads a file a component names: `lookup` is registered only when the
     environment is given a context, and `_render_unit` does not give it one.
     """

@@ -27,8 +27,8 @@ from secrets_mgmt.git_dates import (
 from secrets_mgmt.rotation_tools import RotationTools
 
 HOST = "daniel-test"
-HOST_FILE = f"ansible/vars/hosts/{HOST}.sops.yaml"
-SECRETS = "ansible/vars/secrets.yml"
+HOST_FILE = f"secrets/hosts/{HOST}.sops.yaml"
+SECRETS = "secrets/secrets.yml"
 PACKAGE = f"hosts/{HOST}/package.yml"
 
 # The live host files. H4.2 added daniel-server's, H4.5 the Pi's and H6.3b daniel-box's; the equality below then
@@ -142,7 +142,7 @@ def test_a_lagging_registry_date_does_not_flag_a_synced_copy(repo):
         "entries": {"tok_a": {"tier": "assisted", "last_rotated": "2025-01-01"}}
     }
     commit(
-        repo, "registry", **{"ansible/secret_rotation.yml": yaml.safe_dump(registry)}
+        repo, "registry", **{"secrets/secret_rotation.yml": yaml.safe_dump(registry)}
     )
     assert hs.check(repo, tools_for(repo)) == []
 

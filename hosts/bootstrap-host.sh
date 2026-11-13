@@ -52,7 +52,7 @@
 #
 # The script runs on a host before anything homelab is installed, so it carries what it needs:
 # the repository's address, not a name, because the LAN's DNS runs in the cluster; the archive
-# key's fingerprint; and the pins of the tools it fetches. ansible/tests/repo/
+# key's fingerprint; and the pins of the tools it fetches. tests/repo/
 # test_lan_facts_have_one_source.py holds the URL equal to daniel-box's server_ip and the
 # fingerprint equal to hosts/keys/'s keyring. hosts/lib/tests/test_bootstrap_host_pins.py holds
 # the nfpm, uv and k3s pins equal to their sources.
@@ -82,7 +82,7 @@ PI_SWAPFILE=/swapfile
 PI_SWAPFILE_SIZE=1G
 
 # The k3s pin equals `k3s_version`, `k3s_install_script_url` and `k3s_install_script_sha256` in
-# ansible/roles/k8s/system-upgrade/defaults/main.yml, so a rebuilt node never installs an older
+# k8s/roles/system-upgrade/defaults/main.yml, so a rebuilt node never installs an older
 # k3s than the SUC Plans target. Renovate bumps both files in one PR.
 # renovate: datasource=github-releases depName=k3s-io/k3s
 K3S_VERSION=v1.37.2+k3s1
@@ -614,7 +614,7 @@ else
     sha=$(git -C "$clone" rev-parse HEAD) || die "cannot read HEAD of $clone"
     git -C "$clone" archive HEAD | tar -x -C "$work/tree" || die "cannot archive HEAD of $clone"
     python_version=$(sed -n 's/^host_python_version: "\(.*\)"$/\1/p' \
-        "$work/tree/ansible/inventory/group_vars/all.yml")
+        "$work/tree/inventory/group_vars/all.yml")
     [ -n "$python_version" ] || die "cannot read host_python_version from the clone"
     phase "the git archive of the clone"
 

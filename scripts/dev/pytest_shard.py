@@ -49,7 +49,7 @@ after its weight was recorded measured 45.67s against 0.48s, and the split packe
 
 A CACHE SHARED ACROSS MODULES IS A PER-WORKER COST, NOT A MODULE'S. Under xdist every worker
 builds `_k8s_render`'s render once and charges it to whichever module asks first, so its weight
-would vary from run to run. `ansible/tests/render_share.py` builds it when collection
+would vary from run to run. `tests/render_share.py` builds it when collection
 finishes, outside every test's timed phases, with the fleet render beside it, and its
 `# DECIDED:` has the numbers. `scripts/tests/conftest.py` runs the two census files' shared
 pass the same way. `--summary` charges all three per shard, as `prebuild_seconds`.
@@ -114,7 +114,7 @@ from pathlib import Path, PurePosixPath
 # and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # Reach `render_share`, which decides which test modules read the fleet render.
-sys.path.insert(1, str(Path(__file__).resolve().parents[2] / "ansible" / "tests"))
+sys.path.insert(1, str(Path(__file__).resolve().parents[2] / "tests"))
 
 from lib.cli_help import ArgumentParser
 
@@ -142,7 +142,7 @@ from shard_weight_gate import (
 
 WEIGHTS_PATH = Path(__file__).resolve().with_name("pytest_shard_weights.json")
 # pytest's default `python_files`, both forms — the same pair
-# `ansible/tests/repo/test_testpaths_covers_every_test_file.py` derives its census from, and for
+# `tests/repo/test_testpaths_covers_every_test_file.py` derives its census from, and for
 # the same reason: a single hand-kept glob would miss a `foo_test.py` that pytest collects.
 _TEST_FILE_GLOBS = ("test_*.py", "*_test.py")
 
@@ -181,8 +181,8 @@ _SLICE_PERIOD_SECONDS = 12 * 60 * 60
 # which is all CI reads, carries the pin too.
 CI_ONLY_WEIGHTS = {
     # Four legs run the jobs image under docker, which no host here has. CI hands them the real
-    # PATH through `ansible/tests/leakguard.py:_LIVE_API_TESTS`. 22.8s on master run 39813591673.
-    "ansible/roles/k8s/crowdsec/tests/test_jobs_image.py": 22.8,
+    # PATH through `tests/leakguard.py:_LIVE_API_TESTS`. 22.8s on master run 39813591673.
+    "k8s/roles/crowdsec/tests/test_jobs_image.py": 22.8,
 }
 
 
@@ -197,7 +197,7 @@ def under_testpaths(rel: str, paths) -> bool:
     """Whether `rel` lies under a `testpaths` entry, where an entry may be a glob.
 
     `full_match` against `<entry>/**` matches by path component, so a `scripts` entry does not
-    cover `scripts_extra/test_x.py`, and `ansible/roles/k8s/*/tests` covers every role's suite.
+    cover `scripts_extra/test_x.py`, and `k8s/roles/*/tests` covers every role's suite.
     """
     return any(PurePosixPath(rel).full_match(f"{entry}/**") for entry in paths)
 

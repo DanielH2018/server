@@ -1,6 +1,6 @@
 # CrowdSec record — the incidents, the measurements and the sidecar agent seeding
 
-Working-out moved off `ansible/roles/k8s/crowdsec/CLAUDE.md` (#2991), which a session reads on
+Working-out moved off `k8s/roles/crowdsec/CLAUDE.md` (#2991), which a session reads on
 every touch of the WAF. The role doc keeps the rules; this page keeps the incident each rule was
 written after, the measurements behind the numbers, how the traefik and authelia sidecar agents are
 seeded, and what the removed Metabase dashboard showed.
@@ -30,7 +30,7 @@ Until #2752 the gate probed on a fixed 80s timer. On 2026-09-27 that failed a 58
 with eight 302s, then passed on a re-run. The decision had landed at LAPI at 12:25:18Z, but the
 Traefik bouncer made no stream pull from 12:22:24Z to 12:32:24Z. That was the plugin's
 metrics-ticker stall, which `metricsUpdateIntervalSeconds: 0` turns off; the `DECIDED: no
-usage-metrics ticker` comment in `ansible/roles/k8s/traefik/templates/dynamic.yaml.j2` has the
+usage-metrics ticker` comment in `k8s/roles/traefik/templates/dynamic.yaml.j2` has the
 evidence.
 
 LAPI records bouncer pulls on an auto-created `k8straefik@<pod IP>` row, one per Traefik pod IP.
@@ -170,7 +170,7 @@ already carries, so it cannot fill the gap either.
 
 The traefik pod and the authelia pod each run a `crowdsec-agent` sidecar and three seeding init
 containers, in the order `crowdsec-hub-install`, `crowdsec-config-install`, `crowdsec-data-install`.
-Both pods render them from `ansible/templates/crowdsec-agent.yml.j2`, so the order and the
+Both pods render them from `k8s/templates/crowdsec-agent.yml.j2`, so the order and the
 tolerances hold for both, and a change to one is a change to both (#3741). Authelia's pod adds
 `wait-for-redis` after these three, which `docs/authelia-sessions-and-crowdsec-init.md` covers.
 
@@ -227,9 +227,9 @@ the template was amended by #1211, not reversed: the skipped hub tree is not all
 `cscli hub update` before the parser load, which is why hub-install exists.
 
 Three tests hold both pods to this:
-`ansible/tests/services/test_crowdsec_config_install_seeds_staged_tree.py`,
-`ansible/tests/services/test_crowdsec_optional.py` and
-`ansible/tests/services/test_crowdsec_hub_install_stages_the_hub_tree.py`.
+`tests/services/test_crowdsec_config_install_seeds_staged_tree.py`,
+`tests/services/test_crowdsec_optional.py` and
+`tests/services/test_crowdsec_hub_install_stages_the_hub_tree.py`.
 To verify a deploy of either host role, read the sidecar's restart count rather than pod readiness:
 
 ```
@@ -239,14 +239,14 @@ kubectl get pod -n homelab -l app=<traefik|authelia> -o jsonpath='{.items[*].sta
 ## What a sidecar scrape job needs, and three dashboard findings
 
 Pod-role service discovery emits a target per *declared* `containerPort`, so each CrowdSec sidecar
-declares 6060 (`ansible/roles/k8s/traefik/templates/deployment.yaml.j2`,
-`ansible/roles/k8s/authelia/templates/deployment.yaml.j2`). A NetworkPolicy also admits
+declares 6060 (`k8s/roles/traefik/templates/deployment.yaml.j2`,
+`k8s/roles/authelia/templates/deployment.yaml.j2`). A NetworkPolicy also admits
 `prometheus` to that port. Either one missing gives a job that discovers nothing or reads
 `up == 0` forever, both indistinguishable from the job nobody added.
 
 Until #4088 the grant was a hand-written rule in each pod's own policy. It now renders from
 `crowdsec_k8s_sidecar_agents`, one policy per app, in
-`ansible/roles/k8s/netpol-baseline/templates/networkpolicy-crowdsec-sidecars.yaml.j2`.
+`k8s/roles/netpol-baseline/templates/networkpolicy-crowdsec-sidecars.yaml.j2`.
 
 **The netpol grant is a `from` item of its own, not a port appended to an existing rule.** A
 NetworkPolicy rule ANDs its `from` with its `ports`, so adding 6060 to authelia's traefik-to-9091

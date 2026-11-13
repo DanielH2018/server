@@ -1,7 +1,7 @@
 """The SessionStart banner's worktree section: remote fan-out lines and stale worktrees.
 
 Split out of session-health.py when it reached its line cap
-(ansible/tests/_ratchet.py) with no headroom left. Package name is `hooklib`, not `lib`,
+(tests/_ratchet.py) with no headroom left. Package name is `hooklib`, not `lib`,
 so it never shares a namespace-package name with `scripts/lib` (see session-health.py's
 own import comment).
 """

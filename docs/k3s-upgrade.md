@@ -18,7 +18,7 @@ then follows this page before merging. A patch bump needs the refresh too, becau
 compares the full tag. `test_renovate_k3s_cap_follows_the_schema` holds the cap one minor above
 the schema.
 
-The pin is `k3s_version` in `ansible/roles/k8s/system-upgrade/defaults/main.yml`, moved there from
+The pin is `k3s_version` in `k8s/roles/system-upgrade/defaults/main.yml`, moved there from
 `hosts/components/k3s-server/defaults/main.yml` by H6.1b. The `setup/k3s` tasks read it with `include_vars`.
 It covers both nodes.
 The system-upgrade-controller (SUC) writes both nodes' versions. Its `k3s-server` Plan selects
@@ -159,7 +159,7 @@ carries the CoreDNS port in the same PR as the `k3s_version` move:
 1. Read k3s's manifest at the new tag, and diff it against the old tag. The tag's `+` is
    `%2B` in the URL:
    `gh api -H 'Accept: application/vnd.github.raw' 'repos/k3s-io/k3s/contents/manifests/coredns.yaml?ref=<tag>'`.
-2. Port each change into `ansible/roles/k8s/coredns/`. The image goes into `coredns_image`,
+2. Port each change into `k8s/roles/coredns/`. The image goes into `coredns_image`,
    and the `Corefile` into `templates/config/coredns-corefile.j2`. Everything else goes into the
    Deployment, Service and RBAC templates, with each `%{...}%` placeholder written as the value
    k3s substitutes on this cluster.
@@ -268,7 +268,7 @@ does not downgrade either node. Pause SUC on both nodes (`homelab/k3s-upgrade-pa
 node, or an empty `system_upgrade_nodes`). Downgrade daniel-server by hand first, then daniel-box,
 so the agent is never newer than its server. Then land a PR that lowers `k3s_version` and sets
 `k3s_downgrade_acknowledged` to the same value in
-`ansible/roles/k8s/system-upgrade/defaults/main.yml`. Without the key,
+`k8s/roles/system-upgrade/defaults/main.yml`. Without the key,
 `scripts/validate/cluster_pins.py` refuses the decrease.
 
 This holds **within a minor version**. Across a minor it does not: Kubernetes does not support

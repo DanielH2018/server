@@ -37,4 +37,4 @@ note* (added earlier by the maintainer); the remaining strand was the *phone pus
 GPS transition. The sibling orphan class — `bedroom_notify`'s away-hold recovery branch leaving
 bare-`tag` visibility notes stranded for watch-tier alerts (a different bug from this one) — was
 fixed the same day: it now dismisses both `hold_{{ tag }}` and `{{ tag }}`
-(`ansible/roles/k8s/home-assistant/files/scripts/alerts.yaml`).
+(`k8s/roles/home-assistant/files/scripts/alerts.yaml`).

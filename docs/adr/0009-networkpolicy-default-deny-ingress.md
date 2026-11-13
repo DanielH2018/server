@@ -65,4 +65,4 @@ five. Query the cluster instead.
 ## Governs
 
 No single line. `governs:` is empty; the exempt set and its reasons live in
-`ansible/roles/k8s/netpol-baseline/defaults/main.yml`.
+`k8s/roles/netpol-baseline/defaults/main.yml`.

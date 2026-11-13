@@ -13,7 +13,7 @@ hypervisor_user_groups:
 # 172.17.0.0/16 (bridges left by the retired Docker install), and 192.168.122.0/24
 # (libvirt's own `default`, defined-but-stopped). Sitting outside 10/8 entirely means a
 # future k3s or Docker range cannot grow into it.
-# ENFORCED by ansible/tests/staging/test_staging_network.py, which re-checks the overlap.
+# ENFORCED by tests/staging/test_staging_network.py, which re-checks the overlap.
 hypervisor_staging_net_name: staging
 # DECIDED: the live network's UUID (`virsh net-uuid staging`, 2026-11-07). `net-define` replaces an
 # existing network only when the UUIDs match, and libvirt refuses a same-name define under any other
@@ -140,7 +140,7 @@ hypervisor_etcd_drill_lock: /var/lock/etcd-restore-drill-vm.lock
 # target, from inside the guest — before the guest is handed the cluster token or the R2
 # credentials. It is the half of the fence a repo-side check cannot see: a filter that is
 # defined and unattached reads identical to a working one from this host. Its own header has
-# the four DECIDED trade-offs; ansible/tests/staging/test_staging_egress_fence.py enforces them.
+# the four DECIDED trade-offs; tests/staging/test_staging_egress_fence.py enforces them.
 #
 # Per-target timeout: long enough that a slow-but-permitted answer is not read as a block,
 # short enough that every target timing out still fits the deadline below.

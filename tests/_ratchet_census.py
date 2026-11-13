@@ -1,0 +1,114 @@
+"""The two ratchets themselves, and the census of the tree that feeds them.
+
+`_ratchet.py` and `_ratchet_patches.py` hold the pure half — the caps, the allowlist parser,
+the two comparisons and the patch counter. This module is the impure half that reads the working tree: the
+code-line counts and the monkeypatch counts. It sits beside the
+pure module rather than inside the test module so the `--tighten` writer
+(`scripts/dev/tighten_ratchets.py`) imports the SAME census the ratchet asserts on.
+Importing a `test_*.py` from a script would work under pytest and nowhere else.
+
+The reads of the merge base with `origin/master`, and the tests for all of this, stay in
+`tests/repo/test_module_length_ratchet.py`.
+"""
+
+import subprocess
+from pathlib import Path
+
+from _helpers import REPO, is_test_file
+from _ratchet import Ratchet, cap_for, code_lines
+from _ratchet_patches import count_module_patches, first_party_module_names
+from lib.proc_testing import run
+
+HERE = REPO / "tests" / "repo"
+
+
+def run_git(*args: str) -> subprocess.CompletedProcess[str]:
+    """`git` in the repo root, never raising — the caller reads `returncode`."""
+    return run(["git", *args], cwd=REPO, check=False)
+
+
+LENGTHS = Ratchet(
+    path=HERE / "module_length_allowlist.txt",
+    unit="code lines",
+    remedy=(
+        "Split it where each piece reads alone (docs/python-code-organization.md says "
+        "where the pieces go). If every split would leave a piece conjoined with its "
+        "parent, list it with a `# conjoined: <why>` reason instead."
+    ),
+    cap_of=cap_for,
+)
+
+PATCHES = Ratchet(
+    path=HERE / "monkeypatch_allowlist.txt",
+    unit="monkeypatch.setattr calls on a first-party module",
+    remedy=(
+        "Give the module under test a seam instead — a frozen dataclass of injectable "
+        "boundaries, as in scripts/deploy_tools/land_lib/tools.py with its fakes in "
+        "scripts/deploy_tools/tests/_land_fakes.py."
+    ),
+    cap_of=lambda rel: 0,
+)
+
+
+def tracked_files(*pathspec: str) -> list[str]:
+    """Every tracked path matching `pathspec` (all of them if none), repo-relative.
+
+    `-z`, because without it git C-quotes a path holding a non-ASCII byte, a quote or a
+    newline, and the quoted form names no file. Raises on a failed `git ls-files`: an empty
+    list would pass every guard that asserts over it.
+    """
+    listed = run(
+        ["git", "ls-files", "-z", "--", *pathspec], cwd=REPO, check=True
+    ).stdout
+    return [rel for rel in listed.split("\0") if rel]
+
+
+def tracked_python_files() -> list[str]:
+    """Every tracked first-party `.py` path, repo-relative.
+
+    `git ls-files` rather than a walk, which from the repo root descends into
+    `.claude/worktrees/<name>/` — see test_tracked_python_hazards.py for that incident.
+    """
+    return tracked_files("*.py")
+
+
+def code_line_counts() -> dict[str, int]:
+    """Repo-relative path -> its `code_lines` count, or its line count when that is no more
+    than its cap.
+
+    A file never has more code lines than lines, so a file at or under its cap in lines is
+    under it in code lines too, and the ratchet's verdict on it is the same either way. Only
+    the files over their cap in lines are parsed: they are about one in seven, and parsing
+    every tracked file took 8s, on a census that runs on every commit touching Python.
+
+    Raises:
+        ValueError: naming the file, when one it has to parse does not decode as UTF-8 or
+            does not parse.
+    """
+    counts = {}
+    for rel in tracked_python_files():
+        raw = (REPO / rel).read_bytes()
+        lines = raw.count(b"\n")
+        if lines <= cap_for(rel):
+            counts[rel] = lines
+            continue
+        try:
+            counts[rel] = code_lines(raw.decode())
+        except (SyntaxError, UnicodeDecodeError) as err:
+            raise ValueError(f"{rel}: cannot count its code lines: {err}") from err
+    return counts
+
+
+def monkeypatch_counts() -> dict[str, int]:
+    """Repo-relative test-module path -> its module-patch count, zeros included.
+
+    Zeros are in the mapping so a listed file whose patches are all gone reads as "remove it"
+    rather than as a path that no longer exists.
+    """
+    tracked = tracked_python_files()
+    first_party = first_party_module_names(tracked)
+    return {
+        rel: count_module_patches((REPO / rel).read_text(errors="replace"), first_party)
+        for rel in tracked
+        if is_test_file(Path(rel))
+    }

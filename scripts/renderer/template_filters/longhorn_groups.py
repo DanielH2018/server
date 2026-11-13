@@ -21,7 +21,7 @@ a key. The filter refuses any group the module does not define, so a typo fails 
 same way a key would, and the task still reads as the label it writes (#3946).
 
 Each raises `ValueError` on a group or shard the module does not define, so a typo fails the
-render instead of writing a label no RecurringJob selects. `lib.ansible_jinja_env` registers each
+render instead of writing a label no RecurringJob selects. `lib.guard_jinja_env` registers each
 so the `ValueError` reaches the operator as `FilterError("<filter>: ...")` (#4505).
 """
 

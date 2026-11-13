@@ -119,7 +119,7 @@ _COMMENT_PREFIX_RE = re.compile(r"^(\s*(?:#|//|--|;))(?:\s|$)")
 _SENTENCE_END_RE = re.compile(r"\.(?:\s|$)")
 
 _PLANES: list[tuple[str, str]] = [
-    ("ansible/roles/k8s/", "roles/k8s"),
+    ("k8s/roles/", "k8s/roles"),
     # The Pi's Compose services (H5); H5.12 deleted the `roles/containers` tree they came from.
     # Before the host components, because the first matching prefix names the plane.
     ("hosts/components/pi-compose/services/", "pi-compose"),
@@ -146,7 +146,7 @@ _REPO_PATH_RE = re.compile(
 )
 _ADR_RE = re.compile(r"\bADR-(\d{4})\b")
 _THIS_ROLE_RE = re.compile(r"this role'?s `?CLAUDE\.md`?", re.IGNORECASE)
-_ROLE_DIR_RE = re.compile(r"^(ansible/roles/[^/]+/[^/]+)/")
+_ROLE_DIR_RE = re.compile(r"^(k8s/roles/[^/]+)/")
 
 # (marker file, pointer) pairs that name a path which must NOT exist: the marker quotes the
 # stale path as the counterexample its own guard rejects. Keyed by file and token rather than
@@ -155,7 +155,7 @@ _ROLE_DIR_RE = re.compile(r"^(ansible/roles/[^/]+/[^/]+)/")
 _COUNTEREXAMPLE_POINTERS = frozenset(
     {
         (
-            "ansible/tests/repo/test_documented_paths_exist.py",
+            "tests/repo/test_documented_paths_exist.py",
             "scripts/gen_infra_map.py",
         ),
     }
@@ -166,7 +166,7 @@ def _tracked_files(root: Path) -> list[str] | None:
     """`git ls-files` under `root`, or None when `root` is not a git repository.
 
     DECIDED: `git ls-files`, not a walk plus a hand-maintained skip list — the same
-    reasoning `ansible/tests/repo/test_documented_paths_exist.py` gives for the same
+    reasoning `tests/repo/test_documented_paths_exist.py` gives for the same
     choice. A walk sees whatever happens to be on disk, and this repo grows untracked
     trees during ordinary work: `.venv`, `__pycache__`, and — the concrete miss that motivated this — `.mkdocs-strict-check/`,
     the prek hook's own build output, which is not one of those named exceptions and
@@ -403,7 +403,7 @@ def _pointer_resolves(row: dict[str, str], pointer: str, root: Path) -> bool:
     """True when `pointer` names something that exists under `root`.
 
     `this role's CLAUDE.md` resolves to `<role dir>/CLAUDE.md` for a marker under
-    `ansible/roles/<plane>/<role>/`, and to nothing for a marker anywhere else — a marker in
+    `k8s/roles/<role>/`, and to nothing for a marker anywhere else — a marker in
     `scripts/` has no role to point at, so the phrase there is itself the defect. `ADR-NNNN`
     resolves to the `docs/adr/NNNN-*.md` file, whatever its slug. A repo path resolves against
     `root`, then against the marker's own directory, so `templates/foo.j2` written from inside

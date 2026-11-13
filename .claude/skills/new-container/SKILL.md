@@ -1,6 +1,6 @@
 ---
 name: new-container
-description: Add a new DOCKER service for daniel-pi — a `pi-compose` service in the Pi's host package, which is a `compose_services` entry plus a service tree under hosts/components/pi-compose/services/. New cluster services go to ansible/roles/k8s/ instead; this skill does not scaffold those.
+description: Add a new DOCKER service for daniel-pi — a `pi-compose` service in the Pi's host package, which is a `compose_services` entry plus a service tree under hosts/components/pi-compose/services/. New cluster services go to k8s/roles/ instead; this skill does not scaffold those.
 allowed-tools: Read, Write, Edit, Glob, Bash, WebFetch, WebSearch
 ---
 
@@ -38,7 +38,7 @@ Gather from the user (or infer from context):
 Then make these changes. `hosts/components/pi-compose/services/docker-proxy/` is the worked
 example of a plain service, and `alloy/` of one with a config file.
 
-**`ansible/inventory/host_vars/daniel-pi.yml` → `compose_services`**
+**`inventory/host_vars/daniel-pi.yml` → `compose_services`**
 - Add `name`, `use_authelia: false`, `networks`, and `port` or `udp_port` if it publishes one.
   The template reads them as `container_item`.
 - Never add the service to `containers_list`. That key stays empty, and
@@ -47,7 +47,7 @@ example of a plain service, and `alloy/` of one with a config file.
 **`hosts/components/pi-compose/services/<name>/compose.yaml.j2`**
 - Open with a `{#- … -#}` header that holds what a role's `CLAUDE.md` would have: what the
   service is for, and every non-obvious choice in the file.
-- A service tree has no `ansible/templates/` on its search path, so the shared macros are not
+- A service tree has no `k8s/templates/` on its search path, so the shared macros are not
   available. Write the `networks:`, `deploy.resources` and label blocks out, as `autoheal/`
   does.
 - Pin the image as `tag@sha256:<digest>`; `compose_templates.py` refuses a bare tag.

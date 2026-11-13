@@ -47,7 +47,7 @@ depends:
   - zsh
 defaults:
   # The log file k3s writes. The k3s-agent component carries the same path, because Alloy tails
-  # one literal on every node; ansible/tests/k8s/test_alloy_ships_k3s_log.py holds all three equal.
+  # one literal on every node; tests/k8s/test_alloy_ships_k3s_log.py holds all three equal.
   k3s_log_file: /var/log/k3s.log
   # The two paths `kube-apiserver-arg` names below, shipped at the literal paths under `files:`
   # (a `dst:` is not rendered). The shipped-paths test holds each flag value to a shipped file.

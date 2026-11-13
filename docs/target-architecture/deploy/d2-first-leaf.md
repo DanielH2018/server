@@ -132,13 +132,13 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
   production; `scripts/lib/kubectl.py:RETIRED_CLUSTER_NODES` names the guest. The operator
   ruled in #2944 that a stage cluster may return, and none is scheduled.
 - **bento-pdf, the leaf.**
-    - The entry in `ansible/inventory/host_vars/daniel-box.yml` declares `hostname`
+    - The entry in `inventory/host_vars/daniel-box.yml` declares `hostname`
       `bento-pdf`, port 8080, `use_authelia: true` and `auth_tier: one_factor`.
     - The role has one task, an include of `k8s/manifests`, and one template,
       `deployment.yaml.j2`. The Service and IngressRoute come from
-      `ansible/templates/service-default.yaml.j2` and
-      `ansible/templates/ingressroute-default.yaml.j2`.
-    - `ansible/roles/k8s/bento-pdf/defaults/main.yml` sets `k8s_autodeploy: true`. The role
+      `k8s/templates/service-default.yaml.j2` and
+      `k8s/templates/ingressroute-default.yaml.j2`.
+    - `k8s/roles/bento-pdf/defaults/main.yml` sets `k8s_autodeploy: true`. The role
       has no Secret and no PVC. Its template declares a readiness and a liveness probe.
     - Live: `RollingUpdate`, one replica, a `last-applied-configuration` annotation, and a
       pod-template annotation `kubectl.kubernetes.io/restartedAt` from 2026-10-04.
@@ -147,7 +147,7 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
       `scripts/infra_map/groups.py` and `scripts/deploy_tools/shared_role_callers.py`.
 - **littlelink was rejected as the leaf.** It is the public link page. netpol-baseline's probe
   Job uses it as the liveness target through Traefik, and
-  `ansible/roles/k8s/netpol-baseline/defaults/main.yml` lists it as a `refused` row of
+  `k8s/roles/netpol-baseline/defaults/main.yml` lists it as a `refused` row of
   `netpol_baseline_probe_targets`.
 - **The entry has readers, so it stays in `containers_list`.** The survey's D2 summary says the
   leaf leaves the list. C4 keeps it, with `owner: flux`, and this plan follows C4. The readers
@@ -178,7 +178,7 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
     - A fixture entry carrying only `name`, `platform: k8s`, `owner: flux` and `depends_on`
       moves one rendered template: artifacts' `configmap.yaml.j2`, whose
       `known_services.json` lists every entry's name. Measured with
-      `ansible/tests/_k8s_render.py:render_texts`, the entry appended to daniel-box's list in
+      `tests/_k8s_render.py:render_texts`, the entry appended to daniel-box's list in
       the role context and in `hostvars`. The comparison is against a control render through
       the same override with the list unchanged, because that override alone moves pihole's
       ConfigMap and uptime-kuma's Deployment.
@@ -221,7 +221,7 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
        `_REFUSALS` equal to `DEPLOY_SH_NO_VERDICT`.
     3. **The GitOps deployer.**
         - `deploy_changes.py:services_from_changed_paths` puts every path under
-          `ansible/roles/k8s/<role>/` into `cs.k8s`.
+          `k8s/roles/<role>/` into `cs.k8s`.
         - `deploy_k8s.py:split_k8s_auto_deploy` promotes an image-only bump of a role not on
           the denylist, which bento-pdf qualifies for.
         - `deploy_narrow.py:narrow_deploy_plane` narrows an inventory or template change to
@@ -280,18 +280,18 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
       tests below still use `stub-domain` and `${domain}`, as fixture inputs a gate must
       refuse.
 - **bento-pdf's render names one variable that the baseline holds as a secret, `domain`.**
-    - `ansible/templates/ingressroute.yml.j2:ingressroute` builds the `.local.` object's Host
+    - `k8s/templates/ingressroute.yml.j2:ingressroute` builds the `.local.` object's Host
       match as `hostname ~ '.local.' ~ domain`, and the `-public` object's as
       `hostname ~ '.' ~ domain`.
-    - `ansible/inventory/group_vars/all.yml:k8s_tls_cert_resolver` is `cloudflare`, so each
+    - `inventory/group_vars/all.yml:k8s_tls_cert_resolver` is `cloudflare`, so each
       object's `tls.domains` block renders too, with `domain` as `main` and in both `sans`.
     - `domain` is a SOPS key at the baseline: `grep -c '^domain: ENC\['` on
-      `ansible/vars/secrets.yml` prints 1. It is in R2's `PLACEHOLDER_ANYWHERE`, so R2's rule
+      `secrets/secrets.yml` prints 1. It is in R2's `PLACEHOLDER_ANYWHERE`, so R2's rule
       3 accepts `${domain}` outside a Secret. The operator ruled on 2026-10-14 that `domain`
-      is published. Domain PR 1 defines it in `ansible/inventory/group_vars/all.yml`, and
+      is published. Domain PR 1 defines it in `inventory/group_vars/all.yml`, and
       domain PR 2b takes it out of `PLACEHOLDER_ANYWHERE` and out of the stub set (*Where
       `domain` comes from*).
-    - Neither `deployment.yaml.j2` nor `ansible/templates/service-default.yaml.j2` names any
+    - Neither `deployment.yaml.j2` nor `k8s/templates/service-default.yaml.j2` names any
       key of `secrets.yml`.
 - **Flux records the source commit in one field only.** In kustomize-controller v1.9.6, the
   version D1 pins, `api/v1/kustomization_types.go` defines two status fields:
@@ -315,10 +315,10 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
   `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:emit_deploy_annotation`,
   for the deployer, each run `logger -t deploy-annotation` with an `event=deploy` line. Alloy
   ships syslog to `loki-homelab`, and
-  `ansible/roles/k8s/observability/defaults/main.yml:observability_deploy_annotation_expr`
+  `k8s/roles/observability/defaults/main.yml:observability_deploy_annotation_expr`
   matches `event=deploy` and parses the rest as logfmt. The emitter's docstring rejects a POST
   to Grafana, because that needs a pinned address or a standing write credential through
-  Traefik. `ansible/tests/deploy/test_deploy_annotations.py` holds the query to both emitters.
+  Traefik. `tests/deploy/test_deploy_annotations.py` holds the query to both emitters.
   After D2.7 neither emitter runs for bento-pdf.
 - **D1 splits deciding from writing.**
     - D1's `promote` job checks out the workflow's commit. It runs `promote.py decide` with
@@ -384,7 +384,7 @@ Three readers answer both predicates:
   the same mapping. It is a stdlib-only regex parse like `declared_k8s_services`, because the
   deployer runs under `uv run --no-project`.
 
-A census test in `ansible/tests/deploy/` asserts that the three agree on both predicates,
+A census test in `tests/deploy/` asserts that the three agree on both predicates,
 on the live inventory and on a fixture with two `flux` entries and one without `owner`. Each
 reader fails on any other value, and the census holds a fixture for that.
 
@@ -403,9 +403,9 @@ The first change also drops any whole-entry reader for an edit that changes no f
 such as a comment in the list. `changed_fields` compares every field of every entry, so such
 an edit changes no reader's output, and the redeploy it triggers today buys nothing.
 
-A `Census` row in `ansible/tests/repo/test_census_rows_roles.py` reads
+A `Census` row in `tests/repo/test_census_rows_roles.py` reads
 `DEPLOY_MECHANICS_FIELDS` and asserts that no Jinja expression, inside `{{ }}` or `{% %}`,
-under `ansible/roles/k8s/*/templates/` or `ansible/templates/` reads any member. The predicate
+under `k8s/roles/*/templates/` or `k8s/templates/` reads any member. The predicate
 looks inside Jinja code only: at `70591c307`, 21 template files use the word `owner` in
 comments or JSON, and none inside a Jinja expression. `owner` is the member the row must
 find in the set. Its red fixture is a template that reads `entry.owner`, as the census
@@ -513,7 +513,7 @@ The plan for the move is the *Publish `domain`* item in R2's *Steps, as PRs*, wh
 section calls domain PR 1, 2a, 2b and 3.
 
 - **The renderer writes a literal.** `domain` stays an Ansible variable, defined in
-  `ansible/inventory/group_vars/all.yml`, so it can change in one place. After domain PR 2b,
+  `inventory/group_vars/all.yml`, so it can change in one place. After domain PR 2b,
   bento-pdf's render holds the literal in its Host rules and its `tls.domains`, and holds no
   placeholder. Its Kustomization therefore carries no `postBuild`.
 - **D2.7 waits on domain PR 2b, and on no PR of D3.** `homelab-cluster-vars` no longer holds
@@ -528,10 +528,10 @@ section calls domain PR 1, 2a, 2b and 3.
   secret.
 - **Withdrawn: the Ansible-rendered Secret `homelab-identifiers`.** D2.6a added it before
   round 10. C3 names it as no source. Retiring it would have needed a delete, because
-  `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist` names no Secret.
+  `k8s/roles/manifests/defaults/main.yml:manifests_prune_allowlist` names no Secret.
 - **Withdrawn: the Ansible-rendered Secret `homelab-identifiers`.** D2.6a added it before
   round 10. C3 names it in neither branch. Retiring it would have needed a delete, because
-  `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist` names no Secret.
+  `k8s/roles/manifests/defaults/main.yml:manifests_prune_allowlist` names no Secret.
 
 ### Publication and verification
 
@@ -550,7 +550,7 @@ render job (one run per green master commit X; a dispatched sha passes D1's ance
     source    a tag without postBuild holds no ${K} for a key name of secrets.yml;
               a tag with postBuild names only Secrets that the bundle generates
     host      every Host(...) in an IngressRoute ends in .<domain>, the literal that
-              ansible/inventory/group_vars/all.yml defines
+              inventory/group_vars/all.yml defines
     no-stub   no R1 stub value, stub-<key>, anywhere under out/
   gitleaks over out/ ─▶ hand out/ on as a workflow artifact
 publish job (no checkout): push sha-X and sign
@@ -602,7 +602,7 @@ D1 builds the split. D2 adds its steps to the render job, and it adds the `verif
 - **The source gate is scoped by tag.** C1 makes a tag's Kustomization the one source for
   whether the tag substitutes, so the gate reads `spec.postBuild` there.
     - *A tag without `postBuild`* must hold no `${K}` whose K is a key name of
-      `ansible/vars/secrets.yml`. That is C1's refusal. SOPS leaves the key names in
+      `secrets/secrets.yml`. That is C1's refusal. SOPS leaves the key names in
       plaintext, and the gate reads them the way R2's rule 1 does. A shell `${HOME}` in such
       a tag passes, because Flux never substitutes there.
     - *A tag with `postBuild`* may name in `substituteFrom` only a Secret that a
@@ -617,7 +617,7 @@ D1 builds the split. D2 adds its steps to the render job, and it adds the `verif
       not a reference. It asserts that it examined every published tag's directory, and the
       census fails a published tag with no directory, so it never passes vacuously.
 - **The host gate is the red proof for the domain.** Every Host rule must end in
-  `.<domain>`, where the value is the literal that `ansible/inventory/group_vars/all.yml`
+  `.<domain>`, where the value is the literal that `inventory/group_vars/all.yml`
   defines. The gate reads it from the tree location the renderer reads it from. A
   `${domain}`, a `stub-domain` and a hand-written host each fail.
 
@@ -744,7 +744,7 @@ D1 builds the split. D2 adds its steps to the render job, and it adds the `verif
 
   The decision is the marker `DECIDED: a verification in flight is guarded by two checks` in
   `scripts/deploy_tools/promote_lib/verify_promotion.py`, and
-  `ansible/tests/repo/test_promote_workflow_verify.py` fails a `verify` or `settle` job that
+  `tests/repo/test_promote_workflow_verify.py` fails a `verify` or `settle` job that
   joins a group. A run that never settles stalls promotion as `current`, which D2.6d's
   `PromotionStalled` alert pages. D5's `reset_to_last_good` dispatch moves `prod` outside
   this group as well, so D5 must design it against both checks (C2 *Requests on C2*).
@@ -993,12 +993,12 @@ through Alertmanager from the first real flip.
                                                            dispatch with the ancestry check;
                                                            verify: statuses: read;
                                                            render: checks: read
-  ansible/roles/k8s/monitor-bridge/                      + deploy-pipeline family, scrape
+  k8s/roles/monitor-bridge/                      + deploy-pipeline family, scrape
                                                            endpoint, read-only token (D2.6d)
-  ansible/roles/k8s/observability/                       + scrape job, deploy-pipeline rule
+  k8s/roles/observability/                       + scrape job, deploy-pipeline rule
                                                            group and its promtool tests (D2.6d)
-  ansible/vars/secrets.yml, ansible/secret_rotation.yml  + the exporter's token (D2.6d)
-  ansible/inventory/host_vars/daniel-box.yml             bento-pdf: owner: flux   (PR D2.7 only)
+  secrets/secrets.yml, secrets/secret_rotation.yml  + the exporter's token (D2.6d)
+  inventory/host_vars/daniel-box.yml             bento-pdf: owner: flux   (PR D2.7 only)
 ```
 
 ## Steps, as PRs
@@ -1058,7 +1058,7 @@ that D2.6d adds.
     - An `EVERY_ENTRY` pair in `test_narrow_filter_tables.py`: a bare entry appended to a
       list moves exactly the filters `EVERY_ENTRY` names, `entry_names` among them, and a
       filter with a row per entry is moved.
-    - A render census in `ansible/tests/k8s/`, through `_k8s_render.py:render_texts`. It
+    - A render census in `tests/k8s/`, through `_k8s_render.py:render_texts`. It
       appends a fixture entry to daniel-box's `containers_list`, in the role context and in
       `hostvars`, and compares with a control render through the same override and the list
       unchanged. The census compares at tag level, never by template path:
@@ -1090,7 +1090,7 @@ that D2.6d adds.
    is its own.
     - Add `ansible_owned` to `scripts/renderer/template_filters/toposort.py` beside
       `filter_by_platform`. Batch `containers_list | ansible_owned` in `ansible/deploy.yml`.
-    - Tests in `ansible/tests/deploy/`:
+    - Tests in `tests/deploy/`:
         - the batch loop skips a fixture `flux` entry and a fixture `released` entry, while
           a template still sees both in `containers_list`;
         - on every host's live `containers_list`, the entries that `ansible_owned` drops are
@@ -1163,7 +1163,7 @@ that D2.6d adds.
         - the annotation: `settled` writes one `deploy-annotation` line with
           `source=promote` and the PR's published tags, and `deploy-failed` and `gave-up`
           write none.
-    - `ansible/tests/deploy/test_deploy_annotations.py` gains `promote.py` as a third
+    - `tests/deploy/test_deploy_annotations.py` gains `promote.py` as a third
       emitter, in the test that holds the query to what the emitters log and in the test
       that every deploy path annotates.
     - Edit `docs/landing.md` and `.claude/skills/land-after-merge/SKILL.md`.
@@ -1251,7 +1251,7 @@ that D2.6d adds.
           a reset that fails after a written hold exits non-zero with the hold in place;
         - `probe.py landing` prints `last-good: unknown` when the registry read fails, and
           then never reports `prod` equal to `last-good`.
-    - The D1.4 workflow test in `ansible/tests/repo/` gains the `sha` input's order: D1's
+    - The D1.4 workflow test in `tests/repo/` gains the `sha` input's order: D1's
       ancestry step reads the dispatched commit and runs before the render step. Its red
       fixtures are a render step placed before the ancestry step, and an ancestry step that
       reads `github.sha` instead of the input.
@@ -1314,7 +1314,7 @@ that D2.6d adds.
           stub-mode render, whose Host rule ends in `stub-domain`, fails. So do a fixture
           route with another literal host and one that ends in `${domain}`;
         - no-stub: a fixture ConfigMap value `stub-domain` fails.
-    - The D1.4 workflow test in `ansible/tests/repo/` gains two assertions: the render step
+    - The D1.4 workflow test in `tests/repo/` gains two assertions: the render step
       passes no `--secret-stubs`, and `check-bundle` and gitleaks run before the push step.
       Each has a red fixture.
     - Edit `docs/flux-deploy-plane.md` for the `Removes-Object` trailer and its grammar.
@@ -1352,7 +1352,7 @@ that D2.6d adds.
           read in Prometheus;
         - domain PR 2b has landed, so `domain` is a published key and bento-pdf's render
           holds the literal. The body quotes `grep -c '^domain:'` on
-          `ansible/inventory/group_vars/all.yml` printing 1, and the host gate passing over
+          `inventory/group_vars/all.yml` printing 1, and the host gate passing over
           the real tree. D2.7 needs no part of D3;
         - D2.4a's hand apply is done, and no `k8s_unapplied` line from D2.1d's landing
           remains;
@@ -1379,10 +1379,10 @@ that D2.6d adds.
       and D2.2 drops that tag because Flux owns it. `land.sh` runs no `deploy.sh`, and
       `promote` publishes and verifies the first bundle that holds bento-pdf.
     - **From D2.7 on, bento-pdf's Renovate PRs land without `land-wait`.** In
-      `renovate.json`, the rule for `ansible/roles/k8s/**` digest and `pinDigest` updates
+      `renovate.json`, the rule for `k8s/roles/**` digest and `pinDigest` updates
       sets `automerge: true` and `platformAutomerge: false`, so Renovate merges such a PR
       itself once CI is green.
-      `ansible/roles/k8s/bento-pdf/defaults/main.yml:bento_pdf_k8s_image` is
+      `k8s/roles/bento-pdf/defaults/main.yml:bento_pdf_k8s_image` is
       digest-pinned, so its bumps take that rule. Such a merge goes through no `land.sh`.
       It therefore draws no `land-wait`, no `deploy-annotation` line and no `probe.py
       health` run. `promote`'s `verify` still gates it on Flux's health wait and the commit
@@ -1621,7 +1621,7 @@ later slices size against:
 
 - **An entry point outside the census** (failure class 4). A path that applies a k8s role and
   is missing from the table writes bento-pdf behind Flux's back. Mitigation: two censuses.
-  A `Census` row in `ansible/tests/repo/test_census_rows_text.py` selects every tracked
+  A `Census` row in `tests/repo/test_census_rows_text.py` selects every tracked
   file that invokes `deploy.sh` and fails on one that is neither in the table nor exempt
   with a reason. The owner entry-points census (deleted by #8165) named every row of
   the table as a member and fails when one stops reading ownership (*Verification*).
@@ -1726,13 +1726,13 @@ later slices size against:
 ## Tests and docs that change in the same PR
 
 - D2.1a: tests in `scripts/deploy_tools/tests/`, and the census row in
-  `ansible/tests/repo/test_census_rows_roles.py`. The `narrow_lib/containers.py` module
+  `tests/repo/test_census_rows_roles.py`. The `narrow_lib/containers.py` module
   docstring names `DEPLOY_MECHANICS_FIELDS`.
-- D2.1d: tests in `ansible/tests/deploy/`. `docs/gitops-pipeline.md`'s *Broad changes* says
+- D2.1d: tests in `tests/deploy/`. `docs/gitops-pipeline.md`'s *Broad changes* says
   that the play skips an entry that carries `owner`. The PR body quotes the narrow refusal,
   the equality test's output and the operator's ruling on the discharge.
 - D2.1c: tests in `scripts/deploy_tools/tests/`, the `EVERY_ENTRY` pair among them, and the
-  render census in `ansible/tests/k8s/`. The `changed_fields` docstring states the new case, and
+  render census in `tests/k8s/`. The `changed_fields` docstring states the new case, and
   `docs/gitops-pipeline.md`'s *Broad changes* says that an added Flux-born entry reaches only
   the readers it can move.
 - D2.1b: tests in `scripts/deploy_tools/tests/` and `.claude/hooks/tests/`.
@@ -1741,7 +1741,7 @@ later slices size against:
   gains the `flux` bucket beside `cs.k8s`, and the gitops_deploy role `CLAUDE.md`'s
   *Safety* list gains it.
 - D2.3: tests in `scripts/deploy_tools/tests/`, and the third emitter in
-  `ansible/tests/deploy/test_deploy_annotations.py`. `docs/landing.md`,
+  `tests/deploy/test_deploy_annotations.py`. `docs/landing.md`,
   `.claude/skills/land-after-merge/SKILL.md`. Root `CLAUDE.md`'s *After a PR Merges* gains
   one sentence on flux-owned services. `docs/flux-deploy-plane.md` gains the handback order.
 - D2.4a: tests in `ansible/roles/setup/k3s/tests/`. The k3s role's `CLAUDE.md` names the
@@ -1750,20 +1750,20 @@ later slices size against:
   `scripts/diagnostics/tests/` and `scripts/docs/tests/`. The render_records role's
   `CLAUDE.md` says the list leaves out flux-owned services.
 - D2.5: tests in `scripts/deploy_tools/tests/`, and the D1.4 workflow test in
-  `ansible/tests/repo/`. `docs/flux-deploy-plane.md` gains verification of T over its
+  `tests/repo/`. `docs/flux-deploy-plane.md` gains verification of T over its
   changed set, the `failed=` hold, its way out, the revert rule and its disabled flag,
   `PROD_DIGEST`, and the sources `probe.py landing` reads. `docs/landing.md` shows both
   hold lines.
 - D2.6b, D2.6c: tests in `scripts/renderer/tests/` and `scripts/deploy_tools/tests/`, and
-  the D1.4 workflow test in `ansible/tests/repo/`. `docs/flux-deploy-plane.md` gains the
+  the D1.4 workflow test in `tests/repo/`. `docs/flux-deploy-plane.md` gains the
   render mode, the bundle layout, `digests.json` and its footprint rules, `SHARED_KINDS`,
   the reserved names, the census, the three gates, the object-loss check and the
   `Removes-Object` trailer.
 - D2.6d: tests in monitor-bridge's `tests/`, the promtool test file beside M1's, and M1's
   routing test. monitor-bridge's role `CLAUDE.md` names the family and its token, and
-  `docs/flux-deploy-plane.md` names the three alerts. `ansible/secret_rotation.yml` gains
+  `docs/flux-deploy-plane.md` names the three alerts. `secrets/secret_rotation.yml` gains
   the token through `secret_rotation.py sync`.
-- D2.7: `ansible/roles/k8s/bento-pdf/CLAUDE.md` says Flux owns it. Its generated
+- D2.7: `k8s/roles/bento-pdf/CLAUDE.md` says Flux owns it. Its generated
   `## At a glance` block regenerates through the `regen-role-glance` hook, and D2.4b's
   generator change makes that block name Flux and exit 5.
 
@@ -1814,7 +1814,7 @@ later slices size against:
 5. **Resolved by the operator's ruling of 2026-10-14: where does `domain` come from?** The
    operator ruled that `domain` is published: "domain is not secret, it's a var for
    flexibility just in case of future changes." The renderer writes it as a literal, and it
-   stays an Ansible variable in `ansible/inventory/group_vars/all.yml`. D2.7 waits on domain
+   stays an Ansible variable in `inventory/group_vars/all.yml`. D2.7 waits on domain
    PR 2b of R2's *Publish `domain`* item and on no PR of D3. D2.6c's host gate has one rule,
    the literal. The former default, `domain` from `homelab-cluster-vars`, is rejected.
 6. **Contract amendments still needed for the bundle.** C2's promotion target and C1's
@@ -1868,7 +1868,7 @@ later slices size against:
       reaches the full reader set, 23 tags at `70591c307`. D1.2's 24-tag expectation is
       for the `flux` entry, which carries no `owner`.
 
-    D2.1c's render census in `ansible/tests/k8s/` is the proof of the expected shape, and
+    D2.1c's render census in `tests/k8s/` is the proof of the expected shape, and
     the H slices cite it by what it asserts. Resolution: H1, H2 and H6 delete their
     own-tag-only branch and the 23-tag expectation for Flux-born entries, and run D1.2's
     stop rule over the tags their narrow output names. Gate: before H1's first PR that adds
@@ -1928,11 +1928,11 @@ in other documents, which this round hands to their owners.
   changed. The finding's count, "about 59", is not repeated, because `fold_deferred`
   intersects with `declared` and D2 did not measure that set.
 - **D2-I1-02 (medium): the X2-19 fix assumed every merge goes through `land.sh`.**
-  Confirmed in `renovate.json`: the rule for `ansible/roles/k8s/**` digest and `pinDigest`
+  Confirmed in `renovate.json`: the rule for `k8s/roles/**` digest and `pinDigest`
   updates sets `automerge: true` and `platformAutomerge: false`. bento-pdf's pin escapes
   both later rules that set `automerge: false`: the `annotated-pin` rule, and the
   `k8s image {{depName}} (manual ...)` rule, whose file list omits bento-pdf.
-  `ansible/roles/k8s/bento-pdf/defaults/main.yml:bento_pdf_k8s_image` is digest-pinned.
+  `k8s/roles/bento-pdf/defaults/main.yml:bento_pdf_k8s_image` is digest-pinned.
   The finding holds for bento-pdf. Its claim that most cluster deploys after D6 are
   automerges is not confirmed: the manual-image rule overrides the digest rule for every
   role in its list, about 37 `defaults/main.yml` files, and those land through `land.sh`.
@@ -1945,7 +1945,7 @@ in other documents, which this round hands to their owners.
   is D6's design to make.
 - **D2-I1-03 (medium): D2.1c's census compared template paths, but pihole's member reads
   the list only through an include.** Confirmed:
-  `ansible/roles/k8s/pihole/templates/configmap.yaml.j2` includes
+  `k8s/roles/pihole/templates/configmap.yaml.j2` includes
   `config/pihole-dnsmasq.conf.j2`, and only that file loops over
   `hostvars[k8s_primary_node].containers_list`. Fixed: the census maps each moved
   `(role, template)` to its role's tag and compares with `_list_reader_tags`. pihole stays
@@ -1972,14 +1972,14 @@ to other slices.
   `reader_paths` then keeps every template that renders the list.
     - Fixed in D2: the new PR D2.1c records an added or removed entry that is not
       Ansible-owned by its fields, less `name` and `DEPLOY_MECHANICS_FIELDS`. A render census
-      in `ansible/tests/k8s/` holds the rule to the tree. A bare Flux-born entry then
+      in `tests/k8s/` holds the rule to the tree. A bare Flux-born entry then
       reaches five reader tags rather than 23. *Design*, *Steps*, *Verification*,
       *Rollback*, *Risks*, *Tests and docs* and *Complexity delta* all changed.
     - Refuted, the "own tag only" outcome. A fixture entry carrying only `name`,
       `platform: k8s`, `owner: flux` and `depends_on` moves artifacts'
       `templates/configmap.yaml.j2`, because its `known_services.json` is
       `containers_list | map(attribute='name')`. The render went through
-      `ansible/tests/_k8s_render.py:render_texts`. The control render, through the same
+      `tests/_k8s_render.py:render_texts`. The control render, through the same
       override with the list unchanged, printed `CONTROL diffs: [('pihole',
       'configmap.yaml.j2'), ('uptime-kuma', 'deployment.yaml.j2')]` against the plain
       render. Against that control, the bare entry moved one template only, `('artifacts',
@@ -1994,7 +1994,7 @@ to other slices.
 - **X2-19 (medium): after D6, cluster deploy annotations come only from `deploy.sh`.**
   Confirmed: both emitters write a syslog line, and D2.7 already stops both for bento-pdf.
   Fixed in D2.3: `land-wait` writes a `source=promote` line on `settled`, and
-  `ansible/tests/deploy/test_deploy_annotations.py` gains it as a third emitter. Refuted:
+  `tests/deploy/test_deploy_annotations.py` gains it as a third emitter. Refuted:
   `promote` emitting the line itself. `deploy_io.py:emit_deploy_annotation`'s docstring
   rejects a POST to Grafana, because it would need a pinned address or a standing write
   credential through Traefik. `promote` runs on a GitHub runner, so it would need that
@@ -2008,8 +2008,8 @@ also need edits in other documents, which this round hands to their owners.
 
 - **X-01 (high): the publish job could not render bento-pdf, and `domain` had no source
   before D3.** Fixed in D2, contract part handed over. Confirmed: R1's `cluster` exits 2
-  without `--secret-stubs`, `ansible/templates/ingressroute.yml.j2:ingressroute` builds the
-  Host from `domain`, and `grep -c '^domain: ENC\['` on `ansible/vars/secrets.yml` prints 1.
+  without `--secret-stubs`, `k8s/templates/ingressroute.yml.j2:ingressroute` builds the
+  Host from `domain`, and `grep -c '^domain: ENC\['` on `secrets/secrets.yml` prints 1.
     - D2 depends on R2's PRs 1 and 2. The publish renders in placeholder mode, never with
       `--secret-stubs`, and D2.6c's workflow test pins that.
     - D2.6a adds `homelab-identifiers`, rendered by Ansible from SOPS, as the source before

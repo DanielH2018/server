@@ -97,7 +97,7 @@ def test_an_unterminated_quote_yields_no_command_starts():
     "command,expected",
     [
         ("pytest", "uv run pytest"),
-        ("pytest ansible/tests", "uv run pytest ansible/tests"),
+        ("pytest tests", "uv run pytest tests"),
         ("py.test", "uv run py.test"),
         ("python -V", "uv run python -V"),
         ("python3 -m pytest", "uv run python3 -m pytest"),

@@ -93,7 +93,7 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 
 - **Entry point.** One CLI, `homelab-render`, run as
   `uv run python scripts/renderer/homelab_render.py`. R1 chose that path under the rules in
-  `.claude/rules/python-layout.md`. The renderer reuses `scripts/lib/ansible_jinja_env.py`,
+  `.claude/rules/python-layout.md`. The renderer reuses `scripts/lib/guard_jinja_env.py`,
   `scripts/deploy_tools/render_targets.py` and `scripts/renderer/template_filters/`. R4 moves
   `render_targets.py`'s logic into the renderer rather than deleting it. Comparison and stub
   tooling beside it, such as R1's `shadow_diff.py`, renders nothing itself and is not a second
@@ -164,7 +164,7 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
     from the same render, never from `render_guard.py:BUILT_IMAGE_TAG_STUBS` (D5).
 - **The deploy-tag label.** The renderer stamps `homelab/role: <tag>` on every document a
   prune-armed role renders into `DIR/cluster/<tag>/`, through
-  `ansible/templates/role-labelled.yaml.j2`. C7's workload-service mapping reads it to name
+  `k8s/templates/role-labelled.yaml.j2`. C7's workload-service mapping reads it to name
   an object's deploy tag. R4 keeps the stamping in the renderer when it deletes
   `k8s/manifests`. C7 does not adopt `kustomize.toolkit.fluxcd.io/name` in its place (M2 Open
   question 1, ruled 2026-10-28).
@@ -178,7 +178,7 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 - **No live reads.** The renderer reads only the git tree. It never contacts a cluster, a host,
   a registry or a decryption key, and two renders of one commit are byte-identical.
 - **Secret references, cluster mode only.** A reference renders as `${<key>}`, where `<key>` is
-  the exact key name in `ansible/vars/secrets.yml`. A template a role lists in
+  the exact key name in `secrets/secrets.yml`. A template a role lists in
   `render_sops_manifests` renders no document in placeholder mode, because its Secret takes
   C3's second path (R2). Host and package modes render no secret and keep every `${` literal
   (H3).
@@ -540,7 +540,7 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
   dedicated SOPS manifest, as `mullvad_account` does (R2 PR 7b).
 - **The source of `domain`.** The operator ruled on 2026-10-14 that `domain` is published
   (*Operator ruling (2026-10-14)*). The renderer writes `domain` as a literal.
-  - `domain` stays an Ansible variable, defined in `ansible/inventory/group_vars/all.yml`, so
+  - `domain` stays an Ansible variable, defined in `inventory/group_vars/all.yml`, so
     it can change in one place.
   - No render substitutes `domain`, so a route needs neither `homelab-cluster-vars` nor the
     `cluster-vars` edge.
@@ -570,10 +570,10 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
     from `daniel-box.yml` and `daniel-server.yml`. The renderer exposes the moved list under
     the same variable name.
   - **H5** moves the Pi's entries to `compose_services` in
-    `ansible/inventory/host_vars/daniel-pi.yml` and leaves the Pi's `containers_list` empty.
-    `compose_services` stays there as renderer data, because H7 keeps `ansible/inventory/`.
+    `inventory/host_vars/daniel-pi.yml` and leaves the Pi's `containers_list` empty.
+    `compose_services` stays there as renderer data, because H7 keeps `inventory/`.
   - **H7** deletes the Pi's empty `containers_list` key, and the one in
-    `ansible/inventory/host_vars/_example.yml`, in the PR that deletes their last reader:
+    `inventory/host_vars/_example.yml`, in the PR that deletes their last reader:
     `ansible/preflight.yml` or the Ansible Docker play, whichever goes last.
 
 ## C5. Host packages
@@ -769,7 +769,7 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 
 - **Citations of paths that do not exist yet.** Never cite one as `file:line`, as a pytest
   node id (a test file, two colons, then a test name), or as a full path under
-  `ansible/tests/`. CI checks all three shapes against the tree. Describe a future test by
+  `tests/`. CI checks all three shapes against the tree. Describe a future test by
   what it asserts and the directory it joins.
 - **Citations of existing code.** Cite by path and symbol (`deploy_git.py:ci_verdict`), not by
   line number.
@@ -1142,7 +1142,7 @@ Applied to this page:
 - **`domain` is published** (D2 Open question 5). The operator ruled on 2026-10-14: "domain is
   not secret, it's a var for flexibility just in case of future changes." C3 *The source of
   `domain`* adopts the alternative it listed. The renderer writes `domain` as a literal, and
-  `domain` stays an Ansible variable in `ansible/inventory/group_vars/all.yml`, so it can
+  `domain` stays an Ansible variable in `inventory/group_vars/all.yml`, so it can
   change in one place.
     - D2.7 no longer waits on D3.3a or D3.3b. It waits on PR 2b of R2's *Publish `domain`*
       item, which makes `domain` a published key. The slice index row for D2 states the edge.

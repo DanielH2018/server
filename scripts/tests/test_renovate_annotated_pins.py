@@ -51,16 +51,16 @@ KNOWN_ANNOTATED = frozenset(
 UNTRACKED_BY_DECISION: dict[str, str] = {
     # The pin covers traefik's in-tree CRD copy, which Renovate cannot rewrite: a bump of this
     # key alone would leave the file and its sha256 on the old release. The image pin is the
-    # tracked one, and ansible/tests/k8s/test_traefik_crds.py fails a minor image bump until
+    # tracked one, and tests/k8s/test_traefik_crds.py fails a minor image bump until
     # the copy, this key and the hash are refreshed together.
     "traefik_crds_k8s_version": "follows traefik_k8s_image's minor; refreshed by hand",
 }
 
 _ANNOTATION_LINE = re.compile(r"^\s*#\s*renovate:", re.MULTILINE)
 
-TRAEFIK_DEFAULTS = "ansible/roles/k8s/traefik/defaults/main.yml"
+TRAEFIK_DEFAULTS = "k8s/roles/traefik/defaults/main.yml"
 PI_TOOL_PINS = "hosts/packages/homelab-tools/package.yml"
-NODE_EXPORTER_DEFAULTS = "ansible/roles/k8s/node-exporter/defaults/main.yml"
+NODE_EXPORTER_DEFAULTS = "k8s/roles/node-exporter/defaults/main.yml"
 CROWDSEC_PLUGIN = "maxlerebourg/crowdsec-bouncer-traefik-plugin"
 DENYLIST_MARKER = "k8s_autodeploy: false"
 
@@ -120,7 +120,7 @@ def test_every_annotation_comment_in_role_defaults_is_read():
     ]
     defaults = sorted(
         str(p.relative_to(_REPO))
-        for p in (_REPO / "ansible/roles").glob("*/*/defaults/main.yml")
+        for p in (_REPO / "k8s/roles").glob("*/*/defaults/main.yml")
     )
     scanned = [rel for rel in defaults if any(p.search(rel) for p in patterns)]
     assert TRAEFIK_DEFAULTS in scanned

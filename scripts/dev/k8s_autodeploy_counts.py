@@ -11,8 +11,8 @@ when the derivation raises. `land_renovate_pr.py` reads that output as its denyl
 renovate.json's no-automerge rule read one list.
 
 Both counts read `lib.k8s_roles.k8s_autodeploy_denylist` and the same source
-`ansible/tests/deploy/_autodeploy.py`'s `_auto_deployable` reads for eligibility: each role's
-own `k8s_autodeploy` declaration in `ansible/roles/k8s/<role>/defaults/main.yml`. The guard test's
+`tests/deploy/_autodeploy.py`'s `_auto_deployable` reads for eligibility: each role's
+own `k8s_autodeploy` declaration in `k8s/roles/<role>/defaults/main.yml`. The guard test's
 `test_every_role_is_either_denied_or_declares_itself_deployable` asserts the two sets partition
 every role exactly, so eligible + denylist always equals the role count.
 """
@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.repo_paths import ANSIBLE, K8S_ROLES
+from lib.repo_paths import K8S_ROLES
 
 from lib import yaml_fast
 from lib.cli_help import answer_help
@@ -43,7 +43,7 @@ def eligible_roles() -> list[str]:
 
 
 def all_role_names() -> list[str]:
-    """Every role directory under `ansible/roles/k8s/`, sorted, debris excluded."""
+    """Every role directory under `k8s/roles/`, sorted, debris excluded."""
     return [entry.name for entry in role_dirs(K8S_ROLES)]
 
 
@@ -59,15 +59,15 @@ def autodeploy_stances() -> tuple[list[str], list[str], list[str]]:
         `(eligible, denied, not_declaring)`, each sorted.
     """
     eligible = eligible_roles()
-    denied = k8s_autodeploy_denylist(ANSIBLE)
+    denied = k8s_autodeploy_denylist()
     not_declaring = sorted(set(all_role_names()) - set(eligible) - set(denied))
     return eligible, denied, not_declaring
 
 
-def print_denylist(ansible: Path = ANSIBLE) -> int:
+def print_denylist(roles: Path = K8S_ROLES) -> int:
     """Print the denylist comma-separated, and return the exit code."""
     try:
-        denied = k8s_autodeploy_denylist(ansible)
+        denied = k8s_autodeploy_denylist(roles)
     except ValueError as exc:
         print(f"k8s_autodeploy_counts.py: {exc}", file=sys.stderr)
         return 1

@@ -1,7 +1,7 @@
 """The filter that fits the vendored Flux install to this cluster's workload guards.
 
-The flux role vendors `flux install --export` unedited in `roles/k8s/flux/files/`, so a
-regeneration diffs as upstream's change alone. The fleet guards in `ansible/tests/k8s/` then
+The flux role vendors `flux install --export` unedited in `k8s/roles/flux/files/`, so a
+regeneration diffs as upstream's change alone. The fleet guards in `tests/k8s/` then
 read the rendered Deployments, and upstream's differ from them in four ways. This filter
 closes each one at render time, and sets the controller flags the role names:
 
@@ -24,7 +24,7 @@ A merge patch cannot rename a list item, which is why the rename is code rather 
 data. Each renamed item is written with `name` as its first key. `_IndentedDumper` indents
 every block sequence two columns under its key, the style the hand-written templates use.
 That is a style choice only: PyYAML's default writes a sequence at its key's own column, and
-the volume-name guard (`volume_blocks` in `ansible/tests/k8s/test_volume_names_descriptive.py`)
+the volume-name guard (`volume_blocks` in `tests/k8s/test_volume_names_descriptive.py`)
 reads that form too since #4733. Dropping the dumper would change the flux render's whitespace
 and nothing else.
 """

@@ -29,10 +29,10 @@ override with a bigger `model` (e.g. the session model).
 
 **The agent is read+write — explicitly instruct it to make NO changes, only review.** Its prompt must
 include:
-- its **scope**: the home-assistant role (`ansible/roles/k8s/home-assistant/`) — automations,
+- its **scope**: the home-assistant role (`k8s/roles/home-assistant/`) — automations,
   scenes, scripts, template sensors/macros, configuration — plus live state via `scripts/diagnostics/probe.py ha …`;
 - the **repo conventions** — the `/config` on the PVC is installed from the role's ConfigMap on
-  every pod start, so cite the role source under `ansible/roles/k8s/home-assistant/`, never a
+  every pod start, so cite the role source under `k8s/roles/home-assistant/`, never a
   live `/config` path;
 - its **don't-re-flag list** (from step 1) + the verify-first discipline;
 - the **output format** below.

@@ -6,14 +6,17 @@ Run: uv run pytest hosts/components/claude-code/tests/test_takeover_check_instal
 import shutil
 
 import pytest
-from _helpers import ANSIBLE
+from _helpers import (
+    REPO,
+    K8S_ROLES,
+)
 from _setup_render import CLAUDE_CODE, render_component_text
 from lib import yaml_fast
 from lib.proc_testing import run as run_proc
 
 ROLE = CLAUDE_CODE
 WRAPPER = "/usr/local/sbin/homelab-takeover-check"
-TOOLS = ANSIBLE.parent / "hosts" / "packages" / "homelab-tools" / "package.yml"
+TOOLS = REPO / "hosts" / "packages" / "homelab-tools" / "package.yml"
 
 
 def test_the_sudoers_template_grants_one_command_per_user() -> None:
@@ -74,7 +77,7 @@ def test_the_defaults_leave_the_check_off_and_name_its_wrapper_and_state() -> No
 
 def test_homelab_tools_pins_the_flux_the_cluster_runs() -> None:
     flux = yaml_fast.safe_load(
-        (ANSIBLE / "roles" / "k8s" / "flux" / "defaults" / "main.yml").read_text()
+        (K8S_ROLES / "flux" / "defaults" / "main.yml").read_text()
     )["flux_version"]
     tools = yaml_fast.safe_load(TOOLS.read_text())["tools"]
     assert {arch: pin["version"] for arch, pin in tools["flux"].items()} == {

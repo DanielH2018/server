@@ -52,7 +52,7 @@ lists.
 - `homelab-daniel-box` ships reconcile (H6.2), and since H6.3b the secrets unit and the
   `k3s-restart` component, with the `k3s-gates` component that ships the script the restart
   imports. Its one credential is `k3s_readonly_token`, which
-  `ansible/vars/hosts/daniel-box.sops.yaml` carries. Ansible keeps the builder, the repository and
+  `secrets/hosts/daniel-box.sops.yaml` carries. Ansible keeps the builder, the repository and
   every other daniel-box timer until H7, and the deployer keeps k3s's files until H6.4a. To
   remove the package before H6.4a, run `sudo apt-get remove homelab-daniel-box`. After H6.4a the
   package owns files that `k3s.service`'s `ExecStart` names, and removing it deletes them.
@@ -306,7 +306,7 @@ The first two carry `severity="critical"`. The third carries `severity="warning"
       installs the newest packages and reconciles as a timer run does. Use it when the fix is
       a newer package.
 - **`HostUpdateStale`** fires when a host listed in
-  `ansible/roles/k8s/observability/defaults/main.yml:observability_expected_hosts` reports no
+  `k8s/roles/observability/defaults/main.yml:observability_expected_hosts` reports no
   successful update within its `limit_seconds`. It also fires when the host's exporter is up
   and serves no success timestamp. A failed fetch writes no metric, so an unreachable
   repository, a stopped `homelab-apt-repo.service`, a firewall rule, a keyring mismatch and a
@@ -531,7 +531,7 @@ key. Every step is **operator-only**, and each host step runs from a LAN session
 
     In the same commit, update the fingerprint pin, `ARCHIVE_FINGERPRINT` in
     `hosts/bootstrap-host.sh`.
-    `ansible/tests/repo/test_lan_facts_have_one_source.py::test_the_bootstrap_pin_is_the_committed_keyrings_key`
+    `tests/repo/test_lan_facts_have_one_source.py::test_the_bootstrap_pin_is_the_committed_keyrings_key`
     fails until the two match. Copy the new private key into the break-glass kit, as
     [the break-glass doc](break-glass.md) describes.
 1. Delete the old key from the signer's home, because the role's apply refuses a home that
@@ -614,7 +614,7 @@ No other LVM volume exists on either node.
 
 1. To keep the node's existing age recipient, restore its key to `/etc/homelab/age.key` (root,
    mode 0600) before the first run. Otherwise step 3 creates a fresh key, and the host decrypts
-   nothing until the recipient steps in the header of `ansible/.sops.yaml` have run.
+   nothing until the recipient steps in the header of `secrets/.sops.yaml` have run.
 
 ### Rebuilding daniel-box
 
@@ -687,7 +687,7 @@ daniel-box serves the repository, so it builds its own packages from the clone.
 
 1. Check that the server came up with the flags the package's
    `/etc/rancher/k3s/config.yaml.d/50-homelab.yaml` sets. Each read has one expected answer:
-    - the first prints daniel-box's `server_ip` from `ansible/inventory/host_vars/daniel-box.yml`.
+    - the first prints daniel-box's `server_ip` from `inventory/host_vars/daniel-box.yml`.
       Any other address means k3s picked a second NIC, and every pod would dial the
       apiserver on it;
     - the second prints `etcd`. Without it, `cluster-init` did not take and k3s runs on SQLite;
@@ -806,7 +806,7 @@ daniel-server installs from daniel-box's repository, so daniel-box and the repos
     ```
 
 1. Check that the node holds `server_ip` on `k3s_node_static_link`, which
-   `ansible/inventory/host_vars/daniel-server.yml` names. Then start the agent, for the same
+   `inventory/host_vars/daniel-server.yml` names. Then start the agent, for the same
    reason as on daniel-box, and read the node from daniel-box:
 
     ```bash
@@ -940,7 +940,7 @@ arm64 only.
 
     In the same step, name the host in two more places. The renderer reads the inventory, and
     `bootstrap-host.sh` refuses a host that `HOSTS` does not list:
-    - copy `ansible/inventory/host_vars/_example.yml` to `<host>.yml`, which makes it an
+    - copy `inventory/host_vars/_example.yml` to `<host>.yml`, which makes it an
       inventory host;
     - add the host to `HOSTS` in `hosts/bootstrap-host.sh`.
 1. **Operator-only:** create the age key and read its public key. Run the script from the PR
@@ -950,7 +950,7 @@ arm64 only.
     sudo ./bootstrap-host.sh <host> --until 3
     ```
 
-1. In `ansible/.sops.yaml`, add the creation rule for `vars/hosts/<host>\.sops\.yaml$` ahead of the
+1. In `secrets/.sops.yaml`, add the creation rule for `vars/hosts/<host>\.sops\.yaml$` ahead of the
    generic rule. Its keys are the host's printed key, daniel-box's key and the recovery key, in that
    order. Adding a recipient is **operator-only**.
 1. **Operator-only**, when the tree names a credential for the host: write its SOPS file, and commit
@@ -970,8 +970,8 @@ arm64 only.
     - a third `apt-repo-<host>` rule under `ufw:` in `hosts/components/builder/component.yml`, or
       daniel-box's firewall refuses the host's `apt-get update` in step 6;
     - one `HostReconcileFailed` rule in
-      `ansible/roles/k8s/observability/files/rules/host-checks.yaml`, because
-      `ansible/tests/services/test_host_plane_rule_literals.py` fails an inventory host without one.
+      `k8s/roles/observability/files/rules/host-checks.yaml`, because
+      `tests/services/test_host_plane_rule_literals.py` fails an inventory host without one.
 
     `host_secrets.py check` finds the host from `hosts/<host>/package.yml`, so it takes no edit.
 
@@ -979,16 +979,16 @@ arm64 only.
     series are textfile metrics:
     - ship a node exporter, as `hosts/components/pi-node-exporter/` does for daniel-pi;
     - add a scrape job like `node-pi` to
-      `ansible/roles/k8s/observability/templates/prometheus.yaml.j2`, with `origin: <host>`;
+      `k8s/roles/observability/templates/prometheus.yaml.j2`, with `origin: <host>`;
     - add `<host>: {job: <scrape job>, limit_seconds: <seconds>}` to `observability_expected_hosts` in
-      `ansible/roles/k8s/observability/defaults/main.yml`, with the limit above the host's longest
+      `k8s/roles/observability/defaults/main.yml`, with the limit above the host's longest
       updater gap;
     - add the host's `HostUpdateStale` rule to `host-checks.yaml`. The test above prints the rule.
 
     A new cluster node instead needs a k3s mode in `hosts/bootstrap-host.sh` and an entry in `NODES`
     in `hosts/lib/k3s_gates.py`. It still needs the last two steps, with job `node`: every host
     whose package enables `homelab-updater.timer` needs an `observability_expected_hosts` entry,
-    and `ansible/tests/services/test_host_plane_rule_literals.py` fails a host that has none.
+    and `tests/services/test_host_plane_rule_literals.py` fails a host that has none.
 1. **Operator-only**, after the merge: once the builder has published `homelab-<host>` and
    `homelab_host_applied_info{host="daniel-box"}` names the merge commit or a descendant, run
    the script to the end. daniel-box's firewall then holds the rule. To confirm the rule, check
@@ -1026,7 +1026,7 @@ matrix PR.
 1. To make the host's package one the suite has tested on the target, merge a PR that adds the
    release to the `host_packages` matrix in `.github/workflows/ci.yml`, with the suite green. The
    PR makes the same edit to `.github/workflows/host-test-image.yml`, which
-   `ansible/tests/repo/test_host_test_image.py` holds equal to `ci.yml`, and adds a
+   `tests/repo/test_host_test_image.py` holds equal to `ci.yml`, and adds a
    `<release>-<arch> -` line per new leg to `hosts/lib/tests/container/image.pins`, which the same
    test requires. Until that workflow has published the new release's image and a later PR copies
    its digest into `image.pins` and adds the leg to that test's `PUBLISHED` set, the new leg
@@ -1037,7 +1037,7 @@ matrix PR.
 1. On a cluster node, pause system-upgrade-controller and check the cluster, both from daniel-box.
    The label stops a promoted k3s bump from starting a Job on the node. Go on only when the gate
    exits 0. daniel-box's restart runs at `k3s_restart_window` in
-   `ansible/inventory/host_vars/daniel-box.yml`, so pick a quiet slot outside that window.
+   `inventory/host_vars/daniel-box.yml`, so pick a quiet slot outside that window.
 
     ```bash
     sudo k3s kubectl label node <node> homelab/k3s-upgrade-paused=true
@@ -1257,7 +1257,7 @@ new version, which costs each host one install.
 
 The builder grades each commit over `CI_CONTEXTS`, which the role renders from
 `ci_required_contexts`. When a CI job is renamed, no commit carries the old context, so no
-commit is ever green. Change `ci_required_contexts` in `ansible/inventory/group_vars/all.yml` to
+commit is ever green. Change `ci_required_contexts` in `inventory/group_vars/all.yml` to
 the new name, spelled exactly as `ci.yml`'s `name:`, and merge that. The builder's
 `builder.conf` and the `homelab-checkout-sync` unit both render the key, so neither changes
 until a host package carries it. The updater installs the builder's copy once the builder
@@ -1281,7 +1281,7 @@ procedure above. The first builder run after the fix builds.
 
 The builder refuses to grade anything, because `CI_CONTEXTS` is empty or
 `CI_ANCESTOR_WALK_MAX` is not a positive integer. Restore `ci_required_contexts` or
-`ci_ancestor_walk_max` in `ansible/inventory/group_vars/all.yml` and merge it.
+`ci_ancestor_walk_max` in `inventory/group_vars/all.yml` and merge it.
 
 ### `reason="token"` and `reason="build"`
 

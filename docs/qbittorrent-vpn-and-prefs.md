@@ -1,6 +1,6 @@
 # qbittorrent record — the kill-switch deadlock, the netns reset and the prefs plane
 
-Working-out moved off `ansible/roles/k8s/qbittorrent/CLAUDE.md` (#2991), which a session reads on
+Working-out moved off `k8s/roles/qbittorrent/CLAUDE.md` (#2991), which a session reads on
 every touch of the role. The role doc keeps the rules; this page keeps the two outages behind them,
 the measurements the netns-reset gate was proven with, LinuxServer's `modcache` behaviour line by
 line, and why the prefs plane is shaped the way it is.
@@ -108,10 +108,10 @@ Run this from the repo root, against the live pod's IP, with `--dry-run` first. 
 credentials would land in the transcript. An agent hands the operator the command instead.
 
 ```bash
-QBT_USERNAME=$(sops -d --extract '["qbittorrent_username"]' ansible/vars/secrets.yml) \
-QBT_PASSWORD=$(sops -d --extract '["qbittorrent_password"]' ansible/vars/secrets.yml) \
+QBT_USERNAME=$(sops -d --extract '["qbittorrent_username"]' secrets/secrets.yml) \
+QBT_PASSWORD=$(sops -d --extract '["qbittorrent_password"]' secrets/secrets.yml) \
 QBT_URL=http://<pod-ip>:8080 \
-uv run python ansible/roles/k8s/qbittorrent/files/apply_prefs.py --dry-run
+uv run python k8s/roles/qbittorrent/files/apply_prefs.py --dry-run
 ```
 
 ## Why the prefs plane is shaped the way it is
@@ -119,7 +119,7 @@ uv run python ansible/roles/k8s/qbittorrent/files/apply_prefs.py --dry-run
 Nothing used to re-run `apply_prefs.py` or notice when the PVC's live preferences drifted from
 `DESIRED` (2026-08-27 review, Medium). A daily check closed that. It ran as a daniel-box host
 cron until H2.5d, and runs as the `qbittorrent-prefs-check` CronJob since
-(`ansible/roles/k8s/qbittorrent/templates/prefs-check-cronjob.yaml.j2`, 06:37 UTC). Its entry
+(`k8s/roles/qbittorrent/templates/prefs-check-cronjob.yaml.j2`, 06:37 UTC). Its entry
 point, `files/prefs_check.py`, runs `apply_prefs.py --dry-run --connect-wait 60` and prints one
 `qbittorrent-prefs-check: <verdict>` line to the pod log. Read the verdicts with
 `uv run python scripts/diagnostics/probe.py loki-query '{container="qbittorrent-prefs-check"}' --since 48h`.
@@ -134,7 +134,7 @@ Five decisions inside it are deliberate:
   rather than a key each, because a key whose whole value is one secret is a standalone Flux
   placeholder, and Flux types its value by its text (`docs/homelab-render.md`, *The
   standalone-value guard*). The ConfigMap that stages the
-  code holds no secret (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
+  code holds no secret (`tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
 - **The exit codes are a contract**: `EXIT_OK` (0), `EXIT_UNREACHABLE` (1), `EXIT_BAD_ARGS` (2),
   `EXIT_DRIFT` (3, `--dry-run` only). Before 2026-08-27, `--dry-run` returned 0 whether or not
   anything had drifted, so a scheduled caller could not have branched on it. `prefs_check.py`
@@ -157,4 +157,4 @@ Five decisions inside it are deliberate:
 **Why the values themselves.** The pod egresses through Mullvad, which forwards no ports, so
 the client can only pair with peers it dials itself. Every raised limit is about dialing faster
 and wider; none of it substitutes for an inbound port, and
-`ansible/roles/k8s/qbittorrent/files/apply_prefs.py` has the per-setting reasons.
+`k8s/roles/qbittorrent/files/apply_prefs.py` has the per-setting reasons.

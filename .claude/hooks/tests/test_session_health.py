@@ -80,7 +80,7 @@ def _run_main(
     checkout's `git status` (genuinely dirty while docs-refresh runs the suite over the pages
     it just staged), this machine's worktrees, GitHub, and `~/.claude/fanout`. They go in as
     main()'s keyword seams rather than as patches, because the monkeypatch ratchet
-    (ansible/tests/_ratchet.py) caps a test module at zero patches on a first-party module.
+    (tests/_ratchet.py) caps a test module at zero patches on a first-party module.
     """
     if env:
         for k, v in env.items():
@@ -120,7 +120,7 @@ def test_main_lists_other_sessions_even_when_green(monkeypatch, capsys):
     # another session's open work is information this session needs whether or not the
     # homelab itself is healthy, so it is not gated on the health banner
     run_main = _run_main(
-        monkeypatch, '{"source":"startup"}', sessions=["  • other-branch — roles/k8s/x"]
+        monkeypatch, '{"source":"startup"}', sessions=["  • other-branch — k8s/roles/x"]
     )
     assert run_main() == 0
     out = capsys.readouterr().out
@@ -288,7 +288,7 @@ def test_main_prints_the_health_lines_before_the_session_list(monkeypatch, capsy
         monkeypatch,
         '{"source":"startup"}',
         targets=["  ✗ target loki [loki:3100] down"],
-        sessions=["  • other-branch — roles/k8s/x"],
+        sessions=["  • other-branch — k8s/roles/x"],
         worktrees=["WARN: 1 merged worktree(s) can be removed:"],
     )
     assert run_main() == 0
@@ -300,9 +300,7 @@ def test_main_prints_the_health_lines_before_the_session_list(monkeypatch, capsy
 def test_main_cuts_the_agent_context_to_its_budget_and_keeps_the_health_lines(
     monkeypatch, capsys
 ):
-    sessions = [
-        f"  • worktree-fanout-{n} — {'ansible/roles/k8s/x/' * 4}" for n in range(60)
-    ]
+    sessions = [f"  • worktree-fanout-{n} — {'k8s/roles/x/' * 4}" for n in range(60)]
     run_main = _run_main(
         monkeypatch,
         '{"source":"startup"}',

@@ -1,8 +1,8 @@
 ---
 paths:
-  - "ansible/vars/**"
-  - "ansible/inventory/**"
-  - "ansible/.sops.yaml"
+  - "secrets/**"
+  - "inventory/**"
+  - "secrets/.sops.yaml"
 ---
 
 # Secrets Rules
@@ -11,12 +11,12 @@ The root `CLAUDE.md`, *Secrets Management*, is the home of the safety rules: wha
 `secrets.yml` prints, never decrypt, and never commit plaintext. This file is the home of the
 `.sops.yaml` and key-check mechanics, and of the enforcement detail these paths carry. A template
 reads a value as `{{ name }}`. Flux decrypts the cluster's SOPS file with the cluster's age key
-(ADR 0022), and each host decrypts its own file under `ansible/vars/hosts/` with that host's key
+(ADR 0022), and each host decrypts its own file under `secrets/hosts/` with that host's key
 (ADR 0029).
 
 - A direct Edit/Write to `secrets.yml` is **denied by the block-protected-edits hook** (content-based
   detection of the SOPS markers) — there's no way to "just quickly edit" it; use `sops` / `/add-secret`.
-- `ansible/.sops.yaml` is tracked and holds public keys only. It lists the age recipients new and
+- `secrets/.sops.yaml` is tracked and holds public keys only. It lists the age recipients new and
   updated secrets are encrypted to. SOPS searches upward from the file, so the config sits at
   `ansible/`, not the repo root.
 - `.sops.yaml` auto-encrypts a `.yml` or `.yaml` on save only inside a `vars/` or `secrets/`

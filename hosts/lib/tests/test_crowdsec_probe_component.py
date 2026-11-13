@@ -4,7 +4,7 @@ D5's first crowdsec conversion installed the timer through `setup/k8s_host_files
 hold what the move added: the script and unit paths, the timer's enable link, the legacy entries
 that retire the Ansible-era units, and the one `User=` every unit writing `/var/log/pi-health/`
 declares. The script's behaviour is run against a stub `curl` in
-`ansible/tests/services/test_crowdsec_edge_probe_contract.py`.
+`tests/services/test_crowdsec_edge_probe_contract.py`.
 
 Run: uv run pytest hosts/lib/tests/test_crowdsec_probe_component.py
 """

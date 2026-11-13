@@ -6,7 +6,7 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash
 
 # Adding a k3s service
 
-A new service belongs in `ansible/roles/k8s/<name>/` unless it must run on `daniel-pi`
+A new service belongs in `k8s/roles/<name>/` unless it must run on `daniel-pi`
 (LAN-only utilities, WireGuard). `daniel-server` and `daniel-box` have no Docker at all, so
 a Compose role there deploys nothing — for the Pi, use the `new-container` skill instead.
 
@@ -29,34 +29,34 @@ since 2026-08-14. Read the generated files before you extend them; the TODOs in 
 are the parts only you can write.
 
 **No `service.yaml.j2` is written, and none is needed.** The renderer renders
-`ansible/templates/service-default.yaml.j2` for a role that ships none (#2872), reading the
+`k8s/templates/service-default.yaml.j2` for a role that ships none (#2872), reading the
 name and port off the `containers_list` entry. A Service needing a named port or a sidecar's
 port says so on the entry, with `service_port_name` or `service_extra_ports`. Anything beyond
 that — a selector that differs from the name, a LoadBalancer, a pinned clusterIP — means
 writing the role its own `templates/service.yaml.j2`, which always wins over the default.
-`ansible/templates/service.yml.j2`'s header lists every disqualifier and the role behind it.
+`k8s/templates/service.yml.j2`'s header lists every disqualifier and the role behind it.
 
 **No `ingressroute.yaml.j2` is written either** (#3043). The renderer renders
-`ansible/templates/ingressroute-default.yaml.j2` the same way, reading the name, `hostname`,
+`k8s/templates/ingressroute-default.yaml.j2` the same way, reading the name, `hostname`,
 `port` and `use_authelia` off the entry. A route needing anything the entry does not carry —
 an extra middleware, a second hostname, `public=false`, a bypass prefix, a render condition —
 means writing the role its own `templates/ingressroute.yaml.j2`; the macro header in
-`ansible/templates/ingressroute.yml.j2` lists every parameter.
+`k8s/templates/ingressroute.yml.j2` lists every parameter.
 
 **The scaffolder writes no PVC, Secret or NetworkPolicy.** Each is a decision about the
 service, so add the template by hand. The role passes no file list: the renderer renders
 every top-level `templates/*.yaml.j2` it finds, so a new template ships by existing. Name a
 Secret's template with `secret` in its basename (`secret.yaml.j2`), which
-`ansible/tests/k8s/test_derived_manifest_files.py` requires. A one-off Job's template ends
+`tests/k8s/test_derived_manifest_files.py` requires. A one-off Job's template ends
 `-job.yaml.j2` and stays out of the render's file list.
 
 **Two censuses a new role always joins**, which `prek` does not run and CI does — the
 scaffolder names both when it finishes:
 
-- `BORN_FENCED_ROLES` in `ansible/tests/k8s/test_netpol_baseline_labels.py`, with the sentence
+- `BORN_FENCED_ROLES` in `tests/k8s/test_netpol_baseline_labels.py`, with the sentence
   saying why Traefik is the pod's only caller. A service that dials out drops the
   `netpol-baseline: enforced` pod label and gets its own NetworkPolicy instead.
-- `ROLES_WITH_A_DEFAULT_SERVICE` in `ansible/tests/k8s/test_shared_manifest_defaults.py`, and
+- `ROLES_WITH_A_DEFAULT_SERVICE` in `tests/k8s/test_shared_manifest_defaults.py`, and
   `ROLES_WITH_A_DEFAULT_INGRESSROUTE` beside it for a routed role.
 
 The new role moves the Renovate stance docs fragment. The `regen-doc-fragments` prek hook
@@ -64,15 +64,15 @@ rewrites it on your commit and fails once, so stage what it wrote and commit aga
 
 **The pod-spec shell comes from two shared macros, which the scaffolder already calls.** A
 Deployment template calls `spec_shell(strategy)` under `spec:` and `pod_shell(priority_class,
-…)` under `spec.template.spec:`, both from `ansible/templates/workload-shell.yml.j2`; a
+…)` under `spec.template.spec:`, both from `k8s/templates/workload-shell.yml.j2`; a
 DaemonSet calls `pod_shell` only. Both required arguments are decisions, and the file's
 docstring says what each one costs: `strategy` is `Recreate` (a downtime gap every deploy,
-allowlisted with its reason in `ansible/tests/k8s/test_deploy_strategy.py`) or
+allowlisted with its reason in `tests/k8s/test_deploy_strategy.py`) or
 `RollingUpdate`; `priority_class` is one of the tiers in
-`roles/k8s/cluster-base/templates/priorityclass.yaml.j2`. The pod-level `securityContext` goes
+`k8s/roles/cluster-base/templates/priorityclass.yaml.j2`. The pod-level `securityContext` goes
 through the macro's `run_as_user`/`fs_group`/`non_root` arguments — a pod that needs sysctls
 or supplementalGroups writes the whole block itself and passes none of them. ENFORCED by
-`ansible/tests/k8s/test_workload_shell_uses_the_macros.py`, which refuses an owned field
+`tests/k8s/test_workload_shell_uses_the_macros.py`, which refuses an owned field
 written out by hand. The container-level `securityContext` is `hardened_security_context`
 from `security-context.yml.j2`, as before. A CronJob's containers sit one level deeper, under
 `jobTemplate`, and take the 14-space twins `job_hardened_security_context` and
@@ -80,14 +80,14 @@ from `security-context.yml.j2`, as before. A CronJob's containers sit one level 
 
 **Name every `volumes[].name` for the workload or component that owns it** — `sonarr-config`,
 never `config` — so a mount reads unambiguously in a diff or a `kubectl describe`. ENFORCED by
-`ansible/tests/k8s/test_volume_names_descriptive.py`, which also catches the half-finished rename
+`tests/k8s/test_volume_names_descriptive.py`, which also catches the half-finished rename
 (a `volumeMounts` entry with no matching volume) that no schema check can see.
 
 `templates/` is for **manifests only**: `validate/k8s_manifests.py` renders every `*.j2` there
 and parses it as YAML. App config a manifest embeds via `lookup()` goes in `templates/config/`,
 static assets in `files/`. `Dockerfile*` is exempt and may sit in `templates/` directly.
 
-**Every role under `roles/k8s/` declares `k8s_autodeploy` and `k8s_autodeploy_reason` in
+**Every role under `k8s/roles/` declares `k8s_autodeploy` and `k8s_autodeploy_reason` in
 `defaults/main.yml`.** `lib.k8s_roles.k8s_autodeploy_denylist` derives the Renovate denylist
 from those declarations. It raises on a role that declares nothing, so a missing stance fails
 CI and refuses every unattended Renovate landing rather than defaulting to either answer. Declare `true` for an ordinary service whose image pin
@@ -143,7 +143,7 @@ a deploy trigger, a volume delete) and say why in the comment above the entry.
 
 ## 3. Secrets
 
-Add to `ansible/vars/secrets.yml` (`sops ansible/vars/secrets.yml`) and reference as
+Add to `secrets/secrets.yml` (`sops secrets/secrets.yml`) and reference as
 `{{ variable_name }}` in a `secret.yaml.j2`. The `add-secret` skill covers the rotation
 registry that has to be updated alongside.
 

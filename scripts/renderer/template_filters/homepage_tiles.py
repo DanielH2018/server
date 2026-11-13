@@ -14,7 +14,7 @@ without the key, so a widget URL and its edge cannot disagree.
 `homepage_href` builds a tile's link from the entry's `hostname`, so a renamed route moves the
 tile with it.
 
-`lib.ansible_jinja_env` registers each so a `ValueError` fails the render as a `FilterError` prefixed
+`lib.guard_jinja_env` registers each so a `ValueError` fails the render as a `FilterError` prefixed
 with the filter's name, before any apply.
 """
 

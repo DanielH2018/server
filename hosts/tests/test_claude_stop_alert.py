@@ -12,11 +12,11 @@ Run: uv run pytest hosts/tests/test_claude_stop_alert.py
 import re
 
 import pytest
-from _helpers import ANSIBLE
+from _helpers import REPO
 from _setup_render import render_component_text
 from lib import yaml_fast
 
-COMPONENT = ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
+COMPONENT = REPO / "hosts" / "components" / "claude-code" / "component.yml"
 RULE = "50-claude-stop-alert.rules.j2"
 ACCOUNTS = {
     "sys_user": "stop-sentinel-operator",

@@ -1,0 +1,54 @@
+# cloudflare-ddns — keeps two Cloudflare A records pointed at the router's WAN IP
+
+Runs `favonia/cloudflare-ddns` twice: one Deployment updates a **direct** (unproxied) record,
+the other a **proxied** one behind Cloudflare's edge. See repo-root `CLAUDE.md` for shared
+conventions.
+
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
+- **Applied by:** Flux, through `promote`; `land.sh --tags=cloudflare-ddns` gates the rollout
+- **Image:** `favonia/cloudflare-ddns` (`cloudflare_ddns_k8s_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claims:** none (no PVC)
+<!-- /generated_from -->
+
+- **Digest-pinned image**, with the tag kept alongside the digest for Renovate's k8s-defaults
+  manager.
+- **Secret** (a SOPS key, not a value): `cloudflare_dns_token`.
+- **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
+  is in `cluster/services.yml`, so nothing applies it by hand, and a
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. Both
+  Deployments are `RollingUpdate`
+  with one replica and no readinessProbe, so the Kustomization's `wait` reads a pod Ready as
+  soon as its container starts. That is the same gate the explicit `rollout status` task gave
+  under Ansible.
+- **The Secret substitutes from `homelab-cluster-vars`.** The key above is a `${<key>}`
+  placeholder in the published render. Flux substitutes the values from the
+  `homelab-cluster-vars` Secret, which it decrypts from `secrets/cluster-vars.sops.env`.
+  The Kustomization depends on `cluster-vars`, so a rotated value is live before
+  cloudflare-ddns reconciles. A rotation reaches the cluster only through `cluster_vars.py
+  write`. The renderer stamps a restart checksum on both Deployments, so a changed token rolls
+  both pods.
+- **Where the tasks went.** The Kustomization's `wait` replaces the Ansible wait task. The restart
+  checksum replaces the `manifests_extra_rollouts` restart described below.
+
+## Notable
+- Renders **two** Deployments (`cloudflare-ddns-direct`, `cloudflare-ddns-proxied`), neither
+  named after the service. Under Ansible, before D5.19, `manifests_extra_rollouts` named both
+  explicitly — this is also
+  what restarts them on a Secret change, since `manifests_rollout: ''` disables the shared
+  restart wiring too. Rotating a token without both names in
+  `manifests_extra_rollouts` leaves both pods running on the stale token (found 2026-08-30,
+  both monitors DOWN behind a green deploy).
+- Neither Deployment pushes a heartbeat, so the rules below are the only watch on them.
+
+- favonia's image serves no metrics, so two rule families watch it and page since M6 batch B7's Cutover-1b.
+  `CloudflareDdnsUnavailable` in observability's `pods` group reads each Deployment's available
+  replicas. `CloudflareDdnsDirectUpdateSilent` and `CloudflareDdnsProxiedUpdateSilent` in
+  loki-homelab's `homelab-logs.yaml` fire when a pod logs none of "are already up to date",
+  "Updated an outdated" or "Added a new" for 15 minutes. The pod name separates the two,
+  because both containers are named `cloudflare-ddns`.
+
+## Editing
+- Manifests: `templates/deployment-direct.yaml.j2`, `templates/deployment-proxied.yaml.j2`,
+  `templates/secret.yaml.j2`.

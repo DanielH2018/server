@@ -12,7 +12,7 @@ generated_sha: 62b768e65
 
 # Hosts
 
-3 host(s) in `ansible/inventory/host_vars/`.
+3 host(s) in `inventory/host_vars/`.
 
 
 ## daniel-box

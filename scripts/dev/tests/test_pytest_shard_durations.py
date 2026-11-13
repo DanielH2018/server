@@ -2,7 +2,7 @@
 
 `shard_weight_gate.durations_problems` is what CI's `--check-durations` step runs against the
 durations report its own test step produced. The static half is the ratchet in
-`ansible/tests/repo/test_pytest_shards_partition_the_suite.py`.
+`tests/repo/test_pytest_shards_partition_the_suite.py`.
 
 It has two arms over that one report. `heavy_unweighted` asks whether a costly file is MISSING
 from the table; `stale_overweight` asks whether a recorded number is still roughly what
@@ -32,7 +32,7 @@ REPORT = """============================== slowest durations ===================
 21.40s call     scripts/heavy/tests/test_new_module.py::test_the_long_one
 4.10s setup    scripts/heavy/tests/test_new_module.py::test_the_long_one
 0.90s call     scripts/heavy/tests/test_new_module.py::test_the_short_one
-17.31s call     ansible/tests/k8s/test_secret_consumer_census.py::test_every_consumer
+17.31s call     tests/k8s/test_secret_consumer_census.py::test_every_consumer
 0.01s call     scripts/dev/tests/test_run_as_cron.py::test_a_shell_builtin_still_runs
 
 (58 durations < 0.005s hidden.  Use -vv to show these durations.)
@@ -40,7 +40,7 @@ REPORT = """============================== slowest durations ===================
 
 NEW_MODULE = "scripts/heavy/tests/test_new_module.py"
 RECORDED = {
-    "ansible/tests/k8s/test_secret_consumer_census.py": 17.31,
+    "tests/k8s/test_secret_consumer_census.py": 17.31,
     "scripts/dev/tests/test_run_as_cron.py": 0.05,
 }
 
@@ -48,7 +48,7 @@ RECORDED = {
 def test_the_parser_sums_every_phase_of_a_file():
     totals = shard_weight_gate.parse_durations(REPORT)
     assert totals[NEW_MODULE] == 26.4
-    assert totals["ansible/tests/k8s/test_secret_consumer_census.py"] == 17.31
+    assert totals["tests/k8s/test_secret_consumer_census.py"] == 17.31
     assert len(totals) == 3
 
 
@@ -74,7 +74,7 @@ def test_a_light_unweighted_module_is_clean():
     of them is cheap. Only the cost decides."""
     weights = {
         NEW_MODULE: 26.4,
-        "ansible/tests/k8s/test_secret_consumer_census.py": 17.31,
+        "tests/k8s/test_secret_consumer_census.py": 17.31,
     }
     assert shard_weight_gate.durations_problems(REPORT, weights) == []
 
@@ -88,7 +88,7 @@ def test_the_threshold_decides():
 # failed and then 11.2s on its rerun (#4010): between the two bounds.
 MARGIN_REPORT = (
     f"12.40s call     {NEW_MODULE}::test_the_long_one\n"
-    "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py::test_every_consumer\n"
+    "17.31s call     tests/k8s/test_secret_consumer_census.py::test_every_consumer\n"
 )
 
 
@@ -111,7 +111,7 @@ def test_an_unweighted_module_past_the_fail_bound_fails_and_does_not_also_annota
 def test_a_recorded_weight_far_above_what_it_measured_is_flagged():
     """A stale entry: the census module recorded at 17.31s, measuring 0.09s here, which the three
     missing-from-the-table arms cannot see."""
-    stale = "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py"
+    stale = "17.31s call     tests/k8s/test_secret_consumer_census.py"
     report = REPORT.replace(stale, "0.09s call     " + stale.split()[-1])
     problems = shard_weight_gate.durations_problems(
         report, RECORDED | {NEW_MODULE: 26.4}
@@ -125,7 +125,7 @@ def test_a_recorded_weight_inside_the_runner_noise_is_clean():
     """The accept half, at the bound that decides it. Controls measured 1.10x to 1.46x their
     recorded values, so 17.31s recorded against 14.00s measured is the scale
     difference between the runner and the recording workstation, not a stale entry."""
-    stale = "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py"
+    stale = "17.31s call     tests/k8s/test_secret_consumer_census.py"
     report = REPORT.replace(stale, "14.00s call     " + stale.split()[-1])
     assert (
         shard_weight_gate.durations_problems(report, RECORDED | {NEW_MODULE: 26.4})
@@ -145,7 +145,7 @@ def test_the_floor_keeps_a_cheap_entry_out_of_it():
 def test_both_arms_report_together():
     """One report can carry a heavy unweighted module AND a stale entry, and a gate that
     short-circuited on the first would hide the second until the next run."""
-    stale = "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py"
+    stale = "17.31s call     tests/k8s/test_secret_consumer_census.py"
     report = REPORT.replace(stale, "0.09s call     " + stale.split()[-1])
     problems = shard_weight_gate.durations_problems(report, RECORDED)
     assert len(problems) == 2
@@ -154,7 +154,7 @@ def test_both_arms_report_together():
 
 
 def test_the_stale_ratio_decides():
-    stale = "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py"
+    stale = "17.31s call     tests/k8s/test_secret_consumer_census.py"
     report = REPORT.replace(stale, "0.09s call     " + stale.split()[-1])
     weights = RECORDED | {NEW_MODULE: 26.4}
     assert shard_weight_gate.durations_problems(report, weights, ratio=1000.0) == []
@@ -170,7 +170,7 @@ def test_the_stale_ratio_decides():
 
 # `test_media_volume_verify.py` on #5598: recorded 4.86s on a host busy with fan-out batches,
 # measured 0.97s on the runner (5.0x), and the PR that changed it went red (#5616).
-BUSY_HOST_MODULE = "ansible/roles/k8s/media-volume/tests/test_media_volume_verify.py"
+BUSY_HOST_MODULE = "k8s/roles/media-volume/tests/test_media_volume_verify.py"
 BUSY_HOST_REPORT = f"0.97s call     {BUSY_HOST_MODULE}::test_verify\n"
 
 
@@ -457,7 +457,7 @@ def test_the_diff_scopes_the_recorded_weight_arms_too():
     """An over-recorded and an under-recorded entry outside the diff annotate as the unweighted
     arm does, and the same two inside it fail."""
     report = (
-        "0.09s call     ansible/tests/k8s/test_secret_consumer_census.py::test_every_consumer\n"
+        "0.09s call     tests/k8s/test_secret_consumer_census.py::test_every_consumer\n"
         "16.00s call     scripts/dev/tests/test_run_as_cron.py::test_a_shell_builtin_still_runs\n"
     )
     problems, warnings = shard_weight_gate.gate_complaints(report, RECORDED, set())

@@ -24,7 +24,7 @@ from _renovate import _PACKAGE_RULES, _REPO, _resolve_setting
 from lib import yaml_fast
 
 HOST_FILES_DEFAULTS = _REPO / "hosts/components/registry-gc/defaults/main.yml"
-K8S_ROLES = _REPO / "ansible/roles/k8s"
+K8S_ROLES = _REPO / "k8s/roles"
 
 # The copies the census must find, so a moved or renamed pin fails as a missing member rather
 # than passing over an empty census.
@@ -67,7 +67,7 @@ def image_name(ref: str) -> str:
 def copied_pins(
     copies: Path = HOST_FILES_DEFAULTS, k8s_roles: Path = K8S_ROLES
 ) -> list[Copy]:
-    """Every `_image` key in `copies` that some `roles/k8s/*/defaults/main.yml` also defines."""
+    """Every `_image` key in `copies` that some `k8s/roles/*/defaults/main.yml` also defines."""
     pins = {
         k: v
         for k, v in (yaml_fast.safe_load(copies.read_text()) or {}).items()
@@ -138,7 +138,7 @@ def test_image_name_strips_the_tag_and_digest(ref: str, name: str) -> None:
 _PIN = Copy(
     "x_image",
     "registry",
-    "ansible/roles/k8s/registry/defaults/main.yml",
+    "k8s/roles/registry/defaults/main.yml",
     "hosts/components/registry-gc/defaults/main.yml",
 )
 
@@ -155,12 +155,12 @@ def _rules(paths: list[str]) -> list[dict]:
 
 
 def test_a_rule_matching_both_copies_is_clean() -> None:
-    rules = _rules(["ansible/roles/k8s/**", _PIN.copy])
+    rules = _rules(["k8s/roles/**", _PIN.copy])
     assert resolution_mismatches([_PIN], rules) == []
 
 
 def test_a_rule_missing_the_copy_is_flagged() -> None:
-    problems = resolution_mismatches([_PIN], _rules(["ansible/roles/k8s/**"]))
+    problems = resolution_mismatches([_PIN], _rules(["k8s/roles/**"]))
     assert problems == [
         "x_image (registry, digest): groupName is 'k8s image {{depName}}' in "
         f"{_PIN.source} but None in {_PIN.copy}",

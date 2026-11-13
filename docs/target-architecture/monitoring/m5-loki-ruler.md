@@ -92,7 +92,7 @@ Each selector also matched a live stream when its rule landed.
 
    After PR 3, a delivery break shows only at the next real send, through
    `LokiRulerNotificationsFailing` (*Risks*).
-3. `ansible/tests/services/test_loki_stream_labels.py`'s consumer census includes the rule
+3. `tests/services/test_loki_stream_labels.py`'s consumer census includes the rule
    file, and its named members include one rule. Its rule-file checks cover label names,
    `job`, `machine` and `container` values, and the Pi boundary. PR 3 recorded a non-zero
    `probe.py loki-query 'count_over_time(<selector>[24h])'` for each selector, and a non-zero
@@ -102,13 +102,13 @@ Each selector also matched a live stream when its rule landed.
    `homelab-logs.yaml` or `loki-homelab.yaml` carries `shadow`, except `LokiHomelabDown`. M6's
    A3 Cutover-b deletes that rule, and A3's warning scrape-target rule then pages job
    `loki-homelab` (M6 *A3 and the handoffs it closes*, item 5). The three push tokens are
-   gone from `ansible/vars/secrets.yml` and `ansible/secret_rotation.yml`, and
-   `ansible/tests/k8s/test_secret_consumer_census.py` passes.
+   gone from `secrets/secrets.yml` and `secrets/secret_rotation.yml`, and
+   `tests/k8s/test_secret_consumer_census.py` passes.
 
 ## Baseline at `70591c307`
 
 - **The ruler block exists and is empty.** `loki-homelab-config` in
-  `ansible/roles/k8s/loki-homelab/templates/configmap.yaml.j2` sets `ruler.storage.type: local`
+  `k8s/roles/loki-homelab/templates/configmap.yaml.j2` sets `ruler.storage.type: local`
   with `directory: /loki/rules`, and `common.storage.filesystem.rules_directory: /loki/rules`.
   It has no `alertmanager_url`, no `enable_api` and no rule files. `/loki` is the
   `loki-homelab-data` claim, and `/etc/loki` is the config ConfigMap's mount.
@@ -150,7 +150,7 @@ Each selector also matched a live stream when its rule landed.
         - `LOKI_DOCKER_STREAM`, `{job="k8s"}`, over `LOKI_WINDOW` (30m).
         - `LOKI_PI_STREAM`, `{job="pi"}`, over 3h.
 
-      The selectors render from `loki_streams` in `ansible/inventory/group_vars/all.yml`
+      The selectors render from `loki_streams` in `inventory/group_vars/all.yml`
       through `templates/env-secret.yaml.j2`.
     - **`swallowed_verdicts`** (gate `loki_reachable`, not critical) reads
       `SWALLOWED_VERDICTS_LOGQL` and `SWALLOWED_VERDICTS_POD_LOGQL` over 3h. For each logger
@@ -233,14 +233,14 @@ Each selector also matched a live stream when its rule landed.
   `SWALLOWED_VERDICTS_POD_LOGQL`. A bridge push into a deleted tile's token is logged by the
   `monitor-bridge` pod, which neither selector reads.
 - **A bridge tile's deadline is 1200s.** `uptime_kuma_k8s_bridge_push_interval` is 1200 in
-  `ansible/roles/k8s/uptime-kuma/defaults/main.yml`, so a bridge tile goes DOWN 1200s after its
+  `k8s/roles/uptime-kuma/defaults/main.yml`, so a bridge tile goes DOWN 1200s after its
   last push.
 - **Prometheus cannot see a Loki rule's alerts.** The ruler writes `ALERTS` only to a
   remote-write target. `prometheus.yaml.j2` deliberately runs without
   `--web.enable-remote-write-receiver`, and its comment records why. So C7's health gate,
   which reads Prometheus `ALERTS`, cannot see a log rule's alert. *Open questions* raises this.
 - **The route admits only `/loki/api/v1/`.**
-  `ansible/roles/k8s/loki-homelab/templates/ingressroute.yaml.j2` restricts the LAN route to
+  `k8s/roles/loki-homelab/templates/ingressroute.yaml.j2` restricts the LAN route to
   that prefix, behind its ClientIP guard. A host can read `/loki/api/v1/rules` but not the
   ruler's `/prometheus/api/v1/alerts`.
 - **The label vocabulary is guarded for `job` values only.** `test_loki_stream_labels.py`
@@ -286,7 +286,7 @@ ruler:
 `loki-homelab-rules`, has one key per rule group, `<group>.yaml`. A new role default,
 `loki_homelab_rule_groups`, lists the groups, `[homelab-logs]`. `templates/rules-configmap.yaml.j2`
 loops over that list and reads each file with
-`lookup('file', playbook_dir + '/roles/k8s/loki-homelab/files/rules/' + group + '.yaml')`, the
+`lookup('file', playbook_dir + '/k8s/roles/loki-homelab/files/rules/' + group + '.yaml')`, the
 form M1 convention 1 gives `observability_rule_groups`. It never globs, because the offline
 renderer supports no `fileglob` (M1 *Baseline*). A file that the list does not name never
 reaches the ConfigMap. So `alert_rules.py`'s lokitool phase fails when the stems in
@@ -305,7 +305,7 @@ threshold (the same 10m).
 
 ### The cross-namespace grant
 
-`ansible/roles/k8s/netpol-baseline/templates/networkpolicy-alertmanager.yaml.j2` is a new
+`k8s/roles/netpol-baseline/templates/networkpolicy-alertmanager.yaml.j2` is a new
 bespoke policy. It opens with a `DECIDED` marker naming its shape: a cross-namespace peer,
 which the callers model cannot express. The `bespoke-netpol-says-why-it-is-not-a-callers-fence`
 census row requires that marker. The policy admits `app: loki-homelab` from the `homelab`
@@ -432,7 +432,7 @@ in M6, which deletes the row with them.
 ### The selector census
 
 `test_loki_stream_labels.py` gains a source, `_loki_rule_exprs()`, which reads every `expr` from
-the files in `ansible/roles/k8s/loki-homelab/files/rules/`. It joins `_consumers()`, and the
+the files in `k8s/roles/loki-homelab/files/rules/`. It joins `_consumers()`, and the
 named-member census gains `LokiPodLogsSilent`. A selector naming a `job` no stream emits then
 fails `test_every_consumer_selects_only_owner_values` in CI.
 
@@ -448,7 +448,7 @@ The rule-file source gets four more checks, because `_selected_jobs` reads `job`
   nothing.
 - **`container` values.** The census maps each `container` value the rules use to the role
   whose template declares it, `uptime-kuma` to the uptime-kuma Deployment. It renders that
-  template through `ansible/tests/_k8s_render.py:render_role_template` and asserts that the
+  template through `tests/_k8s_render.py:render_role_template` and asserts that the
   container name is there. A value with no mapping fails.
 - **The Pi boundary (#3739).** PR 3 also moves `_PI_STREAMS` and `_selector_matches` from
   `test_check_loki.py` into the stream-label helper. The check maps each silence rule to the
@@ -475,24 +475,24 @@ stays until M6's A7, and `test_loki_selectors_use_real_stream_labels` stays with
  ansible/
 ~  vars/secrets.yml                       loses three push tokens (PR 5, operator-only)
 ~  secret_rotation.yml                    their three rows deleted (PR 4a, the operator's commit)
- ansible/roles/k8s/uptime-kuma/
+ k8s/roles/uptime-kuma/
 ~  templates/static-monitors.yaml.j2      the discord comment's reason for the name (PR 4a)
 ~  CLAUDE.md                              the same reason, in the Discord-template section (PR 4a)
- ansible/roles/k8s/loki-homelab/
+ k8s/roles/loki-homelab/
 ~  defaults/main.yml                      loki_homelab_rule_groups; the readers comment (PR 4a)
 ~  CLAUDE.md                              the readers bullet names the ruler (PR 4a)
 ~  templates/configmap.yaml.j2            the ruler block
 +  templates/rules-configmap.yaml.j2      loki-homelab-rules, a loop over that list
 ~  templates/deployment.yaml.j2           the /etc/loki-rules/fake mount
 +  files/rules/homelab-logs.yaml          group homelab-logs, interval 5m
- ansible/roles/k8s/observability/
+ k8s/roles/observability/
 ~  defaults/main.yml                      loki-homelab joins observability_rule_groups
 +  files/rules/loki-homelab.yaml
 +  tests/rules/loki-homelab.test.yaml
- ansible/roles/k8s/netpol-baseline/
+ k8s/roles/netpol-baseline/
 +  templates/networkpolicy-alertmanager.yaml.j2
 ~  templates/networkpolicy-loki.yaml.j2   comment: the deleted check bodies no longer named
- ansible/roles/k8s/monitor-bridge/
+ k8s/roles/monitor-bridge/
 ~  files/check_table.py                   three rows removed; swallowed_verdicts gated by startup_grace
 ~  files/checks/logs.py                   three bodies removed
 ~  files/verdicts/logs.py                 the ingestion and notify-failure verdicts removed
@@ -508,7 +508,7 @@ stays until M6's A7, and `test_loki_selectors_use_real_stream_labels` stays with
 -  tests/test_check_kuma_notify_failures.py
 ~  tests/test_check_loki.py               ingestion, reachability and Pi-boundary tests removed;
                                           two roster known-sets shrink (PR 4a)
- ansible/tests/services/
+ tests/services/
 ~  test_loki_stream_labels.py             the rule-file source and its four checks (PR 3);
                                           "env-secret LOKI_STREAM" leaves the named members (PR 4a)
 ~  test_alloy_pi_config_labels.py         docstring names LokiPiLogsSilent (PR 4a)
@@ -542,7 +542,7 @@ The ten `tests/test_check_*.py` files are `test_check_table.py` (`_GATES` and it
 whose gate assertion moves from `gates.LOKI_DEPENDENT` to `gates.STARTUP_GRACE`. The stream-label
 helper that PR 3 adds is not in the tree above, because its path followed
 `.claude/rules/python-layout.md` at implementation time: PR 3 placed it at
-`ansible/tests/_loki_streams.py`.
+`tests/_loki_streams.py`.
 
 ## Steps, as PRs
 
@@ -580,8 +580,8 @@ depends on which tags are flux-owned, and PR 4a states each case.
   `LokiRulerSmoke`, the mount, lokitool provisioning and `alert_rules.py`'s lokitool phase with
   its list agreement check (*Ruler configuration*). lokitool's version comes from
   `loki_homelab_k8s_image`, following M1's tool rule.
-- Add `ansible/roles/k8s/loki-homelab/files/rules/` and
-  `ansible/roles/k8s/loki-homelab/defaults/main.yml` to the `validate-alert-rules` hook's
+- Add `k8s/roles/loki-homelab/files/rules/` and
+  `k8s/roles/loki-homelab/defaults/main.yml` to the `validate-alert-rules` hook's
   `files` regex. Otherwise a PR that edits only a LogQL rule skips the hook and merges a syntax
   error green.
 - Requires the C7 row that *Open questions* 2 requests, in contracts.md's register or
@@ -716,7 +716,7 @@ depends on which tags are flux-owned, and PR 4a states each case.
 - Rewrite the text that names the deleted check as the reader of Kuma's drop line or of Loki.
   Each site names `KumaNotificationDropped` on the loki-homelab ruler instead:
     - The comment above the `discord` notification in
-      `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`, and the matching
+      `k8s/roles/uptime-kuma/templates/static-monitors.yaml.j2`, and the matching
       sentence in the role's `CLAUDE.md` (*One Discord template for every monitor*). Both say
       the name stays `Homelab Alerts` because the bridge reads it out of Kuma's failure line.
       The rule filters `|= "Cannot send notification"`, which names no notification, so that
@@ -724,7 +724,7 @@ depends on which tags are flux-owned, and PR 4a states each case.
     - `docs/uptime-kuma-autokuma-record.md`: the paragraph that says monitor-bridge reads the
       drop line out of Loki and pages the **Kuma Notification Delivery** tile, the bullet on
       the `discord` id and name, and the closing link that lists the tile.
-    - The auto-deploy comment in `ansible/roles/k8s/loki-homelab/defaults/main.yml`, which
+    - The auto-deploy comment in `k8s/roles/loki-homelab/defaults/main.yml`, which
       names "Loki Log Ingestion" among the readers, and the role `CLAUDE.md`'s bullet on
       "every LogQL-backed monitor-bridge check". Both name the ruler's rules and the bridge's
       remaining LogQL checks.
@@ -807,7 +807,7 @@ depends on which tags are flux-owned, and PR 4a states each case.
 - Deploys `loki-homelab` and `observability`, in either order. Both are `owner: flux` on
   `master`, so the merge's `promote` run applies them and `land.sh` deploys neither. The Kuma
   side is already gone, so order does not matter here. A rules edit rolls the `Recreate` Loki
-  pod once (`ansible/roles/k8s/loki-homelab/CLAUDE.md`, *Ruler*).
+  pod once (`k8s/roles/loki-homelab/CLAUDE.md`, *Ruler*).
 - Two-writer check: from this commit, the two ported checks and a Loki query fault page from
   Alertmanager only.
 
@@ -817,8 +817,8 @@ PR 5 is its own PR, by the operator's ruling of 2026-10-22, and not part of PR 4
 before the `monitor-bridge` deploy of PR 4a plus 7 days. Until then a revert of PR 4a still has
 its tokens. The sops removal and `cluster_vars.py write` are operator-only.
 
-- Remove the three keys from `ansible/vars/secrets.yml` with `sops` (**operator-only**), delete
-  their rows from `ansible/secret_rotation.yml` by hand, add the names to
+- Remove the three keys from `secrets/secrets.yml` with `sops` (**operator-only**), delete
+  their rows from `secrets/secret_rotation.yml` by hand, add the names to
   `scripts/secrets_mgmt/git_dates.py:RETIRED`, run `cluster_vars.py write` (**operator-only**) so the
   cluster files lose the names, and delete `PENDING_RETIREMENT` with the test that holds it.
   M6's B6c reused the set, so its token PR (#6926) owns that deletion instead
@@ -829,7 +829,7 @@ its tokens. The sops removal and `cluster_vars.py write` are operator-only.
 - **Retire the three push tokens in the same PR**, or CI fails. `land.sh` merges with
   `merge_method=squash` (`scripts/deploy_tools/land_lib/merge.py:_merge_past_review`), so
   master holds PR 4a as one commit.
-  `ansible/tests/k8s/test_secret_consumer_census.py:test_no_declared_consumer_tag_names_a_role_that_never_references_the_secret`
+  `tests/k8s/test_secret_consumer_census.py:test_no_declared_consumer_tag_names_a_role_that_never_references_the_secret`
   runs over every key name in `secrets.yml` (`scripts/secrets_mgmt/rotation_tools.py:sops_names`).
   `scripts/secrets_mgmt/consumers.py:consumer_tags` routes each `monitor_bridge_*` token to
   `monitor-bridge` and `uptime-kuma`. `consumers.py:tree_consumers` credits a role only when one
@@ -838,11 +838,11 @@ its tokens. The sops removal and `cluster_vars.py write` are operator-only.
   credit comes from that file through `k8s_lookup_map` (#3781). Once this PR deletes the three
   rows, a key left in `secrets.yml` fails the test for both tags, and CI's unscoped `pytest`
   job stops the merge. The PR therefore carries the four-part token recipe M6 uses:
-    1. **Operator-only:** remove these three keys from `ansible/vars/secrets.yml` with `sops`:
+    1. **Operator-only:** remove these three keys from `secrets/secrets.yml` with `sops`:
         - `monitor_bridge_loki_push_token`
         - `monitor_bridge_kuma_notify_failures_push_token`
         - `monitor_bridge_loki_reachable_push_token`
-    1. Delete the same three rows from `ansible/secret_rotation.yml` by hand. Running
+    1. Delete the same three rows from `secrets/secret_rotation.yml` by hand. Running
        `secret_rotation.py sync` does not do it:
        `scripts/secrets_mgmt/secrets_lib/secret_registry.py:sync` adds missing names and only
        reports stale ones. Commit `6894e3523` ("Retire the E7-orphaned credentials") deleted
@@ -869,7 +869,7 @@ its tokens. The sops removal and `cluster_vars.py write` are operator-only.
       and the store still agree.
     - **The operator's commit** carries part 1, the `sops` removal (**operator-only**), with
       parts 2 and 4. The `sops` edit decrypts the file, and C8 marks any step that decrypts
-      operator-only. Deleting the rows touches `ansible/secret_rotation.yml`, which the
+      operator-only. Deleting the rows touches `secrets/secret_rotation.yml`, which the
       `regen-doc-fragments` hook's `files` regex matches through `ansible/[^/]+\.ya?ml`. That
       hook rewrites the `secret-tiers` fragment and fails once, so the fragment is staged and
       the same commit runs again. The operator may make the whole commit, or run only `sops`
@@ -887,23 +887,23 @@ its tokens. The sops removal and `cluster_vars.py write` are operator-only.
 
   Two more files carry the three names, and the plan above did not list them. The agent's commit
   regenerates the first. The operator's commit regenerates the second.
-    - `ansible/roles/k8s/manifests/files/standalone_secret_keys.json` lists each tag's
+    - `k8s/roles/manifests/files/standalone_secret_keys.json` lists each tag's
       standalone keys. `uv run python scripts/renderer/standalone_map.py` drops the three
       names once the rows have left `check_table.py`, and that is in the agent's commit.
-    - `ansible/vars/cluster-vars.sops.env` and `cluster-vars.source` hold the same three names,
+    - `secrets/cluster-vars.sops.env` and `cluster-vars.source` hold the same three names,
       because Flux substitutes them into the bridge's and uptime-kuma's Secrets. Only
       `cluster_vars.py write` changes them (**operator-only**), and `cluster_vars.py check` in
       CI refuses a file that still holds a key `secrets.yml` has lost. The operator runs `write`
       after the `sops` removal, in the same commit.
-  Because `ansible/vars/secrets.yml` changed, `land.sh` appends its rotation note
+  Because `secrets/secrets.yml` changed, `land.sh` appends its rotation note
   (`land_lib/land_tags.py:_ROTATION_NOTE`). No role file names the three keys after this PR,
   so the note asks for no redeploy. The PR body quotes three reads, taken after the operator's
   commit:
     - `uv run python scripts/secrets_mgmt/secret_rotation.py audit --check` exiting 0.
-    - `grep -c '_push_token:' ansible/secret_rotation.yml` printing three fewer than on
+    - `grep -c '_push_token:' secrets/secret_rotation.yml` printing three fewer than on
       `origin/master` before the PR. That is 80 from the 83 at `70591c307`, if no other slice's
       token PR lands first.
-    - `git diff --stat origin/master -- ansible/vars/secrets.yml`. Plain `git diff` on that
+    - `git diff --stat origin/master -- secrets/secrets.yml`. Plain `git diff` on that
       file prints plaintext.
 
 ## Verification
@@ -932,8 +932,8 @@ uv run python scripts/diagnostics/probe.py loki-query --since 1m 'sum(count_over
 uv run python scripts/diagnostics/probe.py metric 'monitor_status{monitor_name=~"Loki Log Ingestion|Loki Reachable|Kuma Notification Delivery"}'
 # PR 4a: the registry agrees with secrets.yml (exit 0), and three push-token rows are gone
 uv run python scripts/secrets_mgmt/secret_rotation.py audit --check
-grep -c '_push_token:' ansible/secret_rotation.yml
-git diff --stat origin/master -- ansible/vars/secrets.yml
+grep -c '_push_token:' secrets/secret_rotation.yml
+git diff --stat origin/master -- secrets/secrets.yml
 ```
 
 **The ruler-to-Alertmanager proof, red then green.** `alertmanager_alerts_received_total` is
@@ -1143,7 +1143,7 @@ restart: PR 2a and PR 3 restart Loki anyway.
       `regen-doc-fragments` hook rewrites.
     - `docs/monitor-bridge-checks.md` and `docs/monitor-bridge-internals.md` lose the three
       rows and the Loki gate, and show `swallowed_verdicts` gated by `startup_grace`.
-    - `ansible/roles/k8s/monitor-bridge/CLAUDE.md`'s *Gates and hysteresis* section drops
+    - `k8s/roles/monitor-bridge/CLAUDE.md`'s *Gates and hysteresis* section drops
       "Loki". Its *Traps* bullet on Alloy stream labels also points at the census.
     - `EMAIL_TIER` in `test_kuma_static_monitors.py`, which C-1b deleted loses
       `"Kuma Notification Delivery"` and its comment, so
@@ -1153,7 +1153,7 @@ restart: PR 2a and PR 3 restart Loki anyway.
       loki-homelab role, `docs/uptime-kuma-autokuma-record.md`, and the other entries in
       `docs/monitor-bridge-checks.md` that name Loki Log Ingestion.
     - The token part: the three `RETIRED` entries in the agent's commit, then the three rows
-      deleted from `ansible/secret_rotation.yml` and the rewritten `secret-tiers` fragment in
+      deleted from `secrets/secret_rotation.yml` and the rewritten `secret-tiers` fragment in
       the operator's commit. `test_secret_consumer_census.py` and
       `test_departed_secrets_are_accounted_for.py` pass unchanged on the PR's tip, because the
       keys leave `sops_names` in the same PR. Both are red on the agent's commit alone.
@@ -1346,7 +1346,7 @@ their gate. Refuted: none.
   `HostPushVerdictSwallowed` and `KumaRefusedPush`, and pages the Cutover-1a to Cutover-2
   window through `KumaRefusedPush`. design.md's M5 row ports all three checks. contracts.md's
   amendment list has no M5 row. `check_table.py` has 44 rows, four of them gates, and
-  `ansible/secret_rotation.yml` has 83 `_push_token` keys, so M5's three removals leave 41
+  `secrets/secret_rotation.yml` has 83 `_push_token` keys, so M5's three removals leave 41
   rows and 80 tokens. *Open questions* 4 states the three-part interface change and requests
   a contracts row gated before M6's first Cutover-1a. *Open questions* 1 and 2 request their
   C7 rows, gated before PR 4 and PR 2a. The *Unblocks* line names the M6 gate, and *Risks*
@@ -1476,7 +1476,7 @@ that order), which this plan requests rather than makes. Refuted: none.
   `secret-rotation-registry-sync` hook in `prek.toml` runs `audit --check`. Corrected in round
   f0 (M5-i2-01): `cmd_audit` returns 1 on any missing or stale row, and the missing half is
   the one that fails a commit deleting the rows before the keys leave.
-  `ansible/secret_rotation.yml` holds the three rows among 83 `_push_token:` keys. Commit
+  `secrets/secret_rotation.yml` holds the three rows among 83 `_push_token:` keys. Commit
   `6894e3523` deleted its retired rows by hand. PR 5 is now M6's four-part commit: the
   operator's `sops` removal, the deleted rows, the `RETIRED` entries and the `secret-tiers`
   fragment. Its body quotes `audit --check` exiting 0, a push-token count three below
@@ -1494,7 +1494,7 @@ against the sibling pages before the fix.
   push tokens that PR 5 kept for another week.** Fixed by folding PR 5 into PR 4a. Confirmed:
   `consumers.py:consumer_tags` routes each `monitor_bridge_*` token to `monitor-bridge` and
   `uptime-kuma`. `consumers.py:_census_corpus` reads only role files and skips `secrets.yml`
-  and `secret_rotation.yml`. `grep -rln` for the three names under `ansible/roles` prints only
+  and `secret_rotation.yml`. `grep -rln` for the three names under `k8s/roles` prints only
   `monitor-bridge/files/check_table.py`. `_phantom_tags` therefore fails both tags once PR 4a
   deletes the rows. PR 4a's commit carries the four-part recipe, and its merge waits on the
   operator's `sops` edit. `land_lib/land_tags.py` only appends `_ROTATION_NOTE` on a
@@ -1522,12 +1522,12 @@ against the sibling pages before the fix.
   X2-11 and X2-16 entries carry a superseded note. M6's "The M5 handoff gate" baseline
   bullet and the first half of its first *Order* bullet are M6's to delete.
 - **M5-i1-03 (medium). PR 4a left the Kuma email-tier roster asserting the deleted tile.**
-  Fixed. Confirmed: `ansible/tests/services/test_kuma_static_monitors.py:EMAIL_TIER` lists
+  Fixed. Confirmed: `tests/services/test_kuma_static_monitors.py:EMAIL_TIER` lists
   "Kuma Notification Delivery", and `test_email_tier_membership_is_exactly_declared` asserts
   equality with the rendered tiles. PR 4a removes the entry and its comment. The email leg
   moves to M1's receiver for `severity="critical"` alerts, which `KumaNotificationDropped`
   reaches from PR 4b. *The tree* and *Tests and docs* list the file. A grep for the deleted
-  checks' names over `ansible/tests`, the role test directories and `scripts` found no other
+  checks' names over `tests`, the role test directories and `scripts` found no other
   exact-set roster outside the files PR 4a already lists.
 - **M5-i1-04 (medium). The X2-10 fix was stale, and the health-gate claims built on it were
   false.** Fixed by rewording, with no `verify` label. Confirmed: M6's A3 item 5 deletes
@@ -1553,7 +1553,7 @@ was checked against the tree at `70591c307` before the fix.
 - **M5-i2-01 (high). PR 4a's token-retirement order failed the registry-sync prek hook at
   both commits.** Fixed. Confirmed: the `secret-rotation-registry-sync` hook in `prek.toml`
   runs `secret_rotation.py audit --check` on any change matching
-  `^(ansible/vars/secrets\.yml|ansible/secret_rotation\.yml|scripts/secrets_mgmt/.*\.py)$`.
+  `^(secrets/secrets\.yml|secrets/secret_rotation\.yml|scripts/secrets_mgmt/.*\.py)$`.
   `secret_rotation.py:cmd_audit` returns 1 when `--check` is set and `missing or stale` is
   non-empty, and `secret_registry.py:registry_drift` returns both lists. An agent commit that
   deleted the rows first failed on three missing names, and an operator commit with the
@@ -1562,7 +1562,7 @@ was checked against the tree at `70591c307` before the fix.
   the tests, the docs and the `RETIRED` additions, and the hook passes on it. The operator's
   commit carries the **operator-only** `sops` removal, the row deletion and the
   `secret-tiers` fragment that `regen-doc-fragments` rewrites. That hook's `files` regex
-  matches `ansible/secret_rotation.yml` through `ansible/[^/]+\.ya?ml`. Commit `6894e3523`
+  matches `secrets/secret_rotation.yml` through `ansible/[^/]+\.ya?ml`. Commit `6894e3523`
   put the removed keys and their deleted rows in one commit the same way. PR 4a states that
   the branch's CI is red between the two commits, on `test_secret_consumer_census.py` and on
   `test_departed_secrets_are_accounted_for.py:test_no_listed_departure_is_back_in_the_store`.

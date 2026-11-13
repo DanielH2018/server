@@ -2,7 +2,7 @@
 
 Two Pi-hole instances exist so a deploy never takes LAN DNS down. The sequencing that holds
 them apart, and the restart triggers each instance reads, are worked out here.
-`ansible/roles/k8s/pihole/CLAUDE.md` keeps the operating rules, within the inject hook's
+`k8s/roles/pihole/CLAUDE.md` keeps the operating rules, within the inject hook's
 character budget, and a session reads this page when it edits that role.
 
 Both sections below describe the Ansible-era roll. pihole is flux-owned since its own-window

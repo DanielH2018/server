@@ -12,7 +12,7 @@ health the same way the other host crons do: a {ts,ok,msg} state file that fake-
 turns into the fake-remux-scan textfile verdict, plus a per-fake Discord line.
 
 Runs via `uv run --no-project --python <pin>` (host_python_version in
-ansible/inventory/group_vars/all.yml). Config comes from /etc/autofix-fake-remux/config.env
+inventory/group_vars/all.yml). Config comes from /etc/autofix-fake-remux/config.env
 (0600, embeds SONARR_API_KEY + the Discord webhook). Sonarr reports its own `/data` view, which
 HOST_DATA_ROOT maps to the host path ffprobe opens. An empty SONARR_API_KEY or SONARR_URL disables
 the scan, and the state file names which one.

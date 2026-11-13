@@ -34,7 +34,7 @@ import os
 
 import pytest
 from _pi_health import COMPONENT_DEFAULTS, PI_HOST_VARS, journalctl_calls, run
-from lib.ansible_inventory import pi_entries_in
+from lib.inventory_lists import pi_entries_in
 from renderer.renderer_lib import host as host_mode
 from validate.validate_lib.host_fixtures import (
     HOST,

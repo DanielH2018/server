@@ -25,7 +25,7 @@ def https_route_without_tls(doc: dict) -> str | None:
 
     Such a route is not a TLS router at all: Traefik never considers it a candidate for an
     HTTPS request, so the route silently never matches while reading as correctly configured.
-    ansible/templates/ingressroute.yml.j2 already says the `tls:` key is never conditional and
+    k8s/templates/ingressroute.yml.j2 already says the `tls:` key is never conditional and
     records that omitting it cost a week — this makes the rule something a machine enforces
     rather than a comment a hand-written route can miss.
 

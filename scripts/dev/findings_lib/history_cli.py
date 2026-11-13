@@ -90,7 +90,7 @@ def cites(issue: dict, path: str) -> bool:
     Not `cited_paths`: it needs a `/` and a file extension, so it never captures `CLAUDE.md`,
     `prek.toml` or `bin/land`, and `--file CLAUDE.md` dropped all 30 of gh's hits. The path
     matches as a whole token instead. Nothing path-like may precede it, so `CLAUDE.md` does
-    not match `ansible/roles/k8s/docs/CLAUDE.md`; it may be followed by `/` (a directory),
+    not match `k8s/roles/docs/CLAUDE.md`; it may be followed by `/` (a directory),
     `:<line>` or sentence punctuation, but not by more of a name. The trailer is cut first,
     because it names `scripts/dev/findings.py` on every issue.
     """

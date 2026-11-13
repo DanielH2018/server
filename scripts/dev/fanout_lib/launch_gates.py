@@ -27,7 +27,7 @@ from fanout_lib.status import BatchStatus, parse_status
 from findings_lib.issue_model import cited_paths
 from findings_lib.solo_only import solo_only_reasons
 from findings_lib.tracked_paths import resolve_fragments
-from lib.ansible_inventory import LANDING_HOST
+from lib.inventory_lists import LANDING_HOST
 from lib.cli_help import error, warn
 
 # The host `fanout.py place` normally runs on; its launches go over `bash -c`, never ssh, so the

@@ -1,0 +1,229 @@
+"""Traefik's two namespace lists must agree, and must be a list.
+
+`rbac.yaml.j2` renders one namespaced Role per watched namespace; `static-config.yaml.j2`
+lists the same set as `providers.kubernetesCRD.namespaces`. Both read one variable,
+`traefik_k8s_watched_namespaces`, so they cannot drift — this file is what holds that true
+once someone wraps one side in a filter or reintroduces a literal list.
+
+The agreement is checked on the RENDERED manifests, not on the templates' text. A test that
+greps both templates for the same variable name passes the moment one side changes shape
+while still naming it, which is the indirection trap `textual-guard-checks-break-on-indirection`
+records. Comparing Role `metadata.namespace` values against the provider list compares the
+thing that actually has to match.
+
+Why the two failure modes are asymmetric, and why the list is per-cluster:
+
+- A namespace Traefik watches but has no Role in fails SILENTLY. Its informers never sync,
+  so an IngressRoute there applies cleanly, reports nothing wrong, and the host 404s.
+- A Role for a namespace that does not exist fails LOUDLY, at apply time: a cluster whose
+  subset lacks observability aborts with `namespaces "observability" not found`, because
+  nothing else creates the namespace.
+
+Neither is something a render can see on its own, which is the point of checking the pair.
+"""
+
+import pytest
+
+
+from lib import yaml_fast
+
+
+from _k8s_render import render_role_template
+
+_ROLE = "traefik"
+_HOST = "daniel-box"
+# A cluster that watches a narrower set, as an override rather than a host. The pair below
+# shows both readings follow the variable rather than the template text.
+_NARROWED = {"traefik_k8s_watched_namespaces": ["homelab", "longhorn-system"]}
+
+
+def _render(host: str, template: str, overrides: dict | None = None) -> str:
+    return render_role_template(_ROLE, template, overrides, host=host)
+
+
+def _role_namespaces(host: str, overrides: dict | None = None) -> list[str]:
+    """Every namespace rbac.yaml.j2 renders a Role for, in order."""
+    docs = yaml_fast.safe_load_all(_render(host, "rbac.yaml.j2", overrides))
+    return [
+        d["metadata"]["namespace"]
+        for d in docs
+        if isinstance(d, dict) and d.get("kind") == "Role"
+    ]
+
+
+def _provider_namespaces(host: str, overrides: dict | None = None) -> list[str]:
+    """The provider list, read out of the ConfigMap's embedded Traefik config.
+
+    static-config.yaml.j2 is a ConfigMap whose data value is a block scalar, so the config is
+    a STRING at the manifest level and has to be parsed a second time. Parsing the manifest
+    alone compares comments, not configuration.
+    """
+    doc = yaml_fast.safe_load(_render(host, "static-config.yaml.j2", overrides))
+    config = yaml_fast.safe_load(doc["data"]["traefik.yml"])
+    return config["providers"]["kubernetesCRD"]["namespaces"]
+
+
+def disagreements(watched: list[str], granted: list[str]) -> list[str]:
+    """The comparison itself, taking its two lists as arguments so the rejecting test below
+    can drive it directly. Returns one message per way the pair disagrees; empty means they
+    match."""
+    unwatched = set(watched) - set(granted)
+    ungranted = set(granted) - set(watched)
+    out = []
+    if unwatched:
+        out.append(
+            f"Traefik watches {sorted(unwatched)} but rbac.yaml.j2 renders no Role there — "
+            f"its IngressRoutes will 404 with nothing reported wrong."
+        )
+    if ungranted:
+        out.append(
+            f"rbac.yaml.j2 renders a Role in {sorted(ungranted)}, which Traefik does not "
+            f"watch — an unused grant, and an apply failure if the namespace is absent."
+        )
+    return out
+
+
+@pytest.mark.parametrize("overrides", [None, _NARROWED], ids=["prod", "narrowed"])
+def test_the_two_namespace_lists_agree(overrides: dict | None) -> None:
+    """Both halves at once, on the rendered manifests."""
+    problems = disagreements(
+        _provider_namespaces(_HOST, overrides), _role_namespaces(_HOST, overrides)
+    )
+    assert not problems, f"{_HOST} with {overrides}: " + " ".join(problems)
+
+
+@pytest.mark.parametrize("overrides", [None, _NARROWED], ids=["prod", "narrowed"])
+def test_the_variable_renders_as_a_list_not_a_string(overrides: dict | None) -> None:
+    """A single-string default would iterate CHARACTERS, one Role per letter.
+
+    `{% for ns in traefik_k8s_watched_namespaces %}` is happy to walk a string, so a default
+    written as `"{{ [a, b, c] }}"` renders plausibly-shaped YAML with dozens of one-letter
+    namespaces. Counting the Roles is what distinguishes the two; eyeballing the render does
+    not.
+    """
+    namespaces = _role_namespaces(_HOST, overrides)
+    assert namespaces, f"{_HOST} with {overrides} renders no Roles at all"
+    assert len(namespaces) == len(set(namespaces)), (
+        f"{_HOST} with {overrides} renders duplicate Role namespaces: {namespaces}"
+    )
+    assert all(len(ns) > 1 for ns in namespaces), (
+        f"{_HOST} with {overrides}: single-character namespaces mean the variable is a string "
+        f"being iterated character by character, not a list: {namespaces}"
+    )
+
+
+def test_prod_still_watches_the_three_namespaces() -> None:
+    """Pins the prod set, so narrowing it needs an explicit edit here."""
+    assert _provider_namespaces("daniel-box") == [
+        "homelab",
+        "observability",
+        "longhorn-system",
+    ]
+
+
+def test_a_narrowed_list_reaches_both_readings() -> None:
+    """The rejecting half. A cluster with no observability must not name `observability` — that
+    aborts the RBAC apply — and both readings have to follow the variable to say so.
+
+    The narrowed list is supplied as an override. Without this pair, a reading hardcoded to prod's three
+    namespaces would agree with every host.
+    """
+    assert "observability" not in _provider_namespaces(_HOST, _NARROWED)
+    assert "observability" not in _role_namespaces(_HOST, _NARROWED)
+
+
+def test_the_comparison_accepts_a_matching_pair() -> None:
+    """The accepting half, so a comparison that flagged everything would fail here."""
+    assert (
+        disagreements(["homelab", "longhorn-system"], ["longhorn-system", "homelab"])
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    ("watched", "granted", "expect"),
+    [
+        (["homelab", "observability"], ["homelab"], "renders no Role there"),
+        (["homelab"], ["homelab", "observability"], "does not watch"),
+    ],
+)
+def test_the_comparison_rejects_a_mismatched_pair(
+    watched: list[str], granted: list[str], expect: str
+) -> None:
+    """The rejecting half, driving the SAME function the real test drives.
+
+    A set difference against a list that had silently stopped being read compares two empty
+    sets and passes, so the passing side alone cannot tell a working comparison from an inert
+    one. Each direction is asserted separately: a check that caught only the loud failure
+    would still miss the silent one, which is the expensive one.
+    """
+    problems = disagreements(watched, granted)
+    assert len(problems) == 1
+    assert expect in problems[0]
+
+
+def empty_services_problem(provider: dict) -> str | None:
+    """None when the CRD provider keeps a router whose Service has no ready endpoints.
+
+    Dropping that router unmaps its host's TLS options, so a handshake in the window records
+    `default` and SNICheck answers that connection 421 for life once the router returns.
+    The DECIDED marker in static-config.yaml.j2 has the mechanism.
+    """
+    if provider.get("allowEmptyServices") is not True:
+        return (
+            f"providers.kubernetesCRD.allowEmptyServices is "
+            f"{provider.get('allowEmptyServices')!r}; a backend with no ready endpoints then "
+            f"drops its router and wedges any connection opened meanwhile on 421 (#2747)"
+        )
+    return None
+
+
+def _provider(host: str, overrides: dict | None = None) -> dict:
+    doc = yaml_fast.safe_load(_render(host, "static-config.yaml.j2", overrides))
+    return yaml_fast.safe_load(doc["data"]["traefik.yml"])["providers"]["kubernetesCRD"]
+
+
+@pytest.mark.parametrize("overrides", [None, _NARROWED], ids=["prod", "narrowed"])
+def test_empty_services_keep_their_router_is_clean(overrides: dict | None) -> None:
+    # fact: k8s/roles/traefik/CLAUDE.md#Client identity and TLS
+    assert empty_services_problem(_provider(_HOST, overrides)) is None
+
+
+@pytest.mark.parametrize("provider", [{}, {"allowEmptyServices": False}])
+def test_empty_services_dropping_their_router_is_flagged(provider: dict) -> None:
+    assert empty_services_problem(provider) is not None
+
+
+_PRUNE_LABEL = "kustomize.toolkit.fluxcd.io/prune"
+# Each RBAC kind traefik's flip moves into its bundle, and how many of it prod renders: one
+# cluster-scoped object, or one per watched namespace.
+_PER_NAMESPACE = len(["homelab", "observability", "longhorn-system"])
+
+
+@pytest.mark.parametrize(
+    ("template", "kind", "count"),
+    [
+        ("rbac.yaml.j2", "ClusterRole", 1),
+        ("rbac-binding.yaml.j2", "ClusterRoleBinding", 1),
+        ("rbac.yaml.j2", "Role", _PER_NAMESPACE),
+        ("rbac.yaml.j2", "RoleBinding", _PER_NAMESPACE),
+    ],
+)
+def test_rbac_is_exempt_from_prune(template: str, kind: str, count: int) -> None:
+    """D5 step 26's traefik bullet: the RBAC carries the prune exemption before the flip
+    moves it into traefik's bundle, whose tag prunes, so neither a dropped object nor a
+    revert of only that move can prune a grant the edge needs."""
+    docs = [
+        d
+        for d in yaml_fast.safe_load_all(_render(_HOST, template))
+        if isinstance(d, dict) and d.get("kind") == kind
+    ]
+    assert len(docs) == count, f"{template} renders {len(docs)} {kind} documents"
+    unlabelled = [
+        d["metadata"].get("namespace", "<cluster>")
+        for d in docs
+        if (d["metadata"].get("labels") or {}).get(_PRUNE_LABEL) != "disabled"
+    ]
+    assert not unlabelled, (
+        f"{template}'s {kind} lacks {_PRUNE_LABEL}: disabled in {unlabelled}"
+    )

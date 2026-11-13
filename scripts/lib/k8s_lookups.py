@@ -18,8 +18,8 @@ _CROSS_ROLE_FILE = re.compile(
 
 
 def cross_role_files(text: str) -> list[str]:
-    """Each other role's file `text` names through `role_file`, as `roles/k8s/<role>/<path>`."""
-    return [f"roles/k8s/{role}/{path}" for path, role in _CROSS_ROLE_FILE.findall(text)]
+    """Each other role's file `text` names through `role_file`, as `k8s/roles/<role>/<path>`."""
+    return [f"k8s/roles/{role}/{path}" for path, role in _CROSS_ROLE_FILE.findall(text)]
 
 
 def k8s_lookup_map(repo_root) -> dict[str, set[str]]:
@@ -27,7 +27,7 @@ def k8s_lookup_map(repo_root) -> dict[str, set[str]]:
 
     A role reading its own file is left out.
     """
-    k8s = Path(repo_root) / "ansible" / "roles" / "k8s"
+    k8s = Path(repo_root) / "k8s" / "roles"
     found: dict[str, set[str]] = {}
     if not k8s.is_dir():
         return found

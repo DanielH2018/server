@@ -66,7 +66,7 @@ RUNNER_HEAVY_FAIL_SECONDS = 15.0
 # WHY AN OVER-RECORDING ARM. The unweighted arm asks "is this file missing from the
 # table". It never asks "is a recorded number still roughly what the file costs", so an entry that
 # has become far too high stands until someone runs a full `--record`: `--record-missing` only
-# fills gaps. A recorded 17.31s for `ansible/tests/k8s/test_secret_consumer_census.py` that
+# fills gaps. A recorded 17.31s for `tests/k8s/test_secret_consumer_census.py` that
 # measured 0.09s made the greedy split place it first, so one shard carried 17s of phantom
 # weight for as long as the entry stood — the skew of an unweighted heavy file with the sign
 # flipped.
@@ -138,7 +138,7 @@ UNDER_WEIGHT_RATIO = 20.0
 # WHY LOWER. #4873's verify-by is "no module recorded under 1s totals over 5s", and four of
 # the six rows that issue named measured 7.41-7.66s against 0.0-0.01s recorded: under the 10s
 # bound, so the arm could not have seen them. Those four were the k8s render charged to its
-# first reader, which `ansible/tests/conftest.py` now builds outside every timed phase; this
+# first reader, which `tests/conftest.py` now builds outside every timed phase; this
 # band is what makes that shape visible again if the build ever lands back on a test. Between
 # here and `RUNNER_HEAVY_SECONDS` a 20x ratio needs a weight of 0.25-0.5s or less, so the band
 # annotates only near-free entries, and it never fails the run: a 5s module is an eighth of a
@@ -297,7 +297,7 @@ def _under_complaint(
         f"recorded weight, so the shard split packs it as nearly free: {listed}. "
         f"Repair (seconds): {RECORD_FILES_HINT}. If it records near 0s again, the time is a "
         "per-process cache its first test built: build that cache outside the timed phases, "
-        "as ansible/tests/render_share.py does for the k8s and fleet renders"
+        "as tests/render_share.py does for the k8s and fleet renders"
     )
 
 

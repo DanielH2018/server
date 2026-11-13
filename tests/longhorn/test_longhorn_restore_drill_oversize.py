@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+"""The restore drill publishes the backed-up volumes its actualSize cap keeps out.
+
+Check 8 iterates only the drill's candidates file, and the drill writes that file after the cap.
+A volume that grows past `k3s_longhorn_restore_drill_max_actual_bytes` therefore leaves the
+rotation and the coverage check together, unreported. The drill writes `excluded_oversize` beside the candidates, and
+the backup-health reader names every volume in it.
+
+These tests RUN the rendered script through the shared harness in `_restore_drill.py`.
+
+Run: uv run pytest tests/longhorn/test_longhorn_restore_drill_oversize.py
+"""
+
+from pathlib import Path
+
+from lib import yaml_fast
+
+from _restore_drill import DRILL_DEFAULTS, harness
+
+CAP = int(
+    yaml_fast.safe_load(DRILL_DEFAULTS.read_text())[
+        "k3s_longhorn_restore_drill_max_actual_bytes"
+    ]
+)
+SMALL = "a-config"
+BIG = "b-config"
+
+
+def _excluded(run) -> list[str]:
+    return run.cm["excluded_oversize"].splitlines()
+
+
+def test_backed_volume_over_the_cap_is_published_as_excluded(tmp_path: Path) -> None:
+    run = harness(tmp_path, [SMALL, BIG], actual_sizes={BIG: CAP + 1})
+    run()
+    assert _excluded(run) == [f"{BIG}\t{CAP + 1}"]
+    assert run.cm["candidates"].split() == [SMALL]
+
+
+def test_volume_at_the_cap_is_a_candidate_not_excluded(tmp_path: Path) -> None:
+    run = harness(tmp_path, [SMALL, BIG], actual_sizes={BIG: CAP})
+    run()
+    assert _excluded(run) == []
+    assert run.cm["candidates"].split() == [SMALL, BIG]
+
+
+def test_oversize_volume_with_no_completed_backup_is_not_excluded(
+    tmp_path: Path,
+) -> None:
+    """Check 4 owns a backed-up-in-name-only volume; this file lists only what the cap drops."""
+    run = harness(tmp_path, [SMALL, BIG], backed=[SMALL], actual_sizes={BIG: CAP + 1})
+    run()
+    assert _excluded(run) == []
+
+
+def test_pinned_run_still_publishes_the_full_excluded_set(tmp_path: Path) -> None:
+    """Written before the pin, like the candidates file, per the DECIDED marker beside it."""
+    run = harness(tmp_path, [SMALL, BIG], actual_sizes={BIG: CAP + 1})
+    run([SMALL])
+    assert _excluded(run) == [f"{BIG}\t{CAP + 1}"]
+
+
+def test_excluded_set_is_published_when_the_cap_leaves_nothing_eligible(
+    tmp_path: Path,
+) -> None:
+    run = harness(tmp_path, [BIG], actual_sizes={BIG: CAP + 1})
+    proc = run()
+    assert proc.returncode == 1
+    assert "no eligible volume" in proc.stderr, proc.stderr
+    assert _excluded(run) == [f"{BIG}\t{CAP + 1}"]
+
+
+# The native trim joins a volume with its per-job label, never a group label (H2.2a). Sorted
+# key order, as kubectl emits it; the drill's jq `keys[]` sorts on its own, so here the order
+# only keeps the fixture honest to the API.
+_NO_BACKUP = "recurring-job-group.longhorn.io/no-backup"
+_TRIM_JOB = "recurring-job.longhorn.io/trim"
+
+
+def test_an_opt_out_volume_with_the_trim_label_is_no_tier(tmp_path: Path) -> None:
+    """A `no-backup` volume over the cap with a Completed backup stays out of all three sets."""
+    run = harness(
+        tmp_path,
+        [SMALL, BIG],
+        actual_sizes={BIG: CAP + 1},
+        labels={BIG: sorted([_NO_BACKUP, _TRIM_JOB])},
+    )
+    run()
+    assert _excluded(run) == []
+    assert run.cm["excluded_nopvc"] == ""
+    assert run.cm["candidates"].split() == [SMALL]
+
+
+def test_a_trim_group_label_reads_as_a_backup_tier(tmp_path: Path) -> None:
+    """Red half: the group form puts the same volume in a tier, so the cap reports it."""
+    run = harness(
+        tmp_path,
+        [SMALL, BIG],
+        actual_sizes={BIG: CAP + 1},
+        labels={BIG: sorted([_NO_BACKUP, "recurring-job-group.longhorn.io/trim"])},
+    )
+    run()
+    assert _excluded(run) == [f"{BIG}\t{CAP + 1}"]

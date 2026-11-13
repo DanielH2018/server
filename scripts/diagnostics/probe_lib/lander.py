@@ -42,14 +42,17 @@ from diagnostics.probe_lib.host_reader import (
 )
 from lib import yaml_fast
 from lib.exit_codes import PROBE_FAILED, PROBE_OK
-from lib.repo_paths import ANSIBLE, REPO
+from lib.repo_paths import (
+    REPO,
+    INVENTORY,
+)
 from lib.systemd_timer import span_s
 
 NAME = "claude-fanout-server-lander"
 # The claude-code host component ships its template under the packaged name.
 UNIT = f"homelab-{NAME}.service"
 ROLE = REPO / "hosts" / "components" / "claude-code"
-GROUP_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
+GROUP_VARS = INVENTORY / "group_vars" / "all.yml"
 SHOW = ["LoadState", "ActiveState", "Result", "ExecMainExitTimestamp"]
 # `fanout_lib/autoland.py:run` ends both of its unread lines with this, after
 # `<SERVER_HOST> records unreadable` or `GitHub unreadable`. A prefix match missed the first,

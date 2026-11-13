@@ -3,7 +3,7 @@
 # with the `+` prefix, because the service runs as {{ sys_user }}. systemd-tmpfiles-setup.service
 # also creates them at boot. dpkg never owns a path under /home.
 #
-# The artifacts Deployment (ansible/roles/k8s/artifacts) mounts the local tree, each peer
+# The artifacts Deployment (k8s/roles/artifacts) mounts the local tree, each peer
 # directory and the star list directory as hostPaths of `type: Directory`, so each must exist
 # before the pod starts on a rebuilt host. Their paths equal artifacts' artifacts_host_dir,
 # artifacts_peer_dir/<name> and artifacts_stars_dir, which

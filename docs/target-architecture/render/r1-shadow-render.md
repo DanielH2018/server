@@ -72,26 +72,26 @@ a shadow, and Ansible stays the only writer to the cluster.
 
 - **56 services, one tag each.** `uv run python scripts/deploy_tools/render_targets.py
   daniel-box` prints 56 names, and `daniel-server` prints none. All 56 `platform: k8s` entries
-  in `ansible/inventory/host_vars/daniel-box.yml` carry exactly one tag, equal to the entry
+  in `inventory/host_vars/daniel-box.yml` carry exactly one tag, equal to the entry
   name, as `scripts/lib/render_guard.py:entry_tags` reads them.
-- **63 role directories under `ansible/roles/k8s/`.** The other 7 are utility roles reached
+- **63 role directories under `k8s/roles/`.** The other 7 are utility roles reached
   only through `include_role`: `manifests`, `image-builder`, `cronjob-gate`,
   `arr-notification`, `volume-snapshot`, `volume-revert` and `longhorn-api`. 57 task files
   in 56 roles name `k8s/manifests` in an `include_role`.
 - **The template corpus.** 273 `.j2` files under the k8s roles' `templates/` directories hold
-  21,644 lines. `ansible/templates/` holds 21 shared macro files.
+  21,644 lines. `k8s/templates/` holds 21 shared macro files.
 - **No dry-run render survives the play.** Under `k8s_dry_run`, the task "Create a throwaway
-  render directory" in `ansible/roles/k8s/manifests/tasks/main.yml` makes an
+  render directory" in `k8s/roles/manifests/tasks/main.yml` makes an
   `ansible.builtin.tempfile` directory. "Discard the throwaway render directory" deletes it
   at the end of the role. A deferred directory is a subdirectory of that temporary directory.
 - **The file-list rule has an offline copy.** The task "Resolve the manifest file lists"
   derives `manifests_files_resolved` and `manifests_secret_files_resolved`.
   `scripts/lib/k8s_roles.py:resolved_manifest_files` restates it, and
-  `ansible/tests/k8s/test_derived_manifest_files.py` holds the two in step.
+  `tests/k8s/test_derived_manifest_files.py` holds the two in step.
 - **Prune-armed roles render through a wrapper.** `manifests_prune` defaults to `true` in
-  `ansible/roles/k8s/manifests/defaults/main.yml`, and an armed role renders every document
-  through `ansible/templates/role-labelled.yaml.j2`. The opt-outs are listed in
-  `test_manifests_prune.py` in `ansible/tests/deploy/`.
+  `k8s/roles/manifests/defaults/main.yml`, and an armed role renders every document
+  through `k8s/templates/role-labelled.yaml.j2`. The opt-outs are listed in
+  `test_manifests_prune.py` in `tests/deploy/`.
 - **Three callers defer an apply.** `pihole`, `headlamp` and `netpol-baseline` pass
   `manifests_deferred_dir_name` as `pihole-instance-2`, `headlamp-observability` and
   `netpol-baseline-observability`.
@@ -109,30 +109,30 @@ a shadow, and Ansible stays the only writer to the cluster.
       `hostvars[k8s_primary_node].containers_list`. In the play that is the k8s-filtered,
       toposorted `set_fact` view.
     - `pi-peer-backup/templates/cronjob.yaml.j2` reads `hostvars['daniel-pi'].ansible_user`,
-      which is an inline variable in `ansible/inventory/hosts.ini`.
+      which is an inline variable in `inventory/hosts.ini`.
     - The same template reads `hostvars['daniel-pi'].ansible_host`, which daniel-pi's
       host_vars set to the Jinja `"{{ server_ip }}"`.
-- **Templates read no gathered fact.** A grep of the k8s templates, `ansible/templates/` and
+- **Templates read no gathered fact.** A grep of the k8s templates, `k8s/templates/` and
   the k8s role defaults for `ansible_*` names finds `ansible_user`, `ansible_host` and
   `ansible_parent_role_names`. The last one derives `manifests_service` in
-  `ansible/roles/k8s/manifests/defaults/main.yml`, and the renderer names the service
+  `k8s/roles/manifests/defaults/main.yml`, and the renderer names the service
   itself. `inventory_hostname` renders as `daniel-box`. `playbook_dir` appears only inside
   lookups, never in rendered bytes.
 - **The renderer's Jinja environment lacks two filters the templates use.** A `jinja2` parse
   of all 294 templates (the 273 role templates and the 21 shared macros) through
-  `scripts/lib/ansible_jinja_env.py:register_ansible_filters` collects every filter and test name.
+  `scripts/lib/guard_jinja_env.py:register_ansible_filters` collects every filter and test name.
   Two filters are not registered. `homelab_role_label` comes from
   `scripts/renderer/template_filters/role_label.py`, and `role-labelled.yaml.j2` uses it. `from_json`
   is used by `home-assistant/templates/config/secrets.yaml.j2`. No template uses `from_yaml`.
   The content-tag expression in the task "Compute the content tag" in
-  `ansible/roles/k8s/image-builder/tasks/main.yml` does use it. `template_env` defaults to
+  `k8s/roles/image-builder/tasks/main.yml` does use it. `template_env` defaults to
   `StubUndefined`.
 - **One template reads a secret's structure.** `home-assistant/templates/config/secrets.yaml.j2`
   parses `google_assistant_service_account` with `from_json`. It then reads
   `ga.project_id`, `ga.client_email` and `ga.private_key`, and each goes through `to_json`.
   `home-assistant/templates/secret.yaml.j2` pulls that file in through `lookup('template')`.
   The template reads no other name than that key and `domain`, and both are secret keys.
-  A grep of the k8s templates and `ansible/templates/` for a secret key name followed by `.`
+  A grep of the k8s templates and `k8s/templates/` for a secret key name followed by `.`
   or `[` finds no other structured read; its one other hit is the `email.json:` key in
   `uptime-kuma/templates/static-monitors.yaml.j2`. Through ansible-core 2.21.5's `Templar`,
   the old one-key stub form `{"stub": …}` raises `AnsibleUndefinedVariable: object of type
@@ -140,9 +140,9 @@ a shadow, and Ansible stays the only writer to the cluster.
   template text must be wrapped in `trust_as_template`; an untrusted string comes back
   unrendered, and both forms then pass.
 - **Task-computed values reach templates.** A grep of every `set_fact` and `register` name in
-  `ansible/roles/k8s/*/tasks/*.yml` against the templates finds these inputs:
+  `k8s/roles/*/tasks/*.yml` against the templates finds these inputs:
     - derivable from the tree: `k8s_built_image_tags` (11 reads), set by the "Compute the
-      content tag" task in `ansible/roles/k8s/image-builder/tasks/main.yml`; four script
+      content tag" task in `k8s/roles/image-builder/tasks/main.yml`; four script
       checksums (`monitor_bridge_script_checksum`, `autofix_bridge_script_checksum` and the
       two `game_stats_*_script_checksum`); `kuma_declarations` in `uptime-kuma`;
       `janitorr_dry_run`;
@@ -152,19 +152,19 @@ a shadow, and Ansible stays the only writer to the cluster.
       `pi-peer-backup/templates/secret.yaml.j2`, `authelia/templates/config-secret.yaml.j2`
       (`password: '{{ authelia_password_hash }}'` and its two siblings), and n8n's
       `deployment.yaml.j2` and `deployment-runners.yaml.j2`. n8n passes the digest to
-      `ansible/templates/checksum-annotation.yml.j2:checksum_annotation`, which ends in
+      `k8s/templates/checksum-annotation.yml.j2:checksum_annotation`, which ends in
       `default('unstaged')`. An empty `k8s_built_images` therefore renders
       `checksum/image: "unstaged"`, a value that names no stub.
 - **The content tag hashes a render.** `image_builder_content_tag` is `sha-` plus the first 12
   hex digits of `sha256` over `context-configmap.yaml.j2`'s rendered `data`, through
-  `dictsort | to_json`. `ansible/tests/deploy/test_image_builder_content_tag.py` evaluates
+  `dictsort | to_json`. `tests/deploy/test_image_builder_content_tag.py` evaluates
   that expression through ansible-core's own `Templar`. Ten `include_role` sites in nine task
   files reach `k8s/image-builder`; n8n builds two images.
-- **Secrets.** `ansible/vars/secrets.yml` holds 184 top-level keys. Key names are plaintext.
+- **Secrets.** `secrets/secrets.yml` holds 184 top-level keys. Key names are plaintext.
   The SOPS metadata marks 183 values `type:str` and one, `mullvad_account`, `type:int`. Key
   names match 459 times across 78 template files.
 - **Tasks that send a secret value.** A YAML walk of every task in
-  `ansible/roles/k8s/*/tasks/*.yml` finds the tasks whose body names a secret key. A second
+  `k8s/roles/*/tasks/*.yml` finds the tasks whose body names a secret key. A second
   pass looks for variables derived from one. It collects every key in the k8s role defaults,
   `group_vars/all.yml` and the host_vars whose value references a secret key, transitively.
   It finds one, `headlamp/defaults/main.yml:headlamp_k8s_oidc_issuer_url` (`https://auth.{{
@@ -195,7 +195,7 @@ a shadow, and Ansible stays the only writer to the cluster.
   7, a pre-merge dry run without secrets, is optional and planned.
   `hosts/components/claude-code/templates/claude-rc.service.j2` sets `PrivateTmp=yes` and
   `ProtectHome=yes` for a non-operator user. An agent session therefore sees neither the
-  operator's `/tmp` and `/var/tmp` nor `/home`. `ansible/inventory/group_vars/all.yml` sets
+  operator's `/tmp` and `/var/tmp` nor `/home`. `inventory/group_vars/all.yml` sets
   `sys_user` to `ubuntu`.
 - **Ten plays in seven playbooks import `load_secrets.yml`.** The importers are both plays
   of `ansible/deploy.yml`, `initial_setup.yml`, the three plays of `k3s-bringup.yml`,
@@ -214,7 +214,7 @@ a shadow, and Ansible stays the only writer to the cluster.
       service and writes no receipt, so `land.sh` reports `needs-manual-apply`.
       [The GitOps pipeline page](../../archive/gitops-pipeline.md), *A deploy-plane change is narrowed
       before it is applied*, says the same.
-    - A change under `ansible/roles/k8s/<role>/` that is not an image-pin bump goes into
+    - A change under `k8s/roles/<role>/` that is not an image-pin bump goes into
       `ChangeSet.k8s`, which defers and records a line for that role.
     - Each service's next deploy discharges its line. A `manifests` line discharges by
       `deploy_release.render_proof` once a render holding the change matches the applied
@@ -224,15 +224,15 @@ a shadow, and Ansible stays the only writer to the cluster.
       rules.
 - **The offline pieces exist.** `scripts/lib/render_context.py:render_context` layers role
   defaults, `group_vars/all.yml` and host_vars in Ansible's precedence.
-  `scripts/lib/ansible_jinja_env.py:register_ansible_filters` registers six ansible-core
+  `scripts/lib/guard_jinja_env.py:register_ansible_filters` registers six ansible-core
   filters, a `to_json` stand-in (`scripts/lib/k8s_yaml.py:to_json_stub`), the `search` test
   and 16 repo filters. `scripts/lib/k8s_yaml.py:make_lookup` implements the `file`, `pipe`
   (base64 only, in process), `template` and `vars` lookups.
   `scripts/validate/k8s_manifests.py:main` renders every role with `StubUndefined`, which
   prints `STUB` for any undefined name. It is a structural check, not a byte oracle.
 - **Roles apply objects outside their render directory.** The dry-run guard census's own write
-  rule is `ansible/tests/deploy/test_k8s_dry_run.py:_chunk_mutates`, applied to each task
-  chunk from `ansible/tests/_k8s_guards.py:_task_chunks`. That rule, plus `kubectl run`,
+  rule is `tests/deploy/test_k8s_dry_run.py:_chunk_mutates`, applied to each task
+  chunk from `tests/_k8s_guards.py:_task_chunks`. That rule, plus `kubectl run`,
   finds 22 roles: `authelia`, `autofix-bridge`, `cronjob-gate`, `crowdsec`, `game-stats`,
   `headlamp`, `image-builder`, `janitorr`, `jellyfin`, `media-volume`, `monitor-bridge`,
   `n8n`, `netpol-baseline`, `observability`, `pihole`, `prowlarr`, `qbittorrent`,
@@ -257,7 +257,7 @@ a shadow, and Ansible stays the only writer to the cluster.
   `scripts/docs/tests/test_gen_reference_scripts.py` at 17.77s.
   `scripts/validate/tests/test_validate_k8s_manifests.py`, which renders every k8s role once
   in process, weighs 15.46s. `pyproject.toml`'s `addopts` runs `--dist loadscope`, which
-  keeps one module on one xdist worker. `ansible/tests/repo/test_every_ci_job_is_gated.py`
+  keeps one module on one xdist worker. `tests/repo/test_every_ci_job_is_gated.py`
   requires every job to feed the gate. The agent's token cannot push `.github/workflows/`
   edits (*What the `claude` user cannot do*).
 - **Every docs page needs a nav entry.** A comment in `mkdocs.yml` states the rule, and
@@ -266,42 +266,42 @@ a shadow, and Ansible stays the only writer to the cluster.
 
 The commands behind the counts above, run from the repo root at `70591c307`. The first line
 writes key names only, never values. The 459 matches include comments and
-`ansible/templates/`, which is why they differ from the design's 444 in 76 templates. The
+`k8s/templates/`, which is why they differ from the design's 444 in 76 templates. The
 filter census, the secret-task walk and the write-rule census are short Python reads over
 the same tree. PR 2 and PR 5 turn the first two into tests, and PR 8 turns the third into a
 census row.
 
 ```bash
-grep -oE '^[A-Za-z0-9_]+:' ansible/vars/secrets.yml | tr -d ':' | grep -vx sops > /tmp/keys.txt
+grep -oE '^[A-Za-z0-9_]+:' secrets/secrets.yml | tr -d ':' | grep -vx sops > /tmp/keys.txt
 wc -l < /tmp/keys.txt                                                      # 184 keys
-grep -E '^[A-Za-z0-9_]+: ENC\[' ansible/vars/secrets.yml \
+grep -E '^[A-Za-z0-9_]+: ENC\[' secrets/secrets.yml \
   | grep -oE 'type:[a-z]+\]$' | sort | uniq -c                             # 183 str, 1 int
-grep -rowFf /tmp/keys.txt ansible/roles/k8s/*/templates ansible/templates | wc -l  # 459
-grep -rlwFf /tmp/keys.txt ansible/roles/k8s/*/templates ansible/templates | wc -l  # 78
-grep -rlwFf /tmp/keys.txt ansible/roles/k8s/*/tasks | wc -l                # 11 task files
-ls -d ansible/roles/k8s/*/ | wc -l                                         # 63 roles
-grep -lE '^\s*name:\s*k8s/manifests\s*$' ansible/roles/k8s/*/tasks/*.yml | wc -l   # 57
-grep -lE '^\s*name:\s*k8s/image-builder\s*$' ansible/roles/k8s/*/tasks/*.yml | wc -l  # 9
-find ansible/roles/k8s -path '*/templates/*' -name '*.j2' | wc -l          # 273
-find ansible/roles/k8s -path '*/templates/*' -name '*.j2' -print0 \
+grep -rowFf /tmp/keys.txt k8s/roles/*/templates k8s/templates | wc -l  # 459
+grep -rlwFf /tmp/keys.txt k8s/roles/*/templates k8s/templates | wc -l  # 78
+grep -rlwFf /tmp/keys.txt k8s/roles/*/tasks | wc -l                # 11 task files
+ls -d k8s/roles/*/ | wc -l                                         # 63 roles
+grep -lE '^\s*name:\s*k8s/manifests\s*$' k8s/roles/*/tasks/*.yml | wc -l   # 57
+grep -lE '^\s*name:\s*k8s/image-builder\s*$' k8s/roles/*/tasks/*.yml | wc -l  # 9
+find k8s/roles -path '*/templates/*' -name '*.j2' | wc -l          # 273
+find k8s/roles -path '*/templates/*' -name '*.j2' -print0 \
   | xargs -0 wc -l | tail -1                                               # 21644
-grep -rlw containers_list ansible/roles/k8s/*/templates ansible/templates \
-  ansible/roles/k8s/*/defaults | wc -l                                     # 70
-grep -lE 'kubectl.*(apply|create|patch|delete|run|exec)' ansible/roles/k8s/*/tasks/*.yml \
+grep -rlw containers_list k8s/roles/*/templates k8s/templates \
+  k8s/roles/*/defaults | wc -l                                     # 70
+grep -lE 'kubectl.*(apply|create|patch|delete|run|exec)' k8s/roles/*/tasks/*.yml \
   | grep -v /manifests/ | cut -d/ -f4 | sort -u | wc -l                    # 25, reads included
 grep -lE 'ansible.builtin.(cron|systemd|systemd_service)|check_timer|dest: /(usr|etc/systemd|etc/cron|opt|var/lib|home)' \
-  ansible/roles/k8s/*/tasks/*.yml | cut -d/ -f4 | sort -u | wc -l          # 9
+  k8s/roles/*/tasks/*.yml | cut -d/ -f4 | sort -u | wc -l          # 9
 # Task-computed names that templates read:
-grep -h -A3 'ansible.builtin.set_fact:' ansible/roles/k8s/*/tasks/*.yml \
+grep -h -A3 'ansible.builtin.set_fact:' k8s/roles/*/tasks/*.yml \
   | grep -oE '^\s{4,6}[a-z_0-9]+:' | tr -d ' :' > /tmp/taskvars.txt
-grep -h 'register:' ansible/roles/k8s/*/tasks/*.yml | awk '{print $2}' >> /tmp/taskvars.txt
+grep -h 'register:' k8s/roles/*/tasks/*.yml | awk '{print $2}' >> /tmp/taskvars.txt
 grep -v '^manifests_' /tmp/taskvars.txt | sort -u > /tmp/taskvars.sorted
-grep -rhoFwf /tmp/taskvars.sorted ansible/roles/k8s/*/templates ansible/templates \
+grep -rhoFwf /tmp/taskvars.sorted k8s/roles/*/templates k8s/templates \
   | sort | uniq -c
 # Structured reads of a secret key (key followed by "." or "["):
 sed 's/.*/\\b&(\\.[a-z_]|\\[)/' /tmp/keys.txt > /tmp/keypat.txt
-grep -rnoEf /tmp/keypat.txt ansible/roles/k8s/*/templates ansible/templates  # 1, email.j
-grep -rlF 'stub-' ansible/roles/k8s ansible/templates ansible/inventory | wc -l  # 0
+grep -rnoEf /tmp/keypat.txt k8s/roles/*/templates k8s/templates  # 1, email.j
+grep -rlF 'stub-' k8s/roles k8s/templates inventory | wc -l  # 0
 ```
 
 ## Design
@@ -331,7 +331,7 @@ module under `scripts/renderer/tests/` starts `test_renderer_`.
       that `deploy.yml`'s pre_tasks build, using the same two filter functions.
     - It builds `hostvars` itself. `hostvars['daniel-box']` is the rendered context, so it
       carries the play's `containers_list` view. Every other host gets its inline variables
-      from `ansible/inventory/hosts.ini` and its own host_vars, and any Jinja in them
+      from `inventory/hosts.ini` and its own host_vars, and any Jinja in them
       resolves against that host's own context. daniel-pi's `ansible_host` therefore
       resolves to daniel-pi's `server_ip`.
     - It lays the secret stub map over every secret key.
@@ -458,9 +458,9 @@ always a renderer bug, never an escaping question.
 
 A stub render is a comparison input, and nothing may push it as the cluster artifact. Every
 secret key renders as its stub, and `domain` is a secret key: `grep -c '^domain:'
-ansible/vars/secrets.yml` prints 1. D2's leaf, bento-pdf, ships no IngressRoute template of
-its own. It takes `ansible/templates/ingressroute-default.yaml.j2`, which calls the
-`ingressroute` macro in `ansible/templates/ingressroute.yml.j2`. That macro builds the Host
+secrets/secrets.yml` prints 1. D2's leaf, bento-pdf, ships no IngressRoute template of
+its own. It takes `k8s/templates/ingressroute-default.yaml.j2`, which calls the
+`ingressroute` macro in `k8s/templates/ingressroute.yml.j2`. That macro builds the Host
 rule as `hostname ~ '.local.' ~ domain`. A stub render therefore routes
 `bento-pdf.local.stub-domain`. The stub is a valid DNS label, so the object passes
 `--dry-run=server` and applies cleanly, yet the route matches no request.
@@ -556,7 +556,7 @@ On a run with no stub file, nothing is defined before the load, so the trigger i
 - Under the variable, the directory and the files it holds are owned by `sys_user`. The
   operator's `compare`, copy and cleanup then run without `sudo`.
 
-**Sonarr's API reads skip under stubs.** In `ansible/roles/k8s/sonarr/tasks/verify.yml`, the
+**Sonarr's API reads skip under stubs.** In `k8s/roles/sonarr/tasks/verify.yml`, the
 two `uri` reads and the two asserts that read their registers gain `when: not
 (homelab_secret_stubs | default(false) | bool)`. The asserts need the guard too, because a
 skipped read leaves a register with no `.json`. The guard is not `k8s_dry_run`: an ordinary
@@ -604,20 +604,20 @@ channels, and R1 records each one rather than rendering it:
 + scripts/renderer/renderer_lib/cluster.py
 + scripts/renderer/tests/                       (library tests, four determinism modules)
 + scripts/renderer/template_filters/secret_stubs.py        (stub form, key list, comparison, NEVER_STUB)
-+ ansible/tests/k8s/                            (+ the secret-key task census module)
++ tests/k8s/                            (+ the secret-key task census module)
 + docs/homelab-render.md
   mkdocs.yml                                    (+ nav entry for docs/homelab-render.md)
-  scripts/lib/ansible_jinja_env.py              (+ homelab_role_label, from_json, from_yaml)
+  scripts/lib/guard_jinja_env.py              (+ homelab_role_label, from_json, from_yaml)
   ansible/pre_tasks/load_secrets.yml            (stub refusal and stub content asserts)
   ansible/deploy.yml                            (load_secrets_stubs_allowed in both plays)
-  ansible/roles/k8s/sonarr/tasks/verify.yml     (two reads, two asserts skip under stubs)
-  ansible/roles/k8s/sonarr/CLAUDE.md            (the stub guard on verify.yml)
-  ansible/roles/k8s/manifests/defaults/main.yml (+ manifests_shadow_dir)
-  ansible/roles/k8s/manifests/tasks/main.yml    (directory selection, assert, owner, discard)
-  ansible/roles/k8s/manifests/CLAUDE.md         (+ manifests_shadow_dir bullet)
-  ansible/tests/_k8s_guards.py                  (+ write rule moved in; guard pattern argument)
-  ansible/tests/deploy/test_k8s_dry_run.py      (imports the moved write rule)
-  ansible/tests/repo/test_census_rows_roles.py  (+ out-of-render census row)
+  k8s/roles/sonarr/tasks/verify.yml     (two reads, two asserts skip under stubs)
+  k8s/roles/sonarr/CLAUDE.md            (the stub guard on verify.yml)
+  k8s/roles/manifests/defaults/main.yml (+ manifests_shadow_dir)
+  k8s/roles/manifests/tasks/main.yml    (directory selection, assert, owner, discard)
+  k8s/roles/manifests/CLAUDE.md         (+ manifests_shadow_dir bullet)
+  tests/_k8s_guards.py                  (+ write rule moved in; guard pattern argument)
+  tests/deploy/test_k8s_dry_run.py      (imports the moved write rule)
+  tests/repo/test_census_rows_roles.py  (+ out-of-render census row)
   scripts/dev/pytest_shard_weights.json         (the determinism modules; the help module)
 ```
 
@@ -632,7 +632,7 @@ homelab_render.py cluster --out DIR --secret-stubs FILE
    ├─ renderer_lib.task_inputs.include_vars(role)
    ├─ renderer_lib.task_inputs.derived_facts(role, ctx)
    ├─ k8s_roles.resolved_manifest_files(role)                  at baseline
-   └─ ansible_jinja_env.template_env + k8s_yaml.make_lookup    at baseline
+   └─ guard_jinja_env.template_env + k8s_yaml.make_lookup    at baseline
 ```
 
 ## Steps, as PRs
@@ -662,14 +662,14 @@ updates `docs/homelab-render.md` for what it adds.
       `google_assistant_service_account` as a `str` equal to its `homelab_secret_stub`.
     - home-assistant's `templates/config/secrets.yaml.j2` renders through ansible-core's
       `Templar` with the stub map as its variables. The test wraps the template text in
-      `trust_as_template`, as `ansible/tests/deploy/test_image_builder_content_tag.py:_tag`
+      `trust_as_template`, as `tests/deploy/test_image_builder_content_tag.py:_tag`
       does, because an untrusted string comes back unrendered. The output holds each
       field's stub. The red case is the old `{"stub": …}` form, which must raise
       `AnsibleUndefinedVariable`. That raise also proves the template was evaluated.
     - `homelab_unstubbed_keys` returns nothing for the full stub map, and returns exactly
       the key whose value was changed in a copy of it.
     - `PINNED_LIVE_FACTS`'s reader tags equal those a word grep of the k8s templates and
-      `ansible/templates/` finds for each fact name. Its `must_find` member is
+      `k8s/templates/` finds for each fact name. Its `must_find` member is
       `authelia/templates/config-secret.yaml.j2` for `authelia_password_hash`.
     - `shadow_diff.py --help` exits 0. Two entry points join
       `scripts/lib/tests/test_entry_points_answer_help.py` across PR 1a and 1b, the heaviest
@@ -702,7 +702,7 @@ updates `docs/homelab-render.md` for what it adds.
    `manifests_*` vars from each role's include. Every role without task-computed inputs
    renders after this PR. Tests:
     - one armed and one unarmed role; one deferred caller; one role with two claims.
-    - A template census parses every template of the 56 roles and `ansible/templates/`. It
+    - A template census parses every template of the 56 roles and `k8s/templates/`. It
       asserts that every filter and test name resolves in the renderer's environment, and it
       must find `role-labelled.yaml.j2`. A fixture template with an unregistered filter is
       flagged.
@@ -714,7 +714,7 @@ updates `docs/homelab-render.md` for what it adds.
    drops one `image_builder_context_files` entry from the renderer's input and must see the
    tags differ. After this PR all 56 tags render.
 4. **Skip sonarr's API reads under a stub file** (about 30 lines). The four `when` guards in
-   `sonarr/tasks/verify.yml`, and a line under *Notable* in `ansible/roles/k8s/sonarr/CLAUDE.md`.
+   `sonarr/tasks/verify.yml`, and a line under *Notable* in `k8s/roles/sonarr/CLAUDE.md`.
    PR 5's secret-key census is its test. It names "Read the cluster copy's root folders" as a
    member that must be found guarded, and it flags the unguarded form. Landing this first
    keeps that census green when it arrives. The change is a k8s role change that is not an
@@ -724,8 +724,8 @@ updates `docs/homelab-render.md` for what it adds.
 5. **Refuse a misplaced or incomplete stub file** (about 190 lines). The two preamble
    asserts in `ansible/pre_tasks/load_secrets.yml`; `load_secrets_stubs_allowed` in both
    plays of `ansible/deploy.yml`; and the secret-key task census, a module in
-   `ansible/tests/k8s/`.
-    - **The census rule.** It reads every task in `ansible/roles/k8s/*/tasks/*.yml` whose
+   `tests/k8s/`.
+    - **The census rule.** It reads every task in `k8s/roles/*/tasks/*.yml` whose
       body names a secret key or a derived variable. A derived variable is a key in the k8s
       role defaults, `group_vars` or host_vars whose value references a secret key,
       transitively. Each such task must pass one of four tests. It can be skipped under a
@@ -769,7 +769,7 @@ updates `docs/homelab-render.md` for what it adds.
       unscoped `deploy.sh` to follow through.
 6. **Keep a stubbed dry-run render** (about 120 lines). `manifests_shadow_dir`, its assert,
    the owner switch and the discard guard, with a `manifests_shadow_dir` bullet in
-   `ansible/roles/k8s/manifests/CLAUDE.md`. The assert recomputes the stub check with PR 1a's
+   `k8s/roles/manifests/CLAUDE.md`. The assert recomputes the stub check with PR 1a's
    filters, so it needs no plugin edit. The change touches the shared `manifests` role, so
    the deployer records one `k8s_unapplied` line for `manifests`. With the variable unset no
    rendered byte moves, so the render proof discharges that line within about an hour of the
@@ -791,8 +791,8 @@ updates `docs/homelab-render.md` for what it adds.
    stub shape changes `secret_stubs.py`, which is both halves. It lands like PR 5 and closes
    only on an operator run at a master SHA that holds it; the copy at X cannot test it.
 8. **Census of what the render does not cover, plus the determinism test** (about 190 lines).
-    - **The census row.** A `Census` row in `ansible/tests/repo/test_census_rows_roles.py`.
-      It reads every task file under `ansible/roles/k8s/*/tasks/` except `manifests`'. Its
+    - **The census row.** A `Census` row in `tests/repo/test_census_rows_roles.py`.
+      It reads every task file under `k8s/roles/*/tasks/` except `manifests`'. Its
       offence is a task chunk that writes by `_chunk_mutates`, or that runs `kubectl run`.
       `_chunk_mutates` and the patterns it reads move from `test_k8s_dry_run.py` into
       `_k8s_guards.py`, so both tests import one rule. The row's `allow` map holds each task
@@ -1089,13 +1089,13 @@ whole-tree comparison, such as two full renders of one commit.
 - PR 1b refreshes the weight of `scripts/lib/tests/test_entry_points_answer_help.py` in
   `scripts/dev/pytest_shard_weights.json` with `pytest_shard.py --record-files`, since R1's
   two entry points join that module.
-- PR 4 adds a line to `ansible/roles/k8s/sonarr/CLAUDE.md`: `verify.yml` skips its API reads
+- PR 4 adds a line to `k8s/roles/sonarr/CLAUDE.md`: `verify.yml` skips its API reads
   under a stub file.
 - PR 5 states each preamble assert's reason in a comment at the assert in
-  `load_secrets.yml`. It runs `uv run pytest ansible/tests/deploy` for the tests that read
+  `load_secrets.yml`. It runs `uv run pytest tests/deploy` for the tests that read
   the preamble, such as `test_playbooks_gather_through_the_preamble.py`. The asserts go
   ahead of the SOPS load, and the fact gather stays last.
-- PR 6 adds a `manifests_shadow_dir` bullet to `ansible/roles/k8s/manifests/CLAUDE.md`, under
+- PR 6 adds a `manifests_shadow_dir` bullet to `k8s/roles/manifests/CLAUDE.md`, under
   *The caller's contract*. It adds a paragraph to `docs/k8s-manifest-cycle-record.md`, *What
   a green `--dry-run` does not cover*, on how the shadow run differs from a plain dry run.
 - PR 7 adds the shadow-pair procedure to `docs/homelab-render.md`, marked operator-only.
@@ -1168,7 +1168,7 @@ whole-tree comparison, such as two full renders of one commit.
       `homelab_secret_stub` builds it. A test of "equals the stub form" would miss both
       `bento-pdf.local.stub-domain` and the three home-assistant field values, which hold
       the token inside a longer string. That census has no false positive at the baseline:
-      `grep -rl 'stub-' ansible/roles/k8s ansible/templates ansible/inventory` prints
+      `grep -rl 'stub-' k8s/roles k8s/templates inventory` prints
       nothing, and those trees are where rendered values come from. It cannot see
       `k8s_built_images: []`, which renders `"unstaged"`, nor a stand-in without the
       marker, such as R3's PHC-shaped hashes. *Owner:* D2.
@@ -1306,10 +1306,10 @@ other documents went out as cross-slice notes.
 
 - **X-01 (high): D2's publish job cannot render bento-pdf: no stub file, and no source for
   `domain` before D3.** Fixed in R1's part.
-    - Confirmed. `grep -c '^domain:' ansible/vars/secrets.yml` prints 1, so `domain` is a
+    - Confirmed. `grep -c '^domain:' secrets/secrets.yml` prints 1, so `domain` is a
       secret key. bento-pdf ships only `deployment.yaml.j2` and takes its route from
-      `ansible/templates/ingressroute-default.yaml.j2`. The `ingressroute` macro in
-      `ansible/templates/ingressroute.yml.j2` builds the Host rule from `'.local.' ~
+      `k8s/templates/ingressroute-default.yaml.j2`. The `ingressroute` macro in
+      `k8s/templates/ingressroute.yml.j2` builds the Host rule from `'.local.' ~
       domain`. R1's `cluster` exits 2 without `--secret-stubs`.
     - The *Unblocks* line no longer says that R1 unblocks D2. D2 needs R1 and R2's
       placeholder mode together.

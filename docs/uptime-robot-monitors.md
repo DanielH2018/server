@@ -11,7 +11,7 @@ reconfigured in the console leaves no trace in git, and the repo keeps reading a
 
 Changing anything below means opening <https://dashboard.uptimerobot.com> and editing it there.
 
-One half is checkable from here. `ansible/tests/repo/test_uptime_robot_keywords.py` parses the
+One half is checkable from here. `tests/repo/test_uptime_robot_keywords.py` parses the
 monitor table below and asserts, against the live public endpoint, that each documented keyword
 rule holds; it is marked `ui`, so it runs on demand (`uv run pytest -m ui -k uptime_robot`) and
 never in CI. It cannot see the console, so a monitor deleted there stays invisible to it.

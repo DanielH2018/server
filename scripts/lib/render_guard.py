@@ -36,10 +36,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.git import git
 from lib.role_files import repo_file, role_file
-from lib.ansible_inventory import K8S_HOST, containers_entries_in, host_names
+from lib.inventory_lists import K8S_HOST, containers_entries_in, host_names
 from lib.repo_paths import (
     ALL_VARS,
-    ANSIBLE,
     HOST_VARS,
     INVENTORY,
     K8S_SERVICES,
@@ -49,7 +48,6 @@ from lib.repo_paths import (
 
 __all__ = [
     "ALL_VARS",
-    "ANSIBLE",
     "BASE_CONTEXT",
     "BUILT_IMAGE_TAG_STUBS",
     "HOST_VARS",
@@ -83,7 +81,7 @@ __all__ = [
 # 'latest')`. A render here has no play, so without a seed the fallback fires: every
 # rendered-manifest guard would check `:latest` while production renders the hash — passing, and
 # no longer reading the ref the cluster gets. The digests are arbitrary; their SHAPE and this
-# map's keys are asserted by ansible/tests/k8s/test_built_images_name_the_content_tag.py.
+# map's keys are asserted by tests/k8s/test_built_images_name_the_content_tag.py.
 BUILT_IMAGE_TAG_STUBS: dict[str, str] = {
     "code-server": "sha-c0de5e2e7000",
     "homelab-mcp": "sha-70c1ab0e1111",
@@ -176,8 +174,8 @@ def make_env(dirs=(), undefined_cls=StubUndefined) -> Environment:
 
     Carries the given template dirs on the loader, the stub-undefined class, and the whitespace
     flags matching Ansible's Templar so rendered output matches a real deploy. Its globals are
-    ``lib.role_files``' ``role_file`` and ``repo_file``. It registers no filter: ``lib.ansible_jinja_env.register_ansible_filters(make_env(...))`` adds the Ansible
-    ones, and ``template_env`` does that over a template directory and ``ansible/templates/``.
+    ``lib.role_files``' ``role_file`` and ``repo_file``. It registers no filter: ``lib.guard_jinja_env.register_ansible_filters(make_env(...))`` adds the Ansible
+    ones, and ``template_env`` does that over a template directory and ``k8s/templates/``.
 
     With no ``dirs`` the environment has an empty loader, which is the form a test takes to
     render a template's text or a task's expression through ``from_string``. A bare
@@ -239,8 +237,8 @@ def host_files(host_vars: Path = HOST_VARS) -> list[Path]:
 
 
 def services_file(host_vars: Path) -> Path:
-    """``cluster/services.yml`` in the tree whose ``ansible/inventory/host_vars`` is `host_vars`."""
-    return host_vars.resolve().parents[2] / K8S_SERVICES.relative_to(REPO)
+    """``cluster/services.yml`` in the tree whose ``inventory/host_vars`` is `host_vars`."""
+    return host_vars.resolve().parents[1] / K8S_SERVICES.relative_to(REPO)
 
 
 def host_layer(host_vars: Path, host: str) -> dict:

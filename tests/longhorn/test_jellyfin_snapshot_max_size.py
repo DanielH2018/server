@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+"""jellyfin's snapshot-space cap must stay a value Longhorn will accept.
+
+Longhorn's `Volume.Spec.snapshotMaxSize` takes "0" (uncapped) or a value no smaller than
+`Volume.Spec.Size` x 2 — "because Longhorn requires at least two snapshots to function
+properly" (longhorn.io/docs/1.12.1, Snapshot Space Management). jellyfin declares a cap, so its
+value and `jellyfin_k8s_size` are coupled, and the coupling only breaks in one direction: raise
+the PVC past half the cap and the admission webhook refuses the patch on EVERY jellyfin deploy
+from then on.
+
+`jellyfin_k8s_snapshot_max_size` is therefore derived from `jellyfin_k8s_size` in the role
+defaults rather than written out. This file EVALUATES that expression instead of
+pattern-matching it, so a rewritten-but-still-correct expression passes and a
+rewritten-and-wrong one does not.
+
+Run: uv run pytest tests/longhorn/test_jellyfin_snapshot_max_size.py
+"""
+
+import re
+
+import pytest
+
+from _helpers import (
+    load_defaults,
+    K8S_ROLES,
+)
+from _jinja_env import render_expr
+from renderer import shadow_diff
+from renderer.renderer_lib import cluster
+from renderer.renderer_lib.context import load_stubs
+
+JELLYFIN = K8S_ROLES / "jellyfin"
+CAP_SCRIPT = JELLYFIN / "files" / "jellyfin_snapshot_cap.py"
+
+GIB = 1024**3
+
+
+def _resolve(expression: str, size: str) -> int:
+    return int(render_expr(expression, jellyfin_k8s_size=size))
+
+
+def _assert_cap_is_legal(expression: str, size: str) -> None:
+    """The invariant Longhorn's admission webhook enforces, checked here instead."""
+    floor = int(size.removesuffix("Gi")) * GIB * 2
+    resolved = _resolve(expression, size)
+
+    assert resolved >= floor, (
+        f"jellyfin_k8s_snapshot_max_size resolves to {resolved} bytes against a "
+        f"jellyfin_k8s_size of {size} ({floor} bytes is the floor).\nLonghorn refuses a "
+        f"non-zero snapshotMaxSize below twice the volume size, so this value would fail the "
+        f"patch in the cap Job on every jellyfin revision."
+    )
+    assert resolved != 0, (
+        "jellyfin_k8s_snapshot_max_size resolves to 0, which is Longhorn's UNCAPPED value — "
+        "the pre-apply snapshot chain could then grow the backend without bound, which is the "
+        "thing this var exists to stop."
+    )
+
+
+def test_the_pvc_size_is_still_expressed_in_gi():
+    """The unit the derivation slices off, asserted rather than assumed.
+
+    `jellyfin_k8s_snapshot_max_size` reads `jellyfin_k8s_size[:-2]` and multiplies by 1024**3.
+    Rewriting the size as `8192Mi` would leave that arithmetic silently wrong, and no other
+    assertion in this file would notice — both values move together.
+    """
+    size = load_defaults(JELLYFIN)["jellyfin_k8s_size"]
+
+    assert size.endswith("Gi") and size.removesuffix("Gi").isdigit(), (
+        f"jellyfin_k8s_size is {size!r}. jellyfin_k8s_snapshot_max_size derives itself by "
+        f"stripping a two-character `Gi` suffix — change the unit and the derivation must "
+        f"change with it."
+    )
+
+
+def test_the_declared_cap_is_legal_for_the_declared_size():
+    defaults = load_defaults(JELLYFIN)
+    _assert_cap_is_legal(
+        defaults["jellyfin_k8s_snapshot_max_size"], defaults["jellyfin_k8s_size"]
+    )
+
+
+def test_the_cap_stays_legal_when_the_pvc_is_raised():
+    """The drift this guard actually exists for.
+
+    A hardcoded cap passes the test above and fails the moment someone raises the PVC. The
+    sizes below span the raise that already happened (3Gi to 8Gi) and two beyond it.
+    """
+    expression = load_defaults(JELLYFIN)["jellyfin_k8s_snapshot_max_size"]
+    for size in ("3Gi", "8Gi", "16Gi", "64Gi"):
+        _assert_cap_is_legal(expression, size)
+
+
+@pytest.mark.parametrize(
+    ("what", "expression", "size"),
+    [
+        ("a hardcoded cap", "17179869184", "64Gi"),
+        (
+            "a cap derived at 1x instead of 2x",
+            "{{ (jellyfin_k8s_size[:-2] | int) * 1024 * 1024 * 1024 }}",
+            "8Gi",
+        ),
+        ("Longhorn's uncapped sentinel", "0", "8Gi"),
+    ],
+)
+def test_the_guard_rejects_a_cap_longhorn_would_refuse(what, expression, size):
+    """The red half: each of these is a plausible way to write the var, and wrong.
+
+    The hardcoded case is checked at 64Gi, the size at which it stops being legal — it passes
+    at today's 8Gi, which is exactly why the drift test above varies the size.
+    """
+    with pytest.raises(AssertionError):
+        _assert_cap_is_legal(expression, size)
+
+
+def test_the_cap_job_actually_applies_the_cap(tmp_path):
+    """A var nothing reads is a decision recorded and never enforced."""
+    stubs_file = tmp_path / "stubs.yml"
+    assert shadow_diff.main(["stubs", "--out", str(stubs_file)]) == 0
+    defaults = load_defaults(JELLYFIN)
+    cap = render_expr(
+        defaults["jellyfin_k8s_snapshot_max_size"],
+        jellyfin_k8s_size=defaults["jellyfin_k8s_size"],
+    )
+    job = cluster.render_tag("jellyfin", load_stubs(stubs_file)).verify["cap.yaml"]
+    assert re.search(rf"name: CAP_MAX_SIZE\s+value: ['\"]?{cap}['\"]?\s", job), (
+        "the rendered cap Job no longer carries jellyfin_k8s_snapshot_max_size — the cap is "
+        "declared in defaults and applied to nothing, so the live volume stays uncapped"
+    )
+    assert "snapshotMaxSize" in CAP_SCRIPT.read_text(), (
+        "files/jellyfin_snapshot_cap.py no longer patches spec.snapshotMaxSize on the Longhorn "
+        "volume"
+    )

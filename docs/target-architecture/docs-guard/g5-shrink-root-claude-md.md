@@ -131,9 +131,9 @@ filtered by `citations.in_tree`, run section by section and over the whole file.
       node, in *The procedure*;
     - `deploy_changes.py:_BROAD_MANUAL_PREFIXES`, in *When to wait*;
     - `block-footguns.py:issue_create_by_hand_problem`, in its *Where to Look* row.
-- `test_documented_paths_exist.py` (`ansible/tests/repo/`) checks three shapes in every doc
+- `test_documented_paths_exist.py` (`tests/repo/`) checks three shapes in every doc
   that `_helpers.py:discover_docs` lists, which is every `CLAUDE.md` plus `.claude/` and
-  `docs/`. The three shapes are a `file:line` citation, a bare `ansible/tests/…py` path, and
+  `docs/`. The three shapes are a `file:line` citation, a bare `tests/…py` path, and
   a test node id, which joins a test file and a test name with a double colon. Its docstring
   says "Only citations carrying a line number count", plus those two test shapes.
 - A bare repo path or a `file.py:symbol` atom is checked only inside a `CLAUDE.md`. There the
@@ -143,10 +143,10 @@ filtered by `citations.in_tree`, run section by section and over the whole file.
 
 **Tests that pin root text.**
 
-- `test_ci_cancelled_is_not_a_verdict.py` (`ansible/tests/deploy/`) asserts that the root
+- `test_ci_cancelled_is_not_a_verdict.py` (`tests/deploy/`) asserts that the root
   holds `_CI_NO_VERDICT_CONCLUSIONS` and the literal ``` `docs/landing.md` owns the rule ```.
   Its `test_cancelled_is_declared_no_verdict` carries `# fact: CLAUDE.md#The procedure`.
-- `test_claude_md_paragraphs_have_one_home.py` (`ansible/tests/repo/`):
+- `test_claude_md_paragraphs_have_one_home.py` (`tests/repo/`):
     - `test_no_root_paragraph_is_also_in_a_skill_rule_or_docs_page` fails when a root
       paragraph of `MIN_CHARS` (240) characters or more also appears verbatim in another doc
       that `discover_docs` lists. It compares only paragraphs still in the root.
@@ -161,8 +161,8 @@ filtered by `citations.in_tree`, run section by section and over the whole file.
       (*Suites*). The 651-character `roles/containers/` block leaves the root, and the
       466-character `containers_list` block shrinks to one line.
 - The `root-claude-md-has-no-self-disclaiming-prose` row of `test_census_rows_text.py`
-  (`ansible/tests/repo/`).
-- `test_checksum_annotations_documented.py` (`ansible/tests/k8s/`). It checks any
+  (`tests/repo/`).
+- `test_checksum_annotations_documented.py` (`tests/k8s/`). It checks any
   `checksum/<name>` the root names, and skips when the root names none.
 
 **Headings named from elsewhere.** These must survive, verified with
@@ -180,7 +180,7 @@ filtered by `citations.in_tree`, run section by section and over the whole file.
 - *Secrets Management*: the `add-secret` skill and `ansible/roles/setup/sops_setup/CLAUDE.md`.
 - *Review & Memory Hygiene*: `scripts/docs/reference/decisions.py`, in a string the
   generator renders.
-- *Python & Tests*: several test docstrings in `ansible/tests/`.
+- *Python & Tests*: several test docstrings in `tests/`.
 - *Common Commands*: `ansible/README.md`.
 - *Adding a New Service*: the `new-container` skill.
 
@@ -196,7 +196,7 @@ section says. The sweep command in *Verification* prints 125 such lines outside 
 - `test_setup_cron_roles_have_a_contract.py` (deleted, #8027) cites the *Where to Look*
   cron row in an assertion message.
 - `docs/break-glass.md` cites *Project Overview* for "Ansible runs from daniel-box".
-- `ansible/tests/k8s/test_uncovered_roles_justifications_resolve.py`,
+- `tests/k8s/test_uncovered_roles_justifications_resolve.py`,
   `scripts/diagnostics/tests/test_probe_registry.py` and `scripts/validate/asset_pins.py`
   cite the non-vacuity rule in *Python & Tests*.
 - `scripts/secrets_mgmt/consumers.py` cites *Common Commands*.
@@ -207,15 +207,15 @@ section says. The sweep command in *Verification* prints 125 such lines outside 
 
 **Destinations that exist, and their limits.**
 
-- `.claude/rules/secrets.md` is 18 lines, with globs for `ansible/vars/**` and
-  `ansible/inventory/**`. `inject-nested-docs.py:READ_RULES` also injects it on a read. Its
+- `.claude/rules/secrets.md` is 18 lines, with globs for `secrets/**` and
+  `inventory/**`. `inject-nested-docs.py:READ_RULES` also injects it on a read. Its
   opening paragraph says the root covers the SOPS workflow and that the file adds only
-  path-specific detail. `ansible/.sops.yaml` matches neither glob.
+  path-specific detail. `secrets/.sops.yaml` matches neither glob.
 - `.claude/rules/docker.md` is 44 lines, for `ansible/roles/containers/**`.
 - `.claude/rules/k8s-templates.md` is 18 lines, for k8s `templates/` and `files/`.
 - `.claude/rules/python-layout.md` is 10,448 characters. That is over the hook's 7,500-
   character payload, so it already arrives as a head, and G5 adds nothing to it. Its `paths:`
-  cover `scripts/**`, `ansible/tests/**`, `scripts/renderer/template_filters/**`, role `tests/**` and
+  cover `scripts/**`, `tests/**`, `scripts/renderer/template_filters/**`, role `tests/**` and
   `.claude/hooks/**`, but not alert-rule templates.
 - `docs/python-code-organization.md`, `docs/secret-rotation.md`, `docs/deploying.md`,
   `docs/landing.md`, `docs/claude-tooling.md`, `docs/claude-shell-permissions.md` and
@@ -260,10 +260,10 @@ citation is checked. G5 therefore moves only prose that cites nothing.
   body lists it as deliberately dropped, with the reason.
 - The four non-path atoms in *Baseline* stay in their sections.
 - The citations that would otherwise travel with a moved paragraph, and so stay in the root:
-    - `ansible/inventory/host_vars/daniel-pi.yml`, from the `roles/containers/` paragraph;
-    - `ansible/.sops.yaml`, `ansible/bootstrap.yml` and `ansible/secret_rotation.yml`, from
+    - `inventory/host_vars/daniel-pi.yml`, from the `roles/containers/` paragraph;
+    - `secrets/.sops.yaml`, `ansible/bootstrap.yml` and `secrets/secret_rotation.yml`, from
       the secrets mechanics;
-    - `scripts/dev/new_k8s_service.py`, `ansible/templates/`, `ansible/deploy.yml` and
+    - `scripts/dev/new_k8s_service.py`, `k8s/templates/`, `ansible/deploy.yml` and
       `scripts/renderer/template_filters/toposort.py`, from *Adding a New Service*;
     - `.github/workflows/ci.yml`, from *Python & Tests*.
 - One planned deliberate drop: `docs/archive/k3s-migration/`, in the migration-history
@@ -300,14 +300,14 @@ in the tree.
       caveat. `docs/reference/services.md` owns the count.
 - **Directory Structure**: 15 → 13.
     - Stays: the tree, and one line naming `roles/containers/` as the Pi's roles, with
-      `ansible/inventory/host_vars/daniel-pi.yml` as the source of truth.
+      `inventory/host_vars/daniel-pi.yml` as the source of truth.
     - Moves: the `roles/containers/` paragraph, to `.claude/rules/docker.md`.
 - **Where to Look**: 23 → 22.
     - Stays: one pointer per row, each with its citations.
     - Moves: the claim mechanics in the backlog row, to `findings.py claim --help`.
 - **Adding a New Service**: 27 → 12.
     - Stays: default to k3s; one line per skill, keeping `scripts/dev/new_k8s_service.py` and
-      `ansible/templates/`; the ordering fact as one line keeping `ansible/deploy.yml` and
+      `k8s/templates/`; the ordering fact as one line keeping `ansible/deploy.yml` and
       `scripts/renderer/template_filters/toposort.py`.
     - Moves: the stale-Secret-key fact, to `.claude/rules/k8s-templates.md`, which loads on
       a `templates/secret.yaml.j2` edit.
@@ -346,7 +346,7 @@ in the tree.
     - Moves: the banner derivation, to `docs/claude-tooling.md`.
 - **Secrets Management**: 29 → 16.
     - Stays: the three safety rules word for word; the cannot-decrypt pointer; one line each
-      for `ansible/.sops.yaml` and for rotation, keeping `ansible/secret_rotation.yml` and
+      for `secrets/.sops.yaml` and for rotation, keeping `secrets/secret_rotation.yml` and
       `docs/secret-rotation.md`.
     - Moves: the `.sops.yaml` mechanics and the `grep -c` key check, to
       `.claude/rules/secrets.md`.
@@ -404,7 +404,7 @@ into two destinations.
  CLAUDE.md                          309 lines -> about 192; 25,903 chars -> at most 17,000
  .claude/rules/docker.md            + roles/containers/ paragraph
  .claude/rules/k8s-templates.md     + stale Secret keys after a key is removed
- .claude/rules/secrets.md           ~ opening paragraph; + ansible/.sops.yaml glob
+ .claude/rules/secrets.md           ~ opening paragraph; + secrets/.sops.yaml glob
                                     + .sops.yaml scope, the grep -c key check
  docs/adr/index.md                  + the marker form and grep example
  docs/claude-tooling.md             + SessionStart banner derivation, probe usage
@@ -412,8 +412,8 @@ into two destinations.
  scripts/dev/findings.py (help text, if missing)   + claim and close semantics
  scripts/dev/fanout_lib/review/held_hooks.py       + rules matching a held phase's range
  scripts/dev/fanout_lib/review/review.py           ~ appends them beside project_claude_md
- ansible/tests/repo/test_claude_md_paragraphs_have_one_home.py   ~ MIN_GRADED_PARAGRAPHS
- docs/, .claude/, scripts/, ansible/tests/   ~ pointers whose content moved
+ tests/repo/test_claude_md_paragraphs_have_one_home.py   ~ MIN_GRADED_PARAGRAPHS
+ docs/, .claude/, scripts/, tests/   ~ pointers whose content moved
 ```
 
 ## Steps, as PRs
@@ -421,7 +421,7 @@ into two destinations.
 Each PR keeps every heading and runs the checks in *Verification* before push:
 
 - `uv run python scripts/dev/fact_status.py lint --changed-since origin/master`;
-- `uv run pytest ansible/tests/repo ansible/tests/deploy ansible/tests/k8s`;
+- `uv run pytest tests/repo tests/deploy tests/k8s`;
 - the citation diff, the graded count, the pointer sweep and the one-home check.
 
 The order puts PR 0 first, because it must land before any text moves. PRs 1 to 4 follow the
@@ -437,7 +437,7 @@ with high and low counts.
     - `held_hooks.py` and `review.py` change as *Design* says.
     - The tests join `test_fanout_review_red_green.py` in `scripts/dev/tests/`, beside its
       held-settings assertion. `test_fanout_review.py` is at 464 lines of the 500-line cap.
-    - The red-proof pair: a range touching `ansible/vars/x.yml` puts `secrets.md`'s text in
+    - The red-proof pair: a range touching `secrets/x.yml` puts `secrets.md`'s text in
       the reviewer's appended prompt, and a range touching only `docs/x.md` puts no rule
       text there.
     - A third test: the implement phase after a red phase carries every rule's text.
@@ -447,7 +447,7 @@ with high and low counts.
     - Rewrites the opening paragraph of `.claude/rules/secrets.md`. It names the root as the
       home of the safety rules and this file as the home of the `.sops.yaml` and key-check
       mechanics.
-    - Adds `ansible/.sops.yaml` to that rule's `paths:`. The file is tracked, so
+    - Adds `secrets/.sops.yaml` to that rule's `paths:`. The file is tracked, so
       `test_rules_globs_match_a_tracked_file.py` (`.claude/hooks/tests/`) still passes.
     - The three secrets safety rules stay word for word, because a session can run
       `git diff` without naming the file.
@@ -490,7 +490,7 @@ Exit criterion:
 wc -l -m CLAUDE.md
 git show 70591c307:CLAUDE.md | grep '^##* ' | sort > /tmp/g5-headings-before.txt
 grep '^##* ' CLAUDE.md | sort | comm -23 /tmp/g5-headings-before.txt -
-uv run pytest -q -p no:cacheprovider ansible/tests/repo ansible/tests/deploy ansible/tests/k8s
+uv run pytest -q -p no:cacheprovider tests/repo tests/deploy tests/k8s
 prek run --all-files
 uv run --no-sync python .claude/hooks/inject-nested-docs.py --report | tail -1
 ```
@@ -533,7 +533,7 @@ all three and records them in its PR body.
 test's own split:
 
 ```bash
-uv run --no-sync python -I -c 'import sys; sys.path[:0] = ["scripts", "ansible/tests", "ansible/tests/repo"]; from test_claude_md_paragraphs_have_one_home import paragraphs; print(len(paragraphs(open(sys.argv[1]).read())))' CLAUDE.md
+uv run --no-sync python -I -c 'import sys; sys.path[:0] = ["scripts", "tests", "tests/repo"]; from test_claude_md_paragraphs_have_one_home import paragraphs; print(len(paragraphs(open(sys.argv[1]).read())))' CLAUDE.md
 ```
 
 - At `70591c307` it prints 28.
@@ -555,7 +555,7 @@ git grep -n -E "(repo-root|root|repo) .?CLAUDE\.md|CLAUDE\.md.{0,8}(Project Over
 - For each line about a section the PR trims, check whether the content it leans on moved.
   A pointer that only names a heading stays valid.
 - Retarget a pointer whose content moved in the same PR when the file is any Markdown file
-  or sits under `docs/`, `.claude/`, `scripts/` or `ansible/tests/`. A Markdown file is safe
+  or sits under `docs/`, `.claude/`, `scripts/` or `tests/`. A Markdown file is safe
   anywhere, setup roles included, because `deploy_changes.py:is_doc` routes it to no plane.
 - The sweep reads files outside the root. Inside the root, each PR also greps for bold
   cross-references to the sections it trims, such as "see **Python & Tests**" in *Common
@@ -712,7 +712,7 @@ Raised: 3 high, 7 medium. Fixed: all 10. Refuted: one claim inside G5-R1-03.
   **Fixed.** Measured 53 in-tree occurrences and 41 distinct spans with
   `citations.parse_citations` and `citations.in_tree`. Confirmed that
   `citations.repo_docs` lists only `CLAUDE.md` files and that `test_documented_paths_exist.py`
-  checks only `file:line`, bare `ansible/tests/…py` and node-id shapes. Chose option (c):
+  checks only `file:line`, bare `tests/…py` and node-id shapes. Chose option (c):
   *Design* keeps every citation in a `CLAUDE.md`, *Verification* adds the per-PR citation
   diff, the Baseline sentence is corrected, and *Risks* names failure classes 4 and 8. The
   exit bullet compares each PR's root with the root just before it, because G2 changes the
@@ -748,8 +748,8 @@ Raised: 3 high, 7 medium. Fixed: all 10. Refuted: one claim inside G5-R1-03.
   directive and the cannot-decrypt pointer. The per-section list names what stays in each
   section.
 - **G5-R1-08 (medium)**: `secrets.md`'s opening paragraph turns false, and its globs miss
-  `ansible/.sops.yaml`. **Fixed.** PR 1 rewrites the paragraph and adds the glob.
-  `git ls-files ansible/.sops.yaml` prints the path, so the globs test still passes.
+  `secrets/.sops.yaml`. **Fixed.** PR 1 rewrites the paragraph and adds the glob.
+  `git ls-files secrets/.sops.yaml` prints the path, so the globs test still passes.
 - **G5-R1-09 (medium)**: pointers to section content are not swept. **Fixed.** Confirmed
   the stale pointers in `invocation_sites.py` and `render_guard.py`. *Verification* adds a
   sweep that prints 125 lines at `70591c307`, with a retarget-or-file rule by path. Setup-role

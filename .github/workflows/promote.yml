@@ -66,7 +66,7 @@ name: promote
 # Every commit merged in the window was published by its own run, so this one skips render,
 # images and publish and starts at `promote`.
 #
-# ansible/tests/repo/test_promote_workflow.py holds every guard, permission and handoff here.
+# tests/repo/test_promote_workflow.py holds every guard, permission and handoff here.
 
 on:
   # zizmor: ignore[dangerous-triggers] -- every job requires a successful push run of CI on master in this repository, `render` refuses a commit not on master, and no job checks out a pull-request ref.
@@ -78,7 +78,7 @@ on:
     branches: [master]
   # The weekly reboot's no-promotion window ends here, at the cron's 07:30 UTC Sunday plus the
   # 5-minute shutdown delay and the mute's 40-minute recovery, all from
-  # ansible/inventory/group_vars/all.yml. GitHub reads this literal, so
+  # inventory/group_vars/all.yml. GitHub reads this literal, so
   # scripts/deploy_tools/tests/test_promote_reboot_window.py derives it and fails a drift.
   schedule:
     - cron: "15 8 * * 0"
@@ -102,7 +102,7 @@ on:
 
 permissions: {}
 
-# Every `gh` call and GHCR login in a step goes through these, and ansible/tests/repo/
+# Every `gh` call and GHCR login in a step goes through these, and tests/repo/
 # test_promote_workflow_retry.py fails one that does not. They live here because `tag`, `settle`,
 # `publish` and `reset-move` check out nothing, so no script or local action can reach them.
 # Each step that calls them opens with `eval "$RETRY_FUNCTIONS"`. `retry` prints only the stdout
@@ -115,7 +115,7 @@ env:
   # without them.
   UV_NO_DEV: "1"
   UV_NO_GROUP: lint
-  # The flux CLI this workflow's flux steps fetch, equal to flux_version in roles/k8s/flux and to
+  # The flux CLI this workflow's flux steps fetch, equal to flux_version in k8s/roles/flux and to
   # the amd64 flux pin in hosts/packages/homelab-tools/package.yml. Env, so the cache key reads it.
   # renovate: datasource=github-release-attachments depName=fluxcd/flux2
   FLUX_VERSION: v2.9.6
@@ -230,7 +230,7 @@ jobs:
       # A --role render writes only the named tags' image contexts, and --shared-only writes
       # none, so both branches pass --all-images: the `images` job builds and pushes all ten
       # from out/images/ and refuses a render without tags.json (#5374, #5593).
-      # ansible/tests/repo/test_promote_workflow_bundle.py fails either branch without it.
+      # tests/repo/test_promote_workflow_bundle.py fails either branch without it.
       - name: Build the bundle
         id: build
         run: |
@@ -398,7 +398,7 @@ jobs:
           name: bundle
           path: out
 
-      # FLUX_VERSION equals flux_version in ansible/roles/k8s/flux/defaults/main.yml, so the CLI
+      # FLUX_VERSION equals flux_version in k8s/roles/flux/defaults/main.yml, so the CLI
       # and the controllers move together; the workflow test fails a drift. The `flux_roundtrip`
       # job in ci.yml fetches the same pin, so the CLI that proves target slice R2's round trip
       # is the CLI that publishes, and scripts/tests/test_renovate_flux_cli.py fails a drift.

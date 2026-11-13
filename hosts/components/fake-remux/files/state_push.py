@@ -13,7 +13,7 @@ host. `disk_prune`, `fake_remux`, `fake_remux_replace`, `verify`, `pi_peers` and
 in check.py are all literally this shape, so the port is a parameter, not a rewrite.
 
 Runs on daniel-box via `uv run --no-project --python <pin>` (host_python_version in
-ansible/inventory/group_vars/all.yml). Carries no secrets.
+inventory/group_vars/all.yml). Carries no secrets.
 
 Usage: state_push.py <label> <state-file> <max-age-hours> [<label> <state-file> <max-age-hours> ...]
 """

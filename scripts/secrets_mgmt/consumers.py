@@ -61,28 +61,25 @@ _CENSUS_SKIP_SUFFIXES = (".md",)
 def _census_corpus(repo: str = REPO) -> tuple[tuple[str, str, str], ...]:
     """Every censusable k8s role and host component file, read once — (text, role, plane) each.
 
-    The files are those under `ansible/roles/k8s/` and `hosts/components/`. A caller that asks about many secrets in one process matches each against the one corpus,
+    The files are those under `k8s/roles/` and `hosts/components/`. A caller that asks about many secrets in one process matches each against the one corpus,
     a fraction of the I/O of walking ~1600 files per name.
-
-    Only files that belong to a k8s role are kept from `ansible/`: a hit anywhere else cannot
-    name a consumer, so carrying its text would cost memory for a match that is discarded.
 
     The corpus is cached for the process, which is correct for every caller here — the
     rotation tools and their tests read a tree that does not change under them. A caller that
     edits the tree mid-process must call `_census_corpus.cache_clear()`.
     """
     corpus: list[tuple[str, str, str]] = []
-    ansible_dir = os.path.join(repo, "ansible")
+    roles_dir = os.path.join(repo, "k8s", "roles")
     lookups = k8s_lookup_map(repo)
-    for dirpath, dirnames, filenames in os.walk(ansible_dir):
-        rel = os.path.relpath(dirpath, ansible_dir)
+    for dirpath, dirnames, filenames in os.walk(roles_dir):
+        rel = os.path.relpath(dirpath, roles_dir)
         if any(skip in rel for skip in _CENSUS_SKIP):
             dirnames[:] = []
             continue
         parts = rel.split(os.sep)
-        if not (len(parts) >= 3 and parts[0] == "roles" and parts[1] == "k8s"):
+        if rel == os.curdir:
             continue
-        role = parts[2]
+        role = parts[0]
         for filename in filenames:
             if filename in _CENSUS_SKIP_FILES or filename.endswith(
                 _CENSUS_SKIP_SUFFIXES
@@ -101,7 +98,7 @@ def _census_corpus(repo: str = REPO) -> tuple[tuple[str, str, str], ...]:
             corpus.append((text, role, K8S_PLANE))
             # A k8s role that `lookup()`s this file from another role renders what it holds,
             # so it is a consumer too (#3781).
-            rel = os.path.relpath(os.path.join(dirpath, filename), ansible_dir)
+            rel = os.path.relpath(os.path.join(dirpath, filename), repo)
             for reader in sorted(lookups.get(rel, ())):
                 corpus.append((text, reader, K8S_PLANE))
     corpus.extend(_host_package_corpus(repo))
@@ -126,7 +123,7 @@ def _packages_by_component(repo: str) -> dict[str, list[str]]:
 def _host_package_corpus(repo: str) -> list[tuple[str, str, str]]:
     """(text, host package, `HOST_PLANE`) per file of `hosts/components/` and per package listing it.
 
-    The second walk root of the census. The first covers `ansible/roles/`; H5.7 moved the first
+    The second walk root of the census. The first covers `k8s/roles/`; H5.7 moved the first
     secret consumer, autoheal's webhook, out of it. A component no host package lists
     contributes nothing, because no package would carry its file.
     """

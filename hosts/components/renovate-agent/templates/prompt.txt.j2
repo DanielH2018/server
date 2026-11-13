@@ -32,7 +32,7 @@ How you land a PR, which replaces every `land.sh` step in the skill:
   that still reads `PENDING`, means systemd stopped the lander before it wrote an outcome. That
   is no verdict for this PR: quote the `Result` in the summary and start no further landing.
 - That unit re-checks the PR itself before it lands anything: Renovate's author, a `renovate/`
-  branch into master, no denied role, no `ansible/inventory/` change, a passed stability soak and
+  branch into master, no denied role, no `inventory/` change, a passed stability soak and
   a bounded file count. A `REFUSED:` line is final for this run. Report it and move on.
 - A `VERDICT: settled` line means CI, the deploy and the health gate all passed, and is your
   verification. Any other `VERDICT:` line: quote it in the summary and start no further landing.

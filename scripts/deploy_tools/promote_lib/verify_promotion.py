@@ -140,7 +140,7 @@ POLL_S = 30
 #
 # Longer than the `verify` job's timeout-minutes plus `settle`'s, with ten minutes for runner
 # queueing, so the wait outlasts any run still verifying
-# (ansible/tests/repo/test_promote_workflow_verify.py). `verify`'s limit sits just above
+# (tests/repo/test_promote_workflow_verify.py). `verify`'s limit sits just above
 # `chained_timeout.VERIFY_CAP_S`, so this is 335 + 5 + 10 minutes, and the `promote` job that holds it fits
 # inside GitHub's 6-hour job limit with 10 minutes to spare.
 IN_FLIGHT_WAIT_S = 350 * 60

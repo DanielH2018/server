@@ -98,7 +98,7 @@ PUSH_MSG="eval-run exited without setting a status"
 # The longest legitimate gap between two textfile writes: the cron is weekly (Sunday 02:00,
 # 604800s) and the extra 6h is margin, so a sweep that merely runs long does not page. The
 # disarmed no-key run writes too. The rule's literals are pinned to this value by
-# ansible/tests/services/test_not_reporting_rule_deadlines.py.
+# tests/services/test_not_reporting_rule_deadlines.py.
 DEADLINE_S=626400
 
 on_exit() {

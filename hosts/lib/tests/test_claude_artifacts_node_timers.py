@@ -19,13 +19,12 @@ import pytest
 import yaml
 
 from lib.render_context import render_context
-from lib.repo_paths import REPO
+from lib.repo_paths import K8S_ROLES, REPO
 from renderer.renderer_lib import host as host_mode
 from _setup_render import CLAUDE_CODE
 
-ROLES = REPO / "ansible" / "roles"
-ARTIFACTS = ROLES / "k8s" / "artifacts"
-OBSERVABILITY = ROLES / "k8s" / "observability"
+ARTIFACTS = K8S_ROLES / "artifacts"
+OBSERVABILITY = K8S_ROLES / "observability"
 COMPONENT = REPO / "hosts" / "components" / "claude-code" / "component.yml"
 UNITS = "/usr/lib/systemd/system"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-artifacts.conf"

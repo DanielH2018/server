@@ -13,7 +13,7 @@ from deploy_tools.land_lib import detach, live_limit
 from lib.repo_paths import REPO
 
 NOW = datetime(2026, 11, 12, 12, 0, tzinfo=UTC)
-K8S_PATH = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
+K8S_PATH = "k8s/roles/sonarr/templates/deployment.yaml.j2"
 
 
 def _iso(age: timedelta) -> str:
@@ -93,10 +93,10 @@ def test_the_reboot_window_lowers_a_k8s_pr_to_one():
 @pytest.mark.parametrize(
     "path",
     [
-        "ansible/roles/k8s/longhorn/defaults/main.yml",
-        "ansible/roles/k8s/metallb/defaults/main.yml",
-        "ansible/roles/k8s/flux/templates/sync.yaml.j2",
-        "ansible/vars/cluster-vars.sops.env",
+        "k8s/roles/longhorn/defaults/main.yml",
+        "k8s/roles/metallb/defaults/main.yml",
+        "k8s/roles/flux/templates/sync.yaml.j2",
+        "secrets/cluster-vars.sops.env",
     ],
 )
 def test_a_serial_pr_lowers_its_own_limit_to_one(path):
@@ -154,4 +154,4 @@ def test_every_serial_role_is_a_k8s_role_directory():
     """`SERIAL_ROLES` is derived from pin names, so a pin moved to another role must fail here."""
     assert {"longhorn", "metallb", "flux"} <= live_limit.SERIAL_ROLES
     for role in live_limit.SERIAL_ROLES:
-        assert (REPO / "ansible" / "roles" / "k8s" / role).is_dir(), role
+        assert (REPO / "k8s" / "roles" / role).is_dir(), role

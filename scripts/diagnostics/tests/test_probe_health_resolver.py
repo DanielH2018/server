@@ -378,7 +378,7 @@ def test_cronjob_only_census_finds_exactly_the_known_roles():
     a check that finds its own subject by pattern (KNOWN_CONSUMERS in test_probe_boundaries.py
     is the worked example). Equality rather than `>=` so a THIRD role gaining a CronJob is
     caught here too, pointing at
-    ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py for whether it is wired up.
+    tests/deploy/test_cronjob_only_roles_include_the_gate.py for whether it is wired up.
     """
     resolved = _resolved()
     cronjob_only = {

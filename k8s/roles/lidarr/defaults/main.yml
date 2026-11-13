@@ -1,0 +1,51 @@
+---
+# The stable LSIO stream. Do not move to the nightly or plugins branch: Lidarr cannot go back to
+# stable without restoring its database.
+lidarr_k8s_image: lscr.io/linuxserver/lidarr:3.1.6.5079-ls48@sha256:a91ef0642c15c9bd7c4260fee98fa99972c61601e37c8a96411d6a9cf0e9ad40
+
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
+# Flux's lidarr-snapshot Job snapshots the claim below before each revision applies, so a bad
+# swap that migrates lidarr.db can be reverted (docs/volume-snapshot-drills.md).
+k8s_autodeploy: true
+k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the lidarr-snapshot Job before each revision and an operator revert to it after a failed one; -lsNN versioning still hides a breaking bump. WEIGHED: lidarr also mounts media-data (shared, not reverted); a revert rewinds import history while the files stay, recoverable by a library rescan"
+k8s_autodeploy_snapshot_pvcs: [lidarr-config]
+k8s_autodeploy_unreverted_claims: [media-data]
+
+# The rollout budget, declared once, as radarr's is: Flux reads the literal, and the template's
+# progressDeadlineSeconds reads it through lidarr_k8s_rollout_timeout.
+manifests_rollout_timeout: 660s
+lidarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
+
+# lidarr.db holds the library and the absolute root-folder path, /data/media/music.
+lidarr_k8s_claim: lidarr-config
+lidarr_k8s_storage_class: longhorn
+lidarr_k8s_size: 2Gi
+
+# The WHOLE data tree at /data: imports hardlink from /data/torrents into /data/media/music, and
+# link() only works when one mount spans both.
+lidarr_k8s_media_claim: media-data
+
+# No Docker mods.
+lidarr_k8s_docker_mods: ""
+
+lidarr_k8s_cpu_limit: "1"
+lidarr_k8s_mem_limit: 1024Mi
+lidarr_k8s_cpu_request: "100m"
+lidarr_k8s_mem_request: 128Mi
+
+# Bound via LIDARR__LOG__*; see k8s/roles/sonarr/defaults/main.yml for why upstream's defaults
+# inflate the backup.
+lidarr_k8s_log_level: info
+lidarr_k8s_log_rotate: "10"
+
+# Pinned in lockstep with sonarr, radarr and prowlarr
+# (tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep).
+lidarr_k8s_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0@sha256:af535d94061cf97a52e1661945ffba78c03f9443eae7c0da1a80a5a4be56b520
+
+# The image's s6 init drops to PUID 1000 (lsio_env).
+lidarr_k8s_uid: 1000
+
+k8s_claims:
+  - name: "{{ lidarr_k8s_claim }}"
+    storage_class: "{{ lidarr_k8s_storage_class }}"
+    size: "{{ lidarr_k8s_size }}"

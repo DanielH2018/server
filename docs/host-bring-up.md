@@ -44,7 +44,7 @@ git clone --recurse-submodules https://github.com/DanielH2018/server.git   # use
 ```
 
 Clone it to **`/home/<user>/server`, as the user named by `sys_user`** (`ubuntu`, in
-`ansible/inventory/group_vars/all.yml`). Both the path and the username are baked into role templates and
+`inventory/group_vars/all.yml`). Both the path and the username are baked into role templates and
 systemd units, such as the secret-rotation crons and AIDE's local config. A repo cloned elsewhere, or owned by a
 differently named user, breaks those with no clear error.
 
@@ -52,7 +52,7 @@ differently named user, breaks those with no clear error.
 [`docs/email-to-rss.md`](email-to-rss.md)); a plain clone leaves the directory empty.
 
 Secrets are committed **encrypted** (SOPS/age), so the clone already contains
-`ansible/vars/secrets.yml` — there is no separate secrets-copy step. Letting this host
+`secrets/secrets.yml` — there is no separate secrets-copy step. Letting this host
 *decrypt* them is **§5** below.
 
 ## 3. Install uv
@@ -67,12 +67,12 @@ source ~/.bashrc   # (or re-login) to pick up ~/.local/bin on PATH
 
 ## 4. Add the host to inventory
 
-`ansible/inventory/host_vars/<host>.yml` describes each host to the renderer and the host
+`inventory/host_vars/<host>.yml` describes each host to the renderer and the host
 packages: one file is one inventory host, and a host without a file matches nothing. Before
 touching SOPS:
 
-1. Create `ansible/inventory/host_vars/<host>.yml` — copy
-   `ansible/inventory/host_vars/_example.yml`, which lists every variable a
+1. Create `inventory/host_vars/<host>.yml` — copy
+   `inventory/host_vars/_example.yml`, which lists every variable a
    new host can set with its default and why it matters. At minimum:
    - `server_ip` — the host's LAN IP (no default exists; every role that publishes a
      LAN-bound port or firewalls by IP needs it).
@@ -81,12 +81,12 @@ touching SOPS:
      repo-root `CLAUDE.md` → "Project Overview").
    - Any hardware capability flags a role you plan to deploy expects — for example `has_igpu: true`
      only if the host has an Intel iGPU (gates `/dev/dri` passthrough for jellyfin/tdarr;
-     defaults to `false` in `ansible/inventory/group_vars/all.yml`).
+     defaults to `false` in `inventory/group_vars/all.yml`).
 
 ## 5. Onboard the host to SOPS
 
 This step gates decryption: a host needs `sops` and an age key before it can read
-`ansible/vars/secrets.yml`.
+`secrets/secrets.yml`.
 
 - `sops` comes from the host package. `hosts/bootstrap-host.sh` installs it, and the package's
   `sops` component puts `/usr/bin/sops` on `PATH` and depends on `age`.
@@ -95,8 +95,8 @@ This step gates decryption: a host needs `sops` and an age key before it can rea
 
 Then:
 
-1. Add the printed `age1…` public key to `ansible/.sops.yaml` (tracked) under `age:`.
-2. On a host that can already decrypt (daniel-box): `sops updatekeys ansible/vars/secrets.yml`,
+1. Add the printed `age1…` public key to `secrets/.sops.yaml` (tracked) under `age:`.
+2. On a host that can already decrypt (daniel-box): `sops updatekeys secrets/secrets.yml`,
    then commit + push the re-encrypted `secrets.yml` + `.sops.yaml`.
 3. Back on the new host: `git pull`.
 
@@ -149,7 +149,7 @@ cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster). The Pi's
 ship in its host package.
 
 **CrowdSec's bouncers need no manual registration.** Since slice-6 B2 the single LAPI runs in
-the k3s cluster (`ansible/roles/k8s/crowdsec`) and registers its one bouncer declaratively from the
+the k3s cluster (`k8s/roles/crowdsec/`) and registers its one bouncer declaratively from the
 `BOUNCER_KEY_*` env — `k8straefik`, the cluster edge's (the Docker edge and its
 `dockertraefik` key retired at E7, 2026-08-13). Verify with
 `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers list` on daniel-box (the
@@ -190,9 +190,9 @@ reports SKIP. Run it once Flux has applied the host's workloads, and again after
 2. **Home Assistant onboarding**, then mint four long-lived tokens (Profile → Security) for
    `monitor_bridge_ha_token`, `homepage_ha_token`, `prometheus_ha_token`, `claude_ha_token`.
    The rest of HA's one-time setup — HACS, Zigbee pairing, the `light.bedroom_lights` group,
-   companion-app sensors — is in `ansible/roles/k8s/home-assistant/SETUP.md`.
+   companion-app sensors — is in `k8s/roles/home-assistant/SETUP.md`.
 3. **Authelia**, on a genuinely fresh install: generate the OIDC HMAC secret, client password
-   hash and RSA key per the setup instructions in `ansible/roles/k8s/authelia/templates/config-secret.yaml.j2`
+   hash and RSA key per the setup instructions in `k8s/roles/authelia/templates/config-secret.yaml.j2`
    (header comment explains fresh-install secrets) — the role asserts they exist. Note that
    OIDC configuration is live as of E7 (2026-08-13).
 **Why these can't move into Ansible** (checked 2026-07-30, so it doesn't get re-litigated):
@@ -206,7 +206,7 @@ restarts the pod, so a rotation reaches the live admin user on the next deploy w
 
 External prerequisites, none of them IaC-managed: the Cloudflare DNS records (including the
 hand-created grey-cloud `*.local.<domain>` wildcard that all internal routing depends on — see
-`ansible/roles/k8s/cloudflare-ddns/CLAUDE.md`),
+`k8s/roles/cloudflare-ddns/CLAUDE.md`),
 router port-forwards for Traefik and WireGuard, a Backblaze B2 bucket for the Longhorn
 backup plane (kopia retired 2026-08-13), and the off-box UptimeRobot dead-man's-switch.
 Rebuilding rather than bringing up a new host? Follow
@@ -219,6 +219,6 @@ history — do not follow it.
 - **journald** log level and disk cap ship in the host package (the drop-in at
   `/etc/systemd/journald.conf.d/50-homelab.conf`) — nothing to do by hand.
 - **LaTeX editing in code-server:**
-  `ansible/roles/k8s/code-server/CLAUDE.md`.
+  `k8s/roles/code-server/CLAUDE.md`.
 - **Email-to-RSS** (the Cloudflare Worker submodule):
   [`docs/email-to-rss.md`](email-to-rss.md).

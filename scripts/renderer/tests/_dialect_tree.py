@@ -58,7 +58,7 @@ def write_tree(root: Path, template: str = _TREE_TEMPLATE) -> tuple[Path, Invent
     Returns:
         The role tree, as `render_tag`'s `roles`, and the inventory.
     """
-    role = root / "roles" / "k8s" / "widget"
+    role = root / "k8s" / "roles" / "widget"
     (role / "templates").mkdir(parents=True)
     (role / "defaults").mkdir()
     (role / "templates" / "configmap.yaml.j2").write_text(template)
@@ -78,4 +78,4 @@ def write_tree(root: Path, template: str = _TREE_TEMPLATE) -> tuple[Path, Invent
         plane_hosts={"k8s": "h1"},
         services=services,
     )
-    return root / "roles" / "k8s", inventory
+    return root / "k8s" / "roles", inventory

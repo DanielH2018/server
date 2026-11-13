@@ -56,7 +56,7 @@ The following updates have all been created. To force a retry/rebase of any, cli
 <details><summary>ansible (1)</summary>
 <blockquote>
 
-<details><summary>ansible/roles/k8s/n8n/tasks/main.yml</summary>
+<details><summary>k8s/roles/n8n/tasks/main.yml</summary>
 
 
 <!-- Detected Dependencies listing truncated: nothing in notify_logic parses it. -->

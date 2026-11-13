@@ -39,7 +39,7 @@ ENV container=docker
 # until the case's 900 second timeout (run 41153975441). It also Depends on auditd, debsums, jq,
 # libpam-tmpdir, unattended-upgrades, unzip and update-notifier-common (H7.58), and daniel-server's
 # on rsyslog (H7.59). The apt-sources fixture's `apt-github-cli` component Depends on `gh`.
-# ansible/tests/repo/test_host_test_image_predownloads.py fails on a case Depends this list lacks. `age` generates the throwaway key the
+# tests/repo/test_host_test_image_predownloads.py fails on a case Depends this list lacks. `age` generates the throwaway key the
 # secrets-unit case encrypts to (H4.1c). `git`, `gnupg` and `curl` are on an Ubuntu server
 # install, and bootstrap-host.sh calls each before it installs anything (H7.15a). `gcc`,
 # `libc6-dev` and `libyaml-dev` build PyYAML's C extension for the repo venv. They are

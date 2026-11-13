@@ -2,7 +2,7 @@
 
 `deploy-ui.service`, `User={{ sys_user }}`, cwd the primary checkout. `homelab-daniel-box` ships
 it. H7.50 moved it from the `deploy_ui` setup role, with its in-flight panel. It serves the page
-and API `roles/k8s/deploy-ui` routes to, and runs `land.sh` and
+and API `k8s/roles/deploy-ui/` routes to, and runs `land.sh` and
 `gh` exactly as the operator would from a terminal. It starts no deploy, because Flux applies
 every service. The page stays as the one browser view of landings in progress (operator
 ruling, 2026-11-06).
@@ -17,11 +17,11 @@ visible decision:
   them. ENFORCED: `hosts/lib/tests/test_deploy_ui_component.py`.
 - Authelia `two_factor` gates `deploy.local`: `auth_tier: two_factor` on the `deploy-ui`
   containers_list entry, rendered into the authelia role's access_control rules.
-  ENFORCED: `ansible/tests/services/test_authelia_access_tiers.py`.
+  ENFORCED: `tests/services/test_authelia_access_tiers.py`.
 
 DECIDED: a pod inside the cluster reaches the daemon without Authelia. Accepted 2026-09-10 —
 a hostile pod already has kubectl-adjacent reach. Nothing stops it at the network layer:
-netpol-baseline is INGRESS ONLY (`roles/k8s/netpol-baseline/templates/networkpolicy.yaml.j2`),
+netpol-baseline is INGRESS ONLY (`k8s/roles/netpol-baseline/templates/networkpolicy.yaml.j2`),
 so pod egress is unfenced on this cluster.
 Every POST also needs `X-Deploy-UI: 1` so a cross-site form cannot ride the Authelia cookie.
 
@@ -32,7 +32,7 @@ Every POST also needs `X-Deploy-UI: 1` so a cross-site form cannot ride the Auth
   package version stops it, and reconcile deletes its three ufw rules over two runs, because
   the arm deletes at most two in one run.
 - Remove the `deploy-ui` entry from `containers_list` in `cluster/services.yml` and
-  deploy, which drops the route (`roles/k8s/deploy-ui`) and `deploy.local`.
+  deploy, which drops the route (`k8s/roles/deploy-ui/`) and `deploy.local`.
 
 ## In flight
 

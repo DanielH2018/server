@@ -187,7 +187,7 @@ def role_cronjob_targets(role, default_namespace, roles_dir=K8S_ROLES):
     makes for a Deployment. Two censuses pin that pair from opposite sides, and both assert
     equality rather than a lower bound so a third role cannot join unnoticed:
     scripts/diagnostics/tests/test_probe_health_resolver.py from the health-gate side, and
-    ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py from the deploy side.
+    tests/deploy/test_cronjob_only_roles_include_the_gate.py from the deploy side.
     """
     targets = _role_kind_targets(role, default_namespace, {"CronJob"}, roles_dir)
     if targets is None:

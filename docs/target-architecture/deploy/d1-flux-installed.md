@@ -66,11 +66,11 @@ and upstream facts through `gh`.
   `ansible/roles/setup/k3s/defaults/main.yml:k3s_readonly_crd_api_groups`. That list holds
   `traefik.io`, `metallb.io`, `longhorn.io` and `k3s.cattle.io`, and no Flux group. The plan
   concluded that a `kubectl get` on any Flux kind returns Forbidden.
-  `ansible/tests/k8s/test_k8s_manifests_rbac.py:test_readonly_role_covers_the_crd_groups_this_homelab_deploys`
+  `tests/k8s/test_k8s_manifests_rbac.py:test_readonly_role_covers_the_crd_groups_this_homelab_deploys`
   checks only the Traefik groups and the k3s group. Its docstring says a missing group
   "degrades silently".
     - **Corrected on 2026-10-12 (#4742): the read-only identity reads every Flux kind.**
-      D1.2 vendored `ansible/roles/k8s/flux/files/gotk-components.yaml`, which carries the
+      D1.2 vendored `k8s/roles/flux/files/gotk-components.yaml`, which carries the
       ClusterRole `flux-view-flux-system`. That role is labelled
       `rbac.authorization.k8s.io/aggregate-to-view: "true"` and grants `get`, `list` and
       `watch` on `resources: '*'` in six groups: `kustomize.toolkit.fluxcd.io`,
@@ -105,7 +105,7 @@ and upstream facts through `gh`.
 - **The Flux CRDs fit a client-side apply.** In the v2.9.6 `install.yaml`, the largest CRD is
   `helmreleases` at 76,373 bytes and `kustomizations` is 40,655 bytes. Both are under the
   262,144-byte limit that `last-applied-configuration` puts on a client-side apply, which is
-  how the manifests role applies (`ansible/roles/k8s/manifests/tasks/main.yml`, task "Apply
+  how the manifests role applies (`k8s/roles/manifests/tasks/main.yml`, task "Apply
   manifests for ...").
 - **What the unmodified install carries.** flux2 v2.9.6 `manifests/rbac/kustomization.yaml`
   includes `resourcequota.yaml`, a ResourceQuota named `critical-pods`, in every install. The
@@ -164,7 +164,7 @@ and upstream facts through `gh`.
       status for an artifact pushed with `--revision master@sha1:T` goes to T, never to a
       triggering commit that T superseded.
 - **The cluster already pulls from GHCR without a pull secret.** `texbrain_k8s_image` in
-  `ansible/roles/k8s/texbrain/defaults/main.yml` is `ghcr.io/danielh2018/texbrain`, built by
+  `k8s/roles/texbrain/defaults/main.yml` is `ghcr.io/danielh2018/texbrain`, built by
   the fork's CI. [ADR-0018](../../adr/0018-the-repository-stays-public-and-ci-stays-hosted.md)
   keeps the repository public and CI hosted.
 - **cosign v3 stores a signature as an untagged referrer.** `gh release list -R
@@ -182,32 +182,32 @@ and upstream facts through `gh`.
 
 - **A role is reachable only through its `containers_list` entry.** `ansible/deploy.yml`
   includes each k8s role in a loop over `containers_list`, with tags defaulting to the entry's
-  name. `ansible/inventory/host_vars/daniel-box.yml` declares 56 `platform: k8s` entries, and
-  `ansible/roles/k8s/` holds 63 roles.
+  name. `inventory/host_vars/daniel-box.yml` declares 56 `platform: k8s` entries, and
+  `k8s/roles/` holds 63 roles.
 - **The scaffolder writes a one-image service.** `uv run python
   scripts/dev/new_k8s_service.py --help` shows that `--image` and `--port` are required.
   `scripts/dev/new_k8s_service.py:entry_lines` always writes `port:`, and
   `scripts/dev/new_k8s_service.py:deployment_template` writes one Deployment.
 - **The shared role queues its rollout in `homelab`.** In
-  `ansible/roles/k8s/manifests/tasks/main.yml`, the task "Queue the batch drain for the
+  `k8s/roles/manifests/tasks/main.yml`, the task "Queue the batch drain for the
   rollout of ..." appends `manifests_rollout | default(manifests_service)` with namespace
-  `k8s_namespace`, which `ansible/inventory/group_vars/all.yml:k8s_namespace` sets to
-  `homelab`. `ansible/roles/k8s/manifests/tasks/drain.yml` runs `rollout status` on it and
-  fails with "rollout did not complete". `ansible/roles/k8s/observability/tasks/main.yml`
+  `k8s_namespace`, which `inventory/group_vars/all.yml:k8s_namespace` sets to
+  `homelab`. `k8s/roles/manifests/tasks/drain.yml` runs `rollout status` on it and
+  fails with "rollout did not complete". `k8s/roles/observability/tasks/main.yml`
   shows the way out: `manifests_rollout: ''`, `manifests_self_rollouts` with a namespace, and
   the role's own wait and stabilise-gate snapshot.
 - **A self rollout expects a restart unless it narrows its signals.**
-  `ansible/roles/k8s/manifests/defaults/main.yml:manifests_restart_triggers_default` is
-  `[config, secret, image]`. In `ansible/roles/k8s/manifests/tasks/release_stamp.yml`, the
+  `k8s/roles/manifests/defaults/main.yml:manifests_restart_triggers_default` is
+  `[config, secret, image]`. In `k8s/roles/manifests/tasks/release_stamp.yml`, the
   task "Work out which workloads this apply must roll" applies that default to every
   `manifests_self_rollouts` entry that names no `restart_on`. The `secret` signal fires
   whenever `manifests_secret_render` changed. Only a change to that workload's own pod
   template, which `manifests_rolled_by_apply` records, then clears `restart: true`.
   `scripts/diagnostics/probe_lib/health.py:release_expected_restarts` and
   `format_role_health` fail such a workload as NOT ROLLED when it has no newer
-  `restartedAt`. `ansible/roles/k8s/observability/defaults/main.yml:observability_stabilise_workloads`
+  `restartedAt`. `k8s/roles/observability/defaults/main.yml:observability_stabilise_workloads`
   narrows each of its entries with `restart_on`, and
-  `ansible/tests/deploy/test_restart_on_narrows_the_restart_signals.py:_EXPECTED_NARROWERS`
+  `tests/deploy/test_restart_on_narrows_the_restart_signals.py:_EXPECTED_NARROWERS`
   names observability as the one narrowing role.
 - **A dropped document stays live.** `kubectl apply` deletes nothing it no longer sees, and
   `manifests_prune_allowlist` holds no Flux kind. The prowlarr task "Retire the flaresolverr
@@ -220,16 +220,16 @@ and upstream facts through `gh`.
   returns NotFound for a create in a namespace that does not exist, and has no dry-run
   exemption.
 - **The manifests role prunes one namespace.** A role outside `homelab` passes its own
-  `manifests_prune_namespace`, as `ansible/roles/k8s/observability/tasks/main.yml`,
-  `ansible/roles/k8s/longhorn-ui/tasks/main.yml` and
-  `ansible/roles/k8s/dri-device-plugin/tasks/main.yml` do. The pruned kinds are
-  `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist`.
+  `manifests_prune_namespace`, as `k8s/roles/observability/tasks/main.yml`,
+  `k8s/roles/longhorn-ui/tasks/main.yml` and
+  `k8s/roles/dri-device-plugin/tasks/main.yml` do. The pruned kinds are
+  `k8s/roles/manifests/defaults/main.yml:manifests_prune_allowlist`.
 - **The shared apply is one directory apply.** The task "Apply manifests for ..." runs
   `kubectl apply -f <dir>/` once. A CRD and an object of that CRD in one directory fail on a
   cluster that lacks the CRD. `manifests_deferred_files` and `manifests_deferred_dir_name`
   stage a file in a sibling directory that the role applies itself, as
-  `ansible/roles/k8s/headlamp/tasks/main.yml` and
-  `ansible/roles/k8s/netpol-baseline/tasks/main.yml` do.
+  `k8s/roles/headlamp/tasks/main.yml` and
+  `k8s/roles/netpol-baseline/tasks/main.yml` do.
 
 ### What the deployer does with an inventory change
 
@@ -283,7 +283,7 @@ and upstream facts through `gh`.
   most one pending run per concurrency group, and a newer run evicts the queued one. Actions
   are pinned by commit SHA, for example `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1`.
   Every job runs on `ubuntu-26.04`, and the `workflow-runners-are-pinned` row of
-  `ansible/tests/repo/test_census_rows_text.py` refuses a floating label. The workflows at
+  `tests/repo/test_census_rows_text.py` refuses a floating label. The workflows at
   this commit are `ci.yml`, `image-smoke.yml` and `renovate-config-canary.yml`.
 - **The deployer reads CI through `deploy_git.py:ci_verdict`.**
   `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_git.py:_CI_NO_VERDICT_CONCLUSIONS`
@@ -303,32 +303,32 @@ and upstream facts through `gh`.
 - **`gh` cannot set an empty variable.** cli/cli `pkg/cmd/variable/set/set.go:getBody` uses
   `--body` only when it is non-empty. Otherwise it prompts, or reads standard input.
 - **Fleet guards the unmodified install trips:**
-    - `ansible/tests/k8s/test_namespace_resource_defaults.py:test_no_resourcequota_is_declared_anywhere`
+    - `tests/k8s/test_namespace_resource_defaults.py:test_no_resourcequota_is_declared_anywhere`
       runs `git grep` for `kind: ResourceQuota` over the `ansible/` source tree.
-    - `ansible/tests/k8s/test_pod_template_hygiene.py:_SYSTEM_TIER` allows a class outside
+    - `tests/k8s/test_pod_template_hygiene.py:_SYSTEM_TIER` allows a class outside
       the four homelab tiers for dri-device-plugin only.
-    - `ansible/tests/k8s/test_container_security_context.py:test_every_asserting_container_pins_a_uid`
+    - `tests/k8s/test_container_security_context.py:test_every_asserting_container_pins_a_uid`
       requires a uid pin beside `runAsNonRoot`.
-    - `ansible/tests/k8s/test_deploy_strategy.py:test_every_deployment_states_a_strategy`
+    - `tests/k8s/test_deploy_strategy.py:test_every_deployment_states_a_strategy`
       requires a stated strategy, and `_RECREATE` must list every `Recreate` Deployment.
     - The `pods-disable-service-link-env-vars` and `rendered-kinds-have-vendored-schemas` rows
-      of `ansible/tests/k8s/_workload_property_rows.py` read every rendered pod and kind.
+      of `tests/k8s/_workload_property_rows.py` read every rendered pod and kind.
       `scripts/validate/refresh_vendored_schemas.py:CORE_GROUP_FILES` holds no
       apiextensions.k8s.io file, and `scripts/validate/refresh_vendored_schemas.py:VENDORED`
       holds no fluxcd group.
-    - `ansible/tests/k8s/test_workload_shell_uses_the_macros.py:shell_offences` keys on a
+    - `tests/k8s/test_workload_shell_uses_the_macros.py:shell_offences` keys on a
       literal `kind:` line in a template's source.
-    - `ansible/tests/k8s/test_volume_names_descriptive.py:GENERIC` holds `data`, `tmp` and
+    - `tests/k8s/test_volume_names_descriptive.py:GENERIC` holds `data`, `tmp` and
       `temp`, and `ALLOWED_UNPREFIXED` exempts only `media`.
       `test_volume_names_name_their_workload` reads a rendered `- name:` line textually, so a
       render that sorts `mountPath` before `name` hides the names from it (failure class 4).
-    - `ansible/tests/k8s/test_deferred_manifest_dir_is_reserved.py:test_the_census_finds_the_known_deferred_directories`
+    - `tests/k8s/test_deferred_manifest_dir_is_reserved.py:test_the_census_finds_the_known_deferred_directories`
       asserts that the deferred directories equal `KNOWN_DEFERRED_DIRS`, an exact map.
 - **A service's priority class comes from its tier.** The comment above the entries in
-  `ansible/inventory/host_vars/daniel-box.yml` says a tiered role's templates take the class
+  `inventory/host_vars/daniel-box.yml` says a tiered role's templates take the class
   from `tier_priority_class` rather than writing it (#3452).
   `scripts/renderer/template_filters/service_tier.py:SERVICE_TIERS` maps `platform` to
-  `homelab-critical`. `ansible/tests/k8s/test_priority_class_is_derived_from_tier.py:_CLASS_AT_DERIVATION`
+  `homelab-critical`. `tests/k8s/test_priority_class_is_derived_from_tier.py:_CLASS_AT_DERIVATION`
   is compared with exact equality. `service_tier.py:shed_entries` sheds every untiered entry,
   and [Break-glass](../../break-glass.md), scenario *one node is down and the survivor runs
   short of memory*, scales `probe.py shed-set` to zero.
@@ -337,36 +337,36 @@ and upstream facts through `gh`.
   below `system-cluster-critical`. Tier 1, `homelab-critical`, holds the edge, auth, the
   image registry and the alert bridge.
 - **kube-state-metrics takes its configuration as arguments.**
-  `ansible/roles/k8s/observability/templates/kube-state-metrics.yaml.j2` renders no ConfigMap
+  `k8s/roles/observability/templates/kube-state-metrics.yaml.j2` renders no ConfigMap
   and no `checksum/config` annotation. The comment above its ClusterRole requires the RBAC
   rules and the `--resources` argument to change together. observability's *One config change,
   one restart* section in its `CLAUDE.md` rolls each workload through its pod template, and
-  `ansible/tests/services/test_observability_config_rolls_one_workload.py` pins the data-key
+  `tests/services/test_observability_config_rolls_one_workload.py` pins the data-key
   count of each ConfigMap the role renders. observability declares `k8s_autodeploy: false`.
 - **Renovate.** In `renovate.json`, the manager for `# renovate:` annotations matches
-  `ansible/roles/k8s/*/defaults/main.yml` and needs the annotation on the line above a
+  `k8s/roles/*/defaults/main.yml` and needs the annotation on the line above a
   `*_version:` key. No manager matches a role's `files/`. The `manual — k8s_autodeploy:
   false` rule is docker-only
-  (`ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py:test_the_manual_rule_is_scoped_to_container_images`),
+  (`tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py:test_the_manual_rule_is_scoped_to_container_images`),
   while the non-major automerge rule names no datasource. A per-package manual rule for a pin
   that a denied role owns carries the `k8s_autodeploy: false` marker
-  (`ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py`).
+  (`tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py`).
 - **The rotation registry tracks SOPS keys only.** `scripts/secrets_mgmt/secret_rotation.py`
-  reconciles `ansible/secret_rotation.yml` against `ansible/vars/secrets.yml`, and `sync`
+  reconciles `secrets/secret_rotation.yml` against `secrets/secrets.yml`, and `sync`
   prints "stale" for any other name. The daily audit turns the "Secret Rotation" monitor down
   when a key passes its tier window. The `external` tier is 365 days, and
   [Secret rotation](../../secret-rotation.md) defines `source: record` for a SOPS copy of a
   credential that something else owns.
 - **ADRs are never rewritten.** [Architecture decisions](../../adr/index.md) says a reversed
   decision gets a new ADR, and the old one's status becomes `Superseded by ADR-NNNN`.
-  `ansible/tests/repo/test_adr_links.py:VALID_STATUS` accepts `Proposed`.
+  `tests/repo/test_adr_links.py:VALID_STATUS` accepts `Proposed`.
 
 ## Design
 
 ### What D1 adds
 
 ```diff
-+ ansible/roles/k8s/flux/
++ k8s/roles/flux/
 +   CLAUDE.md
 +   defaults/main.yml               flux_version (Renovate-annotated), flux_pod_patch,
 +                                   flux_controllers (restart_on: []), flux_sync_suspend,
@@ -382,13 +382,13 @@ and upstream facts through `gh`.
 +                                   class from tier_priority_class, the volumes renamed
 +   templates/sync.yaml.j2          deferred: OCIRepository, Kustomization, Providers, Alerts
 +   templates/secret.yaml.j2        Secrets flux-github-status (token) and flux-discord (address)
-  ansible/inventory/host_vars/daniel-box.yml
+  inventory/host_vars/daniel-box.yml
 +   containers_list entry `flux`: platform k8s, tier platform, no port, no hostname, no owner
-  ansible/tests/k8s/test_deploy_strategy.py                 _RECREATE gains source-controller
-  ansible/tests/k8s/test_priority_class_is_derived_from_tier.py   _CLASS_AT_DERIVATION gains flux
-  ansible/tests/k8s/test_deferred_manifest_dir_is_reserved.py     KNOWN_DEFERRED_DIRS gains flux-sync
-  ansible/tests/deploy/test_restart_on_narrows_the_restart_signals.py   _EXPECTED_NARROWERS gains flux
-+ ansible/tests/k8s/test_aggregated_clusterroles.py   every aggregating ClusterRole is listed;
+  tests/k8s/test_deploy_strategy.py                 _RECREATE gains source-controller
+  tests/k8s/test_priority_class_is_derived_from_tier.py   _CLASS_AT_DERIVATION gains flux
+  tests/k8s/test_deferred_manifest_dir_is_reserved.py     KNOWN_DEFERRED_DIRS gains flux-sync
+  tests/deploy/test_restart_on_narrows_the_restart_signals.py   _EXPECTED_NARROWERS gains flux
++ tests/k8s/test_aggregated_clusterroles.py   every aggregating ClusterRole is listed;
                                                      flux-view-flux-system's grant is pinned (D1.2b)
   scripts/validate/refresh_vendored_schemas.py   apiextensions core file, four Flux kinds
 + scripts/validate/schemas/…                     the schemas it fetches
@@ -401,10 +401,10 @@ and upstream facts through `gh`.
 + scripts/deploy_tools/forge.py     the forge adapter: every GitHub and GHCR call promote.py makes
   .claude/hooks/block-footguns.py   denies agents the two variable writes and the tag moves (D1.4)
   scripts/secrets_mgmt/secret_rotation.py   a 90-day tier for PROMOTE_TOKEN's copy (D1.4)
-  ansible/roles/k8s/observability/  kube-state-metrics argument for Flux kinds, a scrape job
+  k8s/roles/observability/  kube-state-metrics argument for Flux kinds, a scrape job
                                     with histogram buckets dropped (D1.6); the flux rule
                                     group and its promtool tests (D1.6b)
-  ansible/roles/k8s/netpol-baseline/defaults/main.yml   a flux-system plane, three refused rows
+  k8s/roles/netpol-baseline/defaults/main.yml   a flux-system plane, three refused rows
 + docs/flux-deploy-plane.md
 + docs/adr/<next free number>-…    Proposed: Flux applies the cluster from a promoted artifact
   docs/adr/0010-…                   a dated line in Status, linking the proposal
@@ -510,7 +510,7 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
       entry, because that set exists for one name shared by a whole stack.
     - kustomize-controller and notification-controller get the `RollingUpdate` strategy they
       leave implicit. source-controller keeps upstream's `Recreate` and gets a `_RECREATE`
-      row in `ansible/tests/k8s/test_deploy_strategy.py` with a reason. This is the one
+      row in `tests/k8s/test_deploy_strategy.py` with a reason. This is the one
       exemption.
     - `KNOWN_DEFERRED_DIRS` gains `"flux-sync": "flux"` in D1.5, where the deferred file
       arrives. That is a census member, not an exemption.
@@ -661,7 +661,7 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
       a `git grep` for `gitops_deploy/defaults/main.yml` or `gitops_deploy_ci_contexts`
       finds it.
     - The list's source moves at H7.2e. That PR moves the key to
-      `ansible/inventory/group_vars/all.yml` under the name `ci_required_contexts`, and the
+      `inventory/group_vars/all.yml` under the name `ci_required_contexts`, and the
       role default becomes a Jinja reference to the new key until H7.19a. H7.20a then
       deletes the role defaults. A plain YAML read of the role default after H7.2e returns
       the reference as a string, which the shape rule above turns into an `error`. So
@@ -862,7 +862,7 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
   reconciliation without deleting anything. With the lever off, the render omits
   `spec.suspend` from both objects rather than writing `suspend: false`. The role applies
   `flux-sync` with client-side `kubectl apply`, as the manifests cycle applies its own
-  files (`ansible/roles/k8s/manifests/tasks/main.yml` runs `k3s kubectl apply` with no
+  files (`k8s/roles/manifests/tasks/main.yml` runs `k3s kubectl apply` with no
   `--server-side`). That apply's three-way merge sets every field the render names, so an
   explicit `suspend: false` would undo an operator's hand suspend at the role's next run.
   A field the render omits keeps its live value, unless the last apply rendered it. D5's
@@ -964,7 +964,7 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       false` rule. Add a per-package rule for `fluxcd/flux2` with `automerge: false` and the
       marker, because the docker-only rule never sees a github-releases pin.
     - Pin the vendored images by digest through the pipeline's digest step (*Decisions*).
-      Add a test in `ansible/tests/k8s/` that every container image the flux role renders
+      Add a test in `tests/k8s/` that every container image the flux role renders
       matches `<repo>:<tag>@sha256:<64 hex>`. Its red half is a fixture render with one
       image carrying the tag only.
     - Filter out `allow-scraping` and `allow-webhooks`, keep `allow-egress`, and add
@@ -972,12 +972,12 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       test asserts that no rendered NetworkPolicy in `flux-system` has a `namespaceSelector`
       that matches every namespace. Its red half is the unfiltered vendored file.
     - Add the `_RECREATE` row for source-controller. Add `"flux": "homelab-critical"` to
-      `_CLASS_AT_DERIVATION` in `ansible/tests/k8s/test_priority_class_is_derived_from_tier.py`,
+      `_CLASS_AT_DERIVATION` in `tests/k8s/test_priority_class_is_derived_from_tier.py`,
       and `flux` to `_EXPECTED_NARROWERS` in
-      `ansible/tests/deploy/test_restart_on_narrows_the_restart_signals.py`.
-    - Add a test in `ansible/tests/k8s/` that the vendored file's header names
+      `tests/deploy/test_restart_on_narrows_the_restart_signals.py`.
+    - Add a test in `tests/k8s/` that the vendored file's header names
       `flux_version`, with a fixture of a mismatched header as its red half.
-    - Add a self-rollout test in `ansible/tests/k8s/`, over the harness in
+    - Add a self-rollout test in `tests/k8s/`, over the harness in
       `_release_expectation.py`. A changed secret render with an unchanged
       apply expects none of the three controllers to roll. Its red half is the same render
       with `restart_on` removed from each entry, which expects all three.
@@ -1033,7 +1033,7 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
    vendored `flux-view-flux-system` (*Baseline*, corrected). The operator accepted the
    aggregation, so this PR changes no RBAC, and its earlier list change and operator apply
    are **not needed**.
-    - A new test module in `ansible/tests/k8s/` lists every ClusterRole across the render
+    - A new test module in `tests/k8s/` lists every ClusterRole across the render
       that carries an `aggregate-to-view`, `aggregate-to-edit` or `aggregate-to-admin`
       label, each with a reason. The census must find exactly the listed names, among them
       `flux-view-flux-system`. `flux-edit-flux-system` is the second member: it aggregates
@@ -1044,7 +1044,7 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       the six groups. It must find `kustomize.toolkit.fluxcd.io`, so an empty parse cannot
       pass. Its red halves are a copy with a seventh group and a copy with `create`.
     - Correct the texts that said the identity reads no Flux group: the docstring of
-      `ansible/tests/k8s/test_k8s_manifests_rbac.py:test_readonly_role_covers_the_crd_groups_this_homelab_deploys`
+      `tests/k8s/test_k8s_manifests_rbac.py:test_readonly_role_covers_the_crd_groups_this_homelab_deploys`
       and `docs/flux-deploy-plane.md`, *Reading Flux objects*. The matching comment above
       `k3s_readonly_crd_api_groups` is filed as
       [#4749](https://github.com/DanielH2018/server/issues/4749), because any edit under
@@ -1111,7 +1111,7 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       overwrites `PROD_DIGEST`. Store the token's copy with `sops set` as `promote_token`.
       The agent then runs `uv run python scripts/secrets_mgmt/secret_rotation.py sync`, sets
       that row to `source: record` and tier `external-90d`, and commits
-      `ansible/secret_rotation.yml`.
+      `secrets/secret_rotation.yml`.
     - Add the tier `external-90d` with 90 days to `secret_rotation.py:TIER_DAYS` and to
       `rotation_tools.DEFAULT_TIER_DAYS`. The `regen-doc-fragments` hook rewrites the tier
       table.
@@ -1129,7 +1129,7 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`, and each other denied
       form gets one. The must-pass case is
       `gh variable get DEPLOY_HOLD -R DanielH2018/server`, so a read stays allowed.
-    - Add a test in `ansible/tests/repo/` that parses the workflow and asserts:
+    - Add a test in `tests/repo/` that parses the workflow and asserts:
         - the four trigger guards and the master-ref guard on every job a dispatch reaches;
         - the job-level `concurrency: promote` with `cancel-in-progress: false` on `promote`
           and on `tag`;
@@ -1152,7 +1152,7 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       whose `render` lacks the ancestry check, one whose `publish` checks out the
       repository, one whose `tag` sits outside the `promote` group, and one whose flux CLI
       version differs from `flux_version`. The drill path's checks sit in
-      `ansible/tests/repo/test_promote_drill_workflow.py`. Its red fixtures are a drill push
+      `tests/repo/test_promote_drill_workflow.py`. Its red fixtures are a drill push
       without the annotation, a signed push that carries it, a drill path without the
       must-fail `cosign verify`, a verify step that passes on a refusal, one that accepts
       any cosign failure rather than cosign's no-signature error, one that skips the digest
@@ -1182,7 +1182,7 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       `200`.
     - **Operator-only before merge:** create the fine-grained status token and store it with
       `sops set` as `flux_github_status_token`. The agent then runs `uv run python
-      scripts/secrets_mgmt/secret_rotation.py sync` and commits `ansible/secret_rotation.yml`.
+      scripts/secrets_mgmt/secret_rotation.py sync` and commits `secrets/secret_rotation.yml`.
     - Add `templates/sync.yaml.j2` as a deferred file, the CRD wait, the deferred apply, and
       `templates/secret.yaml.j2`, holding the objects from *Decisions*. `sync.yaml.j2`
       renders the `verify-drill` OCIRepository only while `flux_verify_drill` is true, and
@@ -1203,7 +1203,7 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
 
 7. **D1.6 — Flux in the metrics plane** (about 110 lines).
     - Add a kube-state-metrics custom-resource-state config for the Flux kinds to
-      `ansible/roles/k8s/observability/`, with the read-only RBAC it needs. That config
+      `k8s/roles/observability/`, with the read-only RBAC it needs. That config
       produces `gotk_resource_info`, the series C6 names. For a Kustomization, its `revision`
       label reads `status.lastAppliedOriginRevision`, so the label carries `master@sha1:<sha>`
       rather than the OCI tag and digest. Its `ready` label reads the Ready condition's
@@ -1214,7 +1214,7 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       rendered from a defaults variable through `to_json`. The config then lives in the pod
       template, so a change to it rolls kube-state-metrics through the apply, which suits
       its `restart_on: []` entry. No ConfigMap is added, so the key-count table in
-      `ansible/tests/services/test_observability_config_rolls_one_workload.py` stays as it
+      `tests/services/test_observability_config_rolls_one_workload.py` stays as it
       is. Rejected: a ConfigMap with a `checksum/config` annotation, which adds a key-count
       row and a second roll path for the same result.
     - The ClusterRole gains `list` and `watch` on the two Flux kinds the config reads, and
@@ -1368,7 +1368,7 @@ fails. Exit 2 shows that the same object was read and reconciled.
 - *The self rollouts.* The D1.2 self-rollout test's red half, the same render without
   `restart_on`, expects all three controllers to roll. At D1.5's landing,
   `probe.py health flux` prints no NOT ROLLED line.
-- *The guard patches.* The D1.2 PR body quotes `uv run pytest ansible/tests/k8s` failing with
+- *The guard patches.* The D1.2 PR body quotes `uv run pytest tests/k8s` failing with
   `flux_pod_patch` emptied and the volume rewrite removed, naming each guard under
   *Baseline*, `test_volume_names_name_their_workload` included, and then passing with both.
 - *The hold stops promotion live.* **Operator-only:** set `DEPLOY_HOLD` to any SHA and merge
@@ -1588,7 +1588,7 @@ fails. Exit 2 shows that the same object was read and reconciled.
   digest. The rule is safe whichever referrer path GHCR takes. If GHCR does not list the
   bundles as package versions at all, none is deleted, which costs storage only.
 - **A textual guard cannot see the vendored Deployments** (failure class 4).
-  `ansible/tests/k8s/test_workload_shell_uses_the_macros.py:shell_offences` keys on a
+  `tests/k8s/test_workload_shell_uses_the_macros.py:shell_offences` keys on a
   literal `kind:` line, and
   `components.yaml.j2` has none. Mitigation: the rendered guards read the patched objects,
   and the D1.2 red run shows each of them firing on the unpatched render.
@@ -1660,7 +1660,7 @@ fails. Exit 2 shows that the same object was read and reconciled.
 - **Two Discord streams.** The deployer and Flux both post to the deploy channel. Flux posts
   errors only, and D6 retires the deployer's k8s alerts.
 - **The CI-context list moves out from under `decide`.** H7.2e moves the key to
-  `ansible/inventory/group_vars/all.yml` as `ci_required_contexts`, and H7.20a deletes the
+  `inventory/group_vars/all.yml` as `ci_required_contexts`, and H7.20a deletes the
   role defaults `decide` reads. A `decide` left on the old path would print `error` on
   every run, and cluster promotion would stop. Mitigation: H7.2e repoints `decide` in the
   same PR (*Decisions*). D1.3's checkout test fails CI on a move without the repoint, the
@@ -1671,19 +1671,19 @@ fails. Exit 2 shows that the same object was read and reconciled.
 
 - **D1.1:** the vendored schemas under `scripts/validate/schemas/`. The ADR, `Proposed`.
 - **D1.2:**
-    - `ansible/roles/k8s/flux/CLAUDE.md`, with its generated `## At a glance` block (the
+    - `k8s/roles/flux/CLAUDE.md`, with its generated `## At a glance` block (the
       `regen-role-glance` hook). It records the guard decision, the digest-pinned images,
       the `flux-system` fence, the requirement that no agent token carries
       `write:packages`, and `PROMOTE_TOKEN`'s rotation steps.
-    - A header-version test, a digest test and a fence render test in `ansible/tests/k8s/`,
+    - A header-version test, a digest test and a fence render test in `tests/k8s/`,
       each with its red fixture.
-    - A self-rollout test in `ansible/tests/k8s/`, with its red half without `restart_on`.
-    - `ansible/tests/k8s/test_deploy_strategy.py:_RECREATE` gains source-controller.
-    - `ansible/tests/k8s/test_priority_class_is_derived_from_tier.py:_CLASS_AT_DERIVATION`
+    - A self-rollout test in `tests/k8s/`, with its red half without `restart_on`.
+    - `tests/k8s/test_deploy_strategy.py:_RECREATE` gains source-controller.
+    - `tests/k8s/test_priority_class_is_derived_from_tier.py:_CLASS_AT_DERIVATION`
       gains `"flux": "homelab-critical"`.
-    - `ansible/tests/deploy/test_restart_on_narrows_the_restart_signals.py:_EXPECTED_NARROWERS`
+    - `tests/deploy/test_restart_on_narrows_the_restart_signals.py:_EXPECTED_NARROWERS`
       gains `flux`, so its signal check reads the three new entries.
-    - The comment above the entries in `ansible/inventory/host_vars/daniel-box.yml` names
+    - The comment above the entries in `inventory/host_vars/daniel-box.yml` names
       the deploy controller in the `platform` tier.
     - The guards the patch satisfies, each green against the rendered role:
       `test_no_resourcequota_is_declared_anywhere`, `test_pod_template_hygiene.py`,
@@ -1694,7 +1694,7 @@ fails. Exit 2 shows that the same object was read and reconciled.
       `test_renovate_per_package_manual_rules_carry_the_denylist_marker.py` hold both.
     - The `regen-doc-fragments` hook rewrites the auto-deploy coverage fragment.
     - `docs/flux-deploy-plane.md` and its `mkdocs.yml` nav entry. ADR-0010's dated line.
-- **D1.2b:** a new test module in `ansible/tests/k8s/` with the aggregation census, the
+- **D1.2b:** a new test module in `tests/k8s/` with the aggregation census, the
   grant pin and their red halves. The docstring of
   `test_readonly_role_covers_the_crd_groups_this_homelab_deploys` names the Flux groups
   `view` aggregation covers. `docs/flux-deploy-plane.md` states that the read-only identity
@@ -1703,7 +1703,7 @@ fails. Exit 2 shows that the same object was read and reconciled.
   test of the CI-context list among them. The comment above `gitops_deploy_ci_contexts` in
   the role defaults names `promote.py decide` as a reader, beside `fetch_ci_verdict`. The import test holds `promote.py` to the forge
   adapter.
-- **D1.4:** a workflow test in `ansible/tests/repo/`, with eleven red fixtures, the seventh
+- **D1.4:** a workflow test in `tests/repo/`, with eleven red fixtures, the seventh
   for the `cosign-release` pin and the last four for the render and sign split. The hook
   rule's must-deny and must-pass cases in `.claude/hooks/tests/test_block_footguns.py`. The
   `external-90d` tier, whose fragment the `regen-doc-fragments` hook rewrites.
@@ -1717,18 +1717,18 @@ fails. Exit 2 shows that the same object was read and reconciled.
   with the lever off removes a suspend that a lever-on run wrote, and that the role is a
   `containers_list` reader, which is why H1's DR order parks the deployer. The rotation registry gains
   `flux_github_status_token`.
-  `ansible/tests/k8s/test_deferred_manifest_dir_is_reserved.py:KNOWN_DEFERRED_DIRS` gains
+  `tests/k8s/test_deferred_manifest_dir_is_reserved.py:KNOWN_DEFERRED_DIRS` gains
   `flux-sync`. The D1.2 self-rollout test gains this PR's secret-render case.
   `docs/gitops-pipeline.md` gains one sentence and a link: Flux runs and applies nothing
   outside `flux-system`. Root `CLAUDE.md` stays true, because its "only write path" sentence
   is about the path an agent writes through.
-- **D1.6:** `ansible/roles/k8s/observability/CLAUDE.md` names the Flux config and says it
+- **D1.6:** `k8s/roles/observability/CLAUDE.md` names the Flux config and says it
   travels as an argument. The comment above the ClusterRole in `kube-state-metrics.yaml.j2`
   names the new argument beside `--resources`.
-  `ansible/tests/services/test_observability_config_rolls_one_workload.py` stays green
+  `tests/services/test_observability_config_rolls_one_workload.py` stays green
   unchanged, because no ConfigMap is added. A render test holds the bucket drop on the
   `flux` job. netpol-baseline's probe-table comment covers the `flux-system` plane and the
-  Service-port rows, and `ansible/roles/k8s/netpol-baseline/CLAUDE.md` names the plane.
+  Service-port rows, and `k8s/roles/netpol-baseline/CLAUDE.md` names the plane.
   `docs/flux-deploy-plane.md` records the measured series counts against M1's budget.
 - **D1.6b:** the `flux` entry of `observability_rule_groups` and its promtool tests.
   `docs/flux-deploy-plane.md` names the three rules and the Discord second channel.
@@ -1927,7 +1927,7 @@ fixed. D1-R1-01, D1-R1-04 and D1-R1-06 each also carry one sub-claim refuted wit
   *Decisions* has one operator-visible answer per guard: the ResourceQuota is stripped at
   vendoring, five fields are patched, and source-controller gets one `_RECREATE` row. The
   schemas land first in D1.1. Refuted:
-  `ansible/tests/k8s/test_workload_shell_uses_the_macros.py:shell_offences` would not refuse
+  `tests/k8s/test_workload_shell_uses_the_macros.py:shell_offences` would not refuse
   these Deployments. It keys on a literal `kind:` line in template source, which
   `components.yaml.j2` lacks. That blind spot is a Risk instead. The split order differs
   from the finding's: the `_RECREATE` row lands with the role, because
@@ -2151,7 +2151,7 @@ contracts.md are handed to them.
 - **X2-02 (high), H7 moves and then deletes the CI-context list that `decide` reads by
   path. Fixed in D1, handed to H7 and H3.** Confirmed:
   `ansible/roles/setup/gitops_deploy/defaults/main.yml:gitops_deploy_ci_contexts` holds the
-  list, and H7's *Design* moves it to `ansible/inventory/group_vars/all.yml` as
+  list, and H7's *Design* moves it to `inventory/group_vars/all.yml` as
   `ci_required_contexts` at H7.2e, leaves the role default as a reference until H7.19a, and
   names three surviving readers without `promote.py`. The move breaks `decide` at H7.2e
   already, not only at H7.20a, because a plain YAML read of the reference returns a string.

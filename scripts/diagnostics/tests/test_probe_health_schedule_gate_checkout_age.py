@@ -16,7 +16,7 @@ from lib.git_testing import commit, git, init_repo
 from lib.repo_paths import REPO
 
 ROLE = "longhorn-restore-drill"
-ROLES = "ansible/roles/k8s"
+ROLES = "k8s/roles"
 SCHEDULE_GATE_TESTS = (
     "scripts/diagnostics/tests/test_probe_health_cronjob_schedule_gate.py"
 )

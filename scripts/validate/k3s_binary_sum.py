@@ -5,7 +5,7 @@ The `system-upgrade-verify` Jobs compare each node's k3s binary with the sum in
 `k3s_binary_sha256_amd64`, the `k3s` line of the release's `sha256sum-amd64.txt`. A bump of the
 version that keeps the old sum would turn the verify Jobs red on every healthy node, or, worse,
 get the sum "fixed" from the node. Both keys live in
-`ansible/roles/k8s/system-upgrade/defaults/main.yml`. The sum may move alone (a correction).
+`k8s/roles/system-upgrade/defaults/main.yml`. The sum may move alone (a correction).
 A malformed sum is refused too: it must be 64 lowercase hex digits.
 
 Exit codes: 0 clean; 1 refused; 2 a key could not be read, so the check could not judge.

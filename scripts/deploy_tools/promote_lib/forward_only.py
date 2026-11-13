@@ -56,7 +56,7 @@ from deploy_tools.promote_lib.prune import ReadError
 
 FORWARD_ONLY_FLAG = "flux_forward_only"
 # A k8s role's directory name is its deploy tag, which is the name `digests.json` keys.
-ROLE_DEFAULTS = ":(glob)ansible/roles/k8s/*/defaults/main.yml"
+ROLE_DEFAULTS = ":(glob)k8s/roles/*/defaults/main.yml"
 UNCLASSIFIED = "_unclassified"
 GATE_STATUS_CONTEXT = "homelab/upgrade-gates"
 # A status older than this describes a drill age and a volume health from before a hold or
@@ -105,7 +105,7 @@ def forward_only_roles(repo: Path, sha: str) -> frozenset[str]:
         except yaml.YAMLError as err:
             raise ReadError(f"{path} at {sha}: {err}") from err
         if isinstance(data, dict) and data.get(FORWARD_ONLY_FLAG) is True:
-            roles.add(path.split("/")[3])
+            roles.add(path.split("/")[2])
     return frozenset(roles)
 
 

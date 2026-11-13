@@ -20,7 +20,10 @@ Run: uv run pytest hosts/tests/test_nut_host_secondary.py
 """
 
 from lib import yaml_fast
-from _helpers import ALL_VARS, ANSIBLE
+from _helpers import (
+    ALL_VARS,
+    K8S_ROLES,
+)
 
 from _shell_render import rendered_shell_text
 from lib.proc_testing import run
@@ -28,8 +31,8 @@ from lib.repo_paths import REPO
 
 
 ALL_VARS_TEXT = ALL_VARS.read_text()
-NUT_DEFAULTS = ANSIBLE / "roles" / "k8s" / "nut" / "defaults" / "main.yml"
-NUT_SERVICE = ANSIBLE / "roles" / "k8s" / "nut" / "templates" / "service.yaml.j2"
+NUT_DEFAULTS = K8S_ROLES / "nut" / "defaults" / "main.yml"
+NUT_SERVICE = K8S_ROLES / "nut" / "templates" / "service.yaml.j2"
 NUT_COMPONENT = REPO / "hosts" / "components" / "nut-secondary" / "component.yml"
 NUT_TIMER = NUT_COMPONENT.parent / "units" / "homelab-ups-watchdog.timer.j2"
 
@@ -49,7 +52,7 @@ BLIP_RIDE_OUT_S = 300
 def daniel_box_package(tmp_path):
     """daniel-box's package rendered against a stand-in ciphertext file.
 
-    The real `ansible/vars/hosts/daniel-box.sops.yaml` is operator-written, so the render
+    The real `secrets/hosts/daniel-box.sops.yaml` is operator-written, so the render
     reads a placeholder here; only the rendered templates are under test.
     """
     from renderer.renderer_lib import host as host_mode

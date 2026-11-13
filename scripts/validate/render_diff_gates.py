@@ -86,8 +86,8 @@ from renderer.template_filters.toposort import K8S_APPLIES_LAST, build_k8s_dep_m
 
 CLEAN, REFUSED, UNJUDGED = 0, 1, 2
 SERVICES = Path("cluster/services.yml")
-GROUP_VARS = Path("ansible/inventory/group_vars/all.yml")
-K8S_ROLES = "ansible/roles/k8s/"
+GROUP_VARS = Path("inventory/group_vars/all.yml")
+K8S_ROLES = "k8s/roles/"
 FLUX_PLANE = "flux"
 
 
@@ -341,7 +341,7 @@ def snapshot(
     return Snapshot(
         renders=renders,
         owners=dict.fromkeys(names, FLUX_PLANE),
-        deps=build_k8s_dep_map(k8s, str(tree / "ansible" / "roles" / "k8s")),
+        deps=build_k8s_dep_map(k8s, str(tree / "k8s" / "roles")),
         deferred={n: f for n, f in dirs.items() if n.endswith(DEFERRED_SUFFIX)},
         namespace_roles={
             str(group[var]): role
@@ -374,7 +374,7 @@ def extract(sha: str, dest: Path, paths: Iterable[str] = (), repo: Path = REPO) 
 
 
 # The top-level trees a render reads. `extract` skips one a commit does not hold.
-RENDER_TREES = ("ansible", "scripts", "hosts", "cluster")
+RENDER_TREES = ("k8s", "inventory", "secrets", "scripts", "hosts", "cluster")
 
 
 def render_side(sha: str, dest: Path, repo: Path = REPO) -> Snapshot:

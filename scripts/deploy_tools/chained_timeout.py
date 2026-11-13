@@ -19,7 +19,7 @@ from changed_set import ROOT, SOAK
 from deploy_tools.kustomizations import kustomization_graph
 
 # The values of the two objects the bundle does not carry, from
-# ansible/roles/k8s/flux/templates/sync.yaml.j2: the OCIRepository `homelab`'s `interval`, and
+# k8s/roles/flux/templates/sync.yaml.j2: the OCIRepository `homelab`'s `interval`, and
 # the root Kustomization `homelab`'s `timeout` and `retryInterval`. The root is always
 # expected, so they are the floor of every derived timeout.
 # scripts/deploy_tools/tests/test_chained_timeout.py fails a drift.
@@ -35,13 +35,13 @@ REQUEUE_DEPENDENCY_S = 30
 # once. One that waits on health holds a worker, so a changed set larger than this queues in
 # rounds. The flux role sets `--concurrent` to `k8s_rollout_batch_width` plus one, the worker
 # the soak holds from the start of a rollout (D5.1c, D5.3b2), and
-# ansible/tests/k8s/test_flux_role.py fails a drift between that width and this figure.
+# tests/k8s/test_flux_role.py fails a drift between that width and this figure.
 CONCURRENT = 5
 # The ceiling of every derived timeout, 5.5 hours. GitHub stops a hosted job at 6 hours, and a
 # `verify` stopped by its job limit leaves no verdict, so `settle` writes `<T> unverified`,
 # which names no Kustomization. Capping here makes `verify` print `failed` first, naming the
 # names (d4-ordering.md, *The cap*). The three workflow limits are sized from this figure
-# (ansible/tests/repo/test_promote_workflow_verify.py).
+# (tests/repo/test_promote_workflow_verify.py).
 # DECIDED: the clamp stands although the published bundle's all-changed chain is past it
 # (#5868: 36732s with 122 Kustomizations, against 19800s; it was 36480s until #8190 added
 # `lidarr` and `lidarr-snapshot`, which lidarr waits on, 36360s until #8194 added

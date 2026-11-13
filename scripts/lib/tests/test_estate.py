@@ -81,11 +81,10 @@ def test_k8s_entries_are_the_named_services_keyed_by_name(estate):
 def test_role_vars_lets_the_inventory_override_a_role_default(estate, tmp_path):
     # A fragment printing the raw default would be wrong once all.yml or the plane host's
     # host_vars sets the same key.
-    for plane in ("k8s", "setup"):
-        role = tmp_path / "roles" / plane / "r"
+    for role in (tmp_path / "k8s" / "roles" / "r", tmp_path / "roles" / "setup" / "r"):
         (role / "defaults").mkdir(parents=True)
         (role / "defaults" / "main.yml").write_text("port: 0\nown: default\n")
-    k8s = estate.role_vars(tmp_path / "roles" / "k8s" / "r")
+    k8s = estate.role_vars(tmp_path / "k8s" / "roles" / "r")
     setup = estate.role_vars(tmp_path / "roles" / "setup" / "r")
     assert (k8s["port"], k8s["own"]) == (2, "default")
     assert setup["port"] == 1

@@ -16,7 +16,7 @@ shapes:
   as sharing too. `land.sh`'s land gate (H1.1g) relies on this: it gates one bump per PR.
 
 A pin changes when its value changes. The check reads each pin from whichever file under
-`ansible/roles/` holds the key at each SHA, so a PR that moves the key into another role at
+`k8s/roles/` holds the key at each SHA, so a PR that moves the key into another role at
 the same version is no bump, and neither the decrease nor the alone check applies to it.
 
 The key set anywhere else under `ansible/` is refused: inventory, play vars, `include_role`
@@ -66,17 +66,16 @@ PINS: Mapping[str, bool] = {
     "k3s_metallb_version": False,
 }
 # YAML only: a role's CLAUDE.md or template can quote `<key>: v1.2.3` at a line start.
-ANSIBLE_YAML = (":(glob)ansible/**/*.yml", ":(glob)ansible/**/*.yaml")
-# Every file Ansible reads variables from. Inventory files take any extension or none.
-ANSIBLE_VARS = (
-    *ANSIBLE_YAML,
-    ":(glob)ansible/**/*.ini",
-    ":(glob)ansible/inventory/**",
-    ":(glob)ansible/**/group_vars/**",
-    ":(glob)ansible/**/host_vars/**",
+VARS_YAML = (
+    ":(glob)k8s/**/*.yml",
+    ":(glob)k8s/**/*.yaml",
+    ":(glob)inventory/**/*.yml",
+    ":(glob)inventory/**/*.yaml",
 )
-ROLES = "ansible/roles/"
-K3S_DEFAULTS = "ansible/roles/k8s/system-upgrade/defaults/main.yml"
+# Every file a render reads variables from. Inventory files take any extension or none.
+VARS_FILES = (*VARS_YAML, ":(glob)inventory/**")
+ROLES = "k8s/roles/"
+K3S_DEFAULTS = "k8s/roles/system-upgrade/defaults/main.yml"
 K3S_KEY, K3S_ACK_KEY = "k3s_version", "k3s_downgrade_acknowledged"
 K3S_VERSION = re.compile(r"v(\d+)\.(\d+)\.(\d+)\+k3s(\d+)")
 VERSION = re.compile(r"v?(\d+)\.(\d+)\.(\d+)")
@@ -222,9 +221,9 @@ def k3s_values_at(sha: str, repo: Path = REPO) -> tuple[str | None, str | None]:
 
 
 def files_setting(key: str, sha: str, repo: Path = REPO) -> list[str]:
-    """Every YAML file under `ansible/` that sets `key` at the top level at `sha`."""
+    """Every YAML file under `k8s/` or `inventory/` that sets `key` at the top level at `sha`."""
     hits = git(
-        "grep", "-l", "-E", f"^{key}:", sha, "--", *ANSIBLE_YAML, cwd=repo, check=False
+        "grep", "-l", "-E", f"^{key}:", sha, "--", *VARS_YAML, cwd=repo, check=False
     )
     if hits.returncode not in (0, 1):
         raise Unjudged(f"git grep for {key} at {sha[:9]} failed: {hits.stderr}")
@@ -280,7 +279,7 @@ def assigns(key: str, line: str) -> bool:
 
 def files_assigning(key: str, sha: str, repo: Path = REPO) -> list[str]:
     """Every file under `ansible/` that Ansible reads vars from and that assigns `key` at `sha`."""
-    hits = git("grep", "-n", "-F", key, sha, "--", *ANSIBLE_VARS, cwd=repo, check=False)
+    hits = git("grep", "-n", "-F", key, sha, "--", *VARS_FILES, cwd=repo, check=False)
     if hits.returncode not in (0, 1):
         raise Unjudged(f"git grep for {key} at {sha[:9]} failed: {hits.stderr}")
     found: dict[str, None] = {}

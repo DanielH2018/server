@@ -16,8 +16,8 @@ COVERED = [
     "scripts/dev/findings.py",
     "scripts/renderer/template_filters/toposort.py",
     ".claude/hooks/fanout-stop.py",
-    "ansible/roles/k8s/monitor-bridge/files/registry.py",
-    "ansible/roles/k8s/home-assistant/files/custom_templates/fan.jinja",
+    "k8s/roles/monitor-bridge/files/registry.py",
+    "k8s/roles/home-assistant/files/custom_templates/fan.jinja",
 ]
 
 
@@ -27,11 +27,9 @@ def test_findings_citing_only_suite_covered_code_are_eligible():
 
 def test_a_doc_a_template_or_no_citation_is_not_eligible():
     assert not red_green_eligible([*COVERED, "docs/landing.md"])
-    assert not red_green_eligible(
-        ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"]
-    )
+    assert not red_green_eligible(["k8s/roles/sonarr/templates/deployment.yaml.j2"])
     # A role with no `tests/` of its own: nothing would run a red test against its files.
-    assert not red_green_eligible(["ansible/roles/k8s/nosuchrole/files/x.py"])
+    assert not red_green_eligible(["k8s/roles/nosuchrole/files/x.py"])
     assert not red_green_eligible([])
 
 

@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser
 
 # The commit-status context the PR run writes and this script reads. ci.yml's `prek` job writes
-# it; ansible/tests/repo/test_ci_skip_proven_master.py pins both sides to this name.
+# it; tests/repo/test_ci_skip_proven_master.py pins both sides to this name.
 CONTEXT = "ci/tested-tree"
 
 CREATOR = "github-actions[bot]"

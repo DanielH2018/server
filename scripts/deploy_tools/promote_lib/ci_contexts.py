@@ -31,7 +31,7 @@ from ci_verdict import ci_verdict
 
 # The required check-run names, as one literal so a `git grep` for the path or the key finds
 # this reader. The key moved from the deployer's role defaults to group_vars in H7.2e.
-CI_CONTEXTS_SOURCE = "ansible/inventory/group_vars/all.yml"
+CI_CONTEXTS_SOURCE = "inventory/group_vars/all.yml"
 CI_CONTEXTS_KEY = "ci_required_contexts"
 
 

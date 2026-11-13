@@ -4,7 +4,7 @@ The artifacts browser puts a star on each card, and each served HTML artifact sh
 star as a button at its top right. A starred artifact is never pruned, and the "starred only"
 checkbox filters the list to the starred ones. This page records how one click in the browser
 reaches the prune on every host. The operating rules stay in
-`ansible/roles/k8s/artifacts/CLAUDE.md`.
+`k8s/roles/artifacts/CLAUDE.md`.
 
 The server adds the button's `<script>` tag as it serves the page, only when a star list is
 configured, and never changes the file on disk. The script draws nothing until `GET /api/star`

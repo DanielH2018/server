@@ -4,7 +4,7 @@
 These are the pieces that decide what a manifest renders WITH — the recursive expansion Ansible
 does on a variable's value, and a role's resolved defaults. The layering of those into one
 render context, in Ansible's precedence, is `lib.render_context`. The `bool` filter that expansion registers is
-`lib.ansible_jinja_env.ansible_bool`, the one its `register_ansible_filters` gives every render
+`lib.guard_jinja_env.ansible_bool`, the one its `register_ansible_filters` gives every render
 guard.
 """
 
@@ -18,7 +18,7 @@ import re
 
 from jinja2 import StrictUndefined, Undefined
 
-from lib.ansible_jinja_env import ansible_bool
+from lib.guard_jinja_env import ansible_bool
 from lib.render_guard import (
     SHARED_TPL,
     StubUndefined,
@@ -62,7 +62,7 @@ def _heavy_env():
     """The environment `register_ansible_filters` builds, imported on first use."""
     from jinja2 import Environment
 
-    from lib.ansible_jinja_env import register_ansible_filters
+    from lib.guard_jinja_env import register_ansible_filters
 
     return register_ansible_filters(Environment())
 

@@ -11,7 +11,7 @@ from fanout_lib.target import Target
 from dev.findings import main
 from dev.findings_lib.precomputed import deploy_line, covering_tests
 
-SONARR = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
+SONARR = "k8s/roles/sonarr/templates/deployment.yaml.j2"
 TOOLING = "scripts/dev/fanout_lib/brief.py"
 
 

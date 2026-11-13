@@ -4,8 +4,8 @@ title: Code scanning stays on default setup, and false positives are removed in 
 status: Superseded by ADR-0024
 date: 2026-09-02
 governs:
-  - scripts/diagnostics/probe_lib/ha.py:280
-  - ansible/roles/k8s/homelab-mcp/files/safe_reads.py:267
+  - scripts/diagnostics/probe_lib/ha.py:278
+  - k8s/roles/homelab-mcp/files/safe_reads.py:267
 ---
 
 # ADR-0016: Code scanning stays on default setup, and false positives are removed in code
@@ -64,11 +64,11 @@ The filters advanced setup would buy cannot express what the remaining noise nee
 `paths-ignore` drops a file from *every* query and `query-filters` filters a query across
 *every* file; there is no path×query intersection. The 13 remaining
 `py/incomplete-url-substring-sanitization` alerts are `assert "name" in list_of_strings`
-membership checks in tests — `ansible/tests/k8s/test_k8s_manifests_rbac.py`,
+membership checks in tests — `tests/k8s/test_k8s_manifests_rbac.py`,
 `scripts/dev/tests/test_gen_hosts_block.py` and siblings. Ignoring those paths would also
 strip `py/clear-text-logging-sensitive-data` from them, which is the query covering the secret
 discipline this repo cares most about; and one of the paths,
-`ansible/roles/k8s/homelab-mcp/tests/test_safe_reads.py`, tests
+`k8s/roles/homelab-mcp/tests/test_safe_reads.py`, tests
 `allowed_hosts_and_origins` — the repo's only genuine Host-header allowlist, and precisely
 what the noisy query exists to check.
 
@@ -124,7 +124,7 @@ accepted cost. PR #1081 rewrote those membership assertions as exact comparisons
 query closed all of them as fixed. That left 12 dismissed results on master, one query in
 one file each, and both are removed at source in the same way as the TLS floor:
 
-- `py/path-injection` × 5 in `ansible/roles/k8s/artifacts/files/artifact_server.py`.
+- `py/path-injection` × 5 in `k8s/roles/artifacts/files/artifact_server.py`.
   `safe_path()` now normalizes with `os.path.realpath` and checks with `str.startswith`,
   which is the one sanitizer shape the query models; `Path.resolve` plus a `parents` test
   rejected the same inputs and was invisible to it. `TestSafePath` in the role's tests pins
@@ -147,8 +147,8 @@ those two queries matter most.
 
 ## Governs
 
-- `scripts/diagnostics/probe_lib/ha.py:280` — the `tls_context()` marker in the probe library.
-- `ansible/roles/k8s/homelab-mcp/files/safe_reads.py:267` — the same marker in the MCP
+- `scripts/diagnostics/probe_lib/ha.py:278` — the `tls_context()` marker in the probe library.
+- `k8s/roles/homelab-mcp/files/safe_reads.py:267` — the same marker in the MCP
   server's ship list.
 
 Both markers explain why the TLS floor is stated rather than inherited. Neither enforces the

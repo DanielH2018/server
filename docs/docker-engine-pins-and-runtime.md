@@ -119,7 +119,7 @@ gains it again is rebuilt.
 `daemon.json` on 9323, and `[metrics] address` in `/etc/containerd/config.toml` on 1338 at path
 `/v1/metrics`, each with a UFW allow from `lan_subnet` — a host listener gets none of the bypass
 Docker's own iptables chain gives a published port. The cluster's Prometheus scrapes them as
-`dockerd-pi` and `containerd-pi` (`ansible/roles/k8s/observability/`). Both files declare
+`dockerd-pi` and `containerd-pi` (`k8s/roles/observability/`). Both files declare
 `manual:` activation, so a change marks the daemon pending and restarts nothing.
 
 They exist to size `GOMEMLIMIT`. On 2026-09-18 the two daemons took 97 and 53 major faults/s on

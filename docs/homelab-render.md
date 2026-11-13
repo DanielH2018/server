@@ -50,7 +50,7 @@ steps, and this page describes each piece once its PR has merged.
 
 ## The stub form
 
-A stub render never reads a secret. Every key of `ansible/vars/secrets.yml` renders as its
+A stub render never reads a secret. Every key of `secrets/secrets.yml` renders as its
 stub instead, which the filter `homelab_secret_stub` builds:
 
 - A key `K` becomes `stub-` plus `K` with underscores turned to hyphens, such as
@@ -58,10 +58,10 @@ stub instead, which the filter `homelab_secret_stub` builds:
   `kubectl apply --dry-run=server`.
 - `become_password` never takes a stub. It is the one name in `NEVER_STUB`, because no
   template reads it.
-- `domain` takes no stub and no placeholder, because it is not in `ansible/vars/secrets.yml`.
+- `domain` takes no stub and no placeholder, because it is not in `secrets/secrets.yml`.
   The operator ruled on 2026-10-14 that it is a variable, not a secret, and deleted it from
   the store on 2026-10-15. Every render reads its value from
-  `ansible/inventory/group_vars/all.yml`.
+  `inventory/group_vars/all.yml`.
 
 Two more filters serve the stub-file refusals in the playbook preamble (*A stub file stops
 outside a k8s dry run*). `homelab_stub_keys` lists the key names that take a stub, from the parsed `secrets.yml`. It
@@ -105,7 +105,7 @@ under the same subdirectory names, after every pass that edits rendered text. Th
 `kustomization.yaml` lists the upstream files under `resources` and the patches under
 `patches`. A placeholder render refuses a tag that vendors files and whose own render holds a
 placeholder, because Flux would then substitute into the upstream bytes. No `$` in those bytes
-is escaped. `ansible/tests/_k8s_render.py:rendered_docs` reads `render_tag`'s output, which
+is escaped. `tests/_k8s_render.py:rendered_docs` reads `render_tag`'s output, which
 holds no vendored file, so the fleet guards never read them. H1's *Vendored upstream manifests*
 (`docs/target-architecture/host/h1-cluster-config-to-flux.md`) says why that is accepted.
 
@@ -114,7 +114,7 @@ A placeholder render with `--role` also writes the publish bundle, `DIR/flux/` a
 `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/`. `docs/flux-deploy-plane.md`'s *The bundle*
 describes them. A stub render, a render without `--role` and a render that names no
 flux-owned tag write none of them. A published tag whose role lists `render_sops_manifests`
-also gets a byte copy of each of its SOPS manifests from `ansible/vars/cluster-manifests/`
+also gets a byte copy of each of its SOPS manifests from `secrets/cluster-manifests/`
 in `DIR/cluster/<tag>/`, and `decryption` on its Kustomization.
 
 Every placeholder render also writes the image contexts (D5.4a1, C1 *Cluster output*).
@@ -137,7 +137,7 @@ job that builds and pushes them, and D5.4b points the flux-owned consumers at GH
 Every render, in either mode, stamps `checksum/restart` on the pod template of each restart
 target of a flux-owned tag that names a ConfigMap or Secret. Every `manifests_self_rollouts`
 entry is a restart target. Both modes hash the
-placeholder-form documents and the digests in `ansible/vars/cluster-vars.source`, so they
+placeholder-form documents and the digests in `secrets/cluster-vars.source`, so they
 stamp the same value. `docs/flux-deploy-plane.md`'s *Restart triggers* has the rule.
 
 Every render, in either mode, also labels each PersistentVolumeClaim and Namespace of a
@@ -150,12 +150,12 @@ the rule.
 `digests.json`, and renders no tag. The publish job calls it when no tag is flux-owned, with
 `--all-images`, so the `images` job still finds every context and `tags.json` (#5593). It
 takes neither `--role` nor `--secret-stubs`, and either beside it is a usage error. The
-`cluster-vars` kind copies the cluster file, `ansible/vars/cluster-vars.sops.env`, byte for
+`cluster-vars` kind copies the cluster file, `secrets/cluster-vars.sops.env`, byte for
 byte.
 
 `cluster` exits 2 and writes nothing in seven cases:
 
-- In stub mode, the stub file does not stub every key of `ansible/vars/secrets.yml`. The
+- In stub mode, the stub file does not stub every key of `secrets/secrets.yml`. The
   message names the keys, never a value. Write a fresh stub file for the commit.
 - A `--role` names a tag that is not a k8s render target of daniel-box.
 - A directory it would write under `DIR/cluster/` already holds files from an earlier
@@ -190,7 +190,7 @@ A role's templates render with these variables, resolved for daniel-box:
   in the list therefore does not matter: an ordering no template carries goes in
   `depends_on:` on the entry;
 - `container_item`, the tag's own entry from that list;
-- `hosts`, one entry per `ansible/inventory/host_vars/` file, holding that host's literal
+- `hosts`, one entry per `inventory/host_vars/` file, holding that host's literal
   `server_ip`, `compose_services` and `claude_agent_ssh_login_enabled`
   (`scripts/lib/render_context.py:_hosts`). `group_vars`' `k8s_pi_client_ip` reads
   `hosts['daniel-pi'].server_ip`, so it is daniel-pi's address, not daniel-box's.
@@ -220,7 +220,7 @@ The renderer writes a tag's files by these rules:
   replicas.
 - **The shared defaults.** A listed `service.yaml` or `ingressroute.yaml` that the role ships
   no template for renders from `service-default.yaml.j2` or `ingressroute-default.yaml.j2`
-  in `ansible/templates/`, so a role whose Service or route fits the shared shape writes no
+  in `k8s/templates/`, so a role whose Service or route fits the shared shape writes no
   template (#2872, #3043). Such a route leaves no string in the role, so
   `scripts/renderer/template_filters/toposort.py` derives the traefik edge from the entry's `hostname`.
   A listed name with no template stops the render.
@@ -240,7 +240,7 @@ A role sets the keys of `scripts/lib/k8s_roles.py:RENDER_KEYS` in its
 `scripts/lib/k8s_roles.py:resolved_manifest_files` read `defaults/main.yml` only, and each raises
 on a role without that file.
 
-The render reads no role's `tasks/`. The only task files under `ansible/roles/k8s/` are the
+The render reads no role's `tasks/`. The only task files under `k8s/roles/` are the
 revert runbook's, and `scripts/renderer/tests/test_renderer_runbook_allowlist.py` holds that set.
 
 The renderer resolves only the five keys it renders with: the
@@ -251,7 +251,7 @@ so a template must not name one of these keys for any other purpose.
 The renderer holds two defaults as constants:
 `scripts/lib/k8s_roles.py:MANIFESTS_PRUNE_DEFAULT` and `ROLLOUT_TIMEOUT_DEFAULT`.
 
-**The test harness reads this render.** `ansible/tests/_k8s_render.py:rendered_docs` and
+**The test harness reads this render.** `tests/_k8s_render.py:rendered_docs` and
 `rendered_texts` read `render_tag`'s files and deferred files in stub mode, so a fleet guard
 reads the labelled bytes. They stop before the restart stamp and placeholder mode.
 `render_role_template` renders one template unlabelled with `role_context`'s variables, for a
@@ -281,11 +281,11 @@ holds. `scripts/lib/role_files.py` defines both, and `make_env` registers them i
 environment. Each resolves from `role_path`, the rendering role's directory, which
 `render_context` sets. A test that renders a copy of a role therefore reads the copy, and a
 copy whose templates call `repo_file()` or name a sibling role is laid out as
-`<root>/ansible/roles/k8s/<tag>`. `scripts/lib/k8s_lookups.py:cross_role_files` reads the
+`<root>/k8s/roles/<tag>`. `scripts/lib/k8s_lookups.py:cross_role_files` reads the
 `role=` form to find which roles read another role's files.
 
 A template census in `scripts/renderer/tests/` parses every template of the k8s roles and
-`ansible/templates/`. It fails when a filter or test name does not resolve in the environment
+`k8s/templates/`. It fails when a filter or test name does not resolve in the environment
 the renderer renders with.
 
 ### Derived values
@@ -309,7 +309,7 @@ A role default that reads the map, such as `nut_k8s_image`, resolves in a second
 context with the map as an override, the precedence `set_fact` has over every file layer.
 
 Tests hold each content tag equal to image-builder's expression evaluated with the same
-variables, which `ansible/tests/_image_builder_tag.py` holds as a literal.
+variables, which `tests/_image_builder_tag.py` holds as a literal.
 `scripts/deploy_tools/tests/test_ci_images.py` also holds one tag as the literal ansible-core
 2.22 computed.
 
@@ -322,7 +322,7 @@ through, follows the same rules, so a guard checks the bytes the renderer writes
 
 Placeholder mode is the mode the publish job runs (C1 *Only placeholder mode publishes*).
 `cluster` without `--secret-stubs` renders every secret reference as `${<key>}`, where `<key>`
-is the key name in `ansible/vars/secrets.yml`. Flux substitutes the real values at apply time.
+is the key name in `secrets/secrets.yml`. Flux substitutes the real values at apply time.
 
 `scripts/renderer/renderer_lib/placeholders.py` renders in three passes, because the escape
 would also escape a placeholder emitted before it:
@@ -382,11 +382,11 @@ rule, the tag, the file, the document as `Kind/name` or the refused form, and th
 
 | Rule | Reads | Refuses |
 |---|---|---|
-| `known-key` | the output of a directory that substitutes | a `${NAME}` whose name is not a key of `ansible/vars/secrets.yml` |
+| `known-key` | the output of a directory that substitutes | a `${NAME}` whose name is not a key of `secrets/secrets.yml` |
 | `no-bare-dollar-brace` | the output, read as Flux reads it, each `$$` paired first | a `${` that is not a placeholder of pass 3, and a sentinel fragment in any directory |
 | `confined-to-secret` | the kind of each rendered document | a placeholder outside `kind: Secret`, except `email` (`PLACEHOLDER_ANYWHERE`) |
 | `no-sops-manifest-key` | the output | a placeholder of a key in `SOPS_MANIFEST_KEYS`, the multi-line or all-digit standalone keys Flux cannot substitute as written |
-| `no-secret-expression` | the syntax tree of every `.j2` under the k8s roles' `templates/` and `ansible/templates/`, but `*.sh.j2` | any form of a secret key that could change its value |
+| `no-secret-expression` | the syntax tree of every `.j2` under the k8s roles' `templates/` and `k8s/templates/`, but `*.sh.j2` | any form of a secret key that could change its value |
 
 Rule 5 allows a key only bare, under `default`, `to_json` or `indent` (not for a
 `SOPS_MANIFEST_KEYS` key), inside a `~` concatenation, as the subject of `is defined`, as an
@@ -418,8 +418,8 @@ transform of the key. It reads two kinds of binding.
   alias also passes iteration, a part selected by a constant name and, when a `{% set %}`
   bound it to a literal container, a length test in an `{% if %}`. A value alias passes none
   of the three.
-- **Role defaults and inventory.** The Jinja strings in `ansible/roles/k8s/*/defaults/main.yml`,
-  `ansible/inventory/group_vars/` and `ansible/inventory/host_vars/` are parsed the same way.
+- **Role defaults and inventory.** The Jinja strings in `k8s/roles/*/defaults/main.yml`,
+  `inventory/group_vars/` and `inventory/host_vars/` are parsed the same way.
   A value that names a key is an alias for it, the text around an interpolation counts as a
   `~` concatenation, and a transform in the value is a violation. Every template that uses
   the variable then treats it as the key, and an alias of an alias counts too. The tree has
@@ -447,7 +447,7 @@ Prometheus's config block, which output `domain`
 Each rule must find its named members, so a rule that stops matching cannot pass: rule 3
 `${email}` in traefik's `traefik-static` ConfigMap, rule 1 a placeholder in authelia's config
 Secret, rule 2 the escaped `$${` in qbittorrent's `qbittorrent-netns-reset` ConfigMap, rule 4 every
-`SOPS_MANIFEST_KEYS` key in `ansible/vars/secrets.yml`, and rule 5 at least 46 templates that
+`SOPS_MANIFEST_KEYS` key in `secrets/secrets.yml`, and rule 5 at least 46 templates that
 name a key and two accepted uses. A `--role` render asserts a member of rules 1 to 4 only
 for the tags it rendered. Rule 5 reads the whole tree on every run.
 
@@ -663,7 +663,7 @@ template shape fixes it, so the guard checks the values where the cluster file i
   placeholder mode leaves out.
 - **The coverage test**, `scripts/renderer/tests/test_renderer_standalone_map.py`, renders the
   fleet in placeholder mode and holds the committed map equal to it. It also fails on a
-  mapped key absent from `ansible/vars/secrets.yml`. Its named members are `email` and
+  mapped key absent from `secrets/secrets.yml`. Its named members are `email` and
   `wireguard_interface_private_key`, mapped under `traefik` and `qbittorrent`.
 
 When `cluster_vars.py write` refuses a key, it writes nothing, so the cluster file and the live
@@ -709,7 +709,7 @@ publishes*).
 ## Write the stub file
 
 The file is a function of the git tree alone, so an agent, CI and the operator write the
-same bytes for one commit. It reads only the key names of `ansible/vars/secrets.yml`, which
+same bytes for one commit. It reads only the key names of `secrets/secrets.yml`, which
 SOPS leaves in plaintext, and decrypts nothing.
 
 ```bash
@@ -902,7 +902,7 @@ differs from the form H3's *Package rules* states.
 Only cluster mode has a substitution step after it, so only cluster mode renders placeholders
 and escapes `$`.
 
-- Host mode withholds every top-level key name of `ansible/vars/secrets.yml` from every layer,
+- Host mode withholds every top-level key name of `secrets/secrets.yml` from every layer,
   through `render_context`'s `withhold` keyword, and resolves under the strict undefined class.
   An inventory value that reads a secret is dropped with it.
 - A template that reads a secret, or a value aliasing one, fails the render. The error names

@@ -26,7 +26,7 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 import _stale_probe_rule as _rule  # noqa: E402  (needs the hooks directory on sys.path)
 
-_ROLE_FILE = "ansible/roles/k8s/metallb/defaults/main.yml"
+_ROLE_FILE = "k8s/roles/metallb/defaults/main.yml"
 _GATE = "uv run python scripts/diagnostics/probe.py health metallb"
 
 

@@ -39,7 +39,7 @@ named in `nfpm.yaml`'s `scripts:` (H3, *Package rules*).
 Host mode renders no secret, except in two kinds of file (H4, *Secret-bearing files*): a
 spec's declared `outputs:` and its `compose: true` files render a secret reference as `${<key>}`
 with C1's escape, through `host_outputs.py`. Everywhere else no substitution step follows, so
-the context withholds every top-level key of `ansible/vars/secrets.yml`, and resolves under the
+the context withholds every top-level key of `secrets/secrets.yml`, and resolves under the
 strict undefined class, so an inventory value that reads a secret is dropped too. A template
 that reads either fails the render, and the error names the secret key. A `${` in such a
 template is shell, and renders byte for byte.
@@ -64,7 +64,7 @@ from lib import yaml_fast
 from lib.estate import REPO_INVENTORY, Inventory
 from lib.render_context import UnresolvedVarsError, render_context
 from lib.render_guard import StrictChainableUndefined, load_yaml
-from lib.repo_paths import ANSIBLE, REPO
+from lib.repo_paths import REPO, SECRETS as SECRETS_DIR
 from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.environment import RenderError, render_file
 from renderer.renderer_lib.host_sources import (
@@ -106,9 +106,9 @@ from renderer.renderer_lib.host_manifest import (
 )
 
 HOSTS = REPO / "hosts"
-SECRETS = ANSIBLE / "vars" / "secrets.yml"
+SECRETS = SECRETS_DIR / "secrets.yml"
 # The per-host ciphertext a package that ships `secrets-unit` carries (H4, *Which ciphertext*).
-HOST_SOPS = ANSIBLE / "vars" / "hosts"
+HOST_SOPS = SECRETS_DIR / "hosts"
 
 # Every host package runs reconcile under /usr/bin/python3 (H3, *Package rules*).
 HOST_DEPENDS = ("python3 (>= 3.12)",)

@@ -31,7 +31,7 @@ component and step 4 of `hosts/bootstrap-host.sh`, and deleted the tasks.
   installs; the copies already on the hosts stay until H7.56. Each cluster host's package lists
   `/usr/local/bin/uv` as a legacy entry, so the install removes the copy that `initial_setup`
   wrote.
-- **Vale's copies are in `homelab-tools` and CI** (`ansible/tests/repo/test_vale_matches_the_ci_pin.py`).
+- **Vale's copies are in `homelab-tools` and CI** (`tests/repo/test_vale_matches_the_ci_pin.py`).
   The dotfiles repo's `tools.toml` pins uv, prek and Python, and this repo holds no twin of uv or
   prek.
 - **`host_python_version` names an interpreter only the dotfiles repo installs.** Units run `uv` with
@@ -40,7 +40,7 @@ component and step 4 of `hosts/bootstrap-host.sh`, and deleted the tasks.
   read `~/.local/bin/uv python list --only-installed` on each, and then merge this repo's bump. No
   test can hold the two equal, because the dotfiles repo is not in this tree.
 - **This play becomes root, so `~` is `/root` — SSH paths are absolute only** (#2413). The
-  `role-tasks-write-no-home-relative-path` row of `ansible/tests/repo/test_census_rows_roles.py`
+  `role-tasks-write-no-home-relative-path` row of `tests/repo/test_census_rows_roles.py`
   ratchets the class. The home-dir resolver task
   exists for the same reason. The role doc's fact-dependency rule said a `register:` carries
   every consumer's tag. A check held it over every setup role until H7.44 emptied the last

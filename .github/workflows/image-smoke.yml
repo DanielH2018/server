@@ -102,8 +102,8 @@ jobs:
           # excluding the ones that cannot boot bare — all 9 roles the old exclusion list
           # touched were denylisted ones.
           diff="$(git diff "origin/$BASE_REF"...HEAD -- \
-            'ansible/roles/k8s/*/defaults/main.yml' \
-            'ansible/inventory/group_vars/all.yml')"
+            'k8s/roles/*/defaults/main.yml' \
+            'inventory/group_vars/all.yml')"
           images="$(printf '%s' "$diff" | python scripts/dev/smoke_extract.py)"
           {
             echo "list<<EOF"

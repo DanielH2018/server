@@ -37,7 +37,7 @@ can join its own soak rule to the same workload-service recording rules.
 
 **Exit criterion.** All four hold:
 
-1. `CHECKS` in `ansible/roles/k8s/monitor-bridge/files/check_table.py` has no `k8s_workloads`
+1. `CHECKS` in `k8s/roles/monitor-bridge/files/check_table.py` has no `k8s_workloads`
    row. The `workload_log_errors` row that replaces it calls only
    `checks/logs.py:with_log_errors`.
    `probe.py metric 'monitor_status{monitor_name="k3s Workload Health"}'` returns nothing, and
@@ -60,7 +60,7 @@ can join its own soak rule to the same workload-service recording rules.
   `kuma_id="monitor-bridge-k8s-workloads"`, `display="k3s Workload Health"` and
   `gate="prometheus"`. It is not `critical`, so Kuma pages Discord only.
 - **The Kubernetes arms**, from
-  `ansible/roles/k8s/monitor-bridge/files/checks/cluster.py:check_k8s_workloads` and its
+  `k8s/roles/monitor-bridge/files/checks/cluster.py:check_k8s_workloads` and its
   helpers:
     - Unavailable replicas: `kube_deployment_status_replicas_unavailable > 0`, held by
       `K8S_WORKLOADS_CONSECUTIVE` (3).
@@ -124,14 +124,14 @@ can join its own soak rule to the same workload-service recording rules.
   `checks/cluster_zero.py` (72 lines). No other check imports either. Four test files total
   586 lines: `test_check_k8s_workload_gates.py`, `test_check_k8s_workload_replicas.py`,
   `test_check_k8s_rollout_stall.py` and `test_check_k8s_zero_available.py`, under
-  `ansible/roles/k8s/monitor-bridge/tests/`. `verdicts/cluster.py:ksm_resource_label` has no
+  `k8s/roles/monitor-bridge/tests/`. `verdicts/cluster.py:ksm_resource_label` has no
   production caller outside `check_k8s_workloads`.
 - **Other tests read the family.**
-    - `ansible/tests/services/test_dri_resource_name_agrees.py` reads the
+    - `tests/services/test_dri_resource_name_agrees.py` reads the
       `K8S_EXTENDED_RESOURCES` default out of `bridge/config.py` by regex.
     - `test_config_reads_the_rendered_env.py:test_no_rendered_key_carries_a_second_default_in_python`
       names `("config.py", "K8S_EXTENDED_RESOURCES", True)` as a member it must find.
-    - `ansible/tests/services/test_kuma_push_resend_beats.py:test_no_push_monitor_can_resend_faster_than_four_hours`
+    - `tests/services/test_kuma_push_resend_beats.py:test_no_push_monitor_can_resend_faster_than_four_hours`
       names `k3s Workload Health` as a member it must find.
     - `test_check_host.py:test_crash_loop_arm_gates_on_a_recent_restart_not_just_the_hour_window`
       calls `check_k8s_workloads`, and
@@ -139,20 +139,20 @@ can join its own soak rule to the same workload-service recording rules.
       pins the 30m floor.
     - `test_check_longhorn.py` tests `ksm_resource_label` and `extended_resource_verdict`, and
       `test_check_loki.py` tests `with_log_errors`.
-- **kube-state-metrics** (`ansible/roles/k8s/observability/templates/kube-state-metrics.yaml.j2`)
+- **kube-state-metrics** (`k8s/roles/observability/templates/kube-state-metrics.yaml.j2`)
   runs with `--resources=pods,deployments,statefulsets,daemonsets,nodes` and
   `--metric-labels-allowlist=pods=[app],deployments=[app]`. The comment above its ClusterRole
   keeps the grants and the flag in step. Prometheus scrapes it every 1m.
 - **The deploy tag reaches the object, not the pod.** `scripts/renderer/template_filters/role_label.py`
   stamps `homelab/role: <service>` on `metadata.labels` of every document an armed role
   renders. It never touches a pod template, so pods carry no tag. `_UNARMED_ROLES` in
-  `ansible/tests/deploy/test_manifests_prune.py` names the two roles that skip it, `authelia`
+  `tests/deploy/test_manifests_prune.py` names the two roles that skip it, `authelia`
   and `nut`.
 - **Live label census** (read-only `kubectl get deploy,ds -A`, 2026-10-11): 71 Deployments, 11
   DaemonSets and no StatefulSets. 13 Deployments and 4 DaemonSets carry no `homelab/role`:
     - In `homelab`: `authelia`, `authelia-redis`, `nut` and `pihole-2`, all with no labels at
       all. `pihole-2` is pihole's deferred file (`manifests_deferred_files` in
-      `ansible/roles/k8s/pihole/tasks/main.yml`).
+      `k8s/roles/pihole/tasks/main.yml`).
     - In `kube-system`, `longhorn-system` and `metallb-system`: the k3s, Longhorn and MetalLB
       add-ons, including the `longhorn-manager`, `longhorn-csi-plugin`, engine-image and
       `speaker` DaemonSets. The `dri-device-plugin` DaemonSet in `kube-system` carries its
@@ -164,20 +164,20 @@ can join its own soak rule to the same workload-service recording rules.
     - The add-on namespaces add Job-owned pods (Longhorn's backup Jobs and k3s's
       `helm-install-gateway-api`) and two `InstanceManager`-owned Longhorn pods.
     - Every `homelab` Job and CronJob runs with `restartPolicy: Never` (read-only
-      `kubectl get cronjobs,jobs -n homelab`). No file under `ansible/roles` sets
+      `kubectl get cronjobs,jobs -n homelab`). No file under `k8s/roles` sets
       `restartPolicy: OnFailure`.
     - `max by (namespace) (max_over_time(kube_pod_container_status_restarts_total[7d]) * on(namespace, pod) group_left() max by (namespace, pod) (kube_pod_owner{owner_kind=~"Job|"}))`
       returned 0 for `homelab`, `kube-system` and `longhorn-system`.
 - **The Kuma tile is live.** `probe.py metric 'monitor_status{monitor_name="k3s Workload
   Health"}'` returns one series (`monitor_type="push"`). A bridge tile's deadline is
   `uptime_kuma_k8s_bridge_push_interval`, 1200s, in the uptime-kuma role defaults. The comment
-  above the bridge loop in `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`
+  above the bridge loop in `k8s/roles/uptime-kuma/templates/static-monitors.yaml.j2`
   says a row's `kuma_id` is the AutoKuma id. A row that keeps its `kuma_id` therefore keeps its
   monitor and its history. The bridge reads each row's token from `KUMA_PUSH_<NAME>`
   (`bridge/types.py:push_env`), which the env-secret derives from the row name.
 - **Deploy order.** `ansible/deploy.yml` deploys the k8s play in the order
   `scripts/renderer/template_filters/toposort.py:toposort_containers` gives, which is stable on
-  `containers_list` order. In `ansible/inventory/host_vars/daniel-box.yml`, `observability`
+  `containers_list` order. In `inventory/host_vars/daniel-box.yml`, `observability`
   comes before `uptime-kuma`, which comes before `monitor-bridge`.
   `scripts/deploy_tools/land_lib/deploy.py:deploy_by_host` runs one `deploy.sh` per host with
   every tag, and `scripts/deploy_tools/land_lib/options.py` gives `land.sh` a `--tags` option
@@ -186,7 +186,7 @@ can join its own soak rule to the same workload-service recording rules.
 - **What restarts Prometheus.** The `kube-state-metrics` scrape job sits inside the
   `observability_prometheus_config` block of `prometheus.yaml.j2`, which the Prometheus
   Deployment hashes into `checksum/config`, so any edit there rolls the `Recreate` Prometheus.
-  `ansible/roles/k8s/observability/defaults/main.yml:observability_stabilise_workloads` gives
+  `k8s/roles/observability/defaults/main.yml:observability_stabilise_workloads` gives
   `prometheus` and `grafana` `restart_on: [secret]`, and M1 adds `alertmanager`. The role's
   `CLAUDE.md` says `manifests_secret_render` is one register over all of the role's Secrets.
   M1's PR 5 narrows that restart to the Secret files each workload reads
@@ -200,7 +200,7 @@ can join its own soak rule to the same workload-service recording rules.
   lasts lead + `weekly_reboot_shutdown_delay_minutes` (5) +
   `uptime_kuma_k8s_maintenance_recovery_allowance_minutes` (40) = 50 minutes. Kuma applies it
   to every monitor, the k8s workloads tile included.
-  `ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py` holds the derivation.
+  `k8s/roles/uptime-kuma/tests/test_maintenance_window.py` holds the derivation.
 
 ## Design
 
@@ -282,7 +282,7 @@ all in `homelab`. The narrowing loses no crash-loop coverage today:
 - Over 7 days, every Job-owned and ownerless pod in every namespace held a restart count of 0.
 
 Two things hold the narrowing in place. First, a pytest renders every `templates/*.j2` of every
-k8s role through `ansible/tests/_k8s_render.py:rendered_docs`, which globs the `*-job.yaml`
+k8s role through `tests/_k8s_render.py:rendered_docs`, which globs the `*-job.yaml`
 templates too. It asserts that every rendered Job and CronJob sets `restartPolicy: Never`, and
 it names `pi-peer-backup` as a member it must find. Second, the crash-loop alert falls back to
 `service="unmapped"` for a pod outside the mapping, as described under *The rules*, so a
@@ -292,7 +292,7 @@ No StatefulSet exists (`count(kube_statefulset_labels)` returns nothing). A Stat
 in the domain but has no step, so it lands in `unmapped`. The first StatefulSet therefore
 pages `WorkloadServiceUnmapped` until the mapping gains that hop.
 
-The override table is a literal (M1 convention 1). A pytest in `ansible/tests/k8s/` derives the
+The override table is a literal (M1 convention 1). A pytest in `tests/k8s/` derives the
 set from the rendered manifests. It renders every k8s role and applies the labelling rule the
 manifests role applies: armed roles' non-deferred files get the label. It asserts that the table
 maps exactly the remaining Deployments and DaemonSets to their own role. It names `authelia` and
@@ -449,13 +449,13 @@ templates read the new names in the same commit, because a role's defaults are i
 another role. The `discord`, `email` and catch-all routes gain
 `mute_time_intervals: [weekly-reboot]`. The Watchdog route never does (M1, *The routing tree*).
 
-A test in `ansible/tests/services/` derives the Alertmanager window from the same variables
+A test in `tests/services/` derives the Alertmanager window from the same variables
 `test_maintenance_window.py` reads. It asserts that the two windows are equal while Kuma lives,
 and that moving the reboot moves the window.
 
 That test proves the interval, not that this family's alerts reach it. A routing pytest in the
 same directory proves the second part. It renders the observability role's Alertmanager Secret
-through `ansible/tests/_k8s_render.py:render_role_template` and walks the routing tree of
+through `tests/_k8s_render.py:render_role_template` and walks the routing tree of
 `alertmanager.yml` the way Alertmanager does: children in order, stopping at the first match
 unless `continue: true`. It walks two label sets that stand for this family once PR 4b drops
 `shadow`:
@@ -497,7 +497,7 @@ mutes this family today.
 ### The tree this adds and removes
 
 ```diff
- ansible/roles/k8s/observability/
+ k8s/roles/observability/
 +  files/rules/workload-service.yaml
 +  files/rules/k8s-workloads.yaml
 +  tests/rules/workload-service.test.yaml
@@ -508,7 +508,7 @@ mutes this family today.
 ~  templates/prometheus.yaml.j2               kube_replicaset_* drop, and the job comment
 ~  templates/alertmanager-secret.yaml.j2      time_intervals, mute_time_intervals
 ~  templates/telemetry-health.sh.j2           its comment names the rules
- ansible/roles/k8s/monitor-bridge/files/
+ k8s/roles/monitor-bridge/files/
 -  checks/cluster_rollout.py
 -  checks/cluster_zero.py
 ~  checks/cluster.py                          check_k8s_workloads removed
@@ -517,7 +517,7 @@ mutes this family today.
                                               ksm_resource_label removed
 ~  check_table.py                             k8s_workloads replaced by workload_log_errors
 ~  bridge/config_cluster.py, bridge/config.py the K8S_* fields removed
- ansible/roles/k8s/monitor-bridge/
+ k8s/roles/monitor-bridge/
 ~  templates/env-secret.yaml.j2               the K8S_* keys removed; LOG_ERROR_* stay
 ~  defaults/main.yml                          monitor_bridge_modules loses two paths
 -  tests/test_check_k8s_workload_gates.py
@@ -536,7 +536,7 @@ mutes this family today.
 - kube-state-metrics: allowlist, `replicasets`, ClusterRole and the relabel drop. Add
   `("kube-state-metrics", "kube_replicaset_created")` to `MUST_DROP` and
   `("kube-state-metrics", "kube_replicaset_owner", ...)` to `MUST_KEEP` in
-  `ansible/tests/services/test_metric_drop_regexes.py`.
+  `tests/services/test_metric_drop_regexes.py`.
 - Rewrite the comment above the `kube-state-metrics` job so that it names no reader PR 4a
   removes: rule groups evaluate every minute, monitor-bridge every 300s, and nothing reads
   these families at sub-minute resolution. The edit lands here because the drop already rolls
@@ -578,19 +578,19 @@ mutes this family today.
     - An unlabelled Deployment outside the table fires `WorkloadServiceUnmapped`.
     - A mapping rule that yields nothing leaves `K8sDeploymentReplicasUnavailable` firing with
       `service="unmapped"`, and fires `WorkloadServiceUnmapped` through its second clause.
-- Add the rule-literal pytest in `ansible/tests/services/`, described under *Tests and docs*.
+- Add the rule-literal pytest in `tests/services/`, described under *Tests and docs*.
   Extend `test_dri_resource_name_agrees.py` to read the rule's `devic_es_dri` and compare it
   with the plugin's advertised name, sanitised.
 - Add pint offline, its Renovate manager and its `--prove-red` fixture. Add
   `scripts/validate/pint/` to the `validate-alert-rules` hook's `files` regex, so a PR that
   edits only a pint config still runs the hook. Add `live.hcl`, and record in the PR its two
   red runs and its clean run, as *Verification* describes.
-- Rewrite the comment in `ansible/roles/k8s/tdarr/defaults/main.yml` so that it holds on both
+- Rewrite the comment in `k8s/roles/tdarr/defaults/main.yml` so that it holds on both
   sides of the cutover. It names the cluster's extended-resource check and the test that holds
   the strings together, instead of counting monitor-bridge's `K8S_EXTENDED_RESOURCES` default
   among "Four independent strings".
 - This PR leaves alone the comment in
-  `ansible/roles/k8s/crowdsec/templates/crowdsec-appsec-verify.sh.j2`, although it names
+  `k8s/roles/crowdsec/templates/crowdsec-appsec-verify.sh.j2`, although it names
   `k3s Workload Health`. A `crowdsec` deploy runs the ban gate in the role's
   `tasks/verify.yml`, since deleted (#7371), despite its `tags: [never, b1-gate]`. The
   comment above that file's resume probe says why: `deploy.yml` and `tasks/k8s_batch.yml`
@@ -668,7 +668,7 @@ one-commit rule, and the bound is stated under PR 4a.
   10). The PR quotes A7's entry in M6 when it merges. If M6's text no longer carries A7, the
   gate is open again and this PR waits.
 - Delete everything the tree above marks removed, including `ksm_resource_label` and
-  `monitor_bridge_modules`' two paths. `ansible/tests/services/test_monitor_bridge_modules.py`
+  `monitor_bridge_modules`' two paths. `tests/services/test_monitor_bridge_modules.py`
   fails if a path is left behind.
 - Move two pieces of reasoning into `k8s-workloads.yaml` as `#` comments, so they outlive the
   bridge code:
@@ -707,7 +707,7 @@ one-commit rule, and the bound is stated under PR 4a.
   the label.
 - Rewrite the comment in `hosts/components/claude-code/templates/telemetry-health.sh.j2`,
   a host script, so that it names the `k8s-workloads` rules.
-- Rewrite `ansible/roles/k8s/valheim/CLAUDE.md` so that pod death surfaces through
+- Rewrite `k8s/roles/valheim/CLAUDE.md` so that pod death surfaces through
   `K8sDeploymentZeroAvailable` and `K8sContainerCrashLooping`.
 - Gates: PR 4a's verification is recorded, PR 3's reload check and routing pytest have
   passed, and C7's amendments for Open questions 3 and 5 have landed in contracts.md, because
@@ -798,7 +798,7 @@ uv run python scripts/diagnostics/probe.py health monitor-bridge
 
 The live pint pass runs on daniel-box:
 `scripts/validate/alert_tools.sh pint --config scripts/validate/pint/live.hcl lint
-ansible/roles/k8s/observability/files/rules/`. `live.hcl` reaches Prometheus at its pinned
+k8s/roles/observability/files/rules/`. `live.hcl` reaches Prometheus at its pinned
 ClusterIP, because the loopback hostPort answers only on the node the pod runs on. A
 `promql/series` finding fails it, and it is
 clean before PR 2 merges. PR 2 records two red runs before the clean one, so a clean result
@@ -942,15 +942,15 @@ is shown to come from a Prometheus that answered:
     - `workload-service.test.yaml`, and `PrometheusRuleEvaluationFailures`' case in
       `alerting-meta.test.yaml`.
     - The `MUST_DROP` and `MUST_KEEP` entries in `test_metric_drop_regexes.py`.
-    - The override derivation pytest in `ansible/tests/k8s/`.
-    - The Job restart-policy pytest in `ansible/tests/k8s/`.
+    - The override derivation pytest in `tests/k8s/`.
+    - The Job restart-policy pytest in `tests/k8s/`.
     - The observability role's `CLAUDE.md` gains a paragraph on the mapping, the allowlist and
       the pod domain.
 - **PR 2.**
     - `k8s-workloads.test.yaml`, `scripts/validate/pint/offline.hcl`,
       `scripts/validate/pint/live.hcl`, the pint `--prove-red` fixture, and the Renovate
       manager in `renovate.json`.
-    - The rule-literal pytest in `ansible/tests/services/`. Until PR 4a it asserts that each
+    - The rule-literal pytest in `tests/services/`. Until PR 4a it asserts that each
       rule literal equals its bridge source: the floors equal `K8S_MIN_WORKLOADS` and
       `K8S_MIN_DAEMONSETS`, each `for:` equals its `K8S_*_CONSECUTIVE` times `INTERVAL`, and the
       crash-loop `1h`, `3` and `30m` equal the three `K8S_RESTART_*` values. Two assertions
@@ -968,7 +968,7 @@ is shown to come from a Prometheus that answered:
 - **PR 3.**
     - The mute derivation test, plus the renamed-variable edits in
       `test_maintenance_window.py` if it reads the old names.
-    - The routing pytest in `ansible/tests/services/`, with its `Watchdog` red half.
+    - The routing pytest in `tests/services/`, with its `Watchdog` red half.
     - The uptime-kuma role's `CLAUDE.md` maintenance-window section names the new `group_vars`
       keys.
 - **PR 4a.**
@@ -994,14 +994,14 @@ is shown to come from a Prometheus that answered:
       `docs/assets/generated/fragments/bridge-thresholds.md`, `bridge-checks.md` and
       `bridge-gate-sets.md`, and all three are committed with the PR. The gate-sets fragment
       moves because the row leaves the `prometheus` set and joins `startup_grace`.
-    - `ansible/roles/k8s/monitor-bridge/CLAUDE.md` loses the *Traps* item on sanitised
+    - `k8s/roles/monitor-bridge/CLAUDE.md` loses the *Traps* item on sanitised
       resource names, which moves to the rule. The monitor-bridge glance block regenerates.
-    - The `ansible/roles/k8s/home-assistant/templates/deployment.yaml.j2` comment stays,
+    - The `k8s/roles/home-assistant/templates/deployment.yaml.j2` comment stays,
       because it records a dated incident ("2026-08-23: 3 restarts, paging k3s Workload
       Health") that remains true.
 - **PR 4b.**
     - `k8s-workloads.test.yaml` drops `shadow` from each expected label set.
-    - `ansible/roles/k8s/valheim/CLAUDE.md` and the `telemetry-health.sh.j2` comment change as
+    - `k8s/roles/valheim/CLAUDE.md` and the `telemetry-health.sh.j2` comment change as
       PR 4b lists.
 - **PR 5.** None.
 
@@ -1022,8 +1022,8 @@ is shown to come from a Prometheus that answered:
 
 1. **Contract gap, C1 and C3.** No contract pins the label that names an object's deploy tag.
    The workload-service mapping reads `homelab/role`, and `kustomize.toolkit.fluxcd.io/name`
-   with `-deferred` stripped under Flux. `ansible/templates/role-labelled.yaml.j2` stamps
-   `homelab/role`, and `ansible/roles/k8s/manifests/tasks/main.yml` applies that wrapper to
+   with `-deferred` stripped under Flux. `k8s/templates/role-labelled.yaml.j2` stamps
+   `homelab/role`, and `k8s/roles/manifests/tasks/main.yml` applies that wrapper to
    the roles that arm `manifests_prune`. R4, which follows D6, deletes that role. Resolution: C1
    requires the renderer to keep stamping `homelab/role`, or C7 adopts the Flux label. Either
    way, both stay in the allowlist until D6. Gate: before D6 merges. Requested as a row of

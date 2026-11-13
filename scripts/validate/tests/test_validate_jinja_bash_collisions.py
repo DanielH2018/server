@@ -11,8 +11,8 @@ from validate import jinja_bash_collisions as v
 # paired with names whose absence the failure can print.
 CENSUS_MEMBERS = frozenset(
     {
-        "ansible/roles/k8s/pihole/templates/configmap.yaml.j2",
-        "ansible/templates/ingressroute.yml.j2",
+        "k8s/roles/pihole/templates/configmap.yaml.j2",
+        "k8s/templates/ingressroute.yml.j2",
     }
 )
 
@@ -49,17 +49,6 @@ def test_blanking_a_raw_block_preserves_line_numbers():
     blanked = v.blank_raw_blocks("a\n{% raw %}\n${#x}\n{% endraw %}\nb\n")
     assert blanked.count("\n") == 5
     assert blanked.splitlines()[4] == "b"
-
-
-def test_the_vendored_collections_are_not_scanned(tmp_path):
-    # Present only when ansible-galaxy has run, uneditable, and full of upstream fixtures —
-    # scanning them would make the verdict depend on whether they happen to be installed.
-    (tmp_path / "roles").mkdir()
-    (tmp_path / "roles" / "ours.j2").write_text("echo hi\n")
-    vendored = tmp_path / "collections" / "community" / "general" / "templates"
-    vendored.mkdir(parents=True)
-    (vendored / "theirs.j2").write_text("echo ${#x}\n")
-    assert [p.name for p in v.templates(tmp_path)] == ["ours.j2"]
 
 
 def test_the_scan_finds_the_templates():

@@ -152,7 +152,7 @@ def parse_verify_by(body: str) -> str | None:
 # A repo-relative FILE path as an issue body cites one: two or more `/`-joined segments ending
 # in a file extension, the first segment a bare directory name (`scripts`, `.claude`) so a
 # hostname (`docs.local.example.com/...`) never matches. An optional `:<line>` is dropped.
-# Files only — a directory citation (`ansible/roles/k8s/monitor-bridge/`) is the role-level
+# Files only — a directory citation (`k8s/roles/monitor-bridge/`) is the role-level
 # grouping the fan-out already does, and the shared-code hazard is one FILE.
 _CITED_PATH_RE = re.compile(
     r"(?<![\w/.:-])(\.?[A-Za-z0-9_-]+(?:/[A-Za-z0-9_.-]+)+\.[A-Za-z0-9]+)(?::\d+)?(?![\w/])"

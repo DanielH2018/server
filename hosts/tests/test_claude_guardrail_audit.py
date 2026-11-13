@@ -11,7 +11,7 @@ import os
 import re
 import subprocess
 
-from _helpers import ANSIBLE, load_defaults
+from _helpers import load_defaults
 from _ruleset_drift import textfile_series
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, path_with, write_exec
@@ -20,10 +20,8 @@ from lib.repo_paths import REPO
 TEMPLATE = ("components", "claude-code", "claude-guardrail-audit.sh.j2")
 CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 REAL_CHECK_LIB = REPO / "hosts/components/check-lib/files/homelab-check-lib.sh"
-DEFAULTS = load_defaults(ANSIBLE.parent / "hosts" / "components" / "claude-code")
-RENOVATE_DEFAULTS = load_defaults(
-    ANSIBLE.parent / "hosts" / "components" / "renovate-agent"
-)
+DEFAULTS = load_defaults(REPO / "hosts" / "components" / "claude-code")
+RENOVATE_DEFAULTS = load_defaults(REPO / "hosts" / "components" / "renovate-agent")
 HARDENING_WATCH = "-w /etc/passwd -p wa -k identity"
 
 AUDITCTL = r"""#!/usr/bin/env bash

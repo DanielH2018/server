@@ -23,7 +23,10 @@ import re
 
 import pytest
 from lib import yaml_fast
-from _helpers import ANSIBLE
+from _helpers import (
+    REPO,
+    K8S_ROLES,
+)
 from _setup_render import COMPONENTS, render_component_text
 
 NAME = "renovate-agent"
@@ -138,7 +141,7 @@ def test_the_disarmed_marker_follows_the_arm_flag_both_ways() -> None:
 
     Disarming ships the series the rule's `unless` reads; arming drops the file from the package.
     """
-    rules = ANSIBLE / "roles/k8s/observability/files/rules/other-setup-checks.yaml"
+    rules = K8S_ROLES / "observability/files/rules/other-setup-checks.yaml"
     [group] = yaml_fast.safe_load(rules.read_text())["groups"]
     [rule] = [r for r in group["rules"] if r["alert"] == "RenovateAgentNotReporting"]
     [(metric, check)] = re.findall(
@@ -245,7 +248,7 @@ def test_the_deadline_straddles_the_daily_period(unit: str) -> None:
 
 # ── the denylist exclusion: the prompt must leave a `k8s_autodeploy: false` PR to a person ──
 
-RENOVATE = ANSIBLE.parent / "renovate.json"
+RENOVATE = REPO / "renovate.json"
 
 # The tell is read out of renovate.json, not typed here: the manual rule's groupName is what
 # Renovate puts in the PR title, and a rename there that the prompt did not follow is exactly

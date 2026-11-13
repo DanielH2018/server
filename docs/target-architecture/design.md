@@ -66,7 +66,7 @@ its risks against [the recurring failure classes](../failure-classes.md). The su
 ### Cluster deploy plane: Flux, a CI-rendered OCI artifact and homelab-render
 
 **Decision.** CI renders every manifest with `homelab-render` (C1), a Python + Jinja2 renderer
-that keeps the 273 templates and reuses `scripts/lib/ansible_jinja_env.py`,
+that keeps the 273 templates and reuses `scripts/lib/guard_jinja_env.py`,
 `scripts/deploy_tools/render_targets.py` and `scripts/renderer/template_filters/`. CI pushes the output
 as an OCI artifact, a `promote` workflow moves the tag Flux follows (C2), and
 kustomize-controller applies it server-side with prune and wait (C3, C4).
@@ -79,7 +79,7 @@ plugin puts the age key in repo-server), Kluctl in-cluster (CI no longer sees th
 bytes), and Kustomize, Helm or CUE as renderers (a rewrite of 21.6k template lines).
 
 **Removes by construction** classes A to E. With them go the orphan-GC cron,
-`ansible/roles/k8s/manifests/tasks/verify_secret_keys.yml`, positional ordering, the
+`k8s/roles/manifests/tasks/verify_secret_keys.yml`, positional ordering, the
 `k8s_autodeploy` denylist (replaced by `suspend`), the CI poll, the five narrowings, range
 parking, the owed ledgers and cross-role reach. `land.py` and `land_lib` lose their k8s arms
 in D6 and their host-plane arms in H7. D6 bounds them at 8,800 lines, against 6,258 at the
@@ -123,11 +123,11 @@ billed listing during a B2 cap breach (M6). Rejected: Gatus, which removes D1 bu
 and D3, and hardening Kuma, which only guards D1.
 
 **Removes by construction** D1 to D3. Deleted: the uptime-kuma role (4 images, 2 PVCs, the
-540-line `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`, 2 sync CronJobs);
-`ansible/roles/k8s/monitor-bridge/files/gates.py`, `apply_startup_grace` in
+540-line `k8s/roles/uptime-kuma/templates/static-monitors.yaml.j2`, 2 sync CronJobs);
+`k8s/roles/monitor-bridge/files/gates.py`, `apply_startup_grace` in
 `files/bridge/streaks.py`, the push path
 and the check bodies that read Prometheus and Loki; 82 of the 83 push-token secrets in
-`ansible/secret_rotation.yml`, with their rotation entries;
+`secrets/secret_rotation.yml`, with their rotation entries;
 `ansible/roles/setup/common/tasks/check_timer.yml`; and `probe.py kuma-drift`. Of the 83,
 52 carry the `monitor_bridge_` prefix and 44 belong to the bridge's own check rows. M3 retires
 1, M5 retires 3 and M6 retires 79, `registry_gc_push_token` among them (M6 batch B6c).
@@ -205,7 +205,7 @@ size ratchet whose count a session raised instead of trimming
 ([#2982](https://github.com/DanielH2018/server/issues/2982)); and G4, generated output in the
 deploying checkout, which goes with the cluster deploy plane. Deleted: 4,077 lines of lock
 machinery and the `OVER_CEILING` exemptions that
-`ansible/tests/_doc_size.py:recorded_count_problems` checks. Added: a diff-to-sections step of
+`tests/_doc_size.py:recorded_count_problems` checks. Added: a diff-to-sections step of
 about 100 lines, and a one-time rewrite of the 87 `CLAUDE.md` files.
 
 **Remains:** restated or uncited prose that the lock never saw. The most-read sections cite
@@ -310,7 +310,7 @@ did for ADR-0011. The owning slice takes the next free number. Approving any ADR
   extends it (D3 Open question 1). Its decision decrypts at deploy time through
   `community.sops.sops_decrypt`. Afterwards the cluster's own age key and each host's own age
   key decrypt. The Pi becomes a recipient of its own host file only, and stays off
-  `secrets.yml`'s list (H4). Adding a recipient to `ansible/.sops.yaml` is
+  `secrets.yml`'s list (H4). Adding a recipient to `secrets/.sops.yaml` is
   **operator-only**.
 - **Amend [ADR-0019](../adr/0019-fact-support-stops-at-the-repo-store.md)** in G2
   (**operator-only**). ADR-0019 retires the lock only when `fact_status.py report --days 60`
@@ -416,7 +416,7 @@ a tag that is not flux-owned (M6 Open question 4), so that flip waits on the dri
 1. **Resolved: where `domain` comes from.** The operator ruled on 2026-10-14 that `domain` is
    published: "domain is not secret, it's a var for flexibility just in case of future
    changes." The renderer writes `domain` as a literal, and it stays an Ansible variable in
-   `ansible/inventory/group_vars/all.yml`. D2.7, the leaf's flip, waits on PR 2b of R2's
+   `inventory/group_vars/all.yml`. D2.7, the leaf's flip, waits on PR 2b of R2's
    *Publish `domain`* item and on no PR of D3 (C3).
 1. **Three smaller design points.** Whether hashing SOPS ciphertext for restart checksums
    over-triggers when sops re-encrypts unchanged values (D3). How the Longhorn pre-apply
@@ -514,7 +514,7 @@ contracts.md, and this page follows them.
   reads 82 of the 83 push tokens: 1 for M3, 3 for M5 and 78 for M6, with the 83rd going in
   D5's wave D. The host-plane paragraph says what happens to the tile if M6 deletes Kuma
   first. The net-complexity line keeps 83, because it counts the whole migration. Measured
-  at `70591c307`: `grep -cE '^ *[a-z0-9_]*push_token:' ansible/secret_rotation.yml` prints
+  at `70591c307`: `grep -cE '^ *[a-z0-9_]*push_token:' secrets/secret_rotation.yml` prints
   83, the same count with the `monitor_bridge_` prefix prints 52, and
   `registry_gc_push_token` is one of the other 31. M6's own counts change in M6.
 

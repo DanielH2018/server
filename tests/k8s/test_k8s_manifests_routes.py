@@ -1,0 +1,468 @@
+"""The edge: Authelia's session config, and what every IngressRoute must carry.
+
+An authed route without the forward-auth and rate-limit middlewares is an open service; an
+`https` route without `tls:` never matches at all; the CrowdSec LAPI route must never gain a
+public host rule; a public host rule must be reachable only from the Docker edge; and every
+route's TLSOption must exist and not be the one named `default`. None of these fails a render.
+
+Each route renders with its own role's defaults, not group_vars alone: a role may gate its
+route on one of them (navidrome renders no route while `navidrome_k8s_replicas` is 0),
+and rendering without them raises `UndefinedError` rather than reproducing what deploys.
+"""
+
+import re
+
+from lib import yaml_fast
+from lib.render_guard import k8s_services
+from _manifest_guards import (
+    ALL_VARS_VALUES,
+    K8S,
+    _k8s_entries,
+    _render,
+    _role_context,
+    _route_template,
+    _route_templates,
+)
+
+
+def _k8s_authelia_config() -> dict:
+    entry = next(c for c in _k8s_entries() if c["name"] == "authelia")
+    defaults = yaml_fast.safe_load(
+        (K8S / "authelia" / "defaults" / "main.yml").read_text()
+    )
+    rendered = _render(
+        K8S / "authelia" / "templates" / "config-secret.yaml.j2",
+        container_item=entry,
+        services=k8s_services(),
+        email="stub@example.com",
+        authelia_jwt="stub",
+        authelia_secret="stub",
+        authelia_storage="stub",
+        authelia_user="stub",
+        authelia_password_argon2="stub",
+        authelia_oidc_hmac_secret="stub",
+        authelia_oidc_rsa_key_content="STUBKEY",
+        authelia_client_password_hash="stub",
+        **ALL_VARS_VALUES,
+        **defaults,
+    )
+    doc = yaml_fast.safe_load(rendered)
+    return yaml_fast.safe_load(doc["stringData"]["configuration.yml"])
+
+
+def test_k8s_session_cookie_name_is_set():
+    """The session cookie name actually comes from the intended var, and every cookie variant
+    (the `.local.` LAN one and the public one) is named off it."""
+    k8s_name = yaml_fast.safe_load(
+        (K8S / "authelia" / "defaults" / "main.yml").read_text()
+    )["authelia_k8s_cookie_name"]
+
+    session = _k8s_authelia_config()["session"]
+    assert session["name"] == k8s_name
+    assert all(c["name"].startswith(k8s_name) for c in session["cookies"])
+
+
+def test_k8s_authelia_database_is_on_its_own_volume():
+    """Two Authelias writing one SQLite file corrupt it.
+
+    The database must live under the mount backed by the PVC.
+    """
+    db_path = _k8s_authelia_config()["storage"]["local"]["path"]
+    assert db_path.startswith("/config/")
+
+    deployment = yaml_fast.safe_load(
+        _render(
+            K8S / "authelia" / "templates" / "deployment.yaml.j2",
+            container_item=next(c for c in _k8s_entries() if c["name"] == "authelia"),
+            services=_k8s_entries(),
+            **ALL_VARS_VALUES,
+            **yaml_fast.safe_load(
+                (K8S / "authelia" / "defaults" / "main.yml").read_text()
+            ),
+        )
+    )
+    spec = deployment["spec"]["template"]["spec"]
+    mount = next(
+        m
+        for m in spec["containers"][0]["volumeMounts"]
+        if db_path.startswith(m["mountPath"] + "/")
+    )
+    volume = next(v for v in spec["volumes"] if v["name"] == mount["name"])
+    assert "persistentVolumeClaim" in volume, (
+        f"{db_path} is backed by {volume} — an emptyDir loses every TOTP enrolment on restart"
+    )
+
+
+# IngressRoutes that deliberately skip forward-auth on a service whose `use_authelia` is true.
+# Keyed by the IngressRoute's metadata.name so adding another unauthenticated route to an
+# otherwise-gated service has to be a conscious edit here, with a reason, rather than something
+# that slips in behind a passing test.
+AUTHELIA_BYPASS_ROUTES = {
+    # The three below are the NATIVE public bypasses on the UNSUFFIXED names —
+    # emitted by the ingressroute() macro from each entry's bridge_bypass_prefixes.
+    # Each serves session-less callers that arrive at this edge directly.
+    "n8n-public-webhook": (
+        "External services POST /webhook/ with no session; gating it silently breaks every "
+        "registered webhook while the callers keep reporting success."
+    ),
+    # karakeep's session-less callers are the browser extension and the mobile app, Bearer
+    # API-key clients that cannot pass 2FA. Three prefixes rather than `/api/`: that width
+    # also reaches next-auth's /api/auth/* and the cookie-authenticated children, where the
+    # app password is the only gate on the internet. Each entry names the gate the
+    # app itself applies to that prefix, which is what makes it safe to leave Authelia off.
+    "karakeep-public-api-v1": (
+        "The REST API; every /api/v1 route sits behind the app's authMiddleware, which 401s "
+        "without a valid Bearer key or session."
+    ),
+    "karakeep-public-api-trpc": (
+        "What the extension and the mobile app actually speak; protected procedures 401 "
+        "without a key. The public procedures are the account flows (apiKeys.exchange — the "
+        "extension's password login — signup, invite, email verify, password reset) and the "
+        "public-list reads; every account flow carries the app's own rate limit (3-10 per "
+        "window, live only with RATE_LIMITING_ENABLED) and signup is closed by "
+        "DISABLE_SIGNUPS. test_karakeep_public_bypass.py requires both."
+    ),
+    "karakeep-public-api-assets": (
+        "Asset upload and download for the mobile app, behind the app's authMiddleware. No "
+        "trailing slash: the upload POSTs to exactly /api/assets, and nothing else under "
+        "/api/ starts with `assets`."
+    ),
+    # navidrome's session-less callers are Subsonic apps, which send credentials on every
+    # request and cannot follow an Authelia redirect.
+    "navidrome-public-rest": (
+        "The Subsonic API; navidrome rejects every /rest/ call without a valid username and "
+        "token or password. Its reverse-proxy auth stays off, so no header can stand in for "
+        "those credentials (test_navidrome_parked_route.py requires it)."
+    ),
+}
+
+
+def test_every_authed_service_carries_forward_auth_and_rate_limit():
+    """The check that has to scale.
+
+    IngressRoutes are hand-authored, and a missing middleware is an ungated service that
+    returns 200 and looks fine.
+
+    Iterates every document, not just the first: a role may ship more than one IngressRoute
+    (healthchecks ships its ping bypass alongside the UI route), and reading only the first would
+    leave the extra ones unchecked — exactly where an ungated route would hide.
+    """
+    for entry in _k8s_entries():
+        route_tpl = _route_template(entry["name"])
+        if route_tpl is None:
+            continue
+        rendered = _render(
+            route_tpl,
+            **_role_context(entry["name"], container_item=entry, domain="example.com"),
+        )
+        for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
+            name = doc["metadata"]["name"]
+            for route in doc["spec"]["routes"]:
+                middlewares = [m["name"] for m in route["middlewares"]]
+                # rate-limit is unconditional — it is the brute-force protection, and the
+                # login portal (use_authelia: false) is the route that needs it most. It
+                # applies to bypass routes too: skipping auth never means skipping this.
+                assert any(m.startswith("rate-limit") for m in middlewares), name
+                # A strangler-bridge route carries no forward-auth on purpose — the Docker
+                # edge it is reachable from has already applied Authelia. Exempting it by
+                # metadata.name would exempt the service's normal route too, since both live
+                # in one document, so the exemption is the ClientIP clause itself. That makes
+                # the two conditions inseparable: drop the guard and this test starts
+                # demanding the auth back.
+                if "ClientIP(" in route["match"]:
+                    continue
+                if entry.get("use_authelia") and name not in AUTHELIA_BYPASS_ROUTES:
+                    assert "authelia" in middlewares, name
+
+
+def test_every_https_route_carries_tls():
+    """An IngressRoute on the `https` entrypoint with no `spec.tls` is a NON-TLS router, and
+    the k8s Traefik sets no entrypoint-level TLS — so TLS is decided per router and an HTTPS
+    request is only ever matched against TLS routers.
+
+    The route still applies cleanly, `kubectl get` still shows it, and Traefik logs nothing.
+    Requests just fall through to whatever other router matches the host. Reads every route
+    template so a route in a second template is covered too — the monitoring routes live in
+    their own file, and a role's main route can be the shared default under
+    `k8s/templates/`.
+    """
+    for entry in _k8s_entries():
+        for route_tpl in _route_templates(entry["name"]):
+            rendered = _render(
+                route_tpl,
+                **_role_context(
+                    entry["name"], container_item=entry, domain="example.com"
+                ),
+            )
+            for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
+                if "https" not in doc["spec"].get("entryPoints", []):
+                    continue
+                assert doc["spec"].get("tls"), (
+                    f"{doc['metadata']['name']} ({route_tpl.parent.parent.name}) serves the "
+                    "https entrypoint without a tls block — it will never match a request"
+                )
+
+
+def test_the_lapi_route_never_gains_a_public_host_rule():
+    """The CrowdSec LAPI is machine-key-gated ban management — k8s_public_route flipping
+    true must not drag it onto the public internet. Its route passes public=false to the
+    ingressroute() macro; this pins the rendered result so a macro refactor can't undo it."""
+    entry = next(c for c in _k8s_entries() if c["name"] == "crowdsec")
+    route_tpl = K8S / "crowdsec" / "templates" / "ingressroute.yaml.j2"
+    rendered = _render(route_tpl, container_item=entry, **ALL_VARS_VALUES)
+    for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
+        if doc["metadata"]["name"] != "crowdsec":
+            continue
+        for route in doc["spec"]["routes"]:
+            hosts = re.findall(r"Host\(`([^`]+)`\)", route["match"])
+            public = [
+                h
+                for h in hosts
+                if not h.endswith(f".local.{ALL_VARS_VALUES['domain']}")
+            ]
+            assert not public, (
+                f"the LAPI IngressRoute matches {public} on the public domain — the "
+                "ban-management API must stay LAN-only whatever k8s_public_route says"
+            )
+        break
+    else:
+        raise AssertionError(
+            "the LAPI IngressRoute (metadata.name crowdsec) not found in the rendered output"
+        )
+
+
+def test_every_public_host_rule_is_reachable_only_from_the_docker_edge():
+    """The companion to the test above, for the hole the strangler bridge opens in it.
+
+    That test guards a variable; this one guards the rendered rules, which is where the
+    exposure actually lives. A bridged route matches the real public hostname while
+    k8s_public_route is still false, so the variable check stays green either way — and a
+    bridged route that lost its ClientIP clause would be an un-Authelia'd service answering
+    the public name to anything on the LAN that can spell `curl --resolve`.
+    """
+    domain = "example.com"
+    for entry in _k8s_entries():
+        route_tpl = _route_template(entry["name"])
+        if route_tpl is None:
+            continue
+        rendered = _render(
+            route_tpl,
+            **_role_context(entry["name"], container_item=entry, domain=domain),
+        )
+        for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
+            for route in doc["spec"]["routes"]:
+                match = route["match"]
+                hosts = re.findall(r"Host\(`([^`]+)`\)", match)
+                public = [h for h in hosts if not h.endswith(f".local.{domain}")]
+                if not public or ALL_VARS_VALUES["k8s_public_route"]:
+                    continue
+                assert "ClientIP(" in match, (
+                    f"{doc['metadata']['name']} matches {public} on the public domain with "
+                    "no ClientIP guard, so it is reachable from the whole LAN without "
+                    "passing the Docker edge's Authelia and CrowdSec"
+                )
+
+
+def _tlsoption_names() -> set:
+    rendered = _render(
+        K8S / "traefik" / "templates" / "dynamic.yaml.j2",
+        **ALL_VARS_VALUES,
+        **yaml_fast.safe_load((K8S / "traefik" / "defaults" / "main.yml").read_text()),
+    )
+    return {
+        d["metadata"]["name"]
+        for d in yaml_fast.safe_load_all(rendered)
+        if d and d.get("kind") == "TLSOption"
+    }
+
+
+def test_routes_reference_a_tlsoption_that_exists_and_is_not_named_default():
+    """`default` is reserved, so an IngressRoute naming it explicitly fails to build.
+
+    Traefik registers a TLSOption of that name as the global default options, never under
+    <namespace>-default@kubernetescrd. The object meanwhile sits there looking perfectly valid:
+
+        error "unknown TLS options: homelab-default@kubernetescrd"
+
+    Every router carrying that reference stops serving. Guard both halves — the name is not the
+    reserved one, and the name the macro asks for is one the traefik role defines.
+    """
+    defined = _tlsoption_names()
+    assert defined, "the traefik role no longer defines any TLSOption"
+    assert "default" not in defined, (
+        "a TLSOption named 'default' is registered as Traefik's global default and cannot be "
+        "referenced by name from an IngressRoute"
+    )
+    for entry in _k8s_entries():
+        tpl = _route_template(entry["name"])
+        if tpl is None:
+            continue
+        rendered = _render(tpl, **_role_context(entry["name"], container_item=entry))
+        # Every document: a role may ship more than one IngressRoute, and a second one naming
+        # a TLSOption that does not exist fails exactly as loudly as the first would.
+        for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
+            named = doc["spec"]["tls"]["options"]["name"]
+            assert named in defined, (
+                f"{doc['metadata']['name']} references TLS options '{named}', which the "
+                f"traefik role does not define (it defines {sorted(defined)})"
+            )
+
+
+# monitoring_route() call sites allowed to serve PathPrefix(`/`). Empty on purpose — see the
+# test below. Adding a name here needs the reason written beside it, the same shape as
+# AUTHELIA_BYPASS_ROUTES above.
+_WIDE_MONITORING_ROUTES: dict[str, str] = {}
+
+
+def test_no_monitoring_route_serves_a_bare_path_prefix():
+    """A `-monitoring` route matching PathPrefix(`/`) exposes the whole backend API.
+
+    The macro says guard 2 is "only the endpoint the check reads" (k8s/templates/
+    ingressroute.yml.j2). A call site that ignores it and also widens the ClientIP to the
+    entire pod CIDR, on an `auth_enabled: false` Loki, gives every pod read of every log line,
+    a push path to forge entries, and the delete handler.
+
+    The ClientIP guard cannot be relied on to compensate. Everything arriving through Traefik
+    carries Traefik's identity, so a NetworkPolicy cannot tell callers apart, and the CIDR is
+    the only discriminator the route has.
+
+    A comment asking the next author to remember is what failed here, so this is a test.
+    """
+    offenders = []
+    for entry in _k8s_entries():
+        for route_tpl in _route_templates(entry["name"]):
+            rendered = _render(
+                route_tpl,
+                **_role_context(
+                    entry["name"], container_item=entry, domain="example.com"
+                ),
+            )
+            for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
+                name = doc["metadata"]["name"]
+                if not name.endswith("-monitoring"):
+                    continue
+                for route in doc["spec"].get("routes", []):
+                    if "PathPrefix(`/`)" not in route.get("match", ""):
+                        continue
+                    if name in _WIDE_MONITORING_ROUTES:
+                        continue
+                    offenders.append(f"{name} ({entry['name']})")
+    assert not offenders, (
+        "monitoring route(s) serving PathPrefix(`/`), which exposes the whole backend API: "
+        f"{sorted(offenders)}. Narrow the prefix to the endpoint the caller actually reads, or "
+        "add the route to _WIDE_MONITORING_ROUTES with the reason."
+    )
+
+
+def _dashboard_route_match() -> str:
+    rendered = _render(
+        K8S / "traefik" / "templates" / "dashboard-ingressroute.yaml.j2",
+        **ALL_VARS_VALUES,
+    )
+    doc = yaml_fast.safe_load(rendered)
+    return doc["spec"]["routes"][0]["match"]
+
+
+def _assert_dashboard_match_does_not_serve_api(match: str) -> None:
+    """`api@internal` answers `/api/http/routers` with every router's `rule` string verbatim
+    — two file-provider routers in livesync-gate-secret.yaml.j2 embed
+    `livesync_sync_token` and the `homelab_mcp_token` bearer in `Header()` matchers, so a
+    match that routes `/api` behind this Authelia session reads both credentials back.
+    """
+    assert "PathPrefix(`/dashboard`)" in match, (
+        f"dashboard route match {match!r} does not scope to /dashboard"
+    )
+    assert "/api" not in match, (
+        f"dashboard route match {match!r} routes /api, which reprints the livesync and "
+        "homelab-mcp credentials embedded in livesync-gate-secret.yaml.j2's Header() rules"
+    )
+
+
+def test_dashboard_route_does_not_serve_api():
+    """The rendered dashboard IngressRoute must pass the guard above."""
+    _assert_dashboard_match_does_not_serve_api(_dashboard_route_match())
+
+
+def test_dashboard_route_guard_rejects_an_api_prefix_fixture():
+    """Red-proof: a rule shaped like a Host-only route (no PathPrefix at all) or
+    the upstream-documented form (`PathPrefix(`/dashboard`) || PathPrefix(`/api`)`) both route
+    `/api` and must fail the guard above, not pass it silently.
+    """
+    for offending_match in [
+        "Host(`traefik.local.example.com`)",
+        "Host(`traefik.local.example.com`) && "
+        "(PathPrefix(`/dashboard`) || PathPrefix(`/api`))",
+    ]:
+        try:
+            _assert_dashboard_match_does_not_serve_api(offending_match)
+        except AssertionError:
+            continue
+        raise AssertionError(
+            f"guard accepted {offending_match!r}, which routes /api and should be rejected"
+        )
+
+
+# Scrutiny's web app has no auth of its own, so its Authelia bypass IS its access control.
+# Below: the paths a route-crossing caller reads, and the paths that must stay unreachable
+# unauthenticated — the second set is scrutiny's own mutating route table (delete a device,
+# forge SMART history, archive a device, rewrite notify settings).
+SCRUTINY_BYPASS_READS = frozenset(
+    {"/api/summary", "/api/health", "/api/device/0x5000c500a1b2c3d4/details"}
+)
+SCRUTINY_MUTATING_PATHS = frozenset(
+    {
+        "/api/device/0x5000c500a1b2c3d4",
+        "/api/device/0x5000c500a1b2c3d4/smart",
+        "/api/device/0x5000c500a1b2c3d4/archive",
+        "/api/settings",
+        "/api/health/notify",
+    }
+)
+
+
+def _bypass_permits_mutation(rule: dict, path: str) -> bool:
+    """Does this bypass rule leave `path` writable without authentication?
+
+    A rule reaches a path when some `resources` pattern matches it AND the rule permits a
+    method past GET/HEAD. An absent or empty `methods` key means every method.
+    """
+    methods = set(rule.get("methods") or [])
+    if methods and methods <= {"GET", "HEAD"}:
+        return False
+    return any(re.search(p, path) for p in rule["resources"])
+
+
+def test_scrutiny_bypass_is_read_only_and_path_scoped():
+    """A bypass granting `^/api/.*$` with no `methods` key hands the LAN
+    and every pod scrutiny's whole mutating route table. Two callers cross this route
+    and both only read: `probe.py scrutiny` (/api/summary) and the blackbox probe of
+    scrutiny (/api/health). Every writer addresses the ClusterIP, so nothing here needs a verb past
+    HEAD."""
+    rules = _k8s_authelia_config()["access_control"]["rules"]
+    scrutiny = [
+        r
+        for r in rules
+        if r.get("policy") == "bypass" and "scrutiny" in str(r.get("domain"))
+    ]
+    assert len(scrutiny) == 1, f"expected one scrutiny bypass rule, got {len(scrutiny)}"
+    rule = scrutiny[0]
+
+    assert set(rule.get("methods") or []) <= {"GET", "HEAD"}, rule.get("methods")
+    for path in sorted(SCRUTINY_BYPASS_READS):
+        assert any(re.search(p, path) for p in rule["resources"]), path
+    # Path scope, asserted independently of the method gate: `_bypass_permits_mutation` short-circuits
+    # to False on any GET/HEAD-only rule, so a re-widening to `^/api/.*$` — unauthenticated
+    # reads of every device and of the notify settings — would satisfy that check vacuously.
+    for path in sorted(SCRUTINY_MUTATING_PATHS):
+        assert not any(re.search(p, path) for p in rule["resources"]), path
+        assert not _bypass_permits_mutation(rule, path), path
+
+
+def test_scrutiny_bypass_guard_rejects_the_old_wildcard():
+    """Red-proof: a rule with every method and `^/api/.*$` must be flagged by the
+    helper above, so a guard that quietly stopped matching fails here rather than passing on
+    an empty set."""
+    old = {"resources": ["^/api/.*$"]}
+    assert SCRUTINY_MUTATING_PATHS
+    for path in sorted(SCRUTINY_MUTATING_PATHS):
+        assert _bypass_permits_mutation(old, path), path

@@ -25,8 +25,8 @@ def role_file_path(role_path: Path, path: str, role: str | None = None) -> Path:
 
 
 def repo_file_path(role_path: Path, path: str) -> Path:
-    """`path` from the repository root, three levels above the plane: `<root>/ansible/roles/<plane>`."""
-    return role_path.parents[3] / path
+    """`path` from the repository root, two levels above the roles directory: `<root>/k8s/roles`."""
+    return role_path.parents[2] / path
 
 
 @pass_context

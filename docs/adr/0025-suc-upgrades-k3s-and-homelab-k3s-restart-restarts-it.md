@@ -65,7 +65,7 @@ window.
     - `system_upgrade_nodes: []` pauses it on every node, through git;
     - masking `homelab-k3s-restart.timer` pauses the restart on one host;
     - masking `homelab-updater.timer` pauses every package change on one host.
-- **Contract.** `ansible/roles/k8s/system-upgrade/CLAUDE.md` carries the *Autonomous-role
+- **Contract.** `k8s/roles/system-upgrade/CLAUDE.md` carries the *Autonomous-role
   contract*: scope, arming, abort valves, required evidence and the next-run review. The
   Plans select no node until a PR widens `system_upgrade_nodes`, one node at a time.
 

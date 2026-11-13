@@ -82,7 +82,7 @@ _INCIDENT_READERS = frozenset(
     {
         "scripts/lib/render_guard.py",
         "scripts/lib/k8s_roles.py",
-        "scripts/lib/ansible_inventory.py",
+        "scripts/lib/inventory_lists.py",
     }
 )
 
@@ -180,7 +180,7 @@ def test_an_armed_landing_from_a_stale_checkout_refuses_before_it_merges(land_ru
 _GIT_REPORTING_A_MASTER_CHANGE = """#!{python}
 import sys
 args = sys.argv[1:]
-changed = "scripts/lib/ansible_inventory.py"
+changed = "scripts/lib/inventory_lists.py"
 if args and args[0] in ("log", "diff"):
     specs = args[args.index("--") + 1:] if "--" in args else []
     def covers(spec):
@@ -195,8 +195,8 @@ import sys
 sys.path[:0] = ["scripts", "scripts/deploy_tools"]
 import land
 from deploy_tools.land_lib import own_checkout
-sys.modules.pop("lib.ansible_inventory", None)
-sys.modules.pop("ansible_inventory", None)
+sys.modules.pop("lib.inventory_lists", None)
+sys.modules.pop("inventory_lists", None)
 print("\\n".join(own_checkout.stale_landing_code("origin/master") or []))
 """
 
@@ -216,7 +216,7 @@ def test_a_module_a_later_phase_imports_lazily_is_compared(tmp_path):
         check=True,
         timeout=120,
     )
-    assert "scripts/lib/ansible_inventory.py" in run.stdout.split()
+    assert "scripts/lib/inventory_lists.py" in run.stdout.split()
 
 
 def test_imported_paths_follows_a_function_level_import_and_skips_the_venv(tmp_path):

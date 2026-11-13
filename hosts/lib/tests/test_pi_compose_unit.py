@@ -114,7 +114,7 @@ def test_a_larger_start_period_lengthens_both_timeouts_and_an_hour_is_refused(tr
 
 # ComposeUpStale's bound, which only the boot run's timeout derives (#6187).
 
-RULES = REPO / "ansible/roles/k8s/observability/files/rules/host-checks.yaml"
+RULES = REPO / "k8s/roles/observability/files/rules/host-checks.yaml"
 # Boot reaching the unit, plus one scrape. The rule's comment carries the measured boot run.
 BOOT_SLACK = 300
 

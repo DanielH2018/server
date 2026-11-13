@@ -1,6 +1,6 @@
 """daniel-pi's Alloy runs through the Pi's Compose project (H5.8).
 
-Three guards moved here with the service from `ansible/tests/services/`
+Three guards moved here with the service from `tests/services/`
 (`test_alloy_pi_config_labels.py`, `test_alloy_pi_http_surface.py` and
 `test_alloy_pi_gomemlimit_headroom.py`). Each reads the rendered package of
 `hosts/daniel-pi/package.yml`, which is what the Pi installs, never a template's source text.

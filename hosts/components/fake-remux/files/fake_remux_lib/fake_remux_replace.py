@@ -13,7 +13,7 @@ gates blast radius: `off` skips entirely, `shadow` previews searches/grabs into 
 zero Sonarr mutations, `live` executes grabs/deletes/imports/blocklists.
 
 Runs via `uv run --no-project --python <pin>` (host_python_version in
-ansible/inventory/group_vars/all.yml). Config comes from /etc/autofix-fake-remux/config.env — the
+inventory/group_vars/all.yml). Config comes from /etc/autofix-fake-remux/config.env — the
 same file the detector reads (0600, SONARR_API_KEY + Discord webhook) — plus a FAKE_REMUX_POLICY JSON the pure core
 reads (release-group allow/deny, size band, attempt caps — see fake_remux_replace_logic.py).
 

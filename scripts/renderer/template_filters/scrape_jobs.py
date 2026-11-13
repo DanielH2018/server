@@ -34,7 +34,7 @@ A job needing auth, relabeling or pod discovery stays hand-written in the templa
 key raises rather than being ignored, so a `basic_auth:` written here fails the render instead of
 rendering a job without it.
 
-`lib.ansible_jinja_env` registers each so a `ValueError` reaches the operator as a `FilterError`
+`lib.guard_jinja_env` registers each so a `ValueError` reaches the operator as a `FilterError`
 prefixed with the filter's name.
 """
 

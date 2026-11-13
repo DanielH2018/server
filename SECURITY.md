@@ -29,7 +29,7 @@ live hosts or their public hostnames; findings must come from reading this repos
 
 ## Secrets
 
-Secrets live SOPS-encrypted in `ansible/vars/secrets.yml`, with the age private keys never leaving
+Secrets live SOPS-encrypted in `secrets/secrets.yml`, with the age private keys never leaving
 the hosts. `.gitattributes` sets `diff=sops`, so `git diff` on that file prints **plaintext** —
 that is a local review hazard, not a defect in the committed blob.
 

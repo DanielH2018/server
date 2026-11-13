@@ -20,7 +20,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from pathlib import Path
 
 from lib import yaml_fast
-from lib.ansible_inventory import K8S_HOST
+from lib.inventory_lists import K8S_HOST
 from lib.estate import REPO_INVENTORY, Inventory
 from lib.render_context import render_context
 from lib.render_guard import StrictChainableUndefined
@@ -53,7 +53,7 @@ def template_context(
     """The context `role_dir`'s templates render with on `host`.
 
     Args:
-        role_dir: The role directory, `ansible/roles/k8s/<tag>`.
+        role_dir: The role directory, `k8s/roles/<tag>`.
         stubs: The stub file's variables, laid over every layer.
         host: The inventory host the role renders for.
         inventory: Where the inventory files live; the repo's own unless a test says not.

@@ -356,7 +356,7 @@ def test_an_empty_tree_is_flagged_with_a_render(tmp_path):
     found = check_tree(
         _tree(tmp_path), replace(EXPECTED, manifests=()), lambda _p: None
     )
-    assert found == ["ansible/vars/cluster-vars.sops.env does not exist"]
+    assert found == ["secrets/cluster-vars.sops.env does not exist"]
 
 
 def test_ciphertext_only_is_clean_on_ciphertext(tmp_path):

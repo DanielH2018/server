@@ -50,9 +50,7 @@ def _reaches_no_render(path: str) -> bool:
     """A document or a test, which no render reads; a `.md` a role ships under `files/` may."""
     if is_test_only_path(path):
         return True
-    return is_doc(path) and not (
-        path.startswith("ansible/roles/") and "/files/" in path
-    )
+    return is_doc(path) and not (path.startswith("k8s/roles/") and "/files/" in path)
 
 
 def moves_the_bundle(paths) -> bool:

@@ -9,7 +9,7 @@ probe path that decrypts again then hits the stub, not the real age key. A main(
 hand-rolled its own monkeypatches instead of going through `_run_main` would let `stale_worktree_lines` run for real too and
 make `gh` calls. None of that is what either test is checking.
 
-Same mechanism as `ansible/tests/_helpers.py`'s `stub_logger_on_path`, which
+Same mechanism as `tests/_helpers.py`'s `stub_logger_on_path`, which
 `scripts/deploy_tools/tests/conftest.py`'s `_no_syslog` calls. Both write their stubs and their
 `PATH` through `lib.proc_testing`; what stays per-suite is WHICH binaries each fences and what
 their bodies record.

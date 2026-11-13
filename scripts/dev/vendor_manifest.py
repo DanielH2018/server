@@ -14,7 +14,7 @@ tree. Its `defaults/main.yml` pins each file in a list whose key ends `vendored_
 `url` renders from the same defaults file, so a Renovate bump of the version key changes it.
 `fetched_url` and `sha256` record what the tool last fetched. A bump that nobody refreshed
 therefore leaves `url` and `fetched_url` apart, and `check_tree` names that as well as a file
-whose bytes differ from `sha256`. `ansible/tests/k8s/test_vendored_manifests_match_their_pins.py`
+whose bytes differ from `sha256`. `tests/k8s/test_vendored_manifests_match_their_pins.py`
 runs `check_tree` over the real tree.
 
 The item also matches `asset_pins.py`'s list shape (`url` beside `sha256`), so its fetch-and-check
@@ -56,10 +56,12 @@ sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import jinja2
 
+from lib.repo_paths import K8S_ROLES
+
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
-from lib.repo_paths import ROLES
+
 from validate.asset_pins import Fetcher, fetch
 
 KEY_SUFFIX = "vendored_manifests"
@@ -170,12 +172,12 @@ def check_role(role: _Path) -> list[str]:
     ]
 
 
-def roles_in(roles: _Path = ROLES) -> list[_Path]:
-    """Every role directory under `<roles>/<plane>/`."""
-    return sorted(p for p in roles.glob("*/*") if p.is_dir())
+def roles_in(roles: _Path = K8S_ROLES) -> list[_Path]:
+    """Every role directory under `roles`."""
+    return sorted(p for p in roles.glob("*") if p.is_dir())
 
 
-def check_tree(roles: _Path = ROLES) -> list[str]:
+def check_tree(roles: _Path = K8S_ROLES) -> list[str]:
     """`check_role` over every role under `roles`."""
     return [problem for role in roles_in(roles) for problem in check_role(role)]
 
@@ -307,7 +309,7 @@ def _select(role: _Path, names: Iterable[str]) -> list[Vendored] | None:
 
 
 def main(
-    argv: list[str] | None = None, roles: _Path = ROLES, fetcher: Fetcher = fetch
+    argv: list[str] | None = None, roles: _Path = K8S_ROLES, fetcher: Fetcher = fetch
 ) -> int:
     parser = ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("role", nargs="?", help="the role to refresh, such as metallb")

@@ -1,6 +1,6 @@
 # headlamp — plugins, and the measurements behind the OIDC login rules
 
-The role's operating rules are `ansible/roles/k8s/headlamp/CLAUDE.md`: the two-identities
+The role's operating rules are `k8s/roles/headlamp/CLAUDE.md`: the two-identities
 grant, and the OIDC values that must agree. This page holds the plugin mechanics and the
 measurements each login rule was derived from, kept off the file the inject hook loads on
 every touch of the role (#2985).
@@ -25,18 +25,18 @@ every touch of the role (#2985).
   so a Renovate bump rewrites the whole URL.
 - **The Flux plugin (#5221) reads through `view`.** Flux's vendored `flux-view-flux-system`
   aggregates its six `*.toolkit.fluxcd.io` groups into `view`, read-only
-  (`ansible/tests/k8s/test_aggregated_clusterroles.py` pins it), and `headlamp-cluster-read`
+  (`tests/k8s/test_aggregated_clusterroles.py` pins it), and `headlamp-cluster-read`
   already grants `customresourcedefinitions`, which the plugin's overview reads to decide
   whether Flux is installed. No `headlamp_k8s_crd_api_groups` entry is needed. The plugin's
   sync, suspend and resume buttons fail as Forbidden, which is intended: writes to Flux go
   through git.
 - **Prometheus charts.** The plugin finds Prometheus by the `headlamp-prometheus: "true"`
-  label on the Service in `roles/k8s/observability`, and queries it through the API server's
+  label on the Service in `k8s/roles/observability/`, and queries it through the API server's
   service proxy, so `templates/rbac-observability.yaml.j2` carries a Role in `observability` granting `get`
   on `services/proxy` pinned to `prometheus:9090`. The network hop is the API server's,
   admitted by `netpol_baseline_obs_node_cidrs`, not by anything on the headlamp pod. Label,
   Service name/port and the Role's `resourceNames` must agree;
-  `ansible/tests/k8s/test_k8s_manifests_rbac.py` checks they do, because a mismatch shows as
+  `tests/k8s/test_k8s_manifests_rbac.py` checks they do, because a mismatch shows as
   empty charts with no error.
 - **Charts are off per browser.** The "Show Prometheus metrics" button on a workload's detail
   page toggles them, stored in that browser's localStorage; nothing in IaC can pre-enable it.
@@ -97,11 +97,11 @@ Headlamp forwards the browser's `id_token` to the API server on every call. It r
 `offline_access` scope, so Authelia issues it no refresh token, and the login ends when the
 `id_token` expires. Authelia's global `id_token` lifespan is 1h, which signed the dashboard out
 every hour. The `headlamp` client therefore names the custom lifespan `headlamp` in
-`ansible/roles/k8s/authelia/templates/config-secret.yaml.j2`, which sets the `id_token` and
+`k8s/roles/authelia/templates/config-secret.yaml.j2`, which sets the `id_token` and
 access token to 18h. Headlamp's own `-session-ttl` (`headlamp_k8s_session_ttl`, 24h) is longer,
 so it does not cut the login short. The token grants only the read-only `view` binding, which
 bounds what a leaked one is worth.
 
 To change the length, edit `lifespans.custom.headlamp`. Every other client keeps the global
 lifespans. `test_headlamp_login_lasts_eighteen_hours` in
-`ansible/tests/k8s/test_k8s_headlamp_oidc.py` pins the value.
+`tests/k8s/test_k8s_headlamp_oidc.py` pins the value.

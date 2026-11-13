@@ -94,7 +94,7 @@ def sops_manifest_entries(
 
     Args:
         render: A placeholder render; only its rendered tags' entries are read.
-        keys: The key names of `ansible/vars/secrets.yml`.
+        keys: The key names of `secrets/secrets.yml`.
         sops_keys: The keys an entry may name.
     """
     sentinels = Sentinels(keys)

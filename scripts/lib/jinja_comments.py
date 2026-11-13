@@ -5,7 +5,7 @@ WHY. The docs generators read `.j2` templates as text and match macro calls and 
 arguments with regexes (`lib.k8s_roles`, `docs/catalog_lib/route_facts.py`, `docs/catalog_lib/catalog_backup.py`).
 A regex sees no difference between an argument a call passes and the same text quoted in a
 Jinja comment above it, so a comment that mentions `public=false` makes a public route read
-as LAN-only — which is what `ansible/roles/k8s/docs/CLAUDE.md` said while its
+as LAN-only — which is what `k8s/roles/docs/CLAUDE.md` said while its
 `templates/ingressroute.yaml.j2` passed no `public` argument at all (#3148).
 
 LINE NUMBERS AND INDENTATION SURVIVE. Each comment is replaced by its own newlines rather

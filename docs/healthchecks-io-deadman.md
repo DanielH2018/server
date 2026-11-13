@@ -16,9 +16,9 @@ it is a second destination for the handful of jobs whose silence actually matter
 | `longhorn-backup-health` | `hosts/components/k3s-host-checks/templates/longhorn-backup-health.sh.j2` | target unavailable, backups stale/missing/errored, the daily count exceeds the B2 budget, or k3s's newest S3 etcd snapshot is stale, missing or disarmed |
 | `daniel-box-disk-health` | `hosts/components/k3s-host-checks/templates/disk-health.sh.j2` | `/` over the headroom threshold, or `df` fails |
 | `etcd-snapshot-offbox` | `hosts/components/k3s-host-checks/templates/etcd-token-drift.sh.j2` | the cluster token changed since the off-box copy was stamped, or the token or its stamp cannot be read |
-| `pi-peer-backup` | `roles/k8s/pi-peer-backup/files/pull-pi-peers.sh` | rsync failed, or fewer than 2 peer files landed |
+| `pi-peer-backup` | `k8s/roles/pi-peer-backup/files/pull-pi-peers.sh` | rsync failed, or fewer than 2 peer files landed |
 | `registry-gc` | `hosts/components/registry-gc/templates/registry-gc.sh.j2` | a mirror's GC job exceeded its deadline, a mirror pod would not terminate, the job manifest failed to apply, the Deployment did not come back afterwards, the keep set could not be built, or another run held the lock |
-| `alertmanager-watchdog` | the `healthchecks` receiver in `roles/k8s/observability/templates/alertmanager-secret.yaml.j2`, fed by the `Watchdog` rule in `roles/k8s/observability/files/rules/alerting-meta.yaml` | never: Alertmanager sends no resolved notification, and silence is the failure — see *Alertmanager's watcher* below |
+| `alertmanager-watchdog` | the `healthchecks` receiver in `k8s/roles/observability/templates/alertmanager-secret.yaml.j2`, fed by the `Watchdog` rule in `k8s/roles/observability/files/rules/alerting-meta.yaml` | never: Alertmanager sends no resolved notification, and silence is the failure — see *Alertmanager's watcher* below |
 | `weekly-reboot-<host>` | the `Weekly system restart` cron in `hosts/components/host-maintenance/component.yml`, one slug per host | never: it pings before the reboot, and silence means the cron did not run |
 | `<host>-docker-prune` | the `Clean unused Docker images` cron in the same file, on each `has_docker` host (`daniel-pi`) | never: it pings only after the prune succeeds, and silence is the failure |
 | `<host>-worktree-sweep` | `homelab-worktree-sweep.timer` (the `worktree-sweep` component), one slug per host whose package lists it: daniel-box and daniel-server | `prune_worktrees.py --prune` exits non-zero: it pings the exit-status endpoint `/<rc>`, so a failed removal or branch deletion fails the check |
@@ -46,7 +46,7 @@ is not a cron: its period is the slug's own `timeout`, which must stay above N s
 send cannot page. Every other slug is a Cron check carrying its expression in the timezone its
 cron runs in. That is UTC for every host cron, and `America/Chicago` for
 `pi-peer-backup` alone: it is a k8s CronJob whose manifest sets `timeZone: {{ tz }}`
-(`roles/k8s/pi-peer-backup/templates/cronjob.yaml.j2`), so its console check carries
+(`k8s/roles/pi-peer-backup/templates/cronjob.yaml.j2`), so its console check carries
 `0 23 * * *` in `America/Chicago`. The timezone field is load-bearing: a UTC expression
 matches the CronJob for one DST offset only, and drifts an hour at the next change. The
 CronJob moved from `30 23` to `0 23` on 2026-09-21, off the weekly Longhorn shard's slot. The
@@ -182,7 +182,7 @@ these steps, and no new secret, because one project ping key covers every check.
 1. **Create the check by hand** in the Healthchecks.io console with the slug and the period and
    grace from the table above. Never let the ping URL auto-provision it: a typo'd slug becomes a
    second, unwatched check that reads green forever because something pings it.
-   `ansible/tests/services/test_healthchecks_pings.py` fails the build if a call site adds the
+   `tests/services/test_healthchecks_pings.py` fails the build if a call site adds the
    auto-provisioning parameter.
 2. **Match the schedule type to the job.** A cron-driven job takes the console's **Cron** type
    with the same expression and timezone, so the two cannot drift. An interval job takes Simple.
@@ -191,7 +191,7 @@ these steps, and no new secret, because one project ping key covers every check.
    collects two stores one after the other. Each phase is bounded by a 20-minute Job deadline,
    120 s for its pod to terminate, 120 s for an unfinished Job's delete, 180 s for the rollout
    back up and its warm budget (30 minutes, then 15). The worst case is about 6000 s, and
-   `ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py` derives it. `etcd-snapshot-offbox` allows an hour for a late cron fire: the token comparison itself takes
+   `tests/services/test_registry_gc_watchers_cover_the_worst_run.py` derives it. `etcd-snapshot-offbox` allows an hour for a late cron fire: the token comparison itself takes
    under a second.
 4. **Add the slug to the table, the fragment's cron variable and
    `monitor_bridge_healthchecks_expected` in the same PR**, as *The console drifts* below says.
@@ -242,7 +242,7 @@ check's message names the slug and field. A clean read is cached for a day, and 
 re-read every five minutes, so the alert clears one cycle after the console is fixed.
 
 That expectation list is a literal in monitor-bridge's defaults.
-`ansible/tests/services/test_monitor_bridge_healthchecks_expected.py` holds it to the cron
+`tests/services/test_monitor_bridge_healthchecks_expected.py` holds it to the cron
 variables in the fragment above and to the period-and-grace table on this page. To change a
 cron or a grace, change the variable, this table and the list in the same PR.
 

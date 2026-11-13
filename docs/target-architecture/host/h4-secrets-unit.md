@@ -17,7 +17,7 @@ PR H4.3a, daniel-server's `upsmon.conf`, rendered and read by nothing: [#6082](h
 PR H4.3b1, the `kuma-push` component and reconcile's udev arm: [#6089](https://github.com/DanielH2018/server/pull/6089). It republishes `homelab-daniel-pi` and `homelab-daniel-server`. The arm hashes `/usr/lib/udev/rules.d/NN-homelab-*.rules` from disk instead of reading a manifest field, so no renderer change was needed, and it lives in `reconcile_lib/udev.py`. The Pi's `kuma-push-lib.sh` kept its sha256, path and package.
 PR H4.3c, NUT on daniel-server: [#6096](https://github.com/DanielH2018/server/pull/6096). It republishes `homelab-daniel-server` and ends the `nut_host` role on `ups_host`. A component file entry now takes `src: role:<template>`, as an output does, and `HOST_INPUTS` gained the watchdog template. The rollout text's step 2 is inexact: the output's new dependent changes `secrets.json`, so `secrets_inputs_sha256` moves and reconcile restarts `homelab-secrets` once before it restarts `nut-monitor`. The NUT container cases of *Verification* have no PR, so the environ read stands in for them.
 PR H4.4, the Pi's SOPS creation rule: [#6092](https://github.com/DanielH2018/server/pull/6092). It carries only the rule and `docs/break-glass.md` item 12. The Pi's file, `credentials:`, `LIVE_HOST_FILES` entry and `check` member moved to H4.5, because `host_outputs.py:finish` refuses a credential without a `secrets-unit`. The Pi's bootstrap step 3 ran on 2026-10-24.
-PR H4.5, the Pi switches to `/run/credstore`: [#6107](https://github.com/DanielH2018/server/pull/6107). It adds the `secrets-unit` component, the two `credentials:` and the `LIVE_HOST_FILES` entry to the Pi, and repoints both token heartbeats at `/run/credstore`. The Pi's file came from the operator's `host_secrets.py sync daniel-pi` commit on the PR's branch. `HOST_INPUTS` gained `ansible/vars/hosts/`, because a host render opens that file. It keeps the interim files, which H4.6 retires.
+PR H4.5, the Pi switches to `/run/credstore`: [#6107](https://github.com/DanielH2018/server/pull/6107). It adds the `secrets-unit` component, the two `credentials:` and the `LIVE_HOST_FILES` entry to the Pi, and repoints both token heartbeats at `/run/credstore`. The Pi's file came from the operator's `host_secrets.py sync daniel-pi` commit on the PR's branch. `HOST_INPUTS` gained `secrets/hosts/`, because a host render opens that file. It keeps the interim files, which H4.6 retires.
 PR H4.6, the interim files retired: the two token files left with H7.25 ([#6242](https://github.com/DanielH2018/server/pull/6242)), which deleted `optimize_pi`'s interim tasks and listed both files as legacy entries. Reconcile removed them on the Pi at 18:10 UTC on 2026-10-25, after both Pi heartbeat tiles had read UP for a day on the H4.5 version and `homelab-secrets` read `active`. The empty `/etc/homelab/interim/` stayed, because reconcile only unlinked. The closing PR teaches reconcile to `rmdir` an empty legacy directory and lists the directory after its files.
 
 This slice adds `homelab-secrets.service`, which decrypts a per-host SOPS file on the host
@@ -95,8 +95,8 @@ The exit criterion has five parts, all observed together:
   The role applies to daniel-box too, so only the udev tasks are daniel-server's alone.
 - **One push token per host.** `kuma-push.env.j2` picks the token by `inventory_hostname`:
   `ups_secondary_daniel_server_push_token` on daniel-server and `ups_secondary_push_token` on
-  daniel-box (`ansible/roles/k8s/nut/CLAUDE.md`, issue #952).
-    - `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` gates
+  daniel-box (`k8s/roles/nut/CLAUDE.md`, issue #952).
+    - `k8s/roles/uptime-kuma/templates/static-monitors.yaml.j2` gates
       `UPS Secondary (daniel-server)` on `ups_secondary_daniel_server_push_token` and
       `UPS Secondary (daniel-box)` on `ups_secondary_push_token`. Its comment says one tile
       per host, because a shared token would let either host's `up` mask the other's `down`.
@@ -112,10 +112,10 @@ The exit criterion has five parts, all observed together:
   path from role tasks, and `scripts/secrets_mgmt/tests/test_secret_bearing_host_paths.py`
   pins it.
     - The script renders `domain` inline: `KUMA_HOST="uptime-kuma.local.{{ domain }}"`.
-      `grep -c '^domain:'` on `ansible/vars/secrets.yml` prints 0, because #5087 moved `domain`
-      to `ansible/inventory/group_vars/all.yml`. It is therefore not a SOPS key, and no host
+      `grep -c '^domain:'` on `secrets/secrets.yml` prints 0, because #5087 moved `domain`
+      to `inventory/group_vars/all.yml`. It is therefore not a SOPS key, and no host
       file carries it. `KUMA_RESOLVE_IP` reads `k3s_metallb_ingress_vip` from
-      `ansible/inventory/group_vars/all.yml`, which is not a secret.
+      `inventory/group_vars/all.yml`, which is not a secret.
     - `test_nut_host_secondary.py:test_the_usb_half_is_confined_to_the_ups_host` asserts
       that the udev tasks still exist.
 - **daniel-server needs no live read; daniel-box does.** In the role defaults,
@@ -137,7 +137,7 @@ The exit criterion has five parts, all observed together:
   supply the variable (*Render context* under *NUT on daniel-server*).
 - **The playbook gate and the deployer.** `ansible/initial_setup.yml` runs `nut_host` when
   `inventory_hostname == ups_host or nut_host_secondary_armed | bool`. Only
-  `ansible/inventory/host_vars/daniel-box.yml` sets `nut_host_secondary_armed: true`.
+  `inventory/host_vars/daniel-box.yml` sets `nut_host_secondary_armed: true`.
     - `deploy_changes.py:_BROAD_MANUAL_PREFIXES` lists `ansible/initial_setup.yml`. A change
       there parks the GitOps deployer with no fast-forward until someone applies it by hand,
       which stalls every session's landing.
@@ -173,14 +173,14 @@ The exit criterion has five parts, all observed together:
 - **Decryption happens on the controller.** ADR-0003
   (`docs/adr/0003-sops-with-age-for-secrets-at-rest.md`) decrypts at deploy time through
   `community.sops`.
-    - `ansible/.sops.yaml` has one creation rule, `.*(vars|secrets)\/.*\.ya?ml$`, encrypting
+    - `secrets/.sops.yaml` has one creation rule, `.*(vars|secrets)\/.*\.ya?ml$`, encrypting
       to daniel-box, daniel-server and an off-box recovery key.
     - daniel-server's own key is at `~/.config/sops/age/keys.txt`, which
       `ansible/roles/setup/sops_setup/tasks/main.yml` generates.
     - `sops_setup` installs `/usr/local/bin/sops` at `sops_setup_version` (`v3.13.3`) on
       every host, the Pi included. It generates an age key only where
       `ansible_connection` is `local`.
-- **These push tokens rotate only by hand.** `ansible/secret_rotation.yml` records
+- **These push tokens rotate only by hand.** `secrets/secret_rotation.yml` records
   `ups_secondary_push_token`, `ups_secondary_daniel_server_push_token`,
   `pi_sd_health_push_token` and `pi_recovery_push_token` as tier `auto`,
   and `nut_monitor_password` as `assisted`.
@@ -202,14 +202,14 @@ The exit criterion has five parts, all observed together:
       the keys two revisions share, when they share at least `_REENCRYPT_MIN_SHARED` (10).
 - **The weekly reboot is the common boot path.** `Weekly system restart` in
   `ansible/roles/setup/initial_setup/tasks/crons.yml` reboots each host on Sunday at 07:30,
-  from `weekly_reboot_*` in `ansible/inventory/group_vars/all.yml`. The Kuma maintenance of
+  from `weekly_reboot_*` in `inventory/group_vars/all.yml`. The Kuma maintenance of
   the same name covers every monitor from 07:25 for 50 minutes
-  (`ansible/roles/k8s/uptime-kuma/CLAUDE.md`). A tile that goes DOWN inside it pages only
+  (`k8s/roles/uptime-kuma/CLAUDE.md`). A tile that goes DOWN inside it pages only
   when the window closes.
 - **Drift is stamped.** `setup-drift-check.sh` (initial_setup, armed on daniel-server through
   `setup_drift_check_hosts`) reads stamp fragments generically, `nut-host` among them.
 - **gitleaks scans commits, not artifacts.** `.gitleaks.toml` allows one SOPS path,
-  `ansible/vars/secrets\.yml`. Its header records that the default rules false-positive on
+  `secrets/secrets\.yml`. Its header records that the default rules false-positive on
   ciphertext beside a suggestive key name, and that a line-regex allowlist does not work in
   the pre-commit `gitleaks git --staged` mode. `prek.toml` runs gitleaks on commits. Nothing
   scans a built artifact.
@@ -234,7 +234,7 @@ The exit criterion has five parts, all observed together:
   (operator ruling of 2026-10-14), because `domain` is then read from the inventory. H3's
   *Verification*
   therefore gives the agent a Prometheus query over loopback, with
-  `ansible/roles/k8s/observability/defaults/main.yml:observability_prometheus_cluster_ip` as
+  `k8s/roles/observability/defaults/main.yml:observability_prometheus_cluster_ip` as
   the fallback.
 
 ## Design
@@ -479,11 +479,11 @@ that runs one now.
 
 ### Which ciphertext each host carries
 
-Every host package ships one per-host SOPS file, `ansible/vars/hosts/<host>.sops.yaml`,
+Every host package ships one per-host SOPS file, `secrets/hosts/<host>.sops.yaml`,
 installed as `/usr/lib/homelab/secrets/<host>.sops.yaml`. It holds only the keys that host's
 rendered tree names, as placeholders or as credentials.
 
-- **Why per host, not a byte copy of `secrets.yml`.** A copy of `ansible/vars/secrets.yml`
+- **Why per host, not a byte copy of `secrets.yml`.** A copy of `secrets/secrets.yml`
   would change with every commit to that file. H3's builder publishes a package whenever its
   rendered tree differs, and H3.9's land host wait targets each host whose tree differs
   (Baseline). Every `/add-secret` PR and every rotation would then publish a new host
@@ -492,8 +492,8 @@ rendered tree names, as placeholders or as credentials.
   each package to the ciphertext its host uses.
 - **Recipients.** Each file is encrypted to its host's own key, daniel-box's key and the
   off-box recovery key. A creation rule for each path goes ahead of the general rule in
-  `ansible/.sops.yaml`, whose pattern `.*(vars|secrets)\/.*\.ya?ml$` also matches
-  `ansible/vars/hosts/`. The Pi stays off `secrets.yml`'s recipient list, which keeps the
+  `secrets/.sops.yaml`, whose pattern `.*(vars|secrets)\/.*\.ya?ml$` also matches
+  `secrets/hosts/`. The Pi stays off `secrets.yml`'s recipient list, which keeps the
   2026-10-03 removal that `docs/break-glass.md` records.
 - **Contents in this slice.**
     - daniel-server: `ups_secondary_daniel_server_push_token` from H4.2,
@@ -542,7 +542,7 @@ rendered file to decide.
 
 - **Placeholders render only in declared files.** In a declared output, host mode renders a
   reference to a secret key as `${<key>}`, where `<key>` is the key's name in
-  `ansible/vars/secrets.yml`. It escapes the rest of the file by C1's cluster-mode rule: a
+  `secrets/secrets.yml`. It escapes the rest of the file by C1's cluster-mode rule: a
   literal `$` followed by `$` or by `{` renders as `$$`.
 - **Compose files are the one other kind.** H5's compose component declares its compose
   files, which install at their real path under `/usr/lib/homelab/compose/`. Host mode
@@ -716,15 +716,15 @@ homelab-secrets (age key /etc/homelab/age.key)        │
 + hosts/components/nut-secondary/component.yml        (renders nut_host's templates until H7.8)
 + hosts/components/nut-secondary/templates/           (drop-in, watchdog units, udev rule)
 + hosts/daniel-server/package.yml
-+ ansible/vars/hosts/daniel-server.sops.yaml          (operator-only content)
-+ ansible/vars/hosts/daniel-pi.sops.yaml              (operator-only content)
++ secrets/hosts/daniel-server.sops.yaml          (operator-only content)
++ secrets/hosts/daniel-pi.sops.yaml              (operator-only content)
 + scripts/secrets_mgmt/host_secrets.py
 + docs/adr/                                           (one ADR amending ADR-0003)
   scripts/renderer/                                   (host mode: inventory_hostname, declared
                                                        outputs, placeholders and escape)
   hosts/lib/homelab-reconcile                         (secrets step, restart contract, udev arm)
   hosts/components/pi-heartbeats/component.yml        (LoadCredential from /run/credstore)
-  ansible/.sops.yaml                                  (per-host creation rules ahead of the
+  secrets/.sops.yaml                                  (per-host creation rules ahead of the
                                                        general rule)
   .gitleaks.toml                                      (per-host SOPS files, package ciphertext)
   scripts/secrets_mgmt/git_dates.py                   (path parameter, commit-returning walk)
@@ -828,7 +828,7 @@ meaning.
       pytest job as a test, because that job checks out full history.
     - Make the unattended path of `secret_rotation.py:cmd_rotate` skip every key a host file
       carries.
-    - Extend `.gitleaks.toml`'s SOPS path allowlist to `ansible/vars/hosts/.*\.sops\.yaml`.
+    - Extend `.gitleaks.toml`'s SOPS path allowlist to `secrets/hosts/.*\.sops\.yaml`.
     - `docs/secret-rotation.md` gains the host-file copy rule and the **operator-only** `sync`
       step in its hand-rotation and `assisted` runbooks.
     - No host file exists yet, so the check's live-tree members start at H4.2. Its fixtures
@@ -840,11 +840,11 @@ meaning.
     - `docs/break-glass.md` gains daniel-server's `/etc/homelab/age.key`, its restore, and
       the loss rule. A lost or exposed host key means rotating every value that host held,
       not only re-keying the host. The rotation list is derived, not remembered: every
-      value in every SOPS file whose creation rule in `ansible/.sops.yaml` lists that host's
+      value in every SOPS file whose creation rule in `secrets/.sops.yaml` lists that host's
       public key.
-    - Add the creation rule for `ansible/vars/hosts/daniel-server.sops.yaml` ahead of the
+    - Add the creation rule for `secrets/hosts/daniel-server.sops.yaml` ahead of the
       general rule. Its recipients are the daniel-server, daniel-box and recovery keys that
-      `ansible/.sops.yaml` already lists.
+      `secrets/.sops.yaml` already lists.
     - **Operator-only:** run `host_secrets.py sync`, which decrypts `secrets.yml` and writes
       daniel-server's file holding `ups_secondary_daniel_server_push_token`. Commit it in
       this PR.
@@ -956,7 +956,7 @@ meaning.
     `host_outputs.py:finish` refuses a package that has a credential but no `secrets-unit`,
     and the Pi gets that component in H4.5. So `sync daniel-pi` cannot run in H4.4.
     - **Operator-only:** run step 3 of `bootstrap-host.sh` on the Pi. Done on 2026-10-24.
-    - Add the creation rule for `ansible/vars/hosts/daniel-pi.sops.yaml` ahead of the
+    - Add the creation rule for `secrets/hosts/daniel-pi.sops.yaml` ahead of the
       general rule, with the Pi's printed key, daniel-box's key and the recovery key.
     - `docs/break-glass.md` gains the Pi's `/etc/homelab/age.key`, that the Pi is a
       recipient of its own file only, and H4.2's loss rule. A lost SD card is a lost host
@@ -1056,7 +1056,7 @@ and before the slice closes.
   therefore logged in.
 - *The drill, **operator-only**.* It needs a maintenance window and console access to both
   nodes. The operator runs `kubectl -n homelab exec deploy/nut -- upsmon -c fsd`, the drill
-  `ansible/roles/k8s/nut/CLAUDE.md` names in *Timer vs. safety net*. The pod's primary sets
+  `k8s/roles/nut/CLAUDE.md` names in *Timer vs. safety net*. The pod's primary sets
   FSD, and both secondaries power their hosts off within about 15 s. daniel-box is the
   control plane, so the whole cluster goes down with it. After power-on, exit criterion part 1
   and both tiles must read as above.
@@ -1490,7 +1490,7 @@ and before the slice closes.
     - `ansible/roles/setup/nut_host/CLAUDE.md` says the role ends on `ups_host` and why, and
       that the `ups_host` half is package-owned. Its generated glance block is regenerated,
       and its *Applied by* line names the guard.
-    - `ansible/roles/k8s/nut/CLAUDE.md` updates its pointer to the host half and its
+    - `k8s/roles/nut/CLAUDE.md` updates its pointer to the host half and its
       *Editing* section, which tells the reader to apply `nut_host` on both hosts.
     - `scripts/secrets_mgmt/secret_bearing_host_paths.py` and its test stay unchanged,
       because the task that installs `/usr/local/bin/ups-secondary-health.sh` still applies
@@ -1606,7 +1606,7 @@ and before the slice closes.
     - Handoff rule 3 also waits for the component's secrets and credentials to exist.
     - *Shared names* gain the persisted root `/var/lib/homelab-secrets/`, the queue
       `/run/homelab-secrets/pending.json`, and the per-host SOPS file
-      `ansible/vars/hosts/<host>.sops.yaml`, shipped as
+      `secrets/hosts/<host>.sops.yaml`, shipped as
       `/usr/lib/homelab/secrets/<host>.sops.yaml`.
     - `component.yml` gains a defaults-source field and an `outputs:` declaration, which the
       renderer honours.
@@ -1640,7 +1640,7 @@ and before the slice closes.
           `/usr/lib/homelab/compose/` (*Secret-bearing files*). H4.1a3's renderer test pins
           it;
         - `host_secrets.py check` keeps running on every PR rather than only on PRs that
-          touch the Pi file or `ansible/secret_rotation.yml`. A stale host file is a fact of
+          touch the Pi file or `secrets/secret_rotation.yml`. A stale host file is a fact of
           the tree, a rotation PR that skips `sync` fails itself, and the unattended rotation
           path skips host-file keys, so master never carries a stale file;
         - the hand path restarts the owed dependents. Reconcile reads `pending.json` on every
@@ -1675,7 +1675,7 @@ and before the slice closes.
 7. **The other hosts' ciphertext.** This slice ships per-host SOPS files for daniel-server and
    the Pi. H6 ships daniel-box's package with `secrets-unit`, and H7's rebuild runbook adds a
    rebuilt host's key as a recipient. Resolution: H6 adds
-   `ansible/vars/hosts/daniel-box.sops.yaml` with the keys its tree names, and its
+   `secrets/hosts/daniel-box.sops.yaml` with the keys its tree names, and its
    `add-secret` step for `k3s_readonly_token` gains the **operator-only** `sync`. H7's
    runbook re-encrypts the rebuilt host's own file to its new key. Both slices confirm before
    their first PR that ships ciphertext.
@@ -1728,7 +1728,7 @@ How each was fixed, with the evidence measured at `70591c307`:
   `cmd_rotate` skips them. `sync` becomes an operator-only runbook step, and the cron wiring is
   dropped.
 - **R1-06.** The drill is the operator-only `kubectl exec` from
-  `ansible/roles/k8s/nut/CLAUDE.md`, which powers off both nodes. A pre-drill `upsc -c` check
+  `k8s/roles/nut/CLAUDE.md`, which powers off both nodes. A pre-drill `upsc -c` check
   was added.
 - **R1-07.** The output persists under `/var/lib/homelab-secrets/`, and outputs render
   independently. The page timing is corrected to the 1200 s deadline, and to the maintenance

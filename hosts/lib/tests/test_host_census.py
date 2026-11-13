@@ -21,7 +21,7 @@ KNOWN_HOSTS = frozenset({"daniel-box", "daniel-server", "daniel-pi"})
 ROOTS = "scripts/validate/validate_lib/package_roots.py"
 GATE = "hosts/lib/builder_rollout_gate.py"
 SCRIPT = "hosts/bootstrap-host.sh"
-SOPS = "ansible/.sops.yaml"
+SOPS = "secrets/.sops.yaml"
 NEW_HOST = "daniel-new"
 
 
@@ -56,12 +56,10 @@ def has_own_creation_rule(rules: list[dict], host: str) -> bool:
     SOPS takes the first match, and the generic rule matches every per-host path too, so a rule
     placed after it never applies.
     """
-    path = f"vars/hosts/{host}.sops.yaml"
+    path = f"hosts/{host}.sops.yaml"
     for rule in rules:
         if re.search(rule["path_regex"], path):
-            return not re.search(
-                rule["path_regex"], "vars/hosts/no-such-host.sops.yaml"
-            )
+            return not re.search(rule["path_regex"], "hosts/no-such-host.sops.yaml")
     return False
 
 
@@ -89,7 +87,7 @@ def census_problems(tree: Path) -> list[str]:
 
 
 def _rule(host: str) -> str:
-    return f'  - path_regex: vars/hosts/{host}\\.sops\\.yaml$\n    age: "age1new"\n'
+    return f'  - path_regex: (^|/)hosts/{host}\\.sops\\.yaml$\n    age: "age1new"\n'
 
 
 def _edit_sub(tree: Path, relative: str, pattern: str, replacement: str) -> None:
@@ -101,7 +99,7 @@ def _edit_sub(tree: Path, relative: str, pattern: str, replacement: str) -> None
     path.write_text(changed)
 
 
-GENERIC_RULE = r"^  - path_regex: \.\*\(vars\|secrets\)"
+GENERIC_RULE = r"^  - path_regex: \\\.ya\?ml\$"
 
 
 @pytest.fixture
@@ -128,9 +126,7 @@ def _add_script(tree: Path) -> None:
 
 
 def _add_rule(tree: Path) -> None:
-    _edit_sub(
-        tree, SOPS, GENERIC_RULE, _rule(NEW_HOST) + "  - path_regex: .*(vars|secrets)"
-    )
+    _edit_sub(tree, SOPS, GENERIC_RULE, _rule(NEW_HOST) + r"  - path_regex: \\.ya?ml$")
 
 
 ADDS = {"NAMED": _add_named, "CANARY_ORDER": _add_canary, "HOSTS": _add_script}

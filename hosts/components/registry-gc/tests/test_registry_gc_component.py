@@ -1,6 +1,6 @@
 """The rendered `registry-gc` component: the mirror registries' garbage collection (H7.64).
 
-The script's behaviour is run against stubs in `ansible/tests/services/test_registry_gc_*.py`.
+The script's behaviour is run against stubs in `tests/services/test_registry_gc_*.py`.
 These tests hold what the move added: the units that run it, the two Job manifests in host mode,
 the toggle, the copies of the registry role's keys, and the legacy entries.
 """
@@ -16,7 +16,7 @@ from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 COMPONENT = REPO / "hosts" / "components" / "registry-gc"
-REGISTRY_ROLE = REPO / "ansible" / "roles" / "k8s" / "registry"
+REGISTRY_ROLE = REPO / "k8s" / "roles" / "registry"
 SCRIPT = "/usr/lib/homelab/registry-gc.sh"
 UNITS = "/usr/lib/systemd/system"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-registry-gc.conf"
@@ -124,7 +124,8 @@ def test_a_timer_that_fails_to_start_keeps_the_cron_and_the_old_script(package):
 def test_the_toggle_drops_the_files_the_link_and_the_policy(tmp_path):
     root = tmp_path / "hosts"
     (root / "daniel-box").mkdir(parents=True)
-    (tmp_path / "ansible").symlink_to(REPO / "ansible")
+    for name in ("k8s", "inventory", "secrets"):
+        (tmp_path / name).symlink_to(REPO / name)
     (root / "components").mkdir()
     (root / "components" / "registry-gc").symlink_to(COMPONENT)
     (root / "lib").symlink_to(REPO / "hosts" / "lib")

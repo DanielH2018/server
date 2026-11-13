@@ -1,6 +1,6 @@
 """When each secret's ciphertext last changed, read out of git.
 
-A real rotation changes the value in `ansible/vars/secrets.yml` but leaves the registry's
+A real rotation changes the value in `secrets/secrets.yml` but leaves the registry's
 `last_rotated` behind, because `sync` deliberately will not touch an existing row's date. An
 app-side rotation nobody recorded is then invisible and ages into a false OVERDUE. These
 functions read the date back out of the git history and advance the registry IN MEMORY only,
@@ -29,7 +29,7 @@ from secrets_mgmt.rotation_tools import RotationTools
 # Repo-relative, for git revspecs — `git show <rev>:<path>` needs the tracked path.
 # `rotation_tools.SECRETS_FILE` is the absolute spelling of this same file, for the callers
 # that open it rather than ask git about it.
-SECRETS_GIT_PATH = "ansible/vars/secrets.yml"
+SECRETS_GIT_PATH = "secrets/secrets.yml"
 
 # new name -> the name the same secret was stored under before it was renamed.
 #
@@ -41,7 +41,7 @@ SECRETS_GIT_PATH = "ansible/vars/secrets.yml"
 #
 # A renamed key gets NO derived date from before its rename: the walk stops at the boundary
 # rather than following the old spelling backwards. Its pre-rename history is frozen into
-# `ansible/secret_rotation.yml` at rename time instead, by carrying over the date the
+# `secrets/secret_rotation.yml` at rename time instead, by carrying over the date the
 # derivation reported on the commit before. A later real rotation derives normally, because
 # both revisions then spell the key the same way.
 #
@@ -134,7 +134,7 @@ RETIRED: frozenset[str] = frozenset(
         "healthchecks_password",
         "healthchecks_secret_key",
         # Published as an inventory variable by the operator's 2026-10-14 ruling;
-        # ansible/inventory/group_vars/all.yml holds it (target slice R2, domain PR 3).
+        # inventory/group_vars/all.yml holds it (target slice R2, domain PR 3).
         "domain",
         # The push tokens of the bridge's Loki ingestion, Loki-reachable and Kuma notification
         # checks, which M5's PR 4a deleted. M5's PR 5 retired them a week later.

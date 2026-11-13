@@ -14,8 +14,8 @@ from lib import proc_testing
 
 from validate import cluster_pins
 
-K3S = "ansible/roles/k8s/system-upgrade/defaults/main.yml"
-LONGHORN = "ansible/roles/k8s/longhorn/defaults/main.yml"
+K3S = "k8s/roles/system-upgrade/defaults/main.yml"
+LONGHORN = "k8s/roles/longhorn/defaults/main.yml"
 METALLB = cluster_pins.Pin(K3S, "v0.16.0")
 
 
@@ -72,17 +72,17 @@ def test_a_metallb_bump_across_two_minors_is_clean():
 def test_a_bump_beside_its_role_files_and_docs_is_clean():
     paths = [
         K3S,
-        "ansible/roles/k8s/system-upgrade/files/upstream/longhorn.yaml",
+        "k8s/roles/system-upgrade/files/upstream/longhorn.yaml",
         "docs/x.md",
     ]
     assert judge("v1.12.1", "v1.12.2", paths) == []
 
 
 def test_a_bump_that_also_edits_another_role_is_flagged():
-    paths = [K3S, "ansible/roles/k8s/authelia/defaults/main.yml"]
+    paths = [K3S, "k8s/roles/authelia/defaults/main.yml"]
     flagged = judge("v1.12.1", "v1.12.2", paths)
     assert len(flagged) == 1
-    assert flagged[0].startswith("ansible/roles/k8s/authelia/defaults/main.yml: ")
+    assert flagged[0].startswith("k8s/roles/authelia/defaults/main.yml: ")
 
 
 def test_two_pins_bumped_in_one_pr_is_flagged():
@@ -97,7 +97,7 @@ def test_a_pin_moved_to_another_role_at_the_same_version_is_clean():
     """No value changes, so neither the decrease nor the alone check applies."""
     old = pins("v1.12.1")
     new = pins("v1.12.1", path=LONGHORN)
-    paths = [K3S, LONGHORN, "ansible/roles/k8s/system-upgrade/tasks/longhorn.yml"]
+    paths = [K3S, LONGHORN, "k8s/roles/system-upgrade/tasks/longhorn.yml"]
     assert cluster_pins.problems(old, new, paths) == []
 
 
@@ -115,7 +115,7 @@ def test_the_real_tree_holds_both_pins_in_one_role_file_each():
     found = cluster_pins.pins_at("HEAD")
     assert set(found) == {"k3s_longhorn_version", "k3s_metallb_version"}
     for key, pin in found.items():
-        assert pin is not None, f"no role YAML under ansible/roles sets {key}"
+        assert pin is not None, f"no role YAML under k8s/roles sets {key}"
         cluster_pins.version(pin)
 
 
@@ -153,7 +153,7 @@ def test_a_key_moved_across_roles_in_git_is_clean(repo, capsys):
         repo,
         {
             K3S: "k3s_longhorn_version: v1.12.1\nk3s_metallb_version: v0.16.0\n",
-            "ansible/roles/k8s/system-upgrade/tasks/longhorn.yml": "- name: apply\n",
+            "k8s/roles/system-upgrade/tasks/longhorn.yml": "- name: apply\n",
         },
     )
     head = _commit(
@@ -161,7 +161,7 @@ def test_a_key_moved_across_roles_in_git_is_clean(repo, capsys):
         {
             K3S: "k3s_metallb_version: v0.16.0\n",
             LONGHORN: 'k3s_longhorn_version: "v1.12.1"\n',
-            "ansible/roles/k8s/system-upgrade/tasks/longhorn.yml": None,
+            "k8s/roles/system-upgrade/tasks/longhorn.yml": None,
         },
     )
     assert cluster_pins.check(base, head, repo) == cluster_pins.CLEAN
@@ -187,7 +187,7 @@ def test_a_pin_read_but_not_assigned_outside_its_role_file_is_clean(repo):
         repo,
         {
             K3S: "k3s_longhorn_version: v1.12.1\n",
-            "ansible/roles/k8s/system-upgrade/tasks/longhorn.yml": (
+            "k8s/roles/system-upgrade/tasks/longhorn.yml": (
                 "- name: apply\n"
                 "  url: https://x/{{ k3s_longhorn_version }}/longhorn.yaml\n"
                 "  when: k3s_longhorn_version == 'v1.12.1'\n"
@@ -213,17 +213,17 @@ def test_the_real_tree_overrides_no_pin():
             "- hosts: k3s\n  vars:\n    k3s_longhorn_version: v1.11.0\n",
         ),
         (
-            "ansible/roles/k8s/system-upgrade/tasks/main.yml",
+            "k8s/roles/system-upgrade/tasks/main.yml",
             "- include_role:\n    name: x\n  vars:\n    k3s_longhorn_version: v1.11.0\n",
         ),
         (
-            "ansible/inventory/extra.ini",
+            "inventory/extra.ini",
             "[k3s]\ndaniel-box k3s_longhorn_version=v1.11.0\n",
         ),
-        ("ansible/inventory/extra.ini", "[all:vars]\nk3s_longhorn_version = v1.11.0\n"),
-        ("ansible/inventory/group_vars/all", "k3s_longhorn_version: v1.11.0\n"),
+        ("inventory/extra.ini", "[all:vars]\nk3s_longhorn_version = v1.11.0\n"),
+        ("inventory/group_vars/all", "k3s_longhorn_version: v1.11.0\n"),
         (
-            "ansible/roles/k8s/system-upgrade/tasks/x.yml",
+            "k8s/roles/system-upgrade/tasks/x.yml",
             "- set_fact:\n    k3s_longhorn_version: v1.11.0\n",
         ),
         ("ansible/site.yml", "- hosts: all\n  vars: {k3s_longhorn_version: v1.11.0}\n"),
@@ -236,7 +236,7 @@ def test_the_real_tree_overrides_no_pin():
             '- hosts: all\n  vars: {note: "see #1", k3s_longhorn_version: v1.11.0}\n',
         ),
         (
-            "ansible/inventory/extra.ini",
+            "inventory/extra.ini",
             '[k3s]\ndaniel-box note="a #b" k3s_longhorn_version=v1.11.0\n',
         ),
         (
@@ -244,7 +244,7 @@ def test_the_real_tree_overrides_no_pin():
             "- hosts: all\n  vars: {note: 'it''s #1', k3s_longhorn_version: v1.11.0}\n",
         ),
         (
-            "ansible/inventory/extra.ini",
+            "inventory/extra.ini",
             "[k3s]\ndaniel-box ansible_user=x;y k3s_longhorn_version=v1.11.0\n",
         ),
     ],
@@ -274,7 +274,7 @@ def test_an_override_the_column_zero_grep_missed_is_flagged(repo, capsys, path, 
 
 def test_an_inventory_override_of_a_pin_is_flagged(repo, capsys):
     base = _commit(repo, {K3S: "k3s_longhorn_version: v1.12.1\n"})
-    group_vars = "ansible/inventory/group_vars/all.yml"
+    group_vars = "inventory/group_vars/all.yml"
     head = _commit(repo, {group_vars: "k3s_longhorn_version: v1.11.0\n"})
     assert cluster_pins.check(base, head, repo) == cluster_pins.REFUSED
     assert f"[FAIL] {group_vars}: k3s_longhorn_version is set outside" in (

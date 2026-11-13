@@ -4,7 +4,7 @@ Headlamp does not authorise anything under OIDC: it forwards the browser's `id_t
 API SERVER accepts or rejects it. So the trust lives in `hosts/components/k3s-server` (the
 homelab-daniel-box package since H6.4a), one tree away from the workload that needs it, and its values are only correct relative to something outside this
 role — the Authelia issuer hosts, the Authelia client id, and the group name
-`roles/k8s/headlamp` binds. Each of those drifts silently: the login succeeds and the dashboard
+`k8s/roles/headlamp` binds. Each of those drifts silently: the login succeeds and the dashboard
 renders an empty cluster, with nothing in any log.
 
 The trust is an `AuthenticationConfiguration` file, not six `--kube-apiserver-arg=oidc-*`
@@ -24,14 +24,17 @@ for why each value is what it is.
 import functools
 
 import jinja2
-from _helpers import ANSIBLE, load_defaults
+from _helpers import (
+    load_defaults,
+    K8S_ROLES,
+)
 from _k8s_render import rendered_docs
 from lib import yaml_fast
-from lib.ansible_jinja_env import make_env, register_ansible_filters
+from lib.guard_jinja_env import make_env, register_ansible_filters
 from lib.repo_paths import ALL_VARS, K3S_SERVER
 from renderer.renderer_lib import host as host_mode
 
-HEADLAMP = ANSIBLE / "roles" / "k8s" / "headlamp"
+HEADLAMP = K8S_ROLES / "headlamp"
 DOMAIN = yaml_fast.safe_load(ALL_VARS.read_text())["domain"]
 
 # The two hostnames Authelia answers on, and the two `iss` values they mint. Measured
@@ -240,7 +243,7 @@ def test_groups_prefix_matches_the_group_headlamp_binds():
     """Two roles, one string, and neither fails loudly when they disagree.
 
     The API server applies the groups prefix to every value of the claim before RBAC sees it;
-    `roles/k8s/headlamp` binds the prefixed name. A mismatch is a login that succeeds onto an
+    `k8s/roles/headlamp` binds the prefixed name. A mismatch is a login that succeeds onto an
     empty dashboard.
     """
     headlamp = yaml_fast.safe_load((HEADLAMP / "defaults" / "main.yml").read_text())

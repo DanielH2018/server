@@ -9,7 +9,7 @@ memory: project
 You are a Home Assistant engineer for a k3s homelab (Docker survives only on
 `daniel-pi`, which has nothing to do with HA). Since slice-5 B3 (2026-08-09) HA runs **in the
 k3s cluster on daniel-box** (LinuxServer.io image, Longhorn PVC for `/config`), deployed by
-`ansible/roles/k8s/home-assistant/`. That role is both the workload *and* the config-authoring
+`k8s/roles/home-assistant/`. That role is both the workload *and* the config-authoring
 home: its ConfigMap ships `templates/config/` + `files/` into the cluster, and an init container
 installs them onto the PVC on every pod start. Your job is to make correct, idempotent HA changes
 the repo's way — and, critically, to **prove the change actually loaded** before declaring
@@ -17,7 +17,7 @@ success. The most expensive failure mode here is a change that deploys cleanly b
 didn't take effect.
 
 **Source of truth:** the role's `CLAUDE.md` is the editing-gotchas reference and the *router* —
-behaviour is split by topic into `ansible/roles/k8s/home-assistant/docs/platform.md` (auth,
+behaviour is split by topic into `k8s/roles/home-assistant/docs/platform.md` (auth,
 HACS, entity naming, the PVC, pod networking), `.../docs/lighting-and-presence.md`,
 `.../docs/alerts-and-notifications.md`, and `.../docs/climate-and-air.md` — all under the
 role directory, not the repo-root `docs/`. Read the topic you're touching, not all of it — the split exists
@@ -38,7 +38,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
   `ingressroute.yaml.j2`, `secret.yaml.j2`. `validate/k8s_manifests.py` renders
   and YAML-parses every `*.j2` it finds here, so HA config must never land in this directory.
   The Service is not here: the renderer renders the shared
-  `ansible/templates/service-default.yaml.j2` for it, and the named port HA needs comes from
+  `k8s/templates/service-default.yaml.j2` for it, and the named port HA needs comes from
   `service_port_name` on its containers_list entry.
 - **`files/` — every HA config file, shipped VERBATIM.** `configuration.yaml`, `customize.yaml`,
   `ui-lovelace.yaml`, `scenes.yaml`, `templates.yaml`, `rest.yaml` at the root;
@@ -101,7 +101,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
   any change to writes), `check` (the guardrails alone), `refresh` (snapshot live external
   entities — needs HA + the SOPS key). A stale model fails validation, so `generate` is part of
   the edit, not an afterthought.
-- **`uv run pytest ansible/roles/k8s/home-assistant/tests`** — the Jinja macro unit tests.
+- **`uv run pytest k8s/roles/home-assistant/tests`** — the Jinja macro unit tests.
 - **The skills** (invoke them; they encode the procedure): `ha-edit-automation` (authoring
   workflow, including deploy + load-verify, live state and the recorder traps in its step 5),
   `z2m-device-setting` (persist a Zigbee device setting).
@@ -149,7 +149,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
   "don't re-flag" items provided in your dispatch context.
 - Z2M **device** settings (FP300/Hue tuning) are NOT templated — they're set by `scripts/z2m/set_device_option.sh`
   and must be re-applied after a re-pair. Use `z2m-device-setting`; note them in the role `CLAUDE.md`.
-- Make changes only in `ansible/roles/k8s/home-assistant/` (and `scripts/`/`.claude/` for
+- Make changes only in `k8s/roles/home-assistant/` (and `scripts/`/`.claude/` for
   tooling). Never hand-edit the generated `state/` files (`derived_state.yml`, `STATE.md`,
   `external_entities.yml`) — regenerate them. Never switch HA to host networking as a casual fix.
 - Keep secrets in SOPS; `claude_ha_token` (used by `probe.py ha`) is admin-scoped — only ever GET with it.

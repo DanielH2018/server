@@ -81,7 +81,7 @@ that merely mentions `fanout.py` is ordinary batch work (#4624).
 Two shapes collide across roles as well, so they are bounded per wave rather than per role.
 Both were measured on the 2026-09-10 fan-outs:
 
-- **At most one batch per wave rotates or adds a SOPS secret.** `ansible/vars/secrets.yml` is
+- **At most one batch per wave rotates or adds a SOPS secret.** `secrets/secrets.yml` is
   ciphertext, so two branches that both touch it conflict at merge and the conflict is not
   hand-resolvable; the second lander has to take master's file wholesale and re-mint its own
   value on top. Two of eight wave-1 agents hit exactly that (PRs #1556 and #1567), and one

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""cluster_vars: keep the cluster's SOPS files in step with ansible/vars/secrets.yml (slice D3).
+"""cluster_vars: keep the cluster's SOPS files in step with secrets/secrets.yml (slice D3).
 
 Flux substitutes a flux-owned role's secret placeholders from one Secret, which
-kustomize-controller decrypts from the cluster file `ansible/vars/cluster-vars.sops.env` with
+kustomize-controller decrypts from the cluster file `secrets/cluster-vars.sops.env` with
 a key only the cluster and the hosts hold. R2's multi-line keys travel as SOPS manifests under
-`ansible/vars/cluster-manifests/` instead. `ansible/vars/cluster-vars.source` records, per key,
+`secrets/cluster-manifests/` instead. `secrets/cluster-vars.source` records, per key,
 the digest of its ciphertext in `secrets.yml`, so CI can prove the files fresh without a key.
 
 Two modes:
@@ -25,7 +25,7 @@ Two modes:
            `cluster-vars-ciphertext` runs that. `--ciphertext-only FILE...` asserts only that
            each named SOPS file holds ciphertext, for the publish job's copies (D3.3a).
 
-Every `sops` call that resolves a creation rule passes `--config ansible/.sops.yaml`, because
+Every `sops` call that resolves a creation rule passes `--config secrets/.sops.yaml`, because
 SOPS finds its config from the working directory and the rotation cron runs from the repo
 root.
 
@@ -98,8 +98,8 @@ _FORBIDDEN = (
 
 
 # R3's hashing parameters, the `m=`, `t=` and `p=` of every stored Authelia digest.
-# `ansible/tests/services/test_authelia_argon2_parameters_agree.py` holds them equal to the
-# rendered hashing block in `roles/k8s/authelia/templates/config-secret.yaml.j2`.
+# `tests/services/test_authelia_argon2_parameters_agree.py` holds them equal to the
+# rendered hashing block in `k8s/roles/authelia/templates/config-secret.yaml.j2`.
 ARGON2_PARAMETERS = {"memory": 65536, "iterations": 3, "parallelism": 4}
 
 # R3's PHC pattern: a 16-byte salt is 22 base64 characters and a 32-byte key 43. It is the

@@ -62,9 +62,7 @@ def broad_landing(monkeypatch, capsys, tmp_path):
         fakes = Fakes(
             gh_views={
                 "files,changedFiles": {
-                    "files": [
-                        {"path": f"ansible/roles/k8s/{OWN}/templates/deploy.yaml.j2"}
-                    ],
+                    "files": [{"path": f"k8s/roles/{OWN}/templates/deploy.yaml.j2"}],
                     "changedFiles": 1,
                 }
             },

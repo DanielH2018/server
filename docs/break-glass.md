@@ -18,14 +18,14 @@ Use these in this order. Each lives in the password manager unless the citation 
 otherwise; none of the values below are secrets themselves, only names and locations.
 
 1. **The off-box recovery age key.** A password-manager-held age keypair, added as a SOPS
-   recipient on 2026-06-11 so `ansible/vars/secrets.yml` survives losing every host's own key.
+   recipient on 2026-06-11 so `secrets/secrets.yml` survives losing every host's own key.
    The host recipient of `secrets.yml` and the cluster files is `daniel-box`. `daniel-pi`'s
    key was removed on 2026-10-03, because the Pi is driven over ssh and never decrypts.
    `daniel-server`'s user-home key was retired on 2026-11-09 (#6643), so the recovery key and
    `daniel-box`'s key are the only two that decrypt those files. The recovery key decrypts
    the SOPS-encrypted secrets file; nothing else in this list works without it if
    `daniel-box`'s own key is also gone.
-   Source: `ansible/.sops.yaml` (recipient comments above the `age:` line).
+   Source: `secrets/.sops.yaml` (recipient comments above the `age:` line).
 
 2. **The k3s cluster token.** A copy taken out-of-band on 2026-08-23, matching
    `/var/lib/rancher/k3s/server/token` on daniel-box at the time of copy. Since
@@ -72,7 +72,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
    `docs/healthchecks-io-deadman.md` ("Period and grace").
 
 6. **The router's WireGuard port-forward.** UDP `51820` forwards to daniel-box, where
-   wg-easy runs as a k8s workload (`roles/k8s/wg-easy`). If daniel-box is rebuilt on new
+   wg-easy runs as a k8s workload (`k8s/roles/wg-easy/`). If daniel-box is rebuilt on new
    hardware, the forward's destination IP needs updating to match; the client subnet
    (`10.8.0.0/24`) and admin UI (`wg-easy.daniel-hunter.com`, behind Authelia) do not
    change. `daniel-pi` runs a second, LAN-only wg-easy on `51822/udp` — not this path, and
@@ -81,7 +81,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
 
 7. **The way in on a host with no age key yet.** The operator runs `age-keygen` by hand, or places the recovery private key (item 1) at
    `~/.config/sops/age/keys.txt` instead. The host package supplies `sops` and `age`. After
-   that, the host can decrypt `ansible/vars/secrets.yml`, and *The age keys* below says which
+   that, the host can decrypt `secrets/secrets.yml`, and *The age keys* below says which
    hosts hold a key.
    Source: `docs/host-bring-up.md` (§5) and the `add-secret` skill's
    *Onboarding a host that cannot decrypt yet* section
@@ -102,7 +102,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
    the repo, CI or a host, and its only use is the scenario below. The kit also holds image
    archives for a rebuilt cluster that cannot reach GHCR or Docker Hub, refreshed with the
    bundle. It holds the three Flux controller images that
-   `ansible/roles/k8s/flux/files/gotk-components.yaml` pins at `flux_version`, and the
+   `k8s/roles/flux/files/gotk-components.yaml` pins at `flux_version`, and the
    registry's image (`registry_k8s_image`). Each archive is the pinned image's whole index as an
    OCI layout, because the manifests name the index digest. Docker's classic image store saves
    one platform's image under a manifest of its own, so a node that imports that archive holds
@@ -175,8 +175,8 @@ otherwise; none of the values below are secrets themselves, only names and locat
    Source: `hosts/components/builder/CLAUDE.md` and `docs/host-packages.md`.
 
 10. **The cluster age key.** A dedicated age keypair that decrypts only the cluster file
-    (`ansible/vars/cluster-vars.sops.env`) and the SOPS manifests under
-    `ansible/vars/cluster-manifests/`. It never decrypts `ansible/vars/secrets.yml`. Its
+    (`secrets/cluster-vars.sops.env`) and the SOPS manifests under
+    `secrets/cluster-manifests/`. It never decrypts `secrets/secrets.yml`. Its
     private half lives in the password manager, beside item 1, and in the Secret
     `flux-system/sops-age`. The cluster needs it only as that Secret: `kustomize-controller`
     reads `sops-age` to decrypt the cluster file into the Secret `homelab-cluster-vars`. A
@@ -191,7 +191,7 @@ otherwise; none of the values below are secrets themselves, only names and locat
     - **A leaked key is not a lost key.** The rotation protects future revisions only,
       because git history and every published `sha-<sha>` artifact keep copies of the
       cluster file and of each cluster manifest, all encrypted to the old key. A suspected
-      compromise also needs every key that `ansible/vars/cluster-vars.source` lists rotated
+      compromise also needs every key that `secrets/cluster-vars.source` lists rotated
       (**operator-only**) and its consumers redeployed. That list includes the keys the
       cluster manifests hold. *Rotating the cluster key* in `docs/secret-rotation.md` has
       the steps.
@@ -199,11 +199,11 @@ otherwise; none of the values below are secrets themselves, only names and locat
    and `docs/adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md`.
 
 11. **daniel-server's host age key.** `/etc/homelab/age.key` (root, mode 0600) is the key
-    `homelab-secrets.service` decrypts `ansible/vars/hosts/daniel-server.sops.yaml` with. It
+    `homelab-secrets.service` decrypts `secrets/hosts/daniel-server.sops.yaml` with. It
     is the same keypair that H4.2 copied from daniel-server's user-home key. The 2026-11-09
     ruling (#6643) retired the user-home copy, so the key now lives at this one path and
     decrypts only that host file. Its public half is the first recipient of the
-    `vars/hosts/daniel-server\.sops\.yaml$` rule in `ansible/.sops.yaml`, and of no other
+    `vars/hosts/daniel-server\.sops\.yaml$` rule in `secrets/.sops.yaml`, and of no other
     rule. The recovery key (item 1) is a recipient of the host file, so it is the way back
     when the host loses the key.
     - **To restore it** onto a rebuilt daniel-server, place the recovery key (item 1) at
@@ -211,17 +211,17 @@ otherwise; none of the values below are secrets themselves, only names and locat
       `/etc/homelab/age.key` (root, mode 0600), then delete the user-home copy. Or let
       `sudo hosts/bootstrap-host.sh daniel-server` create a fresh key at the second path (its
       step 3) and print the public key. A fresh key then needs the recipient steps in the
-      header of `ansible/.sops.yaml`, applied to `vars/hosts/daniel-server.sops.yaml` only,
+      header of `secrets/.sops.yaml`, applied to `vars/hosts/daniel-server.sops.yaml` only,
       from daniel-box or any host holding the recovery key, before the host decrypts
       anything.
     - **A lost or exposed key means rotating every value the host held**, not only re-keying
       the host. A re-key protects future revisions. Git history and every published
       package keep ciphertext encrypted to the old key. The rotation list is derived, not
-      remembered: every value in every SOPS file whose creation rule in `ansible/.sops.yaml`
+      remembered: every value in every SOPS file whose creation rule in `secrets/.sops.yaml`
       lists the host's public key. To print the rules, take the public key from
       `age-keygen -y` on the surviving copy of the key, or from the first recipient of the
       host's own rule, and run, from the repo root:
-      `uv run python -c 'import sys, yaml; [print(r["path_regex"]) for r in yaml.safe_load(open("ansible/.sops.yaml"))["creation_rules"] if sys.argv[1] in r["age"]]' <public key>`.
+      `uv run python -c 'import sys, yaml; [print(r["path_regex"]) for r in yaml.safe_load(open("secrets/.sops.yaml"))["creation_rules"] if sys.argv[1] in r["age"]]' <public key>`.
       For daniel-server the only rule is `vars/hosts/daniel-server.sops.yaml`, so the list is
       every value in its host file. Past revisions in git history still wrap `secrets.yml` and
       the cluster files to the retired user-home key, so deleting that key's private half
@@ -230,11 +230,11 @@ otherwise; none of the values below are secrets themselves, only names and locat
    Source: `docs/target-architecture/host/h4-secrets-unit.md` ("Which ciphertext each host
    carries") and `hosts/bootstrap-host.sh` (step 3).
 12. **daniel-pi's host age key.** `/etc/homelab/age.key` (root, mode 0600) on the Pi is the
-    key `homelab-secrets.service` decrypts `ansible/vars/hosts/daniel-pi.sops.yaml` with. The
+    key `homelab-secrets.service` decrypts `secrets/hosts/daniel-pi.sops.yaml` with. The
     Pi generated it at `hosts/bootstrap-host.sh` step 3 on 2026-10-24, so it exists at one
     path on one machine and nowhere else. The Pi is a recipient of its own file only. Its
     public half appears in the `vars/hosts/daniel-pi\.sops\.yaml$` creation rule of
-    `ansible/.sops.yaml`, beside daniel-box's key and the recovery key (item 1), and in no
+    `secrets/.sops.yaml`, beside daniel-box's key and the recovery key (item 1), and in no
     other rule. The file arrived with H4.5. Since then the key decrypts the two push tokens that
     the Pi's heartbeats load from `/run/credstore`, so a lost key costs those two values.
     - **To replace it** on a rebuilt Pi, follow *Scenario: daniel-pi must be rebuilt from a blank
@@ -266,7 +266,7 @@ Each host holds up to two age keys, and they have different readers.
   every host, and `homelab-secrets.service` decrypts the host's own SOPS file with it.
 - **The operator's user-home key, `~/.config/sops/age/keys.txt`.** Ansible's `community.sops`
   lookups, the operator's `sops` edits, the `add-secret` skill and the secret rotation timer
-  read it. They decrypt `ansible/vars/secrets.yml` and the cluster files.
+  read it. They decrypt `secrets/secrets.yml` and the cluster files.
 
 The decision recorded with H7.24b on 2026-10-30, and the ruling of 2026-11-09 (#6643):
 
@@ -275,7 +275,7 @@ The decision recorded with H7.24b on 2026-10-30, and the ruling of 2026-11-09 (#
 - **daniel-server holds no user-home key.** H4.2 left a duplicate there. The operator ruled on
   2026-11-09 to retire it and to rely on the recovery key (item 1) for the case where
   daniel-box is dead. The key is deleted from the generic rule and both cluster rules of
-  `ansible/.sops.yaml`, and the operator rotates `secrets.yml`, the cluster file and each
+  `secrets/.sops.yaml`, and the operator rotates `secrets.yml`, the cluster file and each
   cluster manifest with `sops rotate -i --rm-age <key>`. Then the operator removes
   `~/.config/sops/age/keys.txt` from daniel-server. The rotation and the removal are
   **operator-only**. daniel-server keeps its host key, `/etc/homelab/age.key` (item 11),
@@ -298,7 +298,7 @@ the recovery key (item 1).
    [Rebuilding a cluster node](host-packages.md#rebuilding-a-cluster-node) in
    `docs/host-packages.md`, which lists what the packages do not hold yet. Without the old
    node's age key, the script's step 3 creates a fresh one: add its public key to
-   `ansible/.sops.yaml`, run `sops updatekeys` from the machine that holds the recovery
+   `secrets/.sops.yaml`, run `sops updatekeys` from the machine that holds the recovery
    key, commit and pull. Delete the recovery key from that machine once the new
    daniel-box decrypts on its own.
 2. Decide whether cluster **objects** (Deployments, Secrets, PVC bindings) are also lost —
@@ -331,7 +331,7 @@ What happens without any action:
   keep working. Do not chase DNS errors in that window.
 - **Pods with a Longhorn RWO volume stay Terminating.** Longhorn's
   `node-down-pod-deletion-policy` is `do-nothing`, and the `DECIDED:` comment on
-  `k3s_longhorn_node_down_pod_deletion_policy` in `ansible/roles/k8s/longhorn/defaults/main.yml`
+  `k3s_longhorn_node_down_pod_deletion_policy` in `k8s/roles/longhorn/defaults/main.yml`
   says why. Their volumes stay attached to the dead node until step 2 below.
 - **`nut` cannot move.** It is pinned to daniel-server because the UPS is USB-attached there.
   While daniel-server is down, daniel-box gets no power-loss shutdown signal and runs to battery
@@ -403,7 +403,7 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
     ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
     ```
 
-    Write down the fingerprint the last line prints, because step 6 compares it. The address must equal `server_ip` in `ansible/inventory/host_vars/daniel-pi.yml`. No package
+    Write down the fingerprint the last line prints, because step 6 compares it. The address must equal `server_ip` in `inventory/host_vars/daniel-pi.yml`. No package
     pins the address, so correct the router's DHCP reservation if it differs.
 4. To create the age key and run the one-time host steps, run the script through `sh`, because
     the boot partition is FAT. It prints the new public key.
@@ -418,7 +418,7 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
     `AllowGroups ssh-users` otherwise locks out `ubuntu` and `pi-peer-backup`.
 
 5. To let the first package decrypt its secrets, add the new key to the
-    `vars/hosts/daniel-pi\.sops\.yaml$` rule in `ansible/.sops.yaml`, **without removing the old
+    `vars/hosts/daniel-pi\.sops\.yaml$` rule in `secrets/.sops.yaml`, **without removing the old
     key**. `compose-run` refuses to start the project without `compose.env`, and
     `homelab-secrets` cannot write that file until the package carries ciphertext for this key.
     On daniel-box, run the re-encrypt from `ansible/`, commit, and merge through a PR. The merged
@@ -501,7 +501,7 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
     `dailyaidecheck.timer`.
 9. To re-pin the host key, write the output of
     `ssh daniel-pi cat /etc/ssh/ssh_host_ed25519_key.pub` to
-    `ansible/roles/k8s/pi-peer-backup/files/daniel-pi-ssh-host-ed25519.pub` and merge through a
+    `k8s/roles/pi-peer-backup/files/daniel-pi-ssh-host-ed25519.pub` and merge through a
     PR. `promote` applies the new `pi-peer-backup-ssh` Secret. Each other account that has the
     old key in its `known_hosts`, such as the agent user, needs the same `ssh-keygen -R`.
 10. To make the Pi report the applied version, start the updater on the Pi. Only the updater
@@ -605,7 +605,7 @@ suspended before it is scaled and resumed rather than redeployed.
 ### Scenario: Longhorn backups must stop and the disarm PR cannot reach the cluster
 
 The normal lever is a PR that sets `k3s_longhorn_backup_armed: false` (or
-`k3s_longhorn_r2_armed: false`) in `ansible/roles/k8s/longhorn-backup/defaults/main.yml`. Promote
+`k3s_longhorn_r2_armed: false`) in `k8s/roles/longhorn-backup/defaults/main.yml`. Promote
 applies it like any revision, and a failed revision never resets across it, because
 `longhorn-backup` is forward-only. Three cases defeat that path: `DEPLOY_HOLD` holds a value other
 than `none`, a transaction-cap spiral outruns a merge, and `longhorn` is not Ready, so the
@@ -644,7 +644,7 @@ If your own working machine is what's gone, the lab itself needs nothing done to
    anything.
 2. If daniel-box itself is unreachable this way, clone the repo fresh (item 8, or straight
    from GitHub) onto any replacement machine, drop the recovery age key (item 1) at
-   `~/.config/sops/age/keys.txt`, and `sops -d ansible/vars/secrets.yml` to confirm decrypt
+   `~/.config/sops/age/keys.txt`, and `sops -d secrets/secrets.yml` to confirm decrypt
    before doing anything else. **Operator-only:** this prints every secret, and the agent
    guard denies it (`docs/claude-shell-permissions.md`, *Inspecting a secret without
    decrypting it*).
@@ -725,7 +725,7 @@ steps below on production.
 
 1. Clone item 8's repo bundle and commit the change to apply on top of it.
 1. Commit the break-glass source form: set `flux_break_glass: true` in
-   `ansible/roles/k8s/flux/defaults/main.yml`. The OCIRepository `homelab` then names the
+   `k8s/roles/flux/defaults/main.yml`. The OCIRepository `homelab` then names the
    in-cluster registry (`flux_break_glass_url`), reads it over plain HTTP, and verifies against
    the Secret `flux-break-glass-key` instead of the keyless identity.
 1. Check that the commit to render equals or descends from the commit that the cluster's
@@ -825,7 +825,7 @@ emergency change, and silently reverts it. So order the steps:
 
 The registry's NetworkPolicy admits source-controller on the push port at all times, so
 neither direction applies or deletes a policy by hand.
-`ansible/roles/k8s/registry/templates/networkpolicy.yaml.j2` has the trade-off, in its
+`k8s/roles/registry/templates/networkpolicy.yaml.j2` has the trade-off, in its
 `DECIDED:` marker for that rule.
 
 ## Documented vs drilled
@@ -850,7 +850,7 @@ Once a year, on a scratch host with no other access to this repo's live infrastr
 
 1. Place **only** the recovery age key (item 1) at `~/.config/sops/age/keys.txt`.
 2. Clone the repo (or restore item 8's bundle).
-3. Run `sops -d ansible/vars/secrets.yml` and confirm it decrypts cleanly, using the
+3. Run `sops -d secrets/secrets.yml` and confirm it decrypts cleanly, using the
    recovery recipient alone — no host key present. **Operator-only:** an agent cannot run
    this step, because the guard denies any `sops` decrypt.
 4. Record the date and outcome in this doc's *Documented vs drilled* table, in the SOPS

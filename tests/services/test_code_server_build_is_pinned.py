@@ -1,0 +1,327 @@
+"""Guard: every input to the code-server image build is pinned.
+
+The image is built in-cluster from `templates/Dockerfile.j2`. Six inputs would otherwise resolve
+from the network at build time: the base tag without a digest, NodeSource's
+`setup_22.x` script piped to bash, bare `pip install` names, an unversioned `npm install -g`,
+and the CURRENT version of each VS Code extension from Open VSX and the marketplace — which
+for a platform-specific extension is whichever build the API lists first (alpine-arm64 for
+ruff and ty, win32-x64 for Claude Code). Each guard here names one of those inputs, so the
+failure says which one floated rather than that a count moved. Every guard reads the RENDERED
+Dockerfile, through `_k8s_render.rendered_build_text` (#3175).
+
+Run: uv run pytest tests/services/test_code_server_build_is_pinned.py
+"""
+
+import json
+import re
+
+import pytest
+
+from _helpers import K8S_ROLES, REPO, load_defaults
+from _k8s_render import rendered_build_text, rendered_k8s_text
+
+ROLE = K8S_ROLES / "code-server"
+
+
+def _rendered_dockerfile() -> str:
+    """The Dockerfile as image-builder's `template` lookup renders it.
+
+    Every pin below is read off this rather than off the template: the node URL and each
+    extension URL come from a role default, so a source scan sees `{{ ... }}`.
+    """
+    return rendered_build_text("code-server")
+
+
+# The extensions the pin table must carry, so a renamed or emptied list fails as a missing
+# member rather than passing over nothing. The second set names the ones published per
+# platform: their URL has to select the linux-x64 build, or the API's first-listed one ships.
+KNOWN_EXTENSIONS = frozenset(
+    {
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "astral-sh.ty",
+        "ms-python.vscode-pylance",
+        "Anthropic.claude-code",
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "vadimcn.vscode-lldb",
+    }
+)
+PLATFORM_SPECIFIC = frozenset(
+    {
+        "charliermarsh.ruff",
+        "astral-sh.ty",
+        "Anthropic.claude-code",
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+    }
+)
+TARGET_PLATFORM = "linux-x64"
+
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_RELEASE = re.compile(r"^\d+\.\d+\.\d+$")
+
+# The network-resolving forms. Any one of them in the Dockerfile means a version is decided at
+# build time.
+FLOATING_FORMS = (
+    "deb.nodesource.com",
+    "| bash",
+    "extensionquery",
+    "/api/${publisher}",
+    "sh.rustup.rs",
+)
+
+# The subPath mounts of the backed-up workspace claim in deployment.yaml.j2. Cargo must write
+# none of them: a target/ there fills the 1 Gi claim and rides the weekly B2 backup.
+BACKED_UP_MOUNTS = ("/config/workspace", "/config/.ssh", "/config/.config")
+CARGO_PATH_VARS = ("CARGO_HOME", "CARGO_TARGET_DIR")
+
+
+def extension_pin_problems(entries: list[dict]) -> list[str]:
+    """Every entry missing a release version, a sha256, or the platform its URL must name.
+
+    Pure over the parsed list so the red half below can hand it a broken entry without editing
+    the tree.
+    """
+    problems: list[str] = []
+    for e in entries:
+        name = e.get("name", "<unnamed>")
+        version = str(e.get("version", ""))
+        if not _RELEASE.match(version):
+            problems.append(f"{name}: version {version!r} is not an exact release")
+        if not _SHA256.match(str(e.get("sha256", ""))):
+            problems.append(f"{name}: sha256 is not 64 hex characters")
+        url = str(e.get("url", ""))
+        if version and version not in url:
+            problems.append(f"{name}: url does not name version {version}")
+        if name in PLATFORM_SPECIFIC and TARGET_PLATFORM not in url:
+            problems.append(f"{name}: url does not select the {TARGET_PLATFORM} build")
+    return problems
+
+
+def floating_pip_packages(dockerfile: str) -> list[str]:
+    """Every package in a `pip install` continuation block without an exact `==` pin."""
+    floating: list[str] = []
+    block = re.search(r"pip install[^\n]*\\\n((?:\s+\S+\s*\\\n)+)", dockerfile)
+    if block is None:
+        return ["<no pip install block found>"]
+    for line in block.group(1).splitlines():
+        token = line.strip().rstrip("\\").strip()
+        if token and not token.startswith("-") and "==" not in token:
+            floating.append(token)
+    return floating
+
+
+def cargo_path_problems(dockerfile: str, backed_up: tuple[str, ...]) -> list[str]:
+    """Every cargo write path the Dockerfile leaves unset or puts under a backed-up mount."""
+    problems: list[str] = []
+    for var in CARGO_PATH_VARS:
+        m = re.search(rf"^ENV\s+{var}=(\S+)\s*$", dockerfile, re.MULTILINE)
+        if m is None:
+            problems.append(f"{var} is not set, so cargo writes under $HOME")
+            continue
+        path = m.group(1).rstrip("/")
+        under = [b for b in backed_up if path == b or path.startswith(b + "/")]
+        if under:
+            problems.append(f"{var}={path} lands on the backed-up mount {under[0]}")
+    return problems
+
+
+def test_the_base_image_carries_a_digest() -> None:
+    m = re.search(r"^FROM\s+(\S+)", _rendered_dockerfile(), re.MULTILINE)
+    assert m, "no FROM line"
+    assert re.search(r":\d+\.\d+\.\d+-ls\d+@sha256:[0-9a-f]{64}$", m.group(1)), (
+        f"FROM {m.group(1)} must pin the -lsNN release tag AND its digest: linuxserver "
+        "rebuilds a tag in place, so the tag alone names a moving image"
+    )
+
+
+def test_every_extension_is_pinned_by_version_and_sha256() -> None:
+    entries = load_defaults(ROLE)["code_server_k8s_extensions"]
+    names = {e["name"] for e in entries}
+    missing = KNOWN_EXTENSIONS - names
+    assert not missing, f"extension pin table lost {sorted(missing)}"
+    assert not extension_pin_problems(entries)
+
+
+def test_every_pip_package_is_pinned_exactly() -> None:
+    assert not floating_pip_packages(_rendered_dockerfile())
+
+
+def test_the_cli_is_pinned_to_the_extension_release() -> None:
+    m = re.search(r"@anthropic-ai/claude-code@(\S+)", _rendered_dockerfile())
+    assert m, "npm install of @anthropic-ai/claude-code carries no version"
+    cli = m.group(1)
+    extension = next(
+        e
+        for e in load_defaults(ROLE)["code_server_k8s_extensions"]
+        if e["name"] == "Anthropic.claude-code"
+    )
+    assert cli == str(extension["version"]), (
+        f"CLI pinned to {cli} but the Anthropic.claude-code extension to {extension['version']} — "
+        "the extension drives the CLI, so the two move together. Set the extension's version "
+        "and URL, then run `uv run python scripts/validate/asset_pins.py --refresh "
+        "'code_server_k8s_extensions[Anthropic.claude-code]'` for its sha256"
+    )
+
+
+# The extension refresh, as the Renovate rule must spell it for whoever finishes a CLI bump.
+EXTENSION_REFRESH = "--refresh 'code_server_k8s_extensions[Anthropic.claude-code]'"
+
+
+def test_the_renovate_rule_names_the_extension_finish() -> None:
+    """A CLI bump's PR title and body both say the extension moves by hand (#4584).
+
+    VS Code extensions have no Renovate datasource, so every CLI bump this rule raises fails
+    the lockstep test above until someone moves the extension. #4559 arrived red with the
+    finish only in its body; the group name is what reaches the title.
+    """
+    rules = json.loads((REPO / "renovate.json").read_text())["packageRules"]
+    rule = next(
+        r
+        for r in rules
+        if "npm" in r.get("matchDatasources", [])
+        and f"{ROLE.relative_to(REPO)}/templates/Dockerfile.j2"
+        in r.get("matchFileNames", [])
+    )
+    assert "Anthropic.claude-code" in rule["groupName"], rule["groupName"]
+    for field in ("description", "prBodyNotes"):
+        assert EXTENSION_REFRESH in json.dumps(rule[field]), (
+            f"the rule's {field} must name `asset_pins.py {EXTENSION_REFRESH}`"
+        )
+
+
+def test_node_is_pinned_with_a_checksum() -> None:
+    defaults = load_defaults(ROLE)
+    version = str(defaults["code_server_k8s_node_version"])
+    assert _RELEASE.match(version), f"node version {version!r} is not an exact release"
+    assert _SHA256.match(str(defaults["code_server_k8s_node_sha256"]))
+    rendered = _rendered_dockerfile()
+    assert f"node-v{version}-linux-x64.tar.xz" in rendered
+    assert "sha256sum -c" in rendered
+
+
+def test_rust_is_pinned_with_a_checksum() -> None:
+    defaults = load_defaults(ROLE)
+    version = str(defaults["code_server_k8s_rust_version"])
+    assert _RELEASE.match(version), f"rust version {version!r} is not an exact release"
+    rendered = _rendered_dockerfile()
+    # (published tarball, where the Dockerfile saves it, the key holding its digest)
+    for tarball, local, key in (
+        (
+            f"rust-{version}-x86_64-unknown-linux-gnu.tar.xz",
+            "/tmp/rust.tar.xz",
+            "code_server_k8s_rust_sha256",
+        ),
+        (
+            f"rust-src-{version}.tar.xz",
+            "/tmp/rust-src.tar.xz",
+            "code_server_k8s_rust_src_sha256",
+        ),
+    ):
+        sha = str(defaults[key])
+        assert _SHA256.match(sha), f"{key} is not 64 hex characters"
+        assert f"static.rust-lang.org/dist/{tarball}" in rendered, (
+            f"{tarball} is not downloaded by the rendered Dockerfile"
+        )
+        assert f"{sha}  {local}" in rendered, (
+            f"{key} is not checked by sha256sum -c in the rendered Dockerfile"
+        )
+
+
+def test_cargo_writes_stay_off_the_backed_up_claim() -> None:
+    # fact: k8s/roles/code-server/CLAUDE.md#Notable
+    deployment = rendered_k8s_text("code-server", "deployment.yaml.j2")
+    for mount in BACKED_UP_MOUNTS:
+        assert f"mountPath: {mount}\n" in deployment, (
+            f"{mount} is no longer a mount in the rendered deployment; update BACKED_UP_MOUNTS"
+        )
+    assert not cargo_path_problems(_rendered_dockerfile(), BACKED_UP_MOUNTS)
+
+
+def test_no_build_step_resolves_a_version_from_the_network() -> None:
+    rendered = _rendered_dockerfile()
+    back = [form for form in FLOATING_FORMS if form in rendered]
+    assert not back, f"network-resolved build step(s) are back: {back}"
+
+
+def test_the_rendered_build_verifies_every_extension() -> None:
+    rendered = _rendered_dockerfile()
+    for e in load_defaults(ROLE)["code_server_k8s_extensions"]:
+        assert e["url"] in rendered, (
+            f"{e['name']}: pinned URL not in the rendered Dockerfile"
+        )
+        assert f"{e['sha256']}  /opt/vsix/{e['name']}.vsix" in rendered, (
+            f"{e['name']}: no sha256sum check in the rendered Dockerfile"
+        )
+
+
+# ── red proofs for the two pure checks ─────────────────────────────────────────────────────
+
+
+def _entry(**overrides) -> dict:
+    base = {
+        "name": "charliermarsh.ruff",
+        "version": "2026.82.0",
+        "url": "https://open-vsx.org/api/charliermarsh/ruff/linux-x64/2026.82.0/file/x.vsix",
+        "sha256": "b" * 64,
+    }
+    return {**base, **overrides}
+
+
+def test_a_complete_extension_entry_is_clean() -> None:
+    assert extension_pin_problems([_entry()]) == []
+
+
+@pytest.mark.parametrize(
+    "broken",
+    [
+        {"version": "latest"},
+        {"sha256": "abc"},
+        {
+            "url": "https://open-vsx.org/api/charliermarsh/ruff/linux-x64/2026.81.0/file/x.vsix"
+        },
+        {
+            "url": "https://open-vsx.org/api/charliermarsh/ruff/alpine-arm64/2026.82.0/file/x.vsix"
+        },
+    ],
+    ids=["floating-version", "short-hash", "url-names-other-version", "wrong-platform"],
+)
+def test_a_broken_extension_entry_is_flagged(broken: dict) -> None:
+    assert extension_pin_problems([_entry(**broken)])
+
+
+def test_a_fully_pinned_pip_block_is_clean() -> None:
+    text = "RUN pip install --no-cache-dir \\\n        uv==1.0.0 \\\n        ruff==0.1.0 \\\n    && true\n"
+    assert floating_pip_packages(text) == []
+
+
+def test_a_bare_pip_package_is_flagged() -> None:
+    text = "RUN pip install --no-cache-dir \\\n        uv==1.0.0 \\\n        ruff \\\n    && true\n"
+    assert floating_pip_packages(text) == ["ruff"]
+
+
+_CARGO_ENV = (
+    "ENV CARGO_HOME=/config/.cargo\nENV CARGO_TARGET_DIR=/config/.cargo-target\n"
+)
+
+
+def test_cargo_paths_off_the_backed_up_mounts_are_clean() -> None:
+    assert cargo_path_problems(_CARGO_ENV, BACKED_UP_MOUNTS) == []
+
+
+@pytest.mark.parametrize(
+    "dockerfile",
+    [
+        "ENV CARGO_HOME=/config/.cargo\n",
+        "ENV CARGO_HOME=/config/.cargo\nENV CARGO_TARGET_DIR=/config/workspace/target\n",
+        "ENV CARGO_HOME=/config/.config/cargo\nENV CARGO_TARGET_DIR=/config/.cargo-target\n",
+    ],
+    ids=[
+        "target-dir-unset",
+        "target-dir-in-workspace",
+        "cargo-home-in-backed-up-config",
+    ],
+)
+def test_a_cargo_path_on_the_backed_up_claim_is_flagged(dockerfile: str) -> None:
+    assert cargo_path_problems(dockerfile, BACKED_UP_MOUNTS)
