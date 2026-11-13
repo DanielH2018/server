@@ -36,13 +36,23 @@
 # `k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address` on daniel-server before
 # the next reboot (operator-only); the revert restores that play's tasks.
 #
+# The read-only kubeconfig (#8261) is k3s-server's script, unit, token output and shell profile,
+# borrowed whole. Sessions and landings run on this node too, and without it every cluster read
+# here fails. The token cannot read Secrets, and this node already holds the join token.
+#
 # ENFORCED: ansible/tests/setup/test_k3s_agent_component.py.
 component: k3s-server
 depends:
   - open-iscsi
   - nfs-common
   - multipath-tools
+  - zsh
 defaults:
+  # An agent has no apiserver and no admin kubeconfig. The kubeconfig names the server's
+  # apiserver rather than the agent's own proxy on 6444, so `kubectl` answers while k3s-agent is
+  # down, and the CA is the one the agent fetched at its join.
+  k3s_readonly_kubeconfig_server: "https://{{ hostvars['daniel-box'].server_ip }}:6443"
+  k3s_readonly_kubeconfig_ca_source: /var/lib/rancher/k3s/agent/server-ca.crt
   # The log file k3s writes. The k3s-server component carries the same path, because Alloy tails
   # one literal on every node; ansible/tests/k8s/test_alloy_ships_k3s_log.py holds all three equal.
   k3s_log_file: /var/log/k3s.log
@@ -75,7 +85,20 @@ files:
   - {src: templates/static-link-sysctl.conf.j2, dst: /etc/sysctl.d/90-homelab-static-link.conf, activate: sysctl, when: "k3s_node_static_link | length > 0"}
   - {src: files/homelab-netplan-wifi, dst: /usr/lib/homelab/homelab-netplan-wifi, mode: "0755", when: "k3s_node_wifi_link | length > 0"}
   - {src: units/homelab-netplan-wifi.service, dst: /usr/lib/systemd/system/homelab-netplan-wifi.service, when: "k3s_node_wifi_link | length > 0"}
+  - {src: "component:templates/k3s-readonly-kubeconfig.j2", dst: /usr/lib/homelab/k3s-readonly-kubeconfig, mode: "0755", activate: "try-restart:homelab-k3s-kubeconfig.service"}
+  - {src: "component:units/homelab-k3s-kubeconfig.service.j2", dst: /usr/lib/systemd/system/homelab-k3s-kubeconfig.service}
+  - {src: "component:templates/k3s-kubeconfig-profile", dst: /etc/profile.d/k3s-kubeconfig.sh}
 outputs:
+  - src: "component:templates/k3s-readonly-token.j2"
+    path: /etc/rancher/k3s/readonly-token
+    destination: k3s/readonly-token
+    owner: root
+    group: root
+    mode: "0600"
+    keys: [k3s_readonly_token]
+    persist: false
+    link: false
+    dependents: [homelab-k3s-kubeconfig.service]
   - src: templates/netplan-wifi-fallback.json.j2
     path: /etc/netplan/80-homelab-wifi-fallback.yaml
     destination: netplan/80-homelab-wifi-fallback.yaml
@@ -89,6 +112,7 @@ outputs:
     format: json   # homelab-secrets escapes each value, and JSON is YAML to netplan
     when: "k3s_node_wifi_link | length > 0"
 enable:
+  homelab-k3s-kubeconfig.service: multi-user.target
   homelab-netplan-wifi.service: {target: multi-user.target, when: "k3s_node_wifi_link | length > 0"}
 legacy:
   # Ansible's logging drop-in. Its lines equal the package's, so both apply harmlessly until
@@ -106,6 +130,15 @@ legacy:
 lines:
   # kubelet's log watchers and every root-uid container share the per-uid default of 128.
   - {path: /etc/sysctl.conf, line: fs.inotify.max_user_instances=1024, regexp: '^\s*fs\.inotify\.max_user_instances\s*=', activate: sysctl}
+  # zsh does not read /etc/profile.d, and zshenv is the one startup file every invocation reads.
+  # `depends: zsh` installs the file first. The arm would create a missing /etc/zsh 0700, which
+  # hides the file from every user.
+  - path: /etc/zsh/zshenv
+    marker: "# {mark} ANSIBLE MANAGED — k3s kubeconfig"
+    block: |
+      if [ -r /etc/profile.d/k3s-kubeconfig.sh ]; then
+        . /etc/profile.d/k3s-kubeconfig.sh
+      fi
 # The inter-node join rules, allowed FROM the server ON this agent. Each spec is the rule as `ufw
 # show added` prints it. `keep`: no revert and no floor ever deletes one, because the agent stops
 # being a node without them. The live rules carry no comment, so the arm adopts each by appending

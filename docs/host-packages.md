@@ -46,7 +46,9 @@ lists.
   UPS shutdown chain and the `k3s-gates` component, whose `/usr/lib/homelab/k3s_gates.py` the
   k3s-agent Plan's `prepare` runs (#6413). Since H7.34 it also ships the k3s agent's whole host
   half (`hosts/components/k3s-agent/`) and the hypervisor with its monthly etcd restore drill
-  (`hosts/components/hypervisor/`).
+  (`hosts/components/hypervisor/`). The `k3s-agent` component also writes the read-only
+  `~/.kube/config` there (#8261), from `k3s_readonly_token` and the CA the agent fetched at its
+  join, so `kubectl`, `probe.py` and a landing read the cluster from a session on that node.
 - `homelab-daniel-box` ships reconcile (H6.2), and since H6.3b the secrets unit and the
   `k3s-restart` component, with the `k3s-gates` component that ships the script the restart
   imports. Its one credential is `k3s_readonly_token`, which
