@@ -2,7 +2,7 @@
 
 `cc-wait fanout <run-id> [<run-id> ...]` runs this through `.claude/wait-sources/fanout`. It
 replaces the Monitor loop each orchestrating session wrote by hand around `status`, 92 of them
-in the two weeks to 2026-10-04 (`while true; do fanout_place.py status <id> | grep -v
+in the two weeks to 2026-10-04 (`while true; do fanout.py place status <id> | grep -v
 ': running$'; sleep 120; done`).
 
     fanout.py probe --describe <run-id>...   # terminal states, as JSON

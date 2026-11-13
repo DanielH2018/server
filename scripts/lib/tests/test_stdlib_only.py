@@ -262,8 +262,6 @@ def test_the_declared_fanout_units_are_the_commands_the_builders_write():
         stop_post("1", SERVER_TARGET),
     ]
     for entry, argv in FANOUT_UNITS:
-        if entry.name == "fanout.py" and argv[:1] == ("place",):
-            continue  # what the fanout_place.py shim forwards to, not a command line
         shape = " ".join([entry.relative_to(REPO).as_posix(), *argv]) + " "
         assert any(shape in command for command in written), shape
 

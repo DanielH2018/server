@@ -1,7 +1,7 @@
 """`place clean` removes a squash-merged batch whose worktree carries a pre-#6552 script (#6571).
 
 #6552 taught `clean-one` to count a tip inside a merged PR's head as landed, but the remote leg
-ran the BATCH WORKTREE's own `fanout_place.py`. That copy is frozen at the batch's launch, so
+ran the BATCH WORKTREE's own `fanout.py`. That copy is frozen at the batch's launch, so
 every batch started before #6552 kept judging by the old ladder and `clean` kept them with
 "not merged into origin/master" although their PRs had merged. These tests drive the real
 `place clean` entry over a saved manifest, run the command it builds under bash, and let the
@@ -25,7 +25,7 @@ from _fanout_fakes import fake_tools
 BRANCH = "worktree-fanout-x"
 UNIT = "fanout-x"
 # The `clean-one` a batch launched before #6552 carries in its own worktree.
-STALE_SCRIPT = 'import sys\nprint("kept:", sys.argv[2], sys.argv[3], "not merged into origin/master")\n'
+STALE_SCRIPT = 'import sys\nprint("kept:", sys.argv[-2], sys.argv[-1], "not merged into origin/master")\n'
 SCRIPTS = Path(clean_mod.__file__).resolve().parents[2]
 
 
@@ -33,7 +33,7 @@ def _scratch(tmp_path):
     """A primary checkout, the real `scripts/` linked into it, and a batch worktree on a branch.
 
     The branch holds a change master lacks, so no local layer of `is_merged` can call it
-    landed. The worktree commits the stale `fanout_place.py`; the primary has the current one.
+    landed. The worktree commits the stale `fanout.py`; the primary has the current one.
     """
     origin = init_repo(tmp_path / "origin.git", bare=True)
     primary = init_repo(tmp_path / "primary", initial_commit="init")
@@ -45,7 +45,7 @@ def _scratch(tmp_path):
     commit(
         worktree,
         "work",
-        **{"feature.txt": "unlanded\n", "scripts/dev/fanout_place.py": STALE_SCRIPT},
+        **{"feature.txt": "unlanded\n", "scripts/dev/fanout.py": STALE_SCRIPT},
     )
     git(primary, "worktree", "lock", "--reason", UNIT, str(worktree))
     return primary, worktree
