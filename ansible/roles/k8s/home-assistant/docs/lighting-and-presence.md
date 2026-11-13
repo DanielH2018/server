@@ -321,11 +321,11 @@ and the bedtime/wake routines that drive them.
 - **Dynamic morning wake (since 2026-06-18).** The wake ramp is driven by the real alarm, not a
   hardcoded time. `sensor.bedroom_wake_start` (a `device_class: timestamp` template sensor in
   `files/templates.yaml`) = `sensor.pixel_watch_3_next_alarm − 15 min`, `availability:` gated to
-  MORNING alarms only (local hour 03:00–11:00) so a nap/evening alarm never arms it. It's the SINGLE
-  source of truth for the wake window `[wake_start, alarm)`: `bedroom_morning_reset` time-triggers
-  `at: sensor.bedroom_wake_start` (id `alarm`), and both `bedroom_apply_natural`'s morning exception
-  and `bedroom_presence_on`'s window read it (the old triplicated 06:00/07:00 formula + weekday/weekend
-  split are GONE). `bedroom_morning_reset` also has a `09:00` `fallback` trigger that clears the
+  MORNING alarms only (local hour 03:00–11:00) so a nap/evening alarm never arms it. It anchors the
+  real alarm's wake: `bedroom_morning_reset` time-triggers `at: sensor.bedroom_wake_start` (id
+  `alarm`), and `bedroom_apply_natural`'s morning exception and `bedroom_wake_ramp` read it. The
+  gates that must also count a fallback wake read `binary_sensor.bedroom_in_wake_window` instead
+  (see *The wake window counts either wake* below). `bedroom_morning_reset` also has a `09:00` `fallback` trigger that clears the
   overnight overrides (sleep mode, AL sleep, manual-off, fan-manual) on no-alarm days; only the
   `alarm` trigger runs the ramp. The fallback re-applies natural lighting in ONE case — sleep mode
   was still on and the lights were still on when it fired, meaning the night ran to 09:00 and the

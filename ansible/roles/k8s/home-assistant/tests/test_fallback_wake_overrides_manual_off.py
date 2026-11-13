@@ -5,9 +5,11 @@ top-level manual_off gate made a night that ended with manual_off on a night wit
 (#8381). A mid-ramp "off" still has to stop RAMP and RELEASE.
 """
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
+from jinja_harness import render_template
 
 AUTOMATIONS = (
     Path(__file__).resolve().parent.parent
@@ -16,6 +18,15 @@ AUTOMATIONS = (
     / "wake-and-sleep.yaml"
 )
 MANUAL_OFF = "input_boolean.bedroom_manual_off"
+FRIDAY_0610 = datetime(2026, 11, 13, 6, 10, tzinfo=timezone.utc)
+# Every branch variable set so that only manual_off decides whether a branch runs.
+BRANCH_VARIABLES = {
+    "no_real_wake": True,
+    "in_start_window": True,
+    "wake_today": False,
+    "in_window": True,
+    "release_due": True,
+}
 
 
 def _fallback_wake() -> dict:
@@ -40,23 +51,32 @@ def _branches() -> dict[str, dict]:
     return by_name
 
 
-def test_manual_off_does_not_gate_the_whole_automation():
-    conditions = str(_fallback_wake()["condition"])
-    assert MANUAL_OFF not in conditions, conditions
+def _holds(condition, manual_off: str) -> bool:
+    states = {"person.daniel": "home", MANUAL_OFF: manual_off}
+    if isinstance(condition, dict) and condition["condition"] == "state":
+        return states[condition["entity_id"]] == condition["state"]
+    template = condition if isinstance(condition, str) else condition["value_template"]
+    rendered = render_template(
+        template,
+        is_state=lambda entity_id, state: states[entity_id] == state,
+        now=lambda: FRIDAY_0610,
+        **BRANCH_VARIABLES,
+    )
+    return rendered == "True"
+
+
+def _runs(branch: str, manual_off: str) -> bool:
+    conditions = _fallback_wake()["condition"] + _branches()[branch]["conditions"]
+    return all(_holds(c, manual_off) for c in conditions)
 
 
 def test_start_runs_with_manual_off_on_and_clears_it():
-    start = _branches()["start"]
-    assert MANUAL_OFF not in str(start["conditions"]), start["conditions"]
-    services = [step.get("service") for step in start["sequence"]]
+    assert _runs("start", manual_off="on")
+    services = [step.get("service") for step in _branches()["start"]["sequence"]]
     assert "script.bedroom_clear_overrides" in services, services
 
 
 def test_ramp_and_release_stop_on_manual_off():
-    branches = _branches()
-    for name in ("ramp", "release"):
-        conditions = branches[name]["conditions"]
-        assert any(MANUAL_OFF in str(c) and "'off'" in str(c) for c in conditions), (
-            name,
-            conditions,
-        )
+    for branch in ("ramp", "release"):
+        assert _runs(branch, manual_off="off"), branch
+        assert not _runs(branch, manual_off="on"), branch

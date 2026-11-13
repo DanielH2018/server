@@ -8,8 +8,8 @@
    window length (45 below) and the two internal knees in wake_brightness (15 = the alarm, 35 =
    alarm+20) define the 3-segment curve; the 15-min PRE-alarm lead MUST stay equal to the 15-min
    offset baked into templates.yaml's bedroom_wake_start state expression — change the pre-alarm lead
-   in both places together. The caller passes minutes since wake_start (or a negative sentinel when
-   unavailable). #}
+   in both places together. The caller passes minutes since the wake anchor (wake_elapsed, or the
+   ramp tickers' own elapsed), or a negative sentinel when there is none. #}
 {%- macro in_wake_window(elapsed_min) -%}
 {%- set e = elapsed_min | float(-1) -%}
 {{ 0 <= e < 45 }}
@@ -28,7 +28,7 @@
 {{ ((now_s - past | max) / 60) if past else -1 }}
 {%- endmacro -%}
 
-{# Wake-ramp RELEASE catch-up window: [45, 90) minutes since wake_start. The hand-off back to
+{# Wake-ramp RELEASE catch-up window: [45, 90) minutes since the wake anchor. The hand-off back to
    Adaptive Lighting (set_manual_control:false + apply at window end) used to fire on a SINGLE tick
    (elapsed in [45,46)); an HA restart/deploy or a gated-off minute spanning that one tick stranded AL
    paused for the rest of the day. This widens it to a 45-min catch-up window so a missed release

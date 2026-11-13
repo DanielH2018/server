@@ -179,8 +179,8 @@ bedroom_apply_natural:
 # fallback auto_light_allowed's `dark_fallback` argument takes. At night a stale-bright reading
 # is physically impossible, so sun-below-horizon guarantees the reset lights on the first press; by
 # day we still honor the live lux (a genuinely bright room stays off). Scoped to this HOLD path only —
-# the automatic presence gate (the binary_sensor, used by bedroom_presence_on / the Button-4 sleep-exit)
-# is unchanged. The button-1 HOLD blip condition is the exact complement of this `if` (keep them in sync).
+# the automatic presence gate (the binary_sensor, used by bedroom_presence_on) is unchanged. The
+# button-1 HOLD blip condition is the exact complement of this `if` (keep them in sync).
 bedroom_apply_natural_gated:
   alias: "Bedroom — apply natural lighting, lux-gated"
   mode: restart

@@ -89,3 +89,13 @@ def test_the_other_gates_read_the_window_sensor():
         text = str(gate)
         assert WINDOW_SENSOR in text, name
         assert "sensor.bedroom_wake_start" not in text, name
+
+
+def test_apply_natural_keeps_its_wake_start_only_read():
+    # bedroom_apply_wake halts without wake_start, so a fallback morning read as a wake here would
+    # turn every natural apply during the fallback ramp into a no-op.
+    scripts = yaml.safe_load((FILES / "scripts" / "lighting.yaml").read_text())
+    steps = scripts["bedroom_apply_natural"]["sequence"]
+    exception = next(s for s in steps if "variables" in s)["variables"]["exception"]
+    assert "sensor.bedroom_wake_start" in exception
+    assert WINDOW_SENSOR not in exception
