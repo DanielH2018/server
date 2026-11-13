@@ -75,6 +75,7 @@ from lib.repo_paths import REPO
 
 CI_WORKFLOW = Path(".github/workflows/ci.yml")
 HOOKS_STEP = "Run hooks (full sweep)"
+SUITE_STEP = "Run the test suite"
 
 # The whole suite took 198s and the hooks 87s on daniel-box (2026-11-13). A check still
 # running at nine times that is hung, and a caller waiting on the verdict needs a bound.
@@ -101,10 +102,28 @@ _API = "repos/{owner}/{repo}/actions"
 _TESTED = re.compile(r"\+([0-9a-f]{40}):refs/remotes/pull/\d+/merge")
 
 
+def _jobs(tree: Path) -> dict:
+    """The jobs of the swept commit's CI workflow, or none where the commit has no workflow."""
+    try:
+        workflow = yaml_fast.safe_load((tree / CI_WORKFLOW).read_text())
+    except FileNotFoundError:
+        return {}
+    return workflow.get("jobs") or {}
+
+
+def _job_env(tree: Path, job: str) -> dict[str, str]:
+    """The environment the swept commit's workflow gives every step of `job`.
+
+    A value that holds a `${{ }}` expression is left out, because only a runner can evaluate
+    it. A test holds the two local jobs to literal values.
+    """
+    env = _jobs(tree).get(job, {}).get("env") or {}
+    return {name: str(value) for name, value in env.items() if "${{" not in str(value)}
+
+
 def _hooks(tree: Path) -> list[str]:
     """The hooks job's own sweep command, read from the swept commit so it cannot drift."""
-    workflow = yaml_fast.safe_load((tree / CI_WORKFLOW).read_text())
-    steps = workflow["jobs"]["hooks"]["steps"]
+    steps = _jobs(tree).get("hooks", {}).get("steps") or ()
     for step in steps:
         if step.get("name") == HOOKS_STEP:
             # `bash -e` is how GitHub runs a step that names no shell.
@@ -113,8 +132,9 @@ def _hooks(tree: Path) -> list[str]:
 
 
 def _pytest(tree: Path) -> list[str]:
-    # The six hosted shards partition this one run.
-    return ["uv", "run", "python", "-m", "pytest"]
+    # The six hosted shards partition this one run. --exact: a runner starts with no
+    # environment, and without it `uv run` keeps the lint tools the hooks check installed.
+    return ["uv", "run", "--exact", "python", "-m", "pytest"]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -125,16 +145,20 @@ class Local:
         command: The argv to run in a tree, given the tree.
         failed: Matches the lines of the check's output that name what failed.
         timeout: Seconds the check may run before it is killed.
+        step: The name of the hosted job's step that the command stands for. The job's other
+            steps set the runner up or check something only a runner can, so the check's
+            verdict is comparable with this step's and not with the whole job's.
     """
 
     command: Callable[[Path], list[str]]
     failed: re.Pattern[str]
     timeout: int = CHECK_TIMEOUT
+    step: str = ""
 
 
 LOCAL = {
-    "hooks": Local(_hooks, re.compile(r"\.Failed$")),
-    "pytest": Local(_pytest, re.compile(r"^(FAILED|ERROR) ")),
+    "hooks": Local(_hooks, re.compile(r"\.Failed$"), step=HOOKS_STEP),
+    "pytest": Local(_pytest, re.compile(r"^(FAILED|ERROR) "), step=SUITE_STEP),
 }
 
 # Why this host runs none of the gate's other jobs.
@@ -313,8 +337,8 @@ def tested_commit(run_id: int, repo: Path, github: Callable[..., str] = _github)
     raise NoTree("no job's log names the merge it checked out")
 
 
-def _check_env() -> dict[str, str]:
-    """This process's environment as a hosted runner would give it to a check.
+def _check_env(tree: Path, job: str) -> dict[str, str]:
+    """This process's environment as a hosted runner would give it to a check of `job`.
 
     It drops git's variables and the virtualenv that runs this tool. `uv run` puts its
     project's `.venv/bin` first on `PATH`, and a check that inherited it would run a hook's
@@ -323,6 +347,10 @@ def _check_env() -> dict[str, str]:
     It sets the locale to `HOSTED_LANG`. Under `en_US.UTF-8`, `sort` ignores punctuation, so
     it orders `~ALL` ahead of `!refs/tags/v*` where a runner orders it after. A test that
     pinned the host's order passed here and failed hosted (CI run 43336474461).
+
+    It adds the job's own `env:`. The pytest job sets `UV_NO_GROUP=lint`, so its suite runs
+    without the lint tools, and a test that called one passed here and failed hosted (CI run
+    43146864552).
     """
     env = {
         name: value
@@ -335,7 +363,7 @@ def _check_env() -> dict[str, str]:
         env["PATH"] = os.pathsep.join(
             p for p in env["PATH"].split(os.pathsep) if Path(p) != Path(venv) / "bin"
         )
-    return env
+    return {**env, **_job_env(tree, job)}
 
 
 def _run(job: str, local: Local, tree: Path, log: Path) -> Check:
@@ -351,7 +379,7 @@ def _run(job: str, local: Local, tree: Path, log: Path) -> Check:
             proc = subprocess.Popen(
                 argv,
                 cwd=tree,
-                env=_check_env(),
+                env=_check_env(tree, job),
                 stdout=out,
                 stderr=subprocess.STDOUT,
                 start_new_session=True,

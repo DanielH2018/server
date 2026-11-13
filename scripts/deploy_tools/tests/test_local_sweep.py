@@ -62,23 +62,42 @@ def test_every_job_the_gate_needs_is_local_or_hosted_with_a_reason():
     assert all(local_sweep.HOSTED.values())
 
 
-def test_the_hosted_hooks_step_is_only_the_command_the_local_check_runs():
-    """A step `env:`, `shell:` or `working-directory:` is one the local check would not apply."""
+def _hosted_step(job: str) -> dict:
+    """The step of the real workflow that `job`'s local check stands for."""
     (step,) = [
         s
-        for s in _ci_jobs()["hooks"]["steps"]
-        if s.get("name") == local_sweep.HOOKS_STEP
+        for s in _ci_jobs()[job]["steps"]
+        if s.get("name") == local_sweep.LOCAL[job].step
     ]
-    assert set(step) == {"name", "run"}
+    return step
+
+
+@pytest.mark.parametrize("job", sorted(local_sweep.LOCAL))
+def test_a_local_check_can_apply_everything_its_hosted_step_runs_under(job):
+    """A step's own `env:`, `shell:` or `working-directory:`, and a job `env:` value only a
+    runner can evaluate, are ones the local check would not apply."""
+    assert set(_hosted_step(job)) == {"name", "run"}
+    literal = local_sweep._job_env(REPO, job)
+    assert literal == {k: str(v) for k, v in _ci_jobs()[job].get("env", {}).items()}
 
 
 def test_the_pytest_check_uses_the_launcher_the_hosted_shards_use():
-    (step,) = [
-        s
-        for s in _ci_jobs()["pytest"]["steps"]
-        if s.get("name") == "Run the test suite"
-    ]
-    assert " ".join(local_sweep.LOCAL["pytest"].command(REPO)) in step["run"]
+    # A runner's environment is new, so the hosted command needs no --exact.
+    launcher = [a for a in local_sweep.LOCAL["pytest"].command(REPO) if a != "--exact"]
+    assert " ".join(launcher) in _hosted_step("pytest")["run"]
+
+
+def test_a_check_runs_under_the_env_the_swept_commits_workflow_gives_its_job(repo):
+    workflow = (
+        "jobs:\n  pytest:\n    env:\n      UV_NO_GROUP: lint\n"
+        "      TOKEN: ${{ github.token }}\n"
+    )
+    commit(repo, "a workflow", **{CI_YML: workflow})
+    shows_env = _bash('echo "FAILED ${UV_NO_GROUP:-unset} ${TOKEN:-unset}"; exit 1')
+
+    (check,) = sweep("HEAD", repo=repo, checks=shows_env).checks
+
+    assert check.detail == ("FAILED lint unset",)
 
 
 def test_the_hooks_check_runs_the_command_the_swept_commit_carries(repo):
