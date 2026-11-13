@@ -129,10 +129,13 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
   at the two ends of the diff, never against a recorded hash, so a row means the diff itself
   moved the atom. A row's kind is `moved`, `gone`, `ambiguous` or `unparsable`, and each row
   says whether the diff also edited the section's prose. `--format` takes `text`,
-  `markdown`, `github` or `json`. The rules for each row and each format are on
+  `markdown`, `github`, `json` or `reread`. The rules for each row and each format are on
   `scripts/lib/facts/notice.py:moved_sections` and `scripts/lib/facts/notice.py:render`. The
   command exits 0 with rows or without, and exits 2 only when git cannot resolve the merge
   base. `docs/target-architecture/docs-guard/g1-diff-notice.md` is the plan that built it.
+  `scripts/dev/repo_guards.py` ends by printing the `reread` format, which lists only the
+  sections whose prose the branch left unchanged. That is how the notice reaches the
+  session that made the change, and it changes no exit code.
 
 `docs/adr/0023-fact-support-is-a-diff-notice.md` records why the notice replaced the stored
 hashes and their blocking test. A moved atom gets a notice and never blocks a merge. `lint`

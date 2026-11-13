@@ -79,9 +79,10 @@ content citation reaches 419.
 - A sentence that goes false in a section citing nothing about the changed code gives no
   row, so the replay cannot count it.
 
-**What stays open.** The advisory notice still reaches no session. The cheapest delivery
-is to print its unedited rows from `scripts/dev/repo_guards.py`, with no exit code. Nobody
-has decided that.
+**Delivery.** The CI job summary reached no session. The operator ruled on 2026-11-13 that
+`scripts/dev/repo_guards.py` prints the notice's unedited rows after its guards, with no
+exit code. A session and a fan-out batch both run that script before they open a PR.
+`fact_status.py notice --format reread` prints the same lines.
 
 **What reopens the slice.** A later replay whose graded share reaches 20%. The report
 lists the rows to grade:
@@ -206,7 +207,8 @@ Nothing to roll back: no gate was built. The planned rollback was to restore
 
 ## Complexity delta
 
-As stopped: adds three fields to each content row of the report's JSON, and removes
-nothing. As planned: adds one flag, one CI step and one line format, and removes the
+As stopped: adds three fields to each content row of the report's JSON, one notice format
+and one call in `repo_guards.py`. Removes the row in the root `CLAUDE.md` that told a
+session to run the notice by hand. As planned: adds one flag, one CI step and one line format, and removes the
 advisory step and the row in the root `CLAUDE.md` that tells a session to run the notice
 by hand.
