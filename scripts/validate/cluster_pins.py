@@ -80,6 +80,7 @@ VARS_YAML = (
 VARS_FILES = (*VARS_YAML, ":(glob)inventory/**", ":(glob)ansible/inventory/**")
 ROLES = ("k8s/roles/", "ansible/roles/k8s/")
 K3S_DEFAULTS = "k8s/roles/system-upgrade/defaults/main.yml"
+K3S_DEFAULTS_BEFORE_RENAME = "ansible/roles/k8s/system-upgrade/defaults/main.yml"
 K3S_KEY, K3S_ACK_KEY = "k3s_version", "k3s_downgrade_acknowledged"
 K3S_VERSION = re.compile(r"v(\d+)\.(\d+)\.(\d+)\+k3s(\d+)")
 VERSION = re.compile(r"v?(\d+)\.(\d+)\.(\d+)")
@@ -211,6 +212,11 @@ def k3s_problems(old: str | None, new: str | None, ack: str | None) -> list[str]
 def k3s_values_at(sha: str, repo: Path = REPO) -> tuple[str | None, str | None]:
     """`k3s_version` and `k3s_downgrade_acknowledged` at `sha`; None where the file or key is absent."""
     shown = git("show", f"{sha}:{K3S_DEFAULTS}", cwd=repo, check=False)
+    if shown.returncode != 0:
+        # The old path exists only for a base from before the ansible/ tree was renamed.
+        shown = git(
+            "show", f"{sha}:{K3S_DEFAULTS_BEFORE_RENAME}", cwd=repo, check=False
+        )
     if shown.returncode != 0:
         return None, None
     data = yaml_fast.safe_load(shown.stdout)

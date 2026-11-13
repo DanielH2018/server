@@ -12,6 +12,7 @@ from lib.repo_paths import SYSTEM_UPGRADE_DEFAULTS
 from validate import k3s_binary_sum as sut
 
 PATH = "defaults.yml"
+OLD_PATH = "ansible/defaults.yml"
 SUM_A, SUM_B = "a" * 64, "b" * 64
 
 
@@ -29,8 +30,9 @@ def _git(repo: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def _commit(repo: Path, text: str) -> str:
-    (repo / PATH).write_text(text)
+def _commit(repo: Path, text: str, path: str = PATH) -> str:
+    (repo / path).parent.mkdir(parents=True, exist_ok=True)
+    (repo / path).write_text(text)
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "--no-gpg-sign", "-m", "step")
     return _git(repo, "rev-parse", "HEAD")
@@ -58,6 +60,20 @@ def test_a_bump_that_leaves_the_sum_is_refused(repo, capsys):
         sut.keys_at(base, PATH, repo), sut.keys_at(head, PATH, repo)
     )
     assert problems
+
+
+def test_a_base_from_before_the_rename_is_read_at_its_old_path(repo):
+    base = _commit(repo, _doc("v1.37.1+k3s1", SUM_A), OLD_PATH)
+    head = _commit(repo, _doc("v1.37.2+k3s1", SUM_A))
+    assert sut.check(base, head, repo, PATH, OLD_PATH) == sut.REFUSED
+    moved = _commit(repo, _doc("v1.37.3+k3s1", SUM_B))
+    assert sut.check(base, moved, repo, PATH, OLD_PATH) == sut.CLEAN
+
+
+def test_a_base_with_neither_path_is_unjudged(repo):
+    base = _commit(repo, _doc("v1.37.1+k3s1", SUM_A), "elsewhere.yml")
+    head = _commit(repo, _doc("v1.37.2+k3s1", SUM_B))
+    assert sut.check(base, head, repo, PATH, OLD_PATH) == sut.UNJUDGED
 
 
 def test_a_malformed_sum_is_refused(repo):

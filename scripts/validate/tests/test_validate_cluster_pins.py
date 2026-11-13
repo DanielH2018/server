@@ -330,6 +330,14 @@ def test_the_real_tree_holds_a_k3s_pin_the_check_can_read():
     assert ack is None or ack == pin
 
 
+def test_a_k3s_pin_at_its_pre_rename_path_is_read(repo):
+    sha = _commit(
+        repo,
+        {cluster_pins.K3S_DEFAULTS_BEFORE_RENAME: "k3s_version: v1.37.1+k3s1\n"},
+    )
+    assert cluster_pins.k3s_values_at(sha, repo) == ("v1.37.1+k3s1", None)
+
+
 def test_a_k3s_pin_present_at_the_base_and_gone_at_the_head_is_flagged():
     flagged = cluster_pins.k3s_problems(OLD_K3S, None, None)
     assert len(flagged) == 1
