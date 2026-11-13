@@ -118,6 +118,36 @@ WORKFLOW_ROWS = (
         ),
     ),
     Census(
+        name="workflow-tag-moves-name-the-digest",
+        reason=(
+            "`decide` verifies a digest, and `prod`, `superseding`, `last-good` and `held` "
+            "must land on that digest. A move by the mutable `sha-<T>` tag lands on whatever "
+            "`sha-<T>` names at the moment of the move, which nothing re-checks against the "
+            "verified digest (#8223). `oci://<repo>@<digest>` names the bytes decide verified."
+        ),
+        files=lambda: tracked(".github/workflows/*.yml"),
+        offence=lines_matching(
+            re.compile(r'flux tag artifact\s+"?oci://[^\s"@]+["\s]')
+        ),
+        red=(
+            Subject(
+                "a.yml",
+                'run: flux tag artifact "oci://$repo:sha-$TARGET" --tag prod\n',
+            ),
+            Subject(
+                "b.yml",
+                "run: flux tag artifact oci://ghcr.io/x/y:sha-abc --tag held\n",
+            ),
+        ),
+        green=(
+            Subject(
+                "a.yml",
+                'run: flux tag artifact "oci://$repo@$DIGEST" --tag prod\n',
+            ),
+        ),
+        must_find=frozenset({".github/workflows/promote.yml"}),
+    ),
+    Census(
         name="package-build-downloads-outlast-a-release-outage",
         reason=(
             "GitHub's release host answered 504 for about five minutes in run 42054080101. A "
