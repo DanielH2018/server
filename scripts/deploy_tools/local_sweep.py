@@ -72,6 +72,8 @@ CHECK_TIMEOUT = 30 * 60
 # A failed check lists at most this many of the lines that name what failed.
 MAX_DETAIL = 20
 
+_RESULT = "SWEEP-RESULT: "
+
 # A scratch directory's name says whether `--keep` asked for it, which `_reap` never removes.
 _SCRATCH = "sweep-"
 _KEPT = "kept-"
@@ -179,9 +181,37 @@ class Sweep:
             f"{c.job}={c.verdict} {c.job}_seconds={c.seconds}" for c in self.checks
         )
         return (
-            f"SWEEP-RESULT: verdict={self.verdict} sha={self.sha} tree={self.tree}"
+            f"{_RESULT}verdict={self.verdict} sha={self.sha} tree={self.tree}"
             f" seconds={self.seconds} {checks}"
         )
+
+
+def parse_result_line(line: str) -> Sweep | None:
+    """The sweep that a `Sweep.result_line` describes, or None when `line` carries none.
+
+    Text ahead of the prefix is ignored, so a journal or syslog line parses as it is. The
+    result has no `detail` and no `kept`, which the line does not carry.
+    """
+    fields = line.partition(_RESULT)[2]
+    pairs = dict(field.split("=", 1) for field in fields.split() if "=" in field)
+    try:
+        checks = tuple(
+            Check(
+                key.removesuffix("_seconds"),
+                pairs[key.removesuffix("_seconds")],
+                int(seconds),
+            )
+            for key, seconds in pairs.items()
+            if key.endswith("_seconds")
+        )
+        sweep = Sweep(pairs["sha"], pairs["tree"], checks, int(pairs["seconds"]))
+    except KeyError, ValueError:
+        return None
+    if any(check.verdict not in EXIT for check in checks):
+        return None
+    # A line cut short still parses, with a check missing and so another verdict. Only a
+    # sweep that writes this exact line back is the one the line describes.
+    return sweep if sweep.result_line() == _RESULT + fields.strip() else None
 
 
 def _work_root() -> Path:
