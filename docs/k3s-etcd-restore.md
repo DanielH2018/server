@@ -84,9 +84,9 @@ encrypted with the cluster token — `ControlRuntimeBootstrap` includes `Encrypt
 (`pkg/daemons/config/types.go`), `ReadFromDisk` reads each path's bytes into `File.Content`
 (`pkg/bootstrap/bootstrap.go`), and `pkg/cluster/storage.go` describes the blob as "CA certs and
 keys, encryption passphrases, etc — encrypted with the join token." `secrets-encrypt rotate-keys`
-calls `cluster.Save`, so the stored copy tracks rotations. `k3s_version` in the k3s role's
-defaults pins the running release, and the monthly drill guest has no key of its own, so a bump
-that broke decryption from the blob would fail the drill. An etcd snapshot is an unfiltered
+calls `cluster.Save`, so the stored copy tracks rotations. `k3s_version` in the
+`system-upgrade` role's defaults pins the running release, and the monthly drill guest has no
+key of its own, so a bump that broke decryption from the blob would fail the drill. An etcd snapshot is an unfiltered
 datastore image, so it carries that blob.
 
 **The artifact that has to survive daniel-box is therefore `/var/lib/rancher/k3s/server/token`,
@@ -158,8 +158,8 @@ reproduce: objects that exist live but are not declared, and anything created ou
   compressed, and the extension is literally `.zip`. The name matters: it is what
   `--cluster-reset-restore-path` takes, and it takes it as a NAME, never a path (see below).
 - Credentials for a restore: `/etc/rancher/k3s/etcd-s3.env` on daniel-box (0600 root), a package link to the file `homelab-secrets` renders
-  by the k3s role from the `r2_*` SOPS secrets. The Secret cannot serve a restore, because a
-  restore runs when the API may be gone.
+  from the `r2_*` SOPS secrets. `hosts/components/k3s-host-checks/component.yml` declares it.
+  The Secret cannot serve a restore, because a restore runs when the API may be gone.
 
 <!-- Generated from etcd-snapshot-retention in the k3s-server component; edit that. -->
 --8<-- "assets/generated/fragments/etcd-offbox-retention.md"
