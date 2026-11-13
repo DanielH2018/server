@@ -62,7 +62,7 @@ order:
    evidence. Same-day runs carry a letter suffix (`review-2026-08-16-state` *and* `…16b-state`); the
    later is not a superset. List them rather than recalling a slug — the names change every run:
    ```bash
-   ls -1 ~/.claude/projects/-home-ubuntu-server/memory/review-*-state.md 2>/dev/null | sort | tail -2
+   ls -1 "$HOME"/.claude/projects/-*-server/memory/review-*-state.md 2>/dev/null | sort | tail -2
    ```
    **Zero ledgers is a valid state, not a missing file.** Step 7 deletes a ledger once its durable
    rows are folded into the standing list, so an empty match means nothing has shipped since the
