@@ -725,11 +725,11 @@ assumed that only `critical` alerts open an episode. Decision 4 therefore exclud
 workloads behind a critical probe. That premise no longer holds. `poll_routes` routes
 `K8sDeploymentZeroAvailable`, `K8sContainerCrashLooping`, `IngressProbeFailed` and
 `ScrapeTargetDown`, which are `warning` alerts that fire for every workload. Only each rule's
-`for:` window and the two-poll streak the poller requires would stand between a restart and a routed
-episode (#8259).
+`for:` window and the two-poll streak the poller requires would stand between a restart and
+a routed episode (#8259).
 
-The allowlist's test derives the exclusion from `poll_routes`, so widening the route table
-narrows the allowlist. A key routed to `none`, such as `ExtraProbeFailed:wg-easy`, covers
+Slice 3's allowlist test must derive the exclusion from `poll_routes`, so widening the route
+table narrows the allowlist. A key routed to `none`, such as `ExtraProbeFailed:wg-easy`, covers
 nothing. `K8sDeploymentZeroAvailable` and `K8sContainerCrashLooping` fire for any
 Deployment and any container. While the table routes them, slice 3 has to show which
 workloads a restart cannot drive into either alert before it lists any workload.
