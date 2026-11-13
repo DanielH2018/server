@@ -122,7 +122,7 @@ results:
 | the daemon is killed | `wd_keepalive` runs | `wd_keepalive` runs |
 
 `test_a_restart_leaves_the_watchdog_daemon_running_and_a_stop_or_a_crash_starts_the_keepalive`
-in `hosts/lib/tests/test_pi_tuning_component.py` repeats the table on any host with a systemd
+in `hosts/lib/tests/test_pi_watchdog_dropin.py` repeats the table on any host with a systemd
 user manager.
 
 The debloat step purges Open vSwitch, which was installed with no bridges and no netplan
@@ -205,7 +205,7 @@ The caps themselves, set when the tmpfs was 81% full on 2026-06-11:
   That outlasts the weekly AIDE and rkhunter reports, which log to the journal.
 - `ACCT_LOGGING="3"` cuts pacct retention from 30 daily generations (savelog via
   `/etc/cron.daily/acct`, about 28 MB/day of healthcheck exec churn) to 3.
-- auditd is capped to a 12 MB ceiling.
+- auditd is capped to a 12 MB ceiling. Its free-space thresholds have their own section below.
 - `HISTORY=2` cuts sysstat's shipped 7 days — 18 sa/sar files, 9.9 MB — to 2.
 
 **Every cap here is a cap, never a disable.** `sar`, `lastcomm` and `ausearch` each have a
@@ -216,6 +216,36 @@ found that nothing reads them.
 most of `/var/log` is itself swapped into zram. Freeing a megabyte here frees both the
 compressed physical page *and* a megabyte of zram capacity — and capacity is the axis under
 pressure, since zram runs about 81% full with the SD-card swapfile already carrying overflow.
+
+## auditd's free-space thresholds, and the log that was silent 74% of the time
+
+auditd suspends logging when a write finds less free space than `admin_space_left`, and only a
+restart resumes it. The unit stays active the whole time. The packaged thresholds are sized for a
+disk: `space_left = 75` and `admin_space_left = 50`, in MB, with
+`admin_space_left_action = SUSPEND`. `/var/log` is the 128 MB tmpfs, and the caps above leave it
+less free space than that by design.
+
+Measured on 2026-11-13:
+
+- In the 7 days before, the tmpfs never had more than 72.7 MB free, and it had less than 50 MB
+  free for 42% of the time. The 30-day low was 13 MB.
+- Process accounting is the largest tenant at 33 MB. `pacct.0` stays uncompressed for a day, at
+  22 MB. The journal held 30 MB and the audit logs 9 MB.
+- The three audit log files held four stretches of records between 2026-11-01 21:15 and
+  2026-11-12 14:45 UTC, each starting at a boot. They add up to 74.9 hours of the 283.6 hours to
+  the time of the measurement.
+- Two of the three stops that were not a reboot fell within a minute of the tmpfs dropping under
+  50 MB free. The third, on 2026-11-08 at 23:55, had 63 MB free and is unexplained.
+- After the reboot on 2026-11-12 at 14:46 the tmpfs had 36 MB free. auditd logged "Audit daemon is
+  suspending logging due to low disk space" at start and wrote nothing for 26 hours.
+
+No check reported any of it, because every check read the unit's state.
+
+The `pi-tuning` component sets `space_left = 10` and `admin_space_left = 5`, both under the 30-day
+low. It sets `admin_space_left_action = ROTATE`, so a write below 5 MB free drops the oldest 4 MB
+log file and logging goes on. auditd refuses to start unless `admin_space_left` is the smaller
+number. `disk_full_action` and `disk_error_action` stay `SUSPEND`, so a full tmpfs still stops
+the log.
 
 ## earlyoom, and the guard that was inert for its whole life
 
