@@ -302,11 +302,11 @@ li.service > div.service-card {
  * block of definite height once the group is a flex column. The `- 0.75rem` is the list's own
  * `mt-3`.
  *
- * HOW THE HEIGHT IS SPLIT: the calendar spans THREE Services rows and the two link rows together
- * span the FOURTH. The Services column is four rows of height r with three gaps of g, so the
- * list is 4r + 3g tall. Cut that into eight equal tracks with the same gap g: 8t + 7g = 4r + 3g
- * gives t = (r - g) / 2. Six tracks plus their five gaps are then 6t + 5g = 3r + 2g — exactly
- * three Services rows — and one track is a link row, so the two link rows plus their gap make
+ * HOW THE HEIGHT IS SPLIT: the calendar spans FOUR Services rows and the two link rows together
+ * span the FIFTH. The Services column is five rows of height r with four gaps of g, so the
+ * list is 5r + 4g tall. Cut that into ten equal tracks with the same gap g: 10t + 9g = 5r + 4g
+ * gives t = (r - g) / 2. Eight tracks plus their seven gaps are then 8t + 7g = 4r + 3g — exactly
+ * four Services rows — and one track is a link row, so the two link rows plus their gap make
  * 2t + g = r, one Services row. Every size is derived from the list height, so it holds at any
  * width and for any tile height; nothing here is a pixel constant. The previous version pinned
  * the calendar at a 22.5rem cap and the link cards at 50px, which matched the Services rows
@@ -323,8 +323,8 @@ li.service > div.service-card {
  * match — measured on the deployed page 2026-09-10, every track exactly one card tall. The
  * `:has(> div > ul > #my-calendar)` and `:has(> #my-calendar)` forms match one element each.
  *
- * The four-row count of the Services group is what the 8 encodes. A Services group that renders
- * three or five rows needs 6 or 10 tracks here and a matching `span` on the calendar.
+ * The five-row count of the Services group is what the 10 encodes. A Services group that renders
+ * four or six rows needs 8 or 12 tracks here and a matching `span` on the calendar.
  *
  * Verified on the deployed page 2026-09-10 at 900, 1024, 1280, 1920 and 2560px — both columns end
  * on the same y at every one, including 900px where the grid collapses to two columns and six
@@ -343,12 +343,12 @@ div.services-group:has(> div > ul > #my-calendar) > div {
 
 ul.services-list:has(> #my-calendar) {
   height: calc(100% - 0.75rem);
-  grid-template-rows: repeat(8, minmax(0, 1fr));
+  grid-template-rows: repeat(10, minmax(0, 1fr));
 }
 
-/* Six of the eight tracks: three Services rows and the two gaps between them. */
+/* Eight of the ten tracks: four Services rows and the three gaps between them. */
 #my-calendar {
-  grid-row: 1 / span 6;
+  grid-row: 1 / span 8;
   min-height: 0;
   /* Zero intrinsic height, so the calendar's natural 412px cannot set the row height. Without
    * this the calendar column's intrinsic size (412px of calendar plus two 40px link rows) beat
