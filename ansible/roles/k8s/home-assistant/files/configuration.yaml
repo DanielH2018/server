@@ -134,17 +134,23 @@ shell_command:
 # home-assistant_v2.db; none are needed for restore or any automation (those read LIVE state, not
 # history): sun.sun is recomputed on boot, pm0_3 is an unused fine-particle count (alerts + dashboard
 # use pm2_5/pm10), linkquality/last_seen are Zigbee diagnostics. The UPS load/voltage
-# diagnostics + automation/script domains (the former "next candidates") were pulled in on
-# 2026-07-03, with purge_keep_days 10→7: the DB was 113M and its daily page churn was a top
-# driver of B2 billable growth (Kopia-era measurement; Longhorn ships the same blocks now). Domain excludes drop entity state HISTORY only —
-# `automation_triggered` logbook events still record, and `probe.py ha why` reads live traces.
+# diagnostics joined on 2026-07-03, with purge_keep_days 10→7: the DB was 113M and its daily page
+# churn was a top driver of B2 billable growth (Kopia-era measurement; Longhorn ships the same blocks).
+# Automations and scripts are excluded by ENTITY, and only the high-churn ones (weekly runs from
+# Loki, 2026-11). An exclude drops every event whose data.entity_id matches, not only state history:
+# the excluded six record no `automation_triggered` / `script_started` event, so the historical
+# logbook cannot say which of them changed a light. Every other automation and script keeps that
+# attribution. A domain exclude would drop it for all of them.
 recorder:
   purge_keep_days: 7
   exclude:
-    domains:
-      - automation
-      - script
     entities:
+      - automation.ha_heartbeat                              # ~10,000 runs/week
+      - automation.bedroom_wake_ramp                         # ~6,000
+      - automation.bedroom_fan_temperature_control           # ~5,700
+      - automation.bedroom_fallback_wake_no_watch_alarm      # ~4,500
+      - automation.bedroom_color_tracking                    # ~1,000
+      - script.bedroom_apply_fan                             # ~5,800
       - sun.sun
       - sensor.bedroom_airgradient_one_pm0_3
       # Heartbeat helper — rewritten every minute by the ha_heartbeat automation; the live

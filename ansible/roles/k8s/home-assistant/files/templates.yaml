@@ -63,6 +63,18 @@
       state: >-
         {{ (as_datetime(states('sensor.pixel_watch_3_next_alarm')) - timedelta(hours=8)).isoformat() }}
 
+# Pixel Watch staleness: hours the watch's next alarm has sat in the past (0 when it is in the
+# future or there is none). A watch that stops reporting freezes next_alarm on an already-rung alarm
+# while the entity stays available, so an offline alert cannot see it (2026-11-03, #8382). Fed to
+# the threshold engine by binary_sensor.pixel_watch_next_alarm_overdue_high (thresholds.yaml).
+- sensor:
+    - name: "Pixel Watch next alarm overdue"
+      unique_id: pixel_watch_next_alarm_overdue
+      unit_of_measurement: h
+      state: >-
+        {% from 'diagnostics.jinja' import alarm_overdue_hours %}
+        {{ alarm_overdue_hours(as_timestamp(states('sensor.pixel_watch_3_next_alarm'), none), as_timestamp(now())) }}
+
 # UPS power (W) — the NUT integration only exposes ups.load as a PERCENTAGE; the Energy dashboard
 # needs energy (kWh), which requires power (W) first. Derive it from the load % and the UPS's rated
 # real-power output: power = load% / 100 * realpower.nominal. The 900 W is ups.realpower.nominal read

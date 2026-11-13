@@ -14,13 +14,20 @@
     - platform: mqtt
       topic: zigbee2mqtt/Tap Dial
   # Z2M publishes the FULL device state to this topic on every report (battery, link quality, …),
-  # not only on button/dial actions. Gate on an action actually being present so the automation
-  # no-ops on those state reports — without this the dial_rotate_* conditions below stringify an
-  # undefined `action` and log "dict object has no attribute 'action'" on every report (and on the
-  # retained-state replay each HA restart). `payload_json is defined` first guards a non-JSON retain.
+  # plus actions no branch handles: brightness_step_* (about one per dial_rotate_*) and the
+  # non-release button_N_press / button_N_hold. The condition runs before a run takes a queue slot,
+  # so it admits only the actions a branch below handles; anything else would hold one of the 10
+  # slots and push real dial steps into "Maximum number of runs exceeded". Keep this list in step
+  # with the branches (tests/test_tap_dial_condition_matches_branches.py).
+  # `payload_json is defined` first guards a non-JSON retain.
   condition:
     - condition: template
-      value_template: "{{ trigger.payload_json is defined and trigger.payload_json.action is defined }}"
+      value_template: >-
+        {% set act = (trigger.payload_json.action | default('') | string) if trigger.payload_json is defined else '' %}
+        {{ act in ['button_1_press_release', 'button_1_hold_release', 'button_2_press_release',
+                   'button_2_hold_release', 'button_3_press_release', 'button_3_hold_release',
+                   'button_4_press_release', 'button_4_hold_release']
+           or act.startswith('dial_rotate_') }}
   action:
     # Read the action once, safely defaulted — so no condition below can hit an undefined attribute.
     - variables:
@@ -49,6 +56,9 @@
         # natural state HONORING the lux gate (bright room -> off), and re-apply the fan if home.
         - conditions: "{{ act == 'button_1_hold_release' }}"
           sequence:
+            - service: script.turn_off
+              target:
+                entity_id: script.bedroom_fan_nudge
             - service: script.bedroom_exit_sleep
             - service: input_boolean.turn_off
               target:
@@ -118,6 +128,9 @@
                 oscillating: "{{ not is_state_attr('fan.tower_fan', 'oscillating', true) }}"
         - conditions: "{{ act == 'button_3_hold_release' }}"
           sequence:
+            - service: script.turn_off
+              target:
+                entity_id: script.bedroom_fan_nudge
             - service: timer.cancel
               target:
                 entity_id: timer.bedroom_fan_dial
@@ -133,6 +146,9 @@
         # the dial_rotate branches + timer.bedroom_fan_dial). Replaces the old hold-to-boost-100%.
         - conditions: "{{ act == 'button_4_press_release' }}"
           sequence:
+            - service: script.turn_off
+              target:
+                entity_id: script.bedroom_fan_nudge
             # Fan ONLY. Clear the fan's sleep cap (the sleep_mode flag) + the fan override, then apply the
             # temp band. Deliberately does NOT touch the lights or AL sleep mode: clearing AL sleep makes
             # Adaptive Lighting self-on the lights, and the FP300 illuminance is dominated by the bedroom
@@ -174,14 +190,20 @@
                   data:
                     value: "{% from 'fan.jinja' import pct_to_level %}{{ pct_to_level(state_attr('fan.tower_fan', 'percentage') | float(0) if is_state('fan.tower_fan', 'on') else 0) | int }}"
         # Dial rotate = brightness +/- 12% NORMALLY; in fan-dial mode (timer active) = fan +/-1 level.
-        # (Substring match catches the *_step variants.)
+        # (Substring match catches the *_step variants.) The nudge is STARTED with script.turn_on, not
+        # called: a call waits on the DREO cloud ack (up to ~6 s with retries), which held this
+        # queue's slots. The nudge's own queue keeps the steps in order, and can still be draining
+        # when a button runs, so every button branch that sets the fan stops the nudge first.
         - conditions: "{{ 'dial_rotate_right' in act }}"
           sequence:
             - if: "{{ is_state('timer.bedroom_fan_dial', 'active') }}"
               then:
-                - service: script.bedroom_fan_nudge
+                - service: script.turn_on
+                  target:
+                    entity_id: script.bedroom_fan_nudge
                   data:
-                    delta: 1
+                    variables:
+                      delta: 1
                 # Sliding window: each turn restarts the 5-min revert timer.
                 - service: timer.start
                   target:
@@ -197,9 +219,12 @@
           sequence:
             - if: "{{ is_state('timer.bedroom_fan_dial', 'active') }}"
               then:
-                - service: script.bedroom_fan_nudge
+                - service: script.turn_on
+                  target:
+                    entity_id: script.bedroom_fan_nudge
                   data:
-                    delta: -1
+                    variables:
+                      delta: -1
                 - service: timer.start
                   target:
                     entity_id: timer.bedroom_fan_dial

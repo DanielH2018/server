@@ -57,7 +57,13 @@ and the bedtime/wake routines that drive them.
   `input_boolean` snapshot on restart, so this stuck state recurs: every deploy can resurrect an
   overnight override until the 09:00/alarm morning reset clears it.
 - The dial emits `dial_rotate_<dir>_<slow|fast|step>` (caught by the substring match) alongside
-  harmless `brightness_step_*` no-ops.
+  `brightness_step_*`, and each button emits `button_N_press` and `button_N_hold` before its
+  `_release`. No branch handles those, and `bedroom_tap_dial_control`'s condition drops them before
+  they take one of its 10 queue slots. Each fan-dial step starts `script.bedroom_fan_nudge` with
+  `script.turn_on` rather than waiting on it, because the nudge blocks on the DREO cloud ack; the
+  nudge's own queue (`max: 30`) holds the burst in order. That queue can still be draining when a
+  button runs, so the B1 hold, B3 hold and B4 tap branches stop `script.bedroom_fan_nudge` (clearing
+  its queue) before they set the fan; otherwise the queued steps would undo them.
 
 ## The lux gate
 - Presence (FP300), an `input_boolean` manual-off override, and an alarm-driven morning reset
@@ -261,8 +267,10 @@ and the bedtime/wake routines that drive them.
   sufficient, and *Picking the 90-lux threshold* above covers the part the band rule does not.
 - **Z2M runtime state on the T1 (NOT in git — a re-pair wipes it).** `detection_period: 5` s, the
   factory default, left as-is: it is already the fast end and reports landed 2-9 s after a light
-  switch. It is also the aggressive end for the CR2450, so revisit once the battery sensor reports
-  (this model can take up to 24 h to publish battery for the first time). Re-apply after any re-pair
+  switch. It is also the aggressive end for the CR2450, so watch the battery:
+  `binary_sensor.bedroom_t1_battery_low` alerts through the threshold engine at 25%. The T1 is
+  not in `bedroom_sensor_offline_alert`, because it reports only on change and would trip Z2M's
+  passive availability timeout in a stable room. Re-apply after any re-pair
   with `zigbee2mqtt/Aqara T1/set` — see the `z2m-device-setting` skill.
 - **The T1's HA entity parks at `unknown` after a Z2M rename or an HA restart**, because a rename
   republishes the MQTT-discovery configs and clears the state while the sensor only reports on change.
