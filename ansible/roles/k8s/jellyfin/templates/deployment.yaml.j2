@@ -25,10 +25,10 @@ spec:
     spec:
 {{ pod_shell('homelab-standard') }}
       # Pinned to the node media-data's local PV names (k8s/media-volume pins it to the same
-      # `inventory_hostname`), so the pin moves no pod: jellyfin could run nowhere else. It is
+      # `k8s_primary_node`), so the pin moves no pod: jellyfin could run nowhere else. It is
       # written here because the jellyfin-prepull Job copies this pod's placement and cannot read
       # a PV's, and the renderer refuses a pre-pull for a workload that names no node (#5855).
-{{ node_affinity_required(inventory_hostname) }}
+{{ node_affinity_required(k8s_primary_node) }}
       # THE OTHER HALF OF THE GPU WIRING (D2). The device plugin gets the container past the
       # cgroup v2 device filter; this gets it past the file mode — /dev/dri/renderD128 is
       # crw-rw---- root:render, and the container runs as uid {{ puid }}. Host-specific by
@@ -785,7 +785,7 @@ spec:
               value: "{{ jellyfin_k8s_published_url }}"
 {# DECIDED: no nodeSelector; the bound media-data local PV's nodeAffinity pins this pod to
    daniel-box, where the AMD VAAPI device is. The pod-level required affinity above names the
-   same `inventory_hostname` only so the jellyfin-prepull Job can copy it (#5855). #}
+   same `k8s_primary_node` only so the jellyfin-prepull Job can copy it (#5855). #}
           volumeMounts:
             - name: jellyfin-config
               mountPath: /config

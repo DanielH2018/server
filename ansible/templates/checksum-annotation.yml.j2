@@ -1,47 +1,14 @@
 {#
-  checksum/<name> pod-template annotation — the trigger a Deployment/DaemonSet needs to
-  restart on content it mounts but the template module never rendered. A ConfigMap
-  staged by `kubectl create configmap --from-file` (observability's Grafana dashboards are the
-  one left) sits outside the manifests role's own render/apply cycle, so `manifests_render is changed`
-  never fires for it and the pod keeps running the code
-  it started with. See "A config edit won't restart the pod (k3s)" in the repo CLAUDE.md.
+  checksum/<name> pod-template annotation: restarts a workload when content it reads changes
+  but no manifest the renderer emits embeds that content. `value` is the caller's own hash,
+  e.g. observability's hash of a ConfigMap body. It renders `unstaged` when undefined, so a
+  render with no value never rolls the pod. Content embedded in an emitted manifest needs no
+  annotation: `scripts/renderer/renderer_lib/restart.py` stamps the restart for it.
 
-  A role that instead embeds its file via `lookup('file'|'template', ...)` directly INTO a
-  manifest listed in `manifests_files`/`manifests_secret_files` needs no annotation at all —
-  the embed changes the rendered manifest's bytes, `manifests_render is changed` fires on its
-  own, and the central rollout-restart covers it. Reach for this macro only for content that
-  reaches the cluster some other way. autofix-bridge's templates/script-configmap.yaml.j2 is
-  the worked example of the embed, and monitor-bridge's splits one per module to stay under
-  the client-side apply's annotation cap.
-
-  Two call shapes, matching the two ways a caller computes its value:
-
-    checksum_annotation('name', value=<already-computed checksum>)
-      Renders the value verbatim, `| default('unstaged')`. Use this when the value comes from
-      a task or a rendered value — a `copy` register, a fact hashing several files together,
-      observability's hash of a ConfigMap body — anything other than one file's raw bytes,
-      so a role's own computation is preserved exactly rather than approximated by this
-      macro's own hashing.
-
-    checksum_annotation('name', path=<absolute path to one file>)
-      Hashes the file's raw bytes inline: `lookup('file', path, rstrip=False) | hash('sha1')`.
-      `rstrip=False` is load-bearing — the file lookup's default strips trailing whitespace,
-      which would hash different bytes than the file on disk and diverge from a `copy` task's
-      own (unstripped) checksum of the same file. No caller uses this mode, but it stays
-      correct for a role that stages exactly one file.
-
-  `unstaged` is the value every existing checksum/ annotation falls back to on a config-only
-  run (`--skip-tags deploy`), a `--dry-run` validator render, or a register/fact that never
-  ran — stable across all three so none of them rolls the pod. `path` mode falls back the
-  same way through the same `| default('unstaged')`: `scripts/validate/k8s_manifests.py`'s
-  offline `lookup('file', ...)` shim reads the checked-in role file directly (there is no
-  `--dry-run` case where that file is absent), so its render always yields a real digest
-  rather than the placeholder.
-
-  Invoke at the annotations block's indent, e.g.:
+  Invoke at the annotations block's indent:
       annotations:
-        {{ checksum_annotation('config', value=observability_grafana_config | hash('sha1')) }}
+        {{ checksum_annotation('config', observability_grafana_config | hash('sha1')) }}
 #}
-{% macro checksum_annotation(name, value=None, path=None) -%}
-checksum/{{ name }}: "{{ (value if path is none else (lookup('file', path, rstrip=False) | hash('sha1'))) | default('unstaged') }}"
+{% macro checksum_annotation(name, value) -%}
+checksum/{{ name }}: "{{ value | default('unstaged') }}"
 {%- endmacro %}

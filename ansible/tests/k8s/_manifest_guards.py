@@ -31,12 +31,9 @@ SERVER_VARS = yaml_fast.safe_load((HOST_VARS / "daniel-server.yml").read_text())
 def _render(path: Path, **ctx) -> str:
     """Render a template with the given context; undefined values are left to raise.
 
-    `playbook_dir` and `lookup`/`hash` are wired the same way `validate/k8s_manifests.py`
-    wires them, not just the caller's own `ctx` — a `deployment.yaml.j2` this renders may
-    call `ansible/templates/checksum-annotation.yml.j2`'s path-mode
-    `lookup('file', playbook_dir + ..., rstrip=False) | hash('sha1')`
-    (valheim-stats', terraria-stats'), and this helper renders every role's
-    `deployment.yaml.j2` generically, not just the ones a caller anticipated.
+    `playbook_dir` and `lookup` are wired the same way `validate/k8s_manifests.py` wires
+    them, not just the caller's own `ctx`: this helper renders every role's
+    `deployment.yaml.j2` generically, and any of them may call `lookup('file', ...)`.
     """
     ctx.setdefault("playbook_dir", str(ANSIBLE))
     env = template_env(path.parent, undefined_cls=Undefined)
