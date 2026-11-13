@@ -983,7 +983,6 @@
  "scripts/dev/tests/test_findings.py": 0.0,
  "scripts/dev/tests/test_findings_backlog_fetch.py": 0.0,
  "scripts/dev/tests/test_findings_block.py": 0.01,
- "scripts/dev/tests/test_findings_board.py": 0.0,
  "scripts/dev/tests/test_findings_claim_batch_holds.py": 0.0,
  "scripts/dev/tests/test_findings_claim_cli.py": 0.0,
  "scripts/dev/tests/test_findings_claim_plans.py": 0.0,

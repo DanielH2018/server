@@ -2,7 +2,7 @@
 
 `plan_open` is pure — it is handed the issue matching a fingerprint and returns an outcome
 plus gh argv. The CLI tests around it drive `findings.main` against the fakes, so the label
-sync, the issue read and the Project-board retry all run for real.
+sync and the issue read run for real.
 
 Run: uv run pytest scripts/dev/tests/test_findings_open.py
 """
@@ -15,12 +15,11 @@ from dev import findings
 from dev.findings_lib.issue_model import (
     LABELS,
     NO_REOPEN,
-    PROJECT_TITLE,
     claim_comment,
     fingerprint,
     parse_verify_by,
 )
-from dev.findings_lib.plans import is_project_failure, plan_open, without_project
+from dev.findings_lib.plans import plan_open
 
 _LABELS = ["claude", "severity/high", "kind/gap"]
 _HOLDER = "worktree-issue-3"
@@ -58,15 +57,7 @@ def test_open_with_no_match_plans_a_create_with_every_label():
         and "Fingerprint: `" + "f" * 12 + "`" in body
         and "Source: s" in body
     )
-    assert argv[argv.index("--project") + 1] == PROJECT_TITLE
-
-
-def test_open_touch_and_reopen_never_pass_project(issue):
-    for existing in (issue(3, fp="f" * 12), issue(3, state="CLOSED", fp="f" * 12)):
-        _, _, plans = plan_open(
-            existing, title="T", body="B", labels=_LABELS, fp="f" * 12, source="s"
-        )
-        assert all("--project" not in argv for argv in plans)
+    assert "--project" not in argv
 
 
 def test_open_with_an_open_match_touches_instead_of_creating(issue):
@@ -329,48 +320,10 @@ def test_open_cli_dry_run_with_repo_prints_the_repo(tmp_path, capsys, make_tools
     assert not calls.gh
 
 
-# --- the Project board is best-effort ---------------------------------------------------------
+# --- a failed create fails the command --------------------------------------------------------
 
 
-def test_without_project_drops_the_pair_by_position():
-    argv = [
-        "issue",
-        "create",
-        "--title",
-        "Server Issue Tracking",
-        "--project",
-        "Server Issue Tracking",
-    ]
-    assert without_project(argv) == [
-        "issue",
-        "create",
-        "--title",
-        "Server Issue Tracking",
-    ]
-
-
-def test_is_project_failure_matches_project_and_scope_only():
-    assert is_project_failure("could not resolve to a ProjectV2")
-    assert is_project_failure("missing required SCOPES")
-    assert not is_project_failure("HTTP 422: label not found")
-    assert not is_project_failure(None)
-
-
-def test_open_retries_without_project_and_warns(tmp_path, capsys, make_tools):
-    body = tmp_path / "b.md"
-    body.write_text("B")
-    board = subprocess.CalledProcessError(
-        1, "gh", stderr="could not resolve to a ProjectV2\nmore\n"
-    )
-    tools, calls = make_tools(Fakes(gh_errors={"issue create": board}))
-    assert findings.main(_open_argv(body), tools) == 0
-    out = capsys.readouterr()
-    assert "#42 created" in out.out
-    assert 'not added to Project "Server Issue Tracking": could not resolve' in out.err
-    assert "--project" in calls.gh[0] and "--project" not in calls.gh[1]
-
-
-def test_open_propagates_a_non_project_failure(tmp_path, make_tools):
+def test_open_propagates_a_create_failure(tmp_path, make_tools):
     body = tmp_path / "b.md"
     body.write_text("B")
     other = subprocess.CalledProcessError(1, "gh", stderr="HTTP 422: label not found")

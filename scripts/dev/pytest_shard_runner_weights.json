@@ -860,7 +860,6 @@
  "scripts/dev/tests/test_fanout_target.py": 0.21,
  "scripts/dev/tests/test_findings.py": 0.18,
  "scripts/dev/tests/test_findings_block.py": 0.02,
- "scripts/dev/tests/test_findings_board.py": 0.06,
  "scripts/dev/tests/test_findings_claim_batch_holds.py": 0.09,
  "scripts/dev/tests/test_findings_claim_cli.py": 0.31,
  "scripts/dev/tests/test_findings_claim_reap_then_claim.py": 0.1,
