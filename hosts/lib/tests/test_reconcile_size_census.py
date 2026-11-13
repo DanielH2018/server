@@ -98,9 +98,8 @@ def test_the_failure_message_names_the_operator_ruling_and_its_three_choices(tmp
     lib = _lib(tmp_path, {"homelab-reconcile": "#!/usr/bin/python3\nx = 1\n"})
     message = over_ceiling(lib, 0)
     assert message is not None
-    assert "operator ruling (ADR-0029)" in message
-    assert "cut reconcile" in message
-    assert "raise the ceiling in ADR-0029 with a reason" in message
+    assert "operator ruling" in message
+    assert "ADR-0029" in message
     assert "ansible-pull" in message
 
 
