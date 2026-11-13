@@ -48,6 +48,7 @@ _REPLACED_NOBACKUP = frozenset(
         "homelab/scrutiny-influxdb-data",
         "homelab/crowdsec-db",
         "homelab/code-server-config",
+        "homelab/slskd-config",
     }
 )
 
