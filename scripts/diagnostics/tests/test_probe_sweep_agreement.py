@@ -41,10 +41,10 @@ PYTEST_SKIPPED = "pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }}
 FAILED = "FAILED hosts/lib/tests/test_box_firewall_and_maintenance.py::test_reconcile"
 
 
-def _sweep(pytest_verdict="pass", sha=SHA, seconds=344) -> Sweep:
+def _sweep(pytest_verdict="pass", sha=SHA, seconds=344, run=None) -> Sweep:
     detail = (FAILED,) if pytest_verdict == "fail" else ()
     checks = (Check("hooks", "pass", 103), Check("pytest", pytest_verdict, 240, detail))
-    return Sweep(sha, TREE, checks, seconds)
+    return Sweep(sha, TREE, checks, seconds, run=run)
 
 
 def _lines(lines, at: float, pid: int):
@@ -85,11 +85,19 @@ def _runs(hooks="success", pytest_shard="success", gate="success", also=()):
     return [*runs, _check_run(99, CI_GATE_NAME, gate)]
 
 
-def _run(rows, runs_by_sha, capsys, since="8d"):
+def _run(rows, hosted, capsys, since="8d"):
+    """Run the probe over `rows`. `hosted` is the check-runs of each commit, or the jobs of
+    each run id, and a read of anything else fails."""
+    paths = {
+        f"actions/runs/{key}/jobs"
+        if isinstance(key, int)
+        else f"commits/{key}/check-runs": runs
+        for key, runs in hosted.items()
+    }
     code = sweep_agreement.run_sweep_agreement(
         SimpleNamespace(since=since),
         read_rows=lambda seconds, now: rows,
-        read_check_runs=runs_by_sha.__getitem__,
+        read_check_runs=paths.__getitem__,
         now=NOW,
     )
     return code, capsys.readouterr().out
@@ -144,9 +152,30 @@ def test_sweeps_that_agree_with_hosted_ci_pass(capsys):
     code, out = _run(_rows(_sweep()), {SHA: _runs(hooks="skipped")}, capsys)
     assert code == PROBE_OK
     assert out.startswith(
-        "1 sweep over 0.0 days, p90 344s: 2 checks agree, 0 red here only, 0 red hosted "
-        "only, 0 not comparable; hosted CI ran 1 of the 2 compared itself, and 0 were red\n"
+        "1 sweep, 0 of them of pull-request runs, over 0.0 days, p90 344s: 2 checks agree, "
+        "0 red here only, 0 red hosted only, 0 not comparable; hosted CI ran 1 of the 2 "
+        "compared itself, and 0 were red\n"
     )
+
+
+def test_a_sweep_of_a_run_is_set_beside_that_runs_own_jobs(capsys):
+    """The swept merge commit has no check-runs: GitHub hangs a run's on the head commit."""
+    rows = _rows(_sweep(run=5))
+    code, out = _run(rows, {5: _runs(pytest_shard="failure")}, capsys)
+    assert code == PROBE_FAILED
+    assert out.startswith("1 sweep, 1 of them of pull-request runs, ")
+    assert "and 1 were red" in out
+    assert f"  {SHA[:12]} of run 5  pytest  swept" in out
+
+
+def test_a_commit_swept_twice_counts_once_by_its_newest_sweep(capsys):
+    rows = [
+        *_rows(_sweep("fail"), at=NOW - 3600, pid=1),
+        *_rows(_sweep(), pid=2),
+    ]
+    _, out = _run(rows, {SHA: _runs()}, capsys)
+    assert out.startswith("1 sweep, ")
+    assert "2 checks agree, 0 red here only" in out
 
 
 def test_a_sweep_red_where_hosted_is_green_is_listed_with_what_failed(capsys):
@@ -226,9 +255,9 @@ def _week(
         seconds = 601 if n >= count - slow else 344
         at = NOW - days * 86400 + n * step
         sweeps.append(sweep_agreement.Swept(at, _sweep(verdict, sha, seconds), ()))
-        hosted[sha] = {"hooks": "proven", "pytest": verdict}
+        hosted[sweeps[-1].hosted_at] = {"hooks": "proven", "pytest": verdict}
     if missed:
-        hosted[sweeps[-1].sweep.sha]["pytest"] = "fail"
+        hosted[sweeps[-1].hosted_at]["pytest"] = "fail"
     return sweep_agreement.compare(sweeps, hosted)
 
 

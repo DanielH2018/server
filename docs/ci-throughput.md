@@ -95,8 +95,10 @@ hosted sweep. A merge costs about 1.1 hosted runs in place of 2.1.
       below has how it runs and how to read it.
     - **B1c, landed.** `probe.py sweep-agreement` compares each sweep's verdict with the
       hosted run of the same commit, and says where B2's gate stands.
-    - **B1d, proposed.** Sweep the trees of pull requests that hosted CI read red, so the
-      comparison holds hosted reds. The gate below says why master cannot supply them.
+    - **B1d, landed.** `local_sweep.py --run <id>` sweeps what one pull-request run of CI
+      tested, and the probe compares the sweep with that run's own jobs. Replaying runs that
+      hosted CI read red gives the comparison its hosted reds. The gate below says why master
+      cannot supply them, and *Replaying a hosted run* has the command.
 1. **B2, planned.** A queue of one, behind a flag, for the fan-out server lander. The local
    sweep replaces the branch-update re-test.
 1. **B3, planned.** The queue records the tested tree before each merge, and
@@ -197,6 +199,45 @@ The probe exits 1 only for a sweep that read green where
 hosted CI read red, which is a red tree a queue would have merged. A sweep that read red where
 hosted CI read green is listed with the tests that failed, because a queue would have refused
 a good pull request.
+
+#### Replaying a hosted run
+
+The timer sweeps master, and master's hosted runs are nearly all green. A sweep can only miss
+a failure on a tree that hosted CI read red, so those trees come from pull requests. In the
+week to 2026-11-13, 72 pull-request runs of CI failed, and 68 of them failed in `hooks` or
+`pytest`.
+
+To replay one, run this on daniel-box from the primary checkout, with the run's id from
+`gh run list --workflow ci.yml --event pull_request --status failure`:
+
+```sh
+systemd-run --user --wait --collect --quiet \
+    -p MemoryHigh=4500M -p MemorySwapMax=1G \
+    -p SyslogIdentifier=local-sweep -p SyslogLevel=notice \
+    -p WorkingDirectory="$PWD" -E PYTEST_XDIST_AUTO_NUM_WORKERS=8 \
+    /usr/bin/uv run --no-sync python scripts/deploy_tools/local_sweep.py --run <id>
+```
+
+The properties are the ones `homelab-local-sweep.service` sets, so the replay has the unit's
+memory bound and its lines reach Loki under the unit's identifier. The next
+`probe.py sweep-agreement` counts it.
+
+- **The tree is the merge, not the head.** A pull-request run tests the merge of the head
+  into master as master stood. GitHub's API names only the head, so the tool reads the merge
+  commit's id from a job's log and fetches that one commit.
+- **The hosted verdict is the run's own jobs.** GitHub hangs a pull-request run's check-runs
+  on the head commit, so the swept merge commit has none. The result line carries
+  `run=<id>`, and the probe reads that run's jobs.
+- **No tree a bot wrote.** The tool refuses a run that a bot started and a run from a fork.
+  A Renovate pull request can carry a dependency nobody has read, and a sweep installs it and
+  runs it as the user who started the sweep.
+- **One sweep at a time.** A sweep holds a lock in the user's cache directory, so a replay
+  and the timer's sweep run one after the other. A sweep's seconds exclude the wait.
+- **A commit or a run counts once.** The probe takes the newest sweep of each.
+
+A replay that reads green where hosted CI read red is either a hosted flake or a difference
+between daniel-box and a hosted runner. Each one is read and explained before B2 starts,
+because the second kind is a failure a queue would merge.
 
 The timer samples the tip of master. A commit that merges and is superseded between two runs
 is never swept, and at most three sweeps start in an hour.

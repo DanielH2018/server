@@ -55,6 +55,20 @@ def test_the_unit_outlasts_the_time_limits_the_tool_puts_on_its_checks(unit):
     assert int(number) * _SECONDS[suffix] > checks
 
 
+def test_the_documented_replay_command_sets_what_the_unit_sets(unit):
+    """A replay by hand has no unit, so the doc's command carries the unit's bounds itself."""
+    doc = (REPO / "docs" / "ci-throughput.md").read_text()
+    command = doc.split("#### Replaying a hosted run")[1].split("```")[1]
+    properties = dict(re.findall(r"-p (\w+)=(\S+)", command))
+    del properties["WorkingDirectory"]
+    assert properties == {
+        key: unit[key]
+        for key in ("MemoryHigh", "MemorySwapMax", "SyslogIdentifier", "SyslogLevel")
+    }
+    # The fixture keeps the unit's last Environment= line, which is the worker count.
+    assert f"-E {unit['Environment']} " in command
+
+
 def test_the_sweep_runs_inside_the_fleets_bound_with_a_smaller_one_of_its_own(unit):
     fleet = yaml_fast.safe_load(FLEET.read_text())
     assert unit["Slice"] == fleet["claude_code_fleet_slice"]

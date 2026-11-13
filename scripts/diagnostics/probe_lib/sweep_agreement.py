@@ -9,6 +9,11 @@ same commits. This probe makes the comparison. It reads:
 - GitHub's check-runs of each swept commit, for the gate jobs the sweep runs. That is one
   GitHub read per swept commit, about 300 for a full window, so do not run it in a loop.
 
+A sweep that `local_sweep.py --run <id>` made replays what one pull-request run tested, and
+its line carries `run=<id>`. The probe compares it with that run's own jobs. These sweeps are
+where the hosted reds come from, because master's runs are nearly all green. A commit or a run
+that was swept twice counts once, by its newest sweep.
+
 A hosted job that skipped beside a green gate counts as green. The gate passes a skipped job
 only when `prove` showed that a pull-request run had already tested the same tree. Most master
 commits are proven this way, and a proven tree is green by construction. The count line
@@ -100,15 +105,22 @@ class Swept:
     sweep: Sweep
     printed: tuple[str, ...]
 
+    @property
+    def hosted_at(self) -> str:
+        """The GitHub API path, under the repository, of the verdicts this sweep is set beside."""
+        if self.sweep.run:
+            return f"actions/runs/{self.sweep.run}/jobs"
+        return f"commits/{self.sweep.sha}/check-runs"
+
 
 def swept(rows: Rows) -> list[Swept]:
-    """Each sweep in Loki's rows, oldest first, with the lines its own run printed.
+    """The newest sweep of each commit or run in Loki's rows, with the lines its run printed.
 
     A run's lines share its pid. A run that died printed no result line, and its lines stay
     with its pid and reach no sweep.
     """
     printed: dict[str, list[tuple[int, str]]] = {}
-    found = []
+    found: dict[str, Swept] = {}
     for at_ns, line in rows:
         match = _LINE.search(line)
         if not match:
@@ -119,12 +131,14 @@ def swept(rows: Rows) -> list[Swept]:
             printed.setdefault(pid, []).append((at_ns, message))
             continue
         own = (m for at, m in printed.pop(pid, ()) if at_ns - at < _RUN_SECONDS * 1e9)
-        found.append(Swept(at_ns / 1e9, sweep, tuple(own)))
-    return found
+        one = Swept(at_ns / 1e9, sweep, tuple(own))
+        found.pop(one.hosted_at, None)
+        found[one.hosted_at] = one
+    return list(found.values())
 
 
 def hosted(check_runs: CheckRuns) -> dict[str, str]:
-    """What hosted CI said of each job of `HOSTED_JOBS`, from one commit's check-runs.
+    """What hosted CI said of each job of `HOSTED_JOBS`, from a commit's check-runs or a run's jobs.
 
     Returns:
         Per job: `pass` or `fail` for a job that ran, `proven` for one that skipped beside a
@@ -212,14 +226,19 @@ class Agreement:
         )
 
 
-def compare(sweeps: list[Swept], hosted_by_sha: dict[str, dict[str, str]]) -> Agreement:
-    """Set each check of each sweep beside the hosted verdict of the same commit and job."""
+def compare(sweeps: list[Swept], hosted_at: dict[str, dict[str, str]]) -> Agreement:
+    """Set each check of each sweep beside the hosted verdict of the same tree and job.
+
+    Args:
+        sweeps: The sweeps to compare.
+        hosted_at: `hosted()` of what GitHub returned for each sweep's `hosted_at`.
+    """
     agree = not_comparable = ran = red = 0
     here, there = [], []
     for one in sweeps:
         red_here, red_hosted = [], []
         for check in one.sweep.checks:
-            other = hosted_by_sha.get(one.sweep.sha, {}).get(check.job, "none")
+            other = hosted_at.get(one.hosted_at, {}).get(check.job, "none")
             if "none" in (check.verdict, other):
                 not_comparable += 1
                 continue
@@ -246,7 +265,8 @@ def _listed(
     lines = []
     for one, jobs in found:
         when = time.strftime("%Y-%m-%d %H:%MZ", time.gmtime(one.at))
-        lines.append(f"  {one.sweep.sha[:12]}  {', '.join(jobs)}  swept {when}")
+        run = f" of run {one.sweep.run}" if one.sweep.run else ""
+        lines.append(f"  {one.sweep.sha[:12]}{run}  {', '.join(jobs)}  swept {when}")
         if with_output:
             # The run's first line is its count, which names nothing.
             lines += [f"    {line.strip()}" for line in one.printed[1:]]
@@ -264,8 +284,10 @@ def report(found: Agreement, now: float) -> tuple[str, int]:
     here = sum(len(jobs) for _, jobs in found.red_here_only)
     there = sum(len(jobs) for _, jobs in found.red_hosted_only)
     count = len(found.sweeps)
+    replays = sum(1 for one in found.sweeps if one.sweep.run)
     lines = [
-        f"{count} sweep{'s' if count != 1 else ''} over {days:.1f} days, p90 {p90}s: "
+        f"{count} sweep{'s' if count != 1 else ''}, {replays} of them of pull-request runs, "
+        f"over {days:.1f} days, p90 {p90}s: "
         f"{found.agree} checks agree, {here} red here only, {there} red hosted only, "
         f"{found.not_comparable} not comparable; hosted CI ran {found.hosted_ran} of the "
         f"{found.compared} compared itself, and {found.hosted_red} were red"
@@ -295,24 +317,27 @@ def _loki_rows(seconds: int, now: float) -> Rows:
     return core._rows_from_loki(core.fetch_parsed(url, resolve=pin))
 
 
-def _check_runs(sha: str) -> CheckRuns:
-    """One commit's check-runs, each as its id, name, status and conclusion.
+def _check_runs(hosted_at: str) -> CheckRuns:
+    """A commit's check-runs or a run's jobs, each as its id, name, status and conclusion.
+
+    Args:
+        hosted_at: A `Swept.hosted_at`.
 
     Raises:
         subprocess.SubprocessError: gh failed or did not answer.
         OSError: gh is not installed.
         ValueError: gh printed a line that is not JSON.
     """
-    path = f"repos/{{owner}}/{{repo}}/commits/{sha}/check-runs?per_page=100"
-    each = ".check_runs[] | {id, name, status, conclusion}"
+    path = f"repos/{{owner}}/{{repo}}/{hosted_at}?per_page=100"
+    each = "(.check_runs // .jobs)[] | {id, name, status, conclusion}"
     out = gh("api", "--paginate", path, "--jq", each, cwd=REPO, timeout=60).stdout
     return [json.loads(line) for line in out.splitlines() if line.strip()]
 
 
-def _read_all(read: Callable[[str], CheckRuns], shas: list[str]) -> list[CheckRuns]:
-    """`read` of each sha, eight at a time. The first failure cancels the reads not started."""
+def _read_all(read: Callable[[str], CheckRuns], paths: list[str]) -> list[CheckRuns]:
+    """`read` of each path, eight at a time. The first failure cancels the reads not started."""
     with ThreadPoolExecutor(max_workers=8) as pool:
-        futures = [pool.submit(read, sha) for sha in shas]
+        futures = [pool.submit(read, path) for path in paths]
         try:
             return [future.result() for future in futures]
         except BaseException:
@@ -339,10 +364,10 @@ def run_sweep_agreement(
             "sweeps are missing from it; pass a shorter --since"
         )
     sweeps = swept(rows)
-    shas = sorted({one.sweep.sha for one in sweeps})
+    paths = [one.hosted_at for one in sweeps]
     try:
-        hosted_by_sha = dict(
-            zip(shas, map(hosted, _read_all(read_check_runs, shas)), strict=True)
+        hosted_at = dict(
+            zip(paths, map(hosted, _read_all(read_check_runs, paths)), strict=True)
         )
     except (subprocess.SubprocessError, OSError, ValueError, KeyError) as exc:
         cause = (getattr(exc, "stderr", None) or str(exc)).strip().splitlines()[-1:]
@@ -350,7 +375,7 @@ def run_sweep_agreement(
             f"GitHub's check-runs could not be read ({''.join(cause)}); check "
             "`gh auth status`, then run this again"
         ) from exc
-    text, code = report(compare(sweeps, hosted_by_sha), now)
+    text, code = report(compare(sweeps, hosted_at), now)
     print(text)
     return code
 
