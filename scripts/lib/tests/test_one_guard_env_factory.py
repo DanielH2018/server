@@ -7,6 +7,7 @@ Run: uv run pytest scripts/lib/tests/test_one_guard_env_factory.py
 """
 
 import re
+from pathlib import Path
 
 from lib.proc_testing import run
 from lib.repo_paths import REPO
@@ -18,7 +19,8 @@ def _tracked_python() -> dict[str, str]:
     names = run(["git", "ls-files", "-z", "*.py"], cwd=REPO, check=True).stdout.split(
         "\0"
     )
-    return {name: (REPO / name).read_text() for name in names if name}
+    own = Path(__file__).resolve().relative_to(REPO).as_posix()
+    return {name: (REPO / name).read_text() for name in names if name and name != own}
 
 
 def test_one_guard_env_factory_remains_and_nothing_names_the_deleted_one():
