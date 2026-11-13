@@ -274,9 +274,7 @@ truth, with a reason beside each entry. It holds:
 - `.github/`
 - `hosts/components/host-hardening/` and `hosts/components/sshd/`, which hold the sudo cache,
   ssh and the operator's login
-- `secrets/.sops.yaml` and `secrets/secrets.yml`, and their paths after
-  [ADR-0030](adr/0030-the-ansible-tree-is-renamed-for-what-it-holds.md)'s rename,
-  `secrets/.sops.yaml` and `secrets/secrets.yml`
+- `secrets/.sops.yaml` and `secrets/secrets.yml`
 - alert-triggered triage: every `templates/claude-triage*` template, which includes the pins
   template that sets the run's caps, the rule `templates/50-claude-triage.rules.j2`,
   `files/claude_triage_run.py` and `files/claude_triage_poll.py`, all under
