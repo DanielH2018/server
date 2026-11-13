@@ -30,3 +30,4 @@
 | `crowdsec-db` | None | — | — |
 | `code-server-config` | None | — | — |
 | `scrutiny-influxdb-data` | None | — | — |
+| `slskd-config` | None | — | — |

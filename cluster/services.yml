@@ -986,6 +986,8 @@ containers_list:
     port: 5030
     use_authelia: true
     auth_tier: one_factor
+    # slskd's settings and transfer history; the downloads live on media-data.
+    no_backup_claims: [slskd-config]
   # Deploys LAST: every workload role must finish before this role fences the namespace
   # (docs/networkpolicy-slice-answers.md). K8S_APPLIES_LAST in template_filters/toposort.py gives
   # it an edge onto every other entry, so it applies last wherever it sits in this list, and an
