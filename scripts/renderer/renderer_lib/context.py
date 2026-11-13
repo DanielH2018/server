@@ -24,13 +24,10 @@ from lib.ansible_inventory import K8S_HOST
 from lib.estate import REPO_INVENTORY, Inventory
 from lib.render_context import render_context
 from lib.render_guard import StrictChainableUndefined
-from lib.repo_paths import FILTER_PLUGINS, K8S_ROLES
+from lib.repo_paths import K8S_ROLES
 
-# Ansible loads a filter plugin by file path; a script reaches it through this insert.
-if str(FILTER_PLUGINS) not in _sys.path:
-    _sys.path.insert(0, str(FILTER_PLUGINS))
 
-from toposort import build_k8s_dep_map, toposort_containers
+from renderer.template_filters.toposort import build_k8s_dep_map, toposort_containers
 
 
 # Host_vars keys only a host component reads; each reads a name only that component defines.

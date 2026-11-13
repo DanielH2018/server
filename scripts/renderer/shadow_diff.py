@@ -52,7 +52,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
-from lib.repo_paths import ANSIBLE, FILTER_PLUGINS
+from lib.repo_paths import ANSIBLE
 from lib.exit_codes import SHADOW_OK, SHADOW_REFUSED
 from renderer.renderer_lib.cluster import (
     RenderError,
@@ -73,11 +73,11 @@ from renderer.renderer_lib.roundtrip import (
 )
 from renderer.renderer_lib.shadow import TreeRefused, digest_lines
 
-# Ansible loads a filter plugin by file path; a script reaches it through this insert.
-if str(FILTER_PLUGINS) not in _sys.path:
-    _sys.path.insert(0, str(FILTER_PLUGINS))
 
-from secret_stubs import homelab_secret_stub, homelab_stub_keys
+from renderer.template_filters.secret_stubs import (
+    homelab_secret_stub,
+    homelab_stub_keys,
+)
 
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
 SENTINEL = "homelab_secret_stubs"

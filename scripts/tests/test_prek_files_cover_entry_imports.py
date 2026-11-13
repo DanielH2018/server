@@ -9,7 +9,7 @@ and merge green with the hook skipped; master's full sweep catches it only after
 The import closure is read from the source, transitively, resolving each import the way the
 importing file's runtime would: against its own directory and the `scripts/` ancestors a
 module there inserts, and against every directory the file puts on `sys.path` itself. An
-insert of a `lib.repo_paths` constant (`ANSIBLE / "filter_plugins"`) is evaluated from that
+insert of a `lib.repo_paths` constant (`HOST_LIB_FILES`) is evaluated from that
 module. A module pytest runs (a test, a conftest, a helper under `tests/`) also resolves
 against every `pythonpath` root in `pyproject.toml`, which is how a bare `from _row_table
 import ...` in `ansible/tests/repo/` reaches `ansible/tests/` (#5921). An import no root resolves is the stdlib or a third-party package, and needs no match.
@@ -229,13 +229,13 @@ def test_a_regex_matching_the_whole_closure_is_clean():
 
 
 def test_only_a_module_pytest_runs_resolves_a_bare_import_through_pythonpath(tmp_path):
-    # `filter_errors` resolves only through the `ansible/filter_plugins` pythonpath root. A
-    # script prek or cron runs gets no `pythonpath`, so the same import raises there and must
-    # not read as reaching the plugin; a test module's must.
-    plugin = (REPO / "ansible/filter_plugins/filter_errors.py").resolve()
+    # `host_lib` resolves only through the `hosts/lib` pythonpath root. A script prek or cron
+    # runs gets no `pythonpath`, so the same import raises there and must not read as reaching
+    # the module; a test module's must.
+    module = (REPO / "hosts/lib/host_lib.py").resolve()
     script = tmp_path / "cron_job.py"
-    script.write_text("import filter_errors\n")
+    script.write_text("import host_lib\n")
     test = tmp_path / "test_job.py"
-    test.write_text("import filter_errors\n")
-    assert plugin not in imported_files(script)
-    assert plugin in imported_files(test)
+    test.write_text("import host_lib\n")
+    assert module not in imported_files(script)
+    assert module in imported_files(test)

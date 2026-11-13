@@ -15,7 +15,7 @@
   entry's `hostname`. A widget dialling a ClusterIP gets its URL only from
   `services | homepage_widget_url(<entry>, k8s_namespace)`. That filter refuses an
   entry without `homepage_widget: true`, and the same key adds homepage to the entry's
-  NetworkPolicy callers (ansible/filter_plugins/homepage_tiles.py), so the URL and the edge
+  NetworkPolicy callers (scripts/renderer/template_filters/homepage_tiles.py), so the URL and the edge
   cannot disagree.
 #}
 - Top Row:

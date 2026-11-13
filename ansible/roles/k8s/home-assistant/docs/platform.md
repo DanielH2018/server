@@ -152,12 +152,23 @@ refusing the device would each fail on every cast rather than in bursts. None of
 deliver receiver-side JS errors into HA's log, and the receiver's reply does arrive: `Thread-5`
 simply cannot read it while it waits.
 
-**Nothing in this repo's config fixes it.** The fix belongs in
-`home-assistant-libs/pychromecast`: `channel_connected` must not block the socket thread. It
-could send `get_status` without waiting for the connect ack, or `_connect_hass` could refuse to
-wait when called on the socket thread. The operator decided on 2026-09-30 not to report it
-upstream (#3014, closed as accepted, keeps the drafts) and to live with the fault (#2800,
-closed as accepted). Casting works; the cost is an occasional 30 s stall.
+**The loop runs for hours, and it blocks the dismiss (#8201).** On 2026-11-12 it ran in every
+hour from 09:00 to 14:54, 57-109 timeouts an hour, not in the occasional 30 s stalls that #2800
+and #3014 were accepted on. `media_player.turn_off` needs the blocked thread to read the quit
+reply, so `bedroom_display_dismiss` failed four times that day and left the Hub on the
+dashboard in a dark room.
+
+**The repo ends the loop by quitting the app over a second connection.** The loop runs only
+while the dashboard app is on the Hub, so a quit that lands stops it. `bedroom_display_dismiss`
+retries every 5 minutes. When HA's own `turn_off` has not taken effect 15 s later, it runs
+`shell_command.bedroom_display_quit_app`. That command runs `files/cast_quit_app.py` with the
+image's own pychromecast. The script connects to the Hub with no Home Assistant controller, so
+nothing on its connection can block in `_connect_hass`. It reads the running app itself and
+quits only the dashboard, so HA's stale view of the Hub cannot stop user media. A failure exits
+non-zero, which logs on `homeassistant.components.shell_command`, inside the runtime-error
+alert's scope. The real fix is still upstream: `channel_connected` must not block the socket
+thread. The operator chose on 2026-11-13 not to wait on it; the `DECIDED:` marker at
+`shell_command:` in `files/configuration.yaml` records that.
 
 **`external_url` is not the thing to change either.** HA's cast integration resolves the URL
 itself: `hass_url = get_url(hass, require_ssl=True, prefer_external=True)` in

@@ -3474,7 +3474,7 @@ On that filter it would return True for all 8 `probe: false` entries, so C-4a mo
 #### PR C-4b
 
 [#7835](https://github.com/DanielH2018/server/issues/7835) deletes
-`ansible/filter_plugins/kuma_monitors.py`, its import and its `kuma_ingress_monitors`
+`scripts/renderer/template_filters/kuma_monitors.py`, its import and its `kuma_ingress_monitors`
 registration in `scripts/lib/ansible_jinja_env.py`. D6 had already deleted
 `narrow_lib/containers.py`, so no `FILTER_FIELDS` row was left to remove. The plugin's other
 filter, `kuma_malformed_push_tokens`, had no caller left, so it went with the file. The census
@@ -3866,10 +3866,10 @@ PR follows a read that the tile is gone.
   ValueError for an entry with no `port`.
 - **The entry's `hostname` readers.** Homepage's `templates/config/services.yaml.j2` calls
   `containers_list | homepage_href('uptime-kuma', domain)`, and
-  `filter_plugins/homepage_tiles.py:homepage_href` raises ValueError for an entry with no
+  `template_filters/homepage_tiles.py:homepage_href` raises ValueError for an entry with no
   `hostname`.
 - **Authelia.** The entry sets `use_authelia: true` and `auth_tier: one_factor`, which
-  `filter_plugins/authelia_access.py:authelia_service_rules` turns into a generated rule.
+  `template_filters/authelia_access.py:authelia_service_rules` turns into a generated rule.
   `authelia/templates/config-secret.yaml.j2` also holds a hand-written `uptime-kuma.local`
   bypass for `/api/push/`, `/metrics` and `/api/status-page/`, ahead of the generated rules.
 - **The push plumbing:**
@@ -3994,7 +3994,7 @@ Every batch below applies one recipe a previous slice proved, and follows M1 con
 
 Each check pages from Kuma or from Alertmanager, never both (M1 convention 5). One cutover
 PR that both removes a Kuma pager and drops `shadow` cannot keep that. The k8s play deploys
-roles in toposorted order: `ansible/filter_plugins/toposort.py` over daniel-box's
+roles in toposorted order: `scripts/renderer/template_filters/toposort.py` over daniel-box's
 `containers_list` puts `observability` before `uptime-kuma` and `uptime-kuma` before
 `monitor-bridge`, as M2's PR 4a states. So `observability` ships the live rules first, while
 the Kuma pager still runs. Once the commit merges, any other session's `observability`
@@ -4586,7 +4586,7 @@ Kuma still pages for every unmigrated batch until C-1, so it keeps a watcher unt
   series would exceed it. Production sets no `CHECKS_SKIP` or `CHECKS_ONLY`
   (`templates/env-secret.yaml.j2`), so in the pod the gauge is the table's length. It serves
   them from a stdlib `http.server` thread on a `port` that the entry declares. A `metrics` item
-  on the entry renders the scrape job through `ansible/filter_plugins/scrape_jobs.py`, and the
+  on the entry renders the scrape job through `scripts/renderer/template_filters/scrape_jobs.py`, and the
   `homelab` baseline already admits Prometheus. During the shadow window it also keeps pushing
   (M1 convention 5).
 - **What a row exports, from A6-1 on.** The gauge is written at each point that pushes today,
@@ -5447,7 +5447,7 @@ here. C-1 waits for the operator's acceptance.
       timer import means that D6.17 has landed. No `kuma_check_timer` import means that D6.18
       has landed.
 4. **C-4, the names**, in two PRs:
-    - **C-4a.** Add `ansible/filter_plugins/ingress_probes.py` with `ingress_probe_targets`,
+    - **C-4a.** Add `scripts/renderer/template_filters/ingress_probes.py` with `ingress_probe_targets`,
       rename the `kuma:` key on `containers_list` entries to `probe:`, switch M4's probe job to
       the new filter, and add its row to `narrow_lib/containers.py:FILTER_FIELDS`. It also
       registers `ingress_probe_targets` in `scripts/lib/ansible_jinja_env.py`, beside the
@@ -5564,7 +5564,7 @@ here. C-1 waits for the operator's acceptance.
  hosts/daniel-pi/package.yml                           the pi-kuma-push-lib.sh legacy entry out (C-6)
  scripts/renderer/renderer_lib/
 ~  host_sources.py, host_inputs.py                     the kuma-push-lib.sh rows out (C-3a)
- ansible/filter_plugins/
+ scripts/renderer/template_filters/
 +  ingress_probes.py                                   C-4a
 -  kuma_monitors.py                                    C-4b, after D6
  scripts/diagnostics/probe_lib/
@@ -5611,7 +5611,7 @@ the `secret-rotation-registry-sync` hook (*Baseline*). The PR body quotes three 
 `grep -c '_push_token:' ansible/secret_rotation.yml` with the count it expects, and
 `git diff --stat ansible/vars/secrets.yml`. Plain `git diff` on that file prints plaintext.
 
-**Narrowing, for every PR that edits `ansible/inventory/` or `ansible/filter_plugins/`.**
+**Narrowing, for every PR that edits `ansible/inventory/` or `scripts/renderer/template_filters/`.**
 Before merging, run the read-only
 `uv run python scripts/deploy_tools/deploy_tags.py narrow origin/master HEAD` from the PR's
 worktree, and quote its output in the PR body. It names the tags `land.sh` and the tick reach.
@@ -6490,7 +6490,7 @@ Raised: 4 high, 5 medium. Fixed: 9, two of them in part. Refuted in part: 2.
 
 - **M6-C1-01 (high)** The one-PR cutovers for A1 to A6-7 and B Cutover-1 deploy the live rules
   before the Kuma tile goes, so two pagers run at once. **Fixed.** At `70591c307`,
-  `ansible/filter_plugins/toposort.py` orders `observability` before `uptime-kuma` and
+  `scripts/renderer/template_filters/toposort.py` orders `observability` before `uptime-kuma` and
   `uptime-kuma` before `monitor-bridge`, which M2's PR 4a also states. *The cutover order* now
   says so and adopts M2's split for every cutover: Cutover-a and Cutover-b for A1 to A5, A7,
   B8 and A6-7 (as A6-7a and A6-7b), and Cutover-1a, Cutover-1b and Cutover-2 for B1 to B7.

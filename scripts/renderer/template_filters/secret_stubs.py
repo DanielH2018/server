@@ -1,4 +1,4 @@
-"""Ansible filter plugin holding the secret stub form of the shadow render (target slice R1).
+"""The secret stub form of the shadow render (target slice R1).
 
 The shadow render compares `homelab-render` with the Ansible manifests role for identical
 inputs, and the inputs it can share without decrypting anything are stub values: every
@@ -6,9 +6,6 @@ secret key `K` renders as `stub-` plus `K` with underscores turned to hyphens. T
 valid DNS label, so a stubbed host name still passes `kubectl apply --dry-run=server`. This
 module is the one definition of the form, which the renderer and its render guards are
 built to share, so neither restates it. `docs/homelab-render.md` is the operator's page.
-
-Ansible loads every module under `filter_plugins/` in every play, so this one imports the
-standard library only. `FilterModule.filters()` returns one literal dict.
 """
 
 from collections.abc import Mapping
@@ -66,15 +63,3 @@ def homelab_unstubbed_keys(keys, values) -> list[str]:
         for key, value in pairs
         if not (isinstance(value, str) and value == homelab_secret_stub(key))
     ]
-
-
-class FilterModule:
-    # Unwrapped by `_as_filter`, unlike the siblings: importing `filter_errors` would add a
-    # sibling import to a plugin that must load in every play, and the one ValueError raised
-    # here already names its filter.
-    def filters(self):
-        return {
-            "homelab_secret_stub": homelab_secret_stub,
-            "homelab_stub_keys": homelab_stub_keys,
-            "homelab_unstubbed_keys": homelab_unstubbed_keys,
-        }

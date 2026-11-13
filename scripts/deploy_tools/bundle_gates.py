@@ -34,7 +34,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 import yaml
 
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS, ANSIBLE, FILTER_PLUGINS
+from lib.repo_paths import ALL_VARS, ANSIBLE
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
     FLUX_DIR,
@@ -44,11 +44,8 @@ from renderer.renderer_lib.bundle import (
 from renderer.renderer_lib.placeholders import references
 from renderer.renderer_lib.shadow import stub_tokens
 
-# Ansible loads a filter plugin by file path; a script reaches it through this insert.
-if str(FILTER_PLUGINS) not in _sys.path:
-    _sys.path.insert(0, str(FILTER_PLUGINS))
 
-from secret_stubs import homelab_secret_stub
+from renderer.template_filters.secret_stubs import homelab_secret_stub
 
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
 

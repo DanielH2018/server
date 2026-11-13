@@ -54,7 +54,6 @@ from _ratchet import (
 CENSUS_MEMBERS = frozenset(
     {
         ".claude/hooks/_hook_common.py",
-        "ansible/filter_plugins/toposort.py",
         "evals/trend.py",
         "scripts/lib/repo_paths.py",
     }

@@ -217,15 +217,8 @@ def _path_inserts(path: Path) -> list[ast.expr]:
     ]
 
 
-@pytest.mark.parametrize(
-    ("rel", "directory"),
-    [
-        ("scripts/lib/ansible_jinja_env.py", repo_paths.ANSIBLE / "filter_plugins"),
-        ("scripts/dev/tighten_ratchets.py", repo_paths.ANSIBLE / "tests"),
-    ],
-    ids=["ansible_jinja_env-filter_plugins", "tighten_ratchets-ansible_tests"],
-)
-def test_the_two_hand_built_inserts_use_repo_paths_constants(rel, directory):
+def test_tighten_ratchets_inserts_ansible_tests_through_its_repo_paths_constant():
+    rel, directory = "scripts/dev/tighten_ratchets.py", repo_paths.ANSIBLE / "tests"
     inserts = _path_inserts(REPO / rel)
     hand_built = [
         ast.unparse(arg)

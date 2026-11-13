@@ -94,7 +94,7 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 - **Entry point.** One CLI, `homelab-render`, run as
   `uv run python scripts/renderer/homelab_render.py`. R1 chose that path under the rules in
   `.claude/rules/python-layout.md`. The renderer reuses `scripts/lib/ansible_jinja_env.py`,
-  `scripts/deploy_tools/render_targets.py` and `ansible/filter_plugins/`. R4 moves
+  `scripts/deploy_tools/render_targets.py` and `scripts/renderer/template_filters/`. R4 moves
   `render_targets.py`'s logic into the renderer rather than deleting it. Comparison and stub
   tooling beside it, such as R1's `shadow_diff.py`, renders nothing itself and is not a second
   renderer.
@@ -503,7 +503,7 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
       in them is named `snapshot-<tag>` or `prepull-<tag>`, so no other Kustomization adopts
       one, and the race that keeps `-deferred` on `Orphan` has nothing to race.
 - **Ordering.** `dependsOn` is generated, and no slice hand-writes it. Its edges come from
-  `ansible/filter_plugins/toposort.py`, or from a renderer rule that the adding slice names,
+  `scripts/renderer/template_filters/toposort.py`, or from a renderer rule that the adding slice names,
   such as D3's `cluster-vars` edge and D4's `-deferred` edges.
 - **Prune exemptions.** PVCs and Namespaces carry `kustomize.toolkit.fluxcd.io/prune: disabled`,
   and so does a ConfigMap that holds state no render restores, named by its slice. H2's

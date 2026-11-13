@@ -138,6 +138,13 @@ RUNBOOK_GATES_OK = OK
 RUNBOOK_GATES_BAD_ARGS = USAGE_ERROR
 RUNBOOK_GATES_UNAVAILABLE = 69
 
+# -- scripts/deploy_tools/local_sweep.py ------------------------------------------------
+# 69 is sysexits' EX_UNAVAILABLE again: no check graded the commit, which is neither verdict.
+SWEEP_PASSED = OK
+SWEEP_FAILED = FAILED
+SWEEP_BAD_ARGS = USAGE_ERROR
+SWEEP_NO_VERDICT = 69
+
 # -- scripts/secrets_mgmt/secret_rotation.py --------------------------------------------
 # A refused argument (a future date for `record`, a key the registry lacks) was 2 until #4443,
 # and is usage.
@@ -407,6 +414,17 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         ),
         _c(FACT_STATUS_BAD_ARGS, "FACT_STATUS_BAD_ARGS", "the command line is wrong."),
         _c(FACT_STATUS_BAD_REF, "FACT_STATUS_BAD_REF", "`notice` found no merge base."),
+    ),
+    "scripts/deploy_tools/local_sweep.py": (
+        _c(SWEEP_PASSED, "SWEEP_PASSED", "every local check passed."),
+        _c(SWEEP_FAILED, "SWEEP_FAILED", "a local check failed."),
+        _c(SWEEP_BAD_ARGS, "SWEEP_BAD_ARGS", "the command line is wrong."),
+        _c(
+            SWEEP_NO_VERDICT,
+            "SWEEP_NO_VERDICT",
+            "no verdict: the commit could not be checked out, a check could not start or "
+            "outran its time limit, or the sweep itself raised.",
+        ),
     ),
     "scripts/deploy_tools/runbook_gates.py": (
         _c(RUNBOOK_GATES_OK, "RUNBOOK_GATES_OK", "every gate run passed."),

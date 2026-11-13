@@ -485,7 +485,7 @@ def test_the_census_sibling_gate_matches_the_import_closure_and_its_config(path)
         "scripts/dev/findings.py",
         "scripts/deploy_tools/land_lib/ledger.py",
         "ansible/roles/k8s/monitor-bridge/files/registry.py",
-        "ansible/filter_plugins/toposort.py",
+        "scripts/renderer/template_filters/toposort.py",
         "ansible/roles/k8s/traefik/defaults/main.yml",
     ],
 )

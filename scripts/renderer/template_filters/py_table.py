@@ -1,4 +1,4 @@
-"""Ansible filter plugin reading a table of constructor calls out of a Python module's source.
+"""The filter reading a table of constructor calls out of a Python module's source.
 
 monitor-bridge declares every check once, in `roles/k8s/monitor-bridge/files/check_table.py`,
 as a tuple of `PushCheck(...)` calls (#3659). The pod imports that module. The generated
@@ -14,22 +14,12 @@ non-literal value (`fn=service.check_n8n`) is left out, because it names code ra
 data. A positional argument raises, as does a missing table or an element that is not a call:
 either would otherwise drop a row, and a dropped row is a check no generated fragment names.
 
-No Ansible import at load time, so `fragments_bridge.py` and the tests call this one function.
-`FilterModule` registers it through `_as_filter`, which re-raises a `ValueError` as
-`FilterError("py_table: ...")` and fails the render before anything applies (#4505).
+`fragments_bridge.py` and the tests call this one function. `lib.ansible_jinja_env` registers it so a
+`ValueError` fails the render as `FilterError("py_table: ...")` before anything
+applies (#4505).
 """
 
 import ast
-
-import sys as _sys
-from pathlib import Path as _Path
-
-# Ansible loads a plugin by file path, so `filter_errors` beside it imports by bare name only
-# once this directory is on the path (#4527).
-if str(_Path(__file__).resolve().parent) not in _sys.path:
-    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
-
-from filter_errors import _as_filter
 
 
 def _literal(node: ast.expr) -> tuple[bool, object]:
@@ -80,8 +70,3 @@ def py_table(source: str, name: str) -> list[dict]:
                 row[kw.arg] = value
         rows.append(row)
     return rows
-
-
-class FilterModule:
-    def filters(self):
-        return {"py_table": _as_filter(py_table)}

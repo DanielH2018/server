@@ -51,10 +51,10 @@ def test_the_static_ratchet_hook_covers_the_row_table_its_entry_imports():
 @pytest.mark.parametrize(
     ("hook_id", "member"),
     [
-        ("static-ratchet-tests-lander", "ansible/filter_plugins/filter_errors.py"),
+        ("static-ratchet-tests-lander", "ansible/tests/_setup_render.py"),
         ("static-ratchet-tests-checksum", "scripts/validate/k8s_manifests.py"),
-        ("static-ratchet-tests-shell", "ansible/filter_plugins/filter_errors.py"),
-        ("static-ratchet-tests-renovate", "ansible/filter_plugins/filter_errors.py"),
+        ("static-ratchet-tests-shell", "ansible/tests/_shell_render.py"),
+        ("static-ratchet-tests-renovate", "ansible/tests/_k8s_render.py"),
     ],
 )
 def test_a_hook_gate_covers_the_modules_its_entry_reaches_through_pythonpath(

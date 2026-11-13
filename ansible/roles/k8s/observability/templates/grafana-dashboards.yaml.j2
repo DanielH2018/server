@@ -6,7 +6,7 @@
   Rendered here rather than staged on the node and built by a task (D5's imperative-ConfigMap
   row), so the ConfigMaps are a render that Flux can apply once observability is flux-owned.
   Each board passes through `grafana_deploy_annotated`
-  (ansible/filter_plugins/grafana_dashboards.py), which adds the two deploy-annotation queries
+  (scripts/renderer/template_filters/grafana_dashboards.py), which adds the two deploy-annotation queries
   and writes the JSON with sorted keys, so an unchanged board renders the same bytes.
 
   `manifests_exclude_files` keeps this file out of the shared role's client-side apply, which

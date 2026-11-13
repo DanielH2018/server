@@ -10,7 +10,10 @@ import yaml
 
 from lib import yaml_fast
 from renderer import shadow_diff
-from secret_stubs import homelab_secret_stub, homelab_stub_keys
+from renderer.template_filters.secret_stubs import (
+    homelab_secret_stub,
+    homelab_stub_keys,
+)
 
 
 def test_stubs_writes_the_same_file_twice_for_one_tree(tmp_path):

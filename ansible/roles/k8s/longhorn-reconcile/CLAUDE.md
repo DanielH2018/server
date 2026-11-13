@@ -118,4 +118,4 @@ authority is written here to keep a later edit from widening it.
   CronJob goes with the Kustomization, and the restored `setup/k3s` tasks write the same labels.
 - **The group names are a contract with the RecurringJobs.** A one-byte change in a label drops
   a volume out of its job with nothing failing. `tests/test_longhorn_reconcile.py` types the
-  labels out and holds them equal to `ansible/filter_plugins/longhorn_groups.py`.
+  labels out and holds them equal to `scripts/renderer/template_filters/longhorn_groups.py`.

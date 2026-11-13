@@ -415,10 +415,10 @@ def macro_bool_coercion_errors(trees: list, custom_templates_dir: Path) -> list[
 # validates clean and never reaches the pod. The check below makes that disagreement an
 # error.
 _SHIPPED_DIR_LISTS = {
-    "": ("home_assistant_root_files", "*.yaml"),
-    "automations": ("home_assistant_automation_files", "*.yaml"),
-    "scripts": ("home_assistant_script_files", "*.yaml"),
-    "custom_templates": ("home_assistant_template_files", "*.jinja"),
+    "": ("home_assistant_root_files", ("*.yaml", "*.py")),
+    "automations": ("home_assistant_automation_files", ("*.yaml",)),
+    "scripts": ("home_assistant_script_files", ("*.yaml",)),
+    "custom_templates": ("home_assistant_template_files", ("*.jinja",)),
 }
 
 
@@ -433,11 +433,14 @@ def shipped_dir_list_errors(role_dir: Path) -> list[str]:
         return []
     values = yaml_fast.safe_load(defaults.read_text()) or {}
     errors = []
-    for subdir, (var, pattern) in _SHIPPED_DIR_LISTS.items():
+    for subdir, (var, patterns) in _SHIPPED_DIR_LISTS.items():
         listed = values.get(var)
         if listed is None:
             continue
-        on_disk = sorted(p.name for p in (role_dir / "files" / subdir).glob(pattern))
+        directory = role_dir / "files" / subdir
+        on_disk = sorted(
+            p.name for pattern in patterns for p in directory.glob(pattern)
+        )
         shown = f"files/{subdir}/" if subdir else "files/"
         for name in sorted(set(on_disk) - set(listed)):
             errors.append(

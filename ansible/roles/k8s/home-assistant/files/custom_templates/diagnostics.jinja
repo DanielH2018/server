@@ -3,11 +3,16 @@
    bool out) so it is unit-tested in tests/test_diagnostics_macros.py. Used by
    automation.ha_runtime_error_alert. `str.startswith(tuple)` and tuple literals behave identically
    in HA's sandboxed Jinja and the bare test harness; `| string` coerces a missing/None value so it
-   can never raise. #}
-{%- macro error_in_scope(level, logger) -%}
+   can never raise. `message` is the joined log text; a Cast device fault (the cast integration's
+   `CastMediaPlayerEntity.<method> Failed: ` format) is the device, not our code, so it is out of
+   scope wherever it is logged. #}
+{%- macro error_in_scope(level, logger, message='') -%}
 {%- set lv = (level | string | upper) -%}
 {%- set lg = (logger | string) -%}
+{%- set msg = (message | string) -%}
 {%- set scoped = ('homeassistant.components.automation', 'homeassistant.components.script',
-                  'homeassistant.components.template', 'homeassistant.helpers.template') -%}
-{{ lv in ['ERROR', 'CRITICAL'] and lg.startswith(scoped) }}
+                  'homeassistant.components.template', 'homeassistant.helpers.template',
+                  'homeassistant.components.shell_command') -%}
+{%- set cast_fault = ': CastMediaPlayerEntity.' in msg and ' Failed: ' in msg -%}
+{{ lv in ['ERROR', 'CRITICAL'] and lg.startswith(scoped) and not cast_fault }}
 {%- endmacro -%}

@@ -78,7 +78,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import RENDER_FAILED, RENDER_OK, RENDER_REFUSED
-from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, K8S_ROLES
+from lib.repo_paths import ANSIBLE, K8S_ROLES
 from renderer.renderer_lib import secret_checks
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
@@ -123,11 +123,11 @@ from renderer.renderer_lib.placeholders import (
     select_mode,
 )
 
-# Ansible loads a filter plugin by file path; a script reaches it through this insert.
-if str(FILTER_PLUGINS) not in _sys.path:
-    _sys.path.insert(0, str(FILTER_PLUGINS))
 
-from secret_stubs import homelab_stub_keys, homelab_unstubbed_keys
+from renderer.template_filters.secret_stubs import (
+    homelab_stub_keys,
+    homelab_unstubbed_keys,
+)
 
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
 # The cluster file `cluster_vars.py write` keeps. The bundle's copy keeps its basename.

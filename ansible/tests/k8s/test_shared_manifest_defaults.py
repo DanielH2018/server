@@ -56,6 +56,7 @@ ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
         "ical-proxy",
         "jellyfin",
         "karma",
+        "lidarr",
         "littlelink",
         "livesync",
         "loki-homelab",
@@ -72,7 +73,7 @@ ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
 
 # The roles whose IngressRoute the shared default renders — the IngressRoute half of the census above.
 # Every one of them is routed (its entry carries a `hostname`), which is also what
-# `ansible/filter_plugins/toposort.py` now derives their traefik ordering edge from.
+# `scripts/renderer/template_filters/toposort.py` now derives their traefik ordering edge from.
 ROLES_WITH_A_DEFAULT_INGRESSROUTE = frozenset(
     {
         "bazarr",
@@ -80,6 +81,7 @@ ROLES_WITH_A_DEFAULT_INGRESSROUTE = frozenset(
         "code-server",
         "homepage",
         "jellyfin",
+        "lidarr",
         "littlelink",
         "pihole",
         "prowlarr",

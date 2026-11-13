@@ -173,6 +173,7 @@ _LSIO_CHOWN_THEN_DROP = {
     ("freshrss", "freshrss"),
     ("home-assistant", "home-assistant"),
     ("jellyfin", "jellyfin"),
+    ("lidarr", "lidarr"),
     ("prowlarr", "prowlarr"),
     ("qbittorrent", "qbittorrent"),
     ("radarr", "radarr"),

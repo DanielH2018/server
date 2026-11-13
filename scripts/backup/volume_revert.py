@@ -40,11 +40,8 @@ from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
 from lib.kubectl import MissingKubectl
 from lib.operator_kubectl import Kubectl, KubectlFailed, for_mode
-from lib.repo_paths import FILTER_PLUGINS
 from renderer.renderer_lib.snapshot import snapshot_name
-
-sys.path.insert(0, str(FILTER_PLUGINS))
-from longhorn_manager import ready_manager_ip
+from renderer.template_filters.longhorn_manager import ready_manager_ip
 
 LONGHORN_NAMESPACE = "longhorn-system"
 APPLY_COMMAND = "scripts/backup/volume_revert.py <the same flags> --apply"

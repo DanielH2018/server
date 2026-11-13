@@ -65,7 +65,7 @@ has its own test under `scripts/diagnostics/tests/`.
   prove nothing.
 - **`shed-set`** prints the Deployments and StatefulSets to scale to zero when one node is
   lost, so the tiered services fit on the survivor (`probe_lib/shed_set.py`). The set is every
-  k8s entry with no `tier:`, derived by `shed_entries` in `filter_plugins/service_tier.py`, and
+  k8s entry with no `tier:`, derived by `shed_entries` in `template_filters/service_tier.py`, and
   each role is rendered to name its scalable workloads. It reads the inventory only.
 - **`takeover <tag>`** lists the field paths Flux's first apply of a tag strips: a field a
   manager `kustomize-controller` cleans owns, such as `kubectl-rollout`'s `restartedAt`, that no

@@ -57,7 +57,6 @@ ANSIBLE = REPO / "ansible"
 ROLES = ANSIBLE / "roles"
 K8S_ROLES = ROLES / "k8s"
 JOB_FILES = SCRIPTS / "renderer" / "job_files"
-FILTER_PLUGINS = ANSIBLE / "filter_plugins"
 # `longhorn_robustness.py`'s one copy lives in monitor-bridge's `files/` without shipping in its
 # pod; the runbook gates import it from here (#3668).
 MONITOR_BRIDGE_FILES = K8S_ROLES / "monitor-bridge" / "files"

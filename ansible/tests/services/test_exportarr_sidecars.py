@@ -26,7 +26,7 @@ from _helpers import REPO
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 
-ARRS = ("sonarr", "radarr", "prowlarr")
+ARRS = ("sonarr", "radarr", "prowlarr", "lidarr")
 METRICS_PORT = 9707
 
 

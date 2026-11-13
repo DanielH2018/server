@@ -75,7 +75,8 @@ because a role doc is loaded on every task in this directory whether it is neede
 - **A NEW file ships nothing until its list in `defaults/main.yml` names it.** Four lists,
   one per shape: `home_assistant_automation_files` (merged by `!include_dir_merge_list`),
   `home_assistant_script_files` (`!include_dir_merge_named`), `home_assistant_template_files`
-  and `home_assistant_root_files`. The validator checks the directory and the list agree.
+  and `home_assistant_root_files`, which also carries the `.py` scripts a `shell_command`
+  runs. The validator checks the directory and the list agree.
 - **Git is the source of truth; HA UI edits are overwritten on deploy.** A config edit changes
   the rendered ConfigMap, so the renderer's restart annotation rolls the Deployment (~120s).
 

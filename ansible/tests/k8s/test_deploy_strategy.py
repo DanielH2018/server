@@ -36,6 +36,10 @@ _RECREATE = {
         "radarr",
         "radarr",
     ): "sqlite config DB; two instances would double-run import jobs",
+    (
+        "lidarr",
+        "lidarr",
+    ): "sqlite config DB; two instances would double-run import jobs",
     ("bazarr", "bazarr"): "sqlite config DB",
     (
         "prowlarr",

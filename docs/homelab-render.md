@@ -12,7 +12,7 @@ steps, and this page describes each piece once its PR has merged.
 
 ## What is in place
 
-- `ansible/filter_plugins/secret_stubs.py` holds the stub form. It is the one definition
+- `scripts/renderer/template_filters/secret_stubs.py` holds the stub form. It is the one definition
   that R1's renderer and its playbook checks are built to share, so neither restates it.
 - `scripts/renderer/shadow_diff.py stubs` writes the stub file a stub-mode render takes.
 - The renderer pins no live fact, because no value a template reads comes from live state
@@ -186,7 +186,7 @@ A role's templates render with these variables, resolved for daniel-box:
   with the stub file's variables over all of them;
 - `services`: every entry of `cluster/services.yml`, in the dependency order of
   `toposort_containers`. `scripts/renderer/renderer_lib/context.py` sorts it with
-  `ansible/filter_plugins/toposort.py`, and templates read that order. An entry's position
+  `scripts/renderer/template_filters/toposort.py`, and templates read that order. An entry's position
   in the list therefore does not matter: an ordering no template carries goes in
   `depends_on:` on the entry;
 - `container_item`, the tag's own entry from that list;
@@ -222,7 +222,7 @@ The renderer writes a tag's files by these rules:
   no template for renders from `service-default.yaml.j2` or `ingressroute-default.yaml.j2`
   in `ansible/templates/`, so a role whose Service or route fits the shared shape writes no
   template (#2872, #3043). Such a route leaves no string in the role, so
-  `ansible/filter_plugins/toposort.py` derives the traefik edge from the entry's `hostname`.
+  `scripts/renderer/template_filters/toposort.py` derives the traefik edge from the entry's `hostname`.
   A listed name with no template stops the render.
 - **The claims.** Each `k8s_claims` entry renders `claim-default.yaml.j2` to
   `claim-<name>.yaml`, with the entry as `manifests_claim`.

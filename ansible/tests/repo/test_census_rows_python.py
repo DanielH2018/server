@@ -252,11 +252,11 @@ ROWS = (
             Subject("b.py", "from __future__ import division\n"),
         ),
         min_matches=200,
-        # One per context that reaches the uv interpreter: a filter plugin, a Claude hook, an
+        # One per context that reaches the uv interpreter: a template filter, a Claude hook, an
         # eval script and the suite's shared helper.
         must_find=frozenset(
             {
-                "ansible/filter_plugins/toposort.py",
+                "scripts/renderer/template_filters/toposort.py",
                 ".claude/hooks/block-footguns.py",
                 "evals/trend.py",
                 "ansible/tests/_helpers.py",
@@ -379,17 +379,16 @@ ROWS = (
         # The live index decides, so the red subject is a second home for a real module.
         red=(
             Subject("scripts/lib/registry.py", ""),
-            Subject("ansible/filter_plugins/k8s_manifests.py", ""),
+            Subject("hosts/lib/k8s_manifests.py", ""),
         ),
         green=(Subject("scripts/lib/no_other_root_holds_this_name.py", ""),),
         min_matches=100,
-        # One per root shape: a filter plugin, a cross-role host module, a deployer module,
+        # One per root shape: a cross-role host module, a deployer module,
         # a monitor-bridge module reached bare inside its image, a k8s role's `files/`
         # reached only through a role test's insert, two `scripts/` modules, and one from each
         # `scripts/<dir>` a test inserts itself.
         must_find=frozenset(
             {
-                "ansible/filter_plugins/toposort.py",
                 "hosts/lib/host_lib.py",
                 "ansible/roles/k8s/monitor-bridge/files/registry.py",
                 "ansible/roles/k8s/homelab-mcp/files/safe_reads.py",

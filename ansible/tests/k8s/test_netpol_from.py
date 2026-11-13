@@ -22,7 +22,7 @@ import pytest
 
 from _helpers import K8S_ROLES
 from _k8s_render import host_context, pod_template, rendered_docs
-from homepage_tiles import netpol_callers
+from renderer.template_filters.homepage_tiles import netpol_callers
 from lib import yaml_fast
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster

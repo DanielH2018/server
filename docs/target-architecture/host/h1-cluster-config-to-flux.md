@@ -381,7 +381,7 @@ The exit criterion has two parts:
 
   `Return volumes to the default recurring-job group` selects from live PVCs whose
   `storageClassName` is `longhorn`, not from a list of claims. The desired membership is
-  computed at render time from `containers_list`, by `ansible/filter_plugins/longhorn_groups.py`,
+  computed at render time from `containers_list`, by `scripts/renderer/template_filters/longhorn_groups.py`,
   through `k3s_longhorn_r2_volumes`, `k3s_longhorn_weekly_volumes` and
   `k3s_longhorn_nobackup_volumes`.
 - **The agent's kubeconfig names this role.** The task `Give the agent user the operator's
@@ -464,7 +464,7 @@ writer.
   instead of reset. As its own tag it is not forward-only, and it prunes like any service, so
   it is not one of the plumbing tags below.
 - **Each tag's shed disposition.** `probe.py shed-set` lists every untiered entry
-  (`ansible/filter_plugins/service_tier.py:shed_entries`), and
+  (`scripts/renderer/template_filters/service_tier.py:shed_entries`), and
   [Break-glass](../../break-glass.md) scales that list to zero when a node is lost. None of
   the six tags declares a `tier:`, so each one takes an explicit disposition in the PR that
   adds its entry:
@@ -2424,7 +2424,7 @@ subject's tests.
 ## Tests and docs that change in the same PR
 
 - **H1.1d:** `ansible/tests/k8s/test_shed_set_is_derived_from_tier.py`, the module docstring
-  of `ansible/filter_plugins/service_tier.py` for `shed_entries`, and the module docstring of
+  of `scripts/renderer/template_filters/service_tier.py` for `shed_entries`, and the module docstring of
   `scripts/diagnostics/probe_lib/shed_set.py`, which says a service leaves the set only by
   gaining a `tier:`.
 - **H1.1g:** `renovate.json` and the tests under `scripts/tests/` that read its rules, and the
@@ -3267,7 +3267,7 @@ against the tree at `70591c307`, against k3s's manifest at `v1.37.1+k3s1` throug
 or against a read-only live read on 2026-10-11, before the fix.
 
 - **H1-C3-01 (high)** The six new entries carry no tier, so the node-down break-glass would
-  scale CoreDNS to zero. *Confirmed:* `ansible/filter_plugins/service_tier.py:shed_entries`
+  scale CoreDNS to zero. *Confirmed:* `scripts/renderer/template_filters/service_tier.py:shed_entries`
   sheds every untiered entry, `scripts/lib/estate.py:Estate.k8s_entries` filters on
   `platform` only, and `docs/break-glass.md` restores a shed service with
   `deploy.sh --tags`. *Fixed:*

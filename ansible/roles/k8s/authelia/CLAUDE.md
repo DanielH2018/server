@@ -24,7 +24,7 @@ redis incident, the notifier's history and the OIDC derivations are in
 
 A service's policy is the `auth_tier: one_factor | two_factor` beside its `use_authelia: true` in
 `inventory/host_vars/<host>.yml`, not a rule in this role. `templates/config-secret.yaml.j2` renders
-one rule per tier from those entries through `filter_plugins/authelia_access.py`, plus one scoped
+one rule per tier from those entries through `template_filters/authelia_access.py`, plus one scoped
 bypass, Karma's pair and two wildcards. A generated rule names only the LAN name, so
 the public name keeps the `*.<domain>` wildcard's `two_factor` whatever the entry declares (#2057).
 

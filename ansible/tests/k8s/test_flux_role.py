@@ -26,12 +26,11 @@ import re
 
 import chained_timeout
 import pytest
-from filter_errors import FilterError
+from lib.ansible_jinja_env import FilterError, repo_filters
 
 from _helpers import ALL_VARS, ROLES, load_defaults
 from lib import yaml_fast
 from _k8s_render import rendered_docs
-from flux_components import FilterModule
 from test_volume_names_descriptive import volume_names
 
 FLUX = ROLES / "k8s" / "flux"
@@ -218,7 +217,7 @@ spec:
 )
 def test_flux_components_refuses_an_install_it_cannot_fit(text):
     with pytest.raises(FilterError) as caught:
-        FilterModule().filters()["flux_components"](text, {}, "homelab-critical", {})
+        repo_filters()["flux_components"](text, {}, "homelab-critical", {})
     assert str(caught.value).startswith("flux_components: "), str(caught.value)
 
 
@@ -226,7 +225,7 @@ def test_the_volume_name_guard_reads_the_renamed_volumes():
     """The volume-name guard scans rendered `- name:` lines under `volumes:`. A sequence
     written at its key's own column reads to it as the end of the block, so it collected no
     name from this filter's first output and passed while checking nothing."""
-    out = FilterModule().filters()["flux_components"](
+    out = repo_filters()["flux_components"](
         _DEPLOYMENT, {}, "homelab-critical", {"cache": "cache"}
     )
     assert volume_names(out) == {
@@ -260,7 +259,7 @@ def test_a_controller_flag_replaces_upstreams_value_for_it():
     install = _DEPLOYMENT.replace(
         "image: x", "image: x\n        args: [--concurrent=4, --a]"
     )
-    out = FilterModule().filters()["flux_components"](
+    out = repo_filters()["flux_components"](
         install, {}, "c", {"cache": "cache"}, {"source-controller": ["--concurrent=5"]}
     )
     docs = list(yaml_fast.safe_load_all(out))
@@ -269,7 +268,7 @@ def test_a_controller_flag_replaces_upstreams_value_for_it():
 
 def test_a_flag_for_a_deployment_the_install_lacks_is_refused():
     with pytest.raises(FilterError, match="kustomize-controller"):
-        FilterModule().filters()["flux_components"](
+        repo_filters()["flux_components"](
             _DEPLOYMENT,
             {},
             "c",
@@ -301,7 +300,7 @@ def test_a_controller_resources_patch_replaces_only_the_keys_it_names():
         "image: x",
         "image: x\n        resources: {limits: {memory: 1Gi}, requests: {memory: 64Mi, cpu: 50m}}",
     )
-    out = FilterModule().filters()["flux_components"](
+    out = repo_filters()["flux_components"](
         install,
         {},
         "c",
@@ -318,7 +317,7 @@ def test_a_controller_resources_patch_replaces_only_the_keys_it_names():
 
 def test_resources_for_a_deployment_the_install_lacks_are_refused():
     with pytest.raises(FilterError, match="kustomize-controller"):
-        FilterModule().filters()["flux_components"](
+        repo_filters()["flux_components"](
             _DEPLOYMENT,
             {},
             "c",

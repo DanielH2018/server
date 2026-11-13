@@ -28,7 +28,8 @@ from lib.repo_paths import REPO
 # 13625 once #8267 gave every tmpfiles.d file the `tmpfiles` activation.
 # 13562 once #8181 took the service list out of the host_vars layer.
 # 13567 once #8184 resolved a template lookup's `role_file()` path in rule 5.
-LINE_CEILING = 13567
+# 15030 once #8185 moved the template filters from ansible/filter_plugins/ into the renderer.
+LINE_CEILING = 15030
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 

@@ -42,7 +42,7 @@ the bundle from GHCR. A bad apply here stops name resolution, and host probes st
   `flux_forward_only: true`, each with its `DECIDED:` marker in `defaults/main.yml`). A render
   that drops an object leaves it serving, and a failed revision holds rather than resets `prod`
   into a fetch that needs the DNS that just failed.
-- **`NEVER_SHED` names the tag** in `ansible/filter_plugins/service_tier.py`. The role is
+- **`NEVER_SHED` names the tag** in `scripts/renderer/template_filters/service_tier.py`. The role is
   untiered, because its pod keeps `system-cluster-critical`, which `tier: platform` would
   lower. CoreDNS at zero replicas stops cluster DNS, and Flux then cannot fetch the bundle that
   restores it. `_SYSTEM_TIER` in `ansible/tests/k8s/test_pod_template_hygiene.py` records the

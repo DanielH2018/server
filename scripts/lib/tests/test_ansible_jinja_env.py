@@ -3,6 +3,7 @@
 Run: uv run pytest scripts/lib/tests/test_ansible_jinja_env.py
 """
 
+import inspect
 import sys
 
 import pytest
@@ -21,9 +22,9 @@ EXPECTED_FILTERS = {
     "hash": "renderer.renderer_lib.jinja_filters.hash_text",
     "mandatory": "renderer.renderer_lib.jinja_filters.mandatory",
     "to_uuid": "renderer.renderer_lib.jinja_filters.to_uuid",
-    "authelia_service_rules": "authelia_access.authelia_service_rules",
-    "lan_hostnames": "entry_fields.lan_hostnames",
-    "netpol_caller_fences": "homepage_tiles.netpol_caller_fences",
+    "authelia_service_rules": "renderer.template_filters.authelia_access.authelia_service_rules",
+    "lan_hostnames": "renderer.template_filters.entry_fields.lan_hostnames",
+    "netpol_caller_fences": "renderer.template_filters.homepage_tiles.netpol_caller_fences",
 }
 
 
@@ -199,16 +200,46 @@ def test_the_light_tier_loads_no_ansible_core():
         ("weekly_backup_group", (9,)),
         ("weekly_backup_shard", ("ns/absent", {})),
         ("longhorn_backup_name", ("no_such_key",)),
+        (
+            "authelia_service_rules",
+            ([{"name": "svc", "hostname": "svc", "use_authelia": True}], "x.dev", []),
+        ),
     ],
 )
 def test_a_guard_refusal_names_its_filter_as_a_deploy_does(name: str, args: tuple):
-    """The guard env registers the FilterModule versions, so its refusal reads as a deploy's (#4505)."""
-    from filter_errors import FilterError
-
+    """The guard env registers the wrapped filters, so its refusal reads as a deploy's (#4505)."""
     env = aje.register_ansible_filters(aje.make_env([SHARED_TPL]))
-    with pytest.raises(FilterError) as caught:
+    with pytest.raises(aje.FilterError) as caught:
         env.filters[name](*args)
     assert str(caught.value).startswith(f"{name}: "), str(caught.value)
+
+
+def test_every_repo_filter_runs_the_one_wrapper():
+    """Each entry is `as_filter` around the function its key names, so every refusal is prefixed."""
+    wrapped = aje.repo_filters()
+    assert {"authelia_service_rules", "flux_components", "homelab_role_label"} <= set(
+        wrapped
+    )
+    for name, fn in wrapped.items():
+        assert (
+            fn.__code__
+            is aje.as_filter(test_every_repo_filter_runs_the_one_wrapper).__code__
+        )
+        assert inspect.unwrap(fn).__name__ == name
+
+
+def test_a_wrapped_filter_calling_a_wrapped_filter_names_only_the_one_that_refused():
+    """`FilterError` is a `ValueError`, so the outer wrapper must not prefix it a second time."""
+
+    def inner():
+        raise ValueError("refused")
+
+    def outer():
+        aje.as_filter(inner)()
+
+    with pytest.raises(aje.FilterError) as caught:
+        aje.as_filter(outer)()
+    assert str(caught.value) == "inner: refused"
 
 
 def test_template_env_reads_a_file_lookup_and_refuses_any_other_plugin(tmp_path):

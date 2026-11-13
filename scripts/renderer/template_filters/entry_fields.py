@@ -1,9 +1,7 @@
-"""Ansible filter plugin: the values a template collects from every `containers_list` entry.
+"""Filters returning the values a template collects from every `containers_list` entry.
 
 A template that loops `containers_list` itself may read any field of any entry (#4395). Each
 filter here returns only the values its template renders, never an entry.
-
-No Ansible import, so the render harnesses register the same functions the renderer runs.
 """
 
 
@@ -40,12 +38,3 @@ def lan_hostnames(containers_list):
             names.append(entry["hostname"])
         names.extend(entry.get("extra_hostnames", []))
     return names
-
-
-class FilterModule:
-    def filters(self):
-        return {
-            "entry_names": entry_names,
-            "published_ports": published_ports,
-            "lan_hostnames": lan_hostnames,
-        }

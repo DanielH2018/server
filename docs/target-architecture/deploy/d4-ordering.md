@@ -68,7 +68,7 @@ Unblocks: [D5](d5-bulk-move.md) and H1
 ## Goal and exit criterion
 
 After D4, Flux applies flux-owned roles in an order generated from
-`ansible/filter_plugins/toposort.py`. No role template hand-writes `dependsOn`. Every ordering
+`scripts/renderer/template_filters/toposort.py`. No role template hand-writes `dependsOn`. Every ordering
 constraint that rests on list position at `70591c307` becomes an edge, either derived in
 toposort or declared as inventory data:
 
@@ -127,7 +127,7 @@ the other. The second adds an edge in the same commit as a change to the depende
 ## Baseline at `70591c307`
 
 - **How the play orders roles.** `ansible/deploy.yml` builds the map with
-  `ansible/filter_plugins/toposort.py:build_k8s_dep_map`, from the full `containers_list`,
+  `scripts/renderer/template_filters/toposort.py:build_k8s_dep_map`, from the full `containers_list`,
   and sorts with `toposort_containers`, a stable sort. Its comment says the sort is a no-op on
   the live inventory, which `ansible/tests/deploy/test_k8s_toposort.py` checks.
 - **How the play batches and drains.** `ansible/deploy.yml` includes `tasks/k8s_batch.yml`
@@ -241,7 +241,7 @@ the other. The second adds an edge in the same commit as a change to the depende
   deferred files. The probe Job is templated by the role's own tasks, outside `k8s/manifests`,
   so R1 does not render it.
 - **How a toposort change lands.** `deploy_changes.py:_BROAD_DEPLOY_PREFIXES` lists
-  `ansible/filter_plugins/` with the comment "toposort". The `narrow_lib/filters.py`
+  `scripts/renderer/template_filters/` with the comment "toposort". The `narrow_lib/filters.py`
   docstring says refusing is right "for a filter the play calls (`toposort.py`'s, from
   `deploy.yml`)". Per `docs/gitops-pipeline.md`, a refusal fast-forwards and records a
   `k8s_unapplied` line for each service it may reach. `land.sh` then reports
@@ -355,7 +355,7 @@ the other. The second adds an edge in the same commit as a change to the depende
 The edges live in toposort and the inventory, so the Ansible play and the renderer read one
 map:
 
-- **`K8S_APPLIES_LAST`** joins `ansible/filter_plugins/toposort.py`, a dict of role to
+- **`K8S_APPLIES_LAST`** joins `scripts/renderer/template_filters/toposort.py`, a dict of role to
   written reason, like `K8S_CRD_EDGE_EXEMPT`. Its one entry is `netpol-baseline`, with the
   reason from the slice answers. `build_k8s_dep_map` gives an entry in this dict an edge to
   every other k8s entry.
@@ -745,7 +745,7 @@ conditions of dispatch runs.
 
 ```diff
   ansible/roles/k8s/netpol-baseline/tasks/main.yml + drain include first (D4.0)
-  ansible/filter_plugins/toposort.py               + K8S_APPLIES_LAST, edges in build_k8s_dep_map
+  scripts/renderer/template_filters/toposort.py               + K8S_APPLIES_LAST, edges in build_k8s_dep_map
   ansible/inventory/host_vars/daniel-box.yml       netpol-baseline comment (D4.0);
                                                    configarr, jellyfin, tdarr depends_on,
                                                    any entry after netpol-baseline moves ahead,

@@ -137,8 +137,8 @@ markers = [
   "image: runs a script inside its pinned container image with `docker run`; deselected from the pytest shards (no Docker daemon) and run by .github/workflows/image-leg.yml with `-m image`",
   "ui: live checks against the homelab's own routes — browser smoke (scripts/diagnostics/tests/test_ui_smoke.py) and the Uptime Robot keyword rules (ansible/tests/repo/test_uptime_robot_keywords.py)",
 ]
-# filter_plugins: lets test_toposort import toposort. hosts/lib: host_lib is the module the host
-# components' scripts share, shipped beside them in each host package — on pythonpath so the
+# hosts/lib: host_lib is the module the host components' scripts share, shipped beside them in
+# each host package — on pythonpath so the
 # import-tested renovate_notify.py + test_host_lib.py resolve it in CI. scripts: the k8s manifest
 # tests import the render guards from there — _k8s_render.py did it with a sys.path insert, which
 # only worked for modules importing _k8s_render first.
@@ -153,7 +153,6 @@ pythonpath = [
   # `ansible/tests` so the guards in its subdirectories reach the shared `_helpers.py` and
   # `_k8s_render.py` at its root: pytest prepends only a test's OWN directory.
   "ansible/tests",
-  "ansible/filter_plugins",
   "hosts/lib",
   "ansible/roles/k8s/game-stats/files",
   "hosts/components/deploy-ui/files",
@@ -349,7 +348,6 @@ python-version = "3.15"
 # is added here without a matching search path.
 extra-paths = [
   "ansible/tests",
-  "ansible/filter_plugins",
   "hosts/components/worktree-holders/files",
   "hosts/lib",
   "hosts/components/deploy-ui/files",
@@ -422,7 +420,6 @@ include = [
   ".claude",
   "ansible/roles",
   "ansible/tests",
-  "ansible/filter_plugins",
   "evals",
   "hosts",
 ]
@@ -477,12 +474,12 @@ unsupported-operator = "error"
 possibly-missing-submodule = "error"
 
 [[tool.ty.overrides]]
-# Two scripts run inside container images built elsewhere, so their third-party imports are not
+# Three scripts run inside container images built elsewhere, so their third-party imports are not
 # and should not be in this repo's dev group. The rule stays on everywhere else, where an
 # unresolved import means a typo or a missing search path above.
 #
 # THE COLLATERAL, stated because it is not obvious: this is per-file, not per-module, so these
-# two files lose the check on their FIRST-party imports too. homelab-mcp/files/app.py imports
+# files lose the check on their FIRST-party imports too. homelab-mcp/files/app.py imports
 # `k8s_reads` from its own directory, which is on extra-paths above and would otherwise be
 # checked — a typo there now reports nothing here and surfaces as a ModuleNotFoundError when the
 # pod starts. ty has no per-module suppression, so the alternatives are this or losing the rule
@@ -490,6 +487,7 @@ possibly-missing-submodule = "error"
 include = [
   "ansible/roles/k8s/homelab-mcp/files/app.py",
   "ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py",
+  "ansible/roles/k8s/home-assistant/files/cast_quit_app.py",
 ]
 [tool.ty.overrides.rules]
 import-not-found = "ignore"

@@ -1,6 +1,6 @@
 """Every SSO service's Authelia policy is the `auth_tier` declared on its containers_list entry.
 
-`filter_plugins/authelia_access.py` renders the rules from the entries themselves and refuses
+`template_filters/authelia_access.py` renders the rules from the entries themselves and refuses
 an entry that attaches the middleware without declaring a tier. A rule joined to the inventory
 by a hostname string would let a service ride the `*.local.<domain>` one_factor wildcard by
 omission.
@@ -19,7 +19,7 @@ from lib import yaml_fast
 
 from lib.render_guard import k8s_services
 from _k8s_render import host_context, rendered_docs
-from authelia_access import AUTH_TIERS, authelia_service_rules
+from renderer.template_filters.authelia_access import AUTH_TIERS, authelia_service_rules
 
 DOMAIN = "example.com"
 RFC1918 = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]

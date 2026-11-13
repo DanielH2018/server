@@ -1,6 +1,6 @@
 {#
   The vendored Flux install (files/gotk-components.yaml), passed through the flux_components
-  filter (ansible/filter_plugins/flux_components.py). The filter merges flux_pod_patch into each
+  filter (scripts/renderer/template_filters/flux_components.py). The filter merges flux_pod_patch into each
   Deployment, states RollingUpdate where upstream leaves the strategy implicit, renames the
   generic volumes, sets each pod's class from the `flux` entry's tier, and sets the controller
   flags flux_controller_args names. It merges flux_controller_resources into the named

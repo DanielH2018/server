@@ -1,4 +1,4 @@
-"""Error shape of the `homelab_role_label` filter in filter_plugins/role_label.py (#4505).
+"""Error shape of the `homelab_role_label` filter in template_filters/role_label.py (#4505).
 
 A refusal reaches the operator under the task's template path, so it names the filter that
 refused. The label behaviour itself is pinned in `test_manifests_prune.py`.
@@ -7,9 +7,9 @@ Run: uv run pytest ansible/tests/deploy/test_role_label_filter.py
 """
 
 import pytest
-from filter_errors import FilterError
+from lib.ansible_jinja_env import FilterError, repo_filters
 
-from role_label import ROLE_LABEL, FilterModule
+from renderer.template_filters.role_label import ROLE_LABEL
 
 
 @pytest.mark.parametrize(
@@ -25,5 +25,5 @@ from role_label import ROLE_LABEL, FilterModule
 def test_a_refusal_is_a_filter_error_named_for_its_filter(text, role):
     """A render failure names the filter that refused, through the filter Ansible calls."""
     with pytest.raises(FilterError) as caught:
-        FilterModule().filters()["homelab_role_label"](text, role)
+        repo_filters()["homelab_role_label"](text, role)
     assert str(caught.value).startswith("homelab_role_label: "), str(caught.value)

@@ -215,7 +215,7 @@ section says. The sweep command in *Verification* prints 125 such lines outside 
 - `.claude/rules/k8s-templates.md` is 18 lines, for k8s `templates/` and `files/`.
 - `.claude/rules/python-layout.md` is 10,448 characters. That is over the hook's 7,500-
   character payload, so it already arrives as a head, and G5 adds nothing to it. Its `paths:`
-  cover `scripts/**`, `ansible/tests/**`, `ansible/filter_plugins/**`, role `tests/**` and
+  cover `scripts/**`, `ansible/tests/**`, `scripts/renderer/template_filters/**`, role `tests/**` and
   `.claude/hooks/**`, but not alert-rule templates.
 - `docs/python-code-organization.md`, `docs/secret-rotation.md`, `docs/deploying.md`,
   `docs/landing.md`, `docs/claude-tooling.md`, `docs/claude-shell-permissions.md` and
@@ -264,7 +264,7 @@ citation is checked. G5 therefore moves only prose that cites nothing.
     - `ansible/.sops.yaml`, `ansible/bootstrap.yml` and `ansible/secret_rotation.yml`, from
       the secrets mechanics;
     - `scripts/dev/new_k8s_service.py`, `ansible/templates/`, `ansible/deploy.yml` and
-      `ansible/filter_plugins/toposort.py`, from *Adding a New Service*;
+      `scripts/renderer/template_filters/toposort.py`, from *Adding a New Service*;
     - `.github/workflows/ci.yml`, from *Python & Tests*.
 - One planned deliberate drop: `docs/archive/k3s-migration/`, in the migration-history
   clause of *Project Overview*. It points at history, and the archive is not a place a
@@ -308,7 +308,7 @@ in the tree.
 - **Adding a New Service**: 27 → 12.
     - Stays: default to k3s; one line per skill, keeping `scripts/dev/new_k8s_service.py` and
       `ansible/templates/`; the ordering fact as one line keeping `ansible/deploy.yml` and
-      `ansible/filter_plugins/toposort.py`.
+      `scripts/renderer/template_filters/toposort.py`.
     - Moves: the stale-Secret-key fact, to `.claude/rules/k8s-templates.md`, which loads on
       a `templates/secret.yaml.j2` edit.
 - **Common Commands**: 18 → 10.

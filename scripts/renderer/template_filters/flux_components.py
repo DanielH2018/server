@@ -1,4 +1,4 @@
-"""Ansible filter plugin that fits the vendored Flux install to this cluster's workload guards.
+"""The filter that fits the vendored Flux install to this cluster's workload guards.
 
 The flux role vendors `flux install --export` unedited in `roles/k8s/flux/files/`, so a
 regeneration diffs as upstream's change alone. The fleet guards in `ansible/tests/k8s/` then
@@ -27,24 +27,18 @@ That is a style choice only: PyYAML's default writes a sequence at its key's own
 the volume-name guard (`volume_blocks` in `ansible/tests/k8s/test_volume_names_descriptive.py`)
 reads that form too since #4733. Dropping the dumper would change the flux render's whitespace
 and nothing else.
-
-No Ansible import at load time, so the tests call the function the renderer runs.
 """
+
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import copy
 
 import yaml
 
-import sys as _sys
-from pathlib import Path as _Path
-
-# Ansible loads a plugin by file path, so its siblings import by bare name only once this
-# directory is on the path (#4527).
-if str(_Path(__file__).resolve().parent) not in _sys.path:
-    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
-
-from filter_errors import _as_filter
-from role_label import _Dumper, _Loader
+from renderer.template_filters.role_label import _Dumper, _Loader
 
 
 class _IndentedDumper(_Dumper):
@@ -164,8 +158,3 @@ def flux_components(
         default_flow_style=False,
         width=4096,
     )
-
-
-class FilterModule:
-    def filters(self):
-        return {"flux_components": _as_filter(flux_components)}

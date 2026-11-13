@@ -2,7 +2,7 @@
 
 The daily R2 tier was a hand-written list in the k3s role's defaults. It is now every
 `backup_claims` volume of a `home-critical` entry, one whose tier is `home-edge` or
-`home-automation`, computed by `filter_plugins/service_tier.py`. These tests pin the derivation to the list it replaced, and
+`home-automation`, computed by `template_filters/service_tier.py`. These tests pin the derivation to the list it replaced, and
 pin each tiered entry's `backup_claims` to the Longhorn PVCs its role really renders, so the
 claims cannot become a second hand list that drifts from the manifests.
 
@@ -14,7 +14,7 @@ import pytest
 from _helpers import load_defaults
 from _k8s_render import k8s_entries
 from lib.service_tiers import R2_TIER, r2_volumes, resolved_tier_lists
-from service_tier import tier_backup_claims, tier_entries
+from renderer.template_filters.service_tier import tier_backup_claims, tier_entries
 from test_every_longhorn_pvc_has_a_tier import longhorn_pvcs_by_role
 from lib.repo_paths import LONGHORN_RECONCILE_ROLE
 

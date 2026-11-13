@@ -1,4 +1,4 @@
-"""Unit tests for filter_plugins/entry_fields.py.
+"""Unit tests for template_filters/entry_fields.py.
 
 Each filter replaced a Jinja loop over `containers_list` (#4395), and the five templates it
 serves render byte-identical through it. These pin the two rules a loop spelled inline:
@@ -7,7 +7,11 @@ which entries contribute, and in what order.
 Run: uv run pytest ansible/tests/deploy/test_entry_fields_filter.py
 """
 
-from entry_fields import entry_names, lan_hostnames, published_ports
+from renderer.template_filters.entry_fields import (
+    entry_names,
+    lan_hostnames,
+    published_ports,
+)
 
 ENTRIES = [
     {"name": "wg-easy", "port": 51821, "hostname": "wg"},
