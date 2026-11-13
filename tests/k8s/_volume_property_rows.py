@@ -60,6 +60,12 @@ VOLUME_PROPERTIES = (
                 )
                 for name in _FLUX_CONTROLLERS
             }
+            | {
+                "Deployment/terraria": (
+                    "each world save rewrites .wld.bak, and a copy left 0:0 644 under a "
+                    "correct root needs the walk at every mount to regain group-write"
+                )
+            }
         ),
     ),
 )
