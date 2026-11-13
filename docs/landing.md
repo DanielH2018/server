@@ -246,7 +246,11 @@ another root.
 Such code can enter `land.py`'s imports through a later approved PR whose diff never shows it.
 `land_lib/policy.py:shape_hits` reads these from the file listing and from the tree at the pinned
 head. `LAND_APPROVER` names a GitHub login whose latest
-review, if it approves the head SHA, lifts that refusal. With either of the first two set, every merge path is pinned to the head SHA the checks read. A push after the checks fails
+review, if it approves the head SHA, lifts that refusal. `LAND_REQUIRE_HEAD` names the head
+SHA a caller's own checks read, and the landing refuses any other head. `LAND_REQUIRE_APPROVAL`
+makes every landing need `LAND_APPROVER`'s approval of the head, whatever paths it changes.
+The lander in `renovate-agent` sets both after its own floor check, which exempts digest-only image
+bumps that a path list would refuse. With any of these but `LAND_APPROVER` set, every merge path is pinned to the head SHA the checks read. A push after the checks fails
 the landing, and a re-run checks the new head. `--verdict-file <path>` writes `PENDING`, then
 the landing's one result line, for a unit to hand on to the agent that started it. A landing
 that sets neither setting is unchanged, and `--any-author` lifts neither.

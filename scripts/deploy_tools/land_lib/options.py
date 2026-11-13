@@ -29,6 +29,10 @@ REQUIRE_AUTHOR_ENV = "LAND_REQUIRE_AUTHOR"
 REQUIRE_BRANCH_PREFIX_ENV = "LAND_REQUIRE_BRANCH_PREFIX"
 APPROVAL_PATHS_ENV = "LAND_APPROVAL_PATHS"
 APPROVER_ENV = "LAND_APPROVER"
+# The head SHA a caller already checked, and whether every landing needs LAND_APPROVER's
+# approval of it: renovate-agent's lander sets them after its own floor check.
+REQUIRE_HEAD_ENV = "LAND_REQUIRE_HEAD"
+REQUIRE_APPROVAL_ENV = "LAND_REQUIRE_APPROVAL"
 # A user that cannot land a PR itself hands it to this lander unit (`handoff.py`).
 HANDOFF_ENV = "LAND_HANDOFF_UNIT"
 # Seconds after land.sh starts by which the landing must print its verdict. A lander whose
@@ -64,6 +68,8 @@ ENV_KNOBS = (
     REQUIRE_BRANCH_PREFIX_ENV,
     APPROVAL_PATHS_ENV,
     APPROVER_ENV,
+    REQUIRE_HEAD_ENV,
+    REQUIRE_APPROVAL_ENV,
     HANDOFF_ENV,
     DEADLINE_ENV,
     WINDOW_GRACE_ENV,
@@ -114,6 +120,10 @@ class Options:
     approval_paths: str = ""
     # The login whose approval of the head lifts the approval-path refusal; "" never does.
     approver: str = ""
+    # The head SHA the landing must find, or "" for whatever the PR's head is.
+    require_head: str = ""
+    # Whether the landing needs the approver's approval of the head whatever paths it changes.
+    require_approval: bool = False
     # `LAND_DEADLINE`, in seconds after the landing starts, or 0 for none.
     deadline: int = 0
     # `LAND_WINDOW_GRACE`, the seconds the reboot window may add to the promotion wait.
@@ -143,7 +153,12 @@ class Options:
     @property
     def policy_active(self) -> bool:
         """Whether a lander unit set the landing policy, which also pins the merge."""
-        return bool(self.require_branch_prefix or self.approval_paths)
+        return bool(
+            self.require_branch_prefix
+            or self.approval_paths
+            or self.require_head
+            or self.require_approval
+        )
 
 
 def parse_args(argv: list[str] | None, description: str) -> Options:
@@ -238,6 +253,8 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         require_branch_prefix=os.environ.get(REQUIRE_BRANCH_PREFIX_ENV) or "",
         approval_paths=os.environ.get(APPROVAL_PATHS_ENV) or "",
         approver=os.environ.get(APPROVER_ENV) or "",
+        require_head=os.environ.get(REQUIRE_HEAD_ENV) or "",
+        require_approval=bool(os.environ.get(REQUIRE_APPROVAL_ENV)),
         deadline=int(os.environ.get(DEADLINE_ENV) or 0),
         window_grace=int(os.environ.get(WINDOW_GRACE_ENV) or 0),
         verdict_file=ns.verdict_file,
