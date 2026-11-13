@@ -213,21 +213,24 @@ One full run spends 1,243 of its 1,424 runner-seconds in seven jobs: `hooks` and
 `pytest` shards (run 43354559178). Those seven move to runner pods in the cluster. The other
 eight jobs stay hosted, because they are short or need what a pod does not have.
 
-1. **C1, planned.** An ADR supersedes
-   [ADR-0018](adr/0018-the-repository-stays-public-and-ci-stays-hosted.md), and a check
-   reports a fork approval policy other than `all_external_contributors`.
-1. **C2, planned.** Runner pods run a shadow `hooks` and a shadow `pytest` that gate nothing,
-   and a probe sets each beside its hosted twin. The suite's Docker tests move to a job of
-   their own, which stays hosted. The slice ends after a week with no shadow job green where
-   its twin was red.
+1. **C1, done.** [ADR-0032](adr/0032-cis-heavy-jobs-may-run-on-runner-pods.md) supersedes
+   ADR-0018, and the `github-checks` component alerts on a fork approval policy other than
+   `all_external_contributors`.
+1. **C2, planned.** A launcher on daniel-box starts one runner pod for each heavy job of a run
+   it dispatches, and the `workflow-runners-are-pinned` row accepts the one `runs-on` expression
+   that routes a job to a pod. A timer dispatches shadow runs of master that gate nothing, and
+   a probe sets each beside the hosted run of the same commit. The suite's Docker tests move to
+   a job of their own, which stays hosted. The slice ends after a week with no shadow job green
+   where its twin was red.
 1. **C3, planned.** A repository variable routes the heavy jobs of a queue run to the pods. A
    value of 0 sends every job back to the hosted pool, and a watch sets it to 0 when no
    runner answers.
-1. **C4, planned.** Pull-request shards follow, a count at a time, for a run that a person
-   started from a branch of this repository. A bot's run and a fork's run stay hosted.
 
-The order of work is R1, C1, C2, B2, B3, C3, C4 and then B4. C2's week runs while B2 and B3
-are built.
+A pull-request run stays hosted. The launcher starts pods only for a run it dispatched, and
+the nodes hold about one run's heavy jobs at a time, which the queue's runs fill.
+
+The order of work is R1, C1, C2, B2, B3, C3 and then B4. C2's week runs while B2 and B3 are
+built.
 
 The decisions, all the operator's:
 
@@ -236,12 +239,19 @@ The decisions, all the operator's:
   key, a `gh` token and a cluster node. A runner pod holds none of the three: it has no host
   mount, no ServiceAccount token and no privilege, and it runs one job. Two things stay
   true. Egress NetworkPolicies are not enforced on this cluster, so a job in a pod can reach
-  the LAN. A container escape would land on a production node. C1 writes the ADR.
-- **Which credential registers a runner. Open.** A runner controller in the cluster needs a
-  credential with the repository's `Administration: write` permission, which also covers the
-  rulesets. The alternative keeps that credential out of the cluster: the queue on daniel-box
-  mints a one-job runner token with the token the lander uses and hands it to a waiting pod. C1
-  prices both.
+  the LAN. A container escape would land on a production node. ADR-0032 is the record.
+- **Which credential registers a runner. Decided on 2026-11-13: it stays on daniel-box.** The
+  launcher mints a one-job runner configuration with the token the lander uses, and creates the
+  pod that holds it. A runner therefore exists only while a dispatched run waits for it. The
+  launcher creates pods through a ServiceAccount that can write Jobs in the runner namespace and
+  nothing else. That is a second write path to the cluster beside Flux, bounded by the
+  namespace, its Pod Security standard and a ResourceQuota. The option refused was GitHub's
+  runner controller in the cluster. It starts a pod for any queued job, so a pull-request run
+  could use one, and it needs no launcher. It needs a credential with the repository's
+  `Administration: write` permission in a cluster Secret, which can rewrite the rulesets and
+  delete the repository, and no credential in the cluster can do either. Before C2 builds on
+  it, the operator mints one configuration by hand, because GitHub's documentation is the only
+  evidence that the token the lander uses may.
 - **Which node, and whose memory. Open.** A pod lives under `kubepods`, outside the agent
   fleet's bound on `user.slice`. daniel-box has 16 cores and 14 GiB of 28 available.
   daniel-server has 8 cores and 22 GiB of 30 available, and ran the suite four times slower.

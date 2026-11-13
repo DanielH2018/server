@@ -3,6 +3,7 @@
 # does the branch-protection ruleset still exclude Renovate's branches, and does the fence still
 # keep the agent's account to its own branches? Three arms, one verdict. Ahead of all three, the repo
 # must be public: on the free plan GitHub enforces no ruleset on a private repo (#3610).
+# After them it reads the fork approval policy, which the runner pods depend on (ADR-0032).
 #
 # Usage: github-ruleset-drift [-h|--help]
 # Takes no arguments and changes nothing on GitHub. systemd timer
@@ -89,7 +90,7 @@ push() { # up|down msg
 
 # push_reachout MSG — report a failure whose cause was reaching api.github.com.
 #
-# Only the two fetch arms use it. One WAN outage lit this tile beside the WAN tile on 2026-09-18
+# Only the fetch arms use it. One WAN outage lit this tile beside the WAN tile on 2026-09-18
 # (#2793), and a link that is gone is the WAN tile's page, not this one's. A 200 carrying the wrong
 # shape keeps `push down`: GitHub answered, so the link is fine and the body is the fault.
 #
@@ -421,5 +422,25 @@ check_bypass {{ github_fence_ruleset_id }} "$FENCE_BODY" "$EXPECTED_FENCE_BYPASS
 check_bypass {{ rs.id }} "${RESTRICTION_BODY[{{ rs.id }}]}" "$(printf '%s\n' {{ rs.bypass | sort | join(' ') }} | sort)"
 {% endfor %}
 
-push up "repo public; ruleset {{ github_ruleset_id }} active, ${LIVE_COUNT} required contexts, matches the declared set; ruleset {{ github_branch_ruleset_id }} excludes {{ github_branch_ruleset_renovate_exclude }}; ruleset {{ github_ruleset_id }} requires a PR with {{ github_ruleset_required_approvals }} approving reviews; ruleset {{ github_fence_ruleset_id }} restricts every branch except {{ github_fence_ruleset_exclude | join(', ') }}; {% for rs in github_update_restriction_rulesets %}ruleset {{ rs.id }} restricts {{ rs.include | join(', ') }} on {{ rs.repo }}; {% endfor %}all bypass lists as declared"
+# DECIDED: a fork's pull request waits for approval before any workflow runs, whoever opened it,
+# because a runner pod takes a job from any workflow run in this repo (ADR-0032).
+#
+# No `-f`: a token without admin gets an error body, which says more than curl's exit code.
+FORK_APPROVAL_URL="https://api.github.com/repos/{{ github_repo }}/actions/permissions/fork-pr-contributor-approval"
+if ! FORK_APPROVAL_BODY=$(curl -s --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
+  -H "Accept: application/vnd.github+json" "$FORK_APPROVAL_URL"); then
+  push_reachout "failed to fetch the fork approval policy of {{ github_repo }} — UNVERIFIED"
+  exit 1
+fi
+FORK_APPROVAL=$(printf '%s' "$FORK_APPROVAL_BODY" | jq -r '.approval_policy // empty' 2>/dev/null)
+if [ -z "$FORK_APPROVAL" ]; then
+  push down "{{ github_repo }} returned no fork approval policy ($(printf '%s' "$FORK_APPROVAL_BODY" | jq -r '.message // "no message"' 2>/dev/null)) — GitHub shows it only to an admin token, so check gh auth status for {{ sys_user }}; UNVERIFIED"
+  exit 1
+fi
+if [ "$FORK_APPROVAL" != "{{ github_fork_approval_policy }}" ]; then
+  push down "fork pull requests run workflows under '${FORK_APPROVAL}', declared {{ github_fork_approval_policy }} — a fork's code can reach a runner pod with no approval (ADR-0032); set it back under Settings, Actions, General"
+  exit 1
+fi
+
+push up "repo public; ruleset {{ github_ruleset_id }} active, ${LIVE_COUNT} required contexts, matches the declared set; ruleset {{ github_branch_ruleset_id }} excludes {{ github_branch_ruleset_renovate_exclude }}; ruleset {{ github_ruleset_id }} requires a PR with {{ github_ruleset_required_approvals }} approving reviews; ruleset {{ github_fence_ruleset_id }} restricts every branch except {{ github_fence_ruleset_exclude | join(', ') }}; {% for rs in github_update_restriction_rulesets %}ruleset {{ rs.id }} restricts {{ rs.include | join(', ') }} on {{ rs.repo }}; {% endfor %}all bypass lists as declared; fork pull requests wait for approval ({{ github_fork_approval_policy }})"
 exit 0

@@ -2,8 +2,8 @@
 # docs/target-architecture/host/h7-delete-ansible.md). Until H7.37 the gitops_deploy role installed
 # them as the Ansible-era `kuma-check-github-*` timers.
 #
-# - homelab-github-ruleset-drift, daily 06:40: compares the live rulesets and the repo's visibility
-#   with the declarations in defaults/main.yml. It writes github-ruleset-drift.prom and never
+# - homelab-github-ruleset-drift, daily 06:40: compares the live rulesets, the repo's visibility
+#   and its fork approval policy with the declarations in defaults/main.yml. It writes github-ruleset-drift.prom and never
 #   writes the rulesets.
 # - homelab-github-interaction-limit, daily 06:50: re-applies the declared interaction limit, which
 #   GitHub lets lapse after six months, and writes github-interaction-limit.prom.

@@ -1,7 +1,7 @@
 ---
 id: "0018"
 title: The repository stays public, and CI stays on GitHub-hosted runners
-status: Accepted
+status: Superseded by ADR-0032
 date: 2026-09-28
 governs: []
 ---
@@ -10,7 +10,11 @@ governs: []
 
 ## Status
 
-Accepted.
+Superseded by [ADR-0032](0032-cis-heavy-jobs-may-run-on-runner-pods.md). The decision was
+accepted on 2026-09-28.
+
+ADR-0032 keeps the repository public and lets two jobs run on runner pods in the cluster. This
+record's objection to a runner as a host process stands, and ADR-0032 restates it.
 
 ## Context
 
