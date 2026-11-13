@@ -141,6 +141,12 @@ files:
   - {src: templates/claude-guardrail-ack.json.j2, dst: /etc/homelab/claude-guardrail-ack.json, when: "claude_code_guardrail_ack_enabled"}
   - {src: units/homelab-claude-guardrail-ack.service.j2, dst: /usr/lib/systemd/system/homelab-claude-guardrail-ack.service, when: "claude_code_guardrail_ack_enabled"}
   - {src: units/homelab-claude-guardrail-ack.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-guardrail-ack.timer, when: "claude_code_guardrail_ack_enabled"}
+  - {src: files/claude_dotfiles_mirror.py, dst: /usr/lib/homelab/claude-dotfiles-mirror/claude_dotfiles_mirror.py, when: "claude_code_dotfiles_mirror_enabled"}
+  - {lib: host_lib.py, dst: /usr/lib/homelab/claude-dotfiles-mirror/host_lib.py, when: "claude_code_dotfiles_mirror_enabled"}
+  - {src: templates/claude-dotfiles-mirror.json.j2, dst: /etc/homelab/claude-dotfiles-mirror.json, when: "claude_code_dotfiles_mirror_enabled"}
+  - {src: templates/claude-dotfiles-allowed-signers.j2, dst: /etc/claude-dotfiles/allowed_signers, when: "claude_code_dotfiles_mirror_enabled"}
+  - {src: units/homelab-claude-dotfiles-mirror.service.j2, dst: /usr/lib/systemd/system/homelab-claude-dotfiles-mirror.service, when: "claude_code_dotfiles_mirror_enabled"}
+  - {src: units/homelab-claude-dotfiles-mirror.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-dotfiles-mirror.timer, when: "claude_code_dotfiles_mirror_enabled"}
   # The agent's clone and dotfiles syncs. Their textfiles keep the names `claude-clone-sync` and
   # `claude-dotfiles-sync`, which observability's host-checks rules read.
   - {src: files/claude-clone-sync.sh, dst: /usr/local/bin/claude-clone-sync.sh, mode: "0755", when: "claude_code_agent_user_enabled"}
@@ -231,6 +237,7 @@ enable:
   homelab-claude-cgroup-metrics.timer: timers.target
   homelab-claude-guardrail-audit.timer: timers.target
   homelab-claude-guardrail-ack.timer: {target: timers.target, when: claude_code_guardrail_ack_enabled}
+  homelab-claude-dotfiles-mirror.timer: {target: timers.target, when: claude_code_dotfiles_mirror_enabled}
   homelab-claude-clone-sync.timer: {target: timers.target, when: claude_code_agent_user_enabled}
   homelab-claude-dotfiles-sync.timer:
     target: timers.target
@@ -269,6 +276,8 @@ legacy:
     when: not claude_code_pipeline_timeline_enabled
   - path: /var/lib/node-exporter-textfile/claude-guardrail-ack.prom
     when: not claude_code_guardrail_ack_enabled
+  - path: /var/lib/node-exporter-textfile/claude-dotfiles-mirror.prom
+    when: not claude_code_dotfiles_mirror_enabled
   - {unit: claude-rc.service}
   - {unit: claude-rc-alert.service}
   - {unit: claude-rc-restart.service}

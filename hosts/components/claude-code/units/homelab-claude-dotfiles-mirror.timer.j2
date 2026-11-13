@@ -1,0 +1,14 @@
+# Shipped by both hosts' packages with its enable link while claude_code_dotfiles_mirror_enabled.
+# Every N minutes, where claude_code_dotfiles_mirror_minute is `*/N`;
+# claude-dotfiles-mirror.json.j2 derives the textfile deadline from the same value and refuses
+# any other shape.
+{% set _every_n = claude_code_dotfiles_mirror_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
+[Unit]
+Description=Mirror the dotfiles repo and verify its newest tag every {{ _every_n }} minutes
+
+[Timer]
+OnCalendar=*-*-* *:07/{{ _every_n }}:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
