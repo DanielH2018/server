@@ -105,11 +105,16 @@ hosted sweep. A merge costs about 1.1 hosted runs in place of 2.1.
 B2 waits for B1 to run for 7 days and to sweep 300 commits. No commit may read green locally
 and red on a hosted job the sweep covers, and the p90 sweep must take 10 minutes or less.
 
-Three decisions are the operator's. The first is not made:
+Three decisions are the operator's, and all three are made:
 
-- **Who records the tested tree.** `prove` trusts a record by its creator, so the queue needs
-  a creator of its own. A GitHub App that can write a commit status and nothing else is the
-  recommended one.
+- **Who records the tested tree. Decided on 2026-11-13: a GitHub App.** `prove` trusts a
+  record by its creator, and GitHub sets a status's creator from the token that wrote it. No
+  personal token can write as `danielh2018-homelab-tested-tree[bot]`, so a session cannot
+  record its own tree. The App is number 5745632, installed on this repository alone as
+  installation 181619225, and commit statuses are its only write permission. Its private key
+  is `tested_tree_app_private_key` in `ansible/vars/secrets.yml`. Nothing reads the key
+  before B3. The key is as safe as that file: a session that can decrypt it can record a
+  tree.
 - **What a batch proves. Decided on 2026-11-13: the commits before its last.** A batch sweeps
   only its last stacked tree, and that sweep stands for the commits before it. An earlier
   commit of a batch can therefore be red by itself. `scripts/deploy_tools/await_ci.py`
