@@ -1,7 +1,7 @@
 """Bundle fixtures for the publish gates and `decide`'s object-loss check.
 
 `ROUTE` copies bento-pdf's two IngressRoutes as `homelab_render.py cluster --role bento-pdf`
-renders them from `ansible/templates/ingressroute-default.yaml.j2`, with the domain made a
+renders them from `k8s/templates/ingressroute-default.yaml.j2`, with the domain made a
 parameter. The first, `bento-pdf` with its `.local.` host, is the named member of the host
 gate and of the object-loss check.
 """

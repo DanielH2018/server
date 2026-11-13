@@ -41,7 +41,7 @@ days, so `--limit` and the Loki cap below no longer apply to it.
 
 `probe.py alerts` read the DOWN lines from two streams in the `loki-homelab` store:
 monitor-bridge's checks, and the host crons that pushed to Kuma through syslog. Loki keeps 744h
-(`loki_homelab_retention` in `ansible/roles/k8s/loki-homelab/defaults/main.yml`), so **the
+(`loki_homelab_retention` in `k8s/roles/loki-homelab/defaults/main.yml`), so **the
 issue's 90-day question cannot be answered from Loki at all.** A 90-day figure below is an
 extrapolation from 31 days.
 

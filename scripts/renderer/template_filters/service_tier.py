@@ -16,7 +16,7 @@ services is derived from it (#3389). Four consumers read it:
   scale to zero.
 
 `scripts/lib/service_tiers.py` and the docs generators read the same functions the
-renderer runs. `lib.ansible_jinja_env` registers each so a `ValueError` reaches the operator as a
+renderer runs. `lib.guard_jinja_env` registers each so a `ValueError` reaches the operator as a
 `FilterError` prefixed with the filter's name.
 """
 
@@ -41,7 +41,7 @@ TIER_GROUPS = {"home-critical": ("home-edge", "home-automation")}
 # roles whose `defaults/main.yml` sets `flux_prune: false`. CoreDNS at zero replicas stops
 # cluster DNS, and Flux then cannot fetch the bundle that restores it. A tier is no substitute,
 # because it derives a PriorityClass these roles do not run at. Each tag joins in the PR that
-# adds its entry, and `ansible/tests/k8s/test_shed_set_is_derived_from_tier.py` holds the set
+# adds its entry, and `tests/k8s/test_shed_set_is_derived_from_tier.py` holds the set
 # equal to the untiered `flux_prune: false` roles, so a plumbing tag cannot land without it.
 # The full reasoning is the H1 plan's *Six Flux-born tags*.
 NEVER_SHED = frozenset(

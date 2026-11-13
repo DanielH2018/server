@@ -56,11 +56,11 @@ raw_value=$3
 [[ -n "$device" && -n "$key" ]] || usage
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
-secrets_file=${Z2M_SECRETS_FILE:-$repo_root/ansible/vars/secrets.yml}
+secrets_file=${Z2M_SECRETS_FILE:-$repo_root/secrets/secrets.yml}
 timeout_s=${Z2M_READBACK_TIMEOUT:-20}
 
 if [[ -z "${Z2M_MQTT_HOST:-}" ]]; then
-  Z2M_MQTT_HOST=$(sed -n 's/^mqtt_k8s_vip:[[:space:]]*//p' "$repo_root/ansible/inventory/group_vars/all.yml")
+  Z2M_MQTT_HOST=$(sed -n 's/^mqtt_k8s_vip:[[:space:]]*//p' "$repo_root/inventory/group_vars/all.yml")
 fi
 [[ -n "$Z2M_MQTT_HOST" ]] || { echo "set_device_option: no broker address (Z2M_MQTT_HOST unset, mqtt_k8s_vip not in group_vars)" >&2; exit 64; }
 

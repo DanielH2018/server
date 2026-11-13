@@ -1,7 +1,7 @@
 {#- docker-proxy and its sub-proxies (H5.6, docs/target-architecture/host/h5-pi-compose.md). The
     three services were one Ansible role's compose file until H5.6; the macros that file imported
     (networks, resources, autokuma labels) are written out here, because a service tree has no
-    ansible/templates on its search path. The values are the ones the macros rendered for the Pi.
+    k8s/templates on its search path. The values are the ones the macros rendered for the Pi.
     docker-proxy-codeserver renders only under has_code_server, which the recovery heartbeat
     (hosts/components/pi-heartbeats) reads for the same gate. Both are false on the Pi.
 

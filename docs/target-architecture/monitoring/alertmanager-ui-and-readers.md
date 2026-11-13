@@ -3,7 +3,7 @@
 Status: ARCHIVED on 2026-11-13. Before archiving it read: DECIDED (spike [#6688](https://github.com/DanielH2018/server/issues/6688), closed 2026-10-31). B-6a shipped the `admins` option ([#6743](https://github.com/DanielH2018/server/pull/6743)); the operator accepted that option on 2026-11-05 (open question 1).
 
 **HISTORY — answer 1 (b) is superseded.** On 2026-11-12 the operator retired the
-`alertmanager.local` UI route in favour of Karma (`ansible/roles/k8s/karma/`). Alertmanager's own
+`alertmanager.local` UI route in favour of Karma (`k8s/roles/karma/`). Alertmanager's own
 UI shows no severity until a group is expanded, and it cannot rank alerts by severity. Karma
 colours and sorts by severity, filters by any label, and manages silences. It reaches
 Alertmanager in-cluster, behind the same `two_factor` plus `group:admins` Authelia pair on
@@ -81,21 +81,21 @@ database holds a rule created by hand is unverified.
 | `homelab-ui` / `-m ui` | Grafana's existing `-m ui -k grafana` path | the `claude-ui` tier only | both |
 
 **No NetworkPolicy change is needed for either option.**
-`ansible/roles/k8s/netpol-baseline/templates/networkpolicy-observability.yaml.j2:44` already
+`k8s/roles/netpol-baseline/templates/networkpolicy-observability.yaml.j2:44` already
 admits the traefik pod from the homelab namespace to every port of every observability pod.
 Alertmanager carries `netpol-baseline: enforced`
-(`ansible/roles/k8s/observability/templates/alertmanager.yaml.j2:29`), so the baseline selects
+(`k8s/roles/observability/templates/alertmanager.yaml.j2:29`), so the baseline selects
 it. Grafana reaches Alertmanager inside the namespace, which the bare `podSelector: {}` at
 `networkpolicy-observability.yaml.j2:68` admits. NetworkPolicies add up, so
 `networkpolicy-alertmanager.yaml.j2` widens that baseline and never narrows it. The only stale
 text is the comment at
-`ansible/roles/k8s/netpol-baseline/templates/networkpolicy-alertmanager.yaml.j2:21`, "Alertmanager
+`k8s/roles/netpol-baseline/templates/networkpolicy-alertmanager.yaml.j2:21`, "Alertmanager
 has no route, so traefik never dials it". B-6b edits that comment in the same PR as the route.
 
 **(a) The Grafana datasource gives silence power at `one_factor`.** Grafana's OIDC client is
-`one_factor` by decision (`ansible/roles/k8s/authelia/templates/config-secret.yaml.j2:352`),
+`one_factor` by decision (`k8s/roles/authelia/templates/config-secret.yaml.j2:352`),
 because the headless `-m ui` browser holds a one_factor session. The Authelia `admins` group
-maps to Grafana's `Admin` role (`ansible/roles/k8s/observability/templates/grafana.yaml.j2:250`).
+maps to Grafana's `Admin` role (`k8s/roles/observability/templates/grafana.yaml.j2:250`).
 In Grafana OSS, an Editor or an Admin can create and expire silences on an external
 Alertmanager datasource; a Viewer can only read. The pinned image was not exercised for this,
 but OSS has no per-datasource read-only switch, so nothing in the tree could narrow it.
@@ -105,7 +105,7 @@ every alert".
 
 **(b) The native route keeps silences behind `two_factor`.** It is a hand-written IngressRoute
 in the observability role, LAN-only in the shape of
-`ansible/roles/k8s/observability/templates/prometheus-ingressroute.yaml.j2:54`, naming the
+`k8s/roles/observability/templates/prometheus-ingressroute.yaml.j2:54`, naming the
 `authelia` chain Middleware that `middlewares.yaml.j2` already copies into the namespace. The
 observability entry carries one `hostname`, `grafana`, so `authelia_service_rules` cannot
 generate the rule. Without the hand-written rule the `*.local` wildcard at
@@ -115,7 +115,7 @@ revert removes B-6b first.
 The route also needs `--web.external-url=https://alertmanager.local.<domain>`. The Deployment's
 args at `alertmanager.yaml.j2:44` set none, so Alertmanager builds its links from the pod's
 hostname. The notification template renders only a `runbook_url` link
-(`ansible/roles/k8s/observability/files/alertmanager/homelab.tmpl:35`). A silence link in the
+(`k8s/roles/observability/files/alertmanager/homelab.tmpl:35`). A silence link in the
 Discord and email bodies becomes possible once the external URL exists; it is optional.
 
 The service-reference row changes on its own. `docs/reference/services.md` is generated from
@@ -125,7 +125,7 @@ only, so the second route needs a sentence in the observability role's `CLAUDE.m
 **`homelab-ui` coverage of (b) reaches the `claude-ui` tier only.** The `claude-agent` account
 has no groups and no TOTP (`docs/claude-tooling.md:485`), so it cannot pass a `two_factor`
 rule. The `claude-ui` user has a seeded TOTP and is in `admins`
-(`ansible/roles/k8s/authelia/defaults/main.yml:150`). A `-m ui` test can therefore load the
+(`k8s/roles/authelia/defaults/main.yml:150`). A `-m ui` test can therefore load the
 Alertmanager UI. The same reach means a Claude-driven browser on that tier can create a
 silence. The operator accepted that on 2026-11-05 (open question 1).
 
@@ -141,15 +141,15 @@ moves to `two_factor` for `admins`, which the `-m ui` constraint rules out today
 | Reader or writer | What it does | Gap |
 |---|---|---|
 | Prometheus | sends every rule's alert to `alertmanager:9093` | none |
-| Loki ruler | sends to Alertmanager directly (`ansible/roles/k8s/loki-homelab/templates/configmap.yaml.j2:66`) | its alerts never reach `ALERTS`, so `probe.py health` and `monitors` cannot see a log rule firing (`m5-loki-ruler.md:238`, an M5 open question) |
+| Loki ruler | sends to Alertmanager directly (`k8s/roles/loki-homelab/templates/configmap.yaml.j2:66`) | its alerts never reach `ALERTS`, so `probe.py health` and `monitors` cannot see a log rule firing (`m5-loki-ruler.md:238`, an M5 open question) |
 | Grafana | three datasources over Prometheus, Loki and Tempo, plus two uid aliases (`grafana.yaml.j2:25`); no Alertmanager datasource | rejected in answer 1; the tree provisions no Grafana-managed rules, so nothing needs routing through Alertmanager |
 | `probe.py health <tag>` | reads `ALERTS{alertstate="firing",service="<tag>"}` (`scripts/diagnostics/probe_lib/health_alerts.py:49`) | cannot say an alert is silenced or inhibited. A silenced alert still fails the gate, which is correct: a silence mutes a page, not a deploy's health. The gate should name the silence in its output |
 | `probe.py monitors` | at this survey, Kuma's rollup plus firing ingress alerts from `ALERTS`; M6 B-2 moved it onto `ALERTS` (`scripts/diagnostics/probe_lib/monitors.py`) | it lists active silences, and still shows no inhibition |
 | `probe.py alerts` | at this survey, DOWN history from Loki; M6 B-2 moved it onto `ALERTS` history (`scripts/diagnostics/probe_lib/alerts.py`) | the history of a silence lives only in Alertmanager |
 | `monitor-bridge` | serves gauges that Prometheus scrapes; pushes the rest to Kuma | none for Alertmanager. Its gates move into Alertmanager `inhibit_rules` through M6, which makes inhibitions the thing an operator most needs to see |
 | Kuma maintenance sync | keeps ONE Kuma window, the weekly reboot's (the `kuma-maintenance-sync` CronJob) | none. C-1b deleted it, and nothing replaces it: Alertmanager already mutes the reboot |
-| Weekly reboot window | the `weekly-reboot` time interval (`ansible/roles/k8s/observability/templates/alertmanager-secret.yaml.j2:60`) derives from the same `weekly_reboot_*` values as the cron | none. `ansible/tests/services/test_alertmanager_reboot_mute.py::test_moving_the_reboot_moves_the_mute` holds the two equal |
-| Homepage | an Uptime Kuma widget (`ansible/roles/k8s/homepage/templates/config/services.yaml.j2:93`) | M6 B-4 replaces it with a `prometheusmetric` tile over `ALERTS`; that tile shows no silence count |
+| Weekly reboot window | the `weekly-reboot` time interval (`k8s/roles/observability/templates/alertmanager-secret.yaml.j2:60`) derives from the same `weekly_reboot_*` values as the cron | none. `tests/services/test_alertmanager_reboot_mute.py::test_moving_the_reboot_moves_the_mute` holds the two equal |
+| Homepage | an Uptime Kuma widget (`k8s/roles/homepage/templates/config/services.yaml.j2:93`) | M6 B-4 replaces it with a `prometheusmetric` tile over `ALERTS`; that tile shows no silence count |
 
 **A planned window other than the reboot is a silence, not a config change.** Kuma's sync
 manages only the reboot window, so retiring Kuma loses no other planned window. A recurring
@@ -212,7 +212,7 @@ adds. Both deploy through the promotion, because the observability, authelia and
 netpol-baseline roles are Flux-owned.
 
 **The `probe.py` read path is independent of M6's order.** It needs the route's host name from
-B-6b and nothing else. It touches no rule file under `ansible/roles/k8s/observability/files/rules/`
+B-6b and nothing else. It touches no rule file under `k8s/roles/observability/files/rules/`
 and no routing test. It should land before C-1, which retires the Kuma UI's pause button, so
 the operator can see a silence they create during Phase C.
 
@@ -234,7 +234,7 @@ the operator can see a silence they create during Phase C.
    It exposes silence comments and creators beyond what the Prometheus door exposes.
    **Answered 2026-10-31: yes** (the operator's ruling on
    [#6689](https://github.com/DanielH2018/server/issues/6689)).
-   `ansible/roles/k8s/observability/templates/alertmanager-read-ingressroute.yaml.j2` is the
+   `k8s/roles/observability/templates/alertmanager-read-ingressroute.yaml.j2` is the
    door, and `scripts/diagnostics/probe_lib/alertmanager_api.py` is its reader.
 
 ## Follow-ups filed

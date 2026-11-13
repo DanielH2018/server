@@ -61,7 +61,7 @@ def grafana_failure(tmp_path_factory) -> subprocess.CompletedProcess[str]:
     """One run over a tree holding one board whose panel names an unprovisioned uid."""
     root = tmp_path_factory.mktemp("grafana")
     script = _copy_script(root, "grafana_dashboard_uids.py")
-    role = root / "ansible/roles/k8s/observability"
+    role = root / "k8s/roles/observability"
     (role / "templates").mkdir(parents=True)
     (role / "templates/grafana.yaml.j2").write_text(
         "datasources:\n  - name: Prometheus\n    uid: prometheus\n"
@@ -157,7 +157,7 @@ def asset_pins_refusal(request, tmp_path_factory):
     root = tmp_path_factory.mktemp("asset_pins")
     script = _copy_script(root, "asset_pins.py")
     (root / "renovate.json").write_text(json.dumps({"customManagers": []}))
-    defaults = root / "ansible/roles/k8s/scratch/defaults/main.yml"
+    defaults = root / "k8s/roles/scratch/defaults/main.yml"
     defaults.parent.mkdir(parents=True)
     defaults.write_text(_defaults_carrying(set(asset_pins.KNOWN_PINS) - {refusal.drop}))
     return refusal, proc_testing.run([sys.executable, str(script), *refusal.argv])

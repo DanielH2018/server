@@ -45,22 +45,22 @@ The exit criterion is seven observations:
 
 1. **Nothing of Ansible is left.** Four listings, each with its expected output:
     - `git ls-files ':(glob)ansible/*.yml' ':(glob)ansible/*.sh'` prints only
-      `ansible/secret_rotation.yml`, which is a data registry, not a playbook.
+      `secrets/secret_rotation.yml`, which is a data registry, not a playbook.
     - `git ls-files ansible/roles/setup ansible/roles/containers ansible/pre_tasks
       ansible/post_tasks ansible/tasks ansible/prune_backups ansible.cfg .ansible-lint
       ansible/requirements.yml` prints nothing. That includes D5's setup role
       `k8s_host_files`, which H7.18c deletes.
-    - `git ls-files 'ansible/roles/*/*/tasks/*'` prints nothing, so R4's two runbook roles
+    - `git ls-files 'k8s/roles/*/tasks/*'` prints nothing, so R4's two runbook roles
       are gone too.
-    - `git grep -n '^containers_list:' -- ansible/inventory` prints nothing. H1.9 removes
+    - `git grep -n '^containers_list:' -- inventory` prints nothing. H1.9 removes
       the key from daniel-box and daniel-server, and H7.20d removes the Pi's.
 
    `uv tree | grep -c ansible-core` prints 0, and `grep -c ansible-lint prek.toml` prints 0.
-   The keep-list is `ansible/vars/`, `ansible/inventory/`, `ansible/.sops.yaml`,
-   `ansible/README.md`, `ansible/secret_rotation.yml`, `scripts/renderer/template_filters/`,
-   `ansible/templates/`, `ansible/tests/`, and the `templates/`, `defaults/` and `files/` of
-   each `ansible/roles/k8s/` role that C1's renderer reads. The Pi's `compose_services`
-   stays in `ansible/inventory/host_vars/daniel-pi.yml` as renderer data.
+   The keep-list is `secrets/`, `inventory/`, `secrets/.sops.yaml`,
+   `ansible/README.md`, `secrets/secret_rotation.yml`, `scripts/renderer/template_filters/`,
+   `k8s/templates/`, `tests/`, and the `templates/`, `defaults/` and `files/` of
+   each `k8s/roles/` role that C1's renderer reads. The Pi's `compose_services`
+   stays in `inventory/host_vars/daniel-pi.yml` as renderer data.
 2. **The Pi rebuild.** The operator follows the Pi runbook in `docs/break-glass.md` on a
    blank SD card flashed with stock Ubuntu 24.04. The Pi installs `homelab-daniel-pi` at the
    version the builder last published, runs the Compose project healthy with the restored
@@ -116,8 +116,8 @@ the operator's ruling on exit 4 and the operator's cleanup for exit 5. Exit 3 wa
 waived, so the status is DONE. Each reading uses the commands its observation names.
 
 1. **Holds.** `git ls-files ':(glob)ansible/*.yml' ':(glob)ansible/*.sh'` prints only
-   `ansible/secret_rotation.yml`. The second and third listings print nothing, and
-   `git grep -n '^containers_list:' -- ansible/inventory` prints nothing.
+   `secrets/secret_rotation.yml`. The second and third listings print nothing, and
+   `git grep -n '^containers_list:' -- inventory` prints nothing.
    `uv tree | grep -c ansible-core` prints 0, and `grep -c ansible-lint prek.toml` prints 0.
 2. **Waived** by the operator on 2026-11-08
    ([#7505](https://github.com/DanielH2018/server/issues/7505)).
@@ -211,7 +211,7 @@ waived, so the status is DONE. Each reading uses the commands its observation na
       `ansible/k3s-bringup.yml` (184), `ansible/deploy.yml` (210, which R4 and D6 shrink),
       `ansible/preflight.yml` (98), `ansible/prune_backups.yml` (87),
       `ansible/seed_volume_backup.yml` (292) and `ansible/k3s-storage-smoke.yml` (36);
-    - `ansible/requirements.yml` and `ansible/secret_rotation.yml`.
+    - `ansible/requirements.yml` and `secrets/secret_rotation.yml`.
 
   Playbook-only task files live in `ansible/prune_backups/tasks/b2-drain.yml`,
   `ansible/pre_tasks/load_secrets.yml`, `ansible/tasks/` and `ansible/post_tasks/` (R4
@@ -237,22 +237,22 @@ waived, so the status is DONE. Each reading uses the commands its observation na
   records a `k3s` line too. `hypervisor`, `docker_install`, `initial_setup`, `nut_host` and
   `claude_code` admit daniel-box, so the tick applies them there and records nothing. Root
   `CLAUDE.md`'s *When to wait* lists an uncleared line as a stop.
-- **R4 leaves two runbook roles.** R4's exit 1 keeps `ansible/roles/k8s/volume-revert/` and
-  `ansible/roles/k8s/longhorn-api/` with their tasks, and R4's *Open questions* 2 says H7
+- **R4 leaves two runbook roles.** R4's exit 1 keeps `k8s/roles/volume-revert/` and
+  `k8s/roles/longhorn-api/` with their tasks, and R4's *Open questions* 2 says H7
   replaces the runbook with a task-free tool. `longhorn-api/tasks/resolve.yml` reads
   `ansible_hostname`.
 - **Ansible imports outside the playbooks.** `git grep -l -E '^\s*(from|import) ansible\b'
   -- '*.py'` lists 25 files:
-    - `ansible/tests/_helpers.py`, which imports `ansible.plugins.filter.core.FilterModule`,
+    - `tests/_helpers.py`, which imports `ansible.plugins.filter.core.FilterModule`,
       `ansible.plugins.filter.mathstuff.FilterModule` and
       `ansible.plugins.test.core.TestModule` at module top and registers all three sets into
       its Jinja env. That is every core filter and test, far more than R4's seven.
-      `git grep -l -E '^\s*(from _helpers import|import _helpers)' -- ansible/tests | wc -l`
+      `git grep -l -E '^\s*(from _helpers import|import _helpers)' -- tests | wc -l`
       prints 361: 105 in `setup`, 63 in `services`, 52 in `deploy`, 50 in `repo`, 43 in `k8s`,
       33 in `longhorn`, 4 in `staging`, and 11 shared helper modules at the top of
-      `ansible/tests/`;
+      `tests/`;
     - ten tests that import `Templar` or `DataLoader`: three image-builder tests in
-      `ansible/tests/deploy/`, `test_derived_manifest_files.py` in `k8s`,
+      `tests/deploy/`, `test_derived_manifest_files.py` in `k8s`,
       `test_snapshot_name_length.py` in `longhorn`, `test_crowdsec_ban_gate.py` in
       `services`, and four in `setup` (`test_agent_clone_fast_forward.py`,
       `test_agent_operator_config.py`, `test_claude_agent_memory_seed.py` and
@@ -264,12 +264,12 @@ waived, so the status is DONE. Each reading uses the commands its observation na
     - `test_pi_escalation_timeout.py` in `setup` (deleted by H7.55), which imported the ssh
       connection plugin;
     - `scripts/deploy_tools/deploy_lib/flags.py` (`PlaybookCLI`), and
-      `scripts/lib/ansible_jinja_env.py` with its test in `scripts/lib/tests/`;
+      `scripts/lib/guard_jinja_env.py` with its test in `scripts/lib/tests/`;
     - the five filter plugins below.
 
   R1, R3 and R4 add tests that use ansible-core's `Templar` as an oracle, and R4's exit 4
   proves only cluster mode without ansible-core.
-    - `scripts/lib/ansible_jinja_env.py:register_ansible_filters` imports `b64encode`,
+    - `scripts/lib/guard_jinja_env.py:register_ansible_filters` imports `b64encode`,
       `comment`, `get_hash`, `mandatory`, `to_bool` and `to_uuid` from
       `ansible.plugins.filter.core`, and `search` from `ansible.plugins.test.core`.
       `to_json` is the local `lib.k8s_yaml:to_json_stub`. R4 PR 10 reimplements these in
@@ -292,9 +292,9 @@ waived, so the status is DONE. Each reading uses the commands its observation na
       `roles/setup/k3s/files` on `sys.path` and imports `longhorn_lib.longhorn_backups`,
       which imports `host_lib`. `register_ansible_filters` imports `longhorn_groups`, so the
       cluster renderer depends on both directories.
-    - `ansible/roles/k8s/autofix-bridge/defaults/main.yml` stages
+    - `k8s/roles/autofix-bridge/defaults/main.yml` stages
       `roles/setup/common/files/kuma_push.py`, and
-      `ansible/roles/k8s/uptime-kuma/templates/status-page-sync-configmap.yaml.j2` reads it
+      `k8s/roles/uptime-kuma/templates/status-page-sync-configmap.yaml.j2` reads it
       with `lookup('file', ...)`. `configarr` and `janitorr` stage `host_lib.py` and
       `kuma_push.py` until H2.6 removes those imports.
     - Inside the tree, `ansible/roles/setup/common/tasks/install_host_lib.yml` copies both
@@ -312,7 +312,7 @@ waived, so the status is DONE. Each reading uses the commands its observation na
       deleted with that file, said a module "forgotten in the copy loop passes CI and kills the deployer at import on
       its next tick".
     - `initial_setup/files/kuma-push-lib.sh` and `setup-drift-lib.sh` have 15 references
-      outside the setup tree: 14 in tests and test helpers under `ansible/tests/` and
+      outside the setup tree: 14 in tests and test helpers under `tests/` and
       `scripts/deploy_tools/tests/`, and one in an eval record. No running code outside the
       tree sources either library. The tests follow the crons that source them.
     - Scripts import deployer modules or `host_lib`: `scripts/deploy_tools/land_lib/*`,
@@ -327,7 +327,7 @@ waived, so the status is DONE. Each reading uses the commands its observation na
     - `pyproject.toml`'s pytest `pythonpath` lists
       `ansible/roles/setup/{common,gitops_deploy,deploy_ui}/files`. Its ty `extra-paths` also lists the `files/` of `initial_setup`, `fake_remux`,
       `render_records`, `k3s`, `renovate_notify` and `renovate_agent`.
-      `ansible/tests/repo/test_ty_config_covers_the_repo.py` holds the two lists together.
+      `tests/repo/test_ty_config_covers_the_repo.py` holds the two lists together.
 - **The deployer outlives D6.** D6's *Goal* says "The deployer itself stays, because it
   still applies the host plane until H7". D6's table gives H7 "the deployer, setup narrowing,
   and `land.sh`'s setup and Pi arms", and D6's exit 2 is a setup-plane change applied by the
@@ -354,7 +354,7 @@ waived, so the status is DONE. Each reading uses the commands its observation na
       `TICK_STILL_RUNNING` and lock contention as `Verdict.DEPLOY_FAILED`. An import census
       cannot see this dependency.
     - **Code outside the role reads the deployer's paths.**
-      `ansible/roles/k8s/monitor-bridge/templates/deployment.yaml.j2` mounts
+      `k8s/roles/monitor-bridge/templates/deployment.yaml.j2` mounts
       `/var/lib/gitops-deploy` as the hostPath volume `monitor-bridge-gitops-state`, with
       `type: Directory`, and `bridge/config_service.py` reads it as `GITOPS_STATE_DIR` for
       `checks/gitops.py:check_gitops_alive` and `check_gitops_status`. The same pod also
@@ -366,18 +366,18 @@ waived, so the status is DONE. Each reading uses the commands its observation na
       `k8s_autodeploy_counts.py --denylist`.
     - `git grep -n -i checkout-sync` over the slice plans matches only this file, so no other
       slice builds the timer that replaces the fast-forward.
-- **The inventory is read beyond Ansible.** `scripts/lib/ansible_inventory.py:inventory_hosts`
-  reads `ansible/inventory/hosts.ini`, `scripts/lib/render_context.py` builds every render's
+- **The inventory is read beyond Ansible.** `scripts/lib/inventory_lists.py:inventory_hosts`
+  reads `inventory/hosts.ini`, `scripts/lib/render_context.py` builds every render's
   variable layers from `group_vars` and `host_vars`, and G2's `retired-host` rule reads
-  `hosts.ini`. `ansible/inventory/host_vars/daniel-pi.yml` sets `ansible_host: "{{ server_ip }}"`.
-  `ansible/roles/k8s/pi-peer-backup/templates/cronjob.yaml.j2` renders
+  `hosts.ini`. `inventory/host_vars/daniel-pi.yml` sets `ansible_host: "{{ server_ip }}"`.
+  `k8s/roles/pi-peer-backup/templates/cronjob.yaml.j2` renders
   `hostvars['daniel-pi'].ansible_user` and `.ansible_host` into the rsync target.
   `scripts/docs/reference/hosts.py` and `.claude/hooks/block-footguns.py` name
   `ansible_connection`.
-- **pi-peer-backup writes the Pi.** `ansible/roles/k8s/pi-peer-backup/tasks/main.yml`
+- **pi-peer-backup writes the Pi.** `k8s/roles/pi-peer-backup/tasks/main.yml`
   installs the forced-command wrapper and authorizes the pull key with `delegate_to:
   daniel-pi`. The key it authorizes is the tracked public half,
-  `ansible/roles/k8s/pi-peer-backup/files/pi-peer-backup.pub`, so it is not a secret.
+  `k8s/roles/pi-peer-backup/files/pi-peer-backup.pub`, so it is not a secret.
 - **D5 adds a setup role that H7 must empty.** `git ls-files
   ansible/roles/setup/k8s_host_files | wc -l` prints 0, because D5 creates the role. D5's
   *Host-side rows* moves into it the host-side tasks of the k8s roles it flips. The role's
@@ -398,7 +398,7 @@ waived, so the status is DONE. Each reading uses the commands its observation na
   daniel-server's `host_vars` only. H5 empties the Pi's `containers_list`, adds
   `compose_services` beside it, and points every reader at both keys (H5, *Every reader
   reads both keys*). At `70591c307` the Pi's readers are the three templates that `git grep
-  -n -F "hostvars['daniel-pi'].containers_list"` lists in `ansible/roles/k8s/`
+  -n -F "hostvars['daniel-pi'].containers_list"` lists in `k8s/roles/`
   (`artifacts`, `monitor-bridge` and `observability`), `render_context.py:_HOSTVARS_KEYS`
   and `health_docker.py:declared_on_pi`. H5's *What stays with Ansible until H7* hands the
   empty key to H7 and keeps `compose_services` in the inventory.
@@ -518,7 +518,7 @@ waived, so the status is DONE. Each reading uses the commands its observation na
   The other three are the absent half of a cron still live on another host, such as
   `Remove the firmware cron on hosts without fwupd`.
 - **Contract checks derive from setup tasks.**
-  `test_setup_cron_roles_have_a_contract.py` (deleted, #8027) derives the cron-installing set from `tasks/`, and `ansible/tests/repo/test_role_claude_md.py`
+  `test_setup_cron_roles_have_a_contract.py` (deleted, #8027) derives the cron-installing set from `tasks/`, and `tests/repo/test_role_claude_md.py`
   requires a `CLAUDE.md` per setup role. Both pass vacuously once the roles are gone.
   `hosts/tests/` holds 114 tracked files.
 - **Docs that name the playbooks.** `git grep -l 'ansible-playbook' -- ':!docs/archive'`
@@ -529,7 +529,7 @@ waived, so the status is DONE. Each reading uses the commands its observation na
   `ha-edit-automation`, `new-k8s-service`) and the `CLAUDE.md` files of `k8s/deploy-ui`,
   `k8s/headlamp` and `k8s/nut` name them too. `docs/failure-classes.md` cites no test under
   `hosts/tests/`.
-- **The NUT drill powers off both nodes.** `ansible/roles/k8s/nut/CLAUDE.md` says the
+- **The NUT drill powers off both nodes.** `k8s/roles/nut/CLAUDE.md` says the
   manual drill "actually powers BOTH nodes off now that daniel-box is armed".
 
 ## Design
@@ -619,7 +619,7 @@ to parse, so deleting a role would force that edit.
   so H3.2's two-writer census and H7.2f's setup census both read the role as empty. The
   playbook line stays, and the tick applies the emptied role on daniel-box as a no-op.
 - **What stays in the emptied role.** The stub `tasks/main.yml` and a stub `CLAUDE.md`,
-  because `ansible/tests/repo/test_role_claude_md.py` requires one per setup role until
+  because `tests/repo/test_role_claude_md.py` requires one per setup role until
   H7.20c retires that half. The stub points at the component. Every template, file and
   default that a component renders is `git mv`'d into the component's directory in the PR
   that moves it, as H3.8b does, so H7.20a deletes nothing a render reads.
@@ -980,7 +980,7 @@ hand list, and the PR body quotes all four:
 
 - an import grep for every module under `ansible/roles/setup/*/files/`;
 - a grep for `roles/setup/` in non-comment lines outside the setup tree;
-- a grep over `ansible/roles/` for `src:` lines and `lookup('file'` calls that name another
+- a grep over `k8s/roles/` for `src:` lines and `lookup('file'` calls that name another
   role's `files/`, which finds the in-tree copiers the first two miss by construction;
 - an import grep, top-level and function-level, for `deployer_lib`, `gitops_hold`,
   `gitops_markers` and `gitops_ledger` in every tracked file outside
@@ -1014,9 +1014,9 @@ At `70591c307` the first three greps find three groups of modules:
   and `scripts/diagnostics/probe_lib/landing_blockers.py`, which imports
   `_CI_NO_VERDICT_CONCLUSIONS` from `deploy_git`.
 - `gitops_deploy_ci_contexts` moves from `gitops_deploy/defaults/main.yml` to
-  `ansible/inventory/group_vars/all.yml` as `ci_required_contexts`, because H7.20a deletes
+  `inventory/group_vars/all.yml` as `ci_required_contexts`, because H7.20a deletes
   the role defaults and four readers outlive the deployer: D1's `promote.py decide`, H3's
-  builder, checkout-sync and `ansible/tests/repo/test_ci_contexts_match_workflows.py`. The
+  builder, checkout-sync and `tests/repo/test_ci_contexts_match_workflows.py`. The
   role default becomes a reference to the new key until H7.19a, and `await_ci.py`'s comment
   names it.
     - **Every reader repoints in this PR.** D1's `decide` reads the list from
@@ -1033,7 +1033,7 @@ At `70591c307` the first three greps find three groups of modules:
       'gitops_deploy_ci_(contexts|ancestor_walk_max)' -- ':!ansible/roles/setup/gitops_deploy/'
       ':!docs/'`, lists every file that names either old key, whatever its transport. At
       `70591c307` it finds two workflow comments, `await_ci.py`'s comment and two tests
-      under `ansible/tests/repo/`. At H7.2e's base it must also find `promote.py` and the
+      under `tests/repo/`. At H7.2e's base it must also find `promote.py` and the
       builder; the PR body quotes it and marks each hit repointed or edited. The import
       greps cannot find these readers, because each reads a YAML file and imports nothing.
     - **The deployer's copy.** The deployer runs from `/opt/gitops-deploy/`, so the same PR
@@ -1041,7 +1041,7 @@ At `70591c307` the first three greps find three groups of modules:
       with its stamp pair, and gives it a routing key that re-applies `gitops_deploy`. The
       PR body quotes `test_gitops_deploy_ship_list.py` passing, including its
       scratch-install import check. Root `CLAUDE.md`'s citation and
-      `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py` repoint in the same PR.
+      `tests/deploy/test_ci_cancelled_is_not_a_verdict.py` repoint in the same PR.
 
 `initial_setup/files/kuma-push-lib.sh` and `setup-drift-lib.sh` do not move. Only tests and
 one eval record name them from outside the tree (Baseline), and those tests move or retire
@@ -1144,7 +1144,7 @@ and assigns each hit outside tests:
   in H7.19b.
 
 **The deployer-import census lands in H7.19b,** after the deletions it checks, as a row in
-`ansible/tests/repo/test_census_rows_python.py`. It walks the AST of every tracked `.py`
+`tests/repo/test_census_rows_python.py`. It walks the AST of every tracked `.py`
 file outside `ansible/roles/setup/gitops_deploy/`, the `hosts/` tree included, and reads
 every `Import` and `ImportFrom` node, function-level ones too. It fails on any import of
 `deployer_lib`, `gitops_hold`, `gitops_markers` or `gitops_ledger`, and on any use of
@@ -1154,7 +1154,7 @@ on one naming `/etc/gitops-deploy`, `/var/lib/gitops-deploy`, `/opt/gitops-deplo
 last two keep a later path reader of the deleted role defaults from returning, which the key
 grep in *Shared modules leave the setup tree* finds only at H7.2e. It reads only Python, so the legacy entries in `hosts/*/package.yml` that
 retire those paths are not hits. The deployer's code stays on disk until H7.20a, and so do the tests
-of that code, under `ansible/tests/deploy/` and the role's own `tests/`. The census's
+of that code, under `tests/deploy/` and the role's own `tests/`. The census's
 allowlist names each of those test modules, H7.20a deletes them with their subject, and the
 allowlist is empty once H7.20a merges. Its named member is
 `scripts/deploy_tools/await_ci.py`, which the walk must read. Three red fixtures are
@@ -1206,7 +1206,7 @@ H7.19b.
   `config.env`, which
   `gitops_deploy/templates/config.env.j2` renders from the role default
   `gitops_deploy_ci_ancestor_walk_max: 10`. H7.19b retires that config and H7.20a deletes
-  the default. H7.2e therefore moves the value to `ansible/inventory/group_vars/all.yml` as
+  the default. H7.2e therefore moves the value to `inventory/group_vars/all.yml` as
   `ci_ancestor_walk_max`, beside `ci_required_contexts`, and the role default becomes a
   reference to it. checkout-sync's unit renders it into `Environment=`. checkout-sync
   refuses a missing, non-integer or non-positive bound with `refused{reason="ci"}` before
@@ -1358,7 +1358,7 @@ refuses a PR that bumps only one side.
 ### The pinned endpoints that remove live reads
 
 - `nut_host` on daniel-box reads the `nut` Service's ClusterIP with kubectl. H7.8 first
-  pins `spec.clusterIP` in `ansible/roles/k8s/nut/` to the live value. That is a no-op on the
+  pins `spec.clusterIP` in `k8s/roles/nut/` to the live value. That is a no-op on the
   live Service, because the value is unchanged. Then it renders the secondary from the pin.
 - The deploy-ui component's ufw rules and the builder's read inventory only.
 - pi-peer-backup's rsync target reads `hostvars['daniel-pi'].server_ip` and a role default
@@ -1715,7 +1715,7 @@ on H4.2's and H6.2's step lists. Steps 1 and 3 to 5 go in the host's first PR:
    host on another architecture first needs H3's `homelab-tools` build for it.
 2. **Operator-only:** run `bootstrap-host.sh <host> --until 3`, which creates the age key
    and prints its public key.
-3. Add the creation rule for `ansible/vars/hosts/<host>.sops.yaml` ahead of the general
+3. Add the creation rule for `secrets/hosts/<host>.sops.yaml` ahead of the general
    rule, with the host's printed key, daniel-box's key and the recovery key. Adding a
    recipient is **operator-only**.
 4. **Operator-only:** run `host_secrets.py sync` for the host, and commit its file.
@@ -1769,23 +1769,23 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
     - `ansible/roles/setup/` and `ansible/roles/containers/`;
     - R4's runbook roles' `tasks/`, after H7.16b replaces them;
     - in H7.20a, the `ansible_connection=` keys in `hosts.ini` and their only reader,
-      `scripts/lib/ansible_inventory.py:Host.connection`;
+      `scripts/lib/inventory_lists.py:Host.connection`;
     - in H7.20a, the Ansible-only inventory keys: `ansible_user` on the Pi's `hosts.ini`
       line and `ansible_host` in `host_vars/daniel-pi.yml`, with the two renderer tests that
       assert them;
     - `ansible-core` from `pyproject.toml` and `uv.lock`;
     - the `ansible-lint` prek hook and `scripts/tests/test_ansible_lint_hook.py`;
-    - in H7.20b, `ansible/tests/leakguard.py`'s `ANSIBLE_LOCAL_TEMP` sweep, which exists only
+    - in H7.20b, `tests/leakguard.py`'s `ANSIBLE_LOCAL_TEMP` sweep, which exists only
       because importing ansible-core creates `ansible-local-<pid>*` (#5904). That is the
       docstring section *Ansible's local temp directory points at a temp directory*,
       `ANSIBLE_LOCAL_TEMP_DIR`, `_ANSIBLE_LOCAL`, `sweep_dead_ansible_local`,
       `use_ansible_local_temp` and its call at import. In
-      `ansible/tests/repo/test_leakguard.py` it is `_IMPORTS_ANSIBLE_THEN_DIES`,
+      `tests/repo/test_leakguard.py` it is `_IMPORTS_ANSIBLE_THEN_DIES`,
       `_run_script` and the two tests that use them, whose subprocess fails with
       `ModuleNotFoundError` once ansible-core is gone. The sweep leaves in the same PR as
       `test_ansible_lint_hook.py`, which reads `leakguard.ANSIBLE_LOCAL_TEMP_DIR`. The same
       PR drops `test_leakguard.py` from `IN_A_STRING` in
-      `ansible/tests/repo/test_ansible_core_census.py`, and the `ANSIBLE_LOCAL_TEMP` entry
+      `tests/repo/test_ansible_core_census.py`, and the `ANSIBLE_LOCAL_TEMP` entry
       in the child env of `scripts/renderer/tests/test_renderer_host_inputs.py`;
     - in H7.20d, the Pi's empty `containers_list` key and `_example.yml`'s copy of it.
 - **Converted to scripts in H7.16:** `prune_backups.yml` and `seed_volume_backup.yml` become
@@ -1794,7 +1794,7 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
   `scripts/backup/` command.
 - **Kept as renderer data:** the keep-list in exit observation 1. Renaming the `ansible/`
   tree is not this slice's work.
-    - The Pi's `compose_services` stays in `ansible/inventory/host_vars/daniel-pi.yml`.
+    - The Pi's `compose_services` stays in `inventory/host_vars/daniel-pi.yml`.
       `scripts/lib/render_context.py` reads it for the Pi's host render and for the three
       cluster templates that name the Pi's services.
     - H1.9's `cluster/services.yml` holds the cluster's list, so after H7.20d no
@@ -1829,7 +1829,7 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
                                                                   plus H3's homelab_builder
                                                                   and D5's k8s_host_files)
 - ansible/roles/containers/
-- ansible/roles/k8s/{volume-revert,longhorn-api}/tasks/
+- k8s/roles/{volume-revert,longhorn-api}/tasks/
 - ansible/{initial_setup,bootstrap,k3s-bringup,deploy,preflight}.yml
 - ansible/{prune_backups,seed_volume_backup,k3s-storage-smoke,requirements}.yml
 - ansible/bring-up.sh  ansible/prune_backups/  ansible/pre_tasks/
@@ -1844,8 +1844,8 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
 - scripts/deploy_tools/reach.py  scripts/deploy_tools/land_lib/land_reach.py
 - scripts/deploy_tools/land_lib/tick.py                        (H7.19a, with _step_tick)
 - scripts/dev/gen_gitops_markers.py
-- ansible/roles/k8s/monitor-bridge/files/{gitops_hold,gitops_markers,gitops_ledger}.py
-- ansible/roles/k8s/monitor-bridge/files/checks/gitops.py      (H7.19a's first PR, with
+- k8s/roles/monitor-bridge/files/{gitops_hold,gitops_markers,gitops_ledger}.py
+- k8s/roles/monitor-bridge/files/checks/gitops.py      (H7.19a's first PR, with
                                                                   the gitops-state mount)
 - scripts/lib/deployer_park.py
 + scripts/lib/{tree_lock,k8s_lookups}.py                      (moved out of deployer_lib,
@@ -1857,21 +1857,21 @@ rule of its own, and it names the set. `host_secrets.py check` finds its hosts f
                                                                   removed)
   scripts/deploy_tools/await_ci.py                             (imports hosts/lib, H7.2e)
   scripts/secrets_mgmt/consumers.py                            (imports scripts/lib)
-  ansible/inventory/group_vars/all.yml                         (+ ci_required_contexts,
+  inventory/group_vars/all.yml                         (+ ci_required_contexts,
                                                                   H7.2e)
   scripts/renderer/template_filters/claude_agents.py                      (deleted, or its ansible
                                                                   import removed, H7.17)
-  ansible/inventory/hosts.ini                                  (host names only;
+  inventory/hosts.ini                                  (host names only;
                                                                   - ansible_connection,
                                                                   - ansible_user, H7.20a)
-  scripts/lib/ansible_inventory.py                             (- Host.connection, H7.20a)
-  ansible/inventory/host_vars/daniel-pi.yml                    (- ansible_host, H7.20a)
-  ansible/inventory/host_vars/{daniel-pi,_example}.yml         (- containers_list, H7.20d;
+  scripts/lib/inventory_lists.py                             (- Host.connection, H7.20a)
+  inventory/host_vars/daniel-pi.yml                    (- ansible_host, H7.20a)
+  inventory/host_vars/{daniel-pi,_example}.yml         (- containers_list, H7.20d;
                                                                   compose_services stays)
-  ansible/roles/k8s/{artifacts,monitor-bridge,observability}/templates/
+  k8s/roles/{artifacts,monitor-bridge,observability}/templates/
                                                                (Pi reads: compose_services
                                                                   only, H7.20d)
-  scripts/lib/{render_context,ansible_inventory}.py            (Pi reads: compose_services
+  scripts/lib/{render_context,inventory}.py            (Pi reads: compose_services
                                                                   only, H7.20d)
   pyproject.toml, uv.lock, prek.toml, .gitignore
 ```
@@ -2362,7 +2362,7 @@ the `manual_plane` clearing, and *Rollback*'s
 22. **H7.46** stays alone. It carries the renders-without-ansible-core proof and lands the
     deletion census with its allowlist.
     **Landed as [#7756](https://github.com/DanielH2018/server/pull/7756).** Both censuses
-    live in `ansible/tests/repo/test_ansible_core_census.py`, not in the census-row files,
+    live in `tests/repo/test_ansible_core_census.py`, not in the census-row files,
     because the collection takes about 40 seconds and prek runs those files at every commit.
     The allowlist holds `_helpers.py` (H7.54), `flags.py` and `test_deploy_flags.py`
     (H7.53), and `test_pi_escalation_timeout.py` (H7.55). Collection runs no test body, so a
@@ -2379,7 +2379,7 @@ the `manual_plane` clearing, and *Rollback*'s
     timer, and pi-peer-backup, `reference/hosts.py` and `block-footguns.py` no longer read the
     connection keys. Its PR body quotes the empty cluster `diff -r`. Two files the row does not
     name still read `ansible_connection`: `land_reach.py`, which H7.19b deletes, and
-    `scripts/lib/ansible_inventory.py`'s `connection` property. That property's other caller
+    `scripts/lib/inventory_lists.py`'s `connection` property. That property's other caller
     is a gitops_deploy test, so it has no caller once the deployer's code goes. No step deletes
     it yet ([#7744](https://github.com/DanielH2018/server/issues/7744)).
 24. **H7.48** stays alone. It carries the retired-crons census and empties `k8s_host_files`.
@@ -2428,7 +2428,7 @@ the `manual_plane` clearing, and *Rollback*'s
     `deploy_locks.py` keeps its own `TREE_LOCK` until H7.20a, and
     `scripts/lib/tests/test_tree_lock.py` holds the two equal. Those equality checks left
     `test_tree_lock_single_definition.py`, whose macro checks read templates and stay in
-    `ansible/tests/deploy/`. The `role_paths.py` grep moves to the deleting PR, because
+    `tests/deploy/`. The `role_paths.py` grep moves to the deleting PR, because
     `land_tags.py` imports `land_shared` and only the setup arm's deletion shows whether that
     import survives. The
     deleting PR and the strict census wait on
@@ -2455,8 +2455,8 @@ the `manual_plane` clearing, and *Rollback*'s
     `/etc/gitops-deploy/` on daniel-box are the operator's cleanup.
 30. **H7.54** stays alone. Its parity proof covers 361 modules.
     **Landed as [#7856](https://github.com/DanielH2018/server/pull/7856).**
-    The test env moved to `ansible/tests/_jinja_env.py` and registers
-    `lib.ansible_jinja_env`'s set, the renderer's filters and the repo's filter plugins.
+    The test env moved to `tests/_jinja_env.py` and registers
+    `lib.guard_jinja_env`'s set, the renderer's filters and the repo's filter plugins.
     It sits outside `_helpers.py` so the prek hooks that import `_helpers.py` need not run on
     every filter plugin. `_helpers.py` left the deletion census's allowlist. The
     census's named member moved to `test_pi_escalation_timeout.py`. Part two of the parity
@@ -2470,7 +2470,7 @@ the `manual_plane` clearing, and *Rollback*'s
     and exit observation 7's census at its head.
     Deleting `test_pi_escalation_timeout.py` removes the deletion census's named member, so
     H7.55 repoints or drops the two named-member asserts in
-    `ansible/tests/repo/test_ansible_core_census.py`. It also deletes the volume-revert role's
+    `tests/repo/test_ansible_core_census.py`. It also deletes the volume-revert role's
     tasks, and with them the longhorn tests' `_volume_revert.py` stand-ins.
     **Split in two on 2026-11-12,** because one PR would have touched well over 100 files.
     The first PR deletes everything no reader of the setup tree reads: `deploy.yml`,
@@ -3225,7 +3225,7 @@ the `manual_plane` clearing, and *Rollback*'s
       command that reads the snapshot name D5 states. **Operator-only:** drill it once.
 17. **H7.17 The last Ansible imports.** The PR body re-runs the Baseline's two greps and
     disposes of each of the 25 files, or names the later PR that does.
-    - **`ansible/tests/_helpers.py` waits for H7.19d.** Until H7.19a and H7.18c empty
+    - **`tests/_helpers.py` waits for H7.19d.** Until H7.19a and H7.18c empty
       `gitops_deploy` and `k8s_host_files`, tests of their live templates still render
       through it, so it stays on the deletion census's allowlist.
     - **The `Templar` and `DataLoader` tests.** Each of the ten, and each oracle test R1, R3
@@ -3240,9 +3240,9 @@ the `manual_plane` clearing, and *Rollback*'s
       each of the three hosts and package mode for every package under `hosts/packages/`.
     - **The deletion census lands here**, ahead of H7.20b. It is a runtime check: a
       subprocess collects the whole suite with `sys.modules['ansible'] = None` and fails on
-      any import error. Its named member is `ansible/tests/_helpers.py`, which the
+      any import error. Its named member is `tests/_helpers.py`, which the
       collection must import. Its allowlist names each file still importing `ansible` and
-      the PR that removes the import: `ansible/tests/_helpers.py` (H7.19d),
+      the PR that removes the import: `tests/_helpers.py` (H7.19d),
       `scripts/deploy_tools/deploy_lib/flags.py` (H7.19b) and
       `test_pi_escalation_timeout.py` (H7.20a). An import error raised from an allowlisted
       file, including one a module meets by importing `_helpers`, is tolerated, and any
@@ -3272,7 +3272,7 @@ the `manual_plane` clearing, and *Rollback*'s
         - The first removes monitor-bridge's gitops checks, its
           `monitor-bridge-gitops-state` volume and mount, `GITOPS_STATE_DIR` and
           `config_service.py`'s read, and lands the hostPath row in
-          `ansible/tests/k8s/test_rendered_properties.py` (*Path readers*). The role's
+          `tests/k8s/test_rendered_properties.py` (*Path readers*). The role's
           `CLAUDE.md` restates its `nodeSelector` as the etcd drill's. The deployer runs
           unwatched from this merge until the fifth PR's.
         - The second, H7.50, re-homes deploy_ui with its in-flight panel, as H7.11 states:
@@ -3334,7 +3334,7 @@ the `manual_plane` clearing, and *Rollback*'s
           skill and cut `land-after-merge` to C6's waits.
     - **H7.19c** Turn the setup census strict. It fails while any setup role has a task
       that applies to a host.
-    - **H7.19d** The test env leaves ansible-core. `ansible/tests/_helpers.py`'s Jinja env
+    - **H7.19d** The test env leaves ansible-core. `tests/_helpers.py`'s Jinja env
       is rebuilt on the renderer's filter set from R4's `renderer_lib/filters.py`, in place
       of ansible-core's three plugin modules, and leaves the deletion census's allowlist.
       The filter set shrinks for 361 modules, so the PR carries a parity proof in two
@@ -3362,12 +3362,12 @@ the `manual_plane` clearing, and *Rollback*'s
       diff cannot see an import break, so the second is a full `uv run pytest
       --collect-only` at the head with no import error, and the deployer-import census
       green with its allowlist empty.
-      The same PR deletes `Host.connection` from `scripts/lib/ansible_inventory.py`, with
+      The same PR deletes `Host.connection` from `scripts/lib/inventory_lists.py`, with
       `test_connection_defaults_to_ssh_as_ansible_does` in
-      `scripts/lib/tests/test_ansible_inventory.py`. H7.19b deletes the property's caller in
+      `scripts/lib/tests/test_inventory_lists.py`. H7.19b deletes the property's caller in
       `land_reach.py`, and this PR deletes the other one, in the deployer role's
       `tests/test_gitops_markers.py`. The PR also deletes the `ansible_connection=` keys
-      from `ansible/inventory/hosts.ini`, with the header comment that explains them, the
+      from `inventory/hosts.ini`, with the header comment that explains them, the
       sentence in the root `README.md` that cites them, and the `has_repo_checkout`
       comment in `group_vars/all.yml` that names them. The playbooks and
       `pre_tasks/load_secrets.yml`, which read the keys, go in the same PR. Two readers in
@@ -3380,12 +3380,12 @@ the `manual_plane` clearing, and *Rollback*'s
       assertion and the keys in its fixture inventory, because no inventory then holds a key
       the page could leak. After it, `git grep -n ansible_connection -- scripts` matches only
       the fixture inventories, and the assertions over them, in
-      `scripts/lib/tests/test_ansible_inventory.py`,
+      `scripts/lib/tests/test_inventory_lists.py`,
       `scripts/docs/tests/test_gen_doc_fragments.py` and
       `scripts/renderer/tests/_dialect_tree.py`.
       The PR also deletes the Ansible-only inventory keys `ansible_user=ubuntu`, on the Pi's
       `hosts.ini` line, and `ansible_host: "{{ server_ip }}"`, in
-      `ansible/inventory/host_vars/daniel-pi.yml`. They wait for this PR, not for H7.18d:
+      `inventory/host_vars/daniel-pi.yml`. They wait for this PR, not for H7.18d:
       H7.18d stops pi-peer-backup reading them, but every play run with
       `-e target=daniel-pi`, including a rollback re-apply of restored tasks, reaches the Pi
       through them until the playbooks go. The `hosts.ini` comment above the Pi's line and
@@ -3400,22 +3400,22 @@ the `manual_plane` clearing, and *Rollback*'s
       `docs/homelab-render.md`'s `hostvars` bullet, the `hostvars` bullet in
       `scripts/renderer/renderer_lib/context.py`'s module docstring, the `_HOSTVARS_KEYS`
       docstring in `scripts/lib/render_context.py`, and the `Host.settings` docstring in
-      `scripts/lib/ansible_inventory.py`;
+      `scripts/lib/inventory_lists.py`;
     - **H7.20b** ansible-core, the collections, `ansible.cfg`, `.ansible-lint`, the prek
       hook, leakguard's `ANSIBLE_LOCAL_TEMP` sweep with its tests, and the setup entries
       left in `pyproject.toml`. The deletion census's allowlist is empty by then;
     - **H7.20c** the ADR, `ansible/README.md`, the archived bring-up sections, and the
-      setup half of `ansible/tests/repo/test_role_claude_md.py`;
+      setup half of `tests/repo/test_role_claude_md.py`;
     - **H7.20d** the Pi's `containers_list` key, after H7.20a. The key must outlive every
       Ansible reader: `preflight.yml` asserts it until H7.55, `deploy.sh` and `land.sh`'s
       Pi arms read it until H7.19b, and `deploy.yml`'s Docker play and the restored tasks
       of a rollback re-apply read it until H7.20a. The PR does these things:
-        - deletes `containers_list: []` from `ansible/inventory/host_vars/daniel-pi.yml`;
+        - deletes `containers_list: []` from `inventory/host_vars/daniel-pi.yml`;
         - swaps `_example.yml`'s `containers_list: []` for `compose_services: []`, and
           rewrites its comment, which names `deploy.yml`;
         - points every reader that H5.1 pointed at both keys at `compose_services` alone:
           the three cluster templates, `render_context.py:_HOSTVARS_KEYS`, H5's helper in
-          `scripts/lib/ansible_inventory.py` with `health_docker.py:declared_on_pi`, the
+          `scripts/lib/inventory_lists.py` with `health_docker.py:declared_on_pi`, the
           recovery heartbeat's watch set, and H5's service-list census in
           `hosts/tests/`. Two greps at the PR's base are the census of record:
           `git grep -n compose_services`, because H5 makes every reader of the union name
@@ -3439,10 +3439,10 @@ git ls-files ':(glob)ansible/*.yml' ':(glob)ansible/*.sh'
 git ls-files ansible/roles/setup ansible/roles/containers ansible/pre_tasks \
   ansible/post_tasks ansible/tasks ansible/prune_backups ansible.cfg .ansible-lint \
   ansible/requirements.yml
-git ls-files 'ansible/roles/*/*/tasks/*'
-git grep -n '^containers_list:' -- ansible/inventory
-git grep -n ansible_connection -- ansible/inventory scripts/lib/ansible_inventory.py
-git grep -n -w -e ansible_user -e ansible_host -- ansible/inventory
+git ls-files 'k8s/roles/*/tasks/*'
+git grep -n '^containers_list:' -- inventory
+git grep -n ansible_connection -- inventory scripts/lib/inventory_lists.py
+git grep -n -w -e ansible_user -e ansible_host -- inventory
 uv tree | grep -c ansible-core
 grep -c ansible-lint prek.toml
 
@@ -3479,12 +3479,12 @@ journalctl -u homelab-checkout-sync.service -n 20 --no-pager
 
 # Exit 5, in a worktree at master.
 uv run pytest --collect-only -q | tail -n 3
-uv run pytest ansible/tests/repo/test_census_rows_python.py -q
+uv run pytest tests/repo/test_census_rows_python.py -q
 ```
 
 The expected results are:
 
-- the first listing prints only `ansible/secret_rotation.yml`, and the other three print
+- the first listing prints only `secrets/secret_rotation.yml`, and the other three print
   nothing;
 - both counts print 0;
 - no failed `homelab-*` unit, `dpkg --verify` prints nothing, and the live-state probe shows
@@ -3630,7 +3630,7 @@ progress.
   landing ends `settled` and starts no tick. Its red half runs the same fixture against the
   base's `_STEPS`, where `_step_tick` runs `gitops_tick.sh`, and that run ends
   `deploy-failed`.
-- *No gitops hostPath (H7.19a).* A row in `ansible/tests/k8s/test_rendered_properties.py`
+- *No gitops hostPath (H7.19a).* A row in `tests/k8s/test_rendered_properties.py`
   asserts that no rendered cluster manifest mounts a hostPath under
   `/var/lib/gitops-deploy`. Its named member is monitor-bridge's Deployment, which the row
   must find, and a fixture Deployment carrying that hostPath is flagged.
@@ -3706,13 +3706,13 @@ progress.
   defines `containers_list`, and asserts that `compose_services` holds `docker-proxy` and
   `alloy`. The two `homelab-render` pairs show an empty `diff -r`.
 - *The deletion census.* Two rows, each with a named member:
-    - in `ansible/tests/repo/test_ansible_core_census.py`, landed by H7.17: a subprocess
+    - in `tests/repo/test_ansible_core_census.py`, landed by H7.17: a subprocess
       collects the whole suite with `sys.modules['ansible'] = None`, and any import error
       outside the allowlist fails it. H7.54's named member was
       `test_pi_escalation_timeout.py`, which H7.55 deleted, so the grep half's named member is
-      `ansible/tests/repo/test_leakguard.py`, and a fixture module holding `import ansible.errors` is flagged. The allowlist is
+      `tests/repo/test_leakguard.py`, and a fixture module holding `import ansible.errors` is flagged. The allowlist is
       empty before H7.20b merges;
-    - in `ansible/tests/repo/test_census_rows_text.py`, no tracked file names
+    - in `tests/repo/test_census_rows_text.py`, no tracked file names
       `ansible-playbook`, except under `docs/archive/`, `docs/adr/`,
       `docs/target-architecture/`, the generated `docs/reference/` and the census's own
       fixture; the named member is root `CLAUDE.md`, and a fixture naming
@@ -3723,7 +3723,7 @@ progress.
   secret-rotation, compose-adopt, checkout-sync and claude-memory-sync. A fixture component
   with such a timer and no heading is flagged.
   `test_setup_cron_roles_have_a_contract.py` (deleted, #8027) and the setup half of
-  `ansible/tests/repo/test_role_claude_md.py` retire in H7.20c, when their subject does.
+  `tests/repo/test_role_claude_md.py` retire in H7.20c, when their subject does.
   Amended 2026-11-05, on H7.47's PR. No component marks a timer `changes_state: true`, and
   `COMPONENT_KEYS` refuses a new key, so the census's subject is every component that ships a
   timer, with `allow` naming one that changes no state and why. Components state their
@@ -3761,7 +3761,7 @@ progress.
       runs the command ON that host (**operator-only**): `uv run ansible-playbook
       ansible/initial_setup.yml --tags <role>`, or `ansible/k3s-bringup.yml` for the k3s
       halves. Never pass `-e target=` for another host, because the header of
-      `ansible/inventory/hosts.ini` records that it selects that host's variables and runs
+      `inventory/hosts.ini` records that it selects that host's variables and runs
       on the machine you typed it on.
     - For the Pi, the operator runs it from a node over ssh with `-e target=daniel-pi`, as
       today (**operator-only**).
@@ -3990,9 +3990,9 @@ progress.
     - its `pyproject.toml` `extra-paths` entry goes.
 - **H7.1:** `docs/break-glass.md` records the age-key decision.
 - **H7.2e:** `pyproject.toml`, root `CLAUDE.md`'s `_CI_NO_VERDICT_CONCLUSIONS` citation,
-  `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py`,
-  `ansible/tests/repo/test_ci_contexts_match_workflows.py` and
-  `ansible/tests/repo/test_every_ci_job_is_gated.py` for `ci_required_contexts`,
+  `tests/deploy/test_ci_cancelled_is_not_a_verdict.py`,
+  `tests/repo/test_ci_contexts_match_workflows.py` and
+  `tests/repo/test_every_ci_job_is_gated.py` for `ci_required_contexts`,
   `await_ci.py`'s comment, the comments in `.github/workflows/ci.yml` and
   `.github/workflows/renovate-config-canary.yml` that name the old key, D1's `decide` tests
   in `scripts/deploy_tools/tests/`, whose empty-list fixture empties `ci_required_contexts`,
@@ -4004,9 +4004,9 @@ progress.
   routing paragraph.
 - **H7.4:**
     - `k8s_host_files`' `CLAUDE.md` loses the two Pi rows;
-    - `ansible/roles/k8s/pi-peer-backup/CLAUDE.md`'s *Auth* line, which says the role
+    - `k8s/roles/pi-peer-backup/CLAUDE.md`'s *Auth* line, which says the role
       authorizes the public half, names the `pi-peer-backup-target` component;
-    - `ansible/tests/services/test_pi_peer_backup_forced_command.py` follows the wrapper's
+    - `tests/services/test_pi_peer_backup_forced_command.py` follows the wrapper's
       path;
     - the line-arm tests in `hosts/lib/tests/` gain a case where a rotated key replaces the
       line anchored on `pi-peer-backup-cronjob`, and a case where the rewrite keeps the
@@ -4020,8 +4020,8 @@ progress.
   `pi-compose` component `CLAUDE.md` names the `ExecStartPre=` that creates the external
   networks, and the CI fixture records Compose's behaviour with an unlabelled network.
 - **H7.6d–f:** `docs/host-baseline-record.md`'s sshd sections.
-- **H7.8:** `ansible/roles/k8s/nut/CLAUDE.md` records the pinned ClusterIP.
-- **H7.10a:** `ansible/roles/k8s/docs/CLAUDE.md`, which says "The role's own task creates
+- **H7.8:** `k8s/roles/nut/CLAUDE.md` records the pinned ClusterIP.
+- **H7.10a:** `k8s/roles/docs/CLAUDE.md`, which says "The role's own task creates
   the directory", names the docs-refresh component's `tmpfiles.d` line.
 - **H7.12c:** `docs/claude-agent-user.md`, `docs/claude-code-rc-caps.md` and
   `docs/landing.md` for the `claude-land@` rename, and the tests that name the unit, such
@@ -4048,7 +4048,7 @@ progress.
 - **H7.18a:** the generators under `scripts/docs/` and `scripts/secrets_mgmt/secret_rotation.py`,
   with their tests in `scripts/docs/tests/`. ADR-0001 is listed below.
 - **H7.17:** the tests the Baseline lists as importing ansible, converted or deleted; the
-  `_helpers.py` filter census and the deletion census in `ansible/tests/repo/`; and R4's
+  `_helpers.py` filter census and the deletion census in `tests/repo/`; and R4's
   ansible-free render test, extended to host and package modes.
 - **H7.18c:** `k8s_host_files`' `CLAUDE.md` becomes a stub, and D5's render test leaves.
 - **H7.19a**, by PR:
@@ -4073,11 +4073,11 @@ progress.
 - **H7.2e**, for the walk bound: `config.env.j2` keeps rendering the role default, which
   now refers to `ci_ancestor_walk_max`, so `gitops_deploy/tests/test_deploy_config.py`
   passes unchanged, and the PR body quotes it passing.
-- **H7.19b:** `ansible/tests/deploy/test_tree_lock_single_definition.py` and
+- **H7.19b:** `tests/deploy/test_tree_lock_single_definition.py` and
   `test_k8s_lookup_readers.py` follow their modules to `scripts/lib/`; the land_lib tests
   that import `deploy_cross_role` or the state modules, such as `test_land_classify.py` and
   `_land_fakes.py`, follow their subjects; `test_gitops_markers_copies.py` goes with the
-  copies; the deployer-import census row in `ansible/tests/repo/test_census_rows_python.py`;
+  copies; the deployer-import census row in `tests/repo/test_census_rows_python.py`;
   the doc that transcludes the gitops fragment, and the fragment file;
   `.claude/hooks/session-health.py` and its tests in `.claude/hooks/tests/`; the `deploy`
   skill; `docs/landing.md` again, for the setup and Pi arms; `docs/deploying.md`; root
@@ -4199,7 +4199,7 @@ progress.
    reimplements the filters, and R4's exit check 4 proves the cluster render runs with
    ansible-core unimportable. Resolved for host and package modes by H7.46 (old H7.17),
    whose subprocess test renders each host and each package with ansible-core unimportable.
-   H7.54 rebuilt the test env, in `ansible/tests/_jinja_env.py`, on the renderer's set, and
+   H7.54 rebuilt the test env, in `tests/_jinja_env.py`, on the renderer's set, and
    H7.46's filter census lists what that env must register.
 5. **ADR numbering.** D6, G2 and H7 each add an ADR. Resolution: each takes the next free
    number at merge time, and none reserves one.
@@ -4246,13 +4246,13 @@ progress.
     walk then retire. Resolution: the H7 ADR lists the primary checkout under what
     remains, with this recommendation, and the operator rules on the later slice
     (**operator-only**).
-13. **The tree still reads as Ansible after H7.** The keep-list leaves `ansible/vars/`,
-    `ansible/inventory/`, `scripts/renderer/template_filters/`, `ansible/templates/`,
-    `ansible/tests/`, and each k8s role's `templates/`, `defaults/` and `files/` under
+13. **The tree still reads as Ansible after H7.** The keep-list leaves `secrets/`,
+    `inventory/`, `scripts/renderer/template_filters/`, `k8s/templates/`,
+    `tests/`, and each k8s role's `templates/`, `defaults/` and `files/` under
     `ansible/`. A reader then looks for playbooks that no longer exist. Recommendation: one
     move PR after H7.20 renames the tree to a neutral root that the operator picks
     (**operator-only**), with `git mv` only and every path constant changed through
-    `scripts/lib/repo_paths.py`. The same PR moves `ansible/.sops.yaml` beside `vars/`,
+    `scripts/lib/repo_paths.py`. The same PR moves `secrets/.sops.yaml` beside `vars/`,
     because SOPS searches upward from the file, and updates `.gitleaks.toml`, the Renovate
     rules, the prek hooks and the CI path filters. Resolution:
     the H7 ADR records the follow-on. The PR runs when no other slice has a branch open,
@@ -4354,8 +4354,8 @@ fixes use a different mechanism from the one the finding proposed, and each says
   `k8s_retire.py` and `k8s_autodeploy.py` are gone. *Baseline* carries the measured filter
   list, and Open question 4 points at R4's exit check 4.
 - **H7-R1-15 (medium) The deletion census is unscoped.** Fixed. Two rows with named members,
-  one in `ansible/tests/repo/test_census_rows_python.py` and one in
-  `ansible/tests/repo/test_census_rows_text.py` with the stated exemptions.
+  one in `tests/repo/test_census_rows_python.py` and one in
+  `tests/repo/test_census_rows_text.py` with the stated exemptions.
 - **H7-R1-16 (medium) Generators come back empty.** Fixed by H7.18a, with named members.
   ADR-0001 is an **operator-only** decision.
 - **H7-R1-17 (medium) Docs, skills and hooks are missing.** Fixed. Every PR runs the grep and
@@ -4380,7 +4380,7 @@ fixes use a different mechanism from the one the finding proposed, and each says
   with mitigations and finding links.
 
 Found while fixing, and fixed here: R4 leaves the `volume-revert` and `longhorn-api`
-runbook tasks to H7 (H7.16b, and exit 1 now lists `ansible/roles/*/*/tasks/*`). The lint is
+runbook tasks to H7 (H7.16b, and exit 1 now lists `k8s/roles/*/tasks/*`). The lint is
 the `ansible-lint` prek hook, not a CI job, so exit 1 greps `prek.toml`. Root `CLAUDE.md`
 cites `deploy_git.py:_CI_NO_VERDICT_CONCLUSIONS`, which H7.2e moves.
 
@@ -4428,7 +4428,7 @@ was checked against the tree and the other slice plans before the fix.
     - The proof is an empty `diff -r` over the cluster render and the Pi's host render.
     - Exit 1, *What the deletion touches* and the tree diff state that `compose_services`
       stays in the inventory as renderer data. Exit 1 gains `git grep -n
-      '^containers_list:' -- ansible/inventory`, which must print nothing.
+      '^containers_list:' -- inventory`, which must print nothing.
     - The C4 amendment goes to the contracts as a note.
 - **X-21 (medium) `facts.lock` steps ran unconditionally.** Fixed at four sites: the
   shared-modules design, H7.2e's and H7.19b's docs rows, and failure class 8 in *Risks*.
@@ -4474,7 +4474,7 @@ mechanism the finding offered as its alternative, or a narrower one, and each sa
   for is written as the fallback, with `$1` gating, forward-only removal, a census against
   a plain revert, four CI cases, and the H3 amendment in the same PR. H7 ships no divert at
   `70591c307`, so H3's whitelist stays closed (Open question 9).
-- **H7-R10-04 (high) ansible-core removal missed `ansible/tests/_helpers.py`, which 361
+- **H7-R10-04 (high) ansible-core removal missed `tests/_helpers.py`, which 361
   test modules import.** Fixed. Confirmed: the import grep lists 25 files, and the
   `_helpers` grep prints 361. *Baseline* lists all 25 by group. H7.17 rebuilds
   `_helpers.py` on R4's filter set with a two-part parity proof, converts or deletes the ten
@@ -4792,7 +4792,7 @@ fix.
   own checkout and refuse an empty or missing list. H3's builder grades over the same key
   and walks `gitops_deploy_ci_ancestor_walk_max` commits. `git grep -l -E
   'gitops_deploy_ci_(contexts|ancestor_walk_max)'` outside the role and `docs/` lists two
-  workflow comments, `await_ci.py` and two tests under `ansible/tests/repo/`, and no
+  workflow comments, `await_ci.py` and two tests under `tests/repo/`, and no
   promote or builder, because neither exists at `70591c307`. Both exist at H7.2e's base:
   H7 depends on H6, H6 on D2 and D2 on D1, and H7 on H5, which depends on H3.
     - The break comes at H7.2e, not at H7.20a. A role default rewritten as a reference is

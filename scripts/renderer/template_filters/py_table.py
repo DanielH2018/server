@@ -1,6 +1,6 @@
 """The filter reading a table of constructor calls out of a Python module's source.
 
-monitor-bridge declares every check once, in `roles/k8s/monitor-bridge/files/check_table.py`,
+monitor-bridge declares every check once, in `k8s/roles/monitor-bridge/files/check_table.py`,
 as a tuple of `PushCheck(...)` calls (#3659). The pod imports that module. The generated
 bridge fragments need the same rows, rendered on the controller, where importing the module
 would mean importing every check body it names. So
@@ -14,7 +14,7 @@ non-literal value (`fn=service.check_n8n`) is left out, because it names code ra
 data. A positional argument raises, as does a missing table or an element that is not a call:
 either would otherwise drop a row, and a dropped row is a check no generated fragment names.
 
-`fragments_bridge.py` and the tests call this one function. `lib.ansible_jinja_env` registers it so a
+`fragments_bridge.py` and the tests call this one function. `lib.guard_jinja_env` registers it so a
 `ValueError` fails the render as `FilterError("py_table: ...")` before anything
 applies (#4505).
 """

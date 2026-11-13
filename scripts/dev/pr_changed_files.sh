@@ -10,7 +10,7 @@
 # Two callers use only the fetch. ci.yml's `deck_mod` job and image-smoke.yml's collect step
 # each diff their own pathspec after it, and leave the file lists below unread. The fetch is
 # here so that no workflow carries its own copy of the token header; the `workflows-fetch-
-# through-the-shared-script` row of ansible/tests/repo/test_census_rows_text.py checks that.
+# through-the-shared-script` row of tests/repo/test_census_rows_text.py checks that.
 #
 # One caller reads only `changed.txt`. ci.yml's `pytest` job hands it to the shard-weight gate
 # as `--changed-files`, which fails a PR only for a test module the PR's diff changes (#5480).

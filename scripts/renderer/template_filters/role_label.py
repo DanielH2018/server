@@ -18,7 +18,7 @@ the prune deleting every live object that file used to declare.
 Only `metadata.labels` changes. A Deployment's `spec.selector` and pod-template labels stay as
 rendered, so labelling a workload rolls no pods and touches no Service selector.
 
-`lib.ansible_jinja_env` registers it so a `ValueError` fails the render as
+`lib.guard_jinja_env` registers it so a `ValueError` fails the render as
 `FilterError("homelab_role_label: ...")` before any apply (#4505).
 """
 

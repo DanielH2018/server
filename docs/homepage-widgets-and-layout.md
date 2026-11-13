@@ -1,6 +1,6 @@
 # homepage widgets and layout — the CSS derivations and the per-widget record
 
-Working-out moved off `ansible/roles/k8s/homepage/CLAUDE.md` (#2995), which a session reads on
+Working-out moved off `k8s/roles/homepage/CLAUDE.md` (#2995), which a session reads on
 every touch of the dashboard. The role doc keeps the editing rules; this page keeps the grid and
 stat-block derivations, the browser measurements behind them, and the per-widget record of what
 is on the dashboard and why.
@@ -135,11 +135,11 @@ block and took its whole grid row from 120px to 136px.
 
 - **The Headlamp tile's widget reads Prometheus, not Headlamp.** Headlamp exposes no service API
   — its backend only proxies the Kubernetes API — and dialling its ClusterIP is fenced off on
-  purpose (`roles/k8s/headlamp/templates/networkpolicy.yaml.j2`, re-asserted every deploy by that
+  purpose (`k8s/roles/headlamp/templates/networkpolicy.yaml.j2`, re-asserted every deploy by that
   role's policy-probe Job). So the tile shows cluster-state counts from a `customapi` widget
   against `prometheus.<observability-ns>:9090`, with the PromQL in `defaults/main.yml` as
   `homepage_k8s_headlamp_cluster_query`. That call is cross-namespace, so `prometheus-callers`
-  (`roles/k8s/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2`) names `homepage` — a
+  (`k8s/roles/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2`) names `homepage` — a
   widget-proxy error on that tile is the symptom of it being dropped.
 - **The Longhorn widget dials `longhorn-frontend`, not `longhorn-backend`.** Longhorn's own
   chart-owned `longhorn-manager` policy admits six same-namespace components and nothing else,
@@ -152,7 +152,7 @@ block and took its whole grid row from 120px to 136px.
   CrowdSec (#1385 — a LAPI machine credential is read/write on decisions) and Healthchecks
   (#1386 — needs a project API key created in the UI). Read the issue before adding one; each
   records why it was not simply plumbed in. Traefik was a fourth (#1383 — `api.insecure: false`
-  and the `DECIDED:` marker in `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean
+  and the `DECIDED:` marker in `k8s/roles/traefik/templates/dashboard-ingressroute.yaml.j2` mean
   `/api` is served nowhere the widget can reach); its tile was replaced by the deploy queue on
   2026-09-10, so it has no tile to add a widget to.
 - **A re-added Jellyfin tile needs `version: 2`.** The tile was dropped on 2026-09-10 and stays

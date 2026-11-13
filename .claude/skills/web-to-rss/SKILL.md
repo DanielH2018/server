@@ -3,7 +3,7 @@ name: web-to-rss
 description: Subscribe FreshRSS to a blog or site that has no RSS feed by scraping it — find a hidden feed, else write FreshRSS "HTML + XPath" or "XML + XPath" rules, check them against the live page, and hand over an OPML to import. Use when the user says a site "doesn't have RSS", wants to "follow" or "get updates from" a blog, pastes a blog URL to subscribe to, or when a scraped FreshRSS feed stops getting new items or shows an XPath error.
 ---
 
-Turn a site without a feed into a FreshRSS subscription. FreshRSS (`ansible/roles/k8s/freshrss/`)
+Turn a site without a feed into a FreshRSS subscription. FreshRSS (`k8s/roles/freshrss/`)
 does the scraping itself on every refresh, so no new service is needed. This skill produces the
 scraping rules and proves them before anyone imports them.
 

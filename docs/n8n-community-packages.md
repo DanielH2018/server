@@ -1,6 +1,6 @@
 # n8n community node packages — where they live, and how to list them
 
-`ansible/roles/k8s/n8n/CLAUDE.md` is the role doc, and it carries the one rule this page's
+`k8s/roles/n8n/CLAUDE.md` is the role doc, and it carries the one rule this page's
 detail reduces to: an installed community package is PVC state, so restoring a fresh
 `n8n-data` claim starts with none and the workflows that used them break at run time. This
 page is the account behind that — which flags are set and why, where a package lands on disk,

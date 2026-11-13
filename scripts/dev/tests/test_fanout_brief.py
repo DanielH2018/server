@@ -226,9 +226,7 @@ def test_a_dotfiles_brief_names_its_repo_and_stops_at_the_pr_on_every_host():
 
 
 def test_a_health_line_naming_a_cited_role_or_host_is_kept_and_the_rest_counted():
-    issues = [
-        Issue(1, "t", "fix `ansible/roles/k8s/sonarr/tasks/main.yml` on daniel-pi")
-    ]
+    issues = [Issue(1, "t", "fix `k8s/roles/sonarr/tasks/main.yml` on daniel-pi")]
     health = [
         "[daniel-box] ⚠ sonarr is owed a deploy",
         "[daniel-box] ⚠ daniel-pi is unreachable",

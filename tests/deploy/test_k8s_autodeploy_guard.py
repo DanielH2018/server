@@ -1,0 +1,387 @@
+"""Guards on which k8s roles Renovate may automerge an image bump for.
+
+A role's rollouts are the primary —
+`{{ manifests_rollout_kind | default('deploy') }}/{{ manifests_rollout | default(manifests_service) }}` — plus every
+`manifests_extra_rollouts` entry. A rendered
+Deployment is gated only if its own `metadata.name` matches the primary rollout name or one of
+the declared extras; a name that can't be resolved statically (a Jinja expression) counts as
+ungated, the fail-closed direction. Four role shapes therefore auto-deploy without a working
+gate:
+
+  * a role rendering a `kind: Deployment` whose name isn't in that gated set: `kubectl apply -f
+    <dir>/` applies it but nothing waits on it, so a bump to its image is deployed and never
+    verified. A typo'd or drifted `manifests_extra_rollouts` entry falls into this the same way
+    an undeclared Deployment does — matching is by name, not by count. prowlarr and freshrss
+    declare their extras correctly, so they are gated — but both still declare
+    k8s_autodeploy: false, for migrating-state reasons (Recreate + an RWO PVC)
+    that gatedness never touches. Don't read "gated" as
+    "eligible";
+  * a role passing `manifests_rollout: ''`, which skips the rollout wait AND the stability soak
+    outright. For a role rendering a Deployment or DaemonSet that is a real defect. For a
+    batch-only role — no Deployment, no DaemonSet — it is correct and unavoidable, so such a
+    role is exempt from this shape's offender check only on positive proof: it renders at least
+    one batch workload, and every one is credited by the batch gate below. A role rendering NO
+    workload at all still counts as an offender — rendering nothing is not evidence of a gate;
+  * a role whose gated Deployment(s) declare no `readinessProbe`: `rollout status` then returns
+    the moment the pod reports Running, which proves only that the image exists. Checked per
+    Deployment, not once per role — a probe on the primary doesn't excuse a probe-less extra;
+  * a role rendering a `kind: Job` or `kind: CronJob` with no role-local completion gate after
+    the apply: batch workloads are never gated through `manifests_rollout` at all, so nothing
+    above even attempts to wait on them. Two gate forms count, and they cover different shapes:
+
+      - a role-local `wait --for=condition=complete job/<name>`, for a Job the role applies
+        itself. Every name the wait lists is credited;
+      - a `flux_cronjob_gates` entry, for a CronJob of a flux-owned role. A CronJob runs on
+        its schedule, so nothing executes at deploy time and no `job/<name>` wait can be
+        written for it at all; the renderer copies the CronJob into a gate Job in
+        `<tag>-verify` and Flux blocks on it.
+
+    Delegation to `k8s/image-builder` is the third shape and is NOT credited: the Job lives in
+    image-builder's templates, not the caller's, so a role that only delegates renders zero
+    batch templates and passes this guard vacuously on an empty loop. That is a known limit,
+    not a hole a delegation marker was ever able to close.
+
+All four are fine for a hand-deployed role — an operator is watching. None is fine for an
+auto-deployed one, so a role's own k8s_autodeploy declaration must cover them. Asserting it
+here means a role whose gated set drifts from what it actually renders fails the suite instead
+of silently auto-deploying ungated.
+
+These guards are the only thing standing between a role shape and an ungated auto-deploy.
+
+The synthetic-role unit tests for the two gate kinds live in
+test_k8s_autodeploy_batch_gates.py and test_k8s_autodeploy_rollout_gates.py, and the derivation
+they share is _autodeploy.py. What stays here is what reads the live tree — the declaration
+partition, and the PVC/claim accounting.
+"""
+
+from pathlib import Path
+
+from _autodeploy import (
+    _K8S_ROLES,
+    _REPO,
+    _auto_deployable,
+    _daemonset_alias_matches,
+    _declares_autodeploy,
+    _denylist,
+    _kubectl_consumer_paths,
+    _role_defaults,
+    _roles,
+)
+from _role_census import role_dirs
+from _autodeploy_claims import (
+    _claim_name_refs,
+    _deployment_strategy_is_recreate,
+    _migrating_state,
+    _rendered_pvc_claims,
+)
+
+
+def test_every_role_declares_its_autodeploy_stance() -> None:
+    """Eligibility is declared where the justifying knowledge lives, not in a central list.
+
+    Omission must not read as consent. Scoping this to roles pinning an `_image:` var would
+    leave a mirror gap: a role with no defaults/main.yml at all has no `_image:` var either, so
+    it would skip the check entirely. Treating an undeclared role as eligible would flip it
+    from protected to auto-deployable with nobody reviewing it. Every role _roles() yields must
+    declare, whether or not it pins an image.
+    """
+    missing = [role.name for role in _roles() if not _declares_autodeploy(role)]
+    assert not missing, (
+        "Role(s) with no k8s_autodeploy declaration. Add both keys to defaults/main.yml — "
+        "k8s_autodeploy: true|false and a k8s_autodeploy_reason saying why:\n"
+        + "\n".join(sorted(missing))
+    )
+
+
+def test_every_role_is_either_denied_or_declares_itself_deployable() -> None:
+    """The two sets must partition the workload roles exactly.
+
+    The filter raises on an undeclared role, so this asserts the partition holds across
+    the live tree rather than trusting that it does.
+    """
+    denied = _denylist()
+    all_roles = {p.name for p in _roles()}
+    deployable = {p.name for p in _roles() if _auto_deployable(p)}
+    assert denied | deployable == all_roles
+    assert denied & deployable == set()
+
+
+def test_daemonset_alias_matcher_flags_kubectl_args_but_not_manifest_kind_fields() -> (
+    None
+):
+    """Pins the boundary the sweep below depends on, so the next reader sees it rather than
+    having to re-derive it from the regex.
+
+    `kind: DaemonSet` in a manifest is correct and required by the Kubernetes API — a naive
+    case-insensitive sweep would flag every daemonset.yaml.j2 in the repo. The distinction is
+    kubectl argument vs. manifest field: a manifest's `kind:` line never follows a kubectl verb
+    or takes the `<kind>/<name>` shorthand, so it is never matched here regardless of casing.
+    """
+    must_flag = [
+        "kubectl get DaemonSet foo",
+        "rollout status DaemonSet/foo",
+        "kubectl get ds foo",
+        "kubectl get daemonsets foo",
+    ]
+    for line in must_flag:
+        assert _daemonset_alias_matches(line), f"should have flagged: {line!r}"
+
+    must_not_flag = [
+        "kind: DaemonSet",
+        "  kind: DaemonSet\n",
+        "kubectl get daemonset foo",
+        "rollout status daemonset/foo",
+    ]
+    for line in must_not_flag:
+        assert not _daemonset_alias_matches(line), f"should not have flagged: {line!r}"
+
+
+def test_no_kubectl_invocation_spells_the_daemonset_kind_by_alias() -> None:
+    """One spelling of the kind, across every file under k8s/roles/ (`_kubectl_consumer_paths`).
+
+    `manifests_rollout_kind` and two other consumers match the literal 'daemonset', so a
+    kubectl invocation using 'ds', 'daemonsets', or any casing of 'DaemonSet' is a working
+    command that reads as a sanctioned spelling — and copying it into a parameterized role
+    gives a green deploy with the stabilisation gate reading a Deployment's jsonpath off a
+    DaemonSet.
+    """
+    offenders = []
+    for path in _kubectl_consumer_paths():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        except OSError:
+            continue
+        for n, line in enumerate(text.splitlines(), 1):
+            for token in _daemonset_alias_matches(line):
+                offenders.append(
+                    f"{path.relative_to(_REPO)}:{n}: {token!r} in {line.strip()}"
+                )
+    assert not offenders, (
+        "spell the DaemonSet kind 'daemonset', not a kubectl alias like 'ds', 'daemonsets', "
+        "or 'DaemonSet' — found:\n" + "\n".join(offenders)
+    )
+
+
+def test_recreate_is_read_off_the_spec_shell_call(tmp_path: Path) -> None:
+    """The strategy reaches a template through `spec_shell('Recreate')`, not a literal — a
+    scan that matched only the literal would read every Deployment as rolling and leave
+    `test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs` with nothing to
+    check."""
+    role = tmp_path / "widget"
+    (role / "templates").mkdir(parents=True)
+    tpl = role / "templates" / "deployment.yaml.j2"
+    tpl.write_text("spec:\n{{ spec_shell('Recreate') }}\n  replicas: 1\n")
+    assert _deployment_strategy_is_recreate(role)
+    tpl.write_text("spec:\n{{ spec_shell('RollingUpdate') }}\n  replicas: 1\n")
+    assert not _deployment_strategy_is_recreate(role)
+    tpl.write_text("spec:\n  # was {{ spec_shell('Recreate') }} once\n  replicas: 1\n")
+    assert not _deployment_strategy_is_recreate(role)
+
+
+def test_an_unresolvable_claim_var_is_reported_not_dropped(tmp_path: Path) -> None:
+    """A `{{ var }}` absent from the role's own defaults must be named, not silently dropped.
+
+    Dropping it would let a role whose claim var was renamed or removed pass this guard on an
+    empty rendered set matching an empty declared set — quietly correct only because both sides
+    went blind the same way.
+    """
+    role = tmp_path / "widget"
+    (role / "defaults").mkdir(parents=True)
+    (role / "defaults" / "main.yml").write_text(
+        "widget_k8s_claim: widget-config\n"
+        "k8s_claims:\n"
+        '  - name: "{{ widget_missing_claim }}"\n'
+    )
+    resolved, unresolved = _rendered_pvc_claims(role)
+    assert resolved == set()
+    assert unresolved == ["{{ widget_missing_claim }}"]
+
+
+def test_pvc_template_claim_is_resolved_through_defaults(tmp_path: Path) -> None:
+    """A role's own PersistentVolumeClaim template, live-shaped and resolved through its defaults.
+
+    `metadata.name` is a single-var Jinja reference (zigbee2mqtt's and code-server's actual shape),
+    resolved through the role's own defaults rather than left as the literal `{{ ... }}` string.
+    """
+    role = tmp_path / "widget"
+    (role / "templates").mkdir(parents=True)
+    (role / "defaults").mkdir(parents=True)
+    (role / "templates" / "pvc.yaml.j2").write_text(
+        "---\n"
+        "apiVersion: v1\n"
+        "kind: PersistentVolumeClaim\n"
+        "metadata:\n"
+        "  name: {{ widget_k8s_claim }}\n"
+        "  namespace: homelab\n"
+    )
+    (role / "defaults" / "main.yml").write_text("widget_k8s_claim: widget-config\n")
+    resolved, unresolved = _rendered_pvc_claims(role)
+    assert resolved == {"widget-config"}
+    assert unresolved == []
+
+
+def test_pvc_template_claim_is_found_when_name_is_not_the_first_metadata_key(
+    tmp_path: Path,
+) -> None:
+    """A PVC whose metadata carries `labels:` first must still yield a claim.
+
+    A matcher requiring `name:` on the line immediately after `metadata:` would yield no claim
+    and no complaint, and a declared `k8s_autodeploy_snapshot_pvcs` entry would fail
+    `test_snapshot_pvc_declarations_match_rendered_claims` for a role that was correct.
+    """
+    role = tmp_path / "widget"
+    (role / "templates").mkdir(parents=True)
+    (role / "defaults").mkdir(parents=True)
+    (role / "templates" / "pvc.yaml.j2").write_text(
+        "---\n"
+        "apiVersion: v1\n"
+        "kind: PersistentVolumeClaim\n"
+        "metadata:\n"
+        "  labels:\n"
+        "    app.kubernetes.io/name: widget\n"
+        "  name: {{ widget_k8s_claim }}\n"
+        "  namespace: homelab\n"
+    )
+    (role / "defaults" / "main.yml").write_text("widget_k8s_claim: widget-config\n")
+    resolved, unresolved = _rendered_pvc_claims(role)
+    assert resolved == {"widget-config"}
+    assert unresolved == []
+
+
+def test_k8s_claims_entry_is_resolved_through_defaults(tmp_path: Path) -> None:
+    """A `k8s_claims` entry is a rendered claim, its name resolved through the role's defaults.
+
+    The red half: the same role declaring no `k8s_claims` renders nothing, so a snapshot
+    declaration against it would be reported rather than credited.
+    """
+    role = tmp_path / "widget"
+    (role / "defaults").mkdir(parents=True)
+    defaults = role / "defaults" / "main.yml"
+    defaults.write_text(
+        "widget_k8s_claim: widget-config\n"
+        "k8s_claims:\n"
+        '  - name: "{{ widget_k8s_claim }}"\n'
+        "    storage_class: longhorn\n"
+        "    size: 1Gi\n"
+    )
+    assert _rendered_pvc_claims(role) == ({"widget-config"}, [])
+    defaults.write_text("widget_k8s_claim: widget-config\n")
+    assert _rendered_pvc_claims(role) == (set(), [])
+
+
+def test_snapshot_pvc_declarations_match_rendered_claims() -> None:
+    """A declared `k8s_autodeploy_snapshot_pvcs` entry must be a claim the role actually renders.
+
+    A typo'd claim name snapshots nothing and fails silently at deploy time — the volume simply
+    isn't protected, and nothing says so; this is the only pre-deploy catch for that, since
+    --dry-run never reaches volume-snapshot (see the section comment above).
+
+    See `_rendered_pvc_claims` for why this reads three sources.
+    """
+    offenders = []
+    for role in _roles():
+        declared = _role_defaults(role).get("k8s_autodeploy_snapshot_pvcs") or []
+        if not declared:
+            continue
+        rendered, unresolved = _rendered_pvc_claims(role)
+        if unresolved:
+            offenders.append(
+                f"{role.name}: could not resolve claim token(s) {unresolved!r} against its "
+                f"own defaults/main.yml"
+            )
+        missing = [c for c in declared if c not in rendered]
+        if missing:
+            offenders.append(
+                f"{role.name}: k8s_autodeploy_snapshot_pvcs declares {missing} but the role "
+                f"only renders {sorted(rendered)!r}"
+            )
+    assert not offenders, (
+        "a declared k8s_autodeploy_snapshot_pvcs entry must be a claim the role actually "
+        "renders:\n" + "\n".join(offenders)
+    )
+
+
+def test_auto_deployable_migrating_state_roles_declare_snapshot_pvcs() -> None:
+    """An auto-deployable role with the Recreate + RWO-PVC shape must declare a non-empty
+    `k8s_autodeploy_snapshot_pvcs`, so the pre-apply Longhorn snapshot actually runs for it.
+
+    Auto-deployable roles with the shape exist, so this guard runs against a non-empty set and
+    asserts the offenders among them stay empty: every promoted role declares its snapshot
+    claims, so the assertion passes on real coverage rather than on nothing to check. Denylisted
+    roles with the shape sit outside that set: `code-server` (its image is an immutable
+    `registry/…:latest` ref with no version signal to auto-deploy on),
+    `zigbee2mqtt`/`livesync`/`qbittorrent` (volume state coupled to something outside it —
+    coordinator NVRAM, connected Obsidian clients, the referenced data volume — that a revert
+    can desynchronise, which is a different question from whether the snapshot covers the
+    volume) and tdarr (the same shared-media coupling).
+    `test_snapshot_pvc_declarations_match_rendered_claims` above is the guard that bites on a
+    wrong declaration.
+    """
+    candidates = [
+        role.name
+        for role in _roles()
+        if _auto_deployable(role) and _migrating_state(role)
+    ]
+    assert candidates, (
+        "no auto-deployable role has the Recreate + RWO-PVC shape — this guard has gone back "
+        "to vacuous. Reverting four of slice 7b's twelve promotions for state coupling "
+        "(zigbee2mqtt, livesync, qbittorrent, then tdarr) left eight, so this staying non-empty "
+        "is expected; "
+        "only a full revert of all twelve should relax this back to documenting vacuity. If it's "
+        "empty for any other reason, _auto_deployable or _migrating_state has drifted from what "
+        "the roles actually declare."
+    )
+    offenders = [
+        role
+        for role in candidates
+        if not (
+            _role_defaults(_K8S_ROLES / role).get("k8s_autodeploy_snapshot_pvcs") or []
+        )
+    ]
+    assert not offenders, (
+        "auto-deployable role(s) with the Recreate + RWO-PVC shape declare no "
+        "k8s_autodeploy_snapshot_pvcs, so a bad image swap can migrate the volume with no "
+        "pre-apply recovery point:\n" + "\n".join(offenders)
+    )
+
+
+def test_auto_deployable_roles_account_for_every_claim_they_mount() -> None:
+    """Every claim an auto-deployable role mounts is either revert-covered or explicitly acked.
+
+    Reverting the fix — dropping `k8s_autodeploy_unreverted_claims` from a role that mounts
+    `media-data` — fails this test by name.
+    """
+    offenders = []
+    for role in role_dirs():
+        defaults = _role_defaults(role)
+        if not defaults.get("k8s_autodeploy"):
+            continue
+
+        mounted, unresolved = _claim_name_refs(role)
+        owned, _ = _rendered_pvc_claims(role)
+        snapshotted = set(defaults.get("k8s_autodeploy_snapshot_pvcs") or [])
+        acked = set(defaults.get("k8s_autodeploy_unreverted_claims") or [])
+
+        foreign = mounted - owned - snapshotted - acked
+        if foreign:
+            offenders.append(
+                f"  {role.name}: mounts {sorted(foreign)}, which it neither renders nor "
+                f"declares in k8s_autodeploy_snapshot_pvcs nor acks in "
+                f"k8s_autodeploy_unreverted_claims"
+            )
+        if unresolved:
+            offenders.append(
+                f"  {role.name}: claimName token(s) this reader cannot resolve "
+                f"({unresolved}) — an auto-deployable role must not mount a claim whose name "
+                f"nothing here can check"
+            )
+
+    assert not offenders, (
+        "auto-deployable role(s) mount state that k8s/volume-revert will NOT roll back, with "
+        "nobody having recorded that the trade-off was weighed. Either add the claim to "
+        "k8s_autodeploy_snapshot_pvcs (if reverting it is safe) or list it in "
+        "k8s_autodeploy_unreverted_claims with the reason in k8s_autodeploy_reason:\n"
+        + "\n".join(offenders)
+    )

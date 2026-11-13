@@ -137,7 +137,7 @@ def pinned_keys(repo: Path, rel: str) -> frozenset[str]:
 # templates, whose pins live nowhere else. A value holding `{{` is a built image whose tag
 # the play computes, so it pins nothing a sentence could restate.
 _VAR_FILES = re.compile(
-    r"^ansible/(?:roles/[^/]+/[^/]+/defaults/[^/]+|inventory/(?:group|host)_vars/[^/]+)\.ya?ml$"
+    r"^(?:k8s/roles/[^/]+/defaults/[^/]+|inventory/(?:group|host)_vars/[^/]+)\.ya?ml$"
 )
 # The Pi's compose templates: the package component's per-service trees (H5).
 _COMPOSE_FILES = re.compile(

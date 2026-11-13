@@ -30,7 +30,7 @@ _mod = base._mod
 inline_margins = _mod.inline_margins
 MAX_CHARS = _mod.INLINE_MAX_CHARS - len(_mod._PREAMBLE)
 MAX_LINES = _mod.INLINE_MAX_LINES - _mod._PREAMBLE.count("\n")
-HEADER = _mod._header("ansible/roles/k8s/foo/CLAUDE.md", "ansible/roles/k8s/foo")
+HEADER = _mod._header("k8s/roles/foo/CLAUDE.md", "k8s/roles/foo")
 
 
 def _doc_with_block(chars, newlines):
@@ -244,5 +244,5 @@ def test_report_on_the_live_tree_finds_its_named_members():
     rows = _rows(base._REPO)
     # 77 nested docs once H7.55 deleted the setup roles' CLAUDE.md files.
     assert sum(doc.endswith("/CLAUDE.md") for doc in rows) >= 75
-    assert "ansible/roles/k8s/traefik/CLAUDE.md" in rows
+    assert "k8s/roles/traefik/CLAUDE.md" in rows
     assert ".claude/rules/python-layout.md" in rows

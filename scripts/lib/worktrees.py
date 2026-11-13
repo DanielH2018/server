@@ -654,7 +654,7 @@ def memoised_merged(
 
     ``ask`` is the read itself, defaulted to `is_merged`. A test counts its calls through
     this parameter rather than by patching the module attribute, which is the direction the
-    monkeypatch ratchet in `ansible/tests/repo/` pushes callers.
+    monkeypatch ratchet in `tests/repo/` pushes callers.
     """
     cache: dict[str, bool] = {}
 

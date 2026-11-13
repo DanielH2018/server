@@ -40,7 +40,7 @@ Two smaller rules:
 - **`--json` prints compact JSON**: `json.dumps(rows)` with no `indent`. Only `jq` and agents
   read it, and indentation roughly doubles the tokens. A file written to disk for a person to
   diff keeps its indent. The `printed-json-is-compact` row of
-  `ansible/tests/repo/test_census_rows_python.py` enforces this for one-line
+  `tests/repo/test_census_rows_python.py` enforces this for one-line
   `print(json.dumps(…))` calls.
 - **A subprocess's chatter stays out of your output.** Capture the stderr of `uv`, `gh` or
   `git` and print it only on failure, cut to its deciding lines. A raw multi-line error

@@ -34,7 +34,7 @@ This stays a file rather than a census row for the reason Guard 2 gives (#3430):
 each import through Guard 2's evaluator against an index of the tree, and its accept/reject
 pairs build synthetic trees under `tmp_path`, which a row's text-only subjects cannot.
 
-A role's tests get one more directory. `ansible/roles/conftest.py` puts `<plane>/<role>/files`
+A role's tests get one more directory. `k8s/conftest.py` puts `k8s/roles/<role>/files`
 on `sys.path` when pytest collects a module under that role's `tests/` (#3746), so the guard
 credits that directory for such a module and refuses an insert of it as redundant, the same
 two rules it applies to `pythonpath`. The rule is the conftest's own `role_files_dir`, loaded
@@ -67,12 +67,12 @@ from lib.repo_paths import REPO
 _PYPROJECT = tomllib.loads((REPO / "pyproject.toml").read_text())
 _INI = _PYPROJECT["tool"]["pytest"]["ini_options"]
 PYTHONPATH_DIRS = [(REPO / p).resolve() for p in _INI["pythonpath"]]
-# `ansible/roles/k8s/*/tests` is a glob, which pytest expands and `REPO / p` does not: read
+# `k8s/roles/*/tests` is a glob, which pytest expands and `REPO / p` does not: read
 # literally, it named a directory that does not exist and kept every role test out of the census.
 TESTPATH_DIRS = [d.resolve() for p in _INI["testpaths"] for d in REPO.glob(p)]
 
 # The conftest that puts a role's own `files/` on sys.path for that role's tests.
-ROLES_CONFTEST = REPO / "ansible" / "roles" / "conftest.py"
+ROLES_CONFTEST = REPO / "k8s" / "conftest.py"
 assert ROLES_CONFTEST.is_file(), (
     f"{ROLES_CONFTEST} is gone: role tests lost their files/ path"
 )
@@ -81,7 +81,7 @@ assert _SPEC and _SPEC.loader
 _roles_conftest = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_roles_conftest)
 role_files_dir = _roles_conftest.role_files_dir
-ROLES_ROOT = ROLES_CONFTEST.parent
+ROLES_ROOT = ROLES_CONFTEST.parent / "roles"
 
 
 def _tracked_python() -> list[Path]:
@@ -89,7 +89,7 @@ def _tracked_python() -> list[Path]:
 
     `git ls-files` rather than `REPO.rglob` — a root-anchored rglob walks other sessions'
     `.claude/worktrees/<name>/` checkouts and judges this commit against their older copies
-    (ENFORCED by `ansible/tests/repo/test_tracked_python_hazards.py`). This checkout is itself
+    (ENFORCED by `tests/repo/test_tracked_python_hazards.py`). This checkout is itself
     one of those worktrees, so the hazard is not hypothetical here.
     """
     return [REPO / rel for rel in _tracked_files() if rel.endswith(".py")]
@@ -159,7 +159,7 @@ def find_test_bootstrap_gaps(
 
     Explicitly parameterised — the accept/reject pair below feeds it synthetic trees under
     `tmp_path`, which a function reading `testpaths` for itself could not be handed.
-    `roles_root` is the directory `ansible/roles/conftest.py` sits in; None credits no role.
+    `roles_root` is the roles directory beside `k8s/conftest.py`; None credits no role.
     """
     if pythonpath_index is None:
         pythonpath_index = build_import_index()
@@ -178,7 +178,7 @@ def find_test_bootstrap_gaps(
             if any(_provides(d, top) for d in pythonpath_dirs):
                 continue  # pyproject's pythonpath covers it for every collected module
             if role_dir is not None and _provides(role_dir, top):
-                continue  # ansible/roles/conftest.py inserts the role's own files/
+                continue  # k8s/conftest.py inserts the role's own files/
             providers = {d for d in repo_dirs.get(top, set()) if _provides(d, top)}
             if not providers:
                 continue  # third-party: the environment provides it, not the tree
@@ -265,7 +265,7 @@ def test_no_test_module_carries_an_insert_pythonpath_already_supplies():
     )
     assert not redundant, (
         "test module inserts a directory pytest already puts on sys.path (its own, its "
-        "role's files/ via ansible/roles/conftest.py, or a `pythonpath` entry in "
+        "role's files/ via k8s/conftest.py, or a `pythonpath` entry in "
         "pyproject.toml) — delete the bootstrap, it is dead weight:\n"
         + "\n".join(
             f"  {f.relative_to(REPO)}:{lineno} inserts {target.relative_to(REPO)}"
@@ -282,7 +282,7 @@ def test_the_census_contains_the_modules_this_guard_exists_for():
     written for — `test_ui_login.py` is the one that breaks, and three siblings carry the
     insert it borrows. The next two pin two other census shapes: a `scripts/tests` guard, and
     a `conftest.py` outside `scripts/`. The last two are fixture modules, one under
-    `scripts/` and one under `ansible/tests/` — a shape a census narrowed back to `test_*.py`
+    `scripts/` and one under `tests/` — a shape a census narrowed back to `test_*.py`
     would drop without moving the count past 200.
     """
     census = {p.relative_to(REPO).as_posix() for p in collect_test_modules()}
@@ -292,11 +292,11 @@ def test_the_census_contains_the_modules_this_guard_exists_for():
             "scripts/diagnostics/tests/test_probe_vip_placement.py",
             "scripts/diagnostics/tests/test_probe_readonly_rbac.py",
             "scripts/tests/test_script_bootstraps_present.py",
-            "ansible/tests/conftest.py",
+            "tests/conftest.py",
             "scripts/deploy_tools/tests/_land_fakes.py",
-            "ansible/tests/_k8s_render.py",
-            # Imports its role's `files/` module through ansible/roles/conftest.py alone.
-            "ansible/roles/k8s/crowdsec/tests/test_bouncer_prune.py",
+            "tests/_k8s_render.py",
+            # Imports its role's `files/` module through k8s/conftest.py alone.
+            "k8s/roles/crowdsec/tests/test_bouncer_prune.py",
         }
     )
     assert required <= census, sorted(required - census)
@@ -430,11 +430,9 @@ def _role_tree(
 ) -> tuple[Path, Path, dict[str, set[Path]]]:
     """Two roles under `tmp_path/roles`, each shipping one module, and a test in the first."""
     roles = tmp_path / "roles"
-    own = _write(roles / "k8s" / "own" / "files" / "own_mod.py", "VALUE = 1\n").parent
-    other = _write(
-        roles / "k8s" / "other" / "files" / "other_mod.py", "VALUE = 2\n"
-    ).parent
-    module = _write(roles / "k8s" / "own" / "tests" / "test_x.py", test_body)
+    own = _write(roles / "own" / "files" / "own_mod.py", "VALUE = 1\n").parent
+    other = _write(roles / "other" / "files" / "other_mod.py", "VALUE = 2\n").parent
+    module = _write(roles / "own" / "tests" / "test_x.py", test_body)
     repo_dirs = {"own_mod": {own.resolve()}, "other_mod": {other.resolve()}}
     return module, roles, repo_dirs
 
@@ -460,13 +458,13 @@ def test_a_role_test_inserting_its_own_files_is_flagged(tmp_path):
         'sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "files"))\n',
     )
     flagged = find_redundant_test_bootstraps([module], [], {}, roles_root=roles)
-    files = (roles / "k8s" / "own" / "files").resolve()
+    files = (roles / "own" / "files").resolve()
     assert [(f.name, t) for f, _, t in flagged] == [("test_x.py", files)]
 
 
 def test_role_files_dir_names_no_directory_outside_a_role_s_tests(tmp_path):
     module, roles, _ = _role_tree(tmp_path, "")
-    assert role_files_dir(module, roles) == (roles / "k8s" / "own" / "files").resolve()
-    stray = _write(roles / "k8s" / "own" / "files" / "test_y.py", "")
+    assert role_files_dir(module, roles) == (roles / "own" / "files").resolve()
+    stray = _write(roles / "own" / "files" / "test_y.py", "")
     assert role_files_dir(stray, roles) is None
     assert role_files_dir(tmp_path / "scripts" / "tests" / "test_z.py", roles) is None

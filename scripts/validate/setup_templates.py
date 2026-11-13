@@ -2,7 +2,7 @@
 """Render every host component template and fail on a variable nothing defines.
 
 The other render guards cover other files: `compose_templates.py` reads the Pi's `pi-compose`
-services, `k8s_manifests.py` reads `roles/k8s`, `shell_templates.py` covers `*.sh.j2` anywhere
+services, `k8s_manifests.py` reads `k8s/roles`, `shell_templates.py` covers `*.sh.j2` anywhere
 and `unit_templates.py` covers `*.service.j2` / `*.timer.j2`. Nothing else renders a component's
 `*.yaml.j2`, `*.env.j2`, `*.conf.j2` or Corefile. A template with an undefined variable, a Jinja
 syntax error, or a rename its consumer missed would otherwise first fail in a package build.
@@ -13,7 +13,7 @@ Undefined and then judges each name it collected. A name is allowed to be undefi
 
   - supplied by the host renderer (`renderer_lib/host.py`) — `hosts`, `services` and
     `inventory_hostname` (`HOST_RENDER_SUPPLIED`);
-  - a SOPS secret, by name, from the plaintext registry `ansible/secret_rotation.yml`;
+  - a SOPS secret, by name, from the plaintext registry `secrets/secret_rotation.yml`;
   - defined anywhere in the inventory — `group_vars/all.yml` or any host's `host_vars` file;
   - declared in the component's own `defaults/main.yml`. `lib.render_context` leaves out a
     default whose value will not expand (it names a filter the light environment lacks), so the
@@ -54,17 +54,16 @@ from lib import yaml_fast
 from lib.render_context import render_context
 from lib.render_guard import (
     ALL_VARS,
-    ANSIBLE,
     dump_numbered,
     host_files,
     load_yaml,
     make_env,
 )
-from lib.repo_paths import REPO
+from lib.repo_paths import REPO, SECRETS
 from validate.validate_lib.shipped_render import render_shipped, template_loader
 
 COMPONENTS = REPO / "hosts" / "components"
-SECRET_REGISTRY = ANSIBLE / "secret_rotation.yml"
+SECRET_REGISTRY = SECRETS / "secret_rotation.yml"
 
 # The names `renderer_lib/host.py` supplies a component template, which no repo file defines.
 HOST_RENDER_SUPPLIED = frozenset({"hosts", "services", "inventory_hostname"})
@@ -173,10 +172,7 @@ def repo_relative(tpl: Path) -> str:
     The tests hand `check_template` a template written under `tmp_path`, which is outside the
     repo — `Path.relative_to` raises there rather than returning something printable.
     """
-    for root in (ANSIBLE, REPO):
-        if tpl.is_relative_to(root):
-            return str(tpl.relative_to(root))
-    return str(tpl)
+    return str(tpl.relative_to(REPO)) if tpl.is_relative_to(REPO) else str(tpl)
 
 
 def check_template(tpl: Path, ctx: dict, known: frozenset[str]) -> list[str]:

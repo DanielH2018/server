@@ -7,7 +7,7 @@ import re
 
 import pytest
 
-from lib import ansible_jinja_env as aje
+from lib import guard_jinja_env as aje
 
 # `-e var=...`, `--extra-vars` or "extra vars": a playbook's command-line variables, which no
 # render path at HEAD has.

@@ -404,7 +404,7 @@ def test_a_fixture_module_under_tests_is_pytest_only_and_a_library_beside_it_is_
     directory is not, whatever its name."""
     assert is_pytest_only(Path("scripts/deploy_tools/tests/_land_fakes.py"))
     assert is_pytest_only(Path("scripts/conftest.py"))
-    assert is_pytest_only(Path("ansible/tests/_k8s_render.py"))
+    assert is_pytest_only(Path("tests/_k8s_render.py"))
     assert not is_pytest_only(Path("scripts/deploy_tools/_fakes.py"))
     assert not is_pytest_only(Path("scripts/lib/render_guard.py"))
 

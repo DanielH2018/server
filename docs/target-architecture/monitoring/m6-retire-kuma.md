@@ -5,18 +5,18 @@ Status: DONE. C-4b merged as [#7841](https://github.com/DanielH2018/server/pull/
 read on 2026-11-12 at `061b0146e`. Exit 4's fixtures passed that day, and its live drill, which
 is operator-only, ran at B-1d on 2026-10-17:
 
-1. `ansible/roles/k8s/uptime-kuma/` does not exist. `probe.py metric 'up{job="uptime-kuma"}'`
+1. `k8s/roles/uptime-kuma/` does not exist. `probe.py metric 'up{job="uptime-kuma"}'`
    printed `No data`. `kubectl get svc,ingressroute,cm,cronjob,deploy -n homelab -l
    homelab/role=uptime-kuma` printed `No resources found in homelab namespace.` The same
    label across every namespace, with `pvc` and `pv`, printed `No resources found`. No PVC or
    PV name contains `kuma`, among 45 of each. None of the 44 Longhorn volumes carries a
    `kuma` namespace or PVC name, and every volume carries a PVC name. The 45th PV,
    `media-data`, is a local volume. The operator's delete after C-2b has therefore happened.
-2. `grep -c '_push_token:'` printed 0 for `ansible/secret_rotation.yml` and for
-   `ansible/vars/secrets.yml`. `secret_rotation.py audit --check` exited 0.
+2. `grep -c '_push_token:'` printed 0 for `secrets/secret_rotation.yml` and for
+   `secrets/secrets.yml`. `secret_rotation.py audit --check` exited 0.
    [#7178](https://github.com/DanielH2018/server/issues/7178) closed on 2026-11-06.
 3. C-4b landed after D6, closing [#7835](https://github.com/DanielH2018/server/issues/7835).
-   The census row in `ansible/tests/repo/test_census_rows_text.py` held the allowlist until
+   The census row in `tests/repo/test_census_rows_text.py` held the allowlist until
    the operator retired it on 2026-11-12
    ([#8177](https://github.com/DanielH2018/server/issues/8177)).
 4. `test_a_critical_alert_active_after_the_apply_that_still_fires_is_flagged` and
@@ -804,7 +804,7 @@ The three PRs each change one pager side only, and they merge in this order. The
 
 **A6-8 and A6-9, the code half.** The operator waived the one-week revert window for the token retirements on 2026-11-02, so this PR carries both. A6-8 deletes the `token`, `kuma_id`, `display`, `description` and `status_group` fields from `PushCheck` and from all 19 rows of `check_table.py`, with the `DECIDED` marker on spelled-out tokens. The rules in `bridge-exporter.yaml` already carry their own `description` annotation (21 of 21), so no description moves. `fragments_bridge.py` renders the `bridge-checks` table as check, gate, critical and runbook, and the gate-set rows name the gate by its row name. The `monitor-bridge-checks.md` bullets are titled by check name. `test_bridge_size_cap.py` holds the bridge's `files/` at 8,000 lines: the residual measured 7,836 lines over 39 modules with `deploy_pipeline.py` included, and the plan rounds up to the next 500. A6-9 adds the 20 `monitor_bridge_*_push_token` names to `git_dates.RETIRED`, deletes `PENDING_RETIREMENT` and its readers, and removes the `PREFIX_EXCEPTION_CONSUMERS` entry for `monitor_bridge_cloudflare_drift_push_token`, which was its only member.
 
-**The operator's commit for A6-9.** The 20 keys are in `ansible/vars/secrets.yml`, `ansible/secret_rotation.yml` and the cluster file (`cluster-vars.source` and `cluster-vars.sops.env`). None is in a host store (`ansible/vars/hosts/*.sops.yaml`). The commit removes them from the store and the registry, regenerates the cluster files with `cluster_vars.py write`, and regenerates the doc fragments (`secret-tiers` and the three `bridge-*` fragments). The checks that stay red until then: `test_no_listed_departure_is_back_in_the_store`, `test_the_committed_cluster_files_pass_check`, `test_uptime_kuma_is_a_consumer_iff_a_tile_exists` and `test_every_committed_fragment_matches_what_the_generator_writes_now`.
+**The operator's commit for A6-9.** The 20 keys are in `secrets/secrets.yml`, `secrets/secret_rotation.yml` and the cluster file (`cluster-vars.source` and `cluster-vars.sops.env`). None is in a host store (`secrets/hosts/*.sops.yaml`). The commit removes them from the store and the registry, regenerates the cluster files with `cluster_vars.py write`, and regenerates the doc fragments (`secret-tiers` and the three `bridge-*` fragments). The checks that stay red until then: `test_no_listed_departure_is_back_in_the_store`, `test_the_committed_cluster_files_pass_check`, `test_uptime_kuma_is_a_consumer_iff_a_tile_exists` and `test_every_committed_fragment_matches_what_the_generator_writes_now`.
 
 ### A7 log arm
 
@@ -1340,7 +1340,7 @@ Cutover-1a PR that adds this paragraph). The window has four stacked PRs:
 
 **Cutover-1b, the rules page.** The combined window's second PR drops `shadow` from the twelve rules in `initial-setup-checks.yaml` and
 removes the six `CheckWithoutPager` terms of B2 (Docs Refresh, Secret Rotation, Setup Plane Drift, Homelab Evals and the two Loki Read Route tiles). Every rule file is `files/rules/initial-setup-checks.yaml`.
-All twelve are `warning`, which posts to Discord alone, the channel mix the six tiles had. The routing test is `ansible/tests/services/test_alertmanager_routing_b2_b4_b6b.py`.
+All twelve are `warning`, which posts to Discord alone, the channel mix the six tiles had. The routing test is `tests/services/test_alertmanager_routing_b2_b4_b6b.py`.
 
 **Inhibits.** None is added. The generic `HostCheckOverdue` deadman is already muted beside every `<Check>NotReporting` pair by the inhibit on `equal: [check, origin]`, and that inhibit's source is the rule whichever of `shadow` it carries. `HostCheckOverdue{check="eval-run",origin="daniel-server"}` is a different series ([#6735](https://github.com/DanielH2018/server/issues/6735)) and stays a live page until the leaked file goes. No B2 rule overlaps a scrape-target page: the checks read textfile verdicts, and a dead `node` exporter is `ScrapeTargetDown`'s alone.
 
@@ -2473,8 +2473,8 @@ no `push failed` line, `probe.py applied` reads `/usr/local/bin/registry-gc.sh` 
 their subject: `test_a_write_keeps_a_pending_retirement_key_and_drops_an_ordinary_one`,
 `test_a_retired_key_has_left_the_pending_allowance` and
 `test_consumer_tags_registry_gc_token_is_manual`. The operator's commit removes the key from
-`secrets.yml`, its row in `ansible/secret_rotation.yml` and its line in the cluster files. With
-the key gone, `git grep -n registry_gc_push_token -- ansible/roles ':!*/tests/*'` returns
+`secrets.yml`, its row in `secrets/secret_rotation.yml` and its line in the cluster files. With
+the key gone, `git grep -n registry_gc_push_token -- k8s/roles ':!*/tests/*'` returns
 nothing, which is C-1a's quoted gate.
 
 ### B7 pods
@@ -2550,7 +2550,7 @@ The mute derives from the reboot cron's group vars and spans Sunday 07:25 to 08:
 5-minute lead before the 07:30 cron, a 5-minute shutdown delay and a 40-minute recovery
 allowance. 2026-10-25 was a Sunday, so the 07:46 alert falls inside the mute, and live it would
 have paged nobody, as Kuma's maintenance window paged nobody.
-`ansible/tests/services/test_alertmanager_reboot_mute.py` holds the mute equal to Kuma's window.
+`tests/services/test_alertmanager_reboot_mute.py` holds the mute equal to Kuma's window.
 A failed cycle outside the reboot window pages on one sample, which matches the tile's
 `max_retries` of 0.
 
@@ -3164,7 +3164,7 @@ in the `observability` role.
   `Watchdog`, and groups by `service` through a `$service` variable built on
   `label_values(ALERTS, service)`. The two tables carry the `shadow` label, so an alert whose
   batch has not cut over stays visible and reads as not paged by Alertmanager.
-- `ansible/tests/services/test_alert_history_board_reads_alerts.py` holds every panel query to
+- `tests/services/test_alert_history_board_reads_alerts.py` holds every panel query to
   that shape. It replaces the test that parsed the bridge's DOWN line out of the old board.
 
 The board's history spans Prometheus's 30-day retention, not Loki's 744 hours. Kuma episodes
@@ -3183,10 +3183,10 @@ The post-apply read is owed at landing. It is a `uv run pytest -m ui -k grafana`
 
 B-6a ([#6689](https://github.com/DanielH2018/server/issues/6689)) wrote the `two_factor` rule
 for `alertmanager.local` with `group:admins` as its subject, and the `deny` rule after it, in
-`ansible/roles/k8s/authelia/templates/config-secret.yaml.j2`.
+`k8s/roles/authelia/templates/config-secret.yaml.j2`.
 
 B-6b ([#6690](https://github.com/DanielH2018/server/issues/6690)) adds the UI route,
-`ansible/roles/k8s/observability/templates/alertmanager-ingressroute.yaml.j2`, and sets
+`k8s/roles/observability/templates/alertmanager-ingressroute.yaml.j2`, and sets
 `--web.external-url=https://alertmanager.local.<domain>` on the Deployment. The route shares
 its host with the GET-only read door from
 [#6691](https://github.com/DanielH2018/server/issues/6691), which outranks it on the door's two
@@ -3231,7 +3231,7 @@ nothing. Each item of *Phase B* item 8, and what changed:
   which grades the deliberate absence of a `for:` on `WANUnreachable`. The two
   `homelab-cicd-reviewer` cases quote the alloy compose file's live label. `evals/history.json`
   keeps the old case id as history, because the eval-run cron owns that file.
-- **`ansible/roles/k8s/homelab-mcp/CLAUDE.md`.** The `/health` router now exists for the
+- **`k8s/roles/homelab-mcp/CLAUDE.md`.** The `/health` router now exists for the
   `blackbox-extra` job's `http_body_ok` probe, not for a Kuma tile.
 - **The ADR (C-0).** No change. ADR 0026 was written and accepted on 2026-10-24.
 
@@ -3249,7 +3249,7 @@ nothing changed there. Their C-1a halves, `format_kuma` and the `KUMA_QUERY` arm
 `docs/healthchecks-io-deadman.md`. Item 8 does not list them, and no other M6 PR row does.
 [#7056](https://github.com/DanielH2018/server/issues/7056) tracks the sweep, after C-1 and C-3a.
 
-`ansible/roles/k8s/monitor-bridge/files/bridge/common.py` is one of the files #6821 names. Two of
+`k8s/roles/monitor-bridge/files/bridge/common.py` is one of the files #6821 names. Two of
 its docstrings still say the bridges push to Kuma and that Kuma forwards to Discord. B-7 left
 them, because the file ships in the monitor-bridge and autofix-bridge builds. Both roles are
 flux-owned, so a docstring edit would roll two workloads in a PR that otherwise deploys nothing.
@@ -3271,7 +3271,7 @@ not firing and whose source is not unknown recovers. The first successful poll o
 therefore drops every `kuma:` key in `poll-state.json` and opens no episode for it.
 
 **Only daniel-box carries the poller.** The component's `when:` gates `claude_triage_poll.py` on
-`claude_code_triage_enabled`, which `ansible/inventory/host_vars/daniel-box.yml` sets true and
+`claude_code_triage_enabled`, which `inventory/host_vars/daniel-box.yml` sets true and
 `hosts/components/claude-code/defaults/main.yml` leaves false. A render of both host packages
 before the change put the file in `homelab-daniel-box` and not in `homelab-daniel-server`. Item 9's
 **Order** and C-1a's precondition once said "both hosts". They now say daniel-box, because
@@ -3314,7 +3314,7 @@ monitor_name=Status Page Sync, monitor_type=push = 1
 $ kubectl -n flux-system get ocirepository homelab \
     -o 'jsonpath={.status.artifact.metadata.org\.opencontainers\.image\.revision}'
 master@sha1:a4d5def5fa1e3416f6db889c7e6dee589e811aff
-$ git show a4d5def5fa:ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2 \
+$ git show a4d5def5fa:k8s/roles/uptime-kuma/templates/static-monitors.yaml.j2 \
     | grep -E '\.json: \|$' | grep -vE '^ +(discord|email|tag-[a-z]+)\.json:'
   status-page-sync.json: |
 ```
@@ -3325,7 +3325,7 @@ poller's. Since then the journal holds 667 `query=` lines and no `uptime-kuma` l
 runs `homelab-daniel-box` `0.6730+g35edf86f1457`, whose commit descends from B-10's `589c932c85`.
 
 **Homepage has no Kuma read left.** Its Kustomization reports the digest that holds `a4d5def5fa`,
-and `git grep uptime-kuma a4d5def5fa -- ansible/roles/k8s/homepage` returns nothing.
+and `git grep uptime-kuma a4d5def5fa -- k8s/roles/homepage` returns nothing.
 
 **The cluster file does not change.** `cluster_vars.py check` reads clean, because
 `uptime-kuma/templates/secret.yaml.j2` still renders `prometheus_kuma_api_key` for the maintenance
@@ -3455,7 +3455,7 @@ yet. To take it, run `count(probe_success{job="blackbox-ingress"})` and expect 2
 own tags, `ingress_probes.py -> observability`, and this readers line:
 
 ```text
-narrow: containers_list readers of kuma,probe on 15 entries -> longhorn-reconcile,observability via ansible/inventory/host_vars/daniel-box.yml
+narrow: containers_list readers of kuma,probe on 15 entries -> longhorn-reconcile,observability via inventory/host_vars/daniel-box.yml
 ```
 
 **`longhorn-reconcile` is a reader the plan does not predict.** Its `defaults/main.yml` calls
@@ -3475,7 +3475,7 @@ On that filter it would return True for all 8 `probe: false` entries, so C-4a mo
 
 [#7835](https://github.com/DanielH2018/server/issues/7835) deletes
 `scripts/renderer/template_filters/kuma_monitors.py`, its import and its `kuma_ingress_monitors`
-registration in `scripts/lib/ansible_jinja_env.py`. D6 had already deleted
+registration in `scripts/lib/guard_jinja_env.py`. D6 had already deleted
 `narrow_lib/containers.py`, so no `FILTER_FIELDS` row was left to remove. The plugin's other
 filter, `kuma_malformed_push_tokens`, had no caller left, so it went with the file. The census
 row's allowlist loses C-4b's two entries, which closes exit criterion 3's C-4b wait.
@@ -3502,7 +3502,7 @@ therefore no longer decrypts anything.
 still renders it, and `consumers.py:CROSS_HOST_PUSH_TOKENS` still names it. R4 owns its removal,
 in the secrets commit that follows its role deletion (`docs/target-architecture/render/r4-delete-k8s-ansible-path.md`,
 *The push token leaves after the role*). After C-5, `grep -c '_push_token:'` prints 1 for both
-`ansible/secret_rotation.yml` and `ansible/vars/secrets.yml`, so exit criterion 2 holds only once
+`secrets/secret_rotation.yml` and `secrets/secrets.yml`, so exit criterion 2 holds only once
 R4's commit lands. [#7178](https://github.com/DanielH2018/server/issues/7178) tracks that.
 
 ### PR C-6
@@ -3547,13 +3547,13 @@ push-token secret remains.
 
 **Exit criterion.** All five hold:
 
-1. `ansible/roles/k8s/uptime-kuma/` does not exist. `probe.py metric 'up{job="uptime-kuma"}'`
+1. `k8s/roles/uptime-kuma/` does not exist. `probe.py metric 'up{job="uptime-kuma"}'`
    returns nothing. The read-only
    `kubectl get svc,ingressroute,cm,cronjob,deploy -n homelab -l homelab/role=uptime-kuma`
    returns nothing. That read holds once C-1b's prune has reached the cluster (*Phase C*).
    The two claims outlive it until the **operator-only** delete after C-2b.
-2. `grep -c '_push_token:' ansible/secret_rotation.yml` prints 0, and so does
-   `grep -c '_push_token:' ansible/vars/secrets.yml`. Key names are plaintext in the encrypted
+2. `grep -c '_push_token:' secrets/secret_rotation.yml` prints 0, and so does
+   `grep -c '_push_token:' secrets/secrets.yml`. Key names are plaintext in the encrypted
    file, so the second read prints a count and never a value. `secret_rotation.py audit --check`
    exits 0.
 3. Nothing reads Kuma. This is a functional criterion, not a sweep of every mention. It is
@@ -3564,9 +3564,9 @@ push-token secret remains.
       `kuma_ingress_monitors`. C-6 quotes the `git grep` that shows it
       (*Phase C* item 6). A read through an indirection escapes that grep:
       `netpol-probe-job.yaml.j2` reads the entry's port through `entry_port(t.service)`. The
-      named-member case C-1 adds to `ansible/tests/k8s/test_netpol_probe_targets.py` holds
+      named-member case C-1 adds to `tests/k8s/test_netpol_probe_targets.py` holds
       that read instead.
-    - A ratchet census row in `ansible/tests/repo/test_census_rows_text.py` held every other
+    - A ratchet census row in `tests/repo/test_census_rows_text.py` held every other
       mention of `kuma` in those trees to a frozen allowlist. Each allowlist entry named its
       file and its reason, and a file outside it that mentioned `kuma` failed CI. The
       operator retired the identifier row and this row on 2026-11-12
@@ -3616,7 +3616,7 @@ push-token secret remains.
 
 ### What M2 to M5 leave
 
-- **Push tokens.** `ansible/secret_rotation.yml` lists 83 push tokens:
+- **Push tokens.** `secrets/secret_rotation.yml` lists 83 push tokens:
     - 44 belong to the rows of `CHECKS` in `check_table.py`.
     - 8 more carry the `monitor_bridge_` prefix but belong to other producers: `appsec`,
       `configarr`, `fake_remux`, `fake_remux_replace`, `home_allowlist`, `janitorr`,
@@ -3629,10 +3629,10 @@ push-token secret remains.
   `scripts/secrets_mgmt/secrets_lib/secret_registry.py:sync` adds missing rows and only
   reports stale ones, and `secret_rotation.py`'s `sync` help says existing entries are
   preserved. `secret_rotation.py audit --check` exits non-zero on any missing or stale row. The prek hook
-  `secret-rotation-registry-sync` runs it on every change to `ansible/vars/secrets.yml` or
-  `ansible/secret_rotation.yml`, and CI runs prek. Commit `6894e3523` ("Retire the E7-orphaned
+  `secret-rotation-registry-sync` runs it on every change to `secrets/secrets.yml` or
+  `secrets/secret_rotation.yml`, and CI runs prek. Commit `6894e3523` ("Retire the E7-orphaned
   credentials") is the precedent: it deleted the retired keys' rows from
-  `ansible/secret_rotation.yml` by hand, in the commit that removed the keys.
+  `secrets/secret_rotation.yml` by hand, in the commit that removed the keys.
 - **Bridge rows.** M2 removes no row: its PR 4a replaces `k8s_workloads` with
   `workload_log_errors`, and its PR 5 keeps `monitor_bridge_k8s_workloads_push_token` because
   that row still pushes on it. `check_table.py` holds 44 rows at the baseline, four of them
@@ -3832,11 +3832,11 @@ PR follows a read that the tile is gone.
 ### Kuma's footprint
 
 - **The census.** `git grep -il kuma 70591c307` lists 548 files. The largest groups are:
-    - `ansible/tests` (90) and `ansible/roles/k8s/monitor-bridge` (52);
+    - `tests` (90) and `k8s/roles/monitor-bridge/` (52);
     - `docs/archive` (29), which is history and stays;
     - `scripts/diagnostics` (25) and `scripts/deploy_tools` (24), mostly fixtures that use
       `uptime-kuma` as a sample tag;
-    - `ansible/roles/k8s/uptime-kuma` (21), `ansible/roles/setup/k3s` (17) and
+    - `k8s/roles/uptime-kuma/` (21), `ansible/roles/setup/k3s` (17) and
       `ansible/roles/setup/initial_setup` (14).
   Restricted to non-test files under `ansible`, `scripts`, `.claude` and `evals`, it is still
   about 200 files, 38 of them non-test scripts. That is why exit criterion 3 is functional.
@@ -3854,7 +3854,7 @@ PR follows a read that the tile is gone.
       credential `prometheus_kuma_api_key`.
 - **Seven template files and two shared defaults.** `git ls-files` on the role's `templates/`
   lists seven files, none of them a Service or an IngressRoute. Those two come from
-  `ansible/roles/k8s/manifests/defaults/main.yml:manifests_shared_defaults`, which
+  `k8s/roles/manifests/defaults/main.yml:manifests_shared_defaults`, which
   `manifests/tasks/main.yml` adds because the entry in `host_vars/daniel-box.yml` sets `port`
   and `hostname`.
 - **`entry_port('uptime-kuma')` callers:** the push URLs in monitor-bridge, autofix-bridge,
@@ -3919,7 +3919,7 @@ PR follows a read that the tile is gone.
       `CLAUDE.md` says its `/health` router exists so the Kuma tile can prove the edge routes.
     - Homepage's `uptimekuma` widget in `templates/config/services.yaml.j2`, with its
       block-label overrides in `custom.css.j2`. They are held by
-      `ansible/tests/services/test_homepage_block_label_overrides.py`.
+      `tests/services/test_homepage_block_label_overrides.py`.
     - The Grafana boards `Apps/uptime-kuma-monitors.json` and
       `Infrastructure/alert-history.json`.
     - Prometheus's `uptime-kuma` scrape job, which reaches the Service directly with the API
@@ -3942,7 +3942,7 @@ PR follows a read that the tile is gone.
   the `healthchecks_drift` row), the deadman rows in `scripts/docs/fragment_renderers.py`, and
   the tests `scripts/docs/tests/test_fragments_storage.py`,
   `scripts/docs/tests/test_gen_doc_fragments.py`,
-  `ansible/tests/services/test_monitor_bridge_healthchecks_expected.py`,
+  `tests/services/test_monitor_bridge_healthchecks_expected.py`,
   `hosts/tests/test_health_cron_boot_grace.py` and
   `scripts/validate/tests/test_backup_health_shim.py`.
 - **M5's Kuma rule.** M5 adds one Kuma rule, `KumaNotificationDropped` (`critical`,
@@ -4284,7 +4284,7 @@ tip then stops a push whose tile is still live, and Kuma pages DOWN 1200s later.
   wrapper's export line.
 - B4's renovate_agent token PR deletes `renovate_agent_kuma_push_token` from
   `scripts/secrets_mgmt/consumers.py`.
-- B0 rewords the two `ansible/inventory/group_vars/all.yml` comments that place
+- B0 rewords the two `inventory/group_vars/all.yml` comments that place
   `wan_reachable` and `boot_grace_active` in `kuma-push-lib.sh`, because B0 moves both.
 - B-2 rewords the `scripts/diagnostics/probe.py` docstring that names `monitor_status`.
 - C-3a rewords the comments that name `kuma-push-lib.sh` in
@@ -4361,7 +4361,7 @@ files that the rows above name only by their Ansible path. Each goes with the PR
   (`.claude/rules/python-layout.md`, *A check retires when its subject does*). C-6 rewrites
   the bullet's lead to say that each run writes a check file and neither unit loads a
   credential. The rewritten bullet names Kuma nowhere and drops the ENFORCED line. C-6 retires the test of
-  the same name in `ansible/tests/services/test_gitops_check_rule_literals.py` the same way,
+  the same name in `tests/services/test_gitops_check_rule_literals.py` the same way,
   with the sentence in `ansible/roles/setup/gitops_deploy/CLAUDE.md` that cites it.
 
 **Every `hosts/` file the grep finds, by PR.** `git grep -il kuma -- hosts ':!*/tests/*'
@@ -4441,7 +4441,7 @@ not name.
       `hosts/components/claude-code/templates/claude-triage-config.env.j2` and
       `hosts/components/secret-rotation/units/homelab-secret-rotation-audit.timer`. The timer's
       `ENFORCED:` line cites
-      `ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py`, which C-1 deletes, so
+      `k8s/roles/uptime-kuma/tests/test_maintenance_window.py`, which C-1 deletes, so
       the citation points at nothing from C-1 until C-6. No check resolves it: the facts lock
       reads Markdown sections, not unit files.
       C-6 keeps the timer's schedule and rewrites only the reason the comment gives for it.
@@ -4622,7 +4622,7 @@ Kuma still pages for every unmigrated batch until C-1, so it keeps a watcher unt
       every `monitor-bridge` deploy, and Phase B's health gate fails it. `for: 10m` is two
       `INTERVAL`s: the first cycle (up to one `INTERVAL`) plus the 1m scrape interval, with
       margin. A dead loop still pages within 10m of its deadline.
-- **The bijection test**, in `ansible/roles/k8s/monitor-bridge/tests/`. It asserts a
+- **The bijection test**, in `k8s/roles/monitor-bridge/tests/`. It asserts a
   one-to-one match between the rows of `CHECKS` and the rules that select `check="<row>"`, with
   `MonitorBridgeDown` and `BridgeCheckStale` exempt by name. It lands with A6's cutover, when
   only exporter rows remain in `CHECKS`. The row count needs no test of its own there: A6-1's
@@ -5105,7 +5105,7 @@ reach A6-7a, fail the bijection test and lose its only pager.
     - the three reviewer agents;
     - `.claude/hooks/hooklib/service_lines.py`;
     - the eval cases that name Kuma;
-    - `ansible/roles/k8s/homelab-mcp/CLAUDE.md`.
+    - `k8s/roles/homelab-mcp/CLAUDE.md`.
 9. **Triage's poller** drops its Kuma source in B-10. It keeps the `ALERTS` path alone:
     - **The code.** `KUMA_QUERY`, `KUMA_UP_QUERY`, `kuma_up_keys`, the `kuma` arm of
       `unknown_sources` and of `down_keys`, and the `kuma_up` argument of `step` go.
@@ -5143,7 +5143,7 @@ here. C-1 waits for the operator's acceptance.
           instant read, returns exactly one series, the `Status Page Sync` push tile. Any other
           series, of any type, fails the gate. This read needs the scrape job that C-1a
           deletes, so C-1a quotes it and C-1b does not repeat it.
-        - `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` declares
+        - `k8s/roles/uptime-kuma/templates/static-monitors.yaml.j2` declares
           `status-page-sync.json` as its only monitor at the commit `prod` holds. The
           `homelab` OCIRepository's `org.opencontainers.image.revision` annotation names
           that commit. To list the monitors, filter the file's entity keys at that commit
@@ -5192,7 +5192,7 @@ here. C-1 waits for the operator's acceptance.
 
    **C-1b, empty the role.** Preconditions, each quoted in the PR: C-1a's two reads above,
    taken after `prod` held C-1a; and
-   `git grep -n -w uptime-kuma -- ansible ':!*/tests/*' ':!*.md' ':!ansible/roles/k8s/uptime-kuma/*'`,
+   `git grep -n -w uptime-kuma -- ansible ':!*/tests/*' ':!*.md' ':!k8s/roles/uptime-kuma/*'`,
    which lists only files C-1b edits and C-2a's grants: the four bespoke policies and
    ical-proxy's `netpol_from` in `host_vars/daniel-box.yml`. The grep uses `-w` rather than a
    quoted `'uptime-kuma'`, because an unquoted YAML value such as `service: uptime-kuma` is a
@@ -5246,7 +5246,7 @@ here. C-1 waits for the operator's acceptance.
       entry's through `entry_port(t.service)`, which raises once `port` is gone. With the
       port patched in, `netpol-baseline-verify` would probe a Service this PR prunes. The
       comment above the row's fencing-shape group drops `uptime-kuma`.
-    - Add a named-member case to `ansible/tests/k8s/test_netpol_probe_targets.py`: every row
+    - Add a named-member case to `tests/k8s/test_netpol_probe_targets.py`: every row
       without `port` names a `containers_list` entry that exists and has `port`. After this
       PR no portless row names uptime-kuma, so the case's red proof is a synthetic fixture.
       A portless row naming a portless entry must fail, and so must a portless row naming no
@@ -5273,7 +5273,7 @@ here. C-1 waits for the operator's acceptance.
       worktree instead. A clean render shows that the emptied directory renders and that the
       probe Job renders without the row. CI's cross-plane order gate renders the cluster at
       the PR's base and head.
-    - **Tests.** `ansible/tests/k8s/test_netpol_probe_targets.py` runs in this PR's CI.
+    - **Tests.** `tests/k8s/test_netpol_probe_targets.py` runs in this PR's CI.
       `test_every_expecting_row_renders_a_leg` renders the probe Job and goes red on the
       `entry_port` raise, and the new named-member case holds the table to the entries.
     - **The promotion's gates.** `promote` applies C-1b, and its soak reads the critical
@@ -5361,7 +5361,7 @@ here. C-1 waits for the operator's acceptance.
           every Pi check (B5) and every B9 integrity scan on all three hosts is newer than that
           batch's recorded Cutover-2 apply. That alone is also true of a shadow-phase script,
           which still sources the library. Second,
-          `git grep -n kuma-push-lib -- 'ansible/roles/*/templates/*' 'ansible/roles/*/files/*' hosts ':!*/tests/*'`
+          `git grep -n kuma-push-lib -- 'k8s/roles/*/templates/*' 'k8s/roles/*/files/*' hosts ':!*/tests/*'`
           prints no script that sources the file. The pattern is not the full path, because
           B9's `aide-check.sh.j2` and `rkhunter-check.sh.j2` source it as
           `{{ initial_setup_host_lib_dir }}/kuma-push-lib.sh`, which the `integrity-scans`
@@ -5450,12 +5450,12 @@ here. C-1 waits for the operator's acceptance.
     - **C-4a.** Add `scripts/renderer/template_filters/ingress_probes.py` with `ingress_probe_targets`,
       rename the `kuma:` key on `containers_list` entries to `probe:`, switch M4's probe job to
       the new filter, and add its row to `narrow_lib/containers.py:FILTER_FIELDS`. It also
-      registers `ingress_probe_targets` in `scripts/lib/ansible_jinja_env.py`, beside the
+      registers `ingress_probe_targets` in `scripts/lib/guard_jinja_env.py`, beside the
       filters that file already imports, so a repo render of the probe job resolves it. No
       plugin is deleted, so the narrowing can answer (M4 open question 1).
     - **C-4b (landed, #7835).** Delete `kuma_monitors.py`, which no template calls after
       C-4a. In the same commit, remove its import and the `kuma_ingress_monitors` registration from
-      `scripts/lib/ansible_jinja_env.py`, which would otherwise raise ImportError on every
+      `scripts/lib/guard_jinja_env.py`, which would otherwise raise ImportError on every
       repo render. Remove the `kuma_ingress_monitors` row from
       `scripts/deploy_tools/narrow_lib/containers.py:FILTER_FIELDS` too, unless D6 has
       deleted the narrowing. `narrow_lib/filters.py` refuses any deleted plugin, so this PR
@@ -5463,7 +5463,7 @@ here. C-1 waits for the operator's acceptance.
       that row are on the allowlist.
 5. **C-5, secrets.** **Operator-only:** remove `kuma_status_page_sync_push_token`,
    `uptime_kuma_username`, `uptime_kuma_password` and `prometheus_kuma_api_key` from
-   `secrets.yml`. The same commit deletes their rows from `ansible/secret_rotation.yml`, adds
+   `secrets.yml`. The same commit deletes their rows from `secrets/secret_rotation.yml`, adds
    them to `RETIRED`, and carries the regenerated fragment. That is the token-PR rule in
    *Steps*. `render_records_push_token` stays for R4, which removes it after deleting the
    role that renders it, so exit criterion 2 holds only after R4's secrets commit.
@@ -5511,8 +5511,8 @@ here. C-1 waits for the operator's acceptance.
 ### The tree
 
 ```diff
--ansible/roles/k8s/uptime-kuma/                        the whole role (3,655 lines), C-1b and C-2b
- ansible/roles/k8s/monitor-bridge/files/
+-ansible/k8s/roles/uptime-kuma/                        the whole role (3,655 lines), C-1b and C-2b
+ k8s/roles/monitor-bridge/files/
 -  gates.py                                            A6-7r
 ~  bridge/streaks.py                                   apply_startup_grace and grace_streaks out (A6-7a); State, down_streak and the probe caches stay
 ~  check.py                                            gauges at each push point (A6-1); _evaluate and check_enabled in, gate rows run as rows (A6-7r); push branch out (A6-7a)
@@ -5525,10 +5525,10 @@ here. C-1 waits for the operator's acceptance.
 ~  check_table.py                                      22 rows out (A1 to A5, A7, B8); prometheus out (A6-7a); tile fields out (A6-8); swallowed_verdicts out (C-7)
 ~  verdicts/logs.py                                    KUMA_RETIRING_TAGS (B1 to B7 shadow PRs, B9's tag PR); out with swallowed_verdicts (C-7)
 ~  checks/*.py, verdicts/*.py                          the Prometheus-reading bodies out (A1 to A5, B8); the log arm out (A7)
- ansible/roles/k8s/uptime-kuma/templates/
+ k8s/roles/uptime-kuma/templates/
 ~  static-monitors.yaml.j2                             CHECKS loop out (A6-7a); B tiles out (each Cutover-1a)
 ~  status-page-sync-configmap.yaml.j2                  bridge pins out (A6-7a)
- ansible/roles/k8s/observability/
+ k8s/roles/observability/
 +  files/rules/hosts.yaml, containers.yaml, scrape.yaml, edge.yaml, storage.yaml   A1 to A5
 +  files/rules/bridge-exporter.yaml                    A6-2 to A6-6
 ~  files/rules/host-checks.yaml                        B1 to B6a, two rules per producer; KumaDown (B1, out at C-1a)
@@ -5541,11 +5541,11 @@ here. C-1 waits for the operator's acceptance.
 ~  templates/scrape-credentials-secret.yaml.j2         kuma_api_key out (C-1a)
 ~  templates/alertmanager-secret.yaml.j2               inhibit_rules for WAN and B2 (A6)
 ~  templates/kube-state-metrics.yaml.j2                configmaps, cronjobs (B6b; jobs was #5675); B7 reuses cronjobs
- ansible/roles/k8s/authelia/templates/config-secret.yaml.j2   alertmanager two_factor (B-6a); kuma bypass out (C-1b)
- ansible/roles/k8s/loki-homelab/files/rules/homelab-logs.yaml   WorkloadLogErrors (A7); cloudflare-ddns rule (B7); KumaNotificationDropped out (C-7)
- ansible/roles/k8s/netpol-baseline/defaults/main.yml   the uptime-kuma probe row out (C-1b)
+ k8s/roles/authelia/templates/config-secret.yaml.j2   alertmanager two_factor (B-6a); kuma bypass out (C-1b)
+ k8s/roles/loki-homelab/files/rules/homelab-logs.yaml   WorkloadLogErrors (A7); cloudflare-ddns rule (B7); KumaNotificationDropped out (C-7)
+ k8s/roles/netpol-baseline/defaults/main.yml   the uptime-kuma probe row out (C-1b)
  ansible/roles/setup/common/tasks/install_host_lib.yml   kuma_push.py out of the loop, absent task in (C-3a), absent task out (C-6)
- ansible/roles/k8s/blackbox-exporter/files/blackbox.yml   tcp_connect, dns, keyword modules (B8)
+ k8s/roles/blackbox-exporter/files/blackbox.yml   tcp_connect, dns, keyword modules (B8)
  ansible/roles/setup/optimize_pi/templates/node_exporter.service.j2   textfile collector on (B5)
  ansible/roles/setup/initial_setup/files/
 -  kuma-push-lib.sh                                    C-3a
@@ -5578,11 +5578,11 @@ here. C-1 waits for the operator's acceptance.
 ~ scripts/diagnostics/postflight.py                    B-2; check_kuma_scrape out at C-1
 ~ scripts/docs/fragments_lib/fragments_bridge.py       gate sets (A6-7r), row fields (A6-8)
 ~ scripts/docs/catalog_lib/glance_facts.py            timer_units follows the rename (C-3b)
-~ scripts/lib/ansible_jinja_env.py                    ingress_probe_targets in (C-4a), kuma filter out (C-4b)
+~ scripts/lib/guard_jinja_env.py                    ingress_probe_targets in (C-4a), kuma filter out (C-4b)
 ~ scripts/secrets_mgmt/secret_rotation.py, rotation_tools.py   the audit push out (B2); malformed_push_tokens call out (C-5)
-~ ansible/roles/k8s/homepage/templates/config/services.yaml.j2, custom.css.j2   B-4
-- ansible/roles/k8s/observability/files/dashboards/Apps/uptime-kuma-monitors.json   B-5
-~ ansible/roles/k8s/observability/files/dashboards/Infrastructure/alert-history.json   B-5
+~ k8s/roles/homepage/templates/config/services.yaml.j2, custom.css.j2   B-4
+- k8s/roles/observability/files/dashboards/Apps/uptime-kuma-monitors.json   B-5
+~ k8s/roles/observability/files/dashboards/Infrastructure/alert-history.json   B-5
 ```
 
 ## Steps, as PRs
@@ -5602,16 +5602,16 @@ was a separate file under `m6-status/`, so that a PR recording one batch merged 
 another batch's PR without a conflict. M6 is done, and #8164 folded the files into this page.
 
 **Every token PR, and C-5, is one commit with four parts.** The operator removes the keys
-from `ansible/vars/secrets.yml` with `sops` (**operator-only**). In the same commit the agent
-deletes the keys' rows from `ansible/secret_rotation.yml`, adds the keys to
+from `secrets/secrets.yml` with `sops` (**operator-only**). In the same commit the agent
+deletes the keys' rows from `secrets/secret_rotation.yml`, adds the keys to
 `scripts/secrets_mgmt/git_dates.py:RETIRED`, and stages the fragment the `regen-doc-fragments`
 hook rewrites. `sync` does not delete a stale row, so a commit without the row deletion fails
 the `secret-rotation-registry-sync` hook (*Baseline*). The PR body quotes three reads:
 `uv run python scripts/secrets_mgmt/secret_rotation.py audit --check` exiting 0,
-`grep -c '_push_token:' ansible/secret_rotation.yml` with the count it expects, and
-`git diff --stat ansible/vars/secrets.yml`. Plain `git diff` on that file prints plaintext.
+`grep -c '_push_token:' secrets/secret_rotation.yml` with the count it expects, and
+`git diff --stat secrets/secrets.yml`. Plain `git diff` on that file prints plaintext.
 
-**Narrowing, for every PR that edits `ansible/inventory/` or `scripts/renderer/template_filters/`.**
+**Narrowing, for every PR that edits `inventory/` or `scripts/renderer/template_filters/`.**
 Before merging, run the read-only
 `uv run python scripts/deploy_tools/deploy_tags.py narrow origin/master HEAD` from the PR's
 worktree, and quote its output in the PR body. It names the tags `land.sh` and the tick reach.
@@ -5675,14 +5675,14 @@ this applies to, with what the rules predict:
 | B-6b | Alertmanager IngressRoute | ~40 | `observability` |
 | B-7 | docs, skills, agents, evals, the ADR draft (C-0) | ~200 | none |
 | B-10 | triage's poller reads `ALERTS` alone and drops its `kuma:` keys; its docs; after Phase A | ~60 removed | a new version of the daniel-box and daniel-server host packages |
-| C-1a | `KumaDown` with its inhibit, the scrape job and its credential, `check_kuma_scrape`, the two `scrape-targets.yaml` rows, `monitors.py`'s Kuma read; the operator's `cluster_vars.py write` if the check asks; after B-2, B-4 and B6c's token PR (a quoted `git grep -n registry_gc_push_token -- ansible/roles ':!*/tests/*'` returns nothing); the two post-promotion reads that `KumaDown` and the scrape are gone | ~60 removed | the promotion (`observability`) |
+| C-1a | `KumaDown` with its inhibit, the scrape job and its credential, `check_kuma_scrape`, the two `scrape-targets.yaml` rows, `monitors.py`'s Kuma read; the operator's `cluster_vars.py write` if the check asks; after B-2, B-4 and B6c's token PR (a quoted `git grep -n registry_gc_push_token -- k8s/roles ':!*/tests/*'` returns nothing); the two post-promotion reads that `KumaDown` and the scrape are gone | ~60 removed | the promotion (`observability`) |
 | C-1b | empty the uptime-kuma render down to its claims: the seven templates, the declaration task and the tests that render them, the include's secret list and rollout; the Authelia bypass; the entry's routed fields and the probe row; the probe-row named-member case; `Removes-Object:` lines; the operator's `cluster_vars.py write`; a quoted `homelab-render cluster --role uptime-kuma netpol-baseline`; after C-1a's reads | ~3,050 removed, ~40 added | the promotion (`authelia`, `blackbox-exporter`, `pihole`, `uptime-kuma`, then `netpol-baseline`) |
 | C-2a | the bespoke grants | ~55 removed | the edited roles, then `netpol-baseline` |
 | C-2b | the role directory, the entry and `k8s_host_files/tasks/uptime-kuma.yml`, after C-1b's prune reads `NotFound`; then the **operator-only** delete of the claims and any Secret left | ~100 removed | the promotion |
 | C-3a | `kuma-push-lib.sh` (an absent task on every host), `kuma_push.py`, the re-export, the `install_host_lib.yml` loop and an absent task for the `/opt` copies, the nine stamp pairs, the cross-role table rows; the `kuma-push` component, the `hosts/` copies of `kuma_push.py` and the renderer's two `kuma-push-lib.sh` rows; after B7's autofix-bridge Cutover-2, after B9's Cutover-2 on all three hosts and after C-2b | ~500 removed | a new version of all three host packages; the tick (initial_setup, gitops_deploy, renovate_agent, renovate_notify, fake_remux, deploy_ui on daniel-box); `promote` for the `configarr` and `janitorr` ConfigMaps; by hand on daniel-server and the Pi; `k3s --tags "backup-health,live-drift"` by hand |
 | C-3b | the task-file and template rename; the variable rename; `glance_facts.py:timer_units` and its named-member case; the `hosts/` comments that cite the task file (*Every `hosts/` file the grep finds, by PR*) | ~300 changed | the tick; `k3s --tags "manifest-prune,live-drift"` by hand; a new version of the daniel-box and daniel-server host packages |
-| C-4a | the key rename, `ingress_probes.py` and its `ansible_jinja_env.py` registration | ~160 | per the narrowing |
-| C-4b | delete `kuma_monitors.py`, its `ansible_jinja_env.py` import and registration, and its `FILTER_FIELDS` row, after D6 | ~70 removed | none once D6 has landed |
+| C-4a | the key rename, `ingress_probes.py` and its `guard_jinja_env.py` registration | ~160 | per the narrowing |
+| C-4b | delete `kuma_monitors.py`, its `guard_jinja_env.py` import and registration, and its `FILTER_FIELDS` row, after D6 | ~70 removed | none once D6 has landed |
 | C-5 | secrets (**operator-only** half first) | ~100 | none |
 | C-6 | the census row, after the quoted identifier `git grep`; C-3a's two absent tasks out; the host packages' Kuma `legacy:` entries out; the `hosts/` history comments (*Every `hosts/` file the grep finds, by PR*); after C-7 | ~100 | a new version of all three host packages; the tick (initial_setup and the `install_host_lib.yml` importers); `land.sh` for `configarr` and `janitorr` only while they import `install_host_lib.yml`; `k3s --tags "backup-health,live-drift"` by hand |
 | C-7 | M5's `KumaNotificationDropped`; the `swallowed_verdicts` row with its bodies, rule, tests and `KUMA_RETIRING_TAGS` | ~350 removed | `observability`, `monitor-bridge`, `loki-homelab` |
@@ -5710,15 +5710,15 @@ uv run python scripts/diagnostics/probe.py metric 'count(homelab_check_success{j
 uv run python scripts/diagnostics/probe.py metric 'count by (monitor_type, monitor_name) (monitor_status)'
 # and only status-page-sync.json declared at the commit prod holds, which this names
 kubectl -n flux-system get ocirepository homelab -o 'jsonpath={.status.artifact.metadata.org\.opencontainers\.image\.revision}'
-git show <commit>:ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2 | grep -E '\.json: \|$' | grep -vE '^ +(discord|email|tag-[a-z]+)\.json:'
+git show <commit>:k8s/roles/uptime-kuma/templates/static-monitors.yaml.j2 | grep -E '\.json: \|$' | grep -vE '^ +(discord|email|tag-[a-z]+)\.json:'
 # Phase B: the health gate reads the alert plane
 uv run python scripts/diagnostics/probe.py health observability
 uv run python scripts/diagnostics/probe.py monitors
 # Phase C, after C-2b and the operator's delete: Kuma is gone
 uv run python scripts/diagnostics/probe.py metric 'up{job="uptime-kuma"}'
 kubectl get svc,ingressroute,cm,cronjob,deploy -n homelab -l homelab/role=uptime-kuma
-grep -c '_push_token:' ansible/secret_rotation.yml
-grep -c '_push_token:' ansible/vars/secrets.yml
+grep -c '_push_token:' secrets/secret_rotation.yml
+grep -c '_push_token:' secrets/secrets.yml
 uv run python scripts/secrets_mgmt/secret_rotation.py audit --check
 ```
 
@@ -5893,7 +5893,7 @@ M4's rules.
   is removed in the same revert, or the config test fails on a shadow source over a live
   target. The order above then
   applies: revert Cutover-a next to restore the tiles as the pager.
-- **A token PR.** Reverting it restores the rows in `ansible/secret_rotation.yml` and the
+- **A token PR.** Reverting it restores the rows in `secrets/secret_rotation.yml` and the
   `RETIRED` entries, but not the secret values. The operator re-adds them with `sops`.
 - **B1's `uptime-kuma-alive`.** Reverting Cutover-2 restores the ping. The operator recreates
   the console check if step 3 has run.
@@ -6007,7 +6007,7 @@ M4's rules.
   *Steps*, with `audit --check` quoted.
 - **Class 6, restart is not recreate.** Its one detector is `pi_pressure`'s port arm. B8
   replaces it with `PiPortDead`, and `docs/failure-classes.md` row 6 moves to that rule's
-  firing case in the same PR, so `ansible/tests/repo/test_failure_class_detectors.py` keeps
+  firing case in the same PR, so `tests/repo/test_failure_class_detectors.py` keeps
   resolving.
 - **The renderer refuses an emptied role.** C-1b empties a flux-owned role, and the renderer
   refuses a restart target that names no workload in the render. Mitigation: the include's
@@ -6066,11 +6066,11 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
       for its tiles, and its rows in `docs/monitor-bridge-checks.md`.
     - Cutover-b (A) or Cutover-1b (B): updates the promtool cases that assert `shadow`.
     - Cutover-a (A) or Cutover-2 (B): deletes the producer's tests for the push.
-    - The token PR: `ansible/secret_rotation.yml`, `RETIRED`, and the regenerated rotation
+    - The token PR: `secrets/secret_rotation.yml`, `RETIRED`, and the regenerated rotation
       fragment.
     - A host batch's Cutover-2: updates `test_kuma_check_timer.py`'s `KNOWN_CHECKS` and
       `test_kuma_env_renders_for_every_cron_tag.py`.
-- **A0.** The red/green test of the named-member floor, in `ansible/tests/services/` beside
+- **A0.** The red/green test of the named-member floor, in `tests/services/` beside
   `test_kuma_push_token_format.py`.
 - **B2's secret-rotation Cutover-2.** `scripts/secrets_mgmt/tests/test_secret_rotation.py`
   and `test_rotation_tools.py` lose their push cases.
@@ -6088,7 +6088,7 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
   and the `LOG_ERROR_*` cases go with their subject, and `docs/monitor-bridge-checks.md` and
   `docs/monitor-bridge-internals.md` lose the row.
 - **A6-7a.** `scripts/docs/tests/test_fragments_bridge.py`,
-  `ansible/roles/k8s/uptime-kuma/tests/test_status_page_groups.py`, the row-needs-a-tile check
+  `k8s/roles/uptime-kuma/tests/test_status_page_groups.py`, the row-needs-a-tile check
   in `test_kuma_static_monitors.py`, the `CHECKS`-loop fixtures in
   `scripts/diagnostics/tests/test_probe_monitors.py`, and the bijection test. The monitor-bridge
   `CLAUDE.md` (*Gates and hysteresis*, `bridge/streaks.py`) and
@@ -6102,7 +6102,7 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
   *Gates and hysteresis* section, its *Module layout* sentence on `gates.py`, and
   `docs/monitor-bridge-internals.md` drop `gates.py` in the same PR. `docs/monitor-bridge-checks.md`
   loses its `gates.py` references. The `bridge-gate-sets` fragment regenerates.
-- **A6-8.** `ansible/roles/k8s/monitor-bridge/tests/test_check_table.py` and
+- **A6-8.** `k8s/roles/monitor-bridge/tests/test_check_table.py` and
   `test_fragments_bridge.py`.
 - **B0.** A test of the shared library, in the existing setup tests, and the
   `always`-tagged copy task and stamp in `initial_setup/tasks/crons.yml` that install it, with
@@ -6119,7 +6119,7 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
   line the first draft named are obsolete: H3.6 wrote the test, and H3.8b moved the heartbeats and their
   contract into `hosts/components/pi-heartbeats/component.yml`.
 - **B1 to B7, each shadow PR, and B9's tag PR.** The batch's `KUMA_RETIRING_TAGS` entries and their cases in
-  `ansible/roles/k8s/monitor-bridge/tests/test_check_swallowed_verdicts.py`.
+  `k8s/roles/monitor-bridge/tests/test_check_swallowed_verdicts.py`.
 - **A6-1 and A6-2.** The exporter test for `homelab_check_rows`, the run-loop export test,
   and the promtool cases for the two exporter rules, restart cases included.
 - **A6-3 to A6-6.** The rule-shape test that derives each A6 rule's `requires` label, its rule
@@ -6138,20 +6138,20 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
   cases. The root `CLAUDE.md` *Claude Tooling* bullet, `docs/claude-tooling.md` and the
   add-secret skill's `kuma-drift` steps change here.
 - **B-4.** `test_homepage_block_label_overrides.py`.
-- **B-6a.** The render test, in `ansible/tests/services/` beside
+- **B-6a.** The render test, in `tests/services/` beside
   `test_authelia_access_tiers.py`.
 - **B-7.** The docs named in Phase B item 8, and the ADR draft. `docs/reference/` pages
   regenerate on the next docs-refresh run.
 - **C-1 to C-7.**
-    - `ansible/tests/deploy/test_manifests_prune.py` is unchanged.
+    - `tests/deploy/test_manifests_prune.py` is unchanged.
     - C-1: M2's weekly-reboot mute test loses its Kuma-equality half. The uptime-kuma role's
       `CLAUDE.md` and tests go with the role.
     - C-1: `test_postflight.py` loses `check_kuma_scrape`'s cases.
-    - C-1: `ansible/tests/k8s/test_netpol_probe_targets.py` gains the probe-row named-member
+    - C-1: `tests/k8s/test_netpol_probe_targets.py` gains the probe-row named-member
       case, and runs against the table without the uptime-kuma row.
     - C-1: `test_kuma_push_token_format.py`, which evaluates the
       deleted token-format assert, is deleted, with A0's floor test. Every other
-      `test_kuma_*.py` in `ansible/tests/services/` that reads a deleted template or task,
+      `test_kuma_*.py` in `tests/services/` that reads a deleted template or task,
       such as `test_kuma_static_monitors.py` and `test_kuma_entities_parse_for_autokuma.py`,
       is deleted or cut to what still exists.
     - C-3a: `test_setup_cross_role_files.py`, `test_host_lib_sibling_copies.py`, and the
@@ -6165,15 +6165,15 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
       file and gains the legacy-unit case. The setup/common, gitops_deploy, initial_setup and
       render_records `CLAUDE.md` files are updated, and their glance blocks regenerate.
       `scripts/docs/tests/test_gen_role_glance.py` gains the named-member timer case.
-    - C-4a and C-4b: `scripts/lib/ansible_jinja_env.py` registers the new filter, then drops
+    - C-4a and C-4b: `scripts/lib/guard_jinja_env.py` registers the new filter, then drops
       the old one.
-    - C-4a: `test_kuma_ingress_monitors.py` (in `ansible/tests/services/`) is renamed with its
+    - C-4a: `test_kuma_ingress_monitors.py` (in `tests/services/`) is renamed with its
       filter, and `scripts/deploy_tools/tests/test_narrow_containers_fields.py` gains the row.
     - `docs/healthchecks-io-deadman.md` keeps no `uptime-kuma-alive` row (B1 removed it).
     - `docs/uptime-kuma-autokuma-record.md` gains a `**HISTORY —` header paragraph and stays.
-    - C-6: the census row in `ansible/tests/repo/test_census_rows_text.py`.
+    - C-6: the census row in `tests/repo/test_census_rows_text.py`.
     - C-7: `test_loki_stream_labels.py` keeps its source and its named member. The
-      `swallowed_verdicts` tests in `ansible/roles/k8s/monitor-bridge/tests/` go with the row,
+      `swallowed_verdicts` tests in `k8s/roles/monitor-bridge/tests/` go with the row,
       `KUMA_RETIRING_TAGS` cases included.
 
 ## Complexity delta
@@ -6470,7 +6470,7 @@ Raised: 12 high, 13 medium. Fixed: 24. Refuted: 1.
   adds `CloudflareDdnsUnavailable` so the health gate sees a dead updater, and gives M5's red
   proof.
 - **M6-R1-23 (medium)** Turning `STARTUP_GRACE` into `for:` changes what the grace means.
-  **Refuted.** At `70591c307`, `ansible/roles/k8s/monitor-bridge/files/check.py:run_once` calls
+  **Refuted.** At `70591c307`, `k8s/roles/monitor-bridge/files/check.py:run_once` calls
   `bridge.streaks.apply_startup_grace(name, ok, msg, cfg.GRACE_CYCLES, src.state.grace_streaks)`
   on every down result of a `startup_grace` row. Nothing tests the target's start time.
   `bridge/streaks.py:apply_startup_grace` is a consecutive-down count that "an `ok` result
@@ -6513,8 +6513,8 @@ Raised: 4 high, 5 medium. Fixed: 9, two of them in part. Refuted in part: 2.
   **Fixed.** Confirmed at `70591c307`: `secret_registry.py:sync` only reports stale rows, and
   `audit --check` fails on them under the prek hook `secret-rotation-registry-sync`. Every
   token PR and C-5 is now one commit that also deletes the rows from
-  `ansible/secret_rotation.yml`, following commit `6894e3523`, and quotes `audit --check`
-  and the `_push_token:` count. Exit criterion 2 also reads `ansible/vars/secrets.yml`.
+  `secrets/secret_rotation.yml`, following commit `6894e3523`, and quotes `audit --check`
+  and the `_push_token:` count. Exit criterion 2 also reads `secrets/secrets.yml`.
 - **M6-C1-04 (high)** The drill's critical `littlelink` alert can fail D5's soak. **Fixed.**
   The drill is C8's operator-only production drill, with its blast radius stated. It takes a
   precondition that littlelink is not `owner: flux`. It reads littlelink's `applied_at` three
@@ -6564,13 +6564,13 @@ Raised: 1 critical, 2 high, 4 medium. Fixed: 7. Refuted: 0.
 - **M6-C2-01 (critical)** C-1 could not deploy the emptied uptime-kuma role: the shared prune
   guard refuses an empty render, and the role's declaration lookup fails first. This is new
   evidence against M6-R1-07, whose fix was incomplete. **Fixed.** Confirmed at `70591c307`:
-    - `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune` is `true`, and the
+    - `k8s/roles/manifests/defaults/main.yml:manifests_prune` is `true`, and the
       uptime-kuma include passes no `manifests_prune: false`.
     - The `always`-tagged assert "Check that a role arming the prune renders something to
-      keep" in `ansible/roles/k8s/manifests/tasks/main.yml` refuses an empty
+      keep" in `k8s/roles/manifests/tasks/main.yml` refuses an empty
       `manifests_files_resolved`, which excludes the Secret files.
     - "Read the AutoKuma declarations back as data" in
-      `ansible/roles/k8s/uptime-kuma/tasks/main.yml` looks up `static-monitors.yaml.j2`.
+      `k8s/roles/uptime-kuma/tasks/main.yml` looks up `static-monitors.yaml.j2`.
 
   C-1 takes the finding's Option 1. It deletes the three pre-include tasks and the seven
   templates, and adds `templates/tombstone-configmap.yaml.j2` so the armed prune runs. It
@@ -6584,7 +6584,7 @@ Raised: 1 critical, 2 high, 4 medium. Fixed: 7. Refuted: 0.
   claims, the Secrets and the tombstone go in an **operator-only** delete after C-2b.
   Updated: exit criterion 1, C-2b, *Steps*, *Verification*, *Rollback* (partial C-1),
   *Risks*, *Tests and docs* (`test_kuma_push_token_format.py` and the other
-  `ansible/tests/services/test_kuma_*.py` files that read deleted templates), *Complexity*
+  `tests/services/test_kuma_*.py` files that read deleted templates), *Complexity*
   and *The tree*.
 - **M6-C2-02 (high)** Phase A's tile deletions take the index below the
   `kuma_declarations | length > 50` floor. **Fixed.** Measured at `70591c307`:
@@ -6603,7 +6603,7 @@ Raised: 1 critical, 2 high, 4 medium. Fixed: 7. Refuted: 0.
   labelled `verify="true"` and active after the reference time must fail, and a `warning`
   alert without `verify` must pass.
 - **M6-C2-04 (medium)** A6-7a deleted `bridge.types.push_env`, which `registry.py` imports.
-  **Fixed.** `ansible/roles/k8s/monitor-bridge/files/registry.py` does
+  **Fixed.** `k8s/roles/monitor-bridge/files/registry.py` does
   `from bridge.types import Check, push_env`. A6-7a now changes `registry.py` and
   `bridge.types.Check`. It also removes `bridge/config.py`'s `KUMA_URL`, which `_env` reads
   as required, so its absence would make `main()` exit 2. The `sources.py`, `cli.py` and
@@ -6631,7 +6631,7 @@ Raised: 1 critical, 2 high, 4 medium. Fixed: 7. Refuted: 0.
   `kuma_check_*` variables, which would otherwise fail the census row. A named-member case
   in `scripts/docs/tests/test_gen_role_glance.py` fails when the k3s role yields neither
   timer.
-- **M6-C2-07 (medium)** C-4a and C-4b left `scripts/lib/ansible_jinja_env.py` on the old
+- **M6-C2-07 (medium)** C-4a and C-4b left `scripts/lib/guard_jinja_env.py` on the old
   filter, and exit criterion 3 contradicted its own allowlist until D6. **Fixed.** C-4a
   registers `ingress_probe_targets`. C-4b removes the import, the registration and the
   `FILTER_FIELDS` row. Exit criterion 3 is reached only after C-4b, and those three entries
@@ -6659,7 +6659,7 @@ Raised: 3 high, 4 medium. Fixed: 7. Refuted: 0. Every finding was checked agains
 - **M6-C3-02 (high)** M6 relied on M5 rules that M5 no longer adds, and B-batch cutovers
   would page through `swallowed_verdicts`. **Fixed.** Confirmed in `m5-loki-ruler.md` Open
   questions 4 and *Risks*. At `70591c307`, `check_table.py` has 44 rows and
-  `ansible/secret_rotation.yml` 83 push tokens. M6 re-baselines to M5's output:
+  `secrets/secret_rotation.yml` 83 push tokens. M6 re-baselines to M5's output:
     - 41 rows, 38 checks and three gates. `swallowed_verdicts` sits under `startup_grace` and
       reads loki-homelab, and A6 exports it as a sixth `startup_grace` row.
     - A6 retires 19 tokens. Phase A retires 78 (41 bridge, 37 other) and Phase C the 79th

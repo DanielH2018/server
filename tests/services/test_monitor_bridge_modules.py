@@ -1,0 +1,298 @@
+#!/usr/bin/env python3
+"""Every runtime module in monitor-bridge's files/ must be in its ConfigMap ship list.
+
+monitor-bridge's runtime is split into modules, which creates a failure mode the
+test suite structurally cannot see: pytest imports the modules from `files/` on disk, so it
+goes green whatever the ship list says, while the pod only ever receives the files named in
+`monitor_bridge_modules`. A module added to files/ and forgotten here therefore passes CI and
+kills the bridge at import on its next roll:
+
+    ModuleNotFoundError: No module named 'bridge.parsing'
+
+That lands on the one workload that cannot page about its own failure — monitor-bridge IS the
+alert pipeline, which is why the role sets `k8s_autodeploy: false`. The pod would crashloop and
+the estate would go quiet rather than loud.
+
+The list is deliberately explicit rather than a `files/*.py` glob: nothing on disk stops a
+future test file from landing in `files/` instead of the sibling `tests/` directory, and if
+one did, it must not reach the image. This test is what keeps the explicit list honest.
+`CHECKOUT_ONLY` names the modules that stay off the list, and no shipped module may import one.
+
+A module is identified by its dotted path under `files/` (`bridge/config.py` is
+`bridge.config`), and the ship list carries paths relative to `files/`, so the census sees a
+module at any depth. A one-level `FILES.glob("*.py")` would return nothing for a packaged
+layout and compare an empty census against the ship list.
+
+Run: uv run pytest tests/services/test_monitor_bridge_modules.py
+"""
+
+import ast
+
+from lib import yaml_fast
+from _helpers import (
+    REPO,
+    import_bindings,
+    imported_module_ids,
+    module_id,
+    module_of,
+    python_modules,
+)
+
+
+ROLE = REPO / "k8s" / "roles" / "monitor-bridge"
+FILES = ROLE / "files"
+TESTS = ROLE / "tests"
+ENTRYPOINT = "cli.py"
+# The runbook gates import these from the checkout, and the pod never receives them.
+CHECKOUT_ONLY = frozenset({"longhorn_robustness.py"})
+
+
+def _ship_list():
+    defaults = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
+    return list(defaults["monitor_bridge_modules"])
+
+
+def _runtime_modules():
+    """Every production .py the pod needs, as a path relative to files/, at any depth."""
+    on_disk = {p.relative_to(FILES).as_posix() for p in python_modules(FILES).values()}
+    return sorted(on_disk - CHECKOUT_ONLY)
+
+
+def _shipped_importers(shipped, checkout_only, root):
+    """The modules in `shipped` that import a module in `checkout_only`, which crashes the pod."""
+    ids = {module_id(root / m, root) for m in checkout_only}
+    return sorted(
+        m
+        for m in shipped
+        if imported_module_ids(ast.parse((root / m).read_text()), ids)
+    )
+
+
+def test_ship_list_matches_the_runtime_modules_on_disk():
+    assert sorted(_ship_list()) == _runtime_modules()
+
+
+def test_no_shipped_module_imports_a_checkout_only_module_is_clean():
+    missing = {m for m in CHECKOUT_ONLY if not (FILES / m).is_file()}
+    assert not missing, f"CHECKOUT_ONLY names modules not in files/: {sorted(missing)}"
+    assert _shipped_importers(_ship_list(), CHECKOUT_ONLY, FILES) == []
+
+
+def test_shipped_module_importing_a_checkout_only_module_is_flagged(tmp_path):
+    (tmp_path / "local_only.py").write_text("X = 1\n")
+    (tmp_path / "bad.py").write_text("def f():\n    from local_only import X\n")
+    (tmp_path / "good.py").write_text("import json\n")
+    importers = _shipped_importers(["bad.py", "good.py"], {"local_only.py"}, tmp_path)
+    assert importers == ["bad.py"]
+
+
+def test_ship_list_carries_the_entrypoint():
+    """The Deployment runs `python /app/cli.py`; shipping the rest without it deploys nothing."""
+    assert ENTRYPOINT in _ship_list()
+
+
+def test_ship_list_excludes_the_test_suite():
+    shipped = set(_ship_list())
+    tests = {p.name for p in TESTS.glob("test_*.py")} | {"conftest.py"}
+    assert not (shipped & tests)
+
+
+def test_every_module_the_entrypoint_imports_is_shipped():
+    """The direct check: whatever cli.py imports from its own directory must travel with it.
+
+    Set equality above already implies this today. It is asserted separately because it is the
+    property that actually breaks the pod, and it keeps holding if the runtime/test split above
+    is ever loosened.
+    """
+    local = set(python_modules(FILES))
+    shipped = {module_id(FILES / m, FILES) for m in _ship_list()}
+    tree = ast.parse((FILES / ENTRYPOINT).read_text())
+    missing = imported_module_ids(tree, local) - shipped
+    assert not missing, (
+        f"{ENTRYPOINT} imports {sorted(missing)}, absent from monitor_bridge_modules"
+    )
+
+
+def test_the_census_sees_a_module_inside_a_package(tmp_path):
+    """Red-proof for depth: a packaged layout must census the same way a flat one does."""
+    (tmp_path / "bridge").mkdir()
+    (tmp_path / "bridge" / "config.py").write_text("X = 1\n")
+    (tmp_path / "check.py").write_text("from bridge import config as cfg\n")
+    (tmp_path / "test_stray.py").write_text("")
+    assert set(python_modules(tmp_path)) == {"bridge.config", "check"}
+    tree = ast.parse((tmp_path / "check.py").read_text())
+    assert imported_module_ids(tree, {"bridge.config", "check"}) == {"bridge.config"}
+
+
+# --- The second invariant: every patched name is bound in the module the test patches it on ---
+#
+# No test patches a runtime module since #3986: each one hands its I/O, clock and sink in as a
+# parameter, and tests/repo/monkeypatch_allowlist.txt carries no monitor-bridge row. This
+# guard stays for the next test that does patch one. A function reads its
+# globals from the module it is DEFINED in, so a patch lands only if the module named in the
+# test is the module whose code reads the name. Patching `check.PROM_URL` when PROM_URL lives in
+# bridge.config and the setattr still SUCCEEDS — it creates a new attribute on `check` that
+# nothing reads — and the test passes against unpatched production code.
+#
+# That is a silent loss of coverage, which no amount of green runs will surface. Hence a guard:
+# every `(module, name)` pair the suite patches must be bound at that module's top level, by a
+# `def`, an assignment, or an import. The companion rule — a module must not from-import a name
+# some test patches on its source module — is tests/services/test_bridge_patch_boundary.py.
+#
+# The census must be an AST walk, not a grep. A line-oriented regex over
+# `monkeypatch.setattr(check, "X"` misses the wrapped form ruff format produces and misses plain
+# `check.X = ...` assignment entirely.
+#
+# The test's local name for a module is resolved through its own imports, so `from bridge import
+# config as cfg` followed by `monkeypatch.setattr(cfg, "X", 1)` is a patch on `bridge.config`,
+# and `bridge.config.X = 1` after `import bridge.config` is the same patch spelled longhand.
+
+
+def _runtime_module_names():
+    return set(python_modules(FILES))
+
+
+def _patched_pairs(test_files=None, module_names=None):
+    """Map each runtime module to the attributes the suite assigns or patches.
+
+    Returns `{module: {name}}`.
+    """
+    module_names = module_names if module_names is not None else _runtime_module_names()
+    if test_files is None:
+        test_files = sorted(
+            p
+            for p in TESTS.glob("*.py")
+            if p.name.startswith("test_") or p.name == "conftest.py"
+        )
+    pairs = {}
+
+    for path in test_files:
+        tree = ast.parse(path.read_text())
+        bound = import_bindings(tree, module_names)
+
+        def _add(target, name, bound=bound):
+            module = module_of(target, bound, module_names)
+            if module:
+                pairs.setdefault(module, set()).add(name)
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                fn = node.func
+                is_setattr = (
+                    isinstance(fn, ast.Attribute) and fn.attr in ("setattr", "delattr")
+                ) or (isinstance(fn, ast.Name) and fn.id in ("setattr", "delattr"))
+                if is_setattr and len(node.args) >= 2:
+                    target, attr = node.args[0], node.args[1]
+                    if isinstance(attr, ast.Constant) and isinstance(attr.value, str):
+                        _add(target, attr.value)
+                # DECIDED: a method call on `module.NAME` is not a patch. On an unbound name,
+                # `mod.gone.clear()` raises AttributeError, so the test fails loudly and this
+                # guard has nothing to catch. Counting the shape also counted every read, such
+                # as `gates.STARTUP_GRACE.isdisjoint(...)` (#4007). The boundary census in
+                # test_bridge_patch_boundary.py omits it for the same reason.
+            targets = []
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
+                targets = [node.target]
+            for t in targets:
+                if isinstance(t, ast.Attribute):
+                    _add(t.value, t.attr)
+    return pairs
+
+
+def _top_level_bindings(source):
+    """Every name a module binds at its top level: def, class, assignment, import."""
+    bound = set()
+    for node in ast.parse(source).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(node.name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for t in targets:
+                if isinstance(t, ast.Name):
+                    bound.add(t.id)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                bound.add((alias.asname or alias.name).split(".")[0])
+    return bound
+
+
+def _unbound_patches(pairs, sources):
+    """[(module, name)] for every patched pair the module's source does not bind."""
+    return sorted(
+        (module, name)
+        for module, names in pairs.items()
+        for name in names
+        if name not in _top_level_bindings(sources[module])
+    )
+
+
+def test_every_patched_name_is_bound_in_the_module_it_is_patched_on():
+    pairs = _patched_pairs()
+    modules = python_modules(FILES)
+    sources = {m: modules[m].read_text() for m in pairs}
+    unbound = _unbound_patches(pairs, sources)
+    assert not unbound, (
+        f"patched on a module that does not bind the name: {unbound} — the setattr creates "
+        "an attribute nothing reads, so the test passes against unpatched code. Patch the "
+        "module whose code reads the name."
+    )
+
+
+def test_unbound_patch_checker_fires_on_a_synthesized_bad_sample(tmp_path):
+    """Prove the checker can fail: a test patching `mod.gone` where mod never binds `gone`."""
+    bad_test = tmp_path / "test_bad.py"
+    bad_test.write_text(
+        "import mod\n\n"
+        "def test_x(monkeypatch):\n"
+        '    monkeypatch.setattr(mod, "gone", 1)\n'
+        '    monkeypatch.setattr(mod, "kept", 2)\n'
+        "    mod.also_gone = 3\n"
+    )
+    pairs = _patched_pairs([bad_test], {"mod"})
+    assert pairs == {"mod": {"gone", "kept", "also_gone"}}
+    unbound = _unbound_patches(pairs, {"mod": "from elsewhere import kept\n"})
+    assert unbound == [("mod", "also_gone"), ("mod", "gone")]
+
+
+def test_the_patch_census_resolves_every_spelling_of_a_packaged_module(tmp_path):
+    """Red-proof for depth: the four ways a test can name `bridge.config` all census as it.
+
+    An alias (`as cfg`), a from-import of the module, a dotted import, and a dotted import with
+    its own alias. A census keyed on the bare `Name` a test used would file three of these
+    under names no module has and lose the patch silently.
+    """
+    test = tmp_path / "test_forms.py"
+    test.write_text(
+        "from bridge import config as cfg\n"
+        "from bridge import io\n"
+        "import bridge.streaks\n"
+        "import checks.b2 as b2\n\n"
+        "def test_x(monkeypatch):\n"
+        '    monkeypatch.setattr(cfg, "A", 1)\n'
+        '    monkeypatch.setattr(io, "B", 2)\n'
+        "    bridge.streaks.C = 3\n"
+        "    b2.D = 4\n"
+        "    bridge.streaks._state.clear()\n"
+    )
+    ids = {"bridge.config", "bridge.io", "bridge.streaks", "checks.b2", "check"}
+    assert _patched_pairs([test], ids) == {
+        "bridge.config": {"A"},
+        "bridge.io": {"B"},
+        "bridge.streaks": {"C"},
+        "checks.b2": {"D"},
+    }
+
+
+def test_the_patch_census_skips_method_calls_on_a_module_attribute(tmp_path):
+    """Red/green for #4007: an assignment counts, a mutating or a reading method call does not."""
+    test = tmp_path / "test_calls.py"
+    test.write_text(
+        "import mod\n\n"
+        "def test_x():\n"
+        "    mod.X = 1\n"
+        "    mod.Y.clear()\n"
+        "    mod.Z.values()\n"
+    )
+    assert _patched_pairs([test], {"mod"}) == {"mod": {"X"}}

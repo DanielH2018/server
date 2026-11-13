@@ -10,18 +10,18 @@ Run: uv run pytest hosts/tests/test_agent_homelab_ui_login.py
 """
 
 from _agent_package import agent_setup_script
-from _helpers import ANSIBLE
+from _helpers import K8S_ROLES, REPO
 from _setup_render import CLAUDE_CODE, render_component_text
 from lib import yaml_fast
 
-BOX_PACKAGE = ANSIBLE.parent / "hosts" / "daniel-box" / "package.yml"
+BOX_PACKAGE = REPO / "hosts" / "daniel-box" / "package.yml"
 PASSWORD = "sentinel-agent-ui-password"
 DOMAIN = "sentinel.example"
 
 
 def role_defaults(*parts: str) -> dict:
     return yaml_fast.safe_load(
-        ANSIBLE.joinpath("roles", *parts, "defaults", "main.yml").read_text()
+        K8S_ROLES.joinpath(*parts, "defaults", "main.yml").read_text()
     )
 
 
@@ -99,7 +99,7 @@ def test_the_file_carries_the_username_password_and_domain() -> None:
 
 def test_the_login_names_the_account_the_authelia_role_creates() -> None:
     """The two roles cannot read each other's defaults, so each carries the name."""
-    authelia = role_defaults("k8s", "authelia")["authelia_k8s_agent_user"]
+    authelia = role_defaults("authelia")["authelia_k8s_agent_user"]
     assert (
         yaml_fast.safe_load((CLAUDE_CODE / "defaults" / "main.yml").read_text())[
             "claude_code_homelab_ui_username"

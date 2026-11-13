@@ -5,7 +5,7 @@ The `system-upgrade-verify` Jobs compare each node's k3s binary with the sum in
 `k3s_binary_sha256_amd64`, the `k3s` line of the release's `sha256sum-amd64.txt`. A bump of the
 version that keeps the old sum would turn the verify Jobs red on every healthy node, or, worse,
 get the sum "fixed" from the node. Both keys live in
-`ansible/roles/k8s/system-upgrade/defaults/main.yml`. The sum may move alone (a correction).
+`k8s/roles/system-upgrade/defaults/main.yml`. The sum may move alone (a correction).
 A malformed sum is refused too: it must be 64 lowercase hex digits.
 
 Exit codes: 0 clean; 1 refused; 2 a key could not be read, so the check could not judge.
@@ -25,12 +25,14 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
-from lib.git import git_stdout
+from lib.git import git, git_stdout
 from lib.repo_paths import REPO, SYSTEM_UPGRADE_DEFAULTS
 
 CLEAN, REFUSED, UNJUDGED = 0, 1, 2
 VERSION_KEY, SUM_KEY = "k3s_version", "k3s_binary_sha256_amd64"
 SUM_SHAPE = re.compile(r"[0-9a-f]{64}")
+# A base from before the ansible/ tree was renamed holds the file here (ADR 0030).
+PRE_RENAME_PATH = "ansible/roles/k8s/system-upgrade/defaults/main.yml"
 
 
 class Unjudged(Exception):
@@ -50,10 +52,19 @@ def problems(base: dict, head: dict) -> list[str]:
     return found
 
 
-def keys_at(sha: str, path: str, repo: Path, introducing: bool = False) -> dict:
+def keys_at(
+    sha: str,
+    path: str,
+    repo: Path,
+    introducing: bool = False,
+    old_path: str = PRE_RENAME_PATH,
+) -> dict:
     """The two keys at `sha`. The base side may lack the sum: the PR that adds it is clean."""
     try:
-        data = yaml_fast.safe_load(git_stdout("show", f"{sha}:{path}", cwd=repo))
+        shown = git("show", f"{sha}:{path}", cwd=repo, check=False)
+        if shown.returncode != 0:
+            shown = git("show", f"{sha}:{old_path}", cwd=repo)
+        data = yaml_fast.safe_load(shown.stdout)
         if introducing and SUM_KEY not in data:
             return {VERSION_KEY: data[VERSION_KEY], SUM_KEY: None}
         return {k: data[k] for k in (VERSION_KEY, SUM_KEY)}
@@ -61,14 +72,23 @@ def keys_at(sha: str, path: str, repo: Path, introducing: bool = False) -> dict:
         raise Unjudged(f"{path} at {sha[:9]}: {exc!r}") from exc
 
 
-def check(base: str, head: str, repo: Path = REPO, path: str = "") -> int:
+def check(
+    base: str,
+    head: str,
+    repo: Path = REPO,
+    path: str = "",
+    old_path: str = PRE_RENAME_PATH,
+) -> int:
     path = path or str(SYSTEM_UPGRADE_DEFAULTS.relative_to(REPO))
     base, head = (
         git_stdout("rev-parse", "--verify", f"{r}^{{commit}}", cwd=repo)
         for r in (base, head)
     )
     try:
-        found = problems(keys_at(base, path, repo, True), keys_at(head, path, repo))
+        found = problems(
+            keys_at(base, path, repo, True, old_path),
+            keys_at(head, path, repo, old_path=old_path),
+        )
     except Unjudged as exc:
         print(f"[FAIL] k3s-binary-sum: cannot judge. {exc}", file=sys.stderr)
         return UNJUDGED

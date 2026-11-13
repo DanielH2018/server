@@ -51,7 +51,7 @@ jobs:
       UV_NO_GROUP: lint
       REGISTRY: kind-registry:5000
       PUSH: 127.0.0.1:5001
-      # The flux CLI this job's flux steps fetch, equal to flux_version in roles/k8s/flux and to
+      # The flux CLI this job's flux steps fetch, equal to flux_version in k8s/roles/flux and to
       # the amd64 flux pin in hosts/packages/homelab-tools/package.yml. Env, so the cache key reads it.
       # renovate: datasource=github-release-attachments depName=fluxcd/flux2
       FLUX_VERSION: v2.9.6
@@ -87,13 +87,13 @@ jobs:
           if git diff --quiet "origin/$BASE_REF...HEAD" -- \
               scripts/renderer/ \
               scripts/deploy_tools/fresh_cluster_drill.py \
-              ansible/roles/k8s/flux/defaults/main.yml \
-              ansible/roles/k8s/flux/templates/sync.yaml.j2 \
-              ansible/roles/k8s/flux/templates/secret.yaml.j2 \
-              ansible/roles/k8s/flux/templates/github-status-secret.yaml.j2 \
-              ansible/roles/k8s/flux/files/gotk-components.yaml \
-              ansible/roles/k8s/registry/ \
-              ansible/roles/k8s/cluster-base/templates/priorityclass.yaml.j2 \
+              k8s/roles/flux/defaults/main.yml \
+              k8s/roles/flux/templates/sync.yaml.j2 \
+              k8s/roles/flux/templates/secret.yaml.j2 \
+              k8s/roles/flux/templates/github-status-secret.yaml.j2 \
+              k8s/roles/flux/files/gotk-components.yaml \
+              k8s/roles/registry/ \
+              k8s/roles/cluster-base/templates/priorityclass.yaml.j2 \
               docs/break-glass.md \
               .github/workflows/flux-deletion-drill.yml; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -203,11 +203,11 @@ jobs:
         run: |
           set -euo pipefail
           node_image=$(awk '/KIND_NODE_IMAGE: / {print $2; exit}' .github/workflows/ci.yml)
-          registry_image=$(awk '/^registry_k8s_image:/ {print $2}' ansible/roles/k8s/registry/defaults/main.yml)
+          registry_image=$(awk '/^registry_k8s_image:/ {print $2}' k8s/roles/registry/defaults/main.yml)
           [ -n "$node_image" ] && [ -n "$registry_image" ]
           kind create cluster --name drill --image "$node_image" --wait 120s
           docker run -d --name kind-registry --network kind -p 127.0.0.1:5001:5000 "$registry_image"
-          kubectl apply --server-side -f ansible/roles/k8s/flux/files/gotk-components.yaml
+          kubectl apply --server-side -f k8s/roles/flux/files/gotk-components.yaml
           for d in source-controller kustomize-controller notification-controller; do
             kubectl -n flux-system rollout status "deployment/$d" --timeout=180s
           done
@@ -368,7 +368,7 @@ jobs:
           f="$RUNNER_TEMP/fresh"
           uv run python scripts/deploy_tools/fresh_cluster_drill.py build \
             --bg-pubkey "$RUNNER_TEMP/keys/green/cosign.pub" --out "$f"
-          crane_image=$(awk '/^registry_k8s_crane_image:/ {print $2}' ansible/roles/k8s/registry/defaults/main.yml)
+          crane_image=$(awk '/^registry_k8s_crane_image:/ {print $2}' k8s/roles/registry/defaults/main.yml)
           [ -n "$crane_image" ]
           mkdir -p "$f/kit"
           jq -r '.[] | "\(.ref) \(.archive)"' "$f/images.json" > "$f/kit.txt"
@@ -439,7 +439,7 @@ jobs:
             docker exec fresh-control-plane install -d -o "$uid" -g "$gid" "$dir"
           done < "$f/volumes/dirs.txt"
           kubectl apply -f "$f/volumes"
-          kubectl apply --server-side -f ansible/roles/k8s/flux/files/gotk-components.yaml
+          kubectl apply --server-side -f k8s/roles/flux/files/gotk-components.yaml
           for d in source-controller kustomize-controller notification-controller; do
             kubectl -n flux-system rollout status "deployment/$d" --timeout=180s
           done

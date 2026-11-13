@@ -2,11 +2,11 @@
     this host's container logs and its two token heartbeats' verdict lines to loki-homelab. It
     was an Ansible role's compose file until H5.8. The macros that file imported (networks,
     resources, autokuma labels) are written out here, because a service tree has no
-    ansible/templates on its search path. The values are the ones the macros rendered for the Pi.
+    k8s/templates on its search path. The values are the ones the macros rendered for the Pi.
     This header holds what the role's CLAUDE.md said; the comments below carry the rest.
 
     - **Pin policy.** The image is pinned by tag AND digest. Renovate moves it in lockstep with
-      the cluster's Alloy (`roles/k8s/loki-homelab/defaults/main.yml`), in one manual PR
+      the cluster's Alloy (`k8s/roles/loki-homelab/defaults/main.yml`), in one manual PR
       (H5.11).
     - **Host.** daniel-pi only. The cluster nodes run the loki-homelab DaemonSet.
     - **The port is on the Pi's LAN IP.** Prometheus scrapes it as `alloy-pi`, and everything
@@ -23,7 +23,7 @@
       The timer that writes the file is `hosts/components/crowdsec-probe/`, and the same test
       pins the stage. The label values render from `loki_streams` in `group_vars/all.yml`,
       which the cluster's Alloy and monitor-bridge's selectors also read;
-      `ansible/tests/services/test_loki_stream_labels.py` holds the consumers to it.
+      `tests/services/test_loki_stream_labels.py` holds the consumers to it.
     - **Config.** config.alloy (River) is a plain package file beside this one, mounted
       read-only. It carries no secret: it reads the HTTP password as
       `sys.env("ALLOY_PI_HTTP_PASSWORD")` and the domain as `sys.env("HOMELAB_DOMAIN")`. The
@@ -85,7 +85,7 @@ services:
   alloy:
     container_name: alloy
     # Tag AND digest, unlike the :latest@sha256 the Promtail role carried: Alloy is the shipper
-    # the cluster pins by tag in roles/k8s/loki-homelab/defaults/main.yml, and keeping the two
+    # the cluster pins by tag in k8s/roles/loki-homelab/defaults/main.yml, and keeping the two
     # on one version keeps one label contract. Renovate moves this pin and the cluster's in one
     # manual PR: the `grafana/alloy (manual — lockstep ...)` group in renovate.json (H5.11).
     # The digest is the arm64 manifest, resolved on daniel-pi 2026-09-02. A Renovate bump
@@ -274,9 +274,9 @@ services:
     # DECIDED: the port stays published on the LAN and the surface behind it is narrowed
     # instead. Two consumers reach it from off-box and neither can use a loopback or a bridge
     # address: observability's `alloy-pi` Prometheus job scrapes k8s_pi_client_ip:12345 as a
-    # STATIC target (roles/k8s/observability/templates/prometheus.yaml.j2), and the
+    # STATIC target (k8s/roles/observability/templates/prometheus.yaml.j2), and the
     # `blackbox-pi-ports` job probes the published port, which PiPortDead pages when it closes
-    # (pinned by ansible/tests/services/test_pi_publishing_containers.py). Metrics are why the
+    # (pinned by tests/services/test_pi_publishing_containers.py). Metrics are why the
     # port exists: dropped entries, batch retries and send latency say whether shipping is
     # keeping up, and a log shipper that silently stops is the failure this makes visible.
     #

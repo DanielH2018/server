@@ -151,7 +151,7 @@ The exit criterion has three parts:
   `LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS` the same way. Only an apply of `setup/k3s`
   re-renders the shim. Measured with `deploy_changes.py:services_from_changed_paths` at the
   baseline:
-    - `['ansible/inventory/group_vars/all.yml']` returns `broad_deploy=True` and no setup
+    - `['inventory/group_vars/all.yml']` returns `broad_deploy=True` and no setup
       role, so nothing re-renders the shim;
     - `['ansible/roles/setup/k3s/defaults/main.yml']` returns
       `setup_roles={'k3s', 'deploy_ui'}`. `scripts/deploy_tools/setup_routing.py` routes `k3s`
@@ -190,16 +190,16 @@ The exit criterion has three parts:
       row of `docs/reference/state.md`;
     - `docs/longhorn-disaster-recovery.md`, `docs/longhorn-upgrade.md` and
       `docs/k3s-node-plane-crons-and-incidents.md`;
-    - tests: eight drill test files under `ansible/tests/longhorn/` plus
-      `ansible/tests/longhorn/_restore_drill.py`,
+    - tests: eight drill test files under `tests/longhorn/` plus
+      `tests/longhorn/_restore_drill.py`,
       `ansible/roles/setup/k3s/tests/test_longhorn_restore_drill_checks.py`,
       `ansible/roles/setup/k3s/tests/test_longhorn_backups.py`,
       `scripts/deploy_tools/tests/test_longhorn_upgrade_gates.py`,
       `scripts/docs/tests/test_gen_reference_state.py`,
-      `ansible/tests/services/test_pi_peer_backup_schedule_clears_the_longhorn_slots.py`
-      (the cron key), `ansible/tests/k8s/test_base_images_digest_pinned.py` (the image key),
+      `tests/services/test_pi_peer_backup_schedule_clears_the_longhorn_slots.py`
+      (the cron key), `tests/k8s/test_base_images_digest_pinned.py` (the image key),
       `scripts/tests/test_renovate_managers.py` (why `roles/setup/*/defaults` is scanned),
-      `ansible/tests/repo/test_shared_render_accessors.py` (the stamp-dir key),
+      `tests/repo/test_shared_render_accessors.py` (the stamp-dir key),
       `test_kuma_env_renders_for_every_cron_tag.py` (retired by H7.35),
       `scripts/validate/tests/test_shell_template_cron_rules.py` and
       `scripts/validate/tests/test_validate_shell_templates.py`.
@@ -214,7 +214,7 @@ The exit criterion has three parts:
 - **The drill's evidence and hand runs.** It writes `PASS`, `FAIL` and `RETRY` lines only
   through `logger -t longhorn-restore-drill`. The operator pin is an argument or
   `RESTORE_DRILL_PIN`; a pinned run stamps `success/<pvc>` but not `last-success`, and
-  `ansible/tests/longhorn/test_longhorn_restore_drill_operator_pin.py::test_argv_pin_drills_that_volume_not_the_rotations_pick`
+  `tests/longhorn/test_longhorn_restore_drill_operator_pin.py::test_argv_pin_drills_that_volume_not_the_rotations_pick`
   holds the pin. `docs/longhorn-upgrade.md` gate 2 and
   `docs/k3s-node-plane-crons-and-incidents.md` tell the operator to run
   `sudo /usr/local/bin/longhorn-restore-drill.sh`.
@@ -246,7 +246,7 @@ The exit criterion has three parts:
 - **Its credentials are SOPS values.** The task `Deploy the off-box etcd snapshot credentials`
   renders `/etc/rancher/k3s/etcd-s3.env` (root 0600, `no_log: true`) from `r2_access_key_id`,
   `r2_secret_access_key`, `r2_bucket` and `r2_account_id`. `grep -cE '^r2_bucket: ENC\['
-  ansible/vars/secrets.yml` prints 1, and the same grep for `r2_account_id` prints 1.
+  secrets/secrets.yml` prints 1, and the same grep for `r2_account_id` prints 1.
   `longhorn-r2-secret.yaml.j2` reads the same `r2_*` keys.
 - **Both etcd drills depend on the script's output.** `scripts/backup/etcd_restore_drill.sh`
   sources the env file, requires `ETCD_S3_BUCKET` and `ETCD_S3_ENDPOINT`, and names the newest
@@ -282,7 +282,7 @@ The exit criterion has three parts:
   arguments re-runs the installer and restarts the control plane, with MetalLB VIPs and Pi-hole
   behind it.
 - **k8s roles install host crons.** `git grep -n 'ansible.builtin.cron:'` under
-  `ansible/roles/k8s/*/tasks/` finds eight roles. Seven install a present cron, and traefik's
+  `k8s/roles/*/tasks/` finds eight roles. Seven install a present cron, and traefik's
   `Cloudflare IP drift` task is the one absent arm:
     - `crowdsec` installs four root cron files that run `cscli` through `k3s kubectl exec
       deploy/crowdsec -c crowdsec`. `files/remote_allowlist.py:main` also runs `kubectl get
@@ -326,13 +326,13 @@ The exit criterion has three parts:
   ConfigMap, against Kuma's in-cluster Service. autofix-bridge and uptime-kuma do this, and
   `K8S_ROLES_IMPORTING_SETUP_FILES` lists them. uptime-kuma admits callers through the
   `netpol_from` list on its `containers_list` entry. monitor-bridge's swallowed-verdict check
-  reads host pushers through `ansible/roles/k8s/monitor-bridge/files/checks/logs.py:SWALLOWED_VERDICTS_LOGQL`
+  reads host pushers through `k8s/roles/monitor-bridge/files/checks/logs.py:SWALLOWED_VERDICTS_LOGQL`
   and pod pushers through `SWALLOWED_VERDICTS_POD_LOGQL`, which names only `pi-peer-backup`.
 - **No in-cluster job runs `kubectl` today.** The repo's Python jobs use a digest-pinned
-  `python:3.14-alpine` (for example `ansible/roles/k8s/uptime-kuma/defaults/main.yml:uptime_kuma_k8s_status_page_sync_image`).
+  `python:3.14-alpine` (for example `k8s/roles/uptime-kuma/defaults/main.yml:uptime_kuma_k8s_status_page_sync_image`).
   `registry.k8s.io/kubectl` exists (its tag list answers, read 2026-10-11) and is distroless,
   so it has no shell to copy its binary out. The fleet rule
-  `ansible/tests/k8s/test_base_images_digest_pinned.py::test_every_external_image_pin_carries_a_digest`
+  `tests/k8s/test_base_images_digest_pinned.py::test_every_external_image_pin_carries_a_digest`
   covers every `*_image` default.
 - **Retiring a host cron.** Only an absent arm removes one. traefik's `Cloudflare IP drift`
   task is the in-tree precedent. An inventory-only change routes as deploy-plane
@@ -343,7 +343,7 @@ The exit criterion has three parts:
   Measured at `70591c307` by calling
   `scripts/deploy_tools/narrow_lib/containers.py:changed_fields`,
   `containers.py:entry_change_tags` and `scripts/deploy_tools/narrow_lib/broad.py:_list_reader_tags`
-  on an in-memory copy of `ansible/inventory/host_vars/daniel-box.yml`, with one label
+  on an in-memory copy of `inventory/host_vars/daniel-box.yml`, with one label
   appended to an entry's `netpol_from`:
     - For uptime-kuma's entry, `changed_fields` returns `{'uptime-kuma': {'netpol_from'}}`,
       `entry_change_tags` returns `uptime-kuma`, and the readers are artifacts,
@@ -357,14 +357,14 @@ The exit criterion has three parts:
       added Flux-born entry reaches on that tree.
 
   `broad.py:narrow` unions `broad.py:_changed_half` with that deploy-plane half.
-  `_changed_half` maps a range's edited `ansible/roles/k8s/<role>/` paths to the role's tag,
+  `_changed_half` maps a range's edited `k8s/roles/<role>/` paths to the role's tag,
   because `deploy_changes.py` puts the whole role directory, `tasks/` included, in `cs.k8s`.
   The tick applies the union as a broad deploy-plane apply, and every broad arm is
   forward-only. The marker `deploy_narrow.py:DECIDED the broad plane ignores` means
   `K8S_AUTODEPLOY_DENYLIST` does not stop that apply. uptime-kuma, monitor-bridge, pihole,
   blackbox-exporter, crowdsec, janitorr and qbittorrent each set `k8s_autodeploy: false` in
   `defaults/main.yml`. artifacts, configarr and netpol-baseline set `true`.
-- **The armed prune.** `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist`
+- **The armed prune.** `k8s/roles/manifests/defaults/main.yml:manifests_prune_allowlist`
   lets a role's next deploy delete a CronJob, ConfigMap, ServiceAccount or NetworkPolicy it no
   longer renders. It never deletes a Role, RoleBinding, Secret or PVC.
 - **`k8s/cronjob-gate`** runs a caller's CronJob once at deploy time. Its `CLAUDE.md` requires
@@ -416,11 +416,11 @@ The exit criterion has three parts:
   never substitutes. A tag that does not substitute gets no `$${` escape, so a `${` in its
   script reaches the cluster unchanged (C1; H1, *No escape either*). H1's
   `longhorn-reconcile` is the precedent for a script CronJob beside `longhorn`. It is a tag and
-  a role of its own, `ansible/roles/k8s/longhorn-reconcile/`, outside `longhorn`'s render, and
+  a role of its own, `k8s/roles/longhorn-reconcile/`, outside `longhorn`'s render, and
   it is not forward-only (H1, *Six Flux-born tags*). `longhorn-backup` substitutes the `r2_*`
   keys for its credential Secret.
 - **The reapers are never scheduled.**
-  `ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py::test_no_host_component_schedules_a_reaper`
+  `tests/longhorn/test_longhorn_reap_never_scheduled.py::test_no_host_component_schedules_a_reaper`
   scans setup roles only. `test_census_finds_the_scheduled_drill` in the same file requires
   `longhorn-restore-drill.sh` among the setup texts as its named member.
 - **CronJob timezones.** monitor-bridge's defaults say every Healthchecks.io slug but
@@ -492,7 +492,7 @@ The exit criterion has three parts:
   Forbidden, kubectl skips the wait and still exits 0 (upstream `pkg/cmd/delete/delete.go`,
   the `errors.IsForbidden` branch after the wait). So a script that deletes a kind also needs
   `list` and `watch` on it, or its teardown order is lost without an error.
-- **The RBAC-against-script test.** One test in `ansible/tests/k8s/` derives, for each moved
+- **The RBAC-against-script test.** One test in `tests/k8s/` derives, for each moved
   job, the `(namespace, apiGroup, resource, verb)` set its script calls, and requires a
   matching rule in that job's rendered RBAC. For a shell script it reads every `$KUBECTL`
   line, and the heredoc's `kind:` lines for an `apply`. For a Python module it runs `main`
@@ -502,7 +502,7 @@ The exit criterion has three parts:
   is the drill's `get backuptarget`. Its red cases are a fixture script line with no matching
   grant, and a fixture `delete pvc` line whose Role grants `delete` alone.
 - **Images, each a digest-pinned `*_image` key in the role's defaults.** Renovate's
-  k8s-defaults manager covers `ansible/roles/k8s/*/defaults/main.yml`, and the fleet digest
+  k8s-defaults manager covers `k8s/roles/*/defaults/main.yml`, and the fleet digest
   rule covers every `*_image` default, so no new wiring is needed. Two shapes:
     - *Shell jobs* (the drill, the AppSec verify and the home allowlist) need bash, `jq`,
       `curl` and `kubectl`. They run in one community image that carries all four,
@@ -518,13 +518,13 @@ The exit criterion has three parts:
   `date`, `sort` and `stat` are BusyBox applets over musl. Each shell job's script tests
   therefore gain an image leg that runs the same script and fixtures inside the pinned digest
   with `docker run --rm`. For the drill, the leg goes in the `launch` call of
-  `ansible/tests/longhorn/_restore_drill.py`. The leg skips when `docker` is missing and `CI`
+  `tests/longhorn/_restore_drill.py`. The leg skips when `docker` is missing and `CI`
   is unset, and fails when `CI` is set, so CI always runs it. The drill's red case is a
   fixture copy that keeps `mktemp /tmp/restore-drill.XXXXXX.yaml`, which fails under the
   image. The AppSec verify has no script harness at `70591c307`, so H2.4b adds one with the
-  leg. The home allowlist's tests under `ansible/tests/services/` gain the leg in H2.4c. No
+  leg. The home allowlist's tests under `tests/services/` gain the leg in H2.4c. No
   moved job sets `readOnlyRootFilesystem`, and the only property row that requires it is
-  karakeep's chrome in `ansible/tests/k8s/_workload_property_rows.py` (measured), so `/tmp`
+  karakeep's chrome in `tests/k8s/_workload_property_rows.py` (measured), so `/tmp`
   stays writable and no `emptyDir` is needed.
 - **Pushes.** A Python job pushes with `kuma_push.py`, staged into its ConfigMap. A shell job
   that pushes sources `kuma-push-lib.sh`, staged into its ConfigMap the same way, with Kuma's
@@ -542,8 +542,8 @@ The exit criterion has three parts:
   prefs check. A shell job builds its push URL from the variable at run time and still hands
   it to `kuma_push` as an argument, which feeds curl on stdin. A Python entry point reads the
   variable and passes it to `kuma_push.push` as `token`. The home allowlist's inline `curl`
-  reads the same variable. A render test in `ansible/tests/k8s/` holds the rule. It binds
-  every key name in `ansible/vars/secrets.yml` to a unique sentinel value (key names are
+  reads the same variable. A render test in `tests/k8s/` holds the rule. It binds
+  every key name in `secrets/secrets.yml` to a unique sentinel value (key names are
   plaintext, so it decrypts nothing), renders the moved roles' ConfigMaps, and fails when any
   ConfigMap's data holds a sentinel. It reads only ConfigMaps, so the Secrets that configarr's
   and crowdsec's `config-secret.yaml.j2` render are out of its scope.
@@ -554,9 +554,9 @@ The exit criterion has three parts:
   moved pusher's container.
 - **Each grant lands with its CronJob.** A `netpol_from` caller lands in the same commit as
   the CronJob whose pod template carries its label, never a PR ahead.
-  `ansible/tests/k8s/test_netpol_from.py::test_every_caller_is_a_label_some_rendered_pod_carries`
+  `tests/k8s/test_netpol_from.py::test_every_caller_is_a_label_some_rendered_pod_carries`
   fails on a caller that no rendered pod carries. Its exemption,
-  `ansible/tests/k8s/test_netpol_from.py:UNRENDERED_CALLERS`, admits only a pod that a task
+  `tests/k8s/test_netpol_from.py:UNRENDERED_CALLERS`, admits only a pod that a task
   starts with `--labels app=<caller>`, so a CronJob label cannot use it. A revert removes the
   grant and the CronJob together. The grants are uptime-kuma's `netpol_from` for the pushers,
   and qbittorrent's `netpol_from` for the prefs check, the one target fence a moved job calls.
@@ -569,7 +569,7 @@ The exit criterion has three parts:
       netpol-baseline's `templates/networkpolicy-callers.yaml.j2` renders that fence. The
       landing's narrowed apply is `deploy.yml --tags <role>,uptime-kuma,netpol-baseline`
       (Baseline, *A field edit to a `containers_list` entry narrows*). It applies the workload role first and
-      netpol-baseline last, the order `ansible/roles/k8s/netpol-baseline/CLAUDE.md`
+      netpol-baseline last, the order `k8s/roles/netpol-baseline/CLAUDE.md`
       requires. A deploy-time gate run of a pusher therefore pushes before the fence admits
       it. *First run* says how each pusher handles that.
     - A fresh pod's first dial can be dropped even through an open fence, because kube-router
@@ -588,7 +588,7 @@ The exit criterion has three parts:
     - the home allowlist's discovery CronJob, which uses the host network, pushes nothing
       and needs no grant (*CrowdSec*);
     - configarr health, because configarr sets `k8s_autodeploy: true`, and
-      `ansible/tests/deploy/test_k8s_autodeploy_batch_gates.py::test_auto_deployable_roles_gate_every_batch_workload_they_render`
+      `tests/deploy/test_k8s_autodeploy_batch_gates.py::test_auto_deployable_roles_gate_every_batch_workload_they_render`
       refuses an ungated CronJob in such a role. Its landing's gate run is the one run whose
       push meets the closed fence. `kuma_push` gives up after three attempts, and H2.5b sets
       the CronJob's `activeDeadlineSeconds` above three `KUMA_PUSH_TIMEOUT_S` attempts plus
@@ -620,7 +620,7 @@ and printed `netpol-baseline,qbittorrent,uptime-kuma`. A second added the drill'
 `netpol_from` edit is a field edit, so it names the edited entry's tag and the one reader of
 `netpol_from`, netpol-baseline. Each family PR's own role tag (crowdsec, configarr,
 janitorr, qbittorrent) comes from `broad.py:_changed_half`, which maps the PR's edits under
-`ansible/roles/k8s/<role>/`, and was not part of the scratch commits. The added drill entry
+`k8s/roles/<role>/`, and was not part of the scratch commits. The added drill entry
 names the readers D2 Open question 10 gives a bare entry.
 
 - **H2.4b:** crowdsec, uptime-kuma and netpol-baseline. Two are denylisted: crowdsec and
@@ -683,7 +683,7 @@ is applied by the writer that installed it, in the same landing:
 
 H7 deletes the arms with Ansible.
 
-A retired-cron census, a new `Census` row in `ansible/tests/repo/test_census_rows_roles.py`,
+A retired-cron census, a new `Census` row in `tests/repo/test_census_rows_roles.py`,
 holds the cron names and the fragment names this slice retires. It fails in two cases:
 
 - a retired cron has no `state: absent` task in the role that installed it, or in that role's
@@ -974,7 +974,7 @@ it, and D5's namespace PR later replaces them with the shared kind `homelab-name
 found, `longhorn` would never read `Ready`, and step 6 would stall with `longhorn-backup`, the
 agent join and the storage smoke test behind it.
 
-- **The tag.** `longhorn-restore-drill` is a k8s role, `ansible/roles/k8s/longhorn-restore-drill/`,
+- **The tag.** `longhorn-restore-drill` is a k8s role, `k8s/roles/longhorn-restore-drill/`,
   whose entry carries `owner: flux` and `depends_on: [longhorn]`. It renders the stamp
   ConfigMap (H2.3b) and, from H2.3d, the script ConfigMap, the CronJob, the ServiceAccount,
   both Roles, the ClusterRole and the three bindings. It renders no Namespace: a Namespace
@@ -1260,26 +1260,26 @@ leaves `setup/`, to `longhorn-backup-health.sh`, which stays until H7.
 ### File tree
 
 ```diff
-  ansible/tests/repo/test_census_rows_roles.py         (+ flux-ownership and retired-cron rows)
-  ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py  (+ CronJob and mounted-ConfigMap arm)
-  ansible/tests/k8s/                                   (+ RBAC-against-script test, no-secret-in-ConfigMap test)
-  ansible/roles/k8s/longhorn/templates/                (+ trim RecurringJob)
-  ansible/roles/k8s/longhorn-reconcile/files/          (+ longhorn_reconcile.py trim and default arms)
-  ansible/roles/k8s/longhorn-reconcile/tests/          (+ trim, default, bound and RBAC-subset cases)
-  ansible/tests/longhorn/_restore_drill.py             (+ persisting fake API, image leg)
-+ ansible/roles/k8s/longhorn-restore-drill/templates/  (stamp and script ConfigMaps, drill CronJob, RBAC)
-+ ansible/roles/k8s/longhorn-restore-drill/defaults/main.yml  (the eight moved keys, namespace copy, runner image, deadline, grace)
-+ ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md   (the drill's contract and DECIDED markers)
-  ansible/inventory/host_vars/daniel-box.yml           (+ longhorn-restore-drill entry, owner: flux)
-  ansible/roles/k8s/longhorn-backup/templates/         (+ the etcd-s3 config Secret)
-  ansible/roles/k8s/crowdsec/templates/                (+ four CronJobs, RBAC, ConfigMap)
-  ansible/roles/k8s/crowdsec/files/                    (+ Python entry points for the two Python jobs)
-  ansible/roles/k8s/configarr/templates/               (+ health CronJob)
-  ansible/roles/k8s/janitorr/templates/                (+ health CronJob)
-  ansible/roles/k8s/qbittorrent/templates/             (+ prefs CronJob)
-  ansible/roles/k8s/*/tasks/main.yml                   (the six roles' cron and host-file tasks become absent arms or move)
-  ansible/inventory/host_vars/daniel-box.yml           (+ netpol_from entries on uptime-kuma and qbittorrent, each in its CronJob's commit)
-  ansible/roles/k8s/monitor-bridge/files/checks/logs.py       (SWALLOWED_VERDICTS_POD_LOGQL names the moved pushers)
+  tests/repo/test_census_rows_roles.py         (+ flux-ownership and retired-cron rows)
+  tests/longhorn/test_longhorn_reap_never_scheduled.py  (+ CronJob and mounted-ConfigMap arm)
+  tests/k8s/                                   (+ RBAC-against-script test, no-secret-in-ConfigMap test)
+  k8s/roles/longhorn/templates/                (+ trim RecurringJob)
+  k8s/roles/longhorn-reconcile/files/          (+ longhorn_reconcile.py trim and default arms)
+  k8s/roles/longhorn-reconcile/tests/          (+ trim, default, bound and RBAC-subset cases)
+  tests/longhorn/_restore_drill.py             (+ persisting fake API, image leg)
++ k8s/roles/longhorn-restore-drill/templates/  (stamp and script ConfigMaps, drill CronJob, RBAC)
++ k8s/roles/longhorn-restore-drill/defaults/main.yml  (the eight moved keys, namespace copy, runner image, deadline, grace)
++ k8s/roles/longhorn-restore-drill/CLAUDE.md   (the drill's contract and DECIDED markers)
+  inventory/host_vars/daniel-box.yml           (+ longhorn-restore-drill entry, owner: flux)
+  k8s/roles/longhorn-backup/templates/         (+ the etcd-s3 config Secret)
+  k8s/roles/crowdsec/templates/                (+ four CronJobs, RBAC, ConfigMap)
+  k8s/roles/crowdsec/files/                    (+ Python entry points for the two Python jobs)
+  k8s/roles/configarr/templates/               (+ health CronJob)
+  k8s/roles/janitorr/templates/                (+ health CronJob)
+  k8s/roles/qbittorrent/templates/             (+ prefs CronJob)
+  k8s/roles/*/tasks/main.yml                   (the six roles' cron and host-file tasks become absent arms or move)
+  inventory/host_vars/daniel-box.yml           (+ netpol_from entries on uptime-kuma and qbittorrent, each in its CronJob's commit)
+  k8s/roles/monitor-bridge/files/checks/logs.py       (SWALLOWED_VERDICTS_POD_LOGQL names the moved pushers)
   ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py  (_K8S_HOST_LIB shrinks to empty)
   ansible/roles/setup/claude_code/tasks/               (+ artifacts sync, telemetry health crons, daniel-box only)
   hosts/components/claude-code/defaults/main.yml    (+ claude_code_artifacts_node, the sync and telemetry variables)
@@ -1316,7 +1316,7 @@ change at merge time*).
 2. **H2.2a Native trim, one canary (Flux).** This PR needs H1.5a and H1.6.
     - Add the `trim` RecurringJob, with `groups: []` and its `DECIDED` marker, to
       `longhorn`. Add the trim-label and explicit-`default` arms to the
-      `longhorn-reconcile` role, `ansible/roles/k8s/longhorn-reconcile/`, with their unit
+      `longhorn-reconcile` role, `k8s/roles/longhorn-reconcile/`, with their unit
       tests and the reconcile-RBAC subset test in its `tests/`. The arm writes
       `recurring-job.longhorn.io/trim` and never `recurring-job-group.longhorn.io/trim`
       (Design, *A per-job label, not a group label*). The PR spans two tags:
@@ -1591,7 +1591,7 @@ kubectl get etcdsnapshotfiles.k3s.cattle.io --sort-by=.metadata.creationTimestam
 uv run python scripts/diagnostics/probe.py monitors | grep -iE 'longhorn backup|etcd'
 
 # Exit part 3: the censuses.
-uv run pytest ansible/tests/repo/test_census_rows_roles.py ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py
+uv run pytest tests/repo/test_census_rows_roles.py tests/longhorn/test_longhorn_reap_never_scheduled.py
 ```
 
 A CronJob has no rollout. Where `k8s/cronjob-gate` does not apply, the PR body records the
@@ -1653,7 +1653,7 @@ stays open for that evidence.
   JSON emits, because the owner maps keep the last key they meet. A fixture that wrote `trim`
   before `default` would leave the red half's owner at `default`, and the red half could never
   fail:
-    - in `ansible/tests/longhorn/test_longhorn_restore_drill_oversize.py`, a `no-backup`
+    - in `tests/longhorn/test_longhorn_restore_drill_oversize.py`, a `no-backup`
       volume that carries the trim label and has a Completed backup above the cap stays out of
       OVERSIZE, ELIGIBLE and NOPVC. The red half lands in OVERSIZE;
     - in `scripts/backup/tests/test_longhorn_reap_logic.py`, a `default` volume that carries
@@ -1663,7 +1663,7 @@ stays open for that evidence.
       that carries the trim label keeps `OWNER_NO_JOB_BY_DESIGN` in `snapshot_owner_map`. The
       red half loses the sentinel.
 - *Drill keys off the host plane (H2.3d).* A `Census` row of
-  `ansible/tests/repo/test_census_rows_roles.py`: no key defined in the `longhorn-restore-drill`
+  `tests/repo/test_census_rows_roles.py`: no key defined in the `longhorn-restore-drill`
   role's defaults appears in a task or template file under `ansible/roles/setup/`. A fixture
   `setup/` template that names `k3s_longhorn_restore_drill_timeout_s` is flagged. The tree at
   H2.3d is clean, and the row asserts that it found its named members,
@@ -1914,10 +1914,10 @@ carries `prune: disabled`.
 
 ## Tests and docs that change in the same PR
 
-- **H2.1:** `ansible/tests/repo/test_census_rows_roles.py`,
-  `ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py`, the RBAC-against-script
-  test in `ansible/tests/k8s/`, and the trim-label fixtures in
-  `ansible/tests/longhorn/test_longhorn_restore_drill_oversize.py`,
+- **H2.1:** `tests/repo/test_census_rows_roles.py`,
+  `tests/longhorn/test_longhorn_reap_never_scheduled.py`, the RBAC-against-script
+  test in `tests/k8s/`, and the trim-label fixtures in
+  `tests/longhorn/test_longhorn_restore_drill_oversize.py`,
   `scripts/backup/tests/test_longhorn_reap_logic.py` and
   `scripts/backup/tests/test_longhorn_reap_opt_out_snapshots.py`.
 - **H2.2a:** the `longhorn-reconcile` unit tests in that role's `tests/`, including the
@@ -1939,17 +1939,17 @@ carries `prune: disabled`.
 - **H2.3b:** the `longhorn-restore-drill` tag's rows in H1.1c's per-tag object census; the
   step-6 namespace test; the role's `CLAUDE.md`, whose generated glance block is written with
   it.
-- **H2.3c:** the drill script tests under `ansible/tests/longhorn/` and their helper
-  `ansible/tests/longhorn/_restore_drill.py`, which gain the persisting fake API, the import
+- **H2.3c:** the drill script tests under `tests/longhorn/` and their helper
+  `tests/longhorn/_restore_drill.py`, which gain the persisting fake API, the import
   cases, the NotFound case, the TERM case and a `mktemp` template with no suffix;
   `docs/k3s-node-plane-crons-and-incidents.md`, which describes the state.
 - **H2.3d:**
-    - the drill tests under `ansible/tests/longhorn/` retarget the `longhorn-restore-drill`
+    - the drill tests under `tests/longhorn/` retarget the `longhorn-restore-drill`
       render, the operator-pin test included, and gain the deadline render test;
-    - `ansible/tests/repo/test_census_rows_roles.py` gains the drill-key row;
-    - `ansible/tests/services/test_pi_peer_backup_schedule_clears_the_longhorn_slots.py` reads
+    - `tests/repo/test_census_rows_roles.py` gains the drill-key row;
+    - `tests/services/test_pi_peer_backup_schedule_clears_the_longhorn_slots.py` reads
       the cron key from the `longhorn-restore-drill` defaults;
-    - `ansible/tests/k8s/test_base_images_digest_pinned.py`, if its fixture names the moved
+    - `tests/k8s/test_base_images_digest_pinned.py`, if its fixture names the moved
       image key;
     - `scripts/tests/test_renovate_managers.py` and `renovate.json`: the reason for scanning
       `roles/setup/*/defaults` moves with the image key, and the scan goes if no other image
@@ -1961,7 +1961,7 @@ carries `prune: disabled`.
     - `scripts/docs/reference/state.py`, whose cadence lookup reads the
       `longhorn-restore-drill` defaults;
     - the namespace equality test and the drill script render test;
-    - the image leg in `ansible/tests/longhorn/_restore_drill.py`, with the suffixed-template
+    - the image leg in `tests/longhorn/_restore_drill.py`, with the suffixed-template
       red case;
     - the contract moves from `ansible/roles/setup/k3s/CLAUDE.md` to the
       `longhorn-restore-drill` role's page, and states that the evidence is the pod log, read with `probe.py loki-query
@@ -1969,21 +1969,21 @@ carries `prune: disabled`.
     - `docs/longhorn-upgrade.md` gate 2 and `docs/k3s-node-plane-crons-and-incidents.md` give
       the **operator-only** hand run and the pinned run (Design, *Hand runs*).
 - **H2.3f:** `docs/longhorn-disaster-recovery.md` drops the host paths;
-  `ansible/tests/repo/test_shared_render_accessors.py` drops its stamp-dir case; the readers'
+  `tests/repo/test_shared_render_accessors.py` drops its stamp-dir case; the readers'
   tests drop their directory cases.
 - **H2.4b and H2.4c:**
-    - `ansible/roles/k8s/crowdsec/CLAUDE.md`'s allowlist and bouncer-prune sections name the
+    - `k8s/roles/crowdsec/CLAUDE.md`'s allowlist and bouncer-prune sections name the
       CronJobs, and their `probe.py loki-query` examples change from the syslog tag to the
       container label;
     - the crowdsec module tests, which gain the two entry points and read the push token from
       the environment;
     - the AppSec verify's new script harness, and the home allowlist's tests under
-      `ansible/tests/services/`, each with its image leg;
-    - uptime-kuma's `netpol_from` in `ansible/inventory/host_vars/daniel-box.yml`, in the
+      `tests/services/`, each with its image leg;
+    - uptime-kuma's `netpol_from` in `inventory/host_vars/daniel-box.yml`, in the
       CronJobs' commit;
     - `SWALLOWED_VERDICTS_POD_LOGQL` and its tests;
     - the static-monitor descriptions that say "on daniel-box";
-    - the no-secret-in-ConfigMap test in `ansible/tests/k8s/`, added by the first family PR to
+    - the no-secret-in-ConfigMap test in `tests/k8s/`, added by the first family PR to
       land and extended by each later one.
 - **H2.5b to H2.5d:**
     - the no-secret-in-ConfigMap test's role list, and the `configarr` and `janitorr` module
@@ -2333,7 +2333,7 @@ their `required_fix`, and each entry says why.
   fragments change where their sources move.
 - **H2-R1-19 (medium): CronJob timezone and boot grace were underspecified.** Fixed. Every
   moved CronJob sets `timeZone: Etc/UTC`, and a rendered-property test holds it. On boot
-  grace: `git grep -l boot_grace_active -- ansible/roles` finds no moved script, and backup
+  grace: `git grep -l boot_grace_active -- k8s/roles` finds no moved script, and backup
   health, which does call it, stays on the host, so `test_health_cron_boot_grace.py` keeps
   its target.
 - **H2-R1-20 (medium): the trim lost its abort valve, and the group rule missed CronJob-owned
@@ -2546,7 +2546,7 @@ contracts.md, H1, H6, D5 and R4.
   password, into bodies the plan stages in ConfigMaps.** Fixed. Confirmed with `grep -rnoE`
   over the six templates. *No secret in a ConfigMap* moves each value into the role's Secret,
   read through `secretKeyRef`, and names the variable each job reads. Each family PR says
-  which key it moves. A render test in `ansible/tests/k8s/` binds every `secrets.yml` key name
+  which key it moves. A render test in `tests/k8s/` binds every `secrets.yml` key name
   to a sentinel and fails when a ConfigMap's data holds one. Its red fixture holds `{{
   monitor_bridge_appsec_push_token }}`.
 - **H2-C1-03 (medium): the drill's deadline path was unspecified, and a killed pod would
@@ -2595,10 +2595,10 @@ changes, handed over as cross-slice notes.
 
 - **H2-C2-01 (high): the grants-first PRs H2.4a and H2.5a fail CI, because the netpol test
   refuses a caller label that no rendered pod carries.** Fixed. Confirmed:
-  `ansible/tests/k8s/test_netpol_from.py::test_every_caller_is_a_label_some_rendered_pod_carries`
+  `tests/k8s/test_netpol_from.py::test_every_caller_is_a_label_some_rendered_pod_carries`
   asserts `unknown == set()`, and `UNRENDERED_CALLERS` admits only a `--labels app=<caller>`
   task. uptime-kuma's entry carries `netpol_from` without `netpol_role_owned`, and
-  `ansible/roles/k8s/netpol-baseline/CLAUDE.md` orders netpol-baseline last. H2.4a and H2.5a
+  `k8s/roles/netpol-baseline/CLAUDE.md` orders netpol-baseline last. H2.4a and H2.5a
   are retired, and each grant lands in its CronJob's commit. *Each grant lands with its
   CronJob*, *Who applies each grant*, *First run*, Steps 11 to 15, *Rollback*, *Risks*,
   *Open questions* 1 and 8, and the tests follow. The first gated run is handled per job:
@@ -2611,8 +2611,8 @@ changes, handed over as cross-slice notes.
       janitorr set `k8s_autodeploy: false`, so the gate is optional there, and each PR records
       the first scheduled run.
     - configarr health keeps its gate, as a bounded exception to the finding's two options.
-      `ansible/roles/k8s/configarr/defaults/main.yml:k8s_autodeploy` is `true`, and
-      `ansible/tests/deploy/test_k8s_autodeploy_batch_gates.py::test_auto_deployable_roles_gate_every_batch_workload_they_render`
+      `k8s/roles/configarr/defaults/main.yml:k8s_autodeploy` is `true`, and
+      `tests/deploy/test_k8s_autodeploy_batch_gates.py::test_auto_deployable_roles_gate_every_batch_workload_they_render`
       refuses an ungated CronJob in such a role. Applying netpol-baseline first would invert
       the order its `CLAUDE.md` requires. The landing's one gate run therefore pushes into the
       closed fence. `kuma_push` stops after three attempts, the deadline sits between that
@@ -2636,7 +2636,7 @@ changes, handed over as cross-slice notes.
 - **H2-C2-04 (medium): `longhorn-reconcile` was placed inside the `longhorn` tag and role.**
   Fixed. Confirmed: H1's *Six Flux-born tags* makes it a tag and role of its own, and H1 names
   DaemonSet `longhorn-manager` as `longhorn`'s member. The arms, their unit and RBAC-subset
-  tests and the file tree point at `ansible/roles/k8s/longhorn-reconcile/`. The step-6
+  tests and the file tree point at `k8s/roles/longhorn-reconcile/`. The step-6
   guard's named member is `longhorn-manager`. The Baseline, H2.2a, H2.2b, *Rollback* and
   *Risks* now say that H2.2b changes only a tag that is not forward-only, so a failed H2.2b
   revision resets.

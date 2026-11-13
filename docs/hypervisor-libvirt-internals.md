@@ -29,7 +29,7 @@ The network keeps the name `staging` after the cluster went. daniel-server's cop
 name under a UUID libvirt refuses to redefine under another one, so renaming it would mean
 destroying and rebuilding the bridge for cosmetics.
 
-`ansible/tests/staging/test_staging_network.py` renders the template and parses it. That matters
+`tests/staging/test_staging_network.py` renders the template and parses it. That matters
 more here than elsewhere: nothing else in the repo validates libvirt XML, and two bugs in this
 role reached a real host in one afternoon because every check only parsed the file it lived in.
 

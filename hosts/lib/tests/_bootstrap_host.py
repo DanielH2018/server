@@ -231,7 +231,7 @@ class FakeHost:
     def clone(self, tmp_path: Path) -> Path:
         """A one-commit git clone holding the file the script reads host_python_version from."""
         clone = tmp_path / "clone"
-        variables = clone / "ansible" / "inventory" / "group_vars"
+        variables = clone / "inventory" / "group_vars"
         variables.mkdir(parents=True)
         (variables / "all.yml").write_text('host_python_version: "3.14.6"\n')
         git = [

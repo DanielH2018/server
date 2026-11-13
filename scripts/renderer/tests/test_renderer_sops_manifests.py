@@ -203,7 +203,7 @@ def test_the_real_tree_names_each_key_only_in_an_entry_is_clean():
     # that holds several keys appears once per key, so the namers are compared as a set.
     result = rule5(homelab_render.secret_keys())
     entry_templates = sorted(
-        f"ansible/roles/k8s/{role}/templates/{entry}.j2"
+        f"k8s/roles/{role}/templates/{entry}.j2"
         for role, (entry, _key) in ENTRIES.items()
     )
     namers = sorted({template for _tag, template, _key in result.sops_namers})

@@ -1,6 +1,6 @@
 """The render guards build their Jinja environment through one factory (#8182).
 
-`render_guard.make_env` and `ansible_jinja_env.make_ansible_env` were two factories for the
+`render_guard.make_env` and `guard_jinja_env.make_ansible_env` were two factories for the
 same environment. Whichever one survives, the other is defined nowhere and called nowhere.
 
 Run: uv run pytest scripts/lib/tests/test_one_guard_env_factory.py

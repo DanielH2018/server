@@ -148,7 +148,7 @@ writer to the cluster throughout.
 
 ## Baseline at `70591c307`
 
-- **184 secret keys, names in plaintext.** Every top-level key in `ansible/vars/secrets.yml`
+- **184 secret keys, names in plaintext.** Every top-level key in `secrets/secrets.yml`
   holds one `ENC[...]` scalar. 183 are `type:str` and `mullvad_account` is `type:int`.
 - **Two keys are identifiers, not credentials, and appear everywhere.** `domain` and `email`
   are secret keys. Outside the 40 template files that declare `kind: Secret`, `domain`
@@ -163,20 +163,20 @@ writer to the cluster throughout.
 - **Literal `${` in template sources.** 95 occurrences in 13 files. Nine of the files are host
   scripts (`*.sh.j2`) that roles install on daniel-box, outside the cluster artifact. The
   cluster-side ones are `traefik/templates/deployment.yaml.j2` (1),
-  `ansible/templates/crowdsec-agent.yml.j2` (2, in the pods of `traefik` and `authelia`) and
+  `k8s/templates/crowdsec-agent.yml.j2` (2, in the pods of `traefik` and `authelia`) and
   `prowlarr/templates/netpol-probe-job.yaml.j2` (1, a task-applied Job). Embedded files add
   more: `qbittorrent/files/netns-reset.sh` holds 6 and is embedded into a ConfigMap by
   `lookup('file')`.
 - **No render input holds `$$` or a `$` directly before `{{`.** Neither the templates nor
-  the files under `ansible/roles/k8s/` and `ansible/templates/` contain either sequence.
+  the files under `k8s/roles/` and `k8s/templates/` contain either sequence.
   Every `lookup('file'|'template')` target in a cluster template sits under
-  `ansible/roles/k8s/`.
+  `k8s/roles/`.
 - **configarr and janitorr.** Each role's `config-secret.yaml.j2` embeds an app config that
   holds API keys, through `lookup('template') | indent(4, true)`. Each role's health script
   (`configarr-health.sh.j2`, `janitorr-health.sh.j2`) mixes shell `${...}` with a push token.
   The scripts install on daniel-box, so they belong to the host plane.
 - **Every context a secret key appears in, by a walk of the syntax tree.** The walk parses
-  the 284 templates under `ansible/roles/k8s/*/templates/` and `ansible/templates/` that are
+  the 284 templates under `k8s/roles/*/templates/` and `k8s/templates/` that are
   not `*.sh.j2`, and classifies the parent node of every key it loads. It finds 323 uses:
   268 bare in output, and the 55 listed below. An earlier text census matched a key followed
   by `|`, `.` or `[`. It missed the 22 filter arguments, because a key in argument position
@@ -216,7 +216,7 @@ writer to the cluster throughout.
       `scripts/renderer/template_filters/authelia_access.py:authelia_service_rules` builds
       `f"{hostname}.local.{domain}"` for each entry and sorts the names within each rule.
     - **Five bindings hold a key.**
-        - The loop in the shared `ansible/templates/ingressroute.yml.j2` macro unpacks
+        - The loop in the shared `k8s/templates/ingressroute.yml.j2` macro unpacks
           `host`, `rate_limit`, `suffix` and `tls_option` from a list of tuples whose first
           member is `hostname ~ '.local.' ~ domain` or `hostname ~ '.' ~ domain`. Every
           routed tag renders it.
@@ -242,7 +242,7 @@ writer to the cluster throughout.
   entry's `metrics:` list (`scripts/renderer/template_filters/scrape_jobs.py`), and its one value is
   `terraria_k8s_replicas`, which is not a secret key.
 - **Rule 5's subject, measured on the syntax tree.** All 294 `.j2` files under
-  `ansible/roles/k8s/*/templates/` and `ansible/templates/` parse with Jinja's default
+  `k8s/roles/*/templates/` and `k8s/templates/` parse with Jinja's default
   delimiters. 68 of them name a secret key as a loaded variable or as the literal argument of
   a `vars` lookup. Nine of those are `*.sh.j2` host scripts, so 59 reach the cluster render.
   R1's text match finds 78, because it also counts a key name in a comment or in plain YAML,
@@ -260,14 +260,14 @@ writer to the cluster throughout.
   `authelia/defaults/main.yml`, in n8n's `deployment.yaml.j2` and
   `deployment-runners.yaml.j2`, and in `pi-peer-backup/templates/secret.yaml.j2`, and in no
   other template or role default.
-- **Secret is not a pruned kind.** `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist`
+- **Secret is not a pruned kind.** `k8s/roles/manifests/defaults/main.yml:manifests_prune_allowlist`
   lists no Secret. A Secret dropped from a role stays live until someone deletes it.
 - **Strict substitution is the controller default.** D3's baseline reads kustomize-controller
   v1.9.6 source: `StrictPostBuildSubstitutions` is on, so an undefined `${var}` with no
   default fails the build.
 - **The render-record dry run decrypts and runs as root.** `deploy.sh --dry-run` loads every
   secret through `ansible/pre_tasks/load_secrets.yml` (`community.sops.load_vars`).
-  `ansible/roles/k8s/manifests/tasks/render_record.yml` and `release_digest.yml` read the
+  `k8s/roles/manifests/tasks/render_record.yml` and `release_digest.yml` read the
   root-only `manifests_secret_digest_key` and write their records with `become: true`.
   [The agent user](../../claude-agent-user.md) holds no age key and no sudo grant, so an
   agent session cannot run that dry run. The records themselves are root-owned and mode
@@ -276,7 +276,7 @@ writer to the cluster throughout.
 - **Six tests parse Authelia's rendered `configuration.yml`** with `yaml_fast.safe_load`:
   `test_authelia_config_schema.py`, `test_authelia_redis_sessions.py`,
   `test_smtp_wiring.py`, `test_authelia_access_tiers.py`, `test_grafana_authelia_oidc.py`
-  and `test_authelia_argon2_parameters_agree.py`, all in `ansible/tests/services/`.
+  and `test_authelia_argon2_parameters_agree.py`, all in `tests/services/`.
 - **The Grafana UI test decrypts.** In `scripts/diagnostics/tests/test_ui_smoke_grafana.py`,
   the `domain` and `grafana` fixtures call `scripts/diagnostics/probe_lib/core.py:sops_extract`,
   which runs `sops -d --extract` and raises `SystemExit` on failure. An agent session cannot
@@ -333,24 +333,24 @@ The commands behind the tree counts above, from the repo root at `70591c307`.
 [R1's baseline](r1-shadow-render.md).
 
 ```bash
-grep -rl '^kind: Secret' ansible/roles/k8s/*/templates ansible/templates | wc -l   # 40
-grep -rlwFf /tmp/keys.txt ansible/roles/k8s/*/templates ansible/templates \
+grep -rl '^kind: Secret' k8s/roles/*/templates k8s/templates | wc -l   # 40
+grep -rlwFf /tmp/keys.txt k8s/roles/*/templates k8s/templates \
   | xargs grep -L '^kind: Secret' | xargs grep -owh 'domain\|email' | sort | uniq -c
                                                        # 130 domain, 6 email
-grep -ro '\${' ansible/roles/k8s/*/templates ansible/templates | wc -l    # 95
-grep -rl '\${' ansible/roles/k8s/*/templates ansible/templates | wc -l    # 13
-grep -rlF '$$' ansible/roles/k8s/ ansible/templates/ | wc -l             # 0
-grep -rlF '${{' ansible/roles/k8s/ ansible/templates/ | wc -l            # 0
-grep -c '\${' ansible/roles/k8s/qbittorrent/files/netns-reset.sh         # 6
-grep -rnE "\{%-? *if [a-z_0-9]+ *\| *default\(''\)" ansible/roles/k8s/*/templates | wc -l
+grep -ro '\${' k8s/roles/*/templates k8s/templates | wc -l    # 95
+grep -rl '\${' k8s/roles/*/templates k8s/templates | wc -l    # 13
+grep -rlF '$$' k8s/roles/ k8s/templates/ | wc -l             # 0
+grep -rlF '${{' k8s/roles/ k8s/templates/ | wc -l            # 0
+grep -c '\${' k8s/roles/qbittorrent/files/netns-reset.sh         # 6
+grep -rnE "\{%-? *if [a-z_0-9]+ *\| *default\(''\)" k8s/roles/*/templates | wc -l
                                                        # 18
 hostname; which flux                                   # daniel-box, flux not found
-grep -c '\$' ansible/roles/k8s/pihole/templates/{deployment-2,pihole-deployment}.yaml.j2 \
-  ansible/roles/k8s/headlamp/templates/rbac-observability.yaml.j2 \
-  ansible/roles/k8s/netpol-baseline/templates/networkpolicy-{observability,prometheus,loki}.yaml.j2
+grep -c '\$' k8s/roles/pihole/templates/{deployment-2,pihole-deployment}.yaml.j2 \
+  k8s/roles/headlamp/templates/rbac-observability.yaml.j2 \
+  k8s/roles/netpol-baseline/templates/networkpolicy-{observability,prometheus,loki}.yaml.j2
                                                        # 0 for each
 grep -rlwE 'pi_peer_backup_known_hosts_line|authelia_[a-z_]*_password_hash|k8s_built_images' \
-  ansible/roles/k8s/*/templates ansible/templates ansible/roles/k8s/*/defaults
+  k8s/roles/*/templates k8s/templates k8s/roles/*/defaults
                                                        # the five files named above
 ```
 
@@ -362,8 +362,8 @@ import glob, jinja2
 from jinja2 import nodes
 keys = set(open('/tmp/keys.txt').read().split())
 env = jinja2.Environment(extensions=['jinja2.ext.do', 'jinja2.ext.loopcontrols'])
-paths = glob.glob('ansible/roles/k8s/*/templates/**/*.j2', recursive=True) \
-    + glob.glob('ansible/templates/**/*.j2', recursive=True)
+paths = glob.glob('k8s/roles/*/templates/**/*.j2', recursive=True) \
+    + glob.glob('k8s/templates/**/*.j2', recursive=True)
 def vars_lookups(tree):
     return [c.args[1] for c in tree.find_all(nodes.Call)
             if isinstance(c.node, nodes.Name) and c.node.name == 'lookup'
@@ -391,8 +391,8 @@ import collections, glob, jinja2
 from jinja2 import nodes
 keys = set(open('/tmp/keys.txt').read().split())
 env = jinja2.Environment(extensions=['jinja2.ext.do', 'jinja2.ext.loopcontrols'])
-paths = [p for p in glob.glob('ansible/roles/k8s/*/templates/**/*.j2', recursive=True)
-         + glob.glob('ansible/templates/**/*.j2', recursive=True) if not p.endswith('.sh.j2')]
+paths = [p for p in glob.glob('k8s/roles/*/templates/**/*.j2', recursive=True)
+         + glob.glob('k8s/templates/**/*.j2', recursive=True) if not p.endswith('.sh.j2')]
 uses, binds = collections.Counter(), []
 def walk(n):
     for field in n.fields:
@@ -527,7 +527,7 @@ it empty.
 `cluster` exit 1 and print the tag, the file, the document's kind and the key.
 
 1. **`known-key`**: in a directory that substitutes, every `${NAME}` that opens a Flux
-   reference names a key in `ansible/vars/secrets.yml`.
+   reference names a key in `secrets/secrets.yml`.
 2. **`no-bare-dollar-brace`**: in a directory that substitutes, the rule scans the output as
    Flux does, pairing each `$$` before it looks for `${`. Every `${` that opens a reference
    must be a placeholder from pass 3. In every directory, no sentinel fragment may remain. A
@@ -550,7 +550,7 @@ it empty.
       (*`mullvad_account` becomes a dedicated Secret*).
 5. **`no-secret-expression`**: this rule reads template sources, not output. It parses each
    template with the renderer's Jinja environment and walks the syntax tree. Its scope is
-   every `.j2` under `ansible/roles/k8s/*/templates/` and `ansible/templates/` except
+   every `.j2` under `k8s/roles/*/templates/` and `k8s/templates/` except
    `*.sh.j2`. A shell template is host-plane output, which C1 renders with no secret, and no
    cluster template embeds one (Baseline). `Dockerfile*.j2` stays in scope, because
    image-builder embeds it into a cluster ConfigMap.
@@ -633,8 +633,8 @@ it empty.
    stub.
 
    A key can also be reached through a variable whose value names it. Rule 5 therefore also
-   parses the Jinja strings in `ansible/roles/k8s/*/defaults/main.yml`,
-   `ansible/inventory/group_vars/` and `ansible/inventory/host_vars/`.
+   parses the Jinja strings in `k8s/roles/*/defaults/main.yml`,
+   `inventory/group_vars/` and `inventory/host_vars/`.
     - A value there that names a secret key is an alias for it. Its own expression must be
       one of the forms above, and plain text around an interpolation counts as a `~`
       concatenation. A transform there is a violation.
@@ -644,7 +644,7 @@ it empty.
     - Without this clause, a default `x: "{{ K }}"` used as `{{ x | trim }}` would pass all
       three checks, for the reason the `vars`-lookup clause gives.
     - A parse of those 68 files at `70591c307` finds 184 Jinja strings, and one names a key:
-      `ansible/roles/k8s/headlamp/defaults/main.yml:headlamp_k8s_oidc_issuer_url`, which is
+      `k8s/roles/headlamp/defaults/main.yml:headlamp_k8s_oidc_issuer_url`, which is
       `https://auth.{{ domain }}`. Its one use, in `headlamp/templates/deployment.yaml.j2`,
       is bare. Since domain PR 2b published `domain`, none names a key. The clause's
       fixture pair is its only proof that it can go red.
@@ -708,7 +708,7 @@ The basename rule reaches only a role whose file lists are derived. `pi-peer-bac
 `home-assistant` pass neither `manifests_files` nor `manifests_secret_files`, so their new
 templates join the secret list by name. `authelia` passes both lists as Jinja expressions
 in its `k8s/manifests` include, and the task "Resolve the manifest file lists" in
-`ansible/roles/k8s/manifests/tasks/main.yml` takes a passed list exactly as given. PR 7
+`k8s/roles/manifests/tasks/main.yml` takes a passed list exactly as given. PR 7
 therefore adds `oidc-jwk-secret.yaml` to authelia's `manifests_secret_files` expression
 itself, under the `authelia_k8s_manage_oidc` lever that gates the `jwks` block, in the
 shape `crowdsec-secret.yaml` already uses. The file never goes in `manifests_files`, which
@@ -794,7 +794,7 @@ config in a Secret, is not standalone, because Flux types only the outer scalar.
 - *On daniel-box, in the deploy path, from PR 1c.* The deploy path never runs the renderer,
   so the renderer's standalone sets reach it as a projection. `standalone_map.py` under
   `scripts/renderer/` writes the committed file
-  `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`. That file maps each
+  `k8s/roles/manifests/files/standalone_secret_keys.json`. That file maps each
   deploy tag to the sorted keys that stand alone in its directories, less `GUARD_DEFERRED`
   until PR 9 deletes that set. The script adds no flag to C1's `cluster` call. The shared `k8s/manifests` role gains two
   tasks before it renders:
@@ -974,33 +974,33 @@ change.
                                                the pinned-fact refusal)
   scripts/renderer/shadow_diff.py             (+ roundtrip subcommand)
   .github/workflows/ci.yml                    (+ pinned flux CLI, + round-trip step)
-  ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2
-  ansible/roles/k8s/qbittorrent/templates/secret.yaml.j2
-  ansible/roles/k8s/mosquitto/templates/config-secret.yaml.j2
-  ansible/roles/k8s/mosquitto/tasks/main.yml  (+ the colon-count assert before the include)
-  ansible/roles/k8s/mosquitto/CLAUDE.md
+  k8s/roles/uptime-kuma/templates/static-monitors.yaml.j2
+  k8s/roles/qbittorrent/templates/secret.yaml.j2
+  k8s/roles/mosquitto/templates/config-secret.yaml.j2
+  k8s/roles/mosquitto/tasks/main.yml  (+ the colon-count assert before the include)
+  k8s/roles/mosquitto/CLAUDE.md
   docs/secret-rotation.md                     (+ the no-prefix rule for mqtt_password_hash)
-  ansible/roles/k8s/pi-peer-backup/templates/{secret,cronjob}.yaml.j2
-+ ansible/roles/k8s/pi-peer-backup/templates/ssh-key-secret.yaml.j2
-  ansible/roles/k8s/home-assistant/templates/{config/secrets.yaml.j2,deployment.yaml.j2}
-+ ansible/roles/k8s/home-assistant/templates/google-sa-secret.yaml.j2
-  ansible/roles/k8s/home-assistant/files/configuration.yaml
-  ansible/roles/k8s/authelia/templates/{config-secret,deployment}.yaml.j2
-+ ansible/roles/k8s/authelia/templates/oidc-jwk-secret.yaml.j2
-  ansible/roles/k8s/authelia/tasks/main.yml   (+ oidc-jwk-secret.yaml in the explicit
+  k8s/roles/pi-peer-backup/templates/{secret,cronjob}.yaml.j2
++ k8s/roles/pi-peer-backup/templates/ssh-key-secret.yaml.j2
+  k8s/roles/home-assistant/templates/{config/secrets.yaml.j2,deployment.yaml.j2}
++ k8s/roles/home-assistant/templates/google-sa-secret.yaml.j2
+  k8s/roles/home-assistant/files/configuration.yaml
+  k8s/roles/authelia/templates/{config-secret,deployment}.yaml.j2
++ k8s/roles/authelia/templates/oidc-jwk-secret.yaml.j2
+  k8s/roles/authelia/tasks/main.yml   (+ oidc-jwk-secret.yaml in the explicit
                                                manifests_secret_files expression;
                                                + the count assert before the include)
-  ansible/roles/k8s/{pi-peer-backup,home-assistant,authelia}/defaults/main.yml
+  k8s/roles/{pi-peer-backup,home-assistant,authelia}/defaults/main.yml
                                               (+ render_sops_manifests)
 + scripts/lib/plain_scalar.py                 (the guard's resolver, shared with D3's write)
 + scripts/renderer/standalone_map.py          (writes the guard's key map)
   scripts/renderer/renderer_lib/flux_probe.py (+ the resolver corpus)
 + scripts/renderer/template_filters/standalone_guard.py
-+ ansible/roles/k8s/manifests/files/standalone_secret_keys.json
-  ansible/roles/k8s/manifests/tasks/main.yml  (+ the guard's two tasks before the render)
-+ ansible/roles/k8s/qbittorrent/templates/mullvad-account-secret.yaml.j2
-  ansible/roles/k8s/qbittorrent/templates/deployment.yaml.j2   (projected Secret volume)
-  ansible/roles/k8s/qbittorrent/defaults/main.yml               (+ render_sops_manifests)
++ k8s/roles/manifests/files/standalone_secret_keys.json
+  k8s/roles/manifests/tasks/main.yml  (+ the guard's two tasks before the render)
++ k8s/roles/qbittorrent/templates/mullvad-account-secret.yaml.j2
+  k8s/roles/qbittorrent/templates/deployment.yaml.j2   (projected Secret volume)
+  k8s/roles/qbittorrent/defaults/main.yml               (+ render_sops_manifests)
 ```
 
 ## Steps, as PRs
@@ -1017,7 +1017,7 @@ agent session must not merge either one until the operator has run it and both d
 match.
 
 PRs 3 and 4 change no rendered YAML `#` comment. The digest covers every byte of a rendered
-Secret, comments included (`ansible/roles/k8s/manifests/files/secret_hmac.py:digest`), so
+Secret, comments included (`k8s/roles/manifests/files/secret_hmac.py:digest`), so
 one edited comment moves the digest while every value stays equal. Two rendered comments
 become false through these PRs, and PR 4b rewrites them after PR 4:
 
@@ -1115,7 +1115,7 @@ PR 4 deletes it.
           `scripts/renderer/tests/`, standalone detection counts `main: ${k}`,
           `k: "${k}"` and a `|-` block holding only `${k}`, and does not count `x-${k}` or a
           block holding more text. The same directory takes the coverage test with its named
-          members. In `ansible/tests/k8s/`, a test evaluates the first task's expression
+          members. In `tests/k8s/`, a test evaluates the first task's expression
           through Ansible's templar over fixture values. A mapped key holding `0123` is
           refused, one holding `example.org` passes, and an undefined mapped key is refused.
           The test also asserts that both tasks precede the render, that the first carries
@@ -1173,21 +1173,21 @@ PR 4 deletes it.
    explains the split goes with it. A value with surrounding whitespace, or a stored hash
    that carries a `user:` prefix, would change the rendered Secret, and the pre-merge digest
    check catches either. Open question 4 says what to do then.
-   `ansible/roles/k8s/mosquitto/CLAUDE.md`, *Secrets*, gains the rule that the stored hash
+   `k8s/roles/mosquitto/CLAUDE.md`, *Secrets*, gains the rule that the stored hash
    carries no `user:` prefix. Rule 5's three entries leave `KNOWN_VIOLATIONS`.
     - The split was the only guard against a prefixed hash. `mosquitto_passwd` writes
-      `username:hash` lines, and `ansible/secret_rotation.yml` lists `mqtt_password_hash`
+      `username:hash` lines, and `secrets/secret_rotation.yml` lists `mqtt_password_hash`
       at tier `assisted`, so a person performs each rotation. A rotation that stored the
       whole line would render `user:user:$7$...`, and every MQTT client would fail auth on
       the next deploy.
     - `docs/secret-rotation.md` gains a bullet in the `assisted` examples: store only the
       part after the first `:` of the `mosquitto_passwd` line.
-    - `ansible/roles/k8s/mosquitto/tasks/main.yml` gains two tasks before the
+    - `k8s/roles/mosquitto/tasks/main.yml` gains two tasks before the
       `k8s/manifests` include. The first, under `no_log`, sets as a fact only the number of
       `:` in `mqtt_password_hash`. The second is an `assert` without `no_log` that fails the
       deploy unless the number is 0. Its message prints the number and no value. The deploy
       stops before the apply, so the old Secret stays live. A `$7$` hash holds no `:`.
-    - A test in `ansible/tests/services/` evaluates the first task's expression through
+    - A test in `tests/services/` evaluates the first task's expression through
       Ansible's templar over fixture values. `$7$abc` counts 0 and passes the assert, and
       `user:$7$abc` counts 1 and fails it. The test also asserts that both tasks precede the
       include and that the first carries `no_log`.
@@ -1222,28 +1222,28 @@ PR 4 deletes it.
    the same `secret.yaml.j2`, so whichever lands second rebases.
 7. **Authelia's OIDC key** (about 150 lines). The dedicated Secret, the volume mount, the
    environment filter and the block-scalar `jwks[].key` expression.
-    - `ansible/roles/k8s/authelia/tasks/main.yml` adds
+    - `k8s/roles/authelia/tasks/main.yml` adds
       `(['oidc-jwk-secret.yaml'] if authelia_k8s_manage_oidc | bool else [])` to the
       `manifests_secret_files` expression of its `k8s/manifests` include, never to
       `manifests_files` (*Multi-line keys become dedicated Secrets*). The Deployment's
       volume, its mount and `X_AUTHELIA_CONFIG_FILTERS` sit behind the same lever, so a
       cluster with OIDC off neither renders the Secret nor mounts it.
-    - A test in `ansible/tests/services/` evaluates authelia's `manifests_secret_files` and
+    - A test in `tests/services/` evaluates authelia's `manifests_secret_files` and
       `manifests_files` values through Ansible's templar with the role's defaults, as
-      `ansible/tests/k8s/test_derived_manifest_files.py:ansible_resolve` does for the
+      `tests/k8s/test_derived_manifest_files.py:ansible_resolve` does for the
       resolve task. With the lever on, `oidc-jwk-secret.yaml` is in the secret list and not
       in the files list. With the lever off, it is in neither. It does not use
       `scripts/lib/k8s_roles.py:resolved_manifest_files`, which counts every basename in a
       Jinja value, a conditional branch included, so it would pass with the lever arm
       broken.
-    - A test in `ansible/tests/k8s/` asserts that every top-level manifest template of each
+    - A test in `tests/k8s/` asserts that every top-level manifest template of each
       `JINJA_LIST_ROLES` role is named in one of the role's two lists. Here
       `resolved_manifest_files`' over-inclusion is the right reading, because the question
       is whether a template is named anywhere. At `70591c307` it is green: authelia's nine
       templates, traefik's fourteen and navidrome's two are all named. A fixture role that
       passes an explicit list and ships one unlisted template is flagged. After PR 7,
       `oidc-jwk-secret.yaml.j2` is its named member.
-    - `ansible/tests/services/test_authelia_config_schema.py` gains three assertions. The
+    - `tests/services/test_authelia_config_schema.py` gains three assertions. The
       filter variable and the mount path agree. The rendered config holds no `{{` other
       than the one filter expression, because the filter runs Go templating over the whole
       file. Resolving that expression with a fixture PEM, under the documented semantics of
@@ -1251,7 +1251,7 @@ PR 4 deletes it.
       for byte.
     - The schema test renders stub values, so it never sees a real one. A real value that
       held `{{` would open a second Go template action, and Authelia would refuse to start.
-      `ansible/roles/k8s/authelia/tasks/main.yml` therefore gains two tasks before the
+      `k8s/roles/authelia/tasks/main.yml` therefore gains two tasks before the
       `k8s/manifests` include. The first renders `config-secret.yaml.j2` with
       `lookup('template')` under `no_log`, and sets only the number of `{{` in its
       `configuration.yml` as a fact. The second is an `assert` without `no_log` that fails
@@ -1259,7 +1259,7 @@ PR 4 deletes it.
       deploy stops before the apply, so the old config stays live. Both tasks run only when
       `authelia_k8s_manage_oidc` is true. With the lever off, the config holds no filter
       expression and the filter is not enabled, so a `{{` in a value is plain text.
-    - A test in `ansible/tests/services/` asserts that both tasks precede the include, that
+    - A test in `tests/services/` asserts that both tasks precede the include, that
       the first carries `no_log`, that the second compares the count to 1, and that both
       carry the lever's `when`.
     - The count assert runs only while Ansible renders authelia. After D5's flip PR for
@@ -1270,7 +1270,7 @@ PR 4 deletes it.
       rule must list `{{` (Open question 12). Automatic rotation never writes `{`, because
       `scripts/secrets_mgmt/secret_rotation.py:cmd_rotate` draws new values with
       `token_hex`. A refusal can therefore only meet a value a person stored.
-    - Five more tests in `ansible/tests/services/` parse the same config and must stay green
+    - Five more tests in `tests/services/` parse the same config and must stay green
       unchanged: `test_authelia_redis_sessions.py`, `test_smtp_wiring.py`,
       `test_authelia_access_tiers.py`, `test_grafana_authelia_oidc.py` and
       `test_authelia_argon2_parameters_agree.py`. The block scalar is what keeps them
@@ -1295,7 +1295,7 @@ PR 4 deletes it.
         - *Tests.* The coverage test's named member moves: `mullvad_account` has no
           standalone use, and `GUARD_DEFERRED` is empty. `sops-manifest-entries` reads four
           entries on the real tree, and `roundtrip` asserts four excluded documents. A test
-          in `ansible/tests/services/` renders qbittorrent's Deployment and asserts that the
+          in `tests/services/` renders qbittorrent's Deployment and asserts that the
           projected volume names both Secrets and that `FILE__MULLVAD_ACCOUNT` still points
           at `<mount>/account`.
 8. **Confinement moves, if PR 2 found any** (one PR per role, each under 100 lines). Each
@@ -1322,7 +1322,7 @@ PR 4 deletes it.
     PR 1, 2a, 2b and 3, so they stay distinct from PRs 1 to 9. The operator ruled: "domain is
     not secret, it's a var for flexibility just in case of future changes." The renderer
     writes `domain` as a literal, and `domain` stays an Ansible variable in
-    `ansible/inventory/group_vars/all.yml`, so it can change in one place. C3 *The source of
+    `inventory/group_vars/all.yml`, so it can change in one place. C3 *The source of
     `domain`* records the ruling, and D2 *Where `domain` comes from* points here. D2.7 waits
     on domain PR 2b and on no PR of D3. The plan comes from a read-only scoping of master, so
     it cites symbols and not line numbers.
@@ -1332,13 +1332,13 @@ PR 4 deletes it.
       and `secrets.yml` hold the same value, nothing changes. Domain PR 1 adds the inventory
       value first. Domain PR 3 deletes the `secrets.yml` value last.
     - **Domain PR 1, the inventory value.**
-        - `ansible/inventory/group_vars/all.yml` gains `domain`, with the value that
+        - `inventory/group_vars/all.yml` gains `domain`, with the value that
           `secrets.yml` holds.
         - `scripts/diagnostics/probe_lib/core.py` and `scripts/diagnostics/ui_login.py` stop
           calling `sops_extract('domain')` and read the inventory value. That removes the
           age-key blocker that H3 and H4 record for `probe.py metric` and `probe.py
           monitors`.
-        - `ansible/inventory/host_vars/daniel-pi.yml`'s comment about `domain` is rewritten.
+        - `inventory/host_vars/daniel-pi.yml`'s comment about `domain` is rewritten.
         - *Landing.* A new `all.yml` key is read by many templates, so expect a wide deploy
           whose applies are no-ops, or a broad refusal. Confirm which with
           `uv run python scripts/deploy_tools/deploy_tags.py narrow origin/master HEAD`
@@ -1370,8 +1370,8 @@ PR 4 deletes it.
         - *Landing.* Every tag reads the standalone map, so expect a wide, byte-identical
           deploy.
     - **Domain PR 3, operator-only.** It lands in one piece.
-        - The operator deletes `domain` from `ansible/vars/secrets.yml` with `sops`.
-        - The same PR drops `domain` from `ansible/secret_rotation.yml` and adds it to
+        - The operator deletes `domain` from `secrets/secrets.yml` with `sops`.
+        - The same PR drops `domain` from `secrets/secret_rotation.yml` and adds it to
           `RETIRED`, which
           `scripts/secrets_mgmt/tests/test_departed_secrets_are_accounted_for.py` reads.
         - It drops `PUBLISHED`, because the key is gone. It updates the `ignore`-tier
@@ -1379,7 +1379,7 @@ PR 4 deletes it.
           `docs/secret-rotation.md`.
     - **Edges.** D2.7 waits on domain PR 2b, not on D3. If domain PR 2b lands before PR 8,
       PR 8's observability item is moot, and PR 9 closes the ratchet without it. If D3.2c
-      writes `ansible/vars/cluster-vars.sops.env` before domain PR 2b lands, the flip
+      writes `secrets/cluster-vars.sops.env` before domain PR 2b lands, the flip
       changes the placeholder key set, and `cluster_vars.py check` fails until the operator
       runs `write` again.
 
@@ -1547,7 +1547,7 @@ remains the gate.
   map exits 1 and names its Deployment, so the narrowed pass can still see a standalone use.
 - The standalone-value guard, as listed under PR 1c: the resolver's pair in
   `scripts/lib/tests/`, the standalone-detection pair and the coverage test in
-  `scripts/renderer/tests/`, and the guard tasks' templar test in `ansible/tests/k8s/`. The
+  `scripts/renderer/tests/`, and the guard tasks' templar test in `tests/k8s/`. The
   flux probe's corpus case fails when the resolver and the pinned CLI disagree on any value.
   The coverage test fails on a fixture map missing `domain`, on a fixture `GUARD_DEFERRED`
   member with no standalone use, and on a key in both sets.
@@ -1722,30 +1722,30 @@ remains the gate.
 - PR 1c adds the standalone-value guard to `docs/homelab-render.md`: what counts as a
   standalone use, the committed map and the command that regenerates it, `GUARD_DEFERRED`,
   the resolver and its corpus, and the narrowed second pass, which replaces the page's
-  "Every key `0123`" item. `ansible/roles/k8s/manifests/CLAUDE.md` gains the guard's two
+  "Every key `0123`" item. `k8s/roles/manifests/CLAUDE.md` gains the guard's two
   tasks and what a refusal means for a deploy.
 - PR 2 adds the rule table and the pinned-fact refusal to `docs/homelab-render.md`.
 - PR 2b adds rule 5's two alias clauses to the same page, with the residual that a part of
   a container alias is untyped.
-- PR 3 changes `ansible/roles/k8s/uptime-kuma/CLAUDE.md` if a sentence there names the
+- PR 3 changes `k8s/roles/uptime-kuma/CLAUDE.md` if a sentence there names the
   `default('')` form.
-- PR 4 updates `ansible/roles/k8s/mosquitto/CLAUDE.md`, *Secrets*, and adds the
+- PR 4 updates `k8s/roles/mosquitto/CLAUDE.md`, *Secrets*, and adds the
   `mqtt_password_hash` bullet to the `assisted` examples in `docs/secret-rotation.md`. It
-  adds the colon-count assert's test to `ansible/tests/services/`.
+  adds the colon-count assert's test to `tests/services/`.
 - PR 4b changes no doc. Its whole diff is the two rendered template comments.
-- PR 5 updates `ansible/roles/k8s/home-assistant/CLAUDE.md` and
-  `ansible/roles/k8s/home-assistant/docs/platform.md` on where the Google service account
-  lives. `ansible/secret_rotation.yml` gains the added key. `docs/homelab-render.md` gains
+- PR 5 updates `k8s/roles/home-assistant/CLAUDE.md` and
+  `k8s/roles/home-assistant/docs/platform.md` on where the Google service account
+  lives. `secrets/secret_rotation.yml` gains the added key. `docs/homelab-render.md` gains
   the `sops-manifest-entries` check and `roundtrip`'s excluded-count assert.
-- PR 6 updates `ansible/roles/k8s/pi-peer-backup/CLAUDE.md`, *Auth*.
-- PR 7 updates `ansible/roles/k8s/authelia/CLAUDE.md`, *OIDC clients* and *Traps*, the
+- PR 6 updates `k8s/roles/pi-peer-backup/CLAUDE.md`, *Auth*.
+- PR 7 updates `k8s/roles/authelia/CLAUDE.md`, *OIDC clients* and *Traps*, the
   second with the count assert and the explicit secret-list entry, and
-  `ansible/tests/services/test_authelia_config_schema.py`. It adds the count assert's test
-  and the secret-list test to `ansible/tests/services/`, and the orphan test to
-  `ansible/tests/k8s/`.
+  `tests/services/test_authelia_config_schema.py`. It adds the count assert's test
+  and the secret-list test to `tests/services/`, and the orphan test to
+  `tests/k8s/`.
 - PR 7b rewrites the header comment of qbittorrent's `secret.yaml.j2` to name the one value
   it keeps, and gives the new template its own. It adds the projected-volume test to
-  `ansible/tests/services/`. `docs/homelab-render.md` drops `GUARD_DEFERRED`'s one member.
+  `tests/services/`. `docs/homelab-render.md` drops `GUARD_DEFERRED`'s one member.
 - `docs/secret-rotation.md` gains a paragraph per dedicated Secret: rotating its key now means
   rendering that one Secret.
 
@@ -1871,7 +1871,7 @@ remains the gate.
    proof in the cluster covers the controller version.
 1. **Where `domain` comes from, and D2's sub-edge on R2 (C3, D2 and the slice
    index).** D2's leaf, bento-pdf, takes its IngressRoute from
-   `ansible/templates/ingressroute-default.yaml.j2`, which imports the `ingressroute.yml.j2`
+   `k8s/templates/ingressroute-default.yaml.j2`, which imports the `ingressroute.yml.j2`
    macro. The macro builds the Host rule as `hostname ~ '.local.' ~ domain`, and `domain` is
    a key of `secrets.yml`. Under R2, bento-pdf's directory substitutes and the artifact
    carries `${domain}`, which strict substitution refuses without a source.
@@ -2098,8 +2098,8 @@ Raised:
 Fixed, R2's part of all four. The parts that belong to other slices and to contracts.md are
 handed over as cross-slice notes, and this log does not record them as done.
 
-- **X-01.** Confirmed. `ansible/templates/ingressroute.yml.j2` builds the Host rule as
-  `hostname ~ '.local.' ~ domain`, and `grep -c '^domain:' ansible/vars/secrets.yml` prints
+- **X-01.** Confirmed. `k8s/templates/ingressroute.yml.j2` builds the Host rule as
+  `hostname ~ '.local.' ~ domain`, and `grep -c '^domain:' secrets/secrets.yml` prints
   1. R2's part has three pieces:
     - `--placeholders` spells the default mode, so D2's publish command can name its mode.
       Placeholder mode stays the default. Making the flag mandatory would have broken the
@@ -2177,7 +2177,7 @@ Fixed, all seven:
 - **R2-10-4.** Accepted, as Open question 10. A `(key, kind)` frozenset,
   `PLACEHOLDER_KIND_EXEMPT`, sits beside `PLACEHOLDER_ANYWHERE` with its own rule pair and
   named member. H1.7b adds it to `secret_checks.py`. Both keys exist:
-  `grep -oE '^[a-z0-9_]*bucket[a-z0-9_]*:' ansible/vars/secrets.yml` prints
+  `grep -oE '^[a-z0-9_]*bucket[a-z0-9_]*:' secrets/secrets.yml` prints
   `longhorn_b2_bucket:` and `r2_bucket:`. Exit criterion 2 now says "no ratchet entries",
   because rule 3's own allowances are part of the rule.
 - **R2-10-5.** Confirmed: D2's `no-stub` gate checks only `stub-<key>`. The fix keys the
@@ -2246,7 +2246,7 @@ Fixed, all five:
     - Open question 11 names R3's PRs 1, 2 and 4, which shrink the set, and PR 5, which
       deletes it. It covers both landing orders. A cross-slice note asks R3 to name the
       refusal in its PR 5.
-- **R2-c1-3.** Confirmed. `ansible/roles/k8s/manifests/files/secret_hmac.py:digest` hashes
+- **R2-c1-3.** Confirmed. `k8s/roles/manifests/files/secret_hmac.py:digest` hashes
   the whole file. `qbittorrent/templates/secret.yaml.j2` and
   `pi-peer-backup/templates/secret.yaml.j2` both carry YAML `#` comments that render.
   mosquitto's split comment is a Jinja `{# ... #}` block, as the finding says.
@@ -2261,8 +2261,8 @@ Fixed, all five:
   A new risk records that `to_json` keeps a stored value's ending, where the `|` block
   scalar adds one newline.
 - **R2-c1-5.** Confirmed as latent, with a measurement. A Jinja parse of the 68 files under
-  `ansible/roles/k8s/*/defaults/main.yml`, `ansible/inventory/group_vars/` and
-  `ansible/inventory/host_vars/` finds 184 Jinja strings. One names a key:
+  `k8s/roles/*/defaults/main.yml`, `inventory/group_vars/` and
+  `inventory/host_vars/` finds 184 Jinja strings. One names a key:
   `headlamp_k8s_oidc_issuer_url`, an interpolation of `domain` that its template uses bare.
   Rule 5 now parses those values, treats an alias as the key, and refuses a transform in
   either place. The headlamp alias is a named member, and an alias red-proof pair joins
@@ -2338,22 +2338,22 @@ Raised:
 Fixed, all six:
 
 - **R2-c3-1.** Confirmed. The `k8s/manifests` include in
-  `ansible/roles/k8s/authelia/tasks/main.yml` passes `manifests_files` and
+  `k8s/roles/authelia/tasks/main.yml` passes `manifests_files` and
   `manifests_secret_files` as Jinja expressions. The task "Resolve the manifest file lists"
-  in `ansible/roles/k8s/manifests/tasks/main.yml` takes a passed list as given.
-  `ansible/tests/k8s/test_derived_manifest_files.py:world_readable_secrets` skips a template
+  in `k8s/roles/manifests/tasks/main.yml` takes a passed list as given.
+  `tests/k8s/test_derived_manifest_files.py:world_readable_secrets` skips a template
   outside the files list. The secret-key reconcile in `manifests/tasks/main.yml` and the
   digest loop in `manifests/tasks/release_digest.yml` both loop over
   `manifests_secret_files_resolved`.
     - PR 7 adds the file to the secret-list expression, never to `manifests_files`.
     - The *Multi-line keys* section and the file tree say that authelia lists the file
       explicitly.
-    - A templar test in `ansible/tests/services/` pins the entry under both lever states.
-    - An orphan test in `ansible/tests/k8s/` covers the three `JINJA_LIST_ROLES` roles. A
+    - A templar test in `tests/services/` pins the entry under both lever states.
+    - An orphan test in `tests/k8s/` covers the three `JINJA_LIST_ROLES` roles. A
       listing of their templates against their include values shows it green at
       `70591c307`.
     - The operator's pre-window dry run reads `secret_manifests`, the field
-      `ansible/roles/k8s/manifests/tasks/render_record.yml` writes.
+      `k8s/roles/manifests/tasks/render_record.yml` writes.
     - Risks, Rollback, Verification and the complexity delta follow.
 - **R2-c3-2.** Confirmed. The template comment, the `assisted` tier and the 2026-04-23 date
   are as the finding says.

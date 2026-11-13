@@ -41,7 +41,7 @@ __all__ = [
 # A k8s role declares a PVC in one of two shapes, and each names the claim AND its
 # StorageClass — the class is what decides whether Longhorn backs the volume up at all
 # (`longhorn` asks for backups, `longhorn-nobackup` does not; see `desired_labels` in
-# ansible/roles/k8s/longhorn-reconcile/files/longhorn_reconcile.py):
+# k8s/roles/longhorn-reconcile/files/longhorn_reconcile.py):
 #
 #   1. an inline `kind: PersistentVolumeClaim` block carrying its own `storageClassName:` line
 #      (no role's template carries one since media-volume moved to `k8s_claims`; the shape stays
@@ -102,7 +102,7 @@ class LonghornTiers:
 
     A volume in none of them and on a backup-asking StorageClass falls into the `default`
     RecurringJob group (daily, to B2) — see
-    ansible/roles/k8s/longhorn-backup/templates/longhorn-recurringjob.yaml.j2.
+    k8s/roles/longhorn-backup/templates/longhorn-recurringjob.yaml.j2.
     """
 
     r2: frozenset[str] = field(default_factory=frozenset)
@@ -310,7 +310,7 @@ def load_longhorn_tier_lists(
 ) -> LonghornTiers:
     """The R2, weekly and no-backup volume lists, resolved from the longhorn-reconcile role.
 
-    The lists are the expressions in `ansible/roles/k8s/longhorn-reconcile/defaults/main.yml`,
+    The lists are the expressions in `k8s/roles/longhorn-reconcile/defaults/main.yml`,
     which `resolved_tier_lists` derives from `containers_list`. `k3s_defaults` is the dict they
     resolve over: a tier key it already holds as a list wins, which is how a test injects one.
     That dict sits under `group_vars`, the way `Estate.role_vars` layers a setup
@@ -479,7 +479,7 @@ def owner_stance(tags: str = "") -> str:
     Args:
         tags: the entry's deploy tags, comma-joined. When given, the gate names them as a
             literal `--tags=<tags>`, which the glance needs: the role-doc census
-            (`ansible/tests/repo/test_role_claude_md.py`) wants `--tags` and the role's name
+            (`tests/repo/test_role_claude_md.py`) wants `--tags` and the role's name
             on one line, and the `=` form gives the glance's wrap no space to break at.
     """
     tag = f"`land.sh --tags={tags}`" if tags else "`land.sh`"

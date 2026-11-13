@@ -1,6 +1,6 @@
 """autoheal runs through the Pi's Compose project (H5.7).
 
-Two guards moved here with the service from `ansible/tests/services/`, and both read the
+Two guards moved here with the service from `tests/services/`, and both read the
 rendered service of the real `hosts/daniel-pi/package.yml`, not the template text:
 
 - The Discord webhook only notifies if its payload key is `content`. `willfarrell/autoheal`

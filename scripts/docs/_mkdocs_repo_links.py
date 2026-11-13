@@ -11,7 +11,7 @@ one-to-one:
     in the tree carries that name -- links to its own row on the Scripts reference page.
   * a docs page -- `docs/secret-rotation.md` -- links to that page.
 
-A role path such as `ansible/roles/k8s/netpol-baseline/tasks/main.yml` is deliberately NOT
+A role path such as `k8s/roles/netpol-baseline/tasks/main.yml` is deliberately NOT
 linked. The Services page documents *netpol-baseline*: its route, auth, backup tier and
 auto-deploy status. It documents nothing about that file, and `tasks/main.yml` and
 `defaults/main.yml` would both land on the same row, telling the reader nothing about either.

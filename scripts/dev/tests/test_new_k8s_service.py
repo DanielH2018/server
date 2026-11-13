@@ -16,18 +16,18 @@ import pytest
 
 import gen_role_glance
 from lib import yaml_fast
-from lib.ansible_jinja_env import template_env
+from lib.guard_jinja_env import template_env
 from lib.k8s_roles import (
     SHARED_MANIFEST_DEFAULTS,
     declared_manifest_files,
     resolved_manifest_files,
 )
-from lib.ansible_inventory import K8S_HOST
+from lib.inventory_lists import K8S_HOST
 from lib.render_guard import StubUndefined, host_layer
 from lib.repo_paths import HOST_VARS
 from validate.k8s_manifests import (
     ALL_VARS,
-    ANSIBLE,
+    K8S_ROLES,
     BASE_CONTEXT,
     load_yaml,
     make_lookup,
@@ -70,7 +70,7 @@ def _render(tmp_path, text: str, name: str, port: int, defaults=None) -> list[di
         **BASE_CONTEXT,
         **load_yaml(ALL_VARS),
         **host_layer(HOST_VARS, K8S_HOST),
-        "role_path": str(ANSIBLE / "roles" / "k8s" / name),
+        "role_path": str(K8S_ROLES / name),
     }
     ctx = resolve_vars(base, base)
     ctx["container_item"] = {"name": name, "hostname": name, "port": port}

@@ -14,11 +14,11 @@ import json
 import re
 
 import pytest
-from _helpers import ANSIBLE
+from _helpers import REPO, K8S_ROLES
 from _k8s_render import render_role_template
 from _setup_render import CLAUDE_CODE, render_component_text, role_context
 from deploy_tools.land_lib import policy
-from lib.ansible_jinja_env import template_env
+from lib.guard_jinja_env import template_env
 from lib import yaml_fast
 
 ROLE = CLAUDE_CODE
@@ -207,7 +207,7 @@ def test_the_alert_names_and_labels_the_poller_matches_on_exist() -> None:
     """A renamed hold alert or mute label would make the poller's gate match nothing."""
     poller = (ROLE / "files" / "claude_triage_poll.py").read_text()
     assert 'HOLD_ALERT = "DeployHoldActive"' in poller
-    observability = ANSIBLE / "roles" / "k8s" / "observability"
+    observability = K8S_ROLES / "observability"
     rules = (observability / "files" / "rules" / "deploy-pipeline.yaml").read_text()
     assert "- alert: DeployHoldActive\n" in rules
     secret = yaml_fast.safe_load(
@@ -227,7 +227,7 @@ def config() -> str:
 def test_the_pollers_fallback_address_is_the_pinned_prometheus_cluster_ip() -> None:
     """Prometheus publishes loopback only on its own node; the ClusterIP reaches it anywhere."""
     observability = yaml_fast.safe_load(
-        (ANSIBLE / "roles/k8s/observability/defaults/main.yml").read_text()
+        (K8S_ROLES / "observability/defaults/main.yml").read_text()
     )
     ip = observability["observability_prometheus_cluster_ip"]
     assert defaults()["claude_code_triage_prom_urls"] == [
@@ -258,7 +258,7 @@ TRIAGE_FILES = [
 @pytest.mark.parametrize("path", TRIAGE_FILES)
 def test_a_pr_changing_triage_needs_the_operator(path, tmp_path) -> None:
     """The operator's 2026-10-15 ruling: the agent cannot raise its own caps unattended."""
-    assert (ANSIBLE.parent / path).is_file(), f"{path} moved; update this list"
+    assert (REPO / path).is_file(), f"{path} moved; update this list"
     listed = tmp_path / "approval-paths"
     listed.write_text(
         render_component_text("claude-code", "claude-land-approval-paths.j2")
@@ -313,8 +313,8 @@ def test_the_runners_own_directories_are_declared_without_a_listing() -> None:
 
 # I6 of the guardrails plan (dotfiles#967): a session has no write path into what opens the next
 # episode. A session can write syslog lines with any tag, so a routed alert must not count them.
-PROMETHEUS_RULES = ANSIBLE / "roles" / "k8s" / "observability" / "files" / "rules"
-LOKI_RULES = ANSIBLE / "roles" / "k8s" / "loki-homelab" / "files" / "rules"
+PROMETHEUS_RULES = K8S_ROLES / "observability" / "files" / "rules"
+LOKI_RULES = K8S_ROLES / "loki-homelab" / "files" / "rules"
 # Prometheus series that count log lines or bytes: Alloy's `stage.metrics` counters and Loki's
 # own ingest volume.
 LOG_VOLUME_METRICS = (

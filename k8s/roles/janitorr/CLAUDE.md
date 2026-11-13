@@ -1,0 +1,124 @@
+# janitorr — Automated media library cleanup
+
+Deletes watched/old media and cleans up Sonarr/Radarr based on disk-usage rules.
+See repo-root `CLAUDE.md` for shared conventions.
+
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in k8s/roles/longhorn-reconcile/defaults/main.yml. -->
+- **Applied by:** Flux, through `promote`; `land.sh --tags=janitorr` gates the rollout
+- **Images:** `ghcr.io/schaka/janitorr` (`janitorr_k8s_image`), `python`
+  (`janitorr_k8s_health_image`), `alpine/k8s` (`janitorr_k8s_health_kubectl_image`)
+- **Route:** none (no `templates/ingressroute.yaml.j2`)
+- **Claim:** `media-data` (not Longhorn (media-local))
+<!-- /generated_from -->
+
+- **Digest-pinned to a `jvm-stable` build** (pulled 2026-06-28). `jvm-stable` is a floating non-semver
+  alias Renovate can't version-track, and janitorr deletes real media, so updates are deliberate.
+  **Manual update:** pull `jvm-stable`, take the new digest, update the k8s role's default, redeploy.
+- **Host: daniel-box (k8s), since 2026-08-08 — slice 4, B7b.** The Docker role this config came
+  from is gone; this role's Secret renders `templates/config/application.yml.j2`. Edit retention
+  rules HERE; deploy with `--tags janitorr` from daniel-box.
+- **No web UI** (background service) · targets the cluster sonarr/radarr/jellyfin
+- **Its health signal is the `janitorr-health` CronJob** (`templates/health-cronjob.yaml.j2`),
+  every 10 minutes. `files/janitorr_health.py` reads the running pod's container start time
+  and, past a 10-minute startup grace, counts `Unexpected error occurred in scheduled task`
+  lines in its log, through its own ServiceAccount (`templates/health-rbac.yaml.j2`). It records
+  the verdict as a log line and on the verdict ConfigMap (below). No gate Job runs it: the role's defaults
+  declare no `flux_cronjob_gates`, so `janitorr-verify` holds no copy of this CronJob.
+- **The health reader was a daniel-box host cron until H2.5c.** The cron,
+  `/usr/local/bin/janitorr-health.sh` and the `janitorr` drift fragment are `legacy:` entries in `hosts/daniel-box/package.yml` since H7.48, and `homelab-reconcile`
+  removes each from a host that still holds it.
+- **The pod holds no Secret.** The reader's code ships in the `janitorr-health` ConfigMap,
+  beside `host_lib.py`. No secret goes in the ConfigMap (`tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
+- **The reader also exports its verdict** (M6 B6b). It patches `homelab/check-verdict`,
+  `homelab/check-last-run` and `homelab/check-message` onto the `janitorr-health-verdict`
+  ConfigMap, which the role renders with no annotations so the reader is their only writer.
+  The patch passes `--field-manager=janitorr-health`: under kubectl's default `kubectl-patch`
+  manager, Flux's apply dropped the annotations every 10 minutes (#6746).
+  kube-state-metrics exports the verdict, and the `pod-producers` rules read it. A
+  failed export makes the reader exit 1.
+- **The health pod carries `app: janitorr-health`, never `app: janitorr`.** The reader
+  takes the first Running pod labelled `app=janitorr`, and a verify Job pod under that label
+  could be the pod it reads.
+
+## Notable
+- Behaviour (retention rules, leaving-soon thresholds, dry-run flag) lives in
+  `templates/config/application.yml.j2`. **It deletes files** — `dry-run` was flipped off
+  2026-06-10 (operator decision after the initial trial period), so it now cleans for
+  real. Tag media `janitorr-keep` in the *arrs to exempt it (see `exclusion-tags` in
+  `application.yml.j2`). **NB:** Radarr/Sonarr reject underscores in tag labels
+  (`^[a-z0-9-]+$`) and Janitorr matches by exact label — the upstream-doc `janitorr_keep`
+  is uncreatable here, so the tags are hyphenated. Add a tag in Radarr via
+  Settings→Tags or the API; Janitorr picks it up on its next run and drops the item
+  from the Leaving Soon collection.
+- Mounts the whole `containers/data` tree at `/data` (same as Sonarr/Radarr since the
+  2026-07-02 hardlink-mount unification). Janitorr acts on media via the Sonarr/Radarr
+  APIs; its direct filesystem use is `leaving-soon-dir` (where it writes the symlinks) and
+  `free-space-check-dir`, both `/data`-relative. **Path-namespace trap:**
+  `media-server-leaving-soon-dir` and the symlink targets are `/data/media/...` strings
+  that JELLYFIN must resolve — jellyfin's primary mount puts the media tree at `/data`,
+  so it carries a second `data/media:/data/media` mount specifically to make janitorr's
+  namespace resolve there (2026-07-02 review M4; see the jellyfin role CLAUDE.md). If
+  either side's mounts change, re-check both configs together.
+- **A restartCount in the low single digits right after a node reboot is EXPECTED, not a
+  fault** (diagnosed 2026-07-02 under Docker; the mechanism below is the k8s one, restated
+  by the 2026-09-24 review, which read a live pod at restartCount 5 with its last crash
+  about two minutes after the node came up). Spring fails fast when sonarr and radarr are
+  not up yet —
+  `feign.RetryableException: Connection refused … sonarr:8989` during context init, *before*
+  any cleanup job runs, so a boot-window crash carries zero deletion risk. The kubelet then
+  restarts the container under **CrashLoopBackOff**, which backs off exponentially (10s,
+  doubling, capped at 5 minutes) rather than retrying on a fixed interval, so the pod heals
+  itself once the *arrs answer. Don't re-flag; only investigate restarts that are NOT
+  clustered in a post-boot window.
+- **To tell a post-boot crash from a real fault, compare the node's `uptime -s` with the
+  pod's `lastState.terminated.finishedAt`**: `kubectl -n homelab get pod -l app=janitorr
+  -o jsonpath='{.items[0].status.containerStatuses[0].lastState.terminated.finishedAt}'`.
+  A finish time within a few minutes of boot is this, and the log line above confirms it.
+  A finish time well after boot is a real fault — read the container log.
+- **DECIDED: the self-healing restart is accepted, and this role adds no wait-for-deps init
+  container** (#2421). Three reasons, and the third is why it is recorded rather than tried.
+  (1) `janitorr-verify` already proves `sonarr:8989`, `radarr:7878` and `jellyfin:8096`
+  answer from a pod fenced and mounted like the new one on every revision that rolls janitorr,
+  which is the same assertion a gate would make, made where the revision's soak acts on it. (2) An unbounded wait trades a bounded
+  post-boot crash loop for an indefinite `Init` stall, with no restart count and no
+  CrashLoopBackOff to notice — see the docstring of
+  `tests/services/test_karakeep_backend_policies.py`, which is where that pattern
+  DOES apply and what it costs. (3) `k8s_autodeploy` is false here, so a pod that never leaves
+  Init waits for a human rather than being caught by a rollout gate, on the one role in the
+  fleet that deletes real media. Contradict this at a cited `file:line` with new evidence.
+- **The `containers_list` `depends_on: [media-volume, sonarr, radarr, jellyfin]` is not a fix
+  for the above.** The renderer toposorts it into the bundle's `dependsOn` edges, which order
+  Flux's applies; it does not gate pod start after a node reboot, when no apply runs at all.
+
+## The Flux verify Job
+
+`templates/verify/` holds `janitorr-verify`, which replaced the retired verify tasks at janitorr's
+flip with no `pods/exec` grant. `files/verify_janitorr.py` reads the mounted `application.yml`,
+dials sonarr, radarr and jellyfin over HTTP, and writes, reads and removes the leaving-soon
+probe link through jellyfin's mount layout; its docstring maps each proof. Its pod is
+`app: janitorr-verify`, which sonarr's and radarr's `netpol_from` list (#5709).
+`tests/test_verify_janitorr.py` renders the Job through the Job census, checks that both
+fences admit the Job's pod, and holds the Job's mounts to janitorr's and jellyfin's.
+
+Flux applies the role's manifests.
+`templates/config/application.yml.j2` and `templates/verify/job.yaml.j2` both read
+`janitorr_k8s_dry_run` from `defaults/main.yml`.
+
+## Retention rungs
+
+`media-deletion` keys each expiration on free disk: a rung applies while free space is below
+its key. The rungs are 5, 10, 15, 20 and 25, and the 25 rung (movies 180d, seasons 240d) is the
+loosest.
+
+DECIDED: the loosest rung is 25 because `/srv/media` shares daniel-box's root LV with
+`/var/lib/longhorn`, and Longhorn stops scheduling on a disk below 25% available
+(`storage-minimal-available-percentage: 25`). A 20 rung would not act until the LV is 80% used,
+past that line. The LV cannot grow, because the VG has no free extents. Operator ruling
+2026-10-22, #5806. The `DiskHealthFailed` threshold of 75% used is Longhorn's floor too and
+stays. Media tagged `janitorr-keep` is exempt from every rung.
+
+## Editing
+- Rules: `templates/config/application.yml.j2` (rendered into the k8s Secret by `k8s/roles/janitorr/`)
+- Verify the health reader: `kubectl -n homelab logs job/<the newest janitorr-health Job>`. Its
+  `janitorr-health: status=up` line is the verdict. No `pushed` line follows it since Cutover-2.

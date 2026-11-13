@@ -1,4 +1,4 @@
-"""The repo path anchors a script under ``scripts/`` reads the Ansible tree through.
+"""The repo path anchors a script under ``scripts/`` reads the tree through.
 
 WHY A MODULE WITH NO IMPORTS. ``render_guard.py`` was meant to be the one definition of
 these, but importing it costs a ``jinja2`` and a ``yaml`` import, so a script that only
@@ -53,9 +53,8 @@ PRIMARY_CHECKOUT = primary_checkout_of(REPO)
 SCRIPTS = REPO / "scripts"
 DOCS = REPO / "docs"
 
-ANSIBLE = REPO / "ansible"
-ROLES = ANSIBLE / "roles"
-K8S_ROLES = ROLES / "k8s"
+K8S = REPO / "k8s"
+K8S_ROLES = K8S / "roles"
 JOB_FILES = SCRIPTS / "renderer" / "job_files"
 # `longhorn_robustness.py`'s one copy lives in monitor-bridge's `files/` without shipping in its
 # pod; the runbook gates import it from here (#3668).
@@ -66,9 +65,11 @@ MONITOR_BRIDGE_FILES = K8S_ROLES / "monitor-bridge" / "files"
 # which `deploy_git` imports. `deploy_logic` itself must not load `host_lib`, which
 # `test_deploy_logic_imports_without_host_lib` enforces by `sys.modules`.
 HOST_LIB_FILES = REPO / "hosts" / "lib"
-SHARED_TPL = ANSIBLE / "templates"  # shared macros
+SHARED_TPL = K8S / "templates"  # shared macros
 
-INVENTORY = ANSIBLE / "inventory"
+INVENTORY = REPO / "inventory"
+# The SOPS files, their creation rules and the plaintext rotation register.
+SECRETS = REPO / "secrets"
 ALL_VARS = INVENTORY / "group_vars" / "all.yml"
 HOST_VARS = INVENTORY / "host_vars"
 # The k3s service list, every template's `services` (render_guard.k8s_services).
@@ -96,7 +97,7 @@ K3S_HOST_CHECKS_DEFAULTS = K3S_HOST_CHECKS / "defaults" / "main.yml"
 K3S_HOST_DNS = REPO / "hosts" / "components" / "k3s-host-dns"
 K3S_FILES = K3S_HOST_CHECKS / "files"
 # The suite's shared guard modules (`_ratchet.py`, `_helpers.py`), for a script that reuses one.
-ANSIBLE_TESTS = ANSIBLE / "tests"
+TESTS = REPO / "tests"
 
 # The bare module names a script outside the roles imports from each role directory, by the
 # directory constant. `lib/stdlib_only.py`'s walk refuses an import from a role directory, or

@@ -28,7 +28,7 @@ def _rows(tmp_path):
 
 def _adr_marker(adr: str) -> str:
     """A marker line citing an ADR, assembled so this file's own source never carries the
-    marker and the ADR token on one line: `ansible/tests/repo/test_adr_links.py` scans .py
+    marker and the ADR token on one line: `tests/repo/test_adr_links.py` scans .py
     sources for exactly that pair and would demand an ADR entry for a fixture.
     """
     return "# " + "DECIDED: one lock. See " + adr + ".\n"
@@ -155,12 +155,12 @@ def test_first_sentence_used_for_the_short_field(tmp_path):
 
 
 def test_planes_are_grouped_by_path_prefix(tmp_path):
-    _write(tmp_path, "ansible/roles/k8s/foo/tasks/main.yml", "# DECIDED: k8s thing.\n")
+    _write(tmp_path, "k8s/roles/foo/tasks/main.yml", "# DECIDED: k8s thing.\n")
     _write(tmp_path, "scripts/bar.py", "# DECIDED: scripts thing.\n")
     _write(tmp_path, "hosts/components/baz/component.yml", "# DECIDED: host thing.\n")
     _write(tmp_path, "README.md", "DECIDED: a marker lives elsewhere.\n")
     rows = {r["path"]: r["plane"] for r in _rows(tmp_path)}
-    assert rows["ansible/roles/k8s/foo/tasks/main.yml"] == "roles/k8s"
+    assert rows["k8s/roles/foo/tasks/main.yml"] == "k8s/roles"
     assert rows["scripts/bar.py"] == "scripts"
     assert rows["hosts/components/baz/component.yml"] == "host components"
     assert rows["README.md"] == "other"
@@ -346,7 +346,7 @@ def test_this_roles_claude_md_pointer_is_flagged_when_the_file_is_missing(tmp_pa
     """
     _write(
         tmp_path,
-        "ansible/roles/k8s/widget/templates/check.sh.j2",
+        "k8s/roles/widget/templates/check.sh.j2",
         "# DECIDED: cron, not a server flag.\n# Full account in this role's CLAUDE.md.\n",
     )
     rows = _rows(tmp_path)
@@ -359,10 +359,10 @@ def test_this_roles_claude_md_pointer_resolves_when_the_file_exists(tmp_path):
     """The red-proof pair to the flag above: same marker, the role doc present."""
     _write(
         tmp_path,
-        "ansible/roles/k8s/widget/templates/check.sh.j2",
+        "k8s/roles/widget/templates/check.sh.j2",
         "# DECIDED: cron, not a server flag.\n# Full account in this role's CLAUDE.md.\n",
     )
-    _write(tmp_path, "ansible/roles/k8s/widget/CLAUDE.md", "# widget\n")
+    _write(tmp_path, "k8s/roles/widget/CLAUDE.md", "# widget\n")
     assert g.find_unresolved_pointers(_rows(tmp_path), tmp_path) == []
 
 
@@ -413,12 +413,12 @@ def test_repo_path_pointer_resolves_relative_to_the_markers_own_directory(tmp_pa
     """`templates/foo.j2` written from inside a role names the sibling, not a root path."""
     _write(
         tmp_path,
-        "ansible/roles/k8s/widget/defaults/main.yml",
+        "k8s/roles/widget/defaults/main.yml",
         "# DECIDED: daily. See templates/check.sh.j2 for the cron body.\n",
     )
     _write(
         tmp_path,
-        "ansible/roles/k8s/widget/defaults/templates/check.sh.j2",
+        "k8s/roles/widget/defaults/templates/check.sh.j2",
         "#!/bin/sh\n",
     )
     assert g.find_unresolved_pointers(_rows(tmp_path), tmp_path) == []
@@ -429,9 +429,9 @@ def test_a_double_extension_path_is_taken_whole(tmp_path):
     _write(
         tmp_path,
         "scripts/foo.py",
-        "# DECIDED: see ansible/roles/k8s/widget/templates/check.sh.j2 for the rest.\n",
+        "# DECIDED: see k8s/roles/widget/templates/check.sh.j2 for the rest.\n",
     )
-    _write(tmp_path, "ansible/roles/k8s/widget/templates/check.sh.j2", "#!/bin/sh\n")
+    _write(tmp_path, "k8s/roles/widget/templates/check.sh.j2", "#!/bin/sh\n")
     assert g.find_unresolved_pointers(_rows(tmp_path), tmp_path) == []
 
 
@@ -483,7 +483,7 @@ def test_a_counterexample_pointer_is_not_flagged(tmp_path):
     """
     _write(
         tmp_path,
-        "ansible/tests/repo/test_documented_paths_exist.py",
+        "tests/repo/test_documented_paths_exist.py",
         "# DECIDED: a suffix, never a bare basename. scripts/gen_infra_map.py is not a suffix.\n",
     )
     (tmp_path / "scripts").mkdir()
@@ -494,7 +494,7 @@ def test_the_counterexample_exemption_is_by_token_not_by_file(tmp_path):
     """The red-proof pair: a different dangling pointer in the same file is still flagged."""
     _write(
         tmp_path,
-        "ansible/tests/repo/test_documented_paths_exist.py",
+        "tests/repo/test_documented_paths_exist.py",
         "# DECIDED: a suffix, never a bare basename. See scripts/nowhere.py.\n",
     )
     (tmp_path / "scripts").mkdir()

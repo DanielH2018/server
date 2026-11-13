@@ -62,13 +62,13 @@ from deploy_tools.runbook_gates_lib.gate_runner import (
 )
 from lib import yaml_fast
 from lib.kubectl import DEFAULT_TOOLS, K3S_KUBECONFIG, Tools
-from lib.repo_paths import ANSIBLE
+from lib.repo_paths import SECRETS
 
 CLUSTER = "prod"
 RUNBOOK = "docs/secret-rotation.md"
 
 SECRET = "authelia_storage"
-REGISTRY = ANSIBLE / "secret_rotation.yml"
+REGISTRY = SECRETS / "secret_rotation.yml"
 PVC = ("homelab", "authelia-config")
 WORKLOAD = ("homelab", "authelia")
 # Two hours: long enough to take the snapshot and read the runbook, short enough that the

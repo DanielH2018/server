@@ -194,7 +194,7 @@ condition is stated once.
 - **`lib.git` strips `GIT_*` only for one-shot calls.** `lib.git.git` builds an environment
   without any `GIT_*` variable and runs one `subprocess.run`, so it cannot host a long-lived
   process. The `git-and-gh-go-through-lib` row in `test_census_rows_python.py` (in
-  `ansible/tests/repo/`) finds raw calls with `_raw_call_offence`, which matches only
+  `tests/repo/`) finds raw calls with `_raw_call_offence`, which matches only
   `subprocess.run`. The four raw `subprocess.Popen` calls under `scripts/` start `tee`, `uv`
   or an argv held in a variable, so none of them names a program in `_ROUTED`.
 - **`report` cannot re-run an earlier window.** `fact_status.py report` takes `--days`,
@@ -227,12 +227,12 @@ condition is stated once.
       A check run's id is also its job's id, so one call says whether a run had the notice
       step.
 - **The dispatch census lists PR-only steps.** `SCOPED_STEPS` in
-  `test_ci_dispatch_sweeps_everything.py` (in `ansible/tests/repo/`) names the steps that
+  `test_ci_dispatch_sweeps_everything.py` (in `tests/repo/`) names the steps that
   must not fire on a `workflow_dispatch`, because they diff against `github.base_ref`. Its
   `_step_conditions` reads every named step with an `if:`, whether it runs a script or uses
   an action.
 - **A separate CI job would need gating.** `test_every_ci_job_is_gated.py` in
-  `ansible/tests/repo/` holds every job to the `prek` gate, so the notice is a step, not a job.
+  `tests/repo/` holds every job to the `prek` gate, so the notice is a step, not a job.
 
 ## Design
 
@@ -442,7 +442,7 @@ needs no checkout, and it grades each commit against that commit's own docs and 
                           ~ precision(): also returns its (commit, unit, atom) moves
  scripts/dev/fact_status.py
 +  notice [--since REF] [--head REV] [--format text|markdown|github|json]
- ansible/tests/repo/test_census_rows_python.py
+ tests/repo/test_census_rows_python.py
                           ~ _raw_call_offence(): also matches subprocess.Popen
  .github/workflows/ci.yml   (hooks job)
 +  step "Notice: CLAUDE.md sections citing atoms this PR moved"   (id: notice)
@@ -835,7 +835,7 @@ change. Then run:
 uv run python scripts/dev/fact_status.py notice --since origin/master
 ```
 
-The output must list the `ansible/roles/k8s/image-builder/CLAUDE.md` section that cites the
+The output must list the `k8s/roles/image-builder/CLAUDE.md` section that cites the
 symbol. Discard the change afterwards with `git restore scripts/lib/render_guard.py`.
 
 The first PR after PR 5 that moves a cited atom must show the table in its run summary and

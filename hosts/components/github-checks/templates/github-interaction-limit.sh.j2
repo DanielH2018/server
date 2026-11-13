@@ -63,7 +63,7 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 
 # The longest legitimate gap between two textfile writes: the timer fires daily (86400s), and the
 # extra hour is the margin the NotReporting rules keep.
-# ansible/tests/services/test_gitops_check_rule_literals.py pins the rules' literals to it.
+# tests/services/test_gitops_check_rule_literals.py pins the rules' literals to it.
 DEADLINE_S=90000
 
 # Records the verdict: the journal line first, so `journalctl -t github-interaction-limit` reads the

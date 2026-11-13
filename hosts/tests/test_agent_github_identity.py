@@ -13,14 +13,14 @@ Run: uv run pytest hosts/tests/test_agent_github_identity.py
 import re
 
 from _agent_package import agent_setup_script, render_daniel_server_with
-from _helpers import ANSIBLE
+from _helpers import REPO
 from _setup_render import render_component_text
 from fanout_lib.target import branch_name
 from lib.worktree_owner import WORKTREE_PREFIX_ENV
 from lib import yaml_fast
 from lib.git_testing import git
 
-COMPONENT = ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
+COMPONENT = REPO / "hosts" / "components" / "claude-code" / "component.yml"
 TOKEN = "sentinel-agent-gh-token"
 
 
@@ -100,9 +100,7 @@ def enter_worktree_branch(name: str) -> str:
 def fence_lets_push(branch: str) -> bool:
     """Whether a branch falls in one of the agent branch fence's exclusions."""
     defaults = yaml_fast.safe_load(
-        (
-            ANSIBLE.parent / "hosts/components/github-checks/defaults/main.yml"
-        ).read_text()
+        (REPO / "hosts/components/github-checks/defaults/main.yml").read_text()
     )
     globs = defaults["github_fence_ruleset_exclude"]
     assert globs, "the fence declares no exclusions"

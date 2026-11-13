@@ -3,7 +3,7 @@
 Every detector row in `test_census_rows_test_modules.py` and `test_census_rows_test_renders.py`
 reads the same census, `pytest_only_modules()`. Parsing dominates the rows' cost: `ast.parse`
 was 5.15s of the 9.23s one row took over 1620 modules (#6437). A row that reparses what another
-row already parsed pays that again, so `share` in `ansible/tests/_row_table.py` has the rows of
+row already parsed pays that again, so `share` in `tests/_row_table.py` has the rows of
 both files find their hits in one pass over one tree per module.
 
 The rows run in a fresh interpreter. In this one, an earlier test on the same xdist worker may
@@ -35,8 +35,8 @@ IMPORT_PAIRS = (
         ".claude/hooks/tests/test_run_hook.py",
     ),
     (
-        "ansible/roles/k8s/registry/tests/test_registry_verify.py",
-        "ansible/roles/k8s/registry/tests/_registry_fakes.py",
+        "k8s/roles/registry/tests/test_registry_verify.py",
+        "k8s/roles/registry/tests/_registry_fakes.py",
     ),
 )
 

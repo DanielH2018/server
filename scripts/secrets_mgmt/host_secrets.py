@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Per-host SOPS files: `ansible/vars/hosts/<host>.sops.yaml`, each copied from secrets.yml.
+"""Per-host SOPS files: `secrets/hosts/<host>.sops.yaml`, each copied from secrets.yml.
 
 Slice H4 ships one SOPS file per host inside the host's package. The host decrypts it with
 its own age key, so no host except the ones that run Ansible ever holds a key for
@@ -20,7 +20,7 @@ every value in it is a copy of the one in `secrets.yml`. `secrets.yml` stays the
               would pass the comparison.
   sync <host> — OPERATOR-ONLY. Decrypts `secrets.yml`, then rewrites `<host>`'s file whole
           with the keys its tree names, encrypted by the creation rule for that path in
-          `ansible/.sops.yaml`. Run it in the same PR as the change that adds a key to a
+          `secrets/.sops.yaml`. Run it in the same PR as the change that adds a key to a
           host's tree or rotates a key a host file carries; `check` in CI is the gate and no
           cron calls it. It rewrites every value on purpose: the host-file walk in
           `git_dates.py` reads that rewrite as the copy.
@@ -52,7 +52,7 @@ from secrets_mgmt.cluster_vars_check import Tree
 from secrets_mgmt.git_dates import SECRETS_GIT_PATH, ciphertext_rotation_commits
 from secrets_mgmt.rotation_tools import RotationTools
 
-HOSTS_GIT_DIR = "ansible/vars/hosts"
+HOSTS_GIT_DIR = "secrets/hosts"
 SUFFIX = ".sops.yaml"
 # A host name is one plain path piece, which keeps a joined path under its directory.
 _HOST = re.compile(r"[a-z][a-z0-9-]*")

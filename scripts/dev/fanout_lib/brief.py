@@ -23,7 +23,7 @@ from fanout_lib.target import (
     branch_name,
 )
 from findings_lib.issue_model import cited_paths
-from lib.ansible_inventory import LANDING_HOST
+from lib.inventory_lists import LANDING_HOST
 
 # `land.sh` and the deployer run on the GitOps host, so only batches placed there land.
 LANDS = LANDING_HOST
@@ -52,7 +52,7 @@ ISSUE_PREAMBLE = (
 
 
 # What a batch touches, as its issues name it: a role by its path, a host by its name.
-_ROLE_RE = re.compile(r"roles/(?:k8s|containers|setup)/([\w-]+)")
+_ROLE_RE = re.compile(r"k8s/roles/([\w-]+)")
 _HOST_RE = re.compile(r"\bdaniel-(?:box|server|pi)\b")
 _HOST_PREFIX_RE = re.compile(r"^\[[^]]+\] ")
 
@@ -168,7 +168,7 @@ def _issue_block(issue: Issue) -> str:
 # review batch's implementer with.
 APPLY_OWED = """### A verdict that leaves a change unapplied
 `needs-manual-apply` means the PR merged and a change is still owed a hand: a rotated secret,
-because `ansible/vars/secrets.yml` derives no deploy tag. `land.sh` printed it after "it needs
+because `secrets/secrets.yml` derives no deploy tag. `land.sh` printed it after "it needs
 applying by hand". promote and Flux apply every k8s tag, and a host's updater applies its
 package, so `land.sh` starts no apply of its own. Read what is still pending:
 ```bash

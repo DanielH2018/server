@@ -113,7 +113,7 @@ def test_the_sonarr_pin_in_the_package_equals_the_services():
     package_copy = yaml.safe_load(
         (COMPONENTS / "fake-remux/defaults/main.yml").read_text()
     )["fake_remux_sonarr_cluster_ip"]
-    sonarr = REPO / "ansible/roles/k8s/sonarr"
+    sonarr = REPO / "k8s/roles/sonarr"
     cluster_copy = yaml.safe_load((sonarr / "defaults/main.yml").read_text())
     assert package_copy == cluster_copy["sonarr_k8s_cluster_ip"]
     template = (sonarr / "templates/service.yaml.j2").read_text()

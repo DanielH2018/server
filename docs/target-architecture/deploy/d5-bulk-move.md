@@ -262,7 +262,7 @@ learned in this stretch bear on them:
   answers 403 once five of its 60-second updates have failed (`updateMaxFailure: 5`). On a
   crowdsec roll that does not settle, read
   `kubectl -n homelab logs deploy/crowdsec -c lapi-register` first.
-- A PR that edits a file under `ansible/roles/k8s/manifests/` that no Ansible render reads,
+- A PR that edits a file under `k8s/roles/manifests/` that no Ansible render reads,
   such as `files/flux_soak.py`, still derives every tag in `land.sh`. Land it with
   `--tags <one flux-owned tag>`, as #5745 did, so the landing waits on the promotion and
   re-applies no Ansible role.
@@ -297,7 +297,7 @@ the last roles to Flux after #5765. traefik's own window landed earlier, in #572
   on 2026-10-22.
 - **`render_targets.py daniel-box` prints `flux` alone.** After #5833, `uv run python
   scripts/deploy_tools/render_targets.py daniel-box` printed `flux`, and `grep -c 'owner:
-  flux' ansible/inventory/host_vars/daniel-box.yml` printed 59. The first output is step 27's
+  flux' inventory/host_vars/daniel-box.yml` printed 59. The first output is step 27's
   precondition.
 - **Step 27 is open and waits on an operator step.** The render-records disarm,
   [#5839](https://github.com/DanielH2018/server/pull/5839), fails
@@ -454,7 +454,7 @@ own-window roles' (*Waves and windows*).
 
 ## Baseline at `70591c307`
 
-- **The task census.** Counting top-level tasks per role under `ansible/roles/k8s/*/tasks/`
+- **The task census.** Counting top-level tasks per role under `k8s/roles/*/tasks/`
   gives three groups:
     - **21 roles have one task**, an include of `k8s/manifests`: bazarr, bento-pdf, deploy-ui,
       freshrss, gpu-exporter, home-assistant, homepage, littlelink, livesync, loki-homelab,
@@ -464,7 +464,7 @@ own-window roles' (*Waves and windows*).
       karakeep, nut, radarr, terraria and valheim.
     - **The rest have more**, from mosquitto's 3 to observability's 30.
 
-  R1's census row in `ansible/tests/repo/test_census_rows_roles.py` lists every task chunk that
+  R1's census row in `tests/repo/test_census_rows_roles.py` lists every task chunk that
   writes a cluster object outside `k8s/manifests`, each with its owning slice. D5 is that
   census's consumer. R1 records host writes separately, as a channel its render does not
   cover.
@@ -477,11 +477,11 @@ own-window roles' (*Waves and windows*).
   loki-homelab, node-exporter, observability and scrutiny. Live, 59 of 71 Deployments carry
   `restartedAt`, 40 of them `Recreate`, as do 5 DaemonSets (D2 baseline). navidrome is
   `Recreate` and parked at `navidrome_k8s_replicas: 0`.
-- **Snapshots.** `grep -l '^k8s_autodeploy_snapshot_pvcs' ansible/roles/k8s/*/defaults/main.yml
+- **Snapshots.** `grep -l '^k8s_autodeploy_snapshot_pvcs' k8s/roles/*/defaults/main.yml
   | wc -l` prints 14: bazarr, code-server, freshrss, home-assistant, jellyfin, karakeep,
   livesync, prowlarr, qbittorrent, radarr, sonarr, speedtest, tdarr and zigbee2mqtt.
   navidrome's and observability's defaults name the key only in comments that say they declare
-  none. `ansible/roles/k8s/volume-snapshot/CLAUDE.md` says "Fourteen roles are opted in".
+  none. `k8s/roles/volume-snapshot/CLAUDE.md` says "Fourteen roles are opted in".
     - That file names each snapshot `autodeploy-<service>-<sha8>-<claim>-<token>`. The token
       is a UTC timestamp (`volume_snapshot_run_token`, format `%Y%m%d%H%M%S`) that "keeps a
       rollback deploy from being refused by its own protection step".
@@ -489,15 +489,15 @@ own-window roles' (*Waves and windows*).
       "the name stays taken". This is failure class 6 (Longhorn's `markRemoved` CR).
     - A name must stay under 63 bytes (#2734), and the retention floor is 2.
     - The claim part drops a leading `<service>-`. `volume-revert`'s task "Name the snapshot
-      prefix for …" in `ansible/roles/k8s/volume-revert/tasks/claim.yml` builds the same
+      prefix for …" in `k8s/roles/volume-revert/tasks/claim.yml` builds the same
       prefix and checks `volume_revert_sha` against `^[0-9a-f]{8,}$`. The longest names are
       code-server's workspace claim and home-assistant's config claim, at 56 bytes each.
-- **The revert.** `ansible/roles/k8s/volume-revert/CLAUDE.md` says the role "scales the
+- **The revert.** `k8s/roles/volume-revert/CLAUDE.md` says the role "scales the
   Deployment to zero, reverts, and leaves it there", and that "a caller that reverts without
   applying afterwards leaves the service down". It has no standalone deploy tag. Its only
   caller is the manifests role, gated on `k8s_restore_snapshot_sha`, which only the deployer's
   rollback sets.
-- **Built images.** `ansible/roles/k8s/image-builder/CLAUDE.md` lists nine callers:
+- **Built images.** `k8s/roles/image-builder/CLAUDE.md` lists nine callers:
   ical-proxy, terraria, pi-peer-backup, n8n, code-server, nut, homelab-mcp, valheim and
   karakeep. n8n builds two images, `n8n` and `n8n-runners`, so there are ten. Ten
   `*_k8s_image` pins read `k8s_built_image_tags`, valheim's being its initContainer image
@@ -505,14 +505,14 @@ own-window roles' (*Waves and windows*).
     - Each build pushes a content tag, `sha-<12 hex>`, hashed over its context ConfigMap's
       `data`, to the in-cluster registry.
     - Every context pins its base image by digest in its `FROM` line, for example
-      `ansible/roles/k8s/nut/templates/Dockerfile.j2`, and Renovate bumps those digests.
+      `k8s/roles/nut/templates/Dockerfile.j2`, and Renovate bumps those digests.
     - `image_builder_force=true` rebuilds for a base-image CVE that the hash cannot see.
     - A GitHub-hosted runner cannot push to the in-cluster registry. The cluster pulls the
       public package `ghcr.io/danielh2018/texbrain` without a pull secret (D1 baseline).
     - Every consumer sets `imagePullPolicy: Always`. `grep -rn imagePullPolicy` over the nine
       roles' templates finds it in n8n (two Deployments), homelab-mcp, nut, ical-proxy,
       terraria, valheim, code-server (twice), karakeep (three times) and pi-peer-backup's
-      CronJob. `ansible/roles/k8s/registry/CLAUDE.md` says a built-image pod "re-fetches by
+      CronJob. `k8s/roles/registry/CLAUDE.md` says a built-image pod "re-fetches by
       tag on each start". With `Always`, kubelet resolves the tag at the registry on every
       container start, so an unreachable registry fails a restart even when the image is
       cached.
@@ -525,8 +525,8 @@ own-window roles' (*Waves and windows*).
   an older master than the one it merges into.
 - **Rendered Jobs that tasks apply.** These templates set a fixed name and
   `ttlSecondsAfterFinished`, and a task applies each one outside `k8s/manifests`:
-    - `netpol-baseline-probe` (`ansible/roles/k8s/netpol-baseline/templates/netpol-probe-job.yaml.j2`);
-    - the netpol probe macro `ansible/templates/netpol-probe-job.yml.j2`, called by n8n
+    - `netpol-baseline-probe` (`k8s/roles/netpol-baseline/templates/netpol-probe-job.yaml.j2`);
+    - the netpol probe macro `k8s/templates/netpol-probe-job.yml.j2`, called by n8n
       (`n8n-netpol-probe`), headlamp (`headlamp-netpol-probe`), prowlarr
       (`flaresolverr-netpol-probe`) and registry (`registry-netpol-probe`);
     - `media-volume-hardlink-probe` (media-volume);
@@ -569,7 +569,7 @@ own-window roles' (*Waves and windows*).
       deploy/registry --replicas=0` for the GC ("STOP-THE-WORLD, NOT OPTIONAL") and scales
       back in `scale_up_and_report`. The rendered Deployment sets `replicas: 1`. The GC is
       monitored by the Kuma `Registry GC` tile, the healthchecks.io `registry-gc` check in
-      monitor-bridge's defaults, `registry_gc_push_token` in `ansible/secret_rotation.yml`,
+      monitor-bridge's defaults, `registry_gc_push_token` in `secrets/secret_rotation.yml`,
       and `scripts/validate/validate_lib/cron_targets.py`. The self-test Jobs copy
       `registry_k8s_probe_source` (`alpine:3.22`) with `crane copy`, which re-pushes only
       layers the registry lacks.
@@ -581,13 +581,13 @@ own-window roles' (*Waves and windows*).
 
   The other host scripts that D5 moves run `kubectl exec` into an app at most. None scales,
   patches or applies a cluster object.
-- **Utility roles.** `ansible/roles/k8s/` holds 63 role directories against 56 k8s entries.
+- **Utility roles.** `k8s/roles/` holds 63 role directories against 56 k8s entries.
   The seven with no entry are utility roles that R4 deletes: arr-notification, cronjob-gate,
   image-builder, longhorn-api, manifests, volume-revert and volume-snapshot. Three task files
-  among them use `delegate_to` or write the host: `ansible/roles/k8s/manifests/tasks/release_digest.yml`
-  (`delegate_to: localhost`), `ansible/roles/k8s/volume-snapshot/tasks/main.yml` ("Resolve
+  among them use `delegate_to` or write the host: `k8s/roles/manifests/tasks/release_digest.yml`
+  (`delegate_to: localhost`), `k8s/roles/volume-snapshot/tasks/main.yml` ("Resolve
   the deploy tag for …", a git read on localhost) and
-  `ansible/roles/k8s/manifests/tasks/release_stamp.yml` (a copy into `manifests_release_dir`,
+  `k8s/roles/manifests/tasks/release_stamp.yml` (a copy into `manifests_release_dir`,
   `/var/lib/homelab/k8s-releases.d`).
 - **Verify tasks.** Six roles have a `tasks/verify.yml`: crowdsec, janitorr, jellyfin,
   qbittorrent, sonarr and tdarr.
@@ -625,8 +625,8 @@ own-window roles' (*Waves and windows*).
       reset-admin-password` through `kubectl exec` when a Secret changed.
     - pihole restarts both instances through `tasks/roll_one.yml` (`rollout restart
       deploy/{{ pihole_instance }}`) when its render, its Secret or its image changes.
-      `grep -rl 'checksum/' ansible/roles/k8s/pihole/templates/` prints nothing.
-    - `grep -rn 'rollout restart' ansible/roles/k8s/*/tasks/*.yml`, outside `k8s/manifests`
+      `grep -rl 'checksum/' k8s/roles/pihole/templates/` prints nothing.
+    - `grep -rn 'rollout restart' k8s/roles/*/tasks/*.yml`, outside `k8s/manifests`
       and comments, finds only observability's and pihole's tasks. prowlarr, which the
       manifests `CLAUDE.md` names beside them, rolls flaresolverr through
       `manifests_extra_rollouts` with a non-empty `manifests_rollout`, which D3's rule
@@ -634,7 +634,7 @@ own-window roles' (*Waves and windows*).
       census, which reads include vars, so R1's census row and each role PR's class quote
       are its backstop.
     - **The three are the whole set.** `grep -rln "manifests_rollout: ''\|manifests_rollout:
-      \"\"" ansible/roles/k8s/*/tasks/` names eleven role directories. One is `manifests`,
+      \"\"" k8s/roles/*/tasks/` names eleven role directories. One is `manifests`,
       whose match is a comment. Of the other ten, seven run no long-lived pod that reads a
       ConfigMap or Secret:
         - deploy-ui and longhorn-ui render a route only, as their task comments say;
@@ -646,18 +646,18 @@ own-window roles' (*Waves and windows*).
       `grep -ln 'configMap\|secretRef\|secretKeyRef\|configMapKeyRef\|secretName'` over
       dri-device-plugin's and media-volume's templates prints nothing. D5 moves all ten, and
       no other slice flips an existing k8s role.
-- **The gate Job.** `ansible/roles/k8s/cronjob-gate/tasks/main.yml` deletes, then creates, a
+- **The gate Job.** `k8s/roles/cronjob-gate/tasks/main.yml` deletes, then creates, a
   Job `<cronjob>-deploy-gate` from the CronJob, and waits for it. Its callers are configarr
-  and pi-peer-backup. `ansible/roles/k8s/pi-peer-backup/files/pull-pi-peers.sh` sets `GATE_RUN=1` when
+  and pi-peer-backup. `k8s/roles/pi-peer-backup/files/pull-pi-peers.sh` sets `GATE_RUN=1` when
   `HOSTNAME` matches `pi-peer-backup-deploy-gate-*`, and then pushes neither Kuma nor
   Healthchecks.io. pi-peer-backup's `CLAUDE.md` says a configarr gate run "genuinely performs
   the reconcile".
 - **Other in-cluster writes that R4 assigns to D5.** crowdsec's "Register the remote agent
   machines on the LAPI", "Create the home-ips allowlist on the LAPI" and "Create the
   remote-ips allowlist on the LAPI" each `kubectl exec` into `deploy/crowdsec`.
-  `ansible/roles/k8s/arr-notification/` runs `files/seed_arr_notification.py` against the
+  `k8s/roles/arr-notification/` runs `files/seed_arr_notification.py` against the
   Service ClusterIP of sonarr and radarr, which include it. The script imports only the
-  standard library. `ansible/roles/k8s/manifests/tasks/verify_secret_keys.yml` patches out a
+  standard library. `k8s/roles/manifests/tasks/verify_secret_keys.yml` patches out a
   live Secret key that the render no longer declares, because `kubectl apply` prunes only
   keys it holds a last-applied baseline for.
 - **Host-file sources are role-relative.** crowdsec's `tasks/main.yml` copies `src:
@@ -667,10 +667,10 @@ own-window roles' (*Waves and windows*).
   resolves in another role".
 - **The soak.** `ansible/post_tasks/k8s_stabilise_gate.yml` reads restart counts after
   `rollout status` returns, waits `k8s_rollout_stabilise_seconds` (60, in
-  `ansible/inventory/group_vars/all.yml`), and reads them again. ADR-0012 states a 180-second
+  `inventory/group_vars/all.yml`), and reads them again. ADR-0012 states a 180-second
   soak.
     - Prometheus scrapes kube-state-metrics every 1m (M2 baseline).
-      `ansible/roles/k8s/observability/templates/prometheus.yaml.j2` sets no
+      `k8s/roles/observability/templates/prometheus.yaml.j2` sets no
       `evaluation_interval`, so rules evaluate at Prometheus's default of 1m.
     - `probe.py metric 'count(kube_pod_status_ready_time)'` returned 101 on 2026-10-11, so
       kube-state-metrics exports each pod's Ready time.
@@ -684,8 +684,8 @@ own-window roles' (*Waves and windows*).
   `weekly_reboot_minute` 30, Sunday, in UTC. M2's `weekly-reboot` mute covers Sunday 07:25 to
   08:15 UTC.
 - **M1's rule layout.** M1 puts rule files in
-  `ansible/roles/k8s/observability/files/rules/<group>.yaml` and their promtool tests in
-  `ansible/roles/k8s/observability/tests/rules/`. C7 requires `service` and `severity` labels
+  `k8s/roles/observability/files/rules/<group>.yaml` and their promtool tests in
+  `k8s/roles/observability/tests/rules/`. C7 requires `service` and `severity` labels
   on every rule.
 - **The namespace comes from the play, not from a role.** `ansible/deploy.yml`'s k8s pre_tasks
   "Build the workload namespace manifest" and "Apply the workload namespace" apply the
@@ -694,11 +694,11 @@ own-window roles' (*Waves and windows*).
   non-empty. D1 adds a `flux` entry with no owner key, so the list keeps an Ansible-owned
   entry until the flux role flips.
     - Three test files read those two tasks by name or by text:
-        - `ansible/tests/k8s/test_namespace_resource_defaults.py:_homelab_ns_items`, which
+        - `tests/k8s/test_namespace_resource_defaults.py:_homelab_ns_items`, which
           feeds the LimitRange tests, and that file's
           `test_the_namespace_is_applied_before_its_limitrange` and
           `test_the_namespace_apply_reports_changed_per_line`;
-        - `ansible/tests/deploy/test_k8s_dry_run.py:test_namespace_apply_is_guarded`;
+        - `tests/deploy/test_k8s_dry_run.py:test_namespace_apply_is_guarded`;
         - `hosts/tests/test_k3s_control_plane_hardening.py`'s
           `test_both_namespaces_carry_the_psa_labels` and
           `test_namespace_apply_reports_a_label_change_as_changed`.
@@ -711,13 +711,13 @@ own-window roles' (*Waves and windows*).
   plane.
     - The rule with `groupName` `k8s image {{depName}}` makes one PR per image, not per role.
       The exportarr sidecar is one image pinned in sonarr, radarr and prowlarr, held equal by
-      `ansible/tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep`.
+      `tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep`.
       All three are snapshot roles, so one exportarr bump changes three snapshot roles in one
       commit.
 - **`k8s_autodeploy: false` stops auto-deploys of image bumps.**
   `ansible/roles/setup/gitops_deploy/CLAUDE.md` says "`k8s_autodeploy: false` is how you stop
   a role". A hand `land.sh` still deploys such a role.
-- **Batch width.** The play rolls `ansible/inventory/group_vars/all.yml:k8s_rollout_batch_width`
+- **Batch width.** The play rolls `inventory/group_vars/all.yml:k8s_rollout_batch_width`
   (5) roles at once.
 - **Flux strips client-side state, and takes over hand writes.** kustomize-controller v1.9.6's
   `internal/controller/kustomization_controller.go`, read through `gh`, sets
@@ -756,7 +756,7 @@ own-window roles' (*Waves and windows*).
   (`ansible/roles/containers/alloy/templates/config.alloy.j2`), through Traefik. crowdsec's
   "Probe the VIP from the banned Pi — expect 403" proves the edge refuses the Pi's requests
   during a ban. Prometheus scrapes the Pi's Alloy directly at the Pi's LAN address, as job
-  `alloy-pi` in `ansible/roles/k8s/observability/templates/prometheus.yaml.j2`. The Pi's
+  `alloy-pi` in `k8s/roles/observability/templates/prometheus.yaml.j2`. The Pi's
   node_exporter runs with `--no-collector.textfile`
   (`ansible/roles/setup/optimize_pi/templates/node_exporter.service.j2`).
 - **render_records.** `ansible/roles/setup/render_records/defaults/main.yml:render_records_state`
@@ -765,7 +765,7 @@ own-window roles' (*Waves and windows*).
   pushes `down` and returns 1 on an empty list (R4 baseline).
     - The two levers route to different planes. Measured with
       `deploy_changes.py:services_from_changed_paths`:
-      `['ansible/inventory/group_vars/all.yml']` gives `{'broad': True, 'broad_deploy':
+      `['inventory/group_vars/all.yml']` gives `{'broad': True, 'broad_deploy':
       True}`. `['ansible/roles/setup/render_records/defaults/main.yml']` gives `{'broad':
       True, 'broad_setup': True, 'setup_roles': {'render_records'}}`.
     - `ansible/initial_setup.yml` applies the role only through `--tags render_records`, so
@@ -971,8 +971,8 @@ reconciliation of a flux-owned role. D5.1b rewrites the sentence in
 
 ### Host writes and concurrency (D5.1c)
 
-- **A host-write census.** A `Census` row in `ansible/tests/repo/test_census_rows_roles.py`
-  reads every task file under `ansible/roles/k8s/*/tasks/`. Its offence is a task that writes
+- **A host-write census.** A `Census` row in `tests/repo/test_census_rows_roles.py`
+  reads every task file under `k8s/roles/*/tasks/`. Its offence is a task that writes
   a host, wherever it is delegated:
     - `ansible.builtin.cron` or `ansible.posix.authorized_key`;
     - a `copy`, `template`, `file`, `lineinfile`, `blockinfile`, `get_url`, `unarchive`,
@@ -1290,7 +1290,7 @@ API server with the pod's ServiceAccount token, and Prometheus or an app over HT
   to the kind.
 - **Pod spec.** `restartPolicy: Never`, `activeDeadlineSeconds` below its Kustomization's
   `timeout`, and a non-root securityContext that PSA `restricted` admits. No priority class:
-  `ansible/tests/k8s/test_pod_template_hygiene.py` leaves Jobs out of its scope on purpose.
+  `tests/k8s/test_pod_template_hygiene.py` leaves Jobs out of its scope on purpose.
 - **`backoffLimit`.** 1 for a snapshot Job, so its one retry takes a new token. 0 for soak and
   verify Jobs, so a flaky check fails rather than passing on a retry. A mutation Job states its
   own value, with its reason.
@@ -1576,7 +1576,7 @@ mirror's stays with its cron (Wave D's registry bullet).
       a healthy merge at 06:30 would read `gave-up` before its promotion had started.
     - **The window's size.** The reboot runs at about 07:35 UTC on Sunday:
       `weekly_reboot_hour` 7 and `weekly_reboot_minute` 30 in
-      `ansible/inventory/group_vars/all.yml`, plus the 5-minute
+      `inventory/group_vars/all.yml`, plus the 5-minute
       `weekly_reboot_shutdown_delay_minutes`. D4's *The size* puts the full-map timeout at
       about 103 minutes of chain, and up to about 2.5 hours for a revision within
       `--concurrent`. For such a revision the window opens near 05:05, and D5's soak,
@@ -1934,7 +1934,7 @@ promotion, an automerged one included, without having to page.
   fleet W. With no `dependsOn` edges, `soak`'s timeout leaves D4's chained path, so D5.3b2
   changes D4's timeout function to keep `verify`'s budget above it (Open question 19).
 - **Reaching Prometheus.** Prometheus's fence is the bespoke
-  `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2`, which
+  `k8s/roles/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2`, which
   netpol-baseline's tasks apply. The Job is a cross-namespace caller from `flux-system`, so
   that template gains a peer for it in D5.3a, which lands and is checked before D5.3b2 wires
   the Job. The peer is one `from` item that ANDs the `flux-system` namespace with the pod
@@ -1970,10 +1970,10 @@ promotion, an automerged one included, without having to page.
   each of the ten images, it renders the context with `homelab-render`, computes the same
   content tag as `image_builder_content_tag`, and pushes
   `ghcr.io/danielh2018/<name>:<content tag>` unless that tag already exists.
-  `ansible/tests/deploy/test_image_builder_content_tag.py` is the oracle for the hash, and a
+  `tests/deploy/test_image_builder_content_tag.py` is the oracle for the hash, and a
   test beside the `images` job's code asserts that it computes the same tag.
 - **The context is a renderer output.** C1 defines only the `cluster` and `host` modes, and
-  the context comes from `ansible/roles/k8s/image-builder/templates/context-configmap.yaml.j2`,
+  the context comes from `k8s/roles/image-builder/templates/context-configmap.yaml.j2`,
   a utility role that no tag renders. D5.4a1 adds, under `homelab-render cluster`,
   `DIR/images/<name>/`, which holds the rendered context files for each of the ten images,
   and `DIR/images/tags.json`, which maps each name to its content tag. The renderer renders
@@ -2096,7 +2096,7 @@ assertion becomes a standing rule.
   Job reads it (#5471).
   Its first connection goes through the shared helper. `sonarr-verify` and `radarr-verify`
   join those roles' `netpol_from`. The script adopts and never deletes, so a re-run changes
-  nothing, and its existing tests in `ansible/roles/k8s/arr-notification/tests/` gain a
+  nothing, and its existing tests in `k8s/roles/arr-notification/tests/` gain a
   double-run case.
 - **`cronjob-gate`'s gate Job** becomes a Job in `<tag>-verify` that the renderer copies from
   the CronJob's `jobTemplate`. The renderer strips `ttlSecondsAfterFinished`, which the Job
@@ -2126,7 +2126,7 @@ assertion becomes a standing rule.
       under one extra run, so the overlap is the accepted cost, and each gate PR states it.
     - **The gate becomes stricter.** Today's gate fails the deploy only when the container
       never starts, and reports a non-zero exit without failing
-      (`ansible/roles/k8s/cronjob-gate/CLAUDE.md`, a decision recorded in
+      (`k8s/roles/cronjob-gate/CLAUDE.md`, a decision recorded in
       `docs/cronjob-gate-design.md`). A Job fails its Kustomization on any non-zero exit, so
       under Flux a transient Pi or *arr outage during a promotion holds it. The default is
       the stricter stance, because a hold is the safe direction. Each gate's PR states the
@@ -2152,7 +2152,7 @@ assertion becomes a standing rule.
   deferred file. The Job therefore starts only after every object the tag renders is applied
   and Ready, which means the new ReplicaSet is available and every deferred policy is in
   place. A Job in `<tag>`'s own Kustomization would start beside the rollout and could read
-  the old pod, the trap that the header of `ansible/roles/k8s/janitorr/tasks/verify.yml`
+  the old pod, the trap that the header of `k8s/roles/janitorr/tasks/verify.yml`
   describes.
 - D4 places netpol-baseline's probe Job in `netpol-baseline-deferred` instead, under its rule
   for verifying Jobs. D5's edge gives the same order, after every policy the probe tests. The
@@ -2266,15 +2266,15 @@ one task file per source role, in a conversion PR before that role flips:
       (Baseline), which never runs `initial_setup.yml`, so the host half would never
       re-apply. H2.7 uses the same pair for `claude_code`. artifacts' `artifacts_host_dir`,
       `artifacts_peer_dir`, `artifacts_peer_sources` and `artifacts_stars_dir` are the pair
-      test's named members: `ansible/roles/k8s/artifacts/templates/deployment.yaml.j2` reads
+      test's named members: `k8s/roles/artifacts/templates/deployment.yaml.j2` reads
       all four, and so do the three directory tasks. media-volume's conversion PR adds `media_volume_host_path`,
-      which `ansible/roles/k8s/media-volume/templates/pv.yaml.j2` and the directory task both
+      which `k8s/roles/media-volume/templates/pv.yaml.j2` and the directory task both
       read. The task's owner reads `puid` and `pgid` from `group_vars/all.yml`, the shared-key
       case above, so the same PR copies them into the task's `vars:` as pairs too.
     - A test in `hosts/tests/` renders every template in `k8s_host_files` with that
       role's defaults and `group_vars`, under `StrictUndefined`, through
-      `scripts/lib/ansible_jinja_env.py`. Its red half is a fixture template that reads a
-      variable defined only in a `roles/k8s/` defaults file. D5.1h lands it while the role
+      `scripts/lib/guard_jinja_env.py`. Its red half is a fixture template that reads a
+      variable defined only in a `k8s/roles/` defaults file. D5.1h lands it while the role
       has no template, so until then it asserts that the set it renders is empty. Wave C's
       pi-peer-backup PR adds the first template, and with it the test's named member.
     - The pair test lands in D5.1h too, asserting an empty set of pairs. docs' conversion PR
@@ -2284,7 +2284,7 @@ one task file per source role, in a conversion PR before that role flips:
   plane once*). From then on the tick applies every `k8s_host_files` PR and `land.sh` follows
   it.
 - Its `CLAUDE.md` carries the Autonomous-role contract, because it installs a timer and
-  removes crons. `ansible/tests/repo/test_role_claude_md.py` and
+  removes crons. `tests/repo/test_role_claude_md.py` and
   `test_setup_cron_roles_have_a_contract.py` (deleted, #8027) hold that.
 - The role's playbook entry runs on daniel-box. `setup_routing.py` places a role whose gate
   admits only another host as a hand apply, so a Pi-gated role would never run from the tick.
@@ -2395,7 +2395,7 @@ sizes its batch of roles against that projection.
 - **The last three PRs** disarm render-records, move the flux role, then move the namespace.
   Each has the precondition that `render_targets.py daniel-box` prints `flux` alone (before
   the disarm PR and the flux PR) or nothing (before the namespace PR). The `owner: flux` count
-  in `ansible/inventory/host_vars/daniel-box.yml` must be one less than its `platform: k8s`
+  in `inventory/host_vars/daniel-box.yml` must be one less than its `platform: k8s`
   count before the disarm PR and the flux PR, and equal to it before the namespace PR. Each PR
   body quotes both outputs.
 
@@ -2593,8 +2593,8 @@ sizes its batch of roles against that projection.
 14. **D5.2c — The revert entry point** (about 150 lines). `ansible/volume-revert.yml`, the
     runbook with its two branch-choosing reads and its three branches in
     `docs/volume-snapshot-drills.md`, and the edits to
-    `ansible/roles/k8s/volume-revert/CLAUDE.md` and
-    `ansible/roles/k8s/volume-snapshot/CLAUDE.md`. A test in `ansible/tests/deploy/` asserts
+    `k8s/roles/volume-revert/CLAUDE.md` and
+    `k8s/roles/volume-snapshot/CLAUDE.md`. A test in `tests/deploy/` asserts
     that a change to the playbook applies nothing from a tick. A text test over the runbook,
     and over D5.1b's shed steps in `docs/break-glass.md`, fails on a `kubectl patch` without
     `--field-manager=homelab-operator`. In the shed scenario it also fails when the step
@@ -2609,7 +2609,7 @@ sizes its batch of roles against that projection.
     that reads `lastAttemptedRevision` without naming the `prod@sha256:` value it compares
     with, and on a wait for `last-good` that reads `.status.artifact.revision` instead of the
     `org.opencontainers.image.revision` key.
-    The playbook's play gathers facts, because `ansible/roles/k8s/longhorn-api/tasks/resolve.yml`
+    The playbook's play gathers facts, because `k8s/roles/longhorn-api/tasks/resolve.yml`
     reads `ansible_hostname` four times. It leaves `gather_facts` unset or true, or it runs
     `ansible.builtin.setup` as `ansible/pre_tasks/load_secrets.yml` does. Every playbook but
     `bootstrap.yml` sets `gather_facts: false` and gets its facts from that pre_task, so a
@@ -2627,7 +2627,7 @@ sizes its batch of roles against that projection.
     per-service map. It names the signature verifier the Job runs: source-controller's
     cosign check on the OCIRepositories `homelab` and `last-good` (*Its scope is R's
     changed set*), so no second image joins the soak Job. The script also holds Open
-    question 19's run-time wait. It is `ansible/roles/k8s/manifests/files/flux_soak.py`,
+    question 19's run-time wait. It is `k8s/roles/manifests/files/flux_soak.py`,
     beside `flux_job_connect.py`, with its tests in that role's `tests/`.
     The Job script and its tests, from fixture API and query results, which no render emits
     yet:
@@ -2726,8 +2726,8 @@ sizes its batch of roles against that projection.
 21. **D5.4b — GHCR refs** (about 120 lines). The GHCR image refs for flux-owned consumers,
     `imagePullPolicy: IfNotPresent` on each, the census against `Always` on a GHCR ref, and
     the secret-in-context census. The PR edits the sentences that explain `Always` in
-    `ansible/roles/k8s/nut/templates/deployment.yaml.j2` and
-    `ansible/roles/k8s/registry/CLAUDE.md`, saying which refs still use it and why.
+    `k8s/roles/nut/templates/deployment.yaml.j2` and
+    `k8s/roles/registry/CLAUDE.md`, saying which refs still use it and why.
 22. **D5.5 to D5.7 — Wave A**, about three roles per PR, about 60 lines each.
 23. **D5.8 — Wave A'**, loki-homelab, navidrome and scrutiny together, about 50 lines.
     Then wg-easy in its own window, about 20 lines, with the LAN precondition.
@@ -2917,7 +2917,7 @@ sizes its batch of roles against that projection.
       the only owner of the GC itself.
 
       **Status, 2026-10-18.** Every self-test and the netpol probe have their inert Jobs in
-      `ansible/roles/k8s/registry/templates/verify-inert/` (#5651). The pull Jobs run the
+      `k8s/roles/registry/templates/verify-inert/` (#5651). The pull Jobs run the
       fleet's python Job image from `localhost:5000`, so the pod's own pull proves the
       containerd path and its `python3 <script>` satisfies the census's `delivery` row (ruling
       on #5680). The push Job seeds that copy, and the pull Jobs wait for it in kubelet's
@@ -2967,7 +2967,7 @@ sizes its batch of roles against that projection.
               set without a `NEVER_SHED` entry (H1's *The set cannot drift*). The tier
               also enters the PriorityClass census, so the flip adds `traefik-crds:
               homelab-critical` to `_CLASS_AT_DERIVATION` in
-              `ansible/tests/k8s/test_priority_class_is_derived_from_tier.py` (#5703). Its `k8s/manifests` include sets `manifests_files: []`, so the
+              `tests/k8s/test_priority_class_is_derived_from_tier.py` (#5703). Its `k8s/manifests` include sets `manifests_files: []`, so the
               render holds the kustomization and the vendored file alone; no role renders
               that shape yet, so the flip PR's render is its first proof. The pin variables
               and `test_traefik_crds.py` move with the copy.
@@ -3030,19 +3030,19 @@ sizes its batch of roles against that projection.
           baseline's namespace. It runs after the apply, so drift fails the Job and the
           revision's soak acts on it, where the task refused the apply. The flip PR also
           deletes the `tasks/main.yml` half of
-          `ansible/tests/k8s/test_netpol_baseline_exempt_gates.py`.
+          `tests/k8s/test_netpol_baseline_exempt_gates.py`.
     - pihole's PR exercises `pihole-deferred` live: instance 2 applies only after instance 1
       is Ready.
 
       **Status, 2026-10-18.** The gravity reconcile has its inert mutation Job in
-      `ansible/roles/k8s/pihole/templates/verify-inert/gravity.yaml.j2` (#5648). It drives
+      `k8s/roles/pihole/templates/verify-inert/gravity.yaml.j2` (#5648). It drives
       each FTL's v6 REST API through the `pihole` and `pihole-2-web` Services, so it needs no
       `pods/exec` and no Role. Its fence peer, `app: pihole-gravity`, landed in
       netpol-baseline with a refused `pihole` row in the probe table. Instance 2 already
       renders into `pihole-deferred`, which waits on `pihole`, and a test pins that order on
       pihole's own render. The live exercise of that order is still the flip PR's, because
       Ansible applies both instances until then. `roll_one.yml`'s sibling gate became an
-      inert guard Job in `ansible/roles/k8s/pihole/templates/guard-inert/guard.yaml.j2`
+      inert guard Job in `k8s/roles/pihole/templates/guard-inert/guard.yaml.j2`
       (#5695). It reads `pihole-2-web`'s EndpointSlices and fails while pihole-2 has no ready
       endpoint, so Flux holds `pihole`. It passes when `pihole` has no EndpointSlice, which is
       a first apply. It must run before `pihole`, so the flip moves it into
@@ -3085,7 +3085,7 @@ sizes its batch of roles against that projection.
       `scripts/secrets_mgmt/tests/test_cluster_vars_tree.py::test_the_committed_cluster_files_pass_check`
       fails with "the cluster file holds render_records_push_token, and no cluster render
       references it". The operator runs `uv run python scripts/secrets_mgmt/cluster_vars.py
-      write` on the PR branch and commits the regenerated `ansible/vars/cluster-vars.*` files.
+      write` on the PR branch and commits the regenerated `secrets/cluster-vars.*` files.
       The token stays in `secrets.yml`, because the `render_records` setup role still reads it
       until R4 deletes the role.
 28. **The bootstrap drill PR** (about 190 lines). It lands before the flux PR, because the
@@ -3261,9 +3261,9 @@ sizes its batch of roles against that projection.
       everything becomes a hand suspend in the recovery runbook, with its resume beside it.
     - A renderer test pins the sync objects' URL, `ref` and `verify` block to D1's values, so
       a change to them fails CI rather than cutting Flux off from its source.
-    - Edit the comment above `render_records_enabled` in `ansible/inventory/group_vars/all.yml`
+    - Edit the comment above `render_records_enabled` in `inventory/group_vars/all.yml`
       to say that the role default pins the producer absent (the disarm PR). The flip already
-      changes `ansible/inventory/host_vars/daniel-box.yml`, which routes to the deploy plane
+      changes `inventory/host_vars/daniel-box.yml`, which routes to the deploy plane
       (`{'broad': True, 'broad_deploy': True}`), so the comment adds no apply. The PR body
       quotes the route for its changed paths.
     - `docs/flux-deploy-plane.md` gains the recovery runbook, all **operator-only** because it
@@ -3321,7 +3321,7 @@ sizes its batch of roles against that projection.
               `flux-deferred`'s first reconcile after the resume. Under `homelab-operator`,
               an Apply owner would stay on every field, and a later commit that removed one
               would never take effect.
-    - **A text test over the recovery runbook**, in `ansible/tests/repo/`, reads only that
+    - **A text test over the recovery runbook**, in `tests/repo/`, reads only that
       runbook's section of `docs/flux-deploy-plane.md`, bounded by its heading, because the
       bootstrap section's applies carry no `--force-conflicts`. It fails on a suspend
       or a resume without `--field-manager=homelab-operator`, and on a `kubectl apply
@@ -3347,7 +3347,7 @@ sizes its batch of roles against that projection.
       then the bootstrap section first runs `./scripts/deploy.sh` and checks, with the
       read-only `kubectl get namespace homelab` and `kubectl -n homelab get limitrange`,
       that both exist. The namespace PR deletes that step.
-    - **A text test over the bootstrap section**, in `ansible/tests/repo/`, reads only that
+    - **A text test over the bootstrap section**, in `tests/repo/`, reads only that
       section, bounded by its heading, and fails when the
       root's apply comes before the restore step, or when a hand apply lacks
       `--field-manager=kustomize-controller`. Its red fixture is the section with step 9
@@ -3355,7 +3355,7 @@ sizes its batch of roles against that projection.
       condition "only when no tag changed between `last-good` and `prod` is a snapshot role
       or a forward-only tag" and the recorded-judgment exception beside it. Its red fixture
       for that clause is the section with the condition deleted from step 2.
-    - **A text test over the three runbooks**, in `ansible/tests/repo/`, fails when a cold
+    - **A text test over the three runbooks**, in `tests/repo/`, fails when a cold
       start step names `./scripts/deploy.sh` without the bootstrap section's link. Its red
       fixture is `docs/break-glass.md`'s *daniel-box is dead* scenario as it stands at
       `70591c307`.
@@ -3401,7 +3401,7 @@ sizes its batch of roles against that projection.
       delete the stale staged render while Flux at the old `prod` still applies it. M6's
       retirement of uptime-kuma, if it follows uptime-kuma's move, takes this path. The claim
       survives prune and is the **operator-only** hand delete D5.1f names.
-    - **A test in `ansible/tests/deploy/`** evaluates every pre_task of the k8s play
+    - **A test in `tests/deploy/`** evaluates every pre_task of the k8s play
       against two inventory fixtures, one with every entry flux-owned and one with a single
       entry handed back, and fails when any task that applies a Namespace or a LimitRange
       would run. The tree passes, because no such task remains. Its red half is a fixture
@@ -3421,8 +3421,8 @@ sizes its batch of roles against that projection.
 
 # Exit 1.
 ./scripts/deploy.sh --list-services
-grep -c 'platform: k8s' ansible/inventory/host_vars/daniel-box.yml      # N
-grep -c 'owner: flux' ansible/inventory/host_vars/daniel-box.yml        # the same N
+grep -c 'platform: k8s' inventory/host_vars/daniel-box.yml      # N
+grep -c 'owner: flux' inventory/host_vars/daniel-box.yml        # the same N
 uv run python scripts/deploy_tools/render_targets.py daniel-box | tr ',' '\n' | grep -c .   # 0
 systemctl list-unit-files 'kuma-check-render-records*' | grep -c render-records   # 0
 grep -rl 'render-records.json' /tmp/out/cluster | grep -c .                        # 0
@@ -3467,7 +3467,7 @@ kubectl get ns homelab -o jsonpath='{.metadata.labels}'
 kubectl -n homelab get limitrange -o jsonpath='{..metadata.labels}'
 grep -c -e 'Build the workload namespace manifest' -e 'Apply the workload namespace' \
   ansible/deploy.yml                                                                  # 0
-uv run pytest ansible/tests/deploy -k namespace
+uv run pytest tests/deploy -k namespace
 
 # Restart annotations, once each role is flux-owned: cloudflare-ddns's from D3's rule,
 # pihole's and observability's from D5.1e. Each named member prints a non-empty value.
@@ -3558,7 +3558,7 @@ includes valheim's initContainer.
 - **The gate Job's name.** A Job named `pi-peer-backup-gate-<digest8>` fails the
   `pull-pi-peers.sh` pattern test.
 - **The moved host files.** A fixture template that reads a variable defined only in a
-  `roles/k8s/` defaults file fails the `k8s_host_files` render test, and a copy of
+  `k8s/roles/` defaults file fails the `k8s_host_files` render test, and a copy of
   `artifacts_peer_sources` that differs from the artifacts role's fails the pair test.
 - **The takeover census.** A fixture Deployment whose `kubectl-rollout` entry owns
   `restartedAt`, which the render omits, is listed. The same field owned by `k3s`, or by a
@@ -3931,18 +3931,18 @@ includes valheim's initContainer.
 ## Tests and docs that change in the same PR
 
 - D5.1 to D5.4: tests in `scripts/renderer/tests/`, `scripts/deploy_tools/tests/`,
-  `ansible/tests/deploy/` and `ansible/tests/repo/test_census_rows_roles.py`.
+  `tests/deploy/` and `tests/repo/test_census_rows_roles.py`.
   `docs/flux-deploy-plane.md` gains snapshots, the soak, images and the stop lever.
     - D5.1b: `ansible/roles/setup/gitops_deploy/CLAUDE.md`'s sentence on stopping a role.
       `docs/break-glass.md`'s shed scenario and the daniel-server-dead step that points at
       it, with `probe.py shed-set`'s owner column and its test. The shed scenario's step 3
       reads `DEPLOY_HOLD` before any resume and clears only step 1's own reason.
-    - D5.2b1 and D5.2c: `ansible/roles/k8s/volume-snapshot/CLAUDE.md`'s "A rollback is not a
-      manual operation", `ansible/roles/k8s/volume-revert/CLAUDE.md`'s caller section, and
+    - D5.2b1 and D5.2c: `k8s/roles/volume-snapshot/CLAUDE.md`'s "A rollback is not a
+      manual operation", `k8s/roles/volume-revert/CLAUDE.md`'s caller section, and
       the runbook in `docs/volume-snapshot-drills.md`.
     - D5.1d: D2's `land-wait` section in `docs/flux-deploy-plane.md` gains the `suspended`
       verdict, and `land.sh --help` lists it.
-    - D5.1e: `ansible/roles/k8s/manifests/CLAUDE.md`'s rule that a pod mounting content
+    - D5.1e: `k8s/roles/manifests/CLAUDE.md`'s rule that a pod mounting content
       outside the cycle needs its own trigger says that `checksum/restart` covers
       `manifests_self_rollouts` entries for flux-owned roles. D3's interim census and its
       test go in the same PR.
@@ -3963,7 +3963,7 @@ includes valheim's initContainer.
       result, the derived `schedule:` run at the
       window's end, and which timeout `decide` reads.
     - D5.2a: the snapshot section of `docs/flux-deploy-plane.md` states the new-claim skip.
-      `ansible/roles/k8s/manifests/CLAUDE.md`'s claims rule says that under Flux a new claim
+      `k8s/roles/manifests/CLAUDE.md`'s claims rule says that under Flux a new claim
       on a snapshot role is skipped by the snapshot Job and created by `<tag>`.
     - D5.2c: the runbook's branch-choosing reads and its per-role Branch 1. Its text test
       gains the shed scenario's read-before-clear clause, with its red fixture.
@@ -3974,14 +3974,14 @@ includes valheim's initContainer.
       `docs/landing.md` and D2's `land-wait` section in `docs/flux-deploy-plane.md` gain the
       `flux/soak` read and the `soak-failed` cause, with the land-wait tests in
       `scripts/deploy_tools/tests/`.
-    - D5.4a1 and D5.4a2: `ansible/roles/k8s/image-builder/CLAUDE.md` says what replaced it for
+    - D5.4a1 and D5.4a2: `k8s/roles/image-builder/CLAUDE.md` says what replaced it for
       flux-owned roles, that `image_builder_force` has no Flux-era use, and that the content
       tag comes from `DIR/images/tags.json`.
     - D5.4b: the comment above `imagePullPolicy` in
-      `ansible/roles/k8s/nut/templates/deployment.yaml.j2`, and the `Always` sentence in
-      `ansible/roles/k8s/registry/CLAUDE.md`.
+      `k8s/roles/nut/templates/deployment.yaml.j2`, and the `Always` sentence in
+      `k8s/roles/registry/CLAUDE.md`.
 - Each role PR: the role's `CLAUDE.md` says Flux owns it and where each converted task went.
-  Its tests move from `ansible/tests/services/` or `ansible/roles/k8s/<role>/tests/` to
+  Its tests move from `tests/services/` or `k8s/roles/<role>/tests/` to
   wherever the converted code lives. A test whose subject is gone is deleted, and any
   `ENFORCED` citation of it goes in the same PR (`.claude/rules/python-layout.md`). A deleted
   test that `docs/failure-classes.md` cites forces an edit to that table.
@@ -3989,7 +3989,7 @@ includes valheim's initContainer.
   comment at both copies for any shared variable, the role's row in `k8s_host_files`'
   `CLAUDE.md`, and the host-write census's `allow` and `must_find` entries for the role.
 - Each fence-peer PR: the role's `containers_list` entry or the bespoke policy, its
-  `netpol_baseline_probe_targets` row, and `ansible/roles/k8s/netpol-baseline/CLAUDE.md` when a
+  `netpol_baseline_probe_targets` row, and `k8s/roles/netpol-baseline/CLAUDE.md` when a
   bespoke policy gains a cross-namespace peer.
 - observability's conversion PR: the role `CLAUDE.md`'s *One config change, one restart*
   section names `checksum/restart` and the Grafana initContainer, and drops the restart
@@ -3998,18 +3998,18 @@ includes valheim's initContainer.
   `pihole-deferred` replace it.
 - pi-peer-backup's flip and configarr's flip: each role's `CLAUDE.md` says the gate Job's new
   name. The `k8s/cronjob-gate` role was retired in #5716, once no caller remained.
-- sonarr's and radarr's flips: `ansible/roles/k8s/arr-notification/CLAUDE.md` says the seed
+- sonarr's and radarr's flips: `k8s/roles/arr-notification/CLAUDE.md` says the seed
   runs as a post-apply Job, and why the ClusterIP rule no longer applies.
-- registry's GC retirement: `ansible/roles/k8s/registry/CLAUDE.md`'s GC notes, the uptime-kuma
+- registry's GC retirement: `k8s/roles/registry/CLAUDE.md`'s GC notes, the uptime-kuma
   tile and group rule, monitor-bridge's healthchecks.io entry, the rotation registry entry,
   `cron_targets.py`, and the tests that cite each, such as
-  `ansible/tests/services/test_healthchecks_pings.py` and
-  `ansible/tests/services/test_monitor_bridge_healthchecks_expected.py`.
+  `tests/services/test_healthchecks_pings.py` and
+  `tests/services/test_monitor_bridge_healthchecks_expected.py`.
 - crowdsec's first conversion PR: `ansible/roles/containers/alloy/CLAUDE.md`'s source list,
   and the label-contract test it names.
 - The render-records disarm PR: `ansible/roles/setup/render_records/CLAUDE.md`'s *Mode* line,
   the uptime-kuma tile with its group rule, and every test that names either. `grep -rln
-  'render-records' ansible/tests ansible/roles/k8s/uptime-kuma/tests` finds them, for example
+  'render-records' tests k8s/roles/uptime-kuma/tests` finds them, for example
   `test_check_timer.py`, whose `KNOWN_CHECKS` names the check. The
   role's own tests in `ansible/roles/setup/render_records/tests/` gain the absent default.
 - traefik's flip: `traefik-crds`'s `CLAUDE.md` says the tag renders `prune: false` and why,
@@ -4017,7 +4017,7 @@ includes valheim's initContainer.
 - The flux PR: the flux role's `CLAUDE.md`, which D1 creates, gains the `prune: false`
   reason. The recovery runbook gains its two hold-first hand-apply branches and the text
   test over them. The PR also edits the comment above `render_records_enabled` in
-  `ansible/inventory/group_vars/all.yml`, and adds `flux` to the CRD census's members.
+  `inventory/group_vars/all.yml`, and adds `flux` to the CRD census's members.
   `docs/flux-deploy-plane.md` gains *Bootstrapping Flux on a rebuilt cluster*.
   `docs/break-glass.md`, `docs/longhorn-disaster-recovery.md` and `docs/k3s-etcd-restore.md`
   link it in place of their cluster `./scripts/deploy.sh` step, with the text test over
@@ -4531,7 +4531,7 @@ Fixed:
 - D5-R2-02: D5.4b sets `IfNotPresent` on every GHCR ref, a renderer census refuses `Always`
   on one, and the Risks entry states the restart dependency. nut's residual is named. H4
   keeps the `nut` pod in the cluster. The finding cites nut's `CLAUDE.md`, but the sentence
-  that explains `Always` is in `ansible/roles/k8s/nut/templates/deployment.yaml.j2`, so D5.4b
+  that explains `Always` is in `k8s/roles/nut/templates/deployment.yaml.j2`, so D5.4b
   edits that comment and the registry `CLAUDE.md` line.
 - D5-R2-03: the evidence moves to a metrics stage in the Pi's Alloy, scraped directly as
   `alloy-pi`. A red fixture names a blocked channel apart from a failing edge, and Open
@@ -4589,7 +4589,7 @@ Fixed:
 - D5-R2-17: *What every Job carries* states image, script delivery, namespace, pod spec and
   `backoffLimit`, and the soak Job is `soak-<spec digest8>`. No kubectl image is pinned in the
   tree, so the Jobs use the Python standard library on the `python:3.14-alpine` digest that
-  monitor-bridge already pins. `ansible/tests/k8s/test_pod_template_hygiene.py` leaves Jobs
+  monitor-bridge already pins. `tests/k8s/test_pod_template_hygiene.py` leaves Jobs
   out of scope, so no priority class is required.
 - D5-R2-18: authelia's seed becomes an initContainer, with a check of whether the CLI needs a
   migration first. jellyfin's cap becomes a Job whose Role covers every Longhorn volume,
@@ -4645,7 +4645,7 @@ Fixed:
 
 - D5-R3-01: confirmed. `renovate.json`'s `k8s image {{depName}}` group makes one PR per image,
   and the exportarr pin is shared by sonarr, radarr and prowlarr
-  (`ansible/tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep`).
+  (`tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep`).
   The hold post now
   prints a command block per changed snapshot role. The runbook opens with a read-only
   classify step on `.status.lastAttemptedRevision`, which kustomize-controller v1.9.6 sets
@@ -4790,7 +4790,7 @@ Fixed:
   artifacts' two directory tasks (D5-R10-01), and pi-peer-backup's two Pi writes go to
   H7.4, not H5 (D5-R10-06).
 - X-16: the Baseline now carries the census. `grep -rln` for an empty `manifests_rollout`
-  over `ansible/roles/k8s/*/tasks/` names eleven directories, `manifests` by a comment.
+  over `k8s/roles/*/tasks/` names eleven directories, `manifests` by a comment.
   Of the other ten, only cloudflare-ddns, observability and pihole run a long-lived pod that
   reads a ConfigMap or Secret. D5 moves all ten, and D5.1e lands before Wave A. A cross-slice
   note asks D3 to drop its premise or quote this census. Corrected in round 10 (D5-R10-04):
@@ -4834,7 +4834,7 @@ Findings raised:
 Fixed:
 
 - D5-R10-01: confirmed. H2's *What H2 leaves in `k8s_host_files`* leaves absent arms in four
-  roles and artifacts' two directory tasks, and `ansible/roles/k8s/artifacts/tasks/main.yml`
+  roles and artifacts' two directory tasks, and `k8s/roles/artifacts/tasks/main.yml`
   holds "Ensure the local artifacts directory exists" and "Ensure a peer directory exists for
   every synced host", both `ansible.builtin.file` with `state: directory`. *Host-side rows*
   and Wave D gain one `k8s_host_files` conversion PR per role for crowdsec, configarr,
@@ -4955,7 +4955,7 @@ Fixed:
   The set is named apart from D5.1b's soak exclusion. *Where each Kustomization is
   written*, the Rollback bullets, Open question 4, Risks and the Tests list follow. Option
   2 was rejected because an attended drill still gates the first live soak.
-- D5-C1-04: confirmed. `ansible/roles/k8s/traefik/tasks/main.yml` fetches the CRDs from a
+- D5-C1-04: confirmed. `k8s/roles/traefik/tasks/main.yml` fetches the CRDs from a
   URL built on `traefik_k8s_crd_version`. D6's *No CRD sits in a tag the default policy can
   delete* needs C3's per-role `prune: false`. traefik's flip and the flux PR now set H1.1a's
   `flux_prune: false`. traefik's flip adds the renderer CRD census with traefik as a named
@@ -5032,7 +5032,7 @@ Fixed:
   budget. D5.1d's `land-wait` figure now reads about 5 hours. The second hold read and its
   test go, because no wait separates the read from the move. The reset group's rationale,
   Risks and Open question 4 follow.
-- D5-C2-04: confirmed against `ansible/roles/k8s/manifests/CLAUDE.md`, *The caller's
+- D5-C2-04: confirmed against `k8s/roles/manifests/CLAUDE.md`, *The caller's
   contract*. The snapshot Job skips a claim absent both live and from `<tag>`'s
   `status.inventory`, and logs the skip. The first-apply rule is now that rule's case where
   every claim is new. A PVC that the inventory lists but the cluster lacks still fails.

@@ -10,7 +10,7 @@ key alone. Every sops call runs with `SOPS_AGE_KEY_FILE` on the host key and
 `sops` and `age-keygen` must be installed. Without them the fixture fails rather than skips:
 CI's `pytest` job installs both, and a skip there would read as a pass.
 
-`ansible/tests/leakguard.py` puts an exit-127 shim for `sops` first on PATH, because a test
+`tests/leakguard.py` puts an exit-127 shim for `sops` first on PATH, because a test
 that reached the real binary could decrypt the real `secrets.yml`. These tests need the real
 binary and reach nothing but `tmp_path`, so the fixture links it into a directory of its own
 and puts that first on the PATH it hands every sops call, the way leakguard lets a test that
@@ -167,7 +167,7 @@ def make_sops_tree(base: Path, values: dict = VALUES) -> SopsTree:
     assert sops and keygen, "the cluster_vars write tests need sops and age-keygen"
     keys, empty, bin_dir = base / "keys", base / "empty-config", base / "bin"
     root = base / "repo"
-    for directory in (keys, empty, bin_dir, root / "ansible" / "vars"):
+    for directory in (keys, empty, bin_dir, root / "secrets"):
         directory.mkdir(parents=True)
     (bin_dir / "sops").symlink_to(sops)
     env = {
@@ -187,12 +187,12 @@ def make_sops_tree(base: Path, values: dict = VALUES) -> SopsTree:
     tree = Tree(root)
     tree.sops_config.write_text(
         "creation_rules:\n"
-        "  - path_regex: vars/cluster-vars\\.sops\\.env$\n"
+        "  - path_regex: (^|secrets/)cluster-vars\\.sops\\.env$\n"
         f'    age: "{cluster},{host}"\n'
-        "  - path_regex: vars/cluster-manifests/[^/]+\\.sops\\.yaml$\n"
+        "  - path_regex: (^|secrets/)cluster-manifests/[^/]+\\.sops\\.yaml$\n"
         "    encrypted_regex: ^(data|stringData)$\n"
         f'    age: "{cluster},{host}"\n'
-        "  - path_regex: .*(vars|secrets)\\/.*\\.ya?ml$\n"
+        "  - path_regex: (^|secrets/)(cluster-manifests/)?[^/]+\\.ya?ml$\n"
         f'    age: "{host}"\n'
     )
     # A call that passes its own `timeout`, as every production sops call does, overrides this.

@@ -50,7 +50,7 @@
       "customType": "regex",
       "description": "The version inside each `fetched_url` of the system-upgrade role's vendored manifests (H6.1b). `scripts/dev/vendor_manifest.py` writes the URL it fetched as a literal beside the pin, so the `# renovate:` annotation on `system_upgrade_controller_version` moves the templated `url` and leaves `fetched_url` behind. This manager reads the same release from `fetched_url`, so a bump PR moves both and `vendor_manifest.py --check` then names the refresh the PR still owes: the files under `files/upstream/`, the sha256 and the controller image digest. Same depName and datasource as the annotation, so the rule that groups it takes the one PR.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/system-upgrade/defaults/main\\.yml$/"
+        "/(^|/)k8s/roles/system-upgrade/defaults/main\\.yml$/"
       ],
       "matchStrings": [
         "fetched_url:[ \\t]*\"https://github\\.com/rancher/system-upgrade-controller/releases/download/(?<currentValue>v\\d+\\.\\d+\\.\\d+)/[A-Za-z0-9.-]+\""
@@ -95,7 +95,7 @@
     },
     {
       "customType": "regex",
-      "description": "Pinned Vale binary in the CI workflow. TWO matchStrings on purpose: the download URL carries the version TWICE (the tag `v3.18.0` and the asset name `vale_3.18.0_Linux_64-bit.tar.gz`), and a manager that rewrites only the tag produces a 404 URL. That 404 used to surface two lines later as `tar xzf`'s \"not in gzip format\", because the curl carried no `-f`; the workflow now runs `curl -fsSL`, so a partial rewrite fails at the download naming the URL. The two matchStrings are still the fix — failing loudly is not the same as not breaking. Asset naming is stable across releases. One more copy lives on the host side, because it installs the binary the prek hook runs and a bump that moved only ci.yml would leave every workstation on the old rules (#1703): the `vale` tool of hosts/packages/homelab-tools/package.yml, which the github-release-attachments manager moves. The `{{depName}}` group puts both managers' bumps in one PR, and ansible/tests/repo/test_vale_matches_the_ci_pin.py ENFORCES that the copies agree.",
+      "description": "Pinned Vale binary in the CI workflow. TWO matchStrings on purpose: the download URL carries the version TWICE (the tag `v3.18.0` and the asset name `vale_3.18.0_Linux_64-bit.tar.gz`), and a manager that rewrites only the tag produces a 404 URL. That 404 used to surface two lines later as `tar xzf`'s \"not in gzip format\", because the curl carried no `-f`; the workflow now runs `curl -fsSL`, so a partial rewrite fails at the download naming the URL. The two matchStrings are still the fix — failing loudly is not the same as not breaking. Asset naming is stable across releases. One more copy lives on the host side, because it installs the binary the prek hook runs and a bump that moved only ci.yml would leave every workstation on the old rules (#1703): the `vale` tool of hosts/packages/homelab-tools/package.yml, which the github-release-attachments manager moves. The `{{depName}}` group puts both managers' bumps in one PR, and tests/repo/test_vale_matches_the_ci_pin.py ENFORCES that the copies agree.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/"
       ],
@@ -121,7 +121,7 @@
     },
     {
       "customType": "regex",
-      "description": "The flux CLI release each flux CI job fetches (#7778): the four promote workflow jobs that push and tag the artifact, ci.yml's `flux_roundtrip` and `sops_manifest_type_proof` jobs, and the two drill workflows. Each file pins the CLI in env as `FLUX_VERSION` and `FLUX_SHA256`, the sha256 of `flux_<version>_linux_amd64.tar.gz`, and each job restores the tarball from an actions/cache keyed on both, fetching the release only on a miss and checking the digest every run. The jobs used `fluxcd/flux2/action` until a release-host outage of five 504s turned master red, because the action downloads the CLI uncached. This manager follows the nfpm manager's shape: ONE matchString spans the `# renovate:` annotation, the `FLUX_VERSION` line and the `FLUX_SHA256` line, so currentValue and currentDigest come from one match, and the github-release-attachments datasource computes the new digest from the release's checksums file. depName equals the `# renovate:` annotation on `flux_version`, so the `fluxcd/flux2` packageRule puts every pin and the defaults pin in one PR. ansible/tests/repo/test_promote_workflow.py and scripts/tests/test_renovate_flux_cli.py fail a pin that drifts from `flux_version`. ENFORCED by scripts/tests/test_renovate_flux_cli.py.",
+      "description": "The flux CLI release each flux CI job fetches (#7778): the four promote workflow jobs that push and tag the artifact, ci.yml's `flux_roundtrip` and `sops_manifest_type_proof` jobs, and the two drill workflows. Each file pins the CLI in env as `FLUX_VERSION` and `FLUX_SHA256`, the sha256 of `flux_<version>_linux_amd64.tar.gz`, and each job restores the tarball from an actions/cache keyed on both, fetching the release only on a miss and checking the digest every run. The jobs used `fluxcd/flux2/action` until a release-host outage of five 504s turned master red, because the action downloads the CLI uncached. This manager follows the nfpm manager's shape: ONE matchString spans the `# renovate:` annotation, the `FLUX_VERSION` line and the `FLUX_SHA256` line, so currentValue and currentDigest come from one match, and the github-release-attachments datasource computes the new digest from the release's checksums file. depName equals the `# renovate:` annotation on `flux_version`, so the `fluxcd/flux2` packageRule puts every pin and the defaults pin in one PR. tests/repo/test_promote_workflow.py and scripts/tests/test_renovate_flux_cli.py fail a pin that drifts from `flux_version`. ENFORCED by scripts/tests/test_renovate_flux_cli.py.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/promote\\.yml$/",
         "/(^|/)\\.github/workflows/ci\\.yml$/",
@@ -174,7 +174,7 @@
     },
     {
       "customType": "regex",
-      "description": "The k3s version `hosts/bootstrap-host.sh` embeds (H7.42), the second copy of `k3s_version` in roles/k8s/system-upgrade/defaults. The script runs on a rebuilt node with no clone to read the pin from, and hosts/lib/tests/test_bootstrap_host_pins.py holds all three embedded k3s values equal to that file, so a bump of one side alone fails CI. The `k3s-io/k3s` packageRule groups this bump with the defaults file's. The install.sh URL and its sha256 are the same manual finish as in the defaults file.",
+      "description": "The k3s version `hosts/bootstrap-host.sh` embeds (H7.42), the second copy of `k3s_version` in k8s/roles/system-upgrade/defaults. The script runs on a rebuilt node with no clone to read the pin from, and hosts/lib/tests/test_bootstrap_host_pins.py holds all three embedded k3s values equal to that file, so a bump of one side alone fails CI. The `k3s-io/k3s` packageRule groups this bump with the defaults file's. The install.sh URL and its sha256 are the same manual finish as in the defaults file.",
       "managerFilePatterns": [
         "/(^|/)hosts/bootstrap-host\\.sh$/"
       ],
@@ -198,7 +198,7 @@
     },
     {
       "customType": "regex",
-      "description": "The kindest/node image CI's `sops_manifest_type_proof` job boots (`KIND_NODE_IMAGE`, issue #5173), pinned by tag and digest. The tag's Kubernetes minor follows `k3s_version` in roles/k8s/system-upgrade, so the proof runs on the API server the cluster runs; ansible/tests/repo/test_kind_node_image_follows_k3s.py fails a k3s minor bump that left the image behind, and the `kind` packageRule offers this pin patch and digest updates only, because a minor no k3s pin has reached yet would be red against that test. ONE matchString spans the annotation and the env line, and Renovate rewrites both the tag and the digest inside it. ENFORCED by scripts/tests/test_renovate_kind_pins.py.",
+      "description": "The kindest/node image CI's `sops_manifest_type_proof` job boots (`KIND_NODE_IMAGE`, issue #5173), pinned by tag and digest. The tag's Kubernetes minor follows `k3s_version` in k8s/roles/system-upgrade, so the proof runs on the API server the cluster runs; tests/repo/test_kind_node_image_follows_k3s.py fails a k3s minor bump that left the image behind, and the `kind` packageRule offers this pin patch and digest updates only, because a minor no k3s pin has reached yet would be red against that test. ONE matchString spans the annotation and the env line, and Renovate rewrites both the tag and the digest inside it. ENFORCED by scripts/tests/test_renovate_kind_pins.py.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/ci\\.yml$/"
       ],
@@ -261,7 +261,7 @@
     },
     {
       "customType": "regex",
-      "description": "CI test-runner Python pin (`python-version:` input in .github/actions/setup/action.yml). helpers:pinGitHubActionDigests tracks the setup-python ACTION digest but not its version INPUT, so this was one of the two last silently-aging pins in the repo. A bump PR runs the whole test suite ON the new interpreter, which is exactly the compatibility proof; keep it moving with the host toolchain rather than frozen at the requires-python floor. Scans every workflow file and every local composite action: the one pin lives in .github/actions/setup/action.yml, which every CI job calls since #3733, and a workflow-only pattern would leave it untracked. Before that each job carried its own copy, and a ci.yml-only pattern let image-smoke.yml's twin age silently until it drifted (2026-07-10 review). A pin that reappears in a workflow is still tracked. The literal is three-part (`3.14.7`, #2152): a two-part `3.14` had setup-python resolve the patch from the toolcache that day, while `.python-version` stays two-part on purpose — it is the minor the repo targets, and ansible/tests/repo/test_python_version_consistency.py compares the workflows to it on major.minor.",
+      "description": "CI test-runner Python pin (`python-version:` input in .github/actions/setup/action.yml). helpers:pinGitHubActionDigests tracks the setup-python ACTION digest but not its version INPUT, so this was one of the two last silently-aging pins in the repo. A bump PR runs the whole test suite ON the new interpreter, which is exactly the compatibility proof; keep it moving with the host toolchain rather than frozen at the requires-python floor. Scans every workflow file and every local composite action: the one pin lives in .github/actions/setup/action.yml, which every CI job calls since #3733, and a workflow-only pattern would leave it untracked. Before that each job carried its own copy, and a ci.yml-only pattern let image-smoke.yml's twin age silently until it drifted (2026-07-10 review). A pin that reappears in a workflow is still tracked. The literal is three-part (`3.14.7`, #2152): a two-part `3.14` had setup-python resolve the patch from the toolcache that day, while `.python-version` stays two-part on purpose — it is the minor the repo targets, and tests/repo/test_python_version_consistency.py compares the workflows to it on major.minor.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/[^/]+\\.yml$/",
         "/(^|/)\\.github/actions/[^/]+/action\\.yml$/"
@@ -289,7 +289,7 @@
       "customType": "regex",
       "description": "karakeep-time-tagger runtime pip deps pinned inside its container command (`uv pip install <pkg>==<ver>`). The uv base image is digest-pinned, but its runtime deps would otherwise re-resolve to newest PyPI on every container start with no update signal (2026-07-16 review M3) \u2014 the same silent-drift the image pin closes, one layer down. Track each pin on PyPI; the packageRule below keeps them manual so a client bump is reviewed alongside the digest-pinned karakeep app it talks to. Lived in the Docker role's compose template until the karakeep k8s cutover (2026-08-06) moved the pins into the k8s deployment template; role archived 2026-08-09.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/karakeep/templates/deployment-time-tagger\\.yaml\\.j2$/"
+        "/(^|/)k8s/roles/karakeep/templates/deployment-time-tagger\\.yaml\\.j2$/"
       ],
       "matchStrings": [
         "(?<depName>[A-Za-z0-9._-]+)==(?<currentValue>[0-9][^\\s\"']*)"
@@ -300,7 +300,7 @@
       "customType": "regex",
       "description": "jellyfin-ani-sync plugin release pin in k8s/jellyfin/defaults/main.yml (2026-09-01 review). The only manager reaching that file is the k8s-images one below, whose matchStrings key on `_image:` — so the plugin release, its download URL and its MD5 were invisible to every manager and aged with no signal, the same silent-drift class as the crowdsec bouncer plugin above. THREE matchStrings, because the pin carries its version three times: the release tag (`/download/v4.1/`), the asset name (`ani-sync_4.1.0.0.zip`) and the paired `jellyfin_k8s_anisync_version` var the init container reads. Rewriting only the tag produces a 404 URL (the Vale manager above records that failure mode). Upstream tags are two-part (`v4.1`) while the plugin version is four-part (`4.1.0.0`), so each matchString captures the SAME two-part `major.minor` and Renovate rewrites all three occurrences in step. extractVersionTemplate strips the tag's `v` so the datasource's version space matches what the matchStrings capture; versioningTemplate makes a two-part version orderable (plain `semver` rejects `4.1` outright, which would leave this manager inert) and maps the `b` suffix on beta tags (`v4.3b`, `v4.2b`) to a prerelease, so betas are never offered against a stable pin. NEVER automerged (packageRule below): the asset name also embeds the JELLYFIN targetAbi (`10.11.6.-.`), which no datasource can supply, and the paired `jellyfin_k8s_anisync_md5` can't be computed by a regex manager. The PR is a SIGNAL — the operator finishes the targetAbi segment and the MD5, and the file's own header requires raising `jellyfin_k8s_image` alongside it. Same manual-finish class as the SOPS pin above, which tracks despite an uncomputable paired sha256 rather than going untracked.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/jellyfin/defaults/main\\.yml$/"
+        "/(^|/)k8s/roles/jellyfin/defaults/main\\.yml$/"
       ],
       "matchStrings": [
         "jellyfin-ani-sync/releases/download/v(?<currentValue>\\d+\\.\\d+)/",
@@ -316,7 +316,7 @@
       "customType": "regex",
       "description": "Intro Skipper plugin release pin in k8s/jellyfin/defaults/main.yml. Same shape and same file as the ani-sync manager above, and it exists for the same reason — the k8s-images manager keys on `_image:`, so a plugin release, its URL and its checksum are invisible to every other manager. THREE matchStrings, because the pin carries the version three times: the release tag path (`/download/10.11/v1.10.11.23/`), the asset name (`intro-skipper-v1.10.11.23.zip`) and the `jellyfin_k8s_introskipper_version` var the init container reads. The ONE thing ani-sync's manager never had to solve is the release LINE: upstream maintains a 10.11 line and a 12.0 line in the same repository (`10.11/v1.10.11.23`, `12.0/v12.0.2.8`, plus rolling `10.11/prerelease` tags), so an unconstrained github-releases datasource ranks a 12.0 build highest and would offer a plugin the deployed 10.11 server's loader rejects — silently, behind a green rollout. extractVersionTemplate is anchored to `^10\\.11/v` for exactly that: a tag from another line, and the `prerelease` tags (no `v` segment), match nothing and are dropped. RAISE THAT ANCHOR when jellyfin_k8s_image moves to a new Jellyfin minor, or this manager goes inert rather than wrong. versioningTemplate spells out the four-part plugin version because plain semver rejects it, and the fourth group is named `build` rather than `revision` on purpose: lib/modules/versioning/regex/index.ts pushes `build` onto the release array Renovate compares, and only reads `revision` when `build` is already present — so `revision` alone would leave every 1.10.11.x equal and the manager inert. NEVER automerged (packageRule below): jellyfin_k8s_introskipper_sha256 and jellyfin_k8s_introskipper_target_abi cannot be computed by a regex manager — the operator takes both from the release and the published manifest.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/jellyfin/defaults/main\\.yml$/"
+        "/(^|/)k8s/roles/jellyfin/defaults/main\\.yml$/"
       ],
       "matchStrings": [
         "intro-skipper/releases/download/10\\.11/v(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)/",
@@ -332,7 +332,7 @@
       "customType": "regex",
       "description": "Webhook plugin release pin in k8s/jellyfin/defaults/main.yml (#1557). Third of the jellyfin plugin managers and it exists for the reason the two above record — the k8s-images manager keys on `_image:`, so a plugin pin, its URL and its checksum are invisible to every other manager and age with no signal. TWO matchStrings rather than three: the pin carries the version in the download URL and in the `jellyfin_k8s_webhook_version` var the init container reads, and there is no separate release-tag path because Webhook is distributed from repo.jellyfin.org, not from a GitHub release asset. The DATASOURCE is still github-releases (`jellyfin/jellyfin-plugin-webhook`), whose tags are a bare major — `v21`, `v22` — which the official manifest publishes as `21.0.0.0`, `22.0.0.0`; the matchStrings therefore capture only that major and Renovate rewrites both occurrences in step. extractVersionTemplate is the release-line ANCHOR, doing here what `^10\\.11/v` does for intro-skipper: Webhook 22.0.0.0 declares targetAbi 12.0.0.0, which the deployed 10.11 server's loader rejects silently behind a green rollout, so the anchor admits majors through 21 and drops anything newer. RAISE THAT ANCHOR when jellyfin_k8s_image moves to Jellyfin 12, or this manager tracks a line upstream has left and goes inert rather than wrong. versioningTemplate spells the version out with optional minor and patch groups because plain semver rejects a bare `21`. NEVER automerged (packageRule below): jellyfin_k8s_webhook_md5 comes from the official manifest.json and jellyfin_k8s_webhook_target_abi from the same place — neither is computable by a regex manager.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/jellyfin/defaults/main\\.yml$/"
+        "/(^|/)k8s/roles/jellyfin/defaults/main\\.yml$/"
       ],
       "matchStrings": [
         "webhook/webhook_(?<currentValue>\\d+)\\.0\\.0\\.0\\.zip",
@@ -347,7 +347,7 @@
       "customType": "regex",
       "description": "Merge Versions plugin release pin in k8s/jellyfin/defaults/main.yml (#1616). Fourth of the jellyfin plugin managers, and it exists for the reason the three above record — the k8s-images manager keys on `_image:`, so a plugin pin, its URL and its checksum are invisible to every other manager and age with no signal, which reads exactly like a plugin with no updates available. TWO matchStrings: the pin carries the version in the release-tag path of the download URL and in the `jellyfin_k8s_mergeversions_version` var the init container reads. The asset FILENAME is identical on every release (`Jellyfin.Plugin.MergeVersions.zip`), so unlike ani-sync's and intro-skipper's pins there is no third occurrence to rewrite. extractVersionTemplate is the release-line ANCHOR, doing here what `^10\\.11/v` does for intro-skipper: upstream tags the line by JELLYFIN version — `10.11.0.1` and `12.0.0` are the two live lines — and 12.0.0 declares targetAbi 12.0, which the deployed 10.11 server's loader rejects silently behind a green rollout, so the anchor admits only the 10.11 line. RAISE THAT ANCHOR when jellyfin_k8s_image moves to a new Jellyfin minor, or this manager goes inert rather than wrong. versioningTemplate spells the four-part version out because plain semver rejects it, and the fourth group is named `build` rather than `revision` for the reason intro-skipper's manager records — Renovate reads `revision` only when `build` is already present, so `revision` alone would leave every 10.11.0.x equal and the manager inert. NEVER automerged (packageRule below): jellyfin_k8s_mergeversions_sha256 is GitHub's own asset digest and _target_abi and _guid come from the plugin's published manifest — no regex manager can compute any of the three.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/jellyfin/defaults/main\\.yml$/"
+        "/(^|/)k8s/roles/jellyfin/defaults/main\\.yml$/"
       ],
       "matchStrings": [
         "jellyfin-plugin-mergeversions/releases/download/(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)/",
@@ -362,7 +362,7 @@
       "customType": "regex",
       "description": "Media Cleaner plugin release pin in k8s/jellyfin/defaults/main.yml (#1619). Fifth of the jellyfin plugin managers, and it exists for the reason the four above record — the k8s-images manager keys on `_image:`, so a plugin pin, its URL and its checksum are invisible to every other manager and age with no signal, which reads exactly like a plugin with no updates available. This plugin DELETES MEDIA FILES, which is why it is pinned at all rather than left as the dashboard-installed PVC state #1619 found. TWO matchStrings, and both capture only the THREE-part release: the pin carries it in the URL's release tag (`/download/v3.2.0/`) and as the first three segments of `jellyfin_k8s_mediacleaner_version`. The FOURTH segment of that var is deliberately outside the capture — it encodes the server ABI (`101109` for 10.11.9), upstream publishes one release tag as three per-ABI manifest versions, and no datasource can say which of them the deployed image wants. extractVersionTemplate only strips the tag's `v`: unlike the intro-skipper, webhook and merge-versions managers there is no release-LINE anchor to carry, because the plugin version here is ABI-independent and the ABI lives in the asset filename instead. versioningTemplate makes the fourth group optional because upstream's tags changed shape mid-history (`v3.1.0.0` then `v3.2.0`) and a template parsing only one leaves the other unorderable and silently skipped. NEVER automerged (packageRule below): a bump has to pick the right per-ABI asset out of several on one tag, re-verify jellyfin_k8s_mediacleaner_sha256 against the download, and carry jellyfin_k8s_mediacleaner_target_abi across — and an automerged bump would arm a different build of a media-deleting plugin with none of the three checked.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/jellyfin/defaults/main\\.yml$/"
+        "/(^|/)k8s/roles/jellyfin/defaults/main\\.yml$/"
       ],
       "matchStrings": [
         "jellyfin-plugin-media-cleaner/releases/download/v(?<currentValue>\\d+\\.\\d+\\.\\d+)/",
@@ -375,10 +375,10 @@
     },
     {
       "customType": "regex",
-      "description": "pip pins inside the two built Dockerfiles that install from PyPI (#2149, #2150): roles/k8s/code-server (the venv's seven tools) and roles/k8s/homelab-mcp (mcp, httpx, uvicorn). Each was a bare name or a range, re-resolved to newest PyPI on every rebuild behind a digest-pinned base — the same one-layer-down drift the karakeep time-tagger manager above closes. ical-proxy's Dockerfile is NOT here: its two pins are held in lockstep with uv.lock by ansible/tests/services/test_ical_proxy_pins_match_uv_lock.py, and lockFileMaintenance is the bump path there. Both files are also read by the built-in dockerfile manager, which sees only the FROM line — no overlap on these pins. The packageRules below keep every bump here manual (a built image ships only on a rebuild) and cap mcp at <2, because 2.0 removed mcp.server.fastmcp and app.py imports it.",
+      "description": "pip pins inside the two built Dockerfiles that install from PyPI (#2149, #2150): k8s/roles/code-server (the venv's seven tools) and k8s/roles/homelab-mcp (mcp, httpx, uvicorn). Each was a bare name or a range, re-resolved to newest PyPI on every rebuild behind a digest-pinned base — the same one-layer-down drift the karakeep time-tagger manager above closes. ical-proxy's Dockerfile is NOT here: its two pins are held in lockstep with uv.lock by tests/services/test_ical_proxy_pins_match_uv_lock.py, and lockFileMaintenance is the bump path there. Both files are also read by the built-in dockerfile manager, which sees only the FROM line — no overlap on these pins. The packageRules below keep every bump here manual (a built image ships only on a rebuild) and cap mcp at <2, because 2.0 removed mcp.server.fastmcp and app.py imports it.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/code-server/templates/Dockerfile\\.j2$/",
-        "/(^|/)ansible/roles/k8s/homelab-mcp/templates/Dockerfile\\.j2$/"
+        "/(^|/)k8s/roles/code-server/templates/Dockerfile\\.j2$/",
+        "/(^|/)k8s/roles/homelab-mcp/templates/Dockerfile\\.j2$/"
       ],
       "matchStrings": [
         "(?<depName>[A-Za-z0-9._-]+)==(?<currentValue>[0-9][^\\s\"'\\\\]*)"
@@ -389,7 +389,7 @@
       "customType": "regex",
       "description": "The Claude Code CLI the code-server image installs with `npm install -g @anthropic-ai/claude-code@X.Y.Z` (#2149). Renovate's built-in npm manager reads package.json only, so a pin inside a Dockerfile needs a regex manager over the npm datasource. Kept at the same release as the Anthropic.claude-code VSIX in the role's defaults (no datasource exists for a VS Code extension, so that half is a manual finish on this PR — the defaults comment has the recipe).",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/code-server/templates/Dockerfile\\.j2$/"
+        "/(^|/)k8s/roles/code-server/templates/Dockerfile\\.j2$/"
       ],
       "matchStrings": [
         "@anthropic-ai/claude-code@(?<currentValue>[\\d.]+)"
@@ -401,7 +401,7 @@
       "customType": "regex",
       "description": "CodeLLDB, the one code-server extension downloaded from a GitHub release rather than Open VSX (2026-10-12). Open VSX carries only its universal bootstrap VSIX, which fetches the platform package unpinned on first activation, so the pin is the release's codelldb-linux-x64.vsix. Unlike the Open VSX extensions it has a datasource, so it is tracked rather than bumped by hand. TWO matchStrings, because the entry carries the version twice: its `version:` line and the `/download/v<version>/` segment of its URL. The `version:` matchString is anchored to the entry's `name:` line so it cannot reach another extension's version. The sha256 is the manual finish: `asset_pins.py --refresh 'code_server_k8s_extensions[vadimcn.vscode-lldb]'`, checked against the asset digest GitHub lists. The `code-server build pins` packageRule groups it, because it matches github-releases on the role's defaults.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/code-server/defaults/main\\.yml$/"
+        "/(^|/)k8s/roles/code-server/defaults/main\\.yml$/"
       ],
       "matchStrings": [
         "name: vadimcn\\.vscode-lldb\\n\\s+version: (?<currentValue>\\d+\\.\\d+\\.\\d+)",
@@ -415,7 +415,7 @@
       "customType": "regex",
       "description": "The fuzzball package both n8n images install: `npm install -g fuzzball@X.Y.Z` in the n8n image (#2213) and `pnpm add fuzzball@X.Y.Z` in the runners image (#5391). Same shape as the Claude Code CLI manager above and for the same reason: the built-in npm manager reads package.json only, and these pins sit in Dockerfiles. One manager over both files, so one PR moves both pins together. Each line had no version at first, so every rebuild took whatever npm served that day — the class #2149 closed for code-server.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/n8n/templates/Dockerfile(-runners)?\\.j2$/"
+        "/(^|/)k8s/roles/n8n/templates/Dockerfile(-runners)?\\.j2$/"
       ],
       "matchStrings": [
         "(?:npm install -g|pnpm add) fuzzball@(?<currentValue>[\\d.]+)"
@@ -427,7 +427,7 @@
       "customType": "regex",
       "description": "Every pinned version in a role's defaults/main.yml, or in a host component's component.yml (the Pi's Docker engine pins since H7.26), that carries a `# renovate:` annotation on the line above it, which is Renovate's documented annotation pattern. The annotation names the dependency: `# renovate: datasource=<ds> depName=<name>`, optionally followed by `versioning=`, `extractVersion=` and `registryUrl=`, IN THAT ORDER, each value free of spaces. The next line must be a `<key>_version:` pin, quoted or not. Adding a pinned artifact is the annotation plus its defaults: no customManager, and the packageRule keyed on depTypeTemplate below makes it a manual PR whose title names `asset_pins.py --refresh <depName>`, the command that rewrites any digest paired with the version. This replaced 13 single-variable managers (#3732); the reasoning each one's description carried now sits in the comment block above its annotation, beside the pin it explains. A pin whose version appears in more than one place, or needs a matchString per occurrence (the jellyfin plugins, vale), keeps its own manager below. scripts/lib/renovate_annotations.py expands each annotation into the per-pin manager the guards in scripts/tests/ read, by running this matchString itself.",
       "managerFilePatterns": [
-        "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/",
+        "/^k8s/roles/[^/]+/defaults/main\\.yml$/",
         "/^hosts/components/[^/]+/component\\.yml$/"
       ],
       "matchStrings": [
@@ -439,7 +439,7 @@
       "customType": "regex",
       "description": "Headlamp plugin release pins in k8s/headlamp/defaults/main.yml (`headlamp_k8s_plugins`, one name/version/sha256 entry per plugin, installed by the fetch-plugins init container). Every plugin lives in ONE upstream repo, headlamp-k8s/plugins, whose releases are tagged `<plugin>-<version>` across all plugins, so the datasource is the same repo for each entry and extractVersionTemplate keys on the captured plugin name to select that plugin's tags and drop the prefix; without it every entry would be offered every other plugin's version. The entry's optional `asset_prefix` (flux publishes `headlamp-k8s-flux-<ver>.tar.gz`) does not carry the version, so rewriting `version` alone moves the whole download URL. NO automerge (packageRule below): the sha256 the init container verifies is not published with the release and cannot be computed by a regex manager, so the PR is a SIGNAL the operator finishes with `gh release download` + `sha256sum` (the defaults file's comment has the commands). Same manual-finish class as the SOPS, coredns and jellyfin-ani-sync pins.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/k8s/headlamp/defaults/main\\.yml$/"
+        "/(^|/)k8s/roles/headlamp/defaults/main\\.yml$/"
       ],
       "matchStrings": [
         "- name: (?<pluginName>[a-z0-9-]+)\\s+version: \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
@@ -451,11 +451,11 @@
     },
     {
       "customType": "regex",
-      "description": "Container images in k8s role defaults (ansible/roles/k8s/*/defaults/main.yml) AND in inventory/group_vars/all.yml. The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal. group_vars/all.yml was added 2026-08-14: crowdsec_k8s_image had been hoisted out of its role defaults into group_vars, which put it outside this manager's patterns AND outside the coverage test's glob (scripts/tests/test_renovate_managers.py globbed roles/k8s/*/defaults/main.yml only) \u2014 so the WAF core, the one image whose staleness is a security problem, was the single pin neither could see. hosts/components/registry-gc/defaults/main.yml is listed for the same one-directory-short escape: its `_image:` pins (registry_k8s_image and registry_k8s_netpol_probe_image). autoReplaceStringTemplate was added 2026-09-24 (#2392), and it is what lets a TAG-ONLY pin gain an @sha256 suffix. With no template, Renovate rewrites a matched span by substituting currentValue -> newValue and currentDigest -> newDigest inside the text it matched (lib/workers/repository/update/branch/auto-replace.ts), so a pin carrying no digest has nothing to substitute: `pinDigests: true`, on since 5ba111de8 for #2146, refreshed every pin that already had a digest and added one to none of the rest, which is why PRs #2336-#2339 merged as one-line tag-only diffs. The template MUST keep the literal `_image: ` prefix. The matchString starts at `_image:` and Renovate replaces the WHOLE matched span, so a template without the prefix rewrites `bazarr_k8s_image: lscr.io/...` into `bazarr_k8slscr.io/...` and corrupts every pin this manager touches. It emits ONE space and NO quotes, matching what every pin here carries; the only quoted `_image:` lines in these files are the built-image ones (`\"{{ k8s_registry_pull_host }}/...\"`), and they match this manager not at all, because depName is `[^:\\s\"'@]+` and fails on the space after `{{`. scripts/tests/test_renovate_managers.py::test_the_k8s_image_template_round_trips_every_live_pin asserts the template reproduces every live matched span byte for byte, so a quoted or double-spaced pin added later fails at commit time rather than as a corrupted Renovate PR.",
+      "description": "Container images in k8s role defaults (k8s/roles/*/defaults/main.yml) AND in inventory/group_vars/all.yml. The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal. group_vars/all.yml was added 2026-08-14: crowdsec_k8s_image had been hoisted out of its role defaults into group_vars, which put it outside this manager's patterns AND outside the coverage test's glob (scripts/tests/test_renovate_managers.py globbed k8s/roles/*/defaults/main.yml only) \u2014 so the WAF core, the one image whose staleness is a security problem, was the single pin neither could see. hosts/components/registry-gc/defaults/main.yml is listed for the same one-directory-short escape: its `_image:` pins (registry_k8s_image and registry_k8s_netpol_probe_image). autoReplaceStringTemplate was added 2026-09-24 (#2392), and it is what lets a TAG-ONLY pin gain an @sha256 suffix. With no template, Renovate rewrites a matched span by substituting currentValue -> newValue and currentDigest -> newDigest inside the text it matched (lib/workers/repository/update/branch/auto-replace.ts), so a pin carrying no digest has nothing to substitute: `pinDigests: true`, on since 5ba111de8 for #2146, refreshed every pin that already had a digest and added one to none of the rest, which is why PRs #2336-#2339 merged as one-line tag-only diffs. The template MUST keep the literal `_image: ` prefix. The matchString starts at `_image:` and Renovate replaces the WHOLE matched span, so a template without the prefix rewrites `bazarr_k8s_image: lscr.io/...` into `bazarr_k8slscr.io/...` and corrupts every pin this manager touches. It emits ONE space and NO quotes, matching what every pin here carries; the only quoted `_image:` lines in these files are the built-image ones (`\"{{ k8s_registry_pull_host }}/...\"`), and they match this manager not at all, because depName is `[^:\\s\"'@]+` and fails on the space after `{{`. scripts/tests/test_renovate_managers.py::test_the_k8s_image_template_round_trips_every_live_pin asserts the template reproduces every live matched span byte for byte, so a quoted or double-spaced pin added later fails at commit time rather than as a corrupted Renovate PR.",
       "managerFilePatterns": [
-        "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/",
+        "/^k8s/roles/[^/]+/defaults/main\\.yml$/",
         "/^hosts/components/registry-gc/defaults/main\\.yml$/",
-        "/^ansible/inventory/group_vars/all\\.yml$/"
+        "/^inventory/group_vars/all\\.yml$/"
       ],
       "matchStrings": [
         "_image:\\s*[\"']?(?<depName>[^:\\s\"'@]+):(?<currentValue>[^\\s\"'@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?"
@@ -498,8 +498,8 @@
         "custom.regex"
       ],
       "matchFileNames": [
-        "ansible/roles/k8s/**",
-        "ansible/inventory/group_vars/all.yml",
+        "k8s/roles/**",
+        "inventory/group_vars/all.yml",
         "hosts/components/registry-gc/defaults/main.yml"
       ],
       "groupName": "k8s image {{depName}}"
@@ -513,8 +513,8 @@
         "docker"
       ],
       "matchFileNames": [
-        "ansible/roles/k8s/**",
-        "ansible/inventory/group_vars/all.yml",
+        "k8s/roles/**",
+        "inventory/group_vars/all.yml",
         "hosts/components/registry-gc/defaults/main.yml"
       ],
       "matchUpdateTypes": [
@@ -552,7 +552,7 @@
       "groupName": "kind (binary + node image)"
     },
     {
-      "description": "No major or minor update for the kindest/node image (issue #5173). Its Kubernetes minor follows `k3s_version`, which ansible/tests/repo/test_kind_node_image_follows_k3s.py holds, so a minor Renovate offered ahead of k3s would open a PR that test keeps red. A k3s minor bump fails that test instead, and the person finishing the k3s upgrade moves the image to a tag the pinned kind release lists.",
+      "description": "No major or minor update for the kindest/node image (issue #5173). Its Kubernetes minor follows `k3s_version`, which tests/repo/test_kind_node_image_follows_k3s.py holds, so a minor Renovate offered ahead of k3s would open a PR that test keeps red. A k3s minor bump fails that test instead, and the person finishing the k3s upgrade moves the image to a tag the pinned kind release lists.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -566,7 +566,7 @@
       "enabled": false
     },
     {
-      "description": "The CI runner image (`runs-on: ubuntu-24.04` in every workflow). The built-in github-actions manager reads a versioned `runs-on` label through the github-runners datasource with no custom manager here; `ubuntu-latest` was the pin until #2152, and GitHub rolls that alias to a new release with no commit in this repo. NO automerge: the `language: system` prek hooks run whatever shellcheck, Go and systemd-analyze the image preinstalls, so the manual half is sweeping every hook against the new image before merging — rebase the branch onto master so it carries the `workflow_dispatch` trigger, then `gh workflow run ci.yml --ref <branch>`. Reading the image's preinstalled-software list is the weaker version of that and was all this rule asked for until 2026-09-24: a workflow-only diff matches no hook's `files` regex, so the PR's own green run never ran those hooks at all (#2366). The `renovate-prs` skill §3 carries the commands. One group for every workflow: the pins share one depName, so one PR moves all of them, and ansible/tests/repo/the workflow-runners-are-pinned row of ansible/tests/repo/test_census_rows_text.py refuses a floating label in any of them.",
+      "description": "The CI runner image (`runs-on: ubuntu-24.04` in every workflow). The built-in github-actions manager reads a versioned `runs-on` label through the github-runners datasource with no custom manager here; `ubuntu-latest` was the pin until #2152, and GitHub rolls that alias to a new release with no commit in this repo. NO automerge: the `language: system` prek hooks run whatever shellcheck, Go and systemd-analyze the image preinstalls, so the manual half is sweeping every hook against the new image before merging — rebase the branch onto master so it carries the `workflow_dispatch` trigger, then `gh workflow run ci.yml --ref <branch>`. Reading the image's preinstalled-software list is the weaker version of that and was all this rule asked for until 2026-09-24: a workflow-only diff matches no hook's `files` regex, so the PR's own green run never ran those hooks at all (#2366). The `renovate-prs` skill §3 carries the commands. One group for every workflow: the pins share one depName, so one PR moves all of them, and tests/repo/the workflow-runners-are-pinned row of tests/repo/test_census_rows_text.py refuses a floating label in any of them.",
       "matchDatasources": [
         "github-runners"
       ],
@@ -589,7 +589,7 @@
       "pinDigests": false
     },
     {
-      "description": "Every Python pin the repo keeps in lockstep, in ONE PR (issue #5479): the CI setup action's `python-version:` (the custom.regex manager, datasource python-version), `.python-version` (the built-in pyenv manager) and the Dockerfile `FROM python:` tags (the built-in dockerfile manager). Three managers report the same packageName `python`, and before this rule each opened its own PR. Renovate PR #5363 bumped only the CI pin to 3.15.0, so ansible/tests/repo/test_python_version_consistency.py and test_renovate_dockerfiles.py::test_python_version_pins_in_lockstep failed on it forever, and Renovate rebased it onto every master move: 57 SHAs and 44 red CI runs in about 46 hours, 52% of the 85 failed ci.yml runs from 2026-10-15 to 2026-10-17. It sits AFTER the `{{depName}}` rule for .github/** (which would otherwise name the CI-only group) and the dockerfile rules above. matchUpdateTypes is minor and major only: a patch bump edits the three-part CI pin alone, which the lockstep tests accept, so it keeps flowing through the groups above. The k8s `python:3.14-alpine@sha256` image pins in roles/k8s/*/defaults/main.yml share the packageName but are excluded by matchFileNames: they are Job and Deployment images `promote` applies, and the manual half of this PR is not theirs. The manual half: a minor or major interpreter bump is moved by a person across the three sites, because the suite and the image smoke job must pass on the new interpreter before merge and the PR cannot automerge. The weekly keys are the ones scripts/tests/test_renovate_manual_rules_push_weekly.py requires of every `(manual` rule, so a red Python PR is pushed at most once a week, not on every master move. The pin sites falling in one group is ENFORCED by scripts/tests/test_renovate_python_group.py::test_every_python_pin_site_falls_in_one_manual_group.",
+      "description": "Every Python pin the repo keeps in lockstep, in ONE PR (issue #5479): the CI setup action's `python-version:` (the custom.regex manager, datasource python-version), `.python-version` (the built-in pyenv manager) and the Dockerfile `FROM python:` tags (the built-in dockerfile manager). Three managers report the same packageName `python`, and before this rule each opened its own PR. Renovate PR #5363 bumped only the CI pin to 3.15.0, so tests/repo/test_python_version_consistency.py and test_renovate_dockerfiles.py::test_python_version_pins_in_lockstep failed on it forever, and Renovate rebased it onto every master move: 57 SHAs and 44 red CI runs in about 46 hours, 52% of the 85 failed ci.yml runs from 2026-10-15 to 2026-10-17. It sits AFTER the `{{depName}}` rule for .github/** (which would otherwise name the CI-only group) and the dockerfile rules above. matchUpdateTypes is minor and major only: a patch bump edits the three-part CI pin alone, which the lockstep tests accept, so it keeps flowing through the groups above. The k8s `python:3.14-alpine@sha256` image pins in k8s/roles/*/defaults/main.yml share the packageName but are excluded by matchFileNames: they are Job and Deployment images `promote` applies, and the manual half of this PR is not theirs. The manual half: a minor or major interpreter bump is moved by a person across the three sites, because the suite and the image smoke job must pass on the new interpreter before merge and the PR cannot automerge. The weekly keys are the ones scripts/tests/test_renovate_manual_rules_push_weekly.py requires of every `(manual` rule, so a red Python PR is pushed at most once a week, not on every master move. The pin sites falling in one group is ENFORCED by scripts/tests/test_renovate_python_group.py::test_every_python_pin_site_falls_in_one_manual_group.",
       "matchManagers": [
         "custom.regex",
         "pyenv",
@@ -602,7 +602,7 @@
         ".github/workflows/**",
         ".github/actions/**",
         ".python-version",
-        "ansible/roles/k8s/*/templates/Dockerfile*.j2"
+        "k8s/roles/*/templates/Dockerfile*.j2"
       ],
       "matchUpdateTypes": [
         "minor",
@@ -617,13 +617,13 @@
       "automerge": false
     },
     {
-      "description": "Digest bumps on the k8s plane. 45 of 92 `*_image` pins carry a @sha256 digest (counted 2026-10-03) and 20 of those sit on a MUTABLE tag (latest, release, master-web/-collector, jvm-stable, alpine) where a VERSION bump can never be offered \u2014 only a digest one. That is about half the fleet, and `matchUpdateTypes: [minor, patch]` above does not match updateType `digest`, so none of them auto-merged. Watchtower applied exactly this class automatically until it was retired 2026-08-09 with the note 'Renovate owns image updates' \u2014 leaving it manual was a regression against what it replaced, not a deliberate posture. minimumReleaseAge is 3 days rather than 7: there is no version to soak, only a re-push of the same tag, so the wait is purely to let a poisoned/yanked push be noticed. The denylist, each role's own `k8s_autodeploy` flag, is the safety boundary: since #1886 the manual rule below opens a denylisted service's digest PR as `manual \u2014` rather than automerging it. A pin on a CHANNEL tag (`:latest@sha256:`) is the shape with no version anywhere in its diff, so a bump on one cannot be read for direction and a downgrade looks like an upgrade (issue #1524, the same shape as n8n's #1493). That class is accepted for the roles left eligible here and fenced by the denylist for the ones whose regression is expensive — the DECIDED marker recording why, and the guard holding the fence, are in ansible/tests/deploy/test_channel_tag_digest_pins_stay_off_autodeploy.py. pinDigest sits beside digest (issue #2481). Renovate types the update that ADDS an @sha256 to a tag-only pin as pinDigest, not digest, and #2480 made those ~35 pins rewritable, so without it each one opened a hand-merge PR. A pinDigest is content-neutral: it pins the digest already behind the tag the cluster runs. `promote` and Flux apply each merged pin. The denylist rule below carries no matchUpdateTypes, so it keeps a denied role's pinDigest manual too. The 3 days is not universal: the nginx alpine rule directly below lowers it to 1 day for two pins whose tag re-pushes faster than a 3-day soak clears (#2886). The 3 days also binds only a digest Renovate can age (issue #3368). Renovate ages a digest update against the release timestamp of the newest VERSION matching its tag. Only Docker Hub returns release timestamps, as `tag_last_pushed`. A tag that names no version (latest, alpine, jvm-stable) has no matching version to age against. So a digest on GHCR or lscr.io, which serves from GHCR, has no timestamp, and neither does any digest on a channel tag. Under Renovate's default `minimumReleaseAgeBehaviour: timestamp-required`, an update with no timestamp stays in Pending Status Checks indefinitely: healthchecks, qbittorrent, janitorr and cloudflare-ddns sat there 4 to 13 days past their soak on 2026-10-03. `timestamp-optional` raises such an update with no age check. Where a timestamp exists, Renovate still enforces the 3 days, so a versioned Docker Hub tag (python:3.14-alpine, traefik:v3.7.13) keeps its soak. The cost: an automerge-eligible channel-tag or GHCR digest automerges on its first Renovate run, and `promote`'s verification is its only check: the soak Job (`flux/soak`) fails the promotion on a restart or a critical or verify=\"true\" alert in the services it changed, and `verify` then holds it and, for a role with no snapshot, resets `prod`. A denylisted role's digest still opens as a `manual —` PR. Renovate documents the behaviour in docs/usage/key-concepts/minimum-release-age.md, section `digest` updates. ENFORCED: scripts/tests/test_renovate_digest_soak_without_timestamp.py. platformAutomerge is false, and rebaseWhen is conflicted, for the reasons the container-images rule gives.",
+      "description": "Digest bumps on the k8s plane. 45 of 92 `*_image` pins carry a @sha256 digest (counted 2026-10-03) and 20 of those sit on a MUTABLE tag (latest, release, master-web/-collector, jvm-stable, alpine) where a VERSION bump can never be offered \u2014 only a digest one. That is about half the fleet, and `matchUpdateTypes: [minor, patch]` above does not match updateType `digest`, so none of them auto-merged. Watchtower applied exactly this class automatically until it was retired 2026-08-09 with the note 'Renovate owns image updates' \u2014 leaving it manual was a regression against what it replaced, not a deliberate posture. minimumReleaseAge is 3 days rather than 7: there is no version to soak, only a re-push of the same tag, so the wait is purely to let a poisoned/yanked push be noticed. The denylist, each role's own `k8s_autodeploy` flag, is the safety boundary: since #1886 the manual rule below opens a denylisted service's digest PR as `manual \u2014` rather than automerging it. A pin on a CHANNEL tag (`:latest@sha256:`) is the shape with no version anywhere in its diff, so a bump on one cannot be read for direction and a downgrade looks like an upgrade (issue #1524, the same shape as n8n's #1493). That class is accepted for the roles left eligible here and fenced by the denylist for the ones whose regression is expensive — the DECIDED marker recording why, and the guard holding the fence, are in tests/deploy/test_channel_tag_digest_pins_stay_off_autodeploy.py. pinDigest sits beside digest (issue #2481). Renovate types the update that ADDS an @sha256 to a tag-only pin as pinDigest, not digest, and #2480 made those ~35 pins rewritable, so without it each one opened a hand-merge PR. A pinDigest is content-neutral: it pins the digest already behind the tag the cluster runs. `promote` and Flux apply each merged pin. The denylist rule below carries no matchUpdateTypes, so it keeps a denied role's pinDigest manual too. The 3 days is not universal: the nginx alpine rule directly below lowers it to 1 day for two pins whose tag re-pushes faster than a 3-day soak clears (#2886). The 3 days also binds only a digest Renovate can age (issue #3368). Renovate ages a digest update against the release timestamp of the newest VERSION matching its tag. Only Docker Hub returns release timestamps, as `tag_last_pushed`. A tag that names no version (latest, alpine, jvm-stable) has no matching version to age against. So a digest on GHCR or lscr.io, which serves from GHCR, has no timestamp, and neither does any digest on a channel tag. Under Renovate's default `minimumReleaseAgeBehaviour: timestamp-required`, an update with no timestamp stays in Pending Status Checks indefinitely: healthchecks, qbittorrent, janitorr and cloudflare-ddns sat there 4 to 13 days past their soak on 2026-10-03. `timestamp-optional` raises such an update with no age check. Where a timestamp exists, Renovate still enforces the 3 days, so a versioned Docker Hub tag (python:3.14-alpine, traefik:v3.7.13) keeps its soak. The cost: an automerge-eligible channel-tag or GHCR digest automerges on its first Renovate run, and `promote`'s verification is its only check: the soak Job (`flux/soak`) fails the promotion on a restart or a critical or verify=\"true\" alert in the services it changed, and `verify` then holds it and, for a role with no snapshot, resets `prod`. A denylisted role's digest still opens as a `manual —` PR. Renovate documents the behaviour in docs/usage/key-concepts/minimum-release-age.md, section `digest` updates. ENFORCED: scripts/tests/test_renovate_digest_soak_without_timestamp.py. platformAutomerge is false, and rebaseWhen is conflicted, for the reasons the container-images rule gives.",
       "matchManagers": [
         "custom.regex"
       ],
       "matchFileNames": [
-        "ansible/roles/k8s/**",
-        "ansible/inventory/group_vars/all.yml",
+        "k8s/roles/**",
+        "inventory/group_vars/all.yml",
         "hosts/components/registry-gc/defaults/main.yml"
       ],
       "matchUpdateTypes": [
@@ -645,8 +645,8 @@
         "docker"
       ],
       "matchFileNames": [
-        "ansible/roles/k8s/freshrss/defaults/main.yml",
-        "ansible/roles/k8s/docs/defaults/main.yml"
+        "k8s/roles/freshrss/defaults/main.yml",
+        "k8s/roles/docs/defaults/main.yml"
       ],
       "matchPackageNames": [
         "nginx",
@@ -659,7 +659,7 @@
       "minimumReleaseAge": "1 day"
     },
     {
-      "description": "NO automerge for an image bump in a role declaring `k8s_autodeploy: false` (issue #1886). The two automerge rules above say a machine may MERGE a k8s image bump; the denylist, each role's own `k8s_autodeploy` flag, says a machine may not merge one for these roles. The flag says nothing else: `promote` and Flux apply every merged bump. The rule dates from Renovate merging authelia 4.39.23 (#1831) and 4.39.24 (#1862) unattended, each of which `Release Staleness Drift` then paged on. A bump here opens as a `manual —` PR that the renovate-prs skill merges through land.sh, which waits on its promotion. matchFileNames is the denylist spelled as paths, one `defaults/main.yml` per denied role, and ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the two are equal — flip a role's flag and the guard names the line to add or drop here. One more path is a copy rather than a role: hosts/components/registry-gc/defaults/main.yml holds the registry role's two image pins for the ghcr-mirror GC Job (#5827). It is listed here and in the three k8s-plane rules above, so each copy resolves to the same group and soak as its source and both land in one PR. Matched by fewer rules, the copy got a branch of its own with no soak, and the test holding the copies equal failed it (#5859, #5835). The guard expects this path alongside group_vars, and scripts/tests/test_renovate_host_file_copies.py asserts each copy resolves the same as its source. inventory/group_vars/all.yml is the one path here that is not a role's defaults (issue #1936): crowdsec_k8s_image lives there because traefik's and authelia's sidecars read it too and role defaults are invisible across roles, and the per-role rule left it automerging. A merged bump there is worse than a merged bump in a denied role's defaults, not better — an inventory change moves the render of every role reading the key (crowdsec, traefik, authelia, all three denied), and `promote` applies them with no denylist check. So the merge boundary is the only gate that pin has, and the same guard asserts that every `_image:` pin in group_vars belongs to a denied role; the day an eligible role's pin is hoisted there, the guard says so and this path has to be reconsidered. No matchUpdateTypes on purpose: the digest rule above automerged a denied role's digest re-push too, the hole test_k8s_autodeploy_denylist.py recorded as unenforced for tdarr. matchDatasources narrows the rule to container images, because the CrowdSec bouncer plugin pin shares traefik's defaults/main.yml and its own manual rule below must keep its group name. POSITION is load-bearing: this rule must sit AFTER the `k8s image {{depName}}` and digest rules whose automerge it overrides, and BEFORE the per-package manual rules, which override its groupName for the pins they own. A per-package rule whose pin a denied role owns (the bouncer plugin in traefik, meilisearch and the time-tagger deps in karakeep, n8n, whose Dockerfiles its own role builds) carries `k8s_autodeploy: false` in its own groupName, because that phrase in the PR title is what keeps the unattended renovate_agent off it (issue #1963) — the same guard asserts it is present exactly where a denied role owns the pin. `groupSingleUpdates: true` is what puts the marker in the TITLE and not only the branch (issue #2646). Renovate applies a group's `commitMessageTopic` (`{{{groupName}}}`, so the marker) only when the branch holds more than one upgrade, and titles a one-dependency group `Update <dep> …` instead — #2620 was `Update klutchell/unbound Docker tag to v1.26.1` against a denied role, with the marker in the branch alone. This flag makes Renovate apply the group settings to a single upgrade too. It cannot move the branch: `generateBranchName` takes the group's `branchTopic` (`{{{groupSlug}}}`) whenever a `groupName` is set, with no upgrade-count condition, which is why #2620's branch already carried the slugified marker while its title did not. So no open `manual —` PR is abandoned and reopened, and the branch tell the renovate_agent prompt reads (`k8s_autodeploy-false`, #2641) stays where it is. The groupName carries no `{{depName}}`, so one Monday's bumps across the denied roles land as one PR and one land.sh run, and land.sh gates every tag the PR changes. The edge and DNS images are the exception: the rule after the base-image rule gives each its own PR again.",
+      "description": "NO automerge for an image bump in a role declaring `k8s_autodeploy: false` (issue #1886). The two automerge rules above say a machine may MERGE a k8s image bump; the denylist, each role's own `k8s_autodeploy` flag, says a machine may not merge one for these roles. The flag says nothing else: `promote` and Flux apply every merged bump. The rule dates from Renovate merging authelia 4.39.23 (#1831) and 4.39.24 (#1862) unattended, each of which `Release Staleness Drift` then paged on. A bump here opens as a `manual —` PR that the renovate-prs skill merges through land.sh, which waits on its promotion. matchFileNames is the denylist spelled as paths, one `defaults/main.yml` per denied role, and tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the two are equal — flip a role's flag and the guard names the line to add or drop here. One more path is a copy rather than a role: hosts/components/registry-gc/defaults/main.yml holds the registry role's two image pins for the ghcr-mirror GC Job (#5827). It is listed here and in the three k8s-plane rules above, so each copy resolves to the same group and soak as its source and both land in one PR. Matched by fewer rules, the copy got a branch of its own with no soak, and the test holding the copies equal failed it (#5859, #5835). The guard expects this path alongside group_vars, and scripts/tests/test_renovate_host_file_copies.py asserts each copy resolves the same as its source. inventory/group_vars/all.yml is the one path here that is not a role's defaults (issue #1936): crowdsec_k8s_image lives there because traefik's and authelia's sidecars read it too and role defaults are invisible across roles, and the per-role rule left it automerging. A merged bump there is worse than a merged bump in a denied role's defaults, not better — an inventory change moves the render of every role reading the key (crowdsec, traefik, authelia, all three denied), and `promote` applies them with no denylist check. So the merge boundary is the only gate that pin has, and the same guard asserts that every `_image:` pin in group_vars belongs to a denied role; the day an eligible role's pin is hoisted there, the guard says so and this path has to be reconsidered. No matchUpdateTypes on purpose: the digest rule above automerged a denied role's digest re-push too, the hole test_k8s_autodeploy_denylist.py recorded as unenforced for tdarr. matchDatasources narrows the rule to container images, because the CrowdSec bouncer plugin pin shares traefik's defaults/main.yml and its own manual rule below must keep its group name. POSITION is load-bearing: this rule must sit AFTER the `k8s image {{depName}}` and digest rules whose automerge it overrides, and BEFORE the per-package manual rules, which override its groupName for the pins they own. A per-package rule whose pin a denied role owns (the bouncer plugin in traefik, meilisearch and the time-tagger deps in karakeep, n8n, whose Dockerfiles its own role builds) carries `k8s_autodeploy: false` in its own groupName, because that phrase in the PR title is what keeps the unattended renovate_agent off it (issue #1963) — the same guard asserts it is present exactly where a denied role owns the pin. `groupSingleUpdates: true` is what puts the marker in the TITLE and not only the branch (issue #2646). Renovate applies a group's `commitMessageTopic` (`{{{groupName}}}`, so the marker) only when the branch holds more than one upgrade, and titles a one-dependency group `Update <dep> …` instead — #2620 was `Update klutchell/unbound Docker tag to v1.26.1` against a denied role, with the marker in the branch alone. This flag makes Renovate apply the group settings to a single upgrade too. It cannot move the branch: `generateBranchName` takes the group's `branchTopic` (`{{{groupSlug}}}`) whenever a `groupName` is set, with no upgrade-count condition, which is why #2620's branch already carried the slugified marker while its title did not. So no open `manual —` PR is abandoned and reopened, and the branch tell the renovate_agent prompt reads (`k8s_autodeploy-false`, #2641) stays where it is. The groupName carries no `{{depName}}`, so one Monday's bumps across the denied roles land as one PR and one land.sh run, and land.sh gates every tag the PR changes. The edge and DNS images are the exception: the rule after the base-image rule gives each its own PR again.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -667,49 +667,49 @@
         "docker"
       ],
       "matchFileNames": [
-        "ansible/inventory/group_vars/all.yml",
-        "ansible/roles/k8s/arr-notification/defaults/main.yml",
-        "ansible/roles/k8s/authelia/defaults/main.yml",
-        "ansible/roles/k8s/autofix-bridge/defaults/main.yml",
-        "ansible/roles/k8s/blackbox-exporter/defaults/main.yml",
-        "ansible/roles/k8s/observability/defaults/main.yml",
-        "ansible/roles/k8s/cloudflare-ddns/defaults/main.yml",
-        "ansible/roles/k8s/cluster-base/defaults/main.yml",
-        "ansible/roles/k8s/coredns/defaults/main.yml",
-        "ansible/roles/k8s/code-server/defaults/main.yml",
-        "ansible/roles/k8s/crowdsec/defaults/main.yml",
-        "ansible/roles/k8s/deploy-ui/defaults/main.yml",
-        "ansible/roles/k8s/dri-device-plugin/defaults/main.yml",
-        "ansible/roles/k8s/flux/defaults/main.yml",
-        "ansible/roles/k8s/game-stats/defaults/main.yml",
-        "ansible/roles/k8s/image-builder/defaults/main.yml",
-        "ansible/roles/k8s/janitorr/defaults/main.yml",
-        "ansible/roles/k8s/karakeep/defaults/main.yml",
-        "ansible/roles/k8s/livesync/defaults/main.yml",
-        "ansible/roles/k8s/loki-homelab/defaults/main.yml",
-        "ansible/roles/k8s/longhorn/defaults/main.yml",
-        "ansible/roles/k8s/longhorn-backup/defaults/main.yml",
-        "ansible/roles/k8s/longhorn-restore-drill/defaults/main.yml",
-        "ansible/roles/k8s/longhorn-ui/defaults/main.yml",
-        "ansible/roles/k8s/metallb/defaults/main.yml",
-        "ansible/roles/k8s/monitor-bridge/defaults/main.yml",
-        "ansible/roles/k8s/mosquitto/defaults/main.yml",
-        "ansible/roles/k8s/n8n/defaults/main.yml",
-        "ansible/roles/k8s/nut/defaults/main.yml",
-        "ansible/roles/k8s/pihole/defaults/main.yml",
-        "ansible/roles/k8s/qbittorrent/defaults/main.yml",
-        "ansible/roles/k8s/registry/defaults/main.yml",
-        "ansible/roles/k8s/scrutiny/defaults/main.yml",
-        "ansible/roles/k8s/slskd/defaults/main.yml",
-        "ansible/roles/k8s/system-upgrade/defaults/main.yml",
-        "ansible/roles/k8s/tdarr/defaults/main.yml",
-        "ansible/roles/k8s/terraria/defaults/main.yml",
-        "ansible/roles/k8s/traefik/defaults/main.yml",
-        "ansible/roles/k8s/traefik-crds/defaults/main.yml",
-        "ansible/roles/k8s/valheim/defaults/main.yml",
-        "ansible/roles/k8s/volume-snapshot/defaults/main.yml",
-        "ansible/roles/k8s/wg-easy/defaults/main.yml",
-        "ansible/roles/k8s/zigbee2mqtt/defaults/main.yml",
+        "inventory/group_vars/all.yml",
+        "k8s/roles/arr-notification/defaults/main.yml",
+        "k8s/roles/authelia/defaults/main.yml",
+        "k8s/roles/autofix-bridge/defaults/main.yml",
+        "k8s/roles/blackbox-exporter/defaults/main.yml",
+        "k8s/roles/observability/defaults/main.yml",
+        "k8s/roles/cloudflare-ddns/defaults/main.yml",
+        "k8s/roles/cluster-base/defaults/main.yml",
+        "k8s/roles/coredns/defaults/main.yml",
+        "k8s/roles/code-server/defaults/main.yml",
+        "k8s/roles/crowdsec/defaults/main.yml",
+        "k8s/roles/deploy-ui/defaults/main.yml",
+        "k8s/roles/dri-device-plugin/defaults/main.yml",
+        "k8s/roles/flux/defaults/main.yml",
+        "k8s/roles/game-stats/defaults/main.yml",
+        "k8s/roles/image-builder/defaults/main.yml",
+        "k8s/roles/janitorr/defaults/main.yml",
+        "k8s/roles/karakeep/defaults/main.yml",
+        "k8s/roles/livesync/defaults/main.yml",
+        "k8s/roles/loki-homelab/defaults/main.yml",
+        "k8s/roles/longhorn/defaults/main.yml",
+        "k8s/roles/longhorn-backup/defaults/main.yml",
+        "k8s/roles/longhorn-restore-drill/defaults/main.yml",
+        "k8s/roles/longhorn-ui/defaults/main.yml",
+        "k8s/roles/metallb/defaults/main.yml",
+        "k8s/roles/monitor-bridge/defaults/main.yml",
+        "k8s/roles/mosquitto/defaults/main.yml",
+        "k8s/roles/n8n/defaults/main.yml",
+        "k8s/roles/nut/defaults/main.yml",
+        "k8s/roles/pihole/defaults/main.yml",
+        "k8s/roles/qbittorrent/defaults/main.yml",
+        "k8s/roles/registry/defaults/main.yml",
+        "k8s/roles/scrutiny/defaults/main.yml",
+        "k8s/roles/slskd/defaults/main.yml",
+        "k8s/roles/system-upgrade/defaults/main.yml",
+        "k8s/roles/tdarr/defaults/main.yml",
+        "k8s/roles/terraria/defaults/main.yml",
+        "k8s/roles/traefik/defaults/main.yml",
+        "k8s/roles/traefik-crds/defaults/main.yml",
+        "k8s/roles/valheim/defaults/main.yml",
+        "k8s/roles/volume-snapshot/defaults/main.yml",
+        "k8s/roles/wg-easy/defaults/main.yml",
+        "k8s/roles/zigbee2mqtt/defaults/main.yml",
         "hosts/components/registry-gc/defaults/main.yml"
       ],
       "groupName": "k8s images (manual — k8s_autodeploy: false, so a person merges it through land.sh)",
@@ -722,17 +722,17 @@
       "automerge": false
     },
     {
-      "description": "The denylist marker for a denied role's BASE image (issue #2117). The rule above is scoped to the custom.regex manager over defaults/main.yml, so it never sees a `FROM` pin in a role's templates/Dockerfile*.j2 — Renovate's built-in dockerfile manager finds those. Every dockerfile-manager bump is already manual (both automerge rules are custom.regex-only, so such a PR reads `Automerge: Disabled by config`); what was missing was the TITLE marker: the unattended renovate_agent reads only the PR title to leave a denied role's bump for a person (#1939), and PR #2115 — nut's debian:bookworm-slim digest — arrived bare, so the title said land it while the role said a person lands it. matchFileNames is the denylist restricted to the roles that carry a Dockerfile, one glob per such role, and ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the two agree — flip a role's flag or add a Dockerfile to a denied role and the guard names the line. n8n's per-package rules below override the groupName this rule sets, and carry the marker themselves. The group name is fixed, like the rule above's, so one Monday's base-image bumps land as one PR and one land.sh run. `automerge: false` is stated rather than inherited so the tell survives a later change to the automerge rules' scope. `groupSingleUpdates: true` carries the marker into the title here for the reason the rule above gives (issue #2646), and matters more on this rule: every base-image pin is one dependency in its own group, so before the flag the title was bare every time.",
+      "description": "The denylist marker for a denied role's BASE image (issue #2117). The rule above is scoped to the custom.regex manager over defaults/main.yml, so it never sees a `FROM` pin in a role's templates/Dockerfile*.j2 — Renovate's built-in dockerfile manager finds those. Every dockerfile-manager bump is already manual (both automerge rules are custom.regex-only, so such a PR reads `Automerge: Disabled by config`); what was missing was the TITLE marker: the unattended renovate_agent reads only the PR title to leave a denied role's bump for a person (#1939), and PR #2115 — nut's debian:bookworm-slim digest — arrived bare, so the title said land it while the role said a person lands it. matchFileNames is the denylist restricted to the roles that carry a Dockerfile, one glob per such role, and tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the two agree — flip a role's flag or add a Dockerfile to a denied role and the guard names the line. n8n's per-package rules below override the groupName this rule sets, and carry the marker themselves. The group name is fixed, like the rule above's, so one Monday's base-image bumps land as one PR and one land.sh run. `automerge: false` is stated rather than inherited so the tell survives a later change to the automerge rules' scope. `groupSingleUpdates: true` carries the marker into the title here for the reason the rule above gives (issue #2646), and matters more on this rule: every base-image pin is one dependency in its own group, so before the flag the title was bare every time.",
       "matchManagers": [
         "dockerfile"
       ],
       "matchFileNames": [
-        "ansible/roles/k8s/code-server/templates/Dockerfile*.j2",
-        "ansible/roles/k8s/karakeep/templates/Dockerfile*.j2",
-        "ansible/roles/k8s/n8n/templates/Dockerfile*.j2",
-        "ansible/roles/k8s/nut/templates/Dockerfile*.j2",
-        "ansible/roles/k8s/terraria/templates/Dockerfile*.j2",
-        "ansible/roles/k8s/valheim/templates/Dockerfile*.j2"
+        "k8s/roles/code-server/templates/Dockerfile*.j2",
+        "k8s/roles/karakeep/templates/Dockerfile*.j2",
+        "k8s/roles/n8n/templates/Dockerfile*.j2",
+        "k8s/roles/nut/templates/Dockerfile*.j2",
+        "k8s/roles/terraria/templates/Dockerfile*.j2",
+        "k8s/roles/valheim/templates/Dockerfile*.j2"
       ],
       "groupName": "k8s base images (manual — k8s_autodeploy: false, so a person merges it through land.sh; promote rebuilds it)",
       "rebaseWhen": "conflicted",
@@ -744,7 +744,7 @@
       "automerge": false
     },
     {
-      "description": "The edge and DNS images keep one PR per image. The denylist rule above batches every other denied role's image bumps into one Monday PR, because each PR costs a full land.sh cycle (merge, master CI, promote, Flux, health gate) and 14 per-image PRs took 13 hours to land on 2026-11-09. These five are excluded from the batch because their failure takes down every route or LAN DNS, and `probe.py health` cannot see it (#1939). Bundled with unrelated bumps, one such regression would be harder to attribute and its revert would pull back the rest. The rule matches by package, not by file: helper images these roles share with others (`python:3.14-alpine`, `alpine:3.24`, `alpine/k8s`) stay in the batch rather than splitting into two PRs. matchFileNames keeps the marker off the same package pinned outside a denied role. The groupName is the denylist rule's former name, so an open per-image PR for one of these keeps its branch. It must follow the denylist rule, whose groupName it overrides; ansible/tests/deploy/test_renovate_edge_images_stay_one_per_pr.py holds the package list, the position and the file scope.",
+      "description": "The edge and DNS images keep one PR per image. The denylist rule above batches every other denied role's image bumps into one Monday PR, because each PR costs a full land.sh cycle (merge, master CI, promote, Flux, health gate) and 14 per-image PRs took 13 hours to land on 2026-11-09. These five are excluded from the batch because their failure takes down every route or LAN DNS, and `probe.py health` cannot see it (#1939). Bundled with unrelated bumps, one such regression would be harder to attribute and its revert would pull back the rest. The rule matches by package, not by file: helper images these roles share with others (`python:3.14-alpine`, `alpine:3.24`, `alpine/k8s`) stay in the batch rather than splitting into two PRs. matchFileNames keeps the marker off the same package pinned outside a denied role. The groupName is the denylist rule's former name, so an open per-image PR for one of these keeps its branch. It must follow the denylist rule, whose groupName it overrides; tests/deploy/test_renovate_edge_images_stay_one_per_pr.py holds the package list, the position and the file scope.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -752,11 +752,11 @@
         "docker"
       ],
       "matchFileNames": [
-        "ansible/inventory/group_vars/all.yml",
-        "ansible/roles/k8s/authelia/defaults/main.yml",
-        "ansible/roles/k8s/crowdsec/defaults/main.yml",
-        "ansible/roles/k8s/pihole/defaults/main.yml",
-        "ansible/roles/k8s/traefik/defaults/main.yml"
+        "inventory/group_vars/all.yml",
+        "k8s/roles/authelia/defaults/main.yml",
+        "k8s/roles/crowdsec/defaults/main.yml",
+        "k8s/roles/pihole/defaults/main.yml",
+        "k8s/roles/traefik/defaults/main.yml"
       ],
       "matchPackageNames": [
         "authelia/authelia",
@@ -894,7 +894,7 @@
       "automerge": false
     },
     {
-      "description": "Flux, the deploy controller (roles/k8s/flux). `flux_version` is a github-releases pin in the role's defaults, and a bump is not finished by rewriting it: files/gotk-components.yaml must be regenerated at the new release with the pipeline its first line names, which Renovate's hosted app cannot run. The `manual — k8s_autodeploy: false` rule above is scoped to container images, so it never sees this pin, and the non-major automerge rule names no datasource and would merge it. Own group, no automerge, so the bump opens as a manual PR, and the `k8s_autodeploy: false` marker in its title keeps the unattended renovate_agent off it (issue #1963). ansible/tests/k8s/test_flux_role.py fails a bump that skipped the regeneration, because the vendored header still names the old release. The flux CLI and the controllers move together, so a release that drops Kubernetes support for the cluster's version is the operator's call, not a soak's. The rule reaches the deps that share the name `fluxcd/flux2` (#4822). On github-releases, the `# renovate:` annotation on `flux_version`. On github-release-attachments, the two `flux` blocks of hosts/packages/homelab-tools/package.yml, the CLI the takeover check runs on daniel-box (#6699), and the `FLUX_VERSION`/`FLUX_SHA256` pin of each CI workflow that fetches the CLI (#7778). ansible/tests/repo/test_promote_workflow.py fails a bump that left a workflow pin behind `flux_version`. ENFORCED by scripts/tests/test_renovate_flux_cli.py.",
+      "description": "Flux, the deploy controller (k8s/roles/flux). `flux_version` is a github-releases pin in the role's defaults, and a bump is not finished by rewriting it: files/gotk-components.yaml must be regenerated at the new release with the pipeline its first line names, which Renovate's hosted app cannot run. The `manual — k8s_autodeploy: false` rule above is scoped to container images, so it never sees this pin, and the non-major automerge rule names no datasource and would merge it. Own group, no automerge, so the bump opens as a manual PR, and the `k8s_autodeploy: false` marker in its title keeps the unattended renovate_agent off it (issue #1963). tests/k8s/test_flux_role.py fails a bump that skipped the regeneration, because the vendored header still names the old release. The flux CLI and the controllers move together, so a release that drops Kubernetes support for the cluster's version is the operator's call, not a soak's. The rule reaches the deps that share the name `fluxcd/flux2` (#4822). On github-releases, the `# renovate:` annotation on `flux_version`. On github-release-attachments, the two `flux` blocks of hosts/packages/homelab-tools/package.yml, the CLI the takeover check runs on daniel-box (#6699), and the `FLUX_VERSION`/`FLUX_SHA256` pin of each CI workflow that fetches the CLI (#7778). tests/repo/test_promote_workflow.py fails a bump that left a workflow pin behind `flux_version`. ENFORCED by scripts/tests/test_renovate_flux_cli.py.",
       "matchDatasources": [
         "github-release-attachments",
         "github-releases"
@@ -934,7 +934,7 @@
       "automerge": false
     },
     {
-      "description": "k3s control plane (`k3s_version` in roles/k8s/system-upgrade/defaults, moved there by H6.1b). NEVER automerged: a k3s bump reinstalls the control plane on a single-server cluster, and until H6.3c it stays a hand apply of `k3s-bringup.yml` by the operator, following docs/k3s-upgrade.md. The pin now routes to the Flux-owned `system-upgrade` tag, so the deployer no longer writes a `manual_plane` line for it and nothing reminds the operator that the bump is owed. After H6.3c SUC applies a bump to the nodes its Plans select. A k3s bump also finishes k3s_install_script_sha256 in the same file: the installer is fetched from the release tag (#2147), so the hash of its install.sh moves with the tag. Split from MetalLB and Longhorn by H1.1g, whose two rules below name the merge gate instead. Same manual-finish class as the SOPS and crowdsec-plugin rules above.",
+      "description": "k3s control plane (`k3s_version` in k8s/roles/system-upgrade/defaults, moved there by H6.1b). NEVER automerged: a k3s bump reinstalls the control plane on a single-server cluster, and until H6.3c it stays a hand apply of `k3s-bringup.yml` by the operator, following docs/k3s-upgrade.md. The pin now routes to the Flux-owned `system-upgrade` tag, so the deployer no longer writes a `manual_plane` line for it and nothing reminds the operator that the bump is owed. After H6.3c SUC applies a bump to the nodes its Plans select. A k3s bump also finishes k3s_install_script_sha256 in the same file: the installer is fetched from the release tag (#2147), so the hash of its install.sh moves with the tag. Split from MetalLB and Longhorn by H1.1g, whose two rules below name the merge gate instead. Same manual-finish class as the SOPS and crowdsec-plugin rules above.",
       "matchDatasources": [
         "github-releases"
       ],
@@ -992,7 +992,7 @@
       "allowedVersions": "/^v\\d+\\.\\d+\\.\\d+$/"
     },
     {
-      "description": "No Renovate PR for `coredns_image` (H1-R1-19). H1.4 moves the CoreDNS image into a k8s role's defaults, where the k8s image manager matches every `_image:` key, but the pin must equal the image the bundled k3s manifest names, which `test_coredns_image_follows_bundled_manifest.py` holds. So the image moves only with `k3s_version`, by the person finishing a k3s upgrade, and a standalone bump could only open a PR that test keeps red. Scoped to the docker datasource under roles/k8s, so the `coredns/coredns` release annotation the annotated-pin rule tracks is untouched.",
+      "description": "No Renovate PR for `coredns_image` (H1-R1-19). H1.4 moves the CoreDNS image into a k8s role's defaults, where the k8s image manager matches every `_image:` key, but the pin must equal the image the bundled k3s manifest names, which `test_coredns_image_follows_bundled_manifest.py` holds. So the image moves only with `k3s_version`, by the person finishing a k3s upgrade, and a standalone bump could only open a PR that test keeps red. Scoped to the docker datasource under k8s/roles, so the `coredns/coredns` release annotation the annotated-pin rule tracks is untouched.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -1000,7 +1000,7 @@
         "docker"
       ],
       "matchFileNames": [
-        "ansible/roles/k8s/**"
+        "k8s/roles/**"
       ],
       "matchPackageNames": [
         "rancher/mirrored-coredns-coredns"
@@ -1008,7 +1008,7 @@
       "enabled": false
     },
     {
-      "description": "No Renovate PR for `system_upgrade_controller_image` (H6.1b). The pin carries the tag of the vendored controller manifest, which `ansible/roles/k8s/system-upgrade/tests/test_system_upgrade_role.py` holds equal to `system_upgrade_controller_version`, and a digest-only bump could only open a PR that moves the image away from the vendored file. The version bump below moves the image by hand in the same PR. Scoped to the docker datasource under roles/k8s, so the `rancher/system-upgrade-controller` release annotation the rule below tracks is untouched.",
+      "description": "No Renovate PR for `system_upgrade_controller_image` (H6.1b). The pin carries the tag of the vendored controller manifest, which `k8s/roles/system-upgrade/tests/test_system_upgrade_role.py` holds equal to `system_upgrade_controller_version`, and a digest-only bump could only open a PR that moves the image away from the vendored file. The version bump below moves the image by hand in the same PR. Scoped to the docker datasource under k8s/roles, so the `rancher/system-upgrade-controller` release annotation the rule below tracks is untouched.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -1016,7 +1016,7 @@
         "docker"
       ],
       "matchFileNames": [
-        "ansible/roles/k8s/**"
+        "k8s/roles/**"
       ],
       "matchPackageNames": [
         "rancher/system-upgrade-controller"
@@ -1050,7 +1050,7 @@
       ],
       "allowedVersions": "<1.38",
       "prBodyNotes": [
-        "Merging this PR is the k3s upgrade: SUC applies the pin to both nodes and restarts daniel-box, the only control-plane node, so merge only when that restart is acceptable. Before merging, in this PR: set `k3s_install_script_sha256` beside `k3s_version` in `ansible/roles/k8s/system-upgrade/defaults/main.yml`, then run `uv run python scripts/validate/refresh_vendored_schemas.py` and commit the schemas it writes — even for a patch release, because `test_vendored_core_schemas_match_the_cluster` compares the full Kubernetes tag. For a new minor, also set `K8S_SCHEMA_VERSION` in `scripts/validate/validate_lib/k8s_schema.py`, raise this cap by one minor, and delete the previous `scripts/validate/schemas/kubernetes.io/v<old minor>/`. Then follow `docs/k3s-upgrade.md` before merging."
+        "Merging this PR is the k3s upgrade: SUC applies the pin to both nodes and restarts daniel-box, the only control-plane node, so merge only when that restart is acceptable. Before merging, in this PR: set `k3s_install_script_sha256` beside `k3s_version` in `k8s/roles/system-upgrade/defaults/main.yml`, then run `uv run python scripts/validate/refresh_vendored_schemas.py` and commit the schemas it writes — even for a patch release, because `test_vendored_core_schemas_match_the_cluster` compares the full Kubernetes tag. For a new minor, also set `K8S_SCHEMA_VERSION` in `scripts/validate/validate_lib/k8s_schema.py`, raise this cap by one minor, and delete the previous `scripts/validate/schemas/kubernetes.io/v<old minor>/`. Then follow `docs/k3s-upgrade.md` before merging."
       ]
     },
     {
@@ -1077,8 +1077,8 @@
         "custom.regex"
       ],
       "matchFileNames": [
-        "ansible/roles/k8s/code-server/templates/Dockerfile.j2",
-        "ansible/roles/k8s/code-server/defaults/main.yml"
+        "k8s/roles/code-server/templates/Dockerfile.j2",
+        "k8s/roles/code-server/defaults/main.yml"
       ],
       "matchDatasources": [
         "pypi",
@@ -1093,7 +1093,7 @@
       ],
       "updateNotScheduled": false,
       "prBodyNotes": [
-        "If this PR bumps `@anthropic-ai/claude-code`, finish the `Anthropic.claude-code` entry of `code_server_k8s_extensions` in `ansible/roles/k8s/code-server/defaults/main.yml` in the same PR: set its version and both version strings in its `linux-x64` URL, then run `uv run python scripts/validate/asset_pins.py --refresh 'code_server_k8s_extensions[Anthropic.claude-code]'`, which rewrites the sha256 of the decoded VSIX. Renovate has no datasource for the extension, so `test_the_cli_is_pinned_to_the_extension_release` stays red until both move together.",
+        "If this PR bumps `@anthropic-ai/claude-code`, finish the `Anthropic.claude-code` entry of `code_server_k8s_extensions` in `k8s/roles/code-server/defaults/main.yml` in the same PR: set its version and both version strings in its `linux-x64` URL, then run `uv run python scripts/validate/asset_pins.py --refresh 'code_server_k8s_extensions[Anthropic.claude-code]'`, which rewrites the sha256 of the decoded VSIX. Renovate has no datasource for the extension, so `test_the_cli_is_pinned_to_the_extension_release` stays red until both move together.",
         "If this PR bumps `rust-lang/rust`, run `uv run python scripts/validate/asset_pins.py --refresh rust-lang/rust` on this branch. It rewrites `code_server_k8s_rust_sha256` and `code_server_k8s_rust_src_sha256`; until then the image build fails at `sha256sum -c`. Compare each new digest with the `.sha256` file static.rust-lang.org publishes beside the tarball.",
         "If this PR bumps `vadimcn/codelldb`, run `uv run python scripts/validate/asset_pins.py --refresh 'code_server_k8s_extensions[vadimcn.vscode-lldb]'` on this branch, and compare the new sha256 with the asset digest `gh release view v<version> -R vadimcn/codelldb --json assets` lists for codelldb-linux-x64.vsix."
       ],
@@ -1101,12 +1101,12 @@
       "automerge": false
     },
     {
-      "description": "homelab-mcp's pip pins (#2150). No automerge: homelab-mcp is flux-owned (D5.14), so a merged bump moves the image's content tag and the next promotion builds the image and rolls the pod with nobody watching. A pip bump can break the app at import time, as mcp 2.0.0 did on the 2026-08-09 rebuild, so a person reads each bump before it merges. The role is auto-deploy ELIGIBLE, so no k8s_autodeploy marker here; the guard in ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the marker appears only where a denied role owns the pin.",
+      "description": "homelab-mcp's pip pins (#2150). No automerge: homelab-mcp is flux-owned (D5.14), so a merged bump moves the image's content tag and the next promotion builds the image and rolls the pod with nobody watching. A pip bump can break the app at import time, as mcp 2.0.0 did on the 2026-08-09 rebuild, so a person reads each bump before it merges. The role is auto-deploy ELIGIBLE, so no k8s_autodeploy marker here; the guard in tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the marker appears only where a denied role owns the pin.",
       "matchManagers": [
         "custom.regex"
       ],
       "matchFileNames": [
-        "ansible/roles/k8s/homelab-mcp/templates/Dockerfile.j2"
+        "k8s/roles/homelab-mcp/templates/Dockerfile.j2"
       ],
       "matchDatasources": [
         "pypi"
@@ -1120,7 +1120,7 @@
       "automerge": false
     },
     {
-      "description": "mcp stays on the 1.x line. 2.0.0 removed mcp.server.fastmcp, which homelab-mcp's app.py imports, and crash-looped the container on the 2026-08-09 rebuild; the Dockerfile used to hold the range `mcp<2` for that reason and now holds an exact pin (#2150). allowedVersions is the range's replacement: Renovate offers 1.x bumps and never a 2.x. Lift it together with an app.py port to the 2.x API. ansible/tests/services/test_homelab_mcp_pins.py asserts this rule and the pin agree.",
+      "description": "mcp stays on the 1.x line. 2.0.0 removed mcp.server.fastmcp, which homelab-mcp's app.py imports, and crash-looped the container on the 2026-08-09 rebuild; the Dockerfile used to hold the range `mcp<2` for that reason and now holds an exact pin (#2150). allowedVersions is the range's replacement: Renovate offers 1.x bumps and never a 2.x. Lift it together with an app.py port to the 2.x API. tests/services/test_homelab_mcp_pins.py asserts this rule and the pin agree.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -1133,7 +1133,7 @@
       "allowedVersions": "<2"
     },
     {
-      "description": "n8n and its task runners are pinned TWICE by design \u2014 roles/k8s/n8n/templates/Dockerfile.j2 (n8nio/n8n) and Dockerfile-runners.j2 (n8nio/runners) \u2014 and the two must move in lockstep: the runners are version-coupled to the n8n they serve, both repositories publish the same version tags, and a split surfaces as every Code-node workflow failing at RUNTIME rather than as a build error (the 2026-08-06 `@n8n/di` incident, recorded in Dockerfile-runners.j2). One group = one PR touching both files, so the lockstep test in scripts/tests/test_renovate_managers.py never sees half an update. NO automerge: these are built images with `k8s_autodeploy: false`, so a person merges each bump, and promote's `images` job then builds the moved content tags and Flux rolls the pods. Both FROMs were `:latest` until 2026-08-19, which meant no PR at all \u2014 see the Dockerfile header. They now pin the `stable` CHANNEL tag with a digest beside it, so what Renovate bumps here is the DIGEST: a PR arrives when n8n promotes a new stable, and a published-but-unpromoted release (2.36.2 at the time of writing) is never offered. The intermediate state \u2014 a bare `:2.35.4` \u2014 tracked correctly but off the wrong train, since `:latest` had always been an alias for `:stable` and a version pin handed the update stream to the full tag list instead. THE MANUAL HALF: a digest bump changes 64 hex characters and no version string, so the diff cannot show which way the version moved. PR #1440 (2026-09-09) proposed moving both files from the 2.37.10 digests to the 2.37.9 digests — a DOWNGRADE — through nine green checks, and only a human resolving each digest by hand caught it (issue #1493). Resolve each new digest to its `org.opencontainers.image.version` label and APPEND a row to roles/k8s/n8n/base-pin-history.tsv; that file's header carries the registry commands. scripts/tests/test_renovate_dockerfiles.py fails until the row is there, and again if a version decreases without a `DOWNGRADE-ACK:` note — an acknowledged decrease is allowed, because a channel pin follows what upstream promotes and a withdrawn release has to be followable.",
+      "description": "n8n and its task runners are pinned TWICE by design \u2014 k8s/roles/n8n/templates/Dockerfile.j2 (n8nio/n8n) and Dockerfile-runners.j2 (n8nio/runners) \u2014 and the two must move in lockstep: the runners are version-coupled to the n8n they serve, both repositories publish the same version tags, and a split surfaces as every Code-node workflow failing at RUNTIME rather than as a build error (the 2026-08-06 `@n8n/di` incident, recorded in Dockerfile-runners.j2). One group = one PR touching both files, so the lockstep test in scripts/tests/test_renovate_managers.py never sees half an update. NO automerge: these are built images with `k8s_autodeploy: false`, so a person merges each bump, and promote's `images` job then builds the moved content tags and Flux rolls the pods. Both FROMs were `:latest` until 2026-08-19, which meant no PR at all \u2014 see the Dockerfile header. They now pin the `stable` CHANNEL tag with a digest beside it, so what Renovate bumps here is the DIGEST: a PR arrives when n8n promotes a new stable, and a published-but-unpromoted release (2.36.2 at the time of writing) is never offered. The intermediate state \u2014 a bare `:2.35.4` \u2014 tracked correctly but off the wrong train, since `:latest` had always been an alias for `:stable` and a version pin handed the update stream to the full tag list instead. THE MANUAL HALF: a digest bump changes 64 hex characters and no version string, so the diff cannot show which way the version moved. PR #1440 (2026-09-09) proposed moving both files from the 2.37.10 digests to the 2.37.9 digests — a DOWNGRADE — through nine green checks, and only a human resolving each digest by hand caught it (issue #1493). Resolve each new digest to its `org.opencontainers.image.version` label and APPEND a row to k8s/roles/n8n/base-pin-history.tsv; that file's header carries the registry commands. scripts/tests/test_renovate_dockerfiles.py fails until the row is there, and again if a version decreases without a `DOWNGRADE-ACK:` note — an acknowledged decrease is allowed, because a channel pin follows what upstream promotes and a withdrawn release has to be followable.",
       "matchDatasources": [
         "docker"
       ],
@@ -1156,7 +1156,7 @@
         "custom.regex"
       ],
       "matchFileNames": [
-        "ansible/roles/k8s/n8n/templates/Dockerfile.j2"
+        "k8s/roles/n8n/templates/Dockerfile.j2"
       ],
       "matchDatasources": [
         "npm"
@@ -1200,7 +1200,7 @@
       "rebaseWhen": "conflicted"
     },
     {
-      "description": "The Pi's wg-easy pin (`ghcr.io/wg-easy/wg-easy:14@sha256:...`) never automerges. wg-easy is a remote-access path into the LAN, so a bad image can cut the tunnel the operator would use to fix it. A v15 bump is a migration, not a redeploy: v15 replaces `PASSWORD_HASH` with a setup wizard (the pin-policy note in the service's compose.yaml.j2). A digest within v14 is manual too, because the operator's 2026-10-29 ruling covers wg-easy only in a manual group. No matchUpdateTypes, so every update type lands here, and the per-service automerge rules before this one lose. Scoped by file and not by package name, so the cluster's own wg-easy pin (roles/k8s/wg-easy, v15) keeps its own rules; the file pins one image, so the file is the pin. A matchPackageNames would also enter ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py's census, which reads ownership by package name alone and would charge this rule with the cluster's denied wg-easy role. groupSingleUpdates puts the work order in the PR title as well as the branch. The Monday-only keys are the `manual —` rule's (#4011).",
+      "description": "The Pi's wg-easy pin (`ghcr.io/wg-easy/wg-easy:14@sha256:...`) never automerges. wg-easy is a remote-access path into the LAN, so a bad image can cut the tunnel the operator would use to fix it. A v15 bump is a migration, not a redeploy: v15 replaces `PASSWORD_HASH` with a setup wizard (the pin-policy note in the service's compose.yaml.j2). A digest within v14 is manual too, because the operator's 2026-10-29 ruling covers wg-easy only in a manual group. No matchUpdateTypes, so every update type lands here, and the per-service automerge rules before this one lose. Scoped by file and not by package name, so the cluster's own wg-easy pin (k8s/roles/wg-easy, v15) keeps its own rules; the file pins one image, so the file is the pin. A matchPackageNames would also enter tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py's census, which reads ownership by package name alone and would charge this rule with the cluster's denied wg-easy role. groupSingleUpdates puts the work order in the PR title as well as the branch. The Monday-only keys are the `manual —` rule's (#4011).",
       "matchManagers": [
         "custom.regex"
       ],
@@ -1217,7 +1217,7 @@
       "rebaseWhen": "conflicted"
     },
     {
-      "description": "Grafana Alloy is pinned twice, and the two pins move together: the Pi's compose pin (hosts/components/pi-compose/services/alloy/compose.yaml.j2) and the cluster's DaemonSet (`loki_homelab_k8s_alloy_image`). Both ship to the same loki-homelab under one label contract, so one PR touches both files. This rule must sit after every rule that sets the cluster pin's groupName (the `k8s image {{depName}}` rule and the denylist rule), or the two pins land in separate PRs. It must also sit before the jellyfin plugin rules: it names a k8s role file and sets automerge, and those rules' position guards require them after every such rule. scripts/tests/test_renovate_pi_compose_pins.py resolves both pins through the rules in order and requires one group. No automerge: loki-homelab is on the auto-deploy denylist, so the group name carries the `k8s_autodeploy: false` marker and groupSingleUpdates puts it in the title (ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py). No matchUpdateTypes, so a digest re-push of either pin lands here too. The Monday-only keys are the `manual —` rule's (#4011).",
+      "description": "Grafana Alloy is pinned twice, and the two pins move together: the Pi's compose pin (hosts/components/pi-compose/services/alloy/compose.yaml.j2) and the cluster's DaemonSet (`loki_homelab_k8s_alloy_image`). Both ship to the same loki-homelab under one label contract, so one PR touches both files. This rule must sit after every rule that sets the cluster pin's groupName (the `k8s image {{depName}}` rule and the denylist rule), or the two pins land in separate PRs. It must also sit before the jellyfin plugin rules: it names a k8s role file and sets automerge, and those rules' position guards require them after every such rule. scripts/tests/test_renovate_pi_compose_pins.py resolves both pins through the rules in order and requires one group. No automerge: loki-homelab is on the auto-deploy denylist, so the group name carries the `k8s_autodeploy: false` marker and groupSingleUpdates puts it in the title (tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py). No matchUpdateTypes, so a digest re-push of either pin lands here too. The Monday-only keys are the `manual —` rule's (#4011).",
       "matchManagers": [
         "custom.regex"
       ],
@@ -1226,7 +1226,7 @@
       ],
       "matchFileNames": [
         "hosts/components/pi-compose/services/alloy/compose.yaml.j2",
-        "ansible/roles/k8s/loki-homelab/defaults/main.yml"
+        "k8s/roles/loki-homelab/defaults/main.yml"
       ],
       "matchPackageNames": [
         "grafana/alloy"
@@ -1241,7 +1241,7 @@
       "rebaseWhen": "conflicted"
     },
     {
-      "description": "jellyfin-ani-sync (2026-09-01 review). NO automerge, and the position of this rule is load-bearing: it must stay AFTER the two k8s-plane rules near the top of this array. The pin lives in ansible/roles/k8s/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule already sets automerge: true for it and the `ansible/roles/k8s/**` rule only renames the group — later rules win, so an ani-sync bump would otherwise merge itself into the `k8s image jellyfin` group. Two things Renovate cannot compute make this a manual finish: the download URL embeds the JELLYFIN server targetAbi (`10.11.6.-.`) beside the plugin version, and jellyfin_k8s_anisync_md5 has to come from the release's manifest.json. On top of that the role's defaults require raising jellyfin_k8s_image in the same change — the plugin's targetAbi must not exceed the server's, which is why the pin sits a release behind on purpose. Tracked for the signal, finished by the operator; same class as the sops / crowdsec-plugin / k3s rules above.",
+      "description": "jellyfin-ani-sync (2026-09-01 review). NO automerge, and the position of this rule is load-bearing: it must stay AFTER the two k8s-plane rules near the top of this array. The pin lives in k8s/roles/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule already sets automerge: true for it and the `k8s/roles/**` rule only renames the group — later rules win, so an ani-sync bump would otherwise merge itself into the `k8s image jellyfin` group. Two things Renovate cannot compute make this a manual finish: the download URL embeds the JELLYFIN server targetAbi (`10.11.6.-.`) beside the plugin version, and jellyfin_k8s_anisync_md5 has to come from the release's manifest.json. On top of that the role's defaults require raising jellyfin_k8s_image in the same change — the plugin's targetAbi must not exceed the server's, which is why the pin sits a release behind on purpose. Tracked for the signal, finished by the operator; same class as the sops / crowdsec-plugin / k3s rules above.",
       "matchDatasources": [
         "github-releases"
       ],
@@ -1257,7 +1257,7 @@
       "automerge": false
     },
     {
-      "description": "Intro Skipper. NO automerge, and the position of this rule is load-bearing for the same reason the ani-sync rule above records: the pin lives in ansible/roles/k8s/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule near the top of this array already sets automerge: true for it, later rules win, and without this entry a bump would merge itself into the `k8s image jellyfin` group. Two things Renovate cannot compute make it a manual finish — jellyfin_k8s_introskipper_sha256 (GitHub's asset digest, not in any datasource) and jellyfin_k8s_introskipper_target_abi (from the plugin's published manifest). The operator also checks that the offered version is still on the Jellyfin line jellyfin_k8s_image runs; the manager's extractVersionTemplate anchors that, and the anchor is hand-raised.",
+      "description": "Intro Skipper. NO automerge, and the position of this rule is load-bearing for the same reason the ani-sync rule above records: the pin lives in k8s/roles/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule near the top of this array already sets automerge: true for it, later rules win, and without this entry a bump would merge itself into the `k8s image jellyfin` group. Two things Renovate cannot compute make it a manual finish — jellyfin_k8s_introskipper_sha256 (GitHub's asset digest, not in any datasource) and jellyfin_k8s_introskipper_target_abi (from the plugin's published manifest). The operator also checks that the offered version is still on the Jellyfin line jellyfin_k8s_image runs; the manager's extractVersionTemplate anchors that, and the anchor is hand-raised.",
       "matchDatasources": [
         "github-releases"
       ],
@@ -1273,7 +1273,7 @@
       "automerge": false
     },
     {
-      "description": "Jellyfin Webhook plugin (#1557). NO automerge, and the position of this rule is load-bearing for the same reason the two rules above record: the pin lives in ansible/roles/k8s/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule near the top of this array already sets automerge: true for it, later rules win, and without this entry a bump would merge itself into the `k8s image jellyfin` group. Two things Renovate cannot compute make it a manual finish — jellyfin_k8s_webhook_md5 and jellyfin_k8s_webhook_target_abi both come from the official manifest at repo.jellyfin.org, which no datasource exposes, and the MD5 is verified against the actual download. The operator also checks that the offered major still targets the Jellyfin line jellyfin_k8s_image runs; the manager's extractVersionTemplate anchors that, and the anchor is hand-raised.",
+      "description": "Jellyfin Webhook plugin (#1557). NO automerge, and the position of this rule is load-bearing for the same reason the two rules above record: the pin lives in k8s/roles/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule near the top of this array already sets automerge: true for it, later rules win, and without this entry a bump would merge itself into the `k8s image jellyfin` group. Two things Renovate cannot compute make it a manual finish — jellyfin_k8s_webhook_md5 and jellyfin_k8s_webhook_target_abi both come from the official manifest at repo.jellyfin.org, which no datasource exposes, and the MD5 is verified against the actual download. The operator also checks that the offered major still targets the Jellyfin line jellyfin_k8s_image runs; the manager's extractVersionTemplate anchors that, and the anchor is hand-raised.",
       "matchDatasources": [
         "github-releases"
       ],
@@ -1289,7 +1289,7 @@
       "automerge": false
     },
     {
-      "description": "Jellyfin Merge Versions plugin (#1616). NO automerge, and the position of this rule is load-bearing for the reason the three rules above record: the pin lives in ansible/roles/k8s/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule near the top of this array already sets automerge: true for it, later rules win, and without this entry a bump would merge itself into the `k8s image jellyfin` group. Three things Renovate cannot compute make it a manual finish — jellyfin_k8s_mergeversions_sha256 is GitHub's asset digest, which no datasource exposes, and _target_abi and _guid come from the plugin's own published manifest (danieladov/JellyfinPluginManifest) rather than from Jellyfin's official one. The operator also checks that the offered release is still on the Jellyfin line jellyfin_k8s_image runs; the manager's extractVersionTemplate anchors that, and the anchor is hand-raised.",
+      "description": "Jellyfin Merge Versions plugin (#1616). NO automerge, and the position of this rule is load-bearing for the reason the three rules above record: the pin lives in k8s/roles/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule near the top of this array already sets automerge: true for it, later rules win, and without this entry a bump would merge itself into the `k8s image jellyfin` group. Three things Renovate cannot compute make it a manual finish — jellyfin_k8s_mergeversions_sha256 is GitHub's asset digest, which no datasource exposes, and _target_abi and _guid come from the plugin's own published manifest (danieladov/JellyfinPluginManifest) rather than from Jellyfin's official one. The operator also checks that the offered release is still on the Jellyfin line jellyfin_k8s_image runs; the manager's extractVersionTemplate anchors that, and the anchor is hand-raised.",
       "matchDatasources": [
         "github-releases"
       ],
@@ -1305,7 +1305,7 @@
       "automerge": false
     },
     {
-      "description": "Jellyfin Media Cleaner plugin (#1619). NO automerge, and the position of this rule is load-bearing for the reason the four rules above record: the pin lives in ansible/roles/k8s/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule near the top of this array already sets automerge: true for it, later rules win, and without this entry a bump would merge itself into the `k8s image jellyfin` group. This is the plugin where that would cost most — it DELETES MEDIA FILES, and three things Renovate cannot compute make a bump a manual finish. One upstream release tag ships several per-ABI assets (MediaCleaner-10.10.7.zip, -10.11.0.zip, -10.11.9.zip) and the operator picks the newest the image satisfies; jellyfin_k8s_mediacleaner_sha256 is GitHub's asset digest, re-verified against the download; and jellyfin_k8s_mediacleaner_target_abi comes from the plugin's published manifest (shemanaev/jellyfin-plugin-repo), which also fixes the version's fourth segment. The role's CLAUDE.md additionally requires raising jellyfin_k8s_image only when every installed plugin has a release for the new ABI.",
+      "description": "Jellyfin Media Cleaner plugin (#1619). NO automerge, and the position of this rule is load-bearing for the reason the four rules above record: the pin lives in k8s/roles/jellyfin/defaults/main.yml, so the `custom.regex` + minor/patch rule near the top of this array already sets automerge: true for it, later rules win, and without this entry a bump would merge itself into the `k8s image jellyfin` group. This is the plugin where that would cost most — it DELETES MEDIA FILES, and three things Renovate cannot compute make a bump a manual finish. One upstream release tag ships several per-ABI assets (MediaCleaner-10.10.7.zip, -10.11.0.zip, -10.11.9.zip) and the operator picks the newest the image satisfies; jellyfin_k8s_mediacleaner_sha256 is GitHub's asset digest, re-verified against the download; and jellyfin_k8s_mediacleaner_target_abi comes from the plugin's published manifest (shemanaev/jellyfin-plugin-repo), which also fixes the version's fourth segment. The role's CLAUDE.md additionally requires raising jellyfin_k8s_image only when every installed plugin has a release for the new ABI.",
       "matchDatasources": [
         "github-releases"
       ],
@@ -1357,7 +1357,7 @@
       "automerge": false
     },
     {
-      "description": "Headlamp plugins (#5221): NO automerge, positioned after the k8s-plane rules for the same reason as jellyfin-ani-sync above, and before the pinDigests rule, which must stay last. The pin lives under ansible/roles/k8s/, so the custom.regex minor/patch rule would otherwise automerge it into the `k8s image headlamp` group. The paired sha256 in headlamp_k8s_plugins is uncomputable here; the fetch-plugins init container refuses the tarball until the operator records the new digest, so an automerged bump would deploy a Headlamp pod that never starts.",
+      "description": "Headlamp plugins (#5221): NO automerge, positioned after the k8s-plane rules for the same reason as jellyfin-ani-sync above, and before the pinDigests rule, which must stay last. The pin lives under k8s/roles/, so the custom.regex minor/patch rule would otherwise automerge it into the `k8s image headlamp` group. The paired sha256 in headlamp_k8s_plugins is uncomputable here; the fetch-plugins init container refuses the tarball until the operator records the new digest, so an automerged bump would deploy a Headlamp pod that never starts.",
       "matchDatasources": [
         "github-releases"
       ],
@@ -1393,9 +1393,9 @@
         "docker"
       ],
       "matchFileNames": [
-        "ansible/roles/k8s/*/defaults/main.yml",
+        "k8s/roles/*/defaults/main.yml",
         "hosts/components/registry-gc/defaults/main.yml",
-        "ansible/inventory/group_vars/all.yml",
+        "inventory/group_vars/all.yml",
         "hosts/components/pi-compose/services/*/compose.yaml.j2"
       ],
       "pinDigests": true,

@@ -2,7 +2,7 @@
 
 A hook whose entry is a test module runs under pytest, which puts every `pythonpath` root in
 `pyproject.toml` on `sys.path`. A bare `from _row_table import ...` in
-`ansible/tests/repo/` resolves only that way, so a census that skips those roots stops the
+`tests/repo/` resolves only that way, so a census that skips those roots stops the
 closure there and cannot see a `files` gate that misses the module (#5921).
 """
 
@@ -17,7 +17,7 @@ from test_prek_files_cover_entry_imports import (
     imported_files,
 )
 
-_ROW_TABLE = (REPO / "ansible/tests/_row_table.py").resolve()
+_ROW_TABLE = (REPO / "tests/_row_table.py").resolve()
 
 
 def _entries(hook_id: str) -> list[tuple[str, Path, dict]]:
@@ -31,12 +31,12 @@ def _entries(hook_id: str) -> list[tuple[str, Path, dict]]:
 
 
 def test_a_test_modules_bare_row_table_import_resolves_through_pythonpath():
-    module = REPO / "ansible/tests/repo/test_census_rows_python.py"
+    module = REPO / "tests/repo/test_census_rows_python.py"
     assert _ROW_TABLE in imported_files(module)
 
 
 def test_the_static_ratchet_hook_covers_the_row_table_its_entry_imports():
-    entry_rel = "ansible/tests/repo/test_census_rows_python.py"
+    entry_rel = "tests/repo/test_census_rows_python.py"
     by_entry = {
         rel: (entry, hook) for rel, entry, hook in _entries("static-ratchet-tests")
     }
@@ -51,10 +51,10 @@ def test_the_static_ratchet_hook_covers_the_row_table_its_entry_imports():
 @pytest.mark.parametrize(
     ("hook_id", "member"),
     [
-        ("static-ratchet-tests-lander", "ansible/tests/_setup_render.py"),
+        ("static-ratchet-tests-lander", "tests/_setup_render.py"),
         ("static-ratchet-tests-checksum", "scripts/validate/k8s_manifests.py"),
-        ("static-ratchet-tests-shell", "ansible/tests/_shell_render.py"),
-        ("static-ratchet-tests-renovate", "ansible/tests/_k8s_render.py"),
+        ("static-ratchet-tests-shell", "tests/_shell_render.py"),
+        ("static-ratchet-tests-renovate", "tests/_k8s_render.py"),
     ],
 )
 def test_a_hook_gate_covers_the_modules_its_entry_reaches_through_pythonpath(

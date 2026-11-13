@@ -19,11 +19,11 @@ from _helpers import REPO as _REPO
 
 from lib import role_installs
 from lib.k8s_roles import is_manifest_template
-from lib.repo_paths import ALL_VARS, ROLES
+from lib.repo_paths import ALL_VARS, K8S_ROLES
 
 
 _SEARCH_ROOTS = [
-    _REPO / "ansible/roles",
+    _REPO / "k8s/roles",
     _REPO / "hosts/components",
     _REPO / ".claude/hooks",
 ]
@@ -239,7 +239,7 @@ def test_hook_wrappers_pin_the_same_version_as_ansible():
 
     assert not offenders, (
         f"these request an interpreter other than the Ansible pin ({pin}, from "
-        "ansible/inventory/group_vars/all.yml):\n  " + "\n  ".join(offenders)
+        "inventory/group_vars/all.yml):\n  " + "\n  ".join(offenders)
     )
 
 
@@ -276,10 +276,10 @@ def test_no_installed_script_runs_by_its_shebang():
     )
     offenders = [
         f"{path.relative_to(_REPO)}: {live}"
-        for path in sorted(ROLES.rglob("*"))
+        for path in sorted(K8S_ROLES.rglob("*"))
         if path.suffix in _SUFFIXES
         and path.is_file()
-        and "tests" not in path.relative_to(ROLES).parts
+        and "tests" not in path.relative_to(K8S_ROLES).parts
         for live in _shebang_runs(role_installs.command_text(path), installed)
     ]
     assert not offenders, (
@@ -311,7 +311,7 @@ def test_a_script_run_through_uv_is_clean():
 # name (`python3-venv`, `--python 3.14.6`) do not match.
 _BARE_PYTHON3 = re.compile(r"(?<![\w./@-])python3(?:\.\d+)?(?![\w./:@-])")
 _REGISTRY_GC = _REPO / "hosts/components/registry-gc/templates/registry-gc.sh.j2"
-_K8S = ROLES / "k8s"
+_K8S = K8S_ROLES
 
 
 def _runs_in_a_container(path) -> bool:
@@ -396,4 +396,4 @@ def test_a_k8s_manifest_runs_in_a_container_and_a_host_script_beside_it_does_not
     assert _runs_in_a_container(templates / "deployment.yaml.j2")
     assert _runs_in_a_container(_K8S / "configarr/templates/config/config.yml.j2")
     assert not _runs_in_a_container(_REGISTRY_GC)
-    assert not _runs_in_a_container(ROLES / "setup/x/templates/y.yml.j2")
+    assert not _runs_in_a_container(_REPO / "hosts/components/x/templates/y.yml.j2")

@@ -6,11 +6,11 @@ gathers the inputs (the files, their base versions, the render's expectations) a
 
 The cluster files are three kinds:
 
-- the cluster file `ansible/vars/cluster-vars.sops.env`, a SOPS dotenv whose metadata SOPS
+- the cluster file `secrets/cluster-vars.sops.env`, a SOPS dotenv whose metadata SOPS
   writes as plain `sops_*` lines;
-- one SOPS manifest per `render_sops_manifests` entry under `ansible/vars/cluster-manifests/`,
+- one SOPS manifest per `render_sops_manifests` entry under `secrets/cluster-manifests/`,
   a Secret whose `data` and `stringData` values alone are encrypted;
-- `ansible/vars/cluster-vars.source`, plaintext freshness evidence: one line per key held in
+- `secrets/cluster-vars.source`, plaintext freshness evidence: one line per key held in
   the other two, naming the key, the SHA-256 of its ciphertext in `secrets.yml`, and, for a
   manifest's key, the manifest's file name. The ciphertext is public, so the digest exposes
   nothing. The third field lets `check --no-render` see which manifest a key belongs to.
@@ -58,28 +58,28 @@ class Tree:
     root: Path
 
     @property
-    def ansible(self) -> Path:
-        return self.root / "ansible"
+    def secrets_dir(self) -> Path:
+        return self.root / "secrets"
 
     @property
     def sops_config(self) -> Path:
-        return self.ansible / ".sops.yaml"
+        return self.secrets_dir / ".sops.yaml"
 
     @property
     def secrets(self) -> Path:
-        return self.ansible / "vars" / "secrets.yml"
+        return self.secrets_dir / "secrets.yml"
 
     @property
     def cluster_file(self) -> Path:
-        return self.ansible / "vars" / "cluster-vars.sops.env"
+        return self.secrets_dir / "cluster-vars.sops.env"
 
     @property
     def source(self) -> Path:
-        return self.ansible / "vars" / "cluster-vars.source"
+        return self.secrets_dir / "cluster-vars.source"
 
     @property
     def manifests(self) -> Path:
-        return self.ansible / "vars" / "cluster-manifests"
+        return self.secrets_dir / "cluster-manifests"
 
     def manifest_files(self) -> list[Path]:
         """The SOPS manifests present, sorted."""
@@ -109,7 +109,7 @@ class ManifestEntry:
 
     @property
     def name(self) -> str:
-        """The manifest's file name under `ansible/vars/cluster-manifests/`."""
+        """The manifest's file name under `secrets/cluster-manifests/`."""
         # DECIDED: `<tag>.<entry stem>.sops.yaml`. The tag alone would collide on a role with
         # two entries, and a tag holds no dot, so the name splits back into both halves.
         # D3.3c's copy into `cluster/<tag>/` reads this property rather than rebuilding it.
@@ -331,14 +331,14 @@ def file_recipients(text: str, dotenv: bool) -> set[str]:
     }
 
 
-def rule_recipients(sops_config: str, rel_to_ansible: str) -> set[str] | None:
-    """The `age:` list of the creation rule SOPS picks for a path relative to `ansible/`.
+def rule_recipients(sops_config: str, rel_to_config: str) -> set[str] | None:
+    """The `age:` list of the creation rule SOPS picks for a path relative to `secrets/`.
 
     SOPS matches each rule's `path_regex` in order and takes the first match
     (`parseCreationRuleForFile` in sops `config/config.go`). None when no rule matches.
     """
     for rule in (yaml_fast.safe_load(sops_config) or {}).get("creation_rules") or []:
-        if re.search(rule.get("path_regex", ""), rel_to_ansible):
+        if re.search(rule.get("path_regex", ""), rel_to_config):
             return {key.strip() for key in str(rule.get("age", "")).split(",") if key}
     return None
 
@@ -346,7 +346,7 @@ def rule_recipients(sops_config: str, rel_to_ansible: str) -> set[str] | None:
 def recipient_problems(label: str, have: set[str], want: set[str] | None) -> list[str]:
     """A cluster file whose recipients are not exactly its own rule's full `age:` list."""
     if want is None:
-        return [f"{label} matches no creation rule in ansible/.sops.yaml"]
+        return [f"{label} matches no creation rule in secrets/.sops.yaml"]
     if have == want:
         return []
     return [
@@ -575,7 +575,7 @@ def check_tree(
         label, text, dotenv = tree.rel(path), path.read_text(), is_dotenv(path)
         out += ciphertext_problems(label, text, dotenv)
         out += mac_proxy_problems(label, text, base(path), dotenv)
-        want = rule_recipients(config, path.relative_to(tree.ansible).as_posix())
+        want = rule_recipients(config, path.relative_to(tree.secrets_dir).as_posix())
         out += recipient_problems(label, file_recipients(text, dotenv), want)
     rendered = {e.name: e.text for e in expected.manifests} if expected else {}
     for path in manifests:

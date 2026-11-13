@@ -5,7 +5,7 @@
 key.
 
 1. `known-key`: in a directory that substitutes, every `${NAME}` that opens a Flux reference
-   names a key in `ansible/vars/secrets.yml`.
+   names a key in `secrets/secrets.yml`.
 2. `no-bare-dollar-brace`: in a directory that substitutes, every `${` that opens a reference
    is a placeholder of pass 3, read as Flux reads it, each `$$` paired first. In every
    directory, no sentinel fragment remains.
@@ -14,7 +14,7 @@ key.
 4. `no-sops-manifest-key`: no key in `SOPS_MANIFEST_KEYS` appears as a placeholder.
 5. `no-secret-expression`: in the template sources, a secret key appears only in a form that
    leaves a single-line value intact. Rule 5 reads every `.j2` under the k8s roles'
-   `templates/` and `ansible/templates/` except `*.sh.j2`, whatever the render's tags.
+   `templates/` and `k8s/templates/` except `*.sh.j2`, whatever the render's tags.
 
 Rule 5's syntax-tree walk is `jinja_uses.py`. This module gives it the sets it reads, and
 turns each refusal into a `Violation`.
@@ -111,7 +111,7 @@ PLACEHOLDER_ANYWHERE = frozenset({"email"})
 # placeholder in a Longhorn BackupTarget's `backupTargetURL`, `s3://<bucket>@<region>/<prefix>`.
 # The URL is a field of the BackupTarget, and Longhorn reads no Secret for it, so the bucket name
 # has no Secret to sit in. It is the only secret-keyed part of the URL, and both keys are in
-# `ansible/vars/secrets.yml`. The kind in the pair keeps the placeholder out of every other
+# `secrets/secrets.yml`. The kind in the pair keeps the placeholder out of every other
 # document: `${r2_bucket}` in a ConfigMap still fails.
 # DECIDED: a pair and not a member of `PLACEHOLDER_ANYWHERE`, so the exemption cannot widen to
 # another kind. H1.7b adds it (the H1 plan's *The backup plane and its levers*, R2's Open
@@ -137,7 +137,7 @@ class Violation(NamedTuple):
     Attributes:
         rule: The rule's name, such as `no-secret-expression`.
         tag: For rules 1 to 4, the directory under `cluster/`. For rule 5, the role whose
-            template it is, or `shared` for `ansible/templates/`.
+            template it is, or `shared` for `k8s/templates/`.
         file: For rules 1 to 4, the rendered file. For rule 5, the template's path from the
             repository root.
         site: For rules 1 to 4, the document as `Kind/name`. For rule 5, the form it refuses.
@@ -154,7 +154,7 @@ class Violation(NamedTuple):
         return f"{self.rule}: {self.tag} {self.file} {self.site}: {self.key}"
 
 
-_ROLE_TEMPLATES = "ansible/roles/k8s/{}/templates/{}"
+_ROLE_TEMPLATES = "k8s/roles/{}/templates/{}"
 
 
 # The fewest in-scope templates whose syntax tree names a secret key: 59 at `70591c307`, and
@@ -306,7 +306,7 @@ def output_members(render: PlaceholderRender, known_keys: Iterable[str]) -> list
     for key in sorted(SOPS_MANIFEST_KEYS - known):
         missing.append(
             f"{NO_SOPS_MANIFEST_KEY}: {key} is in SOPS_MANIFEST_KEYS and not in "
-            "ansible/vars/secrets.yml"
+            "secrets/secrets.yml"
         )
     return missing
 
@@ -512,7 +512,7 @@ def check(
 
     Args:
         render: A placeholder render, after all three passes.
-        known_keys: The key names of `ansible/vars/secrets.yml`.
+        known_keys: The key names of `secrets/secrets.yml`.
         rule5_result: Rule 5's result, when the caller has it already.
         listed: The `render_sops_manifests` templates the third clause holds the namers in
             `rule5_result` to; by default the real tree's. A caller that passes a rule 5

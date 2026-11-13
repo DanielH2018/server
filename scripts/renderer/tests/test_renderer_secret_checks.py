@@ -469,7 +469,7 @@ def test_a_sops_manifest_key_absent_from_the_secrets_file_is_flagged():
     absent = sorted(SOPS_MANIFEST_KEYS - set(FIXTURE_KEYS))
     assert output_members(render, FIXTURE_KEYS) == [
         f"no-sops-manifest-key: {k} is in SOPS_MANIFEST_KEYS and not in "
-        "ansible/vars/secrets.yml"
+        "secrets/secrets.yml"
         for k in absent
     ]
 

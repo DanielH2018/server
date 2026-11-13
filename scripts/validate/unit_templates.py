@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Render every systemd unit under ansible/roles/ and hosts/, and verify the output.
+"""Render every systemd unit under k8s/roles/ and hosts/, and verify the output.
 
-`shell_templates.py` covers `*.sh.j2` and `k8s_manifests.py` covers `roles/k8s/*/templates/*.j2`;
+`shell_templates.py` covers `*.sh.j2` and `k8s_manifests.py` covers `k8s/roles/*/templates/*.j2`;
 `*.service.j2` / `*.timer.j2` fell between them — nothing rendered a unit template or checked the
 result, so a typo'd directive key reached a live host with `daemon_reload: true` reporting
 success and systemd loading the unit anyway, ignoring the bad line with only a journal warning
 (GitHub issue #948).
 
 Render context = `lib.render_context`: StubUndefined (`scripts.lib.render_guard`) under the
-OWNING ROLE's `defaults/main.yml` under `ansible/inventory/group_vars/all.yml`, every value
+OWNING ROLE's `defaults/main.yml` under `inventory/group_vars/all.yml`, every value
 expanded the way Ansible expands it. Bare stubs are not enough: `systemd-analyze verify` treats
 `OnCalendar=STUB` and `OnUnitActiveSec=STUB` as parse failures, so 3 of the 17 live timers
 (gitops-deploy, renovate-agent, claude-rc-restart) were red on a clean repo before their role's
@@ -46,7 +46,7 @@ package lists yet renders through a package of its own. The run fails unless it 
 `homelab-updater.timer`, so a host render that emits nothing cannot pass (H3.2c,
 `docs/target-architecture/host/h3-pi-pilot.md`).
 
-Also renders every polkit rule (`*.rules.j2`) under ansible/roles/ — JavaScript that the
+Also renders every polkit rule (`*.rules.j2`) under k8s/roles/ — JavaScript that the
 roles' tests content-check but whose syntax nothing else checks — and runs `node --check` on
 each output. A missing `node` SKIPS with a message rather than failing closed, unlike a missing
 `systemd-analyze`: `systemd-analyze` is this repo's only way to verify a unit file, so its
@@ -80,15 +80,14 @@ from validate.validate_lib.ok_lines import ok_printer
 from lib.cli_help import answer_help
 from validate.validate_lib.shipped_render import render_shipped
 from lib.render_context import render_context
+from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib import host as host_mode
 from lib.render_guard import (
-    ANSIBLE,
     REPO,
     dump_numbered,
     load_yaml,
 )
 
-ROLES = ANSIBLE / "roles"
 HOSTS = host_mode.HOSTS
 
 # A line systemd-analyze attributes to the file it's checking looks like
@@ -108,24 +107,24 @@ _FAIL_MESSAGE = re.compile(r"Unknown key|Failed to parse|Assignment outside of s
 
 # A host component that keeps role-shaped sources, `templates/` beside a `defaults/main.yml`,
 # such as claude-code (#6773). Its templates render with that file as their owning defaults.
-COMPONENT_TEMPLATES = ANSIBLE.parent / "hosts" / "components"
+COMPONENT_TEMPLATES = REPO / "hosts" / "components"
 
 
 def discover_templates() -> list[Path]:
-    """Every *.service.j2 / *.timer.j2 / *.socket.j2 under ansible/roles/ and a component's templates/."""
+    """Every *.service.j2 / *.timer.j2 / *.socket.j2 under k8s/roles/ and a component's templates/."""
     return sorted(
         path
-        for root, pattern in ((ROLES, "**/"), (COMPONENT_TEMPLATES, "*/templates/"))
+        for root, pattern in ((K8S_ROLES, "**/"), (COMPONENT_TEMPLATES, "*/templates/"))
         for suffix in ("service", "timer", "socket")
         for path in root.glob(f"{pattern}*.{suffix}.j2")
     )
 
 
 def discover_rules() -> list[Path]:
-    """Every polkit rule template (*.rules.j2) under ansible/roles/ and a component's templates/."""
+    """Every polkit rule template (*.rules.j2) under k8s/roles/ and a component's templates/."""
     return sorted(
         [
-            *ROLES.rglob("*.rules.j2"),
+            *K8S_ROLES.rglob("*.rules.j2"),
             *COMPONENT_TEMPLATES.glob("*/templates/*.rules.j2"),
         ]
     )
@@ -175,7 +174,7 @@ def check_template(
 
     Returns an error string, or None on success.
     """
-    rel = path.relative_to(ANSIBLE.parent)
+    rel = path.relative_to(REPO)
     rendered, err = render_shipped(path, ctx)
     if rendered is None:
         return err
@@ -389,7 +388,7 @@ def main(argv: Sequence[str] = ()) -> int:
     templates = discover_templates()
     if not templates:
         print(
-            f"No *.service.j2 / *.timer.j2 templates found under {ROLES}",
+            f"No *.service.j2 / *.timer.j2 templates found under {K8S_ROLES}",
             file=sys.stderr,
         )
         return 1

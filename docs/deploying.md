@@ -48,7 +48,7 @@ rewrites the `archive-key.fpr` the builder checks it against. The runbook names 
 ### Which image bumps Renovate may automerge
 
 Each k8s role declares its own `k8s_autodeploy` stance
-(`ansible/roles/k8s/<role>/defaults/main.yml`), which says only whether Renovate may automerge
+(`k8s/roles/<role>/defaults/main.yml`), which says only whether Renovate may automerge
 an image bump. `scripts/lib/k8s_roles.py` collects the roles declaring `false` into the
 denylist that `renovate.json`'s no-automerge rule and the Renovate lander read. A role on the
 denylist gets a `manual —` PR.
@@ -66,7 +66,7 @@ take the lock, so a new holder appears in it without an edit. Cadences are in
 
 --8<-- "assets/generated/fragments/tree-lock-holders.md"
 
-The crons take the lock through one Jinja macro, `ansible/templates/git-tree-lock.j2`, which
+The crons take the lock through one Jinja macro, `k8s/templates/git-tree-lock.j2`, which
 owns the wait and the alert a skip raises.
 
 ## Checking a k8s change before it merges
@@ -139,4 +139,4 @@ healthchecks-config retirement (#3499) left its B2 backups behind this way (#351
 holds, recently finished landings, and open PRs. Each button runs the command you would type:
 land runs `land.sh --pr <n> --since <sha>`, and cancel SIGTERMs a listed landing. Output goes to
 `~/.local/state/deploy-ui/` on daniel-box and one audit line per action reaches Loki under
-`deploy-ui`. The daemon is `hosts/components/deploy-ui/`; the route is `roles/k8s/deploy-ui`.
+`deploy-ui`. The daemon is `hosts/components/deploy-ui/`; the route is `k8s/roles/deploy-ui/`.

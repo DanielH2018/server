@@ -83,9 +83,7 @@ def render_snapshot_optin(optin: dict[str, list[str]]) -> str:
 
 
 def _snapshot_optin() -> tuple[str, list[str]]:
-    return render_snapshot_optin(snapshot_optin()), [
-        "ansible/roles/k8s/*/defaults/main.yml"
-    ]
+    return render_snapshot_optin(snapshot_optin()), ["k8s/roles/*/defaults/main.yml"]
 
 
 # --- longhorn-volume-shards -----------------------------------------------------------------
@@ -133,7 +131,7 @@ def _volume_shards() -> tuple[str, list[str]]:
         tiers["k3s_longhorn_nobackup_volumes"],
         estate.group_vars["k8s_namespace"],
     ), [
-        "ansible/roles/k8s/longhorn-reconcile/defaults/main.yml",
+        "k8s/roles/longhorn-reconcile/defaults/main.yml",
         "cluster/services.yml",
     ]
 
@@ -167,7 +165,7 @@ def render_deadman_graces(expected: list[dict]) -> str:
 def _deadman_graces() -> tuple[str, list[str]]:
     expected = role_defaults(BRIDGE_ROLE)["monitor_bridge_healthchecks_expected"]
     return render_deadman_graces(expected), [
-        "ansible/roles/k8s/monitor-bridge/defaults/main.yml"
+        "k8s/roles/monitor-bridge/defaults/main.yml"
     ]
 
 

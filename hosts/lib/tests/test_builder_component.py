@@ -228,7 +228,7 @@ def test_the_settings_carry_the_deployers_ci_contexts_and_the_prometheus_cluster
     assert settings["CI_CONTEXTS"] == ",".join(groups["ci_required_contexts"])
     assert settings["CI_ANCESTOR_WALK_MAX"] == str(groups["ci_ancestor_walk_max"])
     observability = yaml_fast.safe_load(
-        (REPO / "ansible/roles/k8s/observability/defaults/main.yml").read_text()
+        (REPO / "k8s/roles/observability/defaults/main.yml").read_text()
     )
     ip = observability["observability_prometheus_cluster_ip"]
     assert settings["PROMETHEUS_URLS"] == f"http://{ip}:9090"

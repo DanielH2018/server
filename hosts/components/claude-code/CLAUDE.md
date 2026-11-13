@@ -251,7 +251,7 @@ health` until H7.40's fourth slice, whose `legacy:` entries in
 embedded the push tokens. Each timer fires every N minutes of its `*/N` minute default, and its
 unit's `SyslogIdentifier=` keeps the tag the cron's `logger -t` wrote, `sync-artifacts` or
 `claude-otel-health`. Loki keeps each run's `status=` line under that tag.
-`ansible/roles/k8s/artifacts/CLAUDE.md` documents how the sync behaves, and the heartbeat's
+`k8s/roles/artifacts/CLAUDE.md` documents how the sync behaves, and the heartbeat's
 template carries why it is a host timer at all.
 
 - **Every key the k8s roles also read has a twin there.** `claude_code_artifacts_node`,
@@ -269,7 +269,7 @@ template carries why it is a host timer at all.
   through `write_check_textfile` in `homelab-check-lib.sh`. The `ArtifactsSync*` and `OtlpDoor*`
   rules in observability's `host-checks.yaml` page from those files. Each script renders its
   deadline from its own minute default, so that default must stay `*/N`, and
-  `ansible/tests/services/test_b6a_rule_literals.py` pins the rules to it.
+  `tests/services/test_b6a_rule_literals.py` pins the rules to it.
 
 ## Autonomous-role contract (`claude-guardrail-audit`, the audit watches on the guardrail paths)
 
@@ -402,7 +402,7 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   the head the review read, with no unchecked box under an operator or before-merge heading and
   no `needs input` or `Do not merge` text. A `--no-review` batch writes no record, so it never
   lands. Neither does a PR touching the landing path's code (`scripts/deploy_tools/`, `scripts/lib/`), the
-  fan-out tooling, the deployer, `ansible/vars/`, `.github/`, `.claude/` or this component. Two
+  fan-out tooling, the deployer, `secrets/`, `.github/`, `.claude/` or this component. Two
   narrowings apply (#5659). A PR passes when its only `pyproject.toml` change is to
   `[tool.pytest.ini_options].testpaths`, judged by parsing the file at the merge base and at the
   head, and a read or parse failure holds it. A PR also passes when its only change under the

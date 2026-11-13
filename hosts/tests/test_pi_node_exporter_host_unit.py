@@ -5,7 +5,7 @@ node-exporter runs on daniel-pi as a systemd unit that `homelab-daniel-pi` ships
 which monitor-bridge's Pi verdicts read series from (`node_hwmon_*`, `node_filesystem_*`,
 `node_memory_*`); the version, which the cluster's DaemonSet pins and the two should share; and
 the textfile directory, which homelab-updater writes `homelab_host.prom` into and never creates.
-The version's oracle is in the tree: `roles/k8s/node-exporter/defaults/main.yml`. The flags'
+The version's oracle is in the tree: `k8s/roles/node-exporter/defaults/main.yml`. The flags'
 oracle is `CONTAINER_FLAGS` below, a record of what the retired container ran, with the textfile
 collector turned on (H3.6).
 

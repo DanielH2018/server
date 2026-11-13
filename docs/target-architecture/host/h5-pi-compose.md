@@ -19,7 +19,7 @@ and every move follows H3's *host handoff rule*.
 Afterwards, `docker compose ls` on the Pi lists one project, `homelab`. It runs every
 container the rendered project declares: alloy, autoheal, docker-proxy,
 docker-proxy-lifecycle and wg-easy. The Pi's `containers_list` in
-`ansible/inventory/host_vars/daniel-pi.yml` is empty, and the `ansible/roles/containers/` tree
+`inventory/host_vars/daniel-pi.yml` is empty, and the `ansible/roles/containers/` tree
 is gone. Two things leave later (*What stays with Ansible until H7*). The inert Docker play in
 `ansible/deploy.yml` goes with that file's last play, in R4 or H7. The empty key goes in H7.
 `compose_services` stays in the inventory, which H7 keeps as renderer data.
@@ -53,16 +53,16 @@ The exit criterion is three observations:
     - It then runs `community.docker.docker_compose_v2` with `remove_orphans: true`, so each
       role is its own project, named after its directory.
 - **The service list is inventory, and its order is the deploy order.**
-  `ansible/inventory/host_vars/daniel-pi.yml` lists four `containers_list` entries, in this
+  `inventory/host_vars/daniel-pi.yml` lists four `containers_list` entries, in this
   order: `docker-proxy`, `wg-easy` (port 51821, UDP 51822), `autoheal` and `alloy` (port
   12345). The `Deploy Containers` play in `ansible/deploy.yml` deploys them in list order.
-  `ansible/tests/deploy/test_platform_filter_real_inventory.py:PI_ORDERING` pins docker-proxy
+  `tests/deploy/test_platform_filter_real_inventory.py:PI_ORDERING` pins docker-proxy
   ahead of autoheal and alloy, and its `_order_violations` reports an absent name as a
   violation.
 - **Five containers run on the Pi.** The four `docker-compose.yml.j2` templates set
   `container_name` on every service: `autoheal`, `wg-easy`, `alloy`, `docker-proxy`,
   `docker-proxy-lifecycle` and `docker-proxy-codeserver`. The last one renders only inside
-  `{% if has_code_server %}`. `ansible/inventory/group_vars/all.yml` sets `has_code_server:
+  `{% if has_code_server %}`. `inventory/group_vars/all.yml` sets `has_code_server:
   false`, and the Pi does not override it. A service that moves to another project collides
   on its name until the old container goes.
 - **Bind mounts are relative, and Ansible creates their sources.** alloy mounts
@@ -80,35 +80,35 @@ The exit criterion is three observations:
   records that the read-only proxy returns every container's `Env`, which is why that proxy
   left the `apps` network.
 - **pi-peer-backup reads wg-easy's data path.**
-  `ansible/roles/k8s/pi-peer-backup/defaults/main.yml:pi_peer_backup_src_dir` is
+  `k8s/roles/pi-peer-backup/defaults/main.yml:pi_peer_backup_src_dir` is
   `/home/{{ sys_user }}/server/containers/wg-easy/config/`.
 - **Networks are external.** Each Pi compose file declares its networks `external: true`. The `docker_install` role's install task loop creates `proxy` and `lifecycle`.
 - **Three Pi services read three secret keys.**
     - autoheal's template reads `monitor_discord_webhook_url`.
     - wg-easy's template reads `domain` in `WG_HOST`.
     - alloy's `config.alloy.j2` reads `alloy_pi_http_password` and `domain`.
-    - `grep -c '^<key>:' ansible/vars/secrets.yml` prints 1 for each of the three keys and 0
+    - `grep -c '^<key>:' secrets/secrets.yml` prints 1 for each of the three keys and 0
       for every other variable the four templates, `config.alloy.j2` and the three macros
       they import read.
-    - `ansible/secret_rotation.yml` gives them the tiers `external`, `ignore` and `assisted`.
+    - `secrets/secret_rotation.yml` gives them the tiers `external`, `ignore` and `assisted`.
       None is `auto`.
 - **alloy recreates on config change through a flag.** alloy's role passes
   `common_config_changed`, because a config-file edit leaves the compose hash unchanged.
   alloy reads its config once, at startup.
 - **Five readers outside the Docker play read the Pi's list, and one module passes it into
   renders.**
-    - `ansible/roles/k8s/observability/templates/prometheus.yaml.j2` reads
+    - `k8s/roles/observability/templates/prometheus.yaml.j2` reads
       `hostvars['daniel-pi'].containers_list | entry_port('alloy')` for the scrape target.
-    - `ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2` builds
+    - `k8s/roles/monitor-bridge/templates/env-secret.yaml.j2` builds
       `PI_PUBLISHED_PORTS` from the entries that define `port`.
-      `ansible/tests/services/test_pi_publishing_containers.py:EXPECTED_PUBLISHERS` pins
+      `tests/services/test_pi_publishing_containers.py:EXPECTED_PUBLISHERS` pins
       `alloy` on 12345 and `wg-easy` on 51821.
-    - `ansible/roles/k8s/artifacts/templates/configmap.yaml.j2` adds the Pi's names to
+    - `k8s/roles/artifacts/templates/configmap.yaml.j2` adds the Pi's names to
       `known_services.json` through `default([])`.
     - `scripts/diagnostics/probe_lib/health_docker.py:declared_on_pi` reads only
       `containers_list`.
     - `scripts/infra_map/inventory.py:declared_services` builds each host's declared
-      services through `lib.ansible_inventory.containers_entries_in`, which reads only
+      services through `lib.inventory_lists.containers_entries_in`, which reads only
       `containers_list`. The docstring of `scripts/infra_map/gen_infra_map.py` overlays the
       Pi's `docker ps` onto that declared skeleton so drift is visible, and
       `scripts/infra_map/constants.py:HOST_PLANE` marks daniel-pi as `docker`. A Pi service
@@ -120,7 +120,7 @@ The exit criterion is three observations:
       `containers_list` into a render's `hostvars`.
 - **Five more modules call `containers_entries_in`.** `git grep -n containers_entries_in
   -- scripts ':!*/tests/*'` lists eight modules: its definition in
-  `scripts/lib/ansible_inventory.py`, the two readers above, and these five, which *The
+  `scripts/lib/inventory_lists.py`, the two readers above, and these five, which *The
   service list* sorts into deliberate `containers_list` reads and Pi-role reads the moves
   retire:
     - `scripts/lib/render_guard.py:containers_entries` and `containers_entries_at`, which
@@ -157,7 +157,7 @@ The exit criterion is three observations:
 - **The deployer routes each part of a move PR differently.**
   `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:services_from_changed_paths`
   does the routing.
-    - An `ansible/inventory/` edit matches `_BROAD_DEPLOY_PREFIXES` and sets
+    - An `inventory/` edit matches `_BROAD_DEPLOY_PREFIXES` and sets
       `broad_deploy`. `scripts/deploy_tools/narrow_lib/broad.py:narrow` maps the changed keys
       to the roles that read them, or refuses. A failed broad arm writes `hold_sha`.
     - A path under `roles/containers/<svc>/templates/` joins `cs.services`, which
@@ -166,7 +166,7 @@ The exit criterion is three observations:
     - A path under `roles/containers/common/` matches `_PI_SHARED_PREFIX`.
 - **Tooling keys on `roles/containers/`.**
   `git grep -l -E 'roles/containers|containers/(alloy|autoheal|wg-easy|docker-proxy|common)'
-  -- ansible/tests scripts '*.toml' .github .claude | wc -l` prints 49. Among them:
+  -- tests scripts '*.toml' .github .claude | wc -l` prints 49. Among them:
     - `scripts/validate/compose_templates.py:ROLES`, behind the `validate-compose-templates`
       hook;
     - `scripts/docs/reference/decisions.py:_PLANES`, which feeds `docs/reference/decisions.md`;
@@ -203,14 +203,14 @@ The exit criterion is three observations:
   asserts that the rule is `_PACKAGE_RULES[-1]`. The rule's description in `renovate.json`
   records that the regex custom manager defaults to `pinDigests: false`, so "a version bump
   carried no `newDigest` (grafana/alloy v1.19.2 -> v1.20.0)". Its `matchFileNames` lists only
-  `ansible/roles/k8s/*/defaults/main.yml`, `ansible/roles/setup/*/defaults/main.yml` and
-  `ansible/inventory/group_vars/all.yml`. Its description also justifies that scope: only the
+  `k8s/roles/*/defaults/main.yml`, `ansible/roles/setup/*/defaults/main.yml` and
+  `inventory/group_vars/all.yml`. Its description also justifies that scope: only the
   k8s-images manager carries a template that can write a digest onto a pin.
   `scripts/tests/test_renovate_auto_replace.py:test_the_k8s_image_template_round_trips_every_live_pin`
   holds that manager's `autoReplaceStringTemplate` to every live pin. alloy and wg-easy pin a
   tag and a digest.
 - **A Pi deploy is heavy.** The `container_healthcheck_timeout` comment in
-  `ansible/inventory/host_vars/daniel-pi.yml` records that a Pi deploy drives load1 8-17 and
+  `inventory/host_vars/daniel-pi.yml` records that a Pi deploy drives load1 8-17 and
   memory PSI `full` 20-25%, with OCI `Timeout waiting for systemd to create scope` failures.
   Every Pi deploy at `70591c307` runs with an operator attending.
 - **The Pi's healthchecks are slow by design.** The same file sets
@@ -219,8 +219,8 @@ The exit criterion is three observations:
   "5 x (60s interval + 60s timeout) = 10 min", and records exec stalls past a 30-second
   timeout under deploy load. docker-proxy's three services also set `start_period: 10s`.
 - **Prometheus scrapes the Pi once a minute.**
-  `ansible/roles/k8s/observability/templates/prometheus.yaml.j2` gives the `node-pi` job
-  `scrape_interval: 1m`, and `ansible/roles/k8s/observability/defaults/main.yml` pins
+  `k8s/roles/observability/templates/prometheus.yaml.j2` gives the `node-pi` job
+  `scrape_interval: 1m`, and `k8s/roles/observability/defaults/main.yml` pins
   `prom/prometheus` 3.x in `observability_k8s_prometheus_image`. Prometheus 3's range
   selectors leave out the sample at the range's left edge, so a `[1m]` window over a 1-minute
   scrape usually holds one sample, and `rate()` over it returns nothing. alloy's compose
@@ -229,7 +229,7 @@ The exit criterion is three observations:
 - **The Pi is the backup WireGuard endpoint.** The header of
   `hosts/components/pi-compose/services/wg-easy/compose.yaml.j2` (the deleted role's
   `CLAUDE.md` before H5.9) records the Pi's UDP 51822 as the fallback entry when the cluster's wg-easy, in
-  `ansible/roles/k8s/wg-easy/` on 51820, is unreachable.
+  `k8s/roles/wg-easy/` on 51820, is unreachable.
 - **ADR-0013 names the deploy path H5 replaces.** `docs/adr/0013-daniel-pi-stays-on-docker.md`
   decides that the Pi "is driven remotely over SSH with `-e target=daniel-pi`". Its *Governs*
   section says the decision is expressed by the Pi's inventory entry and by the continued
@@ -239,7 +239,7 @@ The exit criterion is three observations:
 
 ### The service list: a second key in the Pi's inventory
 
-`ansible/inventory/host_vars/daniel-pi.yml` gains `compose_services:` beside
+`inventory/host_vars/daniel-pi.yml` gains `compose_services:` beside
 `containers_list`. Entries keep the `containers_list` field names. A service lives in exactly
 one of the two keys: the package deploys `compose_services`, and Ansible's Docker play
 deploys `containers_list`.
@@ -248,7 +248,7 @@ The key lives in inventory, not in `hosts/daniel-pi/package.yml`, for two reason
 still renders the cluster readers until D5 or H1, and H3.1 builds the renderer's host context
 from the inventory layers. Both writers therefore read one source, and R1's zero-diff
 comparison sees the same value. The key stays there after Ansible goes, because H7's exit
-observation 1 keeps `ansible/inventory/` as renderer data.
+observation 1 keeps `inventory/` as renderer data.
 
 A third `platform:` value on `containers_list` entries was rejected. `deploy_tags`,
 `render_guard`, `render_targets`, `detach_notify` and `land_platform` each switch on
@@ -267,7 +267,7 @@ skills that name it.
   render. monitor-bridge sorts the publishers by name, which makes `PI_PUBLISHED_PORTS`
   independent of which key holds an entry. artifacts drops its `default([])`.
 - `scripts/lib/render_context.py:_HOSTVARS_KEYS` gains `compose_services`.
-- `scripts/lib/ansible_inventory.py` gains one helper that returns the Pi's entries from both
+- `scripts/lib/inventory_lists.py` gains one helper that returns the Pi's entries from both
   keys and raises when either key is missing. `declared_on_pi` and the Pi test helpers call
   it.
 - `scripts/infra_map/inventory.py:declared_services` calls the same helper when the host is
@@ -306,7 +306,7 @@ reading `containers_list` alone. At `70591c307` the answer is:
   `pi-compose` component. H5.2b's canary was the one exemption until H5.10 removed it;
 - one of the three cluster readers, or the recovery script, renders differently after any one
   entry moves from `containers_list` to `compose_services`. The cluster readers render
-  twice. One render goes through `ansible/tests/_k8s_render.py`, which builds its `hostvars`
+  twice. One render goes through `tests/_k8s_render.py`, which builds its `hostvars`
   with `scripts/lib/render_context.py`. The other goes through C1's renderer, `homelab-render
   cluster --role <tag>`, which builds its own `hostvars` (R1's `renderer_lib/context.py`)
   and is what publishes a flux-owned reader. H5 depends on H3, and H3 on R1, so that
@@ -607,7 +607,7 @@ That route is not cheap, for two reasons:
 
 **The Pi's SOPS file.** Each PR that adds a placeholder has the operator run
 `uv run python scripts/secrets_mgmt/host_secrets.py sync` and commit
-`ansible/vars/hosts/daniel-pi.sops.yaml` (**operator-only**, because `sync` decrypts). H4's
+`secrets/hosts/daniel-pi.sops.yaml` (**operator-only**, because `sync` decrypts). H4's
 `host_secrets.py check` fails the PR until the file carries the key.
 
 ### The engine upgrade
@@ -672,7 +672,7 @@ service moves.
   deleted the last Ansible reader, it deletes the key and repoints every reader at
   `compose_services` alone. *Open questions* 5 asks C4 to name H7.20d and its reader set in
   place of its present trigger.
-- `compose_services` never leaves the inventory. H7 keeps `ansible/inventory/` as renderer
+- `compose_services` never leaves the inventory. H7 keeps `inventory/` as renderer
   data (H7's exit observation 1), so the key stays the renderer's source for the Pi's
   project.
 - **`ansible/deploy.yml` is not edited by H5.** Once the Pi's list is empty, the Docker play
@@ -730,12 +730,12 @@ can land first. Whichever lands second carries the other's change.
                                                       compose arm, H5.2b)
   scripts/secrets_mgmt/consumers.py                   (+ hosts/components/ walk root, H5.7)
 - ansible/roles/containers/                           (all five roles, by H5.12)
-  ansible/inventory/host_vars/daniel-pi.yml           (+ compose_services; containers_list emptied)
-  ansible/roles/k8s/observability/templates/prometheus.yaml.j2   (reads both keys)
-  ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2  (reads both keys, sorted)
-  ansible/roles/k8s/artifacts/templates/configmap.yaml.j2        (reads both keys, no default)
+  inventory/host_vars/daniel-pi.yml           (+ compose_services; containers_list emptied)
+  k8s/roles/observability/templates/prometheus.yaml.j2   (reads both keys)
+  k8s/roles/monitor-bridge/templates/env-secret.yaml.j2  (reads both keys, sorted)
+  k8s/roles/artifacts/templates/configmap.yaml.j2        (reads both keys, no default)
   scripts/lib/render_context.py                       (+ compose_services in hostvars)
-  scripts/lib/ansible_inventory.py                    (+ one helper over both keys)
+  scripts/lib/inventory_lists.py                    (+ one helper over both keys)
   scripts/diagnostics/probe_lib/health_docker.py      (declared_on_pi over both keys)
   ansible/roles/setup/docker_install/tasks/engine-upgrade.yml    (updater mask; homelab stop
                                                                   and recreate; unmask)
@@ -753,7 +753,7 @@ can land first. Whichever lands second carries the other's change.
 
 ## Steps, as PRs
 
-**Landing a move PR (H5.6 to H5.9).** Each PR edits `ansible/inventory/`, deletes one role and
+**Landing a move PR (H5.6 to H5.9).** Each PR edits `inventory/`, deletes one role and
 adds one service to the package. The PR body records the output of
 `uv run python scripts/deploy_tools/deploy_tags.py narrow` and
 `uv run python scripts/deploy_tools/deploy_tags.py blockers` before merge.
@@ -784,7 +784,7 @@ adds one service to the package. The PR body records the output of
       tag, and the PR would be wrong by the census's own rule.
 
 1. **H5.1 One list, read whole.**
-    - Add `compose_services: []` to `ansible/inventory/host_vars/daniel-pi.yml`.
+    - Add `compose_services: []` to `inventory/host_vars/daniel-pi.yml`.
     - Repoint the five readers and the recovery watch set at both keys, as *The service list*
       describes. The infra map's `declared_services` is one of the five.
     - Run `git grep -n containers_entries_in -- scripts ':!*/tests/*'` and record in the PR
@@ -986,7 +986,7 @@ adds one service to the package. The PR body records the output of
         - one group per Pi service;
         - `automerge: false` for wg-easy, in a group named `manual`, as the Docker engine's is;
         - one lockstep group for `grafana/alloy` that joins the Pi's pin with
-          `ansible/roles/k8s/loki-homelab/defaults/main.yml`, with `automerge: false`;
+          `k8s/roles/loki-homelab/defaults/main.yml`, with `automerge: false`;
         - autoheal and docker-proxy digests in their own groups, automerged only if the
           operator chose that in *Open questions* 1.
     - **Add the Pi's template glob to the pinDigests rule's `matchFileNames`,** and change
@@ -1008,7 +1008,7 @@ adds one service to the package. The PR body records the output of
       `decisions.py`, `pins.py` and the infra map's `load_roles`. Drop the Pi-compose role
       shape from
       `scripts/docs/gen_role_glance.py`.
-    - Tests: `ansible/tests/deploy/test_containers_list_roles_exist.py` loses the Pi half, and
+    - Tests: `tests/deploy/test_containers_list_roles_exist.py` loses the Pi half, and
       `test_platform_filter_real_inventory.py` pins the Pi's list empty, as
       `test_daniel_server_is_fully_drained` does for daniel-server.
     - Docs in the same PR (listed under *Tests and docs*).
@@ -1053,7 +1053,7 @@ adds one service to the package. The PR body records the output of
 
 The checks split as H3's *Verification* splits them. An agent runs the Prometheus block,
 through the loopback-then-ClusterIP transport of the land host wait. The fallback address is
-`ansible/roles/k8s/observability/defaults/main.yml:observability_prometheus_cluster_ip`.
+`k8s/roles/observability/defaults/main.yml:observability_prometheus_cluster_ip`.
 `probe.py metric` decrypts `domain`, so it is the operator's. The operator runs every `ssh
 daniel-pi` block and every command on the Pi, because the `claude` user has no login there
 and `sudo` there asks for a password. Each ssh call is one batched, read-only command, which
@@ -1073,7 +1073,7 @@ curl -s --max-time 5 http://127.0.0.1:9090/api/v1/query --data-urlencode "query=
   || curl -s --max-time 5 http://10.43.39.218:9090/api/v1/query --data-urlencode "query=$Q"
 
 # Agent: the readers did not move.
-uv run pytest ansible/tests/services/test_pi_publishing_containers.py
+uv run pytest tests/services/test_pi_publishing_containers.py
 
 # Agent, exit observation 2: a Renovate digest bump merged.
 gh pr list --author app/renovate --search 'hosts/components/pi-compose' --state merged --limit 1
@@ -1425,7 +1425,7 @@ upstream, revert its downstreams before it.
     - the census;
     - `hosts/tests/test_pi_recovery_restarts_and_reports.py`, whose expected set reads
       both keys while `MUST_WATCH` stays fixed;
-    - `ansible/tests/services/test_pi_publishing_containers.py`'s helper, whose expected
+    - `tests/services/test_pi_publishing_containers.py`'s helper, whose expected
       members stay unchanged;
     - `scripts/diagnostics/tests/test_probe_health.py` for `declared_on_pi`;
     - `scripts/infra_map/tests/test_gen_infra_map.py` for `declared_services` on daniel-pi,
@@ -1565,7 +1565,7 @@ upstream, revert its downstreams before it.
     - **H4.**
         - Its routing rule exempts `/usr/lib/homelab/compose/`.
         - `host_secrets.py check` could scope its date failure to PRs that touch the Pi file
-          or `ansible/secret_rotation.yml`.
+          or `secrets/secret_rotation.yml`.
         - *An owed restart survives a failed run* under *The restart contract*, and the
           `homelab-compose` bullet in H4's *Open questions*, cite a 15-minute
           `homelab-compose` restart. H5 derives the unit's `TimeoutStartSec` as 1390 s,
@@ -1589,7 +1589,7 @@ upstream, revert its downstreams before it.
       every reader of the union strict, so deleting the key alone fails every render that
       reads it. C4 should name H7.20d, after H7.20a, as the one PR that deletes the Pi's key
       and `_example.yml`'s and repoints every reader at `compose_services` alone: the three
-      cluster templates, `scripts/lib/ansible_inventory.py`'s helper,
+      cluster templates, `scripts/lib/inventory_lists.py`'s helper,
       `health_docker.py:declared_on_pi`, `render_context.py:_HOSTVARS_KEYS` and the
       `pi-heartbeats` watch set. H7's step H7.20d already reads that way.
     - **C1.** C1 says stub mode "exists only for R1's shadow comparison". H5's list census
@@ -1688,7 +1688,7 @@ refuted. Two design changes go beyond the findings:
     - `EXPECTED_PUBLISHERS` stays unchanged.
     - artifacts drops `default([])`, and *Risks* lists class 3.
 - **H5-R1-05 (high)** `pi_compose_services` existed only in the renderer. *Fixed:* the key
-  lives in `ansible/inventory/host_vars/daniel-pi.yml`, which Ansible and the renderer both
+  lives in `inventory/host_vars/daniel-pi.yml`, which Ansible and the renderer both
   read. The census renders the readers through the test render context before and after each
   move.
 - **H5-R1-06 (high)** Deleting the `Deploy Containers` play deletes the k8s play's snapshot.
@@ -1963,7 +1963,7 @@ and against the H3 and H4 texts, and all 3 are fixed. None is refuted.
       the file tree and *Complexity delta* changed to match.
 - **H5-C1-03 (medium)** The *Baseline* reader list missed `scripts/infra_map`. *Checked:*
   `scripts/infra_map/inventory.py:declared_services` calls
-  `lib.ansible_inventory.containers_entries_in`, which reads only `containers_list`. The
+  `lib.inventory_lists.containers_entries_in`, which reads only `containers_list`. The
   same module's `load_roles` also globs `ansible/roles/containers/*/templates/`, from path
   parts the *Baseline*'s `roles/containers` grep cannot match. The finding did not name that
   second read. *Fixed:*

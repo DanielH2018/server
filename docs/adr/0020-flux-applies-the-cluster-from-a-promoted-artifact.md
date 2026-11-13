@@ -83,7 +83,7 @@ completes this record.
   (`scripts/deploy_tools/deploy_lib/owners.py:refuse_k8s_tags`).
 - The publish floor (`scripts/deploy_tools/bundle_census.py:PUBLISH_FLOOR`) fails publish
   when the service list drops `coredns`, `longhorn`, `metallb` or `traefik`.
-- The deployer routes every path under `ansible/roles/k8s/<role>/` to `cs.flux` and reads no
+- The deployer routes every path under `k8s/roles/<role>/` to `cs.flux` and reads no
   `owner`. `ansible/roles/setup/gitops_deploy/tests/test_changeset_has_no_service_fields.py`
   holds that the deleted `ChangeSet` fields stay deleted.
 - `k8s_tags` (`scripts/lib/k8s_roles.py`) is the one reader of which tags Flux applies, and

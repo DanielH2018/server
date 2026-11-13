@@ -4,19 +4,19 @@ description: "Use when adding, changing or debugging a Home Assistant automation
 allowed-tools: Read, Edit, Write, Bash, Glob
 ---
 
-Make a correct, idempotent HA change under `ansible/roles/k8s/home-assistant/`. The repo
+Make a correct, idempotent HA change under `k8s/roles/home-assistant/`. The repo
 is the source of truth — **HA UI edits are overwritten on deploy.** Read the role `CLAUDE.md`
 (editing gotchas) and `SETUP.md` (how the bedroom suite fits together) before changing
 interdependent logic. Run everything from `/home/ubuntu/server`.
 
 HA itself moved to the k3s cluster at slice-5 B3, but **the edit path did not change**: the
-`ansible/roles/k8s/home-assistant/` role copies these same files verbatim into ConfigMaps, so
+`k8s/roles/home-assistant/` role copies these same files verbatim into ConfigMaps, so
 this role stays the only place to change config. What changed is where you deploy from
 (daniel-box) and how you verify (a rollout and the pod, not a container) — see step 5.
 
 ## 1. Pick the right file
 
-All under `ansible/roles/k8s/home-assistant/`:
+All under `k8s/roles/home-assistant/`:
 
 | Change | File (deployed by `copy`, verbatim) |
 |---|---|
@@ -81,7 +81,7 @@ there deliberately — those two are hand-maintained on purpose; don't widen the
 
 ```
 uv run python scripts/home_assistant/validate_ha_config.py          # YAML, dup keys, !include, template syntax, state-model guardrails
-uv run pytest ansible/roles/k8s/home-assistant/tests   # if you touched a macro
+uv run pytest k8s/roles/home-assistant/tests   # if you touched a macro
 ```
 (The `validate-ha-config` + `pytest` prek hooks run these on commit too.) Fix before deploying —
 validation catches Jinja-syntax and structural errors, but NOT HA schema or entity-existence

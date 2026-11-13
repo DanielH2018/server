@@ -18,7 +18,7 @@ fake_remux_host_data_root: /srv/media
 
 # The *arr is not reachable by name from the host (no cluster DNS), and a package cannot read the
 # cluster when it renders, so this is the Service's pinned ClusterIP.
-# roles/k8s/sonarr/defaults/main.yml:sonarr_k8s_cluster_ip is the other copy, and
+# k8s/roles/sonarr/defaults/main.yml:sonarr_k8s_cluster_ip is the other copy, and
 # hosts/lib/tests/test_h737_box_components.py holds the two equal.
 fake_remux_sonarr_cluster_ip: 10.43.114.186
 fake_remux_sonarr_port: 8989

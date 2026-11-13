@@ -435,7 +435,7 @@ def test_a_placeholder_in_the_rendered_alertmanager_config_is_clean():
 def test_the_live_pint_config_names_the_pinned_prometheus_address():
     """live.hcl reaches Prometheus by its pinned ClusterIP, so the two must stay one value."""
     defaults = yaml_fast.safe_load(
-        (REPO / "ansible/roles/k8s/observability/defaults/main.yml").read_text()
+        (REPO / "k8s/roles/observability/defaults/main.yml").read_text()
     )
     live = (alert_rules.PINT_OFFLINE.parent / "live.hcl").read_text()
     uris = re.findall(r'^\s*uri\s*=\s*"([^"]+)"', live, re.M)

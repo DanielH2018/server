@@ -12,8 +12,8 @@ on:
     paths:
       - scripts/renderer/**
       - scripts/lib/**
-      - ansible/roles/k8s/**
-      - ansible/inventory/group_vars/**
+      - k8s/roles/**
+      - inventory/group_vars/**
       - cluster/services.yml
       - uv.lock
       - pyproject.toml

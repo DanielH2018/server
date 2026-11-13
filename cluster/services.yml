@@ -31,7 +31,7 @@
 # PriorityClass, and a tiered role's templates take it from `tier_priority_class` rather than
 # writing it (#3452). A home-critical entry's `backup_claims` names its Longhorn
 # volumes worth a daily backup; the k3s role's `k3s_longhorn_r2_volumes` is those claims, and
-# `ansible/tests/longhorn/test_r2_tier_is_derived.py` checks them against the role's rendered
+# `tests/longhorn/test_r2_tier_is_derived.py` checks them against the role's rendered
 # PVCs. A tiered entry with no `backup_claims` holds nothing worth a daily copy.
 #
 # The other two Longhorn tiers derive from the entries the same way (#4207).
@@ -187,7 +187,7 @@ containers_list:
     port: 4466
     use_authelia: true
     auth_tier: one_factor
-    # Callers of roles/k8s/headlamp/templates/networkpolicy.yaml.j2, which the role renders
+    # Callers of k8s/roles/headlamp/templates/networkpolicy.yaml.j2, which the role renders
     # itself (hence netpol_role_owned) so its netpol-probe Job tests the fence it just applied.
     netpol_role_owned: true
     netpol_from:
@@ -228,7 +228,7 @@ containers_list:
     # Flux applies media-volume through `promote`, and its hardlink check runs as a Job in
     # `media-volume-verify` (D5, Wave D).
   # Mounts media-volume's claim at /data, so `depends_on` puts it after that role — as it does
-  # for every other media-data mounter below. ansible/tests/deploy/test_k8s_toposort.py pins
+  # for every other media-data mounter below. tests/deploy/test_k8s_toposort.py pins
   # each pair.
   - name: sonarr
     # Flux applies sonarr through `promote`, and its verify Job and arr-notification's seed Job
@@ -245,7 +245,7 @@ containers_list:
       # ports, and rejects it at APPLY time, after every repo-side check has read green.
       - name: metrics
         port: 9707
-    # Callers of roles/k8s/sonarr/templates/networkpolicy.yaml.j2, the additive fence on
+    # Callers of k8s/roles/sonarr/templates/networkpolicy.yaml.j2, the additive fence on
     # this port; the header there says why each class of caller is listed. The role renders it
     # itself so `--tags sonarr` carries its own fence, hence netpol_role_owned.
     netpol_role_owned: true
@@ -272,7 +272,7 @@ containers_list:
     port: 8080
     use_authelia: true
     auth_tier: one_factor
-    # Callers of roles/k8s/qbittorrent/templates/networkpolicy.yaml.j2, the additive fence on
+    # Callers of k8s/roles/qbittorrent/templates/networkpolicy.yaml.j2, the additive fence on
     # the WebUI port; the header there says why each caller is listed. The role renders it
     # itself so `--tags qbittorrent` carries its own fence, hence netpol_role_owned.
     netpol_role_owned: true
@@ -300,7 +300,7 @@ containers_list:
       # ports, and rejects it at APPLY time, after every repo-side check has read green.
       - name: metrics
         port: 9707
-    # Callers of roles/k8s/radarr/templates/networkpolicy.yaml.j2, the additive fence on
+    # Callers of k8s/roles/radarr/templates/networkpolicy.yaml.j2, the additive fence on
     # this port; the header there says why each class of caller is listed. The role renders it
     # itself so `--tags radarr` carries its own fence, hence netpol_role_owned.
     netpol_role_owned: true
@@ -333,7 +333,7 @@ containers_list:
       # ports, and rejects it at APPLY time, after every repo-side check has read green.
       - name: metrics
         port: 9707
-    # Callers of roles/k8s/prowlarr/templates/networkpolicy-prowlarr.yaml.j2, the additive fence on
+    # Callers of k8s/roles/prowlarr/templates/networkpolicy-prowlarr.yaml.j2, the additive fence on
     # this port; the header there says why each class of caller is listed. The role renders it
     # itself so `--tags prowlarr` carries its own fence, hence netpol_role_owned.
     netpol_role_owned: true
@@ -352,7 +352,7 @@ containers_list:
     port: 6767
     use_authelia: true
     auth_tier: one_factor
-    # Callers of roles/k8s/bazarr/templates/networkpolicy-bazarr.yaml.j2, the additive fence on
+    # Callers of k8s/roles/bazarr/templates/networkpolicy-bazarr.yaml.j2, the additive fence on
     # this port; the header there says why. The role renders it itself so `--tags bazarr`
     # carries its own fence, hence netpol_role_owned.
     netpol_role_owned: true
@@ -438,7 +438,7 @@ containers_list:
     # The image serves speedtest_tracker_* natively at `/prometheus` on its UI port (#996).
     # UNVERIFIED until someone flips the app's `prometheus_enabled` Settings toggle by hand: it
     # defaults OFF and lives in the app's own DB, so until then this job reads `up == 0`, not
-    # silently empty. See roles/k8s/speedtest/CLAUDE.md. The port is the entry's own, which
+    # silently empty. See k8s/roles/speedtest/CLAUDE.md. The port is the entry's own, which
     # the image fixes.
     metrics:
       - job: speedtest
@@ -507,7 +507,7 @@ containers_list:
     use_authelia: false
     # NO IngressRoute at all, and that is load-bearing rather than an omission. Its names
     # are served by the X-Sync-Token gate in the k8s Traefik's Secret-mounted file provider
-    # (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2 — token router, Authelia'd
+    # (k8s/roles/traefik/templates/livesync-gate-secret.yaml.j2 — token router, Authelia'd
     # /_utils carve-out at priority 200, and the LAN-only `livesync-probe` router whose CouchDB
     # 401 is the end-to-end signal). The token stays out of CRDs because the readonly
     # kubeconfig can read IngressRoutes but is RBAC-denied Secrets. Replication keeps its
@@ -556,7 +556,7 @@ containers_list:
     use_authelia: true
     auth_tier: one_factor
   # Read-only MCP server. No hostname/ingressroute — its bearer-token router lives in the
-  # edge gate Secret (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2), matching
+  # edge gate Secret (k8s/roles/traefik/templates/livesync-gate-secret.yaml.j2), matching
   # only mcp.local.<domain>, so no dnsmasq override or public router may exist for it.
   - name: homelab-mcp
     # Flux applies homelab-mcp through `promote`, pulls its image from GHCR, and substitutes
@@ -759,7 +759,7 @@ containers_list:
   # The tunnel answers on the node IP (the wg-easy-udp Service's externalIP) rather than a
   # VIP: router UIs forward to devices, and VIPs have no lease. There is no password_hash on
   # either side: v15 owns its admin credentials in its own SQLite DB. Rotation is `cli db:admin:reset`
-  # inside the pod — see roles/k8s/wg-easy/defaults/main.yml.
+  # inside the pod — see k8s/roles/wg-easy/defaults/main.yml.
   - name: wg-easy
     # Flux applies wg-easy through `promote`, and every Ansible path skips it (D5.12, own window,
     # operator on the LAN).
@@ -977,7 +977,7 @@ containers_list:
       # The exportarr sidecar's scrape port, named as radarr's is.
       - name: metrics
         port: 9707
-    # Callers of roles/k8s/lidarr/templates/networkpolicy.yaml.j2.
+    # Callers of k8s/roles/lidarr/templates/networkpolicy.yaml.j2.
     netpol_role_owned: true
     netpol_from:
       - traefik         # deliberate, not redundant — see the policy's header

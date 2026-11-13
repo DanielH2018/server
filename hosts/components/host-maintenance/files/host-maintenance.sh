@@ -15,7 +15,7 @@
 # WHY A WRAPPER (#6179). Each cron used to pipe its command straight into `logger`. The
 # pipeline's exit status was logger's, and nothing wrote a textfile, so a job that failed every
 # week, or stopped running, read the same as one that ran clean. The <job>NotReporting rules in
-# ansible/roles/k8s/observability/files/rules/host-checks.yaml read the file this writes.
+# k8s/roles/observability/files/rules/host-checks.yaml read the file this writes.
 set -uo pipefail
 
 JOB="${1:-}"

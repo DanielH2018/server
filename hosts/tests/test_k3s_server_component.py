@@ -213,7 +213,7 @@ def test_a_template_naming_an_undefined_key_fails_the_host_render(
     hosts = tmp_path / "hosts"
     shutil.copytree(HOSTS, hosts)
     # Sources outside hosts/ resolve against the root's parent.
-    for name in ("ansible", "scripts", "docs"):
+    for name in ("k8s", "inventory", "secrets", "scripts", "docs"):
         (tmp_path / name).symlink_to(REPO / name)
     host_mode.render_host(
         host, hosts_root=hosts

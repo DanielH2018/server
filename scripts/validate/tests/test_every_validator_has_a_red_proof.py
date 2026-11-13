@@ -60,7 +60,7 @@ def suite_for(validator: Path) -> Path:
     `test_validate_<name>.py`, not `test_<name>.py`. The modules dropped their `validate_`
     prefix once `validate/` became a package; the test files could not follow, because pytest
     names modules by basename across the whole repo — there are no `__init__.py` files — and
-    `ansible/tests/k8s/test_k8s_manifests.py` already holds the name `k8s_manifests.py` would
+    `tests/k8s/test_k8s_manifests.py` already holds the name `k8s_manifests.py` would
     want. Renaming four of five and leaving one is worse than keeping the convention.
     """
     return TESTS / f"test_validate_{validator.name}"

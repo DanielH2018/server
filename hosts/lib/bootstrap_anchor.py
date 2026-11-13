@@ -74,9 +74,7 @@ def check_runs(
 
 def required_contexts(tree: Path) -> frozenset[str]:
     """`ci_required_contexts` from the tree the script archived."""
-    variables = yaml.safe_load(
-        (tree / "ansible/inventory/group_vars/all.yml").read_text()
-    )
+    variables = yaml.safe_load((tree / "inventory/group_vars/all.yml").read_text())
     return frozenset(variables["ci_required_contexts"])
 
 

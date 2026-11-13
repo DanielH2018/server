@@ -7,17 +7,15 @@ from lib.repo_paths import REPO
 
 def test_the_real_config_names_the_pins_it_must_find():
     """Both pin shapes Renovate edits in YAML: an `_image:` ref and a `# renovate:` version."""
-    assert "crowdsec_k8s_image" in pinned_keys(
-        REPO, "ansible/inventory/group_vars/all.yml"
-    )
+    assert "crowdsec_k8s_image" in pinned_keys(REPO, "inventory/group_vars/all.yml")
     assert "code_server_k8s_node_version" in pinned_keys(
-        REPO, "ansible/roles/k8s/code-server/defaults/main.yml"
+        REPO, "k8s/roles/code-server/defaults/main.yml"
     )
 
 
 def test_a_key_no_manager_captures_is_not_a_pin():
     assert "crowdsec_k8s_sidecar_agents" not in pinned_keys(
-        REPO, "ansible/inventory/group_vars/all.yml"
+        REPO, "inventory/group_vars/all.yml"
     )
 
 
@@ -45,12 +43,12 @@ def test_a_disabled_built_in_manager_pins_nothing(tmp_path):
 def test_the_real_tree_names_the_image_pins_it_must_find():
     """A role default, an inventory var and a Pi compose line; a built image pins nothing."""
     pins = image_pins(REPO, tracked_files(REPO))
-    assert ("registry_k8s_image", "ansible/roles/k8s/registry/defaults/main.yml") in {
+    assert ("registry_k8s_image", "k8s/roles/registry/defaults/main.yml") in {
         p[1:] for p in pins["registry"]
     }
     assert pins["crowdsecurity/crowdsec"][0][1:] == (
         "crowdsec_k8s_image",
-        "ansible/inventory/group_vars/all.yml",
+        "inventory/group_vars/all.yml",
     )
     assert (
         "image:",

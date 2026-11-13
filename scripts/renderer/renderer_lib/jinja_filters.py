@@ -1,6 +1,6 @@
 """The Ansible-dialect filters and the `search` test, with no ansible-core behind them.
 
-`lib.ansible_jinja_env.register_ansible_filters` registers these on every render guard's
+`lib.guard_jinja_env.register_ansible_filters` registers these on every render guard's
 environment and on the renderer's, so templates keep the names Ansible gives them.
 
 DECIDED: reimplemented, not copied. ansible-core is GPL-3.0-or-later and this repo is MIT. Each

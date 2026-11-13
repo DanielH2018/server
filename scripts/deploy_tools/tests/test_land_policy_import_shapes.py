@@ -217,11 +217,11 @@ ADMITTED = {
         [
             {
                 "status": "modified",
-                "filename": "ansible/roles/k8s/homelab-mcp/templates/deployment.yaml.j2",
+                "filename": "k8s/roles/homelab-mcp/templates/deployment.yaml.j2",
                 "sha": CODE,
             }
         ],
-        {"ansible/roles/k8s/homelab-mcp/templates/deployment.yaml.j2": F},
+        {"k8s/roles/homelab-mcp/templates/deployment.yaml.j2": F},
     ),
 }
 

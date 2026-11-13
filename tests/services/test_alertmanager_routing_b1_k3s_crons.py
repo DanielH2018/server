@@ -1,0 +1,67 @@
+"""M6 batch B1's rules reach Alertmanager's receivers: they page since Cutover-1b.
+
+`test_alertmanager_routing.py` is at its line cap, so the `host-checks.yaml` share of its
+`PAGING` outcome that belongs to B1 lives here, on the same walk of the rendered routing tree.
+The four k3s-cron rules page. The `critical` ones (the longhorn-backup and etcd-snapshot pairs)
+mail as well as post, the rest post to Discord alone, and a rule that regains `shadow` walks to
+the blackhole instead.
+
+Run: uv run pytest tests/services/test_alertmanager_routing_b1_k3s_crons.py
+"""
+
+import pytest
+from test_alertmanager_routing import (
+    BLACKHOLE,
+    PAGING,
+    SHADOW,
+    host_sets,
+    not_blackholed,
+    reached,
+    route_tree,
+    unmuted,
+)
+
+# Each rule (keyed `<alert>/<service>`) and the receivers Alertmanager sends it to.
+EXPECTED = {
+    "LonghornBackupHealthFailed/daniel-box": ["discord", "email"],
+    "LonghornBackupHealthNotReporting/daniel-box": ["discord", "email"],
+    "EtcdSnapshotOffboxFailed/daniel-box": ["discord", "email"],
+    "EtcdSnapshotOffboxNotReporting/daniel-box": ["discord", "email"],
+}
+DISARMED_CHECKS = ("ManifestPrune", "ReleaseStaleness", "LiveDrift")
+
+
+def test_every_expected_b1_rule_is_in_the_paging_set():
+    # Non-vacuity by name: a rule dropped from the file, or an expected rule that is still
+    # shadow, fails here instead of walking past the parametrized tests below.
+    assert set(EXPECTED) <= set(host_sets(shadow=False))
+    assert not set(EXPECTED) & set(host_sets(shadow=True))
+
+
+def test_the_disarmed_checks_have_no_rule():
+    # Their producers stop at the hand apply, so a rule left behind would page NotReporting.
+    rules = set(host_sets(shadow=False)) | set(host_sets(shadow=True))
+    disarmed = {
+        f"{check}Check{suffix}/daniel-box"
+        for check in DISARMED_CHECKS
+        for suffix in ("Failed", "NotReporting")
+    }
+    assert not rules & disarmed, sorted(rules & disarmed)
+
+
+@pytest.mark.parametrize("name", sorted(EXPECTED))
+def test_every_b1_rule_pages_through_the_muted_routes(name):
+    labels, receivers = PAGING[name]
+    assert receivers == EXPECTED[name]
+    assert name not in SHADOW
+    assert [r["receiver"] for r in reached(route_tree(), labels)] == EXPECTED[name]
+    assert unmuted(labels) == []
+
+
+def test_a_b1_rule_that_regains_shadow_is_flagged():
+    """The rejecting half: with `shadow` back, the walk ends on the blackhole, so the receivers
+    expected for the rule no longer match."""
+    labels, _ = PAGING["LonghornBackupHealthFailed/daniel-box"]
+    shadowed = {**labels, "shadow": "true"}
+    assert [r["receiver"] for r in reached(route_tree(), shadowed)] == [BLACKHOLE]
+    assert not_blackholed(shadowed) == []

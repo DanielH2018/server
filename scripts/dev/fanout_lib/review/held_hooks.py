@@ -60,11 +60,11 @@ PROJECT_HOOKS = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'
 UNHELD_EVENTS = ("SessionStart",)
 # The trees beside `HOOKS_DIR` that a hook reaches through its own `__file__`, with the files
 # held from each: `block-footguns.py` imports from `scripts/`, and the
-# inventory is data `lib.ansible_inventory` reads (#4420). `block-protected-bash.py` reads the
+# inventory is data `lib.inventory_lists` reads (#4420). `block-protected-bash.py` reads the
 # agents' frontmatter for the set it holds to read-only (#4617).
 HELD_TREES = (
     (Path("scripts"), "*.py"),
-    (Path("ansible") / "inventory", "*"),
+    (Path("inventory"), "*"),
     (Path(".claude") / "agents", "*.md"),
 )
 

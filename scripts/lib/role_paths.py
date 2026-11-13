@@ -11,9 +11,9 @@ from typing import NamedTuple
 
 # The second group takes a TRAILING SLASH, so a file at a role's own root reports no
 # subdirectory rather than its own basename.
-_ROLE_PATH = re.compile(r"^ansible/roles/k8s/([^/]+)/(?:([^/]+)/)?")
+_ROLE_PATH = re.compile(r"^k8s/roles/([^/]+)/(?:([^/]+)/)?")
 
-SECRETS_FILE = "ansible/vars/secrets.yml"
+SECRETS_FILE = "secrets/secrets.yml"
 
 
 class RolePath(NamedTuple):
@@ -41,9 +41,9 @@ def is_test_path(path: str) -> bool:
 
     The `tests/` directory shape, which `test_testpaths_covers_every_test_file.py` enforces,
     plus a `test_*.py` or `conftest.py` wherever it sits. The `no-role-ships-a-pytest-file`
-    row of `ansible/tests/repo/test_census_rows_roles.py` holds that no role ships one.
+    row of `tests/repo/test_census_rows_roles.py` holds that no role ships one.
     """
-    if path.startswith("ansible/tests/"):
+    if path.startswith("tests/"):
         return True
     parts = path.split("/")
     if "tests" in parts[:-1]:

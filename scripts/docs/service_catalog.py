@@ -2,7 +2,7 @@
 """Generate a single HTML page answering "what runs in this homelab".
 
 THE PROBLEM. ~60 services are declared across two files
-(cluster/services.yml and ansible/inventory/host_vars/daniel-pi.yml), and the only way to
+(cluster/services.yml and inventory/host_vars/daniel-pi.yml), and the only way to
 answer "what runs here, on which host, behind which auth, backed up how" is to read
 through 62 Ansible roles by hand. Every fact already lives in the repo — nothing
 assembles them into one place, so the answer drifts out of date the moment someone
@@ -16,7 +16,7 @@ for exactly which facts that is, and why.
 
 WHY STATIC PARSING ONLY. This must never shell out to ansible or kubectl. A fresh
 worktree has no Ansible collections installed (fresh-worktree-has-no-ansible-collections
-in project memory), and ansible/inventory/*.yml contains SOPS-lookup and other Jinja
+in project memory), and inventory/*.yml contains SOPS-lookup and other Jinja
 expressions that do not render outside a real deploy. Every value below is read with
 `yaml.safe_load` and plain regex over template text — never executed.
 
@@ -72,7 +72,7 @@ from docs.catalog_lib.catalog_model import K3S_DEFAULTS, K8S_ROLES, ServiceRow
 from docs.catalog_lib.catalog_render import render_html, render_markdown
 from lib.cli_help import ArgumentParser
 from lib.estate import Estate, Inventory
-from lib.ansible_inventory import K8S_HOST
+from lib.inventory_lists import K8S_HOST
 from lib.repo_paths import ALL_VARS, K8S_SERVICES
 
 # The service list comes from lib.estate, the loader every docs generator reads the
@@ -158,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
         "--k8s-roles",
         type=Path,
         default=K8S_ROLES,
-        help="override roles/k8s dir (tests)",
+        help="override k8s/roles dir (tests)",
     )
     parser.add_argument(
         "--k3s-defaults",

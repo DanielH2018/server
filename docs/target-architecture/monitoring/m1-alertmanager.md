@@ -68,7 +68,7 @@ else.
 ## Baseline at `70591c307`
 
 - **Prometheus has no rules and no Alertmanager.** `prometheus.yml` in
-  `ansible/roles/k8s/observability/templates/prometheus.yaml.j2` carries no `rule_files:` and no
+  `k8s/roles/observability/templates/prometheus.yaml.j2` carries no `rule_files:` and no
   `alerting:` block.
 - **Three pieces of prose state that no Alertmanager or rule exists, and M1 makes each false.**
   `git grep -il alertmanager 70591c307` returns four files. Two of them hold such prose:
@@ -88,45 +88,45 @@ else.
   count the role's workloads, its manifests, its Secret readers or its tier-1 templates.
   `git grep -n -w -E 'six|seven|eight|two workloads'` over the observability role, its three
   tests and the netpol-baseline role lists them:
-    - `ansible/roles/k8s/observability/CLAUDE.md`, *One config change, one restart*: "The
+    - `k8s/roles/observability/CLAUDE.md`, *One config change, one restart*: "The
       snapshot handing these six to the play gate".
-    - `ansible/roles/k8s/observability/tasks/main.yml`: the restart task's comment ("would
+    - `k8s/roles/observability/tasks/main.yml`: the restart task's comment ("would
       restart all six", "this task runs for exactly the two workloads that read one"), the
       comment at the `manifests_self_rollouts` include ("these six live in"), and the
       comments around the snapshot task and the stabilisation hand-off ("these six", "All six
       carry", "these six are the only workloads").
-    - `ansible/roles/k8s/observability/defaults/main.yml`: the comment above
+    - `k8s/roles/observability/defaults/main.yml`: the comment above
       `observability_stabilise_workloads` ("The six telemetry workloads", "would restart all
       six", "ANY of this role's eight manifests"), and `k8s_autodeploy_reason` ("six
       sub-images"), which feeds the generated *At a glance* block.
     - The comment "Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED
       observability tiers`" in five templates: `collector`, `grafana`, `kube-state-metrics`,
       `loki` and `tempo` `.yaml.j2`. `prometheus.yaml.j2`'s own tier-1 comment stays true.
-    - `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-observability.yaml.j2`: "all
+    - `k8s/roles/netpol-baseline/templates/networkpolicy-observability.yaml.j2`: "all
       seven pods carry the opt-in label already".
     - Test docstrings and failure messages: "six workloads" and "these six" in
       `test_observability_stabilise_coverage.py`; "its six workloads",
       "the two workloads that read one", "names the six", "restarts all six" and "Five of the
       six" in `test_self_rollouts_follow_the_apply.py`; "eight manifests"
-      in `ansible/tests/services/test_observability_config_rolls_one_workload.py`.
+      in `tests/services/test_observability_config_rolls_one_workload.py`.
 
   A past-tense account of an incident, such as "snapshotted all six workloads" (#3133), stays
   as written. "The seven routeless workloads" in `defaults/main.yml` and "the seven
   previously-unmonitorable workloads" in `prometheus.yaml.j2` name the cluster-wide set from
   the migration's slice 3, not this role's workloads, so M1 leaves them.
 - **Prometheus is v3.15.0** (`observability_k8s_prometheus_image` in
-  `ansible/roles/k8s/observability/defaults/main.yml`). It runs as a `Recreate` Deployment on
+  `k8s/roles/observability/defaults/main.yml`). It runs as a `Recreate` Deployment on
   the `prometheus-data` claim. Its pod template carries `checksum/config`, a hash of the one
   `prometheus.yml` key, so a config edit rolls the pod. Its pod shell is
   `pod_shell('homelab-critical', service_account='prometheus', run_as_user=65534,
   run_as_group=65534, fs_group=65534)` with `hardened_security_context(non_root=true)`, and it
   mounts the `prometheus-scrape-credentials` Secret with `defaultMode: 0o444`.
 - **The rendered `prometheus.yml` holds no stubbed value.** Rendered through
-  `ansible/tests/_k8s_render.py:rendered_docs` at `70591c307`, the `prometheus-config`
+  `tests/_k8s_render.py:rendered_docs` at `70591c307`, the `prometheus-config`
   ConfigMap's `prometheus.yml` is 658 lines with no `STUB` in it. Its loops read
   `containers_list` through `scripts/renderer/template_filters/scrape_jobs.py`, plus
   `crowdsec_k8s_sidecar_agents` and `k3s_etcd_expose_metrics` from
-  `ansible/inventory/group_vars/all.yml`.
+  `inventory/group_vars/all.yml`.
 - **Upstream Prometheus v3.15.0 can reload its own rules.** `cmd/prometheus/main.go` defines
   `--config.auto-reload` (interval flag default 30s). `config/reload.go`, function
   `GenerateChecksum`, hashes the config file plus every file each `rule_files` pattern
@@ -144,12 +144,12 @@ else.
     - the `Dockerfile` sets `USER nobody`, `VOLUME [ "/alertmanager" ]` and a default
       `--config.file=/etc/alertmanager/alertmanager.yml`.
 - **The `observability` namespace has one tenant, and its baseline depends on that.**
-  `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-observability.yaml.j2` admits
+  `k8s/roles/netpol-baseline/templates/networkpolicy-observability.yaml.j2` admits
   `podSelector: {}` inside the namespace because only the `observability` role renders into
-  it. `ansible/tests/k8s/test_rendered_properties.py` guards that invariant. A new role in
+  it. `tests/k8s/test_rendered_properties.py` guards that invariant. A new role in
   this namespace would break it. Alertmanager therefore joins the `observability` role.
 - **Observability's tests pin its workload set.**
-  `ansible/tests/services/test_observability_config_rolls_one_workload.py` pins
+  `tests/services/test_observability_config_rolls_one_workload.py` pins
   `_EXPECTED_WORKLOADS` (six names), `_EXPECTED_SECRET_READERS` (`prometheus`, `grafana`) and
   `_CONFIGMAP_DATA_KEYS`. Its
   `test_a_workload_mounting_a_role_configmap_carries_the_checksum_annotation` asserts that the
@@ -161,27 +161,27 @@ else.
   six-item loop. The restart-count snapshot after it must run after that wait, or it reads
   the outgoing pod.
 - **One Secret change restarts every Secret reader in the role.** In
-  `ansible/roles/k8s/observability/tasks/main.yml`, the task "Restart the telemetry workloads
+  `k8s/roles/observability/tasks/main.yml`, the task "Restart the telemetry workloads
   whose secret changed" restarts each `observability_stabilise_workloads` entry whose
   `restart_on` holds `secret` when `manifests_secret_render is changed`. That register comes
-  from one looped `no_log` task in `ansible/roles/k8s/manifests/tasks/main.yml`, "Render secret
+  from one looped `no_log` task in `k8s/roles/manifests/tasks/main.yml`, "Render secret
   manifests", over the `manifests_secret_files_resolved` fact. The role renders three Secret
   files: `grafana-secret.yaml`, `scrape-credentials-secret.yaml` and `origin-pull-secret.yaml`.
   A Traefik middleware reads the third, and no pod does. The release record decides each
   rollout's `restart` from the same register, in
-  `ansible/roles/k8s/manifests/tasks/release_stamp.yml`.
+  `k8s/roles/manifests/tasks/release_stamp.yml`.
   `test_self_rollouts_follow_the_apply.py` pins that behaviour in
   `test_observability_a_changed_secret_expects_only_its_two_readers_to_roll` and
   `test_observability_private_restart_reads_the_same_facts_as_the_record`. The first one
   asserts that the rollouts marked `restart: true` are exactly `{"prometheus", "grafana"}`. It
   reads the role's real defaults through
-  `ansible/tests/_release_expectation.py:observability_self_rollouts`, so the defaults entry
+  `tests/_release_expectation.py:observability_self_rollouts`, so the defaults entry
   PR 2 adds turns it red unless PR 2 edits it too.
 - **An armed role's manifests are re-serialised before they are staged.** `manifests_prune`
-  is `true` in `ansible/roles/k8s/manifests/defaults/main.yml`. The observability include
-  does not override it, and `ansible/tests/deploy/test_manifests_prune.py:_UNARMED_ROLES` is
+  is `true` in `k8s/roles/manifests/defaults/main.yml`. The observability include
+  does not override it, and `tests/deploy/test_manifests_prune.py:_UNARMED_ROLES` is
   `{authelia, nut}`. For an armed role, "Render secret manifests" takes
-  `ansible/templates/role-labelled.yaml.j2` as its `src`, as the ordinary render does. That
+  `k8s/templates/role-labelled.yaml.j2` as its `src`, as the ordinary render does. That
   wrapper pipes the render through `scripts/renderer/template_filters/role_label.py:homelab_role_label`,
   which runs `yaml.load_all` and then `yaml.dump_all`. Only what survives that round trip
   reaches the staged file. A run of the function on a Secret dropped a top-level `#` line. It
@@ -192,13 +192,13 @@ else.
   keeps its comments.
 - **A role can decide a rollout's `restart` itself.** A `manifests_self_rollouts` entry with
   `rolled_by_role: true` is stamped `restart: false`. The owning role raises it afterwards
-  through `ansible/roles/k8s/manifests/tasks/rollout_amend.yml`, only where it issued a
-  `rollout restart`. `ansible/roles/k8s/pihole/tasks/roll_one.yml` is the one caller.
+  through `k8s/roles/manifests/tasks/rollout_amend.yml`, only where it issued a
+  `rollout restart`. `k8s/roles/pihole/tasks/roll_one.yml` is the one caller.
   `rollout_amend.yml` does not read the marker, so a role can call it for an entry without
   one.
 - **`rolled_by_role` also takes an entry out of the pod-template fingerprints.** The task
   "List the workloads whose pod template is fingerprinted" in
-  `ansible/roles/k8s/manifests/tasks/main.yml` ends its list with
+  `k8s/roles/manifests/tasks/main.yml` ends its list with
   `manifests_self_rollouts | rejectattr('rolled_by_role', 'defined')`, and it already did at
   `70591c307`. The marker exists for pihole-2, whose own manifest pihole applies after the
   shared apply, so a fingerprint around the shared apply would be wrong for it. Observability's
@@ -207,13 +207,13 @@ else.
   An entry with the marker always reads "not rolled" there, so an image bump and a Secret edit
   in one deploy would roll a `Recreate` pod twice, deleting it mid-pull: the failure #3115
   fixed. This plan's first draft missed the line (*Restart, PR 5* has the ruling).
-- **The notifier credentials are SOPS keys.** `grep -c '^<name>:' ansible/vars/secrets.yml`
+- **The notifier credentials are SOPS keys.** `grep -c '^<name>:' secrets/secrets.yml`
   returns 1 for `email`, `monitor_discord_webhook_url`, `smtp_notify_app_password` and
   `healthchecks_ping_key`. Kuma's `discord.json` and `email.json` declarations in
-  `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` read the first three.
+  `k8s/roles/uptime-kuma/templates/static-monitors.yaml.j2` read the first three.
   Because `email` is a secret, the Alertmanager config file must be a Secret, not a ConfigMap.
 - **Every k8s Secret template writes `stringData`, never `data`.** Over the pathspec
-  `ansible/roles/k8s/*secret*.j2`, `git grep -l -E '^stringData:'` lists 38 files, and the
+  `k8s/roles/*secret*.j2`, `git grep -l -E '^stringData:'` lists 38 files, and the
   same grep for `^data:` lists none. R2's placeholders therefore stay readable to Flux's
   substitution.
 - **The manifest validator stubs secrets as `STUB`.** `scripts/lib/render_guard.py:StubUndefined`
@@ -228,33 +228,33 @@ else.
   "A NEW file ships nothing until its list in `defaults/main.yml` names it", and its validator
   checks that the directory and the list agree.
 - **Every refused netpol probe row names its policy.** In
-  `ansible/roles/k8s/netpol-baseline/defaults/main.yml`, every `expect: refused` row of
+  `k8s/roles/netpol-baseline/defaults/main.yml`, every `expect: refused` row of
   `netpol_baseline_probe_targets` carries `policy:`. `templates/netpol-probe-job.yaml.j2` in
   that role prints `{{ t.policy }}` in the refused leg's failure message.
-  `ansible/tests/k8s/test_netpol_probe_targets.py` has no test that a row carries the key. No
+  `tests/k8s/test_netpol_probe_targets.py` has no test that a row carries the key. No
   refused row exercises `networkpolicy-observability.yaml.j2` itself: its Prometheus and Loki
   rows test their own bespoke policies, and the Grafana and Tempo rows carry no `expect`. That
   baseline admits Traefik from the `homelab` namespace, any pod in its own namespace and the
   node CIDRs, so the probe pod (`app: netpol-baseline-probe`) is refused.
 - **A probe target with no ready endpoint fails every netpol-baseline deploy.** The task "Fail
   if any probe target has no ready endpoint" in
-  `ansible/roles/k8s/netpol-baseline/tasks/main.yml` asserts a ready address for each row.
-  `ansible/tests/k8s/test_netpol_probe_targets.py:test_terraria_is_absent_while_it_is_scaled_to_zero`
+  `k8s/roles/netpol-baseline/tasks/main.yml` asserts a ready address for each row.
+  `tests/k8s/test_netpol_probe_targets.py:test_terraria_is_absent_while_it_is_scaled_to_zero`
   states the consequence for a row whose workload sits at 0 replicas: "every full deploy.yml
   fails its readiness gate". netpol-baseline is auto-deploy-eligible, and the GitOps deployer
   applies a deploy-plane change as a full `deploy.yml`. A failed apply writes `hold_sha`, and
   `scripts/deploy_tools/gitops_state.py` offers only `clear-*` subcommands, so no tool sets a
   hold ahead of time. The deployer's tick is `gitops-deploy.timer`. Its liveness alert,
   GitOps-Alive, fires once `last_run` is older than `GITOPS_MAX_AGE_MIN`, 90 in
-  `ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2`.
+  `k8s/roles/monitor-bridge/templates/env-secret.yaml.j2`.
 - **Two readers of `ALERTS` are planned, and they filter differently.** M6 Phase B gives
   `probe.py health` the C7 gate query `ALERTS{alertstate="firing",service="<tag>",shadow!="true"}`.
   D5's soak Job counts only critical alerts on a flux-owned service that became active after
   the Job started ([D5](../deploy/d5-bulk-move.md), *The Job*).
 - **Kuma's watcher sets the precedent for the Watchdog's sizing.** `uptime-kuma-alive` in
-  `monitor_bridge_healthchecks_expected` (`ansible/roles/k8s/monitor-bridge/defaults/main.yml`)
+  `monitor_bridge_healthchecks_expected` (`k8s/roles/monitor-bridge/defaults/main.yml`)
   is a Simple check with `timeout: 600` and `grace: 1200`.
-  `ansible/tests/services/test_monitor_bridge_healthchecks_expected.py` derives every slug from
+  `tests/services/test_monitor_bridge_healthchecks_expected.py` derives every slug from
   `scripts/docs/fragment_renderers.py:deadman_crons`, which reads cron variables only and
   returns `(slug, cron, source)` triples from six positional arguments. The test's
   `cron_mismatches` holds a `kind: simple` slug's cron to `_EVERY_N_MINUTES`
@@ -263,7 +263,7 @@ else.
   of sources, which becomes the fragment's `generated_from` header.
 - **The weekly reboot outage is about 10 minutes.** The reboot cron fires at 07:30 UTC on
   Sunday with a 5-minute shutdown delay (`weekly_reboot_*` in
-  `ansible/inventory/group_vars/all.yml`). `docs/healthchecks-io-deadman.md` records daniel-box
+  `inventory/group_vars/all.yml`). `docs/healthchecks-io-deadman.md` records daniel-box
   back up at 07:39:48 and the last pod Ready at 07:45:06 on 2026-08-30.
 - **CI installs no Prometheus tooling.** The `hooks` job in `.github/workflows/ci.yml` installs
   Vale from a pinned tarball and nothing else of this kind.
@@ -278,7 +278,7 @@ else.
   the full sweep alike.
 - **`vale.sh`'s lock-and-stamp guard has its own test.**
   `scripts/validate/tests/test_vale_sync_guard.py` fakes `vale` on PATH and covers a
-  half-unpacked package and a provisioned worktree. `ansible/tests/leakguard.py:SHIMMED_BINARIES`
+  half-unpacked package and a provisioned worktree. `tests/leakguard.py:SHIMMED_BINARIES`
   names `curl`, so a test that runs a script calling `curl` stubs it itself.
 - **`deploy.sh` forwards `-e` to ansible-playbook.**
   `scripts/deploy_tools/deploy_lib/flags.py:usage_error` refuses only a usage error.
@@ -290,7 +290,7 @@ else.
 ### What M1 adds
 
 ```diff
- ansible/roles/k8s/observability/
+ k8s/roles/observability/
 +  templates/alertmanager.yaml.j2          Deployment and Service
 +  templates/alertmanager-secret.yaml.j2   Secret: alertmanager.yml, homelab.tmpl, 3 credential files
 +  templates/prometheus-rules.yaml.j2      ConfigMap: one key per observability_rule_groups entry
@@ -302,7 +302,7 @@ else.
 ~  tasks/main.yml                          alertmanager in the wait loop; the per-Secret restart and its amend
 ~  defaults/main.yml                       image pin, claim, watchdog repeat seconds, observability_rule_groups,
                                            stabilise entry, per-Secret restart keys
- ansible/roles/k8s/netpol-baseline/
+ k8s/roles/netpol-baseline/
 ~  defaults/main.yml                       the alertmanager probe row
  scripts/validate/
 +  alert_tools.sh                          provisions promtool and amtool at the image tags
@@ -325,19 +325,19 @@ else.
 M2 to M6 build on these rules and do not restate them.
 
 1. **Rule files are plain YAML, never Jinja, and a list names each one.** Each family is one
-   file, `ansible/roles/k8s/observability/files/rules/<group>.yaml`, holding one group named
+   file, `k8s/roles/observability/files/rules/<group>.yaml`, holding one group named
    like the file. The role default `observability_rule_groups` lists the group names.
    `templates/prometheus-rules.yaml.j2` loops over that list and reads each file verbatim with
-   `lookup('file', playbook_dir + '/roles/k8s/observability/files/rules/' + group + '.yaml')`.
+   `lookup('file', playbook_dir + '/k8s/roles/observability/files/rules/' + group + '.yaml')`.
    It never globs, because the offline renderer supports no `fileglob` (*Baseline*). A file
    that the list does not name never reaches the ConfigMap, so `alert_rules.py` fails when
    the stems in `files/rules/`, the list and the rendered `prometheus-rules` keys disagree.
    A PR that adds a rule file therefore adds its group to the list in the same commit. Rule
    annotations use Go templates (`{{ $labels.namespace }}`), which a Jinja render would
    consume. A threshold that mirrors an inventory value is a literal in the rule. A pytest pins
-   it to its source, in the role's test directory or `ansible/tests/services/`.
+   it to its source, in the role's test directory or `tests/services/`.
 2. **Every alert ships with a test that makes it fire.** Tests are promtool unit-test files,
-   `ansible/roles/k8s/observability/tests/rules/<group>.test.yaml`. A case whose deadline runs
+   `k8s/roles/observability/tests/rules/<group>.test.yaml`. A case whose deadline runs
    to days goes in `<group>.<part>.test.yaml` with a 1h `evaluation_interval`, because the
    interval is file-wide; the conventions count both files' cases together. Each alert has at least one
    case with non-empty `exp_alerts`, and that case asserts the `service` and `severity`
@@ -371,7 +371,7 @@ M2 to M6 build on these rules and do not restate them.
 4. **Annotations.** `summary` (one line), `description` (what fired and where to look) and,
    where a runbook exists, `runbook_url` pointing at `https://docs.local.<domain>/<page>/`.
    These replace the Kuma tile `description` and the `runbook` tag. The rule files are plain
-   YAML, so the URL is a literal. `ansible/tests/services/test_alert_runbook_urls.py` pins its
+   YAML, so the URL is a literal. `tests/services/test_alert_runbook_urls.py` pins its
    host to `domain` in `group_vars/all.yml`, and requires a `runbook_url` on every alert whose
    description cites a `docs/<page>.md` outside the design directories.
 5. **One pager per check at every commit.** This is C4's two-writer rule applied to paging. At
@@ -472,7 +472,7 @@ M2 to M6 build on these rules and do not restate them.
       pairing each `manifests_secret_render` result's `changed` flag, by position, with
       `manifests_secret_files_resolved`. It never reads a result's `item`. The render task is `no_log`. The repo already relies on a
       `no_log` register's `changed` flag: in
-      `ansible/roles/k8s/image-builder/tasks/main.yml`, the comment on the build gate says
+      `k8s/roles/image-builder/tasks/main.yml`, the comment on the build gate says
       `no_log` "censors the register's CONTENT, not its `changed`". Nothing in the repo shows
       that a result's `item` survives. A selection that matched nothing would
       skip every restart and leave a pod on stale config behind a green deploy.
@@ -609,7 +609,7 @@ one pager:
   so no Kuma tile can see the loss. The first arm, `absent(up{job="alertmanager"})`, pages it.
   It is also the arm that convention 2's empty-input case fires.
 - **The job is configured, but the scrape fails.** `up{job="alertmanager"}` reads 0. Kuma
-  already pages this case. `ansible/roles/k8s/monitor-bridge/files/checks/cluster.py:check_cluster_targets`
+  already pages this case. `k8s/roles/monitor-bridge/files/checks/cluster.py:check_cluster_targets`
   selects `up{origin!="daniel-server"}`, which matches every series with no `origin` label,
   and the job has none. The `Cluster Scrape Targets` tile goes DOWN after
   `CLUSTER_TARGETS_CONSECUTIVE` (3) bridge cycles. The rule therefore leaves this case alone,
@@ -805,9 +805,9 @@ has no cron. The slug rests on five pieces. PR 2 adds the first, and PR 4 adds t
 - **The inputs and the header.** `scripts/docs/gen_doc_fragments.py:deadman_inputs` returns
   a seven-tuple, adding `estate.role_vars` of the observability role. Its return annotation
   follows, and its docstring loses "The six arguments". `_deadman`'s sources list gains
-  `ansible/roles/k8s/observability/defaults/main.yml`, so the fragment's `generated_from`
+  `k8s/roles/observability/defaults/main.yml`, so the fragment's `generated_from`
   header names the file the row reads. The `regen-doc-fragments` hook's `files` regex already
-  covers `ansible/roles/`.
+  covers `k8s/roles/`.
 - **The test branch.** For a `kind: simple` slug, `cron_mismatches` first matches the
   cadence against `^every (\d+)s$`. The row is clean when N is below the slug's `timeout` and
   flagged when N is at or above it. A string that matches neither that pattern nor
@@ -900,24 +900,24 @@ would have no tool to run, or CI would provision a cache that the root-file hook
 - Add the `validate-alert-rules` hook to `prek.toml`. On a PR, CI runs a hook only when a
   changed file matches its `files` regex, so the regex must name every input the hook reads.
   In this PR it covers:
-    - `ansible/roles/k8s/observability/(files/rules|tests/rules|files/alertmanager)/`;
+    - `k8s/roles/observability/(files/rules|tests/rules|files/alertmanager)/`;
     - the role's `prometheus`, `prometheus-rules` and `alertmanager` templates;
-    - `ansible/roles/k8s/observability/defaults/main.yml`, whose image tags set the tool
+    - `k8s/roles/observability/defaults/main.yml`, whose image tags set the tool
       versions and which holds `observability_rule_groups`;
-    - `ansible/inventory/(host_vars/[^/]+|group_vars/all)\.yml`, which feed the
+    - `inventory/(host_vars/[^/]+|group_vars/all)\.yml`, which feed the
       `prometheus.yml` loops and the Alertmanager template. The `validate-compose-templates`
       hook in `prek.toml` uses the same alternation;
     - `scripts/renderer/template_filters/scrape_jobs.py`, which builds the scrape jobs;
     - `scripts/validate/alert_`.
 
-  M2 adds `scripts/validate/pint/`. M5 adds `ansible/roles/k8s/loki-homelab/files/rules/` and
+  M2 adds `scripts/validate/pint/`. M5 adds `k8s/roles/loki-homelab/files/rules/` and
   that role's `defaults/main.yml`. Each in the PR that adds the input.
 - In `.github/workflows/ci.yml`'s `hooks` job, add a provision step after Vale and a
   `uv run python scripts/validate/alert_rules.py --prove-red` step.
 - The tool phase runs `promtool check config --syntax-only` on the `prometheus.yml` the tree
   already renders, so the floor names `prometheus.yml` from this PR. The Python phase has no
   rule file to read yet. PR 2 and PR 3 raise the floor.
-- A test joins `ansible/tests/k8s/test_netpol_probe_targets.py`: every row carrying
+- A test joins `tests/k8s/test_netpol_probe_targets.py`: every row carrying
   `expect: refused` carries `policy`. Its pair is the live table (clean) and a fixture row
   without `policy` (flagged). It does not depend on Alertmanager, so it lands here and holds
   PR 2's row.
@@ -937,7 +937,7 @@ and those edits must land with the workload.
   the stabilise entry. The image pin `observability_k8s_alertmanager_image` landed in PR 1,
   because `alert_tools.sh` reads amtool's version from it.
 - Make room in the observability role's `CLAUDE.md` first. After PR 1 it is 7065 characters
-  against the 7070-character ceiling that `ansible/tests/repo/test_role_claude_md.py` enforces.
+  against the 7070-character ceiling that `tests/repo/test_role_claude_md.py` enforces.
   The new claim grows the generated *At a glance* block, and the *Alert plane* paragraph adds
   more, so move text to `docs/observability-dashboards.md` before adding either.
 - Correct the one-register prose for the new Secret reader: the comment above
@@ -960,7 +960,7 @@ and those edits must land with the workload.
 - In `prometheus.yaml.j2`, add the `alerting:` block and the `alertmanager` scrape job.
   Prometheus rolls once, through its config checksum.
 - Test edits in the same PR, in
-  `ansible/tests/services/test_observability_config_rolls_one_workload.py`:
+  `tests/services/test_observability_config_rolls_one_workload.py`:
     - `_EXPECTED_WORKLOADS` and `_EXPECTED_SECRET_READERS` gain `alertmanager`;
     - the superset assertion in
       `test_a_workload_mounting_a_role_configmap_carries_the_checksum_annotation` exempts
@@ -1123,7 +1123,7 @@ and those edits must land with the workload.
       `grafana-secret.yaml` runs it, and a change to `alertmanager-secret.yaml` alone skips it.
       A third assertion holds the file name the sync's `when` names to the one Secret
       template that renders `grafana_admin_password`.
-    - In `ansible/tests/services/test_observability_config_rolls_one_workload.py`, the guard
+    - In `tests/services/test_observability_config_rolls_one_workload.py`, the guard
       that each Secret reader declares a restart moves from `restart_on` to `restart_secrets`.
       It requires each reader's `restart_secrets` to name exactly the Secret files whose
       Secrets its pod reads, and every entry's `restart_on` to be `[]`, with a red case for
@@ -1390,18 +1390,18 @@ Each risk names its class from `docs/failure-classes.md`.
 
 - **PR 1.** Adds `scripts/validate/tests/test_validate_alert_rules.py`, the fixtures and
   `scripts/validate/tests/test_alert_tools_guard.py`.
-  `ansible/tests/k8s/test_netpol_probe_targets.py` gains the `policy` test. The fixture of
+  `tests/k8s/test_netpol_probe_targets.py` gains the `policy` test. The fixture of
   `test_a_reincluded_or_local_only_root_entry_is_clean` gains `.cache/`, beside the new
   `LOCAL_ONLY` name and its reason comment. `docs/claude-tooling.md` gains a line naming the
   hook.
 - **PR 2.**
-    - Tests, in `ansible/tests/services/test_observability_config_rolls_one_workload.py`:
+    - Tests, in `tests/services/test_observability_config_rolls_one_workload.py`:
       `_EXPECTED_WORKLOADS` and `_EXPECTED_SECRET_READERS` gain `alertmanager`, and the
       checksum census's superset assertion exempts it. The wait loop in `tasks/main.yml`
       gains `alertmanager`, which keeps
       `test_observability_stabilise_coverage.py` green. The
       `alertmanager` row joins `netpol_baseline_probe_targets`, under PR 1's `policy` test.
-      `ansible/tests/k8s/test_pod_template_hygiene.py` passes unchanged, because the tier is
+      `tests/k8s/test_pod_template_hygiene.py` passes unchanged, because the tier is
       one of its four classes. The validator gains the Go-template survival pair.
       In `test_self_rollouts_follow_the_apply.py`, the two-readers test is
       renamed for its secret readers and its expected set gains `alertmanager`. The count
@@ -1430,7 +1430,7 @@ Each risk names its class from `docs/failure-classes.md`.
       `prometheus.yaml.j2` states the scrape condition rules must meet.
 - **PR 4.**
     - Tests: `WIRED_SLUGS` and the `every <N>s` branch of `cron_mismatches`, with its pair, in
-      `ansible/tests/services/test_monitor_bridge_healthchecks_expected.py`. The three
+      `tests/services/test_monitor_bridge_healthchecks_expected.py`. The three
       `render_deadman_cadences` calls in `scripts/docs/tests/test_gen_doc_fragments.py` gain
       the seventh argument, and the first one asserts the `alertmanager-watchdog` row. The
       validator's Watchdog uniqueness and constant-expression pairs.
@@ -1446,7 +1446,7 @@ Each risk names its class from `docs/failure-classes.md`.
       snapshot pair, the Grafana password sync pair, the `no_log` run and the fingerprint pair
       in `test_observability_secret_restarts.py`; and the `restart_secrets`
       census in
-      `ansible/tests/services/test_observability_config_rolls_one_workload.py::test_every_workload_reading_a_role_secret_names_its_file_in_restart_secrets`.
+      `tests/services/test_observability_config_rolls_one_workload.py::test_every_workload_reading_a_role_secret_names_its_file_in_restart_secrets`.
     - Docs: the observability role's `CLAUDE.md`, *One config change, one restart*. In
       `tasks/main.yml`, the comments above the snapshot and the Grafana password sync describe
       the per-file condition.
@@ -1611,7 +1611,7 @@ refuted. Each finding was checked against the tree at `70591c307` before the fix
 - **M1-R1-02, medium.** Every later Alertmanager config edit restarts the `Recreate`
   Prometheus and Grafana through the shared secret-restart signal. **Fixed** by PR 5, which
   narrows the restart to the Secret each workload reads. Confirmed in
-  `ansible/roles/k8s/observability/tasks/main.yml` ("Restart the telemetry workloads whose
+  `k8s/roles/observability/tasks/main.yml` ("Restart the telemetry workloads whose
   secret changed") and `release_stamp.yml`. The design pairs results by position because the
   render task is `no_log`, and uses `rollout_amend.yml` so the shared role stays unchanged.
   This round's design also gave the three entries `rolled_by_role`. The orchestrator ruling of
@@ -1743,7 +1743,7 @@ was checked against the tree at `70591c307` before the fix.
   had one. **Fixed**: PR 1 adds `scripts/validate/tests/test_alert_tools_guard.py` beside
   `test_vale_sync_guard.py`, with three cases: a bad digest exits non-zero with no stamp, an
   unstamped cache is fetched again, and a stamped cache is reused. It fakes `curl` itself,
-  because `ansible/tests/leakguard.py:SHIMMED_BINARIES` names `curl`. PR 1's estimate rises
+  because `tests/leakguard.py:SHIMMED_BINARIES` names `curl`. PR 1's estimate rises
   to about 270 lines, with the reason stated. The test's name is free:
   `scripts/validate/tests/test_every_validator_has_a_red_proof.py` globs only `*.py` under
   `scripts/validate/`, so the shell script is outside its census.
@@ -1752,7 +1752,7 @@ Also changed this round, outside the findings:
 - PR 2 would have turned CI red.
   `test_observability_a_changed_secret_expects_only_its_two_readers_to_roll` asserts exactly
   `{"prometheus", "grafana"}`, and it reads the real defaults through
-  `ansible/tests/_release_expectation.py:observability_self_rollouts`. PR 2 adds
+  `tests/_release_expectation.py:observability_self_rollouts`. PR 2 adds
   `alertmanager` with `restart_on: [secret]`, yet the plan touched that test only in PR 5.
   PR 2 now renames the test for its secret readers and adds `alertmanager` to its expected
   set. No doc cites the old name.
@@ -1766,11 +1766,11 @@ was checked against the tree at `70591c307` before the fix.
 
 - **M1-C1-01, high. `AlertmanagerMetricsMissing` double-pages a condition that Kuma's
   `Cluster Scrape Targets` tile already pages, and PR 3's two-writer check said otherwise.**
-  Confirmed. `ansible/roles/k8s/monitor-bridge/files/checks/cluster.py:check_cluster_targets`
+  Confirmed. `k8s/roles/monitor-bridge/files/checks/cluster.py:check_cluster_targets`
   selects `up{origin!="daniel-server"}`, and its docstring says that every `up` series belongs
-  to exactly one of the two target checks. `ansible/roles/k8s/monitor-bridge/files/verdicts/cluster.py:targets_verdict`
+  to exactly one of the two target checks. `k8s/roles/monitor-bridge/files/verdicts/cluster.py:targets_verdict`
   names each series at 0 as down. The `cluster_targets` row in
-  `ansible/roles/k8s/monitor-bridge/files/check_table.py:CHECKS` is a Kuma push tile, and
+  `k8s/roles/monitor-bridge/files/check_table.py:CHECKS` is a Kuma push tile, and
   `CLUSTER_TARGETS_CONSECUTIVE` is `"3"` in monitor-bridge's `templates/env-secret.yaml.j2`.
   PR 2's scrape job carries no `origin` label. **Fixed** with
   option (a), keeping a narrowed form of the second arm:
@@ -1789,7 +1789,7 @@ was checked against the tree at `70591c307` before the fix.
 - **M1-C1-02, medium. The drill's blast radius omits the Kuma page it raises and the masking
   window after it.** Confirmed from the same check, its 3-cycle streak and monitor-bridge's
   300-second `INTERVAL`. Also checked:
-  `ansible/roles/k8s/monitor-bridge/files/checks/cluster_zero.py:zero_available_offenders`
+  `k8s/roles/monitor-bridge/files/checks/cluster_zero.py:zero_available_offenders`
   excludes a Deployment scaled to 0 on purpose, so `k3s Workload Health` raises no page.
   **Fixed**: *Blast radius* names the `Cluster Scrape Targets` page at 10 to 15 minutes and
   the masked window. *Steps* adds a `probe.py metric 'up{origin!="daniel-server"} == 0'` read
@@ -1798,7 +1798,7 @@ was checked against the tree at `70591c307` before the fix.
   *Risks*.
 - **M1-C1-03, medium. PR 5 narrowed only the restart. Two other consumers of the one-register
   Secret signal still fired on every Alertmanager config edit.** Confirmed in
-  `ansible/roles/k8s/observability/tasks/main.yml`. "Sync the live Grafana admin password
+  `k8s/roles/observability/tasks/main.yml`. "Sync the live Grafana admin password
   with SOPS" has `when: manifests_secret_render is changed and not k8s_no_mutate`. "Snapshot
   the telemetry workloads' restart counts for the end-of-play gate" ends its `when` with
   `or manifests_secret_render is changed`. `grafana-secret.yaml.j2` is the only Secret
@@ -1826,7 +1826,7 @@ the working copy of `m6-retire-kuma.md`.
     - **The `service` mapping could not reach the job.** Convention 3 derived a many-service
       rule's `service` from M2's workload-service join. The `alertmanager` job is a static
       target, and the `prometheus` job's static target in
-      `ansible/roles/k8s/observability/templates/prometheus.yaml.j2` shows that such an `up`
+      `k8s/roles/observability/templates/prometheus.yaml.j2` shows that such an `up`
       series carries only `job` and `instance`. M1's own convention would therefore have
       mapped the job to `unmapped`, outside `observability`'s gate.
     - **The tile pages a down Alertmanager, and its successor cannot.** A3's rule would

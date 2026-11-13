@@ -13,7 +13,7 @@
 #   `etcd-token-drift.sh` compares the cluster token with the operator's stamp and writes neither.
 #   The two reapers delete stranded objects, operator-invoked and dry-run by default. Scheduling
 #   either is out of contract, and they run from the checkout, so this component ships nothing of
-#   theirs (ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py).
+#   theirs (tests/longhorn/test_longhorn_reap_never_scheduled.py).
 # - Mode (explicit and reversible): each timer's enable link arms it. Dropping the component stops
 #   the timers on the install that drops it. `k3s_etcd_restore_drill_armed` arms the weekly drill,
 #   which runs `--list-only` here. `systemctl stop <timer>` stops one until the next install.

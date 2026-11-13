@@ -3,13 +3,13 @@
 This page holds two things. The first is the revert runbook for a flux-owned snapshot role,
 which the operator follows when `promote` holds a failed revision without resetting `prod`.
 The second is the measurements behind the `<tag>-snapshot` Job. The operating rules are in
-`ansible/roles/k8s/volume-snapshot/CLAUDE.md`, which is the file a session loads before touching
+`k8s/roles/volume-snapshot/CLAUDE.md`, which is the file a session loads before touching
 the role. The measurements are kept out of that file so the rule stays
 short and the evidence stays findable (the same split `docs/monitor-bridge-checks.md` makes for
 monitor-bridge, #2699).
 
 A text test reads the runbook:
-`ansible/tests/longhorn/test_volume_revert_runbook_text.py`. Nothing tests the measurements.
+`tests/longhorn/test_volume_revert_runbook_text.py`. Nothing tests the measurements.
 `scripts/renderer/job_files/flux_snapshot.py` is the authority on what the Job does; where a
 paragraph here disagrees with it, the script is right.
 

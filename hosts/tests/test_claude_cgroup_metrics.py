@@ -3,7 +3,7 @@
 claude-rc.service is bounded (MemoryHigh/MemorySwapMax) and user-1000.slice (SSH-started
 sessions) is not, so each cgroup needs its own counters. This host sets
 DefaultMemoryAccounting/CPUAccounting=yes, so the counters are populated on cgroupfs. The
-script writes them as a node-exporter textfile gauge set (roles/k8s/node-exporter/CLAUDE.md
+script writes them as a node-exporter textfile gauge set (k8s/roles/node-exporter/CLAUDE.md
 describes the `--collector.textfile.directory` hook).
 
 Per this repo's red-proof rule, each behaviour below is a pair: one fixture it must read
@@ -16,12 +16,12 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from _helpers import ANSIBLE
+from _helpers import REPO
 from lib import yaml_fast
 from lib.proc_testing import run
 from _setup_render import CLAUDE_CODE
 
-COMPONENT = ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
+COMPONENT = REPO / "hosts" / "components" / "claude-code" / "component.yml"
 SCRIPT = CLAUDE_CODE / "files" / "claude-cgroup-metrics.sh"
 
 # claude-rc.service sits under the fleet's shared parent, user.slice, and

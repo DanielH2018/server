@@ -5,7 +5,7 @@ Design doc. Written 2026-08-16. Status: **all five slices deployed and enforcing
 and `netpol_baseline_obs_enforced` are both `true`, and `netpol_baseline_scope` is `namespace` —
 so every pod in `homelab` and `observability` is fenced by default, and the only way out is the
 `netpol-baseline-exempt` label. The exempt set is declared in
-`ansible/roles/k8s/netpol-baseline/defaults/main.yml` (`netpol_baseline_exempt_workloads`), each
+`k8s/roles/netpol-baseline/defaults/main.yml` (`netpol_baseline_exempt_workloads`), each
 entry carrying its reason inline, and a cluster-side exact-set gate refuses the deploy if the live
 set drifts from it. It is deliberately not enumerated here — this sentence named four workloads
 from 2026-08-17 until 2026-08-23, by which point karakeep-chrome had made it five.
@@ -19,7 +19,7 @@ kubectl -n homelab get pods -l netpol-baseline-exempt --no-headers             #
 # policies — both trees: a policy gating its consumer's STARTUP ships in the consuming
 # role instead (authelia #1609, karakeep and scrutiny #1620), so the baseline's own
 # directory is no longer the whole set
-ls ansible/roles/k8s/*/templates/networkpolicy*.yaml.j2 | wc -l
+ls k8s/roles/*/templates/networkpolicy*.yaml.j2 | wc -l
 ```
 
 What each deploy settled, slice by slice, is in
@@ -252,7 +252,7 @@ reason below.
 **Services born fenced.** A leaf app added after slice 1 shipped belongs to no slice, but has
 slice 1's shape: Traefik is its only caller and it dials nothing. Those carry the label from
 their first deploy rather than waiting for slice 5 to sweep them up, and
-`ansible/tests/k8s/test_netpol_baseline_labels.py` lists them in `BORN_FENCED_ROLES` so the set
+`tests/k8s/test_netpol_baseline_labels.py` lists them in `BORN_FENCED_ROLES` so the set
 stays as explicit as the slices. So far: **artifacts** (2026-08-19), the read-only browser over
 each host's `~/.claude/artifacts`; **docs** (2026-08-24), nginx over a hostPath of built MkDocs
 output, whose site is generated on the host by the `docs-refresh` cron so the pod never fetches,
@@ -392,20 +392,20 @@ bazarr → sonarr/radarr, freshrss → feed-cache, home-assistant → mosquitto.
 
 ## Where the code goes
 
-- Namespace baselines: a new role `ansible/roles/k8s/netpol-baseline/`, placed in
+- Namespace baselines: a new role `k8s/roles/netpol-baseline/`, placed in
   `containers_list` **after traefik** (CRDs) and before the workloads. It genuinely belongs
   to no single service; precedent for a non-service-owned policy is
-  `roles/k8s/longhorn/templates/networkpolicy-metrics.yaml.j2`.
-- Per-workload policies: `ansible/roles/k8s/<name>/templates/networkpolicy.yaml.j2`,
+  `k8s/roles/longhorn/templates/networkpolicy-metrics.yaml.j2`.
+- Per-workload policies: `k8s/roles/<name>/templates/networkpolicy.yaml.j2`,
   alongside the four that already exist.
-- Probe jobs: `ansible/roles/k8s/<name>/templates/netpol-probe-job.yaml.j2`, same pattern.
+- Probe jobs: `k8s/roles/<name>/templates/netpol-probe-job.yaml.j2`, same pattern.
 
 ## Open items still outstanding
 
 1. Whether a lint should require every `containers_list` entry to have a policy — the
    baseline makes a missing policy safe rather than broken, so this is optional, but it is
    the executable-check end of the repo's escalation ladder. Slice 1 shipped a narrower
-   version of this: `ansible/tests/k8s/test_netpol_baseline_labels.py` pins the labelled set.
+   version of this: `tests/k8s/test_netpol_baseline_labels.py` pins the labelled set.
 2. The probe's `activeDeadlineSeconds` (120s) is shorter than the Ansible wait (180s), so a
    deadline-exceeded run produces a misleading diagnosis in either branch of the fail message.
    Slice 1's probe completed well inside both, so the real timings are now known and this can

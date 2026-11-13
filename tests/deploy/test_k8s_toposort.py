@@ -1,0 +1,426 @@
+#!/usr/bin/env python3
+"""The k8s play toposorts containers_list; this guards that the sort is actually correct.
+
+deploy.yml calls build_k8s_dep_map + toposort_containers (scripts/renderer/template_filters/toposort.py),
+so the ordering rules are graph edges rather than hand position in a list -- hand position
+holds right up until someone appends a service in the obvious place. Two rules are derived:
+
+  traefik <- every ROUTED role.
+      Derived from the containers_list entry's `hostname` (_entry_is_routed), with the
+      role's own templates (_role_renders_traefik_crd) as a second test for a role that
+      renders a Traefik CRD without declaring a host of its own. Neither is hand-listed.
+      Fails LOUDLY without the edge, on a fresh cluster: the CRD does not exist, `kubectl
+      apply` exits non-zero, the task fails.
+
+      The entry is the primary test because the shared default,
+      `k8s/templates/ingressroute-default.yaml.j2`, renders a route that leaves no string
+      in the role, so a templates-only derivation would drop the edge for every role using it.
+
+  authelia <- every entry with use_authelia: true.
+      Derived from the containers_list entry itself. Fails SILENTLY without the edge: the
+      IngressRoute applies cleanly whether or not the Middleware exists -- Traefik resolves
+      middleware references at request time, not apply time -- so the deploy is green and
+      the route 500s later, at whatever hour someone first opens it.
+
+A third rule is derived from no template: each K8S_APPLIES_LAST role (netpol-baseline)
+depends on every other entry, so it deploys last wherever the list puts it.
+
+Every other edge is declared data, not derived: a `depends_on:` list on the entry in
+host_vars. traefik `depends_on: [crowdsec]` is one, because the LAPI machine-credential
+constraint isn't something a template carries. DOCUMENTED_ORDERINGS lists the rest. The
+crowdsec edge is also the reverse of the first rule for crowdsec specifically -- crowdsec renders its own
+Traefik CRD (an IngressRoute) -- which is why K8S_CRD_EDGE_EXEMPT in toposort.py excludes
+crowdsec from the auto-derived traefik edge; without that exemption the two edges would
+cycle and toposort_containers would raise on every deploy.
+
+test_derived_order_matches_todays_hand_ordered_list is the cheapest proof the sort is
+sound: the hand-ordered list is a valid topological order, and toposort_containers is a
+stable sort, so running it over the list must reproduce the list unchanged. If it doesn't, an edge points the
+wrong way.
+
+Run: uv run pytest tests/deploy/test_k8s_toposort.py
+"""
+
+import functools
+import random
+from pathlib import Path
+
+import pytest
+from lib.render_guard import k8s_services
+from lib.repo_paths import K8S_ROLES, K8S_SERVICES
+
+from _k8s_render import rendered_docs
+from renderer.template_filters.toposort import (
+    K8S_CRD_EDGE_EXEMPT,
+    K8S_APPLIES_LAST,
+    build_k8s_dep_map,
+    toposort_containers,
+)
+
+
+def _k8s_entries(path: Path) -> list[dict]:
+    return k8s_services(path)
+
+
+SERVICE_FILES = [K8S_SERVICES]
+
+
+def _roles_rendering_traefik_crds() -> set[str]:
+    """Roles whose rendered manifests include any traefik.io/* object -- render ground truth.
+
+    Derived from the rendered output, not a filename or text scan: an IngressRoute that
+    only appears under a Jinja conditional still counts, and a role that stops rendering
+    one drops out without anyone editing this file. It covers the shared default too, so a
+    role whose IngressRoute is `k8s/templates/ingressroute-default.yaml.j2` is in here
+    under its own name. Compared below against the edge set build_k8s_dep_map derives at
+    deploy time, which has to agree with this on every role or the derived edges are wrong.
+    """
+    return {
+        role
+        for role, _tpl, doc in rendered_docs()
+        if doc and str(doc.get("apiVersion", "")).split("/")[0] == "traefik.io"
+    }
+
+
+TRAEFIK_CRD_ROLES = _roles_rendering_traefik_crds()
+
+
+def _index(entries: list[dict]) -> dict[str, int]:
+    return {c["name"]: i for i, c in enumerate(entries)}
+
+
+def _sorted_names(entries: list[dict]) -> list[str]:
+    dep_map = build_k8s_dep_map(entries, str(K8S_ROLES))
+    return [c["name"] for c in toposort_containers(entries, dep_map)]
+
+
+@pytest.fixture(params=SERVICE_FILES, ids=lambda p: p.stem)
+def host(request):
+    entries = _k8s_entries(request.param)
+    return request.param, entries, _index(entries)
+
+
+def test_the_render_found_traefik_crd_roles_at_all():
+    # An empty set would make every comparison below vacuously pass -- the "unreadable
+    # input and an empty result are indistinguishable" shape. Assert a concrete floor and
+    # named members, not just a count: a count can hold while a specific role drops out.
+    assert len(TRAEFIK_CRD_ROLES) > 10, TRAEFIK_CRD_ROLES
+    assert {"traefik", "authelia", "crowdsec", "freshrss"} <= TRAEFIK_CRD_ROLES
+
+
+def _derived_traefik_edge(entries: list[dict]) -> set[str]:
+    """The roles build_k8s_dep_map actually gives a traefik edge, for this host's entries.
+
+    Read off the map the deploy builds rather than by re-asking its predicates: a test that
+    reimplemented `_entry_is_routed or _role_renders_traefik_crd` would keep agreeing with
+    itself after the derivation changed. A K8S_APPLIES_LAST role depends on every entry,
+    traefik included, for a reason that is not a route, so it is left out.
+    """
+    dep_map = build_k8s_dep_map(entries, str(K8S_ROLES))
+    return {
+        name
+        for name, deps in dep_map.items()
+        if "traefik" in deps and name not in K8S_APPLIES_LAST
+    }
+
+
+# Roles the derivation claims an edge for while the render shows no Traefik CRD in the role.
+# Over-derivation is the safe direction and under-derivation is not: an extra edge costs an
+# ordering constraint that is already true, while a missing one applies a Traefik CRD before
+# traefik owns the CRDs. Each name carries the reason it is one-directional.
+OVER_DERIVED_TRAEFIK_EDGE = {
+    "livesync": (
+        "its route is a file-provider router in the traefik role "
+        "(templates/livesync-gate-secret.yaml.j2), not an IngressRoute of its own, so the "
+        "entry's hostname derives an edge no manifest of livesync's renders. The role's own "
+        "CLAUDE.md already states the traefik dependency"
+    ),
+    "navidrome": (
+        "its route is listed only while `navidrome_k8s_replicas` is above 0, and it is parked "
+        "at 0, so the entry's hostname derives an edge no rendered manifest needs until the "
+        "route comes back"
+    ),
+}
+
+
+def test_the_derived_traefik_edge_agrees_with_the_render(host):
+    """build_k8s_dep_map's deploy-time derivation must match the render, for every role.
+
+    The derivation reads the containers_list entry and textually scans the role's own
+    templates, standing in for a real Jinja render so the deploy doesn't pay for one. That's
+    only sound if it agrees with the render -- except for OVER_DERIVED_TRAEFIK_EDGE, where an
+    extra edge is the safe direction and a missing one is still a failure.
+    """
+    _path, entries, _idx = host
+    derived = _derived_traefik_edge(entries)
+    for c in entries:
+        name = c["name"]
+        if name == "traefik" or name in K8S_CRD_EDGE_EXEMPT:
+            continue
+        rendered = name in TRAEFIK_CRD_ROLES
+        if name in OVER_DERIVED_TRAEFIK_EDGE:
+            assert (name in derived) >= rendered, (
+                f"{name}: build_k8s_dep_map derives no traefik edge while the render says it "
+                "renders a Traefik CRD. The deploy would apply that CRD before traefik owns "
+                "the CRDs."
+            )
+            continue
+        assert (name in derived) == rendered, (
+            f"{name}: build_k8s_dep_map derives traefik edge={name in derived}, render says "
+            f"{rendered}. Either the entry lost its hostname or the role gained a Traefik CRD "
+            "nothing derives an edge from."
+        )
+
+
+def test_every_over_derived_role_is_a_real_role_that_still_gets_the_edge(host):
+    """The exemption list must not outlive what it exempts.
+
+    A name that no longer exists, or one the derivation no longer gives an edge, silently
+    widens the test above into an exemption for nothing.
+    """
+    _path, entries, _idx = host
+    names = {c["name"] for c in entries}
+    derived = _derived_traefik_edge(entries)
+    for name, reason in OVER_DERIVED_TRAEFIK_EDGE.items():
+        if name not in names:
+            continue
+        assert reason.strip(), f"{name} is exempted with no reason"
+        assert name in derived, (
+            f"{name} is listed in OVER_DERIVED_TRAEFIK_EDGE but build_k8s_dep_map derives no "
+            "traefik edge for it at all — drop the exemption."
+        )
+
+
+def test_a_routed_entry_that_ships_no_route_template_still_gets_the_edge():
+    """The red-proof for the shared-default route: the roles whose IngressRoute is the shared default.
+
+    `_role_renders_traefik_crd` returns False for a role with no templates directory at all,
+    so an entry-blind derivation would return an empty dep list here.
+    """
+    entry = {"name": "widget", "hostname": "widget", "port": 80}
+    assert build_k8s_dep_map([entry], str(K8S_ROLES))["widget"] == ["traefik"]
+
+    unrouted = {"name": "widget", "port": 80}
+    assert build_k8s_dep_map([unrouted], str(K8S_ROLES))["widget"] == []
+
+
+def test_traefik_is_deployed(host):
+    _path, _entries, idx = host
+    assert "traefik" in idx, "a host with k8s workloads must deploy traefik"
+
+
+def test_crowdsec_still_needs_the_crd_edge_exemption(host):
+    """An exemption that no longer applies is a licence nobody revoked."""
+    _path, _entries, idx = host
+    if "crowdsec" not in idx:
+        pytest.skip("host does not deploy crowdsec")
+    assert "crowdsec" in TRAEFIK_CRD_ROLES, (
+        "crowdsec no longer renders a Traefik CRD -- delete it from K8S_CRD_EDGE_EXEMPT "
+        "in toposort.py so a real traefik edge is derived for it again."
+    )
+
+
+def test_derived_order_matches_todays_hand_ordered_list(host):
+    """The toposort is a no-op on the live inventory: see the module docstring for why."""
+    _path, entries, _idx = host
+    original = [c["name"] for c in entries]
+    assert _sorted_names(entries) == original, (
+        "toposorting containers_list changed the order the hand-maintained list already "
+        "has. Either a derived edge points the wrong way, or the hand-ordered list itself "
+        "violated a constraint the old position-based test would have caught."
+    )
+
+
+def test_shuffled_list_still_sorts_to_respect_every_edge(host):
+    """The real guard: however containers_list gets reordered, the sort recovers the rules."""
+    _path, entries, _idx = host
+    if "traefik" not in {c["name"] for c in entries}:
+        pytest.skip("host does not deploy traefik")
+    rng = random.Random(f"k8s-toposort-{_path.stem}")
+    shuffled = list(entries)
+    rng.shuffle(shuffled)
+
+    sorted_names = _sorted_names(shuffled)
+    idx = {name: i for i, name in enumerate(sorted_names)}
+
+    late_crd = [
+        name
+        for name in sorted_names
+        if name in TRAEFIK_CRD_ROLES
+        and name not in K8S_CRD_EDGE_EXEMPT
+        and idx[name] < idx["traefik"]
+    ]
+    assert not late_crd, f"{late_crd} sorted before traefik despite rendering its CRDs"
+
+    if "authelia" in idx:
+        late_authelia = [
+            c["name"]
+            for c in shuffled
+            if c.get("use_authelia") and idx[c["name"]] < idx["authelia"]
+        ]
+        assert not late_authelia, (
+            f"{late_authelia} sorted before authelia despite use_authelia: true"
+        )
+
+    if "crowdsec" in idx:
+        assert idx["crowdsec"] < idx["traefik"], (
+            "crowdsec sorted after traefik despite the LAPI machine-credential depends_on"
+        )
+
+
+# Every pairwise ordering a role doc or a containers_list comment states in prose, as the
+# `depends_on:` edge that carries it. Without the edge these hold by hand position alone,
+# which the stable sort preserves and nothing checks: dropping the edge, or moving the entry,
+# would pass every test above. The value names where the prose lives, so a reader of a red
+# failure knows which doc to reconcile. netpol-baseline's "after everything" is no pair, and
+# no entry declares it: test_every_entry_sorts_ahead_of_an_applies_last_role_listed_first
+# guards it.
+DOCUMENTED_ORDERINGS = {
+    ("mosquitto", "zigbee2mqtt"): "k8s/roles/mosquitto/CLAUDE.md",
+    ("media-volume", "sonarr"): "k8s/roles/media-volume/CLAUDE.md",
+    ("media-volume", "qbittorrent"): "k8s/roles/media-volume/CLAUDE.md",
+    ("media-volume", "radarr"): "k8s/roles/media-volume/CLAUDE.md",
+    ("media-volume", "bazarr"): "k8s/roles/media-volume/CLAUDE.md",
+    ("media-volume", "jellyfin"): "k8s/roles/media-volume/CLAUDE.md",
+    ("media-volume", "tdarr"): "k8s/roles/media-volume/CLAUDE.md",
+    ("media-volume", "janitorr"): "k8s/roles/media-volume/CLAUDE.md",
+    ("media-volume", "navidrome"): "k8s/roles/media-volume/CLAUDE.md",
+    ("media-volume", "lidarr"): "k8s/roles/media-volume/CLAUDE.md",
+    ("media-volume", "slskd"): "k8s/roles/media-volume/CLAUDE.md",
+    ("loki-homelab", "game-stats"): "k8s/roles/game-stats/CLAUDE.md",
+    ("sonarr", "janitorr"): "host_vars/daniel-box.yml (janitorr comment)",
+    ("radarr", "janitorr"): "host_vars/daniel-box.yml (janitorr comment)",
+    ("jellyfin", "janitorr"): "host_vars/daniel-box.yml (janitorr comment)",
+    ("sonarr", "configarr"): "host_vars/daniel-box.yml (configarr comment)",
+    ("radarr", "configarr"): "host_vars/daniel-box.yml (configarr comment)",
+    ("dri-device-plugin", "jellyfin"): "host_vars/daniel-box.yml (jellyfin comment)",
+    ("dri-device-plugin", "tdarr"): "host_vars/daniel-box.yml (tdarr comment)",
+    ("pihole", "pihole-exporter"): "k8s/roles/pihole-exporter/CLAUDE.md",
+}
+
+
+@pytest.mark.parametrize(
+    ("before", "after"), sorted(DOCUMENTED_ORDERINGS), ids=lambda s: s
+)
+def test_documented_pairwise_ordering_survives_an_adversarial_list(host, before, after):
+    """The derived order keeps `before` ahead of `after` when the list itself says otherwise.
+
+    The hand-ordered list already satisfies every pair, and toposort_containers is stable,
+    so sorting it proves nothing about the edge. `after` is moved to the head and `before`
+    to the tail: only an edge in build_k8s_dep_map can put them back.
+    """
+    # fact: k8s/roles/mosquitto/CLAUDE.md#At a glance
+    # fact: k8s/roles/media-volume/CLAUDE.md#At a glance
+    # fact: k8s/roles/game-stats/CLAUDE.md#At a glance
+    _path, entries, idx = host
+    if before not in idx or after not in idx:
+        pytest.skip(f"host does not deploy both {before} and {after}")
+    by_name = {c["name"]: c for c in entries}
+    # The edge must be DECLARED, not merely implied: a pair held only by a transitive edge
+    # elsewhere would pass the sort below whatever this entry says, which is vacuous.
+    assert before in by_name[after].get("depends_on", []), (
+        f"{after}'s containers_list entry declares no `depends_on: [{before}]`; "
+        f"{DOCUMENTED_ORDERINGS[(before, after)]} says it must."
+    )
+    others = [c for c in entries if c["name"] not in (before, after)]
+    adversarial = [by_name[after], *others, by_name[before]]
+
+    order = _sorted_names(adversarial)
+    assert order.index(before) < order.index(after), (
+        f"{after} sorted before {before}; {DOCUMENTED_ORDERINGS[(before, after)]} says it "
+        f"must not. The `depends_on:` on {after}'s containers_list entry is what carries "
+        "that, and it is gone or points elsewhere."
+    )
+
+
+def test_an_applies_last_role_listed_first_still_sorts_after_a_new_entry(host):
+    """A K8S_APPLIES_LAST role at the head of the list, and a new entry after it, still sort it last.
+
+    The scaffolder appends a new role after the list's last item, which was netpol-baseline
+    (#4833). The hand-ordered list already ends with it and the sort is stable, so only the
+    derived edge can move it back from the head past an entry appended after it.
+    """
+    _path, entries, idx = host
+    last = [name for name in K8S_APPLIES_LAST if name in idx]
+    if not last:
+        pytest.skip("host deploys no K8S_APPLIES_LAST role")
+    by_name = {c["name"]: c for c in entries}
+    others = [c for c in entries if c["name"] not in K8S_APPLIES_LAST]
+    scaffolded = {"name": "widget", "port": 8080}
+    adversarial = [*(by_name[n] for n in last), *others, scaffolded]
+
+    order = _sorted_names(adversarial)
+    assert order[-len(last) :] == last, (
+        f"{last} did not sort last: the order ends {order[-3:]}. build_k8s_dep_map must give "
+        f"each K8S_APPLIES_LAST role an edge onto every other entry; the reason is in toposort.py."
+    )
+
+
+def test_every_applies_last_role_says_why():
+    assert "netpol-baseline" in K8S_APPLIES_LAST
+    for name, reason in K8S_APPLIES_LAST.items():
+        assert reason.strip(), f"{name} applies last with no reason given"
+
+
+@functools.cache
+def _host_dep_map(path: Path) -> dict[str, list[str]]:
+    """The host's dep map, built once: it reads no list order, and each build scans every role."""
+    return build_k8s_dep_map(_k8s_entries(path), str(K8S_ROLES))
+
+
+def _applies_last_ahead_of(
+    entries: list[dict], dep_map: dict[str, list[str]], name: str
+) -> list[str]:
+    """The K8S_APPLIES_LAST roles that still sort ahead of `name` on an adversarial list.
+
+    The list puts every applies-last role first and `name` last. The hand-ordered list already
+    has the opposite order and the sort is stable, so only an edge in `dep_map` can move them.
+    """
+    by_name = {c["name"]: c for c in entries}
+    first = [by_name[n] for n in sorted(K8S_APPLIES_LAST) if n in by_name]
+    middle = [
+        c for c in entries if c["name"] not in K8S_APPLIES_LAST and c["name"] != name
+    ]
+    order = [
+        c["name"]
+        for c in toposort_containers([*first, *middle, by_name[name]], dep_map)
+    ]
+    return [c["name"] for c in first if order.index(c["name"]) < order.index(name)]
+
+
+APPLIES_LAST_PAIRS: list[tuple[Path, str]] = [
+    (path, c["name"])
+    for path in SERVICE_FILES
+    for c in _k8s_entries(path)
+    if c["name"] not in K8S_APPLIES_LAST
+]
+
+
+def test_the_applies_last_cases_name_netpol_baseline_and_every_workload():
+    """Non-vacuity: an empty case list would pass the parametrized test below unrun."""
+    names = {name for _path, name in APPLIES_LAST_PAIRS}
+    assert {"traefik", "jellyfin", "configarr", "flux"} <= names
+    assert "netpol-baseline" not in names
+
+
+@pytest.mark.parametrize(
+    ("path", "name"),
+    APPLIES_LAST_PAIRS,
+    ids=[f"{path.stem}-{name}" for path, name in APPLIES_LAST_PAIRS],
+)
+def test_every_entry_sorts_ahead_of_an_applies_last_role_listed_first(path, name):
+    """No k8s entry relies on its list position to deploy before netpol-baseline."""
+    ahead = _applies_last_ahead_of(_k8s_entries(path), _host_dep_map(path), name)
+    assert not ahead, (
+        f"{ahead} sorted ahead of {name} on a list that puts {name} last. build_k8s_dep_map "
+        "must give each K8S_APPLIES_LAST role an edge onto every other entry; the reason is "
+        "in toposort.py."
+    )
+
+
+def test_an_emptied_applies_last_lets_netpol_baseline_listed_first_stay_first():
+    """The red half: without the dict, the adversarial list keeps netpol-baseline first."""
+    path, name = APPLIES_LAST_PAIRS[0]
+    entries = _k8s_entries(path)
+    dep_map = build_k8s_dep_map(entries, str(K8S_ROLES), applies_last={})
+    assert _applies_last_ahead_of(entries, dep_map, name) == ["netpol-baseline"]

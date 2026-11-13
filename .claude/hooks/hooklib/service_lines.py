@@ -1,7 +1,7 @@
 """The SessionStart banner's service section: down scrape targets.
 
 Split out of session-health.py, which sat at exactly its 600-line cap with no headroom
-(ansible/tests/_ratchet.py), the same reason `worktree_lines` was split before it. Package
+(tests/_ratchet.py), the same reason `worktree_lines` was split before it. Package
 name is `hooklib`, not `lib`, so it never shares a namespace-package name with `scripts/lib`
 (see session-health.py's own import comment).
 
@@ -21,7 +21,7 @@ def k8s_namespace(repo):
     Duplicated rather than imported — `target_problems` shells out to probe.py rather than
     importing it (see its own docstring), and this stays consistent with that.
     """
-    path = os.path.join(repo, "ansible", "inventory", "group_vars", "all.yml")
+    path = os.path.join(repo, "inventory", "group_vars", "all.yml")
     try:
         with open(path) as f:
             for line in f:

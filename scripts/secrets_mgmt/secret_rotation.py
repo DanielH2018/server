@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Secret rotation registry: audit + staggered due dates for ansible/vars/secrets.yml.
+"""Secret rotation registry: audit + staggered due dates for secrets/secrets.yml.
 
 Four subcommands:
   consumers — list every role that references one secret, measured from the tree, with the
            exact commands that make a rotation take effect. Answers the question a rotation
            poses and `audit` does not: who is still holding the old value? Setup-plane roles
            and host packages are called out separately, each with its own apply command.
-  sync   — reconcile the registry (ansible/secret_rotation.yml) with the live secret
+  sync   — reconcile the registry (secrets/secret_rotation.yml) with the live secret
            names. New secrets are classified into a tier and given a STAGGERED seed
            date so their rotations never all fall due on the same day. Removed secrets
            are reported. Existing entries (tier overrides + real rotation dates) are

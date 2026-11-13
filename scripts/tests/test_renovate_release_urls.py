@@ -29,7 +29,7 @@ _RELEASE_URL_CORPUS_FLOOR = frozenset(
     {
         ".github/workflows/ci.yml",
         ".vale.ini",
-        "ansible/roles/k8s/jellyfin/defaults/main.yml",
+        "k8s/roles/jellyfin/defaults/main.yml",
     }
 )
 
@@ -267,10 +267,10 @@ def test_every_release_url_file_is_scanned_or_exempt(tracked: list[str]) -> None
 def test_an_unscanned_release_url_file_is_flagged() -> None:
     """The rejecting half: a plausible new pin no manager reaches must come back unscanned.
 
-    `roles/k8s/<svc>/vars/main.yml` is one directory off the pattern the k8s managers use —
+    `k8s/roles/<svc>/vars/main.yml` is one directory off the pattern the k8s managers use —
     the same one-directory-short escape crowdsec_k8s_image and the k3s pins made before.
     """
-    candidate = "ansible/roles/k8s/jellyfin/vars/main.yml"
+    candidate = "k8s/roles/jellyfin/vars/main.yml"
     _, unscanned = _partition_by_manager_coverage([candidate], _MANAGERS)
     assert unscanned == [candidate] and not _is_release_url_exempt(candidate), (
         "a release pin one directory off the managed paths no longer reads as unscanned — the "

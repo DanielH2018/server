@@ -27,8 +27,8 @@ on:
       - .github/workflows/bootstrap-drill.yml
       - scripts/deploy_tools/bootstrap_drill.py
       - scripts/renderer/**
-      - ansible/roles/k8s/flux/**
-      - ansible/roles/k8s/manifests/**
+      - k8s/roles/flux/**
+      - k8s/roles/manifests/**
 
 permissions:
   contents: read
@@ -53,7 +53,7 @@ jobs:
       LEG: ${{ matrix.leg }}
       # `--field-manager` of every hand apply in steps 3, 5, 6 and 9: the root's own manager.
       APPLY: kubectl apply --server-side --field-manager=kustomize-controller
-      # The flux CLI this job's flux steps fetch, equal to flux_version in roles/k8s/flux and to
+      # The flux CLI this job's flux steps fetch, equal to flux_version in k8s/roles/flux and to
       # the amd64 flux pin in hosts/packages/homelab-tools/package.yml. Env, so the cache key reads it.
       # renovate: datasource=github-release-attachments depName=fluxcd/flux2
       FLUX_VERSION: v2.9.6
@@ -159,7 +159,7 @@ jobs:
         run: |
           set -euo pipefail
           node_image=$(awk '/KIND_NODE_IMAGE: / {print $2; exit}' .github/workflows/ci.yml)
-          registry_image=$(awk '/^registry_k8s_image:/ {print $2}' ansible/roles/k8s/registry/defaults/main.yml)
+          registry_image=$(awk '/^registry_k8s_image:/ {print $2}' k8s/roles/registry/defaults/main.yml)
           [ -n "$node_image" ] && [ -n "$registry_image" ]
           kind create cluster --name drill --image "$node_image" --wait 120s
           docker run -d --name kind-registry --network kind -p 127.0.0.1:5001:5000 "$registry_image"

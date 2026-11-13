@@ -136,21 +136,21 @@ notices rather than 8. The extra notice is `cfe3bfa43`'s own, committed at 21:08
   "moved_prose_edited": 8,
   "crashed": [],
   "content_lock_moves": [
-    {"commit": "fa09d3a089e0792f3430ec9c3c5a0d507c7d6b0f", "committed_at": "2026-10-12T22:53:42Z", "unit": "ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart", "atom": "ansible/roles/k8s/observability/defaults/main.yml:observability_stabilise_workloads", "class": "listed"},
-    {"commit": "2226b7b6169ff010ad3dd5b29efa65344acbebf8", "committed_at": "2026-10-17T13:52:50Z", "unit": "ansible/roles/k8s/observability/CLAUDE.md#Flux in the metrics plane", "atom": "ansible/roles/k8s/observability/defaults/main.yml:observability_ksm_flux_resource_state", "class": "listed"},
-    {"commit": "529b695c10ad9717b29babc77898b64adf35f33e", "committed_at": "2026-10-17T14:32:35Z", "unit": "ansible/roles/k8s/node-exporter/CLAUDE.md#The textfile collector directory", "atom": "ansible/roles/k8s/monitor-bridge/files/verdicts/host_cgroups.py:claude_cgroup_verdict", "class": "listed"},
-    {"commit": "63c40007c8f9e46a3f7aa3b2d6f7ee0279cc4fab", "committed_at": "2026-10-17T20:23:49Z", "unit": "ansible/roles/k8s/registry/CLAUDE.md#Notable", "atom": "scripts/renderer/renderer_lib/images.py:ghcr_refs", "class": "listed"}
+    {"commit": "fa09d3a089e0792f3430ec9c3c5a0d507c7d6b0f", "committed_at": "2026-10-12T22:53:42Z", "unit": "k8s/roles/observability/CLAUDE.md#One config change, one restart", "atom": "k8s/roles/observability/defaults/main.yml:observability_stabilise_workloads", "class": "listed"},
+    {"commit": "2226b7b6169ff010ad3dd5b29efa65344acbebf8", "committed_at": "2026-10-17T13:52:50Z", "unit": "k8s/roles/observability/CLAUDE.md#Flux in the metrics plane", "atom": "k8s/roles/observability/defaults/main.yml:observability_ksm_flux_resource_state", "class": "listed"},
+    {"commit": "529b695c10ad9717b29babc77898b64adf35f33e", "committed_at": "2026-10-17T14:32:35Z", "unit": "k8s/roles/node-exporter/CLAUDE.md#The textfile collector directory", "atom": "k8s/roles/monitor-bridge/files/verdicts/host_cgroups.py:claude_cgroup_verdict", "class": "listed"},
+    {"commit": "63c40007c8f9e46a3f7aa3b2d6f7ee0279cc4fab", "committed_at": "2026-10-17T20:23:49Z", "unit": "k8s/roles/registry/CLAUDE.md#Notable", "atom": "scripts/renderer/renderer_lib/images.py:ghcr_refs", "class": "listed"}
   ],
   "content_notices": [
-    {"commit": "cfe3bfa43869db76afd5613d897847ca2fcfddc0", "unit": "ansible/roles/k8s/flux/CLAUDE.md#How the render meets the fleet guards"},
-    {"commit": "fa09d3a089e0792f3430ec9c3c5a0d507c7d6b0f", "unit": "ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart"},
+    {"commit": "cfe3bfa43869db76afd5613d897847ca2fcfddc0", "unit": "k8s/roles/flux/CLAUDE.md#How the render meets the fleet guards"},
+    {"commit": "fa09d3a089e0792f3430ec9c3c5a0d507c7d6b0f", "unit": "k8s/roles/observability/CLAUDE.md#One config change, one restart"},
     {"commit": "aba4c2e7bc6f7ca6ebe8c7d5d8f65965f8446ab1", "unit": "ansible/roles/setup/homelab_builder/CLAUDE.md#The dispatcher and the arm"},
     {"commit": "b7d8f0ef5bc4f2e415e948eec158d141b7c37f7b", "unit": "ansible/roles/setup/homelab_builder/CLAUDE.md#What the builder half writes (H3.5a)"},
-    {"commit": "e9cb97abb4ac93b55c48412d2c8587677c4bb5f1", "unit": "ansible/roles/k8s/manifests/CLAUDE.md#Rules a caller can break"},
-    {"commit": "e59b5dde918eba2b432604a43c093a0cd16ed50e", "unit": "ansible/roles/k8s/flux/CLAUDE.md#How the render meets the fleet guards"},
-    {"commit": "2226b7b6169ff010ad3dd5b29efa65344acbebf8", "unit": "ansible/roles/k8s/observability/CLAUDE.md#Flux in the metrics plane"},
-    {"commit": "529b695c10ad9717b29babc77898b64adf35f33e", "unit": "ansible/roles/k8s/node-exporter/CLAUDE.md#The textfile collector directory"},
-    {"commit": "63c40007c8f9e46a3f7aa3b2d6f7ee0279cc4fab", "unit": "ansible/roles/k8s/registry/CLAUDE.md#Notable"}
+    {"commit": "e9cb97abb4ac93b55c48412d2c8587677c4bb5f1", "unit": "k8s/roles/manifests/CLAUDE.md#Rules a caller can break"},
+    {"commit": "e59b5dde918eba2b432604a43c093a0cd16ed50e", "unit": "k8s/roles/flux/CLAUDE.md#How the render meets the fleet guards"},
+    {"commit": "2226b7b6169ff010ad3dd5b29efa65344acbebf8", "unit": "k8s/roles/observability/CLAUDE.md#Flux in the metrics plane"},
+    {"commit": "529b695c10ad9717b29babc77898b64adf35f33e", "unit": "k8s/roles/node-exporter/CLAUDE.md#The textfile collector directory"},
+    {"commit": "63c40007c8f9e46a3f7aa3b2d6f7ee0279cc4fab", "unit": "k8s/roles/registry/CLAUDE.md#Notable"}
   ],
   "path_lock_moves": [],
   "python_changed": []

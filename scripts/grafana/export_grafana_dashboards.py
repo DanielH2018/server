@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import answer_help
 
-OUTDIR = "ansible/roles/k8s/observability/files/dashboards"
+OUTDIR = "k8s/roles/observability/files/dashboards"
 
 # Canonical datasource uids we provision (see provisioning/datasources.yml.j2).
 PROM_UID, LOKI_UID = "EGdsQqhVk", "bf4q19tuivta8e"

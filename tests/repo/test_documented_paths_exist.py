@@ -1,0 +1,421 @@
+"""Every `file:line` citation in the operator docs must point at a file that exists.
+
+Prose asserts facts that nothing re-derives, so a rename leaves the docs pointing somewhere
+that used to be right. The `documented-macros-exist` row of `test_census_rows_text.py` covers that for shared macro
+names; this covers it for the paths themselves, which that guard's `*.yml.j2` pattern cannot see.
+
+A doc is what an agent reads before it edits. A stale citation still reads as an
+instruction: the reader opens it, finds nothing, and either guesses or gives up.
+
+**Only citations carrying a line number count.** That restriction is the whole design. A bare-path
+version of this guard would flag paths that are not a claim about this tree at a moment in
+time: a role's
+own `docs/platform.md` read from a doc that lives elsewhere, `.github/workflows/image.yml`
+inside the *upstream* texbrain fork, `k8s/roles/anilist-tags` in a design doc for a
+role nobody has built yet, a retired Kopia procedure, and `.claude/worktrees/` -- which exists
+in the primary checkout and not in a fresh worktree, so it made the verdict depend on where
+the suite ran. Nobody writes `file.py:412` about a planned file, another repo's file, or a
+runtime directory. A line number is a claim that this exact file exists in this tree right
+now, which is exactly the claim that rots silently on a rename.
+
+That is why there is no allowlist here. Every exclusion a bare-path version needed was a
+narrowing someone would later have to defend, and an allowlist is where a real finding goes
+to hide. The pattern earns the zero-entry list.
+
+Two more citation shapes are checked here. A bare `tests/...py` path -- that
+directory exists nowhere but this tree, so a bare citation of it is still a claim about this
+tree now. And a `file.py::test_name` node id, in docs AND in runtime modules, which names the
+check that holds an invariant closed. `scripts/lib/facts/citations.py` owns all three
+grammars (`line_numbered_citations`, `guard_path_citations`, `node_citations`), beside the
+`CLAUDE.md` citation forms, and their paired tests sit beside it. This module keeps what
+depends on the tree: resolution, the extension filter, and the corpus. One corpus walk and one
+tracked-file set serve all three.
+"""
+
+import re
+from pathlib import Path
+
+import pytest
+from _helpers import REPO, discover_docs
+from lib.facts.citations import (
+    guard_path_citations,
+    line_numbered_citations,
+    node_citations,
+    tracked_files,
+)
+
+
+# A floor, not the real count -- catches the walk silently shrinking (a renamed root, a
+# tightened exclude) without hardcoding a number that drifts every time a doc is added.
+# Set just under the ~166 the walk finds: far enough below to absorb ordinary
+# deletions, close enough that a broken walk cannot pass.
+_MIN_DOCS = 100
+
+DOCS = discover_docs()
+
+
+# Every TRACKED file path in the repo, repo-relative, as forward-slash strings.
+#
+# DECIDED: `git ls-files`, not an `rglob` plus a skip list. An rglob sees whatever happens
+# to be on disk, and this repo grows untracked trees during ordinary work: `.venv`,
+# `__pycache__`, and `styles/`, which
+# `vale sync` creates and which carries `.txt` and `.json` files the repo itself does not
+# have. That last one moves `_REPO_EXTENSIONS` below, so the same citation would be checked
+# on a synced checkout and skipped on a fresh one. A guard whose verdict depends on whether
+# someone has run `vale sync` has the defect this module rejected `.claude/worktrees/` for.
+REPO_FILES = tracked_files(REPO)
+
+# Extensions this repo contains, so a language adopted later is covered without an edit here.
+# A citation in another extension is another repository's file. DECIDED: minus `go` -- the only
+# Go here is the traefik role's local plugin (files/cloudflare-realip/), while the docs cite
+# UPSTREAM Go by basename (`docs/longhorn-backup-tiering.md`: Longhorn's `deltablock.go:117`,
+# `s3.go:88`), which counting the plugin would turn into missing-file failures.
+_REPO_EXTENSIONS = {Path(p).suffix.lstrip(".") for p in REPO_FILES} - {"go"}
+
+
+def resolves(cited: str, doc: Path) -> bool:
+    """Whether a cited path names a file that exists, the way a reader would resolve it.
+
+    Doc-relative first, then repo-relative, then as a path SUFFIX of some real file -- which
+    is what makes a context-relative citation like `k8s/roles/volume-snapshot/defaults/main.yml:12`
+    resolve without the `ansible/` prefix nobody writes.
+
+    DECIDED: a suffix, never a bare basename. `scripts/gen_infra_map.py` is not a suffix of
+    `scripts/infra_map/gen_infra_map.py`, so the move that prompted this guard still fails it;
+    matching on basename alone would have accepted it and made the guard decorative.
+    """
+    if (doc.parent / cited).exists() or (REPO / cited).exists():
+        return True
+    tail = "/" + cited
+    return any(known.endswith(tail) for known in REPO_FILES)
+
+
+def cited_paths(line: str) -> list[str]:
+    """Every line-numbered repo path cited in one line of prose.
+
+    Split out from the walk so the pattern can be exercised against inputs it must accept AND
+    inputs it must reject. A guard that matches everything and one that matches nothing are
+    indistinguishable from the passing side alone.
+    """
+    return line_numbered_citations(line, _REPO_EXTENSIONS)
+
+
+# Archived plans describe the tree at the moment they were executed, so a test they name may
+# since have been retired with the work it guarded. Live docs are read as instructions.
+_ARCHIVE = "docs/archive/"
+
+
+# --- the tree-dependent half's own paired tests ---------------------------------------
+#
+# The pattern's accept/reject pairs live beside it in scripts/lib/tests/test_facts_citations.py.
+# What stays here is the extension filter, which only this tree can answer.
+
+
+def test_a_citation_in_a_repo_extension_is_extracted():
+    assert cited_paths("at `k8s/roles/sonarr/tasks/main.yml:12`") == [
+        "k8s/roles/sonarr/tasks/main.yml"
+    ]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        # Upstream Longhorn source, in another repository entirely.
+        "upstream does it in `deltablock.go:117`",
+        "and `s3.go:88` for the store half",
+    ],
+)
+def test_a_citation_of_upstream_go_is_not_extracted(line):
+    assert cited_paths(line) == []
+
+
+def test_resolution_accepts_a_context_relative_citation():
+    """The common shape: the docs cite from context, without the `ansible/` prefix."""
+    doc = REPO / "CLAUDE.md"
+    assert resolves("k8s/roles/volume-snapshot/defaults/main.yml", doc)
+    assert resolves("k8s/roles/volume-snapshot/defaults/main.yml", doc)
+
+
+def test_resolution_rejects_a_path_that_moved():
+    """The proof this guard can go red, using a renamed file.
+
+    `scripts/gen_infra_map.py` moved to `scripts/infra_map/gen_infra_map.py`. Matching on
+    basename would accept the old path and make the whole guard decorative, so this pins the
+    suffix rule at the one case that distinguishes them.
+    """
+    doc = REPO / "CLAUDE.md"
+    assert (REPO / "scripts" / "infra_map" / "gen_infra_map.py").exists(), (
+        "the fixture moved; pick another renamed file to pin the suffix rule"
+    )
+    assert not resolves("scripts/gen_infra_map.py", doc)
+    assert resolves("scripts/infra_map/gen_infra_map.py", doc)
+
+
+# --- the guard itself -----------------------------------------------------------------
+
+
+def test_the_corpus_covers_the_whole_doc_tree():
+    """Coverage is asserted, not assumed -- the macro guard shipped reading two files."""
+    assert len(DOCS) >= _MIN_DOCS, (
+        f"only found {len(DOCS)} docs, expected at least {_MIN_DOCS} -- the walk shrank. "
+        "A floor far below the real count cannot tell 'the walk broke' from 'docs were "
+        "deleted'."
+    )
+
+
+def test_the_guard_finds_citations_to_check():
+    """A pattern that silently stopped matching would pass the guard below vacuously."""
+    hits = sum(
+        len(cited_paths(line)) for doc in DOCS for line in doc.read_text().splitlines()
+    )
+    # About 30. A floor just under it catches the pattern breaking; setting it at the exact
+    # count would instead fail every time a doc drops a citation, which is not a defect.
+    assert hits >= 25, (
+        f"only {hits} line-numbered citations found across {len(DOCS)} docs -- the pattern "
+        "has stopped matching, so the existence check below is passing on an empty set."
+    )
+
+
+def test_every_line_numbered_path_cited_in_the_docs_exists():
+    missing = []
+    for doc in DOCS:
+        if not doc.is_file():
+            continue
+        for line_no, line in enumerate(doc.read_text().splitlines(), 1):
+            for cited in cited_paths(line):
+                if resolves(cited, doc):
+                    continue
+                rel = doc.relative_to(REPO)
+                missing.append(f"{rel}:{line_no} cites {cited}")
+
+    assert not missing, (
+        "the docs cite a repo path that does not exist; an agent following one of these "
+        "opens nothing and then guesses:\n  " + "\n  ".join(missing)
+    )
+
+
+def test_every_test_path_cited_in_the_live_docs_exists():
+    missing = []
+    for doc in DOCS:
+        rel = doc.relative_to(REPO)
+        if not doc.is_file() or str(rel).startswith(_ARCHIVE):
+            continue
+        for line_no, line in enumerate(doc.read_text().splitlines(), 1):
+            for cited in guard_path_citations(line):
+                if cited in REPO_FILES:
+                    continue
+                missing.append(f"{rel}:{line_no} cites {cited}")
+
+    assert not missing, (
+        "the docs cite a test file that does not exist at that path; `pytest <path>` on any "
+        "of these collects nothing:\n  " + "\n  ".join(missing)
+    )
+
+
+def test_the_test_citation_walk_finds_citations_to_check():
+    """A shrunken citation walk is a bug."""
+    found = sum(
+        len(guard_path_citations(line))
+        for doc in DOCS
+        if doc.is_file() and not str(doc.relative_to(REPO)).startswith(_ARCHIVE)
+        for line in doc.read_text().splitlines()
+    )
+    assert found >= 50, found
+
+
+# --- `file.py::test_name` node ids -----------------------------------------------------
+#
+# A runtime module that says "pinned by test_x.py::test_the_thing" is telling the next reader
+# which check holds an invariant closed. That claim rots the way a `file:line` citation does,
+# and neither pattern above sees it: a node id carries no line number, and most are cited
+# from context (`test_check_streaks.py::...` inside the same directory) rather than from the
+# repo root. This corpus is wider than DOCS because the citation
+# lives in two places: docs cite from prose with backticks, runtime modules from a docstring
+# or a comment with none. `node_citations` reads both shapes; its docstring has the grammar.
+
+
+def _runtime_modules() -> list[Path]:
+    """Every tracked first-party runtime .py file.
+
+    Test files are out: a string inside
+    a test is an input, not a claim -- this module carries
+    `tests/k8s/test_x.py::test_the_thing` as a parametrized fixture.
+    """
+    return [
+        REPO / p
+        for p in REPO_FILES
+        if p.endswith(".py")
+        and not Path(p).name.startswith("test_")
+        and Path(p).name != "conftest.py"
+    ]
+
+
+# DECIDED: docs/reference/decisions.md is excluded here, not from DOCS itself -- its own
+# `path:line` citations (the "Decided" column) stay checked by the walk above, and only the
+# node-citation check below is skipped. That page mirrors verbatim `# DECIDED:` comment prose
+# from across the tree rather than being authored here, so a node citation appearing in it is
+# always a second copy of one the source file carries -- and the source is never itself in
+# this corpus, since a role's `.yml`/`.j2` task file is neither a doc nor a runtime module.
+# Checking the copy caught a citation the source has carried, unchecked, since before this
+# page existed (a role's task file cited a test that moved to
+# `test_k8s_autodeploy_batch_gates.py`), and separately turned an identifier that wraps across
+# two comment lines in the source into two words once the generator joins them with a space,
+# which the citation pattern below then reads as a shorter, nonexistent name. Neither is a bug
+# in the mirror; both are properties of the source the generator is not in a position to fix.
+_NODE_CORPUS_EXCLUDED = frozenset({"docs/reference/decisions.md"})
+NODE_CORPUS = sorted(
+    {p for p in DOCS if p.relative_to(REPO).as_posix() not in _NODE_CORPUS_EXCLUDED}
+    | set(_runtime_modules())
+)
+
+
+def candidates(cited: str, source: Path) -> list[Path]:
+    """The tracked files a cited path could mean, resolved the way `resolves` above does.
+
+    Relative to the citing file, to the repo root, or as a path suffix of a tracked file.
+    """
+    found = [d for d in (source.parent / cited, REPO / cited) if d.is_file()]
+    tail = "/" + cited
+    found.extend(REPO / known for known in REPO_FILES if known.endswith(tail))
+    return found
+
+
+def defines_test(path: Path, name: str) -> bool:
+    return (
+        re.search(rf"^\s*(?:async\s+)?def {re.escape(name)}\(", path.read_text(), re.M)
+        is not None
+    )
+
+
+def node_resolves(cited: str, name: str, source: Path) -> bool:
+    return any(defines_test(p, name) for p in candidates(cited, source))
+
+
+def test_node_resolution_accepts_a_context_relative_citation():
+    """A runtime module citing its sibling test by bare filename, the common shape."""
+    source = REPO / "scripts/deploy_tools/land_lib/land_tags.py"
+    assert node_resolves(
+        "test_land_tags.py",
+        "test_small_pr_scopes_to_its_services",
+        source,
+    )
+
+
+def test_node_resolution_rejects_a_renamed_test_and_a_renamed_file():
+    """The proof this guard can go red.
+
+    A file that no longer exists, and a test name nothing defines. Matching on the file
+    alone would accept the second.
+    """
+    source = REPO / "scripts/deploy_tools/land_lib/land_tags.py"
+    assert not node_resolves(
+        "test_land_tagz.py",
+        "test_small_pr_scopes_to_its_services",
+        source,
+    )
+    assert not node_resolves("test_land_tags.py", "test_no_such_test_anywhere", source)
+
+
+def test_node_corpus_excludes_the_generated_decisions_page():
+    """decisions.md mirrors comment prose it did not author -- see the DECIDED marker above
+    NODE_CORPUS. A node citation appearing only because this page quoted it is not a claim
+    this page makes; the source file carries the same words and is checked in its own right
+    wherever it happens to also be a doc or a runtime module.
+    """
+    assert not any(
+        p.as_posix().endswith("docs/reference/decisions.md") for p in NODE_CORPUS
+    )
+
+
+def test_node_corpus_still_includes_an_ordinary_doc():
+    """The red-proof pair to the exclusion above: only the one page is skipped."""
+    assert any(p.as_posix().endswith("docs/adr/index.md") for p in NODE_CORPUS)
+
+
+def test_the_node_walk_finds_citations_to_check():
+    """A pattern that silently stopped matching would pass the guard below vacuously."""
+    hits = sum(
+        len(node_citations(line))
+        for path in NODE_CORPUS
+        for line in path.read_text(errors="replace").splitlines()
+    )
+    # About 10. A floor just under it catches the pattern breaking without failing every
+    # time a doc drops a citation.
+    assert hits >= 8, (
+        f"only {hits} test citations found across {len(NODE_CORPUS)} files -- the pattern "
+        "has stopped matching, so the existence check below is passing on an empty set."
+    )
+
+
+def missing_tests(corpus: list[Path]) -> list[str]:
+    """Every node citation in ``corpus`` that names a test no candidate file defines."""
+    missing = []
+    for path in corpus:
+        if not path.is_file():
+            continue
+        for line_no, line in enumerate(
+            path.read_text(errors="replace").splitlines(), 1
+        ):
+            for cited, name in node_citations(line):
+                if node_resolves(cited, name, path):
+                    continue
+                missing.append(f"{path.as_posix()}:{line_no} cites {cited}::{name}")
+    return missing
+
+
+def test_a_doc_citing_a_renamed_test_is_flagged(tmp_path):
+    """The walk end to end, through the shared parser: a doc naming a test nothing defines."""
+    doc = tmp_path / "runbook.md"
+    doc.write_text(
+        "Pinned by `tests/repo/test_documented_paths_exist.py::test_no_such_test`.\n"
+    )
+    assert missing_tests([doc]) == [
+        f"{doc.as_posix()}:1 cites "
+        "tests/repo/test_documented_paths_exist.py::test_no_such_test"
+    ]
+
+
+def test_a_doc_citing_a_real_test_is_clean(tmp_path):
+    doc = tmp_path / "runbook.md"
+    doc.write_text(
+        "Pinned by `tests/repo/test_documented_paths_exist.py::"
+        "test_every_cited_test_exists`.\n"
+    )
+    assert missing_tests([doc]) == []
+
+
+def test_every_cited_test_exists():
+    missing = [
+        m.removeprefix(f"{REPO.as_posix()}/") for m in missing_tests(NODE_CORPUS)
+    ]
+    assert not missing, (
+        "a doc or module cites a test that no file defines, so the invariant it says is "
+        "pinned may be pinned by nothing:\n  " + "\n  ".join(missing)
+    )
+
+
+def test_the_walk_ignores_other_worktrees_on_disk():
+    """`.claude/worktrees/<name>/` is a full checkout per live session, and the walk skips it.
+
+    An rglob into those judges this commit against other sessions' older docs, so the guard
+    fails on paths that moved legitimately. A CI runner has no worktrees on disk, so master CI
+    stays green while the docs-refresh cron's commit, which runs the prek hooks, is rejected.
+    """
+    # Anchored to REPO, not matched as a substring: this suite often RUNS from inside
+    # `.claude/worktrees/<name>/`, so every legitimate doc path contains that text. The
+    # question is whether the walk left THIS checkout, which only the parent test answers.
+    nested = REPO / ".claude" / "worktrees"
+    strays = [d for d in DOCS if nested in d.parents]
+    assert not strays, "the doc walk reached into another checkout: " + ", ".join(
+        d.as_posix() for d in strays[:3]
+    )
+
+
+def test_the_walk_still_finds_this_repos_own_docs():
+    """The other half: an exclusion tight enough to skip worktrees must not skip the tree.
+
+    Without this, "ignore other checkouts" is satisfied by finding nothing at all.
+    """
+    names = {d.name for d in DOCS}
+    assert "CLAUDE.md" in names
+    assert any(d.as_posix().endswith("docs/secret-rotation.md") for d in DOCS)

@@ -3,7 +3,7 @@
 CI's PR run of prek checks only the changed files, so a hook runs only when a changed path
 matches its `files` regex. A module the entry imports that the regex misses can change alone
 and merge green with the hook skipped; master's full sweep catches it only after the merge
-(`.github/workflows/ci.yml`). `validate-k8s-manifests` missed `lib/ansible_inventory.py` and
+(`.github/workflows/ci.yml`). `validate-k8s-manifests` missed `lib/inventory_lists.py` and
 `lib/render_context.py` this way (#4406).
 
 The import closure is read from the source, transitively, resolving each import the way the
@@ -12,7 +12,7 @@ module there inserts, and against every directory the file puts on `sys.path` it
 insert of a `lib.repo_paths` constant (`HOST_LIB_FILES`) is evaluated from that
 module. A module pytest runs (a test, a conftest, a helper under `tests/`) also resolves
 against every `pythonpath` root in `pyproject.toml`, which is how a bare `from _row_table
-import ...` in `ansible/tests/repo/` reaches `ansible/tests/` (#5921). An import no root resolves is the stdlib or a third-party package, and needs no match.
+import ...` in `tests/repo/` reaches `tests/` (#5921). An import no root resolves is the stdlib or a third-party package, and needs no match.
 """
 
 import ast
@@ -195,7 +195,7 @@ def test_the_census_reads_validate_k8s_manifests_imports():
     by_id = {hook_id: entry for hook_id, entry, _ in HOOKS}
     assert "validate-k8s-manifests" in by_id, sorted(by_id)
     closure = import_closure(by_id["validate-k8s-manifests"])
-    for module in ("scripts/lib/ansible_inventory.py", "scripts/lib/render_context.py"):
+    for module in ("scripts/lib/inventory_lists.py", "scripts/lib/render_context.py"):
         assert (REPO / module).resolve() in closure, module
 
 

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-13 18:17 UTC
-generated_sha: c9de2bd37
+generated_at: 2026-11-13 20:48 UTC
+generated_sha: 24dddf5c4
 ---
 
 !!! warning "Generated file — do not edit"
@@ -23,8 +23,6 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#7718](https://github.com/DanielH2018/server/issues/7718) | medium | gap | cicd | Measure the pytest shard spread on a real CI run of the rebalanced runner table | 2026-11-09 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8243](https://github.com/DanielH2018/server/issues/8243) | medium | gap | security | GitHub-side controls for the guardrails plan: D12 master ruleset, D13 dotfiles rulesets, Renovate floor | 2026-11-12 | 0 | - | - |
 | [#8259](https://github.com/DanielH2018/server/issues/8259) | medium | gap | security | The triage restart allowlist must exclude routed alerts' workloads, not just critical probes | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8280](https://github.com/DanielH2018/server/issues/8280) | medium | gap | cicd | A fresh landing started from a checkout older than the slot-held rule takes two of the three live-landing slots — *no vetted remediation* | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
-| [#8287](https://github.com/DanielH2018/server/issues/8287) | medium | gap | backup-observability | A missing Healthchecks ping key stops the weekly reboot and the Docker prune, not just the ping | 2026-11-13 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8310](https://github.com/DanielH2018/server/issues/8310) | medium | gap | backup-observability | daniel-box's kubelet has no graceful node shutdown, so its reboots may drop Longhorn iSCSI sessions under mounted filesystems | 2026-11-13 | 0 | - | ✓ |
 | [#8328](https://github.com/DanielH2018/server/issues/8328) | medium | gap | cicd | 40 more issue numbers the hidden bot account authored return 404, and their state is unknown | 2026-11-13 | 0 | - | ✓ |
 | [#8359](https://github.com/DanielH2018/server/issues/8359) | medium | gap | container | daniel-box's kubelet still starts image GC at 85 percent, above Longhorn's 75 percent floor, pending daniel-server's canary restart | 2026-11-13 | 0 | - | ✓ |
@@ -36,7 +34,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#8402](https://github.com/DanielH2018/server/issues/8402) | medium | gap | container | WireGuard sidecar's netns reset leaves the pod's resolv.conf pointing at Mullvad, so a dropped device needs a pod delete | 2026-11-13 | 0 | - | - |
 | [#8407](https://github.com/DanielH2018/server/issues/8407) | medium | improvement | cicd | After the ansible/ rename lands: drop the old paths from the four installed readers and update the out-of-repo copies | 2026-11-13 | 0 | - | ✓ |
 | [#8409](https://github.com/DanielH2018/server/issues/8409) | medium | gap | container | Move homelab-mcp's hostPath mount off ansible/ once its node keeps a synced checkout | 2026-11-13 | 0 | - | ✓ |
-| [#8419](https://github.com/DanielH2018/server/issues/8419) | medium | gap | docs | The fact notice counts a regenerated At-a-glance block as a prose edit, which inflates the replay's prose-edited ratio | 2026-11-13 | 0 | worktree-bridge-cse_01U9VNvkuNKsaBp6M1cbXD5s | ✓ |
+| [#8435](https://github.com/DanielH2018/server/issues/8435) | medium | gap | cicd | The local sweep skips tests a hosted runner runs, and nothing lists them | 2026-11-13 | 0 | - | ✓ |
 | [#4435](https://github.com/DanielH2018/server/issues/4435) | low | improvement | cicd | Decide whether to move scripts/ into an installable homelab package | 2026-10-11 | 0 | - | ✓ |
 | [#6292](https://github.com/DanielH2018/server/issues/6292) | low | improvement | container | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule | 2026-10-25 | 0 | - | ✓ |
 | [#7194](https://github.com/DanielH2018/server/issues/7194) | low | improvement | docs | Reword the Kuma history that M6's census row holds on its allowlist | 2026-11-05 | 0 | worktree-orchestrator-wave20 | ✓ |
@@ -52,18 +50,11 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#8018](https://github.com/DanielH2018/server/issues/8018) | low | gap | cicd | Cap live landers per orchestrator and measure the core call rate under load | 2026-11-12 | 0 | - | ✓ |
 | [#8080](https://github.com/DanielH2018/server/issues/8080) | low | gap | cicd | Confirm hosted Renovate regenerates actions.lock on its first Actions bump | 2026-11-12 | 0 | - | ✓ |
 | [#8145](https://github.com/DanielH2018/server/issues/8145) | low | gap | - | No shipped script deletes the .subset-copy trees claude-dotfiles-sync renames | 2026-11-12 | 0 | - | ✓ |
-| [#8147](https://github.com/DanielH2018/server/issues/8147) | low | gap | cicd | await_merge's per-poll CI read polls a rate-limited API at its normal cadence | 2026-11-12 | 1 | worktree-orchestrator-wave20 | ✓ |
 | [#8186](https://github.com/DanielH2018/server/issues/8186) | low | improvement | cicd | Rename step 3: rename the ansible/ tree to names that say what it holds, move every path consumer, and record the ADR | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8193](https://github.com/DanielH2018/server/issues/8193) | low | addition | container | Turn on navidrome scrobbling and Lidarr import lists for music discovery | 2026-11-12 | 0 | - | - |
-| [#8195](https://github.com/DanielH2018/server/issues/8195) | low | gap | cicd | The static-ratchet hook's gate misses .github/actions/*/action.yml, which its workflow census rows read | 2026-11-12 | 0 | worktree-orchestrator-wave20 | ✓ |
 | [#8207](https://github.com/DanielH2018/server/issues/8207) | low | gap | cicd | claude-land@ reaches the cluster without setting KUBECONFIG | 2026-11-12 | 0 | - | ✓ |
 | [#8208](https://github.com/DanielH2018/server/issues/8208) | low | gap | cicd | Record a D7 supersession whose T has its own change and settles good | 2026-11-12 | 0 | - | ✓ |
-| [#8219](https://github.com/DanielH2018/server/issues/8219) | low | gap | backup-observability | No check catches a failed systemd unit that declares no verdict of its own | 2026-11-12 | 0 | - | ✓ |
 | [#8220](https://github.com/DanielH2018/server/issues/8220) | low | improvement | container | The pod-shell macro sets fsGroup with no change policy, so janitorr walks the media volume on every mount | 2026-11-12 | 0 | - | ✓ |
-| [#8223](https://github.com/DanielH2018/server/issues/8223) | low | improvement | cicd | promote moves prod, superseding, last-good and held by the mutable sha tag, not by the digest decide verified | 2026-11-12 | 0 | - | ✓ |
-| [#8224](https://github.com/DanielH2018/server/issues/8224) | low | improvement | container | Prometheus, Alertmanager, Grafana, Loki and Tempo have a readiness probe and no liveness probe | 2026-11-12 | 0 | - | ✓ |
-| [#8225](https://github.com/DanielH2018/server/issues/8225) | low | gap | container | system-upgrade-controller runs BestEffort at the homelab-critical priority class | 2026-11-12 | 0 | - | ✓ |
-| [#8226](https://github.com/DanielH2018/server/issues/8226) | low | improvement | container | The collector and CoreDNS image pins carry a tag and no digest | 2026-11-12 | 0 | - | ✓ |
 | [#8227](https://github.com/DanielH2018/server/issues/8227) | low | gap | cicd | probe.py cannot read the cluster or the Pi from a session on daniel-server | 2026-11-12 | 0 | - | ✓ |
 | [#8228](https://github.com/DanielH2018/server/issues/8228) | low | gap | docs | The Ubuntu 26.04 upgrade has no tracking issue, no etcd snapshot step for daniel-box and an unproven Pi rollback | 2026-11-12 | 0 | - | ✓ |
 | [#8231](https://github.com/DanielH2018/server/issues/8231) | low | improvement | security | The route test exempts any route whose match contains ClientIP( from its Authelia assertion | 2026-11-12 | 0 | - | ✓ |
@@ -97,7 +88,6 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#8360](https://github.com/DanielH2018/server/issues/8360) | low | improvement | cicd | pythonpath-coverage rows in test_prek_files_cover_pythonpath_imports name members the base prek.toml regexes already matched | 2026-11-13 | 0 | - | ✓ |
 | [#8366](https://github.com/DanielH2018/server/issues/8366) | low | gap | cicd | A firewall reconcile test fails in a whole-suite run on a loaded host and passes alone — *no vetted remediation* | 2026-11-13 | 0 | - | - |
 | [#8369](https://github.com/DanielH2018/server/issues/8369) | low | improvement | cicd | land.sh ends needs-manual-apply for a secret rotation it applied in full — *no vetted remediation* | 2026-11-13 | 0 | - | ✓ |
-| [#8370](https://github.com/DanielH2018/server/issues/8370) | low | improvement | container | Seed lidarr's Discord notification and quality profiles, and give it a homepage tile | 2026-11-13 | 0 | - | - |
 | [#8372](https://github.com/DanielH2018/server/issues/8372) | low | improvement | cicd | Drop the ansible/ paths from the four installed readers once the renamed tree's packages are installed | 2026-11-13 | 0 | - | ✓ |
 | [#8376](https://github.com/DanielH2018/server/issues/8376) | low | improvement | docs | 56 role CLAUDE.md files open with Flux applies it, not Ansible plus a migration wave tag | 2026-11-13 | 0 | - | ✓ |
 | [#8377](https://github.com/DanielH2018/server/issues/8377) | low | improvement | docs | Role, host-component and rule docs state current rules as diffs against the retired Ansible layout | 2026-11-13 | 0 | - | ✓ |
@@ -112,6 +102,9 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#8415](https://github.com/DanielH2018/server/issues/8415) | low | gap | security | Post a guardrail change that a hand-installed host package makes, not only one no package explains | 2026-11-13 | 0 | - | ✓ |
 | [#8417](https://github.com/DanielH2018/server/issues/8417) | low | gap | docs | docs/claude-memory-sync.md's check command compares the agent user's store, which the sync does not read | 2026-11-13 | 0 | - | ✓ |
 | [#8420](https://github.com/DanielH2018/server/issues/8420) | low | gap | docs | Three memory entries are out of date: G3 reads PLANNED, the kubectl entry is marked ENFORCED, and the agent-polling cost is wrong | 2026-11-13 | 0 | - | ✓ |
+| [#8434](https://github.com/DanielH2018/server/issues/8434) | low | improvement | cicd | image-smoke boots every image when a change moves role defaults without changing a pin | 2026-11-13 | 0 | - | - |
+| [#8447](https://github.com/DanielH2018/server/issues/8447) | low | gap | container | The per-container requests-and-limits guard does not reach vendored kustomize-patched Deployments | 2026-11-13 | 0 | - | ✓ |
+| [#8452](https://github.com/DanielH2018/server/issues/8452) | low | gap | container | probe.py arr cannot read Lidarr, so its seeded state has no read-only check | 2026-11-13 | 0 | - | - |
 
 ## Deferred, by date
 

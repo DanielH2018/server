@@ -44,7 +44,7 @@ nothing outside `docs/archive/`, `docs/reference/` and `docs/target-architecture
 generated `docs/reference/backlog.md` quotes the closed issue #2584, so it is excluded.
 
 A role doc grown past the report's own budget for it then passes
-`uv run pytest ansible/tests/repo`, and the report shows it as `head` with a negative
+`uv run pytest tests/repo`, and the report shows it as `head` with a negative
 character margin. `ansible/roles/setup/deploy_ui/CLAUDE.md` plus 500 characters is the
 worked case in *Verification*.
 
@@ -56,7 +56,7 @@ worked case in *Verification*.
       take: the header, a newline, `text.rstrip()` and a newline. The block may hold at
       most 7,272 characters and 188 newlines. Those are the two limits less `_PREAMBLE`,
       which is 228 characters and 2 newlines.
-    - The CI budget: `MAX_CHARS` in `_doc_size.py` (`ansible/tests/`) derives 7,070 from the
+    - The CI budget: `MAX_CHARS` in `_doc_size.py` (`tests/`) derives 7,070 from the
       hook. It subtracts the 228-character preamble, a 200-character `HEADER_ALLOWANCE` and
       two newlines.
     - `_doc_size.py:hook_inline_max_chars` reads the `INLINE_MAX_CHARS = <int>` line from
@@ -108,10 +108,10 @@ worked case in *Verification*.
       without recording it, so a later command naming the path injects it.
     - `.claude/rules/facts.md` is in `READ_RULES`, and its globs include `**/CLAUDE.md`.
       `.claude/rules/python-layout.md` is an editing rule whose globs include
-      `ansible/roles/**/tests/**`. Both are heads.
+      `k8s/roles/**/tests/**`. Both are heads.
     - No role doc is a head, so in a command that names a role doc and one of these rules,
       the rule is the first head and gets the payload.
-- **What the CI test enforces.** `test_role_claude_md.py` (`ansible/tests/repo/`, 495 lines)
+- **What the CI test enforces.** `test_role_claude_md.py` (`tests/repo/`, 495 lines)
   checks each role doc on three planes, `k8s`, `setup` and `containers`, for these things:
     - that it exists;
     - that it has at least `MIN_NON_BLANK_LINES` (8) non-blank lines;
@@ -146,7 +146,7 @@ worked case in *Verification*.
 - **The ratchet reached its aim.**
     - #2826's body, on 2026-09-28: "30 of 93 CLAUDE.md files exceed 7,500 characters, by
       353,117 characters in total."
-    - At `70591c307`, `git ls-files 'ansible/roles/*CLAUDE.md' | xargs wc -m` lists 86 role
+    - At `70591c307`, `git ls-files 'k8s/roles/*CLAUDE.md' | xargs wc -m` lists 86 role
       docs, and none is over 7,070. The largest is `ansible/roles/setup/deploy_ui/CLAUDE.md`
       at exactly 7,070. Of the 87 tracked `CLAUDE.md` files, only the root one, at 25,903
       characters, is over 7,500.
@@ -189,13 +189,13 @@ worked case in *Verification*.
       `_doc_size.MAX_CHARS`. G2's PR 4 deletes that file.
 - **`docs/claude-tooling.md` quotes the budget, and no check re-derives the quote.** Its
   hook section says "The payload is 7,500 chars" and "the 7,272 the preamble leaves".
-  `ansible/tests/repo/test_docs_quote_current_values.py:ROWS` has one row for that page,
+  `tests/repo/test_docs_quote_current_values.py:ROWS` has one row for that page,
   for `RECENT_RESTART_SECONDS`.
 - **The hook was 7 lines under its module cap.**
     - `wc -l .claude/hooks/inject-nested-docs.py` printed 593.
-      `ansible/tests/_ratchet.py:NON_TEST_CAP` was 600 raw lines at this baseline, and
-      `ansible/tests/repo/module_length_allowlist.txt` had no entry for the hook.
-    - `tracked_python_files` in `ansible/tests/_ratchet_census.py` counts every tracked
+      `tests/_ratchet.py:NON_TEST_CAP` was 600 raw lines at this baseline, and
+      `tests/repo/module_length_allowlist.txt` had no entry for the hook.
+    - `tracked_python_files` in `tests/_ratchet_census.py` counts every tracked
       `.py`, hook files included.
     - The `DECIDED` header of `module_length_allowlist.txt` (#3661) says to split a module
       over the cap when each piece reads alone, and to use a `conjoined:` reason only when
@@ -400,7 +400,7 @@ who runs the `homelab-review` grep finds it before flagging the missing gate.
 +  test_inject_nested_docs_report.py (the margin, report and exit-status tests)
    test_inject_nested_docs.py        + the budget pin (7,500 / 190 / 7,272 / 188)
    test_inject_nested_docs_head.py   + the notice pair
- ansible/tests/
+ tests/
 -  _doc_size.py
    repo/test_role_claude_md.py
 -    MAX_CHARS ceiling arm, over_ceiling, warn_band, RoleDocNearCeiling,
@@ -464,7 +464,7 @@ budget, and the report reads the hook's own constants.
     - The hook ends near 570 lines.
 3. **PR 2: drop the CI size test** (about 70 lines added, about 330 deleted). This PR opens
    only after step 0 rules yes.
-    - Delete `_doc_size.py` from `ansible/tests/`.
+    - Delete `_doc_size.py` from `tests/`.
     - Delete the `"always::_doc_size.RoleDocNearCeiling"` entry, and the comment above it,
       from `pyproject.toml`.
     - Remove the size arms and tests listed in *Design* from `test_role_claude_md.py`, and
@@ -477,9 +477,9 @@ budget, and the report reads the hook's own constants.
     - Rewrite both `_doc_size.py:MAX_CHARS` sentences in `docs/claude-tooling.md`, whether
       or not G2's PR 4 has landed:
         - In the hook's section, "A role doc is held under that effective budget by
-          `ansible/tests/_doc_size.py:MAX_CHARS`" becomes a pointer to `--report`, which
+          `tests/_doc_size.py:MAX_CHARS`" becomes a pointer to `--report`, which
           prints each doc's budget.
-        - In the facts-line paragraph, "so `ansible/tests/_doc_size.py:MAX_CHARS` still
+        - In the facts-line paragraph, "so `tests/_doc_size.py:MAX_CHARS` still
           promises a whole doc" becomes "so the line never turns a whole doc into a head".
           G2's PR 4 still deletes the whole paragraph later.
     - Rewrite the docstring in `.claude/hooks/tests/test_facts_line.py` that names
@@ -518,8 +518,8 @@ uv run --no-sync python .claude/hooks/inject-nested-docs.py --report; echo "exit
 git grep -n -e _doc_size -e RoleDocNearCeiling -e OVER_CEILING \
   -- ':!docs/archive/' ':!docs/reference/' ':!docs/target-architecture/'
 git grep -n -e '7,272' -e '7,500 chars' -- docs/claude-tooling.md
-uv run pytest -q -p no:cacheprovider ansible/tests/repo/test_role_claude_md.py \
-  ansible/tests/repo/test_module_length_ratchet.py .claude/hooks/tests
+uv run pytest -q -p no:cacheprovider tests/repo/test_role_claude_md.py \
+  tests/repo/test_module_length_ratchet.py .claude/hooks/tests
 ```
 
 The report command is run without a pipe, so `exit=0` is the report's own status. Both
@@ -530,7 +530,7 @@ Proof that the gate is gone: in a scratch worktree, append 500 characters of pro
 7,570 characters, past the 7,174 its directory trigger leaves it. Run:
 
 ```bash
-uv run pytest -q -p no:cacheprovider ansible/tests/repo/test_role_claude_md.py
+uv run pytest -q -p no:cacheprovider tests/repo/test_role_claude_md.py
 uv run --no-sync python .claude/hooks/inject-nested-docs.py --report | grep deploy_ui
 ```
 
@@ -563,7 +563,7 @@ fixture checkout:
 - `..._report_with_no_claude_md_raises`: a fixture checkout holding only the root
   `CLAUDE.md` exits non-zero rather than printing an empty table.
 - Non-vacuity, on the live tree: the report lists at least 80 `CLAUDE.md` rows. It must
-  include `ansible/roles/k8s/traefik/CLAUDE.md` and `.claude/rules/python-layout.md`.
+  include `k8s/roles/traefik/CLAUDE.md` and `.claude/rules/python-layout.md`.
 
 Red-proof for PR 2's notice, in the head test module:
 
@@ -593,7 +593,7 @@ injection does not, and the ranking orders two fixture docs by read count.
     - An `over_ceiling` entry helps only a doc over 7,070 that still fits at its longest
       trigger.
     - The measure of the revert's cost is the count of role docs over 7,070 characters,
-      from `git ls-files 'ansible/roles/*CLAUDE.md' | xargs wc -m`. The docs that must be
+      from `git ls-files 'k8s/roles/*CLAUDE.md' | xargs wc -m`. The docs that must be
       trimmed are a subset of that list, while every longest header stays within the
       200-character `HEADER_ALLOWANCE` that the restored allowance test checks.
     - The report understates the cost. Its `head` and `near` rows weigh a doc at its
@@ -655,7 +655,7 @@ Each risk is checked against `docs/failure-classes.md`.
   `_outline` and `_head_lines` into the library. G2's PR 4 deletes the facts-line code from
   the hook, which lowers the count.
 - **The floor and a member meet other areas' deletions.** The floor of 80 `CLAUDE.md` rows
-  and the `ansible/roles/k8s/traefik/CLAUDE.md` member depend on role docs that R4, D6 and
+  and the `k8s/roles/traefik/CLAUDE.md` member depend on role docs that R4, D6 and
   H7 delete. The slice that deletes them lowers the floor and swaps the member in the same
   PR. `.claude/rules/python-layout.md` is the member that survives every area.
 - **The prek hook's reason weakens.** `static-ratchet-tests` was justified partly by
@@ -792,7 +792,7 @@ was refuted. Each was checked against the tree at `70591c307` before the fix.
   the census, not the hook". *Rollback* now says the revert must trim every role doc that
   fails `_fits_inline` at its longest trigger. It says an `over_ceiling` entry helps only a
   doc that still fits there. The measure is the count of role docs over 7,070 from
-  `git ls-files 'ansible/roles/*CLAUDE.md' | xargs wc -m`. That list bounds the trim set,
+  `git ls-files 'k8s/roles/*CLAUDE.md' | xargs wc -m`. That list bounds the trim set,
   because `HEADER_ALLOWANCE` covers every longest header. *Rollback* says the report's
   shortest-trigger rows understate the cost. Step 0 and *Risks* say PR 2 is one-way in
   practice once docs grow.

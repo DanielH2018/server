@@ -7,7 +7,7 @@ git command targeting the shared checkout, so a session structurally cannot insp
 This banner is the only place that cause reaches it.
 
 Every test drives `dirty_primary_problems` through its injected seams rather than
-patching the module, because the monkeypatch ratchet (`ansible/tests/_ratchet.py`) caps a new
+patching the module, because the monkeypatch ratchet (`tests/_ratchet.py`) caps a new
 test module at zero patches on a first-party module.
 
 Run: uv run pytest .claude/hooks/tests/test_session_health_dirty_primary.py
@@ -27,7 +27,7 @@ _spec.loader.exec_module(_mod)
 # The primary checkout the dirty-primary read is pointed at.
 _PRIMARY = "/home/ubuntu/server"
 
-_DIRTY = " M ansible/tests/services/test_traefik_edge_selfcheck.py\n"
+_DIRTY = " M tests/services/test_traefik_edge_selfcheck.py\n"
 
 
 def _problems(porcelain=""):
@@ -43,7 +43,7 @@ def test_dirty_primary_checkout_is_flagged():
     lines = _problems(porcelain=_DIRTY)
     assert len(lines) == 1
     assert "/home/ubuntu/server" in lines[0]
-    assert "ansible/tests/services/test_traefik_edge_selfcheck.py" in lines[0]
+    assert "tests/services/test_traefik_edge_selfcheck.py" in lines[0]
     # The consequence, not just the state: the job the dirty tree parks.
     assert "homelab-checkout-sync" in lines[0]
     assert "exit 4" not in lines[0]

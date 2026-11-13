@@ -120,8 +120,8 @@ def test_a_docs_page_resolves_to_itself(index: dict[str, tuple[str, str]]) -> No
         "pyproject.toml",
         # A role file. The Services page documents the SERVICE -- route, auth, backup tier --
         # and nothing about either of these, which would land on the same row regardless.
-        "ansible/roles/k8s/netpol-baseline/tasks/main.yml",
-        "ansible/roles/k8s/netpol-baseline/defaults/main.yml",
+        "k8s/roles/netpol-baseline/tasks/main.yml",
+        "k8s/roles/netpol-baseline/defaults/main.yml",
         "tasks/main.yml",
         "defaults/main.yml",
         # Operator docs that live in the tree, not on the site.

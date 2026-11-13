@@ -32,7 +32,7 @@ history. They stay as written:
   amendment's "`deploy.sh` refuses a k8s tag with exit 5": H7.53 deleted `deploy.sh`, its
   `--detach` flag and the `refuse_k8s_tags` check. A host change ships in the host's package
   (ADR-0029), and no setup-plane deploy is left to detach.
-- *Governs*, "the shared rollout tasks" and `ansible/roles/k8s/manifests/files/flux_soak.py`:
+- *Governs*, "the shared rollout tasks" and `k8s/roles/manifests/files/flux_soak.py`:
   the soak Job's script is `scripts/renderer/job_files/flux_soak.py`, as the ADR-0020
   amendment says. H7.57 accepted ADR-0029, which records the result.
 
@@ -127,4 +127,4 @@ statements below, because every k8s `containers_list` entry is Flux-owned and
 
 No single line. `governs:` is empty. The Ansible gate lives in `scripts/diagnostics/probe.py health`
 and in the shared rollout tasks. The Flux gate lives in
-`ansible/roles/k8s/manifests/files/flux_soak.py` and in `promote.py verify`.
+`k8s/roles/manifests/files/flux_soak.py` and in `promote.py verify`.

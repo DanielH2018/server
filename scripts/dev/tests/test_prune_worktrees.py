@@ -334,7 +334,7 @@ def test_one_prune_removes_a_worktree_and_deletes_the_branch_it_freed(
     # would leave its own leavings for the next run, forever.
     #
     # A subprocess, so main() resolves the checkout itself from cwd: the alternative is
-    # patching primary_checkout, and the monkeypatch ratchet in ansible/tests/repo/ only ever
+    # patching primary_checkout, and the monkeypatch ratchet in tests/repo/ only ever
     # falls. CLAUDE_WORKTREE_HOME is inherited, which is how the stand-in reaches it in CI.
     scrub_process_git_env(monkeypatch)
     repo = tmp_path / "repo"

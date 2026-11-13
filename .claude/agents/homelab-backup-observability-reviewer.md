@@ -27,12 +27,12 @@ operator's time).
   contending for one cap; that contention is gone. `check_b2_reachable` remains.
 - **One alert plane: Prometheus rules → Alertmanager → Discord, email and HA mobile**
   (`docs/adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md`). The rules are git files
-  under `roles/k8s/observability/files/rules/`, plus LogQL rules on the `loki-homelab` ruler.
+  under `k8s/roles/observability/files/rules/`, plus LogQL rules on the `loki-homelab` ruler.
   A `Watchdog` rule always fires to Healthchecks.io, so an Alertmanager outage pages off-site.
   Every check pages through these rules (M6, `docs/target-architecture/monitoring/m6-retire-kuma.md`),
   so a missing pager is a missing rule.
 - **The producers each follow one recipe.** `monitor-bridge` (a k8s workload,
-  `roles/k8s/monitor-bridge`) is an exporter: `files/check_table.py`'s `CHECKS` lists every
+  `k8s/roles/monitor-bridge/`) is an exporter: `files/check_table.py`'s `CHECKS` lists every
   check, and each verdict is a `homelab_check_success` gauge that `bridge-exporter.yaml`
   pages on. Host crons and timers write node_exporter textfile metrics, read by
   `host-checks.yaml` and its siblings. Ingress names are probed by `blackbox-exporter`
@@ -49,9 +49,9 @@ operator's time).
   daniel-box.
 
 ## Tools (read-only)
-- `Read`/`Grep` `roles/k8s/{monitor-bridge,observability,loki-homelab,blackbox-exporter,pi-peer-backup}` +
-  their CLAUDE.md, the Longhorn config in `roles/k8s/longhorn*`, and the role crons/CronJobs
-  (`git ls-files 'ansible/roles/k8s/*/templates/*cronjob*' 'hosts/components/*/units/*.timer'`).
+- `Read`/`Grep` `k8s/roles/{monitor-bridge,observability,loki-homelab,blackbox-exporter,pi-peer-backup}` +
+  their CLAUDE.md, the Longhorn config in `k8s/roles/longhorn*`, and the role crons/CronJobs
+  (`git ls-files 'k8s/roles/*/templates/*cronjob*' 'hosts/components/*/units/*.timer'`).
 - `uv run python scripts/diagnostics/probe.py targets` / `metric '<promql>'` / `loki-query '<logql>'` /
   `scrutiny` — live scrape-target, metric, and log state. Never run a command that writes state.
 

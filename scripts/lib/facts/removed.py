@@ -46,7 +46,7 @@ def removed_tokens(repo: Path, base: str) -> set[str]:
 
     Against the working tree, not HEAD: the prek hook runs before the commit exists, and prek
     stashes unstaged edits first, so the tree it reads is the index about to be committed.
-    ``--no-textconv`` keeps git from decrypting ``ansible/vars/secrets.yml`` through its
+    ``--no-textconv`` keeps git from decrypting ``secrets/secrets.yml`` through its
     ``diff=sops`` attribute.
     """
     diff = git(

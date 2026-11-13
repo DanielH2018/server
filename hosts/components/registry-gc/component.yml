@@ -40,7 +40,7 @@
 #   before changing a keep count.
 #
 # ENFORCED: hosts/components/registry-gc/tests/test_registry_gc_component.py (the units, the links
-# and the legacy entries), ansible/tests/services/test_registry_gc_ghcr_mirror.py and
+# and the legacy entries), tests/services/test_registry_gc_ghcr_mirror.py and
 # test_registry_gc_dockerhub_mirror.py (the script's behaviour against stubs).
 files:
   - {src: templates/registry-gc.sh.j2, dst: /usr/lib/homelab/registry-gc.sh, mode: "0700", when: registry_k8s_manage_gc}

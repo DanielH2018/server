@@ -7,7 +7,7 @@
 # /home/<sys_user>/server. hosts/lib/checkout_sync.py does the work, and its docstring lists the
 # steps. The run writes checkout_sync.prom: CheckoutSyncFailed pages while a refusal lasts, and
 # CheckoutSyncNotReporting pages when no verdict lands within the 2-hour deadline
-# (roles/k8s/observability/files/rules/initial-setup-checks.yaml). A crashed run pages through
+# (k8s/roles/observability/files/rules/initial-setup-checks.yaml). A crashed run pages through
 # `homelab-alert@` (the `failure-alert` component).
 #
 # A host that lists this component lists `secrets-unit`, `failure-alert` and `uv` (for /usr/bin/uv)
@@ -40,7 +40,7 @@
 #
 # ENFORCED: hosts/lib/tests/test_checkout_sync.py (the sync over a fixture repository) and
 # hosts/lib/tests/test_checkout_sync_component.py (the units), and
-# ansible/tests/services/test_not_reporting_rule_deadlines.py (the rule's deadline).
+# tests/services/test_not_reporting_rule_deadlines.py (the rule's deadline).
 defaults:
   checkout_sync_github_repo: DanielH2018/server
 depends:

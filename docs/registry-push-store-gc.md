@@ -4,7 +4,7 @@ Use this page when the `PVCFull` alert pages on `registry-data`, the push
 store's claim. Nothing collects that store on a schedule. Its weekly GC was retired in D5,
 because the GC scaled `deploy/registry` to zero and Flux renders that Deployment's
 `replicas: 1`. Flux's drift correction would restore the pod in the middle of the collection.
-`ansible/roles/k8s/registry/CLAUDE.md`, *Notable*, has the growth rate and why the page is
+`k8s/roles/registry/CLAUDE.md`, *Notable*, has the growth rate and why the page is
 the bound.
 
 This procedure collects the store without that race. The operator suspends the Kustomization
@@ -36,7 +36,7 @@ the store keeps the break-glass artifact and its signature (`docs/break-glass.md
 ## 1. See what fills the store
 
 Run these on daniel-box. The push store answers on the loopback hostPort, and the node grant in
-`ansible/roles/k8s/registry/templates/networkpolicy.yaml.j2` admits the request. From
+`k8s/roles/registry/templates/networkpolicy.yaml.j2` admits the request. From
 daniel-server, the same reads answer on the pinned ClusterIP, `10.43.51.14:5000`.
 
 ```bash

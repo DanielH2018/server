@@ -48,7 +48,7 @@ on:
   # runs. A PR run is a full sweep as well, so no step keys on `pull_request` to scope a hook;
   # the PR-only steps (the facts notice, the cross-plane gate, the type-proof scope) are skipped
   # on a dispatch. `renovate-config` runs on `!= 'push'`. ENFORCED by
-  # ansible/tests/repo/test_ci_dispatch_sweeps_everything.py, because a job condition rewritten to
+  # tests/repo/test_ci_dispatch_sweeps_everything.py, because a job condition rewritten to
   # key on `push` would leave a dispatch fast, green and checking nothing.
   workflow_dispatch:
   push:
@@ -189,7 +189,7 @@ jobs:
     # pinned (2026-09-21), so the pin changed nothing on the day. The same reasoning covers
     # the `python-version:` and `node-version:` pins in .github/actions/setup/action.yml.
     # Every `runs-on` in .github/workflows is a versioned label, ENFORCED by
-    # the `workflow-runners-are-pinned` row of ansible/tests/repo/test_census_rows_text.py.
+    # the `workflow-runners-are-pinned` row of tests/repo/test_census_rows_text.py.
     runs-on: ubuntu-26.04
     timeout-minutes: 20  # cap a wedged network hook so it can't burn to the 6h default
     env:
@@ -232,7 +232,7 @@ jobs:
       # Each GitHub release download in this file sits behind an actions/cache keyed on its pin,
       # so it runs once per version bump and a release outage (#7625) fails only the bump's run.
       # The cache holds the download, never the installed binary, and each run checks its digest
-      # where it has one. ENFORCED by ansible/tests/repo/test_ci_release_downloads_are_cached.py.
+      # where it has one. ENFORCED by tests/repo/test_ci_release_downloads_are_cached.py.
       - name: Cache the Vale release
         uses: actions/cache@v6.1.0
         with:
@@ -277,7 +277,7 @@ jobs:
           path: |
             .git/alert-tools/*
             !.git/alert-tools/alloy-*
-          key: alert-tools-${{ runner.os }}-${{ hashFiles('scripts/validate/alert_tools.sh', 'ansible/roles/k8s/observability/defaults/main.yml', 'ansible/roles/k8s/loki-homelab/defaults/main.yml') }}
+          key: alert-tools-${{ runner.os }}-${{ hashFiles('scripts/validate/alert_tools.sh', 'k8s/roles/observability/defaults/main.yml', 'k8s/roles/loki-homelab/defaults/main.yml') }}
 
       - name: Provision promtool, amtool, pint and lokitool
         run: scripts/validate/alert_tools.sh
@@ -292,7 +292,7 @@ jobs:
         run: |
           set -euo pipefail
           version=$(sed -nE 's/^loki_homelab_k8s_alloy_image: *[^:]+:v?([0-9]+\.[0-9]+\.[0-9]+)(@.*)?$/\1/p' \
-            ansible/roles/k8s/loki-homelab/defaults/main.yml)
+            k8s/roles/loki-homelab/defaults/main.yml)
           [ -n "$version" ] || { echo "::error::loki-homelab pins no Alloy image tag"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
@@ -860,7 +860,7 @@ jobs:
       UV_NO_GROUP: lint
       # Its scripts import only [project] dependencies (test_promote_runtime_imports.py).
       UV_NO_DEV: "1"
-      # The flux CLI this job's flux steps fetch, equal to flux_version in roles/k8s/flux and to
+      # The flux CLI this job's flux steps fetch, equal to flux_version in k8s/roles/flux and to
       # the amd64 flux pin in hosts/packages/homelab-tools/package.yml. Env, so the cache key reads it.
       # renovate: datasource=github-release-attachments depName=fluxcd/flux2
       FLUX_VERSION: v2.9.6
@@ -978,7 +978,7 @@ jobs:
       # renovate: datasource=github-release-attachments depName=kubernetes-sigs/kind
       KIND_VERSION: v0.33.0
       KIND_SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
-      # The flux CLI this job's flux steps fetch, equal to flux_version in roles/k8s/flux and to
+      # The flux CLI this job's flux steps fetch, equal to flux_version in k8s/roles/flux and to
       # the amd64 flux pin in hosts/packages/homelab-tools/package.yml. Env, so the cache key reads it.
       # renovate: datasource=github-release-attachments depName=fluxcd/flux2
       FLUX_VERSION: v2.9.6
@@ -999,9 +999,9 @@ jobs:
           set -euo pipefail
           "$GITHUB_WORKSPACE/scripts/dev/pr_changed_files.sh"
           if git diff --quiet "origin/$BASE_REF...HEAD" -- \
-              ansible/roles/k8s/flux/defaults/main.yml \
-              ansible/roles/k8s/flux/files/gotk-components.yaml \
-              ansible/roles/k8s/registry/defaults/main.yml \
+              k8s/roles/flux/defaults/main.yml \
+              k8s/roles/flux/files/gotk-components.yaml \
+              k8s/roles/registry/defaults/main.yml \
               hosts/packages/homelab-tools/package.yml \
               scripts/secrets_mgmt/cluster_vars.py \
               scripts/secrets_mgmt/cluster_vars_check.py \
@@ -1109,7 +1109,7 @@ jobs:
       # name and the runner pushes through the published port. Its image is read from the
       # registry role's pin, registry_k8s_image, so this job holds no copy of it. The node
       # image is one the pinned kind release lists, on k3s_version's Kubernetes minor:
-      # ansible/tests/repo/test_kind_node_image_follows_k3s.py holds the minor, and Renovate
+      # tests/repo/test_kind_node_image_follows_k3s.py holds the minor, and Renovate
       # offers it patch and digest bumps only.
       - name: Create the kind cluster, the registry and the pinned Flux controllers
         if: github.event_name == 'workflow_dispatch' || steps.scope.outputs.changed == 'true'
@@ -1118,11 +1118,11 @@ jobs:
           KIND_NODE_IMAGE: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
         run: |
           set -euo pipefail
-          registry_image=$(awk '/^registry_k8s_image:/ {print $2}' ansible/roles/k8s/registry/defaults/main.yml)
+          registry_image=$(awk '/^registry_k8s_image:/ {print $2}' k8s/roles/registry/defaults/main.yml)
           [ -n "$registry_image" ]
           kind create cluster --name proof --image "$KIND_NODE_IMAGE" --wait 120s
           docker run -d --name kind-registry --network kind -p 127.0.0.1:5001:5000 "$registry_image"
-          kubectl apply --server-side -f ansible/roles/k8s/flux/files/gotk-components.yaml
+          kubectl apply --server-side -f k8s/roles/flux/files/gotk-components.yaml
           for d in source-controller kustomize-controller notification-controller; do
             kubectl -n flux-system rollout status "deployment/$d" --timeout=180s
           done
@@ -1306,7 +1306,7 @@ jobs:
       # `cases=true` when the PR changes an input of the container cases (steps 4 and 5) that is
       # not a render input, so it changes no render (#5004): the test image's build context and
       # fixture specs, and the cases' own code. CASE_INPUTS is the one list of them, and
-      # ansible/tests/repo/test_host_package_case_inputs_census.py holds it to every
+      # tests/repo/test_host_package_case_inputs_census.py holds it to every
       # `validate` module the cases script imports. The renderer is a render input, so it
       # reaches the cases through `changed` when it alters a real render. This job builds what
       # the cases read and the `host_packages` job invokes them, so an edit to either job counts
@@ -1324,7 +1324,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}  # via env, never interpolated into the shell
           CASE_INPUTS: |
-            ansible/inventory/host_vars/_example.yml
+            inventory/host_vars/_example.yml
             docs/host-packages.md
             hosts/bootstrap-host.sh
             hosts/lib/tests/container/

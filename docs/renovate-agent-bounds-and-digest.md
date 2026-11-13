@@ -343,4 +343,4 @@ keep that marker reachable:
   and `test_the_prompt_leaves_a_denylisted_pr_to_a_person` pins both tells.
 - **Every rule carrying the marker sets `groupSingleUpdates: true`**, which applies the group's
   `commitMessageTopic` to a one-dependency branch too and so puts the marker in its title.
-  `ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py` holds it.
+  `tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py` holds it.

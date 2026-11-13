@@ -53,14 +53,14 @@ CI_REPO = "DanielH2018/server"
 # check.
 #
 # This must equal the gate every deploy path grades by, which is `ci_required_contexts` in
-# ansible/inventory/group_vars/all.yml (the deployer renders it to CI_CONTEXTS in its settings
+# inventory/group_vars/all.yml (the deployer renders it to CI_CONTEXTS in its settings
 # file, root-owned on daniel-box, which a worktree session cannot read). Equal in BOTH
 # directions: a name here the deployer does not require blocks a landing the deployer would
 # have deployed. `renovate config validator` is the live instance -- it runs on master and
 # can go red, and the deployer deliberately excludes it because a red renovate.json changes
 # nothing a deploy renders. Requiring it here would have parked every landing behind a
 # dependency-management fault.
-# ansible/tests/repo/test_ci_contexts_match_workflows.py pins both directions.
+# tests/repo/test_ci_contexts_match_workflows.py pins both directions.
 REQUIRED_CONTEXTS = frozenset({"prek (lint + validate + tests + secrets)"})
 
 

@@ -95,8 +95,8 @@ def checkout(tmp_path):
         repo,
         "pin the images",
         **{
-            "ansible/roles/k8s/observability/defaults/main.yml": DEFAULTS,
-            "ansible/roles/k8s/loki-homelab/defaults/main.yml": LOKI_DEFAULTS,
+            "k8s/roles/observability/defaults/main.yml": DEFAULTS,
+            "k8s/roles/loki-homelab/defaults/main.yml": LOKI_DEFAULTS,
         },
     )
     # Prometheus's projects nest the binary under a versioned directory and list sums in

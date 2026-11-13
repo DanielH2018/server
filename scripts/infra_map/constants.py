@@ -13,7 +13,7 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.ansible_inventory import host_names
+from lib.inventory_lists import host_names
 from lib.repo_paths import REPO as REPO_ROOT  # noqa: F401 -- re-exported
 
 

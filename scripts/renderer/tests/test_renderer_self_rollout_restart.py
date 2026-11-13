@@ -226,7 +226,7 @@ def _flipped_values(edit: bool) -> tuple[dict[str, str], dict[str, str]]:
 
 def test_a_board_or_rule_edit_after_the_flip_moves_no_restart_value():
     """Grafana and Prometheus re-read these ConfigMaps in place; Ansible never rolled them."""
-    # fact: ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart
+    # fact: k8s/roles/observability/CLAUDE.md#One config change, one restart
     before, base = _flipped_values(edit=False)
     after, edited = _flipped_values(edit=True)
     assert DASHBOARDS in base

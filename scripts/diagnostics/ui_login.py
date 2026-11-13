@@ -5,7 +5,7 @@ A browser driven on this host cannot reach the homelab UIs the way a laptop does
 for two reasons this script exists to solve:
 
   1. Every `*.local.<domain>` route sits behind Authelia's `one_factor` policy
-     (`roles/k8s/authelia/templates/config-secret.yaml.j2:100`), so an unauthenticated
+     (`k8s/roles/authelia/templates/config-secret.yaml.j2:100`), so an unauthenticated
      browser sees the login portal instead of the app.
   2. This host's resolver bypasses the LAN DNS, so `.local.<domain>` does not resolve
      to the cluster edge from a shell here. Same trap `core.k8s_endpoint` documents;
@@ -35,7 +35,7 @@ only for this script — its password and its TOTP shared secret are both SOPS v
 the code is derived here rather than typed.
 
 That split is what makes the two_factor tier unattended. code-server, n8n and longhorn are
-`two_factor` (`roles/k8s/authelia/templates/config-secret.yaml.j2`), so a one_factor cookie
+`two_factor` (`k8s/roles/authelia/templates/config-secret.yaml.j2`), so a one_factor cookie
 bounces off them, and a code read off the operator's phone would make
 `test_two_factor_service_serves_its_own_ui` skip rather than run.
 
@@ -79,7 +79,7 @@ from diagnostics.probe_lib import core
 from lib.cli_help import ArgumentParser
 
 # The cookie Authelia issues for the LAN cookie-domain. Mirrors
-# `authelia_k8s_cookie_name` in roles/k8s/authelia/defaults/main.yml:48 — a rename there
+# `authelia_k8s_cookie_name` in k8s/roles/authelia/defaults/main.yml:48 — a rename there
 # must land here too, which test_ui_login.py asserts against the role default.
 COOKIE_NAME = "authelia_session_k8s"
 
@@ -337,7 +337,7 @@ def mint(two_factor=False, totp_code=None):
     if cookie is None:
         raise SystemExit(
             "authelia issued no session cookie — check authelia_user / authelia_password "
-            "in ansible/vars/secrets.yml (a wrong password still answers HTTP 200)"
+            "in secrets/secrets.yml (a wrong password still answers HTTP 200)"
         )
 
     if two_factor:

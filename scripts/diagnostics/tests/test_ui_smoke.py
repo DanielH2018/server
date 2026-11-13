@@ -4,7 +4,7 @@
 key (the fixture reads `domain` from SOPS), LAN reachability of the MetalLB ingress VIP, and
 the Node `@playwright/mcp` install — so `addopts` carries `-m 'not ui'`. Everything imported
 here is stdlib or pytest, so collection itself cannot fail on a machine with no browser.
-`ansible/tests/leakguard.py` exempts the `ui` marker from its PATH shims, because the `domain`
+`tests/leakguard.py` exempts the `ui` marker from its PATH shims, because the `domain`
 fixture below decrypts SOPS before anything renders.
 
     uv run pytest -m ui                      # run them
@@ -52,7 +52,7 @@ SERVICES = [
     # runs — so seeing it means the page rendered with NO settings at all, which is the
     # failure this entry exists to catch. Verified 2026-09-06 against the live pod:
     # `__NEXT_DATA__.props.pageProps.initialSettings.title` reads `My Awesome Homepage`, and
-    # `title:` at `roles/k8s/homepage/templates/config/settings.yaml.j2:2` is what puts it
+    # `title:` at `k8s/roles/homepage/templates/config/settings.yaml.j2:2` is what puts it
     # there. Issue #1399 read a `Homepage` failure as a stale expectation and proposed both
     # relaxing this line and deleting that setting; both would have made the check permanently
     # green on the broken state.

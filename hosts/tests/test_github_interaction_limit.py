@@ -13,13 +13,13 @@ import re
 import subprocess
 
 import pytest
-from _helpers import ANSIBLE, load_defaults
+from _helpers import load_defaults
 from _ruleset_drift import textfile_series
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, path_with, write_exec
 from lib.repo_paths import REPO
 
-ROLE = ANSIBLE.parent / "hosts" / "components" / "github-checks"
+ROLE = REPO / "hosts" / "components" / "github-checks"
 TEMPLATE = ("components", "github-checks", "github-interaction-limit.sh.j2")
 CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 # The role's copy of the check library, so a runner that never ran initial_setup still sources it

@@ -73,7 +73,7 @@ def test_a_flip_that_moves_the_render_and_gains_edges_is_clean():
 # The real-render pairs. One HEAD copy per test, rendered for the two roles the edits reach.
 ROLES = ("bento-pdf", "authelia")
 SERVICES = "cluster/services.yml"
-SHELL = "ansible/templates/workload-shell.yml.j2"
+SHELL = "k8s/templates/workload-shell.yml.j2"
 # The macro body's line, not the header comment's mention of the same field.
 SHELL_EDIT = (
     "  revisionHistoryLimit: 3\n  strategy:",

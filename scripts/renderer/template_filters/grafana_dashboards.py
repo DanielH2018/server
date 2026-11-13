@@ -18,7 +18,7 @@ it. An injected annotation must not become something a UI export commits back as
 the injection is idempotent by name as well: a board that already declares an annotation with
 a given name keeps it exactly as it is.
 
-`lib.ansible_jinja_env` registers it so a `ValueError` fails the render as
+`lib.guard_jinja_env` registers it so a `ValueError` fails the render as
 `FilterError("grafana_deploy_annotated: ...")` before any apply.
 """
 

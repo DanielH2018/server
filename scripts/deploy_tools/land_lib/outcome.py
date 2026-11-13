@@ -205,7 +205,7 @@ def disarmed(where: str, consequence: str) -> str:
     return (
         f"the CI gate is disarmed{where} — await_ci requires no CI contexts, so it "
         f"reports no verdict; {consequence}. To re-arm it, set REQUIRED_CONTEXTS in "
-        "scripts/deploy_tools/await_ci.py to ci_required_contexts in ansible/inventory/group_vars/all.yml"
+        "scripts/deploy_tools/await_ci.py to ci_required_contexts in inventory/group_vars/all.yml"
     )
 
 

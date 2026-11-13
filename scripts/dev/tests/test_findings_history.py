@@ -124,7 +124,7 @@ def test_history_file_matches_a_root_file_and_not_its_namesakes(capsys):
     root = make_issue(1)
     root["body"] = "The root CLAUDE.md, line 40."
     role_doc = make_issue(2)
-    role_doc["body"] = "Only ansible/roles/k8s/docs/CLAUDE.md is cited here."
+    role_doc["body"] = "Only k8s/roles/docs/CLAUDE.md is cited here."
     trailer_only = make_issue(3, fp="abc")
     rows, _ = _rows(
         capsys, ["history", "--file", "CLAUDE.md"], [root, role_doc, trailer_only]

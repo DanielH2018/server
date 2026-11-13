@@ -55,7 +55,7 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
 
 # The longest legitimate gap between two textfile writes: two timer periods plus 300s, for the
 # reasons sync-artifacts.sh gives. Rendered from the timer's minute, read as `*/N`; any other
-# shape fails the render. ansible/tests/services/test_b6a_rule_literals.py pins the
+# shape fails the render. tests/services/test_b6a_rule_literals.py pins the
 # NotReporting rule to it.
 {% set _every_n = claude_code_telemetry_health_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
 {% if _every_n.isdigit() and '*/' ~ _every_n == claude_code_telemetry_health_minute | string %}

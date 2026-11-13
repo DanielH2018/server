@@ -148,13 +148,13 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   `Pi container-recovery heartbeat` (`*/5`). Its `CLAUDE.md` glance block lists the same three.
 - **The two token scripts read two SOPS keys.** `pi-sd-health.sh.j2` renders
   `pi_sd_health_push_token` and `pi-recovery-health.sh.j2` renders `pi_recovery_push_token`
-  inline. `grep -c '^<key>:' ansible/vars/secrets.yml` prints 1 for each of the two. A join of
+  inline. `grep -c '^<key>:' secrets/secrets.yml` prints 1 for each of the two. A join of
   every name the three templates read against the `secrets.yml` key names finds no third. The
   integrity sweep reads none. Both token scripts install at mode 0700 with `no_log: true`.
 - **Both token scripts also render `domain` into `KUMA_HOST`, from inventory.** At
   `70591c307` `domain` was a third SOPS key. #5087 deleted it from `secrets.yml`, so
-  `grep -c '^domain:' ansible/vars/secrets.yml` prints 0, and the value lives in
-  `ansible/inventory/group_vars/all.yml`.
+  `grep -c '^domain:' secrets/secrets.yml` prints 0, and the value lives in
+  `inventory/group_vars/all.yml`.
 - **The moved templates read role defaults and inventory.** `pi-gz-integrity.sh.j2` and
   `pi-sd-health.sh.j2` read `optimize_pi_gz_integrity_roots`, `_min_files`, `_state_file` and
   `_max_age_h`. The recovery cron's `state:` reads `optimize_pi_recovery_restart_enabled`. All
@@ -168,28 +168,28 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   promtail reads the log as uid 1000.
 - **Three checks find the templates by their role path.**
   `scripts/validate/shell_templates.py:discover_templates` globs `*.sh.j2` under
-  `ansible/roles/`. `hosts/tests/test_cron_scripts_publish_via_pr.py:push_corpus` and
+  `k8s/roles/`. `hosts/tests/test_cron_scripts_publish_via_pr.py:push_corpus` and
   `test_secret_rendering_host_scripts_have_no_log.py`'s `KNOWN_SECRET_SCRIPTS` (deleted by
   H7.55) name the two token scripts by role path.
-- **The two template validators read `ansible/roles/` only.**
+- **The two template validators read `k8s/roles/` only.**
   `scripts/validate/unit_templates.py:discover_templates` globs `*.service.j2`, `*.timer.j2`
-  and `*.socket.j2` under `ansible/roles/`. Its module docstring says it exists because a
+  and `*.socket.j2` under `k8s/roles/`. Its module docstring says it exists because a
   typo'd directive key otherwise reaches a live host. In `prek.toml`, the `files` selectors of
-  `validate-unit-templates` and `validate-shell-templates` both start `^(ansible/roles/`.
+  `validate-unit-templates` and `validate-shell-templates` both start `^(k8s/roles/`.
 - **The Pi decrypts nothing.** `docs/break-glass.md` records that the Pi's age key was removed
-  from `ansible/.sops.yaml` on 2026-10-03, because the Pi is driven over ssh and never decrypts.
-  `ansible/.sops.yaml` lists three recipients: daniel-box, daniel-server and an off-box
+  from `secrets/.sops.yaml` on 2026-10-03, because the Pi is driven over ssh and never decrypts.
+  `secrets/.sops.yaml` lists three recipients: daniel-box, daniel-server and an off-box
   recovery key.
 - **The Pi's node exporter ignores textfiles.** `ansible/roles/setup/optimize_pi/templates/node_exporter.service.j2`
   passes `--no-collector.textfile`. The cluster nodes' DaemonSet reads
-  `/var/lib/node-exporter-textfile` (`ansible/roles/k8s/node-exporter/templates/daemonset.yaml.j2`).
+  `/var/lib/node-exporter-textfile` (`k8s/roles/node-exporter/templates/daemonset.yaml.j2`).
   That hostPath has `type: DirectoryOrCreate`, so the kubelet creates the directory, root
   0755, on the k3s nodes. Nothing creates it on the Pi: `git grep node-exporter-textfile --
   ansible scripts` matches only that DaemonSet and
   `hosts/components/claude-code/files/claude-cgroup-metrics.sh`, which exits 0 when the
   directory is missing.
   Prometheus scrapes the Pi as a static target on port 9100
-  (`ansible/roles/k8s/observability/templates/prometheus.yaml.j2`, the `node-pi` job, with
+  (`k8s/roles/observability/templates/prometheus.yaml.j2`, the `node-pi` job, with
   `instance: daniel-pi`). The same file scrapes uptime-kuma, so Kuma's `monitor_status` series
   are in Prometheus.
 - **apt on the Pi is heavy, and the night is full.** `optimize_pi`'s `Pin the apt timers to
@@ -223,7 +223,7 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   change set, and the tick fast-forwards it with no deploy. A change under `hosts/` therefore
   neither parks nor deploys anything.
 - **Setup-role changes reach the Pi only by hand, and only the operator can apply them.**
-  `has_gitops: false` in `ansible/inventory/host_vars/daniel-pi.yml`, and the `optimize_pi`
+  `has_gitops: false` in `inventory/host_vars/daniel-pi.yml`, and the `optimize_pi`
   docs give `uv run ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e
   target=daniel-pi`. The play's `load_secrets` pre_task decrypts. The `claude` user has no age
   key and no login on the Pi (`docs/claude-agent-user.md`).
@@ -245,7 +245,7 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
       SHA and points `UV_PROJECT_ENVIRONMENT` at the primary's `.venv`, because a snapshot
       carries no `.venv` and `uv run` would otherwise build a fresh environment.
 - **Prometheus answers on loopback only on its own node.** The comment on
-  `observability_prometheus_cluster_ip` in `ansible/roles/k8s/observability/defaults/main.yml`
+  `observability_prometheus_cluster_ip` in `k8s/roles/observability/defaults/main.yml`
   says the query backends publish a hostPort on 127.0.0.1 of whichever node runs them. `otelq`
   tries loopback, then the pinned ClusterIP, which works from either node.
   `scripts/diagnostics/probe_lib/core.py:observability_loki_ip` reads Loki's pinned address from
@@ -256,12 +256,12 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   2026-10-14 that `domain` is published. Domain PR 1 of the *Publish `domain`* item in R2's
   *Steps, as PRs* makes both functions read the inventory value, so this age-key blocker
   goes away once domain PR 1 lands. Domain PR 1 has landed: `core.py:domain` reads
-  `ansible/inventory/group_vars/all.yml`, and #5087 deleted `domain` from `secrets.yml`.
+  `inventory/group_vars/all.yml`, and #5087 deleted `domain` from `secrets.yml`.
   Neither `probe.py metric` nor `probe.py monitors` reads `secrets.yml` any more; only
   `probe.py kuma-drift` does, through `probe_lib/monitors.py:gate_var_state`.
 - **The CI gate is one context.** `ci.yml`'s `prek` job carries the required context
   `prek (lint + validate + tests + secrets)`, and the deployer reads the same name from
-  `gitops_deploy_ci_contexts`. `ansible/tests/repo/test_every_ci_job_is_gated.py` fails a
+  `gitops_deploy_ci_contexts`. `tests/repo/test_every_ci_job_is_gated.py` fails a
   `ci.yml` job that the gate's step does not read. A job in another workflow gates nothing.
   `ci.yml`'s concurrency group keys a push run on its SHA.
 - **The CI grading and the token lookup are reusable, and the lookup falls back.**
@@ -283,16 +283,16 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   the cross-role files census (deleted by H7.53):test_the_deployers_table_equals_the_trees_cross_role_files`
   asserts that the table equals the tree's imports.
 - **monitor-bridge already reads the Pi through Prometheus.** The `pi_pressure` row of
-  `ansible/roles/k8s/monitor-bridge/files/check_table.py:CHECKS` carries `gate="prometheus"`
+  `k8s/roles/monitor-bridge/files/check_table.py:CHECKS` carries `gate="prometheus"`
   and reads daniel-pi's node exporter. Nothing pages on a host-package metric, because none
   exists.
 - **The setup-role task walkers live in the test helpers.**
-  `ansible/tests/_role_census.py:task_files_by_role` lists every plane's task files, setup
+  `tests/_role_census.py:task_files_by_role` lists every plane's task files, setup
   included. The cron-output test that paired it with `_helpers.walk_tasks` to read cron tasks
   retired in H7.63, with the last cron task. `_role_tasks.py`, since deleted, reads only
-  `ansible/roles/k8s` (`_K8S_ROLES`).
+  `k8s/roles` (`_K8S_ROLES`).
 - **Port 8791 is free.** `git grep -n 8791` matches nothing. `deploy_ui_port` is 8790.
-- **A host address has one definition site.** `ansible/tests/repo/test_lan_facts_have_one_source.py`
+- **A host address has one definition site.** `tests/repo/test_lan_facts_have_one_source.py`
   fails a `.j2`, task file or Python module under `ansible/`, `scripts/` or `docs/` that types a
   host's address instead of reading `server_ip`. Prose in `.md` files is exempt. Its
   `SCAN_ROOTS` holds no `hosts` and its `SCAN_SUFFIXES` holds no `.sh`. `git grep -lE` for
@@ -473,7 +473,7 @@ C1's placeholder and escape rules exist for Flux's `postBuild` substitution, and
 mode has a substitution step. Host mode applies neither rule.
 
 - **No secret value, stub or placeholder.** Host mode removes every top-level key name of
-  `ansible/vars/secrets.yml` from the context, together with any inventory value that cannot
+  `secrets/secrets.yml` from the context, together with any inventory value that cannot
   expand without one. It renders with strict undefined. A template that reads a secret, directly
   or through an inventory value aliasing one, therefore fails the render, and the error names
   the key.
@@ -1030,7 +1030,7 @@ They need no secrets, and they do these steps:
    the container cases. Those inputs change no render: the test image's build context
    `hosts/lib/tests/container/`, which holds the fixture specs, and the cases' own scripts.
    `CASE_INPUTS` on the render step lists them, and
-   `ansible/tests/repo/test_host_package_case_inputs_census.py` holds that list to
+   `tests/repo/test_host_package_case_inputs_census.py` holds that list to
    every `validate` module the cases script imports (#5004). An edit to either job counts
    too, because one builds what the cases read and the other invokes them.
    `host_packages.py job-changed` compares each job as parsed YAML, so an edit to a comment
@@ -1120,7 +1120,7 @@ They need no secrets, and they do these steps:
 
 The `host_packages` job has no `name:` key. GitHub names each matrix leg after the job id and
 the leg's values, such as `host_packages (24.04, 3.12)`. The gate census in
-`ansible/tests/repo/test_every_ci_job_is_gated.py` falls back to the job id, and the gate's
+`tests/repo/test_every_ci_job_is_gated.py` falls back to the job id, and the gate's
 `needs.host_packages.result` fails when either leg fails. The bootstrap cases run in
 `host_packages_bootstrap`, three legs per release, one per offline build, named by release
 alone, so the prefix filter below selects its legs too (#7819, #7879). The build job's `name:` does not start with `host_packages`, so
@@ -1177,7 +1177,7 @@ The reader fails later, often on a host the move did not touch.
 - **The CI context list and the walk bound.** The builder reads both from `config.env`,
   which the role renders from `gitops_deploy_ci_contexts` and
   `gitops_deploy_ci_ancestor_walk_max` (builder step 4). H7.20a deletes those defaults.
-    - H7.2e moves the two keys to `ansible/inventory/group_vars/all.yml`, as
+    - H7.2e moves the two keys to `inventory/group_vars/all.yml`, as
       `ci_required_contexts` and `ci_ancestor_walk_max`. The same PR repoints the builder's
       `config.env` template and its render test to the new keys. It also drops the
       `gitops_deploy/defaults/main.yml` row naming `homelab_builder`, because the census then
@@ -1192,7 +1192,7 @@ The reader fails later, often on a host the move did not touch.
       config reads the moved keys, so the repoint lands before H7.14.
     - The move ends the route that re-applies the builder's config. The row naming
       `homelab_builder` routes a change to the `gitops_deploy` defaults file only.
-      `deploy_changes.py:_BROAD_DEPLOY_PREFIXES` lists `ansible/inventory/`, so the deployer
+      `deploy_changes.py:_BROAD_DEPLOY_PREFIXES` lists `inventory/`, so the deployer
       applies a change to either key in `group_vars/all.yml` as `deploy.yml`, never as the
       `homelab_builder` setup role. The walk in `scripts/deploy_tools/narrow_lib/foreign_keys.py`
       follows a changed role default outward to the inventory names that carry it. It does
@@ -1306,11 +1306,11 @@ daniel-pi: homelab-updater.timer ─▶ apt-get install homelab-updater homelab-
   scripts/deploy_tools/land_lib/deploy.py              (no_tag_outcome yields to host targets)
   scripts/deploy_tools/land_lib/health_verdict.py      (verdict wording names hosts)
   ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py  (+ homelab_builder)
-  ansible/roles/k8s/monitor-bridge/files/check_table.py                     (+ host_packages row, builder arms)
+  k8s/roles/monitor-bridge/files/check_table.py                     (+ host_packages row, builder arms)
   the observability role's rules directory, which M1 creates   (+ HostReconcileFailed, HostUpdateStale, H3.5d)
-  ansible/roles/k8s/monitor-bridge/files/checks/gitops.py                   (+ the row's check body)
-  ansible/roles/k8s/monitor-bridge/files/gates.py                           (host_packages in EXPORTER_DEPENDENT)
-  ansible/tests/repo/test_lan_facts_have_one_source.py (+ hosts, .sh, the bootstrap row)
+  k8s/roles/monitor-bridge/files/checks/gitops.py                   (+ the row's check body)
+  k8s/roles/monitor-bridge/files/gates.py                           (host_packages in EXPORTER_DEPENDENT)
+  tests/repo/test_lan_facts_have_one_source.py (+ hosts, .sh, the bootstrap row)
   hosts/tests/test_setup_cron_roles_have_a_contract.py  (optimize_pi named member retired, H3.8b)
 + docs/host-packages.md                                (the runbook, H3.4b and H3.5b)
   mkdocs.yml                                           (+ the runbook's nav entry, H3.4b)
@@ -1362,7 +1362,7 @@ says otherwise.
         - Add the two-writer census, a test in `hosts/tests/`, because it needs a
           render context and a join that a `Census` row cannot hold.
             - It walks every setup role's tasks through
-              `ansible/tests/_role_census.py:task_files_by_role` and `_helpers.walk_tasks`.
+              `tests/_role_census.py:task_files_by_role` and `_helpers.walk_tasks`.
             - From each task it extracts `dest:`, `path:`, a cron's `name:` with its `user:`,
               and `cron_file:`.
             - It renders every host package plus the shared packages, and fails when a
@@ -1541,7 +1541,7 @@ says otherwise.
               pages once, through its own row, rather than also as an absent builder series.
               The bridge defaults `monitor_bridge_builder_max_lag_s` (7200) and
               `monitor_bridge_builder_max_fetch_age_s` (1800) render into
-              `ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2`, as every bridge
+              `k8s/roles/monitor-bridge/templates/env-secret.yaml.j2`, as every bridge
               threshold does.
             - **Operator-only:** create `monitor_bridge_host_packages_push_token` with the
               `add-secret` skill.
@@ -1575,7 +1575,7 @@ says otherwise.
         - M1's convention 5 bars a rule that is not a shadow from paging `up == 0` for a
           scrape job without an `origin` label before M6's batch A3. It also requires
           every `absent()` arm over such a job to be conjoined with `up == 1`. The `node`
-          and `node-pi` jobs in `ansible/roles/k8s/observability/templates/prometheus.yaml.j2`
+          and `node-pi` jobs in `k8s/roles/observability/templates/prometheus.yaml.j2`
           both carry `origin`, so the convention does not bind these rules. They meet it
           anyway: neither rule pages on `up`, and every absent arm is conjoined with
           `up == 1`. The builder rules of H3.5c's rule form follow the same shape.
@@ -1711,8 +1711,8 @@ says otherwise.
       `scripts/deploy_tools/land_lib/host_wait.py`. Nothing calls it yet, so no landing
       changes.
         1. `HOST_INPUTS` is a constant in the renderer: every path prefix a host render reads.
-           It holds `hosts/`, `ansible/inventory/`, `scripts/renderer/template_filters/`, `scripts/lib/`,
-           `scripts/renderer/`, `pyproject.toml`, `uv.lock`, `ansible/vars/secrets.yml`,
+           It holds `hosts/`, `inventory/`, `scripts/renderer/template_filters/`, `scripts/lib/`,
+           `scripts/renderer/`, `pyproject.toml`, `uv.lock`, `secrets/secrets.yml`,
            because host mode removes its key names, and
            `ansible/roles/setup/initial_setup/files/kuma-push-lib.sh`, which H3.8b copies. A
            test runs a host render under `sys.addaudithook` and asserts that every file it
@@ -1789,12 +1789,12 @@ says otherwise.
         1. Add daniel-pi, with its limit, to the observability role's expected-host map
            (H3.5d). The limit test then covers the Pi's rendered schedule. The rule file is
            plain YAML, so also add the `HostUpdateStale` rule for daniel-pi to
-           `ansible/roles/k8s/observability/files/rules/host-checks.yaml`.
-           `ansible/tests/services/test_host_plane_rule_literals.py` fails until the rule
+           `k8s/roles/observability/files/rules/host-checks.yaml`.
+           `tests/services/test_host_plane_rule_literals.py` fails until the rule
            is there, and its message prints the rule.
         2. The Pi's absent clause reads `up{job="node-pi"}`. A failed scrape marks the
            Pi's series stale, so the success timestamp reads as absent. The `node-pi`
-           job's comment in `ansible/roles/k8s/observability/templates/prometheus.yaml.j2`
+           job's comment in `k8s/roles/observability/templates/prometheus.yaml.j2`
            records 88 minutes of `up == 0` in 7 days. The clause keeps a failed scrape
            from reading as a stale host.
     - The `outcome.py:Verdict.SETTLED` path runs only after every target host settles.
@@ -1827,7 +1827,7 @@ says otherwise.
     - Add `Depends: homelab-tools` to the Pi package. The two-writer census then checks the
       tools' installed paths against every Ansible task that applies to the Pi.
     - Add the `arm64` CI job. The `prek` gate lists it in `needs`, and `KNOWN_JOBS` in
-      `ansible/tests/repo/test_every_ci_job_is_gated.py` names it (*Open questions* 9).
+      `tests/repo/test_every_ci_job_is_gated.py` names it (*Open questions* 9).
     - **Operator check after the merge:** the Pi lists `homelab-tools:arm64` at the merge
       SHA or a descendant, and `dpkg --verify homelab-tools` prints nothing.
 14. **H3.12 Staged rollout.** About 150 lines, in `homelab_builder`. It changes nothing
@@ -2121,7 +2121,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
 - *Bootstrap pin (H3.6).* The fingerprint pinned in `hosts/bootstrap-host.sh` equals the
   fingerprint of `hosts/keys/homelab-archive-keyring.gpg`, and a fixture pin that differs
   is flagged.
-- *CI gate.* `ansible/tests/repo/test_every_ci_job_is_gated.py` already flags a job the gate
+- *CI gate.* `tests/repo/test_every_ci_job_is_gated.py` already flags a job the gate
   never reads. `host_packages` joins its `KNOWN_JOBS`.
 - *Land host wait.*
     - A PR touching only `hosts/daniel-pi/package.yml`, with a stub Prometheus reporting the
@@ -2353,7 +2353,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
   dead exporter on daniel-box hides both builder arms until that exporter answers. The
   host rules carry their own `up` clauses, so a dead exporter silences only its host's. The exporter's own page fires meanwhile. That is
   the bridge's rule for every exporter-dependent row (the `DECIDED` marker at the probe in
-  `ansible/roles/k8s/monitor-bridge/files/check.py`). In the rule form, a dead exporter
+  `k8s/roles/monitor-bridge/files/check.py`). In the rule form, a dead exporter
   silences only the rules that read its series.
 - **H3.5c and M6 can merge in either order.** H3 waits only on R1, and no slice-index edge
   links H3 and M6. M6's baseline counts 44 rows of `CHECKS` and 44 bridge push tokens, and
@@ -2371,7 +2371,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       that prefix and asserts named members.
     - Three selectors find the moved templates by role path. H3.8b moves each to the
       component, with a named member.
-    - Two validators found files only under `ansible/roles/`: `unit_templates.py` and the
+    - Two validators found files only under `k8s/roles/`: `unit_templates.py` and the
       prek selectors of both template hooks. H3.2c verifies every unit and drop-in the host
       renderer emits, with `homelab-updater.timer` as a named member. H3.8b widens the shell
       hook's selector.
@@ -2408,10 +2408,10 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
 - **H3.2b:** `hosts/lib/tests/` covers reconcile and the 3.12 syntax check.
 - **H3.2c:**
     - the two-writer census joins `hosts/tests/`;
-    - the naming census is a `Census` row of `ansible/tests/repo/test_census_rows_text.py`,
+    - the naming census is a `Census` row of `tests/repo/test_census_rows_text.py`,
       as `.claude/rules/python-layout.md` asks of a textual census;
     - `scripts/validate/unit_templates.py`'s test gains the host-render pair and the named
-      member, and its module docstring names the host renders beside `ansible/roles/`;
+      member, and its module docstring names the host renders beside `k8s/roles/`;
     - the `validate-unit-templates` selector in `prek.toml`.
 - **H3.2d:**
     - `scripts/renderer/tests/test_renderer_host_manifest.py` holds the manifest cases, one
@@ -2420,7 +2420,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - `docs/homelab-render.md`'s host-mode section documents `units:`, `legacy:` and the
       manifest.
 - **H3.3a:**
-    - `KNOWN_JOBS` in `ansible/tests/repo/test_every_ci_job_is_gated.py` gains
+    - `KNOWN_JOBS` in `tests/repo/test_every_ci_job_is_gated.py` gains
       `host_packages`;
     - `scripts/validate/tests/test_validate_host_packages.py` holds the `type: config` pair,
       the `.deb` lint pair and the render diff, and `test_maintainer_scripts.py` imports the
@@ -2470,7 +2470,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - `docs/gitops-pipeline.md` gains a note that the builder, not the tick, applies `hosts/`
       (H3.5b);
     - the `host_packages` row's red and green pairs in
-      `ansible/roles/k8s/monitor-bridge/tests/`, the builder arms and the `node` suppression
+      `k8s/roles/monitor-bridge/tests/`, the builder arms and the `node` suppression
       pair included, the limit test beside the renderer's tests, the row's entry in
       `docs/monitor-bridge-checks.md`, and `host_packages` under `node` in the
       `EXPORTER_DEPENDENT` membership on `docs/monitor-bridge-internals.md` (H3.5c). In the
@@ -2482,7 +2482,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
 - **H3.6:**
     - `hosts/tests/test_pi_node_exporter_host_unit.py` changes with the textfile
       flag, and asserts the directory task's owner, group and mode;
-    - `ansible/tests/repo/test_lan_facts_have_one_source.py` gains `hosts`, `.sh`, the
+    - `tests/repo/test_lan_facts_have_one_source.py` gains `hosts`, `.sh`, the
       bootstrap allowlist row and its URL test;
     - the bootstrap fingerprint-pin test, beside the URL test;
     - `docs/pi-host-tuning-record.md` records the updater's measured memory peaks.
@@ -2861,7 +2861,7 @@ reason is given.
   than exec it`. Resolve now sets `ln.host_candidate` by a path test against the renderer's
   `HOST_INPUTS` and runs nothing. `_step_ci` renders only after `ci.wait_master_ci` returns
   green, in `tools.py:gate_snapshot` worktrees that set `UV_PROJECT_ENVIRONMENT`.
-    - `HOST_INPUTS` adds two inputs the finding's list missed: `ansible/vars/secrets.yml`,
+    - `HOST_INPUTS` adds two inputs the finding's list missed: `secrets/secrets.yml`,
       whose key names host mode removes, and `kuma-push-lib.sh`, which H3.8b copies. An audit
       test holds the constant to every file a host render opens, with named members.
     - When the render finds no host, `_step_ci` re-applies the shortcut, so a path-only false
@@ -2976,7 +2976,7 @@ reason is given.
   `node_textfile_scrape_error` through Prometheus.
 - **H3-C1-03 (medium) The host_packages row's absent arm was not exporter-dependent.** Fixed.
   Confirmed by `gates.py:EXPORTER_DEPENDENT` and the `node-pi` job comment in
-  `ansible/roles/k8s/observability/templates/prometheus.yaml.j2`. The Pi entry goes in H3.9c, the PR that lists daniel-pi, not H3.9b,
+  `k8s/roles/observability/templates/prometheus.yaml.j2`. The Pi entry goes in H3.9c, the PR that lists daniel-pi, not H3.9b,
   because the flapping starts there. The builder arms added for H3-C1-06 read daniel-box's
   exporter, so H3.5c adds `host_packages` under `node` too. A red/green pair covers each
   entry. *Risks* states that the suppression covers the whole row.
@@ -3168,7 +3168,7 @@ the M6, H4 and H7 texts. Both held, and both are fixed. None was refuted.
       either form.
 - **H3-I1-02 (medium) After H7.2e moves the CI keys into `group_vars`, nothing re-applies
   the builder's `config.env`, and *What H7 inherits* does not say so.** Fixed. Confirmed:
-  `deploy_changes.py:_BROAD_DEPLOY_PREFIXES` lists `ansible/inventory/`, so the deployer
+  `deploy_changes.py:_BROAD_DEPLOY_PREFIXES` lists `inventory/`, so the deployer
   applies a `group_vars/all.yml` change as `deploy.yml`. The module docstring of
   `scripts/deploy_tools/narrow_lib/foreign_keys.py` follows a changed role default outward
   to the inventory keys that carry it. Nothing routes an inventory edit to a setup role.

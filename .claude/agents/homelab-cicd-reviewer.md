@@ -27,7 +27,7 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
   Renovate may automerge an image bump: a denylisted role's PR opens as `manual —`.
 - **Updates:** Renovate (`renovate.json`) manages version-pinned images + custom regex managers
   (compose tags, prek.toml, the CI prek pin, and the k8s-defaults manager for
-  every `*_image:` var in `ansible/roles/k8s/*/defaults/main.yml`). **Watchtower is retired** —
+  every `*_image:` var in `k8s/roles/*/defaults/main.yml`). **Watchtower is retired** —
   image updates are Renovate-PR-driven only, and the residual `watchtower.enable=false` labels are
   dead metadata. A compose CI guard (`scripts/validate/compose_templates.py`) enforces cap_drop +
   watchtower update-policy on services.
@@ -40,11 +40,11 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
   `minimumReleaseAgeBehaviour: timestamp-optional`. A digest with no release timestamp (GHCR, any
   channel tag) therefore raises at once instead of stalling. The services whose regression is
   expensive declare `k8s_autodeploy: false`, which keeps their digest PRs manual
-  (`ansible/tests/deploy/test_channel_tag_digest_pins_stay_off_autodeploy.py` holds that fence
+  (`tests/deploy/test_channel_tag_digest_pins_stay_off_autodeploy.py` holds that fence
   and its `DECIDED:` marker). A `:latest@sha256:` pin is therefore not unpinned, floating or
   untracked. Re-pinning it to a version tag is not a required fix; many channel tags have no
   version to pin. A bare floating tag with no digest is a real finding.
-- **Secret rotation:** `scripts/secrets_mgmt/secret_rotation.py` (sync/audit/record/consumers) + `ansible/secret_rotation.yml`
+- **Secret rotation:** `scripts/secrets_mgmt/secret_rotation.py` (sync/audit/record/consumers) + `secrets/secret_rotation.yml`
   (plaintext registry: names/tiers/dates, no values) + a daily audit timer
   (`hosts/components/secret-rotation/`) whose textfile verdict `SecretRotationAuditFailed` pages.
 

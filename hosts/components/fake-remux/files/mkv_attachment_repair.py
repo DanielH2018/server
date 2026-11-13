@@ -12,7 +12,7 @@ works — points at Jellyfin rather than at the file, so it is expensive to redi
 # mkvpropedit rewrites the header in place without touching or re-encoding any track.
 
 Runs as a cron on daniel-box under `uv run --no-project --python <pin>` (host_python_version in
-ansible/inventory/group_vars/all.yml), sharing the fake-remux lock — see the role's tasks. Writes
+inventory/group_vars/all.yml), sharing the fake-remux lock — see the role's tasks. Writes
 the same {ts,ok,msg} state file shape as the scan and reconciler; fake-remux-health.sh turns it
 into a textfile verdict.
 

@@ -21,7 +21,7 @@ files or deploy. You are read-only.
   The old Docker edge `10.0.0.161` is **dead** — it is now only a k3s agent node's address.
   Any doc, bookmark, or client config still naming it as an ingress/DNS target is stale, and
   that alone explains a large class of "worked last month" reports.
-- **Reverse proxy:** Traefik (`roles/k8s/traefik`) terminates TLS and routes by Host header
+- **Reverse proxy:** Traefik (`k8s/roles/traefik/`) terminates TLS and routes by Host header
   via Traefik **`IngressRoute` CRDs** rendered per role. One trap worth knowing: an `https`
   IngressRoute **with no `tls:` block never matches at all** (it reads like losing a priority
   contest, but the route isn't even a candidate — diff against a working sibling). The k8s
@@ -43,7 +43,7 @@ files or deploy. You are read-only.
 - **Split-horizon DNS:** the same hostname resolves to the ingress VIP `10.0.0.240` on the
   inside vs Cloudflare's proxy IPs on the outside. Pi-hole serves the whole
   `local.<domain>` space from one wildcard pinned to that VIP
-  (`roles/k8s/pihole/templates/configmap.yaml.j2`). A "works external, fails over WG"
+  (`k8s/roles/pihole/templates/configmap.yaml.j2`). A "works external, fails over WG"
   symptom is almost always which IP the client resolved + whether that path is in the WG
   `AllowedIPs`. Cloudflare IPs are deliberately **not** in `AllowedIPs`.
   - Known trap: Pi-hole answers **AAAA `::`** per query type, which wedges grpc-go clients on
@@ -53,7 +53,7 @@ files or deploy. You are read-only.
   inside any pod. Test from a pod, not from the host shell.
 - **CrowdSec/WAF:** a banned IP gets 403s at Traefik. The engine runs in-cluster with a
   per-node agent DaemonSet tailing each node's auth.log. Trusted remotes are whitelisted in
-  `ansible/roles/k8s/crowdsec/files/crowdsec-trusted-remote-whitelist.yaml`.
+  `k8s/roles/crowdsec/files/crowdsec-trusted-remote-whitelist.yaml`.
   RFC1918 / the WG gateway are exempt by design. Don't flag the whitelist as WAF-weakening.
   Note burst-testing a **public** hostname can self-ban the homelab's own IPv6 — burst
   `.local` names instead.
@@ -89,7 +89,7 @@ files or deploy. You are read-only.
    concluding. Localize the failure to a layer: DNS → firewall/network membership → Traefik
    router/TLS → CrowdSec → the app itself.
 3. Report: root cause, the evidence command + its output, and the **specific file** to change
-   (a manifest template under `ansible/roles/k8s/<svc>/templates/`, a `containers_list` entry,
+   (a manifest template under `k8s/roles/<svc>/templates/`, a `containers_list` entry,
    or a whitelist/runbook), plus the deploy tag that would apply it.
 
 ## Rules

@@ -469,7 +469,7 @@ high number first: the failure names the count observed live (`drew N panel head
 expected at least …`), and N is what to pin. Enroll sparingly — the tier opens every board in
 one browser, which is what the 2Gi limit below bounds.
 
-`ansible/tests/leakguard.py` exempts the `ui` marker from its PATH shims, because the fixtures
+`tests/leakguard.py` exempts the `ui` marker from its PATH shims, because the fixtures
 decrypt SOPS before anything renders. Without that exemption every test in this file errors in
 setup on `could not decrypt domain`, which reads like a missing age key rather than a stubbed
 `sops`.
@@ -568,7 +568,7 @@ source file with the 1-based numbers of the groups it held. To rerun them by han
 source file whole.
 
 The hook also checks the `loki-homelab` ruler's LogQL rules in
-`ansible/roles/k8s/loki-homelab/files/rules/`. It runs `lokitool rules lint --dry-run` on each
+`k8s/roles/loki-homelab/files/rules/`. It runs `lokitool rules lint --dry-run` on each
 file, which parses every expression. It fails when the files, `loki_homelab_rule_groups` and
 the rendered `loki-homelab-rules` ConfigMap's keys disagree, because a file the list does not
 name never reaches the ruler. LogQL has no `promtool test rules` counterpart, so the
@@ -589,7 +589,7 @@ that every series a rule reads exists in the live Prometheus, run this on a clus
 
 ```bash
 scripts/validate/alert_tools.sh pint --no-color --config scripts/validate/pint/live.hcl \
-  lint ansible/roles/k8s/observability/files/rules/
+  lint k8s/roles/observability/files/rules/
 ```
 
 `live.hcl` reaches Prometheus by its pinned ClusterIP, `observability_prometheus_cluster_ip`,
@@ -702,7 +702,7 @@ both keys is indistinguishable from two hooks emitting one each.
 
 ### `block-protected-edits` (PreToolUse, `Edit|Write`)
 
-It *denies* direct edits to SOPS-encrypted files like `ansible/vars/secrets.yml` (use `sops` /
+It *denies* direct edits to SOPS-encrypted files like `secrets/secrets.yml` (use `sops` /
 the `/add-secret` skill) and to a generated page, meaning any file carrying a
 `generated_from:` banner.
 
@@ -710,7 +710,7 @@ the `/add-secret` skill) and to a generated page, meaning any file carrying a
 
 It applies the same two rules on the surface auto mode actually uses. `block-protected-edits`
 matches `Edit|Write` only, and auto mode instructs file changes through `sed`, here-documents and
-short scripts, so `sed -i … ansible/vars/secrets.yml` reached a bare permission prompt with
+short scripts, so `sed -i … secrets/secrets.yml` reached a bare permission prompt with
 nothing saying the file was encrypted. A write here becomes an **ask** carrying `classify()`'s
 reason — never a deny, because the path extraction is a heuristic over command text and a wrong
 extraction must not block work. Each written path is classified against the checkout that owns
@@ -813,7 +813,7 @@ the hook keys its once-only state on the `agent_id` as well. It also tags that s
 rows `agent=<id>`, so a row the subagent caused never suppresses the parent. A small doc that no
 longer fits the budget left by earlier docs in the same command waits for the next command.
 
-A path inside a git object resolves too. `git show origin/master:ansible/roles/k8s/foo/
+A path inside a git object resolves too. `git show origin/master:k8s/roles/foo/
 tasks/main.yml` names a path only after its `<ref>:` prefix is stripped, (#2651), a common read form in review sessions and subagents. `path_tokens` emits both
 the whole token and the part after its last `:`, and the existence check keeps whichever is
 real. A `file:line` token is unaffected: what follows its last `:` is a line number carrying

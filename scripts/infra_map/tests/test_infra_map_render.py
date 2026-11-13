@@ -287,7 +287,7 @@ def _cited_script_paths(page: str) -> list[str]:
 def test_every_script_path_the_page_cites_exists_on_disk():
     """The footer is a reader's route into the code, so a moved module strands them.
 
-    Nothing else guards it. `ansible/tests/repo/test_documented_paths_exist.py` only
+    Nothing else guards it. `tests/repo/test_documented_paths_exist.py` only
     checks citations carrying a `:line`, and these carry none.
     """
     cited = _cited_script_paths(rendered())

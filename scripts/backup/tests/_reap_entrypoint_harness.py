@@ -19,7 +19,7 @@ Consumers: `test_longhorn_reap_entrypoints.py`, `test_longhorn_reap_backups_cli.
 `test_longhorn_reap_backups_modes_cli.py`, `test_longhorn_reap_snapshots_cli.py`. The `_volume`,
 `_backup` and `_snapshot` builders are also the only copies the in-process suites use:
 `test_longhorn_reap_logic.py`, `test_longhorn_reap_selectors.py` and
-`ansible/tests/longhorn/test_longhorn_reap_guard.py`, which reaches this module through
+`tests/longhorn/test_longhorn_reap_guard.py`, which reaches this module through
 `pyproject.toml`'s `pythonpath`.
 """
 

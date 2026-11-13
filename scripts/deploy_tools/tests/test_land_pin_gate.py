@@ -269,7 +269,7 @@ def test_land_sh_regate_exits_0_and_runs_no_landing(land_run):
 
 # ── the land rule over a real repository ────────────────────────────────────────────────────
 
-K3S = "ansible/roles/k8s/system-upgrade/defaults/main.yml"
+K3S = "k8s/roles/system-upgrade/defaults/main.yml"
 
 
 def _git(repo: Path, *args: str) -> str:

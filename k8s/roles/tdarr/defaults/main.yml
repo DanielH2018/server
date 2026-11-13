@@ -1,0 +1,122 @@
+---
+# tdarr is the heaviest transcode consumer: it runs real files through VAAPI for minutes at a time.
+# Pinned by a VERSION TAG plus its digest, because tdarr is stateful AND rewrites library files in
+# place. Upstream pushes a numeric tag to ghcr.io for every release, so Renovate reads the version
+# off the tag and a major release arrives labelled as one. The `:latest@sha256:` pin this
+# replaced changed only its digest, which is how #4550 carried Tdarr v3 with no version anywhere
+# in its title, body or diff (#4555). The image's OCI version label reads `dev_<version>_<date>`
+# on every build, this one included; `dev_` names upstream's build channel, not a pre-release.
+#
+# The digest is what pins; the tag is what Renovate's k8s-defaults manager matches on. A
+# digest-only pin slips its regex and would age forever with no update signal, which
+# test_every_k8s_role_image_is_renovate_tracked refuses. A bump never merges itself: renovate.json
+# turns automerge off for every role the auto-deploy denylist holds, this one included.
+tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:3.00.00@sha256:7ba5325ea64951181a30f2a8d5bbc4fc0985e4c275ea1d09d15491b47b4cd8d6
+
+# The rollout budget, declared once. Read as Flux's health-check `timeout` and by
+# `progressDeadlineSeconds` in templates/deployment.yaml.j2, so the two cannot drift. 600s is
+# the shared default (manifests_rollout_timeout_default): the `tdarr-prepull` Kustomization
+# below puts the image on the node before the `tdarr` Kustomization applies, so a roll pays
+# only the container start and the `vaapi-encode` initContainer, and a stuck tdarr holds a Flux
+# worker for 10 minutes. Until the flip it was 3000s, because Ansible's crictl pre-pull and
+# the rollout wait shared it (D5 step 26).
+# The literal is `manifests_rollout_timeout` because the renderer reads a role's Flux
+# Kustomization `timeout` only from a literal role default (`role_fields` in
+# scripts/lib/k8s_roles.py); as an include var it would render Flux's 600s default (#5464).
+manifests_rollout_timeout: 600s
+tdarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
+
+# The budget of the tdarr-prepull Kustomization, whose Job pulls tdarr's image onto its node
+# before the tdarr Kustomization applies (scripts/renderer/renderer_lib/prepull.py), so the
+# Recreate stops the old pod only once the new image is present (#3875). The image is
+# 1432 MiB compressed (node status `sizeBytes`, 2026-10-09).
+# 3000s is the cold-pull budget: the 1432 MiB pull took 25m37s on 2026-10-08 (#3689).
+# It covers a pull down to 0.5 MB/s. GHCR served daniel-box at 0.21-0.33 MB/s on 2026-10-17
+# (#5525), which would take 4550-7150s here. The Job has no deadline, so a pull that slow
+# costs that revision its verdict, the Job keeps pulling, and Flux applies tdarr on a later
+# retry; a longer budget would hold a worker for over an hour on every cold pull instead.
+flux_prepull_timeout: 3000s
+
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
+# Flux's tdarr-snapshot Job snapshots both config claims below before each revision applies,
+# and the operator can revert them after a failed one; that machinery works here. Auto-deploy
+# stays off for two compounding reasons:
+#   1. tdarr also mounts `media-data` (tdarr_k8s_media_claim below) — a shared RWX volume that
+#      is NOT in k8s_autodeploy_snapshot_pvcs and is never reverted — and rewrites library files
+#      on it IN PLACE, replacing the original with the transcode. Reverting the job/library DB
+#      to before a completed transcode cannot undo that rewrite: the DB then points at an
+#      untranscoded original that no longer exists on media-data, or re-transcodes a file it
+#      already finished. Destructive and irreversible, unlike the recoverable bookkeeping desync
+#      its siblings (zigbee2mqtt, livesync, qbittorrent) have for the same "state coupled
+#      outside the volume" reason.
+#   2. It declares two claims (tdarr-configs, tdarr-server) and volume-revert reverts per claim,
+#      so a revert can leave the pair at different points in time.
+# k8s_autodeploy_snapshot_pvcs stays declared below: the snapshot Job still runs on every
+# revision.
+k8s_autodeploy: false
+k8s_autodeploy_reason: "state coupled outside the volume — rewrites media-data (shared RWX, not reverted) in place, an irreversible transcode the snapshot/revert can't undo; ALSO non-atomic two-claim revert (tdarr-configs, tdarr-server)"
+# The claims snapshotted before each revision applies. Under Flux the renderer turns this
+# list into the tdarr-snapshot Kustomization, whose Job snapshots them before tdarr applies
+# (D5.2a). Two claims, two seeds — same pairing as
+# tdarr_k8s_server_claim/tdarr_k8s_configs_claim below.
+# Declared regardless of k8s_autodeploy.
+k8s_autodeploy_snapshot_pvcs: [tdarr-configs, tdarr-server]
+
+# ── two config claims, not one ──────────────────────────────────────────────────────────────
+# /app/server is the 204 M database (library state, transcode history, node registrations) and
+# /app/configs is 20 K of flow/plugin definitions. They stay two claims rather than one:
+# seeding one claim from the tdarr directory root would drag logs/ and
+# transcode_cache/ onto Longhorn as well, which is precisely the write-heavy churn the volumes
+# below keep off it.
+tdarr_k8s_server_claim: tdarr-server
+tdarr_k8s_server_size: 3Gi
+
+tdarr_k8s_configs_claim: tdarr-configs
+tdarr_k8s_configs_size: 1Gi
+
+# `longhorn` — backed up. Excluding this volume would leave it with a single frozen restore
+# point. B2 Reachable is the readout for whether its incrementals strain B2's TRANSACTION cap.
+tdarr_k8s_storage_class: longhorn
+
+# The claims the renderer emits for this role. The tdarr Kustomization applies them after the
+# tdarr-snapshot Job.
+k8s_claims:
+  - name: "{{ tdarr_k8s_server_claim }}"
+    storage_class: "{{ tdarr_k8s_storage_class }}"
+    size: "{{ tdarr_k8s_server_size }}"
+  - name: "{{ tdarr_k8s_configs_claim }}"
+    storage_class: "{{ tdarr_k8s_storage_class }}"
+    size: "{{ tdarr_k8s_configs_size }}"
+
+# ── the media mount ─────────────────────────────────────────────────────────────────────────
+# READ-WRITE, unlike jellyfin's two read-only mounts, and that asymmetry is the point: tdarr
+# rewrites library files IN PLACE. It is the one media consumer that must be able to.
+#
+# subPath `media` at /media, NOT the whole tree at /data. The path matters for the same reason
+# it does
+# for the *arrs (D4): tdarr's database stores absolute in-container paths, so a library rooted
+# anywhere else loads fine and then fails to match a single file. It gets no access to
+# torrents/ — nothing in tdarr's job reaches into an in-flight download.
+tdarr_k8s_media_claim: media-data
+tdarr_k8s_media_subpath: media
+
+tdarr_k8s_webui_port: 8265
+# The server port internal nodes connect to. `internalNode: true` means the only node is the one
+# inside this container, reaching it over loopback — so this is deliberately NOT in the Service.
+# Exposing it would publish an unauthenticated control channel for a process that rewrites media.
+tdarr_k8s_server_port: 8266
+
+# The extended resource the dri-device-plugin advertises (dri-device-plugin daemonset.yaml.j2).
+# Named here rather than spelled inline in the manifest, so the manifest reads unambiguously.
+# It is NOT in lockstep with anything: jellyfin_k8s_dri_resource is a SEPARATE literal that
+# happens to match, as are the plugin's DaemonSet and the cluster's extended-resource check,
+# which watches the name kube-state-metrics sanitises it to. A rename catching only some of them
+# leaves this pod requesting a resource nothing advertises — unschedulable, not a loud error — or
+# leaves the extended-resource check paging fail-closed for a resource that is fine.
+# tests/services/test_dri_resource_name_agrees.py is what actually couples them.
+tdarr_k8s_dri_resource: devic.es/dri
+
+tdarr_k8s_cpu_limit: "6"
+tdarr_k8s_mem_limit: 4096Mi
+tdarr_k8s_cpu_request: "250m"
+tdarr_k8s_mem_request: 256Mi

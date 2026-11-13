@@ -41,9 +41,9 @@ from lib.k8s_roles import manifest_template
 from lib.repo_paths import ALL_VARS as GROUP_VARS
 
 # `public=false` in a role's own macro call opts the service out of the public Host rule
-# whatever k8s_public_route says. See ansible/templates/ingressroute.yml.j2. Matched against
+# whatever k8s_public_route says. See k8s/templates/ingressroute.yml.j2. Matched against
 # comment-stripped text: three roles explain the argument in a `{# #}` above the call that
-# passes it, and `roles/k8s/docs/` explained one it does NOT pass (#3148).
+# passes it, and `k8s/roles/docs/` explained one it does NOT pass (#3148).
 _PUBLIC_FALSE_RE = re.compile(r"public\s*=\s*false")
 # Only the `ingressroute()` macro renders the public Host rule. A role whose templates call
 # `monitoring_route()` alone (ical-proxy, loki-homelab) is LAN-only by construction, and a
@@ -58,7 +58,7 @@ def ingressroute_templates(role_dir: Path, entry: dict | None = None) -> list[Pa
     """Every ingressroute template a role's route is rendered from, or [] if it has no route.
 
     The role's own `templates/ingressroute*.j2`, plus the shared default under
-    `ansible/templates/` when the role resolves `ingressroute.yaml` into its manifests and
+    `k8s/templates/` when the role resolves `ingressroute.yaml` into its manifests and
     ships no template for it. `entry` is its containers_list entry, which decides that. The shared one has to be included or `reachability` reads the role's remaining
     templates alone: sonarr keeps only `ingressroute-monitoring.yaml.j2`, which calls
     `monitoring_route()` and never `ingressroute()`, so the service would report LAN-only.

@@ -44,7 +44,7 @@ def _load(name):
 _mod = _load("inject-nested-docs")
 
 ROLE_DOC = "This role's rules.\n\n## Deploy\n\nDeploy it with care.\n"
-RULE = '---\npaths:\n  - "ansible/**/*.j2"\n  - "ansible/vars/**"\n---\n\n# Rule body\n'
+RULE = '---\npaths:\n  - "k8s/**/*.j2"\n  - "secrets/**"\n---\n\n# Rule body\n'
 
 
 @pytest.fixture
@@ -53,13 +53,13 @@ def repo(tmp_path, monkeypatch):
     root = tmp_path / "repo"
     (root / ".git").mkdir(parents=True)
     (root / "CLAUDE.md").write_text("# root\n")
-    role = root / "ansible" / "roles" / "k8s" / "foo"
+    role = root / "k8s" / "roles" / "foo"
     (role / "templates").mkdir(parents=True)
     (role / "CLAUDE.md").write_text(ROLE_DOC)
     (role / "templates" / "deployment.yaml.j2").write_text("kind: Deployment\n")
-    (root / "ansible" / "vars").mkdir()
-    (root / "ansible" / "vars" / "secrets.yml").write_text("sops: {}\n")
-    (root / "ansible" / "plain.txt").write_text("x\n")
+    (root / "secrets").mkdir()
+    (root / "secrets" / "secrets.yml").write_text("sops: {}\n")
+    (root / "k8s" / "plain.txt").write_text("x\n")
     (root / ".claude" / "rules").mkdir(parents=True)
     (root / ".claude" / "rules" / "ansible.md").write_text(RULE)
     monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
@@ -76,27 +76,23 @@ def _build(repo, command, session="sess-a"):
 
 
 def test_first_command_naming_a_role_file_is_flagged(repo):
-    context, chosen = _build(
-        repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
-    )
-    assert [d for d, _ in chosen] == ["ansible/roles/k8s/foo/CLAUDE.md"]
+    context, chosen = _build(repo, "cat k8s/roles/foo/templates/deployment.yaml.j2")
+    assert [d for d, _ in chosen] == ["k8s/roles/foo/CLAUDE.md"]
     assert ROLE_DOC.strip() in context
     assert "root" not in [d for d, _ in chosen]
 
 
 def test_second_command_naming_the_same_role_is_clean(repo):
-    _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2")
-    context, chosen = _build(repo, "sed -n 1,5p ansible/roles/k8s/foo/CLAUDE.md")
+    _build(repo, "cat k8s/roles/foo/templates/deployment.yaml.j2")
+    context, chosen = _build(repo, "sed -n 1,5p k8s/roles/foo/CLAUDE.md")
     assert chosen == []
     assert context == ""
 
 
 def test_a_different_session_is_flagged_again(repo):
-    _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2", session="s1")
-    _, chosen = _build(
-        repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2", "s2"
-    )
-    assert [d for d, _ in chosen] == ["ansible/roles/k8s/foo/CLAUDE.md"]
+    _build(repo, "cat k8s/roles/foo/templates/deployment.yaml.j2", session="s1")
+    _, chosen = _build(repo, "cat k8s/roles/foo/templates/deployment.yaml.j2", "s2")
+    assert [d for d, _ in chosen] == ["k8s/roles/foo/CLAUDE.md"]
 
 
 # ── an editing rule waits for a write; a reading rule does not ───────────────
@@ -104,10 +100,10 @@ def test_a_different_session_is_flagged_again(repo):
 
 def test_a_write_to_a_rule_scoped_path_is_flagged_with_its_rule(repo):
     """The read gets the role doc alone; the first write to the same path gets the rule."""
-    _, read = _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2")
+    _, read = _build(repo, "cat k8s/roles/foo/templates/deployment.yaml.j2")
     assert ".claude/rules/ansible.md" not in [d for d, _ in read]
     context, write = _build(
-        repo, "sed -i s/a/b/ ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+        repo, "sed -i s/a/b/ k8s/roles/foo/templates/deployment.yaml.j2"
     )
     assert [d for d, _ in write] == [".claude/rules/ansible.md"]
     assert "# Rule body" in context
@@ -115,9 +111,9 @@ def test_a_write_to_a_rule_scoped_path_is_flagged_with_its_rule(repo):
 
 def test_a_reading_rule_is_flagged_on_a_read(repo):
     (repo / ".claude" / "rules" / "secrets.md").write_text(
-        '---\npaths:\n  - "ansible/vars/**"\n---\n\n# Secrets body\n'
+        '---\npaths:\n  - "secrets/**"\n---\n\n# Secrets body\n'
     )
-    _, chosen = _build(repo, "grep -c sops ansible/vars/secrets.yml")
+    _, chosen = _build(repo, "grep -c sops secrets/secrets.yml")
     assert [d for d, _ in chosen] == [".claude/rules/secrets.md"]
 
 
@@ -125,7 +121,7 @@ def test_an_inline_interpreter_counts_as_a_write(repo):
     """`python3 -c` writes through code the command text cannot show."""
     _, chosen = _build(
         repo,
-        "python3 -c 'import sys' ansible/roles/k8s/foo/templates/deployment.yaml.j2",
+        "python3 -c 'import sys' k8s/roles/foo/templates/deployment.yaml.j2",
     )
     assert ".claude/rules/ansible.md" in [d for d, _ in chosen]
 
@@ -138,65 +134,63 @@ def test_a_command_naming_no_path_is_clean(repo):
 
 
 def test_a_path_that_does_not_exist_is_clean(repo):
-    assert _build(repo, "cat ansible/roles/k8s/nope/templates/x.j2") == ("", [])
+    assert _build(repo, "cat k8s/roles/nope/templates/x.j2") == ("", [])
 
 
 def test_a_glob_under_the_role_resolves_to_its_directory(repo):
-    _, chosen = _build(repo, "grep -l kind ansible/roles/k8s/foo/templates/*.j2")
+    _, chosen = _build(repo, "grep -l kind k8s/roles/foo/templates/*.j2")
     assert (
-        "ansible/roles/k8s/foo/CLAUDE.md",
-        "ansible/roles/k8s/foo/templates",
+        "k8s/roles/foo/CLAUDE.md",
+        "k8s/roles/foo/templates",
     ) in chosen
 
 
 def test_the_root_claude_md_is_never_injected(repo):
-    _, chosen = _build(repo, "cat ansible/plain.txt")
+    _, chosen = _build(repo, "cat k8s/plain.txt")
     assert chosen == []
 
 
 def test_a_rule_glob_selects_its_rule_and_not_another_path(repo):
-    _, chosen = _build(repo, "sed -i s/a/b/ ansible/vars/secrets.yml")
+    _, chosen = _build(repo, "sed -i s/a/b/ secrets/secrets.yml")
     assert [d for d, _ in chosen] == [".claude/rules/ansible.md"]
-    assert _build(repo, "cat ansible/plain.txt", session="other") == ("", [])
+    assert _build(repo, "cat k8s/plain.txt", session="other") == ("", [])
 
 
 def test_an_absolute_path_is_flagged(repo):
-    target = (
-        repo / "ansible" / "roles" / "k8s" / "foo" / "templates" / "deployment.yaml.j2"
-    )
+    target = repo / "k8s" / "roles" / "foo" / "templates" / "deployment.yaml.j2"
     _, chosen = _build(repo, f"head -3 '{target}'")
-    assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _ in chosen]
+    assert "k8s/roles/foo/CLAUDE.md" in [d for d, _ in chosen]
 
 
 def test_a_git_show_ref_path_is_flagged(repo):
     """`git show <ref>:<path>` names the path only after the ref is stripped."""
     _, chosen = _build(
         repo,
-        "git show origin/master:ansible/roles/k8s/foo/templates/deployment.yaml.j2",
+        "git show origin/master:k8s/roles/foo/templates/deployment.yaml.j2",
     )
-    assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _ in chosen]
+    assert "k8s/roles/foo/CLAUDE.md" in [d for d, _ in chosen]
 
 
 def test_a_git_show_ref_path_under_no_role_is_clean(repo):
     """The near miss: the ref strips fine, and what is left is outside every role."""
-    assert _build(repo, "git show origin/master:ansible/plain.txt") == ("", [])
+    assert _build(repo, "git show origin/master:k8s/plain.txt") == ("", [])
 
 
 def test_a_slashed_ref_strips_too(repo):
     """A ref carrying its own `/` — `refs/tmp/rev2364:<path>` — must parse."""
     _, chosen = _build(
         repo,
-        "git show refs/tmp/rev2364:ansible/roles/k8s/foo/templates/deployment.yaml.j2",
+        "git show refs/tmp/rev2364:k8s/roles/foo/templates/deployment.yaml.j2",
     )
-    assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _ in chosen]
+    assert "k8s/roles/foo/CLAUDE.md" in [d for d, _ in chosen]
 
 
 def test_a_file_line_token_still_resolves(repo):
     """The `:` in `file:line` is a line number, and the dirname fallback owns that token."""
     _, chosen = _build(
-        repo, "sed -n 1,5p ansible/roles/k8s/foo/templates/deployment.yaml.j2:12"
+        repo, "sed -n 1,5p k8s/roles/foo/templates/deployment.yaml.j2:12"
     )
-    assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _ in chosen]
+    assert "k8s/roles/foo/CLAUDE.md" in [d for d, _ in chosen]
 
 
 def test_a_path_outside_any_checkout_is_clean(repo, tmp_path):
@@ -211,39 +205,37 @@ def test_a_doc_the_harness_already_loaded_is_clean(repo, tmp_path):
     """A `nested_traversal` row for this session means Read already loaded the doc."""
     (tmp_path / "instructions.log").write_text(
         "2026-09-21T00:00:00Z [sess-a  ] nested_traversal Project  "
-        "ansible/roles/k8s/foo/CLAUDE.md trigger=ansible/roles/k8s/foo/tasks/main.yml\n"
+        "k8s/roles/foo/CLAUDE.md trigger=k8s/roles/foo/tasks/main.yml\n"
     )
-    _, chosen = _build(
-        repo, "sed -i s/a/b/ ansible/roles/k8s/foo/templates/deployment.yaml.j2"
-    )
+    _, chosen = _build(repo, "sed -i s/a/b/ k8s/roles/foo/templates/deployment.yaml.j2")
     assert [d for d, _ in chosen] == [".claude/rules/ansible.md"]
 
 
 def test_another_sessions_log_row_does_not_suppress(repo, tmp_path):
     (tmp_path / "instructions.log").write_text(
         "2026-09-21T00:00:00Z [sess-b  ] nested_traversal Project  "
-        "ansible/roles/k8s/foo/CLAUDE.md\n"
+        "k8s/roles/foo/CLAUDE.md\n"
     )
-    _, chosen = _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2")
-    assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _ in chosen]
+    _, chosen = _build(repo, "cat k8s/roles/foo/templates/deployment.yaml.j2")
+    assert "k8s/roles/foo/CLAUDE.md" in [d for d, _ in chosen]
 
 
 # ── subagents: same session id, empty context ────────────────────────────────
 
 
 def test_a_subagent_is_flagged_for_a_doc_its_parent_already_got(repo):
-    _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2")
+    _build(repo, "cat k8s/roles/foo/templates/deployment.yaml.j2")
     _, chosen = _mod.build_context(
-        "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2",
+        "cat k8s/roles/foo/templates/deployment.yaml.j2",
         str(repo),
         "sess-a",
         agent_id="a1b2c3",
     )
-    assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _, _ in chosen]
+    assert "k8s/roles/foo/CLAUDE.md" in [d for d, _, _ in chosen]
 
 
 def test_a_second_command_in_the_same_subagent_is_clean(repo):
-    command = "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+    command = "cat k8s/roles/foo/templates/deployment.yaml.j2"
     _mod.build_context(command, str(repo), "sess-a", agent_id="a1b2c3")
     assert _mod.build_context(command, str(repo), "sess-a", agent_id="a1b2c3") == (
         "",
@@ -258,9 +250,7 @@ def test_a_subagents_log_row_does_not_suppress_the_parent(repo, tmp_path, monkey
         "session_id": "sess-a",
         "agent_id": "a1b2c3",
         "cwd": str(repo),
-        "tool_input": {
-            "command": "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
-        },
+        "tool_input": {"command": "cat k8s/roles/foo/templates/deployment.yaml.j2"},
     }
     assert _mod.context(payload)
     loaded = {
@@ -268,7 +258,7 @@ def test_a_subagents_log_row_does_not_suppress_the_parent(repo, tmp_path, monkey
         "session_id": "sess-a",
         "agent_id": "a1b2c3",
         "cwd": str(repo),
-        "file_path": str(repo / "ansible/roles/k8s/foo/CLAUDE.md"),
+        "file_path": str(repo / "k8s/roles/foo/CLAUDE.md"),
         "load_reason": "nested_traversal",
         "memory_type": "Project",
     }
@@ -276,8 +266,8 @@ def test_a_subagents_log_row_does_not_suppress_the_parent(repo, tmp_path, monkey
     _load("log-instructions").main()
     rows = (tmp_path / "instructions.log").read_text().splitlines()
     assert len(rows) == 2 and all("agent=a1b2c3" in r for r in rows), rows
-    _, chosen = _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2")
-    assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _ in chosen]
+    _, chosen = _build(repo, "cat k8s/roles/foo/templates/deployment.yaml.j2")
+    assert "k8s/roles/foo/CLAUDE.md" in [d for d, _ in chosen]
 
 
 # ── the payload budget ───────────────────────────────────────────────────────────────
@@ -288,15 +278,15 @@ def test_a_doc_that_fits_alone_but_not_the_remaining_budget_is_deferred(repo):
 
     The two docs overflow one payload but stay under `SESSION_BUDGET_BYTES` together.
     """
-    (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(
+    (repo / "k8s" / "roles" / "foo" / "CLAUDE.md").write_text(
         "role doc line with some words\n" * 150
     )
     (repo / ".claude" / "rules" / "ansible.md").write_text(
         RULE + "rule line of text here\n" * 130
     )
-    command = "sed -i s/a/b/ ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+    command = "sed -i s/a/b/ k8s/roles/foo/templates/deployment.yaml.j2"
     _, first = _build(repo, command)
-    assert [d for d, _ in first] == ["ansible/roles/k8s/foo/CLAUDE.md"]
+    assert [d for d, _ in first] == ["k8s/roles/foo/CLAUDE.md"]
     context, second = _build(repo, command)
     assert [d for d, _ in second] == [".claude/rules/ansible.md"]
     assert "rule line" in context and "only its outline" not in context
@@ -316,7 +306,7 @@ def test_the_budget_is_the_numbers_this_repo_was_measured_against():
 
 
 def test_a_doc_under_the_budget_is_inlined(repo):
-    context, _ = _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2")
+    context, _ = _build(repo, "cat k8s/roles/foo/templates/deployment.yaml.j2")
     assert "Deploy it with care." in context
 
 
@@ -330,9 +320,7 @@ def test_main_emits_additional_context_and_logs_bash_path_match(
         "tool_name": "Bash",
         "session_id": "sess-main-0001",
         "cwd": str(repo),
-        "tool_input": {
-            "command": "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
-        },
+        "tool_input": {"command": "cat k8s/roles/foo/templates/deployment.yaml.j2"},
     }
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
     assert _mod.main() == 0
@@ -344,8 +332,8 @@ def test_main_emits_additional_context_and_logs_bash_path_match(
     assert any(
         "[sess-mai]" in r
         and "bash_path_match" in r
-        and "ansible/roles/k8s/foo/CLAUDE.md" in r
-        and "trigger=ansible/roles/k8s/foo/templates/deployment.yaml.j2" in r
+        and "k8s/roles/foo/CLAUDE.md" in r
+        and "trigger=k8s/roles/foo/templates/deployment.yaml.j2" in r
         for r in rows
     ), rows
 
@@ -366,7 +354,7 @@ def test_main_is_silent_for_a_non_bash_tool(repo, monkeypatch, capsys):
 
 
 def test_rule_globs_reads_the_block_list_form():
-    assert _mod.rule_globs(RULE) == ["ansible/**/*.j2", "ansible/vars/**"]
+    assert _mod.rule_globs(RULE) == ["k8s/**/*.j2", "secrets/**"]
 
 
 def test_rule_globs_reads_the_flow_form():
@@ -384,7 +372,7 @@ def test_rule_globs_without_frontmatter_is_empty():
 
 # A role that exists and carries a CLAUDE.md, so a rename or move goes red here rather than
 # silently emptying every selection.
-KNOWN_ROLE = "ansible/roles/k8s/monitor-bridge"
+KNOWN_ROLE = "k8s/roles/monitor-bridge"
 
 
 def test_the_real_tree_resolves_a_known_role_to_its_doc():
@@ -405,9 +393,9 @@ def test_every_reading_rule_names_a_real_rule_file():
 
 def test_the_real_rules_globs_match_their_own_examples():
     root = _mod._checkout_root(_REPO)
-    assert ".claude/rules/secrets.md" in _mod.docs_for(root, "ansible/vars/secrets.yml")
+    assert ".claude/rules/secrets.md" in _mod.docs_for(root, "secrets/secrets.yml")
     assert ".claude/rules/k8s-templates.md" in _mod.docs_for(
-        root, "ansible/roles/k8s/traefik/templates/deployment.yaml.j2"
+        root, "k8s/roles/traefik/templates/deployment.yaml.j2"
     )
 
 

@@ -14,7 +14,7 @@ import json
 
 import pytest
 
-from lib.ansible_jinja_env import make_env, register_ansible_filters
+from lib.guard_jinja_env import make_env, register_ansible_filters
 from renderer.renderer_lib import jinja_filters as filters
 from renderer.renderer_lib.jinja_filters import (
     b64encode,

@@ -1,6 +1,6 @@
 # autofix-bridge actuators — how each plane works, and what it refuses to do
 
-`ansible/roles/k8s/autofix-bridge/CLAUDE.md` is the role doc, and it keeps the contract: the
+`k8s/roles/autofix-bridge/CLAUDE.md` is the role doc, and it keeps the contract: the
 two planes stay separate, each is reversible by one env flip, and nothing deletes before a
 replacement is verified genuine. This page is the working-out — each actuator's mechanics, the
 valve that was retired and why, and the commands for running either cron by hand. A session
@@ -86,7 +86,7 @@ shadow. Ledger and outcome state live under `/var/lib/autofix-fake-remux/`.
 
 The state dir `/var/lib/autofix-fake-remux` is created `sys_user`-owned. Both crons import the
 shared `hosts/lib/host_lib.py` and run via `uv run --no-project --python <pin>`, the `host_python_version` pin in
-`ansible/inventory/group_vars/all.yml`. monitor-bridge no longer reads these state files, so no
+`inventory/group_vars/all.yml`. monitor-bridge no longer reads these state files, so no
 deploy order applies between `autofix-bridge` and `monitor-bridge`: `fake-remux-health` reads
 the state files itself and writes the three textfile verdicts that the `other-setup-checks` rules
 read.
@@ -113,7 +113,7 @@ FAKE_REMUX_REPLACE_MODE=shadow SONARR_API_KEY=… LEDGER_FILE=/tmp/l.json \
   /usr/bin/uv run --no-project --python 3.15.2 files/fake_remux.py replace
 ```
 
-Unit tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` for the sidecar, and `uv run
+Unit tests: `uv run pytest k8s/roles/autofix-bridge/tests` for the sidecar, and `uv run
 pytest hosts/components/fake-remux/tests` for the fake-remux logic suites.
 
 ## The survey that decided what this role does NOT fix
@@ -130,5 +130,5 @@ configarr. Do not re-propose these.
 inventory file sets them, so the `default(5)` in
 `hosts/components/fake-remux/templates/fake-remux.config.env.j2` applies to both.
 `autofix_fake_remux_replace_mode` (off/shadow/live) gates the reconciler, and
-`ansible/inventory/host_vars/daniel-box.yml` sets it. `autofix_fake_remux_policy`, also in that
+`inventory/host_vars/daniel-box.yml` sets it. `autofix_fake_remux_policy`, also in that
 host_vars file, is the git-tracked selection-policy dict rendered to `policy.json`.

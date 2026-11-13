@@ -28,7 +28,7 @@ def _k8s_tools(run):
 
 def _k8s_inventory(root, tag):
     """Write a checkout whose ONLY service list entry is `tag`."""
-    (root / "ansible" / "inventory" / "host_vars").mkdir(parents=True)
+    (root / "inventory" / "host_vars").mkdir(parents=True)
     (root / "cluster").mkdir()
     (root / "cluster" / "services.yml").write_text(
         f"containers_list:\n  - name: {tag}\n"
@@ -102,7 +102,7 @@ def test_a_pi_compose_service_tag_probes_the_pi_alone(tmp_path):
     DaemonSet's ready pods cannot answer for the Pi's container.
     """
     _k8s_inventory(tmp_path, "loki-homelab")
-    (tmp_path / "ansible" / "inventory" / "host_vars" / "daniel-pi.yml").write_text(
+    (tmp_path / "inventory" / "host_vars" / "daniel-pi.yml").write_text(
         "compose_services:\n  - name: alloy\n"
     )
     seen = []
@@ -124,7 +124,7 @@ def test_a_tag_no_tree_declares_still_probes_k8s_first(tmp_path):
     Same call with an inventory that declares nothing -- `set()` keeps the old order, k8s then
     `--docker`, which is what a block tag reaching the gate relies on.
     """
-    (tmp_path / "ansible" / "inventory" / "host_vars").mkdir(parents=True)
+    (tmp_path / "inventory" / "host_vars").mkdir(parents=True)
     seen = []
 
     def run(argv, **kwargs):

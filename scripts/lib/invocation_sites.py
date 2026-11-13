@@ -103,7 +103,7 @@ def systemd_exec_lines(repo: Path = REPO) -> list[tuple[str, str]]:
     """
     out = []
     units = [
-        *repo.glob("ansible/roles/**/*.service.j2"),
+        *repo.glob("k8s/roles/**/*.service.j2"),
         *repo.glob("hosts/components/**/*.service.j2"),
     ]
     for svc in sorted(units):

@@ -62,7 +62,7 @@ records it here.
 **The deploy path changes, and the decision does not.** `daniel-pi` keeps Docker Compose and
 stays out of the cluster. Its Docker services are no longer Ansible roles that
 `deploy.sh -e target=daniel-pi` renders and applies over SSH. They are `compose_services`
-entries in `ansible/inventory/host_vars/daniel-pi.yml`, rendered from
+entries in `inventory/host_vars/daniel-pi.yml`, rendered from
 `hosts/components/pi-compose/services/<name>/` into the `homelab-daniel-pi` host package. The
 Pi's updater installs each package version, and `homelab-compose.service` runs the services as
 one Compose project, `homelab`. A merged change reaches the Pi without a hand-run deploy.
@@ -70,7 +70,7 @@ one Compose project, `homelab`. A merged change reaches the Pi without a hand-ru
 **`ansible/roles/containers/` is retired.** H5.6 to H5.9 moved docker-proxy, autoheal, alloy and
 wg-easy into the package, and H5.12 deleted the shared `common` role and the tree with it. A
 service's configuration still lives in the tree that deploys it: the Pi's under
-`hosts/components/pi-compose/`, the cluster's under `ansible/roles/k8s/`.
+`hosts/components/pi-compose/`, the cluster's under `k8s/roles/`.
 
 **`-e target=daniel-pi` stays for the setup plays.** `initial_setup.yml` and the Docker engine
 upgrade still reach the Pi over SSH with it. It no longer deploys a service.
@@ -81,14 +81,14 @@ nothing.
 
 ## Consequences
 
-**The repo carries two deployment platforms permanently.** `ansible/roles/k8s/` and
+**The repo carries two deployment platforms permanently.** `k8s/roles/` and
 `ansible/roles/containers/` are both live, and a service's configuration lives in whichever
 tree deploys it — never across the boundary. Eleven roles under `containers/` were
 configuration-only sources for a k8s counterpart until 2026-08-14; they moved into it, and
 reviving one as a Docker service means recovering its Compose plumbing from git history.
 
 **A Compose role on either cluster node deploys nothing.** Neither has Docker, so a new
-service belongs under `roles/k8s/` unless it must be on the Pi. This is the failure mode the
+service belongs under `k8s/roles/` unless it must be on the Pi. This is the failure mode the
 split invites, and it is silent.
 
 **The recovery path does not depend on the thing being recovered.** WireGuard staying on the

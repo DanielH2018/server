@@ -19,7 +19,7 @@ without a `:line` or `::node` suffix, that resolves to a tracked file: doc-relat
 repo-relative second, and as the unique suffix of some tracked path third, which is what
 makes `deploy_logic.py` resolve when there is one such file and stay unresolved when a
 tests/ copy makes it ambiguous. This is deliberately wider than the citation guard in
-`ansible/tests/repo/test_documented_paths_exist.py`, which counts only line-numbered
+`tests/repo/test_documented_paths_exist.py`, which counts only line-numbered
 citations because a bare path there is a claim it cannot always check. Here an unresolved
 path costs nothing: it is simply not a source.
 

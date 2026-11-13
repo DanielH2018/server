@@ -203,7 +203,7 @@ def test_the_host_packages_job_runs_the_engine_case():
 
 
 def test_case_inputs_names_the_engine_case():
-    # The census in ansible/tests/repo/ reaches a case module only once main imports it, so a
+    # The census in tests/repo/ reaches a case module only once main imports it, so a
     # PR that changes only this case would skip the cases until then.
     jobs = yaml_fast.safe_load((fx.REPO / CI_WORKFLOW).read_text())["jobs"]
     (render,) = [

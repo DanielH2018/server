@@ -44,7 +44,7 @@ def test_every_dockerfile_is_renovate_visible(tracked: list[str]) -> None:
     """Every FROM-bearing build file must sit where Renovate's dockerfile manager looks.
 
     The compose-template guard above covers `image:` lines; this is its sibling for built
-    images. Discovery is by CONTENT (any tracked ansible/ file with a FROM line), not by
+    images. Discovery is by CONTENT (any tracked k8s/ file with a FROM line), not by
     name, so the check doesn't share the blind spot it guards against.
 
     Whether the FROM carries a version is a separate question, and its own test below —
@@ -55,12 +55,12 @@ def test_every_dockerfile_is_renovate_visible(tracked: list[str]) -> None:
     build_files = [
         f
         for f in tracked
-        if f.startswith("ansible/")
+        if f.startswith("k8s/")
         and not f.endswith(".md")
         and from_re.search((_REPO / f).read_text(errors="ignore"))
     ]
     assert build_files, (
-        "no FROM-bearing build files found under ansible/ (discovery drifted?)"
+        "no FROM-bearing build files found under k8s/ (discovery drifted?)"
     )
     escaped = [
         f
@@ -98,12 +98,12 @@ def test_no_built_image_floats_on_an_unpinned_base(tracked: list[str]) -> None:
     build_files = [
         f
         for f in tracked
-        if f.startswith("ansible/")
+        if f.startswith("k8s/")
         and not f.endswith(".md")
         and _FROM_RE.search((_REPO / f).read_text(errors="ignore"))
     ]
     assert build_files, (
-        "no FROM-bearing build files found under ansible/ (discovery drifted?)"
+        "no FROM-bearing build files found under k8s/ (discovery drifted?)"
     )
     floating = []
     for f in build_files:
@@ -159,7 +159,7 @@ def test_n8n_base_pins_in_lockstep() -> None:
     The same shape as test_shellcheck_py_pins_in_lockstep below, and for the same reason: a
     grouping rule expresses intent, only a test enforces it.
     """
-    root = _REPO / "ansible/roles/k8s/n8n/templates"
+    root = _REPO / "k8s/roles/n8n/templates"
     app = re.search(
         r"^FROM\s+n8nio/n8n:([^@\s]+)",
         (root / "Dockerfile.j2").read_text(),
@@ -185,7 +185,7 @@ def test_n8n_base_pins_in_lockstep() -> None:
 # moves. So it passes equally on a lockstep DOWNGRADE (the 2.37.10 digests to the 2.37.9
 # digests). Nothing in the repo read the version behind either digest; a human did, by hand.
 #
-# The ledger (ansible/roles/k8s/n8n/base-pin-history.tsv) is where the version lands,
+# The ledger (k8s/roles/n8n/base-pin-history.tsv) is where the version lands,
 # appended once per bump. These guards tie it to the live FROMs and to each other. The check
 # is deliberately offline: `-p leakguard` in pyproject's addopts fails any test that reaches
 # the network, so resolving a digest against the registry is not available to the suite, and

@@ -26,7 +26,7 @@ import ui_login
 from lib.repo_paths import REPO as REPO_ROOT
 
 AUTHELIA_DEFAULTS = os.path.join(
-    REPO_ROOT, "ansible", "roles", "k8s", "authelia", "defaults", "main.yml"
+    REPO_ROOT, "k8s", "roles", "authelia", "defaults", "main.yml"
 )
 
 
@@ -300,9 +300,8 @@ def test_totp_parameters_match_the_seed_init_container():
     """
     deployment = os.path.join(
         REPO_ROOT,
-        "ansible",
-        "roles",
         "k8s",
+        "roles",
         "authelia",
         "templates",
         "deployment.yaml.j2",

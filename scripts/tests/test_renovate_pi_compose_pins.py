@@ -40,7 +40,7 @@ PI_IMAGES = {
     f"{_SERVICES}/wg-easy/compose.yaml.j2": {"ghcr.io/wg-easy/wg-easy"},
 }
 
-LOKI_HOMELAB_DEFAULTS = "ansible/roles/k8s/loki-homelab/defaults/main.yml"
+LOKI_HOMELAB_DEFAULTS = "k8s/roles/loki-homelab/defaults/main.yml"
 
 
 def _pi_manager() -> dict:

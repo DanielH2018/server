@@ -23,7 +23,7 @@ from lib.repo_paths import REPO as _REPO_PATH
 # this module is the last of the twenty call sites that module's docstring describes, which
 # re-derived `parents[2]` by hand under three different names.
 REPO = str(_REPO_PATH)
-SECRETS_FILE = os.path.join(REPO, "ansible", "vars", "secrets.yml")
+SECRETS_FILE = os.path.join(REPO, "secrets", "secrets.yml")
 
 
 def sops_set(

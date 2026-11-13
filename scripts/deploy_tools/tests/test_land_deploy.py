@@ -37,7 +37,7 @@ def test_no_tag_outcomes(landing, fakes, verdict, code):
 def test_the_diff_fallback_derives_from_since_to_the_merge_in_the_primary_checkout(
     landing,
 ):
-    path = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
+    path = "k8s/roles/sonarr/templates/deployment.yaml.j2"
     ln, calls = _ready(landing, Fakes(changed=f"{path}\n"), since="abc")
     ln.needs_diff = True
     deploy.derive_from_diff(ln)

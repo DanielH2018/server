@@ -57,9 +57,9 @@ In addition:
 **The readers.**
 
 - `test_every_recorded_atom_hashes_as_recorded` in `test_facts_lock_matches_tree.py`
-  (`ansible/tests/repo/`). It blocks in the `pytest` job, and at commit time through the
+  (`tests/repo/`). It blocks in the `pytest` job, and at commit time through the
   `static-ratchet-tests` prek hook.
-- `test_facts_lock_units_lint_clean.py` (`ansible/tests/repo/`). It holds the 185 sections
+- `test_facts_lock_units_lint_clean.py` (`tests/repo/`). It holds the 185 sections
   with a lock row lint-clean, and it blocks.
 - `fact_status.py status` and `report`, through `lock.read_lock` and `lock.build_repo_edb`.
   On an absent file, `read_lock` returns `{}`, so every citing section would read
@@ -115,7 +115,7 @@ Two shared helpers live inside modules G2 deletes:
     - the ordering comments above `regen-role-glance`, `facts-reverify-changed`,
       `facts-lint-changed` and `static-ratchet-tests`. The `facts-lint-changed` comment
       names `test_facts_lock_units_lint_clean.py`.
-- `test_static_ratchet_hook.py` (`ansible/tests/repo/`): its `EXPECTED_MODULES` set, and the
+- `test_static_ratchet_hook.py` (`tests/repo/`): its `EXPECTED_MODULES` set, and the
   `docs/facts.lock` case in its parametrize list.
 - `scripts/tests/test_census_rows_test_modules.py`: a `must_find` set that names
   `test_facts_lock_matches_tree.py` and `scripts/lib/tests/test_facts_lock.py`.
@@ -148,7 +148,7 @@ Two shared helpers live inside modules G2 deletes:
   `test_every_recorded_atom_hashes_as_recorded`*.
 - `docs/claude-tooling.md`: one paragraph on the `_facts_line` injection line.
 - `mkdocs.yml` lists every ADR in its nav by hand.
-  `ansible/tests/repo/test_adr_links.py:test_the_nav_lists_every_adr` fails an ADR the nav
+  `tests/repo/test_adr_links.py:test_the_nav_lists_every_adr` fails an ADR the nav
   leaves out.
 
 **Generated pages that carry rows from the lock's code.** `docs/reference/decisions.md`
@@ -164,7 +164,7 @@ marker-bearing file.
   hygiene sweep deleted the `test_status_census` node it used to cite.
 - The highest ADR is 0019. ADR-0017 amends ADR-0011, and ADR-0011's *Status* section says
   so in one paragraph. That pair is the amendment precedent.
-- `VALID_STATUS` in `test_adr_links.py` (`ansible/tests/repo/`) accepts `Accepted`,
+- `VALID_STATUS` in `test_adr_links.py` (`tests/repo/`) accepts `Accepted`,
   `Proposed`, `Rejected` and `Superseded by ADR-NNNN`.
 - `docs/adr/index.md` *Superseding*: an ADR is never deleted or rewritten to match a
   reversed decision.
@@ -179,7 +179,7 @@ calls answered for PR #4440 on 2026-10-11.
 **The whole-tree lint.** `uv run --frozen python scripts/dev/fact_status.py lint` exits 0
 with no output, in 0.29 seconds, over all 451 sections. `lint.WARN_RULES` holds
 `one-way-test` and `version-as-fact`. Every other rule in `lint.RULES` is an error.
-`retired-host` reads `ansible/inventory/hosts.ini`, which H7 keeps as renderer data.
+`retired-host` reads `inventory/hosts.ini`, which H7 keeps as renderer data.
 
 **Sizes, by `wc -l`.**
 
@@ -272,8 +272,8 @@ Four rules can turn it red from a diff that edits no `CLAUDE.md`:
 
 - `unresolved-atom`: the diff deletes or renames what a section cites.
 - `ambiguous-marker`: the diff adds a second `DECIDED` marker that a cited prefix matches.
-- `retired-host`: the diff removes a host from `ansible/inventory/hosts.ini`. No slice in
-  the index retires a host. H7 keeps `ansible/inventory/` as renderer data, so the rule
+- `retired-host`: the diff removes a host from `inventory/hosts.ini`. No slice in
+  the index retires a host. H7 keeps `inventory/` as renderer data, so the rule
   stays live.
 - `renovate-pin`: the diff changes `renovate.json` so that a manager selects a YAML key a
   section cites. M2's PR 2 and H5.7 each add a Renovate manager, so either can meet this.
@@ -345,7 +345,7 @@ condition, because PR 3 deletes the hook.
    lint.py:  - lock-tampered   + lock-retired   - first_cited_units
    report.py: - precision, parity, status ranking, lock-commit window anchor
               + sections citing nothing, by reads
- ansible/tests/repo/
+ tests/repo/
 -  test_facts_lock_matches_tree.py  test_facts_lock_units_lint_clean.py
 +  a whole-tree lint test (every section lint-clean, non-vacuous)
  .claude/hooks/
@@ -422,7 +422,7 @@ The pre-flip PR therefore takes the label PR 2b.
     - Fix the `lint.py` comment in `lint_sections` that names `lock.repo_citations`.
     - The lock still exists, so this PR changes no gate.
 - **PR 2b — whole-tree lint test and reviewer tier 2** (about 90 lines added, 40 deleted).
-    - Add the whole-tree lint test to `ansible/tests/repo/`, with its red-proof pair and its
+    - Add the whole-tree lint test to `tests/repo/`, with its red-proof pair and its
       non-vacuity floor.
     - Delete `test_facts_lock_units_lint_clean.py`. The new test checks every section,
       which includes the 185 it held.
@@ -531,7 +531,7 @@ git grep -n -e facts-reverify-changed -e test_every_recorded_atom_hashes_as_reco
 git grep -n -E -e 'lib\.facts\.(lock|evidence|relations)\b' \
   -e 'from \.(lock|evidence|relations) import' -- scripts/ .claude/ ansible/
 uv run pytest -q -p no:cacheprovider scripts/lib/tests scripts/dev/tests scripts/docs/tests \
-  ansible/tests/repo .claude/hooks/tests
+  tests/repo .claude/hooks/tests
 prek run --all-files
 ```
 
@@ -586,18 +586,18 @@ The job summary carries the same table. Reading it is an operator browser step, 
 `gh` command shows it.
 
 If no such PR arrives within 7 days, open a draft PR from a scratch branch. The PR changes
-only the value of `ansible/roles/k8s/valheim/defaults/main.yml:valheim_k8s_rollout_timeout`.
+only the value of `k8s/roles/valheim/defaults/main.yml:valheim_k8s_rollout_timeout`.
 Read its CI, then close it without merging and delete the branch. A draft PR never reaches master,
 so nothing deploys.
 
 Red-proof for each new check, as paired tests:
 
-- **The whole-tree lint test** (`ansible/tests/repo/`).
+- **The whole-tree lint test** (`tests/repo/`).
     - A fixture repository whose `CLAUDE.md` cites a missing symbol is flagged with
       `unresolved-atom`.
     - The same fixture, citing a symbol that exists, is clean.
     - Non-vacuity: the live walk reaches at least 400 sections. It must find a section of the
-      root `CLAUDE.md` and one of `ansible/roles/k8s/traefik/CLAUDE.md`.
+      root `CLAUDE.md` and one of `k8s/roles/traefik/CLAUDE.md`.
 - **The plain replay window** (`scripts/lib/tests/test_facts_report.py`, PR 2).
     - A fixture history has a lock commit well before the `--days` boundary and commits on
       both sides of the boundary. The replay's first commit falls inside the boundary. G1's
@@ -705,7 +705,7 @@ Each risk is checked against `docs/failure-classes.md`.
 - **Failure class 3, an empty result read as clean.** A whole-tree lint that silently walks
   nothing would pass. The non-vacuity floor and the two named members guard it.
 - **The floor and a member meet other areas' deletions.** The floor of 400 sections and the
-  `ansible/roles/k8s/traefik/CLAUDE.md` member both depend on role docs. R4, D6 and H7
+  `k8s/roles/traefik/CLAUDE.md` member both depend on role docs. R4, D6 and H7
   delete role trees. The slice that deletes a member swaps it for a surviving doc, such as
   the root `CLAUDE.md`, and lowers the floor in the same PR. The test fails loudly until it
   does.
@@ -714,7 +714,7 @@ Each risk is checked against `docs/failure-classes.md`.
     - A Renovate manager added by M2's PR 2 or H5.7 turns red any section that cites a key
       the manager selects, under `renovate-pin`. That PR changes the citation to a path
       atom.
-    - A host removed from `ansible/inventory/hosts.ini` turns red every section naming it,
+    - A host removed from `inventory/hosts.ini` turns red every section naming it,
       under `retired-host`. No slice in the index removes a host.
     - In both cases the PR that made the section wrong is the one held red.
 - **A stale comment in a setup role.** `agent_user.yml` keeps naming
@@ -868,7 +868,7 @@ Findings raised, all fixed except where marked:
     - The choice is to accept that, and ADR-0023's *Decision* names it.
     - The diffs that can trip it from outside a `CLAUDE.md` are named: a host removal
       (`retired-host`), and a Renovate manager from M2's PR 2 or H5.7 (`renovate-pin`).
-    - H7 keeps `ansible/inventory/`, so `retired-host` stays live.
+    - H7 keeps `inventory/`, so `retired-host` stays live.
 - **G2-R1-05 (medium): agents cannot read job summaries.** Fixed.
     - The gap is in ADR-0023's *Consequences*.
     - `gh run view --help` was checked: its JSON fields hold no summary.
