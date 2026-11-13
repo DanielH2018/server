@@ -525,7 +525,9 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 # ci.yml and pyproject.toml's `testpaths`. test_role_claude_md reads every role's CLAUDE.md
 # beside its tasks and templates. The census rows read tracked `.py` files, and four more
 # kinds of path:
-# - every workflow under .github/workflows/, for the runner-pin and shared-fetch rows;
+# - every workflow under .github/workflows/, for the runner-pin, shared-fetch and download-retry
+#   rows, and every composite action's action.yml under .github/actions/, which the
+#   download-retry row reads too (#8195);
 # - any file under a role's templates/, defaults/ or vars/, for the rows that refuse a
 #   Markdown or pytest file a role ships and a hand-written `dependsOn`;
 # - prek.toml, for the row that holds each literal path in a hook's `files` to the tree;
@@ -552,7 +554,7 @@ name = "Static ratchet tests (module length, section lint, shard partition, doc 
 entry = "uv run --frozen pytest -q -p no:cacheprovider ansible/tests/repo/test_module_length_ratchet.py ansible/tests/repo/test_every_section_lints_clean.py ansible/tests/repo/test_pytest_shards_partition_the_suite.py scripts/docs/tests/test_gen_doc_fragments.py ansible/tests/repo/test_role_claude_md.py ansible/tests/repo/test_census_rows_python.py ansible/tests/repo/test_census_rows_suite.py ansible/tests/repo/test_census_rows_roles.py ansible/tests/repo/test_census_rows_text.py ansible/tests/repo/test_census_rows_layout.py"
 language = "system"
 pass_filenames = false
-files = "(\\.py$|(^|/)CLAUDE\\.md$|^scripts/dev/pytest_shard_weights\\.json$|^ansible/tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/[^/]+\\.yml$|^ansible/.*\\.(ya?ml|j2|ini)$|^ansible/roles/[^/]+/[^/]+/(templates|defaults|vars)/|^prek\\.toml$|^(\\.claude/(skills|agents)|evals/cases)/.*\\.(md|json)$|\\.(pyc|so)$|(^|/)__pycache__/|\\.(sh|bash)$|^hosts/(lib|components)/|^\\.claude/wait-sources/)"
+files = "(\\.py$|(^|/)CLAUDE\\.md$|^scripts/dev/pytest_shard_weights\\.json$|^ansible/tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/[^/]+\\.yml$|^\\.github/actions/[^/]+/action\\.yml$|^ansible/.*\\.(ya?ml|j2|ini)$|^ansible/roles/[^/]+/[^/]+/(templates|defaults|vars)/|^prek\\.toml$|^(\\.claude/(skills|agents)|evals/cases)/.*\\.(md|json)$|\\.(pyc|so)$|(^|/)__pycache__/|\\.(sh|bash)$|^hosts/(lib|components)/|^\\.claude/wait-sources/)"
 
 # The two census modules over the pytest-only modules, `_test_module_rules.pytest_only_modules`:
 # the git and subprocess rows and the render-and-path rows. They were the slowest two in the
