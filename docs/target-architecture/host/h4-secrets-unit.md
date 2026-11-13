@@ -1080,8 +1080,7 @@ and before the slice closes.
       under `/usr/lib/homelab/compose/`, while a declared output in the same component is
       routed;
     - an undeclared template that reads a secret fails the render and names the key. The
-      test asserts the raise, because `lib.render_guard.BASE_CONTEXT` stubs `domain` as
-      `example.com`, and a strip that missed the stub would render it;
+      test asserts the raise;
     - the host context carries `inventory_hostname`. A fixture render with it removed is
       flagged by the component test below;
     - a fixture package whose `package.yml` marks a unit `windowed`, and whose declared

@@ -1,8 +1,8 @@
 {#
-  checksum/<name> pod-template annotation: restarts a workload when content it reads changes
-  but no manifest the renderer emits embeds that content. `value` is the caller's own hash,
-  e.g. observability's hash of a ConfigMap body. It renders `unstaged` when undefined, so a
-  render with no value never rolls the pod. Content embedded in an emitted manifest needs no
+  checksum/<name> pod-template annotation: rolls one workload when the input its caller hashes
+  changes. observability hashes each workload's own ConfigMap body into it, so a config edit
+  rolls that pod alone. `value` is the caller's hash, and an undefined one renders `unstaged`,
+  which never rolls the pod. Content a pod mounts through a ConfigMap or Secret needs no
   annotation: `scripts/renderer/renderer_lib/restart.py` stamps the restart for it.
 
   Invoke at the annotations block's indent:
