@@ -20,7 +20,8 @@ state.json keys:
     A unit's "limit": true makes `start` and `restart` fail until `reset-failed` clears it. A
     unit's "invocation" is what `systemctl show -p InvocationID` prints, and a start, restart or
     try-restart changes it.
-    commands: command -> stderr. `sysctl`, `sshd`, `fail2ban-client` and `rsyslogd` exit 1 with that text.
+    commands: command -> stderr. `sysctl`, `systemd-tmpfiles`, `sshd`, `fail2ban-client` and
+        `rsyslogd` exit 1 with that text.
     ufw: {"active": bool, "rules": [[spec, comment], ...], "fail": ["<argv joined>", ...]}. The
         stub replays what `ufw` 0.36.2-6 did when measured (docs/host-packages.md, *The ufw
         arm*): appending a spec that exists relabels it in place, `insert` of one skips, a delete
@@ -217,6 +218,10 @@ def sysctl(state: dict, args: list[str]) -> int:
     return refusing(state, "sysctl")
 
 
+def systemd_tmpfiles(state: dict, args: list[str]) -> int:
+    return refusing(state, "systemd-tmpfiles")
+
+
 def sshd(state: dict, args: list[str]) -> int:
     return refusing(state, "sshd")
 
@@ -335,6 +340,7 @@ HANDLERS = {
     "crontab": crontab,
     "systemctl": systemctl,
     "sysctl": sysctl,
+    "systemd-tmpfiles": systemd_tmpfiles,
     "sshd": sshd,
     "fail2ban-client": fail2ban_client,
     "rsyslogd": rsyslogd,

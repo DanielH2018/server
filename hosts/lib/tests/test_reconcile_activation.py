@@ -16,6 +16,8 @@ from _reconcile_host import Node
 
 SYSCTL_FILE = "/etc/sysctl.d/50-homelab.conf"
 SSHD_FILE = "/etc/ssh/sshd_config.d/50-homelab.conf"
+TMPFILES_FILE = "/usr/lib/tmpfiles.d/homelab-media-volume.conf"
+PATHS = {"sysctl": SYSCTL_FILE, "tmpfiles": TMPFILES_FILE}
 FLAG = "run/homelab/validate-failed"
 
 
@@ -35,6 +37,11 @@ def settled(node: Node) -> None:
     [
         pytest.param("none", [], id="none"),
         pytest.param("sysctl", [["sysctl", "--system"]], id="sysctl"),
+        pytest.param(
+            "tmpfiles",
+            [["systemd-tmpfiles", "--create", TMPFILES_FILE]],
+            id="tmpfiles",
+        ),
         pytest.param(
             "try-restart:fail2ban.service",
             [
@@ -70,7 +77,7 @@ def test_a_changed_file_runs_its_action_and_an_unchanged_one_runs_nothing(
     live_unit(node, "fail2ban.service")
     live_unit(node, "rsyslog.service")
     live_unit(node, "systemd-modules-load.service")
-    path = SYSCTL_FILE if action == "sysctl" else SSHD_FILE
+    path = PATHS.get(action, SSHD_FILE)
     ship(node, path, "kernel.sysrq = 0\n", action)
 
     settled(node)
@@ -197,6 +204,20 @@ def test_a_unit_reconcile_restarted_this_run_gets_no_second_call(node):
     restarts = [v for v in verbs(node) if v[:2] == ["systemctl", "restart"]]
     assert restarts == [["systemctl", "restart", "fail2ban.service"]]
     assert ["systemctl", "try-restart", "fail2ban.service"] not in verbs(node)
+
+
+def test_a_failed_tmpfiles_create_fails_the_run_and_the_next_run_retries_it(node):
+    node.state["commands"]["systemd-tmpfiles"] = "Failed to create directory"
+    ship(node, TMPFILES_FILE, "d /srv/media/media/music - 1000 1000 -\n", "tmpfiles")
+
+    assert node.run().returncode == 1
+    assert TMPFILES_FILE not in node.applied()["files"]
+
+    del node.state["commands"]["systemd-tmpfiles"]
+    settled(node)
+
+    assert verbs(node) == [["systemd-tmpfiles", "--create", TMPFILES_FILE]]
+    assert TMPFILES_FILE in node.applied()["files"]
 
 
 # Validation failures.

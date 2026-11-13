@@ -68,8 +68,12 @@ from renderer.renderer_lib.cluster import RenderRefused
 _UNIT = r"[A-Za-z0-9@_.:-]+\.(?:service|timer|socket|path)"
 # The actions `hosts/lib/reconcile_lib/activate.py:ACTION` reads.
 ACTION = re.compile(
-    rf"none|sysctl|modules-load|reboot|(?:try-restart|reload|manual):{_UNIT}"
+    rf"none|sysctl|tmpfiles|modules-load|reboot|(?:try-restart|reload|manual):{_UNIT}"
 )
+# The directories systemd-tmpfiles reads. A file there gets the `tmpfiles` action whether or not
+# its entry names one, so a new line applies on the install that ships it, not at the next boot
+# (#8267).
+TMPFILES_DIRS = ("/usr/lib/tmpfiles.d/", "/etc/tmpfiles.d/")
 # The shapes `hosts/lib/reconcile_lib/ufw.py` reads.
 UFW_ID = re.compile(r"[a-z0-9][a-z0-9-]*")
 UFW_SPEC = re.compile(r"(?:allow|deny|limit|reject) [A-Za-z0-9 ./:_-]+")
@@ -102,17 +106,29 @@ class Package(Protocol):
 
 
 def add_activation(package: Package, directory: Path, dst: str, action: object) -> None:
-    """Record `action` for the file at `dst`; None records nothing.
+    """Record `action` for the file at `dst`; None records nothing outside tmpfiles.d.
 
     Raises:
-        RenderRefused: `action` is not one reconcile knows.
+        RenderRefused: `action` is not one reconcile knows, or a tmpfiles.d file names one
+            other than `tmpfiles`, or another file names `tmpfiles`.
     """
+    if dst.startswith(TMPFILES_DIRS):
+        if action not in (None, "tmpfiles"):
+            raise RenderRefused(
+                f"{directory}: {dst} is a tmpfiles.d file, so its action is tmpfiles, "
+                f"not {action!r}"
+            )
+        action = "tmpfiles"
+    elif action == "tmpfiles":
+        raise RenderRefused(
+            f"{directory}: {dst} activate 'tmpfiles' is for tmpfiles.d files"
+        )
     if action is None:
         return
     if not isinstance(action, str) or not ACTION.fullmatch(action):
         raise RenderRefused(
-            f"{directory}: {dst} activate {action!r} is not none, sysctl, modules-load, "
-            "reboot, or try-restart, reload or manual followed by :<unit>"
+            f"{directory}: {dst} activate {action!r} is not none, sysctl, tmpfiles, "
+            "modules-load, reboot, or try-restart, reload or manual followed by :<unit>"
         )
     package.activations[dst] = action
 

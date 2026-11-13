@@ -8,6 +8,7 @@ live*), and the renderer writes the entries into the manifest's `activations` ma
     try-restart:<unit>           systemctl try-restart, after the unit's validation
     reload:<unit>                systemctl reload, after the unit's validation
     sysctl                       sysctl --system, after parsing the changed files
+    tmpfiles                     systemd-tmpfiles --create on the changed files
     modules-load                 restart systemd-modules-load.service
     reboot                       mark the host reboot-pending
     manual:<unit>                mark the unit pending and change nothing live
@@ -33,7 +34,7 @@ REBOOT_PENDING = RUN_DIR / "reboot-pending"
 
 _UNIT = r"[A-Za-z0-9@_.:-]+\.(?:service|timer|socket|path)"
 ACTION = re.compile(
-    rf"none|sysctl|modules-load|reboot|(?:try-restart|reload|manual):{_UNIT}"
+    rf"none|sysctl|tmpfiles|modules-load|reboot|(?:try-restart|reload|manual):{_UNIT}"
 )
 # The commands that check a service's configuration before reconcile reloads or restarts it.
 COMMANDS = {
@@ -106,7 +107,7 @@ def invocation(unit: str) -> str:
 
 
 def perform(
-    kind: str, unit: str, policies: dict, called: dict[str, bool], pending: dict
+    kind: str, unit: str, paths: list, policies: dict, called: dict, pending: dict
 ) -> bool:
     """Run one validated action. `called` maps each unit already called this run to its result."""
     if kind == "none":
@@ -120,6 +121,8 @@ def perform(
         return True
     if kind == "sysctl":
         return run("sysctl", "--system").returncode == 0
+    if kind == "tmpfiles":
+        return run("systemd-tmpfiles", "--create", *paths).returncode == 0
     verb = kind
     if kind == "modules-load":
         unit, verb = MODULES_UNIT, "restart"
@@ -180,11 +183,8 @@ def activate(
             log(f"{action}: {problem}; leaving the running service as it is", ERR)
             VALIDATE_FAILED.parent.mkdir(parents=True, exist_ok=True)
             VALIDATE_FAILED.touch()
-        succeeded = problem is None and perform(kind, unit, policies, called, pending)
-        for path in paths:
-            if succeeded:
-                files[path] = now[path]
-            elif path in prev_files:
-                files[path] = prev_files[path]
-        ok = ok and succeeded
+        applied = not problem and perform(kind, unit, paths, policies, called, pending)
+        kept = now if applied else prev_files
+        files.update({path: kept[path] for path in paths if path in kept})
+        ok = ok and applied
     return ok, files

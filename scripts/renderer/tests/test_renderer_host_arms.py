@@ -100,6 +100,30 @@ def test_an_action_reconcile_would_refuse_fails_the_render(hosts, action):
     assert not _reconcile().activate.valid_activations({SSHD: action})
 
 
+TMPFILES = "/usr/lib/tmpfiles.d/homelab-c.conf"
+
+
+def test_a_tmpfiles_d_file_gets_the_tmpfiles_action_without_naming_one(hosts):
+    manifest = _manifest(_render(hosts, {"files": [{"src": "u", "dst": TMPFILES}]}))
+
+    assert manifest["activations"] == {TMPFILES: "tmpfiles"}
+    assert _reconcile().parse_manifest(json.dumps(manifest))["activations"] == {
+        TMPFILES: "tmpfiles"
+    }
+
+
+def test_a_tmpfiles_d_file_naming_another_action_fails_the_render(hosts):
+    component = {"files": [{"src": "u", "dst": TMPFILES, "activate": "none"}]}
+
+    with pytest.raises(RenderRefused, match=r"tmpfiles\.d file"):
+        _render(hosts, component)
+
+
+def test_the_tmpfiles_action_on_a_file_outside_tmpfiles_d_fails_the_render(hosts):
+    with pytest.raises(RenderRefused, match="activate 'tmpfiles'"):
+        _render(hosts, _entry("tmpfiles"))
+
+
 def test_a_shared_package_s_activations_join_the_host_manifest(hosts):
     root = hosts(
         {"files": [{"src": "u", "dst": "/etc/u.conf", "activate": "sysctl"}]},
