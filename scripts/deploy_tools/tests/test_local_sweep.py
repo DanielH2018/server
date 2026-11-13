@@ -6,7 +6,7 @@ itself. Three tests read the real `ci.yml` and hold the tool's tables to it.
 Run: uv run pytest scripts/deploy_tools/tests/test_local_sweep.py
 """
 
-import functools
+import os
 import time
 from pathlib import Path
 
@@ -195,6 +195,21 @@ def test_the_scratch_tree_goes_unless_the_caller_keeps_it(repo, cache):
     assert (kept / "hooks.log").exists()
 
 
+def test_a_sweep_removes_what_a_killed_sweep_left_behind_and_nothing_else(repo, cache):
+    for name in ("sweep-killed", "kept-by-hand", "sweep-still-running"):
+        (cache / name).mkdir(parents=True)
+    # 1970 is older than any stale limit, and the third directory keeps the mtime it was made at.
+    os.utime(cache / "sweep-killed", (0, 0))
+    os.utime(cache / "kept-by-hand", (0, 0))
+
+    sweep("HEAD", repo=repo, checks=_bash("exit 0"))
+
+    assert sorted(p.name for p in cache.iterdir()) == [
+        "kept-by-hand",
+        "sweep-still-running",
+    ]
+
+
 def test_the_report_counts_first_and_lists_only_what_did_not_pass():
     named = tuple(f"FAILED t::{n}" for n in range(local_sweep.MAX_DETAIL + 5))
     result = Sweep(
@@ -222,29 +237,57 @@ def test_the_report_counts_first_and_lists_only_what_did_not_pass():
 def test_the_command_ends_on_the_result_line_and_exits_its_verdict(
     repo, capsys, script, verdict, code
 ):
-    scratch = functools.partial(sweep, repo=repo, checks=_bash(script))
+    argv = ["HEAD", "--keep"]
 
-    assert local_sweep.main(["HEAD", "--keep"], run=scratch) == code
+    assert local_sweep.main(argv, repo=repo, checks=_bash(script)) == code
 
     *above, last = capsys.readouterr().out.splitlines()
     assert last.startswith(f"SWEEP-RESULT: verdict={verdict} ")
     assert any(line.startswith("kept ") for line in above)
 
 
-def test_a_commit_git_cannot_resolve_gets_no_verdict():
-    assert local_sweep.main(["no-such-commit"]) == SWEEP_NO_VERDICT
+def _raises(tree):
+    raise RuntimeError("the check could not be built")
 
 
-def test_a_sweep_that_raises_is_no_verdict_and_never_a_failed_check():
-    def crash(commit, **_):
-        raise RuntimeError("the cache directory is read-only")
-
-    assert local_sweep.main(["HEAD"], run=crash) == SWEEP_NO_VERDICT
+# A sweep that dies before any check reports.
+DIES = {"pytest": Local(_raises, local_sweep.LOCAL["pytest"].failed)}
 
 
-@pytest.mark.parametrize("argv", [[], ["HEAD", "HEAD~1"], ["--fast"]])
-def test_anything_but_one_commit_is_a_usage_error(argv):
-    def swept(commit, **_):
-        raise AssertionError(f"a usage error reached the sweep with {commit}")
+@pytest.mark.parametrize(
+    ("checks", "swept", "printed"),
+    [
+        # A timer's run succeeded when the sweep reached a verdict, a red one included.
+        (_bash("exit 1"), SWEEP_PASSED, "SWEEP-RESULT: verdict=fail "),
+        # The record is written before the first check, so a sweep that died is not repeated.
+        (DIES, SWEEP_NO_VERDICT, ""),
+    ],
+    ids=["red", "died"],
+)
+def test_with_a_record_the_command_sweeps_each_commit_once(
+    repo, tmp_path, capsys, checks, swept, printed
+):
+    argv = ["HEAD", "--once", str(tmp_path / "last-swept")]
 
-    assert local_sweep.main(argv, run=swept) == SWEEP_BAD_ARGS
+    def run() -> tuple[int, str]:
+        return local_sweep.main(argv, repo=repo, checks=checks), capsys.readouterr().out
+
+    code, out = run()
+    assert code == swept
+    assert printed in out
+    # Neither stand-in can exit 0 in silence, so this run swept nothing.
+    assert run() == (SWEEP_PASSED, "")
+    commit(repo, "the next commit", a="1")
+    assert run() != (SWEEP_PASSED, "")
+
+
+def test_a_commit_git_cannot_resolve_gets_no_verdict(repo):
+    assert local_sweep.main(["no-such-commit"], repo=repo) == SWEEP_NO_VERDICT
+
+
+@pytest.mark.parametrize(
+    "argv", [[], ["HEAD", "HEAD~1"], ["--fast"], ["HEAD", "--once"]]
+)
+def test_anything_but_one_commit_is_a_usage_error(repo, argv):
+    # A usage error that reached the sweep would die there and exit 69.
+    assert local_sweep.main(argv, repo=repo, checks=DIES) == SWEEP_BAD_ARGS

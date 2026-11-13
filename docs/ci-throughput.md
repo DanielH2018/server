@@ -86,11 +86,13 @@ keep merging their own pull requests, so every rule in `scripts/deploy_tools/lan
 where it is. The queue then records the tested tree, and the push run's `prove` job skips the
 hosted sweep. A merge costs about 1.1 hosted runs in place of 2.1.
 
-1. **B1.** A shadow sweep of every master commit records its verdict and its duration. It
+1. **B1.** A shadow sweep of master records each swept commit's verdict and duration. It
    changes no behaviour, and it lands in three parts.
     - **B1a, landed.** `scripts/deploy_tools/local_sweep.py <commit>` sweeps one commit by
       hand. *What the local sweep runs* below has its checks and its cost.
-    - **B1b, planned.** A timer on daniel-box sweeps each master commit.
+    - **B1b, landed.** `homelab-local-sweep.timer` on daniel-box sweeps `origin/master` 15
+      minutes after the last sweep ended, and each commit at most once. *The shadow sweep*
+      below has how it runs and how to read it.
     - **B1c, planned.** A report compares each sweep's verdict with the hosted run's.
 1. **B2, planned.** A queue of one, behind a flag, for the fan-out server lander. The local
    sweep replaces the branch-update re-test.
@@ -100,20 +102,24 @@ hosted sweep. A merge costs about 1.1 hosted runs in place of 2.1.
 1. **B5, planned.** Every landing goes through the queue, and the merge pacing and the
    branch-update re-test are deleted.
 
-B2 waits for B1 to run for 7 days and 300 commits. No commit may read green locally and red
-on a hosted job the sweep covers, and the p90 sweep must take 10 minutes or less.
+B2 waits for B1 to run for 7 days and to sweep 300 commits. No commit may read green locally
+and red on a hosted job the sweep covers, and the p90 sweep must take 10 minutes or less.
 
-Three decisions are the operator's, and none is made:
+Three decisions are the operator's. The first is not made:
 
 - **Who records the tested tree.** `prove` trusts a record by its creator, so the queue needs
   a creator of its own. A GitHub App that can write a commit status and nothing else is the
   recommended one.
-- **What a batch proves.** A batch sweeps only its last stacked tree, and that sweep stands
-  for the commits before it. `scripts/deploy_tools/await_ci.py` already lets a descendant's
-  verdict stand for a commit that has none.
-- **Whose memory the sweep uses.** The sweep's cap comes out of the agent fleet's budget or
-  the homelab plane's. With 16 workers the sweep holds 5,990 MiB. A sweep with fewer workers
-  holds less and takes longer, and nothing has measured that trade.
+- **What a batch proves. Decided on 2026-11-13: the commits before its last.** A batch sweeps
+  only its last stacked tree, and that sweep stands for the commits before it. An earlier
+  commit of a batch can therefore be red by itself. `scripts/deploy_tools/await_ci.py`
+  already lets a descendant's verdict stand for a commit that has none. The alternative was
+  to record only the last commit and leave the others to their hosted push run.
+- **Whose memory the sweep uses. Decided on 2026-11-13: the fleet's.** daniel-box has no
+  unbudgeted memory, so the sweep runs inside the agent fleet's bound on `user.slice`, with
+  a `MemoryHigh` of its own. No budget line moves. A sweep costs the fleet about one fan-out
+  batch of memory for the five minutes it runs. The alternative was a permanent share, with
+  the fleet's bound lowered from 14G to 9.5G.
 
 #### What the local sweep runs
 
@@ -129,14 +135,52 @@ after the other. Both checks passed.
 | Check | Seconds | Peak memory |
 |---|---|---|
 | `pytest`, 20,838 tests on 16 workers | 216 | 5,990 MiB |
+| `pytest` on 8 workers | 209 | 3,776 MiB |
+| `pytest` on 4 workers | 321 | 2,313 MiB |
 | `hooks` | 74 | 1,030 MiB |
 
 The memory column is anonymous plus shared memory, sampled once a second, which is what the
-check cannot give back under pressure. The cgroup's `memory.peak` read 8,454 MiB for the same
-run, because it also counts page cache.
+check cannot give back under pressure. The cgroup's `memory.peak` read 8,454 MiB for the
+16-worker run, because it also counts page cache.
+
+Eight workers cost no time and hold 2.2 GiB less than sixteen, so the shadow sweep runs
+eight. A whole sweep on eight workers under `MemoryHigh=4500M` took 301 s and peaked at
+3,499 MiB.
 
 The scratch tree goes under `~/.cache/local-sweep`. A tree under `/tmp` fails one test of the
 Bash hook on every commit, because that hook reads any path under `/tmp` as scratch.
+
+#### The shadow sweep
+
+`homelab-local-sweep.service` runs the tool from the primary checkout as the deploy user, the
+way the docs refresh runs its generators. It sweeps `origin/master` as `homelab-checkout-sync`
+last fetched it, so it fetches nothing. Nothing reads its verdict. The component's
+`component.yml` under `hosts/components/local-sweep/` holds its autonomous-role contract.
+
+- To list the sweeps, run
+  `uv run python scripts/diagnostics/probe.py loki-query '{job="syslog"} |= "SWEEP-RESULT:"'`.
+  Each line carries the commit, the verdict and each check's seconds.
+- To see what failed in a red sweep, read `journalctl -t local-sweep` on daniel-box. The
+  lines above the result line name each failed test or hook.
+- To pause it, run `sudo systemctl mask --now homelab-local-sweep.timer`.
+
+The timer samples the tip of master. A commit that merges and is superseded between two runs
+is never swept, and at most three sweeps start in an hour.
+
+The unit fails only when the sweep did not happen. Under `--once` a sweep that reaches a
+verdict exits 0, red or green. A sweep with no verdict exits 69, and a tool that did not start
+exits 1. Nothing pages on a failed run, and a commit whose sweep died is not swept again.
+
+The deploy user suits a sweep of merged commits and nothing else. A sweep of an unmerged
+pull request runs code no review has passed, so slice B2 moves the sweep to a user that holds
+no credentials before any landing reads its verdict.
+
+That user needs more than an empty home. A sweep run with an empty home directory on
+2026-11-13 passed the hooks and failed 251 tests, with 14 modules that did not import. The
+import errors name `claude_worktree`, and about 190 of the failures are in the Bash-hook
+tests. CI's `pytest` job installs two dotfiles packages, `claude-guard` and
+`claude-worktree`, before it runs the suite. Nothing has confirmed that those two close the
+whole gap.
 
 Two limits are known. daniel-box runs Ubuntu 24.04 with no Docker, so the sweep cannot run
 the host-package cases, and a stacked tree that changes a host input gets no record. A hand
