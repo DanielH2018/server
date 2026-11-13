@@ -28,7 +28,7 @@ import sys
 from pathlib import Path as _Path
 from dataclasses import dataclass, field
 
-# host_lib.py is the setup roles' shared host module and stays in
+# host_lib.py is the host components' shared module and stays in
 # hosts/lib/. Each importer carries its own insert rather than relying on
 # the entry point's having run first.
 sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
