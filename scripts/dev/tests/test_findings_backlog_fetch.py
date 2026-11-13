@@ -1,17 +1,21 @@
-"""The backlog cron's fetch reads three narrow slices, never the whole register.
+"""The backlog cron's fetch reads four narrow slices, never the whole register.
 
 `--state all` grows past its own `REGISTER_FETCH_TIMEOUT` (995 issues take 58.4s, and the
 register grows about 350 issues a week), and a fetch that times out never reaches the
 `ISSUE_LIST_CAP` warning that would explain it, so the backlog page would go silently stale
-behind a bare `gh failed`. `backlog.render_markdown` only ever renders open findings and
-closed `refuted` or `accepted` ones, so those three are what `load_backlog_issues` asks for.
+behind a bare `gh failed`. `backlog.render_markdown` only ever renders open findings, closed
+`refuted` or `accepted` ones and not-planned closes carrying neither label, so those four are
+what `load_backlog_issues` asks for.
 
 `_findings_fakes` answers `issue list` from one list whatever the argv, which is exactly the
 distinction under test here, so these tests answer gh themselves.
 """
 
 from dev.findings_lib.boundaries import FindingsTools
-from dev.findings_lib.gh_calls import SETTLED_LABELS, load_backlog_issues
+from dev.findings_lib.gh_calls import (
+    SETTLED_LABELS,
+    load_backlog_issues,
+)
 from dev.findings_lib.issue_model import NO_REOPEN
 
 
@@ -26,24 +30,26 @@ def _tools(answer_for=lambda argv: []):
     return FindingsTools(gh_json=gh_json), seen
 
 
-def _query(argv: list[str]) -> tuple[str, tuple[str, ...]]:
-    """The state and the non-`claude` labels one `issue list` argv asks for."""
+def _query(argv: list[str]) -> tuple[str, tuple[str, ...], str]:
+    """The state, the non-`claude` labels and the search one `issue list` argv asks for."""
     state = argv[argv.index("--state") + 1]
     labels = tuple(
         argv[i + 1]
         for i, a in enumerate(argv)
         if a == "--label" and argv[i + 1] != "claude"
     )
-    return state, labels
+    search = argv[argv.index("--search") + 1] if "--search" in argv else ""
+    return state, labels, search
 
 
 def test_the_backlog_fetch_asks_only_for_the_rows_the_page_renders():
     tools, seen = _tools()
     load_backlog_issues(tools)
     assert [_query(argv) for argv in seen] == [
-        ("open", ()),
-        ("closed", ("refuted",)),
-        ("closed", ("accepted",)),
+        ("open", (), ""),
+        ("closed", ("refuted",), ""),
+        ("closed", ("accepted",), ""),
+        ("closed", (), "reason:not-planned -label:refuted -label:accepted"),
     ]
 
 

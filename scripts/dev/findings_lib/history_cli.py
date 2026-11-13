@@ -37,6 +37,7 @@ from dev.findings_lib.issue_model import (
     PR_REPO,
     _TRAILER_RE,
     cited_paths,
+    close_outcome,
     is_operator_comment,
     label_names,
     settled_reason,
@@ -47,31 +48,6 @@ from lib.exit_codes import FINDINGS_BAD_ARGS
 # `plan_close` writes this comment on `close --fixed --pr N`. A close that way leaves
 # `closedByPullRequestsReferences` empty, because no closing keyword in a PR closed the issue.
 _FIXED_BY_RE = re.compile(r"^Fixed by PR #(\d+)\.", re.M)
-
-# gh's `stateReason` for a close with no `refuted`/`accepted` label. A `NOT_PLANNED` close
-# without a label is a hand close, so it reads as that rather than as refuted.
-_STATE_REASONS = {
-    "COMPLETED": "fixed",
-    "NOT_PLANNED": "not planned",
-    "DUPLICATE": "duplicate",
-}
-
-
-def close_outcome(issue: dict) -> str:
-    """How ``issue`` was closed: `open`, `refuted`, `accepted`, `fixed`, `not planned`, ...
-
-    The label decides before `stateReason` does, because `findings.py close` writes the
-    label and gh records both not-planned outcomes as the same `NOT_PLANNED`. `stateReason`
-    is read only on a closed issue: a reopened one carries `REOPENED`.
-    """
-    if issue.get("state") != "CLOSED":
-        return "open"
-    names = label_names(issue)
-    for settled in ("refuted", "accepted"):
-        if settled in names:
-            return settled
-    reason = issue.get("stateReason") or ""
-    return _STATE_REASONS.get(reason, reason.lower() or "closed")
 
 
 def closing_prs(issue: dict, repo: str) -> list[int]:

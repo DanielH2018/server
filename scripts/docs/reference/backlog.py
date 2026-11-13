@@ -5,7 +5,7 @@ WHY THIS PAGE IS WORTH HAVING. The issues are the record; this page is the view 
 beside the other generated references at docs.local, so "what is known-broken and unowned"
 is answered where "what runs here" is, without opening GitHub.
 
-THREE TABLES, ONE REGISTER. The first is the open backlog. The second lists the open findings
+FOUR TABLES, ONE REGISTER. The first is the open backlog. The second lists the open findings
 that carry a `not-before:` date, sorted by it, because GitHub's issue list can neither match
 a label prefix nor sort by a label. The third is the settled register:
 every finding closed `--accepted` (true, and the operator lives with it) or `--refuted` (a
@@ -13,12 +13,15 @@ skeptic disproved it), grouped by reviewer domain with the close reason beside i
 reviewer agents under .claude/agents/ point at that table instead of carrying a hand-copied
 "don't re-flag" list each, which would drift. `findings.py open` refuses to re-file either
 outcome; this table is where a reviewer reads the same ruling before it spends a pass
-re-deriving it.
+re-deriving it. The fourth lists the not-planned closes that carry neither label: closed by
+hand outside `findings.py`, with no ruling recorded, so they are absent from the settled
+register and `findings.py open` reopens a re-file of one as a regression.
 
-WHAT IT READS. `findings_lib/issue_model.py`'s row model over the three narrow `gh issue
+WHAT IT READS. `findings_lib/issue_model.py`'s row model over the four narrow `gh issue
 list` calls `gh_calls.load_backlog_issues` runs — the open findings, the closed `refuted`
-ones and the closed `accepted` ones. The open rows feed the backlog table and the two
-settled sets feed the settled one. It does NOT read the whole register: that fetch grew past
+ones, the closed `accepted` ones and the unlabelled not-planned closes. The open rows feed
+the backlog table, the two settled sets feed the settled one and the last set feeds the
+fourth. It does NOT read the whole register: that fetch grew past
 its own timeout and left this page silently stale behind a bare `gh failed`.
 The docs-refresh cron runs as the user whose gh is already authenticated to open the docs
 PR, so this generator needs nothing it does not already have. A gh failure fails THIS
@@ -58,9 +61,8 @@ def render_markdown(rows: list[dict], today: date | None = None) -> str:
     """
     parts = [generated_banner(SOURCE), "# Backlog\n"]
     open_rows = [r for r in rows if r["state"] == "OPEN"]
-    settled = [
-        r for r in rows if r["state"] != "OPEN" and (r["accepted"] or r["refuted"])
-    ]
+    settled = [r for r in rows if r.get("outcome") in ("accepted", "refuted")]
+    unruled = [r for r in rows if r.get("outcome") == "not planned"]
     parts.append(
         "Findings Claude confirmed and did not fix in the session that found them, filed "
         "through `scripts/dev/findings.py` and labelled `claude` on GitHub. A row that has "
@@ -79,6 +81,7 @@ def render_markdown(rows: list[dict], today: date | None = None) -> str:
     parts.extend(_deferred_section(open_rows, today or today_utc()))
     parts.extend(_blocked_section(open_rows))
     parts.extend(_settled_section(settled))
+    parts.extend(_unruled_section(unruled))
     return "\n".join(parts).rstrip("\n") + "\n"
 
 
@@ -191,6 +194,30 @@ def _settled_section(rows: list[dict]) -> list[str]:
                 f"{md_cell(r.get('reason') or '-')} |"
             )
         parts.append("")
+    return parts
+
+
+def _unruled_section(rows: list[dict]) -> list[str]:
+    """Findings closed as not planned with neither settled label, by number."""
+    parts = [
+        "## Closed without a ruling\n",
+        "Findings closed as not planned outside `findings.py close`, so they carry neither "
+        "the `accepted` nor the `refuted` label and recorded no reason. None of them is "
+        "settled: `findings.py open` reopens a re-file of one as a regression. To record a "
+        "ruling, reopen the issue, then close it with `findings.py close --accepted "
+        "--reason` or `--refuted --reason`, or work it.\n",
+    ]
+    if not rows:
+        parts.append("No findings closed without a ruling.\n")
+        return parts
+    parts.append("| # | Severity | Domain | Finding | Closed |")
+    parts.append("|---|---|---|---|---|")
+    for r in sorted(rows, key=lambda r: r["number"]):
+        parts.append(
+            f"| [#{r['number']}]({r['url']}) | {r['severity'] or '-'} | "
+            f"{r['domain'] or '-'} | {md_cell(r['title'])} | {r.get('closed_on') or '-'} |"
+        )
+    parts.append("")
     return parts
 
 

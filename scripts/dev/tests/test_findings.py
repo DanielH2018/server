@@ -119,6 +119,17 @@ def test_issue_rows_reads_verify_by_presence(issue):
     assert rows[2]["verify_by"] is False
 
 
+def test_issue_rows_reads_a_labelless_not_planned_close_as_unruled(issue):
+    hand = issue(1, state="CLOSED", labels=("claude",))
+    ruled = issue(2, state="CLOSED", labels=("claude", "accepted"))
+    for one in (hand, ruled):
+        one.update(stateReason="NOT_PLANNED", closedAt="2026-10-03T19:50:51Z")
+    rows = {r["number"]: r for r in issue_rows([hand, ruled])}
+    assert rows[1]["outcome"] == "not planned"
+    assert rows[2]["outcome"] == "accepted"
+    assert rows[1]["closed_on"] == "2026-10-03"
+
+
 # --- sync-labels -------------------------------------------------------------------------
 
 

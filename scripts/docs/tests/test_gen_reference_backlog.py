@@ -151,6 +151,7 @@ def _settled(number, ruling, domain="cicd", reason="because", **kw):
         accepted=ruling == "accepted",
         refuted=ruling == "refuted",
         reason=reason,
+        outcome=ruling,
         **kw,
     )
 
@@ -193,8 +194,10 @@ def test_render_orders_settled_domains_as_the_reviewer_list_does_and_unlabelled_
     )
 
 
-def test_render_keeps_a_closed_row_without_a_ruling_out_of_both_tables():
-    md = g.render_markdown([_row(7, state="CLOSED", accepted=False, refuted=False)])
+def test_render_keeps_a_fixed_close_out_of_every_table():
+    md = g.render_markdown(
+        [_row(7, state="CLOSED", accepted=False, refuted=False, outcome="fixed")]
+    )
     assert "#7" not in md and "No settled findings" in md
 
 
@@ -228,3 +231,34 @@ def test_help_carries_the_docstring_summary(capsys):
     # the rendered text is compared with the escapes stripped and the whitespace collapsed.
     plain = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", capsys.readouterr().out).split())
     assert "the findings Claude filed as GitHub Issues" in plain
+
+
+# --- closed without a ruling ------------------------------------------------------------
+
+
+def _unruled(number, **kw):
+    return _row(
+        number,
+        state="CLOSED",
+        accepted=False,
+        refuted=False,
+        outcome="not planned",
+        closed_on="2026-10-01",
+        **kw,
+    )
+
+
+def test_render_lists_a_not_planned_close_without_a_ruling_under_its_own_heading():
+    md = g.render_markdown([_unruled(9, severity="high", domain="cicd")])
+    unruled = md[md.index("## Closed without a ruling") :]
+    assert (
+        "| [#9](https://github.com/o/r/issues/9) | high | cicd | t | 2026-10-01 |"
+        in unruled
+    )
+    # Not a ruling, so it never reads as settled.
+    assert "#9" not in md[: md.index("## Closed without a ruling")]
+
+
+def test_render_says_so_when_every_not_planned_close_has_a_ruling():
+    md = g.render_markdown([_settled(5, "accepted")])
+    assert "No findings closed without a ruling." in md
