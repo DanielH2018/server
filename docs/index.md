@@ -6,7 +6,7 @@ agent), and `daniel-pi` (the one remaining Docker host). The
 
 ## Where to start
 
-- **Reference** pages are generated from the Ansible tree. They carry the timestamp and commit
+- **Reference** pages are generated from this repository by the scripts under `scripts/docs/`. They carry the timestamp and commit
   their content was last built from, and a cron regenerates them. Do not edit them by hand — a
   hook rejects it.
 - **Decisions** are the architecture-decision records: what was chosen, why, and what it cost.

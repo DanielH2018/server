@@ -36,7 +36,6 @@
 # reviewing someone else's style diffs in this repo's history.
 /styles/Google/
 !/.python-version
-!/PLANS.md
 # The two community files GitHub looks for at the root. The deny-all above hid them once:
 # they committed clean and simply were not in the tree afterwards.
 !/LICENSE

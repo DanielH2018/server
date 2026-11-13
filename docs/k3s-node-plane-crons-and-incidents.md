@@ -1,10 +1,10 @@
 # k3s node plane: the backup crons' derivations and the measured incidents
 
 Working-out moved off the k3s setup role's `CLAUDE.md` (#2997, deleted by H7.55b), which a session read on every
-touch of the node plane. The role doc keeps the autonomous-role contract, the actuator scope and
-the `ENFORCED:` citations; this page keeps the restore drill's two waivers and its retry bound,
-the cron-evidence checks that make a `logger` line evidence at all, and the four incidents behind
-the role doc's `## Notable`.
+touch of the node plane. daniel-box's host package ships the node plane's units, in the
+`k3s-host-checks` and `k3s-server` components. This page keeps the restore drill's two waivers and
+its retry bound, the cron-evidence checks that make a `logger` line evidence at all, and the four
+incidents behind the deleted role doc's `## Notable`.
 
 ## The restore drill's waivers and its retry bound
 

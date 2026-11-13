@@ -39,6 +39,17 @@ def test_banner_warns_against_hand_editing():
     assert "do not edit" in banner.lower()
 
 
+def test_banner_does_not_name_the_retired_ansible_tree():
+    """The generators read host packages and the k8s roles, not a playbook tree (#8175)."""
+    banner = generated_banner(
+        "scripts/docs/service_catalog.py", when=FIXED, sha="abc1234"
+    )
+    assert "Ansible tree" not in banner
+    assert (
+        "rendered from this repository by `scripts/docs/service_catalog.py`" in banner
+    )
+
+
 def test_banner_opens_with_yaml_frontmatter():
     banner = generated_banner(
         "scripts/docs/service_catalog.py", when=FIXED, sha="abc1234"

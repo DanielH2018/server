@@ -1,11 +1,11 @@
 ---
 generated_from: scripts/docs/reference/networking.py
-generated_at: 2026-11-12 15:10 UTC
-generated_sha: 0d7821e53
+generated_at: 2026-11-13 00:39 UTC
+generated_sha: 4815c0d91
 ---
 
 !!! warning "Generated file — do not edit"
-    This page is rendered from the Ansible tree by `scripts/docs/reference/networking.py`. Hand edits are
+    This page is rendered from this repository by `scripts/docs/reference/networking.py`. Hand edits are
     overwritten by the next run, and a prek hook rejects them at commit time.
     To change what appears here, change the generator or the source it reads.
 

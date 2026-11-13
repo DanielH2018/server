@@ -1,18 +1,18 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-12 23:48 UTC
-generated_sha: 415db63c2
+generated_at: 2026-11-13 00:39 UTC
+generated_sha: 4815c0d91
 ---
 
 !!! warning "Generated file — do not edit"
-    This page is rendered from the Ansible tree by `scripts/docs/reference/decisions.py`. Hand edits are
+    This page is rendered from this repository by `scripts/docs/reference/decisions.py`. Hand edits are
     overwritten by the next run, and a prek hook rejects them at commit time.
     To change what appears here, change the generator or the source it reads.
 
 
 # Decisions
 
-528 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
+532 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep. Each row names its file, not its line; `rg -n` on the marker text finds the line.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -382,6 +382,9 @@ generated_sha: 415db63c2
 | a target whose schedule is unknown, because its render failed or its timer is | `scripts/deploy_tools/land_lib/host_wait.py` | 2026-10-17 |
 | the deadline counts fires after `green_at`, never after the merge. | `scripts/deploy_tools/land_lib/host_wait.py` | 2026-11-09 |
 | fire on ANY change to secrets.yml, and never try to name which keys moved. Naming them means decrypting both revisions, and no plaintext may reach a terminal, a transcript or a log. Over-firing on a key that needed no redeploy costs one exit code; under-firing leaves a rotated credential stale in a consumer this file list cannot show. | `scripts/deploy_tools/land_lib/land_tags.py` | 2026-11-12 |
+| one number, 3, with no separate hard ceiling. 2026-11-12 (#8018), and a second, higher ceiling would be a number nothing reads. | `scripts/deploy_tools/land_lib/live_limit.py` | 2026-11-12 |
+| 2, the top of the report's 1-2. has a backlog, so a slow master costs waiting time, not quota. | `scripts/deploy_tools/land_lib/live_limit.py` | 2026-11-12 |
+| any failure of a read lowers nothing. | `scripts/deploy_tools/land_lib/live_limit.py` | 2026-11-12 |
 | only a path both master and the PR changed makes a green head stale (operator ruling 2026-10-29, #6565). The update never cancelled an in-flight run; its cost was a second full CI run, about 22% of ci.yml runner-minutes. The accepted risk is the shape of #2922 and #2266, which went red on master from a path the PR never touched. A conflict, a capped compare list and a capped file listing still update, since overlap is unknown. | `scripts/deploy_tools/land_lib/merge.py` | 2026-10-29 |
 | a stale approved head is refused, not updated and not merged. would make a head the operator's approval does not name, so the policy would refuse it anyway, and merging it untested is what this check exists to stop. The rebase moves the merge base to master, so the re-approved head goes stale only if master moves again between the approval and the landing. | `scripts/deploy_tools/land_lib/merge.py` | 2026-10-10 |
 | hold the merge while two master runs are unfinished. 20 measured sweeps peaked at 18 in progress at once, against a 20-job runner cap, so a second unfinished sweep already queues (#5526, #8143). A cap of 1 was tried from 2026-10-25 (#6308), on the theory that a re-tested PR merged into an idle master more often merges the tree it tested, so `prove` skips the push sweep. It did not raise that share (#6309). Before the change, 74 of 155 master push runs ran only `prove` and `prek`; from 2026-10-26 to 2026-10-29, 46 of 89 did. With three or more merges in the hour before, the share was 61 of 140 before and 27 of 64 after. The cap of 1 did move merges onto an idle master: 11 of 89 merged while a master run was unfinished, against 67 of 155 before. Yet only 46 of 78 idle-master merges skipped the sweep, against 65 of 88 before, so the untested tree comes from master moving during the PR's re-test, which no merge-time read prevents. Batching the merges is the remaining route (#6521). | `scripts/deploy_tools/land_lib/options.py` | 2026-11-12 |
@@ -492,6 +495,7 @@ generated_sha: 415db63c2
 | a closed list, read by the refusal and the census, because nothing compares the render with Ansible's once R4.7 deletes the play. (ADR-0028) | `scripts/renderer/renderer_lib/dialect.py` | 2026-11-06 |
 | a pass over the rendered text, not a role variable. | `scripts/renderer/renderer_lib/images.py` | 2026-10-17 |
 | reimplemented, not copied. | `scripts/renderer/renderer_lib/jinja_filters.py` | 2026-11-07 |
+| an embedded template's output may also pass through `homelab_role_label`, which round-trips whole manifests through YAML and changes no scalar's value. Rules 1 to 3 read the labelled output, so a placeholder it mangled would still fail there. | `scripts/renderer/renderer_lib/jinja_uses.py` | 2026-11-13 |
 | an applies-last tag waits on no other tag's `-snapshot` or `-verify`. D4 left the choice to D5.1a1. A verify Job probes through netpol-baseline's fences, so netpol-baseline waiting on another tag's `-verify` would run that Job before the fences it dials are applied. A snapshot gates only its own tag. | `scripts/renderer/renderer_lib/ordering.py` | 2026-10-16 |
 | the tag itself is not subtracted, as `-deferred` subtracts it. precheck in a namespace its own tag creates then forms the cycle `<tag>-precheck -> <tag>`, and `bundle_files` refuses the render, where dropping the edge would leave the Job failing on a fresh cluster with no namespace. | `scripts/renderer/renderer_lib/ordering.py` | 2026-10-19 |
 | the Job sets no `activeDeadlineSeconds`. | `scripts/renderer/renderer_lib/prepull.py` | 2026-10-18 |

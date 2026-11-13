@@ -25,21 +25,32 @@ work already executed.
 
 | Host | Role | Notes |
 |------|------|-------|
-| `daniel-box` | k3s server (control plane) | Runs almost every workload. Traefik edge, Authelia SSO + OIDC issuer, Pi-hole DNS, Longhorn storage, CrowdSec. Internet-exposed via Cloudflare, and the **public WireGuard endpoint** (wg-easy, 51820/udp — the router forward moved here). Ansible runs *on* this host. |
+| `daniel-box` | k3s server (control plane) | Runs almost every workload. Traefik edge, Authelia SSO + OIDC issuer, Pi-hole DNS, Longhorn storage, CrowdSec. Internet-exposed via Cloudflare, and the **public WireGuard endpoint** (wg-easy, 51820/udp — the router forward moved here). `homelab-checkout-sync` keeps its primary checkout at `origin/master`. |
 | `daniel-server` | k3s agent node | Intel XE iGPU (Jellyfin/Tdarr transcode), LVM storage, UPS hardware + the NUT shutdown chain. **Docker uninstalled 2026-08-14** — it hosts no Compose services. |
 | `daniel-pi` | Raspberry Pi — Docker | **LAN-only**, never internet-exposed or on the tunnel. A second, LAN-only wg-easy (51822/udp) + a small utility stack (Glances, autoheal, docker-proxy). The only remaining Docker host. |
 
 ## Repository layout
 
 ```
-ansible/          # Playbooks, roles, inventory, templates   ← EDIT HERE
+ansible/          # Render inputs for the k8s roles; no playbook   ← EDIT HERE
   roles/k8s/          # One role per k8s workload (manifests rendered from templates)
-hosts/            # Host packages; the Pi's Docker services are hosts/components/pi-compose/
-  filter_plugins/     # Custom dependency-resolution filters (toposort.py)
+  templates/          # Shared Jinja partials the k8s roles include
+  filter_plugins/     # Custom Jinja filters (toposort.py)
   inventory/          # hosts.ini, group_vars/all.yml, host_vars/<host>.yml
   vars/secrets.yml    # SOPS-encrypted secrets
-scripts/          # Helper scripts (template validation, …)
+  tests/              # Tests over the roles, their renders and the deploy path
+cluster/          # services.yml: one entry per k8s deploy tag
+hosts/            # Host packages and the setup plane each one ships
+  components/         # Units, timers and scripts a host package installs; the Pi's
+                      #   Docker services are pi-compose/
+  daniel-box/ …       # One package.yml per host
+  packages/           # Packages shared across hosts
+  lib/                # The updater, reconcile and checkout-sync helpers
+  bootstrap-host.sh   # One-time bring-up of a new host
+scripts/          # Renderer, landing, diagnostics and docs generators
+evals/            # Evals of the Claude Code setup
 docs/             # Runbooks, design specs, security notes
+  reference/          # Generated reference pages; never hand-edited
   archive/            # Superseded planning docs (incl. the Docker → k3s migration)
 ```
 
