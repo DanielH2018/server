@@ -37,6 +37,8 @@ def _rule_tree(tmp_path, edit_rules, edit_tests):
     edit_tests(tests)
     (rules_dir / "alerting-meta.yaml").write_text(yaml.safe_dump(rules))
     (tests_dir / "alerting-meta.test.yaml").write_text(yaml.safe_dump(tests))
+    for part in alert_conventions.RULE_TESTS_DIR.glob("alerting-meta.*.test.yaml"):
+        (tests_dir / part.name).write_text(part.read_text())
     return rules_dir, tests_dir
 
 

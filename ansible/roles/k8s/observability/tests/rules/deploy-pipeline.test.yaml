@@ -115,6 +115,7 @@ tests:
               instance: monitor-bridge.homelab.svc:9180
               severity: warning
               service: deploy-pipeline
+              escalate: "false"
             exp_annotations:
               summary: The repository variable DEPLOY_HOLD has held promotion for 15 minutes.
               description: >-

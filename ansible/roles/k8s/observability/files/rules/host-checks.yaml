@@ -1252,6 +1252,7 @@ groups:
         labels:
           severity: warning
           service: daniel-box
+          escalate: "false"
         annotations:
           summary: Free fan-out issues have waited an hour with no batch running.
           description: >-

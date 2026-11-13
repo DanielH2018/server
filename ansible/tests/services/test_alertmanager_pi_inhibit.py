@@ -52,7 +52,13 @@ def port_dead(service: str = "wg-easy", port: int = 51821) -> dict[str, str]:
 
 
 def port_inhibit() -> dict:
-    [rule] = [r for r in inhibit_rules() if _selects(r, "source", host_down())]
+    # The WarningUnresolved copy of the rule shares its source.
+    [rule] = [
+        r
+        for r in inhibit_rules()
+        if _selects(r, "source", host_down())
+        and 'alertname="WarningUnresolved"' not in r["target_matchers"]
+    ]
     return rule
 
 

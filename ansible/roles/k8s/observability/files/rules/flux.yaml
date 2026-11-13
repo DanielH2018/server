@@ -131,6 +131,7 @@ groups:
         labels:
           severity: warning
           service: flux
+          escalate: "false"
         annotations:
           summary: The Kustomization {{ $labels.name }} has been suspended for more than 24 hours.
           description: >-
