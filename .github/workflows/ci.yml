@@ -1248,13 +1248,11 @@ jobs:
     name: build the host packages (render, nfpm, lint)
     runs-on: ubuntu-26.04
     timeout-minutes: 15
-    # What the `host_packages` legs gate their steps on, from the render step below.
-    # `run-cases` is the one answer to "does a cases job have anything to run": `k3s_download`
-    # skips on it, and the `prek` gate reads it to pass a job that skipped for that reason.
+    # What the jobs that read this build run on. `run-cases` is the one answer to "does a cases
+    # job have anything to run": the cases legs and `k3s_download` skip on it, and the `prek`
+    # gate reads it to pass a job that skipped for that reason.
     outputs:
       run-cases: ${{ github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true' || steps.render.outputs.cases == 'true' }}
-      changed: ${{ steps.render.outputs.changed }}
-      cases: ${{ steps.render.outputs.cases }}
       upgrade: ${{ steps.render.outputs.upgrade }}
       tools-key: ${{ steps.tools-key.outputs.key }}
       arm64-tools: ${{ steps.arm64.outputs.built }}
@@ -1627,15 +1625,18 @@ jobs:
           compression-level: 0
 
   # Steps 4 and 5 of the host packages, one leg per release. The header above
-  # `host_packages_build` says what each job does. Every step but the checkout and the setup
-  # skips when that job built nothing, and the leg ends green.
+  # `host_packages_build` says what each job does. A leg skips when the build has no cases for
+  # it (`run-cases`), so it takes no runner on a PR that touches no host input
+  # (docs/ci-throughput.md). The `prek` gate passes that skip from the same output, and
+  # `ci_verdict.jobs_verdict` from the build's check-run, so the condition below must skip a
+  # leg for no other reason; `test_ci_skip_proven_master.py` pins it.
   #
   # `cancelled()` in the proof arm removes GitHub's implicit `success()`, so the condition names
   # the build's result. Without it a failed build runs each leg into `Artifact not found`.
   # The `prek` gate needs the build too, so it stays red.
   host_packages:
     needs: [prove, host_packages_build]
-    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' }}
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' && needs.host_packages_build.outputs.run-cases == 'true' }}
     runs-on: ubuntu-26.04
     # Each leg boots a container per case. The bootstrap cases run in `host_packages_bootstrap`.
     # The image step pulls the pinned image, but a PR that
@@ -1671,9 +1672,6 @@ jobs:
       # gh calls. Over 2026-10-13..11-12, `scripts/dev/ci_failures.py` found no download failure
       # that a rerun cleared; every red one followed a build that never uploaded (#8005).
       - name: Download the hand-off from the build job
-        if: >-
-          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
-          || needs.host_packages_build.outputs.cases == 'true'
         uses: actions/download-artifact@v8.0.2
         with:
           name: host-packages-build
@@ -1682,9 +1680,6 @@ jobs:
       # The tarball unpacks to the paths the build job wrote, so the cases read `$RUNNER_TEMP/render`
       # and `$RUNNER_TEMP/debs` as they did when both halves were one job.
       - name: Unpack the render, the debs and nfpm
-        if: >-
-          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
-          || needs.host_packages_build.outputs.cases == 'true'
         run: |
           set -euo pipefail
           tar -xf "$RUNNER_TEMP/handoff/host-packages-build.tar" -C "$RUNNER_TEMP"
@@ -1710,9 +1705,6 @@ jobs:
       # The early exit is in the script, not the `if:`, because a dispatch must reach this
       # step (test_ci_dispatch_sweeps_everything.py) and a dispatch of master must stay green.
       - name: Build the test image for this release
-        if: >-
-          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
-          || needs.host_packages_build.outputs.cases == 'true'
         env:
           RELEASE: ${{ matrix.release }}
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
@@ -1734,9 +1726,6 @@ jobs:
 
       # Step 5: every case, on this leg's release. The script's docstring lists them.
       - name: Run the updater cases in systemd containers
-        if: >-
-          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
-          || needs.host_packages_build.outputs.cases == 'true'
         env:
           RELEASE: ${{ matrix.release }}
           PYTHON: ${{ matrix.python }}
@@ -1776,13 +1765,13 @@ jobs:
   # `hosts/lib/ci_verdict.py` lists. An installed host package holds that list, and a renamed
   # leg would read as pending to every copy installed before the rename.
   #
-  # The steps and their `if:`s are the legs', and the job gates like them. The id starts with
+  # The steps and the job's `if:` are the legs', and the job gates like them. The id starts with
   # `host_packages`, so the prefix filter in docs/target-architecture/host/h3-pi-pilot.md selects
   # these legs too. The budget matches the legs', because a Dockerfile PR builds the image here too.
   host_packages_bootstrap:
     name: host_packages_bootstrap (${{ matrix.release }}, ${{ matrix.python }})
     needs: [prove, host_packages_build]
-    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' }}
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' && needs.host_packages_build.outputs.run-cases == 'true' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
@@ -1808,18 +1797,12 @@ jobs:
       - uses: $/.github/actions/setup
 
       - name: Download the hand-off from the build job
-        if: >-
-          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
-          || needs.host_packages_build.outputs.cases == 'true'
         uses: actions/download-artifact@v8.0.2
         with:
           name: host-packages-build
           path: ${{ runner.temp }}/handoff
 
       - name: Unpack the render, the debs and nfpm
-        if: >-
-          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
-          || needs.host_packages_build.outputs.cases == 'true'
         run: |
           set -euo pipefail
           tar -xf "$RUNNER_TEMP/handoff/host-packages-build.tar" -C "$RUNNER_TEMP"
@@ -1835,9 +1818,6 @@ jobs:
           key: ${{ needs.host_packages_build.outputs.tools-key }}
 
       - name: Build the test image for this release
-        if: >-
-          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
-          || needs.host_packages_build.outputs.cases == 'true'
         env:
           RELEASE: ${{ matrix.release }}
           UPGRADE: ${{ needs.host_packages_build.outputs.upgrade }}
@@ -1852,9 +1832,6 @@ jobs:
           hosts/lib/tests/container/build-image.sh "$RELEASE"
 
       - name: Run the bootstrap cases in systemd containers
-        if: >-
-          github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
-          || needs.host_packages_build.outputs.cases == 'true'
         env:
           RELEASE: ${{ matrix.release }}
           PYTHON: ${{ matrix.python }}
@@ -1979,11 +1956,13 @@ jobs:
   # It waits for `host_packages_build` alone, not for the cases legs (#6151).
   #
   # When `host_packages_build` built no homelab-tools, because no render changed, there is no
-  # artifact and the job ends green with a notice. When the build failed the job skips, because
-  # that notice would not be true.
+  # artifact and the job skips, so it takes no runner (docs/ci-throughput.md). The `prek` gate
+  # passes that skip from `arm64-tools`. A dispatch runs the job whatever was built, and with no
+  # build it ends green with a notice. When the build failed the job skips, and the build's own
+  # result reds the gate.
   host_tools_arm64:
     needs: [prove, host_packages_build]
-    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' }}
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.arm64-tools == 'true') }}
     runs-on: ubuntu-24.04-arm
     # Pulls the pinned test image as host_packages does, and builds it from the same mirror on a
     # Dockerfile change. Measured 2026-11-04 with the mirror slow: this job's build reached

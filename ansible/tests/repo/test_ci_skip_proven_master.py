@@ -32,9 +32,19 @@ PROOF_CONDITION = (
     " || (!cancelled() && needs.prove.outputs.proven != 'true'))"
     f" && {DRAFT_ARM}"
 )
-# The jobs that read the build's artifacts also skip when it did not succeed (#7439).
-BUILD_CONSUMERS = ("host_packages", "host_packages_bootstrap", "host_tools_arm64")
+# The jobs that read the build's artifacts also skip when it did not succeed (#7439), and when
+# it had no work for them. The gate and `ci_verdict.jobs_verdict` pass that second skip, so a
+# job here may skip for no reason beyond the arm named for it.
 BUILD_ARM = "needs.host_packages_build.result == 'success'"
+RUN_CASES_ARM = "needs.host_packages_build.outputs.run-cases == 'true'"
+BUILD_CONSUMERS = {
+    "host_packages": RUN_CASES_ARM,
+    "host_packages_bootstrap": RUN_CASES_ARM,
+    "host_tools_arm64": (
+        "(github.event_name == 'workflow_dispatch'"
+        " || needs.host_packages_build.outputs.arm64-tools == 'true')"
+    ),
+}
 DEPENDENTS = (
     "hooks",
     "pr_gates",
@@ -113,7 +123,7 @@ def test_every_repeated_job_waits_for_the_proof_and_skips_on_it():
             f"{job} waits for a job outside the gate"
         )
         want = (
-            f"{PROOF_CONDITION} && {BUILD_ARM}"
+            f"{PROOF_CONDITION} && {BUILD_ARM} && {BUILD_CONSUMERS[job]}"
             if job in BUILD_CONSUMERS
             else PROOF_CONDITION
         )
@@ -130,12 +140,19 @@ def test_every_repeated_job_waits_for_the_proof_and_skips_on_it():
 def _dependent_runs(
     condition: str, prove: str, proven: str, cancelled: bool, build: str = "success"
 ) -> bool:
-    """Evaluate a dependent's `if:` as GitHub would, for one `prove` outcome on a push."""
+    """Evaluate a dependent's `if:` as GitHub would, for one `prove` outcome on a push.
+
+    The build has work for every job that reads it, so only the proof and the build's result
+    decide.
+    """
     python = (
         condition.replace(f" && {DRAFT_ARM}", "")
         .replace("needs.prove.result", repr(prove))
         .replace("needs.prove.outputs.proven", repr(proven))
         .replace("needs.host_packages_build.result", repr(build))
+        .replace("needs.host_packages_build.outputs.run-cases", repr("true"))
+        .replace("needs.host_packages_build.outputs.arm64-tools", repr("true"))
+        .replace("github.event_name", repr("push"))
         .replace("!cancelled()", str(not cancelled))
         .replace("&&", " and ")
         .replace("||", " or ")

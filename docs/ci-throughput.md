@@ -37,9 +37,10 @@ succeeded, and the build's output said `false` for it: `run-cases` for the cases
 skipped required job as a pass.
 
 **`host_packages_build` owns the answer to whether a case has anything to run.** Its
-`run-cases` output
-is true on a `workflow_dispatch` run, and when the render reports `changed` or `cases`.
-`k3s_download` skips at job level on it.
+`run-cases` output is true on a `workflow_dispatch` run, and when the render reports `changed`
+or `cases`. The eight cases legs and `k3s_download` skip at job level on it.
+`host_tools_arm64` skips when `arm64-tools` is not true, and a dispatch runs it whatever was
+built.
 
 **`jobs_verdict` applies the gate's rule without the outputs.** A check-run does not carry a
 job output. `hosts/lib/ci_verdict.py:jobs_verdict` therefore passes a build reader that skipped
@@ -63,11 +64,8 @@ A run with no host change falls from 25 jobs to 15.
 1. **A1, landed.** `k3s_download` skips at job level.
 1. **A2, landed.** The gate and `jobs_verdict` pass a build reader that skipped because the
    build had no work for it, and the build reports `run-cases`. No gate need skips yet.
-1. **A3, planned.** The eight case legs skip at job level on `run-cases`, and
-   `host_tools_arm64` skips on `arm64-tools`. Their step-level conditions go.
-
-A3 waits until every host reports a package at or past A2's merge commit in
-`homelab_host_applied_info`, so no host's reader loses the early verdict.
+1. **A3, landed.** The eight cases legs skip at job level on `run-cases`, and
+   `host_tools_arm64` skips on `arm64-tools`. Their step-level conditions are gone.
 
 ### Phase B: a merge queue on daniel-box that tests the merged tree
 

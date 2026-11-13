@@ -66,3 +66,4 @@ def test_the_bootstrap_jobs_steps_run_on_the_legs_conditions():
             drifted[name] = step.get("if")
     assert len(jobs["host_packages_bootstrap"]["steps"]) >= 6
     assert drifted == {}
+    assert jobs["host_packages_bootstrap"]["if"] == jobs[LEGS_JOB]["if"]
