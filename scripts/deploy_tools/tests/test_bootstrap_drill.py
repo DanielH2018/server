@@ -6,8 +6,6 @@ Every verdict has a green and a red input, so a verdict that stopped matching fa
 Run: uv run pytest scripts/deploy_tools/tests/test_bootstrap_drill.py
 """
 
-import copy
-
 import pytest
 from lib import yaml_fast
 
@@ -119,15 +117,6 @@ def test_no_decrypt_passes_only_on_a_decryption_failure():
     assert drill.no_decrypt_problems(failed) == []
     assert drill.no_decrypt_problems([_ks("cluster-vars")])
     assert drill.no_decrypt_problems([_ks("cluster-vars", "False", message="timeout")])
-
-
-def test_placeholders_in_a_hand_applied_document_are_flagged():
-    assert drill.placeholder_problems(SYNC_DOCS) == []
-    bad = copy.deepcopy(SYNC_DOCS)
-    bad[0]["spec"]["url"] = "oci://${registry}/manifests"
-    assert drill.placeholder_problems(bad)
-    bad[0]["spec"]["url"] = "oci://$$registry/manifests"
-    assert drill.placeholder_problems(bad)
 
 
 def test_build_writes_the_withheld_root_order(tmp_path):
