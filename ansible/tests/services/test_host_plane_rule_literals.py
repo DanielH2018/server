@@ -6,7 +6,8 @@
 - one `HostUpdateStale` per entry of `observability_expected_hosts`, equal to the rule
   `update_stale_rule` builds from the entry. `tests/rules/fixtures/host-update-stale.yaml`
   holds that rule for `FIXTURE_HOSTS`, the one-host map `host-checks.test.yaml` fires it from,
-  so the shape has promtool cases while the shipped map is empty;
+  so the shape has promtool cases of its own. Every host whose package
+  enables `homelab-updater.timer` has an entry;
 - one `WiredLinkDown` per host whose host_vars set `k3s_node_static_link`, reading that link.
 
 Run: uv run pytest ansible/tests/services/test_host_plane_rule_literals.py
@@ -18,7 +19,7 @@ import yaml
 from _helpers import K8S_ROLES, load_defaults
 from lib import yaml_fast
 from lib.ansible_inventory import inventory_hosts
-from lib.repo_paths import ALL_VARS, HOST_VARS
+from lib.repo_paths import ALL_VARS, HOST_VARS, REPO
 
 ROLE = K8S_ROLES / "observability"
 RULES = ROLE / "files" / "rules" / "host-checks.yaml"
@@ -111,6 +112,32 @@ def update_stale_problems(rules: list[dict], expected: dict[str, dict]) -> list[
     return problems
 
 
+def unexpected_armed_hosts(armed: set[str], expected: dict[str, dict]) -> list[str]:
+    """Each host that arms its updater with no `observability_expected_hosts` entry, or nothing.
+
+    Args:
+        armed: The hosts whose package enables `homelab-updater.timer`.
+        expected: An `observability_expected_hosts` map.
+    """
+    return [
+        f"{host} enables homelab-updater.timer and observability_expected_hosts does not list it"
+        for host in sorted(armed - expected.keys())
+    ]
+
+
+def _armed_hosts() -> set[str]:
+    """The inventory hosts whose host package enables `homelab-updater.timer`."""
+    armed = set()
+    for host in _hosts():
+        path = REPO / "hosts" / host / "package.yml"
+        package = (
+            yaml_fast.safe_load(path.read_text()) if path.exists() else None
+        ) or {}
+        if "homelab-updater.timer" in (package.get("enable") or {}):
+            armed.add(host)
+    return armed
+
+
 def reconcile_failed_problems(rules: list[dict], hosts: set[str]) -> list[str]:
     """Why the `HostReconcileFailed` rules differ from one per host, or nothing.
 
@@ -195,6 +222,20 @@ def _static_links() -> dict[str, str]:
 def test_the_shipped_update_stale_rules_match_the_expected_host_map_is_clean():
     expected = load_defaults(ROLE)["observability_expected_hosts"]
     assert update_stale_problems(_rules(RULES, "HostUpdateStale"), expected) == []
+
+
+def test_every_host_that_arms_its_updater_is_expected_is_clean():
+    armed = _armed_hosts()
+    assert FLEET <= armed
+    expected = load_defaults(ROLE)["observability_expected_hosts"]
+    assert unexpected_armed_hosts(armed, expected) == []
+
+
+def test_a_host_that_arms_its_updater_and_is_not_expected_is_flagged():
+    expected = load_defaults(ROLE)["observability_expected_hosts"]
+    assert unexpected_armed_hosts(_armed_hosts() | {"daniel-new"}, expected) == [
+        "daniel-new enables homelab-updater.timer and observability_expected_hosts does not list it"
+    ]
 
 
 def test_the_fixture_rule_matches_the_one_host_fixture_map_is_clean():
