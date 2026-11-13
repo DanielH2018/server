@@ -12,9 +12,8 @@ config PVC. No manifest reproduces it, so a Longhorn revert past its creation, o
 recreating the claim, drops it silently — and the alert that goes missing is the health alert
 that would have reported the problem.
 
-**No standalone deploy tag.** Callers reach it through a lookup or an
-`include_role: name: k8s/arr-notification`, never through `--tags arr-notification`. It is
-not a `containers_list` entry, so a promoted image bump
+**No standalone deploy tag.** Its callers reach it through a `lookup()`, never through
+`--tags arr-notification`. It is not a `containers_list` entry, so a promoted image bump
 here would match no play and deploy nothing while reporting success. `k8s_autodeploy: false`
 for the same reason; the reason string is in `defaults/main.yml`.
 
@@ -50,17 +49,17 @@ name, so a CustomScript that happened to share the name is left alone.
 - **The update merges into the body the API returned.** Building one from scratch blanks
   `grabFields` / `importFields` / `manualInteractionFields`, which the app then repopulates
   empty — content loss from a task that meant to change two booleans.
-- **ClusterIP, not Traefik and not cluster DNS.** Neither app has an Authelia bypass for
-  `/api/*`, so a routed request 302s at the middleware without reaching the app; and the
-  Ansible controller is not in the cluster, so `sonarr.homelab.svc` does not resolve. Same
-  finding, same workaround as `scripts/diagnostics/probe_lib/arr.py`. The rule binds the
-  Ansible path only. The seed Job runs inside the cluster, so it dials the app's Service by its
-  cluster name, `<app>.homelab.svc.cluster.local`, and never reaches Traefik either.
-- **`no_log` on the seed task, with the diagnostics coming back out through a second task.**
-  The environment carries the API key and the webhook URL, so the task is `no_log: true`. That
-  censors the failure message too, so the task is `failed_when: false` and a following `fail`
-  prints the script's stdout/stderr — which is safe precisely because the script never prints a
-  field value.
+- **Never through Traefik.** Neither app has an Authelia bypass for `/api/*`, so a routed
+  request 302s at the middleware without reaching the app. The seed Job runs inside the
+  cluster, so it dials the app's Service by its cluster name,
+  `<app>.homelab.svc.cluster.local`. A hand run from outside the cluster cannot resolve that
+  name, so it sets `ARR_HOST` to the Service's ClusterIP, the same workaround as
+  `scripts/diagnostics/probe_lib/arr.py`.
+- **Secrets arrive in the environment, and the script never prints a field value.** The Job
+  fills `ARR_API_KEY` and `ARR_DISCORD_WEBHOOK_URL` from two Secrets, and a hand run sets them
+  in the operator's shell; neither passes them on argv. The script's output is one line naming
+  the decision (created, updated or no change). The Job log can therefore be read in full,
+  failures included.
 
 ## Verifying it by hand
 
@@ -93,13 +92,13 @@ Under Flux the seed runs as a post-apply mutation Job in `sonarr-verify` and `ra
 It landed inert in `templates/verify-inert/`, and the apps' flip (D5.20) moved it.
 
 - **The script is the one this role ships**, read by a cross-role `lookup()`, so a change here
-  changes both apps' renders, as the Ansible `include_role` redeployed both before the flip. The template also reads
+  changes both apps' renders. The template also reads
   `arr_notification_name`, `arr_notification_triggers` and
   `arr_notification_include_health_warnings` from `defaults/main.yml` as literals, and spells
   `arr_notification_username` as the app's name capitalised.
-- **One transport.** The script imports only modules the Job census admits, so it reaches the
-  app through `flux_job_connect.open_url` on the controller path too. A refused connect
-  therefore retries for 60 seconds on both paths.
+- **One transport.** The script imports only modules the Job census admits, so a hand run
+  reaches the app through `flux_job_connect.open_url` as the Job does. A refused connect
+  therefore retries for 60 seconds in a hand run too.
 - **The API key comes from `<app>-exportarr`**, which the app's own render applies. The webhook
   comes from `<app>-notification`, a Secret in `<app>-verify` filled by substitution, so that
   Kustomization substitutes.
