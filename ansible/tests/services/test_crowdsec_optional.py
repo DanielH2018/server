@@ -34,8 +34,8 @@ from validate.k8s_manifests import (
 )
 
 from _k8s_render import host_context, render_role_template, traefik_static_config
-from lib.render_guard import containers_entries
-from lib.repo_paths import HOST_VARS
+from lib.ansible_inventory import K8S_HOST
+from lib.render_guard import k8s_services
 
 _FLAGS = {
     "traefik": "traefik_k8s_manage_crowdsec",
@@ -324,11 +324,7 @@ def _host_render(host: str, template: str, overrides: dict | None = None) -> str
 
 
 def _hosts_running_traefik() -> list[str]:
-    return [
-        path.stem
-        for path in sorted(HOST_VARS.glob("*.yml"))
-        if any(c.get("name") == "traefik" for c in containers_entries(path))
-    ]
+    return [K8S_HOST] if any(c["name"] == "traefik" for c in k8s_services()) else []
 
 
 def test_the_edge_census_finds_daniel_box() -> None:

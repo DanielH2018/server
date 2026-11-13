@@ -1,11 +1,10 @@
-"""The one reading of ``containers_list`` and ``hosts.ini`` every script under ``scripts/`` shares.
+"""The one reading of the service lists and the host list every script under ``scripts/`` shares.
 
 WHY A MODULE WITH NO IMPORTS. ``render_guard.containers_entries_in`` was meant to be the one
 rule for which ``containers_list`` entries count, but importing ``render_guard`` costs a
 ``jinja2`` and a ``yaml`` import. So eight readers wrote their own filter, and they disagreed
-about an entry with an empty ``name`` or none at all (#3357). ``hosts.ini`` was parsed twice
-with different rules for an inline comment, and its host names were copied by hand into two
-tuples. This module imports only the standard library and ``repo_paths``, the same reason
+about an entry with an empty ``name`` or none at all (#3357), and host names were copied by
+hand into two tuples. This module imports only the standard library and ``repo_paths``, the same reason
 ``repo_paths`` was split out of ``render_guard``.
 
 ``containers_entries_in`` takes an already-parsed mapping, so the caller keeps its own YAML
@@ -17,32 +16,28 @@ role, because this module imports no YAML loader. ``scripts/lib/tests/test_ansib
 pins each literal to that var instead, so moving the role in the inventory fails a test rather
 than leaving every script naming the old host.
 
-A deliberately narrower host set filters ``inventory_hosts()`` rather than replacing it.
+A deliberately narrower host set filters ``host_names()`` rather than replacing it.
 ``fanout_lib/transport.HOSTS`` (the agent hosts) and ``kubectl.CLUSTER_NODES`` (which
 ``probe.py`` must answer without parsing Ansible, and which names a retired host) stay
 where they are.
 """
 
-import ast
-import shlex
 import sys
-import warnings
-from dataclasses import dataclass
 from pathlib import Path
 
 # A directly-invoked importer gets only its own directory on sys.path, and pyproject's
 # `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.repo_paths import HOST_VARS, HOSTS_INI
+from lib.repo_paths import HOST_VARS
 
 # The host that runs `land.sh`, the fan-out and the host-package builder.
 LANDING_HOST = "daniel-box"
 # The one host whose host_vars set `has_docker: true`; its host package ships its compose services.
 PI_HOST = "daniel-pi"
-# The host whose `containers_list` the renderer fills from `cluster/services.yml`, the
-# group_vars `k8s_primary_node`. The same host as LANDING_HOST, but a different fact: moving the
-# landing host would not move the services.
+# The host whose host_vars every k8s role renders with, the group_vars `k8s_primary_node`. The
+# same host as LANDING_HOST, but a different fact: moving the landing host would not move the
+# cluster's primary node.
 K8S_HOST = "daniel-box"
 
 
@@ -55,7 +50,7 @@ PI_HOST_VARS = host_vars_file(PI_HOST)
 
 
 def containers_entries_in(data: dict | None) -> list[dict]:
-    """The named ``containers_list`` entries in an already-parsed host_vars mapping.
+    """The named ``containers_list`` entries in an already-parsed ``cluster/services.yml``.
 
     Entries with no ``name`` are dropped rather than raising: ``render_guard.entry_tags``
     derives a service's tags from its name, so an unnamed entry selects nothing. A non-mapping entry
@@ -85,92 +80,12 @@ def pi_entries_in(data: dict | None) -> list[dict]:
     return [e for e in data[PI_LIST_KEY] or [] if isinstance(e, dict) and e.get("name")]
 
 
-@dataclass(frozen=True)
-class Host:
-    """One host line of ``hosts.ini``.
+def host_names(host_vars: Path = HOST_VARS) -> tuple[str, ...]:
+    """Every inventory host, sorted: one per ``host_vars`` file.
 
-    Attributes:
-        name: the inventory hostname.
-        groups: every ``[group]`` section the host line sits under, in file order.
-        settings: the line's ``key=value`` host variables, such as ``ansible_host``.
+    A ``_``-prefixed file, such as ``_example.yml``, is a template for a new host, not a host.
+    A missing directory reads as no hosts.
     """
-
-    name: str
-    groups: tuple[str, ...]
-    settings: dict[str, str]
-
-
-def _refuse_a_value_ansible_evaluates(
-    path: Path, host: str, key: str, value: str
-) -> None:
-    """Raise when Ansible's ini parser would read `value` as something other than itself.
-
-    Ansible runs ``ast.literal_eval`` on each value after ``shlex``, and keeps the string only
-    when that raises. A value it accepts never comes back equal: it is a non-string, or a string
-    without its quotes. Quoting the value in ``hosts.ini`` does not help, because ``shlex``
-    removes those quotes first.
-    """
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", SyntaxWarning)
-            evaluated = ast.literal_eval(value)
-    except ValueError, SyntaxError:
-        return
-    raise ValueError(
-        f"{path}: host {host}: {key}={value} is the {type(evaluated).__name__} "
-        f"{evaluated!r} to Ansible and the string {value!r} to this reader; "
-        "set it in the host's host_vars file instead"
+    return tuple(
+        sorted(p.stem for p in host_vars.glob("*.yml") if not p.name.startswith("_"))
     )
-
-
-def inventory_hosts(path: Path = HOSTS_INI) -> list[Host]:
-    """Every host ``hosts.ini`` declares, in file order, one entry per name.
-
-    Parsed by hand rather than with ``configparser``: an ini host line is
-    ``name key=value key=value``, which ``configparser`` reads as one long key. A ``#``
-    anywhere starts a comment, and so does a ``;`` at the start of a line, as Ansible's ini
-    parser reads them. A ``[group:vars]`` or ``[group:children]`` section holds no host
-    lines, so it is skipped. A host listed under two groups is one ``Host`` carrying both.
-    A missing file reads as no hosts. A host line splits as ``shlex`` splits it, as Ansible's
-    does, so a value loses one level of quotes and a quoted value may hold a space or a ``#``.
-
-    Raises:
-        ValueError: A host line has an unbalanced quote, or a value Ansible would evaluate to
-            something other than the string this reader keeps. The message names the host.
-    """
-    if not path.is_file():
-        return []
-    order: list[str] = []
-    groups: dict[str, list[str]] = {}
-    settings: dict[str, dict[str, str]] = {}
-    section: str | None = None
-    for raw in path.read_text().splitlines():
-        line = raw.split("#", 1)[0].strip()
-        if not line or line.startswith(";"):
-            continue
-        if line.startswith("["):
-            section = line.strip("[]").strip()
-            continue
-        if section is not None and ":" in section:
-            continue
-        try:
-            name, *pairs = shlex.split(raw, comments=True)
-        except ValueError as exc:
-            raise ValueError(f"{path}: host {line.split()[0]}: {exc}") from exc
-        if name not in settings:
-            order.append(name)
-            groups[name] = []
-            settings[name] = {}
-        if section is not None and section not in groups[name]:
-            groups[name].append(section)
-        for pair in pairs:
-            if "=" in pair:
-                key, value = pair.split("=", 1)
-                _refuse_a_value_ansible_evaluates(path, name, key, value)
-                settings[name][key] = value
-    return [Host(n, tuple(groups[n]), settings[n]) for n in order]
-
-
-def host_names(path: Path = HOSTS_INI) -> tuple[str, ...]:
-    """Every inventory hostname, in file order."""
-    return tuple(h.name for h in inventory_hosts(path))

@@ -136,8 +136,10 @@ def test_backup_tier_finds_pvc_referenced_only_by_claimname(tmp_path):
 
 def test_backup_tier_docker_is_not_longhorn(tmp_path):
     paths = make_repo(tmp_path)
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "dozzle")
-    assert row.backup_tier == "n/a (Docker/Pi, not Longhorn-backed)"
+    tier = backup_tier(
+        {"name": "dozzle"}, "docker", "homelab", LonghornTiers(), paths["k8s_roles"]
+    )
+    assert tier == "n/a (Docker/Pi, not Longhorn-backed)"
 
 
 def test_multiple_pvcs_report_each_tier_deduplicated(tmp_path):
@@ -228,7 +230,7 @@ def test_backup_tier_reads_a_group_vars_override_of_a_tier_list(tmp_path):
     assert _jellyfin_tier(paths, pvc) == "daily -> R2"
 
 
-def test_backup_tier_derives_the_r2_set_from_the_injected_containers_list(tmp_path):
+def test_backup_tier_derives_the_r2_set_from_the_injected_service_list(tmp_path):
     # #3947: the role's R2 expression derives from the inventory build_rows was given, not
     # from the repo's. Neither `lab/svc-config` nor the `lab` namespace exists in the repo.
     paths = make_repo(tmp_path)
@@ -237,17 +239,16 @@ def test_backup_tier_derives_the_r2_set_from_the_injected_containers_list(tmp_pa
     write(
         paths["k3s_defaults"],
         """\
-        k3s_longhorn_r2_volumes: "{{ containers_list | tier_backup_claims('home-critical', k8s_namespace) }}"
+        k3s_longhorn_r2_volumes: "{{ services | tier_backup_claims('home-critical', k8s_namespace) }}"
         k3s_longhorn_weekly_volumes: []
         k3s_longhorn_nobackup_volumes: []
         """,
     )
     write(
-        paths["host_vars"] / "daniel-box.yml",
+        paths["services"],
         """\
         containers_list:
           - name: svc
-            platform: k8s
             tier: home-edge
             backup_claims: [svc-config]
         """,

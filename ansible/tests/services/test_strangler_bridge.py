@@ -17,8 +17,8 @@ from lib.k8s_roles import resolved_manifest_files
 from lib import yaml_fast
 from jinja2 import ChainableUndefined
 from lib.ansible_jinja_env import template_env
-from _helpers import ANSIBLE, HOST_VARS
-from lib.render_guard import containers_entries
+from _helpers import ANSIBLE
+from lib.render_guard import k8s_services
 from lib.repo_paths import ALL_VARS
 
 
@@ -28,8 +28,8 @@ GATE = (
 DOMAIN = "example.com"
 
 
-def _containers(host: str) -> list[dict]:
-    return containers_entries(HOST_VARS / f"{host}.yml")
+def _containers() -> list[dict]:
+    return k8s_services()
 
 
 def _gate_config() -> dict:
@@ -116,7 +116,7 @@ def test_gate_stays_out_of_crd_objects():
 
 
 def test_the_k8s_portal_owns_the_unsuffixed_auth_name():
-    authelia = next(e for e in _containers("daniel-box") if e["name"] == "authelia")
+    authelia = next(e for e in _containers() if e["name"] == "authelia")
     assert authelia.get("hostname") == "auth", (
         "the k8s portal must own the unsuffixed auth name — it is the OIDC issuer "
         "Jellyfin's SSO plugin points at"
@@ -129,7 +129,7 @@ def test_dual_hostname_machinery_stays_retired():
     The `unsuffixed_hostname` key, the `k8s_hostname_suffix` var and the macro's second route
     are retired. Reintroducing any of them puts two routers on one service.
     """
-    for entry in _containers("daniel-box"):
+    for entry in _containers():
         assert "unsuffixed_hostname" not in entry, (
             f"{entry['name']}: unsuffixed_hostname is retired — `hostname` is the only name"
         )

@@ -488,12 +488,7 @@ def owner_stance(tags: str = "") -> str:
             on one line, and the `=` form gives the glance's wrap no space to break at.
     """
     tag = f"`land.sh --tags={tags}`" if tags else "`land.sh`"
-    return f"Flux, through `promote` (`platform: k8s`); {tag} gates the rollout"
-
-
-def entry_owner(entry: dict[str, Any]) -> str | None:
-    """`flux` for a k8s entry, which Flux applies, or None for a Docker one."""
-    return "flux" if entry.get("platform") == "k8s" else None
+    return f"Flux, through `promote`; {tag} gates the rollout"
 
 
 def autodeploy_eligibility(

@@ -88,14 +88,14 @@ enable:
 # its pods.
 ufw:
   rules:
-    - {id: apt-repo-daniel-server, spec: "allow from {{ hostvars['daniel-server'].server_ip }} to any port {{ builder_repo_port }} proto tcp"}
-    - {id: apt-repo-daniel-pi, spec: "allow from {{ hostvars['daniel-pi'].server_ip }} to any port {{ builder_repo_port }} proto tcp"}
+    - {id: apt-repo-daniel-server, spec: "allow from {{ hosts['daniel-server'].server_ip }} to any port {{ builder_repo_port }} proto tcp"}
+    - {id: apt-repo-daniel-pi, spec: "allow from {{ hosts['daniel-pi'].server_ip }} to any port {{ builder_repo_port }} proto tcp"}
   # The Ansible rules carried the comment 'homelab apt repository'. A spec holds no quote, so the
   # comment goes in its own key. The arm relabels the live rule in place, so a rule that a declaration
   # shares is never deleted.
   legacy:
-    - {spec: "allow from {{ hostvars['daniel-server'].server_ip }} to any port {{ builder_repo_port }} proto tcp", comment: homelab apt repository, replaced_by: apt-repo-daniel-server}
-    - {spec: "allow from {{ hostvars['daniel-pi'].server_ip }} to any port {{ builder_repo_port }} proto tcp", comment: homelab apt repository, replaced_by: apt-repo-daniel-pi}
+    - {spec: "allow from {{ hosts['daniel-server'].server_ip }} to any port {{ builder_repo_port }} proto tcp", comment: homelab apt repository, replaced_by: apt-repo-daniel-server}
+    - {spec: "allow from {{ hosts['daniel-pi'].server_ip }} to any port {{ builder_repo_port }} proto tcp", comment: homelab apt repository, replaced_by: apt-repo-daniel-pi}
 # What the homelab_builder role installed before H7.41b. Reconcile retires each once the package's
 # units are in place. The six unit files and the two enable links shadow the packaged units of the
 # same name, so reconcile hands them off with one daemon-reload and restarts each unit that differed.

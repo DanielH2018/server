@@ -7,8 +7,7 @@ and contract unchanged.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=autofix-bridge`
-  gates the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=autofix-bridge` gates the rollout
 - **Image:** `python` (`autofix_bridge_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
@@ -21,7 +20,7 @@ and contract unchanged.
   the *arr Discord webhook
 - **Depends on:** sonarr and radarr, at runtime
 - **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
-  is `platform: k8s`, so nothing applies it by hand, and a
+  is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Deployment is `Recreate` with one
   replica, so a roll stops the loop until the new pod starts. It has no readinessProbe, so the

@@ -32,7 +32,6 @@ BOOTSTRAP_SCRIPT = "hosts/bootstrap-host.sh"
 # the walkthrough or the example, and a moved line in the inventory can leave every render unchanged.
 FIXTURE_HOST_FILES = (
     "docs/host-packages.md",
-    "ansible/inventory/hosts.ini",
     "ansible/inventory/host_vars/_example.yml",
 )
 # The package whose modules are inputs of the cases alone. The renderer is a render input, which

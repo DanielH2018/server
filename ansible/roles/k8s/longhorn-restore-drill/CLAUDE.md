@@ -8,15 +8,15 @@ ServiceAccount and the RBAC. The CronJob shipped `suspend: true` at H2.3d, and H
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh
-  --tags=longhorn-restore-drill` gates the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=longhorn-restore-drill` gates the
+  rollout
 - **Images:** `alpine/k8s` (`longhorn_restore_drill_runner_image`), `busybox`
   (`k3s_longhorn_restore_drill_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `${DRILL}` (no declared tier (runtime claim named by a shell variable))
 <!-- /generated_from -->
 
-- **Flux applies it, not Ansible.** Its `containers_list` entry is `platform: k8s` and
+- **Flux applies it, not Ansible.** Its `containers_list` entry is in `cluster/services.yml` and
   `depends_on: [longhorn]` from its first commit.
 - **It is a tag of its own, not part of `longhorn`.** The drill's objects live in `homelab`.
   H1's DR order waits on `longhorn` at step 6, and nothing creates `homelab` until step 8, so a

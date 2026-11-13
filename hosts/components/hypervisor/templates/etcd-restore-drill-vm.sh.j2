@@ -313,8 +313,8 @@ fence_targets() {
   # lan_subnet: the cluster edge, the API server, and daniel-pi's wg-easy admin UI — which is
   # unauthenticated, and whose only protection is the LAN-only premise this guest sits outside.
   printf '%s|%s|\n' PRODVIP "$(fence_curl http://{{ k3s_metallb_ingress_vip }})"
-  printf '%s|%s|\n' K3SAPI "$(fence_curl https://{{ hostvars['daniel-box'].server_ip }}:6443/version)"
-  printf '%s|%s|\n' WGEASY "$(fence_curl http://{{ hostvars['daniel-pi'].server_ip }}:51821)"
+  printf '%s|%s|\n' K3SAPI "$(fence_curl https://{{ hosts['daniel-box'].server_ip }}:6443/version)"
+  printf '%s|%s|\n' WGEASY "$(fence_curl http://{{ hosts['daniel-pi'].server_ip }}:51821)"
   # k3s_service_cidr. Longhorn's frontend Service is the thing actually found exposed on
   # 2026-08-28, answering unauthenticated with a mutating `diskUpdate` action in its payload.
   printf '%s|%s|%s\n' LONGHORNSVC "$(fence_curl "$FENCE_LONGHORN_URL")" "$(fence_curl "$FENCE_LONGHORN_URL")"

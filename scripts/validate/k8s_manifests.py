@@ -257,7 +257,7 @@ def main(argv: Sequence[str] = (), render: Callable | None = None) -> int:
         # quietly pass, so treat the mismatch as the failure it is.
         if role not in entries:
             print(
-                f"  [FAIL] {role}: no platform: k8s entry in {K8S_SERVICES.name}",
+                f"  [FAIL] {role}: no entry in {K8S_SERVICES.name}",
                 file=sys.stderr,
             )
             failures += 1

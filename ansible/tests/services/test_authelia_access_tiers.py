@@ -17,8 +17,7 @@ import random
 import pytest
 from lib import yaml_fast
 
-from _helpers import HOST_VARS
-from lib.render_guard import containers_entries
+from lib.render_guard import k8s_services
 from _k8s_render import host_context, rendered_docs
 from authelia_access import AUTH_TIERS, authelia_service_rules
 
@@ -44,7 +43,6 @@ KNOWN_SSO = frozenset(
 def _entry(name, **overrides):
     entry = {
         "name": name,
-        "platform": "k8s",
         "hostname": name,
         "use_authelia": True,
         "auth_tier": "one_factor",
@@ -64,11 +62,10 @@ def test_tiers_group_into_two_sorted_rules_is_clean():
             _entry("alpha"),
             {
                 "name": "plain",
-                "platform": "k8s",
                 "hostname": "plain",
                 "use_authelia": False,
             },
-            {"name": "helper", "platform": "k8s"},
+            {"name": "helper"},
         ],
         DOMAIN,
         RFC1918,
@@ -165,11 +162,7 @@ def _policy(rules, host, source, groups=()):
 
 
 def _sso_entries():
-    return [
-        c
-        for c in containers_entries(HOST_VARS / "daniel-box.yml")
-        if c.get("use_authelia")
-    ]
+    return [c for c in k8s_services() if c.get("use_authelia")]
 
 
 def test_every_sso_entry_resolves_to_its_declared_tier():

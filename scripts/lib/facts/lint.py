@@ -58,7 +58,7 @@ _FENCE_MARK = re.compile(r"```")
 
 _DATE_CLAIM = re.compile(r"\bverified\b[^.\n]{0,40}\b\d{4}-\d{2}-\d{2}\b", re.I)
 
-INVENTORY_REL = "ansible/inventory/hosts.ini"
+INVENTORY_REL = "ansible/inventory/host_vars"
 RETIRED_LOCK_REL = "docs/facts.lock"
 
 

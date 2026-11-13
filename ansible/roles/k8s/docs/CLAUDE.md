@@ -5,8 +5,7 @@ runbooks, design documents and generated reference pages are readable in a brows
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=docs` gates the
-  rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=docs` gates the rollout
 - **Image:** `nginxinc/nginx-unprivileged` (`docs_k8s_image`)
 - **Route:** `docs.<domain>` · `docs.local.<domain>`, Authelia one_factor
 - **Claims:** none (no PVC)
@@ -24,7 +23,7 @@ runbooks, design documents and generated reference pages are readable in a brows
 - **Built by:** `scripts/docs/build_docs.py`, run by `homelab-docs-refresh.service`. **Not by this role** —
   a deploy renders manifests, it does not rebuild the site.
 - **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry is
-  `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when
+  in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when
   `promote` publishes and verifies the next bundle. authelia and traefik are flux-owned too, so
   the Kustomization lists them in `dependsOn`, and Flux applies this tag only after their
   Kustomizations are Ready. The Deployment is `RollingUpdate` with one replica, so a roll keeps

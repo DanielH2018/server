@@ -6,8 +6,7 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=netpol-baseline`
-  gates the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=netpol-baseline` gates the rollout
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
@@ -68,7 +67,7 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
   other tag, so a revision whose workload change fails its `wait` never reaches
   `netpol-baseline` or its verify Job. The flip PR repeats D4's drill on this edge.
 - **Flux applies it, not Ansible** (D5, Wave D's last flip). The `containers_list` entry
-  is `platform: k8s`, so nothing applies it by hand, and a
+  is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle.
   `defaults/main.yml` holds the deferred file list.
 - **`templates/verify/` is the probe's Flux form.** The Job runs

@@ -5,15 +5,14 @@ web UI, no route — infra role.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=mosquitto` gates
-  the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=mosquitto` gates the rollout
 - **Image:** `eclipse-mosquitto` (`mosquitto_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `mosquitto-data` (no backup (StorageClass longhorn-nobackup))
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5.20, a Wave D PR with sonarr and radarr). Its
-  `containers_list` entry is `platform: k8s`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. zigbee2mqtt is Flux-owned too and depends on it. The Deployment is
   `Recreate`, so a change
   that rolls it drops every MQTT client briefly. `mosquitto-data` is on `longhorn-nobackup`,

@@ -78,7 +78,7 @@ def test_the_key_path_is_under_the_agent_home_and_is_not_the_signing_key() -> No
 
 
 def peer_config(peers: dict[str, bool]) -> str:
-    hostvars = {
+    hosts = {
         name: {"server_ip": f"10.0.0.{n}", "claude_agent_ssh_login_enabled": enabled}
         for n, (name, enabled) in enumerate(peers.items(), start=10)
     }
@@ -87,7 +87,7 @@ def peer_config(peers: dict[str, bool]) -> str:
         "agent-ssh-config.j2",
         {
             "groups": {"all": list(peers)},
-            "hostvars": hostvars,
+            "hosts": hosts,
             "claude_agent_ssh_key_host": "daniel-box",
             "claude_agent_ssh_key_path": "/var/lib/claude/.ssh/peers_ed25519",
         },

@@ -45,7 +45,7 @@ spec:
   # it renders from k8s_primary_node rather than a literal — settled by the same 2026-08-14
   # decision as the policy above.
   externalIPs:
-    - {{ hostvars[k8s_primary_node].server_ip }}
+    - {{ hosts[k8s_primary_node].server_ip }}
   selector:
     app: traefik
   ports:

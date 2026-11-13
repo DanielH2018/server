@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-11-13 00:56 UTC
-generated_sha: d26cf3211
+generated_at: 2026-11-13 03:04 UTC
+generated_sha: 62b768e65
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: d26cf3211
 
 # Scripts
 
-438 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+434 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file. The filter bar above the first table narrows all four at once: by section, by directory, or by any text in a row. A header click sorts by that column.
 
@@ -94,7 +94,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Imported, never run on their own
 
-345 script(s) — imported by another script — not an entry point.
+344 script(s) — imported by another script — not an entry point.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
@@ -102,7 +102,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/validate/alert_conventions.py` | validate | Hold the observability role's Prometheus rule files to the conventions promtool cannot check. | imported by alert_rules.py | — | — |
 | `scripts/diagnostics/probe_lib/alertmanager_api.py` | diagnostics | Alertmanager's silences and inhibitions, which Prometheus' `ALERTS` series cannot show. | imported by health_alerts.py, monitors.py | `test_probe_alertmanager_api.py` | — |
 | `scripts/diagnostics/probe_lib/alerts.py` | diagnostics | `probe.py alerts` -- firing-alert history, collapsed to episodes, from Prometheus' `ALERTS`. | imported by subcommands.py | `test_probe_alerts.py` | — |
-| `scripts/lib/ansible_inventory.py` | lib | The one reading of ``containers_list`` and ``hosts.ini`` every script under ``scripts/`` shares. | imported by _live_read_census.py, _render_audit.py, brief.py, cluster.py, compose_templates.py, constants.py, context.py, core.py, diagram.py, estate.py, gen_doc_fragments.py, health_docker.py, images.py, inventory.py, k8s_roles.py, landing_blockers.py, launch_gates.py, lint.py, placeholders.py, render_diff_gates.py, render_guard.py | `test_ansible_inventory.py` | — |
+| `scripts/lib/ansible_inventory.py` | lib | The one reading of the service lists and the host list every script under ``scripts/`` shares. | imported by _live_read_census.py, _render_audit.py, brief.py, cluster.py, constants.py, context.py, core.py, diagram.py, estate.py, gen_doc_fragments.py, health_docker.py, hosts.py, images.py, inventory.py, k8s_roles.py, landing_blockers.py, launch_gates.py, lint.py, networking.py, placeholders.py, render_guard.py, service_catalog.py | `test_ansible_inventory.py` | — |
 | `scripts/lib/ansible_jinja_env.py` | lib | The Jinja environment every render guard uses, carrying the Ansible-dialect filters. | imported by _live_read_jinja.py, cluster.py, compose_templates.py, environment.py, host_sources.py, k8s_context.py, k8s_manifests.py, setup_templates.py, shell_lint.py, shell_templates.py, unit_templates.py | `test_ansible_jinja_env.py` | — |
 | `scripts/dev/fanout_lib/review/api.py` | dev | The review pipeline's public surface: what code outside `fanout_lib/review/` may import. | imported by autoland.py, pipeline_timeline.py, place.py, review_stats.py, review_unit.py, stops.py | — | — |
 | `scripts/diagnostics/probe_lib/arr.py` | diagnostics | `probe.py arr <app> <api-path>` — read-only *arr API GETs against sonarr/radarr/prowlarr. | imported by cli_parser.py, postflight.py, subcommands.py | — | — |
@@ -182,7 +182,6 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/exit_codes.py` | lib | Every exit-code contract this repo's entry points share, named once. | imported by alertmanager_api.py, alerts.py, await_ci.py, b2_drain.py, backups.py, bootstrap_drill.py, build_docs.py, builder.py, bundle_census.py, ci.py, ci_contexts.py, ci_failures.py, claim_cli.py, classify.py, cli_help.py, cli_parser.py, cluster_vars.py, core.py, deletion_drill.py, exit_messages.py, fact_status.py, fanout.py, findings.py, flux.py, flux_probe.py, fragments_deploy.py, fresh_cluster_drill.py, gate_runner.py, gen_infra_map.py, handoff.py, headroom_probe.py, health.py, health_backup_targets.py, health_docker.py, health_gate.py, history_cli.py, homelab_render.py, host_secrets.py, label_worktree.py, land.py, lander.py, longhorn_reap.py, merge.py, monitors.py, notify.py, outcome.py, pi_plane.py, place.py, probe.py, promote.py, prune.py, prune_backups.py, prune_worktrees.py, publish_pr.py, push_rules.py, readonly_rbac.py, reject_robot_emoji.py, renovate_branch_sweep.py, renovate_rebase.py, repo_guards.py, reset.py, review_unit.py, roundtrip.py, runbook_gates.py, scrape_feed.py, scripts.py, secret_rotation.py, seed_volume_backup.py, shadow_diff.py, snapshots.py, standalone_map.py, stateful.py, status.py, storage_smoke.py, tag_rule.py, takeover_census.py, tools.py, vendor_manifest.py, verify_promotion.py, vip_placement.py, volume_revert.py, wait.py, wait_probe.py | `test_exit_codes.py` | — |
 | `scripts/lib/exit_messages.py` | lib | What an entry point prints about its own exit code, read from `lib.exit_codes.CONTRACTS`. | imported by probe.py | — | — |
 | `scripts/dev/findings_lib/export_cli.py` | dev | The `export` subcommand: the whole `claude` register, every state, written as one JSON file. | imported by findings.py | — | — |
-| `scripts/dev/fanout.py` | dev | The issue-fanout tooling: place batches, wait on them, run a review unit, sum the reviews. | imported by fanout_place.py, fanout_probe.py, fanout_review.py, fanout_review_stats.py | — | — |
 | `scripts/dev/fanout_lib/review/fix_round.py` | dev | The fix phase and the delta review that judges it, run once or twice (#7687). | imported by review.py | — | — |
 | `scripts/validate/validate_lib/fixture_host_case.py` | validate | The fixture host the bootstrap cases build, from `docs/host-packages.md`, *Adding a host* (H7.15d). | imported by bootstrap_plan.py, scratch_clones.py | `test_fixture_host_case.py` | — |
 | `scripts/diagnostics/probe_lib/flux.py` | diagnostics | `probe.py flux [tag...]` — each Flux Kustomization's Ready, applied commit and suspension. | imported by cli_parser.py, flux_wait.py, subcommands.py | `test_probe_flux.py` | — |
@@ -262,7 +261,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/renderer/renderer_lib/jinja_uses.py` | renderer | Where each secret key appears in a template's syntax tree, and the forms it passes through. | imported by jinja_aliases.py, secret_checks.py, var_aliases.py | — | — |
 | `scripts/lib/json_types.py` | lib | The type of a parsed JSON document, and the narrowing helpers that go with it. | imported by boundaries.py, closing_refs.py, export_cli.py, gh.py, gh_calls.py, history_cli.py, kubectl.py, label_worktree.py, land_tested_base.py, landing.py, live_limit.py, merge.py, pace.py, policy.py, pr_json.py, stuck_checks.py, tools.py | `test_json_types.py` | — |
 | `scripts/deploy_tools/runbook_gates_lib/k3s_upgrade.py` | deploy_tools | Run the four stop conditions of `docs/k3s-upgrade.md` in order, exit code naming the first failure. | imported by metallb_upgrade.py | `test_runbook_gates_k3s_upgrade.py` | — |
-| `scripts/lib/k8s_context.py` | lib | Ansible's variable semantics, reproduced for the k8s manifest render guard. | imported by cluster.py, context.py, k8s_manifests.py, render_context.py, restart.py | `test_k8s_context.py` | — |
+| `scripts/lib/k8s_context.py` | lib | Ansible's variable semantics, reproduced for the k8s manifest render guard. | imported by cluster.py, k8s_manifests.py, render_context.py, restart.py | `test_k8s_context.py` | — |
 | `scripts/lib/k8s_lookups.py` | lib | The k8s files another k8s role `lookup()`s, mapped to the roles that read them. | imported by consumers.py, k8s_role_callers.py | `test_k8s_lookups.py` | — |
 | `scripts/validate/validate_lib/k8s_net_rules.py` | validate | The two semantic rules on rendered manifests that no schema can make. | imported by k8s_manifests.py | `test_k8s_net_rules.py` | — |
 | `scripts/lib/k8s_role_callers.py` | lib | Which k8s roles reach another k8s role, read from the live tree: `role_callers`. | imported by classify.py, k8s_roles.py | `test_k8s_role_callers.py` | — |
@@ -388,7 +387,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/secrets_mgmt/secrets_lib/secret_registry.py` | secrets_mgmt | Pure logic over the rotation registry: seeding, reconciliation, due dates and drift. | imported by secret_rotation.py, secrets.py | `test_secret_registry.py` | — |
 | `scripts/validate/validate_lib/secrets_case.py` | validate | The container case for a package that carries `secrets-unit` (H4.1c). | imported by case_groups.py, disarm_case.py, engine_case.py, host_package_cases.py | `test_secrets_case.py` | — |
 | `scripts/backup/longhorn_reap_lib/selection.py` | backup | The two operator-selected Backup CR sets: a migrated volume's old chain, and retired seeds. | imported by backups.py | — | — |
-| `scripts/lib/service_tiers.py` | lib | The sets derived from containers_list ``tier``, for readers outside Ansible. | imported by catalog_backup.py, fragments_storage.py, gen_doc_fragments.py, shed_set.py | — | — |
+| `scripts/lib/service_tiers.py` | lib | The sets derived from each service entry's ``tier``, for readers outside Ansible. | imported by catalog_backup.py, fragments_storage.py, gen_doc_fragments.py, shed_set.py | — | — |
 | `scripts/dev/fanout_lib/session_banner.py` | dev | The SessionStart banner a launched brief carries, read from the host it will run on. | imported by place.py | — | — |
 | `scripts/renderer/renderer_lib/shadow.py` | renderer | Hash a render tree and count its stub tokens: the library behind `shadow_diff.py digest`. | imported by _render_audit.py, bundle_gates.py, shadow_diff.py | — | — |
 | `scripts/validate/validate_lib/shadow_case.py` | validate | The container case for a packaged unit that an Ansible-era copy under /etc shadows (H7.41a). | imported by case_groups.py | — | — |
@@ -421,7 +420,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/tag_rule.py` | deploy_tools | The tag rule: a deploy tag leaves the bundle only with its role, and `flux` never leaves. | imported by promote.py, render_diff_gates.py | `test_tag_rule.py` | — |
 | `scripts/diagnostics/probe_lib/takeover.py` | diagnostics | `probe.py takeover <tag>` — the fields Flux's first apply of a tag strips (D5.1g). | imported by subcommands.py, takeover_census.py | `test_probe_takeover.py` | — |
 | `scripts/dev/fanout_lib/target.py` | dev | Which repo a batch works: its register, its primary checkout and the branch it merges to. | imported by _fanout_fakes.py, _review_fakes.py, abandon.py, autoland.py, batch_holds.py, brief.py, claim_cli.py, claims.py, clean.py, launch.py, manifest.py, notify.py, own_surface.py, place.py, review.py, review_ci.py, review_unit.py, status.py, transport.py | `test_fanout_target.py` | — |
-| `scripts/renderer/renderer_lib/targets.py` | renderer | The k8s services a host renders, derived from its `containers_list` and the role files. | imported by _live_read_census.py, _render_audit.py, cluster.py, render_diff_gates.py | `test_renderer_targets.py` | — |
+| `scripts/renderer/renderer_lib/targets.py` | renderer | The k8s services the cluster renders, derived from `cluster/services.yml` and the role files. | imported by _live_read_census.py, _render_audit.py, cluster.py, render_diff_gates.py | `test_renderer_targets.py` | — |
 | `scripts/renderer/renderer_lib/task_inputs.py` | renderer | The render metadata and image builds a role's `defaults/main.yml` gives the renderer. | imported by _live_read_census.py, bundle_census.py, cluster.py, gen_role_glance.py, images.py, restart.py | `test_renderer_task_inputs.py` | — |
 | `scripts/deploy_tools/land_lib/tools.py` | deploy_tools | Every process boundary a landing crosses, as one injectable object. | imported by _land_fakes.py, host_wait.py, land.py, landing.py | `test_land_tools.py` | — |
 | `scripts/dev/findings_lib/tracked_paths.py` | dev | Resolve a path an issue cites relative to some directory to the tracked file it names. | imported by launch_gates.py, place.py, red_green.py | — | — |
@@ -446,7 +445,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Run by hand
 
-38 script(s) — a person runs it.
+35 script(s) — a person runs it.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
@@ -454,10 +453,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/backup/b2_drain.py` | backup | Delete a stranded Longhorn backup prefix directly through the B2 API. | no automated caller in the tree | `test_b2_drain.py` | [0, 1, 2, 64](#scriptsbackupb2drainpy) |
 | `scripts/backup/etcd_restore_drill.sh` | backup | prove an off-box etcd snapshot actually restores, without an outage. | host_inputs.py (a person runs it) | — | — |
 | `scripts/grafana/export_grafana_dashboards.py` | grafana | Export the *customized* Grafana dashboards from the live DB into code. | no automated caller in the tree | `test_export_grafana_dashboards.py` | — |
-| `scripts/dev/fanout_place.py` | dev | Forwarding shim: `fanout_place.py <args>` runs `fanout.py place <args>` (#4346). | clean.py (a person runs it) | — | — |
-| `scripts/dev/fanout_probe.py` | dev | Forwarding shim: `fanout_probe.py <args>` runs `fanout.py probe <args>` (#4346). | no automated caller in the tree | `test_fanout_probe.py` | — |
-| `scripts/dev/fanout_review.py` | dev | Forwarding shim: `fanout_review.py <args>` runs `fanout.py review <args>` (#4346). | no automated caller in the tree | `test_fanout_review.py` | — |
-| `scripts/dev/fanout_review_stats.py` | dev | Forwarding shim: `fanout_review_stats.py <args>` runs `fanout.py stats <args>` (#4346). | no automated caller in the tree | `test_fanout_review_stats.py` | — |
+| `scripts/dev/fanout.py` | dev | The issue-fanout tooling: place batches, wait on them, run a review unit, sum the reviews. | clean.py (a person runs it) | — | — |
 | `scripts/grafana/fetch_grafana_dashboards.py` | grafana | Fetch + adapt Grafana community dashboards for headless (provisioned) use. | no automated caller in the tree | `test_fetch_grafana_dashboards.py` | — |
 | `scripts/diagnostics/flux_wait.py` | diagnostics | The `flux` source for cc-wait: one Flux Kustomization, Ready at an expected commit. | no automated caller in the tree | — | — |
 | `scripts/secrets_mgmt/host_secrets.py` | secrets_mgmt | Per-host SOPS files: `ansible/vars/hosts/<host>.sops.yaml`, each copied from secrets.yml. | no automated caller in the tree | `test_host_secrets.py` | — |

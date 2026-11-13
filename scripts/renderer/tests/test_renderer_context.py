@@ -1,4 +1,4 @@
-"""The context `renderer_lib.context` builds: the k8s view of `containers_list` and `hostvars`.
+"""The context `renderer_lib.context` builds: the toposorted `services` and the `hosts` layer.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_context.py
 """
@@ -12,8 +12,8 @@ from lib.estate import Inventory
 from lib.render_guard import StrictChainableUndefined, host_files, host_layer, load_yaml
 from lib.repo_paths import ANSIBLE, HOST_VARS, K8S_ROLES, K8S_SERVICES
 from renderer import shadow_diff
-from renderer.renderer_lib.context import k8s_containers_list, template_context
-from toposort import build_k8s_dep_map, filter_by_platform, toposort_containers
+from renderer.renderer_lib.context import sorted_services, template_context
+from toposort import build_k8s_dep_map, toposort_containers
 
 ROLE = K8S_ROLES / "littlelink"
 
@@ -27,32 +27,24 @@ def _names(entries):
     return [e["name"] for e in entries]
 
 
-def test_containers_list_is_the_k8s_view_in_toposort_order(ctx):
+def test_services_is_the_toposorted_service_list_and_no_host_view_remains(ctx):
     raw = load_yaml(K8S_SERVICES)["containers_list"]
-    k8s = filter_by_platform(raw, "k8s")
-    expected = _names(toposort_containers(k8s, build_k8s_dep_map(k8s, str(ANSIBLE))))
-    assert _names(ctx["containers_list"]) == expected
+    expected = _names(toposort_containers(raw, build_k8s_dep_map(raw, str(ANSIBLE))))
+    assert _names(ctx["services"]) == expected
+    assert "containers_list" not in ctx
+    assert "hostvars" not in ctx
 
 
-def test_k8s_containers_list_drops_docker_entries_and_sorts_a_reordered_list():
+def test_sorted_services_sorts_a_reordered_list():
     # The real file is already in toposort order (test_k8s_toposort.py holds it there), so
     # only a reordered list shows that the view is sorted rather than copied.
     raw = load_yaml(K8S_SERVICES)["containers_list"]
-    reordered = [*reversed(raw), {"name": "a-docker-service"}]
-    view = _names(k8s_containers_list(reordered))
-    assert "a-docker-service" not in view
-    assert view != _names(reversed(raw))
+    view = _names(sorted_services(raw[::-1]))
+    assert view != _names(raw[::-1])
     position = {name: i for i, name in enumerate(view)}
     deps = build_k8s_dep_map(raw, str(ANSIBLE))
     assert deps["traefik"] == ["crowdsec", "traefik-crds"]
     assert all(position[d] < position[n] for n, ds in deps.items() for d in ds)
-
-
-def test_hostvars_of_the_primary_node_hold_the_k8s_view(ctx):
-    assert ctx["k8s_primary_node"] == "daniel-box"
-    primary = ctx["hostvars"][ctx["k8s_primary_node"]]
-    assert primary["containers_list"] == ctx["containers_list"]
-    assert "hostvars" not in primary
 
 
 def test_the_pi_client_ip_is_the_pis_own_server_ip(ctx):
@@ -68,7 +60,7 @@ def _render(ctx, text):
 
 
 def test_an_undefined_attribute_with_a_default_is_clean(ctx):
-    text = "{{ hostvars['daniel-pi'].no_such_key | default('fallback') }}"
+    text = "{{ hosts['daniel-pi'].no_such_key | default('fallback') }}"
     assert _render(ctx, text) == "fallback"
 
 
@@ -94,21 +86,26 @@ def _inventory(tmp_path, **edits):
         (host_vars / path.name).write_text(
             yaml.safe_dump(edit(layer) if edit else layer)
         )
-    return Inventory(host_vars=host_vars)
+    services = tmp_path / "services.yml"
+    entries = load_yaml(K8S_SERVICES)["containers_list"]
+    edit = edits.get("services")
+    services.write_text(
+        yaml.safe_dump({"containers_list": edit(entries) if edit else entries})
+    )
+    return Inventory(host_vars=host_vars, services=services)
 
 
-def test_template_context_installs_the_k8s_view_over_a_reordered_list(tmp_path):
-    def reverse(layer):
-        return {**layer, "containers_list": layer["containers_list"][::-1]}
+def test_template_context_installs_the_sorted_view_over_a_reordered_list(tmp_path):
+    def reverse(entries):
+        return entries[::-1]
 
-    inventory = _inventory(tmp_path, daniel_box=reverse)
-    reordered = reverse(host_layer(HOST_VARS, "daniel-box"))["containers_list"]
+    inventory = _inventory(tmp_path, services=reverse)
+    reordered = reverse(load_yaml(K8S_SERVICES)["containers_list"])
     ctx = template_context(ROLE, shadow_diff.stub_vars(), inventory=inventory)
 
-    expected = _names(k8s_containers_list(reordered))
+    expected = _names(sorted_services(reordered))
     assert expected != _names(reordered)
-    assert _names(ctx["containers_list"]) == expected
-    assert _names(ctx["hostvars"]["daniel-box"]["containers_list"]) == expected
+    assert _names(ctx["services"]) == expected
 
 
 def test_a_value_naming_an_undefined_variable_is_flagged(tmp_path):

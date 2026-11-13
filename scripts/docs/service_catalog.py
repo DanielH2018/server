@@ -72,33 +72,34 @@ from docs.catalog_lib.catalog_model import K3S_DEFAULTS, K8S_ROLES, ServiceRow
 from docs.catalog_lib.catalog_render import render_html, render_markdown
 from lib.cli_help import ArgumentParser
 from lib.estate import Estate, Inventory
-from lib.repo_paths import ALL_VARS, HOST_VARS
+from lib.ansible_inventory import K8S_HOST
+from lib.repo_paths import ALL_VARS, K8S_SERVICES
 
-# containers_list and the host_vars walk both come from lib.estate, the loader every docs
-# generator reads the inventory through.
+# The service list comes from lib.estate, the loader every docs generator reads the
+# inventory through.
 
 
 # Assembly
 
 
 def build_rows(
-    host_vars: Path = HOST_VARS,
+    services: Path = K8S_SERVICES,
     k8s_roles: Path = K8S_ROLES,
     k3s_defaults: Path = K3S_DEFAULTS,
     all_vars: Path = ALL_VARS,
 ) -> list[ServiceRow]:
-    """Build one `ServiceRow` per `containers_list` entry across every host.
+    """Build one `ServiceRow` per k8s service, each on the k8s host.
 
     Args:
-        host_vars: Directory holding each host's `host_vars` file.
+        services: The k8s service list.
         k8s_roles: Root directory of the k8s roles.
         k3s_defaults: Path to the k3s role's `defaults/main.yml`, for the Longhorn tier lists.
         all_vars: Path to `group_vars/all.yml`.
 
     Returns:
-        One `ServiceRow` per service, across every host in `host_vars`.
+        One `ServiceRow` per service, in `services` order.
     """
-    estate = Estate(Inventory(all_vars=all_vars, host_vars=host_vars))
+    estate = Estate(Inventory(all_vars=all_vars, services=services))
     tiers = load_longhorn_tier_lists(
         k3s_defaults, estate.group_vars, list(estate.k8s_entries().values())
     )
@@ -108,28 +109,27 @@ def build_rows(
     k8s_namespace = estate.group_vars.get("k8s_namespace", "homelab")
 
     rows: list[ServiceRow] = []
-    for host in estate.host_vars_hosts():
-        for entry in estate.entries(host):
-            name = entry["name"]
-            platform = entry.get("platform", "docker")
-            rows.append(
-                ServiceRow(
-                    name=name,
-                    host=host,
-                    platform=platform,
-                    route=route_for(entry, platform, k8s_roles, all_vars),
-                    auth_tier=auth_tier(entry),
-                    backup_tier=backup_tier(
-                        entry,
-                        platform,
-                        k8s_namespace,
-                        tiers,
-                        k8s_roles,
-                        claim_classes,
-                    ),
-                    autodeploy=autodeploy_eligibility(entry, platform),
-                )
+    for entry in estate.services:
+        name = entry["name"]
+        platform = "k8s"
+        rows.append(
+            ServiceRow(
+                name=name,
+                host=K8S_HOST,
+                platform=platform,
+                route=route_for(entry, platform, k8s_roles, all_vars),
+                auth_tier=auth_tier(entry),
+                backup_tier=backup_tier(
+                    entry,
+                    platform,
+                    k8s_namespace,
+                    tiers,
+                    k8s_roles,
+                    claim_classes,
+                ),
+                autodeploy=autodeploy_eligibility(entry, platform),
             )
+        )
     return rows
 
 
@@ -152,10 +152,10 @@ def main(argv: list[str] | None = None) -> int:
         help="output format (default: html, for the standalone artifact page)",
     )
     parser.add_argument(
-        "--host-vars",
+        "--services",
         type=Path,
-        default=HOST_VARS,
-        help="override host_vars dir (tests)",
+        default=K8S_SERVICES,
+        help="override cluster/services.yml (tests)",
     )
     parser.add_argument(
         "--k8s-roles",
@@ -174,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    rows = build_rows(args.host_vars, args.k8s_roles, args.k3s_defaults, args.all_vars)
+    rows = build_rows(args.services, args.k8s_roles, args.k3s_defaults, args.all_vars)
 
     if args.format == "markdown":
         from lib.docs_provenance import finish_generator

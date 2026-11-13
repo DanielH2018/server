@@ -14,7 +14,7 @@ k8s_autodeploy_reason: "read-only NUT network client with a readinessProbe — n
 
 # The UPS name upsd knows is NOT a variable of this role, and neither is the metrics port. The
 # exporter scrapes one UPS per request and takes the name as a `ups=` query param, so the name
-# is set where the request is built: the `nut` metrics item on this role's containers_list
+# is set where the request is built: the `nut` metrics item on this role's services
 # entry, which the observability scrape job renders from. That item holds the port as well, and
 # the templates read it back with `metrics_port('nut')`. A copy here would be a second place to
 # drift.

@@ -10,7 +10,7 @@ Claude Code runs on the **host**, not in a container, and exports to `127.0.0.1:
 and Tempo carry the same `hostIP` pin on 3100/9090/3200 for `otelq`, another host process.
 Tempo's otlp-grpc 4317 skips the pin: two hostPorts on one number wedge a pod in `Pending`.
 
-Flux applies the role (`platform: k8s`).
+Flux applies the role (its entry is in `cluster/services.yml`).
 
 The `observability-verify` Job reads the pin back from the live DaemonSet and fails without it.
 It lives in `templates/verify/` and runs `files/observability_verify.py` with `get` on the
@@ -22,8 +22,7 @@ The working-out lives in `docs/observability-dashboards.md`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=observability`
-  gates the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=observability` gates the rollout
 - **Images:** `otel/opentelemetry-collector-contrib` (`observability_k8s_collector_image`),
   `grafana/loki` (`observability_k8s_loki_image`), `prom/prometheus`
   (`observability_k8s_prometheus_image`), `prom/alertmanager`
@@ -147,7 +146,7 @@ holds the interval to that sum, and
 walks the routing tree to prove the alerts reach the mute.
 
 **A host-plane rule names its host as a literal, so a new host is a rule edit.** The
-`host-checks` group carries one `HostReconcileFailed` per host in `hosts.ini`, and one
+`host-checks` group carries one `HostReconcileFailed` per inventory host, and one
 `HostUpdateStale` per entry of `observability_expected_hosts`, each from the shape in
 `tests/rules/fixtures/host-update-stale.yaml`, which `host-checks.test.yaml` fires.
 `ansible/tests/services/test_host_plane_rule_literals.py` holds both sets to their sources and

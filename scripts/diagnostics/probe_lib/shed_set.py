@@ -3,7 +3,7 @@
 Each tier in `filter_plugins/service_tier.py` names a service the house, SSO or the platform
 needs. Everything else is the shed set: the untiered services an operator scales to zero so
 the tiered ones fit on the surviving node (#3481). The set is derived from the `tier` field on
-daniel-box's `containers_list`, through `lib.service_tiers.shed_set`, so a service joins or
+`cluster/services.yml`, through `lib.service_tiers.shed_set`, so a service joins or
 leaves it by losing or gaining a `tier:` and never by an edit here.
 
 A service is a role, not a workload, so each one is rendered and only its Deployments and
@@ -51,7 +51,7 @@ def suspend_command(tag: str, suspend: bool = True) -> str:
 
 
 def service_tags(entries):
-    """Each service in `entries`, the `containers_list` entries by name, mapped to its tags."""
+    """Each service in `entries`, the service entries by name, mapped to its tags."""
     return {name: entry_tags(entry) for name, entry in entries.items()}
 
 
@@ -71,8 +71,8 @@ def format_shed_set(targets_by_service, tags_by_service=None):
     if not scalable:
         return (
             "INCONCLUSIVE: no untiered k8s service rendered a Deployment or StatefulSet, so "
-            "there is nothing to scale. Check that the inventory read returned daniel-box's "
-            "containers_list before believing this."
+            "there is nothing to scale. Check that the inventory read returned "
+            "cluster/services.yml's entries before believing this."
         ), 2
     lines = [
         "Scale these to zero when one node is lost, so the tiered services fit on the "

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for scripts/docs/service_catalog.py and the catalog_* leaves it assembles.
 
-Entirely fixture-driven — synthetic host_vars/roles under tmp_path, never the real inventory
+Entirely fixture-driven — synthetic service list and roles under tmp_path, never the real inventory
 (which changes; see scripts/deploy_tools/tests/test_deploy_tags.py's REAL-inventory tests for the
 pattern this deliberately does NOT follow — the catalog derives facts rather than guarding a set).
 Run: uv run pytest scripts/docs/tests/test_service_catalog.py
@@ -14,34 +14,22 @@ from docs.catalog_lib.catalog_model import ServiceRow
 from docs.catalog_lib.catalog_render import render_html, render_markdown
 
 
-def test_platform_defaults_to_docker_when_key_absent(tmp_path):
-    paths = make_repo(tmp_path)
-    rows = service_catalog.build_rows(**paths)
-    by_name = {r.name: r for r in rows}
-    assert by_name["jellyfin"].platform == "k8s"
-    assert by_name["dozzle"].platform == "docker"
-
-
 def test_auth_tier_true_false_and_missing(tmp_path):
     paths = make_repo(tmp_path)
     # Add an entry with no use_authelia key at all.
     write(
-        paths["host_vars"] / "box.yml",
+        paths["services"],
         """\
         containers_list:
           - name: jellyfin
-            platform: k8s
             hostname: jellyfin
             use_authelia: false
           - name: authelia
-            platform: k8s
             use_authelia: true
           - name: shell
-            platform: k8s
             use_authelia: true
             auth_tier: two_factor
           - name: mystery
-            platform: k8s
         """,
     )
     for role in ("shell", "mystery"):
@@ -110,18 +98,6 @@ def test_k8s_route_is_no_route_when_role_has_no_ingressroute_template(tmp_path):
     assert row.route == "no route (infra role)"
 
 
-def test_docker_route_is_lan_direct(tmp_path):
-    paths = make_repo(tmp_path)
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "dozzle")
-    assert row.route == "LAN-direct (no Traefik route)"
-
-
-def test_autodeploy_docker_is_applied_by_the_host_package(tmp_path):
-    paths = make_repo(tmp_path)
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "dozzle")
-    assert row.autodeploy == "n/a: applied by the host package"
-
-
 def _jellyfin_row(tmp_path):
     paths = make_repo(tmp_path)
     write(
@@ -136,20 +112,6 @@ def test_autodeploy_of_a_k8s_entry_names_flux(tmp_path):
     row = _jellyfin_row(tmp_path)
     assert row.autodeploy.startswith("n/a: applied by Flux, through `promote`")
     assert "`land.sh`" in row.autodeploy
-
-
-def test_underscore_prefixed_host_vars_files_are_excluded(tmp_path):
-    paths = make_repo(tmp_path)
-    write(
-        paths["host_vars"] / "_example.yml",
-        """\
-        containers_list:
-          - name: not-a-real-service
-            platform: k8s
-        """,
-    )
-    rows = service_catalog.build_rows(**paths)
-    assert "not-a-real-service" not in {r.name for r in rows}
 
 
 def test_render_html_is_self_contained_and_lists_every_service(tmp_path):
@@ -170,8 +132,8 @@ def test_main_writes_output_file(tmp_path):
         [
             "--out",
             str(out_file),
-            "--host-vars",
-            str(paths["host_vars"]),
+            "--services",
+            str(paths["services"]),
             "--k8s-roles",
             str(paths["k8s_roles"]),
             "--k3s-defaults",

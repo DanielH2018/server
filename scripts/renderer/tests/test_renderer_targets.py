@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from lib.ansible_inventory import K8S_HOST
 from renderer.renderer_lib.targets import render_targets, renders
 
 # traefik-crds is the member only a vendored manifest admits.
@@ -15,10 +14,9 @@ MEMBER_FLOOR = {"pihole", "traefik", "flux", "traefik-crds"}
 
 
 def _tree(tmp_path: Path, entries: str) -> tuple[Path, Path]:
-    host_vars = tmp_path / "host_vars"
-    host_vars.mkdir()
-    (host_vars / "box.yml").write_text(f"containers_list:\n{entries}")
-    return host_vars, tmp_path / "roles"
+    services = tmp_path / "services.yml"
+    services.write_text(f"containers_list:\n{entries}")
+    return services, tmp_path / "roles"
 
 
 def _file(roles: Path, rel: str) -> None:
@@ -28,9 +26,9 @@ def _file(roles: Path, rel: str) -> None:
 
 
 def test_a_role_with_nothing_to_render_is_left_out(tmp_path):
-    host_vars, roles = _tree(tmp_path, "  - name: empty\n    platform: k8s\n")
+    services, roles = _tree(tmp_path, "  - name: empty\n")
     _file(roles, "empty/defaults/main.yml")
-    assert render_targets("box", host_vars, roles) == []
+    assert render_targets(services, roles) == []
 
 
 @pytest.mark.parametrize(
@@ -55,18 +53,16 @@ def test_a_config_template_alone_does_not_render(tmp_path):
 
 
 def test_the_set_holds_its_named_members():
-    assert MEMBER_FLOOR - set(render_targets(K8S_HOST)) == set()
+    assert MEMBER_FLOOR - set(render_targets()) == set()
 
 
 def test_a_set_without_traefik_fails_the_floor(tmp_path):
-    entries = "".join(
-        f"  - name: {name}\n    platform: k8s\n" for name in sorted(MEMBER_FLOOR)
-    )
-    host_vars, roles = _tree(tmp_path, entries)
+    entries = "".join(f"  - name: {name}\n" for name in sorted(MEMBER_FLOOR))
+    services, roles = _tree(tmp_path, entries)
     for name in MEMBER_FLOOR - {"traefik"}:
         _file(roles, f"{name}/templates/deployment.yaml.j2")
-    assert MEMBER_FLOOR - set(render_targets("box", host_vars, roles)) == {"traefik"}
+    assert MEMBER_FLOOR - set(render_targets(services, roles)) == {"traefik"}
 
 
-def test_a_host_with_no_vars_file_renders_nothing(tmp_path):
-    assert render_targets("no-such-host", tmp_path) == []
+def test_a_missing_service_list_renders_nothing(tmp_path):
+    assert render_targets(tmp_path / "absent.yml", tmp_path) == []

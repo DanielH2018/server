@@ -83,11 +83,11 @@ spec:
             matchLabels:
               app: prometheus
       ports:
-        - port: {{ containers_list | metrics_port('crowdsec') }}
+        - port: {{ services | metrics_port('crowdsec') }}
           protocol: TCP
         # The crowdsec-jobs sidecar's check exporter, the `crowdsec-jobs` metrics item. The
         # sidecar shares the pod's network identity, so its port needs its own entry here.
-        - port: {{ containers_list | metrics_port('crowdsec-jobs') }}
+        - port: {{ services | metrics_port('crowdsec-jobs') }}
           protocol: TCP
 {% else %}
     # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny

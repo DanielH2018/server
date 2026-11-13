@@ -103,11 +103,10 @@ def register_ansible_filters(env: Environment) -> Environment:
     ``mandatory`` returns its input, so a guard's tracking Undefined passes through it and is
     judged by name as usual.
 
-    ``filter_by_platform``, ``authelia_service_rules`` and ``tier_priority_class`` are this
-    repo's own filter plugins: ``renderer_lib.context`` splits each host's entries by platform
-    through the first, and authelia's config Secret derives its per-service access_control rules
-    through the second, which raises on a ``use_authelia: true`` entry with no ``auth_tier``.
-    A tiered role's pods take their PriorityClass from the third, which raises on an entry
+    ``authelia_service_rules`` and ``tier_priority_class`` are this repo's own filter plugins:
+    authelia's config Secret derives its per-service access_control rules through the first,
+    which raises on a ``use_authelia: true`` entry with no ``auth_tier``. A tiered role's pods
+    take their PriorityClass from the second, which raises on an entry
     with no ``tier``. observability's blackbox probe jobs ask ``in_service_tier`` whether a
     service's target pages critical, and it raises on an entry name it cannot find. observability's
     Prometheus config renders its plain scrape jobs through ``scrape_jobs``, and each owning
@@ -166,7 +165,6 @@ def register_ansible_filters(env: Environment) -> Environment:
     import role_label
     import scrape_jobs
     import service_tier
-    from toposort import filter_by_platform
     from renderer.renderer_lib import jinja_filters as filters
 
     env.filters["b64encode"] = filters.b64encode
@@ -184,7 +182,6 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["mandatory"] = filters.mandatory
     env.filters["to_uuid"] = filters.to_uuid
     env.filters["to_json"] = to_json_stub
-    env.filters["filter_by_platform"] = filter_by_platform
     env.filters["authelia_service_rules"] = authelia_service_rules
     env.filters["flux_components"] = flux_components.FilterModule().filters()[
         "flux_components"

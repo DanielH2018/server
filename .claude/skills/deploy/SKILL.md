@@ -6,7 +6,7 @@ allowed-tools: Bash, Glob
 
 Apply a change through the path that owns it.
 
-**No script deploys a workload by hand.** Every `cluster/services.yml` entry is `platform: k8s`,
+**No script deploys a workload by hand.** Every `cluster/services.yml` entry is in `cluster/services.yml`,
 which Flux applies.
 
 **First, determine what the change touches:**

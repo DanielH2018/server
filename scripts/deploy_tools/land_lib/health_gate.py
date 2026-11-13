@@ -18,7 +18,7 @@ from typing import NamedTuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
 from lib.repo_paths import HOST_VARS, REPO
-from lib.render_guard import containers_entries, entry_platform, entry_tags, host_files
+from lib.render_guard import entry_tags, k8s_services, services_file
 from lib.summary import grouped
 from diagnostics.probe_lib.health_checkout import STALE_CHECKOUT
 from lib.exit_codes import PROBE_NOT_APPLICABLE, PROBE_UNREADABLE
@@ -30,18 +30,14 @@ HOST_VARS_REL = HOST_VARS.relative_to(REPO)
 
 
 def tag_platforms(tag: str, host_vars: Path = HOST_VARS) -> set[str]:
-    """The platforms (`docker`, `k8s`) whose containers_list entries carry `tag`.
+    """`{"k8s"}` when a k8s service in the tree whose host_vars are `host_vars` carries `tag`.
 
-    Empty for a tag no host declares. A Docker-only tag has nothing on the cluster to check,
+    Empty for a tag no service declares. A Docker-only tag has nothing on the cluster to check,
     and probing it there first could find a same-named cluster workload (loki-homelab's Alloy
     DaemonSet) and report the Pi's undeployed container healthy.
     """
-    return {
-        entry_platform(entry)
-        for path in host_files(host_vars)
-        for entry in containers_entries(path)
-        if tag in entry_tags(entry)
-    }
+    services = k8s_services(services_file(host_vars))
+    return {"k8s"} if any(tag in entry_tags(e) for e in services) else set()
 
 
 # One `probe.py health` run. The alert plane sets the floor: up to 90s waiting for a probe

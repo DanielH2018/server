@@ -13,9 +13,9 @@ and rendering without them raises `UndefinedError` rather than reproducing what 
 import re
 
 from lib import yaml_fast
+from lib.render_guard import k8s_services
 from _manifest_guards import (
     ALL_VARS_VALUES,
-    BOX_VARS,
     K8S,
     _k8s_entries,
     _render,
@@ -33,7 +33,7 @@ def _k8s_authelia_config() -> dict:
     rendered = _render(
         K8S / "authelia" / "templates" / "config-secret.yaml.j2",
         container_item=entry,
-        containers_list=BOX_VARS["containers_list"],
+        services=k8s_services(),
         email="stub@example.com",
         authelia_jwt="stub",
         authelia_secret="stub",
@@ -74,7 +74,7 @@ def test_k8s_authelia_database_is_on_its_own_volume():
         _render(
             K8S / "authelia" / "templates" / "deployment.yaml.j2",
             container_item=next(c for c in _k8s_entries() if c["name"] == "authelia"),
-            containers_list=_k8s_entries(),
+            services=_k8s_entries(),
             **ALL_VARS_VALUES,
             **yaml_fast.safe_load(
                 (K8S / "authelia" / "defaults" / "main.yml").read_text()

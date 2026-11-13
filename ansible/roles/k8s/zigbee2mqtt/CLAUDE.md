@@ -5,8 +5,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=zigbee2mqtt` gates
-  the rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=zigbee2mqtt` gates the rollout
 - **Images:** `ghcr.io/koenkk/zigbee2mqtt` (`zigbee2mqtt_k8s_image`), `alpine`
   (`zigbee2mqtt_k8s_init_image`)
 - **Route:** `zigbee2mqtt.<domain>` · `zigbee2mqtt.local.<domain>`, Authelia one_factor
@@ -19,7 +18,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **Port:** 8080 · reaches the coordinator at `tcp://{{ slzb_ip }}:6638`, broker at the
   in-cluster `mosquitto` Service name
 - **Flux applies it, not Ansible** (D5.10, an own-window flip). Its `containers_list` entry
-  is `platform: k8s`, so nothing applies it by hand, and a
+  is in `cluster/services.yml`, so nothing applies it by hand, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. mosquitto
   is Flux-owned too, so the
   Kustomization depends on it. The Deployment is `Recreate` and the SLZB-06M coordinator

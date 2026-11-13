@@ -10,7 +10,7 @@
 # Required: no default exists, and a role will fail or misbehave without it
 
 # The host's LAN IP. Needed by every role that publishes a LAN-bound port or firewalls by
-# IP, and read cross-host as hostvars[<other>].server_ip.
+# IP, and read cross-host as hosts[<other>].server_ip.
 server_ip: 10.0.0.x
 
 # Where sshd's config actually lives on this OS image — check with

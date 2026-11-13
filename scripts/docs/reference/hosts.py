@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate docs/reference/hosts.md — the three hosts and what each one is.
 
-STATIC PARSING ONLY. Reads ansible/inventory/hosts.ini, host_vars/*.yml and each
+STATIC PARSING ONLY. Reads ansible/inventory/host_vars/*.yml, cluster/services.yml and each
 hosts/<host>/package.yml with yaml.safe_load and plain text parsing, never `ansible` or
 `kubectl`. A fresh worktree has
 no Ansible collections installed, and the inventory contains SOPS lookups that do not
@@ -29,7 +29,8 @@ from lib.cli_help import ArgumentParser
 
 from lib import yaml_fast
 from lib.estate import Estate, Inventory
-from lib.repo_paths import ALL_VARS, HOST_VARS, HOSTS_INI, REPO
+from lib.ansible_inventory import K8S_HOST
+from lib.repo_paths import ALL_VARS, HOST_VARS, K8S_SERVICES, REPO
 
 UNKNOWN = "unknown"
 HOSTS = REPO / "hosts"
@@ -74,16 +75,19 @@ def _package(name: str, hosts_root: Path) -> str:
 
 
 def build_rows(
-    hosts_ini: Path = HOSTS_INI,
     host_vars: Path = HOST_VARS,
     all_vars: Path = ALL_VARS,
     hosts_root: Path = HOSTS,
+    services: Path = K8S_SERVICES,
 ) -> list[dict[str, str]]:
-    """Collect every host in `hosts_ini` into one row of inventory facts each.
+    """Collect every host, one per `host_vars` file, into one row of inventory facts each.
+
+    A host's services are the k8s services on the k8s host and its `compose_services` on any
+    other.
 
     Args:
-        hosts_ini: Path to the Ansible `hosts.ini` inventory.
         host_vars: Directory holding each host's `host_vars` file.
+        services: The k8s service list.
         all_vars: Path to `group_vars/all.yml`, read for group-default flag values.
         hosts_root: The `hosts/` tree, read for each host's package.
 
@@ -94,19 +98,21 @@ def build_rows(
     # inventory in a tmp dir, and reaching past it to the real group_vars would make that
     # fixture depend on the repo it is meant to stand in for.
     estate = Estate(
-        Inventory(all_vars=all_vars, host_vars=host_vars, hosts_ini=hosts_ini)
+        Inventory(all_vars=all_vars, host_vars=host_vars, services=services)
     )
     rows = []
-    for host in estate.hosts:
-        name = host.name
+    for name in estate.hosts():
         data = estate.own_vars(name)
+        declared = (
+            estate.services if name == K8S_HOST else data.get("compose_services") or []
+        )
         rows.append(
             {
                 "name": name,
                 "role": ROLES.get(name, f"{UNKNOWN} (no description recorded)"),
                 "ip": str(data.get("server_ip", f"{UNKNOWN} (server_ip not declared)")),
                 "package": _package(name, hosts_root),
-                "services": str(len(estate.entries(name))),
+                "services": str(len(declared)),
                 "docker": _flag(estate, name, "has_docker"),
             }
         )
@@ -126,7 +132,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
 
     parts = [generated_banner("scripts/docs/reference/hosts.py")]
     parts.append("# Hosts\n")
-    parts.append(f"{len(rows)} host(s) in `ansible/inventory/hosts.ini`.\n")
+    parts.append(f"{len(rows)} host(s) in `ansible/inventory/host_vars/`.\n")
 
     for row in sorted(rows, key=lambda r: r["name"]):
         parts.append(f"\n## {row['name']}\n")
@@ -149,13 +155,12 @@ def main(argv: list[str] | None = None) -> int:
     """
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="output file path")
-    parser.add_argument("--hosts-ini", type=Path, default=HOSTS_INI)
     parser.add_argument("--host-vars", type=Path, default=HOST_VARS)
     args = parser.parse_args(argv)
 
     from lib.docs_provenance import finish_generator
 
-    rows = build_rows(args.hosts_ini, args.host_vars)
+    rows = build_rows(args.host_vars)
     return finish_generator(
         "docs.reference.hosts", args.out, rows, render_markdown, "host"
     )

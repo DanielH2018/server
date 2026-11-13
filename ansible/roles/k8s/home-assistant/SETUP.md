@@ -6,7 +6,7 @@ scratch, how to operate it day-to-day, and where to tune it. For implementation 
 the commits that shipped each feature; this guide arrived in `81232dca7`.
 
 Everything is Ansible-managed — **git is the source of truth; HA UI edits are overwritten on
-deploy.** Flux applies the role (`platform: k8s`), so merge the change and `promote` applies it.
+deploy.** Flux applies the role (its entry is in `cluster/services.yml`), so merge the change and `promote` applies it.
 Nothing applies it by hand.
 
 ---

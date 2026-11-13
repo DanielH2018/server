@@ -60,7 +60,6 @@ def test_the_tag_is_a_k8s_tag_and_waits_on_longhorn():
     # Any further field widens the entry's readers beyond the three the landing expects.
     assert entry == {
         "name": TAG,
-        "platform": "k8s",
         "depends_on": ["longhorn"],
     }
 

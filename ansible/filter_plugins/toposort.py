@@ -1,8 +1,7 @@
-"""Ansible filter plugin for ordering and splitting containers_list.
+"""Ansible filter plugin for ordering the k8s services.
 
 `toposort_containers` orders the renderer's entries by the map `build_k8s_dep_map` derives from
-each role's templates and entry, and `filter_by_platform` selects one platform's entries.
-Every `containers_list` entry is `platform: k8s`; the Pi's services deploy from
+each role's templates and entry. Every entry is a k8s service; the Pi's services deploy from
 `compose_services` in its package.
 """
 
@@ -173,16 +172,6 @@ def build_k8s_dep_map(containers_list, playbook_dir, applies_last=None):
     return dep_map
 
 
-def filter_by_platform(containers_list, platform):
-    """Select containers_list entries targeting a given deploy platform.
-
-    A missing `platform` key means "docker", as it does in `entry_fields`.
-    `scripts/validate/compose_templates.py` refuses such an entry, so the
-    renderer never drops a service that omitted the key.
-    """
-    return [c for c in containers_list if c.get("platform", "docker") == platform]
-
-
 class FilterModule:
     """Ansible filter plugin registering this module's containers_list helpers."""
 
@@ -190,5 +179,4 @@ class FilterModule:
         return {
             "build_k8s_dep_map": build_k8s_dep_map,
             "toposort_containers": toposort_containers,
-            "filter_by_platform": filter_by_platform,
         }

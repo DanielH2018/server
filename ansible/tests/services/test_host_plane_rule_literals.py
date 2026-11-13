@@ -18,7 +18,7 @@ import re
 import yaml
 from _helpers import K8S_ROLES, load_defaults
 from lib import yaml_fast
-from lib.ansible_inventory import inventory_hosts
+from lib.ansible_inventory import host_names
 from lib.repo_paths import ALL_VARS, HOST_VARS, REPO
 
 ROLE = K8S_ROLES / "observability"
@@ -205,7 +205,7 @@ def wired_link_problems(rules: list[dict], links: dict[str, str]) -> list[str]:
 
 
 def _hosts() -> set[str]:
-    return {host.name for host in inventory_hosts()}
+    return set(host_names())
 
 
 def _static_links() -> dict[str, str]:

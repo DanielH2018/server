@@ -134,7 +134,7 @@ def rollout_restart_problem(stage: list[str]) -> str | None:
 
 @functools.cache
 def _ssh_hosts() -> tuple[str, ...] | None:
-    """Every host `hosts.ini` declares, read through the one parser `scripts/lib` shares.
+    """Every inventory host, read through the one reader `scripts/lib` shares.
 
     Derived rather than listed: a hand-kept tuple here still named daniel-stage weeks after its
     retirement (#3705). Deferred to the first `ssh` stage so the hot path never pays for the

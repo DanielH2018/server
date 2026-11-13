@@ -9,7 +9,7 @@ from typing import NamedTuple
 FIXTURES = Path(__file__).parent / "fixtures" / "dialect"
 
 ENTRIES = {
-    "containers_list": [
+    "services": [
         {
             "name": "app",
             "port": 8080,
@@ -18,7 +18,6 @@ ENTRIES = {
             "use_authelia": True,
             "auth_tier": "one_factor",
             "homepage_widget": True,
-            "platform": "k8s",
             "netpol_from": ["caller"],
             "metrics": [{"job": "app-metrics", "port": 9100}],
             "backup_claims": ["app-data"],
@@ -51,7 +50,7 @@ CASES = (
     Case(
         "filter",
         "authelia_service_rules",
-        "{{ containers_list | authelia_service_rules('example.com', ['10.0.0.0/8']) | to_json }}",
+        "{{ services | authelia_service_rules('example.com', ['10.0.0.0/8']) | to_json }}",
         ENTRIES,
         '[{"domain": ["app.local.example.com"], "policy": "one_factor", "networks": ["10.0.0.0/8"]}]',
     ),
@@ -88,14 +87,14 @@ CASES = (
     Case(
         "filter",
         "entry_names",
-        "{{ containers_list | entry_names | to_json }}",
+        "{{ services | entry_names | to_json }}",
         ENTRIES,
         '["app"]',
     ),
     Case(
         "filter",
         "entry_port",
-        "{{ containers_list | entry_port('app') }}",
+        "{{ services | entry_port('app') }}",
         ENTRIES,
         "8080",
     ),
@@ -141,21 +140,21 @@ CASES = (
     Case(
         "filter",
         "homepage_href",
-        "{{ containers_list | homepage_href('app', 'example.com', '/x', lan=true) }}",
+        "{{ services | homepage_href('app', 'example.com', '/x', lan=true) }}",
         ENTRIES,
         "https://app.local.example.com/x",
     ),
     Case(
         "filter",
         "homepage_widget_url",
-        "{{ containers_list | homepage_widget_url('app', 'homelab') }}",
+        "{{ services | homepage_widget_url('app', 'homelab') }}",
         ENTRIES,
         "http://app.homelab.svc.cluster.local:8080",
     ),
     Case(
         "filter",
         "in_service_tier",
-        "{{ containers_list | in_service_tier('app', 'platform') }}",
+        "{{ services | in_service_tier('app', 'platform') }}",
         ENTRIES,
         "True",
     ),
@@ -169,7 +168,7 @@ CASES = (
     Case(
         "filter",
         "ingress_probe_targets",
-        "{{ containers_list | ingress_probe_targets | to_json }}",
+        "{{ services | ingress_probe_targets | to_json }}",
         ENTRIES,
         '[{"hostname": "app", "behind_sso": true, "entry": "app"}]',
     ),
@@ -178,7 +177,7 @@ CASES = (
     Case(
         "filter",
         "lan_hostnames",
-        "{{ containers_list | lan_hostnames | to_json }}",
+        "{{ services | lan_hostnames | to_json }}",
         ENTRIES,
         '["app"]',
     ),
@@ -194,14 +193,14 @@ CASES = (
     Case(
         "filter",
         "longhorn_nobackup_claims",
-        "{{ containers_list | longhorn_nobackup_claims('homelab') | to_json }}",
+        "{{ services | longhorn_nobackup_claims('homelab') | to_json }}",
         ENTRIES,
         '["homelab/app-cache"]',
     ),
     Case(
         "filter",
         "longhorn_weekly_claims",
-        "{{ containers_list | longhorn_weekly_claims('homelab') | to_json }}",
+        "{{ services | longhorn_weekly_claims('homelab') | to_json }}",
         ENTRIES,
         '{"homelab/app-weekly": 3}',
     ),
@@ -217,7 +216,7 @@ CASES = (
     Case(
         "filter",
         "metrics_port",
-        "{{ containers_list | metrics_port('app-metrics') }}",
+        "{{ services | metrics_port('app-metrics') }}",
         ENTRIES,
         "9100",
     ),
@@ -225,21 +224,21 @@ CASES = (
     Case(
         "filter",
         "netpol_caller_fences",
-        "{{ containers_list | netpol_caller_fences | to_json }}",
+        "{{ services | netpol_caller_fences | to_json }}",
         ENTRIES,
         '[{"app": "app", "port": 8080, "callers": ["caller", "homepage"]}]',
     ),
     Case(
         "filter",
         "netpol_callers",
-        "{{ containers_list[0] | netpol_callers | to_json }}",
+        "{{ services[0] | netpol_callers | to_json }}",
         ENTRIES,
         '["caller", "homepage"]',
     ),
     Case(
         "filter",
         "published_ports",
-        "{{ containers_list | published_ports | to_json }}",
+        "{{ services | published_ports | to_json }}",
         ENTRIES,
         '["app:8080"]',
     ),
@@ -261,7 +260,7 @@ CASES = (
     Case(
         "filter",
         "scrape_jobs",
-        "{{ containers_list | scrape_jobs('homelab') | to_json }}",
+        "{{ services | scrape_jobs('homelab') | to_json }}",
         ENTRIES,
         '[{"job": "app-metrics", "target": "app.homelab.svc:9100"}]',
     ),
@@ -283,14 +282,14 @@ CASES = (
     Case(
         "filter",
         "tier_backup_claims",
-        "{{ containers_list | tier_backup_claims('platform', 'homelab') | to_json }}",
+        "{{ services | tier_backup_claims('platform', 'homelab') | to_json }}",
         ENTRIES,
         '["homelab/app-data"]',
     ),
     Case(
         "filter",
         "tier_priority_class",
-        "{{ containers_list | tier_priority_class('app') }}",
+        "{{ services | tier_priority_class('app') }}",
         ENTRIES,
         "homelab-critical",
     ),

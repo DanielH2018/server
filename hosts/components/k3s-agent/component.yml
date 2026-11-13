@@ -52,7 +52,7 @@ defaults:
   # An agent has no apiserver and no admin kubeconfig. The kubeconfig names the server's
   # apiserver rather than the agent's own proxy on 6444, so `kubectl` answers while k3s-agent is
   # down, and the CA is the one the agent fetched at its join.
-  k3s_readonly_kubeconfig_server: "https://{{ hostvars['daniel-box'].server_ip }}:6443"
+  k3s_readonly_kubeconfig_server: "https://{{ hosts['daniel-box'].server_ip }}:6443"
   k3s_readonly_kubeconfig_ca_source: /var/lib/rancher/k3s/agent/server-ca.crt
   # The log file k3s writes. The k3s-server component carries the same path, because Alloy tails
   # one literal on every node; ansible/tests/k8s/test_alloy_ships_k3s_log.py holds all three equal.
@@ -147,14 +147,14 @@ lines:
 # k3s_join_agent_ports, whose symmetry with the server side is a test too.
 ufw:
   rules:
-    - {id: k3s-join-vxlan, spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 8472 proto udp", keep: true}
-    - {id: k3s-join-kubelet, spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 10250 proto tcp", keep: true}
-    - {id: k3s-join-node-exporter, spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 9100 proto tcp", keep: true}
-    - {id: k3s-join-memberlist-tcp, spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 7946 proto tcp", keep: true}
-    - {id: k3s-join-memberlist-udp, spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 7946 proto udp", keep: true}
+    - {id: k3s-join-vxlan, spec: "allow from {{ hosts['daniel-box'].server_ip }} to any port 8472 proto udp", keep: true}
+    - {id: k3s-join-kubelet, spec: "allow from {{ hosts['daniel-box'].server_ip }} to any port 10250 proto tcp", keep: true}
+    - {id: k3s-join-node-exporter, spec: "allow from {{ hosts['daniel-box'].server_ip }} to any port 9100 proto tcp", keep: true}
+    - {id: k3s-join-memberlist-tcp, spec: "allow from {{ hosts['daniel-box'].server_ip }} to any port 7946 proto tcp", keep: true}
+    - {id: k3s-join-memberlist-udp, spec: "allow from {{ hosts['daniel-box'].server_ip }} to any port 7946 proto udp", keep: true}
   legacy:
-    - {spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 8472 proto udp", comment: "", replaced_by: k3s-join-vxlan}
-    - {spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 10250 proto tcp", comment: "", replaced_by: k3s-join-kubelet}
-    - {spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 9100 proto tcp", comment: "", replaced_by: k3s-join-node-exporter}
-    - {spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 7946 proto tcp", comment: "", replaced_by: k3s-join-memberlist-tcp}
-    - {spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 7946 proto udp", comment: "", replaced_by: k3s-join-memberlist-udp}
+    - {spec: "allow from {{ hosts['daniel-box'].server_ip }} to any port 8472 proto udp", comment: "", replaced_by: k3s-join-vxlan}
+    - {spec: "allow from {{ hosts['daniel-box'].server_ip }} to any port 10250 proto tcp", comment: "", replaced_by: k3s-join-kubelet}
+    - {spec: "allow from {{ hosts['daniel-box'].server_ip }} to any port 9100 proto tcp", comment: "", replaced_by: k3s-join-node-exporter}
+    - {spec: "allow from {{ hosts['daniel-box'].server_ip }} to any port 7946 proto tcp", comment: "", replaced_by: k3s-join-memberlist-tcp}
+    - {spec: "allow from {{ hosts['daniel-box'].server_ip }} to any port 7946 proto udp", comment: "", replaced_by: k3s-join-memberlist-udp}

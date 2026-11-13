@@ -76,7 +76,7 @@ def test_an_undefined_variable_fails_the_render_and_names_it(tmp_path):
 
 def test_another_hosts_entry_holds_no_group_var_and_fails_the_render(tmp_path):
     with pytest.raises(RenderError, match="group_only"):
-        _tree_render(tmp_path, template="{{ hostvars['h2'].group_only }}\n")
+        _tree_render(tmp_path, template="{{ hosts['h2'].group_only }}\n")
 
 
 def test_an_off_the_list_filter_fails_the_render_and_the_census(tmp_path):

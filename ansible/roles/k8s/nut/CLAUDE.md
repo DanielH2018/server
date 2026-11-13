@@ -6,8 +6,7 @@ the pin is physical and never unwinds.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
-- **Applied by:** Flux, through `promote` (`platform: k8s`); `land.sh --tags=nut` gates the
-  rollout
+- **Applied by:** Flux, through `promote`; `land.sh --tags=nut` gates the rollout
 - **Image:** `ghcr.io/danielh2018/nut` (`nut_k8s_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
@@ -34,7 +33,7 @@ the pin is physical and never unwinds.
   adds nothing to the restart checksum the renderer stamps on nut, and adding it rolled
   nothing.
 - **Flux applies it, not Ansible** (D5.17, Wave C's UPS PR, which went alone). Its
-  `containers_list` entry is `platform: k8s`, so nothing applies it by hand. A merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry is in `cluster/services.yml`, so nothing applies it by hand. A merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. The Deployment is `Recreate`, so every roll stops upsd for the container
   start, plus a pull
   when the content tag moved. That gap is time without power-cut shutdown coverage. The flip
