@@ -261,8 +261,12 @@ FLOOR = [
     "hosts/components/sshd/",
     "ansible/.sops.yaml",
     "ansible/vars/secrets.yml",
+    # Each ansible/ entry also at its path after ADR 0030's rename, ahead of the rename.
+    "secrets/.sops.yaml",
+    "secrets/secrets.yml",
     # The agent's cluster RBAC joined the floor on 2026-10-16 (H1 Open question 7).
     "ansible/roles/k8s/cluster-base/",
+    "k8s/roles/cluster-base/",
 ]
 
 

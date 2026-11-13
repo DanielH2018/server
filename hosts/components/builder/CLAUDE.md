@@ -61,7 +61,8 @@ pin. The unit's second
 
 **The render runs on the built tree's interpreter, not the unit's.** `HOMELAB_PYTHON` runs the
 builder script only. `hosts/lib/builder_python.py:tree_python` reads `host_python_version`
-from the chosen commit's `ansible/inventory/group_vars/all.yml`, and `render_python` installs it
+from the chosen commit's `inventory/group_vars/all.yml`, or from `ansible/inventory/group_vars/all.yml`
+in a commit from before ADR-0030's rename, and `render_python` installs it
 with downloads allowed for that one call. `render()` passes it to `uv run --python`. A tree with no pin
 renders on `HOMELAB_PYTHON`, and a pin that is not a dotted version, or an install that fails,
 reads `reason="build"`. The unit that pins a new interpreter ships in `homelab-daniel-box`, which
