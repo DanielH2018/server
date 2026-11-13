@@ -26,7 +26,7 @@ LIB = REPO / "hosts" / "lib"
 # The 30% is headroom for fixes inside that scope, not room for another arm.
 #
 # DECIDED: raising CEILING is an operator ruling, never part of an ordinary change. Crossing it
-# is design.md's trigger to cut reconcile, to raise the ceiling in ADR-0029 with a reason, or
+# is the trigger to cut reconcile, to raise the ceiling in ADR-0029 with a reason, or
 # to switch the host plan to ansible-pull. The ceiling and its derivation are in ADR-0029.
 BASE_LINES = 326
 STATED_GROWTH = 720

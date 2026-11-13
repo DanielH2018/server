@@ -42,7 +42,8 @@ from lib.repo_paths import REPO
 
 SELF = "scripts/tests/test_census_rows_test_modules.py"
 PLAN_CITATION = re.compile(
-    r"target-architecture|\b(?:[dhmrg]\d-[a-z0-9-]+|contracts)\.md\b"
+    r"target-architecture"
+    r"|(?<![\w/-])(?:[dhmrg]\d-[a-z0-9-]+|contracts|design|alertmanager-ui-and-readers)\.md\b"
 )
 
 ROWS = (
@@ -246,7 +247,7 @@ ROWS = (
             "test that reads one, or a docstring that sends the reader to one, breaks or goes "
             "stale when they move (#8179). Anchor the fact to the ADR under `docs/adr/` that "
             "records it, writing it there first if no ADR does. A slice-plan file name "
-            "(`d5-bulk-move.md`, `contracts.md`) is a hit without its directory too."
+            "(`d5-bulk-move.md`, `contracts.md`, `design.md`) is a hit without its directory too."
         ),
         files=pytest_only_modules,
         offence=lines_matching(PLAN_CITATION),
@@ -257,6 +258,8 @@ ROWS = (
             ),
             Subject("c.py", "# d5-bulk-move.md, *Reaching Prometheus*\n"),
             Subject("d.py", "msg = 'must name a commit (contracts.md C6)'\n"),
+            Subject("e.py", "# is design.md's trigger to cut reconcile\n"),
+            Subject("f.py", "# alertmanager-ui-and-readers.md, *Readers*\n"),
         ),
         green=(
             Subject(
@@ -264,6 +267,7 @@ ROWS = (
             ),
             Subject("b.py", "# The architecture of the target render.\n"),
             Subject("c.py", 'DOC = REPO / "docs" / "adr" / "index.md"\n'),
+            Subject("d.py", '"""See docs/python-design.md."""\n'),
         ),
         min_matches=MODULE_FLOOR,
         must_find=frozenset({"hosts/lib/tests/test_host_package_builder_refusals.py"}),
