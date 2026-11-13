@@ -318,6 +318,7 @@ ROWS = (
                 "homelab-pi-gz-integrity.timer",
                 "homelab-pi-recovery.timer",
                 "homelab-pi-watchdog-health.timer",
+                "homelab-pi-audit-health.timer",
             }
         ),
     ),
