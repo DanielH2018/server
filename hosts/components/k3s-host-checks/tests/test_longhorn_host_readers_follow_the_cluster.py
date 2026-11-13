@@ -29,7 +29,7 @@ from _longhorn_reader_stubs import (
 )
 from lib.repo_paths import K3S_HOST_CHECKS
 from validate import shell_templates as v
-from validate.validate_lib import shell_lint as sl
+from validate.validate_lib.shipped_render import render_shipped_text
 
 SHIM = K3S_HOST_CHECKS / "templates" / "longhorn-backup-health.sh.j2"
 
@@ -43,7 +43,7 @@ _THRESHOLD = re.compile(
 
 def _shim_thresholds() -> dict[str, str]:
     """The threshold exports of the rendered shim, as the cron would give the reader."""
-    rendered = sl.render_template(SHIM, v.template_context(SHIM))
+    rendered = render_shipped_text(SHIM, v.template_context(SHIM))
     exports = dict(re.findall(r'^export (LONGHORN_\w+)="([^"]*)"', rendered, re.M))
     return {k: val for k, val in exports.items() if _THRESHOLD.fullmatch(k)}
 

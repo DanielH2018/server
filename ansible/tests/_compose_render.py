@@ -24,13 +24,12 @@ from pathlib import Path
 
 from _helpers import CONTAINER_ROLES, load_yaml
 from lib import yaml_fast
-from lib.ansible_jinja_env import template_env
 from lib.render_context import render_context
+from validate.validate_lib.shipped_render import render_shipped
 from lib.render_guard import (
     HOST_VARS,
     containers_entries_in,
     entry_platform,
-    render_or_error,
 )
 
 PI = "daniel-pi"
@@ -94,7 +93,7 @@ def render_role_template(
     entry = _entry(role, host_vars() if vars_ is None else vars_)
     path = roles / role / "templates" / template
     ctx = host_context(vars_, roles / role, {"container_item": entry})
-    rendered, err = render_or_error(template_env(path.parent), path.name, ctx)
+    rendered, err = render_shipped(path, ctx)
     assert rendered is not None, f"{role}/{template}: {err}"
     return rendered
 

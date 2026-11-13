@@ -37,7 +37,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from validate.validate_lib.ok_lines import ok_printer
 from lib import yaml_fast
 from lib.cli_help import answer_help
-from lib.ansible_jinja_env import template_env
+from validate.validate_lib.shipped_render import render_shipped
 from lib.ansible_inventory import containers_entries_in
 from lib.render_context import render_context
 from lib.repo_paths import REPO
@@ -45,7 +45,6 @@ from lib.render_guard import (
     HOST_VARS,
     dump_numbered,
     host_layer,
-    render_or_error,
 )
 
 # The Pi package's services (H5): one `compose.yaml.j2` tree per `compose_services` entry.
@@ -272,14 +271,13 @@ def _check_rendered(
     name: str, template: str, tpl: Path, host: str, ci: dict
 ) -> str | None:
     """Render `tpl` with `ci` as its `container_item` and run every check on the result."""
-    env = template_env(tpl.parent)
     # A component template reads its secrets as plain names, and no role defaults sit under it.
     ctx = render_context(None, host=host, overrides={"container_item": ci})
     # A template reads its OWN entry through `container_item`; leaving the lists in would let
     # one render against another service's entry.
     ctx.pop("containers_list", None)
     ctx.pop("compose_services", None)
-    rendered, err = render_or_error(env, template, ctx)
+    rendered, err = render_shipped(tpl, ctx)
     if rendered is None:
         return err
 

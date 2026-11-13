@@ -18,14 +18,13 @@ from functools import cache
 from pathlib import Path
 
 from lib.render_context import render_context
-from lib.render_guard import StubUndefined
 from validate.setup_templates import (
     HOST_RENDER_CONTEXT,
     COMPONENTS,
     component_context,
-    render_shipped,
     standalone_templates,
 )
+from validate.validate_lib.shipped_render import render_shipped
 
 
 def role_context(role_dir: Path, overrides: dict | None = None) -> dict:
@@ -58,7 +57,7 @@ def render_setup_texts(
             contexts[directory] = component_context(
                 directory, {**HOST_RENDER_CONTEXT, **(overrides or {})}
             )
-        rendered, err = render_shipped(tpl, contexts[directory], StubUndefined)
+        rendered, err = render_shipped(tpl, contexts[directory])
         if rendered is None:
             raise AssertionError(f"{directory.name}/{tpl.name}: {err}")
         texts.append((directory.name, tpl.name, rendered))
@@ -102,9 +101,7 @@ def render_component_text(
     assert (directory / name).is_file(), (
         f"no such component template: {directory / name}"
     )
-    rendered, err = render_shipped(
-        directory / name, role_context(directory, overrides), StubUndefined
-    )
+    rendered, err = render_shipped(directory / name, role_context(directory, overrides))
     if rendered is None:
         raise AssertionError(f"{component}/{name}: {err}")
     return rendered

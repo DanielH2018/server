@@ -22,7 +22,7 @@ from pathlib import Path
 
 from lib.repo_paths import ROLES
 from validate.shell_templates import COMPONENTS, discover_templates, template_context
-from validate.validate_lib.shell_lint import render_template
+from validate.validate_lib.shipped_render import render_shipped_text
 
 
 def shell_template_path(plane: str, role: str, template: str) -> Path:
@@ -52,7 +52,7 @@ def render_shell_script(
     path = shell_template_path(plane, role, template)
     ctx = template_context(path, overrides=overrides)
     try:
-        return render_template(path, ctx)
+        return render_shipped_text(path, ctx)
     except RuntimeError as exc:
         raise AssertionError(f"{plane}/{role}/{template}: {exc}") from exc
 
@@ -76,7 +76,7 @@ def render_shell_texts(
     for path in discover_templates() if templates is None else templates:
         plane, role = path.parents[2].name, path.parents[1].name
         try:
-            rendered = render_template(path, template_context(path, overrides))
+            rendered = render_shipped_text(path, template_context(path, overrides))
         except RuntimeError as exc:
             raise AssertionError(f"{plane}/{role}/{path.name}: {exc}") from exc
         texts.append((plane, role, path.name, rendered))
@@ -102,7 +102,7 @@ def rendered_shell_texts() -> tuple[tuple[str, str, str, str], ...]:
         for path in discover_templates():
             plane, role = path.parents[2].name, path.parents[1].name
             try:
-                rendered = render_template(path, template_context(path))
+                rendered = render_shipped_text(path, template_context(path))
             except RuntimeError as exc:
                 raise AssertionError(f"{plane}/{role}/{path.name}: {exc}") from exc
             texts.append((plane, role, path.name, rendered))

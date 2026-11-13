@@ -237,3 +237,12 @@ def test_a_render_the_package_would_ship_broken_is_flagged(tmp_path):
         yaml_fast.safe_load(shipped)
     problems = v.check_template(tpl, {}, frozenset())
     assert any("invalid YAML" in p for p in problems), problems
+
+
+def test_a_secret_the_guard_lacks_renders_through_to_json(tmp_path):
+    """The renderer's `to_json` refuses a stub, so the guard would fail every JSON credential."""
+    tpl = _component_template(
+        tmp_path, "{{ {'password': widget_password} | to_json }}\n", "widget_on: true\n"
+    )
+    problems = v.check_role_template(tpl, frozenset({"widget_password"}), tmp_path)
+    assert problems == []
