@@ -115,12 +115,14 @@ host probes stay green.
   holds the set equal to the untiered roles that set `flux_prune: false`.
 
 ## Host tasks and the backup plane
-The `k3s-server` host component (`hosts/components/k3s-server/component.yml`) installs
-Longhorn's host half: the `open-iscsi`, `nfs-common` and `multipath-tools` packages and the
-multipathd drop-in `/etc/multipath/conf.d/50-homelab-longhorn.conf`. No host file writes a
+Two host components install Longhorn's host half on each node: `k3s-server`
+(`hosts/components/k3s-server/component.yml`) on daniel-box and `k3s-agent`
+(`hosts/components/k3s-agent/component.yml`) on daniel-server. Each installs the `open-iscsi`,
+`nfs-common` and `multipath-tools` packages and the multipathd drop-in
+`/etc/multipath/conf.d/50-homelab-longhorn.conf`. No host file writes a
 Longhorn object that Flux owns: this role owns the Settings and classes, the CSI sidecar
 requests among them (#5958), `longhorn-reconcile` the labels, and `longhorn-backup` the
-credentials, the backup targets and the RecurringJobs. The component's `legacy:` list removes
+credentials, the backup targets and the RecurringJobs. `k3s-server`'s `legacy:` list removes
 the manifests once staged under /etc/rancher/k3s, these and the CoreDNS, MetalLB and RBAC
 ones, so no file remains for a hand `kubectl apply -f` to write a Flux-owned object from.
 The first bring-up run skips only `kubeconfig`. `docs/flux-deploy-plane.md`, *Bootstrapping Flux on a
