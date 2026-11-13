@@ -683,3 +683,15 @@ claude_code_guardrail_ack_quiet_settings_keys:
   - outputStyle
   - theme
 claude_code_guardrail_ack_dotfiles_repo: https://github.com/DanielH2018/dotfiles.git
+
+# ── The dotfiles root mirror (dotfiles#967 D13) ──────────────────────────────────────────
+# homelab-claude-dotfiles-mirror.timer runs files/claude_dotfiles_mirror.py as root. Each run
+# fetches the dotfiles repo into a root-owned bare mirror and records the newest tag whose
+# signature verifies against templates/claude-dotfiles-allowed-signers.j2 and whose commit
+# descends from the last one recorded. A T2 session's config is rendered only from that record
+# (B2). False drops the timer, its units, the config and the signers file from the next package
+# version, and keeps the mirror and the record.
+claude_code_dotfiles_mirror_enabled: true
+# A `*/N` minute, read as the timer's period.
+claude_code_dotfiles_mirror_minute: "*/15"
+claude_code_dotfiles_mirror_repo: https://github.com/DanielH2018/dotfiles.git

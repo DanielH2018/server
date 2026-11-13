@@ -2456,3 +2456,90 @@ tests:
                 collector, so nothing is counting its failed units. Read `systemctl status
                 homelab-systemd-units.timer` and `journalctl -t systemd-units` on daniel-box, then
                 /var/lib/node-exporter-textfile/systemd-units.prom on the host.
+
+  # The dotfiles root mirror pairs: Failed fires on the 0 verdict, NotReporting holds at 1800s
+  # and fires at 2400s past the 2100s deadline.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="claude-dotfiles-mirror", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x45'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-mirror", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x45'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x45'
+      - series: 'homelab_check_success{check="claude-dotfiles-mirror", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x45'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="claude-dotfiles-mirror", instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x45'
+      - series: 'up{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '1x45'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ClaudeDotfilesMirrorFailed
+        exp_alerts:
+          - exp_labels:
+              check: claude-dotfiles-mirror
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: The dotfiles root mirror on daniel-box refused a tag or could not fetch.
+              description: >-
+                claude-dotfiles-mirror on daniel-box ended with status=down: it could not fetch the
+                dotfiles repo, or the newest tag is unsigned, signed by a key other than the
+                operator's, or does not descend from the last verified tag. T2's config stays at
+                the last verified tag until it clears. Run `journalctl -t claude-dotfiles-mirror`
+                on daniel-box.
+          - exp_labels:
+              check: claude-dotfiles-mirror
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: The dotfiles root mirror on daniel-server refused a tag or could not fetch.
+              description: >-
+                claude-dotfiles-mirror on daniel-server ended with status=down: it could not fetch the
+                dotfiles repo, or the newest tag is unsigned, signed by a key other than the
+                operator's, or does not descend from the last verified tag. T2's config stays at
+                the last verified tag until it clears. Run `journalctl -t claude-dotfiles-mirror`
+                on daniel-server.
+      - eval_time: 30m
+        alertname: ClaudeDotfilesMirrorNotReporting
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: ClaudeDotfilesMirrorNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: claude-dotfiles-mirror
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+            exp_annotations:
+              summary: The dotfiles root mirror on daniel-box has stopped reporting.
+              description: >-
+                No claude-dotfiles-mirror verdict newer than 35 minutes reached Prometheus from
+                daniel-box's textfile collector, so no new dotfiles tag is being verified. Read
+                `systemctl status homelab-claude-dotfiles-mirror.timer` and `journalctl -t
+                claude-dotfiles-mirror`, then
+                /var/lib/node-exporter-textfile/claude-dotfiles-mirror.prom on the host.
+          - exp_labels:
+              check: claude-dotfiles-mirror
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+            exp_annotations:
+              summary: The dotfiles root mirror on daniel-server has stopped reporting.
+              description: >-
+                No claude-dotfiles-mirror verdict newer than 35 minutes reached Prometheus from
+                daniel-server's textfile collector, so no new dotfiles tag is being verified. Read
+                `systemctl status homelab-claude-dotfiles-mirror.timer` and `journalctl -t
+                claude-dotfiles-mirror`, then
+                /var/lib/node-exporter-textfile/claude-dotfiles-mirror.prom on the host.

@@ -1,0 +1,28 @@
+# Shipped by both hosts' packages while claude_code_dotfiles_mirror_enabled. Started by
+# homelab-claude-dotfiles-mirror.timer.
+[Unit]
+Description=Mirror the dotfiles repo and record the newest tag the operator signed
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Root, so that only root writes the mirror and the verified record a T2 render reads.
+Environment=PYTHONDONTWRITEBYTECODE=1
+TimeoutStartSec=15min
+# Root has no pinned interpreter of its own, so the unit keeps one in its state directory, as the
+# builder does. ExecStartPre= installs it, which downloads, and does nothing once it is present.
+# Only ExecStart= sets UV_PYTHON_DOWNLOADS=never. Mode 0755: the render user B2 adds reads the
+# mirror and the record, and writes neither.
+StateDirectory=homelab-claude-dotfiles-mirror
+StateDirectoryMode=0755
+Environment=UV_CACHE_DIR=/var/lib/homelab-claude-dotfiles-mirror/uv-cache
+Environment=UV_PYTHON_INSTALL_DIR=/var/lib/homelab-claude-dotfiles-mirror/python
+ExecStartPre=/usr/lib/homelab/bin/uv python install --no-bin {{ host_python_version }}
+ExecStart=/usr/bin/env UV_PYTHON_DOWNLOADS=never /usr/lib/homelab/bin/uv run --no-project \
+  --no-python-downloads --python {{ host_python_version }} \
+  /usr/lib/homelab/claude-dotfiles-mirror/claude_dotfiles_mirror.py /etc/homelab/claude-dotfiles-mirror.json
+SyslogLevel=notice
+# DECIDED: the tag stays `claude-dotfiles-mirror`. It is a join key: Loki selects the run's
+# `status=` line by it.
+SyslogIdentifier=claude-dotfiles-mirror

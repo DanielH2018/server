@@ -1,0 +1,10 @@
+{% set _every_n = claude_code_dotfiles_mirror_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
+{% if not (_every_n.isdigit() and '*/' ~ _every_n == claude_code_dotfiles_mirror_minute | string) %}
+{{ dotfiles_mirror_minute_not_every_n | mandatory('claude_code_dotfiles_mirror_minute must be */N, got ' ~ claude_code_dotfiles_mirror_minute) }}
+{% endif %}
+{{ {
+  'repo': claude_code_dotfiles_mirror_repo,
+  'allowed_signers': '/etc/claude-dotfiles/allowed_signers',
+  'state_dir': '/var/lib/homelab-claude-dotfiles-mirror',
+  'deadline_s': 2 * 60 * (_every_n | int) + 300,
+} | to_json }}

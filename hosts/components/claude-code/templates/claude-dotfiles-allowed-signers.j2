@@ -1,0 +1,13 @@
+{#
+  The one key whose signature on a dotfiles tag lets that tag reach T2's config (dotfiles#967
+  D13). Shipped to /etc/claude-dotfiles/allowed_signers, which claude_dotfiles_mirror.py hands
+  git as gpg.ssh.allowedSignersFile.
+
+  DECIDED: only the operator's "Daniel Box Key" (GitHub signing key 1085848, fingerprint
+  SHA256:YBl5k1TnuMOdwi0wwBeCoxroRXK/qlrnDyJFeN8Oa84), the key the operator signs dotfiles
+  commits with on daniel-box. The operator chose it over their other six GitHub signing keys
+  on 2026-11-13, so that a key on another machine cannot authorize T2's config. The key is
+  literal here, not a variable, so the inventory cannot override it, and this file is on the
+  lander's approval list.
+#}
+operator namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAININFnXfrEYt6NHTnBAUg8I38Mr7IcE6irEBYRFSVcN4

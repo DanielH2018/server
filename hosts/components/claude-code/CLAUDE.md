@@ -321,6 +321,29 @@ as root on both hosts, two minutes after each audit run.
 - **Next-run review:** after a week, read the posts. A post with an obvious source, such as a
   tool that rewrites settings.json, is a candidate for a new explanation rather than a mute.
 
+## Autonomous-role contract (`claude-dotfiles-mirror`, the verified dotfiles tag for T2)
+
+dotfiles#967 D13, the root half of the T2 config source. `homelab-claude-dotfiles-mirror.timer`
+runs `files/claude_dotfiles_mirror.py` as root on both hosts.
+
+- **Scope:** a bare mirror of the dotfiles repo under `/var/lib/homelab-claude-dotfiles-mirror`,
+  which only root writes. Each run fetches, takes the newest tag, and records its name and
+  commit in `verified.json` only when its signature verifies against
+  `/etc/claude-dotfiles/allowed_signers` and its commit descends from the last recorded one.
+  git runs with no system or global config, so nothing in the mirror changes how it checks.
+- **The signer:** `templates/claude-dotfiles-allowed-signers.j2` holds one key, the operator's
+  "Daniel Box Key", as a literal the inventory cannot override. The operator chose that key on
+  2026-11-13. The template and the script are on the lander's approval list.
+- **Mode:** `claude_code_dotfiles_mirror_enabled`. False drops the timer, its units, the config
+  and the signers file from the next package version, and keeps the mirror and the record.
+- **Abort valves:** a refused tag leaves the last record in place, so a bad or rolled-back tag
+  never replaces a good one. A run that finds no tag records nothing and reports up.
+- **Evidence:** a `status=` line under `journalctl -t claude-dotfiles-mirror`, and
+  `claude-dotfiles-mirror.prom`, which `ClaudeDotfilesMirrorFailed` and
+  `ClaudeDotfilesMirrorNotReporting` read.
+- **Next-run review:** before B2 renders T2's config from the record, read a week of `status=`
+  lines and check that each tag the operator pushed was verified.
+
 ## Autonomous-role contract (`sync-artifacts`, a mirror of another host's tree)
 
 - **Scope:** `rsync --delete` of each `claude_code_artifacts_peer_sources` entry's `path` into

@@ -251,6 +251,9 @@ FLOOR = [
     "hosts/components/claude-code/files/rootq_socket.py",
     "hosts/components/claude-code/templates/homelab-rootq.socket.j2",
     "hosts/components/claude-code/templates/homelab-rootq@.service.j2",
+    # The dotfiles root mirror's signer key and verifier joined it on 2026-11-13 (dotfiles#967 D13).
+    "hosts/components/claude-code/templates/claude-dotfiles-allowed-signers.j2",
+    "hosts/components/claude-code/files/claude_dotfiles_mirror.py",
     "scripts/deploy_tools/land",
     "pyproject.toml",
     "uv.lock",
